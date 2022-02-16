@@ -1,0 +1,1 @@
+# Fristick.github.io
