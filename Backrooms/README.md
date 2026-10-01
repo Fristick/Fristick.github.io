@@ -33,7 +33,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
   **lumières surfaciques**, **ray tracing matériel (RTX)** via Lumen, **eau Single Layer Water** avec vagues, rides,
   absorption de la lumière et caustiques animées (Poolrooms), peau en *subsurface scattering*.
 
-![Entités](Docs/apercu_entites.png)
+![Entités](Docs/apercu_entites.jpg)
 
 ---
 
@@ -51,7 +51,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 52 textures (dont 21 normal maps), 11 icônes, 66 sons, 95 modèles (FBX). Il crée aussi
+   toutes les ressources : 52 textures (dont 21 normal maps), 11 icônes, 66 sons, 94 modèles (FBX). Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_Water`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé la v1 ou la v2**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
@@ -104,7 +104,7 @@ Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau.
 
 ## 2 bis. L'inventaire (TAB)
 
-![Icônes](Docs/apercu_icones.png)
+![Icônes](Docs/apercu_icones.jpg)
 
 L'écran reprend la disposition d'*Escape Together*, avec quelques différences :
 - en-tête **MENU >** et onglets **PERSONNAGE**, **JOURNAL**, **PARAMÈTRES**, **TOUCHES** ;
@@ -261,8 +261,8 @@ blender -b -P Tools/Blender/import_user_models.py
 ```
 Ensuite, dans Unreal : `import backrooms_setup; backrooms_setup.run(force=True)`.
 
-![Modèles](Docs/apercu_modeles.png)
-![Textures](Docs/apercu_textures.png)
+![Modèles](Docs/apercu_modeles.jpg)
+![Textures](Docs/apercu_textures.jpg)
 
 ### Ajouter ou modifier un niveau
 Tout se passe dans `Source/Backrooms/Private/BRLevels.cpp`. Chaque niveau est une fonction `LevelX()` qui règle

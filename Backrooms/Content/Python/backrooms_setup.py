@@ -226,9 +226,12 @@ def import_meshes(files):
 
 
 def delete_obsolete_meshes():
-    """Pieces de la v1 remplacees par le squelette articule de la v2 (la v3 remplace SM_Hazmat par le modele fourni)"""
+    """Pieces de la v1 remplacees par le squelette articule de la v2 ; combinaison d'un seul bloc remplacee en v3
+    par les pieces articulees du modele fourni (SM_Hazmat_*)"""
     for name in ("SM_Faceling_Arm", "SM_Faceling_Leg", "SM_Hound_Leg", "SM_Partygoer_Arm", "SM_Partygoer_Leg",
-                 "SM_SkinStealer_Arm", "SM_SkinStealer_Leg", "SM_Wretch_Arm", "SM_Wretch_Leg"):
+                 "SM_SkinStealer_Arm", "SM_SkinStealer_Leg", "SM_Wretch_Arm", "SM_Wretch_Leg", "SM_Hazmat"):
+        if name == "SM_Hazmat" and not os.path.exists(raw("Meshes", "SM_Hazmat_Torso.fbx")):
+            continue
         path = MESH + "/" + name
         if exists(path):
             try:

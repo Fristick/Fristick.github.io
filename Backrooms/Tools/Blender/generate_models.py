@@ -14,7 +14,7 @@ Conventions (importantes pour le code C++) :
   * les NOMS DE MATERIAUX servent de "slots" : le jeu les reconnait par leur nom
     (ex: tout slot contenant "Glow" devient emissif)
 
-Sortie : ../../RawAssets/Meshes/<Nom>.fbx   et   ../../RawAssets/Previews/<Nom>.png
+Sortie : ../../RawAssets/Meshes/<Nom>.fbx   et   ../../RawAssets/Previews/<Nom>.jpg
 """
 import math
 import os
@@ -1291,7 +1291,10 @@ def render_preview(o, name):
     lo = bpy.data.objects.new("L", ld)
     lo.rotation_euler = (math.radians(50), math.radians(10), math.radians(30))
     sc.collection.objects.link(lo)
-    sc.render.filepath = os.path.join(OUT_PREV, name + ".png")
+    sc.render.image_settings.file_format = "JPEG"
+    sc.render.image_settings.color_mode = "RGB"
+    sc.render.image_settings.quality = 90
+    sc.render.filepath = os.path.join(OUT_PREV, name + ".jpg")
     bpy.ops.render.render(write_still=True)
 
 
@@ -1307,6 +1310,9 @@ def _setup_render(size, transparent):
     sc.render.resolution_x = size[0]
     sc.render.resolution_y = size[1]
     sc.render.film_transparent = transparent
+    # Icones : PNG avec transparence (les apercus, eux, sont en JPEG)
+    sc.render.image_settings.file_format = "PNG"
+    sc.render.image_settings.color_mode = "RGBA"
     world = bpy.data.worlds.new("W")
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")

@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy  # noqa: E402
 import generate_models as G  # noqa: E402
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Docs", "apercu_entites.png")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Docs", "apercu_entites.jpg")
 
 
 def place(o, loc, parent=None, pitch=0.0, roll=0.0, sy=1.0, scale=1.0):
@@ -98,6 +98,9 @@ ld.energy = 3
 lo = bpy.data.objects.new("L", ld)
 lo.rotation_euler = (math.radians(45), 0, math.radians(60))
 sc.collection.objects.link(lo)
+sc.render.image_settings.file_format = "JPEG"
+sc.render.image_settings.color_mode = "RGB"
+sc.render.image_settings.quality = 90
 sc.render.filepath = os.path.normpath(OUT)
 bpy.ops.render.render(write_still=True)
 print("Apercu :", OUT)

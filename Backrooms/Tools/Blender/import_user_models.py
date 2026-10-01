@@ -13,7 +13,7 @@ Puis :
 Sorties :
     RawAssets/Meshes/SM_Hazmat_*.fbx, SM_BacteriaET_*.fbx, SM_DeathmothET_*.fbx
     RawAssets/Textures/T_Hazmat_Suit.jpg, T_Hazmat_Mask.jpg, T_Deathmoth.jpg
-    RawAssets/Icons/I_Silhouette.png, RawAssets/Previews/*.png
+    RawAssets/Icons/I_Silhouette.png, RawAssets/Previews/*.jpg
     RawAssets/Meshes/user_models.json  (positions des articulations, en cm, reperes Unreal : +X avant, +Y droite)
 
 Conventions : l'avant regarde vers +X, pieds a Z = 0, chaque piece a son pivot sur son articulation
@@ -160,7 +160,10 @@ def preview(objs, name, view=Vector((1.0, -0.7, 0.45))):
     sun.data.energy = 3.0
     sun.rotation_euler = (math.radians(50), math.radians(10), math.radians(30))
     os.makedirs(OUT_PREV, exist_ok=True)
-    sc.render.filepath = os.path.join(OUT_PREV, name + ".png")
+    sc.render.image_settings.file_format = "JPEG"
+    sc.render.image_settings.color_mode = "RGB"
+    sc.render.image_settings.quality = 90
+    sc.render.filepath = os.path.join(OUT_PREV, name + ".jpg")
     hidden = [o for o in sc.objects if o.type == "MESH" and o not in objs]
     for o in hidden:
         o.hide_render = True
@@ -305,9 +308,11 @@ def process_hazmat():
     body.data.transform(shift)
     joints = {k: shift @ v for k, v in joints.items()}
 
-    # Modele complet (silhouette de l'inventaire, apercu)
+    # Modele complet : seulement pour l'apercu et la silhouette de l'inventaire (le jeu utilise les pieces)
     full = mesh_object("SM_Hazmat", body.data.copy())
-    export_fbx(full, "SM_Hazmat")
+    stale = os.path.join(OUT_MESH, "SM_Hazmat.fbx")
+    if os.path.exists(stale):
+        os.remove(stale)
     preview([full], "SM_Hazmat")
     render_silhouette(full)
     full.hide_render = True
@@ -366,6 +371,8 @@ def render_silhouette(obj):
     sc.render.resolution_x = 384
     sc.render.resolution_y = 768
     sc.render.film_transparent = True
+    sc.render.image_settings.file_format = "PNG"
+    sc.render.image_settings.color_mode = "RGBA"
     world = bpy.data.worlds.new("WS")
     world.use_nodes = True
     world.node_tree.nodes["Background"].inputs[0].default_value = (0.5, 0.5, 0.52, 1)

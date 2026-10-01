@@ -149,20 +149,50 @@ def fade_edges(x, ms=8):
     return x
 
 
+# Frequences d'enregistrement possibles : un son sans aigus est stocke a une frequence plus basse
+# (fichier 2 fois plus petit, aucune difference audible). Seuil : energie au-dessus de la nouvelle
+# frequence de Nyquist inferieure a -60 dB de l'energie totale.
+STORE_RATES = (16000, 22050)
+HF_LIMIT_DB = -60.0
+
+
+def store_rate(x, sr=SR):
+    spec = np.abs(np.fft.rfft(x)) ** 2
+    freqs = np.fft.rfftfreq(len(x), 1.0 / sr)
+    total = spec.sum() + 1e-20
+    for rate in STORE_RATES:
+        if rate < sr and 10 * np.log10(spec[freqs > rate / 2].sum() / total + 1e-20) < HF_LIMIT_DB:
+            return rate
+    return sr
+
+
+def resample(x, sr_from, sr_to):
+    """Reechantillonnage par FFT (circulaire : une boucle reste parfaite si sa duree tombe juste)"""
+    if sr_from == sr_to:
+        return x
+    n_to = int(round(len(x) * sr_to / sr_from))
+    spec = np.fft.rfft(x)[: n_to // 2 + 1]
+    return np.fft.irfft(spec, n_to) * (n_to / len(x))
+
+
+def write_wav(path, x, sr):
+    data = (np.clip(x, -1, 1) * 32767).astype("<i2")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(data.tobytes())
+
+
 def save(name, x, peak=0.89, loop=False):
     x = normalize(np.asarray(x, dtype=np.float64), peak)
     if not loop:
         x = fade_edges(x)
     else:
         LOOPS.add(name)
-    data = (np.clip(x, -1, 1) * 32767).astype("<i2")
-    path = os.path.join(OUT, name + ".wav")
-    with wave.open(path, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(SR)
-        w.writeframes(data.tobytes())
-    print("  ->", name, f"{len(x) / SR:.1f}s", "(boucle)" if loop else "")
+    rate = store_rate(x)
+    write_wav(os.path.join(OUT, name + ".wav"), resample(x, SR, rate), rate)
+    print("  ->", name, f"{len(x) / SR:.1f}s", f"{rate} Hz", "(boucle)" if loop else "")
 
 
 def loop_freq(f, dur):
