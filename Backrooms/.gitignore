@@ -1,0 +1,18 @@
+# Unreal Engine
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.sdf
+*.VC.db
+*.opensdf
+*.xcworkspace
+# Python
+__pycache__/
+*.pyc

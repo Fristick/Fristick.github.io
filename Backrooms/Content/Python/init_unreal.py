@@ -1,0 +1,35 @@
+"""
+Execute automatiquement par Unreal (plugin Python) au demarrage de l'editeur.
+Si les ressources du jeu n'ont pas encore ete importees, lance backrooms_setup.run()
+une fois l'editeur completement charge.
+"""
+import unreal
+
+_state = {"ticks": 0, "handle": None}
+
+
+def _on_tick(delta_seconds):
+    _state["ticks"] += 1
+    if _state["ticks"] < 90:
+        return
+    try:
+        registry = unreal.AssetRegistryHelpers.get_asset_registry()
+        if registry.is_loading_assets():
+            return
+    except Exception:
+        pass
+    unreal.unregister_slate_post_tick_callback(_state["handle"])
+    try:
+        import backrooms_setup
+        if backrooms_setup.needs_setup():
+            backrooms_setup.run(force=False)
+        else:
+            unreal.log("[Backrooms] Ressources deja installees.")
+    except Exception as e:
+        unreal.log_error("[Backrooms] Echec de l'installation automatique : %s" % e)
+
+
+try:
+    _state["handle"] = unreal.register_slate_post_tick_callback(_on_tick)
+except Exception as e:
+    unreal.log_error("[Backrooms] init_unreal : %s" % e)
