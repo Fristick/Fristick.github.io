@@ -4,10 +4,12 @@
 #include "BRAssets.h"
 #include "BRLevels.h"
 #include "BRInteractables.h"
+#include "BRItems.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/RectLightComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -119,7 +121,9 @@ void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size)
 	{
 		WaterS = FBRSurface(TEXT("T_WaterNormal"), FLinearColor(0.3f, 0.45f, 0.5f), 200.f, 0.05f, 0.f);
 	}
-	FBatch& B = GetBatch(TEXT("WATER"), A->Plane(), A->WaterMaterial(WaterS), false, false, 0.f);
+	// Grille subdivisee (vagues par World Position Offset) si le modele Blender est importe
+	UStaticMesh* Grid = A->Mesh(TEXT("SM_WaterGrid"));
+	FBatch& B = GetBatch(TEXT("WATER"), Grid ? Grid : A->Plane(), A->WaterMaterial(WaterS), false, false, 0.f);
 	B.Transforms.Add(FTransform(FRotator::ZeroRotator, Center - GetActorLocation(), FVector(Size.X / 100.f, Size.Y / 100.f, 1.f)));
 }
 
@@ -149,6 +153,11 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 		AddBox(D.Trim, TC, TS, false);
 	}
 
+	if (bWithTrim && ZLo < 1.f && D.WallDetailChance > 0.f)
+	{
+		AddWallDetails(bAlongY, Fixed, A, B);
+	}
+
 	if (bWithPipes && Len > 60.f)
 	{
 		const float Yaw = bAlongY ? 90.f : 0.f;
@@ -161,6 +170,40 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 			AddProp(TEXT("SM_Pipe"), FTransform(FRotator(0.f, Yaw, 0.f), P1, FVector(Len / 100.f, 0.8f, 0.8f)), false, FVector::ZeroVector);
 			AddProp(TEXT("SM_Pipe"), FTransform(FRotator(0.f, Yaw, 0.f), P2, FVector(Len / 100.f, 0.45f, 0.45f)), false, FVector::ZeroVector);
 		}
+	}
+}
+
+void ABRChunk::AddWallDetails(bool bAlongY, float Fixed, float A, float B)
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float Len = B - A;
+	if (Len < 90.f)
+	{
+		return;
+	}
+	const uint32 Seed = W->GetSeed();
+	const int32 KF = FMath::RoundToInt(Fixed);
+	const int32 KM = FMath::RoundToInt((A + B) * 0.5f);
+	for (int32 Side = -1; Side <= 1; Side += 2)
+	{
+		const int32 Salt = 990 + (bAlongY ? 0 : 4) + (Side > 0 ? 1 : 0);
+		if (BRHash::Rand(KF, KM, Salt, Seed) >= D.WallDetailChance)
+		{
+			continue;
+		}
+		const bool bVent = BRHash::Rand(KF, KM, Salt + 20, Seed) < 0.3f;
+		const float Along = A + 40.f + BRHash::Rand(KF, KM, Salt + 40, Seed) * (Len - 80.f);
+		const float Off = Fixed + Side * (D.WallThickness * 0.5f);
+		const float Z = bVent ? D.WallHeight - 55.f : 32.f;
+		const FVector Pos = bAlongY ? FVector(Off, Along, Z) : FVector(Along, Off, Z);
+		const float Yaw = bAlongY ? (Side > 0 ? 0.f : 180.f) : (Side > 0 ? 90.f : -90.f);
+		AddProp(bVent ? FName(TEXT("SM_Vent")) : FName(TEXT("SM_Outlet")), FTransform(FRotator(0.f, Yaw, 0.f), Pos), false,
+			FVector::ZeroVector, nullptr, 2500.f, false);
 	}
 }
 
@@ -324,6 +367,7 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		const FString Key = FString::Printf(TEXT("FIXTURE|%s|%d"), *MeshName.ToString(), L.bBroken ? 0 : 1);
 		FBatch& B = GetBatch(Key, Mesh, nullptr, false, true, 0.f);
 		B.GlowScale = L.bBroken ? 0.f : 1.f;
+		B.bPowered = !L.bBroken;
 		B.Transforms.Add(Local);
 	}
 	else
@@ -342,28 +386,71 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		return;
 	}
 
-	UPointLightComponent* PL = NewObject<UPointLightComponent>(this);
-	PL->SetupAttachment(Root);
-	PL->SetMobility(EComponentMobility::Movable);
-	PL->SetRelativeLocation(LightPos - GetActorLocation());
-	PL->SetIntensityUnits(ELightUnits::Lumens);
-	PL->SetIntensity(D.LightLumens);
-	PL->SetLightColor(D.LightColor);
-	PL->SetAttenuationRadius(D.LightRadius);
-	PL->SetSourceRadius(D.Fixture == EBRFixture::SkyPanel ? 40.f : 8.f);
-	PL->SetSourceLength(SourceLength);
-	PL->SetCastShadows(L.bShadow);
-	PL->SetVolumetricScatteringIntensity(D.bVolumetricFog ? 1.f : 0.f);
-	PL->MaxDrawDistance = D.ViewDistance * 0.75f;
-	PL->MaxDistanceFadeRange = 800.f;
-	PL->RegisterComponent();
-	Extra.Add(PL);
+	// Neons et dalles lumineuses : lumieres surfaciques (ombres douces, reflets realistes en ray tracing)
+	const bool bArea = FBRSettings::Get().bAreaLights
+		&& (D.Fixture == EBRFixture::Panel || D.Fixture == EBRFixture::SkyPanel || D.Fixture == EBRFixture::Tube);
+	ULocalLightComponent* LC = nullptr;
+	float Lumens = D.LightLumens;
+	if (bArea)
+	{
+		URectLightComponent* RL = NewObject<URectLightComponent>(this);
+		RL->SetupAttachment(Root);
+		RL->SetMobility(EComponentMobility::Movable);
+		FVector RectPos = LightPos;
+		RectPos.Z = H - (D.Fixture == EBRFixture::Tube ? 12.f : 5.f);
+		RL->SetRelativeLocation(RectPos - GetActorLocation());
+		RL->SetRelativeRotation(FRotator(-90.f, L.Yaw, 0.f)); // eclaire vers le bas
+		float Width = 55.f;
+		float Length = 115.f;
+		if (D.Fixture == EBRFixture::SkyPanel)
+		{
+			Width = Length = 92.f;
+		}
+		else if (D.Fixture == EBRFixture::Tube)
+		{
+			Width = 8.f;
+			Length = 120.f;
+		}
+		RL->SetSourceWidth(Width);
+		RL->SetSourceHeight(Length);
+		RL->SetBarnDoorAngle(88.f);
+		RL->SetBarnDoorLength(4.f);
+		Lumens *= 0.55f; // tout le flux part vers le bas
+		LC = RL;
+	}
+	else
+	{
+		UPointLightComponent* PL = NewObject<UPointLightComponent>(this);
+		PL->SetupAttachment(Root);
+		PL->SetMobility(EComponentMobility::Movable);
+		PL->SetRelativeLocation(LightPos - GetActorLocation());
+		PL->SetSourceRadius(D.Fixture == EBRFixture::SkyPanel ? 40.f : 8.f);
+		PL->SetSourceLength(SourceLength);
+		LC = PL;
+	}
+	LC->SetIntensityUnits(ELightUnits::Lumens);
+	LC->SetIntensity(Lumens * Power);
+	LC->SetLightColor(D.LightColor);
+	LC->SetAttenuationRadius(D.LightRadius);
+	LC->SetCastShadows(L.bShadow);
+	LC->SetVolumetricScatteringIntensity(D.bVolumetricFog ? 1.f : 0.f);
+	LC->MaxDrawDistance = D.ViewDistance * 0.75f;
+	LC->MaxDistanceFadeRange = 800.f;
+	LC->SetVisibility(Power > 0.01f);
+	LC->RegisterComponent();
+	Extra.Add(LC);
 	++LightCount;
+
+	if (!L.bFlicker)
+	{
+		PoweredLights.Add(LC);
+		PoweredBase.Add(Lumens);
+	}
 
 	if (L.bFlicker && Flickers.Num() > 0)
 	{
-		Flickers.Last().Light = PL;
-		Flickers.Last().BaseIntensity = D.LightLumens;
+		Flickers.Last().Light = LC;
+		Flickers.Last().BaseIntensity = Lumens;
 		Flickers.Last().Timer = FMath::FRandRange(0.1f, 2.f);
 	}
 }
@@ -762,24 +849,36 @@ void ABRChunk::BuildPickupsAndExits()
 	// ---- Objets a ramasser ----
 	struct FPickupRoll
 	{
-		EBRPickupType Type;
+		EBRItem Item;
 		float Chance;
 		int32 Salt;
 	};
+	const float VHS = D.bRequireObjectives ? D.VHSChance : 0.f;
 	const FPickupRoll Rolls[] = {
-		{ EBRPickupType::AlmondWater, D.AlmondWaterChance, 1001 },
-		{ EBRPickupType::AlmondWater, D.AlmondWaterChance * 0.4f, 1002 },
-		{ EBRPickupType::Battery, D.BatteryChance, 1003 },
-		{ EBRPickupType::Note, D.NoteChance, 1004 },
+		{ EBRItem::AlmondWater, D.AlmondWaterChance, 1001 },
+		{ EBRItem::AlmondWater, D.AlmondWaterChance * 0.4f, 1002 },
+		{ EBRItem::Battery, D.BatteryChance, 1003 },
+		{ EBRItem::Note, D.NoteChance, 1004 },
+		{ EBRItem::Bandage, D.BandageChance, 1006 },
+		{ EBRItem::EnergyBar, D.EnergyBarChance, 1007 },
+		{ EBRItem::VHSTape, VHS, 1008 },
+		{ EBRItem::VHSTape, VHS * 0.45f, 1009 },
+		{ EBRItem::Flashlight, D.GearChance, 1010 },
+		{ EBRItem::Headlamp, D.GearChance, 1011 },
+		{ EBRItem::Vest, D.GearChance * 0.7f, 1012 },
 	};
 	for (const FPickupRoll& Roll : Rolls)
 	{
-		if (BRHash::Rand(Coord.X, Coord.Y, Roll.Salt, Seed) >= Roll.Chance)
+		if (Roll.Chance <= 0.f || BRHash::Rand(Coord.X, Coord.Y, Roll.Salt, Seed) >= Roll.Chance)
 		{
 			continue;
 		}
 		FIntPoint Cell(0, 0);
 		if (!PickCell(Roll.Salt, Cell))
+		{
+			continue;
+		}
+		if (Roll.Item == EBRItem::VHSTape && W->IsSpawnArea(Cell.X, Cell.Y))
 		{
 			continue;
 		}
@@ -797,14 +896,14 @@ void ABRChunk::BuildPickupsAndExits()
 		if (P)
 		{
 			FString Note;
-			if (Roll.Type == EBRPickupType::Note)
+			if (Roll.Item == EBRItem::Note)
 			{
 				const TArray<FString>& Common = BRLevels::CommonNotes();
 				const int32 Total = D.Notes.Num() + Common.Num();
 				const int32 Idx = Total > 0 ? static_cast<int32>(BRHash::Hash(Coord.X, Coord.Y, 1005, Seed) % static_cast<uint32>(Total)) : 0;
 				Note = Idx < D.Notes.Num() ? D.Notes[Idx] : (Common.IsValidIndex(Idx - D.Notes.Num()) ? Common[Idx - D.Notes.Num()] : FString());
 			}
-			P->Init(Roll.Type, Id, Note);
+			P->Init(Roll.Item, Id, Note);
 			Spawned.Add(P);
 		}
 	}
@@ -995,7 +1094,7 @@ void ABRChunk::FinishBatches()
 			}
 			else
 			{
-				A->ApplySlots(ISM, nullptr, false, nullptr, B.GlowScale);
+				A->ApplySlots(ISM, nullptr, false, nullptr, B.GlowScale, B.bPowered);
 			}
 		}
 		ISM->RegisterComponent();
@@ -1025,7 +1124,7 @@ void ABRChunk::Tick(float DeltaSeconds)
 			}
 		}
 		F.Phase += DeltaSeconds * 37.f;
-		const float Mod = F.bOn ? (0.85f + 0.15f * FMath::Sin(F.Phase)) : 0.03f;
+		const float Mod = (F.bOn ? (0.85f + 0.15f * FMath::Sin(F.Phase)) : 0.03f) * Power;
 		if (F.Light)
 		{
 			F.Light->SetIntensity(F.BaseIntensity * Mod);
@@ -1036,6 +1135,26 @@ void ABRChunk::Tick(float DeltaSeconds)
 			{
 				G->SetVectorParameterValue(TEXT("Emissive"), F.GlowColor * Mod);
 			}
+		}
+	}
+}
+
+void ABRChunk::SetPower(float InPower)
+{
+	Power = FMath::Clamp(InPower, 0.f, 1.f);
+	for (int32 i = 0; i < PoweredLights.Num(); ++i)
+	{
+		if (ULocalLightComponent* L = PoweredLights[i])
+		{
+			L->SetIntensity(PoweredBase.IsValidIndex(i) ? PoweredBase[i] * Power : 0.f);
+			L->SetVisibility(Power > 0.01f);
+		}
+	}
+	for (FBRFlicker& F : Flickers)
+	{
+		if (F.Light)
+		{
+			F.Light->SetVisibility(Power > 0.01f);
 		}
 	}
 }

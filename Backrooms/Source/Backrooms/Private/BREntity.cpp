@@ -32,9 +32,9 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		Smiler.Number = TEXT("Entit\u00e9 3");
 		Smiler.Description = TEXT("Une silhouette invisible dans l'obscurit\u00e9, dont on ne distingue que deux yeux et un sourire ")
 			TEXT("lumineux. On les trouve dans les zones o\u00f9 la lumi\u00e8re est morte.");
-		Smiler.Advice = TEXT("Ne braquez pas votre lampe sur eux et ne courez pas. Eteignez la lumi\u00e8re et reculez lentement.");
+		Smiler.Advice = TEXT("Ne braquez JAMAIS votre lampe sur eux : ils chargent. Eteignez la lumi\u00e8re, ne courez pas et reculez lentement.");
 		Smiler.HalfHeight = 50.f; Smiler.Radius = 45.f; Smiler.bFlying = true; Smiler.HoverHeight = 165.f; Smiler.bNeedsDark = true;
-		Smiler.WalkSpeed = 110.f; Smiler.ChaseSpeed = 640.f; Smiler.SightRange = 1800.f; Smiler.AttackRange = 110.f;
+		Smiler.WalkSpeed = 110.f; Smiler.ChaseSpeed = 700.f; Smiler.SightRange = 1800.f; Smiler.AttackRange = 110.f;
 		Smiler.Damage = 100.f; Smiler.SanityDamage = 30.f; Smiler.AttackCooldown = 1.f; Smiler.Aura = 0.8f; Smiler.AuraRadius = 900.f;
 		Smiler.Voice = TEXT("S_Smiler"); Smiler.VoiceInterval = 12.f; Smiler.VoiceFalloff = 2000.f;
 
@@ -53,7 +53,7 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		Faceling.Number = TEXT("Entit\u00e9 9");
 		Faceling.Description = TEXT("Des \u00eatres d'apparence humaine, v\u00eatus normalement, mais sans le moindre visage. ")
 			TEXT("La plupart errent sans but et ignorent les vagabonds.");
-		Faceling.Advice = TEXT("Restez poli et gardez vos distances. Certains adultes deviennent agressifs si on les approche.");
+		Faceling.Advice = TEXT("Restez poli et gardez vos distances. Dans les champs, certains se tapissent dans les bl\u00e9s et attrapent ceux qui passent trop pr\u00e8s.");
 		Faceling.HalfHeight = 92.f; Faceling.Radius = 30.f; Faceling.WalkSpeed = 115.f; Faceling.ChaseSpeed = 300.f;
 		Faceling.SightRange = 1500.f; Faceling.AttackRange = 110.f; Faceling.Damage = 15.f; Faceling.SanityDamage = 5.f;
 		Faceling.AttackCooldown = 1.8f; Faceling.Aura = 0.2f; Faceling.AuraRadius = 450.f;
@@ -63,8 +63,9 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		Skin.Name = TEXT("Skin-Stealers");
 		Skin.Number = TEXT("Entit\u00e9 10");
 		Skin.Description = TEXT("Une cr\u00e9ature longiligne qui porte la peau de ses victimes et imite leurs voix pour attirer ")
-			TEXT("les vagabonds. Extr\u00eamement dangereuse.");
-		Skin.Advice = TEXT("Ne r\u00e9pondez jamais \u00e0 une voix famili\u00e8re. Fuyez d\u00e8s que vous l'apercevez.");
+			TEXT("les vagabonds. Au repos, ce n'est qu'une masse de chair translucide ; \u00e0 votre approche, elle prend l'apparence d'un ")
+			TEXT("explorateur en combinaison. Extr\u00eamement dangereuse.");
+		Skin.Advice = TEXT("M\u00e9fiez-vous des explorateurs qui s'approchent sans rien dire. Ne r\u00e9pondez jamais \u00e0 une voix famili\u00e8re : fuyez.");
 		Skin.HalfHeight = 112.f; Skin.Radius = 32.f; Skin.WalkSpeed = 160.f; Skin.ChaseSpeed = 440.f; Skin.SightRange = 2400.f;
 		Skin.AttackRange = 140.f; Skin.Damage = 45.f; Skin.SanityDamage = 15.f; Skin.AttackCooldown = 1.5f; Skin.Aura = 0.5f;
 		Skin.Voice = TEXT("S_SkinStealer"); Skin.VoiceInterval = 9.f; Skin.VoiceFalloff = 3000.f;
@@ -95,8 +96,8 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		Party.Number = TEXT("Entit\u00e9 67");
 		Party.Description = TEXT("=) Des silhouettes jaunes au sourire dessin\u00e9, qui vous invitent \u00e0 \"faire la f\u00eate\". ")
 			TEXT("Personne n'est jamais revenu d'une de leurs f\u00eates.");
-		Party.Advice = TEXT("Ils ne bougent que lorsque vous ne les regardez pas. Ne les quittez JAMAIS des yeux en reculant.");
-		Party.HalfHeight = 92.f; Party.Radius = 30.f; Party.WalkSpeed = 0.f; Party.ChaseSpeed = 700.f; Party.SightRange = 3000.f;
+		Party.Advice = TEXT("Ne soutenez pas leur regard plus de quelques secondes. Pendant les coupures de courant, ils partent \u00e0 la chasse : cachez-vous.");
+		Party.HalfHeight = 92.f; Party.Radius = 30.f; Party.WalkSpeed = 70.f; Party.ChaseSpeed = 520.f; Party.SightRange = 3000.f;
 		Party.AttackRange = 120.f; Party.Damage = 100.f; Party.SanityDamage = 25.f; Party.AttackCooldown = 1.f; Party.Aura = 0.6f;
 		Party.Voice = TEXT("S_Partygoer"); Party.VoiceInterval = 9.f;
 
@@ -108,10 +109,47 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		Clump.HalfHeight = 60.f; Clump.Radius = 60.f; Clump.WalkSpeed = 100.f; Clump.ChaseSpeed = 300.f; Clump.SightRange = 1300.f;
 		Clump.AttackRange = 150.f; Clump.Damage = 40.f; Clump.SanityDamage = 12.f; Clump.AttackCooldown = 1.8f; Clump.Aura = 0.5f;
 		Clump.Voice = TEXT("S_Clump"); Clump.VoiceInterval = 6.f;
+
+		FBREntityInfo& Bact = L[static_cast<int32>(EBREntityKind::Bacteria)];
+		Bact.Name = TEXT("Bacteria");
+		Bact.Number = TEXT("Entit\u00e9 du Niveau 0");
+		Bact.Description = TEXT("Une silhouette humano\u00efde d\u00e9mesur\u00e9e, faite de fils torsad\u00e9s comme un squelette de c\u00e2bles. ")
+			TEXT("Elle erre dans le Niveau 0 en se tordant et imite des coups frapp\u00e9s aux murs pour attirer les vagabonds.");
+		Bact.Advice = TEXT("Si vous entendez frapper, \u00e9loignez-vous. D\u00e8s qu'elle vous voit, cassez la ligne de vue : portes, virages, recoins.");
+		Bact.HalfHeight = 108.f; Bact.Radius = 30.f; Bact.WalkSpeed = 140.f; Bact.ChaseSpeed = 490.f; Bact.SightRange = 2600.f;
+		Bact.AttackRange = 130.f; Bact.Damage = 60.f; Bact.SanityDamage = 20.f; Bact.AttackCooldown = 1.4f; Bact.Aura = 0.5f;
+		Bact.AuraRadius = 900.f; Bact.Voice = TEXT("S_Bacteria"); Bact.VoiceInterval = 7.f; Bact.VoiceFalloff = 3200.f;
 		return L;
 	}();
 	const int32 Index = FMath::Clamp(static_cast<int32>(InKind), 0, Infos.Num() - 1);
 	return Infos[Index];
+}
+
+ABREntity::FHumanoidSpec ABREntity::SpecFor(EBREntityKind InKind)
+{
+	FHumanoidSpec S;
+	switch (InKind)
+	{
+	case EBREntityKind::SkinStealer:
+		S.Hip = 115.f; S.Shoulder = 185.f; S.ShoulderW = 22.f; S.HipW = 11.f; S.Hunch = 10.f;
+		S.UpperArm = 45.f; S.LowerArm = 62.f; S.Thigh = 58.f; S.Neck = 10.f;
+		break;
+	case EBREntityKind::Wretch:
+		S.Hip = 82.f; S.Shoulder = 122.f; S.ShoulderW = 17.f; S.HipW = 9.f; S.Hunch = 30.f;
+		S.UpperArm = 33.f; S.LowerArm = 47.f; S.Thigh = 41.f; S.Neck = 5.f;
+		break;
+	case EBREntityKind::Partygoer:
+		S.Hip = 85.f; S.Shoulder = 138.f; S.ShoulderW = 22.f; S.HipW = 11.f; S.Hunch = 0.f;
+		S.UpperArm = 28.f; S.LowerArm = 40.f; S.Thigh = 43.f; S.Neck = 4.f;
+		break;
+	case EBREntityKind::Bacteria:
+		S.Hip = 140.f; S.Shoulder = 215.f; S.ShoulderW = 19.f; S.HipW = 8.f; S.Hunch = 10.f;
+		S.UpperArm = 62.f; S.LowerArm = 82.f; S.Thigh = 70.f; S.Neck = 16.f;
+		break;
+	default: // Faceling
+		break;
+	}
+	return S;
 }
 
 // =====================================================================================================================
@@ -159,10 +197,34 @@ void ABREntity::BeginPlay()
 
 	bHostileVariant = (Kind != EBREntityKind::Faceling) || FMath::FRand() < 0.15f;
 	VoiceTimer = FMath::FRandRange(2.f, 6.f);
-	if (Kind == EBREntityKind::Smiler || Kind == EBREntityKind::Partygoer)
+	TwitchTimer = FMath::FRandRange(0.2f, 1.f);
+
+	switch (Kind)
 	{
-		M->bOrientRotationToMovement = false;
+	case EBREntityKind::Smiler:
+	case EBREntityKind::Partygoer:
+		SetOrientToMovement(false);
 		SetState(EState::Idle);
+		break;
+	case EBREntityKind::SkinStealer:
+		// Commence sous sa forme de masse de chair
+		Morph = MorphTarget = 0.f;
+		SetState(EState::Idle);
+		break;
+	case EBREntityKind::Faceling:
+	{
+		const ABRWorld* W = World.Get();
+		if (W && W->Def().Layout == EBRLayout::Open)
+		{
+			// Niveau 10 : tapi dans les bles
+			bHostileVariant = true;
+			HideCrouch = 1.f;
+			SetState(EState::Hide);
+		}
+		break;
+	}
+	default:
+		break;
 	}
 
 	if (UBRAssets* A = UBRAssets::Get(this))
@@ -179,6 +241,7 @@ void ABREntity::BeginPlay()
 		}
 	}
 	BuildVisual();
+	UpdateMorph(0.f);
 }
 
 void ABREntity::EndPlay(const EEndPlayReason::Type Reason)
@@ -191,15 +254,15 @@ void ABREntity::EndPlay(const EEndPlayReason::Type Reason)
 }
 
 // =====================================================================================================================
-// Modele
+// Modele articule
 // =====================================================================================================================
 
-USceneComponent* ABREntity::AddPart(FName MeshName, const FVector& Joint, const FVector& Scale, const FVector& FallbackSize,
+USceneComponent* ABREntity::AddPart(FName MeshName, USceneComponent* Parent, const FVector& Joint, const FVector& FallbackSize,
 	float FallbackDrop, const TMap<FString, FLinearColor>* Tints, bool bUniqueGlow, float GlowScale)
 {
 	UBRAssets* A = UBRAssets::Get(this);
 	USceneComponent* Pivot = NewObject<USceneComponent>(this);
-	Pivot->SetupAttachment(Visual);
+	Pivot->SetupAttachment(Parent ? Parent : Visual.Get());
 	Pivot->SetRelativeLocation(Joint);
 	Pivot->RegisterComponent();
 	PartComponents.Add(Pivot);
@@ -212,7 +275,6 @@ USceneComponent* ABREntity::AddPart(FName MeshName, const FVector& Joint, const 
 	if (SM)
 	{
 		MeshComp->SetStaticMesh(SM);
-		MeshComp->SetRelativeScale3D(Scale);
 	}
 	else if (A && A->Cube() && FallbackSize.X > 0.f)
 	{
@@ -247,28 +309,114 @@ USceneComponent* ABREntity::AddPart(FName MeshName, const FVector& Joint, const 
 	return Pivot;
 }
 
-void ABREntity::BuildHumanoid(const TCHAR* Prefix, float Hip, float Shoulder, float ShoulderW, float HipW, float Hunch,
-	const TMap<FString, FLinearColor>* Tints, float ArmLen, float LegLen)
+void ABREntity::AddLimb(USceneComponent* Pivot, ELimb Type, float Phase, float Amp, float Sign, const FRotator& Base)
+{
+	if (!Pivot)
+	{
+		return;
+	}
+	FLimb L;
+	L.Pivot = Pivot;
+	L.Type = Type;
+	L.Phase = Phase;
+	L.Amp = Amp;
+	L.Sign = Sign;
+	L.Base = Base;
+	Pivot->SetRelativeRotation(Base);
+	Limbs.Add(L);
+}
+
+void ABREntity::BuildHumanoid(const TCHAR* Prefix, const FHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent)
 {
 	const FString P(Prefix);
-	AddPart(FName(*(P + TEXT("_Torso"))), FVector(0.f, 0.f, Hip), FVector(1.f), FVector(30.f, 40.f, Shoulder - Hip + 40.f),
-		(Shoulder - Hip + 40.f) * 0.5f, Tints);
+	USceneComponent* Base = Parent ? Parent : Visual.Get();
+	const float Torso = Spec.Shoulder - Spec.Hip;
+	AddPart(FName(*(P + TEXT("_Torso"))), Base, FVector(0.f, 0.f, Spec.Hip), FVector(28.f, Spec.ShoulderW * 2.f, Torso + 10.f), Torso * 0.5f, Tints);
+	HeadPivot = AddPart(FName(*(P + TEXT("_Head"))), Base, FVector(Spec.Hunch * 1.05f, 0.f, Spec.Shoulder + Spec.Neck),
+		FVector(22.f, 19.f, 26.f), 13.f, Tints);
+
+	// Pose de repos propre a chaque espece
+	float ArmPitch = 4.f;
+	float ElbowPitch = 10.f;
+	float ArmRoll = 4.f;
+	float ArmAmp = 22.f;
+	float LegAmp = 28.f;
+	switch (Kind)
+	{
+	case EBREntityKind::Wretch:
+		ArmPitch = 18.f; ElbowPitch = 22.f; ArmAmp = 12.f; LegAmp = 20.f;
+		break;
+	case EBREntityKind::Bacteria:
+		ArmPitch = 6.f; ElbowPitch = 12.f; ArmRoll = 7.f; ArmAmp = 26.f; LegAmp = 30.f;
+		break;
+	case EBREntityKind::SkinStealer:
+		ArmPitch = 8.f; ElbowPitch = 14.f; ArmRoll = 6.f;
+		break;
+	case EBREntityKind::Partygoer:
+		ArmRoll = 8.f; ArmAmp = 26.f;
+		break;
+	default:
+		break;
+	}
+
 	for (int32 Side = -1; Side <= 1; Side += 2)
 	{
-		USceneComponent* Arm = AddPart(FName(*(P + TEXT("_Arm"))), FVector(Hunch, Side * ShoulderW, Shoulder), FVector(1.f),
-			FVector(10.f, 10.f, ArmLen), -ArmLen * 0.5f, Tints);
-		USceneComponent* Leg = AddPart(FName(*(P + TEXT("_Leg"))), FVector(0.f, Side * HipW, Hip), FVector(1.f),
-			FVector(13.f, 13.f, LegLen), -LegLen * 0.5f, Tints);
-		FLimb LA;
-		LA.Pivot = Arm;
-		LA.Phase = Side > 0 ? 0.f : PI;
-		LA.Amp = -22.f;
-		Limbs.Add(LA);
-		FLimb LL;
-		LL.Pivot = Leg;
-		LL.Phase = Side > 0 ? 0.f : PI;
-		LL.Amp = 30.f;
-		Limbs.Add(LL);
+		const float Sgn = static_cast<float>(Side);
+		USceneComponent* Upper = AddPart(FName(*(P + TEXT("_UpperArm"))), Base, FVector(Spec.Hunch, Sgn * Spec.ShoulderW, Spec.Shoulder),
+			FVector(9.f, 9.f, Spec.UpperArm), -Spec.UpperArm * 0.5f, Tints);
+		USceneComponent* Lower = AddPart(FName(*(P + TEXT("_LowerArm"))), Upper, FVector(0.f, 0.f, -Spec.UpperArm),
+			FVector(8.f, 8.f, Spec.LowerArm), -Spec.LowerArm * 0.5f, Tints);
+		USceneComponent* Thigh = AddPart(FName(*(P + TEXT("_Thigh"))), Base, FVector(0.f, Sgn * Spec.HipW, Spec.Hip),
+			FVector(13.f, 13.f, Spec.Thigh), -Spec.Thigh * 0.5f, Tints);
+		const float ShinLen = Spec.Hip - Spec.Thigh;
+		USceneComponent* Shin = AddPart(FName(*(P + TEXT("_Shin"))), Thigh, FVector(0.f, 0.f, -Spec.Thigh),
+			FVector(11.f, 11.f, ShinLen), -ShinLen * 0.5f, Tints);
+
+		// Bras en opposition de phase avec la jambe du meme cote ; roulis negatif = vers l'exterieur pour +Y
+		const float LegPhase = Side > 0 ? 0.f : PI;
+		AddLimb(Upper, ELimb::UpperArm, LegPhase + PI, ArmAmp, Sgn, FRotator(ArmPitch, 0.f, -Sgn * ArmRoll));
+		AddLimb(Lower, ELimb::LowerArm, LegPhase + PI, ArmAmp, Sgn, FRotator(ElbowPitch, 0.f, 0.f));
+		AddLimb(Thigh, ELimb::Thigh, LegPhase, LegAmp, Sgn, FRotator::ZeroRotator);
+		AddLimb(Shin, ELimb::Shin, LegPhase, LegAmp * 1.4f, Sgn, FRotator::ZeroRotator);
+
+		// Partygoer : ballon rouge dans la main droite
+		if (Kind == EBREntityKind::Partygoer && Side > 0)
+		{
+			Balloon = AddPart(TEXT("SM_Partygoer_Balloon"), Lower, FVector(2.f, 0.f, -Spec.LowerArm), FVector::ZeroVector, 0.f, nullptr);
+			if (Balloon)
+			{
+				Balloon->SetUsingAbsoluteRotation(true);
+			}
+		}
+	}
+}
+
+void ABREntity::BuildHound(const TMap<FString, FLinearColor>* Tints)
+{
+	// Proportions identiques a HOUND dans generate_models.py
+	const float Z = 70.f;
+	AddPart(TEXT("SM_Hound_Body"), Visual, FVector(0.f, 0.f, Z), FVector(90.f, 30.f, 25.f), 0.f, Tints);
+	HeadPivot = AddPart(TEXT("SM_Hound_Head"), Visual, FVector(42.f, 0.f, Z + 9.f), FVector(28.f, 18.f, 20.f), 0.f, Tints);
+	struct FLeg
+	{
+		FVector Joint;
+		bool bFront;
+		float Phase;
+	};
+	const FLeg Legs[4] = {
+		{ FVector(34.f, 15.f, Z), true, 0.f },
+		{ FVector(34.f, -15.f, Z), true, PI },
+		{ FVector(-32.f, 14.f, Z), false, PI },
+		{ FVector(-32.f, -14.f, Z), false, 0.f },
+	};
+	for (const FLeg& Leg : Legs)
+	{
+		const float Side = Leg.Joint.Y > 0.f ? 1.f : -1.f;
+		USceneComponent* Up = AddPart(TEXT("SM_Hound_UpperLeg"), Visual, Leg.Joint, FVector(10.f, 10.f, 36.f), -18.f, Tints);
+		USceneComponent* Low = AddPart(TEXT("SM_Hound_LowerLeg"), Up, FVector(0.f, 0.f, -36.f), FVector(8.f, 8.f, 40.f), -20.f, Tints);
+		// Pattes avant pliees vers l'arriere, pattes arriere vers l'avant, legerement ecartees
+		AddLimb(Up, ELimb::HoundUpper, Leg.Phase, 22.f, Leg.bFront ? -1.f : 1.f, FRotator(Leg.bFront ? 25.f : -30.f, 0.f, -Side * 12.f));
+		AddLimb(Low, ELimb::HoundLower, Leg.Phase, 20.f, Leg.bFront ? -1.f : 1.f, FRotator(Leg.bFront ? -45.f : 40.f, 0.f, 0.f));
 	}
 }
 
@@ -279,7 +427,7 @@ void ABREntity::BuildVisual()
 	{
 	case EBREntityKind::Smiler:
 	{
-		AddPart(TEXT("SM_Smiler"), FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(1.f), FVector(70.f, 70.f, 90.f), 0.f, nullptr, true, 0.5f);
+		AddPart(TEXT("SM_Smiler"), Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(70.f, 70.f, 90.f), 0.f, nullptr, true, 0.5f);
 		GlowLight = NewObject<UPointLightComponent>(this);
 		GlowLight->SetupAttachment(Visual);
 		GlowLight->SetRelativeLocation(FVector(70.f, 0.f, MyInfo().HalfHeight));
@@ -292,71 +440,69 @@ void ABREntity::BuildVisual()
 		break;
 	}
 	case EBREntityKind::Hound:
-	{
 		Tints.Add(TEXT("Skin"), FLinearColor(0.55f, 0.53f, 0.5f));
-		const float Z = 62.f;
-		AddPart(TEXT("SM_Hound_Body"), FVector(0.f, 0.f, Z), FVector(1.f), FVector(90.f, 30.f, 25.f), 0.f, &Tints);
-		const FVector Joints[4] = { FVector(33.f, 16.f, Z), FVector(33.f, -16.f, Z), FVector(-30.f, 14.f, Z), FVector(-30.f, -14.f, Z) };
-		const float Phases[4] = { 0.f, PI, PI, 0.f };
-		for (int32 i = 0; i < 4; ++i)
-		{
-			FLimb L;
-			L.Pivot = AddPart(TEXT("SM_Hound_Leg"), Joints[i], FVector(1.f), FVector(10.f, 10.f, Z), -Z * 0.5f, &Tints);
-			L.Phase = Phases[i];
-			L.Amp = 28.f;
-			Limbs.Add(L);
-		}
+		BuildHound(&Tints);
 		break;
-	}
 	case EBREntityKind::Faceling:
 	{
 		const FLinearColor Shirts[5] = { FLinearColor(0.45f, 0.47f, 0.5f), FLinearColor(0.35f, 0.25f, 0.2f), FLinearColor(0.2f, 0.3f, 0.45f),
 			FLinearColor(0.5f, 0.45f, 0.35f), FLinearColor(0.3f, 0.35f, 0.3f) };
 		Tints.Add(TEXT("Cloth"), Shirts[FMath::RandRange(0, 4)]);
 		Tints.Add(TEXT("Skin"), FLinearColor(0.82f, 0.72f, 0.64f));
-		BuildHumanoid(TEXT("SM_Faceling"), 92.f, 145.f, 20.f, 10.f, 0.f, &Tints, 68.f, 92.f);
+		BuildHumanoid(TEXT("SM_Faceling"), SpecFor(Kind), &Tints, Visual);
 		break;
 	}
 	case EBREntityKind::SkinStealer:
+	{
 		Tints.Add(TEXT("Flesh"), FLinearColor(0.72f, 0.48f, 0.42f));
-		BuildHumanoid(TEXT("SM_SkinStealer"), 112.f, 180.f, 23.f, 11.f, 12.f, &Tints, 100.f, 112.f);
+		BodyForm = NewObject<USceneComponent>(this);
+		BodyForm->SetupAttachment(Visual);
+		BodyForm->RegisterComponent();
+		BuildHumanoid(TEXT("SM_SkinStealer"), SpecFor(Kind), &Tints, BodyForm);
+		MassForm = AddPart(TEXT("SM_SkinStealer_Mass"), Visual, FVector::ZeroVector, FVector(110.f, 100.f, 90.f), 45.f, &Tints);
 		break;
+	}
 	case EBREntityKind::Wretch:
 		Tints.Add(TEXT("Skin"), FLinearColor(0.42f, 0.45f, 0.36f));
-		BuildHumanoid(TEXT("SM_Wretch"), 80.f, 122.f, 18.f, 9.f, 28.f, &Tints, 78.f, 80.f);
+		BuildHumanoid(TEXT("SM_Wretch"), SpecFor(Kind), &Tints, Visual);
 		break;
 	case EBREntityKind::Partygoer:
-		BuildHumanoid(TEXT("SM_Partygoer"), 88.f, 142.f, 22.f, 11.f, 0.f, nullptr, 66.f, 88.f);
+		BuildHumanoid(TEXT("SM_Partygoer"), SpecFor(Kind), nullptr, Visual);
+		break;
+	case EBREntityKind::Bacteria:
+		BuildHumanoid(TEXT("SM_Bacteria"), SpecFor(Kind), nullptr, Visual);
 		break;
 	case EBREntityKind::Deathmoth:
 	{
 		const float Z = MyInfo().HalfHeight;
-		AddPart(TEXT("SM_Deathmoth_Body"), FVector(0.f, 0.f, Z), FVector(1.f), FVector(60.f, 20.f, 20.f), 0.f, nullptr);
+		AddPart(TEXT("SM_Deathmoth_Body"), Visual, FVector(0.f, 0.f, Z), FVector(60.f, 20.f, 20.f), 0.f, nullptr);
 		// L'aile s'etend d'un cote : on detecte lequel pour la mirer de l'autre
-		float Side = -1.f;
+		float WingSide = -1.f;
 		if (UBRAssets* A = UBRAssets::Get(this))
 		{
 			if (UStaticMesh* Wing = A->Mesh(TEXT("SM_Deathmoth_Wing")))
 			{
-				Side = Wing->GetBoundingBox().GetCenter().Y >= 0.f ? 1.f : -1.f;
+				WingSide = Wing->GetBoundingBox().GetCenter().Y >= 0.f ? 1.f : -1.f;
 			}
 		}
 		for (int32 k = 0; k < 2; ++k)
 		{
 			const float Out = (k == 0) ? 1.f : -1.f; // cote desire (+Y / -Y)
-			const float Mirror = Out * Side;
-			FLimb L;
-			L.Pivot = AddPart(TEXT("SM_Deathmoth_Wing"), FVector(0.f, Out * 8.f, Z + 4.f), FVector(1.f, Mirror, 1.f),
-				FVector(60.f, 80.f, 2.f), 0.f, nullptr);
-			L.bRoll = true;
-			L.Sign = Out;
-			L.Amp = 50.f;
-			Limbs.Add(L);
+			USceneComponent* WingPivot = AddPart(TEXT("SM_Deathmoth_Wing"), Visual, FVector(0.f, Out * 8.f, Z + 4.f), FVector(60.f, 80.f, 2.f), 0.f, nullptr);
+			if (WingPivot)
+			{
+				WingPivot->SetRelativeScale3D(FVector(1.f, Out * WingSide, 1.f));
+			}
+			AddLimb(WingPivot, ELimb::Wing, 0.f, 50.f, Out, FRotator::ZeroRotator);
 		}
 		break;
 	}
 	case EBREntityKind::Clump:
-		AddPart(TEXT("SM_Clump"), FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(1.1f), FVector(110.f, 110.f, 100.f), 0.f, nullptr);
+		AddPart(TEXT("SM_Clump"), Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(110.f, 110.f, 100.f), 0.f, nullptr);
+		if (Visual)
+		{
+			Visual->SetRelativeScale3D(FVector(1.1f));
+		}
 		break;
 	default:
 		break;
@@ -378,11 +524,11 @@ void ABREntity::Tick(float DeltaSeconds)
 	if (Vanish >= 0.f)
 	{
 		Vanish += Dt;
-		const float S = FMath::Max(0.01f, 1.f - Vanish / 0.6f);
-		Visual->SetRelativeScale3D(FVector(S, S, S));
+		const float Sc = FMath::Max(0.01f, 1.f - Vanish / 0.6f);
+		Visual->SetRelativeScale3D(FVector(Sc, Sc, Sc));
 		if (GlowLight)
 		{
-			GlowLight->SetIntensity(60.f * S);
+			GlowLight->SetIntensity(60.f * Sc);
 		}
 		if (Vanish > 0.6f)
 		{
@@ -394,6 +540,8 @@ void ABREntity::Tick(float DeltaSeconds)
 	bWantsMove = false;
 	Think(Dt);
 	Animate(Dt);
+	UpdateHead(Dt);
+	UpdateMorph(Dt);
 
 	// Detection de blocage
 	const float Speed = static_cast<float>(GetVelocity().Size());
@@ -420,7 +568,8 @@ void ABREntity::Tick(float DeltaSeconds)
 		if (VoiceTimer <= 0.f)
 		{
 			VoiceTimer = I.VoiceInterval * FMath::FRandRange(0.7f, 1.3f);
-			if (State != EState::Frozen)
+			const bool bSilent = State == EState::Frozen || State == EState::Hide || (Kind == EBREntityKind::SkinStealer && Morph < 0.5f);
+			if (!bSilent)
 			{
 				PlayVoice();
 			}
@@ -444,15 +593,18 @@ void ABREntity::SetState(EState NewState)
 		const ABRCharacter* P = Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
 		if (P && FVector::Dist(P->GetActorLocation(), GetActorLocation()) < 2500.f)
 		{
-			if (UBRAssets* A = UBRAssets::Get(this))
-			{
-				if (USoundBase* S = A->Sound(TEXT("S_Alert")))
-				{
-					UGameplayStatics::PlaySound2D(this, S, 0.55f);
-				}
-			}
+			PlaySound2D(TEXT("S_Alert"), 0.55f);
+			LastKnown = P->GetActorLocation();
 		}
 		PlayVoice(1.f);
+	}
+}
+
+void ABREntity::SetOrientToMovement(bool bOrient)
+{
+	if (UCharacterMovementComponent* M = GetCharacterMovement())
+	{
+		M->bOrientRotationToMovement = bOrient;
 	}
 }
 
@@ -463,6 +615,17 @@ void ABREntity::PlayVoice(float Volume)
 		Voice->SetVolumeMultiplier(Volume);
 		Voice->SetPitchMultiplier(FMath::FRandRange(0.9f, 1.1f));
 		Voice->Play();
+	}
+}
+
+void ABREntity::PlaySound2D(FName Sound, float Volume)
+{
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		if (USoundBase* S = A->Sound(Sound))
+		{
+			UGameplayStatics::PlaySound2D(this, S, Volume);
+		}
 	}
 }
 
@@ -533,7 +696,7 @@ void ABREntity::MoveTowards(const FVector& Target, float Speed)
 	{
 		Dir.Z = 0.f;
 	}
-	if (Dir.SizeSquared() < 100.f)
+	if (Dir.SizeSquared() < 100.f || Speed <= 0.f)
 	{
 		return;
 	}
@@ -631,6 +794,7 @@ void ABREntity::Wander(float Speed, float Dt)
 		++PathIndex;
 	}
 	MoveTowards(Wp, Speed);
+	(void)Dt;
 }
 
 void ABREntity::FacePlayer(float Dt)
@@ -674,362 +838,482 @@ void ABREntity::Think(float Dt)
 	const FBREntityInfo& I = MyInfo();
 	if (!W || !P || P->IsDead())
 	{
-		if (Kind != EBREntityKind::Smiler && Kind != EBREntityKind::Partygoer)
+		Reach = FMath::FInterpTo(Reach, 0.f, Dt, 3.f);
+		if (Kind != EBREntityKind::Smiler && Kind != EBREntityKind::Partygoer && State != EState::Hide)
 		{
 			Wander(I.WalkSpeed, Dt);
 		}
 		return;
 	}
 
-	const FVector PL = P->GetActorLocation();
-	const float Dist = static_cast<float>(FVector::Dist(PL, GetActorLocation()));
-	const bool bLOS = Dist < I.SightRange && HasLineOfSight(P);
-	const bool bSeesPlayer = bLOS;
-	const bool bLookedAt = bLOS && IsLookedAtBy(P, 0.82f);
-	const bool bHeard = P->GetNoiseRadius() >= Dist;
-
-	if (bLookedAt && Dist < 2500.f)
+	FSense S;
+	S.Dist = static_cast<float>(FVector::Dist(P->GetActorLocation(), GetActorLocation()));
+	S.bLOS = S.Dist < I.SightRange && HasLineOfSight(P);
+	S.bLookedAt = S.bLOS && IsLookedAtBy(P, 0.82f);
+	S.bHeard = P->GetNoiseRadius() >= S.Dist;
+	if (S.bLOS)
 	{
-		W->Discover(Kind);
-		bSeenOnce = true;
+		LastKnown = P->GetActorLocation();
 	}
-	if (bLOS && Dist < I.AuraRadius)
+
+	if (S.bLookedAt && S.Dist < 2500.f)
+	{
+		bSeenOnce = true;
+		// La fiche du journal ne s'ouvre que si l'entite est bien visible (pas une masse informe)
+		if (Kind != EBREntityKind::SkinStealer || Morph > 0.5f)
+		{
+			W->Discover(Kind);
+		}
+	}
+	if (S.bLOS && S.Dist < I.AuraRadius && State != EState::Hide)
 	{
 		P->AddSanityPressure(I.Aura);
 	}
 
 	switch (Kind)
 	{
-	// ------------------------------------------------------------------ Smilers
 	case EBREntityKind::Smiler:
-	{
-		FacePlayer(Dt);
-		const float Light = W->LightLevelAt(GetActorLocation());
-		if (Light > 0.5f && State != EState::Chase)
-		{
-			StartVanish(); // la lumiere les fait fuir
-			return;
-		}
-		const bool bBeamed = P->IsFlashlightOn() && bLOS && Dist < 1600.f && IsLookedAtBy(P, 0.97f);
-		if (bBeamed)
-		{
-			Agitation += Dt * 0.9f;
-		}
-		else if (P->IsSprinting() && Dist < 1200.f && (bLOS || bHeard))
-		{
-			Agitation += Dt * 0.7f;
-		}
-		else
-		{
-			Agitation = FMath::Max(0.f, Agitation - Dt * 0.25f);
-		}
-
-		if (State == EState::Chase)
-		{
-			P->NotifyChase(1.f);
-			FollowPathTo(PL, I.ChaseSpeed, Dt);
-			TryAttack(P, Dist);
-			const bool bGiveUp = StateTime > 9.f || (!bLOS && StateTime > 4.f) || (!P->IsFlashlightOn() && !P->IsSprinting() && StateTime > 3.f && Dist > 500.f);
-			if (bGiveUp)
-			{
-				StartVanish();
-			}
-		}
-		else
-		{
-			if (Agitation >= 1.f)
-			{
-				SetState(EState::Chase);
-			}
-			else if (bLOS && Dist > 300.f && Dist < 1800.f && !bLookedAt)
-			{
-				// S'approche sans bruit quand on ne le regarde pas
-				const FVector Next = GetActorLocation() + (PL - GetActorLocation()).GetSafeNormal() * 150.f;
-				if (W->LightLevelAt(Next) < 0.2f)
-				{
-					FollowPathTo(PL, I.WalkSpeed, Dt);
-				}
-			}
-			else
-			{
-				MoveTowards(GetActorLocation(), 0.f);
-			}
-		}
+		ThinkSmiler(W, P, S, Dt);
 		break;
-	}
-	// ------------------------------------------------------------------ Hounds
 	case EBREntityKind::Hound:
+		ThinkHound(P, S, Dt);
+		break;
+	case EBREntityKind::Faceling:
+		ThinkFaceling(P, S, Dt);
+		break;
+	case EBREntityKind::SkinStealer:
+		ThinkSkinStealer(P, S, Dt);
+		break;
+	case EBREntityKind::Deathmoth:
+		ThinkDeathmoth(P, S, Dt);
+		break;
+	case EBREntityKind::Wretch:
+		ThinkSimpleHunter(P, S, Dt, 0.6f, 5.f);
+		break;
+	case EBREntityKind::Clump:
+		ThinkSimpleHunter(P, S, Dt, 0.7f, 6.f);
+		break;
+	case EBREntityKind::Partygoer:
+		ThinkPartygoer(W, P, S, Dt);
+		break;
+	case EBREntityKind::Bacteria:
+		ThinkBacteria(W, P, S, Dt);
+		break;
+	default:
+		break;
+	}
+
+	// Bras tendus vers le joueur pendant une poursuite
+	const bool bReaching = State == EState::Chase && S.Dist < 700.f
+		&& (Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::SkinStealer || Kind == EBREntityKind::Wretch || Kind == EBREntityKind::Faceling);
+	Reach = FMath::FInterpTo(Reach, bReaching ? 1.f : 0.f, Dt, 4.f);
+}
+
+// ------------------------------------------------------------------ Smilers
+void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	FacePlayer(Dt);
+	const float Light = W->LightLevelAt(GetActorLocation());
+	if (Light > 0.5f && State != EState::Chase)
 	{
-		const bool bFacing = bLOS && IsLookedAtBy(P, 0.9f);
-		switch (State)
+		StartVanish(); // la lumiere les fait fuir
+		return;
+	}
+
+	// Comme dans Escape Together : un faisceau braque sur lui le fait charger
+	const bool bBeamed = P->IsFlashlightOn() && S.bLOS && S.Dist < 1600.f && IsLookedAtBy(P, 0.97f);
+	BeamTime = bBeamed ? BeamTime + Dt : FMath::Max(0.f, BeamTime - Dt * 0.5f);
+	if (P->IsSprinting() && S.Dist < 1200.f && (S.bLOS || S.bHeard))
+	{
+		Agitation += Dt * 0.7f;
+	}
+	else
+	{
+		Agitation = FMath::Max(0.f, Agitation - Dt * 0.25f);
+	}
+
+	if (State == EState::Chase)
+	{
+		P->NotifyChase(1.f);
+		FollowPathTo(PL, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = S.bLOS ? 0.f : LostSight + Dt;
+		const bool bCalm = !P->IsFlashlightOn() && !P->IsSprinting() && StateTime > 3.f && S.Dist > 500.f;
+		if (StateTime > 6.f || LostSight > 2.5f || bCalm)
 		{
-		case EState::Retreat:
-		{
-			const FVector Away = GetActorLocation() + (GetActorLocation() - PL).GetSafeNormal2D() * 600.f;
-			FollowPathTo(Away, I.WalkSpeed * 1.6f, Dt);
-			if (StateTime > 4.f)
-			{
-				Intimidation = 0.f;
-				SetState(EState::Wander);
-			}
-			break;
+			StartVanish();
 		}
-		case EState::Chase:
+		return;
+	}
+
+	if (BeamTime > 0.35f || Agitation >= 1.f)
+	{
+		SetState(EState::Chase);
+	}
+	else if (S.bLOS && S.Dist > 300.f && S.Dist < 1800.f && !S.bLookedAt)
+	{
+		// S'approche sans bruit quand on ne le regarde pas, en restant dans l'ombre
+		const FVector Next = GetActorLocation() + (PL - GetActorLocation()).GetSafeNormal() * 150.f;
+		if (W->LightLevelAt(Next) < 0.2f)
 		{
-			P->NotifyChase(1.f);
-			FollowPathTo(PL, I.ChaseSpeed, Dt);
-			TryAttack(P, Dist);
-			if (bFacing && !P->IsSprinting() && Dist < 500.f)
-			{
-				Intimidation += Dt * 0.5f;
-				if (Intimidation > 2.f)
-				{
-					SetState(EState::Retreat);
-				}
-			}
-			LostSight = (bLOS || bHeard) ? 0.f : LostSight + Dt;
-			if (LostSight > 6.f)
-			{
-				SetState(EState::Wander);
-			}
-			break;
+			FollowPathTo(PL, I.WalkSpeed, Dt);
 		}
-		case EState::Stalk:
+	}
+	else
+	{
+		MoveTowards(GetActorLocation(), 0.f);
+	}
+}
+
+// ------------------------------------------------------------------ Hounds
+void ABREntity::ThinkHound(ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	const bool bFacing = S.bLOS && IsLookedAtBy(P, 0.9f);
+	switch (State)
+	{
+	case EState::Retreat:
+	{
+		const FVector Away = GetActorLocation() + (GetActorLocation() - PL).GetSafeNormal2D() * 600.f;
+		FollowPathTo(Away, I.WalkSpeed * 1.6f, Dt);
+		if (StateTime > 4.f)
 		{
-			if (Dist > 700.f)
-			{
-				FollowPathTo(PL, I.WalkSpeed * 1.25f, Dt);
-			}
-			else
-			{
-				GetCharacterMovement()->bOrientRotationToMovement = false;
-				FacePlayer(Dt);
-			}
-			if ((P->IsSprinting() && (bHeard || bLOS)) || (!bFacing && Dist < 650.f && StateTime > 2.5f))
-			{
-				GetCharacterMovement()->bOrientRotationToMovement = true;
-				SetState(EState::Chase);
-			}
-			else if (bFacing && Dist < 750.f)
-			{
-				Intimidation += Dt;
-				if (Intimidation > 3.f)
-				{
-					GetCharacterMovement()->bOrientRotationToMovement = true;
-					SetState(EState::Retreat);
-				}
-			}
-			else if (!bLOS && !bHeard && StateTime > 10.f)
-			{
-				GetCharacterMovement()->bOrientRotationToMovement = true;
-				SetState(EState::Wander);
-			}
-			break;
-		}
-		default:
-			Wander(I.WalkSpeed, Dt);
-			if ((bLOS && Dist < 1500.f) || bHeard)
-			{
-				SetState(EState::Stalk);
-			}
-			break;
+			Intimidation = 0.f;
+			SetState(EState::Wander);
 		}
 		break;
 	}
-	// ------------------------------------------------------------------ Facelings
-	case EBREntityKind::Faceling:
+	case EState::Chase:
 	{
-		if (State == EState::Chase)
+		P->NotifyChase(1.f);
+		FollowPathTo(PL, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		if (bFacing && !P->IsSprinting() && S.Dist < 500.f)
 		{
-			P->NotifyChase(0.6f);
-			FollowPathTo(PL, I.ChaseSpeed, Dt);
-			TryAttack(P, Dist);
-			LostSight = bLOS ? 0.f : LostSight + Dt;
-			if (LostSight > 6.f)
+			Intimidation += Dt * 0.5f;
+			if (Intimidation > 2.f)
 			{
-				SetState(EState::Wander);
+				SetState(EState::Retreat);
 			}
 		}
-		else if (State == EState::Retreat)
+		LostSight = (S.bLOS || S.bHeard) ? 0.f : LostSight + Dt;
+		if (LostSight > 6.f)
 		{
-			const FVector Away = GetActorLocation() + (GetActorLocation() - PL).GetSafeNormal2D() * 500.f;
-			FollowPathTo(Away, I.WalkSpeed * 1.4f, Dt);
-			if (StateTime > 4.f)
-			{
-				SetState(EState::Wander);
-			}
+			SetState(EState::Wander);
 		}
-		else if (bLOS && Dist < 350.f)
+		break;
+	}
+	case EState::Stalk:
+	{
+		if (S.Dist > 700.f)
 		{
-			GetCharacterMovement()->bOrientRotationToMovement = false;
+			SetOrientToMovement(true);
+			FollowPathTo(PL, I.WalkSpeed * 1.25f, Dt);
+		}
+		else
+		{
+			SetOrientToMovement(false);
 			FacePlayer(Dt);
-			if (bHostileVariant && Dist < 300.f)
+		}
+		if ((P->IsSprinting() && (S.bHeard || S.bLOS)) || (!bFacing && S.Dist < 650.f && StateTime > 2.5f))
+		{
+			SetOrientToMovement(true);
+			SetState(EState::Chase);
+		}
+		else if (bFacing && S.Dist < 750.f)
+		{
+			Intimidation += Dt;
+			if (Intimidation > 3.f)
 			{
-				GetCharacterMovement()->bOrientRotationToMovement = true;
+				SetOrientToMovement(true);
+				SetState(EState::Retreat);
+			}
+		}
+		else if (!S.bLOS && !S.bHeard && StateTime > 10.f)
+		{
+			SetOrientToMovement(true);
+			SetState(EState::Wander);
+		}
+		break;
+	}
+	default:
+		Wander(I.WalkSpeed, Dt);
+		if ((S.bLOS && S.Dist < 1500.f) || S.bHeard)
+		{
+			SetState(EState::Stalk);
+		}
+		break;
+	}
+}
+
+// ------------------------------------------------------------------ Facelings
+void ABREntity::ThinkFaceling(ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	switch (State)
+	{
+	case EState::Hide:
+	{
+		// Tapi dans les bles : se jette sur le joueur s'il passe trop pres
+		HideCrouch = FMath::FInterpTo(HideCrouch, 1.f, Dt, 3.f);
+		MoveTowards(GetActorLocation(), 0.f);
+		if (S.Dist < 260.f && S.bLOS)
+		{
+			HideCrouch = 0.f;
+			PlayVoice(1.f);
+			SetState(EState::Chase);
+		}
+		break;
+	}
+	case EState::Chase:
+	{
+		HideCrouch = FMath::FInterpTo(HideCrouch, 0.f, Dt, 8.f);
+		P->NotifyChase(0.6f);
+		FollowPathTo(PL, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = S.bLOS ? 0.f : LostSight + Dt;
+		const bool bGiveUp = LostSight > 6.f || (HideCrouch < 0.01f && World.IsValid() && World->Def().Layout == EBRLayout::Open && StateTime > 7.f);
+		if (bGiveUp)
+		{
+			SetState(World.IsValid() && World->Def().Layout == EBRLayout::Open ? EState::Hide : EState::Wander);
+		}
+		break;
+	}
+	case EState::Retreat:
+	{
+		const FVector Away = GetActorLocation() + (GetActorLocation() - PL).GetSafeNormal2D() * 500.f;
+		FollowPathTo(Away, I.WalkSpeed * 1.4f, Dt);
+		if (StateTime > 4.f)
+		{
+			SetState(EState::Wander);
+		}
+		break;
+	}
+	default:
+		if (S.bLOS && S.Dist < 350.f)
+		{
+			SetOrientToMovement(false);
+			FacePlayer(Dt);
+			if (bHostileVariant && S.Dist < 300.f)
+			{
+				SetOrientToMovement(true);
 				SetState(EState::Chase);
 			}
-			else if (Dist < 220.f)
+			else if (S.Dist < 220.f)
 			{
-				GetCharacterMovement()->bOrientRotationToMovement = true;
+				SetOrientToMovement(true);
 				SetState(EState::Retreat);
 			}
 		}
 		else
 		{
-			GetCharacterMovement()->bOrientRotationToMovement = true;
+			SetOrientToMovement(true);
 			Wander(I.WalkSpeed, Dt);
 		}
 		break;
 	}
-	// ------------------------------------------------------------------ Skin-Stealers
-	case EBREntityKind::SkinStealer:
+}
+
+// ------------------------------------------------------------------ Skin-Stealers
+void ABREntity::ThinkSkinStealer(ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	switch (State)
 	{
-		if (State == EState::Chase)
+	case EState::Idle:
+		// Masse de chair immobile ; prend forme humaine quand une proie approche
+		MorphTarget = 0.f;
+		MoveTowards(GetActorLocation(), 0.f);
+		if ((S.bLOS && S.Dist < 1800.f) || S.bHeard)
 		{
-			P->NotifyChase(1.f);
-			FollowPathTo(PL, I.ChaseSpeed, Dt);
-			TryAttack(P, Dist);
-			LostSight = (bLOS || bHeard) ? 0.f : LostSight + Dt;
-			if (LostSight > 8.f)
-			{
-				SetState(EState::Wander);
-			}
+			MorphTarget = 1.f;
+			SetState(EState::Lure);
 		}
-		else if (State == EState::Stalk)
+		break;
+	case EState::Lure:
+	{
+		// Imite un explorateur en combinaison : marche calmement vers le joueur
+		MorphTarget = 1.f;
+		if (Morph < 0.95f)
 		{
-			FollowPathTo(PL, I.WalkSpeed * 1.5f, Dt);
-			if (bLOS)
-			{
-				SetState(EState::Chase);
-			}
-			else if (StateTime > 12.f)
-			{
-				SetState(EState::Wander);
-			}
+			MoveTowards(GetActorLocation(), 0.f);
+			break;
 		}
-		else
+		FollowPathTo(PL, I.WalkSpeed * 0.8f, Dt);
+		EyeContact = S.bLookedAt ? EyeContact + Dt : FMath::Max(0.f, EyeContact - Dt * 0.5f);
+		if (S.Dist < 500.f || EyeContact > 2.5f)
 		{
-			Wander(I.WalkSpeed, Dt);
-			if (bLOS)
-			{
-				SetState(EState::Chase);
-			}
-			else if (bHeard)
-			{
-				SetState(EState::Stalk);
-			}
+			SetState(EState::Chase);
+		}
+		LostSight = (S.bLOS || S.bHeard) ? 0.f : LostSight + Dt;
+		if (LostSight > 10.f)
+		{
+			SetState(EState::Idle);
 		}
 		break;
 	}
-	// ------------------------------------------------------------------ Deathmoths
-	case EBREntityKind::Deathmoth:
-	{
-		const bool bAttracted = P->IsFlashlightOn() && bLOS && Dist < 2000.f;
-		if (State == EState::Chase)
+	case EState::Chase:
+		MorphTarget = 1.f;
+		P->NotifyChase(1.f);
+		FollowPathTo(S.bLOS ? PL : LastKnown, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = (S.bLOS || S.bHeard) ? 0.f : LostSight + Dt;
+		if (LostSight > 8.f)
 		{
-			P->NotifyChase(0.5f);
-			const FVector Wobble(FMath::Sin(Life * 2.1f) * 120.f, FMath::Cos(Life * 1.7f) * 120.f, 0.f);
-			FollowPathTo(PL + Wobble, I.ChaseSpeed, Dt);
-			TryAttack(P, Dist);
-			LostSight = P->IsFlashlightOn() ? 0.f : LostSight + Dt;
-			if (LostSight > 2.5f)
-			{
-				SetState(EState::Wander);
-			}
-		}
-		else
-		{
-			Wander(I.WalkSpeed, Dt);
-			if (bAttracted)
-			{
-				SetState(EState::Chase);
-			}
+			SetState(EState::Lure);
 		}
 		break;
-	}
-	// ------------------------------------------------------------------ Wretches
-	case EBREntityKind::Wretch:
-	{
-		if (State == EState::Chase)
-		{
-			P->NotifyChase(0.6f);
-			FollowPathTo(PL, I.ChaseSpeed, Dt);
-			TryAttack(P, Dist);
-			LostSight = bLOS ? 0.f : LostSight + Dt;
-			if (LostSight > 5.f)
-			{
-				SetState(EState::Wander);
-			}
-		}
-		else
-		{
-			Wander(I.WalkSpeed, Dt);
-			if (bLOS && Dist < I.SightRange)
-			{
-				SetState(EState::Chase);
-			}
-		}
-		break;
-	}
-	// ------------------------------------------------------------------ Partygoers
-	case EBREntityKind::Partygoer:
-	{
-		const bool bObserved = bLOS && IsLookedAtBy(P, 0.72f);
-		if (bObserved)
-		{
-			// Fige comme une statue tant qu'on le regarde
-			GetCharacterMovement()->StopMovementImmediately();
-			if (State != EState::Frozen)
-			{
-				SetState(EState::Frozen);
-			}
-		}
-		else if ((bSeenOnce || Dist < 1200.f) && Dist < 3000.f)
-		{
-			if (State != EState::Chase)
-			{
-				State = EState::Chase;
-				StateTime = 0.f;
-			}
-			P->NotifyChase(0.7f);
-			FollowPathTo(PL, I.ChaseSpeed, Dt);
-			FacePlayer(Dt);
-			TryAttack(P, Dist);
-		}
-		else
-		{
-			FacePlayer(Dt);
-		}
-		break;
-	}
-	// ------------------------------------------------------------------ Clump
-	case EBREntityKind::Clump:
-	{
-		if (State == EState::Chase)
-		{
-			P->NotifyChase(0.7f);
-			FollowPathTo(PL, I.ChaseSpeed, Dt);
-			TryAttack(P, Dist);
-			LostSight = bLOS ? 0.f : LostSight + Dt;
-			if (LostSight > 6.f)
-			{
-				SetState(EState::Wander);
-			}
-		}
-		else
-		{
-			Wander(I.WalkSpeed, Dt);
-			if (bLOS && Dist < I.SightRange)
-			{
-				SetState(EState::Chase);
-			}
-		}
-		break;
-	}
 	default:
+		SetState(EState::Idle);
 		break;
 	}
-	(void)bSeesPlayer;
+}
+
+// ------------------------------------------------------------------ Deathmoths
+void ABREntity::ThinkDeathmoth(ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const bool bAttracted = P->IsFlashlightOn() && S.bLOS && S.Dist < 2000.f;
+	if (State == EState::Chase)
+	{
+		P->NotifyChase(0.5f);
+		const FVector Wobble(FMath::Sin(Life * 2.1f) * 120.f, FMath::Cos(Life * 1.7f) * 120.f, 0.f);
+		FollowPathTo(P->GetActorLocation() + Wobble, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = P->IsFlashlightOn() ? 0.f : LostSight + Dt;
+		if (LostSight > 2.5f)
+		{
+			SetState(EState::Wander);
+		}
+	}
+	else
+	{
+		Wander(I.WalkSpeed, Dt);
+		if (bAttracted)
+		{
+			SetState(EState::Chase);
+		}
+	}
+}
+
+// ------------------------------------------------------------------ Wretches, Clump
+void ABREntity::ThinkSimpleHunter(ABRCharacter* P, const FSense& S, float Dt, float ChaseIntensity, float GiveUpTime)
+{
+	const FBREntityInfo& I = MyInfo();
+	if (State == EState::Chase)
+	{
+		P->NotifyChase(ChaseIntensity);
+		FollowPathTo(S.bLOS ? P->GetActorLocation() : LastKnown, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = S.bLOS ? 0.f : LostSight + Dt;
+		if (LostSight > GiveUpTime)
+		{
+			SetState(EState::Wander);
+		}
+	}
+	else
+	{
+		Wander(I.WalkSpeed, Dt);
+		if (S.bLOS && S.Dist < I.SightRange)
+		{
+			SetState(EState::Chase);
+		}
+	}
+}
+
+// ------------------------------------------------------------------ Partygoers
+void ABREntity::ThinkPartygoer(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	if (State == EState::Chase)
+	{
+		SetOrientToMovement(true);
+		P->NotifyChase(0.9f);
+		FollowPathTo(S.bLOS ? PL : LastKnown, I.ChaseSpeed * (W->IsBlackout() ? 1.1f : 1.f), Dt);
+		TryAttack(P, S.Dist);
+		LostSight = S.bLOS ? 0.f : LostSight + Dt;
+		if (LostSight > 7.f && !W->IsBlackout())
+		{
+			EyeContact = 0.f;
+			bWarned = false;
+			SetState(EState::Idle);
+		}
+		return;
+	}
+
+	// Reste immobile a sourire... et compte combien de temps on soutient son regard
+	EyeContact = (S.bLOS && IsLookedAtBy(P, 0.9f) && S.Dist < 2200.f) ? EyeContact + Dt : FMath::Max(0.f, EyeContact - Dt * 0.4f);
+	if (EyeContact > 1.5f && !bWarned)
+	{
+		bWarned = true;
+		PlayVoice(1.f); // "=)"
+	}
+	const bool bHunt = EyeContact > 3.f || (W->IsBlackout() && S.Dist < 3000.f) || (S.bLOS && S.Dist < 300.f);
+	if (bHunt)
+	{
+		SetState(EState::Chase);
+		return;
+	}
+	if (S.bLOS)
+	{
+		SetOrientToMovement(false);
+		FacePlayer(Dt);
+		MoveTowards(GetActorLocation(), 0.f);
+	}
+	else
+	{
+		SetOrientToMovement(true);
+		Wander(I.WalkSpeed, Dt);
+	}
+}
+
+// ------------------------------------------------------------------ Bacteria
+void ABREntity::ThinkBacteria(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	const bool bSpots = (S.bLOS && S.Dist < I.SightRange * (W->IsBlackout() ? 0.6f : 1.f)) || (S.bHeard && S.Dist < 1200.f);
+	switch (State)
+	{
+	case EState::Chase:
+	{
+		P->NotifyChase(1.f);
+		// Poursuite implacable tant qu'elle voit le joueur, puis fouille sa derniere position connue
+		FollowPathTo(S.bLOS ? PL : LastKnown, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = S.bLOS ? 0.f : LostSight + Dt;
+		if (LostSight > 5.f)
+		{
+			SetState(EState::Stalk);
+		}
+		break;
+	}
+	case EState::Stalk:
+		// Fouille les environs de la derniere position connue
+		FollowPathTo(LastKnown, I.WalkSpeed * 1.4f, Dt);
+		if (bSpots)
+		{
+			SetState(EState::Chase);
+		}
+		else if (StateTime > 8.f || FVector::Dist2D(LastKnown, GetActorLocation()) < 120.f)
+		{
+			SetState(EState::Wander);
+		}
+		break;
+	default:
+		Wander(I.WalkSpeed, Dt);
+		if (bSpots)
+		{
+			SetState(EState::Chase);
+		}
+		break;
+	}
 }
 
 // =====================================================================================================================
@@ -1052,7 +1336,9 @@ void ABREntity::Animate(float Dt)
 	{
 		Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, FMath::Sin(Life * 1.5f) * 6.f));
 		const bool bBlink = FMath::Fmod(Life + 0.37f * static_cast<float>(GetUniqueID() % 7), 5.3f) < 0.12f;
-		const float G = bBlink ? 0.f : (0.85f + 0.15f * FMath::Sin(Life * 13.f));
+		// Le sourire s'illumine davantage quand il est sur le point de charger
+		const float Rage = State == EState::Chase ? 1.6f : 1.f + FMath::Clamp(BeamTime * 2.f, 0.f, 0.6f);
+		const float G = bBlink ? 0.f : (0.85f + 0.15f * FMath::Sin(Life * 13.f)) * Rage;
 		for (UMaterialInstanceDynamic* M : GlowMIDs)
 		{
 			if (M)
@@ -1069,44 +1355,155 @@ void ABREntity::Animate(float Dt)
 	case EBREntityKind::Clump:
 	{
 		Visual->SetRelativeRotation(FRotator(FMath::Sin(Life * 2.3f) * 6.f, FMath::Sin(Life * 1.1f) * 12.f, FMath::Cos(Life * 2.9f) * 6.f));
-		const float S = 1.f + 0.05f * FMath::Sin(Life * 5.f);
-		Visual->SetRelativeScale3D(FVector(S, S, 1.f / S));
+		const float Sc = 1.1f * (1.f + 0.05f * FMath::Sin(Life * 5.f));
+		Visual->SetRelativeScale3D(FVector(Sc, Sc, 1.21f / Sc));
 		return;
 	}
 	case EBREntityKind::Deathmoth:
-	{
 		Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, FMath::Sin(Life * 3.f) * 8.f));
-		for (const FLimb& L : Limbs)
-		{
-			if (USceneComponent* C = L.Pivot.Get())
-			{
-				const float Flap = FMath::Sin(Life * 20.f) * L.Amp;
-				C->SetRelativeRotation(FRotator(0.f, 0.f, -Flap * L.Sign));
-			}
-		}
+		AnimateLimbs(Dt, Gait);
 		return;
-	}
 	default:
 		break;
 	}
 
-	// Humanoides et Hounds : balancement des membres
-	if (bFrozen)
+	if (!bFrozen)
+	{
+		AnimateLimbs(Dt, Gait);
+	}
+
+	// Rebond de la marche, accroupissement (Faceling), palpitation de la masse (Skin-Stealer)
+	const float Bob = FMath::Abs(FMath::Sin(AnimTime)) * 3.f * Gait;
+	Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, Bob - HideCrouch * 70.f));
+	if (Kind == EBREntityKind::Faceling)
+	{
+		Visual->SetRelativeRotation(FRotator(-HideCrouch * 25.f, 0.f, 0.f));
+	}
+	if (MassForm)
+	{
+		const float Pulse = 1.f + 0.06f * FMath::Sin(Life * 3.1f) + 0.03f * FMath::Sin(Life * 7.3f);
+		const float M = FMath::Max(0.01f, 1.f - Morph);
+		MassForm->SetRelativeScale3D(FVector(Pulse * M, Pulse * M, M / Pulse));
+	}
+	if (Balloon)
+	{
+		// Le ballon flotte et se balance doucement
+		Balloon->SetWorldRotation(FRotator(FMath::Sin(Life * 0.9f) * 5.f, GetActorRotation().Yaw, FMath::Cos(Life * 1.3f) * 5.f));
+	}
+}
+
+void ABREntity::AnimateLimbs(float Dt, float Gait)
+{
+	// Spasmes (Bacteria, Wretch)
+	TwitchTimer -= Dt;
+	if (TwitchTimer <= 0.f)
+	{
+		const bool bTwitchy = Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::Wretch;
+		TwitchTimer = bTwitchy ? FMath::FRandRange(0.08f, 0.7f) : 1.f;
+		Twitch = bTwitchy ? FRotator(FMath::FRandRange(-12.f, 12.f), FMath::FRandRange(-20.f, 20.f), FMath::FRandRange(-25.f, 25.f)) : FRotator::ZeroRotator;
+	}
+
+	for (const FLimb& L : Limbs)
+	{
+		USceneComponent* C = L.Pivot.Get();
+		if (!C)
+		{
+			continue;
+		}
+		const float Swing = FMath::Sin(AnimTime + L.Phase);
+		const float Lift = FMath::Max(0.f, FMath::Cos(AnimTime + L.Phase));
+		FRotator R = L.Base;
+		switch (L.Type)
+		{
+		case ELimb::UpperArm:
+			R.Pitch += L.Amp * Swing * Gait * (1.f - Reach) + Reach * 75.f;
+			R.Roll += Reach * L.Sign * 8.f;
+			if (Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::Wretch)
+			{
+				R.Pitch += Twitch.Pitch * 0.4f * L.Sign + FMath::Sin(Life * 17.f + L.Phase) * 2.5f;
+			}
+			break;
+		case ELimb::LowerArm:
+			R.Pitch += (10.f * FMath::Max(0.f, Swing)) * Gait + Reach * 10.f;
+			break;
+		case ELimb::Thigh:
+			R.Pitch += L.Amp * Swing * Gait;
+			break;
+		case ELimb::Shin:
+			R.Pitch -= L.Amp * Lift * Gait; // le genou plie vers l'arriere
+			break;
+		case ELimb::HoundUpper:
+			R.Pitch += L.Amp * Swing * Gait;
+			break;
+		case ELimb::HoundLower:
+			R.Pitch += L.Sign * L.Amp * Lift * Gait;
+			break;
+		case ELimb::Wing:
+		{
+			const float Flap = FMath::Sin(Life * 20.f) * L.Amp;
+			R = FRotator(0.f, 0.f, -Flap * L.Sign);
+			break;
+		}
+		}
+		C->SetRelativeRotation(R);
+	}
+}
+
+void ABREntity::UpdateHead(float Dt)
+{
+	USceneComponent* Head = HeadPivot.Get();
+	if (!Head || !Visual)
 	{
 		return;
 	}
-	for (const FLimb& L : Limbs)
+	FRotator Target = FRotator::ZeroRotator;
+	const ABRCharacter* P = Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	const bool bInterested = State != EState::Wander && State != EState::Idle && State != EState::Hide;
+	const float Dist = P ? static_cast<float>(FVector::Dist(P->GetActorLocation(), GetActorLocation())) : 1e9f;
+	if (P && (bInterested || Dist < 1500.f) && State != EState::Frozen)
 	{
-		if (USceneComponent* C = L.Pivot.Get())
-		{
-			float A = FMath::Sin(AnimTime + L.Phase) * L.Amp * Gait;
-			if (Kind == EBREntityKind::Wretch)
-			{
-				A += FMath::Sin(Life * 17.f + L.Phase) * 3.f; // tremblements
-			}
-			C->SetRelativeRotation(FRotator(A, 0.f, 0.f));
-		}
+		// La tete suit le joueur (dans les limites du cou)
+		const FTransform& VT = Visual->GetComponentTransform();
+		const FVector Local = VT.InverseTransformPosition(P->GetEyeLocation()) - Head->GetRelativeLocation();
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Local.Y), static_cast<float>(Local.X)));
+		const float Pitch = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Local.Z), static_cast<float>(Local.Size2D())));
+		Target = FRotator(FMath::Clamp(Pitch, -40.f, 35.f), FMath::Clamp(Yaw, -75.f, 75.f), 0.f);
 	}
-	const float Bob = FMath::Abs(FMath::Sin(AnimTime)) * 3.f * Gait;
-	Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, Bob));
+	if (Kind == EBREntityKind::Hound && State == EState::Stalk)
+	{
+		Target.Pitch -= 15.f; // tete basse, a l'affut
+	}
+	if (Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::Wretch)
+	{
+		Target += Twitch * (Kind == EBREntityKind::Bacteria ? 1.f : 0.5f);
+	}
+	if (Kind == EBREntityKind::Partygoer && State != EState::Chase)
+	{
+		Target.Roll += FMath::Sin(Life * 0.7f) * 12.f; // tete penchee, "amicale"
+	}
+	const float Speed = (Kind == EBREntityKind::Bacteria) ? 14.f : 5.f;
+	HeadRot = FMath::RInterpTo(HeadRot, Target, Dt, Speed);
+	Head->SetRelativeRotation(HeadRot);
+}
+
+void ABREntity::UpdateMorph(float Dt)
+{
+	if (Kind != EBREntityKind::SkinStealer || !BodyForm)
+	{
+		return;
+	}
+	const float Prev = Morph;
+	Morph = Dt > 0.f ? FMath::FInterpConstantTo(Morph, MorphTarget, Dt, 1.25f) : MorphTarget;
+	if (Morph > 0.f && Prev <= 0.f && MorphTarget > 0.5f)
+	{
+		PlayVoice(0.8f); // bruit de chair qui se dechire
+	}
+	// Le corps "pousse" hors de la masse
+	const float M = FMath::Max(0.01f, Morph);
+	BodyForm->SetRelativeScale3D(FVector(0.5f + 0.5f * M, 0.5f + 0.5f * M, M));
+	BodyForm->SetVisibility(Morph > 0.02f, true);
+	if (MassForm)
+	{
+		MassForm->SetVisibility(Morph < 0.98f, true);
+	}
 }

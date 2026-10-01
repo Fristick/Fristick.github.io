@@ -1,21 +1,29 @@
 #include "BRAssets.h"
 #include "Backrooms.h"
+#include "BRMaterialBuilder.h"
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
+#include "Engine/Texture2D.h"
+#include "TextureResource.h"
+#include "ImageCore.h"
+#include "ImageUtils.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/MeshComponent.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundAttenuation.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
+#include "UObject/Package.h"
 
 namespace
 {
 	const TCHAR* MeshFolder = TEXT("/Game/Backrooms/Meshes");
 	const TCHAR* TexFolder = TEXT("/Game/Backrooms/Textures");
+	const TCHAR* UIFolder = TEXT("/Game/Backrooms/UI");
 	const TCHAR* SoundFolder = TEXT("/Game/Backrooms/Sounds");
 	const TCHAR* MatFolder = TEXT("/Game/Backrooms/Materials");
 
@@ -84,6 +92,26 @@ namespace
 				{ TEXT("Face"), TEXT("T_Grime"), FLinearColor(0.01f, 0.01f, 0.01f), 0.6f, 0.f, 1.f },
 				{ TEXT("Shade"), TEXT("T_Paper"), FLinearColor(1.f, 0.85f, 0.6f), 0.9f, 0.f, 2.f },
 				{ TEXT("Teeth"), TEXT("T_Grime"), FLinearColor(0.9f, 0.88f, 0.8f), 0.4f, 0.f, 1.f },
+				// v2 : entites articulees, objets d'inventaire, combinaison
+				{ TEXT("Wire"), TEXT("T_Grime"), FLinearColor(0.07f, 0.065f, 0.06f), 0.45f, 0.8f, 1.f },
+				{ TEXT("Mouth"), TEXT("T_Grime"), FLinearColor(0.08f, 0.01f, 0.01f), 0.3f, 0.f, 1.f },
+				{ TEXT("Visor"), TEXT("T_Grime"), FLinearColor(0.02f, 0.025f, 0.03f), 0.05f, 0.6f, 1.f },
+				{ TEXT("Hazmat"), TEXT("T_Grime"), FLinearColor(0.75f, 0.6f, 0.08f), 0.6f, 0.f, 2.f },
+				{ TEXT("Claw"), TEXT("T_Grime"), FLinearColor(0.12f, 0.1f, 0.08f), 0.35f, 0.f, 1.f },
+				{ TEXT("Sucker"), TEXT("T_Grime"), FLinearColor(0.95f, 0.7f, 0.6f), 0.5f, 0.f, 1.f },
+				{ TEXT("Shoe"), TEXT("T_Grime"), FLinearColor(0.08f, 0.06f, 0.05f), 0.7f, 0.f, 1.f },
+				{ TEXT("FleshGlass"), TEXT("T_Skin"), FLinearColor(0.85f, 0.55f, 0.5f), 0.25f, 0.f, 2.f },
+				{ TEXT("Vein"), TEXT("T_Skin"), FLinearColor(0.35f, 0.05f, 0.06f), 0.4f, 0.f, 2.f },
+				{ TEXT("Balloon"), TEXT("T_Grime"), FLinearColor(0.8f, 0.04f, 0.03f), 0.22f, 0.f, 1.f },
+				{ TEXT("String"), TEXT("T_Grime"), FLinearColor(0.9f, 0.9f, 0.9f), 0.8f, 0.f, 1.f },
+				{ TEXT("Lens"), TEXT("T_Grime"), FLinearColor(0.02f, 0.02f, 0.025f), 0.05f, 0.5f, 1.f },
+				{ TEXT("Strap"), TEXT("T_OfficeCarpet"), FLinearColor(0.08f, 0.08f, 0.09f), 0.9f, 0.f, 3.f },
+				{ TEXT("Reel"), TEXT("T_Grime"), FLinearColor(0.85f, 0.85f, 0.85f), 0.4f, 0.f, 1.f },
+				{ TEXT("Gauze"), TEXT("T_Paper"), FLinearColor(0.95f, 0.93f, 0.88f), 0.95f, 0.f, 6.f },
+				{ TEXT("Wrapper"), TEXT("T_Grime"), FLinearColor(0.75f, 0.2f, 0.08f), 0.35f, 0.4f, 1.f },
+				{ TEXT("Vest"), TEXT("T_OfficeCarpet"), FLinearColor(0.22f, 0.25f, 0.18f), 0.9f, 0.f, 3.f },
+				{ TEXT("Reflective"), TEXT("T_Grime"), FLinearColor(0.85f, 0.85f, 0.8f), 0.2f, 0.6f, 1.f },
+				{ TEXT("Glove"), TEXT("T_Skin"), FLinearColor(0.7f, 0.55f, 0.08f), 0.5f, 0.f, 3.f },
 			};
 			// Les cles les plus longues d'abord ("DarkMetal" avant "Metal")
 			S.Sort([](const FSlotStyle& A, const FSlotStyle& B) { return FCString::Strlen(A.Key) > FCString::Strlen(B.Key); });
@@ -124,11 +152,12 @@ UObject* UBRAssets::LoadAsset(const TCHAR* Folder, FName Name, UClass* Class)
 	{
 		return nullptr;
 	}
-	if (TObjectPtr<UObject>* Found = Loaded.Find(Name))
+	const FName Key(*(FString(Folder) + TEXT("/") + Name.ToString()));
+	if (TObjectPtr<UObject>* Found = Loaded.Find(Key))
 	{
 		return Found->Get();
 	}
-	if (Missing.Contains(Name))
+	if (Missing.Contains(Key))
 	{
 		return nullptr;
 	}
@@ -143,14 +172,118 @@ UObject* UBRAssets::LoadAsset(const TCHAR* Folder, FName Name, UClass* Class)
 
 	if (Obj)
 	{
-		Loaded.Add(Name, Obj);
+		Loaded.Add(Key, Obj);
 	}
 	else
 	{
-		Missing.Add(Name);
+		Missing.Add(Key);
 		UE_LOG(LogBackrooms, Verbose, TEXT("Ressource absente : %s (repli utilise)"), *PackageName);
 	}
 	return Obj;
+}
+
+UTexture2D* UBRAssets::LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips)
+{
+	const FString Dir = FPaths::Combine(FPaths::ProjectDir(), TEXT("RawAssets"), SubFolder);
+	const TCHAR* Exts[] = { TEXT(".jpg"), TEXT(".png"), TEXT(".jpeg"), TEXT(".tga") };
+	FString File;
+	for (const TCHAR* Ext : Exts)
+	{
+		const FString Candidate = FPaths::Combine(Dir, Name.ToString() + Ext);
+		if (FPaths::FileExists(Candidate))
+		{
+			File = Candidate;
+			break;
+		}
+	}
+	if (File.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	FImage Source;
+	if (!FImageUtils::LoadImage(*File, Source))
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Image illisible : %s"), *File);
+		return nullptr;
+	}
+	// Conversion en BGRA8 sans changer l'espace gamma : les octets d'une normal map restent intacts
+	FImage Img;
+	Source.CopyTo(Img, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+	const int32 W = Img.SizeX;
+	const int32 H = Img.SizeY;
+	if (W <= 0 || H <= 0)
+	{
+		return nullptr;
+	}
+
+	UTexture2D* Tex = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), Name));
+	if (!Tex || !Tex->GetPlatformData() || Tex->GetPlatformData()->Mips.Num() == 0)
+	{
+		return nullptr;
+	}
+	Tex->SRGB = !bLinear;
+	Tex->AddressX = TA_Wrap;
+	Tex->AddressY = TA_Wrap;
+	Tex->LODGroup = bMips ? TEXTUREGROUP_World : TEXTUREGROUP_UI;
+	Tex->NeverStream = true;
+
+	FTexturePlatformData* PD = Tex->GetPlatformData();
+	TArray<FColor> Level;
+	Level.SetNumUninitialized(W * H);
+	FMemory::Memcpy(Level.GetData(), Img.RawData.GetData(), static_cast<SIZE_T>(W) * H * 4);
+	{
+		FTexture2DMipMap& Mip0 = PD->Mips[0];
+		void* Dest = Mip0.BulkData.Lock(LOCK_READ_WRITE);
+		FMemory::Memcpy(Dest, Level.GetData(), static_cast<SIZE_T>(W) * H * 4);
+		Mip0.BulkData.Unlock();
+	}
+
+	// Chaine de mipmaps (filtre boite) : evite le scintillement des sols et murs au loin
+	int32 PW = W;
+	int32 PH = H;
+	while (bMips && (PW > 1 || PH > 1))
+	{
+		const int32 NW = FMath::Max(1, PW / 2);
+		const int32 NH = FMath::Max(1, PH / 2);
+		TArray<FColor> Next;
+		Next.SetNumUninitialized(NW * NH);
+		for (int32 Y = 0; Y < NH; ++Y)
+		{
+			const int32 Y0 = FMath::Min(Y * 2, PH - 1);
+			const int32 Y1 = FMath::Min(Y * 2 + 1, PH - 1);
+			for (int32 X = 0; X < NW; ++X)
+			{
+				const int32 X0 = FMath::Min(X * 2, PW - 1);
+				const int32 X1 = FMath::Min(X * 2 + 1, PW - 1);
+				const FColor& C00 = Level[Y0 * PW + X0];
+				const FColor& C01 = Level[Y0 * PW + X1];
+				const FColor& C10 = Level[Y1 * PW + X0];
+				const FColor& C11 = Level[Y1 * PW + X1];
+				Next[Y * NW + X] = FColor(
+					static_cast<uint8>((C00.R + C01.R + C10.R + C11.R + 2) / 4),
+					static_cast<uint8>((C00.G + C01.G + C10.G + C11.G + 2) / 4),
+					static_cast<uint8>((C00.B + C01.B + C10.B + C11.B + 2) / 4),
+					static_cast<uint8>((C00.A + C01.A + C10.A + C11.A + 2) / 4));
+			}
+		}
+		FTexture2DMipMap* Mip = new FTexture2DMipMap();
+		Mip->SizeX = NW;
+		Mip->SizeY = NH;
+		Mip->SizeZ = 1;
+		Mip->BulkData.Lock(LOCK_READ_WRITE);
+		void* Dest = Mip->BulkData.Realloc(static_cast<int64>(NW) * NH * 4);
+		FMemory::Memcpy(Dest, Next.GetData(), static_cast<SIZE_T>(NW) * NH * 4);
+		Mip->BulkData.Unlock();
+		PD->Mips.Add(Mip);
+		Level = MoveTemp(Next);
+		PW = NW;
+		PH = NH;
+	}
+	Tex->UpdateResource();
+	bRuntimeContent = true;
+	UE_LOG(LogBackrooms, Log, TEXT("Texture chargee depuis RawAssets : %s"), *File);
+	return Tex;
 }
 
 UStaticMesh* UBRAssets::Mesh(FName Name)
@@ -196,7 +329,67 @@ UStaticMesh* UBRAssets::Plane()
 
 UTexture* UBRAssets::Texture(FName Name)
 {
-	return Cast<UTexture>(LoadAsset(TexFolder, Name, UTexture::StaticClass()));
+	if (Name.IsNone())
+	{
+		return nullptr;
+	}
+	if (UTexture* T = Cast<UTexture>(LoadAsset(TexFolder, Name, UTexture::StaticClass())))
+	{
+		return T;
+	}
+	// Secours : lecture directe du fichier (normal maps en lineaire)
+	const FName RawKey(*(TEXT("Raw/") + Name.ToString()));
+	if (TObjectPtr<UObject>* Found = Loaded.Find(RawKey))
+	{
+		return Cast<UTexture>(Found->Get());
+	}
+	if (Missing.Contains(RawKey))
+	{
+		return nullptr;
+	}
+	const FString N = Name.ToString();
+	const bool bLinear = N.EndsWith(TEXT("_N")) || N.Contains(TEXT("Normal"));
+	UTexture2D* Raw = LoadRawTexture(TEXT("Textures"), Name, bLinear, true);
+	if (Raw)
+	{
+		Loaded.Add(RawKey, Raw);
+	}
+	else
+	{
+		Missing.Add(RawKey);
+	}
+	return Raw;
+}
+
+UTexture* UBRAssets::Icon(FName Name)
+{
+	if (Name.IsNone())
+	{
+		return nullptr;
+	}
+	if (UTexture* T = Cast<UTexture>(LoadAsset(UIFolder, Name, UTexture::StaticClass())))
+	{
+		return T;
+	}
+	const FName RawKey(*(TEXT("RawIcon/") + Name.ToString()));
+	if (TObjectPtr<UObject>* Found = Loaded.Find(RawKey))
+	{
+		return Cast<UTexture>(Found->Get());
+	}
+	if (Missing.Contains(RawKey))
+	{
+		return nullptr;
+	}
+	UTexture2D* Raw = LoadRawTexture(TEXT("Icons"), Name, false, false);
+	if (Raw)
+	{
+		Loaded.Add(RawKey, Raw);
+	}
+	else
+	{
+		Missing.Add(RawKey);
+	}
+	return Raw;
 }
 
 USoundBase* UBRAssets::Sound(FName Name)
@@ -222,19 +415,64 @@ USoundAttenuation* UBRAssets::Attenuation(float FalloffDistance)
 	return Att;
 }
 
-UMaterialInterface* UBRAssets::WorldParent()
-{
-	return Cast<UMaterialInterface>(LoadAsset(MatFolder, TEXT("M_BR_World"), UMaterialInterface::StaticClass()));
-}
+// ---------------------------------------------------------------------------------------------------------------------
+// Materiaux maitres
+// ---------------------------------------------------------------------------------------------------------------------
 
-UMaterialInterface* UBRAssets::MeshParent()
+UMaterialInterface* UBRAssets::Parent(EParent Which)
 {
-	return Cast<UMaterialInterface>(LoadAsset(MatFolder, TEXT("M_BR_Mesh"), UMaterialInterface::StaticClass()));
-}
+	const int32 Index = static_cast<int32>(Which);
+	const int32 Count = static_cast<int32>(EParent::Count);
+	if (Parents.Num() != Count)
+	{
+		Parents.SetNum(Count);
+		ParentResolved.Init(false, Count);
+		ParentCustom.Init(false, Count);
+	}
+	if (ParentResolved[Index])
+	{
+		return Parents[Index];
+	}
+	ParentResolved[Index] = true;
 
-UMaterialInterface* UBRAssets::WaterParent()
-{
-	return Cast<UMaterialInterface>(LoadAsset(MatFolder, TEXT("M_BR_Water"), UMaterialInterface::StaticClass()));
+	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_Water") };
+	// Parametre propre a la v2 de chaque materiau : un materiau de la v1 (sans ce parametre) est ignore
+	const TCHAR* V2Params[] = { TEXT("NormalTex"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaveAmplitude") };
+	UMaterialInterface* M = Cast<UMaterialInterface>(LoadAsset(MatFolder, FName(AssetNames[Index]), UMaterialInterface::StaticClass()));
+	if (M)
+	{
+		const FHashedMaterialParameterInfo Info{ FName(V2Params[Index]) };
+		float ScalarValue = 0.f;
+		UTexture* TexValue = nullptr;
+		const bool bV2 = M->GetScalarParameterValue(Info, ScalarValue) || M->GetTextureParameterValue(Info, TexValue);
+		if (!bV2)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("%s date d'une ancienne version : relancez l'import (backrooms_setup.run(force=True))."),
+				AssetNames[Index]);
+			M = nullptr;
+		}
+	}
+
+	if (!M && BRMaterialBuilder::IsAvailable())
+	{
+		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin, EBRMasterMaterial::Water };
+		M = BRMaterialBuilder::Build(Kinds[Index], this, [this](FName TexName) { return Texture(TexName); });
+		if (M)
+		{
+			bRuntimeContent = true;
+		}
+	}
+	// La peau retombe sur le materiau des modeles
+	if (!M && Which == EParent::Skin)
+	{
+		M = Parent(EParent::Mesh);
+		ParentCustom[Index] = ParentCustom[static_cast<int32>(EParent::Mesh)];
+		Parents[Index] = M;
+		return M;
+	}
+	Parents[Index] = M;
+	ParentCustom[Index] = M != nullptr;
+	return M;
 }
 
 UMaterialInterface* UBRAssets::FallbackParent()
@@ -248,7 +486,13 @@ UMaterialInterface* UBRAssets::FallbackParent()
 
 bool UBRAssets::HasContent()
 {
-	return WorldParent() != nullptr;
+	return Parent(EParent::World) != nullptr;
+}
+
+bool UBRAssets::IsUsingRuntimeContent()
+{
+	HasContent();
+	return bRuntimeContent;
 }
 
 FLinearColor UBRAssets::TextureAverage(FName Texture)
@@ -276,6 +520,7 @@ FLinearColor UBRAssets::TextureAverage(FName Texture)
 		{ TEXT("T_Siding"), FLinearColor(0.68f, 0.72f, 0.74f) },
 		{ TEXT("T_Glitch"), FLinearColor(0.5f, 0.4f, 0.6f) },
 		{ TEXT("T_Paper"), FLinearColor(0.88f, 0.85f, 0.74f) },
+		{ TEXT("T_Skin"), FLinearColor(0.75f, 0.62f, 0.55f) },
 		{ TEXT("T_WaterNormal"), FLinearColor(0.3f, 0.6f, 0.7f) },
 	};
 	if (const FLinearColor* Found = Avg.Find(Texture))
@@ -293,23 +538,41 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 		return Found->Get();
 	}
 
-	UMaterialInterface* Parent = WorldParent();
-	const bool bCustom = Parent != nullptr;
-	if (!Parent)
+	UMaterialInterface* ParentMat = Parent(EParent::World);
+	const bool bCustom = ParentMat != nullptr;
+	if (!ParentMat)
 	{
-		Parent = FallbackParent();
+		ParentMat = FallbackParent();
 	}
-	if (!Parent)
+	if (!ParentMat)
 	{
 		return nullptr;
 	}
 
-	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Parent, this);
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, this);
 	if (bCustom)
 	{
 		if (UTexture* Tex = Texture(S.Texture))
 		{
 			MID->SetTextureParameterValue(TEXT("BaseTex"), Tex);
+		}
+		// Normal map associee (<Texture>_N) : relief du papier peint, de la moquette, des joints de carrelage...
+		UTexture* Nrm = S.Texture.IsNone() ? nullptr : Texture(FName(*(S.Texture.ToString() + TEXT("_N"))));
+		if (Nrm)
+		{
+			MID->SetTextureParameterValue(TEXT("NormalTex"), Nrm);
+		}
+		MID->SetScalarParameterValue(TEXT("NormalStrength"), Nrm ? 1.f : 0.f);
+		if (UTexture* Grime = Texture(TEXT("T_Grime")))
+		{
+			MID->SetTextureParameterValue(TEXT("GrimeTex"), Grime);
+		}
+		if (S.Caustics > 0.f)
+		{
+			if (UTexture* Caus = Texture(TEXT("T_Caustics")))
+			{
+				MID->SetTextureParameterValue(TEXT("CausticsTex"), Caus);
+			}
 		}
 		MID->SetVectorParameterValue(TEXT("Tint"), S.Tint);
 		MID->SetScalarParameterValue(TEXT("TexScale"), S.Scale);
@@ -318,6 +581,8 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 		MID->SetScalarParameterValue(TEXT("Grime"), S.Grime);
 		MID->SetScalarParameterValue(TEXT("SelfIllum"), S.SelfIllum);
 		MID->SetVectorParameterValue(TEXT("Emissive"), S.Emissive);
+		MID->SetScalarParameterValue(TEXT("Caustics"), S.Caustics);
+		MID->SetScalarParameterValue(TEXT("FloorGrime"), S.FloorGrime);
 	}
 	else
 	{
@@ -334,23 +599,28 @@ UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S)
 	{
 		return Found->Get();
 	}
-	UMaterialInterface* Parent = WaterParent();
-	const bool bCustom = Parent != nullptr;
-	if (!Parent)
+	UMaterialInterface* ParentMat = Parent(EParent::Water);
+	const bool bCustom = ParentMat != nullptr;
+	if (!ParentMat)
 	{
-		Parent = FallbackParent();
+		ParentMat = FallbackParent();
 	}
-	if (!Parent)
+	if (!ParentMat)
 	{
 		return nullptr;
 	}
-	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Parent, this);
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, this);
 	if (bCustom)
 	{
+		if (UTexture* N = Texture(TEXT("T_WaterNormal")))
+		{
+			MID->SetTextureParameterValue(TEXT("NormalTex"), N);
+		}
 		MID->SetVectorParameterValue(TEXT("Tint"), S.Tint);
 		MID->SetScalarParameterValue(TEXT("TexScale"), S.Scale);
-		MID->SetScalarParameterValue(TEXT("Roughness"), S.Roughness);
-		MID->SetScalarParameterValue(TEXT("Opacity"), 0.35f);
+		MID->SetScalarParameterValue(TEXT("Roughness"), FMath::Min(S.Roughness, 0.08f));
+		MID->SetScalarParameterValue(TEXT("WaveAmplitude"), 1.f);
+		MID->SetScalarParameterValue(TEXT("NormalStrength"), 0.35f);
 	}
 	else
 	{
@@ -385,19 +655,25 @@ FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)
 	return FLinearColor(1.f, 0.96f, 0.86f) * 120.f;
 }
 
+bool UBRAssets::IsSkinSlot(const FString& SlotName)
+{
+	return SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase) || SlotName.Contains(TEXT("Flesh"), ESearchCase::IgnoreCase)
+		|| SlotName.Contains(TEXT("Vein"), ESearchCase::IgnoreCase) || SlotName.Contains(TEXT("Party"), ESearchCase::IgnoreCase);
+}
+
 UMaterialInstanceDynamic* UBRAssets::NewGlow(UObject* Outer, const FLinearColor& Color, float Strength)
 {
-	UMaterialInterface* Parent = MeshParent();
-	const bool bCustom = Parent != nullptr;
-	if (!Parent)
+	UMaterialInterface* ParentMat = Parent(EParent::Mesh);
+	const bool bCustom = ParentMat != nullptr;
+	if (!ParentMat)
 	{
-		Parent = FallbackParent();
+		ParentMat = FallbackParent();
 	}
-	if (!Parent)
+	if (!ParentMat)
 	{
 		return nullptr;
 	}
-	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Parent, Outer ? Outer : this);
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, Outer ? Outer : this);
 	if (bCustom)
 	{
 		if (UTexture* Tex = Texture(TEXT("T_Grime")))
@@ -435,15 +711,16 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 	{
 		const FSlotStyle* Style = FindSlotStyle(SlotName);
 		const FLinearColor Color = TintOverride ? *TintOverride : (Style ? Style->Color : FLinearColor(0.6f, 0.6f, 0.6f));
-		UMaterialInterface* Parent = MeshParent();
-		const bool bCustom = Parent != nullptr;
-		if (!Parent)
+		const bool bSkin = IsSkinSlot(SlotName);
+		UMaterialInterface* ParentMat = Parent(bSkin ? EParent::Skin : EParent::Mesh);
+		const bool bCustom = ParentMat != nullptr;
+		if (!ParentMat)
 		{
-			Parent = FallbackParent();
+			ParentMat = FallbackParent();
 		}
-		if (Parent)
+		if (ParentMat)
 		{
-			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Parent, this);
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, this);
 			if (bCustom)
 			{
 				if (UTexture* Tex = Texture(Style ? FName(Style->Tex) : FName(TEXT("T_Grime"))))
@@ -455,6 +732,17 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 				MID->SetScalarParameterValue(TEXT("Roughness"), Style ? Style->Rough : 0.7f);
 				MID->SetScalarParameterValue(TEXT("Metallic"), Style ? Style->Metal : 0.f);
 				MID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor::Black);
+				if (bSkin)
+				{
+					if (UTexture* N = Texture(TEXT("T_Skin_N")))
+					{
+						MID->SetTextureParameterValue(TEXT("NormalTex"), N);
+					}
+					// Chair translucide du Skin-Stealer : diffusion sous-cutanee plus forte
+					const bool bGlass = SlotName.Contains(TEXT("Glass"), ESearchCase::IgnoreCase);
+					MID->SetScalarParameterValue(TEXT("Subsurface"), bGlass ? 1.f : 0.6f);
+					MID->SetVectorParameterValue(TEXT("SubsurfaceColor"), bGlass ? FLinearColor(1.f, 0.25f, 0.2f) : FLinearColor(1.f, 0.35f, 0.25f));
+				}
 			}
 			else
 			{
@@ -477,7 +765,7 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 }
 
 void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColor>* TintOverrides, bool bUniqueGlow,
-	TArray<UMaterialInstanceDynamic*>* OutGlow, float GlowScale)
+	TArray<UMaterialInstanceDynamic*>* OutGlow, float GlowScale, bool bPowered)
 {
 	if (!Comp)
 	{
@@ -490,8 +778,36 @@ void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColo
 		const FString Slot = Names.IsValidIndex(i) ? Names[i].ToString() : FString(TEXT("Body"));
 		const FLinearColor Glow = GlowColorForSlot(Slot);
 		UMaterialInterface* Mat = nullptr;
+		// Les panneaux de sortie (vert), voyants (rouge) et fenetres ne dependent pas du secteur
+		const bool bMains = bPowered && !Glow.IsAlmostBlack() && !Slot.Contains(TEXT("GlowGreen"), ESearchCase::IgnoreCase)
+			&& !Slot.Contains(TEXT("GlowRed"), ESearchCase::IgnoreCase) && !Slot.Contains(TEXT("GlowWindow"), ESearchCase::IgnoreCase);
 
-		if (!Glow.IsAlmostBlack() && (bUniqueGlow || !FMath::IsNearlyEqual(GlowScale, 1.f)))
+		if (bMains && !bUniqueGlow)
+		{
+			// Materiau partage par tous les neons d'un meme type, eteint pendant les coupures
+			const FString Key = FString::Printf(TEXT("P|%s|%.2f"), *Slot, GlowScale);
+			if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
+			{
+				Mat = Found->Get();
+			}
+			else
+			{
+				const float Strength = FMath::Max3(Glow.R, Glow.G, Glow.B);
+				const FLinearColor Unit = Glow / FMath::Max(Strength, 0.001f);
+				UMaterialInstanceDynamic* MID = NewGlow(this, Unit, Strength * GlowScale);
+				if (MID)
+				{
+					FPoweredGlow PG;
+					PG.MID = MID;
+					PG.Base = Unit * Strength * GlowScale;
+					PoweredGlows.Add(PG);
+					MID->SetVectorParameterValue(TEXT("Emissive"), PG.Base * GlowScaleNow);
+					MatCache.Add(Key, MID);
+				}
+				Mat = MID;
+			}
+		}
+		else if (!Glow.IsAlmostBlack() && (bUniqueGlow || !FMath::IsNearlyEqual(GlowScale, 1.f)))
 		{
 			const float Strength = FMath::Max3(Glow.R, Glow.G, Glow.B);
 			UMaterialInstanceDynamic* MID = NewGlow(Comp, Glow / FMath::Max(Strength, 0.001f), Strength * GlowScale);
@@ -522,5 +838,20 @@ void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColo
 		{
 			Comp->SetMaterial(i, Mat);
 		}
+	}
+}
+
+void UBRAssets::SetGlowScale(float Scale)
+{
+	GlowScaleNow = FMath::Max(0.f, Scale);
+	for (int32 i = PoweredGlows.Num() - 1; i >= 0; --i)
+	{
+		UMaterialInstanceDynamic* MID = PoweredGlows[i].MID.Get();
+		if (!MID)
+		{
+			PoweredGlows.RemoveAtSwap(i);
+			continue;
+		}
+		MID->SetVectorParameterValue(TEXT("Emissive"), PoweredGlows[i].Base * GlowScaleNow);
 	}
 }

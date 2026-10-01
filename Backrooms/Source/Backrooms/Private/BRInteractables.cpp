@@ -4,6 +4,8 @@
 #include "BRWorld.h"
 #include "BRLevels.h"
 #include "BRCharacter.h"
+#include "BRItems.h"
+#include "BRHUD.h"
 
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
@@ -12,6 +14,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/SoundBase.h"
@@ -22,7 +25,8 @@
 
 ABRPickup::ABRPickup()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	Collision = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
 	Collision->InitSphereRadius(28.f);
@@ -36,9 +40,9 @@ ABRPickup::ABRPickup()
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
-void ABRPickup::Init(EBRPickupType InType, uint64 InId, const FString& InNote)
+void ABRPickup::Init(EBRItem InItem, uint64 InId, const FString& InNote)
 {
-	Type = InType;
+	Item = InItem;
 	Id = InId;
 	NoteText = InNote;
 
@@ -47,73 +51,154 @@ void ABRPickup::Init(EBRPickupType InType, uint64 InId, const FString& InNote)
 	{
 		return;
 	}
-	FName MeshName = TEXT("SM_AlmondWater");
+	const FBRItemInfo& Info = BRItems::Get(Item);
+
+	// Taille de la boite de repli (si les modeles Blender ne sont pas importes) et echelle d'affichage
 	FVector FallbackSize(8.f, 8.f, 24.f);
 	FLinearColor FallbackColor(0.9f, 0.85f, 0.7f);
-	float Scale = 1.25f;
-	switch (Type)
+	float Scale = 1.2f;
+	switch (Item)
 	{
-	case EBRPickupType::Battery:
-		MeshName = TEXT("SM_Battery");
+	case EBRItem::AlmondWater:
+		Scale = 1.25f;
+		break;
+	case EBRItem::Battery:
 		FallbackSize = FVector(10.f, 10.f, 5.f);
 		FallbackColor = FLinearColor(0.1f, 0.1f, 0.1f);
 		Scale = 1.4f;
 		break;
-	case EBRPickupType::Note:
-		MeshName = TEXT("SM_Note");
+	case EBRItem::Note:
 		FallbackSize = FVector(21.f, 30.f, 0.5f);
 		FallbackColor = FLinearColor(0.9f, 0.88f, 0.8f);
+		Scale = 1.f;
+		break;
+	case EBRItem::Bandage:
+		FallbackSize = FVector(12.f, 6.f, 6.f);
+		FallbackColor = FLinearColor(0.92f, 0.9f, 0.85f);
+		Scale = 1.35f;
+		break;
+	case EBRItem::EnergyBar:
+		FallbackSize = FVector(13.f, 4.f, 1.6f);
+		FallbackColor = FLinearColor(0.8f, 0.25f, 0.1f);
+		Scale = 1.4f;
+		break;
+	case EBRItem::VHSTape:
+		FallbackSize = FVector(19.f, 10.f, 2.5f);
+		FallbackColor = FLinearColor(0.03f, 0.03f, 0.03f);
+		Scale = 1.3f;
+		break;
+	case EBRItem::Flashlight:
+		FallbackSize = FVector(25.f, 5.f, 5.f);
+		FallbackColor = FLinearColor(0.08f, 0.08f, 0.08f);
+		Scale = 1.15f;
+		break;
+	case EBRItem::Camcorder:
+		FallbackSize = FVector(22.f, 9.f, 11.f);
+		FallbackColor = FLinearColor(0.05f, 0.05f, 0.05f);
+		Scale = 1.1f;
+		break;
+	case EBRItem::Headlamp:
+		FallbackSize = FVector(18.f, 17.f, 5.f);
+		FallbackColor = FLinearColor(0.2f, 0.2f, 0.22f);
+		Scale = 1.2f;
+		break;
+	case EBRItem::Vest:
+		FallbackSize = FVector(20.f, 40.f, 50.f);
+		FallbackColor = FLinearColor(0.3f, 0.32f, 0.25f);
 		Scale = 1.f;
 		break;
 	default:
 		break;
 	}
 
-	if (UStaticMesh* M = A->Mesh(MeshName))
+	if (UStaticMesh* M = A->Mesh(Info.Mesh))
 	{
 		Mesh->SetStaticMesh(M);
 		Mesh->SetRelativeScale3D(FVector(Scale));
+		// Pose le modele sur le sol quelle que soit la position de son pivot
+		const FBox B = M->GetBoundingBox();
+		Mesh->SetRelativeLocation(FVector(0.f, 0.f, -B.Min.Z * Scale - 1.f));
+		if (Item == EBRItem::Vest)
+		{
+			// Gilet couche sur le sol
+			Mesh->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+			Mesh->SetRelativeLocation(FVector(0.f, 0.f, B.Max.X * Scale - 1.f));
+		}
 		A->ApplySlots(Mesh);
 	}
 	else if (A->Cube())
 	{
 		Mesh->SetStaticMesh(A->Cube());
-		Mesh->SetRelativeLocation(FVector(0.f, 0.f, FallbackSize.Z * 0.5f));
+		Mesh->SetRelativeLocation(FVector(0.f, 0.f, FallbackSize.Z * 0.5f - 1.f));
 		Mesh->SetRelativeScale3D(FallbackSize / 100.f);
 		FBRSurface S(TEXT("T_Grime"), FallbackColor, 100.f);
 		Mesh->SetMaterial(0, A->Surface(S));
 	}
-	Collision->SetRelativeLocation(FVector::ZeroVector);
-	Mesh->SetRelativeLocation(Mesh->GetRelativeLocation() + FVector(0.f, 0.f, -1.f));
+	Collision->SetSphereRadius(Item == EBRItem::Vest ? 40.f : 28.f);
+
+	// Les cassettes VHS (objectif) brillent tres legerement pour qu'on puisse les reperer
+	if (Item == EBRItem::VHSTape)
+	{
+		Glint = NewObject<UPointLightComponent>(this);
+		Glint->SetupAttachment(Collision);
+		Glint->SetRelativeLocation(FVector(0.f, 0.f, 18.f));
+		Glint->SetIntensityUnits(ELightUnits::Lumens);
+		Glint->SetIntensity(6.f);
+		Glint->SetLightColor(FLinearColor(0.75f, 0.85f, 1.f));
+		Glint->SetAttenuationRadius(110.f);
+		Glint->SetCastShadows(false);
+		Glint->RegisterComponent();
+		SetActorTickEnabled(true);
+		Time = FMath::FRandRange(0.f, 5.f);
+	}
+}
+
+void ABRPickup::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	Time += DeltaSeconds;
+	if (Glint)
+	{
+		const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 2.2f);
+		Glint->SetIntensity(2.f + 8.f * Pulse * Pulse);
+	}
 }
 
 FString ABRPickup::GetPrompt() const
 {
-	switch (Type)
+	if (Item == EBRItem::Note)
 	{
-	case EBRPickupType::Battery:
-		return TEXT("[E] Ramasser : piles");
-	case EBRPickupType::Note:
 		return TEXT("[E] Lire la note");
-	default:
-		return TEXT("[E] Ramasser : eau d'amande");
 	}
+	return FString::Printf(TEXT("[E] Ramasser : %s"), *BRItems::Get(Item).Name);
 }
 
 void ABRPickup::Collect(ABRCharacter* By)
 {
-	if (!By)
+	if (!By || IsActorBeingDestroyed())
 	{
 		return;
 	}
-	By->ReceivePickup(Type, NoteText);
+	if (!By->ReceivePickup(Item, NoteText))
+	{
+		return; // inventaire plein : l'objet reste au sol
+	}
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		W->MarkCollected(Id);
 	}
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
-		if (USoundBase* S = A->Sound(Type == EBRPickupType::AlmondWater ? FName(TEXT("S_Pickup")) : FName(TEXT("S_Battery"))))
+		FName SoundName = TEXT("S_Pickup");
+		if (Item == EBRItem::Battery)
+		{
+			SoundName = TEXT("S_Battery");
+		}
+		else if (Item == EBRItem::Note || Item == EBRItem::VHSTape)
+		{
+			SoundName = TEXT("S_ItemMove");
+		}
+		if (USoundBase* S = A->Sound(SoundName))
 		{
 			UGameplayStatics::PlaySound2D(this, S, 0.8f);
 		}
@@ -337,6 +422,25 @@ void ABRExit::Use(ABRCharacter* By)
 	ABRWorld* W = ABRWorld::Get(this);
 	if (bUsed || !By || !W || W->IsTransitioning() || By->IsDead())
 	{
+		return;
+	}
+	FString Reason;
+	if (!W->CanLeaveLevel(Reason))
+	{
+		// Niveau 0 : la sortie reste instable tant que les objectifs ne sont pas remplis
+		const float Now = GetWorld() ? static_cast<float>(GetWorld()->GetTimeSeconds()) : 0.f;
+		if (IsInteractable() || Now - LastDenied > 4.f)
+		{
+			LastDenied = Now;
+			ABRHUD::Notify(this, Reason, 4.f, FLinearColor(1.f, 0.55f, 0.35f));
+			if (UBRAssets* A = UBRAssets::Get(this))
+			{
+				if (USoundBase* S = A->Sound(TEXT("S_Flicker")))
+				{
+					UGameplayStatics::PlaySound2D(this, S, 0.6f);
+				}
+			}
+		}
 		return;
 	}
 	bUsed = true;

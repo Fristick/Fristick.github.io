@@ -14,7 +14,7 @@ class UPointLightComponent;
 class UMaterialInstanceDynamic;
 class ABRCharacter;
 
-/** Eau d'amande, piles, notes */
+/** Objet d'inventaire pose au sol (eau d'amande, piles, cassettes VHS, notes, equipement...) */
 UCLASS()
 class BACKROOMS_API ABRPickup : public AActor
 {
@@ -23,11 +23,12 @@ class BACKROOMS_API ABRPickup : public AActor
 public:
 	ABRPickup();
 
-	void Init(EBRPickupType InType, uint64 InId, const FString& InNote);
+	void Init(EBRItem InItem, uint64 InId, const FString& InNote);
+	virtual void Tick(float DeltaSeconds) override;
 	FString GetPrompt() const;
 	void Collect(ABRCharacter* By);
 
-	EBRPickupType Type = EBRPickupType::AlmondWater;
+	EBRItem Item = EBRItem::AlmondWater;
 	uint64 Id = 0;
 	FString NoteText;
 
@@ -37,6 +38,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> Mesh;
+
+	/** Petite lueur pour reperer les cassettes VHS dans le noir */
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> Glint;
+
+	float Time = 0.f;
 };
 
 /** Passage vers un autre niveau */
@@ -84,4 +91,5 @@ protected:
 
 	bool bUsed = false;
 	float Time = 0.f;
+	float LastDenied = -100.f;
 };

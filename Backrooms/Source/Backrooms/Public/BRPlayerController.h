@@ -1,4 +1,4 @@
-// Entrees (Enhanced Input cree entierement en C++), menu titre, pause, journal, commandes console.
+// Entrees (Enhanced Input cree entierement en C++), menu titre, pause, inventaire (TAB), parametres, commandes console.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -23,11 +23,19 @@ public:
 
 	bool IsInMenu() const { return bInMenu; }
 	int32 GetMenuIndex() const { return MenuIndex; }
-	bool IsJournalOpen() const { return bJournal; }
+	bool IsInventoryOpen() const { return bInventory; }
 	bool IsPauseMenuOpen() const { return bPauseMenu; }
+	void SetInventoryOpen(bool bOpen);
 
-	float MouseSensitivity = 1.f;
-	bool bInvertY = false;
+	// ---- Parametres (onglet PARAMETRES de l'inventaire) ----
+	int32 GetSettingsCount() const;
+	FString GetSettingLabel(int32 Index) const;
+	FString GetSettingValue(int32 Index) const;
+	FString GetSettingHint(int32 Index) const;
+	void AdjustSetting(int32 Index, int32 Direction);
+	void LoadSettings();
+	void SaveSettings() const;
+	void ApplySettings();
 
 	// ---- Commandes console (touche ` ou \u00b2) ----
 	/** Aller a un niveau : BRLevel 37 */
@@ -38,7 +46,7 @@ public:
 	UFUNCTION(Exec)
 	void BRGod();
 
-	/** Faire apparaitre une entite devant soi : BRSpawn 0..7 */
+	/** Faire apparaitre une entite devant soi : BRSpawn 0..8 */
 	UFUNCTION(Exec)
 	void BRSpawn(int32 Kind);
 
@@ -49,9 +57,17 @@ public:
 	UFUNCTION(Exec)
 	void BRInvertY();
 
-	/** +5 eau d'amande, +5 piles */
+	/** Remplit l'inventaire (eau, bandages, piles, barres, equipement) et soigne */
 	UFUNCTION(Exec)
 	void BRGiveAll();
+
+	/** Declenche une coupure de courant */
+	UFUNCTION(Exec)
+	void BRBlackout();
+
+	/** Valide les objectifs du niveau (cassettes VHS, enregistrement) */
+	UFUNCTION(Exec)
+	void BRObjectives();
 
 protected:
 	UPROPERTY()
@@ -89,6 +105,12 @@ protected:
 	TObjectPtr<UInputAction> MenuNextAction;
 	UPROPERTY()
 	TObjectPtr<UInputAction> MenuConfirmAction;
+	UPROPERTY()
+	TObjectPtr<UInputAction> NightVisionAction;
+	UPROPERTY()
+	TObjectPtr<UInputAction> BandageAction;
+	UPROPERTY()
+	TArray<TObjectPtr<UInputAction>> PocketActions;
 
 private:
 	void EnsureInput();
@@ -110,8 +132,14 @@ private:
 	void OnInteract(const FInputActionValue& Value);
 	void OnDrink(const FInputActionValue& Value);
 	void OnReload(const FInputActionValue& Value);
-	void OnJournalStarted(const FInputActionValue& Value);
-	void OnJournalCompleted(const FInputActionValue& Value);
+	void OnInventory(const FInputActionValue& Value);
+	void OnNightVision(const FInputActionValue& Value);
+	void OnBandage(const FInputActionValue& Value);
+	void OnPocket1(const FInputActionValue& Value);
+	void OnPocket2(const FInputActionValue& Value);
+	void OnPocket3(const FInputActionValue& Value);
+	void OnPocket4(const FInputActionValue& Value);
+	void UsePocket(int32 Index);
 	void OnPause(const FInputActionValue& Value);
 	void OnQuit(const FInputActionValue& Value);
 	void OnMenuPrev(const FInputActionValue& Value);
@@ -119,7 +147,7 @@ private:
 	void OnMenuConfirm(const FInputActionValue& Value);
 
 	bool bInMenu = true;
-	bool bJournal = false;
+	bool bInventory = false;
 	bool bPauseMenu = false;
 	bool bMappingAdded = false;
 	int32 MenuIndex = 0;

@@ -57,10 +57,17 @@ namespace
 		D.HumSound = TEXT("S_Hum"); D.HumVolume = 0.55f;
 		D.Step = EBRStep::Carpet;
 		D.SanityDrain = 0.08f;
-		D.Entities = { E(EBREntityKind::Smiler, 1.f) };
-		D.MaxEntities = 1; D.SpawnInterval = 120.f;
+		D.Entities = { E(EBREntityKind::Smiler, 0.6f), E(EBREntityKind::Bacteria, 0.4f) };
+		D.MaxEntities = 1; D.SpawnInterval = 100.f;
 		D.AlmondWaterChance = 0.3f; D.BatteryChance = 0.15f; D.NoteChance = 0.25f;
+		D.BandageChance = 0.12f; D.EnergyBarChance = 0.08f; D.GearChance = 0.03f;
 		D.Exits = { X(1, EBRExitStyle::NoclipWall, 0.18f), X(37, EBRExitStyle::NoclipFloor, 0.04f) };
+		// Comme dans Escape Together : cassettes VHS + enregistrement pendant une coupure pour stabiliser la sortie
+		D.bRequireObjectives = true; D.VHSRequired = 6; D.VHSChance = 0.22f;
+		D.bBlackouts = true; D.BlackoutFirst = 75.f; D.BlackoutMinInterval = 120.f; D.BlackoutMaxInterval = 220.f;
+		D.WallDetailChance = 0.1f;
+		D.Wall.FloorGrime = 0.6f;
+		D.Pillar.FloorGrime = 0.6f;
 		D.bPhenomena = true;
 		D.Notes = {
 			TEXT("Si tu lis ceci, tu as \"noclipp\u00e9\" hors de la r\u00e9alit\u00e9. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds."),
@@ -68,7 +75,9 @@ namespace
 			TEXT("Certains murs ont l'air FAUX, comme une image qui se brouille. Touche-les. C'est comme \u00e7a que j'ai quitt\u00e9 cet endroit."),
 			TEXT("L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. [B] pour boire."),
 			TEXT("Si les lumi\u00e8res sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir."),
-			TEXT("Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement.")
+			TEXT("Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement."),
+			TEXT("Les sorties ne tiennent pas. Il faut r\u00e9cup\u00e9rer les six cassettes et filmer le noir pendant une coupure. Apr\u00e8s, les murs c\u00e8dent."),
+			TEXT("Quand les n\u00e9ons s'\u00e9teignent, sors le cam\u00e9scope et appuie sur [N]. La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.")
 		};
 		return D;
 	}
@@ -115,6 +124,9 @@ namespace
 			TEXT("Les portes de service m\u00e8nent plus bas. Plus bas, c'est pire. Mais c'est peut-etre la seule sortie."),
 			TEXT("Les Facelings ne sont pas m\u00e9chants. La plupart. Ne les regarde pas trop longtemps.")
 		};
+		D.bBlackouts = true; D.BlackoutFirst = 120.f;
+		D.Wall.FloorGrime = 0.5f; D.Pillar.FloorGrime = 0.5f;
+		D.BandageChance = 0.15f; D.EnergyBarChance = 0.12f; D.GearChance = 0.04f; D.WallDetailChance = 0.05f;
 		return D;
 	}
 
@@ -157,6 +169,9 @@ namespace
 			TEXT("Les Wretches \u00e9taient des gens comme nous. Ils sont lents. Ne les laisse pas s'approcher."),
 			TEXT("Une porte de secours plus loin. On dit qu'elle m\u00e8ne \u00e0 la Station \u00e9lectrique. Pr\u00e9pare-toi.")
 		};
+		D.bBlackouts = true; D.BlackoutFirst = 100.f;
+		D.Wall.FloorGrime = 0.5f;
+		D.BandageChance = 0.12f; D.EnergyBarChance = 0.1f; D.GearChance = 0.03f;
 		return D;
 	}
 
@@ -201,6 +216,9 @@ namespace
 			TEXT("Si quelqu'un t'appelle par ton nom dans ces couloirs, ce n'est pas un humain. Ne r\u00e9ponds pas."),
 			TEXT("Les ascenseurs fonctionnent encore. Ils m\u00e8nent \u00e0 un bureau. Un endroit calme. Trouve-les.")
 		};
+		D.bBlackouts = true; D.BlackoutFirst = 90.f;
+		D.Wall.FloorGrime = 0.45f;
+		D.BandageChance = 0.15f; D.EnergyBarChance = 0.1f; D.GearChance = 0.04f;
 		return D;
 	}
 
@@ -244,6 +262,8 @@ namespace
 			TEXT("La cage d'escalier descend vers un h\u00f4tel. Ne t'y attarde pas."),
 			TEXT("Si tu vois quelqu'un de jaune qui sourit, NE LE QUITTE PAS DES YEUX.")
 		};
+		D.Wall.FloorGrime = 0.3f; D.WallDetailChance = 0.12f;
+		D.BandageChance = 0.12f; D.EnergyBarChance = 0.15f; D.GearChance = 0.04f;
 		return D;
 	}
 
@@ -286,6 +306,9 @@ namespace
 			TEXT("La chaufferie est au bout du couloir. Apr\u00e8s elle, il n'y a plus de lumi\u00e8re du tout."),
 			TEXT("Quelqu'un frappe aux portes la nuit. N'ouvre jamais.")
 		};
+		D.bBlackouts = true; D.BlackoutFirst = 110.f;
+		D.Wall.FloorGrime = 0.4f; D.WallDetailChance = 0.06f;
+		D.BandageChance = 0.12f; D.EnergyBarChance = 0.1f; D.GearChance = 0.03f;
 		return D;
 	}
 
@@ -519,6 +542,8 @@ namespace
 			TEXT("L'eau est ti\u00e8de. Elle n'a pas de fond, a certains endroits. N'y plonge pas."),
 			TEXT("C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est \u00e7a, le pi\u00e8ge.")
 		};
+		// Reflets d'eau animes sur le carrelage
+		D.Floor.Caustics = 1.f; D.Wall.Caustics = 1.f; D.Pillar.Caustics = 1.f; D.Ceiling.Caustics = 0.6f;
 		return D;
 	}
 

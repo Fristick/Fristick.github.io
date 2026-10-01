@@ -206,6 +206,24 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber)
 	PhenomenaTimer = FMath::FRandRange(30.f, 60.f);
 	Visited.AddUnique(Current->Number);
 
+	// Coupures & objectifs (v2)
+	BlackoutPhase = EBlackout::None;
+	BlackoutTimer = Current->BlackoutFirst * FMath::FRandRange(0.85f, 1.15f);
+	Power = 1.f;
+	AppliedPower = -1.f;
+	VHSFound = 0;
+	bBlackoutRecorded = false;
+	bEntityRecorded = false;
+	bObjectivesAnnounced = false;
+	BlackoutRecordTime = 0.f;
+	EntityRecordTime = 0.f;
+	RecordProgress = 0.f;
+	RecordLabel.Empty();
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		A->SetGlowScale(1.f);
+	}
+
 	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title, Seed);
 
 	ApplyEnvironment();
@@ -410,12 +428,38 @@ void ABRWorld::Tick(float DeltaSeconds)
 		UpdateStreaming(false);
 	}
 
+	// Le menu titre s'affiche par-dessus le niveau : pas de coupure ni d'annonce tant qu'on n'a pas commence
+	bool bMenu = false;
+	if (const ABRCharacter* P = GetPlayer())
+	{
+		if (const ABRPlayerController* PC = Cast<ABRPlayerController>(P->GetController()))
+		{
+			bMenu = PC->IsInMenu();
+		}
+	}
+	if (bMenu)
+	{
+		LevelTime = 0.f;
+	}
+
 	if (TransState == ETrans::None)
 	{
 		UpdatePopulation(Dt);
 		UpdatePhenomena(Dt);
+		if (!bMenu)
+		{
+			UpdateBlackout(Dt);
+		}
 	}
 	UpdateAudio(Dt);
+
+	// Annonce des objectifs au debut d'un niveau qui en exige
+	if (!bObjectivesAnnounced && !bMenu && TransState == ETrans::None && LevelTime > 8.f && Def().bRequireObjectives)
+	{
+		bObjectivesAnnounced = true;
+		ABRHUD::Notify(this, FString::Printf(TEXT("OBJECTIFS : trouver %d cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  [TAB]"),
+			Def().VHSRequired), 8.f, FLinearColor(1.f, 0.85f, 0.4f));
+	}
 }
 
 void ABRWorld::UpdateStreaming(bool bSynchronous)
@@ -488,6 +532,10 @@ void ABRWorld::SpawnChunk(const FIntPoint& Coord)
 	{
 		Chunk->Build(this, Coord);
 		Chunks.Add(Coord, Chunk);
+		if (Power < 0.999f)
+		{
+			Chunk->SetPower(Power);
+		}
 	}
 }
 
@@ -560,7 +608,7 @@ void ABRWorld::UpdatePopulation(float Dt)
 	{
 		return;
 	}
-	SpawnTimer = D.SpawnInterval * FMath::FRandRange(0.6f, 1.4f);
+	SpawnTimer = D.SpawnInterval * FMath::FRandRange(0.6f, 1.4f) * (IsBlackout() ? 0.5f : 1.f);
 
 	// Choix pondere de l'espece
 	float Total = 0.f;
@@ -608,6 +656,18 @@ void ABRWorld::UpdatePopulation(float Dt)
 			continue;
 		}
 		SpawnEntity(Kind, Loc);
+		// Les papillons de la mort se deplacent en essaim
+		if (Kind == EBREntityKind::Deathmoth)
+		{
+			for (int32 k = 0; k < 2 && Entities.Num() < D.MaxEntities + 2; ++k)
+			{
+				const FVector Off(FMath::FRandRange(-120.f, 120.f), FMath::FRandRange(-120.f, 120.f), FMath::FRandRange(-40.f, 40.f));
+				if (ABREntity* Moth = SpawnEntity(Kind, Loc + Off))
+				{
+					Moth->SetActorScale3D(FVector(0.75f));
+				}
+			}
+		}
 		return;
 	}
 }
@@ -670,6 +730,327 @@ void ABRWorld::UpdateAudio(float Dt)
 		HumAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.HumVolume * FMath::Clamp(Light, 0.f, 1.f) * (1.f - Fade)));
 	}
 	AmbientAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.AmbientVolume * (1.f - Fade * 0.8f)));
+}
+
+// =====================================================================================
+// Coupures de courant (v2)
+// =====================================================================================
+
+void ABRWorld::ForceBlackout()
+{
+	if (BlackoutPhase == EBlackout::None && !Def().bOutdoor && Def().Fixture != EBRFixture::None)
+	{
+		BlackoutTimer = 0.f;
+		BlackoutPhase = EBlackout::None;
+		// Le prochain UpdateBlackout declenchera la coupure
+		UpdateBlackout(0.f);
+	}
+}
+
+void ABRWorld::UpdateBlackout(float Dt)
+{
+	const FBRLevelDef& D = Def();
+	UBRAssets* A = UBRAssets::Get(this);
+	const bool bAllowed = D.bBlackouts || BlackoutPhase != EBlackout::None || BlackoutTimer <= 0.f;
+	if (!bAllowed || D.Fixture == EBRFixture::None || D.bOutdoor)
+	{
+		if (Power < 1.f)
+		{
+			Power = 1.f;
+			ApplyPower(false);
+		}
+		return;
+	}
+
+	auto Play = [this, A](const TCHAR* Name, float Volume)
+	{
+		if (A)
+		{
+			if (USoundBase* S = A->Sound(FName(Name)))
+			{
+				UGameplayStatics::PlaySound2D(this, S, Volume);
+			}
+		}
+	};
+
+	BlackoutTimer -= Dt;
+	switch (BlackoutPhase)
+	{
+	case EBlackout::None:
+		if (BlackoutTimer <= 0.f)
+		{
+			BlackoutPhase = EBlackout::Failing;
+			BlackoutTimer = 1.8f;
+			PowerFlickerTimer = 0.f;
+			Play(TEXT("S_Blackout"), 1.f);
+		}
+		break;
+	case EBlackout::Failing:
+	case EBlackout::Restoring:
+	{
+		// Les neons vacillent de plus en plus (ou de moins en moins) avant de lacher
+		const bool bFailing = BlackoutPhase == EBlackout::Failing;
+		const float Total = bFailing ? 1.8f : 1.4f;
+		const float T = FMath::Clamp(BlackoutTimer / Total, 0.f, 1.f);
+		const float OnChance = bFailing ? T * 0.8f : 1.f - T * 0.8f;
+		PowerFlickerTimer -= Dt;
+		if (PowerFlickerTimer <= 0.f)
+		{
+			PowerFlickerTimer = FMath::FRandRange(0.04f, 0.16f);
+			Power = FMath::FRand() < OnChance ? FMath::FRandRange(0.6f, 1.f) : FMath::FRandRange(0.f, 0.08f);
+		}
+		if (BlackoutTimer <= 0.f)
+		{
+			if (bFailing)
+			{
+				BlackoutPhase = EBlackout::Dark;
+				BlackoutTimer = FMath::FRandRange(24.f, 40.f);
+				Power = 0.f;
+				ABRHUD::Notify(this, TEXT("COUPURE DE COURANT"), 4.f, FLinearColor(1.f, 0.3f, 0.25f));
+				if (D.bRequireObjectives && !bBlackoutRecorded)
+				{
+					ABRHUD::Notify(this, TEXT("Filmez pendant la coupure : cam\u00e9scope en MAIN."), 5.f, FLinearColor(1.f, 0.85f, 0.4f));
+				}
+			}
+			else
+			{
+				BlackoutPhase = EBlackout::None;
+				BlackoutTimer = FMath::FRandRange(D.BlackoutMinInterval, FMath::Max(D.BlackoutMinInterval, D.BlackoutMaxInterval));
+				Power = 1.f;
+			}
+		}
+		break;
+	}
+	case EBlackout::Dark:
+		Power = 0.f;
+		if (BlackoutTimer <= 0.f)
+		{
+			BlackoutPhase = EBlackout::Restoring;
+			BlackoutTimer = 1.4f;
+			PowerFlickerTimer = 0.f;
+			Play(TEXT("S_PowerUp"), 0.9f);
+		}
+		break;
+	}
+	ApplyPower(false);
+}
+
+void ABRWorld::ApplyPower(bool bForce)
+{
+	if (!bForce && FMath::Abs(Power - AppliedPower) < 0.01f)
+	{
+		return;
+	}
+	AppliedPower = Power;
+	for (TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->SetPower(Power);
+		}
+	}
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		A->SetGlowScale(Power);
+	}
+}
+
+// =====================================================================================
+// Objectifs (v2)
+// =====================================================================================
+
+void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
+{
+	Out.Reset();
+	const FBRLevelDef& D = Def();
+	if (D.bRequireObjectives)
+	{
+		FBRObjective Vhs;
+		Vhs.Text = TEXT("TROUVER LES CASSETTES VHS");
+		Vhs.Progress = FMath::Min(VHSFound, D.VHSRequired);
+		Vhs.Goal = D.VHSRequired;
+		Vhs.bRequired = true;
+		Out.Add(Vhs);
+	}
+	if (D.bBlackouts)
+	{
+		FBRObjective Rec;
+		Rec.Text = TEXT("FILMER PENDANT UNE COUPURE");
+		Rec.Progress = bBlackoutRecorded ? 1 : 0;
+		Rec.Partial = bBlackoutRecorded ? 1.f : FMath::Clamp(BlackoutRecordTime / 5.f, 0.f, 1.f);
+		Rec.bRequired = D.bRequireObjectives;
+		Out.Add(Rec);
+	}
+	if (D.Entities.Num() > 0 && D.MaxEntities > 0)
+	{
+		FBRObjective Ent;
+		Ent.Text = TEXT("FILMER UNE ENTIT\u00c9");
+		Ent.Progress = bEntityRecorded ? 1 : 0;
+		Ent.Partial = bEntityRecorded ? 1.f : FMath::Clamp(EntityRecordTime / 3.f, 0.f, 1.f);
+		Out.Add(Ent);
+	}
+	FBRObjective Exit;
+	Exit.Text = D.bRequireObjectives ? TEXT("STABILISER ET PRENDRE LA SORTIE") : TEXT("TROUVER UNE SORTIE");
+	Exit.Progress = 0;
+	Out.Add(Exit);
+}
+
+bool ABRWorld::AreObjectivesComplete() const
+{
+	const FBRLevelDef& D = Def();
+	if (!D.bRequireObjectives)
+	{
+		return true;
+	}
+	return VHSFound >= D.VHSRequired && (bBlackoutRecorded || !D.bBlackouts);
+}
+
+bool ABRWorld::CanLeaveLevel(FString& OutReason) const
+{
+	if (AreObjectivesComplete())
+	{
+		return true;
+	}
+	const FBRLevelDef& D = Def();
+	OutReason = FString::Printf(TEXT("La sortie est instable... Cassettes VHS %d/%d"), FMath::Min(VHSFound, D.VHSRequired), D.VHSRequired);
+	if (D.bBlackouts)
+	{
+		OutReason += FString::Printf(TEXT(", filmer pendant une coupure %d/1"), bBlackoutRecorded ? 1 : 0);
+	}
+	OutReason += TEXT("  [TAB]");
+	return false;
+}
+
+void ABRWorld::CompleteTask(const FString& Text)
+{
+	ABRHUD::Notify(this, FString::Printf(TEXT("T\u00c2CHE ACCOMPLIE : %s"), *Text), 5.f, FLinearColor(0.55f, 1.f, 0.55f));
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		if (USoundBase* S = A->Sound(TEXT("S_Objective")))
+		{
+			UGameplayStatics::PlaySound2D(this, S, 0.8f);
+		}
+	}
+	if (Def().bRequireObjectives && AreObjectivesComplete())
+	{
+		ABRHUD::Notify(this, TEXT("Les sorties se sont stabilis\u00e9es. Trouvez un passage (noclip) pour quitter le Niveau."), 7.f,
+			FLinearColor(1.f, 0.9f, 0.5f));
+	}
+}
+
+void ABRWorld::OnVHSCollected()
+{
+	const FBRLevelDef& D = Def();
+	++VHSFound;
+	if (!D.bRequireObjectives)
+	{
+		ABRHUD::Notify(this, FString::Printf(TEXT("+1 Cassette VHS  (%d)"), VHSFound), 3.f, FLinearColor(0.9f, 0.88f, 0.75f));
+		return;
+	}
+	if (VHSFound == D.VHSRequired)
+	{
+		CompleteTask(FString::Printf(TEXT("CASSETTES VHS %d/%d"), D.VHSRequired, D.VHSRequired));
+	}
+	else if (VHSFound < D.VHSRequired)
+	{
+		ABRHUD::Notify(this, FString::Printf(TEXT("Cassette VHS  %d/%d"), VHSFound, D.VHSRequired), 3.f, FLinearColor(1.f, 0.85f, 0.4f));
+	}
+}
+
+void ABRWorld::DebugCompleteRecording()
+{
+	if (!bBlackoutRecorded && Def().bBlackouts)
+	{
+		bBlackoutRecorded = true;
+		CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
+	}
+	bEntityRecorded = true;
+}
+
+ABREntity* ABRWorld::FindVisibleEntity(const FVector& Eye, const FVector& Dir, float MaxDist, float MinDot) const
+{
+	const UWorld* W = GetWorld();
+	if (!W)
+	{
+		return nullptr;
+	}
+	ABREntity* Best = nullptr;
+	float BestDot = MinDot;
+	for (ABREntity* E : Entities)
+	{
+		if (!IsValid(E))
+		{
+			continue;
+		}
+		const FVector Target = E->GetActorLocation();
+		const FVector To = Target - Eye;
+		const float Dist = static_cast<float>(To.Size());
+		if (Dist > MaxDist || Dist < 1.f)
+		{
+			continue;
+		}
+		const float Dot = static_cast<float>(FVector::DotProduct(To / Dist, Dir));
+		if (Dot < BestDot)
+		{
+			continue;
+		}
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRRecordLOS), false);
+		Q.AddIgnoredActor(E);
+		if (const ABRCharacter* P = GetPlayer())
+		{
+			Q.AddIgnoredActor(P);
+		}
+		if (W->LineTraceSingleByChannel(Hit, Eye, Target, ECC_Visibility, Q))
+		{
+			continue;
+		}
+		Best = E;
+		BestDot = Dot;
+	}
+	return Best;
+}
+
+void ABRWorld::NotifyRecording(float Dt, const FVector& Eye, const FVector& Dir)
+{
+	const FBRLevelDef& D = Def();
+	RecordLabel.Empty();
+	RecordProgress = 0.f;
+	if (IsTransitioning())
+	{
+		return;
+	}
+
+	// Filmer pendant une coupure
+	if (D.bBlackouts && !bBlackoutRecorded && BlackoutPhase == EBlackout::Dark)
+	{
+		BlackoutRecordTime += Dt;
+		RecordLabel = TEXT("COUPURE DE COURANT");
+		RecordProgress = FMath::Clamp(BlackoutRecordTime / 5.f, 0.f, 1.f);
+		if (BlackoutRecordTime >= 5.f)
+		{
+			bBlackoutRecorded = true;
+			CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
+		}
+		return;
+	}
+
+	// Filmer une entite
+	if (!bEntityRecorded)
+	{
+		if (ABREntity* E = FindVisibleEntity(Eye, Dir, 2600.f, 0.9f))
+		{
+			EntityRecordTime += Dt;
+			RecordLabel = ABREntity::Info(E->Kind).Name.ToUpper();
+			RecordProgress = FMath::Clamp(EntityRecordTime / 3.f, 0.f, 1.f);
+			if (EntityRecordTime >= 3.f)
+			{
+				bEntityRecorded = true;
+				Discover(E->Kind);
+				CompleteTask(TEXT("FILMER UNE ENTIT\u00c9"));
+			}
+		}
+	}
 }
 
 // =====================================================================================
@@ -1007,7 +1388,7 @@ float ABRWorld::LightLevelAt(const FVector& P) const
 	{
 		return 1.f;
 	}
-	if (D.Fixture == EBRFixture::None)
+	if (D.Fixture == EBRFixture::None || Power < 0.05f)
 	{
 		return 0.f;
 	}
@@ -1031,7 +1412,7 @@ float ABRWorld::LightLevelAt(const FVector& P) const
 			}
 		}
 	}
-	return FMath::Clamp(Acc, 0.f, 1.5f);
+	return FMath::Clamp(Acc * Power, 0.f, 1.5f);
 }
 
 bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes) const

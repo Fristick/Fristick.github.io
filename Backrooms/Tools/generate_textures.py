@@ -60,8 +60,45 @@ def colorize(base_rgb, *layers):
     return np.array(base_rgb, dtype=np.float32)
 
 
+# Intensite du relief (normal map "<nom>_N.png" generee a partir de la luminance)
+NORMAL_STRENGTH = {
+    "T_L0_Wallpaper": 2.0, "T_L0_Carpet": 7.0, "T_L0_Ceiling": 5.0, "T_Concrete": 4.0, "T_ConcreteFloor": 5.0,
+    "T_ConcreteDark": 4.0, "T_Brick": 8.0, "T_MetalPanel": 4.0, "T_OfficeCarpet": 6.0, "T_OfficeWall": 2.0,
+    "T_HotelCarpet": 5.0, "T_HotelWallpaper": 3.0, "T_Wood": 3.0, "T_PoolTile": 9.0, "T_Rock": 10.0, "T_Dirt": 6.0,
+    "T_Asphalt": 5.0, "T_Grass": 6.0, "T_Facade": 4.0, "T_Siding": 7.0, "T_Skin": 4.0,
+}
+
+
+def save_normal(name, rgb, strength, size=1024):
+    """Normal map (convention : x vers la droite, y vers le bas de l'image) depuis la luminance."""
+    lum = rgb.mean(-1) if rgb.ndim == 3 else rgb
+    S = lum.shape[0]
+    h = blur_wrap(lum, 1)
+    # passe-haut : on retire les tres basses frequences (taches) pour ne garder que le relief
+    F = np.fft.rfft2(h)
+    fy = np.fft.fftfreq(S)[:, None] * S
+    fx = np.fft.rfftfreq(S)[None, :] * S
+    f = np.sqrt(fx ** 2 + fy ** 2)
+    F *= 1.0 - np.exp(-((f / 6.0) ** 2))
+    h = np.fft.irfft2(F, s=(S, S))
+    dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5
+    dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.5
+    k = strength * S / 512.0
+    nx, ny, nz = -dx * k, -dy * k, np.ones_like(h)
+    l = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
+    nrm = np.stack([nx / l, ny / l, nz / l], -1) * 0.5 + 0.5
+    img = Image.fromarray((np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
+    if img.size[0] != size:
+        img = img.resize((size, size), Image.LANCZOS)
+    path = os.path.join(OUT, f"{name}_N.jpg")
+    img.save(path, quality=93, optimize=True)
+    print("  ->", os.path.relpath(path))
+
+
 def save(name, rgb, size=None, fmt="jpg"):
     rgb = np.clip(rgb, 0, 1)
+    if name in NORMAL_STRENGTH:
+        save_normal(name, rgb, NORMAL_STRENGTH[name], 1024 if rgb.shape[0] >= 1024 else 512)
     img = Image.fromarray((rgb * 255 + 0.5).astype(np.uint8), "RGB" if rgb.ndim == 3 else "L")
     if size:
         img = img.resize((size, size), Image.LANCZOS)
@@ -93,7 +130,7 @@ def grid_coords(size):
 # Niveau 0
 # ---------------------------------------------------------------------------
 def t_l0_wallpaper():
-    S = 1024
+    S = 2048
     x, y = grid_coords(S)
     base = np.array([0.80, 0.72, 0.42])
     img = np.ones((S, S, 3)) * base
@@ -108,6 +145,11 @@ def t_l0_wallpaper():
     chev_shape = np.exp(-(((v - 0.5) - 0.35 * chev) / 0.035) ** 2) * (chev < 0.55)
     pattern = stripes * 0.9 + chev_shape * 0.55
     img = img * (1 - 0.10 * pattern[..., None])
+    # joints des les de papier peint (tous les 60 cm)
+    us = (x * 2) % 1.0
+    seam = np.exp(-((us - 0.0) / 0.0015) ** 2) + np.exp(-((us - 1.0) / 0.0015) ** 2)
+    lip = np.exp(-((us - 0.004) / 0.002) ** 2)
+    img = img * (1 - 0.18 * seam[..., None]) * (1 + 0.05 * lip[..., None])
     # fibres papier
     paper = noise(S, beta=0.6, seed=11)
     img *= (1 + 0.035 * paper)[..., None]
@@ -123,7 +165,7 @@ def t_l0_wallpaper():
 
 
 def t_l0_carpet():
-    S = 1024
+    S = 2048
     base = np.array([0.56, 0.47, 0.27])
     fib = noise(S, beta=0.2, seed=21)
     fib = blur_wrap(fib, 1)
@@ -141,7 +183,7 @@ def t_l0_carpet():
 
 
 def t_l0_ceiling():
-    S = 1024
+    S = 2048
     x, y = grid_coords(S)
     base = np.array([0.86, 0.84, 0.77])
     # fissures typiques des dalles acoustiques
@@ -468,6 +510,45 @@ def t_paper():
     save("T_Paper", img)
 
 
+def t_caustics():
+    """Reseau lumineux de caustiques (cellules de Voronoi periodiques)"""
+    S = 512
+    rng = np.random.default_rng(241)
+    pts = rng.random((40, 2))
+    x, y = grid_coords(S)
+    d1 = np.full((S, S), 9.0)
+    d2 = np.full((S, S), 9.0)
+    for px, py in pts:
+        for ox in (-1, 0, 1):
+            for oy in (-1, 0, 1):
+                d = np.sqrt((x - px - ox) ** 2 + (y - py - oy) ** 2)
+                d2 = np.minimum(d2, np.maximum(d1, d))
+                d1 = np.minimum(d1, d)
+    edge = d2 - d1
+    c = (1.0 - smoothstep(0.0, 0.035, edge)) ** 1.5
+    c = blur_wrap(c, 2)
+    c = c / c.max()
+    save("T_Caustics", np.repeat(c[..., None], 3, 2))
+
+
+def t_lens_dirt():
+    S = 1024
+    img = np.zeros((S, S))
+    rng = np.random.default_rng(251)
+    x, y = grid_coords(S)
+    for _ in range(140):
+        cx, cy, r = rng.random(), rng.random(), rng.uniform(0.004, 0.05)
+        d = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+        img += np.exp(-(d / r) ** 2) * rng.uniform(0.05, 0.35)
+    smudge = smoothstep(0.8, 2.5, noise(S, beta=2.5, seed=252, aniso=(1.0, 0.4)))
+    img = np.clip(img + smudge * 0.35, 0, 1)
+    save("T_LensDirt", np.repeat(img[..., None], 3, 2))
+
+
+def t_flat_normal():
+    save("T_FlatNormal", np.ones((64, 64, 3)) * np.array([0.5, 0.5, 1.0]), fmt="png")
+
+
 if __name__ == "__main__":
     print("Generation des textures dans", os.path.abspath(OUT))
     t_l0_wallpaper()
@@ -495,4 +576,7 @@ if __name__ == "__main__":
     t_skin()
     t_water_normal()
     t_paper()
+    t_caustics()
+    t_lens_dirt()
+    t_flat_normal()
     print("Termine.")

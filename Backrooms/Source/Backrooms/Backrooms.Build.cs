@@ -15,5 +15,12 @@ public class Backrooms : ModuleRules
 			"EnhancedInput",
 			"AIModule"
 		});
+
+		// FImage : lecture des textures de RawAssets/ quand l'import Python n'a pas ete fait
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"ImageCore",
+			"ImageWrapper"
+		});
 	}
 }

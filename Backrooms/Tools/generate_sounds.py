@@ -657,6 +657,121 @@ def s_clump():
     save("S_Clump", reverb(x, 0.8, 0.3), 0.75)
 
 
+# ---------------------------------------------------------------------------
+# v2 : evenements, interface, objets
+# ---------------------------------------------------------------------------
+def s_blackout():
+    dur = 2.4
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    f = 120 * np.exp(-tt * 1.6) + 20
+    whir = (saw(f) * 0.6 + np.sin(2 * np.pi * np.cumsum(f * 2) / SR) * 0.3) * np.exp(-tt * 1.2)
+    clunk = np.zeros(n)
+    m = int(0.35 * SR)
+    t2 = np.arange(m) / SR
+    clunk[:m] = np.sin(2 * np.pi * (50 + 120 * np.exp(-t2 * 25)) * t2) * np.exp(-t2 * 9) * 1.4
+    clunk[:m] += fft_filter(RNG.standard_normal(m), lo=300, hi=3000) * np.exp(-t2 * 30) * 0.8
+    save("S_Blackout", reverb(whir + clunk, 2.0, 0.4), 0.95)
+
+
+def s_power_up():
+    dur = 2.2
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    m = int(0.3 * SR)
+    t2 = np.arange(m) / SR
+    x[:m] = np.sin(2 * np.pi * (60 + 100 * np.exp(-t2 * 30)) * t2) * np.exp(-t2 * 10)
+    hum = sum(a * np.sin(2 * np.pi * 120 * k * tt) for k, a in [(1, 0.5), (2, 0.3), (3, 0.2)])
+    x += hum * np.clip((tt - 0.2) / 1.2, 0, 1) * 0.5
+    for k in range(5):  # tubes qui s'allument un par un
+        place(x, fft_filter(RNG.standard_normal(int(0.05 * SR)), lo=1500, hi=6000) * 0.4, int((0.4 + k * 0.25) * SR), False)
+    save("S_PowerUp", reverb(x, 1.5, 0.35), 0.85)
+
+
+def s_rec_beep():
+    n = int(0.35 * SR)
+    tt = np.arange(n) / SR
+    x = np.sin(2 * np.pi * 2000 * tt) * ((tt < 0.08) | ((tt > 0.14) & (tt < 0.22)))
+    save("S_RecBeep", x * 0.5, 0.6)
+
+
+def s_night_vision():
+    dur = 1.2
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    f = 2000 + 7000 * (1 - np.exp(-tt * 3))
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * 2.5) * 0.4
+    x += fft_filter(RNG.standard_normal(n), lo=4000, hi=9000) * np.exp(-tt * 4) * 0.1
+    save("S_NightVision", x, 0.5)
+
+
+def s_ui_click():
+    n = int(0.08 * SR)
+    tt = np.arange(n) / SR
+    x = np.sin(2 * np.pi * 1400 * tt) * np.exp(-tt * 80) + fft_filter(RNG.standard_normal(n), lo=2000, hi=8000) * np.exp(-tt * 150) * 0.3
+    save("S_UIClick", x, 0.5)
+
+
+def s_item_move():
+    n = int(0.25 * SR)
+    tt = np.arange(n) / SR
+    x = fft_filter(RNG.standard_normal(n), lo=300, hi=3000) * env(n, 0.01, 0.15) + np.sin(2 * np.pi * 180 * tt) * np.exp(-tt * 30) * 0.4
+    save("S_ItemMove", x, 0.55)
+
+
+def s_bandage():
+    dur = 1.3
+    n = int(dur * SR)
+    x = np.zeros(n)
+    for i in range(3):
+        m = int(0.28 * SR)
+        rip = fft_filter(RNG.standard_normal(m), lo=1500, hi=7000) * env(m, 0.02, 0.25) * (RNG.random(m) > 0.3)
+        place(x, rip, int((0.05 + i * 0.4) * SR), False)
+    save("S_Bandage", x, 0.6)
+
+
+def s_eat():
+    dur = 1.4
+    n = int(dur * SR)
+    x = np.zeros(n)
+    for i in range(4):
+        m = int(0.12 * SR)
+        tt = np.arange(m) / SR
+        c = fft_filter(RNG.standard_normal(m), lo=500, hi=5000) * np.exp(-tt * 40) * (RNG.random(m) > 0.5)
+        place(x, c, int((0.1 + i * 0.3) * SR), False)
+    save("S_Eat", x, 0.6)
+
+
+def s_inventory():
+    n = int(0.6 * SR)
+    tt = np.arange(n) / SR
+    x = fft_filter(RNG.standard_normal(n), lo=400, hi=4000) * env(n, 0.05, 0.4) * (0.5 + 0.5 * np.sin(2 * np.pi * 18 * tt))
+    save("S_Inventory", x, 0.5)
+
+
+def s_objective():
+    n = int(1.4 * SR)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    for k, f in enumerate((523.25, 659.25, 783.99)):
+        seg = (tt > k * 0.12)
+        x += np.sin(2 * np.pi * f * tt) * seg * np.exp(-np.maximum(0, tt - k * 0.12) * 3.0) * 0.4
+    save("S_Objective", reverb(x, 1.2, 0.3), 0.7)
+
+
+def s_bacteria():
+    dur = 2.6
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    f0 = 180 + 120 * np.sin(2 * np.pi * 0.7 * tt) + 60 * RNG.standard_normal(n).cumsum() / SR * 3
+    scream = saw(np.abs(f0)) + saw(np.abs(f0) * 1.51) * 0.5
+    grind = fft_filter(RNG.standard_normal(n), lo=200, hi=2500) * (np.sin(2 * np.pi * 37 * tt) > 0)
+    x = np.tanh((resonate(scream, [900, 1700, 3100], q=6) + grind * 0.6) * 2.5) * env(n, 0.05, 0.3, 0.8, 1.0, 1.2)
+    x = np.round(x * 24) / 24
+    save("S_Bacteria", reverb(x, 1.8, 0.4), 0.9)
+
+
 if __name__ == "__main__":
     print("Synthese des sons dans", os.path.abspath(OUT))
     s_hum()
@@ -697,6 +812,17 @@ if __name__ == "__main__":
     s_wretch()
     s_partygoer()
     s_clump()
+    s_blackout()
+    s_power_up()
+    s_rec_beep()
+    s_night_vision()
+    s_ui_click()
+    s_item_move()
+    s_bandage()
+    s_eat()
+    s_inventory()
+    s_objective()
+    s_bacteria()
     with open(os.path.join(OUT, "loops.txt"), "w") as f:
         f.write("\n".join(sorted(LOOPS)) + "\n")
     print("Termine. Boucles :", ", ".join(sorted(LOOPS)))

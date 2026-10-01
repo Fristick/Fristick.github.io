@@ -20,7 +20,38 @@ enum class EBRSky : uint8 { None, Overcast, Night, Day };
 enum class EBRStep : uint8 { Carpet, Hard, Water, Grass };
 enum class EBRProps : uint8 { None, Warehouse, Pipes, Electrical, Office, Hotel, Caves, Field, Suburbs, City };
 enum class EBREdge : uint8 { Open, Wall, Door };
-enum class EBRPickupType : uint8 { AlmondWater, Battery, Note };
+
+/** Objets d'inventaire */
+enum class EBRItem : uint8
+{
+	None,
+	AlmondWater,  // eau d'amande : sante mentale
+	Bandage,      // bandage : sante
+	Battery,      // piles : lampe / camescope
+	EnergyBar,    // barre energetique : endurance
+	VHSTape,      // cassette VHS (objectif)
+	Flashlight,   // lampe torche (main ou ceinture)
+	Camcorder,    // camescope (main) : REC + vision nocturne
+	Headlamp,     // lampe frontale (tete)
+	Vest,         // gilet de protection (torse)
+	Note,         // note (lue immediatement, va dans le journal)
+	Count
+};
+
+/** Emplacements d'equipement (panneau de droite de l'inventaire) */
+enum class EBREquipSlot : uint8 { Head, Chest, Hand, Belt, Count, None };
+
+/** Une case d'inventaire */
+struct FBRItemSlot
+{
+	EBRItem Item = EBRItem::None;
+	int32 Count = 0;
+	bool IsEmpty() const { return Item == EBRItem::None || Count <= 0; }
+	void Clear() { Item = EBRItem::None; Count = 0; }
+};
+
+/** Groupe de cases (poches, sac, equipement) */
+enum class EBRSlotGroup : uint8 { Pockets, Storage, Equipment };
 
 enum class EBREntityKind : uint8
 {
@@ -32,6 +63,7 @@ enum class EBREntityKind : uint8
 	Wretch,
 	Partygoer,
 	Clump,
+	Bacteria,
 	Count
 };
 
@@ -59,6 +91,8 @@ struct FBRSurface
 	float Grime = 0.35f;      // intensite de la salete a grande echelle
 	float SelfIllum = 0.f;    // fausse lumiere ambiante
 	FLinearColor Emissive = FLinearColor::Black;
+	float Caustics = 0.f;     // reflets d'eau animes (Poolrooms)
+	float FloorGrime = 0.f;   // salete au pied des murs
 
 	FBRSurface() {}
 	FBRSurface(FName InTex, const FLinearColor& InTint, float InScale, float InRough = 0.85f, float InGrime = 0.35f)
@@ -66,8 +100,8 @@ struct FBRSurface
 
 	FString Key() const
 	{
-		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f"), *Texture.ToString(),
-			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B);
+		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f"), *Texture.ToString(),
+			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime);
 	}
 };
 
@@ -172,6 +206,39 @@ struct FBRLevelDef
 	FBRSurface Water;
 	bool bOutdoor = false;
 	bool bPhenomena = false;  // bruits de pas lointains, etc.
+
+	// --- v2 : objectifs, coupures de courant, objets ---
+	bool bRequireObjectives = false; // les sorties ne fonctionnent qu'une fois les objectifs remplis
+	int32 VHSRequired = 6;
+	bool bBlackouts = false;
+	float BlackoutFirst = 90.f;      // delai avant la premiere coupure
+	float BlackoutMinInterval = 140.f;
+	float BlackoutMaxInterval = 280.f;
+	float VHSChance = 0.15f;         // par chunk
+	float BandageChance = 0.12f;
+	float EnergyBarChance = 0.1f;
+	float GearChance = 0.03f;        // lampe, frontale, gilet
+	float WallDetailChance = 0.f;    // prises, aerations
+};
+
+/** Reglages du joueur (onglet Parametres de l'inventaire), sauvegardes dans GameUserSettings.ini */
+struct FBRSettings
+{
+	float Sensitivity = 1.f;
+	bool bInvertY = false;
+	float FOV = 88.f;
+	int32 Quality = 3;          // 0 Bas .. 4 Cinematique
+	bool bHardwareRT = true;    // Lumen en ray tracing materiel (RTX)
+	bool bRTHitLighting = false;
+	bool bAreaLights = true;    // neons en lumieres surfaciques
+	bool bVolumetricFog = true;
+	bool bFilmGrain = true;
+
+	static FBRSettings& Get()
+	{
+		static FBRSettings Settings;
+		return Settings;
+	}
 };
 
 /** Hachage entier deterministe (pas d'etat global : le meme monde a chaque graine) */

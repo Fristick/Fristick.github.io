@@ -28,6 +28,17 @@ struct FBRLightInfo
 	float Yaw = 0.f;
 };
 
+/** Objectif affiche dans l'inventaire (colonne OBJECTIFS) et dans le coin de l'ecran */
+struct FBRObjective
+{
+	FString Text;
+	int32 Progress = 0;
+	int32 Goal = 1;
+	float Partial = 0.f;     // progression de l'etape en cours (enregistrement...)
+	bool bRequired = false;  // necessaire pour quitter le niveau
+	bool IsDone() const { return Progress >= Goal; }
+};
+
 UCLASS()
 class BACKROOMS_API ABRWorld : public AActor
 {
@@ -96,6 +107,32 @@ public:
 	void UnregisterEntity(ABREntity* Entity);
 	ABREntity* SpawnEntity(EBREntityKind Kind, const FVector& Location);
 	const TArray<int32>& GetVisitedLevels() const { return Visited; }
+	const TArray<TObjectPtr<ABREntity>>& GetEntities() const { return Entities; }
+
+	// ------------------------------------------------------------ v2 : coupures de courant
+	/** Coupure de courant en cours (les neons sont eteints ou en train de lacher) */
+	bool IsBlackout() const { return BlackoutPhase == EBlackout::Failing || BlackoutPhase == EBlackout::Dark; }
+	/** Alimentation electrique 0..1 (vacille pendant les coupures) */
+	float GetPower() const { return Power; }
+	/** Declenche une coupure tout de suite (console : BRBlackout) */
+	void ForceBlackout();
+
+	// ------------------------------------------------------------ v2 : objectifs
+	void GetObjectives(TArray<FBRObjective>& Out) const;
+	/** false (+ raison) si les sorties sont encore instables */
+	bool CanLeaveLevel(FString& OutReason) const;
+	bool AreObjectivesComplete() const;
+	void OnVHSCollected();
+	/** Appele chaque image tant que le joueur tient le camescope */
+	void NotifyRecording(float Dt, const FVector& Eye, const FVector& Dir);
+	/** Entite visible dans un cone (ligne de vue verifiee) */
+	ABREntity* FindVisibleEntity(const FVector& Eye, const FVector& Dir, float MaxDist, float MinDot) const;
+	/** Ce que le camescope est en train de filmer (HUD) */
+	const FString& GetRecordLabel() const { return RecordLabel; }
+	float GetRecordProgress() const { return RecordProgress; }
+	int32 GetVHSFound() const { return VHSFound; }
+	/** Console : valide les taches d'enregistrement */
+	void DebugCompleteRecording();
 
 	/** Niveau de depart choisi dans le menu */
 	int32 StartLevel = 0;
@@ -133,6 +170,7 @@ protected:
 
 private:
 	enum class ETrans : uint8 { None, FadingOut, FadingIn };
+	enum class EBlackout : uint8 { None, Failing, Dark, Restoring };
 
 	void ClearLevel();
 	void ApplyEnvironment();
@@ -145,6 +183,9 @@ private:
 	ABRCharacter* GetPlayer() const;
 	float ZoneDensity(int32 X, int32 Y) const;
 	bool MazeOpen(int32 X, int32 Y, bool bEast) const;
+	void UpdateBlackout(float Dt);
+	void ApplyPower(bool bForce);
+	void CompleteTask(const FString& Text);
 
 	const FBRLevelDef* Current = nullptr;
 	uint32 Seed = 1337;
@@ -164,4 +205,21 @@ private:
 	TSet<uint64> Collected;
 	TSet<int32> Discovered;
 	TArray<int32> Visited;
+
+	// v2 : coupures
+	EBlackout BlackoutPhase = EBlackout::None;
+	float BlackoutTimer = 90.f;
+	float PowerFlickerTimer = 0.f;
+	float Power = 1.f;
+	float AppliedPower = -1.f;
+
+	// v2 : objectifs
+	int32 VHSFound = 0;
+	bool bBlackoutRecorded = false;
+	bool bEntityRecorded = false;
+	bool bObjectivesAnnounced = false;
+	float BlackoutRecordTime = 0.f;
+	float EntityRecordTime = 0.f;
+	float RecordProgress = 0.f;
+	FString RecordLabel;
 };

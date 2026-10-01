@@ -10,6 +10,7 @@ class ABRWorld;
 class UInstancedStaticMeshComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
+class ULocalLightComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
@@ -23,7 +24,7 @@ struct FBRFlicker
 	GENERATED_BODY()
 
 	UPROPERTY()
-	TObjectPtr<UPointLightComponent> Light = nullptr;
+	TObjectPtr<ULocalLightComponent> Light = nullptr;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> Glow;
@@ -48,6 +49,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
+	/** Alimentation electrique 0..1 (coupures de courant) */
+	void SetPower(float InPower);
+
 	FIntPoint Coord;
 
 protected:
@@ -61,6 +65,7 @@ protected:
 		bool bHidden = false;
 		float GlowScale = 1.f;
 		float CullDistance = 0.f;
+		bool bPowered = false;   // emissif eteint pendant les coupures
 		TArray<FTransform> Transforms;
 	};
 
@@ -75,6 +80,8 @@ protected:
 	void AddDoorway(bool bAlongY, float Fixed, float Mid);
 	void AddFaceProp(int32 X, int32 Y, const FIntPoint& Dir, FName Mesh, float Along, float Z, const FVector& FallbackSize, bool bCollision);
 	void AddWaterPlane(const FVector& Center, const FVector2D& Size);
+	/** Prises electriques, grilles d'aeration le long d'un mur */
+	void AddWallDetails(bool bAlongY, float Fixed, float A, float B);
 	void BuildCellProps(int32 X, int32 Y);
 	void BuildPickupsAndExits();
 	void FinishBatches();
@@ -95,6 +102,13 @@ protected:
 
 	UPROPERTY()
 	TArray<FBRFlicker> Flickers;
+
+	/** Lumieres coupees pendant les coupures de courant (et leur intensite nominale) */
+	UPROPERTY()
+	TArray<TObjectPtr<ULocalLightComponent>> PoweredLights;
+
+	TArray<float> PoweredBase;
+	float Power = 1.f;
 
 	TMap<FString, FBatch> Batches;
 	TWeakObjectPtr<ABRWorld> World;

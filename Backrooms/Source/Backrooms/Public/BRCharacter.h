@@ -1,4 +1,5 @@
-// Le joueur : vue a la premiere personne, lampe torche, endurance, sante mentale.
+// Le joueur (explorateur en combinaison hazmat) : vue a la premiere personne, inventaire,
+// equipement (camescope, lampe torche, frontale, gilet), endurance, sante mentale.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -8,8 +9,10 @@
 
 class UCameraComponent;
 class USpotLightComponent;
+class UPointLightComponent;
 class UStaticMeshComponent;
 class UAudioComponent;
+class UMaterialInstanceDynamic;
 
 UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
@@ -31,9 +34,12 @@ public:
 	void SetSprinting(bool bInSprint);
 	void ToggleCrouch();
 	void ToggleFlashlight();
+	void ToggleNightVision();
 	void Interact();
-	void DrinkAlmondWater();
-	void ReplaceBattery();
+	/** Utilise l'objet de la poche 0..3 (touches 1-4) */
+	void UsePocket(int32 Index);
+	/** Utilise le premier objet de ce type (touches B = eau, R = piles) */
+	void QuickUse(EBRItem Item);
 	void SetInputLocked(bool bLocked) { bInputLocked = bLocked; }
 	bool IsInputLocked() const { return bInputLocked; }
 
@@ -42,10 +48,30 @@ public:
 	float Sanity = 100.f;
 	float Stamina = 100.f;
 	float Battery = 100.f;
-	int32 AlmondWater = 1;
-	int32 Batteries = 1;
 	int32 NotesRead = 0;
 	bool bGodMode = false;
+	TArray<FString> ReadNotes;
+
+	// ---- Inventaire ----
+	static constexpr int32 NumPockets = 4;
+	static constexpr int32 NumStorage = 20;
+	TArray<FBRItemSlot> Pockets;
+	TArray<FBRItemSlot> Storage;
+	TArray<FBRItemSlot> Equipment;
+
+	FBRItemSlot* GetSlot(EBRSlotGroup Group, int32 Index);
+	int32 CountItem(EBRItem Item) const;
+	/** Ajoute un objet (poches puis sac). Retourne le nombre NON ajoute (0 = tout est rentre). */
+	int32 AddItem(EBRItem Item, int32 Count = 1);
+	/** Deplace / empile / echange le contenu de deux cases (glisser-deposer) */
+	bool MoveItem(EBRSlotGroup FromGroup, int32 FromIndex, EBRSlotGroup ToGroup, int32 ToIndex);
+	/** Double-clic : consomme, equipe ou desequipe */
+	void UseSlot(EBRSlotGroup Group, int32 Index);
+	EBRItem GetEquipped(EBREquipSlot Slot) const;
+	bool HasCamcorderInHand() const { return GetEquipped(EBREquipSlot::Hand) == EBRItem::Camcorder; }
+	bool HasLightSource() const;
+	bool IsNightVision() const { return bNightVision; }
+	void ResetInventory();
 
 	bool IsDead() const { return bDead; }
 	bool IsSprinting() const;
@@ -57,6 +83,10 @@ public:
 	float GetDeathTime() const { return DeathTime; }
 	float GetDamageFlash() const { return DamageFlash; }
 	float GetChaseLevel() const { return ChaseLevel; }
+	/** Tendances (points / s) pour les fleches de la biometrie */
+	float GetSanityTrend() const { return SanityTrend; }
+	float GetHealthTrend() const { return HealthTrend; }
+	float GetStaminaTrend() const { return StaminaTrend; }
 
 	/** Attaque d'une entite (degats de sante et de sante mentale) */
 	void ReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName);
@@ -65,11 +95,14 @@ public:
 	/** Une entite poursuit le joueur (musique de poursuite) */
 	void NotifyChase(float Intensity) { ChaseTarget = FMath::Max(ChaseTarget, Intensity); }
 
-	void ReceivePickup(EBRPickupType Type, const FString& Note);
+	/** Ramassage d'un objet. false si l'inventaire est plein */
+	bool ReceivePickup(EBRItem Item, const FString& Note);
 	void OnEnteredLevel(const FBRLevelDef& Def);
 	void ResetStats();
 
 	// ---- HUD ----
+	/** Son d'interface (inventaire, clic) */
+	void PlayUISound(FName Sound, float Volume = 0.6f) { PlaySound2D(Sound, Volume); }
 	const FString& GetFocusPrompt() const { return FocusPrompt; }
 	bool IsReadingNote() const { return bReadingNote; }
 	const FString& GetOpenNote() const { return OpenNote; }
@@ -82,8 +115,13 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USpotLightComponent> Flashlight;
 
+	/** Objet tenu en main (vue a la premiere personne) */
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> FlashlightMesh;
+	TObjectPtr<UStaticMeshComponent> HandMesh;
+
+	/** Eclairage infrarouge de la vision nocturne */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UPointLightComponent> InfraredLight;
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAudioComponent> HeartAudio;
@@ -94,6 +132,9 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAudioComponent> ChaseAudio;
 
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> HandGlow;
+
 private:
 	void UpdateStats(float Dt);
 	void UpdateCamera(float Dt);
@@ -102,12 +143,17 @@ private:
 	void UpdateAudio(float Dt);
 	void UpdatePostProcess(float Dt);
 	void PlayFootstep();
+	void PlaySound2D(FName Sound, float Volume = 1.f);
 	void Die(const FString& By, AActor* Killer);
 	void SetupLoopAudio(UAudioComponent* Comp, FName Sound);
+	void OnEquipmentChanged();
+	bool UseItemEffect(EBRItem Item);
+	bool StoreItem(EBRItem Item);
 
 	bool bDead = false;
 	bool bInputLocked = true;
 	bool bFlashlightOn = false;
+	bool bNightVision = false;
 	bool bWantsSprint = false;
 	bool bExhausted = false;
 	bool bReadingNote = false;
@@ -123,6 +169,14 @@ private:
 	float FlashFlicker = 1.f;
 	float SprintTime = 0.f;
 	float TimeAlive = 0.f;
+	float EnergyBoost = 0.f;
+	float SanityTrend = 0.f;
+	float HealthTrend = 0.f;
+	float StaminaTrend = 0.f;
+	float PrevSanity = 100.f;
+	float PrevHealth = 100.f;
+	float PrevStamina = 100.f;
+	EBRItem HandVisual = EBRItem::Count;
 	FVector2D LookLag = FVector2D::ZeroVector;
 	EBRStep StepType = EBRStep::Carpet;
 	FString FocusPrompt;

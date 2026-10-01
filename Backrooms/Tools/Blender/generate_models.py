@@ -28,6 +28,7 @@ from mathutils import Matrix, Vector
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_MESH = os.path.normpath(os.path.join(HERE, "..", "..", "RawAssets", "Meshes"))
 OUT_PREV = os.path.normpath(os.path.join(HERE, "..", "..", "RawAssets", "Previews"))
+OUT_ICON = os.path.normpath(os.path.join(HERE, "..", "..", "RawAssets", "Icons"))
 
 # ---------------------------------------------------------------------------
 # Palette de materiaux (nom de slot -> couleur d'apercu). Le jeu applique ses
@@ -52,6 +53,12 @@ PALETTE = {
     "Flesh": (0.6, 0.35, 0.33, 0), "Fur": (0.35, 0.28, 0.2, 0), "Wing": (0.42, 0.36, 0.3, 0),
     "Pattern": (0.15, 0.1, 0.08, 0), "Eye": (0.02, 0.02, 0.02, 0), "Party": (0.95, 0.85, 0.1, 0),
     "Face": (0.02, 0.02, 0.02, 0), "Shade": (0.85, 0.7, 0.5, 0), "Teeth": (0.9, 0.88, 0.8, 0),
+    "Hazmat": (0.95, 0.75, 0.06, 0), "Visor": (0.02, 0.03, 0.04, 0), "Glove": (0.9, 0.72, 0.08, 0), "Wire": (0.012, 0.012, 0.014, 0),
+    "Claw": (0.06, 0.05, 0.04, 0), "Balloon": (0.75, 0.03, 0.03, 0), "String": (0.9, 0.9, 0.9, 0), "Sucker": (0.98, 0.9, 0.45, 0),
+    "Gauze": (0.95, 0.94, 0.9, 0), "Wrapper": (0.8, 0.2, 0.08, 0), "Reel": (0.9, 0.9, 0.9, 0), "Reflective": (0.85, 0.85, 0.8, 0),
+    "Vest": (0.16, 0.2, 0.13, 0), "Mouth": (0.12, 0.02, 0.02, 0), "FleshGlass": (0.85, 0.55, 0.5, 0), "Vein": (0.45, 0.05, 0.08, 0),
+    "Lens": (0.04, 0.07, 0.1, 0), "Strap": (0.05, 0.05, 0.05, 0), "Shoe": (0.06, 0.05, 0.05, 0), "Belt": (0.1, 0.07, 0.05, 0),
+    "Water": (0.2, 0.5, 0.55, 0),
 }
 
 _mats = {}
@@ -625,171 +632,486 @@ def m_rock():
 
 
 # ---------------------------------------------------------------------------
-# ENTITES
+# OBJETS D'INVENTAIRE & DETAILS (v2)
 # ---------------------------------------------------------------------------
-def m_smiler():
-    # Entite 3 : Smilers. Corps sombre presque invisible, yeux et sourire lumineux.
-    # Pivot : centre ; regarde vers +X.
-    body = ico(0.5, (0, 0, 0), "Body", sub=4, scale=(0.55, 1.0, 1.0))
-    displace(body, 0.1, 2.2, seed=9, octaves=3)
-    p = [body]
-    fx = 0.36
-    for s in (-1, 1):
-        e = sphere(0.09, (fx, s * 0.17, 0.17), "Glow", scale=(0.35, 1.0, 0.5), seg=16, rings=8,
-                   rot=(s * 20, 0, 0))
-        p.append(e)
-    # sourire demesure : deux rangees de dents le long d'une courbe en U
-    n = 21
-    for i in range(n):
-        t = (i / (n - 1)) * 2 - 1  # -1..1
-        y = t * 0.34
-        zu = -0.08 + 0.12 * t * t
-        gap = 0.09 * (1 - t * t) + 0.015
-        x = fx + 0.02 - 0.07 * t * t
-        ang = math.degrees(math.atan(t * 0.7))
-        p.append(box((0.03, 0.028, 0.055), (x, y, zu - 0.025), "Glow", rot=(0, 0, -ang)))
-        p.append(box((0.03, 0.028, 0.05), (x, y, zu - gap - 0.025), "Glow", rot=(0, 0, -ang)))
-    # interieur de la bouche
-    p.append(sphere(0.2, (fx - 0.08, 0, -0.1), "Dark", scale=(0.3, 1.6, 0.4), seg=16, rings=8))
-    return join(p, "SM_Smiler")
+def m_camcorder():
+    # Camescope des annees 90. Pivot : poignee ; objectif vers +X.
+    p = [box((0.22, 0.085, 0.11), (0.0, 0, 0.0), "BlackPlastic", bevel=0.012),
+         box((0.14, 0.087, 0.03), (-0.02, 0, 0.055), "DarkMetal", bevel=0.006),
+         cyl(0.038, 0.07, (0.14, 0, 0.005), "BlackPlastic", rot=(0, 90, 0), verts=24),
+         cyl(0.041, 0.02, (0.18, 0, 0.005), "Rubber", rot=(0, 90, 0), verts=24),
+         cyl(0.03, 0.004, (0.19, 0, 0.005), "Lens", rot=(0, 90, 0), verts=24),
+         cyl(0.016, 0.075, (-0.12, -0.02, 0.07), "BlackPlastic", rot=(0, 90, 0), verts=12),
+         cyl(0.02, 0.02, (-0.165, -0.02, 0.07), "Rubber", rot=(0, 90, 0), verts=12),
+         box((0.006, 0.006, 0.006), (0.08, -0.04, 0.05), "GlowRed"),
+         box((0.12, 0.012, 0.05), (-0.01, 0.05, -0.01), "Strap", bevel=0.004),
+         box((0.05, 0.002, 0.014), (0.03, -0.044, 0.02), "Label")]
+    for i in range(4):
+        p.append(box((0.012, 0.004, 0.008), (-0.06 + i * 0.018, -0.044, -0.03), "DarkMetal"))
+    return join(p, "SM_Camcorder")
 
 
-HOUND = dict(body_z=0.62, leg_len=0.62, front=(0.33, 0.16), back=(-0.30, 0.14))
+def m_vhs():
+    # Cassette VHS. Pivot : centre, posee a plat.
+    p = [box((0.187, 0.103, 0.025), (0, 0, 0.0125), "BlackPlastic", bevel=0.002),
+         box((0.12, 0.06, 0.001), (0.0, 0.012, 0.0255), "Label"),
+         box((0.18, 0.001, 0.018), (0, -0.0517, 0.0125), "Label")]
+    for x in (-0.042, 0.042):
+        p.append(cyl(0.021, 0.002, (x, -0.022, 0.0255), "Lens", verts=20))
+        p.append(cyl(0.012, 0.003, (x, -0.022, 0.025), "Reel", verts=12))
+    return join(p, "SM_VHSTape")
 
 
-def m_hound_body():
-    # Entite 8 : Hounds. Humanoide a quatre pattes, longs cheveux noirs.
-    # Pivot : centre du torse (place a 62 cm du sol par le jeu).
-    torso = tube([(-0.36, 0, 0), (-0.1, 0, 0.03), (0.22, 0, 0.05), (0.42, 0, 0.1)],
-                 [(0.12, 0.1), (0.11, 0.09), (0.15, 0.12), (0.05, 0.05)], "Skin", subdiv=2, name="torso")
-    displace(torso, 0.012, 9.0, seed=4)
-    head = sphere(0.11, (0.55, 0, 0.1), "Skin", scale=(1.2, 0.9, 0.95), seg=20, rings=10)
-    p = [torso, head]
-    rnd = random.Random(8)
-    for i in range(36):
-        a = rnd.uniform(-1.4, 1.4)
-        ox = 0.5 + rnd.uniform(-0.08, 0.1)
-        y = math.sin(a) * 0.1
-        top = (ox, y, 0.19 + rnd.uniform(-0.02, 0.02))
-        ln = rnd.uniform(0.28, 0.48)
-        bot = (ox + 0.12 + rnd.uniform(-0.03, 0.05), y * 1.4, top[2] - ln)
-        p.append(tube([top, ((top[0] + bot[0]) / 2 + 0.03, (top[1] + bot[1]) / 2, (top[2] + bot[2]) / 2), bot],
-                      [0.012, 0.009, 0.003], "Hair", subdiv=0, name="hair"))
-    # colonne vertebrale saillante
-    for i in range(7):
-        x = -0.3 + i * 0.1
-        p.append(sphere(0.022, (x, 0, 0.11 + 0.02 * math.sin(i)), "Skin", seg=8, rings=4))
-    return join(p, "SM_Hound_Body")
+def m_bandage():
+    # Rouleau de bande de gaze avec une bande deroulee. Pivot : sol.
+    p = [cyl(0.032, 0.055, (0, 0, 0.032), "Gauze", rot=(90, 0, 0), verts=24),
+         cyl(0.011, 0.056, (0, 0, 0.032), "Tape", rot=(90, 0, 0), verts=12)]
+    strip = box((0.16, 0.054, 0.002), (0.09, 0, 0.001), "Gauze")
+    p.append(strip)
+    return join(p, "SM_Bandage")
 
 
-def m_hound_leg():
-    # Patte : pivot a l'articulation, vers le bas sur 62 cm, "main" vers +X.
-    L = HOUND["leg_len"]
-    leg = tube([(0, 0, 0), (0.07, 0, -0.28), (0.0, 0, -L + 0.05), (0.1, 0, -L + 0.015)],
-               [0.055, 0.042, 0.03, (0.04, 0.03)], "Skin", subdiv=2, name="leg")
-    fingers = []
-    for s in (-1, 0, 1):
-        fingers.append(tube([(0.08, s * 0.02, -L + 0.02), (0.16, s * 0.035, -L + 0.008)], [0.01, 0.006],
-                            "Skin", subdiv=1, name="finger"))
-    return join([leg] + fingers, "SM_Hound_Leg")
+def m_energy_bar():
+    p = [box((0.13, 0.04, 0.016), (0, 0, 0.008), "Wrapper", bevel=0.004),
+         box((0.014, 0.042, 0.004), (0.068, 0, 0.008), "Wrapper"),
+         box((0.014, 0.042, 0.004), (-0.068, 0, 0.008), "Wrapper"),
+         box((0.06, 0.041, 0.017), (0.0, 0, 0.008), "Label")]
+    return join(p, "SM_EnergyBar")
 
 
-# Gabarits humanoides (en metres) : utilises a l'identique par le C++ (BackroomsEntity.cpp)
+def m_headlamp():
+    p = [torus(0.085, 0.012, (0, 0, 0.012), "Strap", seg=32, mseg=4),
+         box((0.035, 0.06, 0.04), (0.09, 0, 0.03), "BlackPlastic", bevel=0.006),
+         cyl(0.016, 0.004, (0.108, 0, 0.03), "Glow", rot=(0, 90, 0), verts=16)]
+    p[0].scale = (1.0, 1.0, 0.4)
+    return join(p, "SM_Headlamp")
+
+
+def m_vest():
+    # Gilet de protection. Pivot : bas, face avant vers +X.
+    p = [box((0.07, 0.4, 0.5), (0.06, 0, 0.25), "Vest", bevel=0.03),
+         box((0.07, 0.4, 0.5), (-0.06, 0, 0.25), "Vest", bevel=0.03)]
+    for y in (-0.13, 0.13):
+        p.append(box((0.19, 0.08, 0.04), (0.0, y, 0.5), "Vest", bevel=0.015))
+    for z in (0.12, 0.3):
+        p.append(box((0.075, 0.41, 0.03), (0.065, 0, z), "Reflective"))
+    for y in (-0.1, 0.1):
+        p.append(box((0.03, 0.12, 0.1), (0.105, y, 0.2), "Vest", bevel=0.01))
+    p.append(box((0.08, 0.16, 0.12), (0.0, 0, 0.47), "Dark"))
+    return join(p, "SM_Vest")
+
+
+def m_outlet():
+    # Prise murale. Pivot : contre le mur, face vers +X.
+    p = [box((0.008, 0.07, 0.115), (0.004, 0, 0), "Plastic", bevel=0.002)]
+    for z in (-0.025, 0.025):
+        p.append(cyl(0.017, 0.004, (0.009, 0, z), "Plastic", rot=(0, 90, 0), verts=16))
+        for y in (-0.006, 0.006):
+            p.append(box((0.003, 0.003, 0.009), (0.011, y, z), "Dark"))
+    return join(p, "SM_Outlet")
+
+
+def m_vent():
+    # Grille d'aeration murale. Pivot : contre le mur, face vers +X.
+    p = [box((0.02, 0.45, 0.3), (0.01, 0, 0), "Metal", bevel=0.004),
+         box((0.005, 0.4, 0.25), (0.021, 0, 0), "Dark")]
+    for i in range(8):
+        z = -0.105 + i * 0.03
+        s = box((0.03, 0.41, 0.006), (0.022, 0, z), "Metal")
+        s.rotation_euler = (0, math.radians(35), 0)
+        p.append(s)
+    return join(p, "SM_Vent")
+
+
+def m_water_grid():
+    # Plan d'eau 1 x 1 m subdivise (vagues par World Position Offset). Pivot : centre.
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=40, y_subdivisions=40, size=1.0, location=(0, 0, 0))
+    o = bpy.context.active_object
+    o.data.materials.append(mat("Water"))
+    return join([o], "SM_WaterGrid")
+
+
+def m_flashlight_fp():
+    # Lampe torche tenue par un gant (vue a la premiere personne). Pivot : poignee.
+    fl = m_flashlight()
+    fl.name = "fl"
+    glove = make_glove(grip_radius=0.022)
+    return join([fl, glove], "SM_Flashlight_FP")
+
+
+def m_camcorder_fp():
+    cam = m_camcorder()
+    cam.name = "cam"
+    glove = make_glove(grip_radius=0.05, z=-0.005)
+    return join([cam, glove], "SM_Camcorder_FP")
+
+
+def make_glove(grip_radius=0.03, z=0.0):
+    """Main gantee (combinaison hazmat) qui empoigne un objet le long de l'axe X."""
+    p = [tube([(-0.11, 0.0, z - 0.02), (-0.04, 0.0, z - grip_radius * 0.6)], [(0.045, 0.04), (0.042, 0.032)], "Glove", subdiv=2, name="palm"),
+         tube([(-0.2, 0.0, z - 0.06), (-0.11, 0.0, z - 0.03)], [0.048, 0.044], "Glove", subdiv=1, name="cuff")]
+    for i in range(4):
+        x = -0.07 + i * 0.022
+        pts = [(x, 0.03, z - grip_radius * 0.5), (x, 0.03 + grip_radius * 0.6, z - grip_radius * 1.2),
+               (x + 0.005, 0.0, z - grip_radius * 1.45), (x + 0.008, -grip_radius * 0.8, z - grip_radius * 1.1)]
+        p.append(tube(pts, [0.011, 0.01, 0.0095, 0.009], "Glove", subdiv=1, name="finger"))
+    p.append(tube([(-0.05, -0.03, z - 0.01), (-0.02, -0.045, z + grip_radius * 0.6), (0.0, -0.035, z + grip_radius * 1.1)],
+                  [0.013, 0.011, 0.01], "Glove", subdiv=1, name="thumb"))
+    return join(p, "glove")
+
+
+# ---------------------------------------------------------------------------
+# ENTITES (v2) : membres en deux segments, tete separee (elle suit le joueur)
+# Les decalages des articulations sont repris a l'identique dans BREntity.cpp
+# ---------------------------------------------------------------------------
 HUMANOIDS = {
-    "Faceling":    dict(hip=0.92, sh=1.45, sw=0.20, hw=0.10, arm=0.68, head=0.115, hunch=0.00,
-                        torso="Cloth", arms="Skin", legs="Pants", skin="Skin"),
-    "SkinStealer": dict(hip=1.12, sh=1.80, sw=0.23, hw=0.11, arm=1.00, head=0.125, hunch=0.12,
-                        torso="Flesh", arms="Flesh", legs="Flesh", skin="Flesh"),
-    "Wretch":      dict(hip=0.80, sh=1.22, sw=0.18, hw=0.09, arm=0.78, head=0.10, hunch=0.28,
-                        torso="Skin", arms="Skin", legs="Skin", skin="Skin"),
-    "Partygoer":   dict(hip=0.88, sh=1.42, sw=0.22, hw=0.11, arm=0.66, head=0.14, hunch=0.00,
-                        torso="Party", arms="Party", legs="Party", skin="Party"),
+    "Faceling":    dict(hip=0.92, sh=1.45, sw=0.19, hw=0.10, hunch=0.00, ua=0.30, la=0.42, th=0.46, head=0.115, neck=0.06,
+                        r_arm=0.042, r_leg=0.065, torso="Cloth", arm_u="Cloth", arm_l="Skin", leg_u="Pants", leg_l="Pants",
+                        foot="Shoe", hand="Skin"),
+    "SkinStealer": dict(hip=1.15, sh=1.85, sw=0.22, hw=0.11, hunch=0.10, ua=0.45, la=0.62, th=0.58, head=0.135, neck=0.10,
+                        r_arm=0.05, r_leg=0.072, torso="Hazmat", arm_u="Hazmat", arm_l="Flesh", leg_u="Hazmat", leg_l="Hazmat",
+                        foot="Rubber", hand="Flesh"),
+    "Wretch":      dict(hip=0.82, sh=1.22, sw=0.17, hw=0.09, hunch=0.30, ua=0.33, la=0.47, th=0.41, head=0.10, neck=0.05,
+                        r_arm=0.03, r_leg=0.045, torso="Skin", arm_u="Skin", arm_l="Skin", leg_u="Skin", leg_l="Skin",
+                        foot="Skin", hand="Skin"),
+    "Partygoer":   dict(hip=0.85, sh=1.38, sw=0.22, hw=0.11, hunch=0.00, ua=0.28, la=0.40, th=0.43, head=0.17, neck=0.04,
+                        r_arm=0.05, r_leg=0.075, torso="Party", arm_u="Party", arm_l="Party", leg_u="Party", leg_l="Party",
+                        foot="Party", hand="Party"),
+    "Bacteria":    dict(hip=1.40, sh=2.15, sw=0.19, hw=0.08, hunch=0.10, ua=0.62, la=0.82, th=0.70, head=0.10, neck=0.16,
+                        r_arm=0.022, r_leg=0.03, torso="Wire", arm_u="Wire", arm_l="Wire", leg_u="Wire", leg_l="Wire",
+                        foot="Wire", hand="Wire"),
 }
 
+HOUND = dict(body_z=0.70, front=(0.34, 0.15), back=(-0.32, 0.14), head=(0.42, 0.0, 0.09), upper=0.36, lower=0.40)
 
-def m_humanoid_torso(kind):
+
+def wiry(points, radius, material, strands=3, twist=1.5, name="wire"):
+    """Faisceau de cables torsades (aspect 'fil de fer' de la Bacteria)"""
+    out = []
+    pts = [Vector(pt) for pt in points]
+    for k in range(strands):
+        ph = k * 2 * math.pi / strands
+        res = []
+        n = len(pts)
+        for i in range(n):
+            a = ph + twist * i
+            off = Vector((0, math.cos(a), math.sin(a))) * radius * 0.9
+            res.append(tuple(pts[i] + off))
+        out.append(tube(res, [radius * 0.75] * n, material, subdiv=1, name=name))
+    return out
+
+
+def m_torso(kind):
     s = HUMANOIDS[kind]
     top = s["sh"] - s["hip"]
     hx = s["hunch"]
-    chest_r = (0.16, 0.11) if kind != "Wretch" else (0.13, 0.09)
-    torso = tube([(0, 0, 0), (hx * 0.3, 0, top * 0.4), (hx * 0.8, 0, top - 0.06), (hx * 1.05, 0, top + 0.08)],
-                 [(0.13, 0.1), (0.12, 0.085), chest_r, (0.05, 0.05)], s["torso"], subdiv=2, name="torso")
-    shoulders = tube([(hx * 0.85, -s["sw"] + 0.03, top - 0.02), (hx * 0.85, 0, top + 0.01),
-                      (hx * 0.85, s["sw"] - 0.03, top - 0.02)], [0.06, 0.08, 0.06], s["torso"], subdiv=2,
-                     name="shoulders")
-    hc = Vector((hx * 1.15 + 0.01, 0, top + 0.05 + s["head"] * 0.95))
-    head_scale = (0.92, 0.85, 1.12) if kind != "SkinStealer" else (0.85, 0.75, 1.35)
-    head = sphere(s["head"], hc, s["skin"], scale=head_scale, seg=24, rings=12)
-    p = [torso, shoulders, head]
-    fx = hc.x + s["head"] * head_scale[0] * 0.92
-    if kind == "SkinStealer":
-        displace(torso, 0.025, 7.0, seed=12)
-        displace(head, 0.015, 9.0, seed=13)
-        for sgn in (-1, 1):
-            p.append(sphere(0.026, (fx - 0.01, sgn * 0.045, hc.z + 0.03), "Dark", scale=(0.6, 1, 1.4), seg=10, rings=6))
-        p.append(box((0.02, 0.08, 0.012), (fx - 0.005, 0, hc.z - 0.07), "Dark"))
+    neck_top = Vector((hx * 1.05, 0, top + s["neck"]))
+    p = []
+    if kind == "Bacteria":
+        pts = [(0, 0, 0), (hx * 0.3, 0, top * 0.35), (hx * 0.7, 0, top * 0.7), (hx, 0, top), tuple(neck_top)]
+        p += wiry(pts, 0.03, "Wire", strands=4, twist=1.2)
+        for k in range(5):  # cotes en fil de fer
+            z = top * (0.45 + k * 0.1)
+            p.append(torus(0.075, 0.006, (hx * 0.6, 0, z), "Wire", rot=(0, 75, 0), mseg=4, seg=12))
+        p.append(tube([(hx, -s["sw"], top - 0.02), (hx, 0, top + 0.02), (hx, s["sw"], top - 0.02)], [0.022, 0.03, 0.022], "Wire", subdiv=1, name="sh"))
+        p.append(tube([(0, -s["hw"] - 0.02, 0), (0, s["hw"] + 0.02, 0)], [0.03, 0.03], "Wire", subdiv=1, name="hip"))
+        return join(p, f"SM_{kind}_Torso")
+
+    chest = {"Wretch": (0.12, 0.085), "Partygoer": (0.19, 0.14), "SkinStealer": (0.2, 0.15)}.get(kind, (0.16, 0.11))
+    belly = {"Wretch": (0.09, 0.07), "Partygoer": (0.2, 0.16), "SkinStealer": (0.17, 0.13)}.get(kind, (0.13, 0.09))
+    pelvis = {"Partygoer": (0.17, 0.13), "Wretch": (0.1, 0.08), "SkinStealer": (0.16, 0.12)}.get(kind, (0.13, 0.1))
+    torso = tube([(0, 0, 0), (hx * 0.3, 0, top * 0.4), (hx * 0.8, 0, top - 0.06), tuple(neck_top)],
+                 [pelvis, belly, chest, (0.05, 0.05)], s["torso"], subdiv=2, name="torso")
+    p.append(torso)
+    p.append(tube([(hx * 0.85, -s["sw"] + 0.03, top - 0.02), (hx * 0.85, 0, top + 0.01), (hx * 0.85, s["sw"] - 0.03, top - 0.02)],
+                  [s["r_arm"] * 1.35, s["r_arm"] * 1.8, s["r_arm"] * 1.35], s["torso"], subdiv=2, name="shoulders"))
+    if kind == "Faceling":
+        p.append(torus(0.06, 0.012, (neck_top.x, 0, neck_top.z - 0.04), "Cloth", mseg=6))
+        p.append(torus(0.135, 0.015, (0, 0, 0.02), "Belt", mseg=4, seg=24))
+        p[-1].scale = (1.0, 0.75, 1.0)
     elif kind == "Wretch":
-        displace(torso, 0.012, 12.0, seed=21)
-        for i in range(5):  # cotes saillantes
-            z = top * 0.45 + i * 0.05
-            p.append(torus(0.1, 0.008, (hx * 0.6 + 0.02, 0, z), "Skin", rot=(0, 90 - 20, 0), mseg=4, seg=16))
-        for sgn in (-1, 1):
-            p.append(sphere(0.022, (fx - 0.012, sgn * 0.035, hc.z + 0.02), "Dark", seg=10, rings=6))
-        p.append(sphere(0.025, (fx - 0.01, 0, hc.z - 0.05), "Dark", scale=(0.6, 1.2, 0.9), seg=10, rings=6))
+        displace(torso, 0.01, 14.0, seed=21)
+        for i in range(6):
+            z = top * 0.38 + i * 0.045
+            r = torus(0.085, 0.007, (hx * 0.55 + 0.03, 0, z), "Skin", rot=(0, 72, 0), mseg=4, seg=16)
+            r.scale = (1.0, 1.15, 0.6)
+            p.append(r)
+        for i in range(8):
+            t = i / 7
+            p.append(sphere(0.016, (hx * t * 0.9 - 0.07, 0, top * t), "Skin", seg=8, rings=4))
+    elif kind == "SkinStealer":
+        displace(torso, 0.02, 6.0, seed=12)
+        p.append(box((0.01, 0.02, top * 0.9), (chest[0] * 0.95 + hx * 0.4, 0, top * 0.45), "Rubber"))
+        for k in range(4):  # chair qui deborde des dechirures de la combinaison
+            pos = (hx * 0.4 + 0.12, (k - 1.5) * 0.08, top * (0.3 + 0.12 * k))
+            blob = ico(0.05, pos, "Flesh", sub=2)
+            displace(blob, 0.015, 15.0, seed=40 + k)
+            p.append(blob)
+        p.append(cyl(0.05, 0.12, (hx * 0.6 - 0.16, 0.0, top * 0.6), "Rubber", verts=12))
     elif kind == "Partygoer":
-        # visage souriant "=)" dessine
-        for sgn in (-1, 1):
-            p.append(sphere(0.022, (fx, sgn * 0.05, hc.z + 0.04), "Face", scale=(0.4, 0.8, 1.4), seg=10, rings=6))
-        pts = []
-        for i in range(9):
-            t = i / 8 * 2 - 1
-            yy = t * 0.075
-            zz = hc.z - 0.045 - 0.03 * (1 - t * t)
-            xx = hc.x + math.sqrt(max(0.0, (s["head"] * 0.9) ** 2 - yy ** 2 - (zz - hc.z) ** 2 * 0.6)) * 0.98 + 0.004
-            pts.append((xx, yy, zz))
-        p.append(tube(pts, [0.008] * len(pts), "Face", subdiv=1, name="smile"))
-    # Faceling : visage parfaitement lisse (aucun trait)
+        pass
     return join(p, f"SM_{kind}_Torso")
 
 
-def m_humanoid_arm(kind):
+def m_head(kind):
     s = HUMANOIDS[kind]
-    L = s["arm"]
-    r = 0.045 if kind != "Wretch" else 0.032
-    arm = tube([(0, 0, 0), (0.0, 0, -L * 0.47), (0.03, 0, -L * 0.88), (0.04, 0, -L)],
-               [r, r * 0.85, r * 0.65, (r * 0.75, r * 0.4)], s["arms"], subdiv=2, name="arm")
-    p = [arm]
-    if kind in ("SkinStealer", "Wretch"):
-        for k in (-1, 0, 1):  # longs doigts
-            p.append(tube([(0.04, k * 0.012, -L), (0.05, k * 0.02, -L - 0.12)], [0.008, 0.004], s["arms"], subdiv=1,
-                          name="finger"))
-    return join(p, f"SM_{kind}_Arm")
+    r = s["head"]
+    c = Vector((0.01, 0, r * 0.95))
+    p = []
+    if kind == "Faceling":
+        head = sphere(r, c, "Skin", scale=(0.92, 0.85, 1.12), seg=32, rings=16)
+        p.append(head)
+        hair = sphere(r * 1.04, c + Vector((-0.015, 0, 0.02)), "Hair", scale=(0.95, 0.9, 1.05), seg=24, rings=12)
+        p.append(hair)
+        hair_front = box((0.05, r * 1.7, r * 1.0), c + Vector((r * 0.85, 0, r * 0.35)), "Hair")
+        hair_front.rotation_euler = (0, math.radians(-35), 0)
+        p.append(hair_front)
+        for sgn in (-1, 1):
+            p.append(sphere(0.022, c + Vector((0.0, sgn * r * 0.86, -0.01)), "Skin", scale=(0.6, 0.4, 1.0), seg=10, rings=6))
+        p.append(tube([(0, 0, 0), (0, 0, 0.06)], [0.045, 0.045], "Skin", subdiv=1, name="neck"))
+    elif kind == "SkinStealer":
+        # capuche de combinaison hazmat deformee, visiere fendue d'ou deborde la chair
+        hood = sphere(r, c + Vector((0, 0, 0.03)), "Hazmat", scale=(1.0, 0.95, 1.35), seg=32, rings=16)
+        displace(hood, 0.012, 7.0, seed=31)
+        visor = sphere(r * 0.86, c + Vector((r * 0.32, 0, 0.06)), "Visor", scale=(0.55, 0.85, 0.75), seg=24, rings=12)
+        flesh = ico(r * 0.4, c + Vector((r * 0.75, -0.02, 0.0)), "Flesh", sub=2)
+        displace(flesh, 0.02, 12.0, seed=33)
+        p += [hood, visor, flesh]
+        # machoire beante sous la visiere
+        p.append(sphere(r * 0.45, c + Vector((r * 0.65, 0, -r * 0.6)), "Mouth", scale=(0.5, 0.9, 0.9), seg=16, rings=8))
+        for i in range(9):
+            t = i / 8 * 2 - 1
+            for zz, h in ((-r * 0.35, -0.03), (-r * 0.85, 0.03)):
+                tooth = cyl(0.008, 0.035, c + Vector((r * 0.82, t * r * 0.35, zz)), "Teeth", verts=6, r2=0.0)
+                tooth.rotation_euler = (0, math.radians(180 if h < 0 else 0), 0)
+                p.append(tooth)
+        p.append(cyl(0.035, 0.07, c + Vector((r * 0.75, 0, -r * 1.05)), "Rubber", rot=(0, 70, 0), verts=12))
+    elif kind == "Wretch":
+        head = sphere(r, c, "Skin", scale=(0.95, 0.8, 1.1), seg=28, rings=14)
+        displace(head, 0.008, 12.0, seed=22)
+        p.append(head)
+        for sgn in (-1, 1):
+            p.append(sphere(0.024, c + Vector((r * 0.78, sgn * 0.034, 0.02)), "Dark", scale=(0.5, 1.0, 1.2), seg=10, rings=6))
+        p.append(sphere(0.03, c + Vector((r * 0.8, 0, -0.05)), "Mouth", scale=(0.5, 1.3, 1.1), seg=12, rings=6))
+        for i in range(6):
+            p.append(cyl(0.004, 0.016, c + Vector((r * 0.86, (i - 2.5) * 0.011, -0.035)), "Teeth", verts=5, r2=0.0, rot=(180, 0, 0)))
+        rnd = random.Random(23)
+        for i in range(12):
+            a = rnd.uniform(-1.2, 1.2)
+            top = c + Vector((-0.02, math.sin(a) * r * 0.7, r * 0.9))
+            p.append(tube([tuple(top), tuple(top + Vector((-0.04, math.sin(a) * 0.05, -0.22 - rnd.random() * 0.1)))],
+                          [0.004, 0.002], "Hair", subdiv=0, name="hair"))
+        p.append(tube([(0, 0, 0), (0, 0, 0.05)], [0.03, 0.03], "Skin", subdiv=1, name="neck"))
+    elif kind == "Partygoer":
+        head = sphere(r, c + Vector((0, 0, 0.02)), "Party", scale=(0.95, 0.95, 1.0), seg=32, rings=16)
+        p.append(head)
+        fx = r * 0.93
+        for sgn in (-1, 1):
+            p.append(sphere(0.02, c + Vector((fx, sgn * 0.055, 0.06)), "Face", scale=(0.4, 0.7, 1.9), seg=12, rings=6))
+        pts = []
+        for i in range(13):
+            t = i / 12 * 2 - 1
+            yy = t * 0.11
+            zz = c.z - 0.03 - 0.06 * (1 - t * t)
+            xx = math.sqrt(max(0.0, (r * 0.97) ** 2 - yy ** 2 - (zz - c.z - 0.02) ** 2 * 0.9)) + 0.005
+            pts.append((xx, yy, zz))
+        p.append(tube(pts, [0.009] * len(pts), "Face", subdiv=1, name="smile"))
+        p.append(tube([(0, 0, 0), (0, 0, 0.05)], [0.06, 0.06], "Party", subdiv=1, name="neck"))
+    elif kind == "Bacteria":
+        head = sphere(r, c + Vector((0.02, 0, 0.04)), "Wire", scale=(1.3, 0.75, 1.6), seg=24, rings=12)
+        displace(head, 0.01, 10.0, seed=55)
+        p.append(head)
+        p.append(box((0.01, 0.02, 0.12), c + Vector((r * 1.25, 0, 0.0)), "Mouth"))
+        p += wiry([(0, 0, 0), (0.0, 0, 0.08), (0.02, 0, 0.16)], 0.018, "Wire", strands=3)
+        rnd = random.Random(56)
+        for i in range(8):  # fils qui depassent du crane
+            a = rnd.uniform(0, 2 * math.pi)
+            base = c + Vector((math.cos(a) * r * 0.6, math.sin(a) * r * 0.4, r * 1.2))
+            p.append(tube([tuple(base), tuple(base + Vector((math.cos(a) * 0.08, math.sin(a) * 0.08, 0.12)))],
+                          [0.005, 0.002], "Wire", subdiv=0, name="w"))
+    return join(p, f"SM_{kind}_Head")
 
 
-def m_humanoid_leg(kind):
+def make_hand(kind, length):
     s = HUMANOIDS[kind]
-    L = s["hip"]
-    r = 0.07 if kind != "Wretch" else 0.05
-    leg = tube([(0, 0, 0), (0.02, 0, -L * 0.5), (0.0, 0, -L + 0.07), (0.0, 0, -L + 0.03)],
-               [r, r * 0.75, r * 0.55, r * 0.5], s["legs"], subdiv=2, name="leg")
-    foot = box((0.22, 0.09, 0.06), (0.06, 0, -L + 0.03), s["skin"] if kind != "Faceling" else "BlackPlastic", bevel=0.02)
-    return join([leg, foot], f"SM_{kind}_Leg")
+    mat_h = s["hand"]
+    z0 = -length
+    p = [sphere(0.03 if kind != "Partygoer" else 0.045, (0.01, 0, z0 - 0.02), mat_h, scale=(0.6, 1.0, 1.25), seg=12, rings=6)]
+    fl = {"Bacteria": 0.16, "Wretch": 0.11, "SkinStealer": 0.14}.get(kind, 0.075)
+    for i in range(4):
+        y = (i - 1.5) * 0.016
+        tip = (0.025, y * 1.3, z0 - 0.04 - fl)
+        if kind == "Partygoer":
+            # doigts en tentacules avec ventouses
+            pts = [(0.01, y * 1.5, z0 - 0.05), (0.03, y * 1.9, z0 - 0.1), (0.02, y * 2.2, z0 - 0.15)]
+            p.append(tube(pts, [0.013, 0.01, 0.006], "Party", subdiv=1, name="tentacle"))
+            for k in range(3):
+                pp = Vector(pts[k]) + Vector((0.012, 0, 0))
+                p.append(cyl(0.006, 0.003, tuple(pp), "Sucker", rot=(0, 90, 0), verts=10))
+        else:
+            p.append(tube([(0.012, y, z0 - 0.04), (0.02, y * 1.2, z0 - 0.04 - fl * 0.55), tip], [0.008, 0.007, 0.005], mat_h, subdiv=1, name="f"))
+            if kind in ("Wretch", "SkinStealer", "Bacteria"):
+                cl = cyl(0.005, 0.03, (tip[0] + 0.004, tip[1], tip[2] - 0.012), "Claw", verts=6, r2=0.0, rot=(180, 0, 0))
+                p.append(cl)
+    if kind != "Partygoer":
+        p.append(tube([(0.01, -0.03, z0 - 0.02), (0.03, -0.04, z0 - 0.06)], [0.008, 0.006], mat_h, subdiv=1, name="thumb"))
+    return p
+
+
+def m_upper_arm(kind):
+    s = HUMANOIDS[kind]
+    r = s["r_arm"]
+    if kind == "Bacteria":
+        return join(wiry([(0, 0, 0), (0, 0, -s["ua"] * 0.5), (0, 0, -s["ua"])], r, "Wire"), f"SM_{kind}_UpperArm")
+    a = tube([(0, 0, 0), (0.005, 0, -s["ua"] * 0.5), (0, 0, -s["ua"])], [r, r * 0.92, r * 0.8], s["arm_u"], subdiv=2, name="ua")
+    if kind == "SkinStealer":
+        displace(a, 0.01, 9.0, seed=61)
+    return join([a], f"SM_{kind}_UpperArm")
+
+
+def m_lower_arm(kind):
+    s = HUMANOIDS[kind]
+    r = s["r_arm"] * 0.85
+    L = s["la"] - 0.06
+    if kind == "Bacteria":
+        p = wiry([(0, 0, 0), (0.01, 0, -L * 0.5), (0.02, 0, -L)], r, "Wire")
+    else:
+        p = [tube([(0, 0, 0), (0.01, 0, -L * 0.5), (0.02, 0, -L)], [r, r * 0.85, r * 0.65], s["arm_l"], subdiv=2, name="la")]
+    if kind == "Faceling":
+        p.append(torus(r * 1.05, 0.006, (0, 0, -0.02), "Cloth", mseg=4))
+    p += make_hand(kind, L)
+    return join(p, f"SM_{kind}_LowerArm")
+
+
+def m_thigh(kind):
+    s = HUMANOIDS[kind]
+    r = s["r_leg"]
+    if kind == "Bacteria":
+        return join(wiry([(0, 0, 0), (0.01, 0, -s["th"] * 0.5), (0, 0, -s["th"])], r, "Wire"), f"SM_{kind}_Thigh")
+    t = tube([(0, 0, 0), (0.015, 0, -s["th"] * 0.5), (0, 0, -s["th"])], [r, r * 0.88, r * 0.72], s["leg_u"], subdiv=2, name="th")
+    return join([t], f"SM_{kind}_Thigh")
+
+
+def m_shin(kind):
+    s = HUMANOIDS[kind]
+    r = s["r_leg"] * 0.72
+    sn = s["hip"] - s["th"]
+    L = sn - 0.05
+    if kind == "Bacteria":
+        p = wiry([(0, 0, 0), (-0.01, 0, -L * 0.5), (0, 0, -L)], r, "Wire")
+        for k in (-1, 0, 1):
+            p.append(tube([(0, 0, -L), (0.1, k * 0.03, -sn + 0.01), (0.16, k * 0.04, -sn + 0.005)], [0.012, 0.008, 0.003], "Wire", subdiv=1, name="toe"))
+        return join(p, f"SM_{kind}_Shin")
+    p = [tube([(0, 0, 0), (-0.01, 0, -L * 0.5), (0, 0, -L)], [r, r * 0.85, r * 0.6], s["leg_l"], subdiv=2, name="sh")]
+    foot_mat = s["foot"]
+    if kind in ("Wretch",):
+        for k in (-1, 0, 1):
+            p.append(tube([(0, 0, -L), (0.08, k * 0.025, -sn + 0.012), (0.12, k * 0.03, -sn + 0.005)], [0.014, 0.01, 0.005], "Skin", subdiv=1, name="toe"))
+    else:
+        p.append(box((0.24 if kind != "Partygoer" else 0.2, 0.095, 0.07), (0.06, 0, -sn + 0.035), foot_mat, bevel=0.025))
+    return join(p, f"SM_{kind}_Shin")
+
+
+def m_smiler():
+    # Entite 3 : Smilers. Masse de fumee noire, yeux et sourire demesure lumineux.
+    rnd = random.Random(9)
+    p = []
+    for i in range(5):
+        c = (rnd.uniform(-0.12, 0.05), rnd.uniform(-0.25, 0.25), rnd.uniform(-0.25, 0.3))
+        b = ico(rnd.uniform(0.25, 0.42), c, "Body", sub=3, scale=(0.6, 1.0, 1.0))
+        displace(b, 0.08, 3.0, seed=10 + i, octaves=3)
+        p.append(b)
+    fx = 0.3
+    for sgn in (-1, 1):
+        p.append(sphere(0.085, (fx, sgn * 0.17, 0.2), "Glow", scale=(0.3, 1.0, 0.42), seg=16, rings=8, rot=(sgn * 24, 0, 0)))
+    # bouche : interieur sombre + deux rangees de crocs coniques
+    p.append(sphere(0.22, (fx - 0.06, 0, -0.1), "Dark", scale=(0.3, 1.7, 0.5), seg=20, rings=10))
+    n = 25
+    for i in range(n):
+        t = (i / (n - 1)) * 2 - 1
+        y = t * 0.36
+        zu = -0.05 + 0.14 * t * t
+        gap = 0.1 * (1 - t * t) + 0.012
+        x = fx + 0.02 - 0.09 * t * t
+        h = 0.07 * (1 - 0.5 * abs(t)) + 0.02
+        up = cyl(0.016, h, (x, y, zu - h * 0.5), "Glow", verts=6, r2=0.0, rot=(180, 0, 0))
+        lo = cyl(0.016, h * 0.9, (x, y, zu - gap + h * 0.45), "Glow", verts=6, r2=0.0)
+        p += [up, lo]
+    return join(p, "SM_Smiler")
+
+
+def m_hound_body():
+    # Entite 8 : Hounds. Torse decharne a l'horizontale (tete et pattes separees).
+    torso = tube([(-0.38, 0, 0), (-0.12, 0, 0.03), (0.2, 0, 0.05), (0.42, 0, 0.09)],
+                 [(0.12, 0.1), (0.1, 0.085), (0.15, 0.12), (0.06, 0.06)], "Skin", subdiv=2, name="torso")
+    displace(torso, 0.01, 11.0, seed=4)
+    p = [torso]
+    for i in range(9):
+        x = -0.33 + i * 0.085
+        p.append(sphere(0.022, (x, 0, 0.1 + 0.02 * math.sin(i * 0.7)), "Skin", seg=8, rings=4))
+    for i in range(5):
+        r = torus(0.12, 0.008, (0.05 + i * 0.045, 0, 0.03), "Skin", rot=(0, 90, 0), mseg=4, seg=16)
+        r.scale = (1.0, 1.05, 0.85)
+        p.append(r)
+    return join(p, "SM_Hound_Body")
+
+
+def m_hound_head():
+    # Tete : pivot au cou ; machoire beante cachee sous de longs cheveux noirs.
+    p = [sphere(0.11, (0.1, 0, 0.0), "Skin", scale=(1.25, 0.88, 0.95), seg=24, rings=12),
+         tube([(-0.04, 0, -0.02), (0.06, 0, 0.0)], [0.05, 0.055], "Skin", subdiv=1, name="neck"),
+         sphere(0.06, (0.2, 0, -0.06), "Mouth", scale=(0.9, 1.0, 0.6), seg=16, rings=8)]
+    for i in range(10):
+        t = i / 9 * 2 - 1
+        p.append(cyl(0.006, 0.03, (0.235, t * 0.045, -0.035), "Teeth", verts=5, r2=0.0, rot=(180, 0, 0)))
+        p.append(cyl(0.006, 0.026, (0.23, t * 0.04, -0.09), "Teeth", verts=5, r2=0.0))
+    rnd = random.Random(8)
+    for i in range(44):
+        a = rnd.uniform(-1.5, 1.5)
+        ox = 0.1 + rnd.uniform(-0.1, 0.1)
+        y = math.sin(a) * 0.1
+        top = (ox, y, 0.1 + rnd.uniform(-0.02, 0.02))
+        ln = rnd.uniform(0.3, 0.55)
+        bot = (ox + 0.16 + rnd.uniform(-0.03, 0.05), y * 1.3, top[2] - ln)
+        p.append(tube([top, ((top[0] + bot[0]) / 2 + 0.04, (top[1] + bot[1]) / 2, (top[2] + bot[2]) / 2), bot],
+                      [0.011, 0.008, 0.002], "Hair", subdiv=0, name="hair"))
+    return join(p, "SM_Hound_Head")
+
+
+def m_hound_upper():
+    L = HOUND["upper"]
+    t = tube([(0, 0, 0), (0.0, 0, -L * 0.5), (0, 0, -L)], [0.055, 0.045, 0.038], "Skin", subdiv=2, name="u")
+    return join([t], "SM_Hound_UpperLeg")
+
+
+def m_hound_lower():
+    L = HOUND["lower"]
+    p = [tube([(0, 0, 0), (0.02, 0, -L * 0.6), (0.0, 0, -L + 0.04)], [0.036, 0.028, 0.025], "Skin", subdiv=2, name="l"),
+         sphere(0.03, (0.03, 0, -L + 0.02), "Skin", scale=(1.5, 1.1, 0.6), seg=12, rings=6)]
+    for k in (-1, 0, 1):
+        tip = (0.15, k * 0.03, -L + 0.004)
+        p.append(tube([(0.04, k * 0.012, -L + 0.02), (0.1, k * 0.025, -L + 0.02), tip], [0.01, 0.008, 0.005], "Skin", subdiv=1, name="f"))
+        p.append(cyl(0.006, 0.04, (tip[0] + 0.02, tip[1], tip[2]), "Claw", verts=6, r2=0.0, rot=(0, 90, 0)))
+    return join(p, "SM_Hound_LowerLeg")
 
 
 def m_moth_body():
     # Entite 4 : Deathmoths. Pivot : centre du thorax ; tete vers +X.
-    body = tube([(-0.42, 0, -0.02), (-0.15, 0, 0.0), (0.05, 0, 0.02), (0.18, 0, 0.03)],
-                [(0.07, 0.07), (0.11, 0.1), (0.12, 0.11), (0.07, 0.07)], "Fur", subdiv=2, name="body")
-    displace(body, 0.01, 18.0, seed=31)
+    body = tube([(-0.36, 0, -0.02), (-0.12, 0, 0.0), (0.05, 0, 0.02), (0.16, 0, 0.03)],
+                [(0.06, 0.06), (0.09, 0.085), (0.1, 0.09), (0.06, 0.06)], "Fur", subdiv=2, name="body")
+    displace(body, 0.014, 22.0, seed=31)
     p = [body]
+    for i in range(6):  # anneaux de l'abdomen
+        r = torus(0.08 - i * 0.008, 0.008, (-0.3 + i * 0.05, 0, -0.01), "Fur", rot=(0, 90, 0), mseg=4, seg=16)
+        p.append(r)
     for s in (-1, 1):
-        p.append(sphere(0.04, (0.2, s * 0.05, 0.05), "Eye", seg=12, rings=6))
-        p.append(tube([(0.22, s * 0.03, 0.08), (0.35, s * 0.12, 0.25), (0.42, s * 0.2, 0.33)], [0.008, 0.012, 0.003],
+        p.append(sphere(0.038, (0.18, s * 0.045, 0.045), "Eye", seg=12, rings=6))
+        p.append(tube([(0.2, s * 0.03, 0.08), (0.32, s * 0.12, 0.24), (0.38, s * 0.2, 0.32)], [0.008, 0.012, 0.003],
                       "Fur", subdiv=1, name="antenna"))
         for k in range(3):
-            x0 = 0.08 - k * 0.09
-            p.append(tube([(x0, s * 0.06, -0.06), (x0 + 0.04, s * 0.22, -0.12), (x0 + 0.06, s * 0.28, -0.3)],
-                          [0.012, 0.009, 0.004], "DarkMetal", subdiv=1, name="leg"))
+            x0 = 0.08 - k * 0.08
+            p.append(tube([(x0, s * 0.05, -0.05), (x0 + 0.04, s * 0.2, -0.1), (x0 + 0.06, s * 0.25, -0.26)],
+                          [0.01, 0.008, 0.003], "DarkMetal", subdiv=1, name="leg"))
     return join(p, "SM_Deathmoth_Body")
 
 
@@ -797,13 +1119,64 @@ def m_moth_wing():
     # Aile : racine a l'origine, s'etend vers +Y. Le jeu la mire pour l'autre cote.
     outline = [(0.16, 0.0), (0.32, 0.3), (0.34, 0.62), (0.18, 0.86), (0.02, 0.9), (-0.12, 0.7),
                (-0.3, 0.6), (-0.44, 0.36), (-0.36, 0.12), (-0.18, 0.0)]
-    w = poly_plate(outline, 0.012, "Wing")
+    w = poly_plate(outline, 0.008, "Wing")
     p = [w]
-    spot = cyl(0.11, 0.004, (0.06, 0.55, 0.014), "Pattern", verts=20)
-    p.append(spot)
-    p.append(cyl(0.05, 0.004, (0.06, 0.55, 0.017), "Eye", verts=16))
-    p.append(cyl(0.07, 0.004, (-0.26, 0.38, 0.014), "Pattern", verts=16))
+    for (x1, y1) in [(0.3, 0.55), (0.12, 0.85), (-0.15, 0.68), (-0.4, 0.38), (0.25, 0.25)]:
+        p.append(tube([(0.0, 0.02, 0.009), (x1 * 0.5, y1 * 0.5, 0.01), (x1 * 0.95, y1 * 0.95, 0.009)], [0.006, 0.004, 0.002],
+                      "Pattern", subdiv=0, name="vein"))
+    p.append(cyl(0.11, 0.004, (0.06, 0.55, 0.011), "Pattern", verts=24))
+    p.append(cyl(0.07, 0.004, (0.06, 0.55, 0.014), "Wing", verts=20))
+    p.append(cyl(0.04, 0.004, (0.06, 0.55, 0.017), "Eye", verts=16))
+    p.append(cyl(0.07, 0.004, (-0.26, 0.38, 0.011), "Pattern", verts=16))
     return join(p, "SM_Deathmoth_Wing")
+
+
+def m_skinstealer_mass():
+    # Forme "au repos" du Skin-Stealer : masse de chair translucide et palpitante.
+    blob = ico(0.55, (0, 0, 0.45), "FleshGlass", sub=4, scale=(1.1, 0.9, 0.85))
+    displace(blob, 0.16, 2.2, seed=71, octaves=3)
+    p = [blob]
+    rnd = random.Random(72)
+    for i in range(14):  # veines
+        a = rnd.uniform(0, 2 * math.pi)
+        z = rnd.uniform(0.2, 0.75)
+        pts = []
+        for k in range(4):
+            aa = a + k * 0.25
+            pts.append((math.cos(aa) * 0.6, math.sin(aa) * 0.5, z + k * 0.04 * rnd.uniform(-1, 1)))
+        p.append(tube(pts, [0.012, 0.01, 0.008, 0.005], "Vein", subdiv=0, name="vein"))
+    for i in range(5):  # membres a moitie formes
+        d = Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-0.2, 0.6))).normalized()
+        base = Vector((0, 0, 0.45)) + d * 0.45
+        tip = base + d * 0.3 + Vector((0, 0, -0.2))
+        p.append(tube([tuple(base), tuple(tip)], [0.06, 0.03], "Flesh", subdiv=1, name="limb"))
+    return join(p, "SM_SkinStealer_Mass")
+
+
+def m_balloon():
+    # Ballon rouge du Partygoer : pivot a la main, le ballon flotte 1 m plus haut.
+    p = [tube([(0, 0, 0), (0.05, 0.04, 0.7), (0.12, 0.1, 1.4)], [0.002, 0.002, 0.002], "String", subdiv=0, name="string"),
+         sphere(0.16, (0.12, 0.1, 1.58), "Balloon", scale=(0.95, 0.95, 1.15), seg=24, rings=12),
+         cyl(0.015, 0.03, (0.12, 0.1, 1.4), "Balloon", verts=8, r2=0.004)]
+    return join(p, "SM_Partygoer_Balloon")
+
+
+def m_hazmat():
+    # Explorateur en combinaison hazmat (silhouette de l'inventaire). Pivot : au sol.
+    p = [tube([(0, 0, 0.95), (0, 0, 1.15), (0, 0, 1.38), (0.01, 0, 1.5)], [(0.17, 0.13), (0.18, 0.14), (0.21, 0.15), (0.08, 0.08)],
+              "Hazmat", subdiv=2, name="torso"),
+         sphere(0.15, (0.02, 0, 1.66), "Hazmat", scale=(1.0, 0.95, 1.12), seg=32, rings=16),
+         sphere(0.13, (0.07, 0, 1.67), "Visor", scale=(0.6, 0.85, 0.7), seg=24, rings=12),
+         cyl(0.04, 0.08, (0.15, 0, 1.56), "Rubber", rot=(0, 70, 0), verts=16),
+         cyl(0.05, 0.14, (-0.12, 0, 1.25), "Rubber", verts=16),
+         torus(0.18, 0.02, (0, 0, 0.98), "Rubber", mseg=6, seg=32)]
+    p[-1].scale = (1.0, 0.8, 1.0)
+    for sgn in (-1, 1):
+        p.append(tube([(0, sgn * 0.2, 1.42), (0.03, sgn * 0.27, 1.15), (0.06, sgn * 0.29, 0.92)], [0.065, 0.06, 0.055], "Hazmat", subdiv=2, name="arm"))
+        p.append(sphere(0.055, (0.07, sgn * 0.29, 0.86), "Rubber", scale=(0.8, 0.7, 1.2), seg=12, rings=6))
+        p.append(tube([(0, sgn * 0.1, 0.95), (0.02, sgn * 0.11, 0.5), (0, sgn * 0.11, 0.12)], [0.085, 0.075, 0.065], "Hazmat", subdiv=2, name="leg"))
+        p.append(box((0.26, 0.11, 0.12), (0.04, sgn * 0.11, 0.06), "Rubber", bevel=0.03))
+    return join(p, "SM_Hazmat")
 
 
 def m_clump():
@@ -836,15 +1209,30 @@ MODELS = {
     "SM_OfficeChair": m_office_chair, "SM_WaterCooler": m_water_cooler, "SM_Partition": m_partition,
     "SM_ExitDoor": m_exit_door, "SM_HotelDoor": m_hotel_door, "SM_ElevatorDoor": m_elevator, "SM_Ladder": m_ladder,
     "SM_Barn": m_barn, "SM_House": m_house, "SM_PowerPole": m_power_pole, "SM_Wheat": m_wheat, "SM_Rock": m_rock,
-    "SM_Smiler": m_smiler, "SM_Hound_Body": m_hound_body, "SM_Hound_Leg": m_hound_leg,
+    # objets v2
+    "SM_Camcorder": m_camcorder, "SM_VHSTape": m_vhs, "SM_Bandage": m_bandage, "SM_EnergyBar": m_energy_bar,
+    "SM_Headlamp": m_headlamp, "SM_Vest": m_vest, "SM_Outlet": m_outlet, "SM_Vent": m_vent, "SM_WaterGrid": m_water_grid,
+    "SM_Flashlight_FP": m_flashlight_fp, "SM_Camcorder_FP": m_camcorder_fp, "SM_Hazmat": m_hazmat,
+    # entites
+    "SM_Smiler": m_smiler, "SM_Hound_Body": m_hound_body, "SM_Hound_Head": m_hound_head,
+    "SM_Hound_UpperLeg": m_hound_upper, "SM_Hound_LowerLeg": m_hound_lower,
     "SM_Deathmoth_Body": m_moth_body, "SM_Deathmoth_Wing": m_moth_wing, "SM_Clump": m_clump,
+    "SM_SkinStealer_Mass": m_skinstealer_mass, "SM_Partygoer_Balloon": m_balloon,
 }
 for _k in HUMANOIDS:
-    MODELS[f"SM_{_k}_Torso"] = (lambda k: lambda: m_humanoid_torso(k))(_k)
-    MODELS[f"SM_{_k}_Arm"] = (lambda k: lambda: m_humanoid_arm(k))(_k)
-    MODELS[f"SM_{_k}_Leg"] = (lambda k: lambda: m_humanoid_leg(k))(_k)
+    for _part, _fn in (("Torso", m_torso), ("Head", m_head), ("UpperArm", m_upper_arm), ("LowerArm", m_lower_arm),
+                       ("Thigh", m_thigh), ("Shin", m_shin)):
+        MODELS[f"SM_{_k}_{_part}"] = (lambda k, fn: lambda: fn(k))(_k, _fn)
 
-ORGANIC = ("Smiler", "Hound", "Faceling", "SkinStealer", "Wretch", "Partygoer", "Deathmoth", "Clump", "Rock")
+ORGANIC = ("Smiler", "Hound", "Faceling", "SkinStealer", "Wretch", "Partygoer", "Deathmoth", "Clump", "Rock", "Bacteria",
+           "Hazmat", "_FP", "Vest")
+
+# Objets d'inventaire : icone rendue (fond transparent) -> RawAssets/Icons/I_<Nom>.png
+ICONS = {
+    "AlmondWater": "SM_AlmondWater", "Bandage": "SM_Bandage", "Battery": "SM_Battery", "EnergyBar": "SM_EnergyBar",
+    "VHSTape": "SM_VHSTape", "Flashlight": "SM_Flashlight", "Camcorder": "SM_Camcorder", "Headlamp": "SM_Headlamp",
+    "Vest": "SM_Vest", "Note": "SM_Note",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -907,6 +1295,128 @@ def render_preview(o, name):
     bpy.ops.render.render(write_still=True)
 
 
+def _setup_render(size, transparent):
+    sc = bpy.context.scene
+    sc.render.engine = "CYCLES"
+    sc.cycles.device = "CPU"
+    sc.cycles.samples = 32
+    try:
+        sc.cycles.use_denoising = False
+    except Exception:
+        pass
+    sc.render.resolution_x = size[0]
+    sc.render.resolution_y = size[1]
+    sc.render.film_transparent = transparent
+    world = bpy.data.worlds.new("W")
+    world.use_nodes = True
+    bg = world.node_tree.nodes.get("Background")
+    bg.inputs[0].default_value = (0.5, 0.5, 0.52, 1)
+    bg.inputs[1].default_value = 0.6
+    sc.world = world
+    return sc
+
+
+def _frame_camera(sc, o, dirv, margin=1.0, ortho=False):
+    bb = [o.matrix_world @ Vector(c) for c in o.bound_box]
+    mn = Vector((min(v.x for v in bb), min(v.y for v in bb), min(v.z for v in bb)))
+    mx = Vector((max(v.x for v in bb), max(v.y for v in bb), max(v.z for v in bb)))
+    ctr = (mn + mx) / 2
+    rad = max((mx - mn).length / 2, 0.02)
+    cam_data = bpy.data.cameras.new("C")
+    if ortho:
+        cam_data.type = "ORTHO"
+        cam_data.ortho_scale = max(mx.z - mn.z, mx.y - mn.y) * 1.08 * margin
+    else:
+        cam_data.lens = 70
+    cam = bpy.data.objects.new("C", cam_data)
+    sc.collection.objects.link(cam)
+    cam.location = ctr + dirv.normalized() * rad * (3.6 * margin if not ortho else 6.0)
+    cam.rotation_euler = (ctr - cam.location).to_track_quat("-Z", "Y").to_euler()
+    sc.camera = cam
+    return ctr
+
+
+def _add_light(sc, kind, energy, rot, size=1.0, loc=(0, 0, 0)):
+    ld = bpy.data.lights.new("L", kind)
+    ld.energy = energy
+    if kind == "AREA":
+        ld.size = size
+    lo = bpy.data.objects.new("L", ld)
+    lo.rotation_euler = [math.radians(a) for a in rot]
+    lo.location = loc
+    sc.collection.objects.link(lo)
+
+
+def draw_note_icon(path):
+    """Icone de note dessinee (feuille manuscrite), plus lisible qu'un rendu 3D d'une feuille plate."""
+    from PIL import Image, ImageDraw
+    im = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    sheet = Image.new("RGBA", (150, 200), (226, 218, 190, 255))
+    d = ImageDraw.Draw(sheet)
+    import random as _r
+    rnd = _r.Random(3)
+    for i in range(11):
+        y = 26 + i * 15
+        d.line((12, y, 140, y), fill=(150, 170, 200, 255), width=1)
+        x = 16
+        while x < 130:
+            w = rnd.randint(8, 26)
+            d.line((x, y - 4, x + w, y - 3 + rnd.randint(-1, 1)), fill=(40, 40, 70, 255), width=2)
+            x += w + rnd.randint(4, 8)
+    d.line((22, 8, 22, 196), fill=(200, 90, 90, 255), width=1)
+    sheet = sheet.rotate(-9, expand=True, resample=Image.BICUBIC)
+    im.alpha_composite(sheet, ((256 - sheet.size[0]) // 2, (256 - sheet.size[1]) // 2))
+    im.save(path)
+
+
+def render_icon(item, model):
+    """Icone d'inventaire 256x256 sur fond transparent."""
+    os.makedirs(OUT_ICON, exist_ok=True)
+    if item == "Note":
+        try:
+            draw_note_icon(os.path.join(OUT_ICON, "I_Note.png"))
+            print("  icone", item)
+            return
+        except Exception:
+            pass
+    reset()
+    o = MODELS[model]()
+    finalize(o)
+    sc = _setup_render((256, 256), True)
+    flat = item in ("Note", "VHSTape", "EnergyBar", "Bandage")
+    _frame_camera(sc, o, Vector((0.35, -0.5, 1.0)) if flat else Vector((0.9, -1.0, 0.75)), margin=1.12 if not flat else 1.0)
+    _add_light(sc, "SUN", 3.5, (45, 15, 35))
+    _add_light(sc, "SUN", 1.2, (120, 0, -140))
+    sc.render.filepath = os.path.join(OUT_ICON, "I_" + item + ".png")
+    bpy.ops.render.render(write_still=True)
+    print("  icone", item)
+
+
+def render_silhouette():
+    """Silhouette de l'explorateur en combinaison (panneau Equipement de l'inventaire)."""
+    os.makedirs(OUT_ICON, exist_ok=True)
+    reset()
+    o = MODELS["SM_Hazmat"]()
+    finalize(o, all_smooth=True)
+    sc = _setup_render((384, 768), True)
+    _frame_camera(sc, o, Vector((1.0, -0.12, 0.05)), margin=1.0, ortho=True)
+    _add_light(sc, "SUN", 0.6, (60, 0, 90))
+    _add_light(sc, "SUN", 4.0, (80, 0, -100))
+    path = os.path.join(OUT_ICON, "I_Silhouette.png")
+    sc.render.filepath = path
+    bpy.ops.render.render(write_still=True)
+    try:  # assombrit en silhouette en gardant un leger contour lumineux
+        from PIL import Image, ImageFilter
+        im = Image.open(path).convert("RGBA")
+        r, g, b, a = im.split()
+        lum = Image.merge("RGB", (r, g, b)).convert("L").point(lambda v: int(v * 0.25))
+        out = Image.merge("RGBA", (lum, lum, lum, a))
+        out.save(path)
+    except Exception as e:
+        print("  (silhouette brute, PIL indisponible :", e, ")")
+    print("  silhouette")
+
+
 def build(name, preview=True):
     reset()
     o = MODELS[name]()
@@ -927,6 +1437,11 @@ def main():
     print("Export FBX ->", OUT_MESH)
     for n in names:
         build(n, preview)
+    if "--no-icons" not in argv and not [a for a in argv if not a.startswith("--")]:
+        print("Icones ->", OUT_ICON)
+        for item, model in ICONS.items():
+            render_icon(item, model)
+        render_silhouette()
     print("Termine :", len(names), "modeles")
 
 
