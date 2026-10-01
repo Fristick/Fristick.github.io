@@ -204,6 +204,12 @@ struct FBRLevelDef
 	bool bWater = false;
 	float WaterHeight = 45.f;
 	FBRSurface Water;
+	/** Proprietes optiques de l'eau (Single Layer Water) : plus elles sont basses, plus l'eau est limpide */
+	float WaterAbsorption = 1.2f;
+	float WaterScattering = 0.15f;
+	/** Bassins profonds (Niveau 37) : proportion de blocs 2x2 creuses et profondeur sous le sol */
+	float PoolChance = 0.f;
+	float PoolDepth = 260.f;
 	bool bOutdoor = false;
 	bool bPhenomena = false;  // bruits de pas lointains, etc.
 

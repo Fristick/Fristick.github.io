@@ -5,7 +5,7 @@ Usage :  python generate_sounds.py      (necessite numpy)
 Sortie : ../RawAssets/Sounds/*.wav  (mono 16 bits)
 
 Les sons "S_Amb_*", "S_Hum", "S_Heartbeat", "S_Breath", "S_Chase", "S_ExitHum" et
-"S_Moth" sont des boucles parfaites : ils sont filtres dans le domaine de Fourier
+"S_Moth", "S_Underwater" sont des boucles parfaites : ils sont filtres dans le domaine de Fourier
 de facon circulaire, donc sans "clic" au raccord.
 """
 import os
@@ -772,6 +772,79 @@ def s_bacteria():
     save("S_Bacteria", reverb(x, 1.8, 0.4), 0.9)
 
 
+# ---------------------------------------------------------------------------
+# v3 : eau (nage, plongeon, apnee). Generateur aleatoire propre a chaque son
+# pour ne pas modifier les sons precedents.
+# ---------------------------------------------------------------------------
+def bubbles(n, count, rng, pitch=(300, 1400), gain=0.4):
+    """Petites bulles : sinusoides qui montent en frequence et s'eteignent vite"""
+    x = np.zeros(n)
+    for _ in range(count):
+        start = int(rng.random() * n * 0.85)
+        ln = int(rng.uniform(0.02, 0.09) * SR)
+        tt = np.arange(min(ln, n - start)) / SR
+        f = rng.uniform(*pitch)
+        x[start:start + len(tt)] += np.sin(2 * np.pi * f * (1 + tt * rng.uniform(4, 12)) * tt) * np.exp(-tt * rng.uniform(40, 90)) * gain
+    return x
+
+
+def s_splash():
+    rng = np.random.default_rng(3701)
+    dur = 1.3
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    crash = fft_filter(rng.standard_normal(n), lo=250, hi=7000) * env(n, 0.004, 0.35)
+    body = fft_filter(rng.standard_normal(n), lo=60, hi=500) * np.exp(-tt * 9)
+    spray = fft_filter(rng.standard_normal(n), lo=2500, hi=9000) * np.exp(-tt * 5) * (rng.random(n) < 0.08)
+    x = crash * 0.9 + body * 0.8 + spray * 0.5 + bubbles(n, 26, rng, (350, 1500), 0.5)
+    save("S_Splash", reverb(x, 1.6, 0.35), 0.85)
+
+
+def s_swim():
+    rng = np.random.default_rng(3702)
+    dur = 0.9
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    # brasse : l'eau poussee par les bras (souffle filtre qui gonfle puis retombe) + clapotis
+    push = fft_filter(rng.standard_normal(n), lo=180, hi=1600) * np.sin(np.pi * np.clip(tt / 0.6, 0, 1)) ** 2
+    lap = fft_filter(rng.standard_normal(n), lo=900, hi=4500) * env(n, 0.01, 0.18) * 0.4
+    x = push + np.roll(lap, int(0.45 * SR)) + bubbles(n, 8, rng, (500, 1300), 0.25)
+    save("S_Swim", reverb(x, 1.4, 0.3), 0.7)
+
+
+def s_underwater():
+    rng = np.random.default_rng(3703)
+    dur = 10.0
+    n = int(dur * SR)
+    t = t_axis(dur)
+    # grondement sourd, pression dans les oreilles, bulles lointaines (boucle parfaite)
+    rumble = fft_filter(rng.standard_normal(n), lo=25, hi=320, circular=True)
+    rumble /= np.std(rumble)
+    hum = np.sin(2 * np.pi * loop_freq(58, dur) * t) * 0.15 + np.sin(2 * np.pi * loop_freq(116.5, dur) * t) * 0.05
+    swell = 0.7 + 0.3 * np.sin(2 * np.pi * loop_freq(0.15, dur) * t)
+    x = rumble * swell * 0.6 + hum
+    b = fft_filter(bubbles(n, 40, rng, (250, 900), 0.6), hi=1400)
+    x = x + np.roll(b, 0)
+    save("S_Underwater", reverb_loop(x, 2.0, 0.4), 0.55, loop=True)
+
+
+def s_gasp():
+    rng = np.random.default_rng(3704)
+    dur = 0.9
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    # inspiration brusque (souffle aspire) puis petite toux d'eau
+    inhale = fft_filter(rng.standard_normal(n), lo=600, hi=5000) * np.clip(tt / 0.35, 0, 1) ** 1.5 * (tt < 0.45)
+    inhale = resonate(inhale, [850, 1300, 2600], q=5) * 0.5 + inhale * 0.5
+    cough_t = tt - 0.55
+    cough = fft_filter(rng.standard_normal(n), lo=200, hi=2200) * np.exp(-np.maximum(cough_t, 0) * 18) * (cough_t > 0)
+    x = inhale + cough * 0.6
+    save("S_Gasp", reverb(x, 0.8, 0.2), 0.75)
+
+
+WATER_V3 = (s_splash, s_swim, s_underwater, s_gasp)
+
+
 if __name__ == "__main__":
     print("Synthese des sons dans", os.path.abspath(OUT))
     s_hum()
@@ -823,6 +896,8 @@ if __name__ == "__main__":
     s_inventory()
     s_objective()
     s_bacteria()
+    for fn in WATER_V3:
+        fn()
     with open(os.path.join(OUT, "loops.txt"), "w") as f:
         f.write("\n".join(sorted(LOOPS)) + "\n")
     print("Termine. Boucles :", ", ".join(sorted(LOOPS)))

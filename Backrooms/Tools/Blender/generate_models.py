@@ -1434,6 +1434,10 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
     preview = "--no-preview" not in argv
     names = [a for a in argv if not a.startswith("--")] or list(MODELS.keys())
+    # La vraie combinaison (Tools/Blender/import_user_models.py) remplace la version procedurale
+    user_hazmat = os.path.isfile(os.path.join(OUT_MESH, "SM_Hazmat_Torso.fbx"))
+    if user_hazmat and "SM_Hazmat" in names and len(names) > 1:
+        names.remove("SM_Hazmat")
     print("Export FBX ->", OUT_MESH)
     for n in names:
         build(n, preview)
@@ -1441,7 +1445,8 @@ def main():
         print("Icones ->", OUT_ICON)
         for item, model in ICONS.items():
             render_icon(item, model)
-        render_silhouette()
+        if not user_hazmat:
+            render_silhouette()
     print("Termine :", len(names), "modeles")
 
 

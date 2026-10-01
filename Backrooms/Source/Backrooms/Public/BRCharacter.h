@@ -5,9 +5,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "BRTypes.h"
+#include "BRRig.h"
 #include "BRCharacter.generated.h"
 
 class UCameraComponent;
+class USpringArmComponent;
 class USpotLightComponent;
 class UPointLightComponent;
 class UStaticMeshComponent;
@@ -35,6 +37,8 @@ public:
 	void ToggleCrouch();
 	void ToggleFlashlight();
 	void ToggleNightVision();
+	/** Vue a la premiere / troisieme personne (le corps en combinaison devient visible) */
+	void ToggleThirdPerson();
 	void Interact();
 	/** Utilise l'objet de la poche 0..3 (touches 1-4) */
 	void UsePocket(int32 Index);
@@ -74,6 +78,13 @@ public:
 	void ResetInventory();
 
 	bool IsDead() const { return bDead; }
+	bool IsThirdPerson() const { return bThirdPerson; }
+	bool IsSwimming() const { return bSwimming; }
+	bool IsUnderwater() const { return bUnderwater; }
+	/** Oxygene (0..100), consomme sous l'eau */
+	float GetBreath() const { return Breath; }
+	/** Profondeur d'eau aux pieds (cm) */
+	float GetWaterDepth() const { return WaterDepth; }
 	bool IsSprinting() const;
 	bool IsFlashlightOn() const { return bFlashlightOn && Battery > 0.f; }
 	float GetNoiseRadius() const;
@@ -109,6 +120,10 @@ public:
 	void CloseNote() { bReadingNote = false; }
 
 protected:
+	/** Perche de camera : longueur 0 a la premiere personne, recul a la troisieme */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<USpringArmComponent> CameraBoom;
+
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UCameraComponent> Camera;
 
@@ -135,6 +150,23 @@ protected:
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> HandGlow;
 
+	/** Corps du joueur : la combinaison hazmat fournie, articulee (ombre a la 1re personne, visible a la 3e) */
+	UPROPERTY()
+	TObjectPtr<USceneComponent> BodyRoot;
+
+	UPROPERTY()
+	TObjectPtr<USceneComponent> BodyFeet;
+
+	UPROPERTY()
+	TArray<TObjectPtr<USceneComponent>> BodyComponents;
+
+	/** Objet tenu, visible a la 3e personne */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> HeldMesh;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UAudioComponent> UnderwaterAudio;
+
 private:
 	void UpdateStats(float Dt);
 	void UpdateCamera(float Dt);
@@ -147,6 +179,14 @@ private:
 	void Die(const FString& By, AActor* Killer);
 	void SetupLoopAudio(UAudioComponent* Comp, FName Sound);
 	void OnEquipmentChanged();
+	void BuildBody();
+	void AnimateBody(float Dt);
+	void UpdateWater(float Dt);
+	void UpdateViewMode();
+	void StartSwimming();
+	void StopSwimming();
+	void ClimbOutOfWater();
+	bool IsNearPoolEdge() const;
 	bool UseItemEffect(EBRItem Item);
 	bool StoreItem(EBRItem Item);
 
@@ -177,6 +217,35 @@ private:
 	float PrevHealth = 100.f;
 	float PrevStamina = 100.f;
 	EBRItem HandVisual = EBRItem::Count;
+	EBRItem HeldVisual = EBRItem::Count;
+	FBRHumanoidParts Body;
+	bool bHasBody = false;
+	bool bThirdPerson = false;
+	bool bSwimming = false;
+	bool bUnderwater = false;
+	bool bJumpHeld = false;
+	bool bDiving = false;
+	float Breath = 100.f;
+	float WaterDepth = 0.f;
+	float WaterZ = -1.0e6f;
+	float BodyAnim = 0.f;
+	float CrouchBlend = 0.f;
+	float SwimBlend = 0.f;
+	float StrokeTimer = 0.f;
+	float EdgePush = 0.f;
+	float SplashCooldown = 0.f;
+	float ClimbGrace = 0.f;
+	/** Se hisser sur le rebord d'un bassin : monter le long de la paroi, puis avancer */
+	bool bMantling = false;
+	float MantleTime = 0.f;
+	float MantleZ = 0.f;
+	FVector MantleDir = FVector::ForwardVector;
+	float AirBlend = 0.f;
+	float UnderBlend = 0.f;
+	float DeathBlend = 0.f;
+	bool bSwimHint = false;
+	FVector FlashBase = FVector::ZeroVector;
+	FVector SwimInput = FVector::ZeroVector;
 	FVector2D LookLag = FVector2D::ZeroVector;
 	EBRStep StepType = EBRStep::Carpet;
 	FString FocusPrompt;

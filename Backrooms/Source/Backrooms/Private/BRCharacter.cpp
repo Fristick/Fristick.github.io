@@ -2,6 +2,7 @@
 #include "Backrooms.h"
 #include "BRAssets.h"
 #include "BRItems.h"
+#include "BRKeys.h"
 #include "BRWorld.h"
 #include "BRHUD.h"
 #include "BRInteractables.h"
@@ -13,11 +14,13 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/SoundBase.h"
@@ -32,11 +35,19 @@ namespace
 	constexpr float FlashCandelas = 650.f;
 	constexpr float BatteryDrain = 0.4f;      // % par seconde (~4 min)
 	constexpr float NightVisionDrain = 0.3f;
+	constexpr float SwimSpeed = 190.f;
+	constexpr float SwimSprintSpeed = 290.f;
+	constexpr float BreathSeconds = 18.f;    // temps d'apnee
+	constexpr float ThirdPersonArm = 240.f;
+	const FVector ThirdPersonOffset(0.f, 45.f, 18.f);
 
 	// Position de la source lumineuse selon l'emplacement de la lampe
 	const FVector HandLightPos(32.f, 16.f, -14.f);
 	const FVector BeltLightPos(12.f, 14.f, -52.f);
 	const FVector HeadLightPos(6.f, 0.f, 9.f);
+	/** A la 3e personne la lampe est avancee devant la combinaison (sinon le corps la masquerait) */
+	const FVector ThirdPersonLightPush(32.f, 0.f, 0.f);
+	constexpr float InteractReach = 260.f;
 }
 
 ABRCharacter::ABRCharacter()
@@ -59,10 +70,18 @@ ABRCharacter::ABRCharacter()
 	Move->GetNavAgentPropertiesRef().bCanCrouch = true;
 	Move->bCanWalkOffLedgesWhenCrouching = true;
 
+	// La perche suit la rotation de visee ; a la 1re personne sa longueur est nulle
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(GetCapsuleComponent());
+	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, StandEyeZ));
+	CameraBoom->TargetArmLength = 0.f;
+	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bDoCollisionTest = false;
+	CameraBoom->ProbeSize = 14.f;
+
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-	Camera->SetupAttachment(GetCapsuleComponent());
-	Camera->SetRelativeLocation(FVector(0.f, 0.f, StandEyeZ));
-	Camera->bUsePawnControlRotation = true;
+	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+	Camera->bUsePawnControlRotation = false;
 	Camera->SetFieldOfView(88.f);
 
 	Flashlight = CreateDefaultSubobject<USpotLightComponent>(TEXT("Flashlight"));
@@ -106,6 +125,10 @@ ABRCharacter::ABRCharacter()
 	ChaseAudio->SetupAttachment(RootComponent);
 	ChaseAudio->bAutoActivate = false;
 
+	UnderwaterAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("UnderwaterAudio"));
+	UnderwaterAudio->SetupAttachment(RootComponent);
+	UnderwaterAudio->bAutoActivate = false;
+
 	ResetInventory();
 }
 
@@ -126,8 +149,11 @@ void ABRCharacter::BeginPlay()
 		SetupLoopAudio(HeartAudio, TEXT("S_Heartbeat"));
 		SetupLoopAudio(BreathAudio, TEXT("S_Breath"));
 		SetupLoopAudio(ChaseAudio, TEXT("S_Chase"));
+		SetupLoopAudio(UnderwaterAudio, TEXT("S_Underwater"));
 	}
+	BuildBody();
 	OnEquipmentChanged();
+	UpdateViewMode();
 }
 
 void ABRCharacter::SetupLoopAudio(UAudioComponent* Comp, FName SoundName)
@@ -490,18 +516,21 @@ void ABRCharacter::OnEquipmentChanged()
 	{
 		if (InHand == EBRItem::Flashlight)
 		{
+			FlashBase = HandLightPos;
 			Flashlight->SetRelativeLocation(HandLightPos);
 			Flashlight->SetInnerConeAngle(13.f);
 			Flashlight->SetOuterConeAngle(30.f);
 		}
 		else if (GetEquipped(EBREquipSlot::Belt) == EBRItem::Flashlight)
 		{
+			FlashBase = BeltLightPos;
 			Flashlight->SetRelativeLocation(BeltLightPos);
 			Flashlight->SetInnerConeAngle(15.f);
 			Flashlight->SetOuterConeAngle(34.f);
 		}
 		else
 		{
+			FlashBase = HeadLightPos;
 			Flashlight->SetRelativeLocation(HeadLightPos);
 			Flashlight->SetInnerConeAngle(22.f);
 			Flashlight->SetOuterConeAngle(45.f);
@@ -549,6 +578,28 @@ void ABRCharacter::OnEquipmentChanged()
 			}
 		}
 	}
+
+	// Objet tenu par le corps (visible a la 3e personne)
+	if (HeldMesh && InHand != HeldVisual)
+	{
+		HeldVisual = InHand;
+		UBRAssets* A = UBRAssets::Get(this);
+		UStaticMesh* M = nullptr;
+		if (A && InHand == EBRItem::Flashlight)
+		{
+			M = A->Mesh(TEXT("SM_Flashlight"));
+		}
+		else if (A && InHand == EBRItem::Camcorder)
+		{
+			M = A->Mesh(TEXT("SM_Camcorder"));
+		}
+		HeldMesh->SetStaticMesh(M);
+		if (A && M)
+		{
+			A->ApplySlots(HeldMesh);
+		}
+	}
+	UpdateViewMode();
 }
 
 // =====================================================================================================================
@@ -559,6 +610,17 @@ void ABRCharacter::InputMove(const FVector2D& Value)
 {
 	if (bInputLocked || bDead)
 	{
+		return;
+	}
+	if (bSwimming)
+	{
+		// Nage : on avance dans la direction du regard (regarder vers le bas = plonger)
+		const FRotator View = GetViewRotation();
+		const FVector Fwd = View.Vector();
+		const FVector Right = FRotator(0.f, View.Yaw, 0.f).RotateVector(FVector(0.f, 1.f, 0.f));
+		AddMovementInput(Fwd, Value.Y);
+		AddMovementInput(Right, Value.X);
+		SwimInput = Fwd * Value.Y + Right * Value.X;
 		return;
 	}
 	AddMovementInput(GetActorForwardVector(), Value.Y);
@@ -581,8 +643,19 @@ void ABRCharacter::InputLook(const FVector2D& DeltaDegrees)
 
 void ABRCharacter::InputJump(bool bPressed)
 {
+	bJumpHeld = bPressed;
 	if (bInputLocked || bDead)
 	{
+		return;
+	}
+	if (bSwimming)
+	{
+		// Remonter a la surface, ou se hisser hors du bassin
+		bDiving = false;
+		if (bPressed && IsNearPoolEdge())
+		{
+			ClimbOutOfWater();
+		}
 		return;
 	}
 	if (bPressed)
@@ -618,6 +691,11 @@ void ABRCharacter::ToggleCrouch()
 	{
 		return;
 	}
+	if (bSwimming)
+	{
+		bDiving = !bDiving; // plonger / arreter de plonger
+		return;
+	}
 	if (bIsCrouched)
 	{
 		UnCrouch();
@@ -636,12 +714,12 @@ void ABRCharacter::ToggleFlashlight()
 	}
 	if (!HasLightSource())
 	{
-		ABRHUD::Notify(this, TEXT("Aucune lampe \u00e9quip\u00e9e (inventaire : [TAB])."), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
+		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Aucune lampe \u00e9quip\u00e9e (inventaire : {Inventory}).")), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
 	}
 	if (!bFlashlightOn && Battery <= 0.f)
 	{
-		ABRHUD::Notify(this, CountItem(EBRItem::Battery) > 0 ? TEXT("Piles vides : [R] pour les changer") : TEXT("Piles vides... il faut en trouver."),
+		ABRHUD::Notify(this, CountItem(EBRItem::Battery) > 0 ? BRKeys::Expand(TEXT("Piles vides : {Battery} pour les changer")) : FString(TEXT("Piles vides... il faut en trouver.")),
 			3.f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
 	}
@@ -701,6 +779,10 @@ void ABRCharacter::Interact()
 
 bool ABRCharacter::IsSprinting() const
 {
+	if (bSwimming)
+	{
+		return bWantsSprint && !bExhausted && GetVelocity().Size() > SwimSpeed * 0.8f;
+	}
 	return bWantsSprint && !bExhausted && !bIsCrouched && GetVelocity().Size2D() > WalkSpeed * 0.8f;
 }
 
@@ -724,12 +806,18 @@ float ABRCharacter::GetNoiseRadius() const
 
 FVector ABRCharacter::GetEyeLocation() const
 {
-	return Camera ? Camera->GetComponentLocation() : GetActorLocation();
+	// Les yeux du personnage (et non la camera, qui recule a la 3e personne)
+	if (!bThirdPerson && Camera)
+	{
+		return Camera->GetComponentLocation();
+	}
+	return GetActorLocation() + FVector(0.f, 0.f, CamZ);
 }
 
 FVector ABRCharacter::GetViewDirection() const
 {
-	return Camera ? Camera->GetForwardVector() : GetActorForwardVector();
+	// Rotation de visee du controleur : toujours a jour (la camera n'est orientee qu'au moment du rendu)
+	return GetViewRotation().Vector();
 }
 
 void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName)
@@ -770,6 +858,9 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	KillerActor = Killer;
 	bReadingNote = false;
 	bNightVision = false;
+	bSwimming = false;
+	bDiving = false;
+	bMantling = false;
 	GetCharacterMovement()->DisableMovement();
 	PlaySound2D(TEXT("S_Death"), 1.f);
 	if (ABRWorld* W = ABRWorld::Get(this))
@@ -791,6 +882,9 @@ void ABRCharacter::ResetStats()
 	EnergyBoost = 0.f;
 	DamageFlash = 0.f;
 	ChaseLevel = ChaseTarget = 0.f;
+	Breath = 100.f;
+	bSwimming = bDiving = bUnderwater = bMantling = false;
+	DeathBlend = 0.f;
 	KilledBy.Empty();
 	KillerActor.Reset();
 	ResetInventory();
@@ -814,7 +908,7 @@ bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
 	}
 	if (AddItem(Item, 1) > 0)
 	{
-		ABRHUD::Notify(this, TEXT("Inventaire plein ! [TAB] pour faire de la place."), 2.5f, FLinearColor(1.f, 0.6f, 0.5f));
+		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Inventaire plein ! {Inventory} pour faire de la place.")), 2.5f, FLinearColor(1.f, 0.6f, 0.5f));
 		return false;
 	}
 	const FBRItemInfo& Info = BRItems::Get(Item);
@@ -837,6 +931,10 @@ void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 	StepType = Def.Step;
 	ChaseLevel = ChaseTarget = 0.f;
 	bReadingNote = false;
+	bSwimming = bDiving = bUnderwater = bMantling = false;
+	Breath = 100.f;
+	WaterDepth = 0.f;
+	bSwimHint = false;
 	if (GetCharacterMovement())
 	{
 		GetCharacterMovement()->StopMovementImmediately();
@@ -847,7 +945,7 @@ void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 	}
 	if (Def.Fixture == EBRFixture::None && !Def.bOutdoor && !bFlashlightOn)
 	{
-		ABRHUD::Notify(this, TEXT("Il fait noir comme dans un four. [F] lampe  -  [N] vision nocturne"), 5.f, FLinearColor(1.f, 0.85f, 0.6f));
+		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Il fait noir comme dans un four. {Flashlight} lampe  -  {NightVision} vision nocturne")), 5.f, FLinearColor(1.f, 0.85f, 0.6f));
 	}
 }
 
@@ -874,11 +972,14 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	TimeAlive += Dt;
 
 	UpdateStats(Dt);
+	UpdateWater(Dt);
 	UpdateCamera(Dt);
 	UpdateFlashlight(Dt);
 	UpdateFocus();
 	UpdateAudio(Dt);
 	UpdatePostProcess(Dt);
+	AnimateBody(Dt);
+	SwimInput = FVector::ZeroVector;
 
 	// Taches d'enregistrement : il suffit de tenir le camescope
 	if (HasCamcorderInHand() && !bDead && !bInputLocked)
@@ -934,7 +1035,12 @@ void ABRCharacter::UpdateStats(float Dt)
 	// Endurance
 	EnergyBoost = FMath::Max(0.f, EnergyBoost - Dt);
 	const bool bSprint = IsSprinting();
-	GetCharacterMovement()->MaxWalkSpeed = (bWantsSprint && !bExhausted) ? SprintSpeed : WalkSpeed;
+	// Dans l'eau on avance plus lentement (jusqu'a -40 % quand elle arrive a la taille)
+	const float Wade = (!bSwimming && WaterDepth > 5.f) ? FMath::Lerp(1.f, 0.6f, FMath::Clamp(WaterDepth / 120.f, 0.f, 1.f)) : 1.f;
+	const bool bFast = bWantsSprint && !bExhausted;
+	GetCharacterMovement()->MaxWalkSpeed = (bFast ? SprintSpeed : WalkSpeed) * Wade;
+	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed * Wade;
+	GetCharacterMovement()->MaxFlySpeed = bFast ? SwimSprintSpeed : SwimSpeed;
 	if (bSprint)
 	{
 		Stamina = FMath::Max(0.f, Stamina - (EnergyBoost > 0.f ? 10.f : 17.f) * Dt);
@@ -995,18 +1101,25 @@ void ABRCharacter::UpdateStats(float Dt)
 
 void ABRCharacter::UpdateCamera(float Dt)
 {
-	if (!Camera)
+	if (!Camera || !CameraBoom)
 	{
 		return;
 	}
-	const float TargetZ = bIsCrouched ? CrouchEyeZ : StandEyeZ;
+	const float TargetZ = (bIsCrouched && !bSwimming) ? CrouchEyeZ : StandEyeZ;
 	CamZ = FMath::FInterpTo(CamZ, TargetZ, Dt, 10.f);
 
 	const float Speed = static_cast<float>(GetVelocity().Size2D());
 	const bool bGrounded = GetCharacterMovement() && GetCharacterMovement()->IsMovingOnGround();
 	float BobZ = 0.f;
 	float BobY = 0.f;
-	if (bGrounded && Speed > 15.f && !bDead)
+	if (bSwimming && !bDead)
+	{
+		// Nage : on se balance doucement au rythme des brasses
+		BobTime += Dt * (1.6f + 2.4f * FMath::Clamp(static_cast<float>(GetVelocity().Size()) / SwimSpeed, 0.f, 1.f));
+		BobZ = FMath::Sin(BobTime) * 3.f;
+		BobY = FMath::Cos(BobTime * 0.5f) * 1.5f;
+	}
+	else if (bGrounded && Speed > 15.f && !bDead)
 	{
 		const float Rate = 8.f * (Speed / WalkSpeed);
 		BobTime += Dt * FMath::Clamp(Rate, 4.f, 14.f);
@@ -1027,13 +1140,34 @@ void ABRCharacter::UpdateCamera(float Dt)
 	{
 		DeathDrop = -FMath::Min(DeathTime * 1.5f, 1.f) * 60.f;
 	}
-	Camera->SetRelativeLocation(FVector(0.f, BobY, CamZ + BobZ + DeathDrop));
+
+	// Perche : a la 1re personne elle est a hauteur des yeux (longueur nulle), a la 3e elle recule derriere l'epaule
+	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, CamZ + DeathDrop + (bThirdPerson ? -8.f : BobZ)));
+	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, bThirdPerson ? ThirdPersonArm : 0.f, Dt, 9.f);
+	CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, bThirdPerson ? ThirdPersonOffset : FVector::ZeroVector, Dt, 9.f);
+	Camera->SetRelativeLocation(FVector(0.f, bThirdPerson ? 0.f : BobY, 0.f));
 
 	// Roulis leger + vertige quand la sante mentale baisse
 	const float Insanity = 1.f - Sanity / 100.f;
 	const float Wobble = Insanity > 0.5f ? FMath::Sin(TimeAlive * 0.8f) * (Insanity - 0.5f) * 8.f : 0.f;
-	Camera->SetRelativeRotation(FRotator(0.f, 0.f, Wobble + (bDead ? FMath::Min(DeathTime, 1.f) * 25.f : 0.f)));
+	const float SwimRoll = bSwimming ? FMath::Sin(BobTime * 0.5f) * 2.f : 0.f;
+	Camera->SetRelativeRotation(FRotator(0.f, 0.f, Wobble + SwimRoll + (bDead ? FMath::Min(DeathTime, 1.f) * 25.f : 0.f)));
 	Camera->SetFieldOfView(FBRSettings::Get().FOV + (IsSprinting() ? 4.f : 0.f) + FMath::Sin(TimeAlive * 0.6f) * Insanity * Insanity * 6.f);
+
+	// Lampe : a la 3e personne elle reste sur le personnage (et non sur la camera qui recule)
+	if (Flashlight)
+	{
+		if (bThirdPerson)
+		{
+			const FVector Eye = GetActorLocation() + FVector(0.f, 0.f, CamZ);
+			const FRotator YawOnly(0.f, GetViewRotation().Yaw, 0.f);
+			Flashlight->SetWorldLocation(Eye + YawOnly.RotateVector(FlashBase + ThirdPersonLightPush));
+		}
+		else
+		{
+			Flashlight->SetRelativeLocation(FlashBase);
+		}
+	}
 
 	// Objet en main : leger retard sur les mouvements de camera
 	LookLag = FMath::Vector2DInterpTo(LookLag, FVector2D::ZeroVector, Dt, 8.f);
@@ -1058,7 +1192,7 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 		if (Battery <= 0.f)
 		{
 			bNightVision = false;
-			ABRHUD::Notify(this, TEXT("Batterie vide : vision nocturne coup\u00e9e. [R] changer les piles"), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
+			ABRHUD::Notify(this, BRKeys::Expand(TEXT("Batterie vide : vision nocturne coup\u00e9e. {Battery} changer les piles")), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
 		}
 	}
 	if (InfraredLight)
@@ -1087,7 +1221,7 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 		if (Battery <= 0.f)
 		{
 			bFlashlightOn = false;
-			ABRHUD::Notify(this, TEXT("La lampe s'\u00e9teint. [R] changer les piles"), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
+			ABRHUD::Notify(this, BRKeys::Expand(TEXT("La lampe s'\u00e9teint. {Battery} changer les piles")), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
 		}
 	}
 	else
@@ -1126,26 +1260,83 @@ void ABRCharacter::UpdateFocus()
 	{
 		return;
 	}
-	const FVector Start = GetEyeLocation();
-	const FVector End = Start + GetViewDirection() * 230.f;
-	FHitResult Hit;
-	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRFocus), false, this);
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Q))
+	const FVector Eye = GetEyeLocation();
+	const FVector Dir = GetViewDirection();
+	auto Accept = [this](AActor* A) -> bool
 	{
-		AActor* A = Hit.GetActor();
 		if (const ABRPickup* P = Cast<ABRPickup>(A))
 		{
 			FocusActor = A;
 			FocusPrompt = P->GetPrompt();
+			return true;
 		}
-		else if (const ABRExit* E = Cast<ABRExit>(A))
+		if (const ABRExit* E = Cast<ABRExit>(A))
 		{
 			if (E->IsInteractable())
 			{
 				FocusActor = A;
 				FocusPrompt = E->GetPrompt();
+				return true;
 			}
 		}
+		return false;
+	};
+
+	// 1) Visee precise : petite sphere lancee dans l'axe du regard (depuis la camera a la 3e personne)
+	FVector Start = Eye;
+	float Len = InteractReach;
+	if (bThirdPerson && Camera)
+	{
+		Start = Camera->GetComponentLocation();
+		Len = static_cast<float>(FVector::Dist(Start, Eye)) + InteractReach;
+	}
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRFocus), false, this);
+	FHitResult Hit;
+	if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Dir * Len, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(7.f), Q)
+		&& FVector::Dist(Hit.ImpactPoint, Eye) < InteractReach + 30.f && Accept(Hit.GetActor()))
+	{
+		return;
+	}
+
+	// 2) Tolerance : l'objet le plus proche de l'axe du regard, a portee et visible (pas de mur entre les deux)
+	TArray<FOverlapResult> Overlaps;
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, Eye, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(InteractReach * 0.8f), Q))
+	{
+		AActor* Best = nullptr;
+		float BestDot = 0.86f;
+		for (const FOverlapResult& O : Overlaps)
+		{
+			AActor* A = O.GetActor();
+			const UPrimitiveComponent* Comp = O.GetComponent();
+			const ABRExit* E = Cast<ABRExit>(A);
+			if (!A || !Comp || (!Cast<ABRPickup>(A) && !(E && E->IsInteractable())))
+			{
+				continue;
+			}
+			const FVector Target = Comp->Bounds.Origin;
+			const float Dot = static_cast<float>(FVector::DotProduct((Target - Eye).GetSafeNormal(), Dir));
+			if (Dot <= BestDot)
+			{
+				continue;
+			}
+			FCollisionQueryParams LosQ(SCENE_QUERY_STAT(BRFocusLos), false, this);
+			LosQ.AddIgnoredActor(A);
+			if (!GetWorld()->LineTraceTestByChannel(Eye, Target, ECC_WorldStatic, LosQ))
+			{
+				Best = A;
+				BestDot = Dot;
+			}
+		}
+		if (Best && Accept(Best))
+		{
+			return;
+		}
+	}
+
+	// 3) Nage : se hisser hors du bassin
+	if (bSwimming && IsNearPoolEdge())
+	{
+		FocusPrompt = BRKeys::Tag(EBRAction::Jump) + TEXT(" Sortir de l'eau");
 	}
 }
 
@@ -1208,6 +1399,14 @@ void ABRCharacter::UpdateAudio(float Dt)
 		}
 		ChaseAudio->SetVolumeMultiplier(FMath::Max(0.001f, bDead ? 0.f : ChaseLevel * 0.8f));
 	}
+	if (UnderwaterAudio && UnderwaterAudio->Sound)
+	{
+		if (!UnderwaterAudio->IsPlaying())
+		{
+			UnderwaterAudio->Play();
+		}
+		UnderwaterAudio->SetVolumeMultiplier(FMath::Max(0.001f, UnderBlend * 0.9f));
+	}
 }
 
 void ABRCharacter::UpdatePostProcess(float Dt)
@@ -1224,19 +1423,29 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	const float Dead = bDead ? FMath::Min(DeathTime / 2.f, 1.f) : 0.f;
 	const bool bNV = bNightVision && !bDead;
 
+	// Sous l'eau (camera immergee) : teinte turquoise, brouillard dense, bords flous ; manque d'air : vision qui se resserre
+	const bool bCamUnder = Camera->GetComponentLocation().Z < WaterZ - 1.f;
+	UnderBlend = FMath::FInterpTo(UnderBlend, bCamUnder ? 1.f : 0.f, Dt, 10.f);
+	if (ABRWorld* FogWorld = ABRWorld::Get(this))
+	{
+		FogWorld->SetUnderwater(UnderBlend);
+	}
+	const float Choke = (!bDead && Breath < 35.f) ? (35.f - Breath) / 35.f : 0.f;
+
 	FPostProcessSettings& S = Camera->PostProcessSettings;
 	Camera->PostProcessBlendWeight = 1.f;
 
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = 0.4f + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f);
+	S.SceneFringeIntensity = 0.4f + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f;
 
 	S.bOverride_FilmGrainIntensity = true;
 	S.FilmGrainIntensity = (Set.bFilmGrain ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
 
 	S.bOverride_VignetteIntensity = true;
-	S.VignetteIntensity = (D ? D->Vignette : 0.45f) + Insanity * 0.5f + DamageFlash * 0.6f + Dead * 0.8f + (bNV ? 0.5f : 0.f);
+	S.VignetteIntensity = (D ? D->Vignette : 0.45f) + Insanity * 0.5f + DamageFlash * 0.6f + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
+		+ Choke * 0.9f;
 
-	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max(Insanity * Insanity, Dead));
+	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max3(Insanity * Insanity, Dead, Choke * 0.6f));
 	if (bNV)
 	{
 		Sat = 0.f;
@@ -1245,6 +1454,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
 
 	FLinearColor Tint = D ? D->SceneTint : FLinearColor::White;
+	Tint = FMath::Lerp(Tint, FLinearColor(0.5f, 0.9f, 0.95f), UnderBlend * 0.8f);
 	if (bNV)
 	{
 		Tint = FLinearColor(0.35f, 1.f, 0.45f);
@@ -1258,8 +1468,8 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.AutoExposureBias = (D ? D->ExposureBias : 0.f) + 3.5f;
 	S.bOverride_AutoExposureMinBrightness = bNV;
 	S.AutoExposureMinBrightness = (D ? D->MinEV : 2.f) - 4.f;
-	S.bOverride_BloomIntensity = bNV;
-	S.BloomIntensity = 2.f;
+	S.bOverride_BloomIntensity = bNV || UnderBlend > 0.01f;
+	S.BloomIntensity = bNV ? 2.f : FMath::Lerp(D ? D->Bloom : 0.6f, 2.2f, UnderBlend);
 
 	// Salete sur l'objectif du camescope (visible dans les halos des neons)
 	if (UBRAssets* A = UBRAssets::Get(this))
@@ -1275,4 +1485,454 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 
 	S.bOverride_MotionBlurAmount = true;
 	S.MotionBlurAmount = 0.f;
+}
+
+// =====================================================================================================================
+// Corps (combinaison hazmat articulee) et vue a la 3e personne
+// =====================================================================================================================
+
+void ABRCharacter::BuildBody()
+{
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (bHasBody || !Capsule || !UBRAssets::Get(this))
+	{
+		return;
+	}
+	bHasBody = true;
+	BodyRoot = NewObject<USceneComponent>(this, TEXT("BodyRoot"));
+	BodyRoot->SetupAttachment(Capsule);
+	BodyRoot->RegisterComponent();
+	BodyFeet = NewObject<USceneComponent>(this, TEXT("BodyFeet"));
+	BodyFeet->SetupAttachment(BodyRoot);
+	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, -Capsule->GetUnscaledCapsuleHalfHeight()));
+	BodyFeet->RegisterComponent();
+
+	// Pieces de la combinaison fournie (Tools/Blender/import_user_models.py) ; a defaut, des boites jaunes
+	TMap<FString, FLinearColor> Fallback;
+	Fallback.Add(TEXT("FallbackHazmat"), FLinearColor(0.75f, 0.6f, 0.08f));
+	Body = BRRig::BuildHumanoid(this, BodyFeet, TEXT("SM_Hazmat"), FBRHumanoidSpec::Hazmat(), &Fallback, BodyComponents, true);
+
+	// La tete et les bras suivent le buste (penche en avant quand on court / s'accroupit)
+	const FAttachmentTransformRules Keep(EAttachmentRule::KeepWorld, false);
+	if (Body.Torso)
+	{
+		for (USceneComponent* Part : { Body.Head, Body.UpperArm[0], Body.UpperArm[1] })
+		{
+			if (Part)
+			{
+				Part->AttachToComponent(Body.Torso, Keep);
+			}
+		}
+	}
+
+	// Objet tenu dans la main droite (visible a la 3e personne)
+	HeldMesh = NewObject<UStaticMeshComponent>(this, TEXT("HeldMesh"));
+	HeldMesh->SetupAttachment(Body.LowerArm[1] ? Body.LowerArm[1] : BodyFeet.Get());
+	HeldMesh->SetRelativeLocation(FVector(3.f, 0.f, -29.f));
+	HeldMesh->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+	HeldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HeldMesh->RegisterComponent();
+	HeldVisual = EBRItem::Count;
+}
+
+void ABRCharacter::UpdateViewMode()
+{
+	// 1re personne : le corps est entierement masque (sinon il couperait le faisceau de la lampe portee a la ceinture)
+	const bool bShow = bThirdPerson;
+	for (UPrimitiveComponent* P : Body.Meshes)
+	{
+		if (P)
+		{
+			P->SetVisibility(bShow);
+			P->SetCastShadow(bShow);
+		}
+	}
+	if (HeldMesh)
+	{
+		HeldMesh->SetVisibility(bShow && HeldMesh->GetStaticMesh() != nullptr);
+		HeldMesh->SetCastShadow(bShow);
+	}
+	if (HandMesh)
+	{
+		HandMesh->SetVisibility(!bShow && HandMesh->GetStaticMesh() != nullptr);
+	}
+	if (CameraBoom)
+	{
+		// La camera recule derriere l'epaule mais ne traverse pas les murs
+		CameraBoom->bDoCollisionTest = bShow;
+	}
+}
+
+void ABRCharacter::ToggleThirdPerson()
+{
+	if (bDead || bInputLocked)
+	{
+		return;
+	}
+	bThirdPerson = !bThirdPerson;
+	UpdateViewMode();
+	ABRHUD::Notify(this, bThirdPerson ? FString(TEXT("Vue \u00e0 la 3e personne")) : FString(TEXT("Vue \u00e0 la 1re personne")), 1.5f,
+		FLinearColor(0.85f, 0.9f, 1.f));
+}
+
+void ABRCharacter::AnimateBody(float Dt)
+{
+	// Le corps n'est visible (et anime) qu'a la 3e personne
+	if (!bHasBody || !BodyRoot || !BodyFeet || !Body.Torso || !bThirdPerson)
+	{
+		return;
+	}
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	const FBRHumanoidSpec Spec = FBRHumanoidSpec::Hazmat();
+	const FVector Vel = GetVelocity();
+	const float Speed2D = static_cast<float>(Vel.Size2D());
+	const float FwdSpeed = static_cast<float>(FVector::DotProduct(Vel, GetActorForwardVector()));
+	const bool bGrounded = Move && Move->IsMovingOnGround();
+
+	CrouchBlend = FMath::FInterpTo(CrouchBlend, (bIsCrouched && !bSwimming) ? 1.f : 0.f, Dt, 10.f);
+	SwimBlend = FMath::FInterpTo(SwimBlend, bSwimming ? 1.f : 0.f, Dt, 5.f);
+	AirBlend = FMath::FInterpTo(AirBlend, (!bGrounded && !bSwimming && !bDead) ? 1.f : 0.f, Dt, 6.f);
+	DeathBlend = FMath::FInterpTo(DeathBlend, bDead ? 1.f : 0.f, Dt, 3.f);
+	const float SwimMove = bSwimming ? FMath::Clamp(static_cast<float>(Vel.Size()) / SwimSpeed, 0.f, 1.f) : 0.f;
+	const float Gait = bSwimming ? 0.f : FMath::Clamp(Speed2D / WalkSpeed, 0.f, 1.6f) * (1.f - 0.4f * CrouchBlend);
+	const float Wade = bSwimming ? 0.f : FMath::Clamp((WaterDepth - 15.f) / 60.f, 0.f, 1.f);
+
+	// Phase du cycle : un pas complet (2 enjambees) ~ 2*PI*45 cm ; a reculons le cycle s'inverse
+	if (bSwimming)
+	{
+		BodyAnim += Dt * (2.2f + 2.6f * SwimMove);
+	}
+	else if (Speed2D > 10.f)
+	{
+		BodyAnim += Dt * (Speed2D / 45.f) * (FwdSpeed < -10.f ? -1.f : 1.f);
+	}
+	BodyAnim = FMath::Fmod(BodyAnim, 2.f * PI * 64.f);
+
+	FRotator Thigh[2], Shin[2], Upper[2], Lower[2];
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const float Ph = BodyAnim + (i == 0 ? 0.f : PI);
+		const float Out = i == 0 ? 1.f : -1.f; // roulis qui ecarte le membre du corps
+
+		// ---- A pied : marche / course, accroupi, en l'air, dans l'eau jusqu'aux genoux ----
+		float TP = Spec.LegAmp * Gait * FMath::Sin(Ph) + 80.f * CrouchBlend + 22.f * AirBlend;
+		float SP = -Spec.LegAmp * 1.3f * Gait * FMath::Max(0.f, FMath::Cos(Ph)) - 115.f * CrouchBlend - 38.f * AirBlend;
+		float UP = -Spec.ArmAmp * Gait * FMath::Sin(Ph) + 18.f * CrouchBlend + 10.f * Wade;
+		float UR = Out * (16.f * AirBlend + 20.f * Wade);
+		float LP = 8.f + 14.f * FMath::Min(Gait, 1.f) + 25.f * CrouchBlend;
+
+		// ---- Nage : sur place (godille + pedalage) ou brasse ----
+		if (SwimBlend > 0.01f)
+		{
+			const float T = BodyAnim;
+			// Sur place
+			const float TreadUP = 35.f + 15.f * FMath::Sin(2.f * T);
+			const float TreadUR = Out * (50.f + 18.f * FMath::Sin(2.f * T));
+			const float TreadLP = 40.f;
+			const float TreadTP = 28.f * FMath::Sin(1.6f * T + (i == 0 ? 0.f : PI)) + 10.f;
+			const float TreadSP = -35.f * FMath::Max(0.f, FMath::Cos(1.6f * T + (i == 0 ? 0.f : PI))) - 15.f;
+			// Brasse : bras tendus vers l'avant qui s'ecartent, jambes en grenouille
+			const float Pull = FMath::Max(0.f, FMath::Sin(T));
+			const float Kick = FMath::Max(0.f, FMath::Sin(T + PI));
+			const float StrokeUP = 165.f - 60.f * Pull;
+			const float StrokeUR = Out * (15.f + 55.f * Pull);
+			const float StrokeLP = 15.f + 55.f * Pull;
+			const float StrokeTP = 10.f + 40.f * Kick;
+			const float StrokeSP = -15.f - 75.f * Kick;
+			const float SUP = FMath::Lerp(TreadUP, StrokeUP, SwimMove);
+			const float SUR = FMath::Lerp(TreadUR, StrokeUR, SwimMove);
+			const float SLP = FMath::Lerp(TreadLP, StrokeLP, SwimMove);
+			const float STP = FMath::Lerp(TreadTP, StrokeTP, SwimMove);
+			const float SSP = FMath::Lerp(TreadSP, StrokeSP, SwimMove);
+			UP = FMath::Lerp(UP, SUP, SwimBlend);
+			UR = FMath::Lerp(UR, SUR, SwimBlend);
+			LP = FMath::Lerp(LP, SLP, SwimBlend);
+			TP = FMath::Lerp(TP, STP, SwimBlend);
+			SP = FMath::Lerp(SP, SSP, SwimBlend);
+		}
+		Thigh[i] = FRotator(TP, 0.f, Out * 4.f * SwimBlend * SwimMove);
+		Shin[i] = FRotator(SP, 0.f, 0.f);
+		Upper[i] = FRotator(UP, 0.f, UR);
+		Lower[i] = FRotator(LP, 0.f, 0.f);
+	}
+
+	// Objet tenu : avant-bras droit a l'horizontale, qui suit la visee
+	const float ViewPitch = FMath::Clamp(static_cast<float>(FRotator::NormalizeAxis(GetViewRotation().Pitch)), -60.f, 60.f);
+	const float TorsoPitch = -20.f * CrouchBlend - 7.f * (IsSprinting() ? 1.f : 0.f) * (1.f - SwimBlend);
+	if (HeldMesh && HeldMesh->GetStaticMesh())
+	{
+		const float Hold = 1.f - SwimBlend;
+		Upper[1] = FMath::Lerp(Upper[1], FRotator(28.f + ViewPitch * 0.8f - TorsoPitch, 0.f, -6.f), Hold);
+		Lower[1] = FMath::Lerp(Lower[1], FRotator(62.f, 0.f, 0.f), Hold);
+	}
+
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (Body.Thigh[i]) { Body.Thigh[i]->SetRelativeRotation(Thigh[i]); }
+		if (Body.Shin[i]) { Body.Shin[i]->SetRelativeRotation(Shin[i]); }
+		if (Body.UpperArm[i]) { Body.UpperArm[i]->SetRelativeRotation(Upper[i]); }
+		if (Body.LowerArm[i]) { Body.LowerArm[i]->SetRelativeRotation(Lower[i]); }
+	}
+	Body.Torso->SetRelativeRotation(FRotator(TorsoPitch, 0.f, 0.f));
+
+	// Corps entier : penche a l'horizontale pendant la brasse, s'effondre a la mort
+	const float SwimPitch = -72.f * SwimMove * SwimBlend;
+	if (Body.Head)
+	{
+		// La tete regarde ou vise le joueur (et se redresse quand on nage a plat ventre)
+		Body.Head->SetRelativeRotation(FRotator(ViewPitch * 0.6f - TorsoPitch - SwimPitch * 0.7f, 0.f, 0.f));
+	}
+	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+	BodyRoot->SetRelativeRotation(FRotator(SwimPitch, 0.f, 80.f * DeathBlend));
+	BodyRoot->SetRelativeLocation(FVector(0.f, 0.f, 35.f * SwimMove * SwimBlend - 60.f * DeathBlend));
+	// Pieds au sol : la capsule raccourcit en position accroupie, et la pose plie les jambes (~42 cm)
+	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, -Half - 42.f * CrouchBlend + 8.f * AirBlend));
+}
+
+// =====================================================================================================================
+// Eau : marche ralentie, nage, plongee, apnee
+// =====================================================================================================================
+
+void ABRCharacter::StartSwimming()
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (bSwimming || !Move || bDead)
+	{
+		return;
+	}
+	bSwimming = true;
+	bDiving = false;
+	EdgePush = 0.f;
+	if (bIsCrouched)
+	{
+		UnCrouch();
+	}
+	const float Impact = FMath::Abs(static_cast<float>(Move->Velocity.Z));
+	Move->SetMovementMode(MOVE_Flying);
+	Move->Velocity.Z *= 0.3f;
+	Move->BrakingDecelerationFlying = 450.f;
+	Move->MaxFlySpeed = SwimSpeed;
+	if (SplashCooldown <= 0.f)
+	{
+		PlaySound2D(TEXT("S_Splash"), FMath::Clamp(0.35f + Impact / 900.f, 0.35f, 1.f));
+		SplashCooldown = 0.8f;
+	}
+	if (!bSwimHint)
+	{
+		bSwimHint = true;
+		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Vous nagez : le regard guide la nage.  {Jump} remonter / sortir au bord  -  {Crouch} plonger  -  {Sprint} nager vite")),
+			6.f, FLinearColor(0.7f, 0.95f, 1.f));
+	}
+}
+
+void ABRCharacter::StopSwimming()
+{
+	if (!bSwimming)
+	{
+		return;
+	}
+	bSwimming = false;
+	bDiving = false;
+	EdgePush = 0.f;
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (Move && !bDead && Move->MovementMode == MOVE_Flying)
+	{
+		Move->SetMovementMode(MOVE_Falling);
+	}
+}
+
+bool ABRCharacter::IsNearPoolEdge() const
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (!bSwimming || !W || !Capsule || !GetWorld())
+	{
+		return false;
+	}
+	const FVector L = GetActorLocation();
+	// Il faut etre a la surface (la tete hors de l'eau)
+	if (L.Z + CamZ < WaterZ - 25.f)
+	{
+		return false;
+	}
+	const FVector Fwd = FRotator(0.f, GetActorRotation().Yaw, 0.f).Vector();
+	const float Reach = Capsule->GetScaledCapsuleRadius() + 45.f;
+	const float EdgeZ = W->FloorZAt(L + Fwd * Reach);
+	if (EdgeZ < W->FloorZAt(L) + 100.f)
+	{
+		return false;
+	}
+	// Pas de mur juste au-dessus du rebord
+	const FVector Top(L.X, L.Y, EdgeZ + 60.f);
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRPoolEdge), false, this);
+	return !GetWorld()->LineTraceTestByChannel(Top, Top + Fwd * (Reach + 40.f), ECC_WorldStatic, Q);
+}
+
+void ABRCharacter::ClimbOutOfWater()
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (!bSwimming || !W || !Move)
+	{
+		return;
+	}
+	MantleDir = FRotator(0.f, GetActorRotation().Yaw, 0.f).Vector();
+	MantleZ = W->FloorZAt(GetActorLocation() + MantleDir * (GetCapsuleComponent()->GetScaledCapsuleRadius() + 45.f));
+	StopSwimming();
+	bMantling = true;
+	MantleTime = 0.f;
+	ClimbGrace = 1.5f;
+	Move->SetMovementMode(MOVE_Flying);
+	Stamina = FMath::Max(0.f, Stamina - 6.f);
+	PlaySound2D(TEXT("S_Splash"), 0.45f);
+	SplashCooldown = 1.f;
+}
+
+void ABRCharacter::UpdateWater(float Dt)
+{
+	SplashCooldown = FMath::Max(0.f, SplashCooldown - Dt);
+	ClimbGrace = FMath::Max(0.f, ClimbGrace - Dt);
+	ABRWorld* W = ABRWorld::Get(this);
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (!W || !Move || W->IsTransitioning() || !W->Def().bWater)
+	{
+		WaterZ = -1.0e6f;
+		WaterDepth = 0.f;
+		bUnderwater = false;
+		bMantling = false;
+		StopSwimming();
+		Breath = FMath::Min(100.f, Breath + 30.f * Dt);
+		return;
+	}
+
+	WaterZ = W->Def().WaterHeight;
+	const FVector L = GetActorLocation();
+	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+	const float FloorZ = W->FloorZAt(L);
+	WaterDepth = FMath::Max(0.f, WaterZ - static_cast<float>(L.Z - Half));
+	const bool bDeep = WaterZ - FloorZ > 120.f;
+	const bool bWasUnder = bUnderwater;
+	bUnderwater = !bDead && L.Z + CamZ < WaterZ - 2.f;
+
+	// Se hisser hors de l'eau : on monte le long de la paroi, puis on avance sur le rebord
+	if (bMantling)
+	{
+		MantleTime += Dt;
+		const float Bottom = static_cast<float>(L.Z) - Half;
+		const bool bAbove = Bottom >= MantleZ + 4.f;
+		Move->Velocity = bAbove ? MantleDir * 240.f : MantleDir * 25.f + FVector(0.f, 0.f, 320.f);
+		if ((bAbove && FloorZ >= MantleZ - 1.f) || MantleTime > 1.4f || bDead)
+		{
+			bMantling = false;
+			if (!bDead)
+			{
+				Move->SetMovementMode(MOVE_Falling);
+			}
+		}
+	}
+
+	// Entree / sortie de la nage
+	if (!bSwimming && !bMantling && bDeep && ClimbGrace <= 0.f && !bDead && L.Z < WaterZ - 20.f)
+	{
+		StartSwimming();
+	}
+	else if (bSwimming && (!bDeep || bDead))
+	{
+		StopSwimming();
+	}
+
+	// Apnee
+	if (bUnderwater && !bGodMode)
+	{
+		Breath = FMath::Max(0.f, Breath - 100.f / BreathSeconds * Dt);
+		if (Breath <= 0.f)
+		{
+			Health -= 14.f * Dt;
+			DamageFlash = FMath::Max(DamageFlash, 0.35f);
+			LastDamageTime = TimeAlive;
+			if (Health <= 0.f)
+			{
+				Die(TEXT("la noyade"), nullptr);
+				return;
+			}
+		}
+	}
+	else
+	{
+		if (bWasUnder && Breath < 60.f)
+		{
+			PlaySound2D(TEXT("S_Gasp"), FMath::Lerp(0.9f, 0.4f, Breath / 60.f));
+		}
+		Breath = FMath::Min(100.f, Breath + 32.f * Dt);
+	}
+	if (bWasUnder != bUnderwater && SplashCooldown <= 0.f)
+	{
+		PlaySound2D(TEXT("S_Splash"), 0.3f);
+		SplashCooldown = 0.5f;
+	}
+
+	if (!bSwimming)
+	{
+		return;
+	}
+
+	// ---- Flottaison : on remonte doucement a la surface, Saut = remonter, Accroupi = plonger ----
+	const float FloatZ = WaterZ - StandEyeZ + 14.f; // les yeux juste au-dessus de l'eau
+	FVector V = Move->Velocity;
+	float Accel = 0.f;
+	if (bJumpHeld)
+	{
+		Accel = 650.f;
+	}
+	else if (bDiving)
+	{
+		Accel = -560.f;
+	}
+	else
+	{
+		Accel = FMath::Clamp((FloatZ - static_cast<float>(L.Z)) * 3.f, -250.f, 260.f) - static_cast<float>(V.Z) * 1.2f;
+	}
+	V.Z += Accel * Dt;
+	// On ne jaillit pas de l'eau en nageant : pour sortir, il faut se hisser sur un rebord
+	if (L.Z > FloatZ && V.Z > 0.f)
+	{
+		V.Z = FMath::Min(static_cast<float>(V.Z), (FloatZ - static_cast<float>(L.Z)) * 6.f);
+	}
+	V.Z = FMath::Clamp(static_cast<float>(V.Z), -SwimSprintSpeed, SwimSprintSpeed);
+	Move->Velocity = V;
+	if (bDiving && L.Z - Half < FloorZ + 15.f)
+	{
+		bDiving = false; // touche le fond
+	}
+
+	// Bruit des brasses (l'endurance baisse comme a la course quand on nage vite : voir UpdateStats)
+	if (V.Size() > 60.f)
+	{
+		StrokeTimer += Dt;
+		const float Period = IsSprinting() ? 0.7f : 1.05f;
+		if (StrokeTimer > Period)
+		{
+			StrokeTimer = 0.f;
+			PlaySound2D(TEXT("S_Swim"), bUnderwater ? 0.25f : FMath::FRandRange(0.4f, 0.55f));
+		}
+	}
+	else
+	{
+		StrokeTimer = 0.f;
+	}
+
+	// Pousser vers un rebord le franchit tout seul (ou touche Saut)
+	const FVector Fwd = FRotator(0.f, GetActorRotation().Yaw, 0.f).Vector();
+	if (FVector::DotProduct(SwimInput.GetSafeNormal2D(), Fwd) > 0.5f && IsNearPoolEdge())
+	{
+		EdgePush += Dt;
+		if (EdgePush > 0.45f)
+		{
+			ClimbOutOfWater();
+		}
+	}
+	else
+	{
+		EdgePush = 0.f;
+	}
 }

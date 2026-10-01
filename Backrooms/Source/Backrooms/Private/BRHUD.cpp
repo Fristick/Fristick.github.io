@@ -4,6 +4,7 @@
 #include "BRCharacter.h"
 #include "BREntity.h"
 #include "BRItems.h"
+#include "BRKeys.h"
 #include "BRLevels.h"
 #include "BRPlayerController.h"
 #include "BRWorld.h"
@@ -33,10 +34,17 @@ namespace
 		Btn_TabCharacter = 100,
 		Btn_TabJournal = 101,
 		Btn_TabSettings = 102,
+		Btn_TabKeys = 103,
 		Btn_InspectUse = 200,
 		Btn_InspectClose = 201,
 		Btn_SettingBase = 300,   // 300 + ligne * 2 (+0 = moins, +1 = plus)
-		Btn_SettingRow = 600     // 600 + ligne (clic sur la ligne entiere)
+		Btn_SettingRow = 600,    // 600 + ligne (clic sur la ligne entiere)
+		Btn_KeysReset = 900,
+		Btn_PauseResume = 950,
+		Btn_PauseSettings = 951,
+		Btn_PauseKeys = 952,
+		Btn_PauseQuit = 953,
+		Btn_KeySlot = 1000       // 1000 + action * 3 + case
 	};
 
 	FLinearColor ClassColor(int32 Class)
@@ -67,8 +75,22 @@ namespace
 		return C;
 	}
 
-	const TCHAR* ControlsLine1 = TEXT("ZQSD / WASD  se d\u00e9placer     Maj  courir     Ctrl / C  s'accroupir     Espace  sauter     E  interagir");
-	const TCHAR* ControlsLine2 = TEXT("F  lampe     N  vision nocturne     1-4  poches     B  eau d'amande     H  bandage     R  piles     TAB  inventaire     P  pause");
+}
+
+FString ABRHUD::ControlsLine(int32 Line) const
+{
+	using namespace BRKeys;
+	if (Line == 0)
+	{
+		return FString::Printf(TEXT("%s%s%s%s  se d\u00e9placer     %s  courir     %s  s'accroupir     %s  sauter     %s  interagir     %s  vue 3e personne"),
+			*Primary(EBRAction::MoveForward), *Primary(EBRAction::MoveLeft), *Primary(EBRAction::MoveBackward), *Primary(EBRAction::MoveRight),
+			*Primary(EBRAction::Sprint), *Primary(EBRAction::Crouch), *Primary(EBRAction::Jump), *Primary(EBRAction::Interact),
+			*Primary(EBRAction::ThirdPerson));
+	}
+	return FString::Printf(TEXT("%s  lampe     %s  vision nocturne     %s-%s  poches     %s  eau d'amande     %s  bandage     %s  piles     %s  inventaire     %s  pause"),
+		*Primary(EBRAction::Flashlight), *Primary(EBRAction::NightVision), *Primary(EBRAction::Pocket1), *Primary(EBRAction::Pocket4),
+		*Primary(EBRAction::Drink), *Primary(EBRAction::Bandage), *Primary(EBRAction::Battery), *Primary(EBRAction::Inventory),
+		*Primary(EBRAction::Pause));
 }
 
 float ABRHUD::Ui() const
@@ -337,6 +359,10 @@ void ABRHUD::DrawHUD()
 			DrawRect(FLinearColor(0.f, 0.f, 0.f, W->GetFade()), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
 		}
 		DrawMenu();
+		if (PC->IsInventoryOpen())
+		{
+			DrawInventory(PC, C, W); // parametres et touches depuis le menu titre
+		}
 		DrawMessages(Dt);
 		return;
 	}
@@ -345,7 +371,7 @@ void ABRHUD::DrawHUD()
 	{
 		PC->SetInventoryOpen(false);
 	}
-	const bool bInv = PC && C && PC->IsInventoryOpen();
+	const bool bInv = PC && PC->IsInventoryOpen();
 	if (!bInv && bWasInventoryOpen)
 	{
 		Dragging = FSlotRef();
@@ -390,9 +416,9 @@ void ABRHUD::DrawHUD()
 			DrawRect(FLinearColor(0.f, 0.f, 0.f, W->GetFade()), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
 		}
 	}
-	if (PC && PC->IsPauseMenuOpen())
+	if (PC && PC->IsPauseMenuOpen() && !bInv)
 	{
-		DrawPause();
+		DrawPause(PC);
 	}
 }
 
@@ -471,10 +497,10 @@ void ABRHUD::DrawMenu()
 	}
 
 	const float Blink = 0.6f + 0.4f * FMath::Sin(Clock * 3.f);
-	Txt(TEXT("[ \u2190 / \u2192 ]  choisir le niveau          [ ENTR\u00c9E ]  noclipper          [ FIN ]  quitter"), CX, H * 0.78f,
+	Txt(FString::Printf(TEXT("[ \u2190 / \u2192 ]  choisir le niveau        [ ENTR\u00c9E ]  noclipper        %s  param\u00e8tres et touches        [ FIN ]  quitter"), *BRKeys::Tag(EBRAction::Inventory)), CX, H * 0.78f,
 		FLinearColor(1.f, 1.f, 1.f, Blink), 1.f * U, Medium, true);
-	Txt(ControlsLine1, CX, H * 0.84f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.8f * U, Medium, true);
-	Txt(ControlsLine2, CX, H * 0.87f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.8f * U, Medium, true);
+	Txt(ControlsLine(0), CX, H * 0.84f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.8f * U, Medium, true);
+	Txt(ControlsLine(1), CX, H * 0.87f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.8f * U, Medium, true);
 	DrawContentWarning(H * 0.905f);
 	Txt(TEXT("Inspir\u00e9 du Backrooms Wiki (backrooms-wiki.wikidot.com) - CC BY-SA 3.0  |  \u00a9 1992 THRESHOLD SYSTEMS"), CX, H * 0.96f,
 		FLinearColor(0.5f, 0.5f, 0.5f, 0.7f), 0.7f * U, Medium, true);
@@ -571,6 +597,12 @@ void ABRHUD::DrawStats(ABRCharacter* C)
 	const float BW = 210.f * U;
 	const float BH = 6.f * U;
 	float Y = Canvas->ClipY - 150.f * U;
+	// Oxygene : seulement sous l'eau (et le temps de reprendre son souffle)
+	if (C->IsUnderwater() || C->GetBreath() < 99.5f)
+	{
+		const float Low = C->GetBreath() < 30.f ? 0.55f + 0.45f * FMath::Sin(Clock * 8.f) : 1.f;
+		Bar(X, Y - 36.f * U, BW, BH, C->GetBreath() / 100.f, FLinearColor(0.35f * Low, 0.85f * Low, 1.f * Low, 0.9f), TEXT("OXYG\u00c8NE"));
+	}
 	Bar(X, Y, BW, BH, C->Health / 100.f, FLinearColor(0.85f, 0.15f, 0.12f, 0.85f), TEXT("SANT\u00c9"));
 	Y += 36.f * U;
 	const float Pulse = C->Sanity < 30.f ? 0.6f + 0.4f * FMath::Sin(Clock * 6.f) : 1.f;
@@ -685,12 +717,12 @@ void ABRHUD::DrawNote(ABRCharacter* C)
 	DrawRect(FLinearColor(0.75f, 0.68f, 0.5f, 0.6f), X, Y, W, 6.f * U);
 	Txt(TEXT("Une note froiss\u00e9e..."), X + 40.f * U, Y + 30.f * U, FLinearColor(0.25f, 0.18f, 0.1f), 1.1f * U, Medium, false, false);
 	float LY = Y + 90.f * U;
-	for (const FString& L : Wrap(C->GetOpenNote(), W - 80.f * U, Medium, 1.05f * U))
+	for (const FString& L : Wrap(BRKeys::Expand(C->GetOpenNote()), W - 80.f * U, Medium, 1.05f * U))
 	{
 		Txt(L, X + 40.f * U, LY, FLinearColor(0.12f, 0.1f, 0.25f), 1.05f * U, Medium, false, false);
 		LY += 34.f * U;
 	}
-	Txt(TEXT("[E] Ranger la note  (elle reste dans le journal : TAB)"), X + W * 0.5f, Y + H - 50.f * U, FLinearColor(0.3f, 0.25f, 0.2f), 0.9f * U,
+	Txt(BRKeys::Expand(TEXT("{Interact} Ranger la note  (elle reste dans le journal : {Inventory})")), X + W * 0.5f, Y + H - 50.f * U, FLinearColor(0.3f, 0.25f, 0.2f), 0.9f * U,
 		Medium, true, false);
 }
 
@@ -716,20 +748,148 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 		GEngine->GetMediumFont(), true);
 }
 
-void ABRHUD::DrawPause()
+void ABRHUD::DrawPause(ABRPlayerController* PC)
 {
 	const float U = Ui();
 	const float CX = Canvas->ClipX * 0.5f;
 	const float H = Canvas->ClipY;
 	UFont* Medium = GEngine->GetMediumFont();
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.7f), 0.f, 0.f, Canvas->ClipX, H);
-	Txt(TEXT("PAUSE"), CX, H * 0.25f, FLinearColor::White, 2.2f * U, GEngine->GetLargeFont(), true);
-	Txt(ControlsLine1, CX, H * 0.42f, FLinearColor(0.85f, 0.85f, 0.85f), 0.9f * U, Medium, true);
-	Txt(ControlsLine2, CX, H * 0.46f, FLinearColor(0.85f, 0.85f, 0.85f), 0.9f * U, Medium, true);
-	Txt(TEXT("[ P ]  reprendre          [ FIN ]  quitter le jeu          (graphismes / RTX : TAB > PARAM\u00c8TRES)"), CX, H * 0.58f,
-		FLinearColor(1.f, 0.92f, 0.6f), 1.f * U, Medium, true);
-	Txt(TEXT("Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives  |  BRSensitivity 1.5"), CX,
-		H * 0.7f, FLinearColor(0.6f, 0.6f, 0.6f), 0.8f * U, Medium, true);
+	if (PlayerOwner)
+	{
+		PlayerOwner->GetMousePosition(MouseX, MouseY);
+	}
+	Buttons.Reset();
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.72f), 0.f, 0.f, Canvas->ClipX, H);
+	Scanlines(0.05f);
+	Txt(TEXT("PAUSE"), CX, H * 0.18f, Yellow, 2.2f * U, GEngine->GetLargeFont(), true);
+
+	// Boutons cliquables
+	const TCHAR* Labels[] = { TEXT("REPRENDRE"), TEXT("PARAM\u00c8TRES / GRAPHISMES"), TEXT("TOUCHES"), TEXT("QUITTER LE JEU") };
+	const int32 Ids[] = { Btn_PauseResume, Btn_PauseSettings, Btn_PauseKeys, Btn_PauseQuit };
+	const float BW = 460.f * U;
+	const float BH = 50.f * U;
+	float Y = H * 0.32f;
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const float X = CX - BW * 0.5f;
+		const bool bHov = Hover(X, Y, BW, BH);
+		DrawRect(bHov ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.55f), X, Y, BW, BH);
+		Frame(X, Y, BW, BH, bHov ? Yellow : YellowDim, 1.f * U);
+		Txt(Labels[i], CX, Y + 10.f * U, bHov ? FLinearColor(0.05f, 0.04f, 0.01f) : Ink, 1.f * U, Medium, true, false);
+		AddButton(Ids[i], X, Y, BW, BH);
+		Y += BH + 14.f * U;
+	}
+	HandlePauseMouse(PC);
+
+	Txt(ControlsLine(0), CX, H * 0.72f, FLinearColor(0.85f, 0.85f, 0.85f), 0.85f * U, Medium, true);
+	Txt(ControlsLine(1), CX, H * 0.755f, FLinearColor(0.85f, 0.85f, 0.85f), 0.85f * U, Medium, true);
+	Txt(FString::Printf(TEXT("%s  reprendre     %s  param\u00e8tres et touches     [ FIN ]  quitter"), *BRKeys::Tag(EBRAction::Pause),
+		*BRKeys::Tag(EBRAction::Inventory)), CX, H * 0.81f, FLinearColor(1.f, 0.92f, 0.6f), 0.9f * U, Medium, true);
+	Txt(TEXT("Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives"), CX,
+		H * 0.88f, FLinearColor(0.6f, 0.6f, 0.6f), 0.8f * U, Medium, true);
+}
+
+void ABRHUD::HandlePauseMouse(ABRPlayerController* PC)
+{
+	if (!PC || !PlayerOwner || !PlayerOwner->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		return;
+	}
+	switch (ButtonAt(MouseX, MouseY))
+	{
+	case Btn_PauseResume:
+		PC->TogglePause();
+		break;
+	case Btn_PauseSettings:
+		PC->SetInventoryOpen(true, static_cast<int32>(ETab::Settings));
+		break;
+	case Btn_PauseKeys:
+		PC->SetInventoryOpen(true, static_cast<int32>(ETab::Keys));
+		break;
+	case Btn_PauseQuit:
+		PC->QuitToDesktop();
+		break;
+	default:
+		break;
+	}
+}
+
+void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
+{
+	if (!PC)
+	{
+		return;
+	}
+	const float U = Ui();
+	UFont* Medium = GEngine->GetMediumFont();
+	UFont* Small = GEngine->GetSmallFont();
+	const float W = FMath::Min(IW, 1240.f * U);
+	const float X = IX + (IW - W) * 0.5f;
+	Panel(X, IY, W, IH, TEXT("TOUCHES"));
+
+	const int32 Count = BRKeys::NumActions();
+	const float Top = IY + 56.f * U;
+	const float RowH = FMath::Min(40.f * U, (IH - 140.f * U) / FMath::Max(1, Count));
+	const float SlotW = 170.f * U;
+	const float SlotGap = 12.f * U;
+	const float SlotsX = X + W - 24.f * U - 3.f * SlotW - 2.f * SlotGap;
+	// En-tetes de colonnes
+	const TCHAR* Heads[] = { TEXT("TOUCHE 1"), TEXT("TOUCHE 2"), TEXT("TOUCHE 3") };
+	for (int32 k = 0; k < 3; ++k)
+	{
+		Txt(Heads[k], SlotsX + k * (SlotW + SlotGap) + SlotW * 0.5f, Top - 4.f * U, InkDim, 0.65f * U, Small, true, false);
+	}
+	float Y = Top + 18.f * U;
+	const bool bBlink = FMath::Fmod(Clock, 0.8f) < 0.5f;
+	for (int32 A = 0; A < Count; ++A)
+	{
+		const EBRAction Act = static_cast<EBRAction>(A);
+		const bool bRowHov = Hover(X + 10.f * U, Y, W - 20.f * U, RowH - 4.f * U);
+		if (bRowHov)
+		{
+			DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.05f), X + 10.f * U, Y, W - 20.f * U, RowH - 4.f * U);
+		}
+		Txt(BRKeys::ActionLabel(Act), X + 28.f * U, Y + (RowH - 4.f * U) * 0.5f - 10.f * U, bRowHov ? Yellow : Ink, 0.78f * U, Medium, false, false);
+		for (int32 Slot = 0; Slot < BRKeys::SlotsPerAction; ++Slot)
+		{
+			const float SX = SlotsX + Slot * (SlotW + SlotGap);
+			const float SY = Y + 2.f * U;
+			const float SH = RowH - 8.f * U;
+			const bool bCap = PC->IsCapturingKey() && PC->GetCaptureAction() == A && PC->GetCaptureSlot() == Slot;
+			const bool bHov = Hover(SX, SY, SlotW, SH);
+			DrawRect(bCap ? WithAlpha(Yellow, bBlink ? 0.85f : 0.45f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), SX, SY, SlotW, SH);
+			Frame(SX, SY, SlotW, SH, bHov || bCap ? Yellow : YellowDim, 1.f * U);
+			const FKey K = BRKeys::GetKey(Act, Slot);
+			const FString Label = bCap ? FString(TEXT("APPUYEZ...")) : BRKeys::KeyName(K);
+			const FLinearColor Col = bCap ? FLinearColor(0.05f, 0.04f, 0.01f) : (K.IsValid() ? Ink : WithAlpha(InkDim, 0.5f));
+			float LS = 0.72f * U;
+			const float LW = TextW(Label, Small, LS);
+			if (LW > SlotW - 12.f * U)
+			{
+				LS *= (SlotW - 12.f * U) / LW;
+			}
+			Txt(Label, SX + SlotW * 0.5f, SY + SH * 0.5f - 9.f * U, Col, LS, Small, true, false);
+			AddButton(Btn_KeySlot + A * BRKeys::SlotsPerAction + Slot, SX, SY, SlotW, SH);
+		}
+		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.1f), X + 18.f * U, Y + RowH - 3.f * U, W - 36.f * U, 1.f * U);
+		Y += RowH;
+	}
+
+	// Bouton de reinitialisation + aide
+	const FString ResetLabel(TEXT("TOUCHES PAR D\u00c9FAUT"));
+	const float RW = TextW(ResetLabel, Medium, 0.8f * U) + 40.f * U;
+	const float RH = 36.f * U;
+	const float RX = X + 24.f * U;
+	const float RY = IY + IH - RH - 16.f * U;
+	const bool bHovR = Hover(RX, RY, RW, RH);
+	DrawRect(bHovR ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), RX, RY, RW, RH);
+	Frame(RX, RY, RW, RH, Yellow, 1.f * U);
+	Txt(ResetLabel, RX + RW * 0.5f, RY + 6.f * U, bHovR ? FLinearColor(0.05f, 0.04f, 0.01f) : Yellow, 0.8f * U, Medium, true, false);
+	AddButton(Btn_KeysReset, RX, RY, RW, RH);
+	const FString Help = PC->IsCapturingKey()
+		? FString(TEXT("Appuyez sur la nouvelle touche (clavier ou bouton de souris).  \u00c9chap : annuler   -   Retour arri\u00e8re : effacer"))
+		: FString(TEXT("Cliquez sur une case puis appuyez sur une touche. Clic droit : effacer. Les changements s'appliquent imm\u00e9diatement."));
+	Txt(Help, RX + RW + 24.f * U, RY + 8.f * U, PC->IsCapturingKey() ? Yellow : InkDim, 0.72f * U, Small, false, false);
 }
 
 void ABRHUD::DrawGlitch(float Amount)
@@ -783,9 +943,21 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	// En-tete "MENU >" et onglets
 	Txt(TEXT("MENU >"), IX, 44.f * U, Yellow, 1.25f * U, Large, false, false);
 	DrawRect(YellowDim, IX, 92.f * U, IW, 1.f * U);
-	const TCHAR* TabNames[] = { TEXT("PERSONNAGE"), TEXT("JOURNAL"), TEXT("PARAM\u00c8TRES") };
+	if (PC)
+	{
+		const int32 Wanted = PC->ConsumeRequestedTab();
+		if (Wanted >= 0 && Wanted <= 3)
+		{
+			Tab = static_cast<ETab>(Wanted);
+		}
+	}
+	if (!C && (Tab == ETab::Character || Tab == ETab::Journal))
+	{
+		Tab = ETab::Settings;
+	}
+	const TCHAR* TabNames[] = { TEXT("PERSONNAGE"), TEXT("JOURNAL"), TEXT("PARAM\u00c8TRES"), TEXT("TOUCHES") };
 	float TX = IX;
-	for (int32 i = 0; i < 3; ++i)
+	for (int32 i = 0; i < 4; ++i)
 	{
 		const bool bSel = static_cast<int32>(Tab) == i;
 		const FString Label = bSel ? FString(TEXT("> ")) + TabNames[i] : FString(TabNames[i]);
@@ -816,6 +988,9 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	case ETab::Settings:
 		DrawSettingsTab(PC);
 		break;
+	case ETab::Keys:
+		DrawKeysTab(PC);
+		break;
 	}
 
 	if (Inspecting.IsValid())
@@ -830,12 +1005,13 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	Txt(TEXT("\u00a9 1992 THRESHOLD SYSTEMS"), IX, FY, InkDim, 0.8f * U, Small, false, false);
 	if (Tab == ETab::Character)
 	{
-		TxtRight(TEXT("[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     [TAB]  FERMER"), IX + IW, FY,
+		TxtRight(BRKeys::Expand(TEXT("[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER")), IX + IW, FY,
 			InkDim, 0.8f * U, Small);
 	}
 	else
 	{
-		TxtRight(TEXT("[CLIC]  CHOISIR     [TAB / \u00c9CHAP]  FERMER"), IX + IW, FY, InkDim, 0.8f * U, Small);
+		TxtRight(Tab == ETab::Keys ? FString(TEXT("[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [\u00c9CHAP]  ANNULER / FERMER"))
+			: FString(TEXT("[CLIC]  CHOISIR     [\u00c9CHAP]  FERMER")), IX + IW, FY, InkDim, 0.8f * U, Small);
 	}
 
 	// Infobulle et objet en cours de deplacement (au-dessus de tout)
@@ -1158,7 +1334,7 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 	UFont* Medium = GEngine->GetMediumFont();
 	const FBRItemInfo& Info = BRItems::Get(It->Item);
 	const float W = 380.f * U;
-	const TArray<FString> Lines = Wrap(Info.Description, W - 28.f * U, Small, 0.72f * U);
+	const TArray<FString> Lines = Wrap(BRKeys::Expand(Info.Description), W - 28.f * U, Small, 0.72f * U);
 	FString Hint;
 	if (Info.bConsumable)
 	{
@@ -1225,7 +1401,7 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 	}
 	Txt(FString::Printf(TEXT("%s     QUANTIT\u00c9 : %d"), *Kind, It->Count), TX, Y + 112.f * U, InkDim, 0.75f * U, Small, false, false);
 	float LY = Y + 146.f * U;
-	for (const FString& L : Wrap(Info.Description, TW, Medium, 0.8f * U))
+	for (const FString& L : Wrap(BRKeys::Expand(Info.Description), TW, Medium, 0.8f * U))
 	{
 		Txt(L, TX, LY, Ink, 0.8f * U, Medium, false, false);
 		LY += 24.f * U;
@@ -1441,7 +1617,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 
 void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 {
-	if (!PlayerOwner || !C)
+	if (!PlayerOwner || !PC)
 	{
 		return;
 	}
@@ -1450,22 +1626,45 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 	const bool bHeld = PlayerOwner->IsInputKeyDown(EKeys::LeftMouseButton);
 	const bool bRight = PlayerOwner->WasInputKeyJustPressed(EKeys::RightMouseButton);
 
-	FSlotBox* Under = (Tab == ETab::Character && !Inspecting.IsValid()) ? FindSlot(MouseX, MouseY) : nullptr;
+	FSlotBox* Under = (C && Tab == ETab::Character && !Inspecting.IsValid()) ? FindSlot(MouseX, MouseY) : nullptr;
 	HoverSlot = Under ? Under->Ref : FSlotRef();
+
+	// Clic droit sur une touche : effacer
+	if (bRight && Tab == ETab::Keys)
+	{
+		const int32 RId = ButtonAt(MouseX, MouseY);
+		if (RId >= Btn_KeySlot)
+		{
+			PC->ClearKey((RId - Btn_KeySlot) / BRKeys::SlotsPerAction, (RId - Btn_KeySlot) % BRKeys::SlotsPerAction);
+		}
+		return;
+	}
 
 	if (bPressed)
 	{
 		const int32 Id = ButtonAt(MouseX, MouseY);
 		if (Id != INDEX_NONE)
 		{
-			if (Id >= Btn_TabCharacter && Id <= Btn_TabSettings)
+			if (Id >= Btn_KeySlot)
 			{
-				Tab = static_cast<ETab>(Id - Btn_TabCharacter);
+				PC->BeginKeyCapture((Id - Btn_KeySlot) / BRKeys::SlotsPerAction, (Id - Btn_KeySlot) % BRKeys::SlotsPerAction);
+			}
+			else if (Id == Btn_KeysReset)
+			{
+				PC->ResetKeys();
+			}
+			else if (Id >= Btn_TabCharacter && Id <= Btn_TabKeys)
+			{
+				const ETab NewTab = static_cast<ETab>(Id - Btn_TabCharacter);
+				if (C || NewTab == ETab::Settings || NewTab == ETab::Keys)
+				{
+					Tab = NewTab;
+				}
 				Inspecting = FSlotRef();
 				Dragging = FSlotRef();
-				C->PlayUISound(TEXT("S_UIClick"));
+				PC->CancelKeyCapture();
 			}
-			else if (Id == Btn_InspectUse && Inspecting.IsValid())
+			else if (Id == Btn_InspectUse && Inspecting.IsValid() && C)
 			{
 				C->UseSlot(Inspecting.Group, Inspecting.Index);
 				const FBRItemSlot* After = C->GetSlot(Inspecting.Group, Inspecting.Index);
@@ -1477,13 +1676,12 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 			else if (Id == Btn_InspectClose)
 			{
 				Inspecting = FSlotRef();
-				C->PlayUISound(TEXT("S_UIClick"));
 			}
-			else if (Id >= Btn_SettingRow && PC)
+			else if (Id >= Btn_SettingRow && Id < Btn_KeysReset)
 			{
 				PC->AdjustSetting(Id - Btn_SettingRow, 1);
 			}
-			else if (Id >= Btn_SettingBase && PC)
+			else if (Id >= Btn_SettingBase && Id < Btn_SettingRow)
 			{
 				const int32 Rel = Id - Btn_SettingBase;
 				PC->AdjustSetting(Rel / 2, (Rel % 2) ? 1 : -1);
@@ -1495,7 +1693,11 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 			Inspecting = FSlotRef(); // clic en dehors : ferme l'inspection
 			return;
 		}
-		if (Under)
+		if (PC->IsCapturingKey())
+		{
+			return;
+		}
+		if (Under && C)
 		{
 			const double Now = FPlatformTime::Seconds();
 			const FBRItemSlot* S = C->GetSlot(Under->Ref.Group, Under->Ref.Index);
@@ -1518,14 +1720,14 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 
 	if (Dragging.IsValid() && (bReleased || !bHeld))
 	{
-		if (Under && !(Under->Ref == Dragging))
+		if (Under && C && !(Under->Ref == Dragging))
 		{
 			C->MoveItem(Dragging.Group, Dragging.Index, Under->Ref.Group, Under->Ref.Index);
 		}
 		Dragging = FSlotRef();
 	}
 
-	if (bRight && Under)
+	if (bRight && Under && C)
 	{
 		const FBRItemSlot* S = C->GetSlot(Under->Ref.Group, Under->Ref.Index);
 		if (S && !S->IsEmpty())

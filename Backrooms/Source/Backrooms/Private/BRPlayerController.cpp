@@ -5,6 +5,7 @@
 #include "BRLevels.h"
 #include "BRHUD.h"
 #include "BREntity.h"
+#include "BRKeys.h"
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -14,6 +15,7 @@
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "HAL/PlatformTime.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/ConfigCacheIni.h"
 
@@ -53,10 +55,7 @@ void ABRPlayerController::BeginPlay()
 	Super::BeginPlay();
 	EnsureInput();
 	AddMappingToPlayer();
-
-	FInputModeGameOnly Mode;
-	SetInputMode(Mode);
-	bShowMouseCursor = false;
+	UpdateInputMode();
 
 	LoadSettings();
 	ApplySettings();
@@ -75,9 +74,13 @@ UInputAction* ABRPlayerController::MakeAction(const TCHAR* Name, EInputActionVal
 	return A;
 }
 
-void ABRPlayerController::MapKey(UInputAction* Action, const FKey& Key, bool bSwizzle, bool bNegate)
+void ABRPlayerController::MapKey(UInputMappingContext* Context, UInputAction* Action, const FKey& Key, bool bSwizzle, bool bNegate)
 {
-	FEnhancedActionKeyMapping& M = Mapping->MapKey(Action, Key);
+	if (!Context || !Action || !Key.IsValid())
+	{
+		return;
+	}
+	FEnhancedActionKeyMapping& M = Context->MapKey(Action, Key);
 	if (bSwizzle)
 	{
 		UInputModifierSwizzleAxis* Swizzle = NewObject<UInputModifierSwizzleAxis>(this);
@@ -93,12 +96,10 @@ void ABRPlayerController::MapKey(UInputAction* Action, const FKey& Key, bool bSw
 
 void ABRPlayerController::EnsureInput()
 {
-	if (Mapping)
+	if (MoveAction)
 	{
 		return;
 	}
-	Mapping = NewObject<UInputMappingContext>(this, TEXT("IMC_Backrooms"));
-
 	MoveAction = MakeAction(TEXT("IA_Move"), EInputActionValueType::Axis2D);
 	LookAction = MakeAction(TEXT("IA_Look"), EInputActionValueType::Axis2D);
 	LookPadAction = MakeAction(TEXT("IA_LookPad"), EInputActionValueType::Axis2D);
@@ -109,7 +110,7 @@ void ABRPlayerController::EnsureInput()
 	InteractAction = MakeAction(TEXT("IA_Interact"), EInputActionValueType::Boolean);
 	DrinkAction = MakeAction(TEXT("IA_Drink"), EInputActionValueType::Boolean);
 	ReloadAction = MakeAction(TEXT("IA_Reload"), EInputActionValueType::Boolean);
-	JournalAction = MakeAction(TEXT("IA_Journal"), EInputActionValueType::Boolean);
+	JournalAction = MakeAction(TEXT("IA_Inventory"), EInputActionValueType::Boolean, true);
 	PauseAction = MakeAction(TEXT("IA_Pause"), EInputActionValueType::Boolean, true);
 	QuitAction = MakeAction(TEXT("IA_Quit"), EInputActionValueType::Boolean, true);
 	MenuPrevAction = MakeAction(TEXT("IA_MenuPrev"), EInputActionValueType::Boolean);
@@ -117,77 +118,136 @@ void ABRPlayerController::EnsureInput()
 	MenuConfirmAction = MakeAction(TEXT("IA_MenuConfirm"), EInputActionValueType::Boolean);
 	NightVisionAction = MakeAction(TEXT("IA_NightVision"), EInputActionValueType::Boolean);
 	BandageAction = MakeAction(TEXT("IA_Bandage"), EInputActionValueType::Boolean);
+	ViewAction = MakeAction(TEXT("IA_View"), EInputActionValueType::Boolean);
 	PocketActions.Reset();
 	for (int32 i = 0; i < 4; ++i)
 	{
 		PocketActions.Add(MakeAction(*FString::Printf(TEXT("IA_Pocket%d"), i + 1), EInputActionValueType::Boolean));
 	}
+	BRKeys::Load();
+	RebuildMappings();
+}
 
-	// Deplacement : ZQSD / WASD (on mappe les deux dispositions de clavier)
-	MapKey(MoveAction, EKeys::W, true, false);
-	MapKey(MoveAction, EKeys::Z, true, false);
-	MapKey(MoveAction, EKeys::S, true, true);
-	MapKey(MoveAction, EKeys::D, false, false);
-	MapKey(MoveAction, EKeys::A, false, true);
-	MapKey(MoveAction, EKeys::Q, false, true);
-	MapKey(MoveAction, EKeys::Up, true, false);
-	MapKey(MoveAction, EKeys::Down, true, true);
-	MapKey(MoveAction, EKeys::Gamepad_Left2D);
-
-	MapKey(LookAction, EKeys::Mouse2D);
-	MapKey(LookPadAction, EKeys::Gamepad_Right2D);
-
-	MapKey(JumpAction, EKeys::SpaceBar);
-	MapKey(JumpAction, EKeys::Gamepad_FaceButton_Bottom);
-	MapKey(SprintAction, EKeys::LeftShift);
-	MapKey(SprintAction, EKeys::Gamepad_LeftThumbstick);
-	MapKey(CrouchAction, EKeys::LeftControl);
-	MapKey(CrouchAction, EKeys::C);
-	MapKey(CrouchAction, EKeys::Gamepad_FaceButton_Right);
-	MapKey(FlashAction, EKeys::F);
-	MapKey(FlashAction, EKeys::Gamepad_FaceButton_Top);
-	MapKey(InteractAction, EKeys::E);
-	MapKey(InteractAction, EKeys::Gamepad_FaceButton_Left);
-	MapKey(DrinkAction, EKeys::B);
-	MapKey(DrinkAction, EKeys::Gamepad_LeftShoulder);
-	MapKey(ReloadAction, EKeys::R);
-	MapKey(ReloadAction, EKeys::Gamepad_RightShoulder);
-	MapKey(JournalAction, EKeys::Tab);
-	MapKey(JournalAction, EKeys::I);
-	MapKey(JournalAction, EKeys::Gamepad_Special_Left);
-	MapKey(NightVisionAction, EKeys::N);
-	MapKey(NightVisionAction, EKeys::Gamepad_DPad_Up);
-	MapKey(BandageAction, EKeys::H);
-	MapKey(BandageAction, EKeys::Gamepad_DPad_Down);
-	// Poches 1-4 : rangee des chiffres en QWERTY et en AZERTY (& e " ')
-	const FKey PocketKeys[4][3] = {
-		{ EKeys::One, EKeys::Ampersand, EKeys::NumPadOne },
-		{ EKeys::Two, EKeys::E_AccentAigu, EKeys::NumPadTwo },
-		{ EKeys::Three, EKeys::Quote, EKeys::NumPadThree },
-		{ EKeys::Four, EKeys::Apostrophe, EKeys::NumPadFour },
-	};
-	for (int32 i = 0; i < 4; ++i)
+UInputAction* ABRPlayerController::ActionFor(int32 BRAction) const
+{
+	switch (static_cast<EBRAction>(BRAction))
 	{
-		for (const FKey& K : PocketKeys[i])
+	case EBRAction::Jump:
+		return JumpAction;
+	case EBRAction::Sprint:
+		return SprintAction;
+	case EBRAction::Crouch:
+		return CrouchAction;
+	case EBRAction::Interact:
+		return InteractAction;
+	case EBRAction::Flashlight:
+		return FlashAction;
+	case EBRAction::NightVision:
+		return NightVisionAction;
+	case EBRAction::Inventory:
+		return JournalAction;
+	case EBRAction::Pocket1:
+		return PocketActions.IsValidIndex(0) ? PocketActions[0].Get() : nullptr;
+	case EBRAction::Pocket2:
+		return PocketActions.IsValidIndex(1) ? PocketActions[1].Get() : nullptr;
+	case EBRAction::Pocket3:
+		return PocketActions.IsValidIndex(2) ? PocketActions[2].Get() : nullptr;
+	case EBRAction::Pocket4:
+		return PocketActions.IsValidIndex(3) ? PocketActions[3].Get() : nullptr;
+	case EBRAction::Drink:
+		return DrinkAction;
+	case EBRAction::Bandage:
+		return BandageAction;
+	case EBRAction::Battery:
+		return ReloadAction;
+	case EBRAction::ThirdPerson:
+		return ViewAction;
+	case EBRAction::Pause:
+		return PauseAction;
+	default:
+		return nullptr;
+	}
+}
+
+void ABRPlayerController::RebuildMappings()
+{
+	if (!MoveAction)
+	{
+		return;
+	}
+	MappingRevision = BRKeys::Revision();
+	UInputMappingContext* Ctx = NewObject<UInputMappingContext>(this);
+
+	// Touches configurables
+	for (int32 A = 0; A < BRKeys::NumActions(); ++A)
+	{
+		const EBRAction Act = static_cast<EBRAction>(A);
+		for (int32 Slot = 0; Slot < BRKeys::SlotsPerAction; ++Slot)
 		{
-			MapKey(PocketActions[i], K);
+			const FKey K = BRKeys::GetKey(Act, Slot);
+			switch (Act)
+			{
+			case EBRAction::MoveForward:
+				MapKey(Ctx, MoveAction, K, true, false);
+				break;
+			case EBRAction::MoveBackward:
+				MapKey(Ctx, MoveAction, K, true, true);
+				break;
+			case EBRAction::MoveRight:
+				MapKey(Ctx, MoveAction, K, false, false);
+				break;
+			case EBRAction::MoveLeft:
+				MapKey(Ctx, MoveAction, K, false, true);
+				break;
+			default:
+				MapKey(Ctx, ActionFor(A), K);
+				break;
+			}
 		}
 	}
-	MapKey(PauseAction, EKeys::P);
-	MapKey(PauseAction, EKeys::Escape);
-	MapKey(PauseAction, EKeys::Gamepad_Special_Right);
-	MapKey(QuitAction, EKeys::End);
 
-	MapKey(MenuPrevAction, EKeys::Left);
-	MapKey(MenuPrevAction, EKeys::A);
-	MapKey(MenuPrevAction, EKeys::Q);
-	MapKey(MenuPrevAction, EKeys::Gamepad_DPad_Left);
-	MapKey(MenuNextAction, EKeys::Right);
-	MapKey(MenuNextAction, EKeys::D);
-	MapKey(MenuNextAction, EKeys::Gamepad_DPad_Right);
-	MapKey(MenuConfirmAction, EKeys::Enter);
-	MapKey(MenuConfirmAction, EKeys::SpaceBar);
-	MapKey(MenuConfirmAction, EKeys::Gamepad_FaceButton_Bottom);
+	// Souris, manette et menu titre (fixes)
+	MapKey(Ctx, MoveAction, EKeys::Gamepad_Left2D);
+	MapKey(Ctx, LookAction, EKeys::Mouse2D);
+	MapKey(Ctx, LookPadAction, EKeys::Gamepad_Right2D);
+	MapKey(Ctx, JumpAction, EKeys::Gamepad_FaceButton_Bottom);
+	MapKey(Ctx, SprintAction, EKeys::Gamepad_LeftThumbstick);
+	MapKey(Ctx, CrouchAction, EKeys::Gamepad_FaceButton_Right);
+	MapKey(Ctx, FlashAction, EKeys::Gamepad_FaceButton_Top);
+	MapKey(Ctx, InteractAction, EKeys::Gamepad_FaceButton_Left);
+	MapKey(Ctx, DrinkAction, EKeys::Gamepad_LeftShoulder);
+	MapKey(Ctx, ReloadAction, EKeys::Gamepad_RightShoulder);
+	MapKey(Ctx, JournalAction, EKeys::Gamepad_Special_Left);
+	MapKey(Ctx, NightVisionAction, EKeys::Gamepad_DPad_Up);
+	MapKey(Ctx, BandageAction, EKeys::Gamepad_DPad_Down);
+	MapKey(Ctx, ViewAction, EKeys::Gamepad_RightThumbstick);
+	MapKey(Ctx, PauseAction, EKeys::Gamepad_Special_Right);
+	MapKey(Ctx, QuitAction, EKeys::End);
+	MapKey(Ctx, MenuPrevAction, EKeys::Left);
+	MapKey(Ctx, MenuPrevAction, EKeys::A);
+	MapKey(Ctx, MenuPrevAction, EKeys::Q);
+	MapKey(Ctx, MenuPrevAction, EKeys::Gamepad_DPad_Left);
+	MapKey(Ctx, MenuNextAction, EKeys::Right);
+	MapKey(Ctx, MenuNextAction, EKeys::D);
+	MapKey(Ctx, MenuNextAction, EKeys::Gamepad_DPad_Right);
+	MapKey(Ctx, MenuConfirmAction, EKeys::Enter);
+	MapKey(Ctx, MenuConfirmAction, EKeys::SpaceBar);
+	MapKey(Ctx, MenuConfirmAction, EKeys::Gamepad_FaceButton_Bottom);
+
+	// Remplace l'ancien contexte
+	if (ULocalPlayer* LP = GetLocalPlayer())
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		{
+			if (Mapping && bMappingAdded)
+			{
+				Sub->RemoveMappingContext(Mapping);
+			}
+			Sub->AddMappingContext(Ctx, 0);
+			bMappingAdded = true;
+		}
+	}
+	Mapping = Ctx;
 }
 
 void ABRPlayerController::AddMappingToPlayer()
@@ -233,6 +293,7 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(JournalAction, ETriggerEvent::Started, this, &ABRPlayerController::OnInventory);
 	EIC->BindAction(NightVisionAction, ETriggerEvent::Started, this, &ABRPlayerController::OnNightVision);
 	EIC->BindAction(BandageAction, ETriggerEvent::Started, this, &ABRPlayerController::OnBandage);
+	EIC->BindAction(ViewAction, ETriggerEvent::Started, this, &ABRPlayerController::OnView);
 	EIC->BindAction(PocketActions[0], ETriggerEvent::Started, this, &ABRPlayerController::OnPocket1);
 	EIC->BindAction(PocketActions[1], ETriggerEvent::Started, this, &ABRPlayerController::OnPocket2);
 	EIC->BindAction(PocketActions[2], ETriggerEvent::Started, this, &ABRPlayerController::OnPocket3);
@@ -244,6 +305,104 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(MenuConfirmAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuConfirm);
 }
 
+void ABRPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	if (MappingRevision != BRKeys::Revision())
+	{
+		RebuildMappings();
+	}
+	PollKeyCapture();
+}
+
+// =====================================================================================================================
+// Reaffectation des touches
+// =====================================================================================================================
+
+void ABRPlayerController::BeginKeyCapture(int32 Action, int32 Slot)
+{
+	if (Action < 0 || Action >= BRKeys::NumActions() || Slot < 0 || Slot >= BRKeys::SlotsPerAction)
+	{
+		return;
+	}
+	CaptureAction = Action;
+	CaptureSlot = Slot;
+	CaptureStart = FPlatformTime::Seconds();
+}
+
+void ABRPlayerController::CancelKeyCapture()
+{
+	CaptureAction = INDEX_NONE;
+}
+
+void ABRPlayerController::ClearKey(int32 Action, int32 Slot)
+{
+	BRKeys::SetKey(static_cast<EBRAction>(Action), Slot, FKey());
+	BRKeys::Save();
+	CancelKeyCapture();
+}
+
+void ABRPlayerController::ResetKeys()
+{
+	BRKeys::ResetDefaults();
+	BRKeys::Save();
+	CancelKeyCapture();
+	ABRHUD::Notify(this, TEXT("Touches par d\u00e9faut r\u00e9tablies."), 2.5f);
+}
+
+void ABRPlayerController::PollKeyCapture()
+{
+	if (CaptureAction == INDEX_NONE)
+	{
+		return;
+	}
+	// On ignore le clic qui a lance la capture
+	if (FPlatformTime::Seconds() - CaptureStart < 0.15)
+	{
+		return;
+	}
+	static TArray<FKey> AllKeys;
+	if (AllKeys.Num() == 0)
+	{
+		EKeys::GetAllKeys(AllKeys);
+	}
+	for (const FKey& K : AllKeys)
+	{
+		if (!WasInputKeyJustPressed(K))
+		{
+			continue;
+		}
+		if (K == EKeys::Escape)
+		{
+			CancelKeyCapture();
+			return;
+		}
+		if (K == EKeys::BackSpace || K == EKeys::Delete)
+		{
+			ClearKey(CaptureAction, CaptureSlot);
+			return;
+		}
+		if (!BRKeys::IsBindable(K))
+		{
+			continue;
+		}
+		FString Removed;
+		BRKeys::SetKey(static_cast<EBRAction>(CaptureAction), CaptureSlot, K, &Removed);
+		BRKeys::Save();
+		if (!Removed.IsEmpty())
+		{
+			ABRHUD::Notify(this, FString::Printf(TEXT("%s retir\u00e9e de : %s"), *BRKeys::KeyName(K), *Removed), 3.f,
+				FLinearColor(1.f, 0.8f, 0.4f));
+		}
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->PlayUISound(TEXT("S_UIClick"));
+		}
+		CancelKeyCapture();
+		return;
+	}
+}
+
 ABRCharacter* ABRPlayerController::GetBRCharacter() const
 {
 	return Cast<ABRCharacter>(GetPawn());
@@ -251,7 +410,26 @@ ABRCharacter* ABRPlayerController::GetBRCharacter() const
 
 bool ABRPlayerController::CanPlay() const
 {
-	return !bInMenu && !bPauseMenu && !bInventory;
+	return !bInMenu && !bPauseMenu && !bInventory && CaptureAction == INDEX_NONE;
+}
+
+void ABRPlayerController::UpdateInputMode()
+{
+	// Curseur visible dans l'inventaire et le menu pause (boutons cliquables)
+	const bool bCursor = bInventory || bPauseMenu;
+	bShowMouseCursor = bCursor;
+	if (bCursor)
+	{
+		FInputModeGameAndUI Mode;
+		Mode.SetHideCursorDuringCapture(false);
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
+		SetInputMode(Mode);
+	}
+	else
+	{
+		FInputModeGameOnly Mode;
+		SetInputMode(Mode);
+	}
 }
 
 // =====================================================================================================================
@@ -389,46 +567,72 @@ void ABRPlayerController::OnReload(const FInputActionValue& Value)
 	}
 }
 
-void ABRPlayerController::SetInventoryOpen(bool bOpen)
+void ABRPlayerController::SetInventoryOpen(bool bOpen, int32 Tab)
 {
-	if (bOpen && (bInMenu || bPauseMenu))
+	if (Tab != INDEX_NONE)
 	{
-		return;
+		RequestedTab = Tab;
 	}
 	if (bOpen == bInventory)
 	{
 		return;
 	}
 	bInventory = bOpen;
+	CancelKeyCapture();
 	if (ABRCharacter* C = GetBRCharacter())
 	{
 		C->SetSprinting(false);
 		C->PlayUISound(TEXT("S_Inventory"));
 	}
 	// Curseur visible pour glisser-deposer les objets ; le monde continue de vivre (comme dans Escape Together)
-	bShowMouseCursor = bOpen;
+	UpdateInputMode();
 	if (bOpen)
 	{
-		FInputModeGameAndUI Mode;
-		Mode.SetHideCursorDuringCapture(false);
-		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
-		SetInputMode(Mode);
 		int32 SX = 0;
 		int32 SY = 0;
 		GetViewportSize(SX, SY);
 		SetMouseLocation(SX / 2, SY / 2);
 	}
-	else
+}
+
+int32 ABRPlayerController::ConsumeRequestedTab()
+{
+	const int32 T = RequestedTab;
+	RequestedTab = INDEX_NONE;
+	return T;
+}
+
+void ABRPlayerController::TogglePause()
+{
+	if (bInMenu)
 	{
-		FInputModeGameOnly Mode;
-		SetInputMode(Mode);
+		return;
 	}
+	bPauseMenu = !bPauseMenu;
+	if (!bPauseMenu)
+	{
+		bInventory = false;
+		CancelKeyCapture();
+	}
+	SetPause(bPauseMenu);
+	UpdateInputMode();
+}
+
+void ABRPlayerController::QuitToDesktop()
+{
+	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }
 
 void ABRPlayerController::OnInventory(const FInputActionValue& Value)
 {
+	if (CaptureAction != INDEX_NONE)
+	{
+		return; // la touche est en train d'etre reaffectee
+	}
 	if (bInMenu || bPauseMenu)
 	{
+		// Depuis le menu titre ou la pause : acces direct aux parametres et aux touches
+		SetInventoryOpen(!bInventory, bInventory ? INDEX_NONE : 2);
 		return;
 	}
 	if (ABRCharacter* C = GetBRCharacter())
@@ -496,30 +700,40 @@ void ABRPlayerController::OnPocket4(const FInputActionValue& Value)
 
 void ABRPlayerController::OnPause(const FInputActionValue& Value)
 {
-	if (bInMenu)
+	if (CaptureAction != INDEX_NONE)
 	{
-		return;
+		return; // capture en cours : la touche est pour la reaffectation (Echap l'annule dans PollKeyCapture)
 	}
 	if (bInventory)
 	{
 		SetInventoryOpen(false); // Echap ferme d'abord l'inventaire
 		return;
 	}
-	bPauseMenu = !bPauseMenu;
-	SetPause(bPauseMenu);
+	TogglePause();
+}
+
+void ABRPlayerController::OnView(const FInputActionValue& Value)
+{
+	if (CanPlay())
+	{
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->ToggleThirdPerson();
+		}
+	}
 }
 
 void ABRPlayerController::OnQuit(const FInputActionValue& Value)
 {
-	if (bPauseMenu || bInMenu)
+	if ((bPauseMenu || bInMenu) && CaptureAction == INDEX_NONE)
 	{
-		UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
+		QuitToDesktop();
 	}
 }
 
 void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 {
-	if (bInMenu)
+	if (bInMenu && !bInventory)
 	{
 		const int32 Num = BRLevels::All().Num();
 		MenuIndex = (MenuIndex + Num - 1) % Num;
@@ -528,7 +742,7 @@ void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 {
-	if (bInMenu)
+	if (bInMenu && !bInventory)
 	{
 		MenuIndex = (MenuIndex + 1) % BRLevels::All().Num();
 	}
@@ -536,7 +750,7 @@ void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 {
-	if (!bInMenu)
+	if (!bInMenu || bInventory)
 	{
 		return;
 	}

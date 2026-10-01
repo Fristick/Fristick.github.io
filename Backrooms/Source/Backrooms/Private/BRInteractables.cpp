@@ -6,6 +6,7 @@
 #include "BRCharacter.h"
 #include "BRItems.h"
 #include "BRHUD.h"
+#include "BRKeys.h"
 
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
@@ -168,9 +169,9 @@ FString ABRPickup::GetPrompt() const
 {
 	if (Item == EBRItem::Note)
 	{
-		return TEXT("[E] Lire la note");
+		return BRKeys::Tag(EBRAction::Interact) + TEXT(" Lire la note");
 	}
-	return FString::Printf(TEXT("[E] Ramasser : %s"), *BRItems::Get(Item).Name);
+	return FString::Printf(TEXT("%s Ramasser : %s"), *BRKeys::Tag(EBRAction::Interact), *BRItems::Get(Item).Name);
 }
 
 void ABRPickup::Collect(ABRCharacter* By)
@@ -396,22 +397,23 @@ void ABRExit::NotifyActorBeginOverlap(AActor* OtherActor)
 FString ABRExit::GetPrompt() const
 {
 	const FString Dest = (Target >= 0 && BRLevels::Exists(Target)) ? FString::Printf(TEXT("Niveau %d ?"), Target) : FString(TEXT("???"));
+	const FString Key = BRKeys::Tag(EBRAction::Interact);
 	switch (Style)
 	{
 	case EBRExitStyle::Door:
-		return FString::Printf(TEXT("[E] Ouvrir la porte de secours  (%s)"), *Dest);
+		return FString::Printf(TEXT("%s Ouvrir la porte de secours  (%s)"), *Key, *Dest);
 	case EBRExitStyle::HotelDoor:
 		return FString::Printf(TEXT("[E] Ouvrir la porte \"CHAUFFERIE\"  (%s)"), *Dest);
 	case EBRExitStyle::Elevator:
-		return FString::Printf(TEXT("[E] Prendre l'ascenseur  (%s)"), *Dest);
+		return FString::Printf(TEXT("%s Prendre l'ascenseur  (%s)"), *Key, *Dest);
 	case EBRExitStyle::Ladder:
-		return FString::Printf(TEXT("[E] Emprunter l'\u00e9chelle  (%s)"), *Dest);
+		return FString::Printf(TEXT("%s Emprunter l'\u00e9chelle  (%s)"), *Key, *Dest);
 	case EBRExitStyle::Barn:
-		return FString::Printf(TEXT("[E] Entrer dans la grange  (%s)"), *Dest);
+		return FString::Printf(TEXT("%s Entrer dans la grange  (%s)"), *Key, *Dest);
 	case EBRExitStyle::HouseDoor:
-		return FString::Printf(TEXT("[E] Pousser la porte entrouverte  (%s)"), *Dest);
+		return FString::Printf(TEXT("%s Pousser la porte entrouverte  (%s)"), *Key, *Dest);
 	case EBRExitStyle::BuildingDoor:
-		return FString::Printf(TEXT("[E] Entrer dans l'immeuble  (%s)"), *Dest);
+		return FString::Printf(TEXT("%s Entrer dans l'immeuble  (%s)"), *Key, *Dest);
 	default:
 		return FString();
 	}

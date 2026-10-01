@@ -34,7 +34,7 @@ private:
 		FLinearColor Color = FLinearColor::White;
 	};
 
-	enum class ETab : uint8 { Character, Journal, Settings };
+	enum class ETab : uint8 { Character, Journal, Settings, Keys };
 
 	/** Reference a une case d'inventaire */
 	struct FSlotRef
@@ -69,7 +69,7 @@ private:
 	void DrawMessages(float Dt);
 	void DrawNote(ABRCharacter* C);
 	void DrawDeath(ABRCharacter* C);
-	void DrawPause();
+	void DrawPause(ABRPlayerController* PC);
 	void DrawGlitch(float Amount);
 	void DrawContentWarning(float Y);
 
@@ -79,6 +79,9 @@ private:
 	void DrawCharacterTab(ABRCharacter* C, ABRWorld* W);
 	void DrawJournalTab(ABRCharacter* C, ABRWorld* W);
 	void DrawSettingsTab(ABRPlayerController* PC);
+	void DrawKeysTab(ABRPlayerController* PC);
+	void HandlePauseMouse(ABRPlayerController* PC);
+	FString ControlsLine(int32 Line) const;
 	void HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C);
 	void DrawSlot(ABRCharacter* C, const FSlotBox& Box);
 	void DrawTooltip(ABRCharacter* C);

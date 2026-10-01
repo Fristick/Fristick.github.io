@@ -7,6 +7,7 @@
 #include "BRCharacter.h"
 #include "BRHUD.h"
 #include "BRPlayerController.h"
+#include "BRKeys.h"
 
 #include "Algo/Reverse.h"
 #include "Components/AudioComponent.h"
@@ -241,6 +242,7 @@ void ABRWorld::ApplyEnvironment()
 	Fog->SetFogHeightFalloff(D.FogFalloff);
 	Fog->SetFogInscatteringColor(D.FogColor);
 	Fog->SetStartDistance(D.FogStart);
+	UnderwaterBlend = 0.f;
 	Fog->SetFogMaxOpacity(1.f);
 	Fog->SetVolumetricFog(D.bVolumetricFog);
 
@@ -352,7 +354,7 @@ void ABRWorld::Discover(EBREntityKind Kind)
 	}
 	Discovered.Add(K);
 	const FBREntityInfo& Info = ABREntity::Info(Kind);
-	ABRHUD::Notify(this, FString::Printf(TEXT("Nouvelle entr\u00e9e du journal : %s - %s  [TAB]"), *Info.Number, *Info.Name),
+	ABRHUD::Notify(this, FString::Printf(TEXT("Nouvelle entr\u00e9e du journal : %s - %s  %s"), *Info.Number, *Info.Name, *BRKeys::Tag(EBRAction::Inventory)),
 		6.f, FLinearColor(1.f, 0.4f, 0.35f));
 }
 
@@ -457,8 +459,8 @@ void ABRWorld::Tick(float DeltaSeconds)
 	if (!bObjectivesAnnounced && !bMenu && TransState == ETrans::None && LevelTime > 8.f && Def().bRequireObjectives)
 	{
 		bObjectivesAnnounced = true;
-		ABRHUD::Notify(this, FString::Printf(TEXT("OBJECTIFS : trouver %d cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  [TAB]"),
-			Def().VHSRequired), 8.f, FLinearColor(1.f, 0.85f, 0.4f));
+		ABRHUD::Notify(this, FString::Printf(TEXT("OBJECTIFS : trouver %d cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  %s"),
+			Def().VHSRequired, *BRKeys::Tag(EBRAction::Inventory)), 8.f, FLinearColor(1.f, 0.85f, 0.4f));
 	}
 }
 
@@ -917,7 +919,7 @@ bool ABRWorld::CanLeaveLevel(FString& OutReason) const
 	{
 		OutReason += FString::Printf(TEXT(", filmer pendant une coupure %d/1"), bBlackoutRecorded ? 1 : 0);
 	}
-	OutReason += TEXT("  [TAB]");
+	OutReason += TEXT("  ") + BRKeys::Tag(EBRAction::Inventory);
 	return false;
 }
 
@@ -1083,6 +1085,39 @@ FIntPoint ABRWorld::CellToChunk(const FIntPoint& C) const
 bool ABRWorld::IsSpawnArea(int32 X, int32 Y) const
 {
 	return FMath::Abs(X) <= 1 && FMath::Abs(Y) <= 1;
+}
+
+bool ABRWorld::IsPoolCell(int32 X, int32 Y) const
+{
+	const FBRLevelDef& D = Def();
+	if (!D.bWater || D.PoolChance <= 0.f || IsSolid(X, Y) || (FMath::Abs(X) <= 2 && FMath::Abs(Y) <= 2))
+	{
+		return false;
+	}
+	// Bassins par blocs de 2x2 cellules : de vraies piscines, pas des trous isoles
+	return BRHash::Rand(BRHash::FloorDiv(X, 2), BRHash::FloorDiv(Y, 2), 1700, Seed) < D.PoolChance;
+}
+
+float ABRWorld::FloorZAt(const FVector& P) const
+{
+	const FIntPoint C = WorldToCell(P);
+	return IsPoolCell(C.X, C.Y) ? -Def().PoolDepth : 0.f;
+}
+
+void ABRWorld::SetUnderwater(float Blend)
+{
+	Blend = FMath::Clamp(Blend, 0.f, 1.f);
+	if (!Fog || FMath::Abs(Blend - UnderwaterBlend) < 0.01f)
+	{
+		return;
+	}
+	UnderwaterBlend = Blend;
+	const FBRLevelDef& D = Def();
+	// Eau limpide : on voit loin, mais tout se noie dans le turquoise
+	Fog->SetFogDensity(FMath::Lerp(D.FogDensity, 0.09f, Blend));
+	Fog->SetFogHeightFalloff(FMath::Lerp(D.FogFalloff, 0.001f, Blend));
+	Fog->SetFogInscatteringColor(FMath::Lerp(D.FogColor, FLinearColor(0.1f, 0.4f, 0.46f), Blend));
+	Fog->SetStartDistance(FMath::Lerp(D.FogStart, 0.f, Blend));
 }
 
 float ABRWorld::ZoneDensity(int32 X, int32 Y) const

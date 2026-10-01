@@ -7,6 +7,21 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3** :
+- **Interaction corrigée** : **E** ramasse vraiment les objets. La visée suit maintenant la rotation de la caméra
+  (avant, elle restait à l'horizontale et ne touchait pas les objets posés au sol). Une petite tolérance aide aussi
+  à viser un objet proche.
+- **Toutes les touches se reconfigurent, même en pleine partie** : onglet **TOUCHES** de l'inventaire (**Tab**) ou
+  bouton **TOUCHES** du menu pause. Chaque action accepte 3 touches (clavier ou boutons de souris). Les messages
+  du jeu (« [E] Ramasser »…) affichent vos touches. Les réglages sont sauvegardés.
+- **Eau** des Poolrooms **plus claire et turquoise**, **bassins profonds** où l'on **nage** : nage dans la direction
+  du regard, plongée, apnée (jauge d'oxygène), remontée, sortie par le rebord. La marche est ralentie dans l'eau et
+  la vue est teintée sous la surface (brouillard turquoise, son étouffé). Des projecteurs sont immergés dans les bassins.
+- **Nouveau papier peint du Niveau 0** (rayures jaune-vert à chevrons, d'après l'image fournie).
+- **Modèles fournis intégrés** : la **combinaison hazmat** devient le corps du joueur (visible en **vue à la 3e personne**,
+  touche **V**), la **Bacteria** et le **Deathmoth** utilisent les modèles fournis (articulés). Le Skin-Stealer se
+  déguise avec la vraie combinaison.
+
 **Nouveautés de la version 2** (inspirées de *Backrooms : Escape Together*) :
 - **Inventaire (TAB)** façon Escape Together : objectifs, biométrie, poches, stockage, équipement sur une silhouette,
   glisser-déposer à la souris, inspection des objets, onglets Journal et Paramètres.
@@ -36,10 +51,10 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 49 textures (dont les normal maps), 11 icônes, 62 sons, 78 modèles Blender. Il crée aussi
+   toutes les ressources : 52 textures (dont 21 normal maps), 11 icônes, 66 sons, 95 modèles (FBX). Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_Water`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
-   **Si vous aviez déjà importé la v1**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
+   **Si vous aviez déjà importé la v1 ou la v2**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
 4. Appuyez sur **Play** (Alt+P). Dans le menu titre, choisissez le niveau (← / →) puis appuyez sur **Entrée** pour « noclipper ».
 
 > Pour relancer l'import à la main : *Window → Output Log*, choisir **Python** en bas, puis
@@ -53,13 +68,17 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 
 ## 2. Contrôles
 
+Ce sont les touches **par défaut**. **Toutes** se changent à tout moment : **Tab → onglet TOUCHES** (ou **Pause → TOUCHES**).
+Cliquez sur une case, appuyez sur la nouvelle touche. **Échap** annule, **Retour arrière** vide la case, **clic droit**
+efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par une autre action lui est retirée (un message l'indique).
+
 | Action | Clavier / souris | Manette |
 |---|---|---|
 | Se déplacer | **ZQSD** ou **WASD** (les deux dispositions marchent) | Stick gauche |
 | Regarder | Souris | Stick droit |
 | Courir | **Maj** (consomme l'endurance) | Clic stick gauche |
-| S'accroupir | **Ctrl** ou **C** | B / Rond |
-| Sauter | **Espace** | A / Croix |
+| S'accroupir / **plonger** (dans l'eau profonde) | **Ctrl** ou **C** | B / Rond |
+| Sauter / **remonter à la surface** / se hisser hors de l'eau | **Espace** | A / Croix |
 | Lampe torche (main, ceinture ou frontale) | **F** | Y / Triangle |
 | Vision nocturne (caméscope en main) | **N** | Croix haut |
 | Interagir / ramasser / lire | **E** | X / Carré |
@@ -68,7 +87,8 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 | Mettre un bandage | **H** | Croix bas |
 | Changer les piles | **R** | RB / R1 |
 | **Inventaire** (objectifs, objets, journal, paramètres) | **Tab** ou **I** | Select |
-| Pause | **P** (Échap ferme l'inventaire ; dans l'éditeur, Échap arrête le PIE) | Start |
+| **Vue à la 1re / 3e personne** | **V** | Clic stick droit |
+| Pause (REPRENDRE, PARAMÈTRES, TOUCHES, QUITTER) | **P** ou **Échap** (dans l'éditeur, Échap arrête le PIE : utilisez **P**) | Start |
 | Quitter (menu / pause) | **Fin** | |
 
 **Dans l'inventaire** : **glisser-déposer** pour déplacer un objet (poches ↔ stockage ↔ équipement),
@@ -87,7 +107,7 @@ Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau.
 ![Icônes](Docs/apercu_icones.png)
 
 L'écran reprend la disposition d'*Escape Together*, avec quelques différences :
-- en-tête **MENU >** et onglets **PERSONNAGE**, **JOURNAL**, **PARAMÈTRES** ;
+- en-tête **MENU >** et onglets **PERSONNAGE**, **JOURNAL**, **PARAMÈTRES**, **TOUCHES** ;
 - colonne de gauche : **OBJECTIFS** (ex. « FILMER PENDANT UNE COUPURE 0/1 », « TROUVER LES CASSETTES VHS 1/6 ») et
   **BIOMÉTRIE** (santé mentale, santé, endurance, piles) avec des flèches de tendance ;
 - au centre : **POCHES** (4 cases, raccourcis 1 à 4) et **STOCKAGE** (20 cases) ;
@@ -111,7 +131,8 @@ Le monde **continue de tourner** quand l'inventaire est ouvert : comme dans le j
 
 L'onglet **PARAMÈTRES** règle la sensibilité, l'axe Y, le champ de vision, la qualité graphique, le **ray tracing matériel
 (RTX)**, les reflets ray tracés haute qualité, les néons surfaciques, le brouillard volumétrique et le grain.
-Les réglages sont sauvegardés dans `Saved/Config/<plateforme>/GameUserSettings.ini`.
+Les réglages et les touches sont sauvegardés dans `Saved/Config/<plateforme>/GameUserSettings.ini`
+(section `[/Script/Backrooms.BRKeys]` pour les touches).
 
 ---
 
@@ -133,6 +154,11 @@ Les réglages sont sauvegardés dans `Saved/Config/<plateforme>/GameUserSettings
 - **Sorties** : chaque niveau contient des passages vers d'autres niveaux (mur qui « glitche », porte de secours,
   ascenseur, échelle, grange…). Ils émettent un **bourdonnement électrique** : écoutez-le pour les trouver.
 - **Notes** : des vagabonds ont laissé des notes, avec des indices et les règles de survie.
+- **Eau** (Niveau 37) : l'eau ralentit la marche (jusqu'à −40 % quand elle arrive à la taille). Dans les **bassins
+  profonds** (2,6 m sous le carrelage), on **nage** : on avance dans la direction du regard (regarder vers le bas pour
+  descendre), **Espace** pour remonter, **Ctrl/C** pour plonger, **Maj** pour nager vite (fatigant). Sous l'eau, la
+  jauge **OXYGÈNE** se vide en 18 s environ ; ensuite on se noie. Pour sortir, nagez contre un rebord sans mur au-dessus
+  et appuyez sur **Espace** (ou continuez d'avancer) : le personnage se hisse sur le bord.
 - **Mort** : vous vous réveillez au Niveau 0 avec l'équipement de départ (caméscope, lampe, eau, bandage, piles).
 
 L'écran imite une caméra « found footage » : REC, horodatage, grain et vignettage.
@@ -154,7 +180,7 @@ L'écran imite une caméra « found footage » : REC, horodatage, grain et vigne
 | **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10 |
 | **10** | *Field of Wheat* | Champ de blé infini sous un ciel couvert, granges, poteaux | Faceling (paisible) | Grange → 11 |
 | **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour | Facelings (paisibles) | Porte d'immeuble → niveau aléatoire |
-| **37** | *Sublimity* (« Poolrooms ») | Salles carrelées blanches inondées d'eau tiède (vagues, réfraction, absorption, caustiques animées sur le carrelage) | aucune | Sol qui glitche → 0, échelle → 4 |
+| **37** | *Sublimity* (« Poolrooms ») | Salles carrelées blanches très lumineuses inondées d'une eau tiède, claire et turquoise (vagues, réfraction, caustiques animées). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
 
 Chaque niveau est une grille **infinie** générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
@@ -166,13 +192,13 @@ quartier pavillonnaire (9), espace ouvert (10), îlots urbains (11).
 
 | Entité | N° wiki | Comportement dans le jeu | Comment survivre |
 |---|---|---|---|
-| **Bacteria** | (Niveau 0) | Silhouette démesurée en fils torsadés, aux gestes saccadés. Erre, vous traque dès qu'elle vous voit ou vous entend, puis fouille votre dernière position | Casser la ligne de vue : portes, virages. Ne pas courir vers elle |
+| **Bacteria** | (Niveau 0) | *(modèle fourni)* Silhouette démesurée en fils torsadés, aux gestes saccadés. Erre, vous traque dès qu'elle vous voit ou vous entend, puis fouille votre dernière position | Casser la ligne de vue : portes, virages. Ne pas courir vers elle |
 | **Smilers** | 3 | Flottent dans le noir et approchent quand on ne les regarde pas. **Chargent** dès qu'on les éclaire plus d'une fraction de seconde | Éteindre la lampe, reculer lentement. Une zone bien éclairée les dissipe. |
-| **Deathmoths** | 4 | Papillons géants volants, attirés par la lampe torche, piqûre toxique | Éteindre la lampe |
+| **Deathmoths** | 4 | *(modèle fourni : phalène scannée)* Papillons géants volants, attirés par la lampe torche, piqûre toxique | Éteindre la lampe |
 | **Clump** | 5 | Masse de membres qui roule vers vous | Le semer dans les couloirs |
 | **Hounds** | 8 | Rôdent à quatre pattes, sentent la peur et chargent si vous courez ou leur tournez le dos | Les regarder en face et reculer en marchant : ils finissent par fuir |
 | **Facelings** | 9 | Humains sans visage, surtout passifs. 15 % sont des adultes agressifs. Dans le champ de blé (Niveau 10), certains se tapissent dans les blés et vous attrapent | Garder ses distances |
-| **Skin-Stealers** | 10 | Masse de chair au repos ; à votre approche, se transforme en « explorateur en combinaison » qui marche vers vous, puis se révèle et charge | Se méfier des silhouettes en combinaison. Fuir et casser la ligne de vue |
+| **Skin-Stealers** | 10 | Masse de chair au repos ; à votre approche, se transforme en « explorateur en combinaison » (la même combinaison hazmat que la vôtre) qui marche vers vous, puis se révèle et charge | Se méfier des silhouettes en combinaison. Fuir et casser la ligne de vue |
 | **Wretches** | 15 | Vagabonds dégénérés, lents mais tenaces | Ne pas se laisser acculer |
 | **Partygoers** | 67 | =) Restent immobiles en souriant, un ballon rouge à la main. Partent en chasse si vous soutenez leur regard plus de 3 s, ou pendant une coupure | Détourner le regard, se cacher pendant les coupures |
 
@@ -194,9 +220,12 @@ Backrooms/
 │   ├── BRTypes.h                Structures des niveaux, hachage déterministe
 │   ├── BRLevels.cpp             ★ Définition des 12 niveaux (tout est réglable ici)
 │   ├── BRWorld.*                Grille infinie, streaming, A*, ambiance, transitions, apparition des entités
-│   ├── BRChunk.*                Construction d'un chunk : murs, portes, néons, accessoires (instances)
+│   ├── BRChunk.*                Construction d'un chunk : murs, portes, néons, accessoires, bassins (instances)
 │   ├── BREntity.*               Les 9 entités : fiches, IA, squelette articulé, animation procédurale
-│   ├── BRCharacter.*            Joueur : inventaire, équipement, caméscope, lampe, endurance, santé mentale
+│   ├── BRCharacter.*            Joueur : inventaire, équipement, caméscope, lampe, endurance, santé mentale,
+│   │                            nage / apnée, corps en combinaison et vue à la 3e personne
+│   ├── BRKeys.*                 Touches configurables (3 par action), sauvegarde, libellés « [E] »
+│   ├── BRRig.*                  Humanoïdes articulés (entités et corps du joueur)
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
 │   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu, inventaire, paramètres, console
 │   ├── BRHUD.*                  Interface (Canvas) : menu, REC, inventaire TAB façon Escape Together
@@ -211,6 +240,8 @@ Backrooms/
 ├── Tools/
 │   ├── Blender/generate_models.py    ★ Modélisation procédurale des 78 modèles + icônes d'inventaire (Blender)
 │   ├── Blender/preview_entities.py   Rendu d'aperçu des entités assemblées
+│   ├── Blender/import_user_models.py Découpe des modèles fournis (hazmat, Bacteria, Deathmoth) en pièces articulées
+│   ├── SourceModels/                 (non versionné) Les fichiers d'origine des modèles fournis
 │   ├── generate_textures.py          Textures procédurales « tileables » (numpy + Pillow)
 │   └── generate_sounds.py            Synthèse de tous les sons (numpy)
 └── Docs/                        Images d'aperçu
@@ -224,6 +255,9 @@ blender -b -P Tools/Blender/generate_models.py -- SM_Smiler # un seul
 # Textures et sons (Python 3 + numpy + pillow)
 python Tools/generate_textures.py
 python Tools/generate_sounds.py
+# Modèles fournis (placer asyc_hazmat.glb, bacteria_recreation.blend, « peppered moth.obj » et sa texture
+# dans Tools/SourceModels/)
+blender -b -P Tools/Blender/import_user_models.py
 ```
 Ensuite, dans Unreal : `import backrooms_setup; backrooms_setup.run(force=True)`.
 
@@ -266,9 +300,15 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | La souris ne tourne pas la caméra | Cliquer dans la fenêtre de jeu (capture de la souris). La caméra est bloquée tant que l'inventaire (TAB) est ouvert |
 | Les touches 1 à 4 ne marchent pas | En AZERTY, les touches **& é " '** sont aussi reconnues ; sinon utiliser le pavé numérique |
 | Trop sombre / trop clair | Ajuster `MinEV` / `MaxEV` / `ExposureBias` du niveau dans `BRLevels.cpp` |
+| **E** ne ramasse rien | Corrigé en v3. Visez l'objet (le point au centre grossit et « [E] Ramasser » s'affiche). Si vous avez changé la touche, le message affiche la nouvelle |
+| Une action ne répond plus | Une touche a pu lui être retirée en la donnant à une autre action : **Tab → TOUCHES**, ou **PAR DÉFAUT** |
+| La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |
 
 ---
 
 *Les textes des niveaux et des entités sont des résumés en français librement inspirés du
-[Backrooms Wiki](https://backrooms-wiki.wikidot.com) (CC BY-SA 3.0). Le code, les modèles, les textures et
-les sons de ce dossier sont générés par les scripts fournis.*
+[Backrooms Wiki](https://backrooms-wiki.wikidot.com) (CC BY-SA 3.0). Le code, les textures, les sons et la plupart
+des modèles de ce dossier sont générés par les scripts fournis. **Exceptions** : la combinaison hazmat
+(`asyc_hazmat`), la Bacteria (`bacteria-lifeform-backrooms`) et le Deathmoth (`deathmoth-backrooms`, phalène poivrée
+scannée) viennent de modèles fournis par l'utilisateur. Ils ont été découpés et adaptés par
+`Tools/Blender/import_user_models.py`. Vérifiez leur licence d'origine avant toute diffusion publique du jeu.*

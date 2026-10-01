@@ -125,28 +125,29 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 	return Infos[Index];
 }
 
-ABREntity::FHumanoidSpec ABREntity::SpecFor(EBREntityKind InKind)
+FBRHumanoidSpec ABREntity::SpecFor(EBREntityKind InKind)
 {
-	FHumanoidSpec S;
+	FBRHumanoidSpec S;
 	switch (InKind)
 	{
 	case EBREntityKind::SkinStealer:
-		S.Hip = 115.f; S.Shoulder = 185.f; S.ShoulderW = 22.f; S.HipW = 11.f; S.Hunch = 10.f;
-		S.UpperArm = 45.f; S.LowerArm = 62.f; S.Thigh = 58.f; S.Neck = 10.f;
+		S = FBRHumanoidSpec::Simple(115.f, 185.f, 22.f, 11.f, 10.f, 45.f, 58.f, 10.f);
+		S.ArmPitch = 8.f; S.ElbowPitch = 14.f; S.ArmRoll = 6.f;
 		break;
 	case EBREntityKind::Wretch:
-		S.Hip = 82.f; S.Shoulder = 122.f; S.ShoulderW = 17.f; S.HipW = 9.f; S.Hunch = 30.f;
-		S.UpperArm = 33.f; S.LowerArm = 47.f; S.Thigh = 41.f; S.Neck = 5.f;
+		S = FBRHumanoidSpec::Simple(82.f, 122.f, 17.f, 9.f, 30.f, 33.f, 41.f, 5.f);
+		S.ArmPitch = 18.f; S.ElbowPitch = 22.f; S.ArmAmp = 12.f; S.LegAmp = 20.f;
 		break;
 	case EBREntityKind::Partygoer:
-		S.Hip = 85.f; S.Shoulder = 138.f; S.ShoulderW = 22.f; S.HipW = 11.f; S.Hunch = 0.f;
-		S.UpperArm = 28.f; S.LowerArm = 40.f; S.Thigh = 43.f; S.Neck = 4.f;
+		S = FBRHumanoidSpec::Simple(85.f, 138.f, 22.f, 11.f, 0.f, 28.f, 43.f, 4.f);
+		S.ArmRoll = 8.f; S.ArmAmp = 26.f;
 		break;
 	case EBREntityKind::Bacteria:
-		S.Hip = 140.f; S.Shoulder = 215.f; S.ShoulderW = 19.f; S.HipW = 8.f; S.Hunch = 10.f;
-		S.UpperArm = 62.f; S.LowerArm = 82.f; S.Thigh = 70.f; S.Neck = 16.f;
+		S = FBRHumanoidSpec::Simple(140.f, 215.f, 19.f, 8.f, 10.f, 62.f, 70.f, 16.f);
+		S.ArmPitch = 6.f; S.ElbowPitch = 12.f; S.ArmRoll = 7.f; S.ArmAmp = 26.f; S.LegAmp = 30.f;
 		break;
 	default: // Faceling
+		S = FBRHumanoidSpec::Simple(92.f, 145.f, 19.f, 10.f, 0.f, 30.f, 46.f, 6.f);
 		break;
 	}
 	return S;
@@ -260,51 +261,12 @@ void ABREntity::EndPlay(const EEndPlayReason::Type Reason)
 USceneComponent* ABREntity::AddPart(FName MeshName, USceneComponent* Parent, const FVector& Joint, const FVector& FallbackSize,
 	float FallbackDrop, const TMap<FString, FLinearColor>* Tints, bool bUniqueGlow, float GlowScale)
 {
-	UBRAssets* A = UBRAssets::Get(this);
-	USceneComponent* Pivot = NewObject<USceneComponent>(this);
-	Pivot->SetupAttachment(Parent ? Parent : Visual.Get());
-	Pivot->SetRelativeLocation(Joint);
-	Pivot->RegisterComponent();
-	PartComponents.Add(Pivot);
-
-	UStaticMeshComponent* MeshComp = NewObject<UStaticMeshComponent>(this);
-	MeshComp->SetupAttachment(Pivot);
-	MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	MeshComp->SetCastShadow(Kind != EBREntityKind::Smiler);
-	UStaticMesh* SM = A ? A->Mesh(MeshName) : nullptr;
-	if (SM)
+	TArray<UMaterialInstanceDynamic*> Glows;
+	USceneComponent* Pivot = BRRig::AddPart(this, Parent ? Parent : Visual.Get(), MeshName, Joint, FallbackSize, FallbackDrop, Tints, PartComponents,
+		nullptr, Kind != EBREntityKind::Smiler, bUniqueGlow, GlowScale, &Glows);
+	for (UMaterialInstanceDynamic* G : Glows)
 	{
-		MeshComp->SetStaticMesh(SM);
-	}
-	else if (A && A->Cube() && FallbackSize.X > 0.f)
-	{
-		MeshComp->SetStaticMesh(A->Cube());
-		MeshComp->SetRelativeLocation(FVector(0.f, 0.f, FallbackDrop));
-		MeshComp->SetRelativeScale3D(FallbackSize / 100.f);
-	}
-	MeshComp->RegisterComponent();
-	PartComponents.Add(MeshComp);
-
-	if (A)
-	{
-		if (SM)
-		{
-			TArray<UMaterialInstanceDynamic*> Glows;
-			A->ApplySlots(MeshComp, Tints, bUniqueGlow, &Glows, GlowScale);
-			for (UMaterialInstanceDynamic* G : Glows)
-			{
-				GlowMIDs.Add(G);
-			}
-		}
-		else
-		{
-			FLinearColor C(0.5f, 0.48f, 0.45f);
-			if (Tints && Tints->Num() > 0)
-			{
-				C = Tints->CreateConstIterator()->Value;
-			}
-			MeshComp->SetMaterial(0, A->Surface(FBRSurface(TEXT("T_Skin"), C, 100.f)));
-		}
+		GlowMIDs.Add(G);
 	}
 	return Pivot;
 }
@@ -326,69 +288,66 @@ void ABREntity::AddLimb(USceneComponent* Pivot, ELimb Type, float Phase, float A
 	Limbs.Add(L);
 }
 
-void ABREntity::BuildHumanoid(const TCHAR* Prefix, const FHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent)
+FBRHumanoidParts ABREntity::BuildHumanoid(const TCHAR* Prefix, const FBRHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent)
 {
-	const FString P(Prefix);
-	USceneComponent* Base = Parent ? Parent : Visual.Get();
-	const float Torso = Spec.Shoulder - Spec.Hip;
-	AddPart(FName(*(P + TEXT("_Torso"))), Base, FVector(0.f, 0.f, Spec.Hip), FVector(28.f, Spec.ShoulderW * 2.f, Torso + 10.f), Torso * 0.5f, Tints);
-	HeadPivot = AddPart(FName(*(P + TEXT("_Head"))), Base, FVector(Spec.Hunch * 1.05f, 0.f, Spec.Shoulder + Spec.Neck),
-		FVector(22.f, 19.f, 26.f), 13.f, Tints);
-
-	// Pose de repos propre a chaque espece
-	float ArmPitch = 4.f;
-	float ElbowPitch = 10.f;
-	float ArmRoll = 4.f;
-	float ArmAmp = 22.f;
-	float LegAmp = 28.f;
-	switch (Kind)
+	FBRHumanoidParts P = BRRig::BuildHumanoid(this, Parent ? Parent : Visual.Get(), Prefix, Spec, Tints, PartComponents, Kind != EBREntityKind::Smiler);
+	HeadPivot = P.Head;
+	for (int32 i = 0; i < 2; ++i)
 	{
-	case EBREntityKind::Wretch:
-		ArmPitch = 18.f; ElbowPitch = 22.f; ArmAmp = 12.f; LegAmp = 20.f;
-		break;
-	case EBREntityKind::Bacteria:
-		ArmPitch = 6.f; ElbowPitch = 12.f; ArmRoll = 7.f; ArmAmp = 26.f; LegAmp = 30.f;
-		break;
-	case EBREntityKind::SkinStealer:
-		ArmPitch = 8.f; ElbowPitch = 14.f; ArmRoll = 6.f;
-		break;
-	case EBREntityKind::Partygoer:
-		ArmRoll = 8.f; ArmAmp = 26.f;
-		break;
-	default:
-		break;
-	}
-
-	for (int32 Side = -1; Side <= 1; Side += 2)
-	{
-		const float Sgn = static_cast<float>(Side);
-		USceneComponent* Upper = AddPart(FName(*(P + TEXT("_UpperArm"))), Base, FVector(Spec.Hunch, Sgn * Spec.ShoulderW, Spec.Shoulder),
-			FVector(9.f, 9.f, Spec.UpperArm), -Spec.UpperArm * 0.5f, Tints);
-		USceneComponent* Lower = AddPart(FName(*(P + TEXT("_LowerArm"))), Upper, FVector(0.f, 0.f, -Spec.UpperArm),
-			FVector(8.f, 8.f, Spec.LowerArm), -Spec.LowerArm * 0.5f, Tints);
-		USceneComponent* Thigh = AddPart(FName(*(P + TEXT("_Thigh"))), Base, FVector(0.f, Sgn * Spec.HipW, Spec.Hip),
-			FVector(13.f, 13.f, Spec.Thigh), -Spec.Thigh * 0.5f, Tints);
-		const float ShinLen = Spec.Hip - Spec.Thigh;
-		USceneComponent* Shin = AddPart(FName(*(P + TEXT("_Shin"))), Thigh, FVector(0.f, 0.f, -Spec.Thigh),
-			FVector(11.f, 11.f, ShinLen), -ShinLen * 0.5f, Tints);
-
+		const float Sgn = i == 0 ? -1.f : 1.f;
 		// Bras en opposition de phase avec la jambe du meme cote ; roulis negatif = vers l'exterieur pour +Y
-		const float LegPhase = Side > 0 ? 0.f : PI;
-		AddLimb(Upper, ELimb::UpperArm, LegPhase + PI, ArmAmp, Sgn, FRotator(ArmPitch, 0.f, -Sgn * ArmRoll));
-		AddLimb(Lower, ELimb::LowerArm, LegPhase + PI, ArmAmp, Sgn, FRotator(ElbowPitch, 0.f, 0.f));
-		AddLimb(Thigh, ELimb::Thigh, LegPhase, LegAmp, Sgn, FRotator::ZeroRotator);
-		AddLimb(Shin, ELimb::Shin, LegPhase, LegAmp * 1.4f, Sgn, FRotator::ZeroRotator);
-
-		// Partygoer : ballon rouge dans la main droite
-		if (Kind == EBREntityKind::Partygoer && Side > 0)
+		const float LegPhase = i == 1 ? 0.f : PI;
+		AddLimb(P.UpperArm[i], ELimb::UpperArm, LegPhase + PI, Spec.ArmAmp, Sgn, FRotator(Spec.ArmPitch, 0.f, -Sgn * Spec.ArmRoll));
+		AddLimb(P.LowerArm[i], ELimb::LowerArm, LegPhase + PI, Spec.ArmAmp, Sgn, FRotator(Spec.ElbowPitch, 0.f, 0.f));
+		AddLimb(P.Thigh[i], ELimb::Thigh, LegPhase, Spec.LegAmp, Sgn, FRotator::ZeroRotator);
+		AddLimb(P.Shin[i], ELimb::Shin, LegPhase, Spec.LegAmp * 1.4f, Sgn, FRotator::ZeroRotator);
+	}
+	// Partygoer : ballon rouge dans la main droite
+	if (Kind == EBREntityKind::Partygoer && P.LowerArm[1])
+	{
+		const float LowerLen = static_cast<float>((Spec.Elbow[1] - Spec.Shoulder[1]).Size()) * 1.4f;
+		Balloon = AddPart(TEXT("SM_Partygoer_Balloon"), P.LowerArm[1], FVector(2.f, 0.f, -LowerLen), FVector::ZeroVector, 0.f, nullptr);
+		if (Balloon)
 		{
-			Balloon = AddPart(TEXT("SM_Partygoer_Balloon"), Lower, FVector(2.f, 0.f, -Spec.LowerArm), FVector::ZeroVector, 0.f, nullptr);
-			if (Balloon)
-			{
-				Balloon->SetUsingAbsoluteRotation(true);
-			}
+			Balloon->SetUsingAbsoluteRotation(true);
 		}
 	}
+	return P;
+}
+
+bool ABREntity::BuildBacteriaModel()
+{
+	// Modele fourni (Tools/Blender/import_user_models.py) : corps, tete et deux longs bras en fils
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!A || !A->Mesh(TEXT("SM_BacteriaET_Body")))
+	{
+		return false;
+	}
+	AddPart(TEXT("SM_BacteriaET_Body"), Visual, FVector::ZeroVector, FVector::ZeroVector, 0.f, nullptr);
+	HeadPivot = AddPart(TEXT("SM_BacteriaET_Head"), Visual, FVector(3.32f, -4.97f, 233.29f), FVector::ZeroVector, 0.f, nullptr);
+	USceneComponent* ArmL = AddPart(TEXT("SM_BacteriaET_ArmL"), Visual, FVector(0.87f, -4.67f, 238.28f), FVector::ZeroVector, 0.f, nullptr);
+	USceneComponent* ArmR = AddPart(TEXT("SM_BacteriaET_ArmR"), Visual, FVector(-0.81f, 11.32f, 231.41f), FVector::ZeroVector, 0.f, nullptr);
+	// Bras ramenes un peu vers le corps pour passer les portes ; ils servent de bequilles en marchant
+	AddLimb(ArmL, ELimb::UpperArm, 0.f, 16.f, -1.f, FRotator(0.f, 0.f, -6.f));
+	AddLimb(ArmR, ELimb::UpperArm, PI, 16.f, 1.f, FRotator(0.f, 0.f, 6.f));
+	return true;
+}
+
+bool ABREntity::BuildMothModel()
+{
+	// Papillon de nuit scanne (modele fourni) : corps + deux ailes articulees a leur racine
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!A || !A->Mesh(TEXT("SM_DeathmothET_Body")))
+	{
+		return false;
+	}
+	const float Z = MyInfo().HalfHeight;
+	USceneComponent* Body = AddPart(TEXT("SM_DeathmothET_Body"), Visual, FVector(0.f, 0.f, Z), FVector::ZeroVector, 0.f, nullptr);
+	USceneComponent* WingL = AddPart(TEXT("SM_DeathmothET_WingL"), Body, FVector(2.53f, -8.f, -5.53f), FVector::ZeroVector, 0.f, nullptr);
+	USceneComponent* WingR = AddPart(TEXT("SM_DeathmothET_WingR"), Body, FVector(1.73f, 8.f, -4.66f), FVector::ZeroVector, 0.f, nullptr);
+	AddLimb(WingL, ELimb::Wing, 0.f, 45.f, -1.f, FRotator::ZeroRotator);
+	AddLimb(WingR, ELimb::Wing, 0.f, 45.f, 1.f, FRotator::ZeroRotator);
+	return true;
 }
 
 void ABREntity::BuildHound(const TMap<FString, FLinearColor>* Tints)
@@ -459,7 +418,22 @@ void ABREntity::BuildVisual()
 		BodyForm->SetupAttachment(Visual);
 		BodyForm->RegisterComponent();
 		BuildHumanoid(TEXT("SM_SkinStealer"), SpecFor(Kind), &Tints, BodyForm);
+		TrueHead = HeadPivot;
 		MassForm = AddPart(TEXT("SM_SkinStealer_Mass"), Visual, FVector::ZeroVector, FVector(110.f, 100.f, 90.f), 45.f, &Tints);
+		// Deguisement : la vraie combinaison hazmat (modele fourni), sinon la combinaison procedurale
+		DisguiseForm = NewObject<USceneComponent>(this);
+		DisguiseForm->SetupAttachment(Visual);
+		DisguiseForm->RegisterComponent();
+		if (BRRig::HasHazmat(this))
+		{
+			BuildHumanoid(TEXT("SM_Hazmat"), FBRHumanoidSpec::Hazmat(), nullptr, DisguiseForm);
+			DisguiseHead = HeadPivot;
+		}
+		else
+		{
+			AddPart(TEXT("SM_Hazmat"), DisguiseForm, FVector::ZeroVector, FVector(40.f, 50.f, 180.f), 90.f, nullptr);
+		}
+		HeadPivot = TrueHead;
 		break;
 	}
 	case EBREntityKind::Wretch:
@@ -470,10 +444,17 @@ void ABREntity::BuildVisual()
 		BuildHumanoid(TEXT("SM_Partygoer"), SpecFor(Kind), nullptr, Visual);
 		break;
 	case EBREntityKind::Bacteria:
-		BuildHumanoid(TEXT("SM_Bacteria"), SpecFor(Kind), nullptr, Visual);
+		if (!BuildBacteriaModel())
+		{
+			BuildHumanoid(TEXT("SM_Bacteria"), SpecFor(Kind), nullptr, Visual);
+		}
 		break;
 	case EBREntityKind::Deathmoth:
 	{
+		if (BuildMothModel())
+		{
+			break;
+		}
 		const float Z = MyInfo().HalfHeight;
 		AddPart(TEXT("SM_Deathmoth_Body"), Visual, FVector(0.f, 0.f, Z), FVector(60.f, 20.f, 20.f), 0.f, nullptr);
 		// L'aile s'etend d'un cote : on detecte lequel pour la mirer de l'autre
@@ -860,7 +841,7 @@ void ABREntity::Think(float Dt)
 	{
 		bSeenOnce = true;
 		// La fiche du journal ne s'ouvre que si l'entite est bien visible (pas une masse informe)
-		if (Kind != EBREntityKind::SkinStealer || Morph > 0.5f)
+		if (Kind != EBREntityKind::SkinStealer || (Morph > 0.5f && !bDisguised))
 		{
 			W->Discover(Kind);
 		}
@@ -1498,10 +1479,32 @@ void ABREntity::UpdateMorph(float Dt)
 	{
 		PlayVoice(0.8f); // bruit de chair qui se dechire
 	}
+	// Deguise en explorateur pendant l'approche, vraie forme pendant la chasse
+	const bool bWantDisguise = State == EState::Lure && DisguiseForm != nullptr;
+	if (bWantDisguise != bDisguised)
+	{
+		if (bDisguised && Morph > 0.5f)
+		{
+			Morph = 0.3f; // la combinaison se dechire : la vraie forme jaillit
+			PlaySound2D(TEXT("S_Alert"), 0.6f);
+			PlayVoice(1.f);
+		}
+		bDisguised = bWantDisguise;
+		HeadPivot = (bDisguised && DisguiseHead.IsValid()) ? DisguiseHead : TrueHead;
+	}
 	// Le corps "pousse" hors de la masse
 	const float M = FMath::Max(0.01f, Morph);
-	BodyForm->SetRelativeScale3D(FVector(0.5f + 0.5f * M, 0.5f + 0.5f * M, M));
-	BodyForm->SetVisibility(Morph > 0.02f, true);
+	USceneComponent* Shown = bDisguised ? DisguiseForm.Get() : BodyForm.Get();
+	USceneComponent* Other = bDisguised ? BodyForm.Get() : DisguiseForm.Get();
+	if (Shown)
+	{
+		Shown->SetRelativeScale3D(FVector(0.5f + 0.5f * M, 0.5f + 0.5f * M, M));
+		Shown->SetVisibility(Morph > 0.02f, true);
+	}
+	if (Other)
+	{
+		Other->SetVisibility(false, true);
+	}
 	if (MassForm)
 	{
 		MassForm->SetVisibility(Morph < 0.98f, true);

@@ -73,11 +73,11 @@ namespace
 			TEXT("Si tu lis ceci, tu as \"noclipp\u00e9\" hors de la r\u00e9alit\u00e9. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds."),
 			TEXT("Le bourdonnement ne s'arr\u00eate jamais. J'ai compte plus de six cents salles. Toujours la m\u00eame moquette humide. Toujours la m\u00eame odeur."),
 			TEXT("Certains murs ont l'air FAUX, comme une image qui se brouille. Touche-les. C'est comme \u00e7a que j'ai quitt\u00e9 cet endroit."),
-			TEXT("L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. [B] pour boire."),
+			TEXT("L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. {Drink} pour boire."),
 			TEXT("Si les lumi\u00e8res sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir."),
 			TEXT("Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement."),
 			TEXT("Les sorties ne tiennent pas. Il faut r\u00e9cup\u00e9rer les six cassettes et filmer le noir pendant une coupure. Apr\u00e8s, les murs c\u00e8dent."),
-			TEXT("Quand les n\u00e9ons s'\u00e9teignent, sors le cam\u00e9scope et appuie sur [N]. La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.")
+			TEXT("Quand les n\u00e9ons s'\u00e9teignent, sors le cam\u00e9scope et appuie sur {NightVision}. La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.")
 		};
 		return D;
 	}
@@ -345,7 +345,7 @@ namespace
 		D.bPhenomena = true;
 		D.Notes = {
 			TEXT("Garde ta lampe \u00e9teinte quand tu vois deux yeux. Recule. Lentement."),
-			TEXT("Les piles sont plus pr\u00e9cieuses que l'eau ici. [R] pour en changer."),
+			TEXT("Les piles sont plus pr\u00e9cieuses que l'eau ici. {Battery} pour en changer."),
 			TEXT("Il y a des \u00e9chelles qui descendent. En bas, \u00e7a sent la terre mouill\u00e9e.")
 		};
 		return D;
@@ -527,10 +527,14 @@ namespace
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::SkyPanel;
 		D.LightChance = 0.5f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
-		D.LightLumens = 3500.f; D.LightColor = C(0.95f, 1.f, 1.f); D.LightRadius = 950.f; D.ShadowChance = 0.1f;
+		D.LightLumens = 4200.f; D.LightColor = C(0.95f, 1.f, 1.f); D.LightRadius = 1000.f; D.ShadowChance = 0.1f;
+		D.LightChance = 0.6f;
+		// Eau limpide et turquoise (absorption faible, presque pas de diffusion) + bassins profonds ou l'on nage
 		D.bWater = true; D.WaterHeight = 45.f;
-		D.Water = S(TEXT("T_WaterNormal"), C(0.35f, 0.75f, 0.8f), 300.f, 0.05f, 0.f);
-		D.FogDensity = 0.04f; D.FogColor = C(0.55f, 0.72f, 0.78f);
+		D.Water = S(TEXT("T_WaterNormal"), C(0.55f, 0.9f, 0.92f), 300.f, 0.02f, 0.f);
+		D.WaterAbsorption = 0.45f; D.WaterScattering = 0.035f;
+		D.PoolChance = 0.32f; D.PoolDepth = 260.f;
+		D.FogDensity = 0.015f; D.FogColor = C(0.7f, 0.86f, 0.9f);
 		D.SceneTint = C(0.95f, 1.f, 1.f); D.Saturation = 1.05f; D.Bloom = 1.2f;
 		D.MinEV = 3.f; D.MaxEV = 10.f;
 		D.AmbientSound = TEXT("S_Amb_Pool"); D.AmbientVolume = 0.7f;
@@ -611,7 +615,7 @@ namespace BRLevels
 			TEXT("R\u00c8GLE N\u00b02 : bois de l'eau d'amande quand ta t\u00eate commence \u00e0 tourner. La folie tue aussi s\u00fbrement que les entites."),
 			TEXT("R\u00c8GLE N\u00b03 : une lampe allum\u00e9e se voit de loin. Parfois, il vaut mieux rester dans le noir."),
 			TEXT("Ils l'appellent le \"Front\" - la r\u00e9alit\u00e9 d'o\u00f9 nous venons. Je ne suis plus s\u00fbr qu'elle ait exist\u00e9."),
-			TEXT("Note pour moi-m\u00eame : [TAB] pour ouvrir le journal. Ne pas oublier ce que j'ai vu.")
+			TEXT("Note pour moi-m\u00eame : {Inventory} pour ouvrir le journal. Ne pas oublier ce que j'ai vu.")
 		};
 		return Notes;
 	}

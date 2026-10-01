@@ -123,8 +123,126 @@ void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size)
 	}
 	// Grille subdivisee (vagues par World Position Offset) si le modele Blender est importe
 	UStaticMesh* Grid = A->Mesh(TEXT("SM_WaterGrid"));
-	FBatch& B = GetBatch(TEXT("WATER"), Grid ? Grid : A->Plane(), A->WaterMaterial(WaterS), false, false, 0.f);
+	FBatch& B = GetBatch(TEXT("WATER"), Grid ? Grid : A->Plane(), A->WaterMaterial(WaterS, W->Def().WaterAbsorption, W->Def().WaterScattering), false, false, 0.f);
 	B.Transforms.Add(FTransform(FRotator::ZeroRotator, Center - GetActorLocation(), FVector(Size.X / 100.f, Size.Y / 100.f, 1.f)));
+}
+
+void ABRChunk::BuildPools()
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float T = D.WallThickness;
+	const float PD = D.PoolDepth;
+	const int32 X0 = Coord.X * N;
+	const int32 Y0 = Coord.Y * N;
+	const uint32 Seed = W->GetSeed();
+	const FBRSurface& PillarS = D.Pillar.Texture.IsNone() ? D.Wall : D.Pillar;
+	constexpr float LampDepth = 3.f;
+	int32 PoolLights = 0;
+
+	auto EdgeTo = [W](int32 X, int32 Y, const FIntPoint& Dir) -> EBREdge
+	{
+		if (Dir.X != 0)
+		{
+			return W->EdgeE(Dir.X > 0 ? X : X - 1, Y);
+		}
+		return W->EdgeN(X, Dir.Y > 0 ? Y : Y - 1);
+	};
+
+	for (int32 X = X0; X < X0 + N; ++X)
+	{
+		for (int32 Y = Y0; Y < Y0 + N; ++Y)
+		{
+			const FVector C = W->CellCenter(FIntPoint(X, Y));
+			if (!W->IsPoolCell(X, Y))
+			{
+				AddBox(D.Floor, FVector(C.X, C.Y, -10.f), FVector(S, S, 20.f));
+				continue;
+			}
+			// Fond du bassin
+			AddBox(D.Floor, FVector(C.X, C.Y, -PD - 10.f), FVector(S, S, 20.f));
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const FIntPoint Dir = GDirs[k];
+				const bool bPoolNext = W->IsPoolCell(X + Dir.X, Y + Dir.Y);
+				const EBREdge E = EdgeTo(X, Y, Dir);
+				const FVector Face = C + FVector(Dir.X, Dir.Y, 0.f) * (S * 0.5f);
+				const bool bAlongY = Dir.X != 0; // la paroi s'etend le long de Y
+				if (E != EBREdge::Open)
+				{
+					// Le mur du dessus descend jusqu'au fond (pas de mur suspendu au-dessus de l'eau) ;
+					// sous une porte, le seuil reste 1 cm sous le sol voisin
+					const float Top = E == EBREdge::Door ? -1.f : 0.f;
+					AddBox(D.Wall, FVector(Face.X, Face.Y, (Top - PD) * 0.5f), bAlongY ? FVector(T, S + T, Top + PD) : FVector(S + T, T, Top + PD));
+				}
+				else if (!bPoolNext)
+				{
+					// Paroi carrelee sous le sol voisin
+					const FVector WallC = Face + FVector(Dir.X, Dir.Y, 0.f) * 10.f;
+					AddBox(D.Wall, FVector(WallC.X, WallC.Y, (-PD - 20.f) * 0.5f), bAlongY ? FVector(20.f, S + 40.f, PD - 20.f) : FVector(S + 40.f, 20.f, PD - 20.f));
+				}
+			}
+			// Projecteur immerge (lumiere turquoise qui fait vivre le fond), sur une paroi
+			if (BRHash::Rand(X, Y, 1720, Seed) < 0.35f && PoolLights < 6)
+			{
+				const int32 Start = static_cast<int32>(BRHash::Hash(X, Y, 1721, Seed) % 4u);
+				for (int32 k = 0; k < 4; ++k)
+				{
+					const FIntPoint Dir = GDirs[(Start + k) % 4];
+					const EBREdge E = EdgeTo(X, Y, Dir);
+					if (E == EBREdge::Open && W->IsPoolCell(X + Dir.X, Y + Dir.Y))
+					{
+						continue;
+					}
+					const float Inset = E != EBREdge::Open ? T * 0.5f : 0.f;
+					const FVector Wall = C + FVector(Dir.X, Dir.Y, 0.f) * (S * 0.5f - Inset) + FVector(0.f, 0.f, -PD + 60.f);
+					UPointLightComponent* PL = NewObject<UPointLightComponent>(this);
+					PL->SetupAttachment(Root);
+					PL->SetMobility(EComponentMobility::Movable);
+					PL->SetRelativeLocation(Wall - FVector(Dir.X, Dir.Y, 0.f) * 30.f - GetActorLocation());
+					PL->SetIntensityUnits(ELightUnits::Lumens);
+					PL->SetIntensity(1400.f);
+					PL->SetLightColor(FLinearColor(0.55f, 0.95f, 1.f));
+					PL->SetAttenuationRadius(650.f);
+					PL->SetSourceRadius(12.f);
+					PL->SetCastShadows(false);
+					PL->MaxDrawDistance = D.ViewDistance * 0.6f;
+					PL->MaxDistanceFadeRange = 600.f;
+					PL->RegisterComponent();
+					Extra.Add(PL);
+					++PoolLights;
+					// Hublot lumineux encastre dans la paroi
+					FBRSurface Lamp(TEXT("T_Grime"), FLinearColor(0.9f, 1.f, 1.f), 100.f, 0.2f, 0.f);
+					Lamp.Emissive = FLinearColor(0.55f, 0.95f, 1.f) * 25.f;
+					const FVector LampC = Wall - FVector(Dir.X, Dir.Y, 0.f) * (LampDepth * 0.5f - 1.f);
+					AddBox(Lamp, LampC, Dir.X != 0 ? FVector(LampDepth, 46.f, 26.f) : FVector(46.f, LampDepth, 26.f), false);
+					break;
+				}
+			}
+		}
+	}
+
+	// Piliers prolonges jusqu'au fond des bassins
+	for (int32 X = X0; X < X0 + N; ++X)
+	{
+		for (int32 Y = Y0; Y < Y0 + N; ++Y)
+		{
+			if (D.Layout != EBRLayout::Rooms || !W->HasPillar(X, Y))
+			{
+				continue;
+			}
+			if (W->IsPoolCell(X, Y) || W->IsPoolCell(X + 1, Y) || W->IsPoolCell(X, Y + 1) || W->IsPoolCell(X + 1, Y + 1))
+			{
+				AddBox(PillarS, FVector((X + 1) * S, (Y + 1) * S, -PD * 0.5f), FVector(D.PillarSize, D.PillarSize, PD));
+			}
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -481,7 +599,14 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 	const uint32 Seed = InWorld->GetSeed();
 
 	// ---- Sol & plafond ----
-	AddBox(D.Floor, FVector(Mid.X, Mid.Y, -10.f), FVector(ChunkW, ChunkW, 20.f));
+	if (D.PoolChance > 0.f)
+	{
+		BuildPools();
+	}
+	else
+	{
+		AddBox(D.Floor, FVector(Mid.X, Mid.Y, -10.f), FVector(ChunkW, ChunkW, 20.f));
+	}
 	if (D.bCeiling)
 	{
 		AddBox(D.Ceiling, FVector(Mid.X, Mid.Y, H + 10.f), FVector(ChunkW, ChunkW, 20.f));
@@ -837,7 +962,7 @@ void ABRChunk::BuildPickupsAndExits()
 		{
 			const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, Salt * 31 + Try, Seed);
 			const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-			if (W->IsWalkable(Cell))
+			if (W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y))
 			{
 				Out = Cell;
 				return true;
@@ -992,7 +1117,7 @@ void ABRChunk::BuildPickupsAndExits()
 			{
 				const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, 1500 + i * 64 + Try, Seed);
 				const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y))
+				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y))
 				{
 					continue;
 				}

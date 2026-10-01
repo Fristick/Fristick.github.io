@@ -112,6 +112,12 @@ namespace
 				{ TEXT("Vest"), TEXT("T_OfficeCarpet"), FLinearColor(0.22f, 0.25f, 0.18f), 0.9f, 0.f, 3.f },
 				{ TEXT("Reflective"), TEXT("T_Grime"), FLinearColor(0.85f, 0.85f, 0.8f), 0.2f, 0.6f, 1.f },
 				{ TEXT("Glove"), TEXT("T_Skin"), FLinearColor(0.7f, 0.55f, 0.08f), 0.5f, 0.f, 3.f },
+				// v3 : modeles fournis (textures UV d'origine)
+				{ TEXT("HazmatSuit"), TEXT("T_Hazmat_Suit"), FLinearColor(1.f, 1.f, 1.f), 0.62f, 0.f, 1.f },
+				{ TEXT("HazmatMask"), TEXT("T_Hazmat_Mask"), FLinearColor(1.f, 1.f, 1.f), 0.45f, 0.1f, 1.f },
+				{ TEXT("HazmatGlass"), TEXT("T_Grime"), FLinearColor(0.015f, 0.02f, 0.025f), 0.04f, 0.7f, 1.f },
+				{ TEXT("MothTex"), TEXT("T_Deathmoth"), FLinearColor(1.f, 1.f, 1.f), 0.78f, 0.f, 1.f },
+				{ TEXT("BacteriaSkin"), TEXT("T_Grime"), FLinearColor(0.006f, 0.006f, 0.008f), 0.22f, 0.f, 1.f },
 			};
 			// Les cles les plus longues d'abord ("DarkMetal" avant "Metal")
 			S.Sort([](const FSlotStyle& A, const FSlotStyle& B) { return FCString::Strlen(A.Key) > FCString::Strlen(B.Key); });
@@ -498,7 +504,7 @@ bool UBRAssets::IsUsingRuntimeContent()
 FLinearColor UBRAssets::TextureAverage(FName Texture)
 {
 	static const TMap<FName, FLinearColor> Avg = {
-		{ TEXT("T_L0_Wallpaper"), FLinearColor(0.78f, 0.7f, 0.42f) },
+		{ TEXT("T_L0_Wallpaper"), FLinearColor(0.66f, 0.64f, 0.33f) },
 		{ TEXT("T_L0_Carpet"), FLinearColor(0.5f, 0.42f, 0.25f) },
 		{ TEXT("T_L0_Ceiling"), FLinearColor(0.85f, 0.83f, 0.75f) },
 		{ TEXT("T_Concrete"), FLinearColor(0.5f, 0.5f, 0.48f) },
@@ -512,6 +518,9 @@ FLinearColor UBRAssets::TextureAverage(FName Texture)
 		{ TEXT("T_HotelWallpaper"), FLinearColor(0.5f, 0.49f, 0.35f) },
 		{ TEXT("T_Wood"), FLinearColor(0.28f, 0.16f, 0.08f) },
 		{ TEXT("T_PoolTile"), FLinearColor(0.88f, 0.91f, 0.92f) },
+		{ TEXT("T_Hazmat_Suit"), FLinearColor(0.75f, 0.72f, 0.49f) },
+		{ TEXT("T_Hazmat_Mask"), FLinearColor(0.41f, 0.41f, 0.4f) },
+		{ TEXT("T_Deathmoth"), FLinearColor(0.69f, 0.6f, 0.49f) },
 		{ TEXT("T_Rock"), FLinearColor(0.33f, 0.29f, 0.25f) },
 		{ TEXT("T_Dirt"), FLinearColor(0.36f, 0.28f, 0.19f) },
 		{ TEXT("T_Asphalt"), FLinearColor(0.17f, 0.17f, 0.18f) },
@@ -592,9 +601,9 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 	return MID;
 }
 
-UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S)
+UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorption, float Scattering)
 {
-	const FString Key = TEXT("Water|") + S.Key();
+	const FString Key = FString::Printf(TEXT("Water|%.3f|%.3f|"), Absorption, Scattering) + S.Key();
 	if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
 	{
 		return Found->Get();
@@ -621,6 +630,8 @@ UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S)
 		MID->SetScalarParameterValue(TEXT("Roughness"), FMath::Min(S.Roughness, 0.08f));
 		MID->SetScalarParameterValue(TEXT("WaveAmplitude"), 1.f);
 		MID->SetScalarParameterValue(TEXT("NormalStrength"), 0.35f);
+		MID->SetScalarParameterValue(TEXT("Absorption"), Absorption);
+		MID->SetScalarParameterValue(TEXT("Scattering"), Scattering);
 	}
 	else
 	{

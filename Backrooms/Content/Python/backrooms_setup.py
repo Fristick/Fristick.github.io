@@ -11,7 +11,7 @@ Il importe :
   RawAssets/Textures/*.jpg|png  -> /Game/Backrooms/Textures   (les *_N sont des normal maps)
   RawAssets/Icons/*.png         -> /Game/Backrooms/UI         (icones de l'inventaire)
   RawAssets/Sounds/*.wav        -> /Game/Backrooms/Sounds     (boucles d'apres loops.txt)
-  RawAssets/Meshes/*.fbx        -> /Game/Backrooms/Meshes     (generes par Tools/Blender/generate_models.py)
+  RawAssets/Meshes/*.fbx        -> /Game/Backrooms/Meshes     (Tools/Blender/generate_models.py + import_user_models.py)
 puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_Water) et la carte L_Backrooms.
 
 Remarque : si cet import echoue, le jeu se debrouille quand meme dans l'editeur (il charge les textures
@@ -21,7 +21,7 @@ import os
 
 import unreal
 
-VERSION = 2
+VERSION = 3
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -226,7 +226,7 @@ def import_meshes(files):
 
 
 def delete_obsolete_meshes():
-    """Pieces de la v1 remplacees par le squelette articule de la v2"""
+    """Pieces de la v1 remplacees par le squelette articule de la v2 (la v3 remplace SM_Hazmat par le modele fourni)"""
     for name in ("SM_Faceling_Arm", "SM_Faceling_Leg", "SM_Hound_Leg", "SM_Partygoer_Arm", "SM_Partygoer_Leg",
                  "SM_SkinStealer_Arm", "SM_SkinStealer_Leg", "SM_Wretch_Arm", "SM_Wretch_Leg"):
         path = MESH + "/" + name
@@ -655,7 +655,8 @@ def run(force=False):
         unreal.EditorDialog.show_message(
             "The Backrooms",
             "Les ressources du jeu ont ete importees (v%d).\n\nAppuyez sur Play (Alt+P) pour noclipper dans le Niveau 0.\n"
-            "TAB : inventaire  -  N : vision nocturne  -  F : lampe" % VERSION,
+            "TAB : inventaire (onglet TOUCHES : toutes les touches se reconfigurent)  -  V : 3e personne  -  "
+            "N : vision nocturne  -  F : lampe" % VERSION,
             unreal.AppMsgType.OK)
     except Exception:
         pass

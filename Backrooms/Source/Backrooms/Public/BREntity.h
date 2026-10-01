@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "BRTypes.h"
+#include "BRRig.h"
 #include "BREntity.generated.h"
 
 class UStaticMeshComponent;
@@ -73,6 +74,10 @@ protected:
 	UPROPERTY()
 	TObjectPtr<USceneComponent> MassForm;
 
+	/** Deguisement du Skin-Stealer : un explorateur en combinaison hazmat */
+	UPROPERTY()
+	TObjectPtr<USceneComponent> DisguiseForm;
+
 	UPROPERTY()
 	TArray<TObjectPtr<USceneComponent>> PartComponents;
 
@@ -103,20 +108,6 @@ private:
 		FRotator Base = FRotator::ZeroRotator;
 	};
 
-	/** Proportions d'un humanoide (cm) - identiques a HUMANOIDS dans Tools/Blender/generate_models.py */
-	struct FHumanoidSpec
-	{
-		float Hip = 92.f;
-		float Shoulder = 145.f;
-		float ShoulderW = 19.f;
-		float HipW = 10.f;
-		float Hunch = 0.f;
-		float UpperArm = 30.f;
-		float LowerArm = 42.f;
-		float Thigh = 46.f;
-		float Neck = 6.f;
-	};
-
 	/** Ce que l'entite percoit du joueur cette image */
 	struct FSense
 	{
@@ -130,10 +121,12 @@ private:
 	void BuildVisual();
 	USceneComponent* AddPart(FName MeshName, USceneComponent* Parent, const FVector& Joint, const FVector& FallbackSize,
 		float FallbackDrop, const TMap<FString, FLinearColor>* Tints, bool bUniqueGlow = false, float GlowScale = 1.f);
-	void BuildHumanoid(const TCHAR* Prefix, const FHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent);
+	FBRHumanoidParts BuildHumanoid(const TCHAR* Prefix, const FBRHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent);
 	void BuildHound(const TMap<FString, FLinearColor>* Tints);
+	bool BuildBacteriaModel();
+	bool BuildMothModel();
 	void AddLimb(USceneComponent* Pivot, ELimb Type, float Phase, float Amp, float Sign, const FRotator& Base);
-	static FHumanoidSpec SpecFor(EBREntityKind InKind);
+	static FBRHumanoidSpec SpecFor(EBREntityKind InKind);
 
 	// IA
 	void Think(float Dt);
@@ -195,6 +188,9 @@ private:
 	bool bWarned = false;
 	TArray<FLimb> Limbs;
 	TWeakObjectPtr<USceneComponent> HeadPivot;
+	TWeakObjectPtr<USceneComponent> TrueHead;
+	TWeakObjectPtr<USceneComponent> DisguiseHead;
+	bool bDisguised = false;
 	FVector VisualBase = FVector::ZeroVector;
 	TWeakObjectPtr<ABRWorld> World;
 };

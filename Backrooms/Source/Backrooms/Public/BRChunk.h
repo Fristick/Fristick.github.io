@@ -83,6 +83,8 @@ protected:
 	/** Prises electriques, grilles d'aeration le long d'un mur */
 	void AddWallDetails(bool bAlongY, float Fixed, float A, float B);
 	void BuildCellProps(int32 X, int32 Y);
+	/** Sol cellule par cellule avec bassins profonds (Niveau 37) */
+	void BuildPools();
 	void BuildPickupsAndExits();
 	void FinishBatches();
 

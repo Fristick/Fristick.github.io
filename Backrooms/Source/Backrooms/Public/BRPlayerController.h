@@ -20,12 +20,28 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void PlayerTick(float DeltaTime) override;
 
 	bool IsInMenu() const { return bInMenu; }
 	int32 GetMenuIndex() const { return MenuIndex; }
 	bool IsInventoryOpen() const { return bInventory; }
 	bool IsPauseMenuOpen() const { return bPauseMenu; }
-	void SetInventoryOpen(bool bOpen);
+	void SetInventoryOpen(bool bOpen, int32 Tab = INDEX_NONE);
+	/** Onglet demande a l'ouverture de l'inventaire (lu une fois par le HUD) */
+	int32 ConsumeRequestedTab();
+	void TogglePause();
+	void QuitToDesktop();
+
+	// ---- Touches (onglet TOUCHES) ----
+	void BeginKeyCapture(int32 Action, int32 Slot);
+	void CancelKeyCapture();
+	bool IsCapturingKey() const { return CaptureAction != INDEX_NONE; }
+	int32 GetCaptureAction() const { return CaptureAction; }
+	int32 GetCaptureSlot() const { return CaptureSlot; }
+	void ClearKey(int32 Action, int32 Slot);
+	void ResetKeys();
+	/** Reconstruit le contexte Enhanced Input a partir des touches configurees */
+	void RebuildMappings();
 
 	// ---- Parametres (onglet PARAMETRES de l'inventaire) ----
 	int32 GetSettingsCount() const;
@@ -111,12 +127,17 @@ protected:
 	TObjectPtr<UInputAction> BandageAction;
 	UPROPERTY()
 	TArray<TObjectPtr<UInputAction>> PocketActions;
+	UPROPERTY()
+	TObjectPtr<UInputAction> ViewAction;
 
 private:
 	void EnsureInput();
 	void AddMappingToPlayer();
 	UInputAction* MakeAction(const TCHAR* Name, EInputActionValueType Type, bool bWhenPaused = false);
-	void MapKey(UInputAction* Action, const FKey& Key, bool bSwizzle = false, bool bNegate = false);
+	void MapKey(UInputMappingContext* Context, UInputAction* Action, const FKey& Key, bool bSwizzle = false, bool bNegate = false);
+	UInputAction* ActionFor(int32 BRAction) const;
+	void UpdateInputMode();
+	void PollKeyCapture();
 	ABRCharacter* GetBRCharacter() const;
 	bool CanPlay() const;
 
@@ -139,6 +160,7 @@ private:
 	void OnPocket2(const FInputActionValue& Value);
 	void OnPocket3(const FInputActionValue& Value);
 	void OnPocket4(const FInputActionValue& Value);
+	void OnView(const FInputActionValue& Value);
 	void UsePocket(int32 Index);
 	void OnPause(const FInputActionValue& Value);
 	void OnQuit(const FInputActionValue& Value);
@@ -151,4 +173,9 @@ private:
 	bool bPauseMenu = false;
 	bool bMappingAdded = false;
 	int32 MenuIndex = 0;
+	int32 RequestedTab = INDEX_NONE;
+	int32 CaptureAction = INDEX_NONE;
+	int32 CaptureSlot = 0;
+	int32 MappingRevision = -1;
+	double CaptureStart = 0.0;
 };

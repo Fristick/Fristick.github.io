@@ -92,6 +92,12 @@ public:
 	float BuildingHeight(int32 BlockX, int32 BlockY) const;
 	/** Maison presente sur ce lot (Niveau 9) */
 	bool HasHouse(int32 LotX, int32 LotY) const;
+	/** Bassin profond (Niveau 37) : le sol de la cellule est a -PoolDepth */
+	bool IsPoolCell(int32 X, int32 Y) const;
+	/** Hauteur du sol sous un point (0, ou le fond d'un bassin) */
+	float FloorZAt(const FVector& P) const;
+	/** Camera sous l'eau (0..1) : brouillard turquoise dense */
+	void SetUnderwater(float Blend);
 	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire) */
 	float LightLevelAt(const FVector& P) const;
 	/** A* sur la grille */
@@ -143,6 +149,8 @@ protected:
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UExponentialHeightFogComponent> Fog;
+
+	float UnderwaterBlend = 0.f;
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USkyAtmosphereComponent> SkyAtmosphere;

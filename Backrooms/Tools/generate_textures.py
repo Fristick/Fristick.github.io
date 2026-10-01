@@ -62,7 +62,7 @@ def colorize(base_rgb, *layers):
 
 # Intensite du relief (normal map "<nom>_N.png" generee a partir de la luminance)
 NORMAL_STRENGTH = {
-    "T_L0_Wallpaper": 2.0, "T_L0_Carpet": 7.0, "T_L0_Ceiling": 5.0, "T_Concrete": 4.0, "T_ConcreteFloor": 5.0,
+    "T_L0_Carpet": 7.0, "T_L0_Ceiling": 5.0, "T_Concrete": 4.0, "T_ConcreteFloor": 5.0,
     "T_ConcreteDark": 4.0, "T_Brick": 8.0, "T_MetalPanel": 4.0, "T_OfficeCarpet": 6.0, "T_OfficeWall": 2.0,
     "T_HotelCarpet": 5.0, "T_HotelWallpaper": 3.0, "T_Wood": 3.0, "T_PoolTile": 9.0, "T_Rock": 10.0, "T_Dirt": 6.0,
     "T_Asphalt": 5.0, "T_Grass": 6.0, "T_Facade": 4.0, "T_Siding": 7.0, "T_Skin": 4.0,
@@ -130,38 +130,60 @@ def grid_coords(size):
 # Niveau 0
 # ---------------------------------------------------------------------------
 def t_l0_wallpaper():
+    """Papier peint du Niveau 0 (modele fourni) : bandes verticales vert-jaune bordees d'un liseré sombre,
+    avec des motifs de trois chevrons empiles, decales d'une demi-periode d'une colonne a l'autre.
+    Une repetition = 16 colonnes (120 cm dans le jeu, soit des bandes de 7,5 cm)."""
     S = 2048
     x, y = grid_coords(S)
-    base = np.array([0.80, 0.72, 0.42])
-    img = np.ones((S, S, 3)) * base
-    # motif : colonnes de rayures fines + petits chevrons
-    cols = 8
-    u = (x * cols) % 1.0
-    v = (y * 16) % 1.0
-    line1 = np.exp(-((u - 0.05) / 0.012) ** 2)
-    line2 = np.exp(-((u - 0.95) / 0.012) ** 2)
-    stripes = np.maximum(line1, line2)
-    chev = np.abs((u - 0.5) * 2.0)
-    chev_shape = np.exp(-(((v - 0.5) - 0.35 * chev) / 0.035) ** 2) * (chev < 0.55)
-    pattern = stripes * 0.9 + chev_shape * 0.55
-    img = img * (1 - 0.10 * pattern[..., None])
-    # joints des les de papier peint (tous les 60 cm)
-    us = (x * 2) % 1.0
-    seam = np.exp(-((us - 0.0) / 0.0015) ** 2) + np.exp(-((us - 1.0) / 0.0015) ** 2)
-    lip = np.exp(-((us - 0.004) / 0.002) ** 2)
-    img = img * (1 - 0.18 * seam[..., None]) * (1 + 0.05 * lip[..., None])
-    # fibres papier
+    cols, rows = 16, 5
+    light = np.array([185, 180, 98]) / 255.0
+    mid = np.array([166, 162, 80]) / 255.0
+    dark = np.array([146, 142, 60]) / 255.0
+    col = np.floor(x * cols).astype(int)
+    u = (x * cols) % 1.0                        # position dans la colonne
+    # liseré sombre (bord gauche de chaque colonne), bords adoucis
+    border = smoothstep(0.0, 0.03, u) * (1 - smoothstep(0.22, 0.27, u))
+    inner_line = np.exp(-((u - 0.125) / 0.025) ** 2)     # trait central un peu plus fonce dans le liseré
+    # motif : 3 chevrons "^" dans la bande claire, une rangee sur deux decalee
+    shift = (col % 2) * 0.5
+    v = (y * rows + shift) % 1.0
+    cu = (u - 0.62) / 0.36                     # -1..1 sur la largeur du motif
+    inside = np.abs(cu) < 1.0
+    motif = np.zeros((S, S))
+    edge = np.zeros((S, S))
+    for k in range(3):
+        c0 = 0.10 + k * 0.075                   # hauteur du sommet de chaque chevron
+        d = (v - (c0 + np.abs(cu) * 0.12))      # distance verticale a la ligne du chevron
+        band = np.exp(-(d / 0.028) ** 4) * inside
+        motif = np.maximum(motif, band)
+        edge = np.maximum(edge, np.exp(-((np.abs(d) - 0.03) / 0.006) ** 2) * inside)
+    # bords du motif adoucis (pointe arrondie)
+    motif *= smoothstep(1.0, 0.82, np.abs(cu))
+    img = np.ones((S, S, 3)) * light
+    img = mix(img, np.ones_like(img) * dark, border * 0.85)
+    img = mix(img, img * 0.93, inner_line * border)
+    img = mix(img, np.ones_like(img) * dark * 0.98, motif * 0.92)
+    img = mix(img, np.ones_like(img) * mid * 1.08, edge * 0.45 * (1 - border))
+    # trame textile verticale + fibres
+    weave = noise(S, beta=1.0, seed=21, aniso=(0.25, 4.0))
+    img *= (1 + 0.025 * weave)[..., None]
     paper = noise(S, beta=0.6, seed=11)
-    img *= (1 + 0.035 * paper)[..., None]
-    # decolorations larges
+    img *= (1 + 0.03 * paper)[..., None]
+    # decolorations larges et taches d'humidite (discretes : la salete du bas de mur est geree par le materiau)
     blot = noise(S, beta=3.0, seed=12)
-    img *= (1 - 0.07 * n01(blot, 2.0))[..., None]
-    # taches d'humidite brunes
+    img *= (1 - 0.06 * n01(blot, 2.0))[..., None]
     stain = noise(S, beta=2.6, seed=13)
-    ring = smoothstep(1.5, 1.8, stain) - smoothstep(2.0, 2.5, stain)
-    inside = smoothstep(1.6, 2.4, stain)
-    img = mix(img, img * np.array([0.78, 0.68, 0.45]), np.clip(inside * 0.35 + ring * 0.4, 0, 1))
+    ring = smoothstep(1.7, 2.0, stain) - smoothstep(2.2, 2.6, stain)
+    inside_st = smoothstep(1.8, 2.6, stain)
+    img = mix(img, img * np.array([0.82, 0.76, 0.55]), np.clip(inside_st * 0.3 + ring * 0.35, 0, 1))
+    # joints des les (tous les 60 cm = 8 colonnes), legerement decolles
+    us = (x * 2) % 1.0
+    seam = np.exp(-((us - 0.0) / 0.0012) ** 2) + np.exp(-((us - 1.0) / 0.0012) ** 2)
+    img *= (1 - 0.15 * seam)[..., None]
     save("T_L0_Wallpaper", img)
+    # relief : motif et bandes legerement embossees, liseré en creux
+    height = 0.6 * motif - 0.5 * border + 0.15 * weave / 3.0 - 0.6 * seam
+    save_normal("T_L0_Wallpaper", height, 6.0, 1024)
 
 
 def t_l0_carpet():
