@@ -12,6 +12,7 @@
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionConstant2Vector.h"
 #include "Materials/MaterialExpressionConstant3Vector.h"
+#include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionDivide.h"
 #include "Materials/MaterialExpressionDotProduct.h"
 #include "Materials/MaterialExpressionLinearInterpolate.h"
@@ -167,6 +168,27 @@ namespace
 			return FPin{ E, 0 };
 		}
 
+		/** Noeud HLSL "Custom" : Inputs = (nom, entree) */
+		FPin Custom(const TCHAR* Description, const FString& Code, ECustomMaterialOutputType OutType, const TArray<TPair<FName, FPin>>& Inputs)
+		{
+			UMaterialExpressionCustom* E = New<UMaterialExpressionCustom>();
+			E->Description = Description;
+			E->Code = Code;
+			E->OutputType = OutType;
+			E->Inputs.Reset();
+			for (const TPair<FName, FPin>& In : Inputs)
+			{
+				FCustomInput CI;
+				CI.InputName = In.Key;
+				E->Inputs.Add(CI);
+			}
+			for (int32 i = 0; i < Inputs.Num(); ++i)
+			{
+				Link(E->Inputs[i].Input, Inputs[i].Value);
+			}
+			return FPin{ E, 0 };
+		}
+
 		FPin Lerp(const FPin& InA, const FPin& InB, const FPin& Alpha)
 		{
 			UMaterialExpressionLinearInterpolate* E = New<UMaterialExpressionLinearInterpolate>();
@@ -289,27 +311,22 @@ namespace
 		const FPin WP = G.WorldPos();
 		const FPin XY = G.Mask(WP, TEXT("rg"));
 		const FPin T = G.Time();
-		const FPin Amp = G.Scalar(TEXT("WaveAmplitude"), 1.f);
 
-		// Trois trains de vagues : h = somme A sin(k D.p + w t) ; pente = somme A k cos(...) D
-		struct FWave
+		// Surface : houle (deplace la surface), clapot (normales) et ondes circulaires autour du joueur.
+		// Meme code HLSL que BR_WATER_SURFACE_HLSL dans Content/Python/backrooms_setup.py.
+		TArray<TPair<FName, FPin>> Inputs;
+		Inputs.Add(TPair<FName, FPin>(TEXT("P"), XY));
+		Inputs.Add(TPair<FName, FPin>(TEXT("T"), T));
+		Inputs.Add(TPair<FName, FPin>(TEXT("Amp"), G.Scalar(TEXT("WaveAmplitude"), 1.f)));
+		Inputs.Add(TPair<FName, FPin>(TEXT("Chop"), G.Scalar(TEXT("WaveChop"), 1.f)));
+		for (int32 i = 0; i < BRMaterialBuilder::NumRipples; ++i)
 		{
-			float DX, DY, Length, Speed, Amp;
-		};
-		const FWave Waves[3] = { { 0.8f, 0.6f, 340.f, 1.1f, 0.9f }, { -0.5f, 0.86f, 210.f, 1.6f, 0.55f }, { 0.2f, -0.98f, 130.f, 2.3f, 0.3f } };
-		FPin Height;
-		FPin Slope;
-		for (const FWave& Wv : Waves)
-		{
-			const float Kk = 6.283185f / Wv.Length;
-			const FPin Phase = G.Add(G.Dot(XY, G.C2(Wv.DX * Kk, Wv.DY * Kk)), G.Mul(T, G.Const(Wv.Speed)));
-			const FPin S = G.Mul(G.Sine(Phase), G.Const(Wv.Amp));
-			const FPin C = G.Mul(G.Sine(G.Add(Phase, G.Const(1.5708f))), G.C2(Wv.Amp * Kk * Wv.DX, Wv.Amp * Kk * Wv.DY));
-			Height = Height.Expr ? G.Add(Height, S) : S;
-			Slope = Slope.Expr ? G.Add(Slope, C) : C;
+			const FString Name = FString::Printf(TEXT("Ripple%d"), i);
+			Inputs.Add(TPair<FName, FPin>(FName(*FString::Printf(TEXT("R%d"), i)), G.Vector(*Name, FLinearColor(0.f, 0.f, 0.f, 0.f))));
 		}
-		Height = G.Mul(Height, Amp);
-		Slope = G.Mul(Slope, Amp);
+		const FPin Surface = G.Custom(TEXT("BRWaterSurface"), BRMaterialBuilder::WaterSurfaceHLSL(), CMOT_Float3, Inputs);
+		const FPin Height = G.Mask(Surface, TEXT("b"));
+		const FPin Slope = G.Mask(Surface, TEXT("rg"));
 		FGraph::Link(Out->WorldPositionOffset, G.Append(G.C2(0.f, 0.f), Height));
 
 		// Rides de detail
@@ -341,6 +358,47 @@ namespace
 
 namespace BRMaterialBuilder
 {
+	const FString& WaterSurfaceHLSL()
+	{
+		// Entrees : P (XY monde, cm), T (temps, s), Amp (houle), Chop (clapot), R0..R7 (ondes : x, y, rayon, amplitude).
+		// Sortie : float3(pente X, pente Y, hauteur de la houle).
+		static const FString Code = TEXT(
+			"float3 acc = float3(0.0, 0.0, 0.0);\n"
+			"float2 dir; float k; float ph;\n"
+			"// Houle lente : deplace la surface (la grille d'eau a un sommet par metre)\n"
+			"dir = float2(0.8, 0.6); k = 6.2831853 / 620.0; ph = dot(P, dir) * k + T * 0.8;\n"
+			"acc += float3(cos(ph) * 1.3 * k * dir, sin(ph) * 1.3) * Amp;\n"
+			"dir = float2(-0.6, 0.8); k = 6.2831853 / 470.0; ph = dot(P, dir) * k + T * 1.05;\n"
+			"acc += float3(cos(ph) * 0.8 * k * dir, sin(ph) * 0.8) * Amp;\n"
+			"// Clapot : vagues courtes qui ne font que plier les reflets\n"
+			"float2 sl = float2(0.0, 0.0);\n"
+			"dir = float2(0.8, 0.6); k = 6.2831853 / 340.0; sl += cos(dot(P, dir) * k + T * 1.1) * 0.9 * k * dir;\n"
+			"dir = float2(-0.5, 0.866); k = 6.2831853 / 210.0; sl += cos(dot(P, dir) * k + T * 1.6) * 0.55 * k * dir;\n"
+			"dir = float2(0.2, -0.98); k = 6.2831853 / 130.0; sl += cos(dot(P, dir) * k + T * 2.3) * 0.3 * k * dir;\n"
+			"dir = float2(-0.94, -0.34); k = 6.2831853 / 75.0; sl += cos(dot(P, dir) * k + T * 3.1) * 0.16 * k * dir;\n"
+			"dir = float2(0.57, -0.82); k = 6.2831853 / 46.0; sl += cos(dot(P, dir) * k + T * 4.2) * 0.08 * k * dir;\n"
+			"acc.xy += sl * Amp * Chop;\n"
+			"// Ondes circulaires (pas du joueur, nage, gouttes) : front gaussien qui s'eloigne en s'elargissant\n"
+			"float4 R[8] = { R0, R1, R2, R3, R4, R5, R6, R7 };\n"
+			"[unroll] for (int i = 0; i < 8; i++)\n"
+			"{\n"
+			"  float4 r = R[i];\n"
+			"  if (r.w > 0.0005)\n"
+			"  {\n"
+			"    float2 d2 = P - r.xy;\n"
+			"    float d = max(length(d2), 0.5);\n"
+			"    float x = d - r.z;\n"
+			"    float w = 18.0 + 0.15 * r.z;\n"
+			"    float kk = 6.2831853 / 22.0;\n"
+			"    float env = exp(-(x * x) / (w * w));\n"
+			"    float dh = r.w * env * (kk * cos(kk * x) - 2.0 * x / (w * w) * sin(kk * x));\n"
+			"    acc.xy += dh * d2 / d;\n"
+			"  }\n"
+			"}\n"
+			"return acc;\n");
+		return Code;
+	}
+
 	bool IsAvailable()
 	{
 #if WITH_EDITOR

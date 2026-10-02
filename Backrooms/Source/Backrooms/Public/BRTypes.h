@@ -207,9 +207,14 @@ struct FBRLevelDef
 	/** Proprietes optiques de l'eau (Single Layer Water) : plus elles sont basses, plus l'eau est limpide */
 	float WaterAbsorption = 1.2f;
 	float WaterScattering = 0.15f;
+	/** Mouvement de l'eau : houle (deplace la surface) et clapot (vaguelettes qui plient les reflets) */
+	float WaterWaves = 1.f;
+	float WaterChop = 1.f;
 	/** Bassins profonds (Niveau 37) : proportion de blocs 2x2 creuses et profondeur sous le sol */
 	float PoolChance = 0.f;
 	float PoolDepth = 260.f;
+	/** Grandes verrieres inclinees a la jonction mur / plafond (par chunk) */
+	float SkylightChance = 0.f;
 	bool bOutdoor = false;
 	bool bPhenomena = false;  // bruits de pas lointains, etc.
 

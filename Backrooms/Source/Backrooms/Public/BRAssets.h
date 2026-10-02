@@ -43,7 +43,7 @@ public:
 	/** Materiau "projete dans l'espace monde" (murs, sols...) - mis en cache */
 	UMaterialInterface* Surface(const FBRSurface& S);
 	/** Eau (Single Layer Water) */
-	UMaterialInterface* WaterMaterial(const FBRSurface& S, float Absorption = 1.2f, float Scattering = 0.15f);
+	UMaterialInterface* WaterMaterial(const FBRSurface& S, float Absorption = 1.2f, float Scattering = 0.15f, float Waves = 1.f, float Chop = 1.f);
 	/** Materiau d'un slot de modele Blender, d'apres son nom (Glow, Metal, Skin...) */
 	UMaterialInterface* SlotMaterial(const FString& SlotName, const FLinearColor* TintOverride = nullptr);
 	/** Nouveau materiau emissif unique (pour les lumieres qui clignotent, les yeux...) */

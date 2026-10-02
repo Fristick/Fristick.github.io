@@ -79,12 +79,15 @@ protected:
 	void AddWallSegment(bool bAlongY, float Fixed, float A, float B, float ZLo, float ZHi, bool bWithTrim, bool bWithPipes);
 	void AddDoorway(bool bAlongY, float Fixed, float Mid);
 	void AddFaceProp(int32 X, int32 Y, const FIntPoint& Dir, FName Mesh, float Along, float Z, const FVector& FallbackSize, bool bCollision);
-	void AddWaterPlane(const FVector& Center, const FVector2D& Size);
+	/** Plan d'eau du niveau, ou flaque calme (bCalm : presque pas de vagues) */
+	void AddWaterPlane(const FVector& Center, const FVector2D& Size, bool bCalm = false);
 	/** Prises electriques, grilles d'aeration le long d'un mur */
 	void AddWallDetails(bool bAlongY, float Fixed, float A, float B);
 	void BuildCellProps(int32 X, int32 Y);
 	/** Sol cellule par cellule avec bassins profonds (Niveau 37) */
 	void BuildPools();
+	/** Verriere inclinee sur un mur + lumiere du jour qui inonde la piece (Niveau 37) */
+	void BuildSkylight();
 	void BuildPickupsAndExits();
 	void FinishBatches();
 

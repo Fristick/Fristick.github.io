@@ -18,6 +18,12 @@ enum class EBRMasterMaterial : uint8
 
 namespace BRMaterialBuilder
 {
+	/** Nombre d'ondes circulaires simultanees sur l'eau (parametres Ripple0..7 du materiau d'eau) */
+	constexpr int32 NumRipples = 8;
+
+	/** Code HLSL de la surface de l'eau (houle, clapot, ondes), identique a celui du script Python */
+	const FString& WaterSurfaceHLSL();
+
 	/** true si l'executable peut compiler des materiaux (editeur, PIE, -game non cuisine) */
 	bool IsAvailable();
 

@@ -14,9 +14,14 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 - **Toutes les touches se reconfigurent, même en pleine partie** : onglet **TOUCHES** de l'inventaire (**Tab**) ou
   bouton **TOUCHES** du menu pause. Chaque action accepte 3 touches (clavier ou boutons de souris). Les messages
   du jeu (« [E] Ramasser »…) affichent vos touches. Les réglages sont sauvegardés.
-- **Eau** des Poolrooms **plus claire et turquoise**, **bassins profonds** où l'on **nage** : nage dans la direction
-  du regard, plongée, apnée (jauge d'oxygène), remontée, sortie par le rebord. La marche est ralentie dans l'eau et
-  la vue est teintée sous la surface (brouillard turquoise, son étouffé). Des projecteurs sont immergés dans les bassins.
+- **L'eau bouge** : houle lente qui soulève la surface, clapot qui déforme les reflets, et **ondes circulaires**
+  qui partent du joueur à chaque pas, à chaque brasse, quand il saute ou plonge dans l'eau, et quand des gouttes
+  tombent du plafond. Tout est calculé dans le matériau d'eau (nœud HLSL).
+- **Poolrooms refaites d'après la capture de référence** : eau limpide turquoise-verte, petit carrelage blanc cassé
+  très brillant, **plafonniers ovales**, **grandes verrières inclinées** qui inondent les salles de lumière du jour.
+- **Bassins profonds** où l'on **nage** : nage dans la direction du regard, plongée, apnée (jauge d'oxygène),
+  remontée, sortie par le rebord. L'eau freine la marche (démarrages et arrêts plus lents), la vue est teintée sous
+  la surface (brouillard turquoise, son étouffé), des projecteurs sont immergés dans les bassins.
 - **Nouveau papier peint du Niveau 0** (rayures jaune-vert à chevrons, d'après l'image fournie).
 - **Modèles fournis intégrés** : la **combinaison hazmat** devient le corps du joueur (visible en **vue à la 3e personne**,
   touche **V**), la **Bacteria** et le **Deathmoth** utilisent les modèles fournis (articulés). Le Skin-Stealer se
@@ -51,10 +56,10 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 52 textures (dont 21 normal maps), 11 icônes, 66 sons, 94 modèles (FBX). Il crée aussi
+   toutes les ressources : 52 textures (dont 21 normal maps), 11 icônes, 66 sons, 95 modèles (FBX). Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_Water`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
-   **Si vous aviez déjà importé la v1 ou la v2**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
+   **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
 4. Appuyez sur **Play** (Alt+P). Dans le menu titre, choisissez le niveau (← / →) puis appuyez sur **Entrée** pour « noclipper ».
 
 > Pour relancer l'import à la main : *Window → Output Log*, choisir **Python** en bas, puis
@@ -180,7 +185,7 @@ L'écran imite une caméra « found footage » : REC, horodatage, grain et vigne
 | **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10 |
 | **10** | *Field of Wheat* | Champ de blé infini sous un ciel couvert, granges, poteaux | Faceling (paisible) | Grange → 11 |
 | **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour | Facelings (paisibles) | Porte d'immeuble → niveau aléatoire |
-| **37** | *Sublimity* (« Poolrooms ») | Salles carrelées blanches très lumineuses inondées d'une eau tiède, claire et turquoise (vagues, réfraction, caustiques animées). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
+| **37** | *Sublimity* (« Poolrooms ») | Salles en petit carrelage blanc brillant, plafonniers ovales et grandes verrières inclinées, inondées d'une eau tiède turquoise-verte qui ondule (houle, clapot, ondes autour du joueur, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
 
 Chaque niveau est une grille **infinie** générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
@@ -282,8 +287,11 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 - **Murs** : projection triplanaire dans l'espace monde (aucune texture étirée), **normal maps** (relief du papier peint,
   de la moquette, des joints), saleté à grande échelle, saleté au pied des murs, rugosité variable.
 - **Néons** : lumières **surfaciques** (rect lights) pour des ombres douces ; seule une partie projette des ombres (`ShadowChance`).
-- **Eau** (Poolrooms) : modèle *Single Layer Water* (absorption/diffusion de la lumière, reflets Lumen/RT), vagues par
-  *World Position Offset* sur une grille subdivisée, rides en normal maps qui défilent, caustiques animées au fond.
+- **Eau** (Poolrooms) : modèle *Single Layer Water* (absorption/diffusion de la lumière, reflets Lumen/RT). Un nœud HLSL
+  calcule la houle (*World Position Offset* sur une grille subdivisée), le clapot et jusqu'à 8 ondes circulaires
+  (paramètres `Ripple0..7` mis à jour par `ABRWorld::UpdateRipples`). S'y ajoutent des rides en normal maps qui
+  défilent et des caustiques animées au fond. Réglages par niveau dans `BRLevels.cpp` : `WaterAbsorption`,
+  `WaterScattering` (limpidité), `WaterWaves` (houle), `WaterChop` (clapot).
 - Sur une petite configuration : onglet **PARAMÈTRES** (qualité « MOYEN », RTX désactivé, néons surfaciques désactivés),
   ou baissez `ViewDistance` / `LightChance` dans `BRLevels.cpp`.
 

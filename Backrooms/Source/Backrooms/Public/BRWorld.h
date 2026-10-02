@@ -16,6 +16,7 @@ class UDirectionalLightComponent;
 class USkyLightComponent;
 class UPostProcessComponent;
 class UAudioComponent;
+class UMaterialInstanceDynamic;
 
 /** Lumiere d'une cellule */
 struct FBRLightInfo
@@ -98,6 +99,10 @@ public:
 	float FloorZAt(const FVector& P) const;
 	/** Camera sous l'eau (0..1) : brouillard turquoise dense */
 	void SetUnderwater(float Blend);
+	/** Surface (texture, teinte) de l'eau du niveau */
+	FBRSurface GetWaterSurface() const;
+	/** Onde circulaire a la surface de l'eau (pas, nage, plongeon). Strength ~ amplitude en cm */
+	void AddWaterRipple(const FVector& Location, float Strength);
 	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire) */
 	float LightLevelAt(const FVector& P) const;
 	/** A* sur la grille */
@@ -152,6 +157,10 @@ protected:
 
 	float UnderwaterBlend = 0.f;
 
+	/** Materiau de l'eau du niveau (ses parametres Ripple0..7 dessinent les ondes) */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WaterMID;
+
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USkyAtmosphereComponent> SkyAtmosphere;
 
@@ -194,6 +203,20 @@ private:
 	void UpdateBlackout(float Dt);
 	void ApplyPower(bool bForce);
 	void CompleteTask(const FString& Text);
+	void UpdateRipples(float Dt);
+
+	struct FRipple
+	{
+		FVector2D Pos = FVector2D::ZeroVector;
+		float Age = 0.f;
+		float Strength = 0.f;
+		bool bActive = false;
+	};
+	static constexpr int32 MaxRipples = 8;
+	FRipple Ripples[MaxRipples];
+	int32 NextRipple = 0;
+	float DripTimer = 1.f;
+	bool bRipplesDirty = false;
 
 	const FBRLevelDef* Current = nullptr;
 	uint32 Seed = 1337;

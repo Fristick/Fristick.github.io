@@ -8,6 +8,7 @@
 #include "BRHUD.h"
 #include "BRPlayerController.h"
 #include "BRKeys.h"
+#include "BRMaterialBuilder.h"
 
 #include "Algo/Reverse.h"
 #include "Components/AudioComponent.h"
@@ -20,6 +21,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Sound/SoundBase.h"
@@ -224,6 +226,13 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber)
 	{
 		A->SetGlowScale(1.f);
 	}
+	// Ondes de l'eau : le materiau du nouveau niveau sera repris au premier Tick
+	WaterMID = nullptr;
+	for (FRipple& R : Ripples)
+	{
+		R = FRipple();
+	}
+	bRipplesDirty = true;
 
 	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title, Seed);
 
@@ -429,6 +438,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 		StreamTimer = 0.1f;
 		UpdateStreaming(false);
 	}
+	UpdateRipples(Dt);
 
 	// Le menu titre s'affiche par-dessus le niveau : pas de coupure ni d'annonce tant qu'on n'a pas commence
 	bool bMenu = false;
@@ -1104,6 +1114,104 @@ float ABRWorld::FloorZAt(const FVector& P) const
 	return IsPoolCell(C.X, C.Y) ? -Def().PoolDepth : 0.f;
 }
 
+FBRSurface ABRWorld::GetWaterSurface() const
+{
+	FBRSurface S = Def().Water;
+	if (S.Texture.IsNone())
+	{
+		S = FBRSurface(TEXT("T_WaterNormal"), FLinearColor(0.3f, 0.45f, 0.5f), 200.f, 0.05f, 0.f);
+	}
+	return S;
+}
+
+void ABRWorld::AddWaterRipple(const FVector& Location, float Strength)
+{
+	if (!Current || !Current->bWater || Strength <= 0.f)
+	{
+		return;
+	}
+	FRipple& R = Ripples[NextRipple];
+	NextRipple = (NextRipple + 1) % MaxRipples;
+	R.Pos = FVector2D(Location.X, Location.Y);
+	R.Age = 0.f;
+	R.Strength = Strength;
+	R.bActive = true;
+	bRipplesDirty = true;
+}
+
+void ABRWorld::UpdateRipples(float Dt)
+{
+	static_assert(MaxRipples == BRMaterialBuilder::NumRipples, "Une onde par parametre RippleN du materiau d'eau");
+	if (!Current || !Current->bWater)
+	{
+		return;
+	}
+	// Gouttes qui tombent du plafond autour du joueur : l'eau n'est jamais tout a fait immobile
+	DripTimer -= Dt;
+	if (DripTimer <= 0.f)
+	{
+		DripTimer = FMath::FRandRange(0.5f, 1.6f);
+		const ABRCharacter* P = GetPlayer();
+		for (FRipple& R : Ripples)
+		{
+			if (P && !R.bActive)
+			{
+				const FVector L = P->GetActorLocation() + FVector(FMath::FRandRange(-800.f, 800.f), FMath::FRandRange(-800.f, 800.f), 0.f);
+				R.Pos = FVector2D(L.X, L.Y);
+				R.Age = 0.f;
+				R.Strength = FMath::FRandRange(0.25f, 0.55f);
+				R.bActive = true;
+				bRipplesDirty = true;
+				break;
+			}
+		}
+	}
+
+	if (!WaterMID)
+	{
+		if (UBRAssets* A = UBRAssets::Get(this))
+		{
+			const FBRLevelDef& D = Def();
+			WaterMID = Cast<UMaterialInstanceDynamic>(A->WaterMaterial(GetWaterSurface(), D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop));
+			bRipplesDirty = true;
+		}
+	}
+
+	static const FName Names[MaxRipples] = { TEXT("Ripple0"), TEXT("Ripple1"), TEXT("Ripple2"), TEXT("Ripple3"), TEXT("Ripple4"),
+		TEXT("Ripple5"), TEXT("Ripple6"), TEXT("Ripple7") };
+	bool bAny = false;
+	FLinearColor Values[MaxRipples];
+	for (int32 i = 0; i < MaxRipples; ++i)
+	{
+		FRipple& R = Ripples[i];
+		Values[i] = FLinearColor(0.f, 0.f, 0.f, 0.f);
+		if (!R.bActive)
+		{
+			continue;
+		}
+		// Le front s'eloigne a ~70 cm/s et s'amortit en s'etalant
+		R.Age += Dt;
+		const float Radius = 6.f + 70.f * R.Age;
+		const float Amp = R.Strength * FMath::Exp(-1.1f * R.Age) / (1.f + Radius / 150.f);
+		if (R.Age > 4.f || Amp < 0.004f)
+		{
+			R.bActive = false;
+			continue;
+		}
+		Values[i] = FLinearColor(static_cast<float>(R.Pos.X), static_cast<float>(R.Pos.Y), Radius, Amp);
+		bAny = true;
+	}
+	// Une derniere mise a jour une fois les ondes eteintes, puis plus rien tant que l'eau est calme
+	if (WaterMID && (bAny || bRipplesDirty))
+	{
+		for (int32 i = 0; i < MaxRipples; ++i)
+		{
+			WaterMID->SetVectorParameterValue(Names[i], Values[i]);
+		}
+	}
+	bRipplesDirty = bAny;
+}
+
 void ABRWorld::SetUnderwater(float Blend)
 {
 	Blend = FMath::Clamp(Blend, 0.f, 1.f);
@@ -1116,7 +1224,7 @@ void ABRWorld::SetUnderwater(float Blend)
 	// Eau limpide : on voit loin, mais tout se noie dans le turquoise
 	Fog->SetFogDensity(FMath::Lerp(D.FogDensity, 0.09f, Blend));
 	Fog->SetFogHeightFalloff(FMath::Lerp(D.FogFalloff, 0.001f, Blend));
-	Fog->SetFogInscatteringColor(FMath::Lerp(D.FogColor, FLinearColor(0.1f, 0.4f, 0.46f), Blend));
+	Fog->SetFogInscatteringColor(FMath::Lerp(D.FogColor, FLinearColor(0.08f, 0.36f, 0.34f), Blend));
 	Fog->SetStartDistance(FMath::Lerp(D.FogStart, 0.f, Blend));
 }
 

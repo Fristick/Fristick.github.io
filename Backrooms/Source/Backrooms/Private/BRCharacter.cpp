@@ -949,6 +949,25 @@ void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 	}
 }
 
+void ABRCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	// Atterrir dans l'eau : gerbe et grosse onde
+	if (WaterDepth > 5.f && !bSwimming)
+	{
+		const float Impact = FMath::Abs(static_cast<float>(GetVelocity().Z));
+		if (SplashCooldown <= 0.f)
+		{
+			PlaySound2D(TEXT("S_Splash"), FMath::Clamp(0.3f + Impact / 1200.f, 0.3f, 0.8f));
+			SplashCooldown = 0.5f;
+		}
+		if (ABRWorld* W = ABRWorld::Get(this))
+		{
+			W->AddWaterRipple(GetActorLocation(), FMath::Clamp(1.2f + Impact / 400.f, 1.2f, 3.f));
+		}
+	}
+}
+
 void ABRCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
@@ -1039,6 +1058,10 @@ void ABRCharacter::UpdateStats(float Dt)
 	const float Wade = (!bSwimming && WaterDepth > 5.f) ? FMath::Lerp(1.f, 0.6f, FMath::Clamp(WaterDepth / 120.f, 0.f, 1.f)) : 1.f;
 	const bool bFast = bWantsSprint && !bExhausted;
 	GetCharacterMovement()->MaxWalkSpeed = (bFast ? SprintSpeed : WalkSpeed) * Wade;
+	// L'eau freine les demarrages et prolonge les arrets (on la pousse, elle nous pousse)
+	const float Drag = bSwimming ? 0.f : FMath::Clamp(WaterDepth / 100.f, 0.f, 1.f);
+	GetCharacterMovement()->MaxAcceleration = FMath::Lerp(2048.f, 850.f, Drag);
+	GetCharacterMovement()->BrakingDecelerationWalking = FMath::Lerp(1800.f, 650.f, Drag);
 	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed * Wade;
 	GetCharacterMovement()->MaxFlySpeed = bFast ? SwimSprintSpeed : SwimSpeed;
 	if (bSprint)
@@ -1121,9 +1144,9 @@ void ABRCharacter::UpdateCamera(float Dt)
 	}
 	else if (bGrounded && Speed > 15.f && !bDead)
 	{
-		const float Rate = 8.f * (Speed / WalkSpeed);
+		const float Rate = 8.f * (Speed / WalkSpeed) * FMath::Lerp(1.f, 0.8f, FMath::Clamp(WaterDepth / 100.f, 0.f, 1.f));
 		BobTime += Dt * FMath::Clamp(Rate, 4.f, 14.f);
-		const float Amp = IsSprinting() ? 3.2f : (bIsCrouched ? 1.2f : 2.f);
+		const float Amp = (IsSprinting() ? 3.2f : (bIsCrouched ? 1.2f : 2.f)) * (1.f + FMath::Clamp(WaterDepth / 100.f, 0.f, 1.f) * 0.4f);
 		BobZ = FMath::Sin(BobTime) * Amp;
 		BobY = FMath::Cos(BobTime * 0.5f) * Amp * 0.6f;
 		const int32 Phase = FMath::FloorToInt(BobTime / PI);
@@ -1454,7 +1477,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
 
 	FLinearColor Tint = D ? D->SceneTint : FLinearColor::White;
-	Tint = FMath::Lerp(Tint, FLinearColor(0.5f, 0.9f, 0.95f), UnderBlend * 0.8f);
+	Tint = FMath::Lerp(Tint, FLinearColor(0.45f, 0.9f, 0.82f), UnderBlend * 0.8f);
 	if (bNV)
 	{
 		Tint = FLinearColor(0.35f, 1.f, 0.45f);
@@ -1717,6 +1740,10 @@ void ABRCharacter::StartSwimming()
 		PlaySound2D(TEXT("S_Splash"), FMath::Clamp(0.35f + Impact / 900.f, 0.35f, 1.f));
 		SplashCooldown = 0.8f;
 	}
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->AddWaterRipple(GetActorLocation(), FMath::Clamp(1.5f + Impact / 300.f, 1.5f, 3.5f));
+	}
 	if (!bSwimHint)
 	{
 		bSwimHint = true;
@@ -1786,6 +1813,10 @@ void ABRCharacter::ClimbOutOfWater()
 	Stamina = FMath::Max(0.f, Stamina - 6.f);
 	PlaySound2D(TEXT("S_Splash"), 0.45f);
 	SplashCooldown = 1.f;
+	if (ABRWorld* MW = ABRWorld::Get(this))
+	{
+		MW->AddWaterRipple(GetActorLocation(), 1.4f);
+	}
 }
 
 void ABRCharacter::UpdateWater(float Dt)
@@ -1869,6 +1900,26 @@ void ABRCharacter::UpdateWater(float Dt)
 	{
 		PlaySound2D(TEXT("S_Splash"), 0.3f);
 		SplashCooldown = 0.5f;
+		W->AddWaterRipple(L, 1.6f);
+	}
+
+	// Ondes a la surface : on fend l'eau en marchant, on la brasse en nageant, on la remue meme immobile
+	const FVector Vel = GetVelocity();
+	const bool bTouchesSurface = bSwimming ? (L.Z + CamZ > WaterZ - 45.f) : (WaterDepth > 4.f && L.Z - Half < WaterZ);
+	RippleTimer -= Dt;
+	if (bTouchesSurface && !bDead && RippleTimer <= 0.f)
+	{
+		const float Moving = FMath::Clamp(static_cast<float>(Vel.Size2D()) / WalkSpeed, 0.f, 1.5f);
+		if (Moving > 0.08f)
+		{
+			RippleTimer = FMath::Lerp(0.42f, 0.2f, FMath::Min(Moving, 1.f));
+			W->AddWaterRipple(L + Vel.GetSafeNormal2D() * 25.f, (bSwimming ? 1.1f : 0.7f) + 0.5f * Moving);
+		}
+		else
+		{
+			RippleTimer = bSwimming ? 0.9f : 1.6f;
+			W->AddWaterRipple(L, bSwimming ? 0.45f : 0.2f);
+		}
 	}
 
 	if (!bSwimming)

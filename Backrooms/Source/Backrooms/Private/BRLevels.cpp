@@ -521,21 +521,23 @@ namespace
 		D.WallLineChance = 0.35f; D.SegmentLength = 3; D.DoorChance = 0.5f; D.DoorWidth = 220.f;
 		D.PillarChance = 0.25f; D.PillarSize = 70.f; D.OpenZoneChance = 0.35f;
 		D.bTrim = false; D.bLintels = true;
-		D.Floor = S(TEXT("T_PoolTile"), C(1, 1, 1), 100.f, 0.15f, 0.15f);
-		D.Wall = S(TEXT("T_PoolTile"), C(1, 1, 1), 100.f, 0.2f, 0.15f);
-		D.Ceiling = S(TEXT("T_PoolTile"), C(0.95f, 0.97f, 0.97f), 100.f, 0.3f, 0.1f);
+		// D'apres la capture de reference : petit carrelage blanc casse tres brillant, plafonniers ovales,
+		// grandes verrieres, eau turquoise-verte limpide qui ondule
+		D.Floor = S(TEXT("T_PoolTile"), C(0.97f, 0.97f, 0.94f), 100.f, 0.12f, 0.1f);
+		D.Wall = S(TEXT("T_PoolTile"), C(0.95f, 0.95f, 0.91f), 100.f, 0.1f, 0.12f);
+		D.Ceiling = S(TEXT("T_PoolTile"), C(0.96f, 0.96f, 0.93f), 100.f, 0.14f, 0.08f);
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::SkyPanel;
-		D.LightChance = 0.5f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
-		D.LightLumens = 4200.f; D.LightColor = C(0.95f, 1.f, 1.f); D.LightRadius = 1000.f; D.ShadowChance = 0.1f;
-		D.LightChance = 0.6f;
-		// Eau limpide et turquoise (absorption faible, presque pas de diffusion) + bassins profonds ou l'on nage
+		D.LightChance = 0.6f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
+		D.LightLumens = 4200.f; D.LightColor = C(1.f, 0.99f, 0.96f); D.LightRadius = 1000.f; D.ShadowChance = 0.15f;
+		D.SkylightChance = 0.45f;
 		D.bWater = true; D.WaterHeight = 45.f;
-		D.Water = S(TEXT("T_WaterNormal"), C(0.55f, 0.9f, 0.92f), 300.f, 0.02f, 0.f);
-		D.WaterAbsorption = 0.45f; D.WaterScattering = 0.035f;
+		D.Water = S(TEXT("T_WaterNormal"), C(0.22f, 0.68f, 0.64f), 300.f, 0.02f, 0.f);
+		D.WaterAbsorption = 1.1f; D.WaterScattering = 0.2f;
+		D.WaterWaves = 1.6f; D.WaterChop = 1.3f;
 		D.PoolChance = 0.32f; D.PoolDepth = 260.f;
-		D.FogDensity = 0.015f; D.FogColor = C(0.7f, 0.86f, 0.9f);
-		D.SceneTint = C(0.95f, 1.f, 1.f); D.Saturation = 1.05f; D.Bloom = 1.2f;
+		D.FogDensity = 0.012f; D.FogColor = C(0.66f, 0.73f, 0.71f);
+		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.4f;
 		D.MinEV = 3.f; D.MaxEV = 10.f;
 		D.AmbientSound = TEXT("S_Amb_Pool"); D.AmbientVolume = 0.7f;
 		D.Step = EBRStep::Water;

@@ -601,9 +601,9 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 	return MID;
 }
 
-UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorption, float Scattering)
+UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorption, float Scattering, float Waves, float Chop)
 {
-	const FString Key = FString::Printf(TEXT("Water|%.3f|%.3f|"), Absorption, Scattering) + S.Key();
+	const FString Key = FString::Printf(TEXT("Water|%.3f|%.3f|%.2f|%.2f|"), Absorption, Scattering, Waves, Chop) + S.Key();
 	if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
 	{
 		return Found->Get();
@@ -628,8 +628,9 @@ UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorpti
 		MID->SetVectorParameterValue(TEXT("Tint"), S.Tint);
 		MID->SetScalarParameterValue(TEXT("TexScale"), S.Scale);
 		MID->SetScalarParameterValue(TEXT("Roughness"), FMath::Min(S.Roughness, 0.08f));
-		MID->SetScalarParameterValue(TEXT("WaveAmplitude"), 1.f);
-		MID->SetScalarParameterValue(TEXT("NormalStrength"), 0.35f);
+		MID->SetScalarParameterValue(TEXT("WaveAmplitude"), Waves);
+		MID->SetScalarParameterValue(TEXT("WaveChop"), Chop);
+		MID->SetScalarParameterValue(TEXT("NormalStrength"), 0.25f + 0.12f * Chop);
 		MID->SetScalarParameterValue(TEXT("Absorption"), Absorption);
 		MID->SetScalarParameterValue(TEXT("Scattering"), Scattering);
 	}
@@ -662,6 +663,14 @@ FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)
 	if (SlotName.Contains(TEXT("GlowWarm"), ESearchCase::IgnoreCase))
 	{
 		return FLinearColor(1.f, 0.7f, 0.38f) * 90.f;
+	}
+	if (SlotName.Contains(TEXT("GlowSky"), ESearchCase::IgnoreCase))
+	{
+		return FLinearColor(0.92f, 0.97f, 1.f) * 260.f; // verriere : jour eblouissant
+	}
+	if (SlotName.Contains(TEXT("GlowCool"), ESearchCase::IgnoreCase))
+	{
+		return FLinearColor(0.95f, 0.98f, 1.f) * 160.f;
 	}
 	return FLinearColor(1.f, 0.96f, 0.86f) * 120.f;
 }

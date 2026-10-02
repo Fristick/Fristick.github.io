@@ -28,6 +28,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+	/** Reception d'un saut : gerbe d'eau si on atterrit dans l'eau */
+	virtual void Landed(const FHitResult& Hit) override;
 
 	// ---- Entrees (appelees par le PlayerController) ----
 	void InputMove(const FVector2D& Value);
@@ -235,6 +237,7 @@ private:
 	float EdgePush = 0.f;
 	float SplashCooldown = 0.f;
 	float ClimbGrace = 0.f;
+	float RippleTimer = 0.f;
 	/** Se hisser sur le rebord d'un bassin : monter le long de la paroi, puis avancer */
 	bool bMantling = false;
 	float MantleTime = 0.f;

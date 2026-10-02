@@ -21,7 +21,7 @@ import os
 
 import unreal
 
-VERSION = 3
+VERSION = 4
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -315,6 +315,22 @@ class Graph(object):
     def world_pos(self):
         return self.node(unreal.MaterialExpressionWorldPosition)
 
+    def custom(self, description, code, inputs, output="CMOT_FLOAT3"):
+        """Noeud HLSL "Custom" ; inputs = [(nom, noeud), ...]"""
+        e = self.node(unreal.MaterialExpressionCustom)
+        safe_set(e, "description", description)
+        e.set_editor_property("code", code)
+        safe_set(e, "output_type", getattr(unreal.CustomMaterialOutputType, output))
+        ins = []
+        for name, _src in inputs:
+            ci = unreal.CustomInput()
+            ci.set_editor_property("input_name", name)
+            ins.append(ci)
+        e.set_editor_property("inputs", ins)
+        for name, src in inputs:
+            self.link(src, e, name)
+        return e
+
     def vertex_normal(self):
         return self.node(unreal.MaterialExpressionVertexNormalWS)
 
@@ -512,6 +528,46 @@ def build_mesh_material(name="M_BR_Mesh", skin=False):
     return m
 
 
+# Surface de l'eau (meme code que BRMaterialBuilder::WaterSurfaceHLSL en C++).
+# Entrees : P (XY monde, cm), T (temps, s), Amp (houle), Chop (clapot), R0..R7 (ondes : x, y, rayon, amplitude).
+# Sortie : float3(pente X, pente Y, hauteur de la houle).
+NUM_RIPPLES = 8
+BR_WATER_SURFACE_HLSL = (
+    "float3 acc = float3(0.0, 0.0, 0.0);\n"
+    "float2 dir; float k; float ph;\n"
+    "// Houle lente : deplace la surface (la grille d'eau a un sommet par metre)\n"
+    "dir = float2(0.8, 0.6); k = 6.2831853 / 620.0; ph = dot(P, dir) * k + T * 0.8;\n"
+    "acc += float3(cos(ph) * 1.3 * k * dir, sin(ph) * 1.3) * Amp;\n"
+    "dir = float2(-0.6, 0.8); k = 6.2831853 / 470.0; ph = dot(P, dir) * k + T * 1.05;\n"
+    "acc += float3(cos(ph) * 0.8 * k * dir, sin(ph) * 0.8) * Amp;\n"
+    "// Clapot : vagues courtes qui ne font que plier les reflets\n"
+    "float2 sl = float2(0.0, 0.0);\n"
+    "dir = float2(0.8, 0.6); k = 6.2831853 / 340.0; sl += cos(dot(P, dir) * k + T * 1.1) * 0.9 * k * dir;\n"
+    "dir = float2(-0.5, 0.866); k = 6.2831853 / 210.0; sl += cos(dot(P, dir) * k + T * 1.6) * 0.55 * k * dir;\n"
+    "dir = float2(0.2, -0.98); k = 6.2831853 / 130.0; sl += cos(dot(P, dir) * k + T * 2.3) * 0.3 * k * dir;\n"
+    "dir = float2(-0.94, -0.34); k = 6.2831853 / 75.0; sl += cos(dot(P, dir) * k + T * 3.1) * 0.16 * k * dir;\n"
+    "dir = float2(0.57, -0.82); k = 6.2831853 / 46.0; sl += cos(dot(P, dir) * k + T * 4.2) * 0.08 * k * dir;\n"
+    "acc.xy += sl * Amp * Chop;\n"
+    "// Ondes circulaires (pas du joueur, nage, gouttes) : front gaussien qui s'eloigne en s'elargissant\n"
+    "float4 R[8] = { R0, R1, R2, R3, R4, R5, R6, R7 };\n"
+    "[unroll] for (int i = 0; i < 8; i++)\n"
+    "{\n"
+    "  float4 r = R[i];\n"
+    "  if (r.w > 0.0005)\n"
+    "  {\n"
+    "    float2 d2 = P - r.xy;\n"
+    "    float d = max(length(d2), 0.5);\n"
+    "    float x = d - r.z;\n"
+    "    float w = 18.0 + 0.15 * r.z;\n"
+    "    float kk = 6.2831853 / 22.0;\n"
+    "    float env = exp(-(x * x) / (w * w));\n"
+    "    float dh = r.w * env * (kk * cos(kk * x) - 2.0 * x / (w * w) * sin(kk * x));\n"
+    "    acc.xy += dh * d2 / d;\n"
+    "  }\n"
+    "}\n"
+    "return acc;\n")
+
+
 def build_water_material():
     """Eau "Single Layer Water" : vagues par World Position Offset, petites rides (normal maps qui defilent),
     absorption et diffusion de la lumiere dans l'eau, reflets Lumen / ray tracing."""
@@ -524,21 +580,14 @@ def build_water_material():
     wp = g.world_pos()
     xy = g.mask(wp, "rg")
     t = g.time()
-    amp = g.scalar("WaveAmplitude", 1.0)
 
-    # Trois trains de vagues : h = somme A sin(k D.p + w t) ; pente = somme A k cos(...) D
-    waves = ((0.8, 0.6, 340.0, 1.1, 0.9), (-0.5, 0.86, 210.0, 1.6, 0.55), (0.2, -0.98, 130.0, 2.3, 0.3))
-    h = None
-    slope = None
-    for dx, dy, length, speed, a_cm in waves:
-        kk = 6.283185 / length
-        phase = g.add(g.mul(g.dot(xy, g.c2(dx * kk, dy * kk)), g.const(1.0)), g.mul(t, g.const(speed)))
-        s = g.mul(g.sine(phase), g.const(a_cm))
-        c = g.mul(g.sine(g.add(phase, g.const(1.5708))), g.c2(a_cm * kk * dx, a_cm * kk * dy))
-        h = s if h is None else g.add(h, s)
-        slope = c if slope is None else g.add(slope, c)
-    h = g.mul(h, amp)
-    slope = g.mul(slope, amp)
+    # Surface : houle (deplace la surface), clapot (normales) et ondes circulaires autour du joueur
+    inputs = [("P", xy), ("T", t), ("Amp", g.scalar("WaveAmplitude", 1.0)), ("Chop", g.scalar("WaveChop", 1.0))]
+    for i in range(NUM_RIPPLES):
+        inputs.append(("R%d" % i, g.vector("Ripple%d" % i, (0.0, 0.0, 0.0, 0.0))))
+    surface = g.custom("BRWaterSurface", BR_WATER_SURFACE_HLSL, inputs)
+    h = g.mask(surface, "b")
+    slope = g.mask(surface, "rg")
     g.output(g.append(g.c2(0.0, 0.0), h), P.MP_WORLD_POSITION_OFFSET)
 
     # Rides de detail

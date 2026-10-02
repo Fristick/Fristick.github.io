@@ -108,7 +108,7 @@ void ABRChunk::AddProp(FName MeshName, const FTransform& T, bool bCollision, con
 	}
 }
 
-void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size)
+void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size, bool bCalm)
 {
 	ABRWorld* W = World.Get();
 	UBRAssets* A = UBRAssets::Get(this);
@@ -116,14 +116,13 @@ void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size)
 	{
 		return;
 	}
-	FBRSurface WaterS = W->Def().Water;
-	if (WaterS.Texture.IsNone())
-	{
-		WaterS = FBRSurface(TEXT("T_WaterNormal"), FLinearColor(0.3f, 0.45f, 0.5f), 200.f, 0.05f, 0.f);
-	}
+	const FBRSurface WaterS = W->GetWaterSurface();
 	// Grille subdivisee (vagues par World Position Offset) si le modele Blender est importe
 	UStaticMesh* Grid = A->Mesh(TEXT("SM_WaterGrid"));
-	FBatch& B = GetBatch(TEXT("WATER"), Grid ? Grid : A->Plane(), A->WaterMaterial(WaterS, W->Def().WaterAbsorption, W->Def().WaterScattering), false, false, 0.f);
+	const FBRLevelDef& D = W->Def();
+	UMaterialInterface* Mat = bCalm ? A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.2f, 0.4f)
+		: A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop);
+	FBatch& B = GetBatch(bCalm ? TEXT("WATER|CALM") : TEXT("WATER"), Grid ? Grid : A->Plane(), Mat, false, false, 0.f);
 	B.Transforms.Add(FTransform(FRotator::ZeroRotator, Center - GetActorLocation(), FVector(Size.X / 100.f, Size.Y / 100.f, 1.f)));
 }
 
@@ -403,10 +402,12 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		SourceLength = 100.f;
 		break;
 	case EBRFixture::SkyPanel:
+		// Plafonnier ovale des Poolrooms
 		MeshName = TEXT("SM_SkyPanel");
 		MeshPos.Z = H;
 		LightPos.Z = H - 40.f;
-		FallbackSize = FVector(100.f, 100.f, 3.f);
+		FallbackSize = FVector(183.f, 68.f, 3.f);
+		SourceLength = 110.f;
 		break;
 	case EBRFixture::Tube:
 		MeshName = TEXT("SM_LightTube");
@@ -522,7 +523,8 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		float Length = 115.f;
 		if (D.Fixture == EBRFixture::SkyPanel)
 		{
-			Width = Length = 92.f;
+			Width = 55.f;
+			Length = 150.f;
 		}
 		else if (D.Fixture == EBRFixture::Tube)
 		{
@@ -806,9 +808,72 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 		}
 	}
 
+	if (D.SkylightChance > 0.f)
+	{
+		BuildSkylight();
+	}
+
 	FinishBatches();
 	BuildPickupsAndExits();
 	SetActorTickEnabled(Flickers.Num() > 0);
+}
+
+void ABRChunk::BuildSkylight()
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const uint32 Seed = W->GetSeed();
+	if (BRHash::Rand(Coord.X, Coord.Y, 1730, Seed) >= D.SkylightChance)
+	{
+		return;
+	}
+	const int32 N = D.ChunkCells;
+	for (int32 Try = 0; Try < 24; ++Try)
+	{
+		const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, 1731 + Try, Seed);
+		const FIntPoint Cell(Coord.X * N + static_cast<int32>(Hh % static_cast<uint32>(N)), Coord.Y * N + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
+		const FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
+		if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y))
+		{
+			continue;
+		}
+		// Il faut un vrai mur (ni porte, ni passage) sur ce cote de la cellule
+		const EBREdge E = Dir.X != 0 ? W->EdgeE(Dir.X > 0 ? Cell.X : Cell.X - 1, Cell.Y) : W->EdgeN(Cell.X, Dir.Y > 0 ? Cell.Y : Cell.Y - 1);
+		if (E != EBREdge::Wall && W->IsWalkable(FIntPoint(Cell.X + Dir.X, Cell.Y + Dir.Y)))
+		{
+			continue;
+		}
+		const float H = D.WallHeight;
+		AddFaceProp(Cell.X, Cell.Y, Dir, TEXT("SM_PoolSkylight"), 0.f, H, FVector::ZeroVector, false);
+
+		// La lumiere du jour entre par les vitrages inclines (vers la piece et vers le bas)
+		const float Inset = D.WallThickness * 0.5f;
+		const FVector Into(-Dir.X, -Dir.Y, 0.f);
+		const FVector Wall = W->CellCenter(Cell, H) + FVector(Dir.X, Dir.Y, 0.f) * (D.CellSize * 0.5f - Inset);
+		URectLightComponent* RL = NewObject<URectLightComponent>(this);
+		RL->SetupAttachment(Root);
+		RL->SetMobility(EComponentMobility::Movable);
+		RL->SetRelativeLocation(Wall + Into * 62.f + FVector(0.f, 0.f, -95.f) - GetActorLocation());
+		RL->SetRelativeRotation(FRotator(-31.f, YawFromDir(Into.X, Into.Y), 0.f));
+		RL->SetSourceWidth(280.f);
+		RL->SetSourceHeight(200.f);
+		RL->SetBarnDoorAngle(80.f);
+		RL->SetBarnDoorLength(10.f);
+		RL->SetIntensityUnits(ELightUnits::Lumens);
+		RL->SetIntensity(26000.f);
+		RL->SetLightColor(FLinearColor(0.93f, 0.97f, 1.f));
+		RL->SetAttenuationRadius(2600.f);
+		RL->SetCastShadows(true);
+		RL->MaxDrawDistance = D.ViewDistance;
+		RL->MaxDistanceFadeRange = 1000.f;
+		RL->RegisterComponent();
+		Extra.Add(RL);
+		return;
+	}
 }
 
 void ABRChunk::BuildCellProps(int32 X, int32 Y)
@@ -843,7 +908,7 @@ void ABRChunk::BuildCellProps(int32 X, int32 Y)
 		if (R(910) < 0.08f)
 		{
 			const FVector P = C + FVector((R(911) - 0.5f) * S * 0.6f, (R(912) - 0.5f) * S * 0.6f, 0.6f);
-			AddWaterPlane(P, FVector2D(150.f + R(913) * 200.f, 120.f + R(914) * 150.f));
+			AddWaterPlane(P, FVector2D(150.f + R(913) * 200.f, 120.f + R(914) * 150.f), true);
 		}
 		break;
 	}

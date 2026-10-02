@@ -58,7 +58,7 @@ PALETTE = {
     "Gauze": (0.95, 0.94, 0.9, 0), "Wrapper": (0.8, 0.2, 0.08, 0), "Reel": (0.9, 0.9, 0.9, 0), "Reflective": (0.85, 0.85, 0.8, 0),
     "Vest": (0.16, 0.2, 0.13, 0), "Mouth": (0.12, 0.02, 0.02, 0), "FleshGlass": (0.85, 0.55, 0.5, 0), "Vein": (0.45, 0.05, 0.08, 0),
     "Lens": (0.04, 0.07, 0.1, 0), "Strap": (0.05, 0.05, 0.05, 0), "Shoe": (0.06, 0.05, 0.05, 0), "Belt": (0.1, 0.07, 0.05, 0),
-    "Water": (0.2, 0.5, 0.55, 0),
+    "Water": (0.2, 0.5, 0.55, 0), "GlowCool": (0.95, 0.98, 1.0, 8), "GlowSky": (0.92, 0.97, 1.0, 14),
 }
 
 _mats = {}
@@ -324,15 +324,99 @@ def m_light_panel():
     return join(p, "SM_LightPanel")
 
 
+def _stadium(length, radius, z, seg=12):
+    """Contour d'un rectangle aux bouts arrondis (axe long = X), sens trigonometrique"""
+    pts = []
+    half = length / 2
+    for i in range(seg + 1):
+        a = -math.pi / 2 + math.pi * i / seg
+        pts.append((half + radius * math.cos(a), radius * math.sin(a), z))
+    for i in range(seg + 1):
+        a = math.pi / 2 + math.pi * i / seg
+        pts.append((-half + radius * math.cos(a), radius * math.sin(a), z))
+    return pts
+
+
+def _ring(outer_top, inner_top, outer_bot, inner_bot, material, cap_inner=False):
+    """Anneau entre deux contours de meme nombre de points (faces haut, bas, flancs)"""
+    bm = bmesh.new()
+    rows = [[bm.verts.new(p) for p in ring] for ring in (outer_top, inner_top, inner_bot, outer_bot)]
+    n = len(outer_top)
+    for a, b in ((0, 1), (1, 2), (2, 3), (3, 0)):
+        for i in range(n):
+            j = (i + 1) % n
+            bm.faces.new((rows[a][i], rows[a][j], rows[b][j], rows[b][i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new("ring")
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new("ring", me)
+    bpy.context.collection.objects.link(o)
+    return _finish(o, material)
+
+
 def m_sky_panel():
-    # Puits de lumiere carre (Niveau 37). Pivot : face superieure.
+    # Plafonnier des Poolrooms : ovale lumineux (rectangle aux bouts arrondis) cercle d'un rebord carrele.
+    # Pivot : face superieure (plan du plafond), l'axe long suit X.
     p = []
-    S, b, h = 1.0, 0.06, 0.05
-    for s in (-1, 1):
-        p.append(box((S, b, h), (0, s * (S / 2 - b / 2), -h / 2), "Trim"))
-        p.append(box((b, S, h), (s * (S / 2 - b / 2), 0, -h / 2), "Trim"))
-    p.append(box((S - 2 * b, S - 2 * b, 0.01), (0, 0, -0.01), "Glow"))
+    L, R = 1.15, 0.34
+    p.append(_ring(_stadium(L, R + 0.07, 0.0), _stadium(L, R, 0.0), _stadium(L, R + 0.05, -0.03), _stadium(L, R, -0.03), "Trim"))
+    # Gorge lumineuse : bande tres claire le long du rebord, centre un peu moins lumineux
+    p.append(_ring(_stadium(L, R, -0.004), _stadium(L, R - 0.07, -0.004), _stadium(L, R, -0.014), _stadium(L, R - 0.07, -0.014), "GlowCool"))
+    p.append(poly_plate([(x, y) for x, y, _ in _stadium(L, R - 0.069, 0.0)], 0.008, "Glow"))
+    p[-1].location.z = -0.012
     return join(p, "SM_SkyPanel")
+
+
+def m_pool_skylight():
+    # Grande verriere inclinee (Poolrooms) a la jonction mur / plafond : deux vitrages tres lumineux.
+    # Pivot : sur la face du mur, a hauteur du plafond ; +X pointe vers la piece, Z vers le haut.
+    p = []
+    W, D, Hh = 3.0, 1.15, 1.9          # largeur, avancee au plafond, hauteur sur le mur
+    bm = bmesh.new()
+    # Joues triangulaires + chassis (prisme ferme)
+    v = {}
+    for sy in (-1, 1):
+        y = sy * W / 2
+        v[(sy, "w0")] = bm.verts.new((0.0, y, 0.0))
+        v[(sy, "c")] = bm.verts.new((D, y, 0.0))
+        v[(sy, "w1")] = bm.verts.new((0.0, y, -Hh))
+    bm.faces.new((v[(-1, "w0")], v[(-1, "c")], v[(-1, "w1")]))
+    bm.faces.new((v[(1, "w0")], v[(1, "w1")], v[(1, "c")]))
+    bm.faces.new((v[(-1, "c")], v[(1, "c")], v[(1, "w1")], v[(-1, "w1")]))
+    # Prisme ouvert (cote mur et plafond) : normales orientees vers l'exterieur, a la main
+    centroid = Vector((D / 3.0, 0.0, -Hh / 3.0))
+    for f in bm.faces:
+        f.normal_update()
+        if f.normal.dot(f.calc_center_median() - centroid) < 0:
+            f.normal_flip()
+    me = bpy.data.meshes.new("bay")
+    bm.to_mesh(me)
+    bm.free()
+    bay = bpy.data.objects.new("bay", me)
+    bpy.context.collection.objects.link(bay)
+    p.append(_finish(bay, "Trim"))
+    # Vitrages : un peu en avant du chassis, separes par un meneau
+    slope = Vector((D, 0.0, Hh)).normalized()          # du bas (mur) vers le haut (plafond)
+    normal = Vector((Hh, 0.0, -D)).normalized()         # vers la piece et vers le bas
+    base = Vector((0.0, 0.0, -Hh))
+    length = Vector((D, 0.0, Hh)).length
+    for y0, y1 in ((-W / 2 + 0.09, -0.04), (0.04, W / 2 - 0.09)):
+        a0, a1 = 0.06 * length, 0.94 * length
+        quad = [base + slope * a0 + Vector((0, y0, 0)) + normal * 0.004, base + slope * a1 + Vector((0, y0, 0)) + normal * 0.004,
+                base + slope * a1 + Vector((0, y1, 0)) + normal * 0.004, base + slope * a0 + Vector((0, y1, 0)) + normal * 0.004]
+        bm = bmesh.new()
+        f = bm.faces.new([bm.verts.new(q) for q in quad])
+        f.normal_update()
+        if f.normal.dot(normal) < 0:
+            f.normal_flip()
+        me = bpy.data.meshes.new("pane")
+        bm.to_mesh(me)
+        bm.free()
+        o = bpy.data.objects.new("pane", me)
+        bpy.context.collection.objects.link(o)
+        p.append(_finish(o, "GlowSky"))
+    return join(p, "SM_PoolSkylight")
 
 
 def m_light_tube():
@@ -1202,7 +1286,7 @@ def m_clump():
 # Liste des modeles
 # ---------------------------------------------------------------------------
 MODELS = {
-    "SM_LightPanel": m_light_panel, "SM_SkyPanel": m_sky_panel, "SM_LightTube": m_light_tube,
+    "SM_LightPanel": m_light_panel, "SM_SkyPanel": m_sky_panel, "SM_PoolSkylight": m_pool_skylight, "SM_LightTube": m_light_tube,
     "SM_LightBulb": m_light_bulb, "SM_Sconce": m_sconce, "SM_StreetLamp": m_street_lamp,
     "SM_AlmondWater": m_almond_water, "SM_Battery": m_battery, "SM_Note": m_note, "SM_Flashlight": m_flashlight,
     "SM_Crate": m_crate, "SM_Pipe": m_pipe, "SM_ElectricBox": m_electric_box, "SM_Desk": m_desk,
