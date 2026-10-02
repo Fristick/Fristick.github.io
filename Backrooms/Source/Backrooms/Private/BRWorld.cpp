@@ -10,6 +10,7 @@
 #include "BRKeys.h"
 #include "BRMaterialBuilder.h"
 #include "BRInteractables.h"
+#include "BRPhenomena.h"
 
 #include "Algo/Reverse.h"
 #include "Components/AudioComponent.h"
@@ -277,8 +278,24 @@ void ABRWorld::BeginTransition(int32 TargetLevel, bool bFromDeath)
 
 void ABRWorld::HandlePlayerDeath()
 {
-	// Seul : retour au Niveau 0. En equipe : on se reveille au point de depart du niveau en cours
-	DeathTimer = IsNetGame() ? 6.f : 4.5f;
+	// Seul : retour au Niveau 0. En equipe : a terre, un coequipier a 30 s pour nous relever,
+	// sinon on se reveille au point de depart du niveau en cours
+	DeathTimer = IsNetGame() ? (HasLivingTeammate() ? 30.f : 6.f) : 4.5f;
+}
+
+bool ABRWorld::HasLivingTeammate() const
+{
+	const ABRCharacter* Me = GetPlayer();
+	TArray<ABRCharacter*> All;
+	GetPlayers(All);
+	for (const ABRCharacter* C : All)
+	{
+		if (C != Me && !C->IsDead())
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void ABRWorld::RespawnLocalPlayer()
@@ -795,6 +812,10 @@ void ABRWorld::Tick(float DeltaSeconds)
 		break;
 	}
 
+	if (DeathTimer > 6.f && IsNetGame() && !HasLivingTeammate())
+	{
+		DeathTimer = 6.f; // plus personne pour nous relever
+	}
 	if (DeathTimer > 0.f)
 	{
 		DeathTimer -= Dt;
@@ -1118,11 +1139,18 @@ void ABRWorld::UpdatePhenomena(float Dt)
 
 	PhenomenaTimer -= Dt;
 	const bool bInsane = P->Sanity < 35.f;
-	if (PhenomenaTimer > 0.f || (!D.bPhenomena && !bInsane))
+	const bool bTroubled = P->Sanity < 50.f;
+	if (PhenomenaTimer > 0.f || (!D.bPhenomena && !bTroubled))
 	{
 		return;
 	}
-	PhenomenaTimer = FMath::FRandRange(35.f, 90.f) * (bInsane ? 0.5f : 1.f);
+	PhenomenaTimer = FMath::FRandRange(35.f, 90.f) * (bInsane ? 0.45f : (bTroubled ? 0.7f : 1.f));
+
+	// Hallucinations : plus la sante mentale baisse, plus on "voit" des choses
+	if (bTroubled && FMath::FRand() < (bInsane ? 0.7f : 0.45f) && SpawnHallucination(P))
+	{
+		return;
+	}
 
 	const float Ang = FMath::FRandRange(0.f, 2.f * PI);
 	const FVector Dir(FMath::Cos(Ang), FMath::Sin(Ang), 0.f);
@@ -1144,6 +1172,50 @@ void ABRWorld::UpdatePhenomena(float Dt)
 		UGameplayStatics::PlaySoundAtLocation(this, S, P->GetActorLocation() + Dir * Dist + FVector(0, 0, 100.f), 1.f, 1.f, 0.f,
 			A->Attenuation(4000.f));
 	}
+}
+
+bool ABRWorld::SpawnHallucination(ABRCharacter* P)
+{
+	UWorld* W = GetWorld();
+	if (!W || !P || !bLevelReady || IsTransitioning())
+	{
+		return false;
+	}
+	const FVector Eye = P->GetEyeLocation();
+	const FVector Fwd = P->GetViewDirection().GetSafeNormal2D();
+	const bool bSmile = FMath::FRand() < 0.35f;
+	for (int32 Try = 0; Try < 16; ++Try)
+	{
+		// Silhouette : au bord du champ de vision (on tourne la tete... plus rien). Sourire : droit devant, dans le noir
+		const float Side = FMath::FRand() < 0.5f ? 1.f : -1.f;
+		const float Ang = bSmile ? FMath::FRandRange(-18.f, 18.f) : Side * FMath::FRandRange(32.f, 48.f);
+		const FVector Dir = FRotator(0.f, Ang, 0.f).RotateVector(Fwd);
+		const float Dist = bSmile ? FMath::FRandRange(1200.f, 2200.f) : FMath::FRandRange(900.f, 1700.f);
+		const FIntPoint Cell = WorldToCell(P->GetActorLocation() + Dir * Dist);
+		if (!IsWalkable(Cell) || IsPoolCell(Cell.X, Cell.Y) || !IsChunkLoaded(CellToChunk(Cell)))
+		{
+			continue;
+		}
+		const FVector Loc = CellCenter(Cell, 0.f);
+		if (bSmile && LightLevelAt(Loc) > 0.3f)
+		{
+			continue;
+		}
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRHallucination), false, P);
+		if (W->LineTraceSingleByChannel(Hit, Eye, Loc + FVector(0.f, 0.f, 120.f), ECC_Visibility, Q))
+		{
+			continue; // il faut pouvoir l'apercevoir
+		}
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (ABRHallucination* H = W->SpawnActor<ABRHallucination>(ABRHallucination::StaticClass(), FTransform(Loc), Params))
+		{
+			H->Init(bSmile ? EBRHallucination::Smile : EBRHallucination::Shadow, P);
+			return true;
+		}
+	}
+	return false;
 }
 
 void ABRWorld::UpdateAudio(float Dt)

@@ -260,6 +260,21 @@ struct FBRSettings
 	bool bVHSEffect = true;
 	/** Eau translucide (toujours visible) au lieu de l'eau Single Layer Water (prochain chargement de niveau) */
 	bool bTranslucentWater = false;
+	/** Volume general (0..1) */
+	float MasterVolume = 1.f;
+	/** Chat vocal de proximite : 0 voix ouverte, 1 appuyer pour parler, 2 desactive */
+	int32 VoiceMode = 1;
+	/** Luminosite : decalage d'exposition (IL) */
+	float Brightness = 0.f;
+	/** Affichage : 0 plein ecran, 1 plein ecran fenetre, 2 fenetre */
+	int32 WindowMode = 1;
+	/** Resolution de rendu (%), completee par l'upscaling TSR */
+	int32 RenderScale = 100;
+	bool bVSync = false;
+	/** Images par seconde maximum (0 = illimite) */
+	int32 MaxFPS = 0;
+	/** Balancement de la camera pendant la marche */
+	bool bHeadBob = true;
 
 	static FBRSettings& Get()
 	{

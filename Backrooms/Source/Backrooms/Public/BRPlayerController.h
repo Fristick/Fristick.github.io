@@ -12,6 +12,8 @@ class UInputAction;
 class ABRCharacter;
 class SWidget;
 class SEditableTextBox;
+class UVOIPTalker;
+class APlayerState;
 
 /** Pages du menu principal */
 enum class EBRMenuPage : uint8 { Main, Solo, Multi, Join };
@@ -47,6 +49,12 @@ public:
 	/** Quitte la partie (et la session reseau) pour revenir au menu principal */
 	void ReturnToMainMenu();
 	bool IsNetGame() const;
+
+	// ---- Chat vocal de proximite
+	/** Le micro transmet (voix ouverte, ou touche de parole enfoncee) */
+	bool IsTransmittingVoice() const { return bTransmitting; }
+	/** Niveau de la voix d'un coequipier (0 = silencieux) : icone au-dessus de sa tete */
+	float GetTalkLevel(const APlayerState* Speaker) const;
 
 	// ---- Multijoueur : demandes envoyees au serveur (le monde est tenu par l'hote)
 	UFUNCTION(Server, Reliable)
@@ -176,6 +184,8 @@ protected:
 	TObjectPtr<UInputAction> MenuUpAction;
 	UPROPERTY()
 	TObjectPtr<UInputAction> MenuDownAction;
+	UPROPERTY()
+	TObjectPtr<UInputAction> TalkAction;
 
 private:
 	void EnsureInput();
@@ -215,6 +225,10 @@ private:
 	void OnMenuNext(const FInputActionValue& Value);
 	void OnMenuConfirm(const FInputActionValue& Value);
 	void OnMenuUp(const FInputActionValue& Value);
+	void OnInteractCompleted(const FInputActionValue& Value);
+	void OnTalkStarted(const FInputActionValue& Value);
+	void OnTalkCompleted(const FInputActionValue& Value);
+	void UpdateVoice(float DeltaTime);
 	void OnMenuDown(const FInputActionValue& Value);
 	void SetMenuPage(EBRMenuPage Page);
 	void StartSolo();
@@ -242,4 +256,11 @@ private:
 	FString JoinAddress;
 	TSharedPtr<SWidget> AddressWidget;
 	TSharedPtr<SEditableTextBox> AddressBox;
+
+	bool bTalkKeyHeld = false;
+	bool bNetIntroShown = false;
+	bool bTransmitting = false;
+	float TalkerTimer = 0.f;
+	/** Une source de voix par coequipier, attachee a son personnage */
+	TMap<TWeakObjectPtr<APlayerState>, TWeakObjectPtr<UVOIPTalker>> Talkers;
 };

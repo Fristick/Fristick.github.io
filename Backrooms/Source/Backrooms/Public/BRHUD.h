@@ -66,6 +66,10 @@ private:
 	void HandleMenuMouse(ABRPlayerController* PC);
 	/** Noms des coequipiers au-dessus de leur tete */
 	void DrawTeammates(ABRCharacter* C);
+	/** Micro : transmet / touche pour parler (en multijoueur) */
+	void DrawVoiceIndicator(ABRPlayerController* PC);
+	/** Pause en multijoueur : joueurs, hote et latence */
+	void DrawPlayerList();
 	void DrawTitleCard();
 	void DrawCamcorder(ABRCharacter* C, ABRWorld* W);
 	void DrawStats(ABRCharacter* C);

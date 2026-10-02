@@ -670,6 +670,18 @@ void ABRCharacter::InputLook(const FVector2D& DeltaDegrees)
 void ABRCharacter::InputJump(bool bPressed)
 {
 	bJumpHeld = bPressed;
+	if (bDead && bPressed)
+	{
+		// A terre en cooperation : abandonner, se reveiller tout de suite au point de depart
+		if (ABRWorld* W = ABRWorld::Get(this))
+		{
+			if (W->IsNetGame())
+			{
+				W->GiveUpDowned();
+			}
+		}
+		return;
+	}
 	if (bInputLocked || bDead)
 	{
 		return;
@@ -934,6 +946,131 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	}
 }
 
+ABRCharacter* ABRCharacter::FindDownedTeammate() const
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	if (!W || !W->IsNetGame() || bDead || !GetWorld())
+	{
+		return nullptr;
+	}
+	TArray<ABRCharacter*> Players;
+	W->GetPlayers(Players);
+	const FVector Eye = GetEyeLocation();
+	const FVector Dir = GetViewDirection();
+	ABRCharacter* Best = nullptr;
+	float BestDot = 0.72f;
+	for (ABRCharacter* Mate : Players)
+	{
+		if (Mate == this || !Mate->IsDead())
+		{
+			continue;
+		}
+		const FVector BodyPos = Mate->GetActorLocation() - FVector(0.f, 0.f, 50.f); // etendu au sol
+		if (FVector::Dist(BodyPos, GetActorLocation()) > 260.f)
+		{
+			continue;
+		}
+		const float Dot = static_cast<float>(FVector::DotProduct((BodyPos - Eye).GetSafeNormal(), Dir));
+		if (Dot <= BestDot)
+		{
+			continue;
+		}
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRReviveLos), false, this);
+		Q.AddIgnoredActor(Mate);
+		if (GetWorld()->LineTraceTestByChannel(Eye, BodyPos, ECC_WorldStatic, Q))
+		{
+			continue;
+		}
+		Best = Mate;
+		BestDot = Dot;
+	}
+	return Best;
+}
+
+void ABRCharacter::UpdateRevive(float Dt)
+{
+	ABRCharacter* Mate = Cast<ABRCharacter>(FocusActor.Get());
+	if (!bInteractHeld || !Mate || !Mate->IsDead() || bDead || bInputLocked)
+	{
+		ReviveProgress = 0.f;
+		return;
+	}
+	if (ReviveProgress <= 0.f)
+	{
+		PlaySound2D(TEXT("S_Bandage"), 0.7f);
+	}
+	ReviveProgress += Dt / 3.5f;
+	if (ReviveProgress >= 1.f)
+	{
+		ReviveProgress = 0.f;
+		bInteractHeld = false;
+		if (HasAuthority())
+		{
+			Mate->ReviveBy(this);
+		}
+		else
+		{
+			ServerRevive(Mate);
+		}
+	}
+}
+
+void ABRCharacter::ServerRevive_Implementation(ABRCharacter* Mate)
+{
+	if (Mate && Mate != this && Mate->IsDead() && !bDead && FVector::Dist(Mate->GetActorLocation(), GetActorLocation()) < 500.f)
+	{
+		Mate->ReviveBy(this);
+	}
+}
+
+void ABRCharacter::ReviveBy(ABRCharacter* By)
+{
+	const APlayerState* PS = By ? By->GetPlayerState() : nullptr;
+	const FString Name = PS ? PS->GetPlayerName() : FString(TEXT("un co\u00e9quipier"));
+	if (IsLocallyControlled())
+	{
+		Revived(Name);
+	}
+	else
+	{
+		ClientRevived(Name);
+	}
+}
+
+void ABRCharacter::ClientRevived_Implementation(const FString& ByName)
+{
+	Revived(ByName);
+}
+
+void ABRCharacter::Revived(const FString& ByName)
+{
+	if (!bDead)
+	{
+		return;
+	}
+	// Releve avec un peu de sante : l'inventaire est conserve
+	bDead = false;
+	Health = 35.f;
+	Sanity = FMath::Max(Sanity, 35.f);
+	Stamina = FMath::Max(Stamina, 40.f);
+	DamageFlash = 0.f;
+	DeathTime = 0.f;
+	LastDamageTime = TimeAlive;
+	KilledBy.Empty();
+	KillerActor.Reset();
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	if (!HasAuthority())
+	{
+		ServerSetDead(false);
+	}
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->CancelPlayerDeath();
+	}
+	PlaySound2D(TEXT("S_Gasp"), 0.85f);
+	ABRHUD::Notify(this, FString::Printf(TEXT("%s vous a relev\u00e9 !"), *ByName), 4.f, FLinearColor(0.6f, 1.f, 0.6f));
+}
+
 void ABRCharacter::ClientReceiveAttack_Implementation(float Damage, float SanityDamage, AActor* Source, const FString& SourceName)
 {
 	ReceiveAttack(Damage, SanityDamage, Source, SourceName);
@@ -1120,6 +1257,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	UpdateCamera(Dt);
 	UpdateFlashlight(Dt);
 	UpdateFocus();
+	UpdateRevive(Dt);
 	UpdateAudio(Dt);
 	UpdatePostProcess(Dt);
 	AnimateBody(Dt);
@@ -1430,6 +1568,13 @@ void ABRCharacter::UpdateCamera(float Dt)
 		}
 	}
 
+	// Balancement desactivable (confort) : les pas restent rythmes par la marche
+	if (!FBRSettings::Get().bHeadBob)
+	{
+		BobZ = 0.f;
+		BobY = 0.f;
+	}
+
 	// Mort : la camera tombe au sol
 	float DeathDrop = 0.f;
 	if (bDead)
@@ -1556,6 +1701,16 @@ void ABRCharacter::UpdateFocus()
 	{
 		return;
 	}
+	// 0) Coequipier a terre : le relever (multijoueur)
+	if (ABRCharacter* Mate = FindDownedTeammate())
+	{
+		FocusActor = Mate;
+		const APlayerState* PS = Mate->GetPlayerState();
+		FocusPrompt = FString::Printf(TEXT("Maintenir %s : relever %s"), *BRKeys::Tag(EBRAction::Interact),
+			PS ? *PS->GetPlayerName() : TEXT("votre co\u00e9quipier"));
+		return;
+	}
+
 	const FVector Eye = GetEyeLocation();
 	const FVector Dir = GetViewDirection();
 	auto Accept = [this](AActor* A) -> bool
@@ -1794,9 +1949,9 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.bOverride_SceneColorTint = true;
 	S.SceneColorTint = FMath::Lerp(Tint, Hurt, FMath::Clamp(DamageFlash * 0.6f + Dead * 0.5f, 0.f, 1.f));
 
-	// Vision nocturne : amplification de lumiere
-	S.bOverride_AutoExposureBias = bNV;
-	S.AutoExposureBias = (D ? D->ExposureBias : 0.f) + 3.5f;
+	// Luminosite choisie par le joueur ; vision nocturne : amplification de lumiere
+	S.bOverride_AutoExposureBias = true;
+	S.AutoExposureBias = (D ? D->ExposureBias : 0.f) + Set.Brightness + (bNV ? 3.5f : 0.f);
 	S.bOverride_AutoExposureMinBrightness = bNV;
 	S.AutoExposureMinBrightness = (D ? D->MinEV : 2.f) - 4.f;
 	S.bOverride_BloomIntensity = bNV || UnderBlend > 0.01f;

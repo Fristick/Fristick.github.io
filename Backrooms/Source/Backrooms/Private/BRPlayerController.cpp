@@ -13,7 +13,9 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "Engine/Engine.h"
+#include "AudioDevice.h"
 #include "Engine/GameViewportClient.h"
+#include "GameFramework/GameUserSettings.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
@@ -22,6 +24,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Net/VoiceConfig.h"
+#include "BRAssets.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 #include "SocketSubsystem.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SEditableTextBox.h"
@@ -31,11 +37,20 @@ namespace
 {
 	const TCHAR* SettingsSection = TEXT("/Script/Backrooms.BRSettings");
 
+	// Ordre d'affichage (deux colonnes) : controles, son, affichage, puis graphismes
 	enum ESettingRow
 	{
 		Row_Sensitivity,
 		Row_InvertY,
 		Row_FOV,
+		Row_HeadBob,
+		Row_Volume,
+		Row_Voice,
+		Row_Brightness,
+		Row_WindowMode,
+		Row_RenderScale,
+		Row_VSync,
+		Row_MaxFPS,
 		Row_Quality,
 		Row_HardwareRT,
 		Row_RTHitLighting,
@@ -48,6 +63,10 @@ namespace
 	};
 
 	const TCHAR* QualityNames[] = { TEXT("BAS"), TEXT("MOYEN"), TEXT("\u00c9LEV\u00c9"), TEXT("\u00c9PIQUE"), TEXT("CIN\u00c9MATIQUE") };
+	const TCHAR* VoiceNames[] = { TEXT("VOIX OUVERTE"), TEXT("APPUYER POUR PARLER"), TEXT("MICRO COUP\u00c9") };
+	const TCHAR* WindowNames[] = { TEXT("PLEIN \u00c9CRAN"), TEXT("FEN\u00caTR\u00c9 SANS BORDURE"), TEXT("FEN\u00caTR\u00c9") };
+	const int32 FPSSteps[] = { 0, 30, 60, 90, 120, 144, 165, 240 };
+	const int32 NumFPSSteps = UE_ARRAY_COUNT(FPSSteps);
 
 	FString OnOff(bool b)
 	{
@@ -141,6 +160,11 @@ void ABRPlayerController::BeginPlay()
 void ABRPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ShowAddressBox(false);
+	if (bTransmitting)
+	{
+		bTransmitting = false;
+		StopTalking();
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -203,6 +227,7 @@ void ABRPlayerController::EnsureInput()
 	BandageAction = MakeAction(TEXT("IA_Bandage"), EInputActionValueType::Boolean);
 	ViewAction = MakeAction(TEXT("IA_View"), EInputActionValueType::Boolean);
 	MenuUpAction = MakeAction(TEXT("IA_MenuUp"), EInputActionValueType::Boolean);
+	TalkAction = MakeAction(TEXT("IA_Talk"), EInputActionValueType::Boolean, true);
 	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean);
 	PocketActions.Reset();
 	for (int32 i = 0; i < 4; ++i)
@@ -249,6 +274,8 @@ UInputAction* ABRPlayerController::ActionFor(int32 BRAction) const
 		return ViewAction;
 	case EBRAction::Pause:
 		return PauseAction;
+	case EBRAction::PushToTalk:
+		return TalkAction;
 	default:
 		return nullptr;
 	}
@@ -380,6 +407,9 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(CrouchAction, ETriggerEvent::Started, this, &ABRPlayerController::OnCrouch);
 	EIC->BindAction(FlashAction, ETriggerEvent::Started, this, &ABRPlayerController::OnFlash);
 	EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &ABRPlayerController::OnInteract);
+	EIC->BindAction(InteractAction, ETriggerEvent::Completed, this, &ABRPlayerController::OnInteractCompleted);
+	EIC->BindAction(TalkAction, ETriggerEvent::Started, this, &ABRPlayerController::OnTalkStarted);
+	EIC->BindAction(TalkAction, ETriggerEvent::Completed, this, &ABRPlayerController::OnTalkCompleted);
 	EIC->BindAction(DrinkAction, ETriggerEvent::Started, this, &ABRPlayerController::OnDrink);
 	EIC->BindAction(ReloadAction, ETriggerEvent::Started, this, &ABRPlayerController::OnReload);
 	EIC->BindAction(JournalAction, ETriggerEvent::Started, this, &ABRPlayerController::OnInventory);
@@ -407,6 +437,101 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 		RebuildMappings();
 	}
 	PollKeyCapture();
+	UpdateVoice(DeltaTime);
+
+	// Arrivee dans une partie en ligne : rappel du role de l'hote et du chat vocal
+	if (!bNetIntroShown && IsNetGame() && GetHUD() && GetPawn())
+	{
+		bNetIntroShown = true;
+		if (HasAuthority())
+		{
+			ABRHUD::Notify(this, TEXT("Vous h\u00e9bergez la partie : votre PC fait tourner le monde et les entit\u00e9s pour tout le groupe. Gardez le jeu ouvert jusqu'\u00e0 la fin."),
+				9.f, FLinearColor(1.f, 0.85f, 0.4f));
+		}
+		else
+		{
+			ABRHUD::Notify(this, TEXT("Connect\u00e9 \u00e0 la partie de l'h\u00f4te. Restez group\u00e9s : on s'entend mieux de pr\u00e8s."), 7.f,
+				FLinearColor(0.75f, 1.f, 0.75f));
+		}
+		if (FBRSettings::Get().VoiceMode == 1)
+		{
+			ABRHUD::Notify(this, BRKeys::Expand(TEXT("Chat vocal de proximit\u00e9 : maintenez {PushToTalk} pour parler.")), 7.f, FLinearColor(0.75f, 0.9f, 1.f));
+		}
+	}
+}
+
+// =====================================================================================================================
+// Chat vocal de proximite (VOIP du moteur : la voix de chacun sort de son personnage, etouffee par les murs)
+// =====================================================================================================================
+
+void ABRPlayerController::OnTalkStarted(const FInputActionValue& Value)
+{
+	bTalkKeyHeld = CaptureAction == INDEX_NONE;
+}
+
+void ABRPlayerController::OnTalkCompleted(const FInputActionValue& Value)
+{
+	bTalkKeyHeld = false;
+}
+
+void ABRPlayerController::UpdateVoice(float DeltaTime)
+{
+	const bool bNet = IsNetGame();
+	const int32 Mode = FBRSettings::Get().VoiceMode;
+	const bool bWant = bNet && !bInMenu && (Mode == 0 || (Mode == 1 && bTalkKeyHeld));
+	if (bWant != bTransmitting)
+	{
+		bTransmitting = bWant;
+		if (bWant)
+		{
+			StartTalking();
+		}
+		else
+		{
+			StopTalking();
+		}
+	}
+	if (!bNet)
+	{
+		return;
+	}
+	TalkerTimer -= DeltaTime;
+	if (TalkerTimer > 0.f)
+	{
+		return;
+	}
+	TalkerTimer = 0.5f;
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	if (!GS)
+	{
+		return;
+	}
+	UBRAssets* A = UBRAssets::Get(this);
+	for (APlayerState* PS : GS->PlayerArray)
+	{
+		if (!PS || PS == PlayerState)
+		{
+			continue;
+		}
+		TWeakObjectPtr<UVOIPTalker>& Slot = Talkers.FindOrAdd(PS);
+		if (!Slot.IsValid())
+		{
+			Slot = UVOIPTalker::CreateTalkerForPlayer(PS);
+		}
+		if (UVOIPTalker* Talker = Slot.Get())
+		{
+			APawn* Pawn = PS->GetPawn();
+			Talker->Settings.ComponentToAttachTo = Pawn ? Pawn->GetRootComponent() : nullptr;
+			Talker->Settings.AttenuationSettings = A ? A->VoiceAttenuation() : nullptr;
+		}
+	}
+}
+
+float ABRPlayerController::GetTalkLevel(const APlayerState* Speaker) const
+{
+	const TWeakObjectPtr<UVOIPTalker>* Slot = Talkers.Find(const_cast<APlayerState*>(Speaker));
+	UVOIPTalker* Talker = Slot ? Slot->Get() : nullptr;
+	return Talker ? Talker->GetVoiceLevel() : 0.f;
 }
 
 // =====================================================================================================================
@@ -635,7 +760,16 @@ void ABRPlayerController::OnInteract(const FInputActionValue& Value)
 		if (ABRCharacter* C = GetBRCharacter())
 		{
 			C->Interact();
+			C->SetInteractHeld(true); // maintenir : relever un coequipier
 		}
+	}
+}
+
+void ABRPlayerController::OnInteractCompleted(const FInputActionValue& Value)
+{
+	if (ABRCharacter* C = GetBRCharacter())
+	{
+		C->SetInteractHeld(false);
 	}
 }
 
@@ -1332,6 +1466,22 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return TEXT("INVERSER L'AXE VERTICAL");
 	case Row_FOV:
 		return TEXT("CHAMP DE VISION");
+	case Row_HeadBob:
+		return TEXT("BALANCEMENT DE LA CAM\u00c9RA");
+	case Row_Volume:
+		return TEXT("VOLUME G\u00c9N\u00c9RAL");
+	case Row_Voice:
+		return TEXT("CHAT VOCAL (PROXIMIT\u00c9)");
+	case Row_Brightness:
+		return TEXT("LUMINOSIT\u00c9");
+	case Row_WindowMode:
+		return TEXT("MODE D'AFFICHAGE");
+	case Row_RenderScale:
+		return TEXT("R\u00c9SOLUTION DE RENDU");
+	case Row_VSync:
+		return TEXT("SYNCHRO VERTICALE (V-SYNC)");
+	case Row_MaxFPS:
+		return TEXT("IMAGES PAR SECONDE MAX.");
 	case Row_Quality:
 		return TEXT("QUALIT\u00c9 GRAPHIQUE");
 	case Row_HardwareRT:
@@ -1364,6 +1514,22 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return OnOff(S.bInvertY);
 	case Row_FOV:
 		return FString::Printf(TEXT("%d\u00b0"), FMath::RoundToInt(S.FOV));
+	case Row_HeadBob:
+		return OnOff(S.bHeadBob);
+	case Row_Volume:
+		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.MasterVolume * 100.f));
+	case Row_Voice:
+		return VoiceNames[FMath::Clamp(S.VoiceMode, 0, 2)];
+	case Row_Brightness:
+		return FString::Printf(TEXT("%+.1f"), S.Brightness);
+	case Row_WindowMode:
+		return WindowNames[FMath::Clamp(S.WindowMode, 0, 2)];
+	case Row_RenderScale:
+		return FString::Printf(TEXT("%d %%"), S.RenderScale);
+	case Row_VSync:
+		return OnOff(S.bVSync);
+	case Row_MaxFPS:
+		return S.MaxFPS <= 0 ? FString(TEXT("ILLIMIT\u00c9")) : FString::Printf(TEXT("%d"), S.MaxFPS);
 	case Row_Quality:
 		return QualityNames[FMath::Clamp(S.Quality, 0, 4)];
 	case Row_HardwareRT:
@@ -1389,6 +1555,22 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 {
 	switch (Index)
 	{
+	case Row_HeadBob:
+		return TEXT("D\u00e9sactivez-le si le mouvement de la cam\u00e9ra pendant la marche vous incommode.");
+	case Row_Volume:
+		return TEXT("Volume de tout le jeu (ambiance, entit\u00e9s, voix des co\u00e9quipiers).");
+	case Row_Voice:
+		return BRKeys::Expand(TEXT("On entend les autres joueurs pr\u00e8s de leur personnage, \u00e9touff\u00e9s par les murs. Appuyer pour parler : touche {PushToTalk}. Voix ouverte : le micro transmet en permanence. Micro coup\u00e9 : vous entendez toujours les autres."));
+	case Row_Brightness:
+		return TEXT("Rend l'image plus claire ou plus sombre (les zones sans lumi\u00e8re restent noires).");
+	case Row_WindowMode:
+		return TEXT("Plein \u00e9cran exclusif, plein \u00e9cran fen\u00eatr\u00e9 (Alt+Tab instantan\u00e9) ou fen\u00eatre. Sans effet dans l'\u00e9diteur.");
+	case Row_RenderScale:
+		return TEXT("En dessous de 100 %, l'image est calcul\u00e9e plus petite puis agrandie par TSR : beaucoup plus fluide, l\u00e9g\u00e8rement plus floue.");
+	case Row_VSync:
+		return TEXT("Supprime les d\u00e9chirures d'image, ajoute un peu de latence.");
+	case Row_MaxFPS:
+		return TEXT("Limiter les images par seconde r\u00e9duit la chaleur et le bruit de la carte graphique. Sans effet dans l'\u00e9diteur.");
 	case Row_Quality:
 		return TEXT("Ombres, Lumen, textures, anti-cr\u00e9nelage (scalability).");
 	case Row_HardwareRT:
@@ -1423,6 +1605,37 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	case Row_FOV:
 		S.FOV = FMath::Clamp(S.FOV + Dir * 2.f, 70.f, 110.f);
 		break;
+	case Row_HeadBob:
+		S.bHeadBob = !S.bHeadBob;
+		break;
+	case Row_Volume:
+		S.MasterVolume = FMath::Clamp(FMath::RoundToFloat((S.MasterVolume + Dir * 0.05f) * 20.f) / 20.f, 0.f, 1.f);
+		break;
+	case Row_Voice:
+		S.VoiceMode = (S.VoiceMode + Dir + 3) % 3;
+		break;
+	case Row_Brightness:
+		S.Brightness = FMath::Clamp(FMath::RoundToFloat((S.Brightness + Dir * 0.1f) * 10.f) / 10.f, -1.5f, 1.5f);
+		break;
+	case Row_WindowMode:
+		S.WindowMode = (S.WindowMode + Dir + 3) % 3;
+		break;
+	case Row_RenderScale:
+		S.RenderScale = FMath::Clamp(S.RenderScale + Dir * 5, 50, 100);
+		break;
+	case Row_VSync:
+		S.bVSync = !S.bVSync;
+		break;
+	case Row_MaxFPS:
+	{
+		int32 Step = 0;
+		for (int32 k = 0; k < NumFPSSteps; ++k)
+		{
+			Step = FPSSteps[k] == S.MaxFPS ? k : Step;
+		}
+		S.MaxFPS = FPSSteps[(Step + Dir + NumFPSSteps) % NumFPSSteps];
+		break;
+	}
 	case Row_Quality:
 		S.Quality = (S.Quality + Dir + 5) % 5;
 		break;
@@ -1480,6 +1693,20 @@ void ABRPlayerController::LoadSettings()
 	GConfig->GetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain, GGameUserSettingsIni);
 	GConfig->GetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect, GGameUserSettingsIni);
 	GConfig->GetBool(SettingsSection, TEXT("TranslucentWater"), S.bTranslucentWater, GGameUserSettingsIni);
+	GConfig->GetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume, GGameUserSettingsIni);
+	GConfig->GetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode, GGameUserSettingsIni);
+	GConfig->GetFloat(SettingsSection, TEXT("Brightness"), S.Brightness, GGameUserSettingsIni);
+	GConfig->GetInt(SettingsSection, TEXT("WindowMode"), S.WindowMode, GGameUserSettingsIni);
+	GConfig->GetInt(SettingsSection, TEXT("RenderScale"), S.RenderScale, GGameUserSettingsIni);
+	GConfig->GetBool(SettingsSection, TEXT("VSync"), S.bVSync, GGameUserSettingsIni);
+	GConfig->GetInt(SettingsSection, TEXT("MaxFPS"), S.MaxFPS, GGameUserSettingsIni);
+	GConfig->GetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob, GGameUserSettingsIni);
+	S.MasterVolume = FMath::Clamp(S.MasterVolume, 0.f, 1.f);
+	S.VoiceMode = FMath::Clamp(S.VoiceMode, 0, 2);
+	S.Brightness = FMath::Clamp(S.Brightness, -1.5f, 1.5f);
+	S.WindowMode = FMath::Clamp(S.WindowMode, 0, 2);
+	S.RenderScale = FMath::Clamp(S.RenderScale, 50, 100);
+	S.MaxFPS = FMath::Clamp(S.MaxFPS, 0, 1000);
 	S.Sensitivity = FMath::Clamp(S.Sensitivity, 0.1f, 5.f);
 	S.FOV = FMath::Clamp(S.FOV, 70.f, 110.f);
 	S.Quality = FMath::Clamp(S.Quality, 0, 4);
@@ -1503,6 +1730,14 @@ void ABRPlayerController::SaveSettings() const
 	GConfig->SetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain, GGameUserSettingsIni);
 	GConfig->SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect, GGameUserSettingsIni);
 	GConfig->SetBool(SettingsSection, TEXT("TranslucentWater"), S.bTranslucentWater, GGameUserSettingsIni);
+	GConfig->SetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume, GGameUserSettingsIni);
+	GConfig->SetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode, GGameUserSettingsIni);
+	GConfig->SetFloat(SettingsSection, TEXT("Brightness"), S.Brightness, GGameUserSettingsIni);
+	GConfig->SetInt(SettingsSection, TEXT("WindowMode"), S.WindowMode, GGameUserSettingsIni);
+	GConfig->SetInt(SettingsSection, TEXT("RenderScale"), S.RenderScale, GGameUserSettingsIni);
+	GConfig->SetBool(SettingsSection, TEXT("VSync"), S.bVSync, GGameUserSettingsIni);
+	GConfig->SetInt(SettingsSection, TEXT("MaxFPS"), S.MaxFPS, GGameUserSettingsIni);
+	GConfig->SetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
@@ -1524,4 +1759,38 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing.LightingMode %d"), (S.bHardwareRT && S.bRTHitLighting) ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), S.bHardwareRT ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.VolumetricFog %d"), S.bVolumetricFog ? 1 : 0));
+	Cmd(FString::Printf(TEXT("r.ScreenPercentage %d"), FMath::Clamp(S.RenderScale, 50, 100)));
+
+	// Volume general
+	FAudioDeviceHandle Audio = W->GetAudioDevice();
+	if (Audio.IsValid())
+	{
+		Audio->SetTransientPrimaryVolume(FMath::Clamp(S.MasterVolume, 0.f, 1.f));
+	}
+
+	// Fenetre, synchro verticale, limite d'images : pas dans l'editeur (ils agiraient sur la fenetre de l'editeur)
+	UGameUserSettings* Display = GEngine->GetGameUserSettings();
+	if (Display && !GIsEditor)
+	{
+		const EWindowMode::Type Mode = S.WindowMode == 0 ? EWindowMode::Fullscreen : (S.WindowMode == 1 ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
+		bool bResolution = false;
+		if (Display->GetFullscreenMode() != Mode)
+		{
+			Display->SetFullscreenMode(Mode);
+			if (Mode != EWindowMode::Windowed)
+			{
+				Display->SetScreenResolution(Display->GetDesktopResolution());
+			}
+			bResolution = true;
+		}
+		Display->SetVSyncEnabled(S.bVSync);
+		Display->SetFrameRateLimit(static_cast<float>(FMath::Max(0, S.MaxFPS)));
+		if (bResolution)
+		{
+			Display->ApplyResolutionSettings(false);
+		}
+		Display->SaveSettings();
+		Cmd(FString::Printf(TEXT("r.VSync %d"), S.bVSync ? 1 : 0));
+		Cmd(FString::Printf(TEXT("t.MaxFPS %d"), FMath::Max(0, S.MaxFPS)));
+	}
 }

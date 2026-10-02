@@ -50,6 +50,12 @@ public:
 	/** Utilise le premier objet de ce type (touches B = eau, R = piles) */
 	void QuickUse(EBRItem Item);
 	void SetInputLocked(bool bLocked) { bInputLocked = bLocked; }
+	/** Touche Interagir maintenue (relever un coequipier a terre) */
+	void SetInteractHeld(bool bHeld) { bInteractHeld = bHeld; }
+	/** Reanimation d'un coequipier en cours (0..1) */
+	float GetReviveProgress() const { return ReviveProgress; }
+	/** Serveur : ce joueur, a terre, est releve par By */
+	void ReviveBy(ABRCharacter* By);
 	bool IsInputLocked() const { return bInputLocked; }
 
 	// ---- Etat ----
@@ -202,6 +208,13 @@ protected:
 	UFUNCTION()
 	void OnRep_Dead();
 
+	/** Relever un coequipier a terre (verifie par le serveur) */
+	UFUNCTION(Server, Reliable)
+	void ServerRevive(ABRCharacter* Mate);
+
+	UFUNCTION(Client, Reliable)
+	void ClientRevived(const FString& ByName);
+
 private:
 	/** Pion d'un autre joueur : corps, lampe, pas, remous */
 	void TickRemote(float Dt);
@@ -209,6 +222,10 @@ private:
 	void SyncNetState();
 	/** Entites proches : pression mentale, musique de poursuite, journal (calcule chez chaque joueur) */
 	void UpdateEntityEffects();
+	/** Coequipier a terre devant soi, a portee de main */
+	ABRCharacter* FindDownedTeammate() const;
+	void UpdateRevive(float Dt);
+	void Revived(const FString& ByName);
 	void ApplyLamp(uint8 Lamp);
 	void SetHeldVisual(EBRItem InHand);
 	uint8 LampSlot() const;
@@ -244,6 +261,8 @@ private:
 	/** Pion vu de l'exterieur (autre joueur) : corps visible, pas de camera ni d'interface */
 	bool bRemoteView = false;
 	float RemoteStepTimer = 0.f;
+	bool bInteractHeld = false;
+	float ReviveProgress = 0.f;
 	uint8 AppliedLamp = 255;
 	bool bFlashlightOn = false;
 	bool bNightVision = false;

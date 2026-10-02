@@ -391,6 +391,7 @@ void ABRHUD::DrawHUD()
 	if (C && !bInv)
 	{
 		DrawTeammates(C);
+		DrawVoiceIndicator(PC);
 	}
 	if (C && !C->IsDead() && !bInv)
 	{
@@ -607,6 +608,12 @@ void ABRHUD::DrawMenu()
 			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW, BH, bInteractive);
 			Y += BH + Gap;
 		}
+		// Conseil multijoueur, visible des le lancement
+		const FString Tip = TEXT("MULTIJOUEUR : c'est le joueur qui a l'ordinateur le plus puissant qui devrait h\u00e9berger la partie.");
+		const float TW = TextW(Tip, Medium, 0.85f * U) + 40.f * U;
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), CX - TW * 0.5f, Y + 10.f * U, TW, 40.f * U);
+		Frame(CX - TW * 0.5f, Y + 10.f * U, TW, 40.f * U, YellowDim, 1.f * U);
+		Txt(Tip, CX, Y + 19.f * U, Yellow, 0.85f * U, Medium, true, false);
 		Hint = TEXT("[ \u2191 / \u2193 ]  choisir        [ ENTR\u00c9E ]  valider        [ FIN ]  quitter");
 		break;
 	}
@@ -625,10 +632,19 @@ void ABRHUD::DrawMenu()
 	}
 	case EBRMenuPage::Multi:
 	{
-		Txt(TEXT("MULTIJOUEUR  -  COOP\u00c9RATION JUSQU'\u00c0 4 JOUEURS"), CX, H * 0.27f, Yellow, 1.1f * U, Medium, true);
-		Txt(TEXT("L'h\u00f4te choisit le niveau de d\u00e9part, les autres le rejoignent avec son adresse IP."), CX, H * 0.27f + 34.f * U, InkDim,
-			0.85f * U, Medium, true);
-		DrawLevelCard(H * 0.36f, false);
+		Txt(TEXT("MULTIJOUEUR  -  COOP\u00c9RATION JUSQU'\u00c0 4 JOUEURS"), CX, H * 0.25f, Yellow, 1.1f * U, Medium, true);
+		{
+			// Qui doit heberger ? Le PC de l'hote fait tourner le monde et les entites pour tout le groupe
+			const float BoxW = FMath::Min(Canvas->ClipX - 80.f * U, 1180.f * U);
+			const float BoxY = H * 0.25f + 40.f * U;
+			DrawRect(FLinearColor(0.12f, 0.09f, 0.f, 0.6f), CX - BoxW * 0.5f, BoxY, BoxW, 62.f * U);
+			Frame(CX - BoxW * 0.5f, BoxY, BoxW, 62.f * U, Yellow, 1.5f * U);
+			Txt(TEXT("CONSEIL : le joueur qui a l'ordinateur le plus puissant (et la meilleure connexion) devrait h\u00e9berger."), CX, BoxY + 8.f * U,
+				Yellow, 0.9f * U, Medium, true, false);
+			Txt(TEXT("Son PC fait tourner le monde, les entit\u00e9s et leurs d\u00e9placements pour tout le groupe ; les autres le rejoignent avec son adresse IP."),
+				CX, BoxY + 34.f * U, Ink, 0.75f * U, Medium, true, false);
+		}
+		DrawLevelCard(H * 0.37f, false);
 		float Y = H * 0.52f;
 		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
 		{
@@ -636,10 +652,11 @@ void ABRHUD::DrawMenu()
 			Y += BH + Gap;
 		}
 		const FString Ip = PC->GetLocalAddress().IsEmpty() ? FString(TEXT("inconnue")) : PC->GetLocalAddress();
-		Txt(FString::Printf(TEXT("Votre adresse IP : %s   (port 7777, UDP)"), *Ip), CX, Y + 18.f * U, FLinearColor(0.75f, 0.95f, 0.75f), 0.95f * U, Medium, true);
+		Txt(FString::Printf(TEXT("Votre adresse IP : %s   (port 7777, UDP)"), *Ip), CX, Y + 10.f * U, FLinearColor(0.75f, 0.95f, 0.75f), 0.95f * U, Medium, true);
 		Txt(TEXT("M\u00eame r\u00e9seau (LAN) : donnez cette adresse \u00e0 vos amis.  Par Internet : redirigez le port UDP 7777 vers ce PC sur la box,"),
-			CX, Y + 50.f * U, InkDim, 0.78f * U, Medium, true);
-		Txt(TEXT("ou utilisez un r\u00e9seau virtuel (Radmin VPN, ZeroTier, Tailscale...) et son adresse IP."), CX, Y + 74.f * U, InkDim, 0.78f * U, Medium, true);
+			CX, Y + 40.f * U, InkDim, 0.78f * U, Medium, true);
+		Txt(TEXT("ou utilisez un r\u00e9seau virtuel (Radmin VPN, ZeroTier, Tailscale...) et son adresse IP.  Chat vocal de proximit\u00e9 : Param\u00e8tres."),
+			CX, Y + 62.f * U, InkDim, 0.78f * U, Medium, true);
 		Hint = TEXT("[ \u2190 / \u2192 ]  niveau        [ \u2191 / \u2193 ]  choisir        [ ENTR\u00c9E ]  valider        [ \u00c9CHAP ]  retour");
 		break;
 	}
@@ -876,6 +893,10 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 	{
 		Txt(C->GetFocusPrompt(), CX, CY + 30.f * U, FLinearColor(1.f, 1.f, 1.f, 0.95f), 1.f * U, GEngine->GetMediumFont(), true);
 	}
+	if (C->GetReviveProgress() > 0.f)
+	{
+		Bar(CX - 130.f * U, CY + 70.f * U, 260.f * U, 8.f * U, C->GetReviveProgress(), FLinearColor(0.55f, 1.f, 0.55f, 0.9f), TEXT("R\u00c9ANIMATION"));
+	}
 }
 
 void ABRHUD::DrawMessages(float Dt)
@@ -934,6 +955,27 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.6f * (1.f - T / 0.25f)), 0.f, 0.f, Canvas->ClipX, H);
 	}
 	const float A = FMath::Clamp((T - 0.8f) / 1.f, 0.f, 1.f);
+	const ABRPlayerController* OwnerPC = Cast<ABRPlayerController>(PlayerOwner);
+	if (OwnerPC && OwnerPC->IsNetGame())
+	{
+		// Cooperation : a terre, un coequipier peut nous relever
+		const ABRWorld* W = ABRWorld::Get(this);
+		const float Left = W ? FMath::Max(0.f, W->GetDeathTimer()) : 0.f;
+		const bool bHelp = W && W->HasLivingTeammate();
+		Txt(TEXT("\u00c0 TERRE"), CX, H * 0.34f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
+		if (!C->GetKilledBy().IsEmpty())
+		{
+			Txt(TEXT("Abattu par : ") + C->GetKilledBy(), CX, H * 0.44f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U, GEngine->GetMediumFont(), true);
+		}
+		if (bHelp)
+		{
+			Txt(FString::Printf(TEXT("Un co\u00e9quipier peut vous relever : il doit maintenir %s pr\u00e8s de vous."), *BRKeys::Tag(EBRAction::Interact)),
+				CX, H * 0.52f, FLinearColor(0.75f, 1.f, 0.75f, A), 1.f * U, GEngine->GetMediumFont(), true);
+		}
+		Txt(FString::Printf(TEXT("R\u00e9veil au point de d\u00e9part du niveau dans %d s      %s  abandonner"), FMath::CeilToInt(Left),
+			*BRKeys::Tag(EBRAction::Jump)), CX, H * 0.58f, FLinearColor(0.9f, 0.85f, 0.6f, A), 1.f * U, GEngine->GetMediumFont(), true);
+		return;
+	}
 	Txt(TEXT("VOUS \u00caTES MORT"), CX, H * 0.38f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
 	if (!C->GetKilledBy().IsEmpty())
 	{
@@ -967,6 +1009,7 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 		const int32 Count = GS ? GS->PlayerArray.Num() : 1;
 		Txt(FString::Printf(TEXT("PARTIE EN LIGNE  -  %d joueur%s  -  le jeu continue pendant la pause"), Count, Count > 1 ? TEXT("s") : TEXT("")),
 			CX, H * 0.235f, FLinearColor(0.75f, 0.95f, 0.75f), 0.9f * U, Medium, true);
+		DrawPlayerList();
 	}
 
 	// Boutons cliquables
@@ -1772,18 +1815,23 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	const float U = Ui();
 	UFont* Medium = GEngine->GetMediumFont();
 	UFont* Small = GEngine->GetSmallFont();
-	const float W = FMath::Min(IW, 1100.f * U);
-	const float X = IX + (IW - W) * 0.5f;
-	Panel(X, IY, W, IH, TEXT("PARAM\u00c8TRES"));
+	const float PanelW = FMath::Min(IW, 1760.f * U);
+	const float PanelX = IX + (IW - PanelW) * 0.5f;
+	Panel(PanelX, IY, PanelW, IH, TEXT("PARAM\u00c8TRES"));
 
+	// Deux colonnes : controles, son et affichage a gauche, graphismes a droite
 	const int32 Count = PC->GetSettingsCount();
-	const float RowH = FMath::Min(56.f * U, (IH - 160.f * U) / FMath::Max(1, Count));
-	float Y = IY + 64.f * U;
+	const int32 PerColumn = (Count + 1) / 2;
+	const float ColGap = 30.f * U;
+	const float W = (PanelW - ColGap) * 0.5f;
+	const float RowH = FMath::Min(56.f * U, (IH - 160.f * U) / FMath::Max(1, PerColumn));
 	HoverSetting = INDEX_NONE;
 	const float Btn = 34.f * U;
-	const float ValueW = 260.f * U;
+	const float ValueW = 250.f * U;
 	for (int32 i = 0; i < Count; ++i)
 	{
+		const float X = PanelX + (i < PerColumn ? 0.f : W + ColGap);
+		const float Y = IY + 64.f * U + (i % PerColumn) * RowH;
 		const bool bHov = Hover(X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
 		if (bHov)
 		{
@@ -1808,14 +1856,15 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		AddButton(Btn_SettingBase + i * 2, MX, BY, Btn, Btn);
 		AddButton(Btn_SettingBase + i * 2 + 1, PX, BY, Btn, Btn);
 		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.12f), X + 18.f * U, Y + RowH - 4.f * U, W - 36.f * U, 1.f * U);
-		Y += RowH;
 	}
+	const float X = PanelX;
+	const float W2 = PanelW;
 
 	// Aide de la ligne survolee
 	const FString Hint = HoverSetting != INDEX_NONE ? PC->GetSettingHint(HoverSetting) : FString();
 	float HY = IY + IH - 84.f * U;
 	for (const FString& L : Wrap(Hint.IsEmpty() ? FString(TEXT("Les r\u00e9glages sont sauvegard\u00e9s automatiquement (GameUserSettings.ini).")) : Hint,
-		W - 56.f * U, Small, 0.75f * U))
+		W2 - 56.f * U, Small, 0.75f * U))
 	{
 		Txt(L, X + 28.f * U, HY, InkDim, 0.75f * U, Small, false, false);
 		HY += 20.f * U;
@@ -1991,7 +2040,85 @@ void ABRHUD::DrawTeammates(ABRCharacter* C)
 		}
 		const FLinearColor Col = Other->IsDead() ? FLinearColor(1.f, 0.45f, 0.4f, A) : FLinearColor(0.8f, 1.f, 0.8f, A);
 		Txt(Name, static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 22.f * U, Col, 0.8f * U, Medium, true);
+		// Il parle : petites barres qui bougent avec sa voix, a cote de son nom
+		const ABRPlayerController* MyPC = Cast<ABRPlayerController>(PlayerOwner);
+		const float Talk = MyPC ? FMath::Clamp(MyPC->GetTalkLevel(PS) * 6.f, 0.f, 1.f) : 0.f;
+		if (Talk > 0.05f)
+		{
+			const float BX = static_cast<float>(Screen.X) + TextW(Name, Medium, 0.8f * U) * 0.5f + 10.f * U;
+			for (int32 k = 0; k < 3; ++k)
+			{
+				const float BH = (4.f + 12.f * Talk * (0.6f + 0.4f * FMath::Sin(Clock * 18.f + k * 1.7f))) * U;
+				DrawRect(FLinearColor(0.6f, 1.f, 0.6f, A), BX + k * 6.f * U, static_cast<float>(Screen.Y) - 6.f * U - BH, 3.f * U, BH);
+			}
+		}
 		Txt(FString::Printf(TEXT("%d m"), FMath::RoundToInt(Dist / 100.f)), static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 2.f * U,
 			WithAlpha(InkDim, A), 0.65f * U, Medium, true);
+	}
+}
+
+void ABRHUD::DrawVoiceIndicator(ABRPlayerController* PC)
+{
+	if (!PC || !PC->IsNetGame())
+	{
+		return;
+	}
+	const float U = Ui();
+	const float X = 50.f * U;
+	const float Y = Canvas->ClipY - 236.f * U;
+	UFont* Small = GEngine->GetSmallFont();
+	const int32 Mode = FBRSettings::Get().VoiceMode;
+	if (PC->IsTransmittingVoice())
+	{
+		const float Pulse = 0.7f + 0.3f * FMath::Sin(Clock * 6.f);
+		DrawRect(FLinearColor(0.95f, 0.2f, 0.15f, Pulse), X, Y + 4.f * U, 10.f * U, 10.f * U);
+		Txt(Mode == 0 ? TEXT("MICRO OUVERT") : TEXT("VOUS PARLEZ"), X + 18.f * U, Y, FLinearColor(1.f, 0.85f, 0.8f, 0.9f), 0.75f * U, Small, false);
+	}
+	else if (Mode == 1)
+	{
+		Txt(BRKeys::Tag(EBRAction::PushToTalk) + TEXT(" parler"), X, Y, WithAlpha(InkDim, 0.7f), 0.7f * U, Small, false);
+	}
+	else if (Mode == 2)
+	{
+		Txt(TEXT("MICRO COUP\u00c9"), X, Y, WithAlpha(InkDim, 0.6f), 0.7f * U, Small, false);
+	}
+}
+
+void ABRHUD::DrawPlayerList()
+{
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	if (!GS)
+	{
+		return;
+	}
+	const float U = Ui();
+	UFont* Medium = GEngine->GetMediumFont();
+	const float W = 380.f * U;
+	const float X = Canvas->ClipX - W - 50.f * U;
+	float Y = Canvas->ClipY * 0.29f;
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X, Y, W, 44.f * U + GS->PlayerArray.Num() * 34.f * U);
+	Frame(X, Y, W, 44.f * U + GS->PlayerArray.Num() * 34.f * U, YellowDim, 1.f * U);
+	Txt(TEXT("JOUEURS"), X + 16.f * U, Y + 10.f * U, Yellow, 0.85f * U, Medium, false, false);
+	TxtRight(TEXT("LATENCE"), X + W - 16.f * U, Y + 10.f * U, InkDim, 0.7f * U, Medium);
+	Y += 44.f * U;
+	for (int32 i = 0; i < GS->PlayerArray.Num(); ++i)
+	{
+		const APlayerState* PS = GS->PlayerArray[i];
+		if (!PS)
+		{
+			continue;
+		}
+		// Le premier joueur de la liste est l'hote (c'est lui qui a cree la partie)
+		FString Name = PS->GetPlayerName();
+		if (Name.Len() > 18)
+		{
+			Name = Name.Left(18);
+		}
+		const bool bMe = PlayerOwner && PS == PlayerOwner->PlayerState;
+		Txt(Name + (i == 0 ? TEXT("  (H\u00d4TE)") : TEXT("")), X + 16.f * U, Y, bMe ? Yellow : Ink, 0.78f * U, Medium, false, false);
+		const int32 Ping = FMath::RoundToInt(PS->GetPingInMilliseconds());
+		const FLinearColor PingCol = Ping < 80 ? Done : (Ping < 160 ? Yellow : Danger);
+		TxtRight(i == 0 ? FString(TEXT("-")) : FString::Printf(TEXT("%d ms"), Ping), X + W - 16.f * U, Y, PingCol, 0.78f * U, Medium);
+		Y += 34.f * U;
 	}
 }

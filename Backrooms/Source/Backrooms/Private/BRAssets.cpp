@@ -403,6 +403,28 @@ USoundBase* UBRAssets::Sound(FName Name)
 	return Cast<USoundBase>(LoadAsset(SoundFolder, Name, USoundBase::StaticClass()));
 }
 
+USoundAttenuation* UBRAssets::VoiceAttenuation()
+{
+	if (!VoiceAtt)
+	{
+		VoiceAtt = NewObject<USoundAttenuation>(this);
+		FSoundAttenuationSettings& S = VoiceAtt->Attenuation;
+		S.bAttenuate = true;
+		S.bSpatialize = true;
+		S.AttenuationShape = EAttenuationShape::Sphere;
+		S.AttenuationShapeExtents = FVector(250.f, 0.f, 0.f);
+		S.FalloffDistance = 2400.f;
+		S.DistanceAlgorithm = EAttenuationDistanceModel::NaturalSound;
+		// Derriere un mur la voix est etouffee (filtre passe-bas) et plus faible
+		S.bEnableOcclusion = true;
+		S.OcclusionTraceChannel = ECC_Visibility;
+		S.OcclusionLowPassFilterFrequency = 900.f;
+		S.OcclusionVolumeAttenuation = 0.45f;
+		S.OcclusionInterpolationTime = 0.25f;
+	}
+	return VoiceAtt;
+}
+
 USoundAttenuation* UBRAssets::Attenuation(float FalloffDistance)
 {
 	const int32 Key = FMath::RoundToInt(FalloffDistance / 100.f);

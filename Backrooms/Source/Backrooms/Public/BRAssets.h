@@ -39,6 +39,8 @@ public:
 	UTexture* Icon(FName Name);
 	USoundBase* Sound(FName Name);
 	USoundAttenuation* Attenuation(float FalloffDistance);
+	/** Voix des coequipiers : 3D, portee ~26 m, etouffee derriere les murs */
+	USoundAttenuation* VoiceAttenuation();
 
 	/** Materiau "projete dans l'espace monde" (murs, sols...) - mis en cache */
 	UMaterialInterface* Surface(const FBRSurface& S);
@@ -94,6 +96,9 @@ private:
 
 	UPROPERTY()
 	TMap<int32, TObjectPtr<USoundAttenuation>> AttCache;
+
+	UPROPERTY()
+	TObjectPtr<USoundAttenuation> VoiceAtt;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInterface>> Parents;

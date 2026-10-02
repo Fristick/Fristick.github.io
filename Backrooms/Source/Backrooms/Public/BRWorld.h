@@ -82,6 +82,14 @@ public:
 	void GetPlayers(TArray<ABRCharacter*>& Out) const;
 	/** Multijoueur : apres une mort, on se reveille au point de depart du niveau */
 	void RespawnLocalPlayer();
+	/** Multijoueur : un coequipier vient de nous relever */
+	void CancelPlayerDeath() { DeathTimer = -1.f; }
+	/** A terre : secondes avant le reveil au point de depart (-1 sinon) */
+	float GetDeathTimer() const { return DeathTimer; }
+	/** A terre : abandonner et se reveiller tout de suite au point de depart */
+	void GiveUpDowned() { DeathTimer = FMath::Min(DeathTimer, 0.3f); }
+	/** Un autre joueur est encore debout (il peut nous relever) */
+	bool HasLivingTeammate() const;
 	/** Client : une entite repliquee rejoint la liste (lampes rouges, camescope, sante mentale) */
 	void RegisterEntity(ABREntity* Entity);
 	/** Serveur : un client a ramasse un objet (il disparait chez tout le monde) */
@@ -288,6 +296,8 @@ private:
 	void UpdatePopulation(float Dt);
 	void UpdateAudio(float Dt);
 	void UpdatePhenomena(float Dt);
+	/** Sante mentale basse : une silhouette ou un sourire que seul ce joueur voit */
+	bool SpawnHallucination(ABRCharacter* P);
 	ABRCharacter* GetPlayer() const;
 	float ZoneDensity(int32 X, int32 Y) const;
 	bool MazeOpen(int32 X, int32 Y, bool bEast) const;

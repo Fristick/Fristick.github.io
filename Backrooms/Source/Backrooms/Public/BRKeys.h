@@ -27,6 +27,7 @@ enum class EBRAction : uint8
 	Battery,
 	ThirdPerson,
 	Pause,
+	PushToTalk,
 	Count
 };
 

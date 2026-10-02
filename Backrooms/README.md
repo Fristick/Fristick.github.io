@@ -7,6 +7,22 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3.4** :
+- **Conseil d'hébergement** affiché dès le menu principal et sur la page MULTIJOUEUR : c'est le joueur qui a
+  **l'ordinateur le plus puissant** (et la meilleure connexion) qui devrait héberger, car son PC fait tourner le monde
+  et les entités pour tout le groupe.
+- **Chat vocal de proximité** : on entend ses coéquipiers depuis leur personnage. La voix faiblit avec la distance et
+  est **étouffée derrière les murs**. Trois modes : appuyer pour parler (**T**, par défaut), voix ouverte, micro coupé.
+  Des barres s'animent à côté du nom de celui qui parle.
+- **À terre, pas mort** (coopération) : un coéquipier a 30 secondes pour vous **relever** en maintenant **E** près de
+  vous (3,5 s). Vous gardez votre inventaire. Sinon, réveil au point de départ ; **Espace** pour abandonner tout de suite.
+- **Hallucinations** : quand la santé mentale baisse, on aperçoit une **silhouette sans visage** au coin de l'œil,
+  qui disparaît dès qu'on la regarde, ou un **sourire lumineux** qui flotte dans le noir. Seul le joueur concerné les voit.
+- **Paramètres complets** (sur deux colonnes) : volume général, chat vocal, luminosité, mode d'affichage (plein écran,
+  fenêtré sans bordure, fenêtré), résolution de rendu (TSR), synchro verticale, limite d'images par seconde,
+  balancement de la caméra.
+- **Pause en ligne** : liste des joueurs, l'hôte et la latence (ping) de chacun.
+
 **Nouveautés de la version 3.3** :
 - **Menu principal** au lancement : **SOLO** (choix du niveau de départ), **MULTIJOUEUR**, **PARAMÈTRES**, **QUITTER**.
   Il se pilote à la souris ou au clavier (**↑ / ↓**, **Entrée**, **Échap** pour revenir en arrière).
@@ -118,6 +134,8 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 | **Vue à la 1re / 3e personne** | **V** | Clic stick droit |
 | Pause (REPRENDRE, PARAMÈTRES, TOUCHES, MENU PRINCIPAL, QUITTER) | **P** ou **Échap** (dans l'éditeur, Échap arrête le PIE : utilisez **P**) | Start |
 | Se cacher | Entrer dans un placard, ou **s'accroupir** dans un trou du mur | |
+| **Parler** (chat vocal, mode « appuyer pour parler ») | **T** | |
+| **Relever un coéquipier à terre** | **E** maintenu près de lui | X / Carré |
 | Quitter (menu / pause) | **Fin** | |
 
 **Dans l'inventaire** : **glisser-déposer** pour déplacer un objet (poches ↔ stockage ↔ équipement),
@@ -190,11 +208,21 @@ La dernière adresse utilisée est mémorisée. Si la connexion échoue, un mess
   disparaît chez tout le monde.
 
 Vous voyez vos coéquipiers en combinaison hazmat (lampe allumée, objet en main, nage), leur nom et leur distance
-au-dessus de leur tête, et vous entendez leurs pas. **Chacun garde** son inventaire, sa santé, sa santé mentale, son
+au-dessus de leur tête, et vous entendez leurs pas.
+
+**Qui héberge ?** Celui qui a **l'ordinateur le plus puissant** et la meilleure connexion : son PC fait tourner le
+monde, les entités et leurs déplacements pour tout le groupe, en plus de son propre affichage.
+
+**Chat vocal de proximité** : on entend chaque coéquipier depuis son personnage. Sa voix faiblit avec la distance
+(on ne l'entend plus au-delà de 25 m environ) et elle est étouffée derrière les murs. Le mode se choisit dans
+**Paramètres → CHAT VOCAL** : **appuyer pour parler** (touche **T**, par défaut), **voix ouverte** ou **micro coupé**.
+L'indicateur en bas à gauche montre quand votre micro transmet. **Chacun garde** son inventaire, sa santé, sa santé mentale, son
 endurance et son journal.
 
-**Mort** : en coopération, on se réveille au point de départ du niveau au bout de quelques secondes, avec l'équipement de
-départ. Les autres continuent. Si le groupe change de niveau entre-temps, on le suit.
+**À terre** : en coopération, on ne meurt pas tout de suite. Un coéquipier peut vous **relever** en maintenant **E**
+près de vous pendant 3,5 secondes : vous repartez avec un peu de santé et **tout votre inventaire**. Si personne ne
+vient dans les 30 secondes (ou s'il ne reste personne debout), vous vous réveillez au point de départ du niveau avec
+l'équipement de départ. **Espace** permet d'abandonner tout de suite. Si le groupe change de niveau, vous le suivez.
 
 **Pause** : en ligne, le jeu ne s'arrête pas pendant la pause. **MENU PRINCIPAL** quitte la partie. Si c'est l'hôte qui
 quitte, la partie se termine pour tout le monde.
@@ -211,6 +239,8 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
 - **Santé** : les entités vous blessent. Elle remonte lentement si vous êtes au calme.
 - **Santé mentale** : elle baisse avec le temps, dans le noir, près des entités et pendant les poursuites.
   En dessous de 30 % surviennent vertiges, aberrations chromatiques, murmures et faux bruits de pas.
+  Sous 50 %, les **hallucinations** commencent : une silhouette sans visage au coin de l'œil (elle disparaît dès
+  qu'on la regarde), un sourire qui flotte dans le noir… En multijoueur, vous êtes seul à les voir.
   À 0, la folie vous tue. **L'eau d'amande** rend +40 de santé mentale.
 - **Endurance** : courir fait du bruit, et le bruit attire les entités.
 - **Lampe torche** : les piles se vident en 4 minutes environ et la lampe vacille quand elles sont faibles.
@@ -381,6 +411,7 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | **E** ne ramasse rien | Corrigé en v3. Visez l'objet (le point au centre grossit et « [E] Ramasser » s'affiche). Si vous avez changé la touche, le message affiche la nouvelle |
 | Une action ne répond plus | Une touche a pu lui être retirée en la donnant à une autre action : **Tab → TOUCHES**, ou **PAR DÉFAUT** |
 | « Impossible de rejoindre la partie » | L'hôte doit avoir cliqué sur **HÉBERGER UNE PARTIE**. Vérifiez l'adresse, la redirection du port **7777 UDP** sur la box de l'hôte et son pare-feu Windows. Sinon, passez par Radmin VPN, ZeroTier ou Tailscale |
+| On n'entend pas les autres | Vérifiez **Paramètres → CHAT VOCAL**. En « appuyer pour parler », il faut maintenir **T**. Vérifiez aussi l'accès au micro dans Windows (*Paramètres → Confidentialité → Microphone*) et le micro par défaut. Dans l'éditeur (PIE), le chat vocal peut ne pas fonctionner : testez en *Standalone Game* ou avec le jeu empaqueté, sur deux PC |
 | « Connexion perdue avec l'hôte » | L'hôte a quitté la partie, ou la connexion a coupé : rejoignez à nouveau |
 | Un ami ne voit pas les mêmes salles | Vous n'avez pas la même version du jeu : utilisez tous la même compilation |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |

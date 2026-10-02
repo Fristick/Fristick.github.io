@@ -35,6 +35,7 @@ namespace
 			{ TEXT("Battery"), TEXT("CHANGER LES PILES") },
 			{ TEXT("ThirdPerson"), TEXT("VUE \u00c0 LA 3E PERSONNE") },
 			{ TEXT("Pause"), TEXT("PAUSE") },
+			{ TEXT("PushToTalk"), TEXT("PARLER (CHAT VOCAL)") },
 		};
 		static_assert(UE_ARRAY_COUNT(Defs) == static_cast<int32>(EBRAction::Count), "Une ligne par action");
 		return Defs[FMath::Clamp(static_cast<int32>(Action), 0, static_cast<int32>(EBRAction::Count) - 1)];
@@ -140,6 +141,7 @@ namespace BRKeys
 		SetDefault(EBRAction::Battery, EKeys::R);
 		SetDefault(EBRAction::ThirdPerson, EKeys::V);
 		SetDefault(EBRAction::Pause, EKeys::P, EKeys::Escape);
+		SetDefault(EBRAction::PushToTalk, EKeys::T);
 		++GRevision;
 	}
 
