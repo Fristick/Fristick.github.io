@@ -60,6 +60,12 @@ private:
 
 	// ---- Jeu
 	void DrawMenu();
+	void DrawLevelCard(float Y, bool bFull);
+	/** Bouton du menu principal (survol = selection clavier) */
+	void MenuButton(int32 Item, const FString& Label, float CX, float Y, float W, float H, bool bInteractive);
+	void HandleMenuMouse(ABRPlayerController* PC);
+	/** Noms des coequipiers au-dessus de leur tete */
+	void DrawTeammates(ABRCharacter* C);
 	void DrawTitleCard();
 	void DrawCamcorder(ABRCharacter* C, ABRWorld* W);
 	void DrawStats(ABRCharacter* C);
@@ -123,6 +129,8 @@ private:
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	int32 HoverSetting = INDEX_NONE;
+	float LastMenuMouseX = -1.f;
+	float LastMenuMouseY = -1.f;
 	bool bWasInventoryOpen = false;
 
 	// Zone de l'inventaire (calculee a chaque image)

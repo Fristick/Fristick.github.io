@@ -426,9 +426,18 @@ void ABRExit::Use(ABRCharacter* By)
 	{
 		return;
 	}
+	// Multijoueur : chez un client seul son propre personnage compte (le serveur voit passer tout le monde)
+	if (!W->HasAuthority() && !By->IsLocallyControlled())
+	{
+		return;
+	}
 	FString Reason;
 	if (!W->CanLeaveLevel(Reason))
 	{
+		if (!By->IsLocallyControlled())
+		{
+			return; // le message est pour le joueur qui a touche la sortie, sur son ecran
+		}
 		// Niveau 0 : la sortie reste instable tant que les objectifs ne sont pas remplis
 		const float Now = GetWorld() ? static_cast<float>(GetWorld()->GetTimeSeconds()) : 0.f;
 		if (IsInteractable() || Now - LastDenied > 4.f)

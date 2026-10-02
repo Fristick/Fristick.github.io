@@ -17,6 +17,25 @@ class USkyLightComponent;
 class UPostProcessComponent;
 class UAudioComponent;
 class UMaterialInstanceDynamic;
+class ABRPlayerController;
+
+/** Niveau en cours, choisi par le serveur et recopie chez les clients (multijoueur) */
+USTRUCT()
+struct FBRNetLevel
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 Level = 0;
+
+	/** Graine de generation : tous les joueurs construisent exactement les memes salles */
+	UPROPERTY()
+	uint32 Seed = 0;
+
+	/** Incremente a chaque chargement (0 = aucun niveau encore) */
+	UPROPERTY()
+	int32 Serial = 0;
+};
 
 /** Lumiere d'une cellule */
 struct FBRLightInfo
@@ -52,12 +71,31 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// ------------------------------------------------------------ Multijoueur
+	/** Partie en reseau (hote ou client) */
+	bool IsNetGame() const;
+	/** Le niveau est construit (un client attend celui du serveur) */
+	bool IsLevelReady() const { return bLevelReady; }
+	/** Tous les joueurs de la partie (le sien et ceux des autres) */
+	void GetPlayers(TArray<ABRCharacter*>& Out) const;
+	/** Multijoueur : apres une mort, on se reveille au point de depart du niveau */
+	void RespawnLocalPlayer();
+	/** Client : une entite repliquee rejoint la liste (lampes rouges, camescope, sante mentale) */
+	void RegisterEntity(ABREntity* Entity);
+	/** Serveur : un client a ramasse un objet (il disparait chez tout le monde) */
+	void ServerCollected(uint64 Id);
+	/** Serveur : un client a termine un enregistrement (0 = coupure, 1 = entite) */
+	void ServerCompleteObjective(uint8 Which);
+	/** Console : valide tous les objectifs (serveur) */
+	void DebugCompleteObjectives();
 
 	// ------------------------------------------------------------ Niveaux
 	/** Lance une transition (fondu + effet "noclip") vers un niveau. -1 = niveau aleatoire */
 	void RequestTransition(int32 TargetLevel, bool bFromDeath = false);
-	/** Charge immediatement un niveau (sans fondu) */
-	void LoadLevelNow(int32 LevelNumber);
+	/** Charge immediatement un niveau (sans fondu). Graine 0 = nouvelle graine aleatoire */
+	void LoadLevelNow(int32 LevelNumber, uint32 InSeed = 0);
 	const FBRLevelDef& Def() const;
 	int32 GetLevelNumber() const;
 	bool IsTransitioning() const { return TransState != ETrans::None; }
@@ -120,8 +158,8 @@ public:
 	uint32 GetSeed() const { return Seed; }
 
 	// ------------------------------------------------------------ Etat
-	bool IsCollected(uint64 Id) const { return Collected.Contains(Id); }
-	void MarkCollected(uint64 Id) { Collected.Add(Id); }
+	bool IsCollected(uint64 Id) const { return Collected.Contains(Id) || NetCollected.Contains(Id); }
+	void MarkCollected(uint64 Id);
 	void Discover(EBREntityKind Kind);
 	bool IsDiscovered(EBREntityKind Kind) const { return Discovered.Contains(static_cast<int32>(Kind)); }
 	void UnregisterEntity(ABREntity* Entity);
@@ -151,8 +189,6 @@ public:
 	const FString& GetRecordLabel() const { return RecordLabel; }
 	float GetRecordProgress() const { return RecordProgress; }
 	int32 GetVHSFound() const { return VHSFound; }
-	/** Console : valide les taches d'enregistrement */
-	void DebugCompleteRecording();
 
 	/** Niveau de depart choisi dans le menu */
 	int32 StartLevel = 0;
@@ -194,11 +230,57 @@ protected:
 	UPROPERTY()
 	TArray<TObjectPtr<ABREntity>> Entities;
 
+	// ---- Etat partage (serveur -> clients)
+	UPROPERTY(ReplicatedUsing = OnRep_NetLevel)
+	FBRNetLevel NetLevel;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Blackout)
+	uint8 NetBlackout = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Collected)
+	TArray<uint64> NetCollected;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Objectives)
+	int32 VHSFound = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Objectives)
+	bool bBlackoutRecorded = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Objectives)
+	bool bEntityRecorded = false;
+
+	UFUNCTION()
+	void OnRep_NetLevel();
+
+	UFUNCTION()
+	void OnRep_Blackout();
+
+	UFUNCTION()
+	void OnRep_Collected();
+
+	UFUNCTION()
+	void OnRep_Objectives();
+
+	/** Tout le monde plonge dans le noir en meme temps ; le niveau suit quand le serveur l'a choisi */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastTransition(int32 TargetLevel, bool bFromDeath);
+
 private:
 	enum class ETrans : uint8 { None, FadingOut, FadingIn };
 	enum class EBlackout : uint8 { None, Failing, Dark, Restoring };
 
 	void ClearLevel();
+	void BeginTransition(int32 TargetLevel, bool bFromDeath);
+	/** Client : suit le niveau du serveur. false tant qu'aucun niveau n'est construit */
+	bool SyncNetLevel();
+	void LoadNetLevel();
+	void EnterBlackoutPhase(uint8 Phase, bool bSilent = false);
+	void DestroyPickup(uint64 Id);
+	void AnnounceVHS();
+	void CompleteObjective(uint8 Which);
+	ABRPlayerController* LocalPC() const;
+	/** Un joueur vivant au hasard (point d'ancrage des apparitions) */
+	ABRCharacter* RandomLivingPlayer() const;
 	void ApplyEnvironment();
 	void UpdateStreaming(bool bSynchronous);
 	void SpawnChunk(const FIntPoint& Coord);
@@ -215,8 +297,10 @@ private:
 	void UpdateRipples(float Dt);
 	/** Niveau 0 : l'entite qui fait des rondes est toujours la (elle reapparait si elle s'eloigne trop) */
 	void UpdatePatrol(float Dt);
-	/** Cherche ou faire apparaitre une entite entre MinDist et MaxDist du joueur (hors de sa vue si bAvoidSight) */
-	bool FindSpawnSpot(EBREntityKind Kind, float MinDist, float MaxDist, bool bAvoidSight, FVector& Out) const;
+	/** Cherche ou faire apparaitre une entite entre MinDist et MaxDist du joueur Anchor (hors de la vue de tous si bAvoidSight) */
+	bool FindSpawnSpot(EBREntityKind Kind, const ABRCharacter* Anchor, float MinDist, float MaxDist, bool bAvoidSight, FVector& Out) const;
+	/** Aucun joueur ne voit ce point */
+	bool IsHiddenFromPlayers(const FVector& Loc) const;
 	void SpawnBlackoutEntities();
 	void DismissBlackoutEntities();
 	TArray<FVector> RedSources;
@@ -252,6 +336,12 @@ private:
 	float PhenomenaTimer = 40.f;
 	float DeathTimer = -1.f;
 	bool bPlayerPlaced = false;
+	bool bLevelReady = false;
+	int32 LoadedSerial = 0;
+	int32 PrevVHSFound = 0;
+	bool bPrevBlackoutRecorded = false;
+	bool bPrevEntityRecorded = false;
+	bool bObjectiveSent[2] = { false, false };
 	TSet<uint64> Collected;
 	TSet<int32> Discovered;
 	TArray<int32> Visited;
@@ -264,9 +354,6 @@ private:
 	float AppliedPower = -1.f;
 
 	// v2 : objectifs
-	int32 VHSFound = 0;
-	bool bBlackoutRecorded = false;
-	bool bEntityRecorded = false;
 	bool bObjectivesAnnounced = false;
 	float BlackoutRecordTime = 0.f;
 	float EntityRecordTime = 0.f;

@@ -1208,8 +1208,9 @@ void ABRChunk::BuildPickupsAndExits()
 		{
 			continue;
 		}
+		// La graine entre dans l'identifiant : un objet ramasse au niveau precedent ne cache rien dans le suivant
 		const uint64 Id = (static_cast<uint64>(static_cast<uint32>(Coord.X)) << 40) ^ (static_cast<uint64>(static_cast<uint32>(Coord.Y)) << 16)
-			^ static_cast<uint64>(Roll.Salt);
+			^ static_cast<uint64>(Roll.Salt) ^ (static_cast<uint64>(Seed) * 0x9E3779B97F4A7C15ull);
 		if (W->IsCollected(Id))
 		{
 			continue;

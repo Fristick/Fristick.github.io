@@ -1,5 +1,7 @@
 // Entites du Backrooms Wiki : modeles Blender articules (bras, avant-bras, cuisses, tibias, tete),
 // animation procedurale, IA a etats (inspiree de Backrooms : Escape Together) et chemins sur la grille.
+// Multijoueur : l'IA ne tourne que sur le serveur (proie = joueur le plus proche) ; les clients recoivent
+// l'espece, l'etat, la cible et l'intensite de la poursuite, et animent le modele a partir de la.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -55,6 +57,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** A definir avant FinishSpawning */
 	EBREntityKind Kind = EBREntityKind::Smiler;
@@ -65,6 +68,16 @@ public:
 	void Dismiss() { StartVanish(); }
 	/** Bacteria : 0..1, a quel point elle a repere le joueur (1 = poursuite) */
 	float GetSuspicion() const { return Suspicion; }
+	bool IsVanishing() const { return Vanish >= 0.f; }
+	/** Tapie (Faceling dans les bles) : pas d'aura */
+	bool IsLurking() const { return State == EState::Hide; }
+	/** Assez visible pour ouvrir sa fiche du journal (pas un Skin-Stealer deguise ou en masse informe) */
+	bool IsRecognizable() const { return Kind != EBREntityKind::SkinStealer || (Morph > 0.5f && !bDisguised); }
+	/** Joueur poursuivi (nullptr si elle ne traque personne) et intensite de la poursuite (musique) */
+	ABRCharacter* GetChaseTarget() const;
+	float GetChaseIntensity() const { return NetChase / 255.f; }
+	/** Taille de l'acteur (aussi chez les clients) */
+	void SetVisualScale(float Scale);
 
 protected:
 	UPROPERTY(VisibleAnywhere)
@@ -97,6 +110,33 @@ protected:
 	/** Ballon rouge du Partygoer (reste vertical quoi que fasse le bras) */
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Balloon;
+
+	// ---- Replique vers les clients
+	UPROPERTY(Replicated)
+	uint8 NetKind = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_State)
+	uint8 NetState = 0;
+
+	/** Joueur observe / poursuivi */
+	UPROPERTY(Replicated)
+	TObjectPtr<ABRCharacter> Target;
+
+	/** Intensite de la poursuite (0..255) */
+	UPROPERTY(Replicated)
+	uint8 NetChase = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Vanish)
+	bool bNetVanish = false;
+
+	UPROPERTY(Replicated)
+	uint8 NetScale = 100;
+
+	UFUNCTION()
+	void OnRep_State();
+
+	UFUNCTION()
+	void OnRep_Vanish();
 
 private:
 	enum class EState : uint8 { Idle, Wander, Stalk, Chase, Retreat, Frozen, Hide, Lure };
@@ -134,6 +174,13 @@ private:
 
 	// IA
 	void Think(float Dt);
+	/** Serveur : le joueur vivant le plus proche (un joueur cache compte moins, la proie actuelle compte plus) */
+	ABRCharacter* PickTarget(ABRWorld* W) const;
+	/** Client : pose deduite de l'etat replique (bras tendus, accroupi, forme du Skin-Stealer) */
+	void UpdateClientState(float Dt);
+	/** Sons d'entree dans un etat (alerte de poursuite), joues chez chacun */
+	void OnStateEntered();
+	void NotifyChase(float Intensity) { ChaseOut = FMath::Max(ChaseOut, Intensity); }
 	void ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt);
 	void ThinkHound(ABRCharacter* P, const FSense& S, float Dt);
 	void ThinkFaceling(ABRCharacter* P, const FSense& S, float Dt);
@@ -148,7 +195,7 @@ private:
 	void UpdateHead(float Dt);
 	void UpdateMorph(float Dt);
 	void SetState(EState NewState);
-	void MoveTowards(const FVector& Target, float Speed);
+	void MoveTowards(const FVector& Dest, float Speed);
 	void FollowPathTo(const FVector& Goal, float Speed, float Dt);
 	void Wander(float Speed, float Dt);
 	void FacePlayer(float Dt);
@@ -198,7 +245,8 @@ private:
 	/** Le joueur est cache (placard, trou) : pas de ligne de vue, pas de bruit */
 	bool bTargetHidden = false;
 	bool bHostileVariant = true;
-	bool bSeenOnce = false;
+	float ChaseOut = 0.f;
+	bool bRegistered = false;
 	bool bWantsMove = false;
 	bool bWarned = false;
 	TArray<FLimb> Limbs;

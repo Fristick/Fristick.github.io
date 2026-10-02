@@ -13,11 +13,19 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
 #include "HAL/PlatformTime.h"
+#include "IPAddress.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/ConfigCacheIni.h"
+#include "SocketSubsystem.h"
+#include "Styling/CoreStyle.h"
+#include "Widgets/Input/SEditableTextBox.h"
+#include "Widgets/Layout/SBox.h"
 
 namespace
 {
@@ -45,6 +53,46 @@ namespace
 	{
 		return b ? FString(TEXT("ACTIV\u00c9")) : FString(TEXT("D\u00c9SACTIV\u00c9"));
 	}
+
+	// Erreurs reseau : la connexion echoue ou se perd, le moteur recharge la carte et le menu les affiche
+	FString GNetMessage;
+	bool GNetHooks = false;
+
+	void HandleNetworkFailure(UWorld* World, UNetDriver* Driver, ENetworkFailure::Type Type, const FString& Error)
+	{
+		switch (Type)
+		{
+		case ENetworkFailure::PendingConnectionFailure:
+			GNetMessage = TEXT("Impossible de rejoindre la partie : v\u00e9rifiez l'adresse, le port 7777 (UDP) et le pare-feu de l'h\u00f4te.");
+			break;
+		case ENetworkFailure::ConnectionLost:
+		case ENetworkFailure::ConnectionTimeout:
+			GNetMessage = TEXT("Connexion perdue avec l'h\u00f4te.");
+			break;
+		case ENetworkFailure::NetDriverListenFailure:
+			GNetMessage = TEXT("Impossible d'h\u00e9berger : le port 7777 est peut-\u00eatre d\u00e9j\u00e0 utilis\u00e9.");
+			break;
+		default:
+			GNetMessage = TEXT("Erreur r\u00e9seau : ") + Error;
+			break;
+		}
+	}
+
+	void HandleTravelFailure(UWorld* World, ETravelFailure::Type Type, const FString& Error)
+	{
+		GNetMessage = TEXT("Impossible de rejoindre la partie : ") + Error;
+	}
+
+	FString FindLocalAddress()
+	{
+		if (ISocketSubsystem* Sockets = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+		{
+			bool bCanBindAll = false;
+			const TSharedRef<FInternetAddr> Addr = Sockets->GetLocalHostAddr(*GLog, bCanBindAll);
+			return Addr->ToString(false);
+		}
+		return FString();
+	}
 }
 
 ABRPlayerController::ABRPlayerController()
@@ -55,6 +103,28 @@ ABRPlayerController::ABRPlayerController()
 void ABRPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+	// En reseau on arrive directement dans la partie ; seul, le menu principal s'affiche
+	bInMenu = !IsNetGame();
+	if (!IsLocalController())
+	{
+		return; // copie serveur du controleur d'un autre joueur
+	}
+	if (!GNetHooks && GEngine)
+	{
+		GNetHooks = true;
+		GEngine->OnNetworkFailure().AddStatic(&HandleNetworkFailure);
+		GEngine->OnTravelFailure().AddStatic(&HandleTravelFailure);
+	}
+	if (bInMenu && !GNetMessage.IsEmpty())
+	{
+		MenuStatus = GNetMessage;
+		GNetMessage.Empty();
+	}
+	if (GConfig)
+	{
+		GConfig->GetString(SettingsSection, TEXT("LastAddress"), JoinAddress, GGameUserSettingsIni);
+	}
+
 	EnsureInput();
 	AddMappingToPlayer();
 	UpdateInputMode();
@@ -66,6 +136,17 @@ void ABRPlayerController::BeginPlay()
 	{
 		MenuIndex = BRLevels::IndexOf(W->StartLevel);
 	}
+}
+
+void ABRPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	ShowAddressBox(false);
+	Super::EndPlay(EndPlayReason);
+}
+
+bool ABRPlayerController::IsNetGame() const
+{
+	return GetNetMode() != NM_Standalone;
 }
 
 UInputAction* ABRPlayerController::MakeAction(const TCHAR* Name, EInputActionValueType Type, bool bWhenPaused)
@@ -121,6 +202,8 @@ void ABRPlayerController::EnsureInput()
 	NightVisionAction = MakeAction(TEXT("IA_NightVision"), EInputActionValueType::Boolean);
 	BandageAction = MakeAction(TEXT("IA_Bandage"), EInputActionValueType::Boolean);
 	ViewAction = MakeAction(TEXT("IA_View"), EInputActionValueType::Boolean);
+	MenuUpAction = MakeAction(TEXT("IA_MenuUp"), EInputActionValueType::Boolean);
+	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean);
 	PocketActions.Reset();
 	for (int32 i = 0; i < 4; ++i)
 	{
@@ -232,6 +315,13 @@ void ABRPlayerController::RebuildMappings()
 	MapKey(Ctx, MenuNextAction, EKeys::Right);
 	MapKey(Ctx, MenuNextAction, EKeys::D);
 	MapKey(Ctx, MenuNextAction, EKeys::Gamepad_DPad_Right);
+	MapKey(Ctx, MenuUpAction, EKeys::Up);
+	MapKey(Ctx, MenuUpAction, EKeys::W);
+	MapKey(Ctx, MenuUpAction, EKeys::Z);
+	MapKey(Ctx, MenuUpAction, EKeys::Gamepad_DPad_Up);
+	MapKey(Ctx, MenuDownAction, EKeys::Down);
+	MapKey(Ctx, MenuDownAction, EKeys::S);
+	MapKey(Ctx, MenuDownAction, EKeys::Gamepad_DPad_Down);
 	MapKey(Ctx, MenuConfirmAction, EKeys::Enter);
 	MapKey(Ctx, MenuConfirmAction, EKeys::SpaceBar);
 	MapKey(Ctx, MenuConfirmAction, EKeys::Gamepad_FaceButton_Bottom);
@@ -305,6 +395,8 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(MenuPrevAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuPrev);
 	EIC->BindAction(MenuNextAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuNext);
 	EIC->BindAction(MenuConfirmAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuConfirm);
+	EIC->BindAction(MenuUpAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuUp);
+	EIC->BindAction(MenuDownAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuDown);
 }
 
 void ABRPlayerController::PlayerTick(float DeltaTime)
@@ -417,8 +509,8 @@ bool ABRPlayerController::CanPlay() const
 
 void ABRPlayerController::UpdateInputMode()
 {
-	// Curseur visible dans l'inventaire et le menu pause (boutons cliquables)
-	const bool bCursor = bInventory || bPauseMenu;
+	// Curseur visible dans le menu principal, l'inventaire et le menu pause (boutons cliquables)
+	const bool bCursor = bInventory || bPauseMenu || bInMenu;
 	bShowMouseCursor = bCursor;
 	if (bCursor)
 	{
@@ -581,6 +673,10 @@ void ABRPlayerController::SetInventoryOpen(bool bOpen, int32 Tab)
 	}
 	bInventory = bOpen;
 	CancelKeyCapture();
+	if (bInMenu)
+	{
+		ShowAddressBox(!bOpen && MenuPage == EBRMenuPage::Join); // le champ IP ne doit pas recouvrir les parametres
+	}
 	if (ABRCharacter* C = GetBRCharacter())
 	{
 		C->SetSprinting(false);
@@ -616,7 +712,11 @@ void ABRPlayerController::TogglePause()
 		bInventory = false;
 		CancelKeyCapture();
 	}
-	SetPause(bPauseMenu);
+	// En multijoueur le monde continue de tourner pour les autres
+	if (!IsNetGame())
+	{
+		SetPause(bPauseMenu);
+	}
 	UpdateInputMode();
 }
 
@@ -711,6 +811,11 @@ void ABRPlayerController::OnPause(const FInputActionValue& Value)
 		SetInventoryOpen(false); // Echap ferme d'abord l'inventaire
 		return;
 	}
+	if (bInMenu)
+	{
+		MenuBack();
+		return;
+	}
 	TogglePause();
 }
 
@@ -737,8 +842,7 @@ void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 {
 	if (bInMenu && !bInventory)
 	{
-		const int32 Num = BRLevels::All().Num();
-		MenuIndex = (MenuIndex + Num - 1) % Num;
+		MenuShiftLevel(-1);
 	}
 }
 
@@ -746,22 +850,355 @@ void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 {
 	if (bInMenu && !bInventory)
 	{
-		MenuIndex = (MenuIndex + 1) % BRLevels::All().Num();
+		MenuShiftLevel(1);
+	}
+}
+
+void ABRPlayerController::OnMenuUp(const FInputActionValue& Value)
+{
+	if (bInMenu && !bInventory)
+	{
+		SetMenuCursor((MenuCursor + GetMenuItemCount() - 1) % FMath::Max(1, GetMenuItemCount()));
+	}
+}
+
+void ABRPlayerController::OnMenuDown(const FInputActionValue& Value)
+{
+	if (bInMenu && !bInventory)
+	{
+		SetMenuCursor((MenuCursor + 1) % FMath::Max(1, GetMenuItemCount()));
 	}
 }
 
 void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 {
-	if (!bInMenu || bInventory)
+	if (bInMenu && !bInventory)
+	{
+		MenuActivate(MenuCursor);
+	}
+}
+
+// =====================================================================================================================
+// Menu principal
+// =====================================================================================================================
+
+int32 ABRPlayerController::GetMenuItemCount() const
+{
+	switch (MenuPage)
+	{
+	case EBRMenuPage::Main:
+		return 4;
+	case EBRMenuPage::Multi:
+		return 3;
+	default:
+		return 2;
+	}
+}
+
+FString ABRPlayerController::GetMenuItemLabel(int32 Item) const
+{
+	static const TCHAR* Main[] = { TEXT("SOLO"), TEXT("MULTIJOUEUR"), TEXT("PARAM\u00c8TRES"), TEXT("QUITTER") };
+	static const TCHAR* Solo[] = { TEXT("NOCLIPPER"), TEXT("RETOUR") };
+	static const TCHAR* Multi[] = { TEXT("H\u00c9BERGER UNE PARTIE"), TEXT("REJOINDRE UNE PARTIE"), TEXT("RETOUR") };
+	static const TCHAR* Join[] = { TEXT("SE CONNECTER"), TEXT("RETOUR") };
+	if (Item < 0 || Item >= GetMenuItemCount())
+	{
+		return FString();
+	}
+	switch (MenuPage)
+	{
+	case EBRMenuPage::Main:
+		return Main[Item];
+	case EBRMenuPage::Solo:
+		return Solo[Item];
+	case EBRMenuPage::Multi:
+		return Multi[Item];
+	default:
+		return Join[Item];
+	}
+}
+
+void ABRPlayerController::SetMenuCursor(int32 Item)
+{
+	if (Item != MenuCursor && Item >= 0 && Item < GetMenuItemCount())
+	{
+		MenuCursor = Item;
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->PlayUISound(TEXT("S_UIClick"), 0.25f);
+		}
+	}
+}
+
+void ABRPlayerController::SetMenuPage(EBRMenuPage Page)
+{
+	MenuPage = Page;
+	MenuCursor = 0;
+	if (Page == EBRMenuPage::Multi && LocalAddress.IsEmpty())
+	{
+		LocalAddress = FindLocalAddress();
+	}
+	ShowAddressBox(Page == EBRMenuPage::Join);
+}
+
+void ABRPlayerController::MenuShiftLevel(int32 Direction)
+{
+	if (MenuPage != EBRMenuPage::Solo && MenuPage != EBRMenuPage::Multi)
 	{
 		return;
 	}
+	const int32 Num = BRLevels::All().Num();
+	MenuIndex = (MenuIndex + (Direction >= 0 ? 1 : Num - 1)) % Num;
+	if (ABRCharacter* C = GetBRCharacter())
+	{
+		C->PlayUISound(TEXT("S_UIClick"), 0.4f);
+	}
+}
+
+void ABRPlayerController::MenuBack()
+{
+	switch (MenuPage)
+	{
+	case EBRMenuPage::Join:
+		SetMenuPage(EBRMenuPage::Multi);
+		break;
+	case EBRMenuPage::Solo:
+	case EBRMenuPage::Multi:
+		SetMenuPage(EBRMenuPage::Main);
+		break;
+	default:
+		break;
+	}
+}
+
+void ABRPlayerController::MenuActivate(int32 Item)
+{
+	if (!bInMenu || Item < 0 || Item >= GetMenuItemCount())
+	{
+		return;
+	}
+	if (ABRCharacter* C = GetBRCharacter())
+	{
+		C->PlayUISound(TEXT("S_UIClick"));
+	}
+	MenuCursor = Item;
+	switch (MenuPage)
+	{
+	case EBRMenuPage::Main:
+		if (Item == 0)
+		{
+			SetMenuPage(EBRMenuPage::Solo);
+		}
+		else if (Item == 1)
+		{
+			SetMenuPage(EBRMenuPage::Multi);
+		}
+		else if (Item == 2)
+		{
+			SetInventoryOpen(true, 2); // onglet PARAMETRES
+		}
+		else
+		{
+			QuitToDesktop();
+		}
+		break;
+	case EBRMenuPage::Solo:
+		if (Item == 0)
+		{
+			StartSolo();
+		}
+		else
+		{
+			MenuBack();
+		}
+		break;
+	case EBRMenuPage::Multi:
+		if (Item == 0)
+		{
+			HostGame();
+		}
+		else if (Item == 1)
+		{
+			SetMenuPage(EBRMenuPage::Join);
+		}
+		else
+		{
+			MenuBack();
+		}
+		break;
+	case EBRMenuPage::Join:
+		if (Item == 0)
+		{
+			JoinGame();
+		}
+		else
+		{
+			MenuBack();
+		}
+		break;
+	}
+}
+
+void ABRPlayerController::HostGame()
+{
+	// La carte est rechargee en serveur "listen" : les amis peuvent rejoindre sur le port 7777
+	const int32 Level = BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number;
+	MenuStatus = TEXT("Cr\u00e9ation de la partie...");
+	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);
+	UGameplayStatics::OpenLevel(this, FName(*Map), true, FString::Printf(TEXT("listen?BRLevel=%d"), Level));
+}
+
+void ABRPlayerController::JoinGame()
+{
+	const FString Address = JoinAddress.TrimStartAndEnd();
+	if (Address.IsEmpty())
+	{
+		MenuStatus = TEXT("Entrez l'adresse IP de l'h\u00f4te (ex. 192.168.1.20).");
+		return;
+	}
+	if (GConfig)
+	{
+		GConfig->SetString(SettingsSection, TEXT("LastAddress"), *Address, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
+	MenuStatus = FString::Printf(TEXT("Connexion \u00e0 %s..."), *Address);
+	ClientTravel(Address, TRAVEL_Absolute);
+}
+
+void ABRPlayerController::ReturnToMainMenu()
+{
+	// Recharger la carte hors ligne : on quitte la session (l'hote ferme la partie pour tout le monde)
+	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);
+	UGameplayStatics::OpenLevel(this, FName(*Map), true);
+}
+
+void ABRPlayerController::ShowAddressBox(bool bShow)
+{
+	UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	if (bShow && !AddressWidget.IsValid() && Viewport && FSlateApplication::IsInitialized())
+	{
+		TWeakObjectPtr<ABRPlayerController> WeakThis(this);
+		AddressWidget = SNew(SBox)
+			.HAlign(HAlign_Center)
+			.VAlign(VAlign_Center)
+			[
+				SNew(SBox)
+				.WidthOverride(520.f)
+				.HeightOverride(52.f)
+				[
+					SAssignNew(AddressBox, SEditableTextBox)
+					.Text(FText::FromString(JoinAddress))
+					.HintText(FText::FromString(TEXT("Adresse IP de l'h\u00f4te, ex. 192.168.1.20")))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 22))
+					.SelectAllTextWhenFocused(true)
+					.OnTextChanged_Lambda([WeakThis](const FText& NewText)
+					{
+						if (ABRPlayerController* Self = WeakThis.Get())
+						{
+							Self->JoinAddress = NewText.ToString();
+						}
+					})
+					.OnTextCommitted_Lambda([WeakThis](const FText& NewText, ETextCommit::Type CommitType)
+					{
+						ABRPlayerController* Self = WeakThis.Get();
+						if (Self && Self->MenuPage == EBRMenuPage::Join)
+						{
+							Self->JoinAddress = NewText.ToString();
+							if (CommitType == ETextCommit::OnEnter)
+							{
+								Self->JoinGame();
+							}
+						}
+					})
+				]
+			];
+		Viewport->AddViewportWidgetContent(AddressWidget.ToSharedRef(), 50);
+		FSlateApplication::Get().SetKeyboardFocus(AddressBox);
+	}
+	else if (!bShow && AddressWidget.IsValid())
+	{
+		if (Viewport)
+		{
+			Viewport->RemoveViewportWidgetContent(AddressWidget.ToSharedRef());
+		}
+		AddressWidget.Reset();
+		AddressBox.Reset();
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().SetAllUserFocusToGameViewport();
+		}
+	}
+}
+
+// =====================================================================================================================
+// Multijoueur : demandes des clients executees par le serveur
+// =====================================================================================================================
+
+void ABRPlayerController::ServerRequestTransition_Implementation(int32 TargetLevel)
+{
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->RequestTransition(TargetLevel);
+	}
+}
+
+void ABRPlayerController::ServerMarkCollected_Implementation(uint64 Id)
+{
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->ServerCollected(Id);
+	}
+}
+
+void ABRPlayerController::ServerVHSCollected_Implementation()
+{
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->OnVHSCollected();
+	}
+}
+
+void ABRPlayerController::ServerCompleteObjective_Implementation(uint8 Which)
+{
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->ServerCompleteObjective(Which);
+	}
+}
+
+void ABRPlayerController::ServerCheat_Implementation(uint8 Command, int32 Value)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!W)
+	{
+		return;
+	}
+	switch (Command)
+	{
+	case 1:
+		W->ForceBlackout();
+		break;
+	case 2:
+		W->DebugCompleteObjectives();
+		break;
+	case 3:
+		SpawnInFront(Value);
+		break;
+	default:
+		break;
+	}
+}
+
+void ABRPlayerController::StartSolo()
+{
 	ABRWorld* W = ABRWorld::Get(this);
 	if (!W || W->IsTransitioning())
 	{
 		return;
 	}
 	bInMenu = false;
+	ShowAddressBox(false);
+	UpdateInputMode();
 	const int32 Target = BRLevels::All()[MenuIndex].Number;
 	if (Target != W->GetLevelNumber())
 	{
@@ -782,6 +1219,8 @@ void ABRPlayerController::BRLevel(int32 Number)
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		bInMenu = false;
+		ShowAddressBox(false);
+		UpdateInputMode();
 		W->RequestTransition(Number);
 	}
 }
@@ -796,6 +1235,16 @@ void ABRPlayerController::BRGod()
 }
 
 void ABRPlayerController::BRSpawn(int32 Kind)
+{
+	if (!HasAuthority())
+	{
+		ServerCheat(3, Kind);
+		return;
+	}
+	SpawnInFront(Kind);
+}
+
+void ABRPlayerController::SpawnInFront(int32 Kind)
 {
 	ABRWorld* W = ABRWorld::Get(this);
 	ABRCharacter* C = GetBRCharacter();
@@ -842,7 +1291,11 @@ void ABRPlayerController::BRGiveAll()
 
 void ABRPlayerController::BRBlackout()
 {
-	if (ABRWorld* W = ABRWorld::Get(this))
+	if (!HasAuthority())
+	{
+		ServerCheat(1, 0);
+	}
+	else if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		W->ForceBlackout();
 	}
@@ -850,17 +1303,14 @@ void ABRPlayerController::BRBlackout()
 
 void ABRPlayerController::BRObjectives()
 {
-	ABRWorld* W = ABRWorld::Get(this);
-	if (!W)
+	if (!HasAuthority())
 	{
-		return;
+		ServerCheat(2, 0);
 	}
-	const int32 Missing = FMath::Max(0, W->Def().VHSRequired - W->GetVHSFound());
-	for (int32 i = 0; i < Missing; ++i)
+	else if (ABRWorld* W = ABRWorld::Get(this))
 	{
-		W->OnVHSCollected();
+		W->DebugCompleteObjectives();
 	}
-	W->DebugCompleteRecording();
 }
 
 // =====================================================================================================================

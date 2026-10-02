@@ -7,6 +7,14 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3.3** :
+- **Menu principal** au lancement : **SOLO** (choix du niveau de départ), **MULTIJOUEUR**, **PARAMÈTRES**, **QUITTER**.
+  Il se pilote à la souris ou au clavier (**↑ / ↓**, **Entrée**, **Échap** pour revenir en arrière).
+- **Multijoueur en coopération**, jusqu'à 4 joueurs : un joueur héberge, les autres le rejoignent avec son adresse IP.
+  Tout le groupe partage les mêmes salles, les sorties, les coupures de courant, les entités et les objectifs du Niveau 0.
+  On voit ses coéquipiers en combinaison, avec leur lampe, l'objet qu'ils tiennent et leur nom. Détails au § 2 ter.
+- Menu pause : nouveau bouton **MENU PRINCIPAL** (quitter la partie sans fermer le jeu).
+
 **Nouveautés de la version 3.2** :
 - **Modèles 3D invisibles corrigés** (lampes du plafond, plan d'eau, objets…). Les FBX stockaient l'échelle (×100) et la
   rotation sur le nœud de l'objet. L'importeur d'Unreal 5.5+ (Interchange) peut l'ignorer, et les modèles arrivaient alors
@@ -74,7 +82,8 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_Water`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
-4. Appuyez sur **Play** (Alt+P). Dans le menu titre, choisissez le niveau (← / →) puis appuyez sur **Entrée** pour « noclipper ».
+4. Appuyez sur **Play** (Alt+P). Dans le menu principal, choisissez **SOLO**, puis le niveau (← / →), puis **NOCLIPPER**
+   (ou **Entrée**). Pour jouer à plusieurs : **MULTIJOUEUR** (voir § 2 ter).
 
 > Pour relancer l'import à la main : *Window → Output Log*, choisir **Python** en bas, puis
 > `import backrooms_setup; backrooms_setup.run(force=True)`
@@ -107,7 +116,7 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 | Changer les piles | **R** | RB / R1 |
 | **Inventaire** (objectifs, objets, journal, paramètres) | **Tab** ou **I** | Select |
 | **Vue à la 1re / 3e personne** | **V** | Clic stick droit |
-| Pause (REPRENDRE, PARAMÈTRES, TOUCHES, QUITTER) | **P** ou **Échap** (dans l'éditeur, Échap arrête le PIE : utilisez **P**) | Start |
+| Pause (REPRENDRE, PARAMÈTRES, TOUCHES, MENU PRINCIPAL, QUITTER) | **P** ou **Échap** (dans l'éditeur, Échap arrête le PIE : utilisez **P**) | Start |
 | Se cacher | Entrer dans un placard, ou **s'accroupir** dans un trou du mur | |
 | Quitter (menu / pause) | **Fin** | |
 
@@ -153,6 +162,47 @@ L'onglet **PARAMÈTRES** règle la sensibilité, l'axe Y, le champ de vision, la
 (RTX)**, les reflets ray tracés haute qualité, les néons surfaciques, le brouillard volumétrique et le grain.
 Les réglages et les touches sont sauvegardés dans `Saved/Config/<plateforme>/GameUserSettings.ini`
 (section `[/Script/Backrooms.BRKeys]` pour les touches).
+
+---
+
+## 2 ter. Multijoueur (coopération, jusqu'à 4 joueurs)
+
+**Héberger** : menu principal → **MULTIJOUEUR** → choisir le niveau de départ (← / →) → **HÉBERGER UNE PARTIE**.
+La carte se recharge en mode serveur et vous êtes directement en jeu. Votre adresse IP est affichée sur la page
+MULTIJOUEUR : donnez-la à vos amis. Au premier lancement, Windows peut demander d'autoriser le jeu dans le pare-feu :
+acceptez (au moins pour les réseaux privés).
+
+**Rejoindre** : **MULTIJOUEUR** → **REJOINDRE UNE PARTIE** → tapez l'adresse IP de l'hôte → **Entrée** (ou **SE CONNECTER**).
+La dernière adresse utilisée est mémorisée. Si la connexion échoue, un message s'affiche au bout de 20 secondes.
+
+**Quelle adresse ?**
+- **Même réseau** (même box ou même Wi-Fi) : l'adresse locale affichée (192.168.x.x) suffit.
+- **Par Internet** : l'hôte redirige le port **7777 en UDP** vers son PC dans l'interface de sa box, puis donne son adresse
+  IP publique. Plus simple : un réseau virtuel (**Radmin VPN**, **ZeroTier**, **Tailscale**…). Tout le monde le rejoint et
+  utilise l'adresse IP de ce réseau.
+- Tout le monde doit utiliser **la même version du jeu** (la même compilation).
+
+**Ce qui est partagé par le groupe** :
+- le niveau et ses salles (même graine de génération) ; quand un joueur prend une sortie, **tout le groupe change de niveau** ;
+- les coupures de courant et les lampes rouges du Niveau 0 ;
+- les entités : l'hôte les simule, et elles traquent le joueur vivant le plus proche (un joueur caché est délaissé) ;
+- les objectifs du Niveau 0 : les cassettes VHS et les enregistrements de chacun comptent pour tous. Un objet ramassé
+  disparaît chez tout le monde.
+
+Vous voyez vos coéquipiers en combinaison hazmat (lampe allumée, objet en main, nage), leur nom et leur distance
+au-dessus de leur tête, et vous entendez leurs pas. **Chacun garde** son inventaire, sa santé, sa santé mentale, son
+endurance et son journal.
+
+**Mort** : en coopération, on se réveille au point de départ du niveau au bout de quelques secondes, avec l'équipement de
+départ. Les autres continuent. Si le groupe change de niveau entre-temps, on le suit.
+
+**Pause** : en ligne, le jeu ne s'arrête pas pendant la pause. **MENU PRINCIPAL** quitte la partie. Si c'est l'hôte qui
+quitte, la partie se termine pour tout le monde.
+
+**Commandes console** : `BRLevel`, `BRBlackout`, `BRObjectives` et `BRSpawn` sont exécutées par l'hôte, même tapées par un client.
+
+**Tester seul dans l'éditeur** : flèche à côté de **Play** → *Number of Players* : **2** et *Net Mode* : **Play As Listen Server**.
+Les deux fenêtres arrivent directement en partie, sans passer par le menu.
 
 ---
 
@@ -241,7 +291,7 @@ Backrooms/
 ├── Source/Backrooms/
 │   ├── BRTypes.h                Structures des niveaux, hachage déterministe
 │   ├── BRLevels.cpp             ★ Définition des 12 niveaux (tout est réglable ici)
-│   ├── BRWorld.*                Grille infinie, streaming, A*, ambiance, transitions, apparition des entités
+│   ├── BRWorld.*                Grille infinie, streaming, A*, ambiance, transitions, entités, état partagé en réseau
 │   ├── BRChunk.*                Construction d'un chunk : murs, portes, néons, accessoires, bassins (instances)
 │   ├── BREntity.*               Les 9 entités : fiches, IA, squelette articulé, animation procédurale
 │   ├── BRCharacter.*            Joueur : inventaire, équipement, caméscope, lampe, endurance, santé mentale,
@@ -249,7 +299,7 @@ Backrooms/
 │   ├── BRKeys.*                 Touches configurables (3 par action), sauvegarde, libellés « [E] »
 │   ├── BRRig.*                  Humanoïdes articulés (entités et corps du joueur)
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
-│   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu, inventaire, paramètres, console
+│   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu principal, multijoueur, inventaire, paramètres, console
 │   ├── BRHUD.*                  Interface (Canvas) : menu, REC, inventaire TAB façon Escape Together
 │   ├── BRInteractables.*        Objets à ramasser et sorties de niveau (verrouillées par les objectifs)
 │   ├── BRAssets.*               Chargement des ressources + matériaux + secours (textures lues dans RawAssets)
@@ -330,6 +380,9 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | Je veux l'écran sans l'effet caméscope | **Tab → PARAMÈTRES → EFFET CAMÉSCOPE (VHS) : DÉSACTIVÉ** |
 | **E** ne ramasse rien | Corrigé en v3. Visez l'objet (le point au centre grossit et « [E] Ramasser » s'affiche). Si vous avez changé la touche, le message affiche la nouvelle |
 | Une action ne répond plus | Une touche a pu lui être retirée en la donnant à une autre action : **Tab → TOUCHES**, ou **PAR DÉFAUT** |
+| « Impossible de rejoindre la partie » | L'hôte doit avoir cliqué sur **HÉBERGER UNE PARTIE**. Vérifiez l'adresse, la redirection du port **7777 UDP** sur la box de l'hôte et son pare-feu Windows. Sinon, passez par Radmin VPN, ZeroTier ou Tailscale |
+| « Connexion perdue avec l'hôte » | L'hôte a quitté la partie, ou la connexion a coupé : rejoignez à nouveau |
+| Un ami ne voit pas les mêmes salles | Vous n'avez pas la même version du jeu : utilisez tous la même compilation |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |
 
 ---

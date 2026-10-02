@@ -7,11 +7,13 @@
 #include "BRHUD.h"
 #include "BRInteractables.h"
 #include "BRPlayerController.h"
+#include "BREntity.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/OverlapResult.h"
@@ -20,9 +22,11 @@
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerState.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Net/UnrealNetwork.h"
 #include "Sound/SoundBase.h"
 
 namespace
@@ -69,6 +73,10 @@ ABRCharacter::ABRCharacter()
 	Move->MaxStepHeight = 35.f;
 	Move->GetNavAgentPropertiesRef().bCanCrouch = true;
 	Move->bCanWalkOffLedgesWhenCrouching = true;
+	// Multijoueur : chaque joueur simule ses propres deplacements (nage, mantle, vitesse variable dans l'eau)
+	// et le serveur reprend sa position telle quelle, sans corrections qui feraient sauter l'image
+	Move->bIgnoreClientMovementErrorChecksAndCorrection = true;
+	Move->bServerAcceptClientAuthoritativePosition = true;
 
 	// La perche suit la rotation de visee ; a la 1re personne sa longueur est nulle
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -154,6 +162,15 @@ void ABRCharacter::BeginPlay()
 	BuildBody();
 	OnEquipmentChanged();
 	UpdateViewMode();
+}
+
+void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(ABRCharacter, NetFlags, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(ABRCharacter, NetHand, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(ABRCharacter, NetLamp, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(ABRCharacter, bDead, COND_SkipOwner);
 }
 
 void ABRCharacter::SetupLoopAudio(UAudioComponent* Comp, FName SoundName)
@@ -512,30 +529,7 @@ void ABRCharacter::OnEquipmentChanged()
 	}
 
 	// Position et forme du faisceau selon la lampe utilisee
-	if (Flashlight)
-	{
-		if (InHand == EBRItem::Flashlight)
-		{
-			FlashBase = HandLightPos;
-			Flashlight->SetRelativeLocation(HandLightPos);
-			Flashlight->SetInnerConeAngle(13.f);
-			Flashlight->SetOuterConeAngle(30.f);
-		}
-		else if (GetEquipped(EBREquipSlot::Belt) == EBRItem::Flashlight)
-		{
-			FlashBase = BeltLightPos;
-			Flashlight->SetRelativeLocation(BeltLightPos);
-			Flashlight->SetInnerConeAngle(15.f);
-			Flashlight->SetOuterConeAngle(34.f);
-		}
-		else
-		{
-			FlashBase = HeadLightPos;
-			Flashlight->SetRelativeLocation(HeadLightPos);
-			Flashlight->SetInnerConeAngle(22.f);
-			Flashlight->SetOuterConeAngle(45.f);
-		}
-	}
+	ApplyLamp(LampSlot());
 
 	// Objet visible dans la main
 	if (HandMesh && InHand != HandVisual)
@@ -579,7 +573,39 @@ void ABRCharacter::OnEquipmentChanged()
 		}
 	}
 
-	// Objet tenu par le corps (visible a la 3e personne)
+	SetHeldVisual(InHand);
+	UpdateViewMode();
+}
+
+uint8 ABRCharacter::LampSlot() const
+{
+	if (GetEquipped(EBREquipSlot::Hand) == EBRItem::Flashlight)
+	{
+		return 0;
+	}
+	return GetEquipped(EBREquipSlot::Belt) == EBRItem::Flashlight ? 1 : 2;
+}
+
+void ABRCharacter::ApplyLamp(uint8 Lamp)
+{
+	if (!Flashlight || Lamp == AppliedLamp)
+	{
+		return;
+	}
+	AppliedLamp = Lamp;
+	const FVector Pos[3] = { HandLightPos, BeltLightPos, HeadLightPos };
+	const float Inner[3] = { 13.f, 15.f, 22.f };
+	const float Outer[3] = { 30.f, 34.f, 45.f };
+	const int32 I = FMath::Min<int32>(Lamp, 2);
+	FlashBase = Pos[I];
+	Flashlight->SetRelativeLocation(FlashBase);
+	Flashlight->SetInnerConeAngle(Inner[I]);
+	Flashlight->SetOuterConeAngle(Outer[I]);
+}
+
+void ABRCharacter::SetHeldVisual(EBRItem InHand)
+{
+	// Objet tenu par le corps (visible a la 3e personne et par les autres joueurs)
 	if (HeldMesh && InHand != HeldVisual)
 	{
 		HeldVisual = InHand;
@@ -598,8 +624,8 @@ void ABRCharacter::OnEquipmentChanged()
 		{
 			A->ApplySlots(HeldMesh);
 		}
+		UpdateViewMode();
 	}
-	UpdateViewMode();
 }
 
 // =====================================================================================================================
@@ -777,8 +803,21 @@ void ABRCharacter::Interact()
 // Etat
 // =====================================================================================================================
 
+bool ABRCharacter::IsFlashlightOn() const
+{
+	if (!IsLocallyControlled())
+	{
+		return (NetFlags & 1) != 0 && !bDead;
+	}
+	return bFlashlightOn && Battery > 0.f;
+}
+
 bool ABRCharacter::IsSprinting() const
 {
+	if (!IsLocallyControlled())
+	{
+		return (NetFlags & 2) != 0;
+	}
 	if (bSwimming)
 	{
 		return bWantsSprint && !bExhausted && GetVelocity().Size() > SwimSpeed * 0.8f;
@@ -806,6 +845,10 @@ float ABRCharacter::GetNoiseRadius() const
 
 FVector ABRCharacter::GetEyeLocation() const
 {
+	if (bRemoteView)
+	{
+		return GetActorLocation() + FVector(0.f, 0.f, bIsCrouched ? CrouchEyeZ : StandEyeZ);
+	}
 	// Les yeux du personnage (et non la camera, qui recule a la 3e personne)
 	if (!bThirdPerson && Camera)
 	{
@@ -817,11 +860,29 @@ FVector ABRCharacter::GetEyeLocation() const
 FVector ABRCharacter::GetViewDirection() const
 {
 	// Rotation de visee du controleur : toujours a jour (la camera n'est orientee qu'au moment du rendu)
-	return GetViewRotation().Vector();
+	return GetAimRotation().Vector();
+}
+
+FRotator ABRCharacter::GetAimRotation() const
+{
+	if (Controller)
+	{
+		return Controller->GetControlRotation(); // joueur local, ou copie serveur d'un client (rotation envoyee avec ses mouvements)
+	}
+	return GetBaseAimRotation(); // pion d'un autre joueur : lacet de l'acteur + tangage replique
 }
 
 void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName)
 {
+	if (!IsLocallyControlled())
+	{
+		// Les entites vivent sur le serveur : le coup est transmis au joueur concerne
+		if (HasAuthority() && !bDead)
+		{
+			ClientReceiveAttack(Damage, SanityDamage, Source, SourceName);
+		}
+		return;
+	}
 	if (bDead || bGodMode)
 	{
 		return;
@@ -863,10 +924,55 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	bMantling = false;
 	GetCharacterMovement()->DisableMovement();
 	PlaySound2D(TEXT("S_Death"), 1.f);
+	if (!HasAuthority())
+	{
+		ServerSetDead(true);
+	}
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		W->HandlePlayerDeath();
 	}
+}
+
+void ABRCharacter::ClientReceiveAttack_Implementation(float Damage, float SanityDamage, AActor* Source, const FString& SourceName)
+{
+	ReceiveAttack(Damage, SanityDamage, Source, SourceName);
+}
+
+void ABRCharacter::ServerSetState_Implementation(uint8 Flags, uint8 Hand, uint8 Lamp)
+{
+	NetFlags = Flags;
+	NetHand = Hand;
+	NetLamp = Lamp;
+}
+
+void ABRCharacter::ServerSetDead_Implementation(bool bInDead)
+{
+	const bool bWas = bDead;
+	bDead = bInDead;
+	if (bDead != bWas)
+	{
+		OnRep_Dead();
+	}
+}
+
+void ABRCharacter::OnRep_Dead()
+{
+	if (IsLocallyControlled() || !bDead)
+	{
+		return;
+	}
+	// Un coequipier tombe : cri a sa position et message
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		if (USoundBase* S = A->Sound(TEXT("S_Death")))
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation(), 0.8f, 1.f, 0.f, A->Attenuation(3500.f));
+		}
+	}
+	const APlayerState* PS = GetPlayerState();
+	ABRHUD::Notify(this, FString::Printf(TEXT("%s est \u00e0 terre."), PS ? *PS->GetPlayerName() : TEXT("Un explorateur")), 4.f,
+		FLinearColor(1.f, 0.45f, 0.4f));
 }
 
 void ABRCharacter::ResetStats()
@@ -893,6 +999,10 @@ void ABRCharacter::ResetStats()
 	if (bIsCrouched)
 	{
 		UnCrouch();
+	}
+	if (!HasAuthority())
+	{
+		ServerSetDead(false);
 	}
 }
 
@@ -953,7 +1063,7 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	// Atterrir dans l'eau : gerbe et grosse onde
-	if (WaterDepth > 5.f && !bSwimming)
+	if (WaterDepth > 5.f && !bSwimming && IsLocallyControlled())
 	{
 		const float Impact = FMath::Abs(static_cast<float>(GetVelocity().Z));
 		if (SplashCooldown <= 0.f)
@@ -990,6 +1100,20 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
 	TimeAlive += Dt;
 
+	if (!IsLocallyControlled())
+	{
+		TickRemote(Dt);
+		return;
+	}
+	if (bRemoteView)
+	{
+		bRemoteView = false; // client : le controleur local vient d'arriver
+		HeldVisual = EBRItem::Count;
+		AppliedLamp = 255;
+		OnEquipmentChanged();
+	}
+
+	UpdateEntityEffects();
 	UpdateStats(Dt);
 	UpdateWater(Dt);
 	UpdateHiding();
@@ -1021,8 +1145,156 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	PrevHealth = Health;
 	PrevStamina = Stamina;
 
+	SyncNetState();
 	SanityPressure = 0.f;
 	ChaseTarget = 0.f;
+}
+
+void ABRCharacter::SyncNetState()
+{
+	if (GetNetMode() == NM_Standalone)
+	{
+		return;
+	}
+	const uint8 Flags = (IsFlashlightOn() ? 1 : 0) | (IsSprinting() ? 2 : 0) | (bSwimming ? 4 : 0);
+	const uint8 Hand = static_cast<uint8>(GetEquipped(EBREquipSlot::Hand));
+	const uint8 Lamp = LampSlot();
+	if (Flags == NetFlags && Hand == NetHand && Lamp == NetLamp)
+	{
+		return;
+	}
+	NetFlags = Flags;
+	NetHand = Hand;
+	NetLamp = Lamp;
+	if (!HasAuthority())
+	{
+		ServerSetState(Flags, Hand, Lamp);
+	}
+}
+
+void ABRCharacter::UpdateEntityEffects()
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!W || bDead || !GetWorld())
+	{
+		return;
+	}
+	const FVector Eye = GetEyeLocation();
+	const FVector Dir = GetViewDirection();
+	for (ABREntity* E : W->GetEntities())
+	{
+		if (!IsValid(E) || E->IsVanishing())
+		{
+			continue;
+		}
+		// Musique de poursuite : l'entite traque CE joueur
+		if (E->GetChaseTarget() == this)
+		{
+			NotifyChase(E->GetChaseIntensity());
+		}
+		if (bHidden)
+		{
+			continue; // cache : ni vu, ni oppresse
+		}
+		const FBREntityInfo& I = E->MyInfo();
+		const FVector Target = E->GetActorLocation();
+		const float Dist = static_cast<float>(FVector::Dist(Target, GetActorLocation()));
+		const bool bAura = Dist < I.AuraRadius && !E->IsLurking();
+		const bool bJournal = Dist < 2500.f && !W->IsDiscovered(E->Kind);
+		if (!bAura && !bJournal)
+		{
+			continue;
+		}
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BREntityAura), false, this);
+		Q.AddIgnoredActor(E);
+		if (GetWorld()->LineTraceTestByChannel(Target + FVector(0.f, 0.f, I.HalfHeight * 0.5f), Eye, ECC_Visibility, Q))
+		{
+			continue;
+		}
+		if (bAura)
+		{
+			AddSanityPressure(I.Aura);
+		}
+		// La fiche du journal s'ouvre quand on la regarde bien en face (pas une masse informe)
+		if (bJournal && FVector::DotProduct((Target - Eye).GetSafeNormal(), Dir) > 0.82f && E->IsRecognizable())
+		{
+			W->Discover(E->Kind);
+		}
+	}
+}
+
+void ABRCharacter::TickRemote(float Dt)
+{
+	// Pion d'un autre joueur (chez soi), ou copie serveur du pion d'un client
+	if (!bRemoteView)
+	{
+		bRemoteView = true;
+		bNightVision = false;
+		if (InfraredLight)
+		{
+			InfraredLight->SetVisibility(false);
+		}
+		UpdateViewMode();
+	}
+	for (UAudioComponent* Loop : { HeartAudio.Get(), BreathAudio.Get(), ChaseAudio.Get(), UnderwaterAudio.Get() })
+	{
+		if (Loop && Loop->IsPlaying())
+		{
+			Loop->Stop();
+		}
+	}
+	if (HasAuthority())
+	{
+		UpdateHiding(); // l'IA des entites (serveur) doit savoir s'il est cache
+	}
+	SetHeldVisual(static_cast<EBRItem>(NetHand));
+	ApplyLamp(NetLamp);
+
+	bSwimming = (NetFlags & 4) != 0;
+	const ABRWorld* W = ABRWorld::Get(this);
+	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+	WaterDepth = (W && W->IsLevelReady() && W->Def().bWater) ? FMath::Max(0.f, W->Def().WaterHeight - static_cast<float>(GetActorLocation().Z - Half)) : 0.f;
+
+	// Sa lampe eclaire la ou il regarde
+	const bool bLight = IsFlashlightOn();
+	if (Flashlight)
+	{
+		Flashlight->SetVisibility(bLight);
+		if (bLight)
+		{
+			const FRotator Aim = GetAimRotation();
+			const FRotator YawOnly(0.f, Aim.Yaw, 0.f);
+			Flashlight->SetWorldLocationAndRotation(GetEyeLocation() + YawOnly.RotateVector(FlashBase + ThirdPersonLightPush), Aim);
+			Flashlight->SetIntensity(FlashCandelas * (NetLamp == 2 ? 0.55f : 1.f));
+		}
+	}
+
+	// Ses pas (spatialises) et ses remous dans l'eau
+	const float Speed = static_cast<float>(GetVelocity().Size2D());
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	RemoteStepTimer -= Dt;
+	if (!bDead && Speed > 40.f && RemoteStepTimer <= 0.f && (bSwimming || (Move && Move->IsMovingOnGround())))
+	{
+		const bool bSprint = (NetFlags & 2) != 0;
+		RemoteStepTimer = bSwimming ? 1.f : (bSprint ? 0.3f : (bIsCrouched ? 0.65f : 0.46f));
+		if (UBRAssets* A = UBRAssets::Get(this))
+		{
+			if (USoundBase* S = A->Sound(bSwimming ? FName(TEXT("S_Swim")) : StepSoundName()))
+			{
+				const float Vol = bIsCrouched ? 0.25f : (bSprint ? 0.9f : 0.6f);
+				UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation() - FVector(0.f, 0.f, Half), Vol, FMath::FRandRange(0.92f, 1.08f), 0.f,
+					A->Attenuation(1800.f));
+			}
+		}
+		if (ABRWorld* RW = ABRWorld::Get(this))
+		{
+			if (WaterDepth > 4.f)
+			{
+				RW->AddWaterRipple(GetActorLocation(), bSwimming ? 1.2f : 0.8f);
+			}
+		}
+	}
+	AnimateBody(Dt);
 }
 
 void ABRCharacter::UpdateStats(float Dt)
@@ -1379,7 +1651,7 @@ void ABRCharacter::UpdateHiding()
 	const bool bWas = bHidden;
 	const ABRWorld* W = ABRWorld::Get(this);
 	bHidden = !bDead && W && W->IsInHidingSpot(GetActorLocation(), bIsCrouched);
-	if (bHidden && !bWas)
+	if (bHidden && !bWas && IsLocallyControlled())
 	{
 		PlaySound2D(TEXT("S_ItemMove"), 0.35f);
 		if (!bHideHint)
@@ -1398,8 +1670,19 @@ void ABRCharacter::PlayFootstep()
 	{
 		return;
 	}
+	if (USoundBase* S = A->Sound(StepSoundName()))
+	{
+		const float Vol = bIsCrouched ? 0.18f : (IsSprinting() ? 0.75f : 0.42f);
+		UGameplayStatics::PlaySound2D(this, S, Vol, FMath::FRandRange(0.92f, 1.08f));
+	}
+}
+
+FName ABRCharacter::StepSoundName() const
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	const EBRStep Type = (W && W->IsLevelReady()) ? W->Def().Step : StepType;
 	const TCHAR* Kind = TEXT("Carpet");
-	switch (StepType)
+	switch (Type)
 	{
 	case EBRStep::Hard:
 		Kind = TEXT("Hard");
@@ -1413,12 +1696,7 @@ void ABRCharacter::PlayFootstep()
 	default:
 		break;
 	}
-	const FName Name(*FString::Printf(TEXT("S_Step_%s_%d"), Kind, FMath::RandRange(1, 4)));
-	if (USoundBase* S = A->Sound(Name))
-	{
-		const float Vol = bIsCrouched ? 0.18f : (IsSprinting() ? 0.75f : 0.42f);
-		UGameplayStatics::PlaySound2D(this, S, Vol, FMath::FRandRange(0.92f, 1.08f));
-	}
+	return FName(*FString::Printf(TEXT("S_Step_%s_%d"), Kind, FMath::RandRange(1, 4)));
 }
 
 void ABRCharacter::UpdateAudio(float Dt)
@@ -1553,7 +1831,8 @@ void ABRCharacter::BuildBody()
 	}
 	bHasBody = true;
 	BodyRoot = NewObject<USceneComponent>(this, TEXT("BodyRoot"));
-	BodyRoot->SetupAttachment(Capsule);
+	// Sur le maillage (vide) du Character : le moteur y applique le lissage des positions recues du reseau
+	BodyRoot->SetupAttachment(GetMesh() ? static_cast<USceneComponent*>(GetMesh()) : static_cast<USceneComponent*>(Capsule));
 	BodyRoot->RegisterComponent();
 	BodyFeet = NewObject<USceneComponent>(this, TEXT("BodyFeet"));
 	BodyFeet->SetupAttachment(BodyRoot);
@@ -1591,7 +1870,7 @@ void ABRCharacter::BuildBody()
 void ABRCharacter::UpdateViewMode()
 {
 	// 1re personne : le corps est entierement masque (sinon il couperait le faisceau de la lampe portee a la ceinture)
-	const bool bShow = bThirdPerson;
+	const bool bShow = ShowsBody();
 	for (UPrimitiveComponent* P : Body.Meshes)
 	{
 		if (P)
@@ -1631,7 +1910,7 @@ void ABRCharacter::ToggleThirdPerson()
 void ABRCharacter::AnimateBody(float Dt)
 {
 	// Le corps n'est visible (et anime) qu'a la 3e personne
-	if (!bHasBody || !BodyRoot || !BodyFeet || !Body.Torso || !bThirdPerson)
+	if (!bHasBody || !BodyRoot || !BodyFeet || !Body.Torso || !ShowsBody())
 	{
 		return;
 	}
@@ -1710,7 +1989,7 @@ void ABRCharacter::AnimateBody(float Dt)
 	}
 
 	// Objet tenu : avant-bras droit a l'horizontale, qui suit la visee
-	const float ViewPitch = FMath::Clamp(static_cast<float>(FRotator::NormalizeAxis(GetViewRotation().Pitch)), -60.f, 60.f);
+	const float ViewPitch = FMath::Clamp(static_cast<float>(FRotator::NormalizeAxis(GetAimRotation().Pitch)), -60.f, 60.f);
 	const float TorsoPitch = -20.f * CrouchBlend - 7.f * (IsSprinting() ? 1.f : 0.f) * (1.f - SwimBlend);
 	if (HeldMesh && HeldMesh->GetStaticMesh())
 	{
@@ -1739,7 +2018,9 @@ void ABRCharacter::AnimateBody(float Dt)
 	BodyRoot->SetRelativeRotation(FRotator(SwimPitch, 0.f, 80.f * DeathBlend));
 	BodyRoot->SetRelativeLocation(FVector(0.f, 0.f, 35.f * SwimMove * SwimBlend - 60.f * DeathBlend));
 	// Pieds au sol : la capsule raccourcit en position accroupie, et la pose plie les jambes (~42 cm)
-	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, -Half - 42.f * CrouchBlend + 8.f * AirBlend));
+	// (le maillage du Character remonte de la difference de hauteur de capsule quand on s'accroupit : on la retire)
+	const float MeshLift = (GetMesh() && BodyRoot->GetAttachParent() == GetMesh()) ? static_cast<float>(GetBaseTranslationOffset().Z) : 0.f;
+	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, -Half - 42.f * CrouchBlend + 8.f * AirBlend - MeshLift));
 }
 
 // =====================================================================================================================

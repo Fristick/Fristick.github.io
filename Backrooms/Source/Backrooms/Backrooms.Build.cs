@@ -17,10 +17,14 @@ public class Backrooms : ModuleRules
 		});
 
 		// FImage : lecture des textures de RawAssets/ quand l'import Python n'a pas ete fait
+		// Slate : champ de saisie de l'adresse IP ; Sockets : adresse IP locale affichee a l'hote
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"ImageCore",
-			"ImageWrapper"
+			"ImageWrapper",
+			"Slate",
+			"SlateCore",
+			"Sockets"
 		});
 	}
 }

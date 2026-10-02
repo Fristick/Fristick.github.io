@@ -9,6 +9,7 @@
 #include "BRPlayerController.h"
 #include "BRKeys.h"
 #include "BRMaterialBuilder.h"
+#include "BRInteractables.h"
 
 #include "Algo/Reverse.h"
 #include "Components/AudioComponent.h"
@@ -20,10 +21,13 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Net/UnrealNetwork.h"
 #include "Sound/SoundBase.h"
 
 namespace
@@ -40,6 +44,9 @@ ABRWorld::ABRWorld()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
+	// Multijoueur : le serveur choisit le niveau et sa graine, chaque joueur construit les memes salles chez lui
+	bReplicates = true;
+	bAlwaysRelevant = true;
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = Root;
@@ -96,6 +103,14 @@ void ABRWorld::BeginPlay()
 	Super::BeginPlay();
 	GWorldInstance = this;
 
+	if (!HasAuthority())
+	{
+		// Client : le niveau et sa graine viennent du serveur
+		Fade = 1.f;
+		SyncNetLevel();
+		return;
+	}
+
 	int32 CmdLevel = StartLevel;
 	if (FParse::Value(FCommandLine::Get(), TEXT("BRLevel="), CmdLevel) && BRLevels::Exists(CmdLevel))
 	{
@@ -123,12 +138,89 @@ ABRCharacter* ABRWorld::GetPlayer() const
 	return Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
 }
 
+void ABRWorld::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRWorld, NetLevel);
+	DOREPLIFETIME(ABRWorld, NetBlackout);
+	DOREPLIFETIME(ABRWorld, NetCollected);
+	DOREPLIFETIME(ABRWorld, VHSFound);
+	DOREPLIFETIME(ABRWorld, bBlackoutRecorded);
+	DOREPLIFETIME(ABRWorld, bEntityRecorded);
+}
+
+bool ABRWorld::IsNetGame() const
+{
+	return GetNetMode() != NM_Standalone;
+}
+
+ABRPlayerController* ABRWorld::LocalPC() const
+{
+	return Cast<ABRPlayerController>(UGameplayStatics::GetPlayerController(this, 0));
+}
+
+void ABRWorld::GetPlayers(TArray<ABRCharacter*>& Out) const
+{
+	Out.Reset();
+	if (UWorld* W = GetWorld())
+	{
+		for (TActorIterator<ABRCharacter> It(W); It; ++It)
+		{
+			if (IsValid(*It) && !It->IsActorBeingDestroyed())
+			{
+				Out.Add(*It);
+			}
+		}
+	}
+}
+
+ABRCharacter* ABRWorld::RandomLivingPlayer() const
+{
+	TArray<ABRCharacter*> All;
+	GetPlayers(All);
+	All.RemoveAll([](const ABRCharacter* C) { return C->IsDead(); });
+	return All.Num() > 0 ? All[FMath::RandRange(0, All.Num() - 1)] : nullptr;
+}
+
+bool ABRWorld::IsHiddenFromPlayers(const FVector& Loc) const
+{
+	TArray<ABRCharacter*> All;
+	GetPlayers(All);
+	for (const ABRCharacter* C : All)
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRSpawnHidden), false, C);
+		if (!GetWorld()->LineTraceSingleByChannel(Hit, C->GetEyeLocation(), Loc, ECC_Visibility, Q))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+void ABRWorld::RegisterEntity(ABREntity* Entity)
+{
+	if (IsValid(Entity))
+	{
+		Entities.AddUnique(Entity);
+	}
+}
+
 // =====================================================================================
 // Niveaux & transitions
 // =====================================================================================
 
 void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath)
 {
+	if (!HasAuthority())
+	{
+		// Client : c'est le serveur qui emmene tout le groupe
+		if (ABRPlayerController* PC = LocalPC())
+		{
+			PC->ServerRequestTransition(TargetLevel);
+		}
+		return;
+	}
 	if (TransState == ETrans::FadingOut)
 	{
 		return;
@@ -150,7 +242,20 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath)
 	{
 		TargetLevel = 0;
 	}
+	MulticastTransition(TargetLevel, bFromDeath);
+}
 
+void ABRWorld::MulticastTransition_Implementation(int32 TargetLevel, bool bFromDeath)
+{
+	BeginTransition(TargetLevel, bFromDeath);
+}
+
+void ABRWorld::BeginTransition(int32 TargetLevel, bool bFromDeath)
+{
+	if (TransState == ETrans::FadingOut)
+	{
+		return;
+	}
 	PendingLevel = TargetLevel;
 	bPendingDeath = bFromDeath;
 	TransState = ETrans::FadingOut;
@@ -172,7 +277,25 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath)
 
 void ABRWorld::HandlePlayerDeath()
 {
-	DeathTimer = 4.5f;
+	// Seul : retour au Niveau 0. En equipe : on se reveille au point de depart du niveau en cours
+	DeathTimer = IsNetGame() ? 6.f : 4.5f;
+}
+
+void ABRWorld::RespawnLocalPlayer()
+{
+	ABRCharacter* P = GetPlayer();
+	if (!P || !bLevelReady)
+	{
+		return;
+	}
+	P->ResetStats();
+	PlacePlayer();
+	P->SetInputLocked(true);
+	TransState = ETrans::FadingIn;
+	TransTimer = 0.f;
+	Fade = 1.f;
+	ABRHUD::Notify(this, TEXT("Vous vous r\u00e9veillez au point de d\u00e9part. Votre \u00e9quipement est rest\u00e9 l\u00e0 o\u00f9 vous \u00eates tomb\u00e9."), 6.f,
+		FLinearColor(1.f, 0.85f, 0.6f));
 }
 
 void ABRWorld::ClearLevel()
@@ -191,6 +314,18 @@ void ABRWorld::ClearLevel()
 	BlackoutEntities.Reset();
 	RedSources.Reset();
 	PatrolSpawnTimer = 0.f;
+	if (!HasAuthority())
+	{
+		// Les entites repliquees sont detruites par le serveur : on garde celles qui existent encore
+		for (ABREntity* E : Copy)
+		{
+			if (IsValid(E) && !E->IsActorBeingDestroyed())
+			{
+				Entities.Add(E);
+			}
+		}
+		return;
+	}
 	for (ABREntity* E : Copy)
 	{
 		if (IsValid(E))
@@ -200,11 +335,13 @@ void ABRWorld::ClearLevel()
 	}
 }
 
-void ABRWorld::LoadLevelNow(int32 LevelNumber)
+void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 {
 	ClearLevel();
 	Current = &BRLevels::Get(LevelNumber);
-	Seed = static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17);
+	Seed = InSeed != 0 ? InSeed : (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17));
+	Seed = Seed != 0 ? Seed : 1u;
+	bLevelReady = true;
 	Collected.Empty();
 	LevelTime = 0.f;
 	TitleTime = 7.f;
@@ -217,9 +354,23 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber)
 	BlackoutTimer = Current->BlackoutFirst * FMath::FRandRange(0.85f, 1.15f);
 	Power = 1.f;
 	AppliedPower = -1.f;
-	VHSFound = 0;
-	bBlackoutRecorded = false;
-	bEntityRecorded = false;
+	if (HasAuthority())
+	{
+		// Le serveur publie le nouveau niveau : les clients le construisent avec la meme graine
+		NetLevel.Level = Current->Number;
+		NetLevel.Seed = Seed;
+		++NetLevel.Serial;
+		LoadedSerial = NetLevel.Serial;
+		NetBlackout = 0;
+		NetCollected.Reset();
+		VHSFound = 0;
+		bBlackoutRecorded = false;
+		bEntityRecorded = false;
+	}
+	PrevVHSFound = VHSFound;
+	bPrevBlackoutRecorded = bBlackoutRecorded;
+	bPrevEntityRecorded = bEntityRecorded;
+	bObjectiveSent[0] = bObjectiveSent[1] = false;
 	bObjectivesAnnounced = false;
 	BlackoutRecordTime = 0.f;
 	EntityRecordTime = 0.f;
@@ -257,6 +408,185 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber)
 	ApplyEnvironment();
 	UpdateStreaming(true);
 	PlacePlayer();
+	// Client arrive pendant une coupure : on reprend l'etat du serveur
+	if (!HasAuthority() && NetBlackout != 0)
+	{
+		EnterBlackoutPhase(NetBlackout, true);
+	}
+}
+
+// =====================================================================================
+// Multijoueur : suivre le serveur
+// =====================================================================================
+
+bool ABRWorld::SyncNetLevel()
+{
+	if (NetLevel.Serial == 0 || NetLevel.Serial == LoadedSerial)
+	{
+		return bLevelReady;
+	}
+	if (!bLevelReady)
+	{
+		// Arrivee dans la partie : on construit tout de suite le niveau du groupe
+		LoadNetLevel();
+		TransState = ETrans::FadingIn;
+		TransTimer = 0.f;
+		Fade = 1.f;
+		return true;
+	}
+	if (TransState != ETrans::FadingOut)
+	{
+		BeginTransition(NetLevel.Level, false); // l'annonce a ete manquee : on suit quand meme
+	}
+	return true;
+}
+
+void ABRWorld::LoadNetLevel()
+{
+	LoadedSerial = NetLevel.Serial;
+	LoadLevelNow(NetLevel.Level, NetLevel.Seed);
+}
+
+void ABRWorld::OnRep_NetLevel()
+{
+	if (HasActorBegunPlay())
+	{
+		SyncNetLevel();
+	}
+}
+
+void ABRWorld::OnRep_Blackout()
+{
+	if (bLevelReady && NetBlackout != static_cast<uint8>(BlackoutPhase))
+	{
+		EnterBlackoutPhase(NetBlackout);
+	}
+}
+
+void ABRWorld::OnRep_Collected()
+{
+	for (const uint64 Id : NetCollected)
+	{
+		if (!Collected.Contains(Id))
+		{
+			Collected.Add(Id);
+			DestroyPickup(Id);
+		}
+	}
+}
+
+void ABRWorld::OnRep_Objectives()
+{
+	if (bLevelReady)
+	{
+		if (VHSFound > PrevVHSFound)
+		{
+			AnnounceVHS();
+		}
+		if (bBlackoutRecorded && !bPrevBlackoutRecorded)
+		{
+			CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
+		}
+		if (bEntityRecorded && !bPrevEntityRecorded)
+		{
+			CompleteTask(TEXT("FILMER UNE ENTIT\u00c9"));
+		}
+	}
+	PrevVHSFound = VHSFound;
+	bPrevBlackoutRecorded = bBlackoutRecorded;
+	bPrevEntityRecorded = bEntityRecorded;
+}
+
+void ABRWorld::MarkCollected(uint64 Id)
+{
+	Collected.Add(Id);
+	if (HasAuthority())
+	{
+		NetCollected.AddUnique(Id);
+	}
+	else if (ABRPlayerController* PC = LocalPC())
+	{
+		PC->ServerMarkCollected(Id);
+	}
+}
+
+void ABRWorld::ServerCollected(uint64 Id)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	Collected.Add(Id);
+	NetCollected.AddUnique(Id);
+	DestroyPickup(Id);
+}
+
+void ABRWorld::DestroyPickup(uint64 Id)
+{
+	if (UWorld* W = GetWorld())
+	{
+		for (TActorIterator<ABRPickup> It(W); It; ++It)
+		{
+			if (It->Id == Id && !It->IsActorBeingDestroyed())
+			{
+				It->Destroy();
+			}
+		}
+	}
+}
+
+void ABRWorld::CompleteObjective(uint8 Which)
+{
+	if (HasAuthority())
+	{
+		ServerCompleteObjective(Which);
+		return;
+	}
+	bool& bSent = bObjectiveSent[Which == 0 ? 0 : 1];
+	if (!bSent)
+	{
+		bSent = true;
+		if (ABRPlayerController* PC = LocalPC())
+		{
+			PC->ServerCompleteObjective(Which);
+		}
+	}
+}
+
+void ABRWorld::ServerCompleteObjective(uint8 Which)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	if (Which == 0 && !bBlackoutRecorded)
+	{
+		bBlackoutRecorded = bPrevBlackoutRecorded = true;
+		CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
+	}
+	else if (Which == 1 && !bEntityRecorded)
+	{
+		bEntityRecorded = bPrevEntityRecorded = true;
+		CompleteTask(TEXT("FILMER UNE ENTIT\u00c9"));
+	}
+}
+
+void ABRWorld::DebugCompleteObjectives()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const int32 Missing = FMath::Max(0, Def().VHSRequired - VHSFound);
+	for (int32 i = 0; i < Missing; ++i)
+	{
+		OnVHSCollected();
+	}
+	if (Def().bBlackouts)
+	{
+		ServerCompleteObjective(0);
+	}
+	ServerCompleteObjective(1);
 }
 
 void ABRWorld::ApplyEnvironment()
@@ -362,7 +692,18 @@ void ABRWorld::PlacePlayer()
 	}
 
 	const float Half = P->GetCapsuleComponent() ? P->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
-	const FVector Loc = CellCenter(Start, Half + 5.f);
+	FVector Loc = CellCenter(Start, Half + 5.f);
+	// En equipe, chacun sa place autour du point de depart
+	if (IsNetGame())
+	{
+		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+		const int32 Slot = (GS && P->GetPlayerState()) ? GS->PlayerArray.IndexOfByKey(P->GetPlayerState()) : 0;
+		if (Slot > 0)
+		{
+			const float Ang = FMath::DegreesToRadians(Yaw + 90.f + 60.f * static_cast<float>(Slot - 1));
+			Loc += FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * FMath::Min(85.f, CellSize() * 0.3f);
+		}
+	}
 	P->SetActorLocation(Loc, false, nullptr, ETeleportType::TeleportPhysics);
 	if (AController* C = P->GetController())
 	{
@@ -393,6 +734,11 @@ void ABRWorld::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
+	if (!HasAuthority() && !SyncNetLevel())
+	{
+		Fade = 1.f; // en attente du niveau du serveur
+		return;
+	}
 	LevelTime += Dt;
 	TitleTime = FMath::Max(0.f, TitleTime - Dt);
 
@@ -409,13 +755,22 @@ void ABRWorld::Tick(float DeltaSeconds)
 		Glitch = Fade;
 		if (TransTimer >= 1.45f)
 		{
-			LoadLevelNow(PendingLevel);
-			if (bPendingDeath)
+			if (HasAuthority())
 			{
-				if (ABRCharacter* P = GetPlayer())
-				{
-					P->ResetStats();
-				}
+				LoadLevelNow(PendingLevel);
+			}
+			else if (NetLevel.Serial != LoadedSerial)
+			{
+				LoadNetLevel();
+			}
+			else if (TransTimer < 12.f)
+			{
+				break; // le serveur n'a pas encore choisi le niveau : on reste dans le noir
+			}
+			ABRCharacter* P = GetPlayer();
+			if (P && (bPendingDeath || (IsNetGame() && P->IsDead())))
+			{
+				P->ResetStats();
 			}
 			TransState = ETrans::FadingIn;
 			TransTimer = 0.f;
@@ -446,7 +801,14 @@ void ABRWorld::Tick(float DeltaSeconds)
 		if (DeathTimer <= 0.f)
 		{
 			DeathTimer = -1.f;
-			RequestTransition(0, true);
+			if (IsNetGame())
+			{
+				RespawnLocalPlayer();
+			}
+			else
+			{
+				RequestTransition(0, true);
+			}
 		}
 	}
 
@@ -474,7 +836,10 @@ void ABRWorld::Tick(float DeltaSeconds)
 
 	if (TransState == ETrans::None)
 	{
-		UpdatePopulation(Dt);
+		if (HasAuthority())
+		{
+			UpdatePopulation(Dt);
+		}
 		UpdatePatrol(Dt);
 		UpdatePhenomena(Dt);
 		if (!bMenu)
@@ -497,26 +862,49 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 {
 	const FBRLevelDef& D = Def();
 	const ABRCharacter* P = GetPlayer();
-	const FVector Center = (P && bPlayerPlaced) ? P->GetActorLocation() : CellCenter(FIntPoint(0, 0));
 	const float ChunkWorld = D.ChunkCells * D.CellSize;
 	const int32 R = FMath::CeilToInt(D.ViewDistance / ChunkWorld);
-	const FIntPoint PC = CellToChunk(WorldToCell(Center));
+
+	// Le serveur garde le sol sous les pieds de chaque joueur (collisions, IA des entites)
+	TArray<FVector> Centers;
+	Centers.Add((P && bPlayerPlaced) ? P->GetActorLocation() : CellCenter(FIntPoint(0, 0)));
+	if (HasAuthority() && IsNetGame())
+	{
+		TArray<ABRCharacter*> All;
+		GetPlayers(All);
+		for (const ABRCharacter* C : All)
+		{
+			if (C != P)
+			{
+				Centers.Add(C->GetActorLocation());
+			}
+		}
+	}
 
 	auto ChunkDist = [&](const FIntPoint& C)
 	{
-		const FVector CC((C.X + 0.5f) * ChunkWorld, (C.Y + 0.5f) * ChunkWorld, Center.Z);
-		return static_cast<float>(FVector::Dist2D(CC, Center));
+		float Best = 1e20f;
+		for (const FVector& Center : Centers)
+		{
+			const FVector CC((C.X + 0.5f) * ChunkWorld, (C.Y + 0.5f) * ChunkWorld, Center.Z);
+			Best = FMath::Min(Best, static_cast<float>(FVector::Dist2D(CC, Center)));
+		}
+		return Best;
 	};
 
 	TArray<FIntPoint> Wanted;
-	for (int32 DX = -R; DX <= R; ++DX)
+	for (const FVector& Center : Centers)
 	{
-		for (int32 DY = -R; DY <= R; ++DY)
+		const FIntPoint PC = CellToChunk(WorldToCell(Center));
+		for (int32 DX = -R; DX <= R; ++DX)
 		{
-			const FIntPoint C(PC.X + DX, PC.Y + DY);
-			if (!Chunks.Contains(C) && ChunkDist(C) <= D.ViewDistance + ChunkWorld * 0.75f)
+			for (int32 DY = -R; DY <= R; ++DY)
 			{
-				Wanted.Add(C);
+				const FIntPoint C(PC.X + DX, PC.Y + DY);
+				if (!Chunks.Contains(C) && !Wanted.Contains(C) && ChunkDist(C) <= D.ViewDistance + ChunkWorld * 0.75f)
+				{
+					Wanted.Add(C);
+				}
 			}
 		}
 	}
@@ -597,15 +985,16 @@ void ABRWorld::UnregisterEntity(ABREntity* Entity)
 void ABRWorld::UpdatePopulation(float Dt)
 {
 	const FBRLevelDef& D = Def();
-	ABRCharacter* P = GetPlayer();
-	if (!P)
+	TArray<ABRCharacter*> Players;
+	GetPlayers(Players);
+	ABRCharacter* P = RandomLivingPlayer();
+	if (Players.Num() == 0)
 	{
 		return;
 	}
-	const FVector PL = P->GetActorLocation();
 	const float ChunkWorld = D.ChunkCells * D.CellSize;
 
-	// Disparition des entites trop eloignees (ou dont le sol n'est plus charge)
+	// Disparition des entites trop eloignees de tous les joueurs (ou dont le sol n'est plus charge)
 	for (int32 i = Entities.Num() - 1; i >= 0; --i)
 	{
 		ABREntity* E = Entities[i];
@@ -614,7 +1003,11 @@ void ABRWorld::UpdatePopulation(float Dt)
 			Entities.RemoveAt(i);
 			continue;
 		}
-		const bool bFar = FVector::Dist2D(E->GetActorLocation(), PL) > D.ViewDistance * 0.95f;
+		bool bFar = true;
+		for (const ABRCharacter* C : Players)
+		{
+			bFar = bFar && FVector::Dist2D(E->GetActorLocation(), C->GetActorLocation()) > D.ViewDistance * 0.95f;
+		}
 		const bool bNoFloor = !IsChunkLoaded(CellToChunk(WorldToCell(E->GetActorLocation())));
 		if (bFar || bNoFloor)
 		{
@@ -630,17 +1023,20 @@ void ABRWorld::UpdatePopulation(float Dt)
 		const bool bBlackout = BlackoutEntities.ContainsByPredicate([E](const TWeakObjectPtr<ABREntity>& B) { return B.Get() == E; });
 		Regular += (bPatrol || bBlackout) ? 0 : 1;
 	}
-	if (D.MaxEntities <= 0 || D.Entities.Num() == 0 || Regular >= D.MaxEntities || P->IsDead())
+	// Un peu plus de monde quand on est plusieurs
+	const int32 MaxRegular = D.MaxEntities + (D.MaxEntities > 0 ? FMath::Min(Players.Num() - 1, 3) : 0);
+	if (D.MaxEntities <= 0 || D.Entities.Num() == 0 || Regular >= MaxRegular || !P)
 	{
 		return;
 	}
-	if (const ABRPlayerController* PC = Cast<ABRPlayerController>(P->GetController()))
+	if (const ABRPlayerController* PC = LocalPC())
 	{
 		if (PC->IsInMenu())
 		{
 			return;
 		}
 	}
+	const FVector PL = P->GetActorLocation();
 	SpawnTimer -= Dt;
 	if (SpawnTimer > 0.f)
 	{
@@ -685,11 +1081,11 @@ void ABRWorld::UpdatePopulation(float Dt)
 		{
 			continue;
 		}
-		// Pas d'apparition sous les yeux du joueur
+		// Pas d'apparition sous les yeux d'un joueur
 		FHitResult Hit;
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRSpawnLOS), false, P);
 		const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, Eye, Loc, ECC_Visibility, Q);
-		if (!bBlocked && Dist < 3000.f)
+		if ((!bBlocked && Dist < 3000.f) || (Players.Num() > 1 && !IsHiddenFromPlayers(Loc)))
 		{
 			continue;
 		}
@@ -697,12 +1093,12 @@ void ABRWorld::UpdatePopulation(float Dt)
 		// Les papillons de la mort se deplacent en essaim
 		if (Kind == EBREntityKind::Deathmoth)
 		{
-			for (int32 k = 0; k < 2 && Entities.Num() < D.MaxEntities + 2; ++k)
+			for (int32 k = 0; k < 2 && Entities.Num() < MaxRegular + 2; ++k)
 			{
 				const FVector Off(FMath::FRandRange(-120.f, 120.f), FMath::FRandRange(-120.f, 120.f), FMath::FRandRange(-40.f, 40.f));
 				if (ABREntity* Moth = SpawnEntity(Kind, Loc + Off))
 				{
-					Moth->SetActorScale3D(FVector(0.75f));
+					Moth->SetVisualScale(0.75f);
 				}
 			}
 		}
@@ -776,7 +1172,7 @@ void ABRWorld::UpdateAudio(float Dt)
 
 void ABRWorld::ForceBlackout()
 {
-	if (BlackoutPhase == EBlackout::None && !Def().bOutdoor && Def().Fixture != EBRFixture::None)
+	if (HasAuthority() && BlackoutPhase == EBlackout::None && !Def().bOutdoor && Def().Fixture != EBRFixture::None)
 	{
 		BlackoutTimer = 0.f;
 		BlackoutPhase = EBlackout::None;
@@ -788,8 +1184,8 @@ void ABRWorld::ForceBlackout()
 void ABRWorld::UpdateBlackout(float Dt)
 {
 	const FBRLevelDef& D = Def();
-	UBRAssets* A = UBRAssets::Get(this);
-	const bool bAllowed = D.bBlackouts || BlackoutPhase != EBlackout::None || BlackoutTimer <= 0.f;
+	const bool bAuth = HasAuthority();
+	const bool bAllowed = D.bBlackouts || BlackoutPhase != EBlackout::None || (bAuth && BlackoutTimer <= 0.f);
 	if (!bAllowed || D.Fixture == EBRFixture::None || D.bOutdoor)
 	{
 		if (Power < 1.f)
@@ -800,9 +1196,62 @@ void ABRWorld::UpdateBlackout(float Dt)
 		return;
 	}
 
-	auto Play = [this, A](const TCHAR* Name, float Volume)
+	// Seul le serveur fait avancer les phases ; un client anime le vacillement en attendant la suivante
+	BlackoutTimer -= Dt;
+	switch (BlackoutPhase)
 	{
-		if (A)
+	case EBlackout::None:
+		if (bAuth && BlackoutTimer <= 0.f)
+		{
+			EnterBlackoutPhase(static_cast<uint8>(EBlackout::Failing));
+		}
+		break;
+	case EBlackout::Failing:
+	case EBlackout::Restoring:
+	{
+		const bool bFailing = BlackoutPhase == EBlackout::Failing;
+		if (BlackoutTimer > 0.f)
+		{
+			// Les neons vacillent de plus en plus (ou de moins en moins) avant de lacher
+			const float Total = bFailing ? 1.8f : 1.4f;
+			const float T = FMath::Clamp(BlackoutTimer / Total, 0.f, 1.f);
+			const float OnChance = bFailing ? T * 0.8f : 1.f - T * 0.8f;
+			PowerFlickerTimer -= Dt;
+			if (PowerFlickerTimer <= 0.f)
+			{
+				PowerFlickerTimer = FMath::FRandRange(0.04f, 0.16f);
+				Power = FMath::FRand() < OnChance ? FMath::FRandRange(0.6f, 1.f) : FMath::FRandRange(0.f, 0.08f);
+			}
+		}
+		else if (bAuth)
+		{
+			EnterBlackoutPhase(static_cast<uint8>(bFailing ? EBlackout::Dark : EBlackout::None));
+		}
+		else
+		{
+			Power = bFailing ? 0.f : 1.f;
+		}
+		break;
+	}
+	case EBlackout::Dark:
+		Power = 0.f;
+		if (bAuth && BlackoutTimer <= 0.f)
+		{
+			EnterBlackoutPhase(static_cast<uint8>(EBlackout::Restoring));
+		}
+		break;
+	}
+	ApplyPower(false);
+}
+
+void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
+{
+	const FBRLevelDef& D = Def();
+	const bool bAuth = HasAuthority();
+	UBRAssets* A = UBRAssets::Get(this);
+	auto Play = [this, A, bSilent](const TCHAR* Name, float Volume)
+	{
+		if (A && !bSilent)
 		{
 			if (USoundBase* S = A->Sound(FName(Name)))
 			{
@@ -811,64 +1260,47 @@ void ABRWorld::UpdateBlackout(float Dt)
 		}
 	};
 
-	BlackoutTimer -= Dt;
+	BlackoutPhase = static_cast<EBlackout>(FMath::Min<uint8>(Phase, static_cast<uint8>(EBlackout::Restoring)));
+	PowerFlickerTimer = 0.f;
+	if (bAuth)
+	{
+		NetBlackout = static_cast<uint8>(BlackoutPhase);
+	}
 	switch (BlackoutPhase)
 	{
-	case EBlackout::None:
-		if (BlackoutTimer <= 0.f)
-		{
-			BlackoutPhase = EBlackout::Failing;
-			BlackoutTimer = 1.8f;
-			PowerFlickerTimer = 0.f;
-			Play(TEXT("S_Blackout"), 1.f);
-		}
-		break;
 	case EBlackout::Failing:
-	case EBlackout::Restoring:
-	{
-		// Les neons vacillent de plus en plus (ou de moins en moins) avant de lacher
-		const bool bFailing = BlackoutPhase == EBlackout::Failing;
-		const float Total = bFailing ? 1.8f : 1.4f;
-		const float T = FMath::Clamp(BlackoutTimer / Total, 0.f, 1.f);
-		const float OnChance = bFailing ? T * 0.8f : 1.f - T * 0.8f;
-		PowerFlickerTimer -= Dt;
-		if (PowerFlickerTimer <= 0.f)
+		BlackoutTimer = 1.8f;
+		Play(TEXT("S_Blackout"), 1.f);
+		break;
+	case EBlackout::Dark:
+		BlackoutTimer = bAuth ? FMath::FRandRange(24.f, 40.f) : 0.f;
+		Power = 0.f;
+		if (bAuth)
 		{
-			PowerFlickerTimer = FMath::FRandRange(0.04f, 0.16f);
-			Power = FMath::FRand() < OnChance ? FMath::FRandRange(0.6f, 1.f) : FMath::FRandRange(0.f, 0.08f);
+			SpawnBlackoutEntities();
 		}
-		if (BlackoutTimer <= 0.f)
+		if (!bSilent)
 		{
-			if (bFailing)
+			ABRHUD::Notify(this, TEXT("COUPURE DE COURANT"), 4.f, FLinearColor(1.f, 0.3f, 0.25f));
+			if (D.bRequireObjectives && !bBlackoutRecorded)
 			{
-				BlackoutPhase = EBlackout::Dark;
-				BlackoutTimer = FMath::FRandRange(24.f, 40.f);
-				Power = 0.f;
-				SpawnBlackoutEntities();
-				ABRHUD::Notify(this, TEXT("COUPURE DE COURANT"), 4.f, FLinearColor(1.f, 0.3f, 0.25f));
-				if (D.bRequireObjectives && !bBlackoutRecorded)
-				{
-					ABRHUD::Notify(this, TEXT("Filmez pendant la coupure : cam\u00e9scope en MAIN."), 5.f, FLinearColor(1.f, 0.85f, 0.4f));
-				}
-			}
-			else
-			{
-				BlackoutPhase = EBlackout::None;
-				BlackoutTimer = FMath::FRandRange(D.BlackoutMinInterval, FMath::Max(D.BlackoutMinInterval, D.BlackoutMaxInterval));
-				Power = 1.f;
+				ABRHUD::Notify(this, TEXT("Filmez pendant la coupure : cam\u00e9scope en MAIN."), 5.f, FLinearColor(1.f, 0.85f, 0.4f));
 			}
 		}
 		break;
-	}
-	case EBlackout::Dark:
-		Power = 0.f;
-		if (BlackoutTimer <= 0.f)
+	case EBlackout::Restoring:
+		BlackoutTimer = 1.4f;
+		Play(TEXT("S_PowerUp"), 0.9f);
+		if (bAuth)
 		{
-			BlackoutPhase = EBlackout::Restoring;
-			BlackoutTimer = 1.4f;
-			PowerFlickerTimer = 0.f;
-			Play(TEXT("S_PowerUp"), 0.9f);
 			DismissBlackoutEntities();
+		}
+		break;
+	default:
+		Power = 1.f;
+		if (bAuth)
+		{
+			BlackoutTimer = FMath::FRandRange(D.BlackoutMinInterval, FMath::Max(D.BlackoutMinInterval, D.BlackoutMaxInterval));
 		}
 		break;
 	}
@@ -980,8 +1412,23 @@ void ABRWorld::CompleteTask(const FString& Text)
 
 void ABRWorld::OnVHSCollected()
 {
-	const FBRLevelDef& D = Def();
+	if (!HasAuthority())
+	{
+		// Les cassettes trouvees par chacun comptent pour tout le groupe
+		if (ABRPlayerController* PC = LocalPC())
+		{
+			PC->ServerVHSCollected();
+		}
+		return;
+	}
 	++VHSFound;
+	PrevVHSFound = VHSFound;
+	AnnounceVHS();
+}
+
+void ABRWorld::AnnounceVHS()
+{
+	const FBRLevelDef& D = Def();
 	if (!D.bRequireObjectives)
 	{
 		ABRHUD::Notify(this, FString::Printf(TEXT("+1 Cassette VHS  (%d)"), VHSFound), 3.f, FLinearColor(0.9f, 0.88f, 0.75f));
@@ -995,16 +1442,6 @@ void ABRWorld::OnVHSCollected()
 	{
 		ABRHUD::Notify(this, FString::Printf(TEXT("Cassette VHS  %d/%d"), VHSFound, D.VHSRequired), 3.f, FLinearColor(1.f, 0.85f, 0.4f));
 	}
-}
-
-void ABRWorld::DebugCompleteRecording()
-{
-	if (!bBlackoutRecorded && Def().bBlackouts)
-	{
-		bBlackoutRecorded = true;
-		CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
-	}
-	bEntityRecorded = true;
 }
 
 ABREntity* ABRWorld::FindVisibleEntity(const FVector& Eye, const FVector& Dir, float MaxDist, float MinDot) const
@@ -1062,21 +1499,20 @@ void ABRWorld::NotifyRecording(float Dt, const FVector& Eye, const FVector& Dir)
 	}
 
 	// Filmer pendant une coupure
-	if (D.bBlackouts && !bBlackoutRecorded && BlackoutPhase == EBlackout::Dark)
+	if (D.bBlackouts && !bBlackoutRecorded && !bObjectiveSent[0] && BlackoutPhase == EBlackout::Dark)
 	{
 		BlackoutRecordTime += Dt;
 		RecordLabel = TEXT("COUPURE DE COURANT");
 		RecordProgress = FMath::Clamp(BlackoutRecordTime / 5.f, 0.f, 1.f);
 		if (BlackoutRecordTime >= 5.f)
 		{
-			bBlackoutRecorded = true;
-			CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
+			CompleteObjective(0);
 		}
 		return;
 	}
 
 	// Filmer une entite
-	if (!bEntityRecorded)
+	if (!bEntityRecorded && !bObjectiveSent[1])
 	{
 		if (ABREntity* E = FindVisibleEntity(Eye, Dir, 2600.f, 0.9f))
 		{
@@ -1085,9 +1521,8 @@ void ABRWorld::NotifyRecording(float Dt, const FVector& Eye, const FVector& Dir)
 			RecordProgress = FMath::Clamp(EntityRecordTime / 3.f, 0.f, 1.f);
 			if (EntityRecordTime >= 3.f)
 			{
-				bEntityRecorded = true;
 				Discover(E->Kind);
-				CompleteTask(TEXT("FILMER UNE ENTIT\u00c9"));
+				CompleteObjective(1);
 			}
 		}
 	}
@@ -1142,9 +1577,9 @@ float ABRWorld::FloorZAt(const FVector& P) const
 	return IsPoolCell(C.X, C.Y) ? -Def().PoolDepth : 0.f;
 }
 
-bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, float MinDist, float MaxDist, bool bAvoidSight, FVector& Out) const
+bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, const ABRCharacter* Anchor, float MinDist, float MaxDist, bool bAvoidSight, FVector& Out) const
 {
-	const ABRCharacter* P = GetPlayer();
+	const ABRCharacter* P = Anchor;
 	if (!P || !GetWorld())
 	{
 		return false;
@@ -1170,7 +1605,7 @@ bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, float MinDist, float MaxDist, b
 		{
 			FHitResult Hit;
 			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRSpawnSpot), false, P);
-			if (!GetWorld()->LineTraceSingleByChannel(Hit, Eye, Loc, ECC_Visibility, Q))
+			if (!GetWorld()->LineTraceSingleByChannel(Hit, Eye, Loc, ECC_Visibility, Q) || (IsNetGame() && !IsHiddenFromPlayers(Loc)))
 			{
 				continue;
 			}
@@ -1185,8 +1620,7 @@ void ABRWorld::UpdatePatrol(float Dt)
 {
 	const FBRLevelDef& D = Def();
 	RedSources.Reset();
-	ABRCharacter* P = GetPlayer();
-	if (!D.bPatrolEntity || !P)
+	if (!D.bPatrolEntity)
 	{
 		return;
 	}
@@ -1202,11 +1636,13 @@ void ABRWorld::UpdatePatrol(float Dt)
 			}
 		}
 	}
-	if (bPresent || P->IsDead() || IsTransitioning() || LevelTime < D.PatrolDelay)
+	// Le reste (faire revenir l'entite) est decide par le serveur
+	ABRCharacter* P = HasAuthority() ? RandomLivingPlayer() : nullptr;
+	if (bPresent || !P || IsTransitioning() || LevelTime < D.PatrolDelay)
 	{
 		return;
 	}
-	if (const ABRPlayerController* PC = Cast<ABRPlayerController>(P->GetController()))
+	if (const ABRPlayerController* PC = LocalPC())
 	{
 		if (PC->IsInMenu())
 		{
@@ -1220,7 +1656,7 @@ void ABRWorld::UpdatePatrol(float Dt)
 	}
 	PatrolSpawnTimer = 4.f;
 	FVector Loc;
-	if (FindSpawnSpot(D.PatrolKind, 1500.f, 2600.f, true, Loc))
+	if (FindSpawnSpot(D.PatrolKind, P, 1500.f, 2600.f, true, Loc))
 	{
 		SpawnEntity(D.PatrolKind, Loc);
 		PatrolSpawnTimer = 15.f;
@@ -1230,16 +1666,19 @@ void ABRWorld::UpdatePatrol(float Dt)
 void ABRWorld::SpawnBlackoutEntities()
 {
 	const FBRLevelDef& D = Def();
-	const ABRCharacter* P = GetPlayer();
-	if (D.BlackoutSmilers <= 0 || !P || P->IsDead())
+	TArray<ABRCharacter*> Players;
+	GetPlayers(Players);
+	Players.RemoveAll([](const ABRCharacter* C) { return C->IsDead(); });
+	if (D.BlackoutSmilers <= 0 || Players.Num() == 0)
 	{
 		return;
 	}
-	// Dans le noir, a portee de vue : on distingue leurs yeux et leur sourire
-	for (int32 i = 0; i < D.BlackoutSmilers; ++i)
+	// Dans le noir, a portee de vue : on distingue leurs yeux et leur sourire (reparti entre les joueurs)
+	const int32 Count = D.BlackoutSmilers + FMath::Min(Players.Num() - 1, 2);
+	for (int32 i = 0; i < Count; ++i)
 	{
 		FVector Loc;
-		if (FindSpawnSpot(EBREntityKind::Smiler, 900.f, 1900.f, false, Loc))
+		if (FindSpawnSpot(EBREntityKind::Smiler, Players[i % Players.Num()], 900.f, 1900.f, false, Loc))
 		{
 			if (ABREntity* E = SpawnEntity(EBREntityKind::Smiler, Loc))
 			{

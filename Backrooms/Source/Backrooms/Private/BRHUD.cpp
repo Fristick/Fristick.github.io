@@ -13,6 +13,10 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "Engine/Texture.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 #include "HAL/PlatformTime.h"
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
@@ -44,6 +48,10 @@ namespace
 		Btn_PauseSettings = 951,
 		Btn_PauseKeys = 952,
 		Btn_PauseQuit = 953,
+		Btn_PauseMainMenu = 954,
+		Btn_Menu = 960,          // 960 + element de la page du menu principal
+		Btn_MenuLevelPrev = 980,
+		Btn_MenuLevelNext = 981,
 		Btn_KeySlot = 1000       // 1000 + action * 3 + case
 	};
 
@@ -380,6 +388,10 @@ void ABRHUD::DrawHUD()
 	}
 	bWasInventoryOpen = bInv;
 
+	if (C && !bInv)
+	{
+		DrawTeammates(C);
+	}
 	if (C && !C->IsDead() && !bInv)
 	{
 		DrawCamcorder(C, W);
@@ -453,6 +465,106 @@ void ABRHUD::DrawContentWarning(float Y)
 	}
 }
 
+void ABRHUD::MenuButton(int32 Item, const FString& Label, float CX, float Y, float W, float H, bool bInteractive)
+{
+	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	const float U = Ui();
+	const float X = CX - W * 0.5f;
+	const bool bSel = PC && PC->GetMenuCursor() == Item;
+	DrawRect(bSel ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.55f), X, Y, W, H);
+	Frame(X, Y, W, H, bSel ? Yellow : YellowDim, 1.f * U);
+	if (bSel)
+	{
+		Txt(TEXT(">"), X + 18.f * U, Y + (H - 26.f * U) * 0.5f, FLinearColor(0.05f, 0.04f, 0.01f), 1.05f * U, GEngine->GetMediumFont(), false, false);
+	}
+	Txt(Label, CX, Y + (H - 26.f * U) * 0.5f, bSel ? FLinearColor(0.05f, 0.04f, 0.01f) : Ink, 1.05f * U, GEngine->GetMediumFont(), true, false);
+	if (bInteractive)
+	{
+		AddButton(Btn_Menu + Item, X, Y, W, H);
+	}
+}
+
+void ABRHUD::DrawLevelCard(float Y, bool bFull)
+{
+	const float U = Ui();
+	const float CX = Canvas->ClipX * 0.5f;
+	UFont* Large = GEngine->GetLargeFont();
+	UFont* Medium = GEngine->GetMediumFont();
+	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	const TArray<FBRLevelDef>& All = BRLevels::All();
+	const int32 Index = PC ? FMath::Clamp(PC->GetMenuIndex(), 0, All.Num() - 1) : 0;
+	const FBRLevelDef& D = All[Index];
+
+	// Selecteur de niveau : fleches cliquables de part et d'autre
+	const FString Sel = FString::Printf(TEXT("NIVEAU %d"), D.Number);
+	Txt(Sel, CX, Y, FLinearColor::White, 1.7f * U, Large, true);
+	const float SW = TextW(Sel, Large, 1.7f * U);
+	const float AW = 54.f * U;
+	const float AH = 54.f * U;
+	const float LX = CX - SW * 0.5f - AW - 40.f * U;
+	const float RX = CX + SW * 0.5f + 40.f * U;
+	for (int32 k = 0; k < 2; ++k)
+	{
+		const float AX = k == 0 ? LX : RX;
+		const bool bHov = Hover(AX, Y - 4.f * U, AW, AH);
+		Frame(AX, Y - 4.f * U, AW, AH, bHov ? Yellow : YellowDim, 1.f * U);
+		Txt(k == 0 ? TEXT("<") : TEXT(">"), AX + AW * 0.5f, Y + 4.f * U, bHov ? Yellow : Ink, 1.3f * U, Large, true, false);
+		AddButton(k == 0 ? Btn_MenuLevelPrev : Btn_MenuLevelNext, AX, Y - 4.f * U, AW, AH);
+	}
+	Txt(FString::Printf(TEXT("\u00ab %s \u00bb  -  %s"), *D.Title, *D.Nickname), CX, Y + 70.f * U, FLinearColor(1.f, 0.9f, 0.6f), 1.1f * U, Medium, true);
+	Txt(D.ClassText, CX, Y + 108.f * U, ClassColor(D.SurvivalClass), 0.95f * U, Medium, true);
+	if (!bFull)
+	{
+		return;
+	}
+	const TArray<FString> Lines = Wrap(D.Description, Canvas->ClipX * 0.5f, Medium, 0.9f * U);
+	float LY = Y + 150.f * U;
+	for (const FString& L : Lines)
+	{
+		Txt(L, CX, LY, FLinearColor(0.85f, 0.85f, 0.85f), 0.9f * U, Medium, true);
+		LY += 26.f * U;
+	}
+	if (D.bRequireObjectives)
+	{
+		Txt(FString::Printf(TEXT("Objectifs : %d cassettes VHS + filmer pendant une coupure de courant"), D.VHSRequired), CX, LY + 6.f * U,
+			Yellow, 0.82f * U, Medium, true);
+		LY += 26.f * U;
+	}
+	if (Index == 0)
+	{
+		Txt(TEXT("(Recommand\u00e9 pour commencer : le vrai d\u00e9but de l'aventure)"), CX, LY + 6.f * U, FLinearColor(0.6f, 0.9f, 0.6f, 0.8f), 0.8f * U, Medium, true);
+	}
+}
+
+void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
+{
+	if (!PC || !PlayerOwner)
+	{
+		return;
+	}
+	// Le survol ne deplace la selection que si la souris bouge (sinon le clavier reprend la main)
+	const bool bMoved = FMath::Abs(MouseX - LastMenuMouseX) > 1.f || FMath::Abs(MouseY - LastMenuMouseY) > 1.f;
+	LastMenuMouseX = MouseX;
+	LastMenuMouseY = MouseY;
+	const int32 Id = ButtonAt(MouseX, MouseY);
+	if (bMoved && Id >= Btn_Menu && Id < Btn_Menu + 8)
+	{
+		PC->SetMenuCursor(Id - Btn_Menu);
+	}
+	if (!PlayerOwner->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		return;
+	}
+	if (Id >= Btn_Menu && Id < Btn_Menu + 8)
+	{
+		PC->MenuActivate(Id - Btn_Menu);
+	}
+	else if (Id == Btn_MenuLevelPrev || Id == Btn_MenuLevelNext)
+	{
+		PC->MenuShiftLevel(Id == Btn_MenuLevelPrev ? -1 : 1);
+	}
+}
+
 void ABRHUD::DrawMenu()
 {
 	const float U = Ui();
@@ -461,47 +573,110 @@ void ABRHUD::DrawMenu()
 	UFont* Large = GEngine->GetLargeFont();
 	UFont* Medium = GEngine->GetMediumFont();
 	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
-	const TArray<FBRLevelDef>& All = BRLevels::All();
-	const int32 Index = PC ? FMath::Clamp(PC->GetMenuIndex(), 0, All.Num() - 1) : 0;
-	const FBRLevelDef& D = All[Index];
+	if (!PC)
+	{
+		return;
+	}
+	const bool bInteractive = !PC->IsInventoryOpen();
+	if (PlayerOwner)
+	{
+		PlayerOwner->GetMousePosition(MouseX, MouseY);
+	}
+	Buttons.Reset();
 
 	DrawRect(FLinearColor(0.02f, 0.02f, 0.01f, 0.62f), 0.f, 0.f, Canvas->ClipX, H);
 	Scanlines(0.05f);
 
 	const float Flick = (FMath::Sin(Clock * 23.f) > 0.97f) ? 0.5f : 1.f;
-	Txt(TEXT("THE BACKROOMS"), CX, H * 0.14f, FLinearColor(1.f, 0.92f, 0.6f, Flick), 2.8f * U, Large, true);
+	Txt(TEXT("THE BACKROOMS"), CX, H * 0.1f, FLinearColor(1.f, 0.92f, 0.6f, Flick), 2.8f * U, Large, true);
 	Txt(TEXT("Si vous ne faites pas attention et que vous noclippez hors de la r\u00e9alit\u00e9 au mauvais endroit..."),
-		CX, H * 0.25f, FLinearColor(0.85f, 0.82f, 0.7f, 0.9f), 1.f * U, Medium, true);
+		CX, H * 0.2f, FLinearColor(0.85f, 0.82f, 0.7f, 0.9f), 1.f * U, Medium, true);
 
-	const FString Sel = FString::Printf(TEXT("<     NIVEAU %d     >"), D.Number);
-	Txt(Sel, CX, H * 0.36f, FLinearColor::White, 1.7f * U, Large, true);
-	Txt(FString::Printf(TEXT("\u00ab %s \u00bb  -  %s"), *D.Title, *D.Nickname), CX, H * 0.44f, FLinearColor(1.f, 0.9f, 0.6f), 1.1f * U, Medium, true);
-	Txt(D.ClassText, CX, H * 0.485f, ClassColor(D.SurvivalClass), 0.95f * U, Medium, true);
-
-	const TArray<FString> Lines = Wrap(D.Description, Canvas->ClipX * 0.5f, Medium, 0.9f * U);
-	float Y = H * 0.54f;
-	for (const FString& L : Lines)
-	{
-		Txt(L, CX, Y, FLinearColor(0.85f, 0.85f, 0.85f), 0.9f * U, Medium, true);
-		Y += 26.f * U;
-	}
-	if (D.bRequireObjectives)
-	{
-		Txt(FString::Printf(TEXT("Objectifs : %d cassettes VHS + filmer pendant une coupure de courant"), D.VHSRequired), CX, Y + 6.f * U,
-			Yellow, 0.82f * U, Medium, true);
-		Y += 26.f * U;
-	}
-	if (Index == 0)
-	{
-		Txt(TEXT("(Recommand\u00e9 pour commencer : le vrai d\u00e9but de l'aventure)"), CX, Y + 6.f * U, FLinearColor(0.6f, 0.9f, 0.6f, 0.8f), 0.8f * U, Medium, true);
-	}
-
+	const float BW = 480.f * U;
+	const float BH = 54.f * U;
+	const float Gap = 14.f * U;
 	const float Blink = 0.6f + 0.4f * FMath::Sin(Clock * 3.f);
-	Txt(FString::Printf(TEXT("[ \u2190 / \u2192 ]  choisir le niveau        [ ENTR\u00c9E ]  noclipper        %s  param\u00e8tres et touches        [ FIN ]  quitter"), *BRKeys::Tag(EBRAction::Inventory)), CX, H * 0.78f,
-		FLinearColor(1.f, 1.f, 1.f, Blink), 1.f * U, Medium, true);
-	Txt(ControlsLine(0), CX, H * 0.84f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.8f * U, Medium, true);
-	Txt(ControlsLine(1), CX, H * 0.87f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.8f * U, Medium, true);
-	DrawContentWarning(H * 0.905f);
+	FString Hint;
+	switch (PC->GetMenuPage())
+	{
+	case EBRMenuPage::Main:
+	{
+		float Y = H * 0.34f;
+		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
+		{
+			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW, BH, bInteractive);
+			Y += BH + Gap;
+		}
+		Hint = TEXT("[ \u2191 / \u2193 ]  choisir        [ ENTR\u00c9E ]  valider        [ FIN ]  quitter");
+		break;
+	}
+	case EBRMenuPage::Solo:
+	{
+		Txt(TEXT("PARTIE SOLO"), CX, H * 0.27f, Yellow, 1.1f * U, Medium, true);
+		DrawLevelCard(H * 0.31f, true);
+		float Y = H * 0.67f;
+		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
+		{
+			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW * 0.8f, BH * 0.9f, bInteractive);
+			Y += BH * 0.9f + Gap;
+		}
+		Hint = TEXT("[ \u2190 / \u2192 ]  choisir le niveau        [ ENTR\u00c9E ]  noclipper        [ \u00c9CHAP ]  retour");
+		break;
+	}
+	case EBRMenuPage::Multi:
+	{
+		Txt(TEXT("MULTIJOUEUR  -  COOP\u00c9RATION JUSQU'\u00c0 4 JOUEURS"), CX, H * 0.27f, Yellow, 1.1f * U, Medium, true);
+		Txt(TEXT("L'h\u00f4te choisit le niveau de d\u00e9part, les autres le rejoignent avec son adresse IP."), CX, H * 0.27f + 34.f * U, InkDim,
+			0.85f * U, Medium, true);
+		DrawLevelCard(H * 0.36f, false);
+		float Y = H * 0.52f;
+		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
+		{
+			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW, BH, bInteractive);
+			Y += BH + Gap;
+		}
+		const FString Ip = PC->GetLocalAddress().IsEmpty() ? FString(TEXT("inconnue")) : PC->GetLocalAddress();
+		Txt(FString::Printf(TEXT("Votre adresse IP : %s   (port 7777, UDP)"), *Ip), CX, Y + 18.f * U, FLinearColor(0.75f, 0.95f, 0.75f), 0.95f * U, Medium, true);
+		Txt(TEXT("M\u00eame r\u00e9seau (LAN) : donnez cette adresse \u00e0 vos amis.  Par Internet : redirigez le port UDP 7777 vers ce PC sur la box,"),
+			CX, Y + 50.f * U, InkDim, 0.78f * U, Medium, true);
+		Txt(TEXT("ou utilisez un r\u00e9seau virtuel (Radmin VPN, ZeroTier, Tailscale...) et son adresse IP."), CX, Y + 74.f * U, InkDim, 0.78f * U, Medium, true);
+		Hint = TEXT("[ \u2190 / \u2192 ]  niveau        [ \u2191 / \u2193 ]  choisir        [ ENTR\u00c9E ]  valider        [ \u00c9CHAP ]  retour");
+		break;
+	}
+	case EBRMenuPage::Join:
+	{
+		// Le champ de saisie (Slate) est centre a l'ecran : on dessine autour
+		Txt(TEXT("REJOINDRE UNE PARTIE"), CX, H * 0.3f, Yellow, 1.3f * U, Large, true);
+		Txt(TEXT("ADRESSE IP DE L'H\u00d4TE"), CX, H * 0.5f - 74.f * U, Ink, 0.95f * U, Medium, true);
+		Frame(CX - 268.f * U, H * 0.5f - 34.f * U, 536.f * U, 68.f * U, YellowDim, 1.f * U);
+		float Y = H * 0.5f + 58.f * U;
+		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
+		{
+			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW, BH, bInteractive);
+			Y += BH + Gap;
+		}
+		Txt(TEXT("Exemples : 192.168.1.20   ou   26.45.120.7:7777   (l'h\u00f4te voit son adresse dans MULTIJOUEUR)"), CX, Y + 14.f * U, InkDim,
+			0.8f * U, Medium, true);
+		Hint = TEXT("[ ENTR\u00c9E ]  se connecter        [ \u00c9CHAP ]  retour");
+		break;
+	}
+	}
+
+	if (!PC->GetMenuStatus().IsEmpty())
+	{
+		Txt(PC->GetMenuStatus(), CX, H * 0.8f, FLinearColor(1.f, 0.7f, 0.35f), 0.95f * U, Medium, true);
+	}
+	Txt(Hint, CX, H * 0.845f, FLinearColor(1.f, 1.f, 1.f, Blink), 0.95f * U, Medium, true);
+	if (PC->GetMenuPage() == EBRMenuPage::Main || PC->GetMenuPage() == EBRMenuPage::Solo)
+	{
+		Txt(ControlsLine(0), CX, H * 0.88f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.75f * U, Medium, true);
+		Txt(ControlsLine(1), CX, H * 0.905f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.75f * U, Medium, true);
+	}
+	DrawContentWarning(H * 0.925f);
+	if (bInteractive)
+	{
+		HandleMenuMouse(PC);
+	}
 	Txt(TEXT("Inspir\u00e9 du Backrooms Wiki (backrooms-wiki.wikidot.com) - CC BY-SA 3.0  |  \u00a9 1992 THRESHOLD SYSTEMS"), CX, H * 0.96f,
 		FLinearColor(0.5f, 0.5f, 0.5f, 0.7f), 0.7f * U, Medium, true);
 }
@@ -765,8 +940,11 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 		Txt(TEXT("Tu\u00e9 par : ") + C->GetKilledBy(), CX, H * 0.48f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U, GEngine->GetMediumFont(), true);
 	}
 	const float A2 = FMath::Clamp((T - 2.2f) / 1.f, 0.f, 1.f);
-	Txt(TEXT("Vous vous r\u00e9veillez... sur une moquette humide. Encore."), CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U,
-		GEngine->GetMediumFont(), true);
+	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	const bool bNet = PC && PC->IsNetGame();
+	Txt(bNet ? TEXT("Vous allez vous r\u00e9veiller au point de d\u00e9part du niveau... vos co\u00e9quipiers continuent sans vous.")
+			 : TEXT("Vous vous r\u00e9veillez... sur une moquette humide. Encore."),
+		CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U, GEngine->GetMediumFont(), true);
 }
 
 void ABRHUD::DrawPause(ABRPlayerController* PC)
@@ -782,15 +960,22 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 	Buttons.Reset();
 	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.72f), 0.f, 0.f, Canvas->ClipX, H);
 	Scanlines(0.05f);
-	Txt(TEXT("PAUSE"), CX, H * 0.18f, Yellow, 2.2f * U, GEngine->GetLargeFont(), true);
+	Txt(TEXT("PAUSE"), CX, H * 0.14f, Yellow, 2.2f * U, GEngine->GetLargeFont(), true);
+	if (PC && PC->IsNetGame())
+	{
+		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+		const int32 Count = GS ? GS->PlayerArray.Num() : 1;
+		Txt(FString::Printf(TEXT("PARTIE EN LIGNE  -  %d joueur%s  -  le jeu continue pendant la pause"), Count, Count > 1 ? TEXT("s") : TEXT("")),
+			CX, H * 0.235f, FLinearColor(0.75f, 0.95f, 0.75f), 0.9f * U, Medium, true);
+	}
 
 	// Boutons cliquables
-	const TCHAR* Labels[] = { TEXT("REPRENDRE"), TEXT("PARAM\u00c8TRES / GRAPHISMES"), TEXT("TOUCHES"), TEXT("QUITTER LE JEU") };
-	const int32 Ids[] = { Btn_PauseResume, Btn_PauseSettings, Btn_PauseKeys, Btn_PauseQuit };
+	const TCHAR* Labels[] = { TEXT("REPRENDRE"), TEXT("PARAM\u00c8TRES / GRAPHISMES"), TEXT("TOUCHES"), TEXT("MENU PRINCIPAL"), TEXT("QUITTER LE JEU") };
+	const int32 Ids[] = { Btn_PauseResume, Btn_PauseSettings, Btn_PauseKeys, Btn_PauseMainMenu, Btn_PauseQuit };
 	const float BW = 460.f * U;
 	const float BH = 50.f * U;
-	float Y = H * 0.32f;
-	for (int32 i = 0; i < 4; ++i)
+	float Y = H * 0.29f;
+	for (int32 i = 0; i < 5; ++i)
 	{
 		const float X = CX - BW * 0.5f;
 		const bool bHov = Hover(X, Y, BW, BH);
@@ -826,6 +1011,9 @@ void ABRHUD::HandlePauseMouse(ABRPlayerController* PC)
 		break;
 	case Btn_PauseKeys:
 		PC->SetInventoryOpen(true, static_cast<int32>(ETab::Keys));
+		break;
+	case Btn_PauseMainMenu:
+		PC->ReturnToMainMenu();
 		break;
 	case Btn_PauseQuit:
 		PC->QuitToDesktop();
@@ -1757,5 +1945,53 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 			Dragging = FSlotRef();
 			C->PlayUISound(TEXT("S_UIClick"));
 		}
+	}
+}
+
+// =====================================================================================================================
+// Multijoueur
+// =====================================================================================================================
+
+void ABRHUD::DrawTeammates(ABRCharacter* C)
+{
+	UWorld* World = GetWorld();
+	if (!World || !C || World->GetNetMode() == NM_Standalone)
+	{
+		return;
+	}
+	const float U = Ui();
+	UFont* Medium = GEngine->GetMediumFont();
+	for (TActorIterator<ABRCharacter> It(World); It; ++It)
+	{
+		ABRCharacter* Other = *It;
+		if (!Other || Other == C)
+		{
+			continue;
+		}
+		const float Dist = static_cast<float>(FVector::Dist(Other->GetActorLocation(), C->GetActorLocation()));
+		if (Dist > 5000.f)
+		{
+			continue;
+		}
+		const FVector Screen = Project(Other->GetActorLocation() + FVector(0.f, 0.f, 112.f));
+		if (Screen.Z <= 0.f || Screen.X < 0.f || Screen.Y < 0.f || Screen.X > Canvas->ClipX || Screen.Y > Canvas->ClipY)
+		{
+			continue;
+		}
+		const APlayerState* PS = Other->GetPlayerState();
+		FString Name = PS ? PS->GetPlayerName() : FString(TEXT("Explorateur"));
+		if (Name.Len() > 20)
+		{
+			Name = Name.Left(20);
+		}
+		const float A = FMath::Clamp(1.2f - Dist / 5000.f, 0.35f, 1.f);
+		if (Other->IsDead())
+		{
+			Name += TEXT("  (\u00e0 terre)");
+		}
+		const FLinearColor Col = Other->IsDead() ? FLinearColor(1.f, 0.45f, 0.4f, A) : FLinearColor(0.8f, 1.f, 0.8f, A);
+		Txt(Name, static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 22.f * U, Col, 0.8f * U, Medium, true);
+		Txt(FString::Printf(TEXT("%d m"), FMath::RoundToInt(Dist / 100.f)), static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 2.f * U,
+			WithAlpha(InkDim, A), 0.65f * U, Medium, true);
 	}
 }

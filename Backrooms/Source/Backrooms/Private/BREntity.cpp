@@ -177,10 +177,50 @@ ABREntity::ABREntity()
 	Voice->bAutoActivate = false;
 }
 
+void ABREntity::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(ABREntity, NetKind, COND_InitialOnly);
+	DOREPLIFETIME_CONDITION(ABREntity, NetScale, COND_InitialOnly);
+	DOREPLIFETIME(ABREntity, NetState);
+	DOREPLIFETIME(ABREntity, Target);
+	DOREPLIFETIME(ABREntity, NetChase);
+	DOREPLIFETIME(ABREntity, bNetVanish);
+}
+
+ABRCharacter* ABREntity::GetChaseTarget() const
+{
+	return NetChase > 0 ? Target.Get() : nullptr;
+}
+
+void ABREntity::SetVisualScale(float Scale)
+{
+	SetActorScale3D(FVector(Scale));
+	NetScale = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Scale * 100.f), 1, 255));
+}
+
 void ABREntity::BeginPlay()
 {
 	Super::BeginPlay();
 	World = ABRWorld::Get(this);
+	if (HasAuthority())
+	{
+		NetKind = static_cast<uint8>(Kind);
+	}
+	else
+	{
+		// Client : l'espece et la taille arrivent avec l'acteur ; il rejoint la liste du monde
+		Kind = static_cast<EBREntityKind>(NetKind);
+		if (NetScale != 100)
+		{
+			SetActorScale3D(FVector(NetScale / 100.f));
+		}
+		if (ABRWorld* W = World.Get())
+		{
+			W->RegisterEntity(this);
+			bRegistered = true;
+		}
+	}
 	const FBREntityInfo& I = MyInfo();
 
 	GetCapsuleComponent()->SetCapsuleSize(I.Radius, I.HalfHeight);
@@ -241,8 +281,37 @@ void ABREntity::BeginPlay()
 			}
 		}
 	}
+	if (!HasAuthority())
+	{
+		State = static_cast<EState>(NetState); // l'etat du serveur prime sur l'etat initial
+		if (bNetVanish)
+		{
+			StartVanish();
+		}
+	}
 	BuildVisual();
 	UpdateMorph(0.f);
+}
+
+void ABREntity::OnRep_State()
+{
+	const EState NewState = static_cast<EState>(NetState);
+	if (NewState == State || !HasActorBegunPlay())
+	{
+		State = NewState;
+		return;
+	}
+	State = NewState;
+	StateTime = 0.f;
+	OnStateEntered();
+}
+
+void ABREntity::OnRep_Vanish()
+{
+	if (bNetVanish && HasActorBegunPlay())
+	{
+		StartVanish();
+	}
 }
 
 void ABREntity::EndPlay(const EEndPlayReason::Type Reason)
@@ -511,7 +580,7 @@ void ABREntity::Tick(float DeltaSeconds)
 		{
 			GlowLight->SetIntensity(60.f * Sc);
 		}
-		if (Vanish > 0.6f)
+		if (Vanish > 0.6f && HasAuthority())
 		{
 			Destroy();
 		}
@@ -519,7 +588,23 @@ void ABREntity::Tick(float DeltaSeconds)
 	}
 
 	bWantsMove = false;
-	Think(Dt);
+	if (HasAuthority())
+	{
+		Think(Dt);
+	}
+	else
+	{
+		if (!bRegistered)
+		{
+			if (ABRWorld* W = ABRWorld::Get(this))
+			{
+				World = W;
+				W->RegisterEntity(this);
+				bRegistered = true;
+			}
+		}
+		UpdateClientState(Dt);
+	}
 	Animate(Dt);
 	UpdateHead(Dt);
 	UpdateMorph(Dt);
@@ -568,17 +653,83 @@ void ABREntity::SetState(EState NewState)
 	StateTime = 0.f;
 	Path.Reset();
 	RepathTimer = 0.f;
+	if (HasAuthority())
+	{
+		NetState = static_cast<uint8>(NewState);
+	}
 	if (NewState == EState::Chase)
 	{
 		LostSight = 0.f;
-		const ABRCharacter* P = Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
-		if (P && FVector::Dist(P->GetActorLocation(), GetActorLocation()) < 2500.f)
+		if (const ABRCharacter* P = Target.Get())
 		{
-			PlaySound2D(TEXT("S_Alert"), 0.55f);
 			LastKnown = P->GetActorLocation();
 		}
-		PlayVoice(1.f);
 	}
+	OnStateEntered();
+}
+
+void ABREntity::OnStateEntered()
+{
+	if (State != EState::Chase)
+	{
+		return;
+	}
+	// Chacun entend l'alerte si la poursuite demarre pres de lui
+	const APawn* Local = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (Local && FVector::Dist(Local->GetActorLocation(), GetActorLocation()) < 2500.f)
+	{
+		PlaySound2D(TEXT("S_Alert"), 0.55f);
+	}
+	PlayVoice(1.f);
+}
+
+void ABREntity::UpdateClientState(float Dt)
+{
+	// L'IA tourne sur le serveur : on deduit la pose de l'etat replique
+	const ABRCharacter* P = Target.Get();
+	const float Dist = P ? static_cast<float>(FVector::Dist(P->GetActorLocation(), GetActorLocation())) : 1e9f;
+	const bool bReaching = State == EState::Chase && Dist < 700.f
+		&& (Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::SkinStealer || Kind == EBREntityKind::Wretch || Kind == EBREntityKind::Faceling);
+	Reach = FMath::FInterpTo(Reach, bReaching ? 1.f : 0.f, Dt, 4.f);
+	if (Kind == EBREntityKind::Faceling)
+	{
+		const bool bHide = State == EState::Hide;
+		HideCrouch = FMath::FInterpTo(HideCrouch, bHide ? 1.f : 0.f, Dt, bHide ? 3.f : 8.f);
+	}
+	if (Kind == EBREntityKind::SkinStealer)
+	{
+		MorphTarget = State == EState::Idle ? 0.f : 1.f;
+	}
+}
+
+ABRCharacter* ABREntity::PickTarget(ABRWorld* W) const
+{
+	TArray<ABRCharacter*> Players;
+	W->GetPlayers(Players);
+	ABRCharacter* Best = nullptr;
+	float BestScore = 1e30f;
+	for (ABRCharacter* C : Players)
+	{
+		if (C->IsDead())
+		{
+			continue;
+		}
+		float Score = static_cast<float>(FVector::DistSquared(C->GetActorLocation(), GetActorLocation()));
+		if (C->IsHidden())
+		{
+			Score *= 4.f; // un joueur cache est delaisse pour un autre
+		}
+		if (C == Target.Get())
+		{
+			Score *= 0.6f; // garde sa proie tant qu'une autre n'est pas bien plus proche
+		}
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = C;
+		}
+	}
+	return Best;
 }
 
 void ABREntity::SetOrientToMovement(bool bOrient)
@@ -614,6 +765,10 @@ void ABREntity::StartVanish()
 {
 	if (Vanish < 0.f)
 	{
+		if (HasAuthority())
+		{
+			bNetVanish = true;
+		}
 		Vanish = 0.f;
 		GetCharacterMovement()->StopMovementImmediately();
 		SetActorEnableCollision(false);
@@ -662,12 +817,12 @@ bool ABREntity::IsDirectPathClear(const FVector& Goal) const
 	return !GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(R), Q);
 }
 
-void ABREntity::MoveTowards(const FVector& Target, float Speed)
+void ABREntity::MoveTowards(const FVector& Dest, float Speed)
 {
 	UCharacterMovementComponent* M = GetCharacterMovement();
 	M->MaxWalkSpeed = Speed;
 	M->MaxFlySpeed = Speed;
-	FVector Dir = Target - GetActorLocation();
+	FVector Dir = Dest - GetActorLocation();
 	const FBREntityInfo& I = MyInfo();
 	if (I.bFlying)
 	{
@@ -780,7 +935,7 @@ void ABREntity::Wander(float Speed, float Dt)
 
 void ABREntity::FacePlayer(float Dt)
 {
-	const ABRCharacter* P = Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	const ABRCharacter* P = Target.Get();
 	if (!P)
 	{
 		return;
@@ -815,7 +970,10 @@ void ABREntity::TryAttack(ABRCharacter* P, float Dist)
 void ABREntity::Think(float Dt)
 {
 	ABRWorld* W = World.Get();
-	ABRCharacter* P = Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	ABRCharacter* P = W ? PickTarget(W) : nullptr;
+	Target = P;
+	ChaseOut = 0.f;
+	NetChase = 0;
 	const FBREntityInfo& I = MyInfo();
 	if (!W || !P || P->IsDead())
 	{
@@ -839,19 +997,7 @@ void ABREntity::Think(float Dt)
 		LastKnown = P->GetActorLocation();
 	}
 
-	if (S.bLookedAt && S.Dist < 2500.f)
-	{
-		bSeenOnce = true;
-		// La fiche du journal ne s'ouvre que si l'entite est bien visible (pas une masse informe)
-		if (Kind != EBREntityKind::SkinStealer || (Morph > 0.5f && !bDisguised))
-		{
-			W->Discover(Kind);
-		}
-	}
-	if (S.bLOS && S.Dist < I.AuraRadius && State != EState::Hide)
-	{
-		P->AddSanityPressure(I.Aura);
-	}
+	// (journal, aura et musique de poursuite : calcules chez chaque joueur, voir ABRCharacter::UpdateEntityEffects)
 
 	switch (Kind)
 	{
@@ -890,6 +1036,7 @@ void ABREntity::Think(float Dt)
 	const bool bReaching = State == EState::Chase && S.Dist < 700.f
 		&& (Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::SkinStealer || Kind == EBREntityKind::Wretch || Kind == EBREntityKind::Faceling);
 	Reach = FMath::FInterpTo(Reach, bReaching ? 1.f : 0.f, Dt, 4.f);
+	NetChase = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(ChaseOut * 255.f), 0, 255));
 }
 
 // ------------------------------------------------------------------ Smilers
@@ -919,7 +1066,7 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 
 	if (State == EState::Chase)
 	{
-		P->NotifyChase(1.f);
+		NotifyChase(1.f);
 		FollowPathTo(bTargetHidden ? LastKnown : PL, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
 		LostSight = S.bLOS ? 0.f : LostSight + Dt;
@@ -971,7 +1118,7 @@ void ABREntity::ThinkHound(ABRCharacter* P, const FSense& S, float Dt)
 	}
 	case EState::Chase:
 	{
-		P->NotifyChase(1.f);
+		NotifyChase(1.f);
 		FollowPathTo(PL, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
 		if (bFacing && !P->IsSprinting() && S.Dist < 500.f)
@@ -1055,7 +1202,7 @@ void ABREntity::ThinkFaceling(ABRCharacter* P, const FSense& S, float Dt)
 	case EState::Chase:
 	{
 		HideCrouch = FMath::FInterpTo(HideCrouch, 0.f, Dt, 8.f);
-		P->NotifyChase(0.6f);
+		NotifyChase(0.6f);
 		FollowPathTo(PL, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
 		LostSight = S.bLOS ? 0.f : LostSight + Dt;
@@ -1142,7 +1289,7 @@ void ABREntity::ThinkSkinStealer(ABRCharacter* P, const FSense& S, float Dt)
 	}
 	case EState::Chase:
 		MorphTarget = 1.f;
-		P->NotifyChase(1.f);
+		NotifyChase(1.f);
 		FollowPathTo(S.bLOS ? PL : LastKnown, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
 		LostSight = (S.bLOS || S.bHeard) ? 0.f : LostSight + Dt;
@@ -1164,7 +1311,7 @@ void ABREntity::ThinkDeathmoth(ABRCharacter* P, const FSense& S, float Dt)
 	const bool bAttracted = P->IsFlashlightOn() && S.bLOS && S.Dist < 2000.f;
 	if (State == EState::Chase)
 	{
-		P->NotifyChase(0.5f);
+		NotifyChase(0.5f);
 		const FVector Wobble(FMath::Sin(Life * 2.1f) * 120.f, FMath::Cos(Life * 1.7f) * 120.f, 0.f);
 		FollowPathTo(P->GetActorLocation() + Wobble, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
@@ -1190,7 +1337,7 @@ void ABREntity::ThinkSimpleHunter(ABRCharacter* P, const FSense& S, float Dt, fl
 	const FBREntityInfo& I = MyInfo();
 	if (State == EState::Chase)
 	{
-		P->NotifyChase(ChaseIntensity);
+		NotifyChase(ChaseIntensity);
 		FollowPathTo(S.bLOS ? P->GetActorLocation() : LastKnown, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
 		LostSight = S.bLOS ? 0.f : LostSight + Dt;
@@ -1217,7 +1364,7 @@ void ABREntity::ThinkPartygoer(ABRWorld* W, ABRCharacter* P, const FSense& S, fl
 	if (State == EState::Chase)
 	{
 		SetOrientToMovement(true);
-		P->NotifyChase(0.9f);
+		NotifyChase(0.9f);
 		FollowPathTo(S.bLOS ? PL : LastKnown, I.ChaseSpeed * (W->IsBlackout() ? 1.1f : 1.f), Dt);
 		TryAttack(P, S.Dist);
 		LostSight = S.bLOS ? 0.f : LostSight + Dt;
@@ -1290,7 +1437,7 @@ void ABREntity::ThinkBacteria(ABRWorld* W, ABRCharacter* P, const FSense& S, flo
 	{
 	case EState::Chase:
 	{
-		P->NotifyChase(1.f);
+		NotifyChase(1.f);
 		// Poursuite implacable tant qu'elle voit le joueur, puis fouille sa derniere position connue
 		FollowPathTo(S.bLOS ? PL : LastKnown, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
@@ -1547,8 +1694,9 @@ void ABREntity::UpdateHead(float Dt)
 	{
 		return;
 	}
-	FRotator Target = FRotator::ZeroRotator;
-	const ABRCharacter* P = Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	FRotator Want = FRotator::ZeroRotator;
+	// La tete suit sa proie (ou, chez un client, le joueur local s'il n'y en a pas)
+	const ABRCharacter* P = Target.Get() ? Target.Get() : Cast<ABRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
 	const bool bInterested = State != EState::Wander && State != EState::Idle && State != EState::Hide;
 	const float Dist = P ? static_cast<float>(FVector::Dist(P->GetActorLocation(), GetActorLocation())) : 1e9f;
 	if (P && (bInterested || Dist < 1500.f) && State != EState::Frozen)
@@ -1558,22 +1706,22 @@ void ABREntity::UpdateHead(float Dt)
 		const FVector Local = VT.InverseTransformPosition(P->GetEyeLocation()) - Head->GetRelativeLocation();
 		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Local.Y), static_cast<float>(Local.X)));
 		const float Pitch = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Local.Z), static_cast<float>(Local.Size2D())));
-		Target = FRotator(FMath::Clamp(Pitch, -40.f, 35.f), FMath::Clamp(Yaw, -75.f, 75.f), 0.f);
+		Want = FRotator(FMath::Clamp(Pitch, -40.f, 35.f), FMath::Clamp(Yaw, -75.f, 75.f), 0.f);
 	}
 	if (Kind == EBREntityKind::Hound && State == EState::Stalk)
 	{
-		Target.Pitch -= 15.f; // tete basse, a l'affut
+		Want.Pitch -= 15.f; // tete basse, a l'affut
 	}
 	if (Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::Wretch)
 	{
-		Target += Twitch * (Kind == EBREntityKind::Bacteria ? 1.f : 0.5f);
+		Want += Twitch * (Kind == EBREntityKind::Bacteria ? 1.f : 0.5f);
 	}
 	if (Kind == EBREntityKind::Partygoer && State != EState::Chase)
 	{
-		Target.Roll += FMath::Sin(Life * 0.7f) * 12.f; // tete penchee, "amicale"
+		Want.Roll += FMath::Sin(Life * 0.7f) * 12.f; // tete penchee, "amicale"
 	}
 	const float Speed = (Kind == EBREntityKind::Bacteria) ? 14.f : 5.f;
-	HeadRot = FMath::RInterpTo(HeadRot, Target, Dt, Speed);
+	HeadRot = FMath::RInterpTo(HeadRot, Want, Dt, Speed);
 	Head->SetRelativeRotation(HeadRot);
 }
 

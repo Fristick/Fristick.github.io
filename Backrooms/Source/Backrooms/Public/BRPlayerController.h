@@ -1,4 +1,5 @@
-// Entrees (Enhanced Input cree entierement en C++), menu titre, pause, inventaire (TAB), parametres, commandes console.
+// Entrees (Enhanced Input cree entierement en C++), menu principal (solo / multijoueur / parametres), pause,
+// inventaire (TAB), parametres, commandes console et demandes envoyees au serveur en multijoueur.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -9,6 +10,11 @@
 class UInputMappingContext;
 class UInputAction;
 class ABRCharacter;
+class SWidget;
+class SEditableTextBox;
+
+/** Pages du menu principal */
+enum class EBRMenuPage : uint8 { Main, Solo, Multi, Join };
 
 UCLASS()
 class BACKROOMS_API ABRPlayerController : public APlayerController
@@ -19,8 +25,45 @@ public:
 	ABRPlayerController();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+
+	// ---- Menu principal : SOLO / MULTIJOUEUR / PARAMETRES / QUITTER
+	EBRMenuPage GetMenuPage() const { return MenuPage; }
+	int32 GetMenuCursor() const { return MenuCursor; }
+	int32 GetMenuItemCount() const;
+	FString GetMenuItemLabel(int32 Item) const;
+	void SetMenuCursor(int32 Item);
+	/** Clic ou ENTREE sur un element de la page */
+	void MenuActivate(int32 Item);
+	void MenuBack();
+	/** Niveau de depart (pages Solo et Multijoueur) */
+	void MenuShiftLevel(int32 Direction);
+	/** Message sous le menu (connexion en cours, erreur reseau...) */
+	const FString& GetMenuStatus() const { return MenuStatus; }
+	/** Adresse IP de cette machine (a donner aux amis) */
+	const FString& GetLocalAddress() const { return LocalAddress; }
+	/** Quitte la partie (et la session reseau) pour revenir au menu principal */
+	void ReturnToMainMenu();
+	bool IsNetGame() const;
+
+	// ---- Multijoueur : demandes envoyees au serveur (le monde est tenu par l'hote)
+	UFUNCTION(Server, Reliable)
+	void ServerRequestTransition(int32 TargetLevel);
+
+	UFUNCTION(Server, Reliable)
+	void ServerMarkCollected(uint64 Id);
+
+	UFUNCTION(Server, Reliable)
+	void ServerVHSCollected();
+
+	UFUNCTION(Server, Reliable)
+	void ServerCompleteObjective(uint8 Which);
+
+	/** Commandes console d'un client executees par l'hote (1 coupure, 2 objectifs, 3 entite) */
+	UFUNCTION(Server, Reliable)
+	void ServerCheat(uint8 Command, int32 Value);
 
 	bool IsInMenu() const { return bInMenu; }
 	int32 GetMenuIndex() const { return MenuIndex; }
@@ -129,6 +172,10 @@ protected:
 	TArray<TObjectPtr<UInputAction>> PocketActions;
 	UPROPERTY()
 	TObjectPtr<UInputAction> ViewAction;
+	UPROPERTY()
+	TObjectPtr<UInputAction> MenuUpAction;
+	UPROPERTY()
+	TObjectPtr<UInputAction> MenuDownAction;
 
 private:
 	void EnsureInput();
@@ -167,6 +214,15 @@ private:
 	void OnMenuPrev(const FInputActionValue& Value);
 	void OnMenuNext(const FInputActionValue& Value);
 	void OnMenuConfirm(const FInputActionValue& Value);
+	void OnMenuUp(const FInputActionValue& Value);
+	void OnMenuDown(const FInputActionValue& Value);
+	void SetMenuPage(EBRMenuPage Page);
+	void StartSolo();
+	void HostGame();
+	void JoinGame();
+	void SpawnInFront(int32 Kind);
+	/** Champ de saisie de l'adresse IP (Slate : respecte la disposition du clavier, AZERTY compris) */
+	void ShowAddressBox(bool bShow);
 
 	bool bInMenu = true;
 	bool bInventory = false;
@@ -178,4 +234,12 @@ private:
 	int32 CaptureSlot = 0;
 	int32 MappingRevision = -1;
 	double CaptureStart = 0.0;
+
+	EBRMenuPage MenuPage = EBRMenuPage::Main;
+	int32 MenuCursor = 0;
+	FString MenuStatus;
+	FString LocalAddress;
+	FString JoinAddress;
+	TSharedPtr<SWidget> AddressWidget;
+	TSharedPtr<SEditableTextBox> AddressBox;
 };

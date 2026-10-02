@@ -1,5 +1,7 @@
 // Le joueur (explorateur en combinaison hazmat) : vue a la premiere personne, inventaire,
 // equipement (camescope, lampe torche, frontale, gilet), endurance, sante mentale.
+// Multijoueur : chacun simule son propre personnage (deplacements acceptes par le serveur) ; les autres
+// voient son corps, sa lampe et ce qu'il tient. Les attaques des entites (serveur) lui sont renvoyees.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -26,6 +28,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	/** Reception d'un saut : gerbe d'eau si on atterrit dans l'eau */
@@ -90,10 +93,12 @@ public:
 	/** Profondeur d'eau aux pieds (cm) */
 	float GetWaterDepth() const { return WaterDepth; }
 	bool IsSprinting() const;
-	bool IsFlashlightOn() const { return bFlashlightOn && Battery > 0.f; }
+	bool IsFlashlightOn() const;
 	float GetNoiseRadius() const;
 	FVector GetEyeLocation() const;
 	FVector GetViewDirection() const;
+	/** Rotation de visee : celle du controleur, ou la visee repliquee pour le pion d'un autre joueur */
+	FRotator GetAimRotation() const;
 	const FString& GetKilledBy() const { return KilledBy; }
 	float GetDeathTime() const { return DeathTime; }
 	float GetDamageFlash() const { return DamageFlash; }
@@ -171,7 +176,44 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAudioComponent> UnderwaterAudio;
 
+	// ---- Multijoueur : ce que les autres joueurs voient de ce personnage
+	/** bit 0 lampe allumee, bit 1 course, bit 2 nage */
+	UPROPERTY(Replicated)
+	uint8 NetFlags = 0;
+
+	/** Objet tenu en main (EBRItem) */
+	UPROPERTY(Replicated)
+	uint8 NetHand = 0;
+
+	/** Lampe : 0 en main, 1 a la ceinture, 2 frontale */
+	UPROPERTY(Replicated)
+	uint8 NetLamp = 1;
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetState(uint8 Flags, uint8 Hand, uint8 Lamp);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetDead(bool bInDead);
+
+	/** Une entite (simulee par le serveur) frappe ce joueur : les degats sont appliques chez lui */
+	UFUNCTION(Client, Reliable)
+	void ClientReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName);
+
+	UFUNCTION()
+	void OnRep_Dead();
+
 private:
+	/** Pion d'un autre joueur : corps, lampe, pas, remous */
+	void TickRemote(float Dt);
+	/** Envoie au serveur ce que les autres doivent voir (lampe, course, nage, objet en main) */
+	void SyncNetState();
+	/** Entites proches : pression mentale, musique de poursuite, journal (calcule chez chaque joueur) */
+	void UpdateEntityEffects();
+	void ApplyLamp(uint8 Lamp);
+	void SetHeldVisual(EBRItem InHand);
+	uint8 LampSlot() const;
+	bool ShowsBody() const { return bThirdPerson || bRemoteView; }
+	FName StepSoundName() const;
 	void UpdateStats(float Dt);
 	void UpdateCamera(float Dt);
 	void UpdateFocus();
@@ -195,8 +237,14 @@ private:
 	bool UseItemEffect(EBRItem Item);
 	bool StoreItem(EBRItem Item);
 
+	UPROPERTY(ReplicatedUsing = OnRep_Dead)
 	bool bDead = false;
+
 	bool bInputLocked = true;
+	/** Pion vu de l'exterieur (autre joueur) : corps visible, pas de camera ni d'interface */
+	bool bRemoteView = false;
+	float RemoteStepTimer = 0.f;
+	uint8 AppliedLamp = 255;
 	bool bFlashlightOn = false;
 	bool bNightVision = false;
 	bool bWantsSprint = false;
