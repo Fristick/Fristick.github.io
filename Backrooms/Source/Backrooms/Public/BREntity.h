@@ -61,6 +61,10 @@ public:
 
 	/** L'entite poursuit le joueur */
 	bool IsHunting() const { return State == EState::Chase; }
+	/** Fait disparaitre l'entite (fin d'une coupure de courant pour les Smilers) */
+	void Dismiss() { StartVanish(); }
+	/** Bacteria : 0..1, a quel point elle a repere le joueur (1 = poursuite) */
+	float GetSuspicion() const { return Suspicion; }
 
 protected:
 	UPROPERTY(VisibleAnywhere)
@@ -156,6 +160,8 @@ private:
 	void PlayVoice(float Volume = 1.f);
 	void PlaySound2D(FName Sound, float Volume);
 	void StartVanish();
+	/** Rondes : prochain point de passage autour du joueur (parfois dans son champ de vision) */
+	void PickPatrolGoal(ABRWorld* W, const ABRCharacter* P);
 
 	EState State = EState::Wander;
 	float StateTime = 0.f;
@@ -182,6 +188,15 @@ private:
 	FRotator Twitch = FRotator::ZeroRotator;
 	FRotator HeadRot = FRotator::ZeroRotator;
 	FVector LastKnown = FVector::ZeroVector;
+	FVector PatrolGoal = FVector::ZeroVector;
+	bool bHasPatrolGoal = false;
+	float PatrolAngle = 0.f;
+	float PatrolDir = 1.f;
+	float PatrolTime = 0.f;
+	int32 PatrolLeg = 0;
+	float Suspicion = 0.f;
+	/** Le joueur est cache (placard, trou) : pas de ligne de vue, pas de bruit */
+	bool bTargetHidden = false;
 	bool bHostileVariant = true;
 	bool bSeenOnce = false;
 	bool bWantsMove = false;

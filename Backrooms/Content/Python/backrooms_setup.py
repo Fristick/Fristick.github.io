@@ -21,7 +21,7 @@ import os
 
 import unreal
 
-VERSION = 4
+VERSION = 5
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -30,7 +30,7 @@ SND = ROOT + "/Sounds"
 MESH = ROOT + "/Meshes"
 MAT = ROOT + "/Materials"
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
-MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_Water")
+MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_Water", "M_BR_WaterSurface")
 
 EAL = unreal.EditorAssetLibrary
 MEL = unreal.MaterialEditingLibrary
@@ -568,6 +568,74 @@ BR_WATER_SURFACE_HLSL = (
     "return acc;\n")
 
 
+# Opacite de l'eau translucide (meme code que BRMaterialBuilder::WaterOpacityHLSL en C++).
+# Entrees : S (composantes XY de la normale), V (vecteur vers la camera), SceneD / PixD (profondeurs, cm),
+# Density (1/cm), BaseOpacity. Sortie : opacite (absorption selon l'epaisseur d'eau traversee + reflet de Fresnel).
+BR_WATER_OPACITY_HLSL = (
+    "float3 N = normalize(float3(S.x, S.y, 1.0));\n"
+    "float ndv = abs(dot(N, normalize(V)));\n"
+    "float fres = 0.02 + 0.98 * pow(1.0 - saturate(ndv), 5.0);\n"
+    "float thick = max(SceneD - PixD, 0.0);\n"
+    "float body = 1.0 - exp(-thick * Density);\n"
+    "float edge = saturate(thick / 6.0);\n"
+    "return saturate((max(body, BaseOpacity) + fres * 0.8) * edge);\n")
+
+
+def build_water_surface_material():
+    """Eau translucide (rendu par defaut) : toujours visible quels que soient les reglages du projet.
+    Teinte selon l'epaisseur d'eau (SceneDepth - PixelDepth), reflets de Fresnel (reflets Lumen de la couche
+    translucide de devant), refraction, et la meme surface animee que l'eau Single Layer Water (houle, clapot, ondes)."""
+    m = new_material("M_BR_WaterSurface")
+    g = Graph(m)
+    P = unreal.MaterialProperty
+    safe_set(m, "blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    safe_set(m, "shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
+    safe_set(m, "two_sided", True)
+    safe_set(m, "translucency_lighting_mode", unreal.TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING)
+    for prop in ("refraction_method", "refraction_mode"):
+        try:
+            m.set_editor_property(prop, unreal.RefractionMode.RM_PIXEL_NORMAL_OFFSET)
+            break
+        except Exception:
+            pass
+
+    wp = g.world_pos()
+    xy = g.mask(wp, "rg")
+    t = g.time()
+    inputs = [("P", xy), ("T", t), ("Amp", g.scalar("WaveAmplitude", 1.0)), ("Chop", g.scalar("WaveChop", 1.0))]
+    for i in range(NUM_RIPPLES):
+        inputs.append(("R%d" % i, g.vector("Ripple%d" % i, (0.0, 0.0, 0.0, 0.0))))
+    surface = g.custom("BRWaterSurface", BR_WATER_SURFACE_HLSL, inputs)
+    h = g.mask(surface, "b")
+    slope = g.mask(surface, "rg")
+    g.output(g.append(g.c2(0.0, 0.0), h), P.MP_WORLD_POSITION_OFFSET)
+
+    ntex = load_tex("T_WaterNormal")
+    scale = g.scalar("TexScale", 300.0)
+    uva = g.add(g.div(xy, scale), g.mul(t, g.c2(0.012, 0.008)))
+    uvb = g.add(g.mul(g.div(xy, scale), g.c2(-1.6, 1.6)), g.mul(t, g.c2(-0.01, 0.014)))
+    na = g.tex("NormalTex", ntex, uva, normal=True)
+    nb = g.tex("NormalTex", ntex, uvb, normal=True)
+    detail = g.mul(g.mask(g.add(na, nb), "rg"), g.scalar("NormalStrength", 0.35))
+    nxy = g.sub(detail, slope)
+    g.output(g.append(nxy, g.const(1.0)), P.MP_NORMAL)
+
+    # Couleur de l'eau profonde (teinte assombrie) ; l'absorption regle la densite
+    tint = g.vector("Tint", (0.22, 0.68, 0.64, 1))
+    g.output(g.mul(tint, g.scalar("DeepColor", 0.35)), P.MP_BASE_COLOR)
+    g.output(g.const(0.5), P.MP_SPECULAR)
+    g.output(g.scalar("Roughness", 0.04), P.MP_ROUGHNESS)
+    opacity = g.custom("BRWaterOpacity", BR_WATER_OPACITY_HLSL, [
+        ("S", nxy), ("V", g.node(unreal.MaterialExpressionCameraVectorWS)),
+        ("SceneD", g.node(unreal.MaterialExpressionSceneDepth)), ("PixD", g.node(unreal.MaterialExpressionPixelDepth)),
+        ("Density", g.mul(g.scalar("Absorption", 1.2), g.const(0.006))), ("BaseOpacity", g.scalar("BaseOpacity", 0.12))],
+        output="CMOT_FLOAT1")
+    g.output(opacity, P.MP_OPACITY)
+    g.output(g.scalar("Refraction", 1.15), P.MP_REFRACTION)
+    finish_material(m)
+    return m
+
+
 def build_water_material():
     """Eau "Single Layer Water" : vagues par World Position Offset, petites rides (normal maps qui defilent),
     absorption et diffusion de la lumiere dans l'eau, reflets Lumen / ray tracing."""
@@ -633,12 +701,20 @@ def materials_missing():
 
 
 def build_materials():
-    for fn in (build_world_material, build_mesh_material, lambda: build_mesh_material("M_BR_Skin", skin=True),
-               build_water_material):
+    jobs = (("M_BR_World", build_world_material), ("M_BR_Mesh", build_mesh_material),
+            ("M_BR_Skin", lambda: build_mesh_material("M_BR_Skin", skin=True)),
+            ("M_BR_Water", build_water_material), ("M_BR_WaterSurface", build_water_surface_material))
+    for name, fn in jobs:
         try:
             fn()
         except Exception as e:
-            unreal.log_error("[Backrooms] Echec de creation d'un materiau : %s" % e)
+            unreal.log_error("[Backrooms] Echec de creation de %s : %s" % (name, e))
+            # Un materiau a moitie construit serait pire que rien : le jeu le reconstruit alors en C++
+            if exists(MAT + "/" + name):
+                try:
+                    EAL.delete_asset(MAT + "/" + name)
+                except Exception:
+                    pass
 
 
 # ---------------------------------------------------------------------------

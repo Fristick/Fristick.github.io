@@ -626,7 +626,7 @@ void ABREntity::StartVanish()
 
 bool ABREntity::HasLineOfSight(const ABRCharacter* P) const
 {
-	if (!P || !GetWorld())
+	if (!P || !GetWorld() || bTargetHidden)
 	{
 		return false;
 	}
@@ -829,9 +829,11 @@ void ABREntity::Think(float Dt)
 
 	FSense S;
 	S.Dist = static_cast<float>(FVector::Dist(P->GetActorLocation(), GetActorLocation()));
+	// Joueur cache (placard, trou dans le mur) : ni vu ni entendu, sauf si on l'a vu s'y glisser juste devant soi
+	bTargetHidden = P->IsHidden() && !(State == EState::Chase && S.Dist < 300.f);
 	S.bLOS = S.Dist < I.SightRange && HasLineOfSight(P);
 	S.bLookedAt = S.bLOS && IsLookedAtBy(P, 0.82f);
-	S.bHeard = P->GetNoiseRadius() >= S.Dist;
+	S.bHeard = !bTargetHidden && P->GetNoiseRadius() >= S.Dist;
 	if (S.bLOS)
 	{
 		LastKnown = P->GetActorLocation();
@@ -918,7 +920,7 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 	if (State == EState::Chase)
 	{
 		P->NotifyChase(1.f);
-		FollowPathTo(PL, I.ChaseSpeed, Dt);
+		FollowPathTo(bTargetHidden ? LastKnown : PL, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
 		LostSight = S.bLOS ? 0.f : LostSight + Dt;
 		const bool bCalm = !P->IsFlashlightOn() && !P->IsSprinting() && StateTime > 3.f && S.Dist > 500.f;
@@ -1259,7 +1261,31 @@ void ABREntity::ThinkBacteria(ABRWorld* W, ABRCharacter* P, const FSense& S, flo
 {
 	const FBREntityInfo& I = MyInfo();
 	const FVector PL = P->GetActorLocation();
-	const bool bSpots = (S.bLOS && S.Dist < I.SightRange * (W->IsBlackout() ? 0.6f : 1.f)) || (S.bHeard && S.Dist < 1200.f);
+	const float Sight = I.SightRange * (W->IsBlackout() ? 0.6f : 1.f);
+
+	// Elle ne repere pas le joueur d'un coup : la suspicion monte tant qu'elle le voit (vite s'il est proche,
+	// s'il court, s'il l'eclaire ; lentement s'il est dans son dos). Le joueur a le temps de la voir et de se cacher.
+	float Rate = 0.f;
+	if (S.bLOS && S.Dist < Sight)
+	{
+		const float Near = 1.f - FMath::Clamp(S.Dist / Sight, 0.f, 1.f);
+		Rate = 0.12f + 1.2f * Near * Near + (P->IsSprinting() ? 0.8f : 0.f) + ((P->IsFlashlightOn() && S.bLookedAt) ? 0.4f : 0.f);
+		const FVector ToPlayer = (PL - GetActorLocation()).GetSafeNormal2D();
+		if (FVector::DotProduct(GetActorForwardVector(), ToPlayer) < 0.f)
+		{
+			Rate *= 0.35f;
+		}
+		if (S.Dist < 350.f)
+		{
+			Rate = 10.f;
+		}
+	}
+	if (S.bHeard && S.Dist < 1200.f)
+	{
+		Rate += 0.9f;
+	}
+	Suspicion = Rate > 0.f ? FMath::Min(1.f, Suspicion + Rate * Dt) : FMath::Max(0.f, Suspicion - 0.15f * Dt);
+
 	switch (State)
 	{
 	case EState::Chase:
@@ -1278,22 +1304,106 @@ void ABREntity::ThinkBacteria(ABRWorld* W, ABRCharacter* P, const FSense& S, flo
 	case EState::Stalk:
 		// Fouille les environs de la derniere position connue
 		FollowPathTo(LastKnown, I.WalkSpeed * 1.4f, Dt);
-		if (bSpots)
+		if (Suspicion >= 1.f)
 		{
 			SetState(EState::Chase);
 		}
 		else if (StateTime > 8.f || FVector::Dist2D(LastKnown, GetActorLocation()) < 120.f)
 		{
+			Suspicion = 0.3f;
+			bHasPatrolGoal = false;
 			SetState(EState::Wander);
 		}
 		break;
 	default:
-		Wander(I.WalkSpeed, Dt);
-		if (bSpots)
+		if (Suspicion >= 1.f)
 		{
 			SetState(EState::Chase);
+			break;
+		}
+		if (Suspicion > 0.45f)
+		{
+			// "Elle m'a vu ?" : elle s'arrete et tourne la tete vers le joueur
+			MoveTowards(GetActorLocation(), 0.f);
+			FacePlayer(Dt);
+			break;
+		}
+		// Rondes autour du joueur
+		PatrolTime += Dt;
+		if (!bHasPatrolGoal || PatrolTime > 25.f || FVector::Dist2D(PatrolGoal, GetActorLocation()) < 150.f)
+		{
+			PickPatrolGoal(W, P);
+		}
+		if (bHasPatrolGoal)
+		{
+			FollowPathTo(PatrolGoal, I.WalkSpeed, Dt);
+		}
+		else
+		{
+			Wander(I.WalkSpeed, Dt);
 		}
 		break;
+	}
+}
+
+void ABREntity::PickPatrolGoal(ABRWorld* W, const ABRCharacter* P)
+{
+	PatrolTime = 0.f;
+	bHasPatrolGoal = false;
+	if (!W || !P || !GetWorld())
+	{
+		return;
+	}
+	++PatrolLeg;
+	const FVector PL = P->GetActorLocation();
+	auto Usable = [W](const FIntPoint& C)
+	{
+		return W->IsWalkable(C) && W->IsChunkLoaded(W->CellToChunk(C)) && !W->IsPoolCell(C.X, C.Y);
+	};
+
+	// Un passage sur trois traverse le champ de vision du joueur, a 9-13 m, dans une salle qu'il voit
+	if (PatrolLeg % 3 == 0)
+	{
+		const FVector Fwd = P->GetViewDirection().GetSafeNormal2D();
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRPatrolView), false, P);
+		Q.AddIgnoredActor(this);
+		for (int32 Try = 0; Try < 12; ++Try)
+		{
+			const FVector Dir = FRotator(0.f, FMath::FRandRange(-35.f, 35.f), 0.f).RotateVector(Fwd);
+			const FIntPoint C = W->WorldToCell(PL + Dir * FMath::FRandRange(900.f, 1300.f));
+			if (!Usable(C))
+			{
+				continue;
+			}
+			const FVector Spot = W->CellCenter(C, PL.Z);
+			FHitResult Hit;
+			if (!GetWorld()->LineTraceSingleByChannel(Hit, P->GetEyeLocation(), Spot + FVector(0.f, 0.f, 60.f), ECC_Visibility, Q))
+			{
+				PatrolGoal = Spot;
+				bHasPatrolGoal = true;
+				return;
+			}
+		}
+	}
+
+	// Sinon : un point d'une ronde de 10 a 16 m autour du joueur, en tournant toujours dans le meme sens
+	if (PatrolLeg == 1)
+	{
+		const FVector From = GetActorLocation() - PL;
+		PatrolAngle = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(From.Y), static_cast<float>(From.X)));
+		PatrolDir = FMath::FRand() < 0.5f ? -1.f : 1.f;
+	}
+	PatrolAngle += FMath::FRandRange(35.f, 70.f) * PatrolDir;
+	for (int32 Try = 0; Try < 12; ++Try)
+	{
+		const float Ang = FMath::DegreesToRadians(PatrolAngle + FMath::FRandRange(-20.f, 20.f));
+		const FIntPoint C = W->WorldToCell(PL + FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * FMath::FRandRange(1000.f, 1600.f));
+		if (Usable(C))
+		{
+			PatrolGoal = W->CellCenter(C, PL.Z);
+			bHasPatrolGoal = true;
+			return;
+		}
 	}
 }
 

@@ -101,6 +101,15 @@ public:
 	void SetUnderwater(float Blend);
 	/** Surface (texture, teinte) de l'eau du niveau */
 	FBRSurface GetWaterSurface() const;
+	/** Positions des entites qui font virer les lampes au rouge (Niveau 0) */
+	const TArray<FVector>& GetRedLightSources() const { return RedSources; }
+	float GetRedLightRadius() const { return Def().RedLightRadius; }
+	/** Le point est-il dans une cachette ? Les trous dans le mur demandent d'etre accroupi */
+	bool IsInHidingSpot(const FVector& Location, bool bCrouched) const;
+	/** Une cachette a moins de Radius cm (indication a l'ecran) */
+	bool FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const;
+	/** Reapplique le materiau de l'eau partout (reglage "Rendu de l'eau") */
+	void RefreshWater();
 	/** Onde circulaire a la surface de l'eau (pas, nage, plongeon). Strength ~ amplitude en cm */
 	void AddWaterRipple(const FVector& Location, float Strength);
 	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire) */
@@ -204,6 +213,15 @@ private:
 	void ApplyPower(bool bForce);
 	void CompleteTask(const FString& Text);
 	void UpdateRipples(float Dt);
+	/** Niveau 0 : l'entite qui fait des rondes est toujours la (elle reapparait si elle s'eloigne trop) */
+	void UpdatePatrol(float Dt);
+	/** Cherche ou faire apparaitre une entite entre MinDist et MaxDist du joueur (hors de sa vue si bAvoidSight) */
+	bool FindSpawnSpot(EBREntityKind Kind, float MinDist, float MaxDist, bool bAvoidSight, FVector& Out) const;
+	void SpawnBlackoutEntities();
+	void DismissBlackoutEntities();
+	TArray<FVector> RedSources;
+	TArray<TWeakObjectPtr<ABREntity>> BlackoutEntities;
+	float PatrolSpawnTimer = 0.f;
 
 	struct FRipple
 	{
@@ -217,6 +235,7 @@ private:
 	int32 NextRipple = 0;
 	float DripTimer = 1.f;
 	bool bRipplesDirty = false;
+	bool bMeshesChecked = false;
 
 	const FBRLevelDef* Current = nullptr;
 	uint32 Seed = 1337;

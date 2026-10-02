@@ -83,6 +83,8 @@ public:
 	bool IsThirdPerson() const { return bThirdPerson; }
 	bool IsSwimming() const { return bSwimming; }
 	bool IsUnderwater() const { return bUnderwater; }
+	/** Dans une cachette (placard, ou accroupi dans un trou du mur) : les entites ne le voient ni ne l'entendent */
+	bool IsHidden() const { return bHidden; }
 	/** Oxygene (0..100), consomme sous l'eau */
 	float GetBreath() const { return Breath; }
 	/** Profondeur d'eau aux pieds (cm) */
@@ -184,6 +186,7 @@ private:
 	void BuildBody();
 	void AnimateBody(float Dt);
 	void UpdateWater(float Dt);
+	void UpdateHiding();
 	void UpdateViewMode();
 	void StartSwimming();
 	void StopSwimming();
@@ -247,6 +250,8 @@ private:
 	float UnderBlend = 0.f;
 	float DeathBlend = 0.f;
 	bool bSwimHint = false;
+	bool bHidden = false;
+	bool bHideHint = false;
 	FVector FlashBase = FVector::ZeroVector;
 	FVector SwimInput = FVector::ZeroVector;
 	FVector2D LookLag = FVector2D::ZeroVector;

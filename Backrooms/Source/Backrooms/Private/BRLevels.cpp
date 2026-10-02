@@ -57,8 +57,13 @@ namespace
 		D.HumSound = TEXT("S_Hum"); D.HumVolume = 0.55f;
 		D.Step = EBRStep::Carpet;
 		D.SanityDrain = 0.08f;
-		D.Entities = { E(EBREntityKind::Smiler, 0.6f), E(EBREntityKind::Bacteria, 0.4f) };
+		// La Bacteria fait des rondes (lampes rouges a 10 m d'elle) ; les Smilers surgissent du noir, surtout pendant les coupures
+		D.Entities = { E(EBREntityKind::Smiler, 1.f) };
 		D.MaxEntities = 1; D.SpawnInterval = 100.f;
+		D.bPatrolEntity = true; D.PatrolKind = EBREntityKind::Bacteria; D.PatrolDelay = 25.f;
+		D.RedLightRadius = 1000.f;
+		D.BlackoutSmilers = 3;
+		D.HidingSpotChance = 0.85f;
 		D.AlmondWaterChance = 0.3f; D.BatteryChance = 0.15f; D.NoteChance = 0.25f;
 		D.BandageChance = 0.12f; D.EnergyBarChance = 0.08f; D.GearChance = 0.03f;
 		D.Exits = { X(1, EBRExitStyle::NoclipWall, 0.18f), X(37, EBRExitStyle::NoclipFloor, 0.04f) };

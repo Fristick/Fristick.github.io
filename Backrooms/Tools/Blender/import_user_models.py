@@ -78,14 +78,32 @@ def save_texture(image, name, size=2048, quality=90):
 
 
 def export_fbx(obj, name):
+    """FBX "tout integre" : sommets en centimetres (unite du fichier = 1 cm), conversion d'axes appliquee a la
+    geometrie, noeud sans rotation ni echelle. Un importeur qui ignore la transformation du noeud (Interchange,
+    Unreal 5.5+) obtient ainsi exactement la meme taille et la meme orientation que l'importeur FBX classique."""
     os.makedirs(OUT_MESH, exist_ok=True)
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     path = os.path.join(OUT_MESH, name + ".fbx")
-    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={"MESH"}, use_mesh_modifiers=True,
-                             mesh_smooth_type="FACE", add_leaf_bones=False, bake_anim=False, apply_unit_scale=True,
-                             axis_forward="-Z", axis_up="Y", path_mode="STRIP")
+    sc = bpy.context.scene
+    old_unit = sc.unit_settings.scale_length
+    bpy.context.view_layer.update()
+    mw = obj.matrix_world.copy()
+    bake = Matrix.Scale(100.0, 4) @ mw
+    obj.data.transform(bake)
+    obj.matrix_world = Matrix.Identity(4)
+    sc.unit_settings.scale_length = 0.01
+    try:
+        bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={"MESH"}, use_mesh_modifiers=True,
+                                 mesh_smooth_type="FACE", add_leaf_bones=False, bake_anim=False, apply_unit_scale=True,
+                                 apply_scale_options="FBX_SCALE_NONE", bake_space_transform=True,
+                                 axis_forward="-Z", axis_up="Y", path_mode="STRIP")
+    finally:
+        obj.data.transform(bake.inverted())
+        obj.matrix_world = mw
+        obj.data.update()
+        sc.unit_settings.scale_length = old_unit
     print("  export", name, len(obj.data.vertices), "sommets")
 
 

@@ -215,6 +215,18 @@ struct FBRLevelDef
 	float PoolDepth = 260.f;
 	/** Grandes verrieres inclinees a la jonction mur / plafond (par chunk) */
 	float SkylightChance = 0.f;
+
+	// --- v3.2 : Niveau 0 ---
+	/** Une entite fait des rondes autour du joueur (elle passe regulierement dans son champ de vision) */
+	bool bPatrolEntity = false;
+	EBREntityKind PatrolKind = EBREntityKind::Bacteria;
+	float PatrolDelay = 25.f;         // avant sa premiere apparition (s)
+	/** > 0 : les lampes virent au rouge a moins de ce rayon (cm) de l'entite qui fait des rondes */
+	float RedLightRadius = 0.f;
+	/** Smilers qui apparaissent dans le noir a chaque coupure de courant */
+	int32 BlackoutSmilers = 0;
+	/** Cachettes (placards, trous dans le mur) par chunk : les entites ne voient pas un joueur cache */
+	float HidingSpotChance = 0.f;
 	bool bOutdoor = false;
 	bool bPhenomena = false;  // bruits de pas lointains, etc.
 
@@ -244,6 +256,10 @@ struct FBRSettings
 	bool bAreaLights = true;    // neons en lumieres surfaciques
 	bool bVolumetricFog = true;
 	bool bFilmGrain = true;
+	/** Effet camescope / VHS : viseur REC, cadres, lignes de balayage, aberration, grain, salete d'objectif */
+	bool bVHSEffect = true;
+	/** Eau translucide (toujours visible) au lieu de l'eau Single Layer Water (prochain chargement de niveau) */
+	bool bTranslucentWater = false;
 
 	static FBRSettings& Get()
 	{

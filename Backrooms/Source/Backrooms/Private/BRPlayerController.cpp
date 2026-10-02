@@ -34,6 +34,8 @@ namespace
 		Row_AreaLights,
 		Row_VolumetricFog,
 		Row_FilmGrain,
+		Row_VHSEffect,
+		Row_Water,
 		Row_Count
 	};
 
@@ -892,6 +894,10 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return TEXT("BROUILLARD VOLUM\u00c9TRIQUE");
 	case Row_FilmGrain:
 		return TEXT("GRAIN DE CAM\u00c9SCOPE");
+	case Row_VHSEffect:
+		return TEXT("EFFET CAM\u00c9SCOPE (VHS)");
+	case Row_Water:
+		return TEXT("RENDU DE L'EAU");
 	default:
 		return FString();
 	}
@@ -920,6 +926,10 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return OnOff(S.bVolumetricFog);
 	case Row_FilmGrain:
 		return OnOff(S.bFilmGrain);
+	case Row_VHSEffect:
+		return OnOff(S.bVHSEffect);
+	case Row_Water:
+		return S.bTranslucentWater ? FString(TEXT("TRANSLUCIDE")) : FString(TEXT("SINGLE LAYER WATER"));
 	default:
 		return FString();
 	}
@@ -939,6 +949,10 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return TEXT("Ombres douces des n\u00e9ons. S'applique aux zones charg\u00e9es ensuite.");
 	case Row_VolumetricFog:
 		return TEXT("Halos de lumi\u00e8re dans l'air humide.");
+	case Row_VHSEffect:
+		return TEXT("D\u00e9sactiv\u00e9 : \u00e9cran normal, sans viseur REC, cadres, lignes, aberration ni salet\u00e9 d'objectif.");
+	case Row_Water:
+		return TEXT("Single Layer Water : absorption r\u00e9aliste. Translucide : toujours visible, si l'eau n'appara\u00eet pas.");
 	default:
 		return FString();
 	}
@@ -977,6 +991,16 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	case Row_FilmGrain:
 		S.bFilmGrain = !S.bFilmGrain;
 		break;
+	case Row_VHSEffect:
+		S.bVHSEffect = !S.bVHSEffect;
+		break;
+	case Row_Water:
+		S.bTranslucentWater = !S.bTranslucentWater;
+		if (ABRWorld* W = ABRWorld::Get(this))
+		{
+			W->RefreshWater();
+		}
+		break;
 	default:
 		return;
 	}
@@ -1004,6 +1028,8 @@ void ABRPlayerController::LoadSettings()
 	GConfig->GetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights, GGameUserSettingsIni);
 	GConfig->GetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog, GGameUserSettingsIni);
 	GConfig->GetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain, GGameUserSettingsIni);
+	GConfig->GetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect, GGameUserSettingsIni);
+	GConfig->GetBool(SettingsSection, TEXT("TranslucentWater"), S.bTranslucentWater, GGameUserSettingsIni);
 	S.Sensitivity = FMath::Clamp(S.Sensitivity, 0.1f, 5.f);
 	S.FOV = FMath::Clamp(S.FOV, 70.f, 110.f);
 	S.Quality = FMath::Clamp(S.Quality, 0, 4);
@@ -1025,6 +1051,8 @@ void ABRPlayerController::SaveSettings() const
 	GConfig->SetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights, GGameUserSettingsIni);
 	GConfig->SetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog, GGameUserSettingsIni);
 	GConfig->SetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain, GGameUserSettingsIni);
+	GConfig->SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect, GGameUserSettingsIni);
+	GConfig->SetBool(SettingsSection, TEXT("TranslucentWater"), S.bTranslucentWater, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 

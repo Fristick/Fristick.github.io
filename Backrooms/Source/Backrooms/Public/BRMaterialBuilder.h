@@ -13,7 +13,8 @@ enum class EBRMasterMaterial : uint8
 	World,  // murs/sols/plafonds : triplanaire, normal maps, salete, caustiques
 	Mesh,   // modeles Blender
 	Skin,   // peau / chair (subsurface)
-	Water   // eau Single Layer Water
+	Water,       // eau Single Layer Water
+	WaterSurface // eau translucide (rendu par defaut, toujours visible)
 };
 
 namespace BRMaterialBuilder
@@ -23,6 +24,8 @@ namespace BRMaterialBuilder
 
 	/** Code HLSL de la surface de l'eau (houle, clapot, ondes), identique a celui du script Python */
 	const FString& WaterSurfaceHLSL();
+	/** Code HLSL de l'opacite de l'eau translucide (epaisseur d'eau + Fresnel) */
+	const FString& WaterOpacityHLSL();
 
 	/** true si l'executable peut compiler des materiaux (editeur, PIE, -game non cuisine) */
 	bool IsAvailable();

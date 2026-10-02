@@ -8,6 +8,7 @@
 #include "Materials/MaterialExpressionAbs.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionAppendVector.h"
+#include "Materials/MaterialExpressionCameraVectorWS.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionConstant2Vector.h"
@@ -18,7 +19,9 @@
 #include "Materials/MaterialExpressionLinearInterpolate.h"
 #include "Materials/MaterialExpressionMin.h"
 #include "Materials/MaterialExpressionMultiply.h"
+#include "Materials/MaterialExpressionPixelDepth.h"
 #include "Materials/MaterialExpressionSaturate.h"
+#include "Materials/MaterialExpressionSceneDepth.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionSine.h"
 #include "Materials/MaterialExpressionSingleLayerWaterMaterialOutput.h"
@@ -306,14 +309,14 @@ namespace
 		}
 	}
 
-	void BuildWater(FGraph& G, UMaterialEditorOnlyData* Out)
+	/** Surface animee commune aux deux eaux : WPO (houle) et normale (clapot, ondes, rides). Retourne la normale XY. */
+	FPin WaterSurface(FGraph& G, UMaterialEditorOnlyData* Out)
 	{
 		const FPin WP = G.WorldPos();
 		const FPin XY = G.Mask(WP, TEXT("rg"));
 		const FPin T = G.Time();
 
-		// Surface : houle (deplace la surface), clapot (normales) et ondes circulaires autour du joueur.
-		// Meme code HLSL que BR_WATER_SURFACE_HLSL dans Content/Python/backrooms_setup.py.
+		// Meme code HLSL que BR_WATER_SURFACE_HLSL dans Content/Python/backrooms_setup.py
 		TArray<TPair<FName, FPin>> Inputs;
 		Inputs.Add(TPair<FName, FPin>(TEXT("P"), XY));
 		Inputs.Add(TPair<FName, FPin>(TEXT("T"), T));
@@ -337,7 +340,32 @@ namespace
 		const FPin Na = G.Tex(TEXT("NormalTex"), NTex, true, UvA);
 		const FPin Nb = G.Tex(TEXT("NormalTex"), NTex, true, UvB);
 		const FPin Detail = G.Mul(G.Mask(G.Add(Na, Nb), TEXT("rg")), G.Scalar(TEXT("NormalStrength"), 0.35f));
-		FGraph::Link(Out->Normal, G.Append(G.Sub(Detail, Slope), G.Const(1.f)));
+		const FPin NormalXY = G.Sub(Detail, Slope);
+		FGraph::Link(Out->Normal, G.Append(NormalXY, G.Const(1.f)));
+		return NormalXY;
+	}
+
+	/** Eau translucide (rendu par defaut) : meme graphe que build_water_surface_material() en Python */
+	void BuildWaterTranslucent(FGraph& G, UMaterialEditorOnlyData* Out)
+	{
+		const FPin NormalXY = WaterSurface(G, Out);
+		const FPin Tint = G.Vector(TEXT("Tint"), FLinearColor(0.22f, 0.68f, 0.64f));
+		FGraph::Link(Out->BaseColor, G.Mul(Tint, G.Scalar(TEXT("DeepColor"), 0.35f)));
+		FGraph::Link(Out->Specular, G.Const(0.5f));
+		FGraph::Link(Out->Roughness, G.Scalar(TEXT("Roughness"), 0.04f));
+		TArray<TPair<FName, FPin>> Inputs;
+		Inputs.Add(TPair<FName, FPin>(TEXT("S"), NormalXY));
+		Inputs.Add(TPair<FName, FPin>(TEXT("V"), FPin{ G.New<UMaterialExpressionCameraVectorWS>(), 0 }));
+		Inputs.Add(TPair<FName, FPin>(TEXT("SceneD"), FPin{ G.New<UMaterialExpressionSceneDepth>(), 0 }));
+		Inputs.Add(TPair<FName, FPin>(TEXT("PixD"), FPin{ G.New<UMaterialExpressionPixelDepth>(), 0 }));
+		Inputs.Add(TPair<FName, FPin>(TEXT("Density"), G.Mul(G.Scalar(TEXT("Absorption"), 1.2f), G.Const(0.006f))));
+		Inputs.Add(TPair<FName, FPin>(TEXT("BaseOpacity"), G.Scalar(TEXT("BaseOpacity"), 0.12f)));
+		FGraph::Link(Out->Opacity, G.Custom(TEXT("BRWaterOpacity"), BRMaterialBuilder::WaterOpacityHLSL(), CMOT_Float1, Inputs));
+	}
+
+	void BuildWater(FGraph& G, UMaterialEditorOnlyData* Out)
+	{
+		WaterSurface(G, Out);
 
 		FGraph::Link(Out->BaseColor, G.C3(0.f, 0.f, 0.f));
 		FGraph::Link(Out->Roughness, G.Scalar(TEXT("Roughness"), 0.04f));
@@ -399,6 +427,20 @@ namespace BRMaterialBuilder
 		return Code;
 	}
 
+	const FString& WaterOpacityHLSL()
+	{
+		// Entrees : S (XY de la normale), V (vers la camera), SceneD / PixD (profondeurs, cm), Density (1/cm), BaseOpacity.
+		static const FString Code = TEXT(
+			"float3 N = normalize(float3(S.x, S.y, 1.0));\n"
+			"float ndv = abs(dot(N, normalize(V)));\n"
+			"float fres = 0.02 + 0.98 * pow(1.0 - saturate(ndv), 5.0);\n"
+			"float thick = max(SceneD - PixD, 0.0);\n"
+			"float body = 1.0 - exp(-thick * Density);\n"
+			"float edge = saturate(thick / 6.0);\n"
+			"return saturate((max(body, BaseOpacity) + fres * 0.8) * edge);\n");
+		return Code;
+	}
+
 	bool IsAvailable()
 	{
 #if WITH_EDITOR
@@ -415,7 +457,8 @@ namespace BRMaterialBuilder
 		{
 			return nullptr;
 		}
-		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_Water_Runtime") };
+		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_Water_Runtime"),
+			TEXT("M_BR_WaterSurface_Runtime") };
 		UMaterial* M = NewObject<UMaterial>(Outer ? Outer : GetTransientPackage(), FName(Names[static_cast<int32>(Which)]), RF_Transient);
 		M->MaterialDomain = MD_Surface;
 		M->BlendMode = BLEND_Opaque;
@@ -443,6 +486,12 @@ namespace BRMaterialBuilder
 		case EBRMasterMaterial::Water:
 			M->SetShadingModel(MSM_SingleLayerWater);
 			BuildWater(G, Out);
+			break;
+		case EBRMasterMaterial::WaterSurface:
+			M->BlendMode = BLEND_Translucent;
+			M->TwoSided = true;
+			M->TranslucencyLightingMode = TLM_SurfacePerPixelLighting;
+			BuildWaterTranslucent(G, Out);
 			break;
 		}
 

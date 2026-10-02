@@ -549,6 +549,21 @@ void ABRHUD::DrawCamcorder(ABRCharacter* C, ABRWorld* W)
 	const float Y = 34.f * U;
 	const bool bNV = C->IsNightVision();
 	const FLinearColor TextC = bNV ? FLinearColor(0.75f, 1.f, 0.75f, 0.9f) : FLinearColor(1.f, 1.f, 1.f, 0.85f);
+	if (!FBRSettings::Get().bVHSEffect)
+	{
+		// Ecran normal : seulement les informations de jeu (tache d'enregistrement, vision nocturne)
+		if (W && !W->GetRecordLabel().IsEmpty())
+		{
+			Txt(TEXT("ENREGISTREMENT : ") + W->GetRecordLabel(), X, Y, Yellow, 0.8f * U, Medium);
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), X, Y + 26.f * U, 220.f * U, 6.f * U);
+			DrawRect(Yellow, X, Y + 26.f * U, 220.f * U * W->GetRecordProgress(), 6.f * U);
+		}
+		if (bNV)
+		{
+			TxtRight(TEXT("VISION NOCTURNE"), Canvas->ClipX - 40.f * U, Y, FLinearColor(0.5f, 1.f, 0.5f, 0.9f), 0.8f * U, Medium);
+		}
+		return;
+	}
 	if (FMath::Fmod(Clock, 1.4f) < 0.9f)
 	{
 		DrawRect(FLinearColor(0.9f, 0.05f, 0.05f, 0.9f), X, Y + 5.f * U, 14.f * U, 14.f * U);
@@ -609,7 +624,8 @@ void ABRHUD::DrawStats(ABRCharacter* C)
 	Bar(X, Y, BW, BH, C->Sanity / 100.f, FLinearColor(0.9f * Pulse, 0.45f * Pulse, 0.3f * Pulse, 0.85f), TEXT("SANT\u00c9 MENTALE"));
 	Y += 36.f * U;
 	Bar(X, Y, BW, BH, C->Stamina / 100.f, FLinearColor(0.9f, 0.9f, 0.85f, 0.75f), TEXT("ENDURANCE"));
-	if (C->HasLightSource() && !C->HasCamcorderInHand())
+	// Piles : la batterie du camescope s'affiche dans le viseur, sauf si l'effet camescope est desactive
+	if ((C->HasLightSource() && !C->HasCamcorderInHand()) || (C->HasCamcorderInHand() && !FBRSettings::Get().bVHSEffect))
 	{
 		Y += 36.f * U;
 		Bar(X, Y, BW, BH, C->Battery / 100.f, FLinearColor(1.f, 0.85f, 0.3f, C->IsFlashlightOn() ? 0.9f : 0.45f), TEXT("PILES"));
@@ -675,6 +691,11 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 	const float CY = Canvas->ClipY * 0.5f;
 	const bool bFocus = !C->GetFocusPrompt().IsEmpty();
 	const float S = (bFocus ? 6.f : 3.f) * U;
+	if (C->IsHidden())
+	{
+		const float Pulse = 0.65f + 0.2f * FMath::Sin(Clock * 2.f);
+		Txt(TEXT("CACH\u00c9"), CX, Canvas->ClipY - 150.f * U, FLinearColor(0.75f, 0.9f, 1.f, Pulse), 1.1f * U, GEngine->GetMediumFont(), true);
+	}
 	DrawRect(FLinearColor(1.f, 1.f, 1.f, bFocus ? 0.9f : 0.45f), CX - S * 0.5f, CY - S * 0.5f, S, S);
 	if (bFocus)
 	{

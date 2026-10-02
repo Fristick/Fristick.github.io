@@ -992,6 +992,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 
 	UpdateStats(Dt);
 	UpdateWater(Dt);
+	UpdateHiding();
 	UpdateCamera(Dt);
 	UpdateFlashlight(Dt);
 	UpdateFocus();
@@ -1360,6 +1361,33 @@ void ABRCharacter::UpdateFocus()
 	if (bSwimming && IsNearPoolEdge())
 	{
 		FocusPrompt = BRKeys::Tag(EBRAction::Jump) + TEXT(" Sortir de l'eau");
+		return;
+	}
+
+	// 4) Cachette toute proche
+	bool bNeedsCrouch = false;
+	const ABRWorld* HW = ABRWorld::Get(this);
+	if (!bHidden && HW && HW->FindHidingSpotNear(GetActorLocation(), 110.f, bNeedsCrouch))
+	{
+		FocusPrompt = bNeedsCrouch ? BRKeys::Tag(EBRAction::Crouch) + TEXT(" S'accroupir et se glisser dans le trou pour se cacher")
+			: FString(TEXT("Entrer dans le placard pour se cacher"));
+	}
+}
+
+void ABRCharacter::UpdateHiding()
+{
+	const bool bWas = bHidden;
+	const ABRWorld* W = ABRWorld::Get(this);
+	bHidden = !bDead && W && W->IsInHidingSpot(GetActorLocation(), bIsCrouched);
+	if (bHidden && !bWas)
+	{
+		PlaySound2D(TEXT("S_ItemMove"), 0.35f);
+		if (!bHideHint)
+		{
+			bHideHint = true;
+			ABRHUD::Notify(this, TEXT("Vous \u00eates cach\u00e9 : les entit\u00e9s ne vous voient plus. Restez immobile et attendez qu'elles s'\u00e9loignent."),
+				5.f, FLinearColor(0.75f, 0.9f, 1.f));
+		}
 	}
 }
 
@@ -1458,14 +1486,16 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	FPostProcessSettings& S = Camera->PostProcessSettings;
 	Camera->PostProcessBlendWeight = 1.f;
 
+	// Effet camescope desactive : ni aberration de l'objectif, ni grain, ni salete, vignettage leger
+	const bool bVHS = Set.bVHSEffect;
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = 0.4f + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f;
+	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f;
 
 	S.bOverride_FilmGrainIntensity = true;
-	S.FilmGrainIntensity = (Set.bFilmGrain ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
+	S.FilmGrainIntensity = ((Set.bFilmGrain && bVHS) ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
 
 	S.bOverride_VignetteIntensity = true;
-	S.VignetteIntensity = (D ? D->Vignette : 0.45f) + Insanity * 0.5f + DamageFlash * 0.6f + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
+	S.VignetteIntensity = (D ? D->Vignette : 0.45f) * (bVHS ? 1.f : 0.4f) + (bHidden ? 0.45f : 0.f) + Insanity * 0.5f + DamageFlash * 0.6f + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
 		+ Choke * 0.9f;
 
 	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max3(Insanity * Insanity, Dead, Choke * 0.6f));
@@ -1502,7 +1532,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 			S.bOverride_BloomDirtMask = true;
 			S.BloomDirtMask = Dirt;
 			S.bOverride_BloomDirtMaskIntensity = true;
-			S.BloomDirtMaskIntensity = HasCamcorderInHand() ? 8.f : 3.f;
+			S.BloomDirtMaskIntensity = !bVHS ? 0.f : (HasCamcorderInHand() ? 8.f : 3.f);
 		}
 	}
 

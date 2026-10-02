@@ -7,6 +7,20 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3.2** :
+- **Modèles 3D invisibles corrigés** (lampes du plafond, plan d'eau, objets…). Les FBX stockaient l'échelle (×100) et la
+  rotation sur le nœud de l'objet. L'importeur d'Unreal 5.5+ (Interchange) peut l'ignorer, et les modèles arrivaient alors
+  100 fois trop petits. Ils sont maintenant exportés « tout intégré » : géométrie en centimètres, aucune transformation.
+  Au lancement, le jeu vérifie la taille des modèles et affiche un message si l'import est à refaire.
+- **Niveau 0** : les néons apparaissent au plafond. La **Bacteria fait des rondes** autour de vous et passe régulièrement
+  dans votre champ de vision. Elle met un instant à vous repérer (elle s'arrête et tourne la tête), plus vite si vous
+  êtes près, si vous courez ou si vous l'éclairez. **Les lampes virent au rouge à moins de 10 m d'elle.**
+  Des **Smilers surgissent du noir à chaque coupure de courant** et disparaissent au retour de la lumière.
+- **Cachettes** : placards de bureau (on entre) et trous dans le mur (on s'y glisse accroupi). Caché, on n'est ni vu
+  ni entendu par les entités (indication « CACHÉ » à l'écran).
+- **Réglages** : « EFFET CAMÉSCOPE (VHS) » à désactiver pour un écran normal (sans viseur REC, cadres, lignes,
+  aberration ni saleté d'objectif). « RENDU DE L'EAU » : Single Layer Water ou eau translucide (toujours visible).
+
 **Nouveautés de la version 3** :
 - **Interaction corrigée** : **E** ramasse vraiment les objets. La visée suit maintenant la rotation de la caméra
   (avant, elle restait à l'horizontale et ne touchait pas les objets posés au sol). Une petite tolérance aide aussi
@@ -94,6 +108,7 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 | **Inventaire** (objectifs, objets, journal, paramètres) | **Tab** ou **I** | Select |
 | **Vue à la 1re / 3e personne** | **V** | Clic stick droit |
 | Pause (REPRENDRE, PARAMÈTRES, TOUCHES, QUITTER) | **P** ou **Échap** (dans l'éditeur, Échap arrête le PIE : utilisez **P**) | Start |
+| Se cacher | Entrer dans un placard, ou **s'accroupir** dans un trou du mur | |
 | Quitter (menu / pause) | **Fin** | |
 
 **Dans l'inventaire** : **glisser-déposer** pour déplacer un objet (poches ↔ stockage ↔ équipement),
@@ -164,6 +179,8 @@ Les réglages et les touches sont sauvegardés dans `Saved/Config/<plateforme>/G
   descendre), **Espace** pour remonter, **Ctrl/C** pour plonger, **Maj** pour nager vite (fatigant). Sous l'eau, la
   jauge **OXYGÈNE** se vide en 18 s environ ; ensuite on se noie. Pour sortir, nagez contre un rebord sans mur au-dessus
   et appuyez sur **Espace** (ou continuez d'avancer) : le personnage se hisse sur le bord.
+- **Cachettes** (Niveau 0) : placards et trous dans le mur. Une fois caché, les entités perdent votre trace (sauf si
+  elles vous ont vu y entrer juste devant elles). Idéal pendant les coupures, quand les Smilers rôdent.
 - **Mort** : vous vous réveillez au Niveau 0 avec l'équipement de départ (caméscope, lampe, eau, bandage, piles).
 
 L'écran imite une caméra « found footage » : REC, horodatage, grain et vignettage.
@@ -174,7 +191,7 @@ L'écran imite une caméra « found footage » : REC, horodatage, grain et vigne
 
 | N° | Titre (wiki) | Ambiance dans le jeu | Entités | Sorties |
 |---|---|---|---|---|
-| **0** | *Threshold* (« The Lobby ») | Salles jaunes à l'infini, papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent et sautent lors des coupures | Bacteria, Smiler (dans le noir) | Mur qui glitche → 1, sol qui glitche → 37 (rare). **Objectifs requis** : 6 cassettes VHS + filmer une coupure |
+| **0** | *Threshold* (« The Lobby ») | Salles jaunes à l'infini, papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent, sautent lors des coupures et **rougissent près de la Bacteria**. Placards et trous dans le mur pour se cacher | Bacteria (fait des rondes), Smilers (dans le noir et à chaque coupure) | Mur qui glitche → 1, sol qui glitche → 37 (rare). **Objectifs requis** : 6 cassettes VHS + filmer une coupure |
 | **1** | *Habitable Zone* | Entrepôt de béton brumeux, piliers, flaques, caisses | Smilers, Facelings, Hounds | Porte de secours → 2, ascenseur → 4 |
 | **2** | *Abandoned Utility Halls* (« Pipe Dreams ») | Labyrinthe de couloirs étroits, tuyaux, ampoules orange | Wretches, Hounds, Clump, Smilers | Porte → 3, échelle → 1 |
 | **3** | *Electrical Station* | Briques, grilles métalliques, armoires électriques, vacarme de machines | Hounds, Skin-Stealers, Smilers, Deathmoths, Wretches | Ascenseur → 4, porte → 2 |
@@ -308,6 +325,9 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | La souris ne tourne pas la caméra | Cliquer dans la fenêtre de jeu (capture de la souris). La caméra est bloquée tant que l'inventaire (TAB) est ouvert |
 | Les touches 1 à 4 ne marchent pas | En AZERTY, les touches **& é " '** sont aussi reconnues ; sinon utiliser le pavé numérique |
 | Trop sombre / trop clair | Ajuster `MinEV` / `MaxEV` / `ExposureBias` du niveau dans `BRLevels.cpp` |
+| Pas de lampes au plafond, pas d'eau, objets invisibles | Corrigé en v3.2 (échelle des FBX). Laissez l'import se relancer au démarrage de l'éditeur (v5). Si un message rouge parle d'échelle : `import backrooms_setup; backrooms_setup.run(force=True)` |
+| L'eau n'apparaît toujours pas | **Tab → PARAMÈTRES → RENDU DE L'EAU : TRANSLUCIDE** |
+| Je veux l'écran sans l'effet caméscope | **Tab → PARAMÈTRES → EFFET CAMÉSCOPE (VHS) : DÉSACTIVÉ** |
 | **E** ne ramasse rien | Corrigé en v3. Visez l'objet (le point au centre grossit et « [E] Ramasser » s'affiche). Si vous avez changé la touche, le message affiche la nouvelle |
 | Une action ne répond plus | Une touche a pu lui être retirée en la donnant à une autre action : **Tab → TOUCHES**, ou **PAR DÉFAUT** |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |

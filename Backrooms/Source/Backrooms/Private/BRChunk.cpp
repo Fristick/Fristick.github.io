@@ -123,6 +123,7 @@ void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size, bool 
 	UMaterialInterface* Mat = bCalm ? A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.2f, 0.4f)
 		: A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop);
 	FBatch& B = GetBatch(bCalm ? TEXT("WATER|CALM") : TEXT("WATER"), Grid ? Grid : A->Plane(), Mat, false, false, 0.f);
+	B.Water = bCalm ? 1 : 0;
 	B.Transforms.Add(FTransform(FRotator::ZeroRotator, Center - GetActorLocation(), FVector(Size.X / 100.f, Size.Y / 100.f, 1.f)));
 }
 
@@ -447,9 +448,10 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 	const float FallbackZ = (D.Fixture == EBRFixture::StreetLamp || D.Fixture == EBRFixture::Sconce) ? 0.f : -FallbackSize.Z;
 	UStaticMesh* Mesh = A->Mesh(MeshName);
 
-	if (L.bFlicker)
+	// Composant individuel pour pouvoir animer l'emissif : neon qui clignote, ou lampe qui peut virer au rouge
+	const bool bIndividual = (L.bFlicker || D.RedLightRadius > 0.f) && !L.bBroken;
+	if (bIndividual)
 	{
-		// Composant individuel pour pouvoir animer l'emissif
 		UStaticMeshComponent* Comp = NewObject<UStaticMeshComponent>(this);
 		Comp->SetupAttachment(Root);
 		Comp->SetMobility(EComponentMobility::Static);
@@ -479,6 +481,8 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		}
 		Comp->RegisterComponent();
 		Extra.Add(Comp);
+		F.bFlickers = L.bFlicker;
+		F.LightColor = D.LightColor;
 		Flickers.Add(F);
 	}
 	else if (Mesh)
@@ -561,13 +565,13 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 	Extra.Add(LC);
 	++LightCount;
 
-	if (!L.bFlicker)
+	if (!bIndividual)
 	{
 		PoweredLights.Add(LC);
 		PoweredBase.Add(Lumens);
 	}
 
-	if (L.bFlicker && Flickers.Num() > 0)
+	if (bIndividual && Flickers.Num() > 0)
 	{
 		Flickers.Last().Light = LC;
 		Flickers.Last().BaseIntensity = Lumens;
@@ -791,6 +795,12 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 		}
 	}
 
+	// ---- Cachettes (avant les accessoires : on ne pose rien dans un placard) ----
+	if (D.HidingSpotChance > 0.f && (D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze))
+	{
+		BuildHidingSpots();
+	}
+
 	// ---- Lumieres & accessoires par cellule ----
 	for (int32 X = X0; X < X0 + N; ++X)
 	{
@@ -801,7 +811,7 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 			{
 				AddLight(X, Y, L);
 			}
-			if (InWorld->IsWalkable(FIntPoint(X, Y)))
+			if (InWorld->IsWalkable(FIntPoint(X, Y)) && !HidingCells.Contains(FIntPoint(X, Y)))
 			{
 				BuildCellProps(X, Y);
 			}
@@ -816,6 +826,132 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 	FinishBatches();
 	BuildPickupsAndExits();
 	SetActorTickEnabled(Flickers.Num() > 0);
+}
+
+void ABRChunk::BuildHidingSpots()
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const uint32 Seed = W->GetSeed();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float H = D.WallHeight;
+	const FBRSurface Wood(TEXT("T_Wood"), FLinearColor(0.82f, 0.7f, 0.5f), 100.f, 0.55f, 0.35f);
+	const FBRSurface Dark(TEXT("T_Grime"), FLinearColor(0.02f, 0.02f, 0.018f), 100.f, 0.95f, 0.f);
+	const int32 Count = FMath::FloorToInt(D.HidingSpotChance * 2.f + BRHash::Rand(Coord.X, Coord.Y, 1740, Seed));
+
+	for (int32 k = 0; k < Count; ++k)
+	{
+		for (int32 Try = 0; Try < 20; ++Try)
+		{
+			const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, 1742 + k * 37 + Try, Seed);
+			const FIntPoint Cell(Coord.X * N + static_cast<int32>(Hh % static_cast<uint32>(N)), Coord.Y * N + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
+			const FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
+			if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell))
+			{
+				continue;
+			}
+			// Contre un vrai mur (ni porte ni passage)
+			const FIntPoint Next(Cell.X + Dir.X, Cell.Y + Dir.Y);
+			const EBREdge E = Dir.X != 0 ? W->EdgeE(Dir.X > 0 ? Cell.X : Cell.X - 1, Cell.Y) : W->EdgeN(Cell.X, Dir.Y > 0 ? Cell.Y : Cell.Y - 1);
+			const bool bSolidNext = !W->IsWalkable(Next);
+			if (E != EBREdge::Wall && !bSolidNext)
+			{
+				continue;
+			}
+			const float Inset = bSolidNext ? 0.f : D.WallThickness * 0.5f;
+			const FVector Face = W->CellCenter(Cell, 0.f) + FVector(Dir.X, Dir.Y, 0.f) * (S * 0.5f - Inset);
+			const FVector In(-Dir.X, -Dir.Y, 0.f);         // vers la piece
+			const FVector Tg(-Dir.Y, Dir.X, 0.f);          // le long du mur
+			auto Box = [&](float Along, float Out, float Z, float SizeAlong, float SizeOut, float SizeZ, const FBRSurface& Surf, bool bCollision)
+			{
+				const FVector C = Face + Tg * Along + In * Out + FVector(0.f, 0.f, Z);
+				AddBox(Surf, C, Dir.X != 0 ? FVector(SizeOut, SizeAlong, SizeZ) : FVector(SizeAlong, SizeOut, SizeZ), bCollision);
+			};
+			FHidingSpot Spot;
+			const bool bCloset = BRHash::Rand(Cell.X, Cell.Y, 1743, Seed) < 0.55f;
+			float HalfW = 0.f;
+			float Depth = 0.f;
+			float Top = 0.f;
+			if (bCloset)
+			{
+				// Placard de bureau, une porte entrouverte : on entre et on attend que ca passe
+				const float Wd = 160.f;
+				const float Dp = 80.f;
+				const float Ht = 220.f;
+				const float Th = 4.f;
+				Box(-(Wd - Th) * 0.5f, Dp * 0.5f, Ht * 0.5f, Th, Dp, Ht, Wood, true);
+				Box((Wd - Th) * 0.5f, Dp * 0.5f, Ht * 0.5f, Th, Dp, Ht, Wood, true);
+				Box(0.f, Dp * 0.5f, Ht - Th * 0.5f, Wd, Dp, Th, Wood, true);
+				Box(0.f, Dp * 0.5f, 3.f, Wd, Dp, 6.f, Wood, true);
+				Box(0.f, 1.5f, Ht * 0.5f, Wd - 2.f * Th, 3.f, Ht - 8.f, Dark, false);
+				Box(-Wd * 0.25f, Dp - 1.5f, Ht * 0.5f, Wd * 0.5f - 2.f, 3.f, Ht - 12.f, Wood, true);
+				// Porte ouverte a ~105 degres autour de sa charniere
+				const FVector Hinge = Face + Tg * (Wd * 0.5f) + In * Dp;
+				const FVector DoorDir = (-Tg * FMath::Cos(FMath::DegreesToRadians(105.f)) + In * FMath::Sin(FMath::DegreesToRadians(105.f))).GetSafeNormal();
+				const float DoorYaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(DoorDir.Y), static_cast<float>(DoorDir.X)));
+				AddBox(Wood, Hinge + DoorDir * (Wd * 0.25f) + FVector(0.f, 0.f, Ht * 0.5f), FVector(Wd * 0.5f - 2.f, 3.f, Ht - 12.f), true, DoorYaw);
+				HalfW = Wd * 0.5f - Th;
+				Depth = Dp - 4.f;
+				Top = Ht;
+			}
+			else
+			{
+				// Trou dans le mur : un pan de mur epais avec une ouverture basse et noire, ou l'on se glisse accroupi
+				const float Wd = 130.f;
+				const float Dp = 95.f;
+				const float HoleH = 105.f;
+				const float Side = 18.f;
+				Box(-(Wd - Side) * 0.5f, Dp * 0.5f, HoleH * 0.5f, Side, Dp, HoleH, D.Wall, true);
+				Box((Wd - Side) * 0.5f, Dp * 0.5f, HoleH * 0.5f, Side, Dp, HoleH, D.Wall, true);
+				Box(0.f, Dp * 0.5f, (HoleH + H) * 0.5f, Wd, Dp, H - HoleH, D.Wall, true);
+				Box(0.f, 2.f, HoleH * 0.5f, Wd - 2.f * Side, 4.f, HoleH, Dark, false);
+				Box(0.f, Dp * 0.5f, HoleH - 1.5f, Wd - 2.f * Side, Dp - 2.f, 3.f, Dark, false);
+				Box(-(Wd * 0.5f - Side - 1.f), Dp * 0.5f, HoleH * 0.5f, 2.f, Dp - 2.f, HoleH - 3.f, Dark, false);
+				Box(Wd * 0.5f - Side - 1.f, Dp * 0.5f, HoleH * 0.5f, 2.f, Dp - 2.f, HoleH - 3.f, Dark, false);
+				HalfW = Wd * 0.5f - Side;
+				Depth = Dp;
+				Top = HoleH + 120.f;
+				Spot.bCrouch = true;
+			}
+			// Volume de la cachette (le centre de la capsule du joueur doit s'y trouver)
+			const FVector A0 = Face + Tg * HalfW + In * 2.f;
+			const FVector A1 = Face - Tg * HalfW + In * Depth;
+			Spot.Box = FBox(FVector(FMath::Min(A0.X, A1.X), FMath::Min(A0.Y, A1.Y), -50.f), FVector(FMath::Max(A0.X, A1.X), FMath::Max(A0.Y, A1.Y), Top));
+			HidingSpots.Add(Spot);
+			HidingCells.Add(Cell);
+			break;
+		}
+	}
+}
+
+bool ABRChunk::IsInHidingSpot(const FVector& Location, bool bCrouched) const
+{
+	for (const FHidingSpot& Spot : HidingSpots)
+	{
+		if (Spot.Box.IsInside(Location) && (bCrouched || !Spot.bCrouch))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ABRChunk::FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const
+{
+	for (const FHidingSpot& Spot : HidingSpots)
+	{
+		if (Spot.Box.ComputeSquaredDistanceToPoint(Location) < Radius * Radius)
+		{
+			bOutNeedsCrouch = Spot.bCrouch;
+			return true;
+		}
+	}
+	return false;
 }
 
 void ABRChunk::BuildSkylight()
@@ -1027,7 +1163,7 @@ void ABRChunk::BuildPickupsAndExits()
 		{
 			const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, Salt * 31 + Try, Seed);
 			const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-			if (W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y))
+			if (W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y) && !HidingCells.Contains(Cell))
 			{
 				Out = Cell;
 				return true;
@@ -1182,7 +1318,7 @@ void ABRChunk::BuildPickupsAndExits()
 			{
 				const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, 1500 + i * 64 + Try, Seed);
 				const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y))
+				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell))
 				{
 					continue;
 				}
@@ -1289,41 +1425,103 @@ void ABRChunk::FinishBatches()
 		}
 		ISM->RegisterComponent();
 		Instances.Add(ISM);
+		if (B.Water >= 0)
+		{
+			WaterISMs.Add(ISM);
+			WaterCalm.Add(B.Water == 1);
+		}
 	}
 	Batches.Empty();
+}
+
+void ABRChunk::RefreshWater()
+{
+	ABRWorld* W = World.Get();
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!W || !A)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const FBRSurface WaterS = W->GetWaterSurface();
+	for (int32 i = 0; i < WaterISMs.Num(); ++i)
+	{
+		UInstancedStaticMeshComponent* ISM = WaterISMs[i];
+		if (!ISM)
+		{
+			continue;
+		}
+		UMaterialInterface* Mat = WaterCalm[i] ? A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.2f, 0.4f)
+			: A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop);
+		for (int32 m = 0; m < ISM->GetNumMaterials(); ++m)
+		{
+			ISM->SetMaterial(m, Mat);
+		}
+	}
 }
 
 void ABRChunk::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UBRAssets* A = UBRAssets::Get(this);
+	const ABRWorld* W = World.Get();
+	const TArray<FVector>* RedSources = W ? &W->GetRedLightSources() : nullptr;
+	const float RedRadius = W ? W->GetRedLightRadius() : 0.f;
+	const FLinearColor RedLight(1.f, 0.05f, 0.03f);
 	for (FBRFlicker& F : Flickers)
 	{
-		F.Timer -= DeltaSeconds;
-		if (F.Timer <= 0.f)
+		float Mod = Power;
+		if (F.bFlickers)
 		{
-			F.bOn = !F.bOn;
-			F.Timer = F.bOn ? FMath::FRandRange(0.05f, 2.5f) : FMath::FRandRange(0.03f, 0.4f);
-			if (!F.bOn && F.Light && A && FMath::FRand() < 0.2f)
+			F.Timer -= DeltaSeconds;
+			if (F.Timer <= 0.f)
 			{
-				if (USoundBase* Snd = A->Sound(TEXT("S_Flicker")))
+				F.bOn = !F.bOn;
+				F.Timer = F.bOn ? FMath::FRandRange(0.05f, 2.5f) : FMath::FRandRange(0.03f, 0.4f);
+				if (!F.bOn && F.Light && A && FMath::FRand() < 0.2f)
 				{
-					UGameplayStatics::PlaySoundAtLocation(this, Snd, F.Light->GetComponentLocation(), 0.5f, FMath::FRandRange(0.9f, 1.1f), 0.f,
-						A->Attenuation(1500.f));
+					if (USoundBase* Snd = A->Sound(TEXT("S_Flicker")))
+					{
+						UGameplayStatics::PlaySoundAtLocation(this, Snd, F.Light->GetComponentLocation(), 0.5f, FMath::FRandRange(0.9f, 1.1f), 0.f,
+							A->Attenuation(1500.f));
+					}
 				}
 			}
+			F.Phase += DeltaSeconds * 37.f;
+			Mod *= F.bOn ? (0.85f + 0.15f * FMath::Sin(F.Phase)) : 0.03f;
 		}
-		F.Phase += DeltaSeconds * 37.f;
-		const float Mod = (F.bOn ? (0.85f + 0.15f * FMath::Sin(F.Phase)) : 0.03f) * Power;
+
+		// Niveau 0 : la lampe vire au rouge quand l'entite qui fait des rondes passe a moins de RedRadius
+		float RedTarget = 0.f;
+		if (F.Light && RedSources && RedRadius > 0.f)
+		{
+			const FVector LP = F.Light->GetComponentLocation();
+			for (const FVector& Src : *RedSources)
+			{
+				const float Dist = static_cast<float>(FVector::Dist2D(LP, Src));
+				RedTarget = FMath::Max(RedTarget, FMath::Clamp((RedRadius - Dist) / (RedRadius * 0.3f), 0.f, 1.f));
+			}
+		}
+		F.Red = FMath::FInterpTo(F.Red, RedTarget, DeltaSeconds, 2.5f);
+
+		// On ne touche aux lumieres que si quelque chose a change (lampes stables : rien a faire la plupart du temps)
+		if (FMath::Abs(Mod - F.AppliedMod) < 0.004f && FMath::Abs(F.Red - F.AppliedRed) < 0.004f)
+		{
+			continue;
+		}
+		F.AppliedMod = Mod;
+		F.AppliedRed = F.Red;
 		if (F.Light)
 		{
-			F.Light->SetIntensity(F.BaseIntensity * Mod);
+			F.Light->SetIntensity(F.BaseIntensity * Mod * FMath::Lerp(1.f, 0.75f, F.Red));
+			F.Light->SetLightColor(FMath::Lerp(F.LightColor, RedLight, F.Red));
 		}
+		const FLinearColor Glow = FMath::Lerp(F.GlowColor, RedLight * 90.f, F.Red) * Mod;
 		for (UMaterialInstanceDynamic* G : F.Glow)
 		{
 			if (G)
 			{
-				G->SetVectorParameterValue(TEXT("Emissive"), F.GlowColor * Mod);
+				G->SetVectorParameterValue(TEXT("Emissive"), Glow);
 			}
 		}
 	}

@@ -188,6 +188,9 @@ void ABRWorld::ClearLevel()
 
 	TArray<TObjectPtr<ABREntity>> Copy = Entities;
 	Entities.Empty();
+	BlackoutEntities.Reset();
+	RedSources.Reset();
+	PatrolSpawnTimer = 0.f;
 	for (ABREntity* E : Copy)
 	{
 		if (IsValid(E))
@@ -226,6 +229,21 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber)
 	{
 		A->SetGlowScale(1.f);
 	}
+	// Modeles importes a la mauvaise echelle (invisibles) : on le dit clairement, une seule fois
+	if (!bMeshesChecked)
+	{
+		bMeshesChecked = true;
+		if (UBRAssets* A = UBRAssets::Get(this))
+		{
+			const FString Problem = A->CheckImportedMeshes();
+			if (!Problem.IsEmpty())
+			{
+				UE_LOG(LogBackrooms, Error, TEXT("%s"), *Problem);
+				ABRHUD::Notify(this, Problem, 30.f, FLinearColor(1.f, 0.35f, 0.3f));
+			}
+		}
+	}
+
 	// Ondes de l'eau : le materiau du nouveau niveau sera repris au premier Tick
 	WaterMID = nullptr;
 	for (FRipple& R : Ripples)
@@ -457,6 +475,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 	if (TransState == ETrans::None)
 	{
 		UpdatePopulation(Dt);
+		UpdatePatrol(Dt);
 		UpdatePhenomena(Dt);
 		if (!bMenu)
 		{
@@ -604,7 +623,14 @@ void ABRWorld::UpdatePopulation(float Dt)
 		}
 	}
 
-	if (D.MaxEntities <= 0 || D.Entities.Num() == 0 || Entities.Num() >= D.MaxEntities || P->IsDead())
+	int32 Regular = 0;
+	for (const ABREntity* E : Entities)
+	{
+		const bool bPatrol = D.bPatrolEntity && E && E->Kind == D.PatrolKind;
+		const bool bBlackout = BlackoutEntities.ContainsByPredicate([E](const TWeakObjectPtr<ABREntity>& B) { return B.Get() == E; });
+		Regular += (bPatrol || bBlackout) ? 0 : 1;
+	}
+	if (D.MaxEntities <= 0 || D.Entities.Num() == 0 || Regular >= D.MaxEntities || P->IsDead())
 	{
 		return;
 	}
@@ -818,6 +844,7 @@ void ABRWorld::UpdateBlackout(float Dt)
 				BlackoutPhase = EBlackout::Dark;
 				BlackoutTimer = FMath::FRandRange(24.f, 40.f);
 				Power = 0.f;
+				SpawnBlackoutEntities();
 				ABRHUD::Notify(this, TEXT("COUPURE DE COURANT"), 4.f, FLinearColor(1.f, 0.3f, 0.25f));
 				if (D.bRequireObjectives && !bBlackoutRecorded)
 				{
@@ -841,6 +868,7 @@ void ABRWorld::UpdateBlackout(float Dt)
 			BlackoutTimer = 1.4f;
 			PowerFlickerTimer = 0.f;
 			Play(TEXT("S_PowerUp"), 0.9f);
+			DismissBlackoutEntities();
 		}
 		break;
 	}
@@ -1112,6 +1140,150 @@ float ABRWorld::FloorZAt(const FVector& P) const
 {
 	const FIntPoint C = WorldToCell(P);
 	return IsPoolCell(C.X, C.Y) ? -Def().PoolDepth : 0.f;
+}
+
+bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, float MinDist, float MaxDist, bool bAvoidSight, FVector& Out) const
+{
+	const ABRCharacter* P = GetPlayer();
+	if (!P || !GetWorld())
+	{
+		return false;
+	}
+	const FBREntityInfo& Info = ABREntity::Info(Kind);
+	const FVector PL = P->GetActorLocation();
+	const FVector Eye = P->GetEyeLocation();
+	for (int32 Attempt = 0; Attempt < 40; ++Attempt)
+	{
+		const float Ang = FMath::FRandRange(0.f, 2.f * PI);
+		const float Dist = FMath::FRandRange(MinDist, MaxDist);
+		const FIntPoint Cell = WorldToCell(PL + FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * Dist);
+		if (!IsWalkable(Cell) || IsSpawnArea(Cell.X, Cell.Y) || IsPoolCell(Cell.X, Cell.Y) || !IsChunkLoaded(CellToChunk(Cell)))
+		{
+			continue;
+		}
+		const FVector Loc = CellCenter(Cell, Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
+		if (Info.bNeedsDark && LightLevelAt(Loc) > 0.12f)
+		{
+			continue;
+		}
+		if (bAvoidSight)
+		{
+			FHitResult Hit;
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRSpawnSpot), false, P);
+			if (!GetWorld()->LineTraceSingleByChannel(Hit, Eye, Loc, ECC_Visibility, Q))
+			{
+				continue;
+			}
+		}
+		Out = Loc;
+		return true;
+	}
+	return false;
+}
+
+void ABRWorld::UpdatePatrol(float Dt)
+{
+	const FBRLevelDef& D = Def();
+	RedSources.Reset();
+	ABRCharacter* P = GetPlayer();
+	if (!D.bPatrolEntity || !P)
+	{
+		return;
+	}
+	bool bPresent = false;
+	for (const ABREntity* E : Entities)
+	{
+		if (IsValid(E) && E->Kind == D.PatrolKind)
+		{
+			bPresent = true;
+			if (D.RedLightRadius > 0.f)
+			{
+				RedSources.Add(E->GetActorLocation());
+			}
+		}
+	}
+	if (bPresent || P->IsDead() || IsTransitioning() || LevelTime < D.PatrolDelay)
+	{
+		return;
+	}
+	if (const ABRPlayerController* PC = Cast<ABRPlayerController>(P->GetController()))
+	{
+		if (PC->IsInMenu())
+		{
+			return;
+		}
+	}
+	PatrolSpawnTimer -= Dt;
+	if (PatrolSpawnTimer > 0.f)
+	{
+		return;
+	}
+	PatrolSpawnTimer = 4.f;
+	FVector Loc;
+	if (FindSpawnSpot(D.PatrolKind, 1500.f, 2600.f, true, Loc))
+	{
+		SpawnEntity(D.PatrolKind, Loc);
+		PatrolSpawnTimer = 15.f;
+	}
+}
+
+void ABRWorld::SpawnBlackoutEntities()
+{
+	const FBRLevelDef& D = Def();
+	const ABRCharacter* P = GetPlayer();
+	if (D.BlackoutSmilers <= 0 || !P || P->IsDead())
+	{
+		return;
+	}
+	// Dans le noir, a portee de vue : on distingue leurs yeux et leur sourire
+	for (int32 i = 0; i < D.BlackoutSmilers; ++i)
+	{
+		FVector Loc;
+		if (FindSpawnSpot(EBREntityKind::Smiler, 900.f, 1900.f, false, Loc))
+		{
+			if (ABREntity* E = SpawnEntity(EBREntityKind::Smiler, Loc))
+			{
+				BlackoutEntities.Add(E);
+			}
+		}
+	}
+}
+
+void ABRWorld::DismissBlackoutEntities()
+{
+	for (const TWeakObjectPtr<ABREntity>& Weak : BlackoutEntities)
+	{
+		if (ABREntity* E = Weak.Get())
+		{
+			E->Dismiss();
+		}
+	}
+	BlackoutEntities.Reset();
+}
+
+bool ABRWorld::IsInHidingSpot(const FVector& Location, bool bCrouched) const
+{
+	const TObjectPtr<ABRChunk>* C = Chunks.Find(CellToChunk(WorldToCell(Location)));
+	return C && *C && (*C)->IsInHidingSpot(Location, bCrouched);
+}
+
+bool ABRWorld::FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const
+{
+	const TObjectPtr<ABRChunk>* C = Chunks.Find(CellToChunk(WorldToCell(Location)));
+	return C && *C && (*C)->FindHidingSpotNear(Location, Radius, bOutNeedsCrouch);
+}
+
+void ABRWorld::RefreshWater()
+{
+	WaterMID = nullptr;
+	bRipplesDirty = true;
+	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		if (ABRChunk* C = Pair.Value)
+		{
+			C->RefreshWater();
+		}
+	}
 }
 
 FBRSurface ABRWorld::GetWaterSurface() const

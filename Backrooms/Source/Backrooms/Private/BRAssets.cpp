@@ -441,9 +441,10 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	}
 	ParentResolved[Index] = true;
 
-	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_Water") };
-	// Parametre propre a la v2 de chaque materiau : un materiau de la v1 (sans ce parametre) est ignore
-	const TCHAR* V2Params[] = { TEXT("NormalTex"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaveAmplitude") };
+	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_Water"), TEXT("M_BR_WaterSurface") };
+	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
+	const TCHAR* V2Params[] = { TEXT("NormalTex"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaveChop"), TEXT("BaseOpacity") };
+	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	UMaterialInterface* M = Cast<UMaterialInterface>(LoadAsset(MatFolder, FName(AssetNames[Index]), UMaterialInterface::StaticClass()));
 	if (M)
 	{
@@ -461,7 +462,8 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 
 	if (!M && BRMaterialBuilder::IsAvailable())
 	{
-		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin, EBRMasterMaterial::Water };
+		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin, EBRMasterMaterial::Water,
+			EBRMasterMaterial::WaterSurface };
 		M = BRMaterialBuilder::Build(Kinds[Index], this, [this](FName TexName) { return Texture(TexName); });
 		if (M)
 		{
@@ -603,12 +605,13 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 
 UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorption, float Scattering, float Waves, float Chop)
 {
-	const FString Key = FString::Printf(TEXT("Water|%.3f|%.3f|%.2f|%.2f|"), Absorption, Scattering, Waves, Chop) + S.Key();
+	const bool bTranslucent = FBRSettings::Get().bTranslucentWater;
+	const FString Key = FString::Printf(TEXT("Water|%d|%.3f|%.3f|%.2f|%.2f|"), bTranslucent ? 1 : 0, Absorption, Scattering, Waves, Chop) + S.Key();
 	if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
 	{
 		return Found->Get();
 	}
-	UMaterialInterface* ParentMat = Parent(EParent::Water);
+	UMaterialInterface* ParentMat = Parent(bTranslucent ? EParent::WaterSurface : EParent::Water);
 	const bool bCustom = ParentMat != nullptr;
 	if (!ParentMat)
 	{
@@ -633,6 +636,9 @@ UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorpti
 		MID->SetScalarParameterValue(TEXT("NormalStrength"), 0.25f + 0.12f * Chop);
 		MID->SetScalarParameterValue(TEXT("Absorption"), Absorption);
 		MID->SetScalarParameterValue(TEXT("Scattering"), Scattering);
+		// Eau translucide : teinte de l'eau profonde, opacite minimale (on voit toujours la surface)
+		MID->SetScalarParameterValue(TEXT("DeepColor"), 0.35f);
+		MID->SetScalarParameterValue(TEXT("BaseOpacity"), 0.12f);
 	}
 	else
 	{
@@ -640,6 +646,33 @@ UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorpti
 	}
 	MatCache.Add(Key, MID);
 	return MID;
+}
+
+FString UBRAssets::CheckImportedMeshes()
+{
+	// Modeles de reference et leur plus grande dimension attendue (cm)
+	struct FRef
+	{
+		const TCHAR* Name;
+		float Expected;
+	};
+	static const FRef Refs[] = { { TEXT("SM_LightPanel"), 122.f }, { TEXT("SM_WaterGrid"), 100.f }, { TEXT("SM_Crate"), 60.f } };
+	for (const FRef& R : Refs)
+	{
+		UStaticMesh* M = Mesh(R.Name);
+		if (!M)
+		{
+			continue;
+		}
+		const float Size = static_cast<float>(M->GetBoundingBox().GetSize().GetMax());
+		if (Size < R.Expected * 0.2f || Size > R.Expected * 5.f)
+		{
+			return FString::Printf(TEXT("Mod\u00e8les 3D import\u00e9s \u00e0 la mauvaise \u00e9chelle (%s : %.1f cm au lieu de %.0f) : ils sont invisibles. ")
+				TEXT("Relancez l'import : Fen\u00eatre > Journal de sortie > Python : import backrooms_setup; backrooms_setup.run(force=True)"),
+				R.Name, Size, R.Expected);
+		}
+	}
+	return FString();
 }
 
 FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)

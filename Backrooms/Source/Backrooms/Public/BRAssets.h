@@ -42,7 +42,7 @@ public:
 
 	/** Materiau "projete dans l'espace monde" (murs, sols...) - mis en cache */
 	UMaterialInterface* Surface(const FBRSurface& S);
-	/** Eau (Single Layer Water) */
+	/** Eau : Single Layer Water, ou eau translucide si FBRSettings::bTranslucentWater */
 	UMaterialInterface* WaterMaterial(const FBRSurface& S, float Absorption = 1.2f, float Scattering = 0.15f, float Waves = 1.f, float Chop = 1.f);
 	/** Materiau d'un slot de modele Blender, d'apres son nom (Glow, Metal, Skin...) */
 	UMaterialInterface* SlotMaterial(const FString& SlotName, const FLinearColor* TintOverride = nullptr);
@@ -68,9 +68,14 @@ public:
 	bool HasContent();
 	/** true si le jeu tourne sur les ressources de secours (import Python absent ou incomplet) */
 	bool IsUsingRuntimeContent();
+	/**
+	 * Verifie la taille des modeles importes (un importeur qui ignore l'echelle du fichier les rend 100 fois trop
+	 * petits : invisibles). Retourne un message d'erreur, vide si tout va bien.
+	 */
+	FString CheckImportedMeshes();
 
 private:
-	enum class EParent : uint8 { World, Mesh, Skin, Water, Count };
+	enum class EParent : uint8 { World, Mesh, Skin, Water, WaterSurface, Count };
 
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);

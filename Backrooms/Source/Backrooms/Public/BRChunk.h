@@ -17,7 +17,7 @@ class UStaticMesh;
 class UAudioComponent;
 struct FBRLightInfo;
 
-/** Lumiere qui clignote (animee par le chunk) */
+/** Lampe animee par le chunk : clignotement, et virage au rouge pres de l'entite du Niveau 0 */
 USTRUCT()
 struct FBRFlicker
 {
@@ -30,10 +30,16 @@ struct FBRFlicker
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> Glow;
 
 	FLinearColor GlowColor = FLinearColor::White;
+	FLinearColor LightColor = FLinearColor::White;
 	float BaseIntensity = 1000.f;
 	float Timer = 0.f;
 	float Phase = 0.f;
 	bool bOn = true;
+	/** false : lampe stable (individuelle seulement pour pouvoir rougir) */
+	bool bFlickers = true;
+	float Red = 0.f;
+	float AppliedMod = -1.f;
+	float AppliedRed = -1.f;
 };
 
 UCLASS()
@@ -51,6 +57,11 @@ public:
 
 	/** Alimentation electrique 0..1 (coupures de courant) */
 	void SetPower(float InPower);
+	/** Reapplique le materiau de l'eau (changement du reglage "Rendu de l'eau") */
+	void RefreshWater();
+	/** Cachettes de ce chunk */
+	bool IsInHidingSpot(const FVector& Location, bool bCrouched) const;
+	bool FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const;
 
 	FIntPoint Coord;
 
@@ -66,6 +77,7 @@ protected:
 		float GlowScale = 1.f;
 		float CullDistance = 0.f;
 		bool bPowered = false;   // emissif eteint pendant les coupures
+		int8 Water = -1;         // 0 = eau du niveau, 1 = flaque calme (materiau change par RefreshWater)
 		TArray<FTransform> Transforms;
 	};
 
@@ -88,6 +100,8 @@ protected:
 	void BuildPools();
 	/** Verriere inclinee sur un mur + lumiere du jour qui inonde la piece (Niveau 37) */
 	void BuildSkylight();
+	/** Placards et trous dans le mur ou se cacher (Niveau 0) */
+	void BuildHidingSpots();
 	void BuildPickupsAndExits();
 	void FinishBatches();
 
@@ -113,6 +127,19 @@ protected:
 	TArray<TObjectPtr<ULocalLightComponent>> PoweredLights;
 
 	TArray<float> PoweredBase;
+
+	struct FHidingSpot
+	{
+		FBox Box;
+		bool bCrouch = false;
+	};
+	TArray<FHidingSpot> HidingSpots;
+	TSet<FIntPoint> HidingCells;
+
+	/** Instances d'eau (et si c'est une flaque calme) */
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> WaterISMs;
+	TArray<bool> WaterCalm;
 	float Power = 1.f;
 
 	TMap<FString, FBatch> Batches;
