@@ -290,7 +290,7 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 		Mesh->SetRelativeScale3D(Size / 100.f);
 		FBRSurface G(TEXT("T_Glitch"), FLinearColor(0.9f, 0.9f, 0.9f), 60.f, 0.5f, 0.f);
 		G.Emissive = FLinearColor(0.6f, 0.5f, 0.8f);
-		GlitchMID = UMaterialInstanceDynamic::Create(A->Surface(G), this);
+		GlitchMID = A->NewSurface(G, this);
 		Mesh->SetMaterial(0, GlitchMID);
 		// Zone de declenchement : il suffit de toucher
 		Box->SetRelativeLocation(bWall ? FVector(25.f, 0.f, Size.Z * 0.5f) : FVector(0.f, 0.f, 60.f));
@@ -403,7 +403,7 @@ FString ABRExit::GetPrompt() const
 	case EBRExitStyle::Door:
 		return FString::Printf(TEXT("%s Ouvrir la porte de secours  (%s)"), *Key, *Dest);
 	case EBRExitStyle::HotelDoor:
-		return FString::Printf(TEXT("[E] Ouvrir la porte \"CHAUFFERIE\"  (%s)"), *Dest);
+		return FString::Printf(TEXT("%s Ouvrir la porte \"CHAUFFERIE\"  (%s)"), *Key, *Dest);
 	case EBRExitStyle::Elevator:
 		return FString::Printf(TEXT("%s Prendre l'ascenseur  (%s)"), *Key, *Dest);
 	case EBRExitStyle::Ladder:

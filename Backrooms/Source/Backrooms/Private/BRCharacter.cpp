@@ -116,8 +116,8 @@ ABRCharacter::ABRCharacter()
 	InfraredLight->SetupAttachment(Camera);
 	InfraredLight->SetRelativeLocation(FVector(40.f, 0.f, 0.f));
 	InfraredLight->SetIntensityUnits(ELightUnits::Lumens);
-	InfraredLight->SetIntensity(500.f);
-	InfraredLight->SetAttenuationRadius(1400.f);
+	InfraredLight->SetIntensity(1800.f);
+	InfraredLight->SetAttenuationRadius(2000.f);
 	InfraredLight->SetCastShadows(false);
 	InfraredLight->SetVisibility(false);
 
@@ -782,6 +782,7 @@ void ABRCharacter::ToggleNightVision()
 		return;
 	}
 	bNightVision = !bNightVision;
+	UpdateViewMode();
 	PlaySound2D(bNightVision ? FName(TEXT("S_NightVision")) : FName(TEXT("S_RecBeep")), 0.7f);
 }
 
@@ -934,6 +935,7 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	bSwimming = false;
 	bDiving = false;
 	bMantling = false;
+	UpdateViewMode();
 	GetCharacterMovement()->DisableMovement();
 	PlaySound2D(TEXT("S_Death"), 1.f);
 	if (!HasAuthority())
@@ -1633,6 +1635,7 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 		if (Battery <= 0.f)
 		{
 			bNightVision = false;
+			UpdateViewMode();
 			ABRHUD::Notify(this, BRKeys::Expand(TEXT("Batterie vide : vision nocturne coup\u00e9e. {Battery} changer les piles")), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
 		}
 	}
@@ -1941,19 +1944,25 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 
 	FLinearColor Tint = D ? D->SceneTint : FLinearColor::White;
 	Tint = FMath::Lerp(Tint, FLinearColor(0.45f, 0.9f, 0.82f), UnderBlend * 0.8f);
-	if (bNV)
-	{
-		Tint = FLinearColor(0.35f, 1.f, 0.45f);
-	}
+	// Vision nocturne : image monochrome teintee en vert. La teinte de scene passe avant la desaturation (elle serait
+	// effacee) : le vert est donne par le gain de l'etalonnage, applique apres la saturation
+	S.bOverride_ColorGain = true;
+	S.ColorGain = bNV ? FVector4(0.42f, 1.18f, 0.5f, 1.f) : FVector4(1.f, 1.f, 1.f, 1.f);
 	const FLinearColor Hurt(1.f, 0.35f, 0.3f);
 	S.bOverride_SceneColorTint = true;
 	S.SceneColorTint = FMath::Lerp(Tint, Hurt, FMath::Clamp(DamageFlash * 0.6f + Dead * 0.5f, 0.f, 1.f));
 
 	// Luminosite choisie par le joueur ; vision nocturne : amplification de lumiere
+	// (vision nocturne : l'exposition peut descendre tres bas et s'adapte vite ; c'est surtout le projecteur
+	// infrarouge qui eclaire, un gain trop fort brulait l'image des qu'un mur etait proche)
 	S.bOverride_AutoExposureBias = true;
-	S.AutoExposureBias = (D ? D->ExposureBias : 0.f) + Set.Brightness + (bNV ? 3.5f : 0.f);
+	S.AutoExposureBias = (D ? D->ExposureBias : 0.f) + Set.Brightness + (bNV ? 1.f : 0.f);
 	S.bOverride_AutoExposureMinBrightness = bNV;
-	S.AutoExposureMinBrightness = (D ? D->MinEV : 2.f) - 4.f;
+	S.AutoExposureMinBrightness = (D ? D->MinEV : 2.f) - 6.f;
+	S.bOverride_AutoExposureSpeedUp = bNV;
+	S.AutoExposureSpeedUp = 6.f;
+	S.bOverride_AutoExposureSpeedDown = bNV;
+	S.AutoExposureSpeedDown = 6.f;
 	S.bOverride_BloomIntensity = bNV || UnderBlend > 0.01f;
 	S.BloomIntensity = bNV ? 2.f : FMath::Lerp(D ? D->Bloom : 0.6f, 2.2f, UnderBlend);
 
@@ -2041,7 +2050,9 @@ void ABRCharacter::UpdateViewMode()
 	}
 	if (HandMesh)
 	{
-		HandMesh->SetVisibility(!bShow && HandMesh->GetStaticMesh() != nullptr);
+		// Vision nocturne : on regarde a travers le camescope (son modele, colle au projecteur infrarouge, eblouissait
+		// l'image au point que l'exposition automatique assombrissait tout le reste)
+		HandMesh->SetVisibility(!bShow && !bNightVision && HandMesh->GetStaticMesh() != nullptr);
 	}
 	if (CameraBoom)
 	{
@@ -2369,24 +2380,7 @@ void ABRCharacter::UpdateWater(float Dt)
 		W->AddWaterRipple(L, 1.6f);
 	}
 
-	// Ondes a la surface : on fend l'eau en marchant, on la brasse en nageant, on la remue meme immobile
-	const FVector Vel = GetVelocity();
-	const bool bTouchesSurface = bSwimming ? (L.Z + CamZ > WaterZ - 45.f) : (WaterDepth > 4.f && L.Z - Half < WaterZ);
-	RippleTimer -= Dt;
-	if (bTouchesSurface && !bDead && RippleTimer <= 0.f)
-	{
-		const float Moving = FMath::Clamp(static_cast<float>(Vel.Size2D()) / WalkSpeed, 0.f, 1.5f);
-		if (Moving > 0.08f)
-		{
-			RippleTimer = FMath::Lerp(0.42f, 0.2f, FMath::Min(Moving, 1.f));
-			W->AddWaterRipple(L + Vel.GetSafeNormal2D() * 25.f, (bSwimming ? 1.1f : 0.7f) + 0.5f * Moving);
-		}
-		else
-		{
-			RippleTimer = bSwimming ? 0.9f : 1.6f;
-			W->AddWaterRipple(L, bSwimming ? 0.45f : 0.2f);
-		}
-	}
+	// Le sillage dans l'eau (marche, nage) est calcule par la simulation de l'eau du monde (ABRWorld::UpdateWaterSim)
 
 	if (!bSwimming)
 	{

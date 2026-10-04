@@ -10,22 +10,25 @@ class UTexture;
 
 enum class EBRMasterMaterial : uint8
 {
-	World,  // murs/sols/plafonds : triplanaire, normal maps, salete, caustiques
-	Mesh,   // modeles Blender
-	Skin,   // peau / chair (subsurface)
-	Water,       // eau Single Layer Water
-	WaterSurface // eau translucide (rendu par defaut, toujours visible)
+	World,       // murs/sols/plafonds : triplanaire, normal maps, salete, caustiques
+	Mesh,        // modeles Blender
+	Skin,        // peau / chair (subsurface)
+	WaterSurface // eau translucide : refraction, absorption selon la profondeur, vagues simulees
 };
 
 namespace BRMaterialBuilder
 {
-	/** Nombre d'ondes circulaires simultanees sur l'eau (parametres Ripple0..7 du materiau d'eau) */
-	constexpr int32 NumRipples = 8;
-
-	/** Code HLSL de la surface de l'eau (houle, clapot, ondes), identique a celui du script Python */
+	/** Code HLSL des noeuds Custom, identique a celui du script Python */
+	/** Houle et clapot de fond (P, T, Amp, Chop) -> float3(pente X, pente Y, hauteur) */
 	const FString& WaterSurfaceHLSL();
-	/** Code HLSL de l'opacite de l'eau translucide (epaisseur d'eau + Fresnel) */
-	const FString& WaterOpacityHLSL();
+	/** Vagues simulees autour du joueur (P, Win, SimTex) -> float2(pente X, pente Y) */
+	const FString& WaterSimHLSL();
+	/** Decalage de l'image du fond par la refraction (VN, PixD, D0, Strength) -> float2 */
+	const FString& WaterRefractHLSL();
+	/** Lumiere qui traverse l'eau : Fresnel, absorption selon le trajet, vue de dessous -> float4(rgb, voile) */
+	const FString& WaterShadeHLSL();
+	/** Caustiques sur le carrelage, deformees par les vagues simulees -> multiplicateur de couleur */
+	const FString& CausticsHLSL();
 
 	/** true si l'executable peut compiler des materiaux (editeur, PIE, -game non cuisine) */
 	bool IsAvailable();

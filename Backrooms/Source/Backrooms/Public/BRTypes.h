@@ -204,10 +204,12 @@ struct FBRLevelDef
 	bool bWater = false;
 	float WaterHeight = 45.f;
 	FBRSurface Water;
-	/** Proprietes optiques de l'eau (Single Layer Water) : plus elles sont basses, plus l'eau est limpide */
+	/** Proprietes optiques de l'eau : absorption (plus elle est basse, plus l'eau est limpide) et voile laiteux
+	 *  de l'eau profonde (diffusion) */
 	float WaterAbsorption = 1.2f;
 	float WaterScattering = 0.15f;
-	/** Mouvement de l'eau : houle (deplace la surface) et clapot (vaguelettes qui plient les reflets) */
+	/** Mouvement de fond de l'eau : houle (deplace la surface) et clapot (vaguelettes qui plient les reflets).
+	 *  Les vagues des joueurs et des entites s'y ajoutent (UBRWaterSim) */
 	float WaterWaves = 1.f;
 	float WaterChop = 1.f;
 	/** Bassins profonds (Niveau 37) : proportion de blocs 2x2 creuses et profondeur sous le sol */
@@ -258,8 +260,6 @@ struct FBRSettings
 	bool bFilmGrain = true;
 	/** Effet camescope / VHS : viseur REC, cadres, lignes de balayage, aberration, grain, salete d'objectif */
 	bool bVHSEffect = true;
-	/** Eau translucide (toujours visible) au lieu de l'eau Single Layer Water (prochain chargement de niveau) */
-	bool bTranslucentWater = false;
 	/** Volume general (0..1) */
 	float MasterVolume = 1.f;
 	/** Chat vocal de proximite : 0 voix ouverte, 1 appuyer pour parler, 2 desactive */

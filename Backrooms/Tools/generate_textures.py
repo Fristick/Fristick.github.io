@@ -64,7 +64,7 @@ def colorize(base_rgb, *layers):
 NORMAL_STRENGTH = {
     "T_L0_Carpet": 7.0, "T_L0_Ceiling": 5.0, "T_Concrete": 4.0, "T_ConcreteFloor": 5.0,
     "T_ConcreteDark": 4.0, "T_Brick": 8.0, "T_MetalPanel": 4.0, "T_OfficeCarpet": 6.0, "T_OfficeWall": 2.0,
-    "T_HotelCarpet": 5.0, "T_HotelWallpaper": 3.0, "T_Wood": 3.0, "T_PoolTile": 9.0, "T_Rock": 10.0, "T_Dirt": 6.0,
+    "T_HotelCarpet": 5.0, "T_HotelWallpaper": 3.0, "T_Wood": 3.0, "T_Rock": 10.0, "T_Dirt": 6.0,
     "T_Asphalt": 5.0, "T_Grass": 6.0, "T_Facade": 4.0, "T_Siding": 7.0, "T_Skin": 4.0,
 }
 
@@ -391,23 +391,58 @@ def t_wood():
     save("T_Wood", img)
 
 
+def save_height_normal(name, h, size=None):
+    """Normal map "<nom>_N.jpg" depuis une carte de hauteur exprimee en pixels (meme convention que save_normal)."""
+    dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5
+    dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.5
+    nx, ny, nz = -dx, -dy, np.ones_like(h)
+    l = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
+    nrm = np.stack([nx / l, ny / l, nz / l], -1) * 0.5 + 0.5
+    img = Image.fromarray((np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
+    if size and img.size[0] != size:
+        img = img.resize((size, size), Image.LANCZOS)
+    path = os.path.join(OUT, f"{name}_N.jpg")
+    img.save(path, quality=95, optimize=True)
+    print("  ->", os.path.relpath(path))
+
+
 def t_pool_tile():
+    """Carrelage des Poolrooms : 10 x 10 carreaux de 10 cm, email blanc a peine bleu-vert, joints fins gris clair,
+    bords arrondis. Chaque carreau est tres legerement incline : les reflets des plafonniers se brisent d'un
+    carreau a l'autre, comme sur un vrai mur carrele."""
     S = 1024
-    x, y = grid_coords(S)
     n_t = 10
+    x, y = grid_coords(S)
     u, v = (x * n_t) % 1.0, (y * n_t) % 1.0
-    gw = 0.045
-    grout = ((u < gw) | (u > 1 - gw) | (v < gw) | (v > 1 - gw)).astype(np.float32)
+    ix = np.floor(x * n_t).astype(int) % n_t
+    iy = np.floor(y * n_t).astype(int) % n_t
     rng = np.random.default_rng(131)
-    tv = rng.random((n_t, n_t))[np.floor(y * n_t).astype(int) % n_t, np.floor(x * n_t).astype(int) % n_t]
-    tile = np.ones((S, S, 3)) * np.array([0.90, 0.93, 0.94]) * (0.97 + 0.04 * tv)[..., None]
-    # bord legerement plus sombre (biseau)
+    per = rng.random((n_t, n_t, 4))[iy, ix]
+    gw = 0.028  # demi-joint, en fraction de carreau (joint de ~5 mm)
     edge = np.minimum(np.minimum(u, 1 - u), np.minimum(v, 1 - v))
-    tile *= (0.93 + 0.07 * smoothstep(gw, gw + 0.08, edge))[..., None]
-    g = np.ones_like(tile) * np.array([0.72, 0.76, 0.76])
-    img = mix(tile, g, grout)
-    img *= (1 - 0.05 * smoothstep(0.5, 2.0, noise(S, beta=3.0, seed=132)))[..., None]
+    tile = smoothstep(gw, gw + 0.012, edge)   # 0 dans le joint, 1 sur l'email
+    bevel = smoothstep(gw, gw + 0.075, edge)  # arrondi du bord du carreau
+
+    # Email : blanc froid, lots de fabrication un peu differents, voile tres doux
+    shade = 0.972 + 0.04 * per[..., 0]
+    hue = (per[..., 1] - 0.5) * 0.02
+    col = np.stack([0.905 - hue, 0.94 + hue * 0.3, 0.95 + hue], -1) * shade[..., None]
+    col *= (1 + 0.012 * noise(S, beta=2.5, seed=133))[..., None]
+    col *= (0.95 + 0.05 * bevel)[..., None]
+    # Joints : ciment gris clair, plus sombre au fond et sale par endroits
+    grout = np.array([0.77, 0.8, 0.8]) * (1 + 0.035 * noise(S, beta=2.8, seed=134))[..., None]
+    grout *= (0.9 + 0.1 * smoothstep(0.0, gw, edge))[..., None]
+    img = mix(grout, col, tile)
+    # Calcaire / salissures a grande echelle, tres legers
+    img *= (1 - 0.035 * smoothstep(0.5, 2.0, noise(S, beta=3.0, seed=132)))[..., None]
     save("T_PoolTile", img)
+
+    # Relief (1 pixel ~ 1 mm) : joint en creux, bord arrondi, carreau incline, email legerement ondule
+    h = 0.9 * tile + 1.3 * bevel
+    tilt = 0.012 * 102.4
+    h += tile * ((per[..., 2] - 0.5) * (u - 0.5) + (per[..., 3] - 0.5) * (v - 0.5)) * tilt
+    h += 0.06 * noise(S, beta=3.0, seed=135) * tile
+    save_height_normal("T_PoolTile", h)
 
 
 def t_rock():
@@ -511,11 +546,12 @@ def t_skin():
 
 
 def t_water_normal():
+    """Rides de l'eau : ondulations douces, sans grain fin (un grain fin fait scintiller les reflets des lampes)"""
     S = 512
-    h = noise(S, beta=3.0, seed=221) * 0.6 + noise(S, beta=2.0, seed=222) * 0.4
+    h = noise(S, beta=3.5, seed=221, fmax=28.0) * 0.7 + noise(S, beta=2.5, seed=222, fmax=48.0) * 0.3
     dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5
     dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.5
-    k = 0.6
+    k = 0.08 / max(0.5 * (np.abs(dx).mean() + np.abs(dy).mean()), 1e-6)  # meme intensite moyenne qu'avant
     nx, ny, nz = -dx * k, -dy * k, np.ones_like(h)
     l = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
     nrm = np.stack([nx / l, ny / l, nz / l], -1)
@@ -533,23 +569,29 @@ def t_paper():
 
 
 def t_caustics():
-    """Reseau lumineux de caustiques (cellules de Voronoi periodiques)"""
-    S = 512
-    rng = np.random.default_rng(241)
-    pts = rng.random((40, 2))
-    x, y = grid_coords(S)
-    d1 = np.full((S, S), 9.0)
-    d2 = np.full((S, S), 9.0)
-    for px, py in pts:
-        for ox in (-1, 0, 1):
-            for oy in (-1, 0, 1):
-                d = np.sqrt((x - px - ox) ** 2 + (y - py - oy) ** 2)
-                d2 = np.minimum(d2, np.maximum(d1, d))
-                d1 = np.minimum(d1, d)
-    edge = d2 - d1
-    c = (1.0 - smoothstep(0.0, 0.035, edge)) ** 1.5
-    c = blur_wrap(c, 2)
-    c = c / c.max()
+    """Caustiques de piscine : la lumiere traverse une surface d'eau ondulee (bruit periodique) et chaque rayon
+    refracte est suivi jusqu'au fond. Les rayons se concentrent en filaments lumineux courbes autour de cellules
+    sombres, exactement comme au fond d'un bassin."""
+    S, ss = 512, 4
+    M = S * ss
+    h = noise(M, beta=3.0, seed=241, fmax=9.0)
+    gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5
+    gy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.5
+    lap = np.roll(h, 1, 0) + np.roll(h, -1, 0) + np.roll(h, 1, 1) + np.roll(h, -1, 1) - 4 * h
+    k = 1.2 / lap.std()  # au-dela de 1 : les rayons se croisent, d'ou les filaments
+    yy, xx = np.mgrid[0:M, 0:M].astype(np.float64)
+    px = (xx - k * gx) / ss
+    py = (yy - k * gy) / ss
+    x0, y0 = np.floor(px), np.floor(py)
+    fx, fy = px - x0, py - y0
+    x0, y0 = x0.astype(np.int64) % S, y0.astype(np.int64) % S
+    x1, y1 = (x0 + 1) % S, (y0 + 1) % S
+    acc = np.zeros(S * S)
+    for xi, yi, w in ((x0, y0, (1 - fx) * (1 - fy)), (x1, y0, fx * (1 - fy)), (x0, y1, (1 - fx) * fy), (x1, y1, fx * fy)):
+        acc += np.bincount((yi * S + xi).ravel(), weights=w.ravel(), minlength=S * S)
+    c = blur_wrap(acc.reshape(S, S), 1)
+    c = c + 0.35 * blur_wrap(c, 4)  # leger halo autour des filaments
+    c = np.clip(c / np.percentile(c, 99.5), 0, 1) ** 0.9
     save("T_Caustics", np.repeat(c[..., None], 3, 2))
 
 

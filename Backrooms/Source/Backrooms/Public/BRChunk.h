@@ -57,8 +57,6 @@ public:
 
 	/** Alimentation electrique 0..1 (coupures de courant) */
 	void SetPower(float InPower);
-	/** Reapplique le materiau de l'eau (changement du reglage "Rendu de l'eau") */
-	void RefreshWater();
 	/** Cachettes de ce chunk */
 	bool IsInHidingSpot(const FVector& Location, bool bCrouched) const;
 	bool FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const;
@@ -77,7 +75,6 @@ protected:
 		float GlowScale = 1.f;
 		float CullDistance = 0.f;
 		bool bPowered = false;   // emissif eteint pendant les coupures
-		int8 Water = -1;         // 0 = eau du niveau, 1 = flaque calme (materiau change par RefreshWater)
 		TArray<FTransform> Transforms;
 	};
 
@@ -136,10 +133,6 @@ protected:
 	TArray<FHidingSpot> HidingSpots;
 	TSet<FIntPoint> HidingCells;
 
-	/** Instances d'eau (et si c'est une flaque calme) */
-	UPROPERTY()
-	TArray<TObjectPtr<UInstancedStaticMeshComponent>> WaterISMs;
-	TArray<bool> WaterCalm;
 	float Power = 1.f;
 
 	TMap<FString, FBatch> Batches;

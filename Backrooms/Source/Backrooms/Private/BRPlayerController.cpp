@@ -6,6 +6,9 @@
 #include "BRHUD.h"
 #include "BREntity.h"
 #include "BRKeys.h"
+#include "BRConfig.h"
+#include "BRAutoTest.h"
+#include "EngineUtils.h"
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -58,7 +61,6 @@ namespace
 		Row_VolumetricFog,
 		Row_FilmGrain,
 		Row_VHSEffect,
-		Row_Water,
 		Row_Count
 	};
 
@@ -139,10 +141,7 @@ void ABRPlayerController::BeginPlay()
 		MenuStatus = GNetMessage;
 		GNetMessage.Empty();
 	}
-	if (GConfig)
-	{
-		GConfig->GetString(SettingsSection, TEXT("LastAddress"), JoinAddress, GGameUserSettingsIni);
-	}
+	BRConfig::Get().GetString(SettingsSection, TEXT("LastAddress"), JoinAddress);
 
 	EnsureInput();
 	AddMappingToPlayer();
@@ -154,6 +153,22 @@ void ABRPlayerController::BeginPlay()
 	if (const ABRWorld* W = ABRWorld::Get(this))
 	{
 		MenuIndex = BRLevels::IndexOf(W->StartLevel);
+	}
+
+	// Test multijoueur (-BRNetTest) cote client : l'hote lance le sien depuis le mode de jeu
+	if (GetNetMode() == NM_Client && ABRAutoTest::IsNetTestRequested() && GetWorld())
+	{
+		bool bRunning = false;
+		for (TActorIterator<ABRAutoTest> It(GetWorld()); It; ++It)
+		{
+			bRunning = true;
+		}
+		if (!bRunning)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			GetWorld()->SpawnActor<ABRAutoTest>(ABRAutoTest::StaticClass(), FTransform::Identity, Params);
+		}
 	}
 }
 
@@ -520,8 +535,8 @@ void ABRPlayerController::UpdateVoice(float DeltaTime)
 		}
 		if (UVOIPTalker* Talker = Slot.Get())
 		{
-			APawn* Pawn = PS->GetPawn();
-			Talker->Settings.ComponentToAttachTo = Pawn ? Pawn->GetRootComponent() : nullptr;
+			APawn* SpeakerPawn = PS->GetPawn();
+			Talker->Settings.ComponentToAttachTo = SpeakerPawn ? SpeakerPawn->GetRootComponent() : nullptr;
 			Talker->Settings.AttenuationSettings = A ? A->VoiceAttenuation() : nullptr;
 		}
 	}
@@ -1190,11 +1205,8 @@ void ABRPlayerController::JoinGame()
 		MenuStatus = TEXT("Entrez l'adresse IP de l'h\u00f4te (ex. 192.168.1.20).");
 		return;
 	}
-	if (GConfig)
-	{
-		GConfig->SetString(SettingsSection, TEXT("LastAddress"), *Address, GGameUserSettingsIni);
-		GConfig->Flush(false, GGameUserSettingsIni);
-	}
+	BRConfig::Get().SetString(SettingsSection, TEXT("LastAddress"), *Address);
+	BRConfig::Save();
 	MenuStatus = FString::Printf(TEXT("Connexion \u00e0 %s..."), *Address);
 	ClientTravel(Address, TRAVEL_Absolute);
 }
@@ -1448,7 +1460,7 @@ void ABRPlayerController::BRObjectives()
 }
 
 // =====================================================================================================================
-// Parametres (sauvegardes dans Saved/Config/<plateforme>/GameUserSettings.ini)
+// Parametres (sauvegardes dans Saved/Config/<plateforme>/BackroomsPlayer.ini)
 // =====================================================================================================================
 
 int32 ABRPlayerController::GetSettingsCount() const
@@ -1496,8 +1508,6 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return TEXT("GRAIN DE CAM\u00c9SCOPE");
 	case Row_VHSEffect:
 		return TEXT("EFFET CAM\u00c9SCOPE (VHS)");
-	case Row_Water:
-		return TEXT("RENDU DE L'EAU");
 	default:
 		return FString();
 	}
@@ -1544,8 +1554,6 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return OnOff(S.bFilmGrain);
 	case Row_VHSEffect:
 		return OnOff(S.bVHSEffect);
-	case Row_Water:
-		return S.bTranslucentWater ? FString(TEXT("TRANSLUCIDE")) : FString(TEXT("SINGLE LAYER WATER"));
 	default:
 		return FString();
 	}
@@ -1583,8 +1591,6 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return TEXT("Halos de lumi\u00e8re dans l'air humide.");
 	case Row_VHSEffect:
 		return TEXT("D\u00e9sactiv\u00e9 : \u00e9cran normal, sans viseur REC, cadres, lignes, aberration ni salet\u00e9 d'objectif.");
-	case Row_Water:
-		return TEXT("Single Layer Water : absorption r\u00e9aliste. Translucide : toujours visible, si l'eau n'appara\u00eet pas.");
 	default:
 		return FString();
 	}
@@ -1657,13 +1663,6 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	case Row_VHSEffect:
 		S.bVHSEffect = !S.bVHSEffect;
 		break;
-	case Row_Water:
-		S.bTranslucentWater = !S.bTranslucentWater;
-		if (ABRWorld* W = ABRWorld::Get(this))
-		{
-			W->RefreshWater();
-		}
-		break;
 	default:
 		return;
 	}
@@ -1677,30 +1676,26 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 
 void ABRPlayerController::LoadSettings()
 {
-	if (!GConfig)
-	{
-		return;
-	}
+	const FConfigFile& Cfg = BRConfig::Get();
 	FBRSettings& S = FBRSettings::Get();
-	GConfig->GetFloat(SettingsSection, TEXT("Sensitivity"), S.Sensitivity, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("InvertY"), S.bInvertY, GGameUserSettingsIni);
-	GConfig->GetFloat(SettingsSection, TEXT("FOV"), S.FOV, GGameUserSettingsIni);
-	GConfig->GetInt(SettingsSection, TEXT("Quality"), S.Quality, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("TranslucentWater"), S.bTranslucentWater, GGameUserSettingsIni);
-	GConfig->GetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume, GGameUserSettingsIni);
-	GConfig->GetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode, GGameUserSettingsIni);
-	GConfig->GetFloat(SettingsSection, TEXT("Brightness"), S.Brightness, GGameUserSettingsIni);
-	GConfig->GetInt(SettingsSection, TEXT("WindowMode"), S.WindowMode, GGameUserSettingsIni);
-	GConfig->GetInt(SettingsSection, TEXT("RenderScale"), S.RenderScale, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("VSync"), S.bVSync, GGameUserSettingsIni);
-	GConfig->GetInt(SettingsSection, TEXT("MaxFPS"), S.MaxFPS, GGameUserSettingsIni);
-	GConfig->GetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob, GGameUserSettingsIni);
+	Cfg.GetFloat(SettingsSection, TEXT("Sensitivity"), S.Sensitivity);
+	Cfg.GetBool(SettingsSection, TEXT("InvertY"), S.bInvertY);
+	Cfg.GetFloat(SettingsSection, TEXT("FOV"), S.FOV);
+	Cfg.GetInt(SettingsSection, TEXT("Quality"), S.Quality);
+	Cfg.GetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
+	Cfg.GetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
+	Cfg.GetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
+	Cfg.GetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
+	Cfg.GetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain);
+	Cfg.GetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
+	Cfg.GetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
+	Cfg.GetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
+	Cfg.GetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);
+	Cfg.GetInt(SettingsSection, TEXT("WindowMode"), S.WindowMode);
+	Cfg.GetInt(SettingsSection, TEXT("RenderScale"), S.RenderScale);
+	Cfg.GetBool(SettingsSection, TEXT("VSync"), S.bVSync);
+	Cfg.GetInt(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
+	Cfg.GetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob);
 	S.MasterVolume = FMath::Clamp(S.MasterVolume, 0.f, 1.f);
 	S.VoiceMode = FMath::Clamp(S.VoiceMode, 0, 2);
 	S.Brightness = FMath::Clamp(S.Brightness, -1.5f, 1.5f);
@@ -1714,31 +1709,27 @@ void ABRPlayerController::LoadSettings()
 
 void ABRPlayerController::SaveSettings() const
 {
-	if (!GConfig)
-	{
-		return;
-	}
+	FConfigFile& Cfg = BRConfig::Get();
 	const FBRSettings& S = FBRSettings::Get();
-	GConfig->SetFloat(SettingsSection, TEXT("Sensitivity"), S.Sensitivity, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("InvertY"), S.bInvertY, GGameUserSettingsIni);
-	GConfig->SetFloat(SettingsSection, TEXT("FOV"), S.FOV, GGameUserSettingsIni);
-	GConfig->SetInt(SettingsSection, TEXT("Quality"), S.Quality, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("TranslucentWater"), S.bTranslucentWater, GGameUserSettingsIni);
-	GConfig->SetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume, GGameUserSettingsIni);
-	GConfig->SetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode, GGameUserSettingsIni);
-	GConfig->SetFloat(SettingsSection, TEXT("Brightness"), S.Brightness, GGameUserSettingsIni);
-	GConfig->SetInt(SettingsSection, TEXT("WindowMode"), S.WindowMode, GGameUserSettingsIni);
-	GConfig->SetInt(SettingsSection, TEXT("RenderScale"), S.RenderScale, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("VSync"), S.bVSync, GGameUserSettingsIni);
-	GConfig->SetInt(SettingsSection, TEXT("MaxFPS"), S.MaxFPS, GGameUserSettingsIni);
-	GConfig->SetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob, GGameUserSettingsIni);
-	GConfig->Flush(false, GGameUserSettingsIni);
+	Cfg.SetFloat(SettingsSection, TEXT("Sensitivity"), S.Sensitivity);
+	Cfg.SetBool(SettingsSection, TEXT("InvertY"), S.bInvertY);
+	Cfg.SetFloat(SettingsSection, TEXT("FOV"), S.FOV);
+	Cfg.SetInt64(SettingsSection, TEXT("Quality"), S.Quality);
+	Cfg.SetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
+	Cfg.SetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
+	Cfg.SetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
+	Cfg.SetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
+	Cfg.SetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain);
+	Cfg.SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
+	Cfg.SetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
+	Cfg.SetInt64(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
+	Cfg.SetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);
+	Cfg.SetInt64(SettingsSection, TEXT("WindowMode"), S.WindowMode);
+	Cfg.SetInt64(SettingsSection, TEXT("RenderScale"), S.RenderScale);
+	Cfg.SetBool(SettingsSection, TEXT("VSync"), S.bVSync);
+	Cfg.SetInt64(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
+	Cfg.SetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob);
+	BRConfig::Save();
 }
 
 void ABRPlayerController::ApplySettings()

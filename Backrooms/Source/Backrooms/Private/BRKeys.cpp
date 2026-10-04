@@ -1,4 +1,5 @@
 #include "BRKeys.h"
+#include "BRConfig.h"
 
 #include "Misc/ConfigCacheIni.h"
 
@@ -148,14 +149,11 @@ namespace BRKeys
 	void Load()
 	{
 		EnsureInit();
-		if (!GConfig)
-		{
-			return;
-		}
+		const FConfigFile& Cfg = BRConfig::Get();
 		for (int32 A = 0; A < NumActions(); ++A)
 		{
 			FString Line;
-			if (!GConfig->GetString(KeysSection, Def(static_cast<EBRAction>(A)).Id, Line, GGameUserSettingsIni))
+			if (!Cfg.GetString(KeysSection, Def(static_cast<EBRAction>(A)).Id, Line))
 			{
 				continue;
 			}
@@ -181,10 +179,7 @@ namespace BRKeys
 	void Save()
 	{
 		EnsureInit();
-		if (!GConfig)
-		{
-			return;
-		}
+		FConfigFile& Cfg = BRConfig::Get();
 		for (int32 A = 0; A < NumActions(); ++A)
 		{
 			FString Line;
@@ -193,9 +188,9 @@ namespace BRKeys
 				const FKey& K = Table()[A * SlotsPerAction + Slot];
 				Line += (Slot > 0 ? TEXT("|") : TEXT("")) + (K.IsValid() ? K.GetFName().ToString() : FString(TEXT("None")));
 			}
-			GConfig->SetString(KeysSection, Def(static_cast<EBRAction>(A)).Id, *Line, GGameUserSettingsIni);
+			Cfg.SetString(KeysSection, Def(static_cast<EBRAction>(A)).Id, *Line);
 		}
-		GConfig->Flush(false, GGameUserSettingsIni);
+		BRConfig::Save();
 	}
 
 	FString KeyName(const FKey& Key)

@@ -8,9 +8,9 @@
 #include "BRHUD.h"
 #include "BRPlayerController.h"
 #include "BRKeys.h"
-#include "BRMaterialBuilder.h"
 #include "BRInteractables.h"
 #include "BRPhenomena.h"
+#include "BRWaterSim.h"
 
 #include "Algo/Reverse.h"
 #include "Components/AudioComponent.h"
@@ -354,6 +354,8 @@ void ABRWorld::ClearLevel()
 
 void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 {
+	// Premier niveau d'un client qui rejoint : le serveur a deja fait apparaitre son personnage a sa place
+	const bool bFirstClientLoad = !HasAuthority() && !bLevelReady;
 	ClearLevel();
 	Current = &BRLevels::Get(LevelNumber);
 	Seed = InSeed != 0 ? InSeed : (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17));
@@ -412,19 +414,21 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		}
 	}
 
-	// Ondes de l'eau : le materiau du nouveau niveau sera repris au premier Tick
-	WaterMID = nullptr;
-	for (FRipple& R : Ripples)
+	// Eau calme dans le nouveau niveau ; ses murs seront relus par la simulation
+	if (WaterSim)
 	{
-		R = FRipple();
+		WaterSim->Reset();
 	}
-	bRipplesDirty = true;
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		A->SetWaterSim(nullptr, FLinearColor(0.f, 0.f, 1000.f, 0.f));
+	}
 
 	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title, Seed);
 
 	ApplyEnvironment();
 	UpdateStreaming(true);
-	PlacePlayer();
+	PlacePlayer(bFirstClientLoad);
 	// Client arrive pendant une coupure : on reprend l'etat du serveur
 	if (!HasAuthority() && NetBlackout != 0)
 	{
@@ -685,7 +689,35 @@ void ABRWorld::ApplyEnvironment()
 	}
 }
 
-void ABRWorld::PlacePlayer()
+int32 ABRWorld::PlayerSlot(const APlayerState* PS) const
+{
+	// L'ordre de PlayerArray differe d'une machine a l'autre (chez un client, son propre etat arrive souvent en premier) :
+	// on classe par identifiant, attribue par le serveur dans l'ordre d'arrivee
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	if (!PS || !GS)
+	{
+		return 0;
+	}
+	int32 Slot = 0;
+	for (const APlayerState* Other : GS->PlayerArray)
+	{
+		Slot += (Other && Other != PS && Other->GetPlayerId() < PS->GetPlayerId()) ? 1 : 0;
+	}
+	return Slot;
+}
+
+FVector ABRWorld::SpawnSpot(int32 Slot, float Half) const
+{
+	FVector Loc = CellCenter(FIntPoint(0, 0), Half + 5.f);
+	if (Slot > 0)
+	{
+		const float Ang = FMath::DegreesToRadians(90.f + 60.f * static_cast<float>(Slot - 1));
+		Loc += FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * FMath::Min(85.f, CellSize() * 0.3f);
+	}
+	return Loc;
+}
+
+void ABRWorld::PlacePlayer(bool bKeepServerSpot)
 {
 	ABRCharacter* P = GetPlayer();
 	if (!P)
@@ -709,19 +741,16 @@ void ABRWorld::PlacePlayer()
 	}
 
 	const float Half = P->GetCapsuleComponent() ? P->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
-	FVector Loc = CellCenter(Start, Half + 5.f);
-	// En equipe, chacun sa place autour du point de depart
-	if (IsNetGame())
+	// (a l'arrivee d'un client, l'etat des autres joueurs n'est pas toujours encore recu : sa place calculee ici
+	// serait fausse, alors que le serveur l'a deja fait apparaitre a la bonne)
+	const bool bServerPlaced = bKeepServerSpot && FVector::Dist2D(P->GetActorLocation(), CellCenter(FIntPoint(0, 0))) < CellSize();
+	if (!bServerPlaced)
 	{
-		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
-		const int32 Slot = (GS && P->GetPlayerState()) ? GS->PlayerArray.IndexOfByKey(P->GetPlayerState()) : 0;
-		if (Slot > 0)
-		{
-			const float Ang = FMath::DegreesToRadians(Yaw + 90.f + 60.f * static_cast<float>(Slot - 1));
-			Loc += FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * FMath::Min(85.f, CellSize() * 0.3f);
-		}
+		const int32 Slot = IsNetGame() ? PlayerSlot(P->GetPlayerState()) : 0;
+		const FVector Loc = SpawnSpot(Slot, Half);
+		P->SetActorLocation(Loc, false, nullptr, ETeleportType::TeleportPhysics);
+		UE_LOG(LogBackrooms, Log, TEXT("Joueur place au point de depart (place %d) : %s"), Slot, *Loc.ToString());
 	}
-	P->SetActorLocation(Loc, false, nullptr, ETeleportType::TeleportPhysics);
 	if (AController* C = P->GetController())
 	{
 		C->SetControlRotation(FRotator(0.f, Yaw, 0.f));
@@ -761,7 +790,8 @@ void ABRWorld::Tick(float DeltaSeconds)
 
 	if (!bPlayerPlaced)
 	{
-		PlacePlayer();
+		// Client qui arrive dans la partie : son personnage apparait a la place que le serveur lui a donnee
+		PlacePlayer(!HasAuthority());
 	}
 
 	switch (TransState)
@@ -839,7 +869,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 		StreamTimer = 0.1f;
 		UpdateStreaming(false);
 	}
-	UpdateRipples(Dt);
+	UpdateWaterSim(Dt);
 
 	// Le menu titre s'affiche par-dessus le niveau : pas de coupure ni d'annonce tant qu'on n'a pas commence
 	bool bMenu = false;
@@ -1784,19 +1814,6 @@ bool ABRWorld::FindHidingSpotNear(const FVector& Location, float Radius, bool& b
 	return C && *C && (*C)->FindHidingSpotNear(Location, Radius, bOutNeedsCrouch);
 }
 
-void ABRWorld::RefreshWater()
-{
-	WaterMID = nullptr;
-	bRipplesDirty = true;
-	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
-	{
-		if (ABRChunk* C = Pair.Value)
-		{
-			C->RefreshWater();
-		}
-	}
-}
-
 FBRSurface ABRWorld::GetWaterSurface() const
 {
 	FBRSurface S = Def().Water;
@@ -1809,90 +1826,84 @@ FBRSurface ABRWorld::GetWaterSurface() const
 
 void ABRWorld::AddWaterRipple(const FVector& Location, float Strength)
 {
-	if (!Current || !Current->bWater || Strength <= 0.f)
+	if (!Current || !Current->bWater || Strength <= 0.f || !WaterSim)
 	{
 		return;
 	}
-	FRipple& R = Ripples[NextRipple];
-	NextRipple = (NextRipple + 1) % MaxRipples;
-	R.Pos = FVector2D(Location.X, Location.Y);
-	R.Age = 0.f;
-	R.Strength = Strength;
-	R.bActive = true;
-	bRipplesDirty = true;
+	WaterSim->AddImpulse(FVector2D(Location.X, Location.Y), 10.f + 7.f * Strength, 0.6f * Strength);
 }
 
-void ABRWorld::UpdateRipples(float Dt)
+void ABRWorld::UpdateWaterSim(float Dt)
 {
-	static_assert(MaxRipples == BRMaterialBuilder::NumRipples, "Une onde par parametre RippleN du materiau d'eau");
 	if (!Current || !Current->bWater)
 	{
 		return;
 	}
+	const ABRCharacter* P = GetPlayer();
+	if (!P)
+	{
+		return;
+	}
+	if (!WaterSim)
+	{
+		WaterSim = NewObject<UBRWaterSim>(this);
+	}
+	const float WaterZ = Current->WaterHeight;
+
+	// Tout ce qui traverse la surface fend l'eau : les joueurs (le sien et ceux des autres) et les entites
+	TArray<AActor*> Bodies;
+	TArray<ABRCharacter*> Players;
+	GetPlayers(Players);
+	Bodies.Append(Players);
+	for (ABREntity* E : Entities)
+	{
+		if (IsValid(E))
+		{
+			Bodies.Add(E);
+		}
+	}
+	for (const AActor* Body : Bodies)
+	{
+		float Radius = 0.f;
+		float HalfHeight = 0.f;
+		Body->GetSimpleCollisionCylinder(Radius, HalfHeight);
+		const FVector L = Body->GetActorLocation();
+		const float Bottom = static_cast<float>(L.Z) - HalfHeight;
+		const float Top = static_cast<float>(L.Z) + HalfHeight;
+		if (Bottom > WaterZ - 2.f || Top < WaterZ - 40.f)
+		{
+			continue; // hors de l'eau, ou entierement dessous
+		}
+		// Un marcheur fend l'eau en avancant ; un nageur la brasse aussi sur place (battements reguliers)
+		const bool bSwim = Bottom < WaterZ - 100.f;
+		const FVector Vel = Body->GetVelocity();
+		const float Speed = static_cast<float>(Vel.Size2D());
+		const FVector2D Pos(L.X, L.Y);
+		const float Size = FMath::Clamp(Radius, 15.f, 60.f) * (bSwim ? 1.f : 0.6f);
+		if (Speed > 15.f)
+		{
+			WaterSim->AddMover(Pos, FVector2D(Vel.X, Vel.Y) / Speed, Size, 0.3f * FMath::Min(Speed, 700.f));
+		}
+		if (bSwim)
+		{
+			WaterSim->AddMover(Pos, FVector2D::ZeroVector, Size, 14.f * FMath::Sin(LevelTime * 5.5f));
+		}
+	}
+
 	// Gouttes qui tombent du plafond autour du joueur : l'eau n'est jamais tout a fait immobile
 	DripTimer -= Dt;
 	if (DripTimer <= 0.f)
 	{
-		DripTimer = FMath::FRandRange(0.5f, 1.6f);
-		const ABRCharacter* P = GetPlayer();
-		for (FRipple& R : Ripples)
-		{
-			if (P && !R.bActive)
-			{
-				const FVector L = P->GetActorLocation() + FVector(FMath::FRandRange(-800.f, 800.f), FMath::FRandRange(-800.f, 800.f), 0.f);
-				R.Pos = FVector2D(L.X, L.Y);
-				R.Age = 0.f;
-				R.Strength = FMath::FRandRange(0.25f, 0.55f);
-				R.bActive = true;
-				bRipplesDirty = true;
-				break;
-			}
-		}
+		DripTimer = FMath::FRandRange(0.8f, 2.4f);
+		const FVector L = P->GetActorLocation() + FVector(FMath::FRandRange(-700.f, 700.f), FMath::FRandRange(-700.f, 700.f), 0.f);
+		WaterSim->AddImpulse(FVector2D(L.X, L.Y), 9.f, FMath::FRandRange(0.25f, 0.5f));
 	}
 
-	if (!WaterMID)
+	WaterSim->Tick(Dt, P->GetActorLocation(), this);
+	if (UBRAssets* A = UBRAssets::Get(this))
 	{
-		if (UBRAssets* A = UBRAssets::Get(this))
-		{
-			const FBRLevelDef& D = Def();
-			WaterMID = Cast<UMaterialInstanceDynamic>(A->WaterMaterial(GetWaterSurface(), D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop));
-			bRipplesDirty = true;
-		}
+		A->SetWaterSim(WaterSim->GetTexture(), WaterSim->GetWindow());
 	}
-
-	static const FName Names[MaxRipples] = { TEXT("Ripple0"), TEXT("Ripple1"), TEXT("Ripple2"), TEXT("Ripple3"), TEXT("Ripple4"),
-		TEXT("Ripple5"), TEXT("Ripple6"), TEXT("Ripple7") };
-	bool bAny = false;
-	FLinearColor Values[MaxRipples];
-	for (int32 i = 0; i < MaxRipples; ++i)
-	{
-		FRipple& R = Ripples[i];
-		Values[i] = FLinearColor(0.f, 0.f, 0.f, 0.f);
-		if (!R.bActive)
-		{
-			continue;
-		}
-		// Le front s'eloigne a ~70 cm/s et s'amortit en s'etalant
-		R.Age += Dt;
-		const float Radius = 6.f + 70.f * R.Age;
-		const float Amp = R.Strength * FMath::Exp(-1.1f * R.Age) / (1.f + Radius / 150.f);
-		if (R.Age > 4.f || Amp < 0.004f)
-		{
-			R.bActive = false;
-			continue;
-		}
-		Values[i] = FLinearColor(static_cast<float>(R.Pos.X), static_cast<float>(R.Pos.Y), Radius, Amp);
-		bAny = true;
-	}
-	// Une derniere mise a jour une fois les ondes eteintes, puis plus rien tant que l'eau est calme
-	if (WaterMID && (bAny || bRipplesDirty))
-	{
-		for (int32 i = 0; i < MaxRipples; ++i)
-		{
-			WaterMID->SetVectorParameterValue(Names[i], Values[i]);
-		}
-	}
-	bRipplesDirty = bAny;
 }
 
 void ABRWorld::SetUnderwater(float Blend)

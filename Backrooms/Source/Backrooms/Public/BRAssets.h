@@ -44,8 +44,12 @@ public:
 
 	/** Materiau "projete dans l'espace monde" (murs, sols...) - mis en cache */
 	UMaterialInterface* Surface(const FBRSurface& S);
-	/** Eau : Single Layer Water, ou eau translucide si FBRSettings::bTranslucentWater */
+	/** Meme materiau, mais unique (non partage) : ses parametres peuvent etre animes (mur qui glitche...) */
+	UMaterialInstanceDynamic* NewSurface(const FBRSurface& S, UObject* Outer);
+	/** Eau translucide : refraction, absorption selon la profondeur, houle (Waves) et clapot (Chop) de fond */
 	UMaterialInterface* WaterMaterial(const FBRSurface& S, float Absorption = 1.2f, float Scattering = 0.15f, float Waves = 1.f, float Chop = 1.f);
+	/** Vagues simulees autour du joueur (UBRWaterSim) : donnees a l'eau et aux caustiques du carrelage */
+	void SetWaterSim(UTexture* SimTexture, const FLinearColor& Window);
 	/** Materiau d'un slot de modele Blender, d'apres son nom (Glow, Metal, Skin...) */
 	UMaterialInterface* SlotMaterial(const FString& SlotName, const FLinearColor* TintOverride = nullptr);
 	/** Nouveau materiau emissif unique (pour les lumieres qui clignotent, les yeux...) */
@@ -77,12 +81,14 @@ public:
 	FString CheckImportedMeshes();
 
 private:
-	enum class EParent : uint8 { World, Mesh, Skin, Water, WaterSurface, Count };
+	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, Count };
 
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);
 	UMaterialInterface* Parent(EParent Which);
 	UMaterialInterface* FallbackParent();
+	/** Nouveau materiau de surface (parametres remplis), sans passer par le cache */
+	UMaterialInstanceDynamic* CreateSurface(const FBRSurface& S, UObject* Outer);
 	static FLinearColor TextureAverage(FName Texture);
 	static bool IsSkinSlot(const FString& SlotName);
 
@@ -114,6 +120,11 @@ private:
 	};
 	TArray<FPoweredGlow> PoweredGlows;
 	float GlowScaleNow = 1.f;
+
+	/** Materiaux qui lisent la simulation de l'eau (eau, carrelage a caustiques) */
+	TArray<TWeakObjectPtr<UMaterialInstanceDynamic>> WaterSimMIDs;
+	TWeakObjectPtr<UTexture> WaterSimTexture;
+	FLinearColor WaterSimWindow = FLinearColor(0.f, 0.f, 1000.f, 0.f);
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;

@@ -307,7 +307,6 @@ private:
 	float EdgePush = 0.f;
 	float SplashCooldown = 0.f;
 	float ClimbGrace = 0.f;
-	float RippleTimer = 0.f;
 	/** Se hisser sur le rebord d'un bassin : monter le long de la paroi, puis avancer */
 	bool bMantling = false;
 	float MantleTime = 0.f;

@@ -16,6 +16,8 @@ public:
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	virtual void StartPlay() override;
+	/** La carte n'a pas de PlayerStart : chaque joueur apparait autour du point de depart du niveau */
+	virtual APawn* SpawnDefaultPawnAtTransform_Implementation(AController* NewPlayer, const FTransform& SpawnTransform) override;
 
 private:
 	/** Niveau de depart demande par l'hote (option BRLevel) */

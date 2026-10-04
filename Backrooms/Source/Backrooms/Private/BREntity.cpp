@@ -14,6 +14,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Net/UnrealNetwork.h"
 #include "Sound/SoundBase.h"
 
 // =====================================================================================================================
@@ -116,7 +117,8 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		Bact.Description = TEXT("Une silhouette humano\u00efde d\u00e9mesur\u00e9e, faite de fils torsad\u00e9s comme un squelette de c\u00e2bles. ")
 			TEXT("Elle erre dans le Niveau 0 en se tordant et imite des coups frapp\u00e9s aux murs pour attirer les vagabonds.");
 		Bact.Advice = TEXT("Si vous entendez frapper, \u00e9loignez-vous. D\u00e8s qu'elle vous voit, cassez la ligne de vue : portes, virages, recoins.");
-		Bact.HalfHeight = 108.f; Bact.Radius = 30.f; Bact.WalkSpeed = 140.f; Bact.ChaseSpeed = 490.f; Bact.SightRange = 2600.f;
+		// Un peu moins rapide qu'un sprint (470) : on peut la semer en cassant la ligne de vue, pas en restant sur place
+		Bact.HalfHeight = 108.f; Bact.Radius = 30.f; Bact.WalkSpeed = 140.f; Bact.ChaseSpeed = 440.f; Bact.SightRange = 2600.f;
 		Bact.AttackRange = 130.f; Bact.Damage = 60.f; Bact.SanityDamage = 20.f; Bact.AttackCooldown = 1.4f; Bact.Aura = 0.5f;
 		Bact.AuraRadius = 900.f; Bact.Voice = TEXT("S_Bacteria"); Bact.VoiceInterval = 7.f; Bact.VoiceFalloff = 3200.f;
 		return L;
@@ -748,6 +750,11 @@ void ABREntity::PlayVoice(float Volume)
 		Voice->SetPitchMultiplier(FMath::FRandRange(0.9f, 1.1f));
 		Voice->Play();
 	}
+}
+
+void ABREntity::MulticastVoiceCue_Implementation(float Volume)
+{
+	PlayVoice(Volume);
 }
 
 void ABREntity::PlaySound2D(FName Sound, float Volume)
@@ -1411,27 +1418,45 @@ void ABREntity::ThinkBacteria(ABRWorld* W, ABRCharacter* P, const FSense& S, flo
 	const float Sight = I.SightRange * (W->IsBlackout() ? 0.6f : 1.f);
 
 	// Elle ne repere pas le joueur d'un coup : la suspicion monte tant qu'elle le voit (vite s'il est proche,
-	// s'il court, s'il l'eclaire ; lentement s'il est dans son dos). Le joueur a le temps de la voir et de se cacher.
+	// s'il court, s'il l'eclaire ; lentement s'il est sur le cote, accroupi ou dans le noir ; a peine s'il est
+	// dans son dos). A ~10 m, il faut ~3 s pour qu'elle passe a l'attaque : le temps de la voir et de se cacher.
 	float Rate = 0.f;
 	if (S.bLOS && S.Dist < Sight)
 	{
 		const float Near = 1.f - FMath::Clamp(S.Dist / Sight, 0.f, 1.f);
-		Rate = 0.12f + 1.2f * Near * Near + (P->IsSprinting() ? 0.8f : 0.f) + ((P->IsFlashlightOn() && S.bLookedAt) ? 0.4f : 0.f);
 		const FVector ToPlayer = (PL - GetActorLocation()).GetSafeNormal2D();
-		if (FVector::DotProduct(GetActorForwardVector(), ToPlayer) < 0.f)
+		const float Facing = static_cast<float>(FVector::DotProduct(GetActorForwardVector(), ToPlayer));
+		const float Cone = Facing > 0.5f ? 1.f : (Facing > 0.f ? 0.5f : 0.15f);
+		Rate = (0.05f + 0.75f * Near * Near) * Cone;
+		if (P->bIsCrouched)
 		{
-			Rate *= 0.35f;
+			Rate *= 0.6f;
 		}
-		if (S.Dist < 350.f)
+		if (!P->IsFlashlightOn() && W->LightLevelAt(PL) < 0.15f)
+		{
+			Rate *= 0.5f; // une silhouette dans le noir se distingue mal
+		}
+		Rate += (P->IsSprinting() ? 0.6f : 0.f) + ((P->IsFlashlightOn() && S.bLookedAt) ? 0.35f : 0.f);
+		if (S.Dist < 300.f)
 		{
 			Rate = 10.f;
 		}
 	}
 	if (S.bHeard && S.Dist < 1200.f)
 	{
-		Rate += 0.9f;
+		Rate += 0.6f;
 	}
 	Suspicion = Rate > 0.f ? FMath::Min(1.f, Suspicion + Rate * Dt) : FMath::Max(0.f, Suspicion - 0.15f * Dt);
+	// "Elle m'a vu ?" : un raclement de fils avertit le joueur (une fois, jusqu'a ce qu'elle se desinteresse)
+	if (Suspicion > 0.45f && !bSuspicionCue && State != EState::Chase)
+	{
+		bSuspicionCue = true;
+		MulticastVoiceCue(0.9f);
+	}
+	else if (Suspicion < 0.2f)
+	{
+		bSuspicionCue = false;
+	}
 
 	switch (State)
 	{

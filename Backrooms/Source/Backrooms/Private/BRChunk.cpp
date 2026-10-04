@@ -123,7 +123,6 @@ void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size, bool 
 	UMaterialInterface* Mat = bCalm ? A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.2f, 0.4f)
 		: A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop);
 	FBatch& B = GetBatch(bCalm ? TEXT("WATER|CALM") : TEXT("WATER"), Grid ? Grid : A->Plane(), Mat, false, false, 0.f);
-	B.Water = bCalm ? 1 : 0;
 	B.Transforms.Add(FTransform(FRotator::ZeroRotator, Center - GetActorLocation(), FVector(Size.X / 100.f, Size.Y / 100.f, 1.f)));
 }
 
@@ -447,6 +446,9 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 	const FTransform Local(Rot, MeshPos - GetActorLocation());
 	const float FallbackZ = (D.Fixture == EBRFixture::StreetLamp || D.Fixture == EBRFixture::Sconce) ? 0.f : -FallbackSize.Z;
 	UStaticMesh* Mesh = A->Mesh(MeshName);
+	// Un luminaire ne projette pas d'ombre : sa monture, collee a la source, dessinait un grand disque noir au plafond.
+	// Seuls les lampadaires (poteau de 6 m, eclaires par les autres lampes) gardent la leur.
+	const bool bFixtureShadow = D.Fixture == EBRFixture::StreetLamp;
 
 	// Composant individuel pour pouvoir animer l'emissif : neon qui clignote, ou lampe qui peut virer au rouge
 	const bool bIndividual = (L.bFlicker || D.RedLightRadius > 0.f) && !L.bBroken;
@@ -456,6 +458,7 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		Comp->SetupAttachment(Root);
 		Comp->SetMobility(EComponentMobility::Static);
 		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Comp->SetCastShadow(bFixtureShadow);
 		FBRFlicker F;
 		F.GlowColor = UBRAssets::GlowColorForSlot(bWarm ? TEXT("GlowWarm") : TEXT("Glow"));
 		if (Mesh)
@@ -488,7 +491,7 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 	else if (Mesh)
 	{
 		const FString Key = FString::Printf(TEXT("FIXTURE|%s|%d"), *MeshName.ToString(), L.bBroken ? 0 : 1);
-		FBatch& B = GetBatch(Key, Mesh, nullptr, false, true, 0.f);
+		FBatch& B = GetBatch(Key, Mesh, nullptr, false, bFixtureShadow, 0.f);
 		B.GlowScale = L.bBroken ? 0.f : 1.f;
 		B.bPowered = !L.bBroken;
 		B.Transforms.Add(Local);
@@ -1426,39 +1429,8 @@ void ABRChunk::FinishBatches()
 		}
 		ISM->RegisterComponent();
 		Instances.Add(ISM);
-		if (B.Water >= 0)
-		{
-			WaterISMs.Add(ISM);
-			WaterCalm.Add(B.Water == 1);
-		}
 	}
 	Batches.Empty();
-}
-
-void ABRChunk::RefreshWater()
-{
-	ABRWorld* W = World.Get();
-	UBRAssets* A = UBRAssets::Get(this);
-	if (!W || !A)
-	{
-		return;
-	}
-	const FBRLevelDef& D = W->Def();
-	const FBRSurface WaterS = W->GetWaterSurface();
-	for (int32 i = 0; i < WaterISMs.Num(); ++i)
-	{
-		UInstancedStaticMeshComponent* ISM = WaterISMs[i];
-		if (!ISM)
-		{
-			continue;
-		}
-		UMaterialInterface* Mat = WaterCalm[i] ? A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.2f, 0.4f)
-			: A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop);
-		for (int32 m = 0; m < ISM->GetNumMaterials(); ++m)
-		{
-			ISM->SetMaterial(m, Mat);
-		}
-	}
 }
 
 void ABRChunk::Tick(float DeltaSeconds)

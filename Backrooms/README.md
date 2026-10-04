@@ -7,6 +7,57 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3.6** (Poolrooms plus réalistes) :
+- **L'eau suit le joueur** : elle est presque immobile, et ce sont les joueurs qui la font bouger. Une simulation de
+  vagues (équation des ondes sur une grille de 19 m × 19 m qui accompagne le joueur, `BRWaterSim`) dessine le **sillage**
+  de chacun (vague devant, creux derrière, sillage en V), les **ronds** des pas, des plongeons et des gouttes du plafond.
+  Les vagues **rebondissent sur les murs et les piliers**. En multijoueur, on voit le sillage de ses coéquipiers et des
+  entités. Coût : moins d'une milliseconde de processeur par image.
+- **Eau toujours translucide et plus réaliste** : on voit le carrelage du fond, déformé par les vagues (réfraction). La
+  couleur dépend de l'épaisseur d'eau traversée : limpide dans 45 cm d'eau, turquoise puis vert-bleu au-dessus des
+  bassins profonds. Les reflets suivent la loi de Fresnel, et sous l'eau la surface vue d'en dessous montre la
+  réflexion totale. Le réglage « RENDU DE L'EAU » disparaît, ainsi que le matériau *Single Layer Water* (`M_BR_Water`).
+- **Caustiques réalistes** : nouvelle texture calculée en suivant la lumière à travers une surface d'eau ondulée, au
+  lieu d'un réseau de lignes qui ressemblait à des fissures. Elles dérivent lentement, sont nettes sous l'eau, plus
+  faibles au-dessus et s'éteignent à 2 m de la surface. Les vagues autour du joueur les déforment.
+- **Carrelage refait** : émail blanc légèrement bleu-vert, joints fins gris clair, bords arrondis, et chaque carreau
+  très légèrement incliné : les reflets des plafonniers se brisent d'un carreau à l'autre comme sur un vrai mur.
+  Le fond est à peine teinté, et la lumière qui en rebondit colore doucement les murs.
+- Le test automatique ajoute une marche dans l'eau (captures du sillage en marchant et après demi-tour), une plongée
+  (surface vue de dessous) et le temps par image (processeur graphique, jeu, rendu). L'import passe en **version 7**
+  et se refait tout seul à l'ouverture de l'éditeur.
+
+**Nouveautés de la version 3.5** (corrections, équilibrage et tests automatiques) :
+- **Compilation corrigée pour Unreal 5.8.3** : `BREntity.cpp` n'incluait pas `Net/UnrealNetwork.h` (le projet ne compilait
+  que par chance, en build « unity »), une variable `Pawn` masquait un membre du contrôleur (erreur C4458), et une API
+  dépréciée en 5.8 (`bUsedWithInstancedStaticMeshes`) est remplacée.
+- **Plantage corrigé en « Standalone Game »** (ou jeu lancé avec `-game`) : le script `init_unreal.py` démarrait aussi
+  hors de l'éditeur et appelait des fonctions d'édition au bout d'une seconde de jeu → plantage. Il ne s'exécute plus que
+  dans l'éditeur.
+- **Multijoueur réparé : le joueur qui rejoignait n'avait pas de personnage.** La carte n'a pas de point d'apparition :
+  Unreal faisait apparaître tout le monde à l'origine, déjà occupée par l'hôte (« SpawnActor failed because of
+  collision »). Chacun apparaît maintenant à sa place autour du point de départ, la même sur toutes les machines
+  (classement par identifiant de joueur, au lieu de l'ordre de la liste des joueurs qui diffère chez le client).
+- **L'eau des Poolrooms s'affiche enfin** : le matériau `M_BR_Water` ne compilait pas en SM6 (les paramètres d'ondes
+  étaient lus en RGB au lieu de RGBA) ; Unreal le remplaçait par le matériau gris par défaut. L'import passe en
+  version 6 et se refait tout seul à l'ouverture de l'éditeur.
+- **Touches et réglages qui disparaissaient** : ils sont maintenant dans `Saved/Config/<plateforme>/BackroomsPlayer.ini`.
+  Avant, ils étaient dans `GameUserSettings.ini`, qu'Unreal efface en entier quand sa version ne lui convient pas
+  (réglages faits en PIE puis jeu lancé en Standalone, nouvelle version du moteur…). Les anciens réglages sont repris.
+- **Bacteria rééquilibrée** (le Niveau 0 est « Classe 1 : sûr », or elle tuait un joueur immobile en moins d'une
+  minute) : première ronde après 50 s au lieu de 25, repérage plus progressif (~3 s à 10 m ; plus lent si l'on est sur
+  le côté, accroupi ou dans le noir), **raclement de fils** quand elle vous remarque, et poursuite à 440 cm/s : un
+  sprint (470) permet désormais de la semer en cassant la ligne de vue.
+- **Vision nocturne utilisable** : elle était grise (la désaturation effaçait la teinte verte) et presque noire (le
+  caméscope tenu en main, collé au projecteur infrarouge, éblouissait l'exposition automatique). Elle est maintenant
+  verte, le projecteur porte plus loin, l'œil s'adapte vite, et l'on regarde à travers le caméscope.
+- **Niveau 6 (Lights Out)** : la lampe éclaire enfin le béton sombre (l'exposition ne pouvait pas s'adapter au noir).
+- Les **murs qui glitchent** (sorties noclip) retrouvent leur effet animé ; plus de **grands disques noirs** au plafond
+  autour des ampoules (la monture faisait de l'ombre à sa propre lampe) ; la porte « CHAUFFERIE » affiche la touche
+  configurée au lieu de « [E] ».
+- **Tests automatiques** intégrés au jeu (§ 9) : `-BRAutoTest` parcourt les 12 niveaux et les 9 entités, mesure les
+  images par seconde et écrit un rapport avec captures ; `-BRNetTest` teste une partie à deux joueurs.
+
 **Nouveautés de la version 3.4** :
 - **Conseil d'hébergement** affiché dès le menu principal et sur la page MULTIJOUEUR : c'est le joueur qui a
   **l'ordinateur le plus puissant** (et la meilleure connexion) qui devrait héberger, car son PC fait tourner le monde
@@ -43,7 +94,8 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 - **Cachettes** : placards de bureau (on entre) et trous dans le mur (on s'y glisse accroupi). Caché, on n'est ni vu
   ni entendu par les entités (indication « CACHÉ » à l'écran).
 - **Réglages** : « EFFET CAMÉSCOPE (VHS) » à désactiver pour un écran normal (sans viseur REC, cadres, lignes,
-  aberration ni saleté d'objectif). « RENDU DE L'EAU » : Single Layer Water ou eau translucide (toujours visible).
+  aberration ni saleté d'objectif). « RENDU DE L'EAU » : Single Layer Water ou eau translucide (retiré en 3.6 : l'eau
+  est toujours translucide).
 
 **Nouveautés de la version 3** :
 - **Interaction corrigée** : **E** ramasse vraiment les objets. La visée suit maintenant la rotation de la caméra
@@ -95,7 +147,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
    toutes les ressources : 52 textures (dont 21 normal maps), 11 icônes, 66 sons, 95 modèles (FBX). Il crée aussi
-   les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_Water`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
+   les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
 4. Appuyez sur **Play** (Alt+P). Dans le menu principal, choisissez **SOLO**, puis le niveau (← / →), puis **NOCLIPPER**
@@ -178,8 +230,9 @@ Le monde **continue de tourner** quand l'inventaire est ouvert : comme dans le j
 
 L'onglet **PARAMÈTRES** règle la sensibilité, l'axe Y, le champ de vision, la qualité graphique, le **ray tracing matériel
 (RTX)**, les reflets ray tracés haute qualité, les néons surfaciques, le brouillard volumétrique et le grain.
-Les réglages et les touches sont sauvegardés dans `Saved/Config/<plateforme>/GameUserSettings.ini`
-(section `[/Script/Backrooms.BRKeys]` pour les touches).
+Les réglages et les touches sont sauvegardés dans `Saved/Config/<plateforme>/BackroomsPlayer.ini`
+(section `[/Script/Backrooms.BRKeys]` pour les touches). Ce fichier n'est jamais effacé par Unreal, contrairement à
+`GameUserSettings.ini` où ils se trouvaient avant la v3.5 (ils en sont repris automatiquement).
 
 ---
 
@@ -282,7 +335,7 @@ L'écran imite une caméra « found footage » : REC, horodatage, grain et vigne
 | **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10 |
 | **10** | *Field of Wheat* | Champ de blé infini sous un ciel couvert, granges, poteaux | Faceling (paisible) | Grange → 11 |
 | **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour | Facelings (paisibles) | Porte d'immeuble → niveau aléatoire |
-| **37** | *Sublimity* (« Poolrooms ») | Salles en petit carrelage blanc brillant, plafonniers ovales et grandes verrières inclinées, inondées d'une eau tiède turquoise-verte qui ondule (houle, clapot, ondes autour du joueur, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
+| **37** | *Sublimity* (« Poolrooms ») | Salles en petit carrelage blanc brillant, plafonniers ovales et grandes verrières inclinées, inondées d'une eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
 
 Chaque niveau est une grille **infinie** générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
@@ -322,11 +375,14 @@ Backrooms/
 │   ├── BRTypes.h                Structures des niveaux, hachage déterministe
 │   ├── BRLevels.cpp             ★ Définition des 12 niveaux (tout est réglable ici)
 │   ├── BRWorld.*                Grille infinie, streaming, A*, ambiance, transitions, entités, état partagé en réseau
+│   ├── BRWaterSim.*             Vagues autour du joueur (sillages, ronds dans l'eau, rebonds sur les murs)
 │   ├── BRChunk.*                Construction d'un chunk : murs, portes, néons, accessoires, bassins (instances)
 │   ├── BREntity.*               Les 9 entités : fiches, IA, squelette articulé, animation procédurale
 │   ├── BRCharacter.*            Joueur : inventaire, équipement, caméscope, lampe, endurance, santé mentale,
 │   │                            nage / apnée, corps en combinaison et vue à la 3e personne
 │   ├── BRKeys.*                 Touches configurables (3 par action), sauvegarde, libellés « [E] »
+│   ├── BRConfig.*               Fichier des réglages du joueur (Saved/Config/<plateforme>/BackroomsPlayer.ini)
+│   ├── BRAutoTest.*             Tests automatiques (-BRAutoTest, -BRNetTest) : captures, images/s, rapport
 │   ├── BRRig.*                  Humanoïdes articulés (entités et corps du joueur)
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
 │   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu principal, multijoueur, inventaire, paramètres, console
@@ -384,11 +440,15 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 - **Murs** : projection triplanaire dans l'espace monde (aucune texture étirée), **normal maps** (relief du papier peint,
   de la moquette, des joints), saleté à grande échelle, saleté au pied des murs, rugosité variable.
 - **Néons** : lumières **surfaciques** (rect lights) pour des ombres douces ; seule une partie projette des ombres (`ShadowChance`).
-- **Eau** (Poolrooms) : modèle *Single Layer Water* (absorption/diffusion de la lumière, reflets Lumen/RT). Un nœud HLSL
-  calcule la houle (*World Position Offset* sur une grille subdivisée), le clapot et jusqu'à 8 ondes circulaires
-  (paramètres `Ripple0..7` mis à jour par `ABRWorld::UpdateRipples`). S'y ajoutent des rides en normal maps qui
-  défilent et des caustiques animées au fond. Réglages par niveau dans `BRLevels.cpp` : `WaterAbsorption`,
-  `WaterScattering` (limpidité), `WaterWaves` (houle), `WaterChop` (clapot).
+- **Eau** (Poolrooms) : matériau translucide `M_BR_WaterSurface`. Il lit l'image et la profondeur de la scène derrière
+  l'eau (`SceneColor`, `SceneDepth`), les décale selon la pente de la surface (réfraction) et les atténue selon
+  l'épaisseur d'eau traversée, couleur par couleur (absorption). S'y ajoutent Fresnel, reflets Lumen (*front layer*) et
+  réflexion totale vue de dessous. La surface : houle et clapot de fond (nœud HLSL, *World Position Offset* sur une
+  grille subdivisée), rides en normal map, et surtout les **vagues simulées** par `UBRWaterSim` : équation des ondes
+  sur 320 × 320 cases de 6 cm qui suivent le joueur (pas fixes de 1/60 s, calcul en parallèle). Les joueurs et les
+  entités y poussent l'eau, les murs et piliers du niveau renvoient les vagues, et les pentes sont envoyées chaque pas
+  à une texture lue par l'eau et par les caustiques du carrelage. Réglages par niveau dans `BRLevels.cpp` :
+  `WaterAbsorption` (limpidité), `WaterScattering` (voile de l'eau profonde), `WaterWaves` (houle), `WaterChop` (clapot).
 - Sur une petite configuration : onglet **PARAMÈTRES** (qualité « MOYEN », RTX désactivé, néons surfaciques désactivés),
   ou baissez `ViewDistance` / `LightChance` dans `BRLevels.cpp`.
 
@@ -399,14 +459,17 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | « Missing modules / Could not be compiled » | Installer Visual Studio 2022 + « Développement de jeux en C++ », puis recompiler via le `.sln` |
 | Murs sans texture / tout est gris | Corrigé en v2 : les matériaux sont marqués « Used with Instanced Static Meshes » (sans ce drapeau, Unreal affichait le matériau par défaut) et le jeu se replie sur les textures de `RawAssets/`. Pour un résultat optimal, relancer `backrooms_setup.run(force=True)` depuis l'Output Log Python |
 | Les murs apparaissent gris quelques secondes | Mode secours : Unreal compile les matériaux à la volée la première fois |
-| L'eau est opaque / noire | Vérifier `r.Water.SingleLayer=1` et DirectX 12 ; relancer l'import |
+| L'eau est opaque / noire / grise | Depuis la v3.6, l'eau est toujours translucide. Ouvrez l'éditeur une fois : l'import v7 se relance tout seul. Sinon : `import backrooms_setup; backrooms_setup.run(force=True)` |
+| Le jeu plante au bout d'une seconde en « Standalone Game » | Corrigé en v3.5 (`init_unreal.py` ne s'exécute plus hors de l'éditeur) |
+| Un ami qui rejoint la partie n'a pas de personnage / ne peut pas bouger | Corrigé en v3.5 (point d'apparition occupé par l'hôte). Tout le monde doit utiliser la même compilation |
+| Mes touches et réglages ont disparu | Corrigé en v3.5 : ils sont dans `BackroomsPlayer.ini`, qu'Unreal n'efface pas |
 | Sons absents | Vérifier que `/Game/Backrooms/Sounds` existe. Relancer l'import |
 | Écran noir au lancement | C'est le fondu d'entrée ; dans le Niveau 6, c'est normal (**F** pour la lampe) |
 | La souris ne tourne pas la caméra | Cliquer dans la fenêtre de jeu (capture de la souris). La caméra est bloquée tant que l'inventaire (TAB) est ouvert |
 | Les touches 1 à 4 ne marchent pas | En AZERTY, les touches **& é " '** sont aussi reconnues ; sinon utiliser le pavé numérique |
 | Trop sombre / trop clair | Ajuster `MinEV` / `MaxEV` / `ExposureBias` du niveau dans `BRLevels.cpp` |
-| Pas de lampes au plafond, pas d'eau, objets invisibles | Corrigé en v3.2 (échelle des FBX). Laissez l'import se relancer au démarrage de l'éditeur (v5). Si un message rouge parle d'échelle : `import backrooms_setup; backrooms_setup.run(force=True)` |
-| L'eau n'apparaît toujours pas | **Tab → PARAMÈTRES → RENDU DE L'EAU : TRANSLUCIDE** |
+| Pas de lampes au plafond, pas d'eau, objets invisibles | Corrigé en v3.2 (échelle des FBX). Laissez l'import se relancer au démarrage de l'éditeur (v7). Si un message rouge parle d'échelle : `import backrooms_setup; backrooms_setup.run(force=True)` |
+| L'eau n'apparaît toujours pas | Relancer l'import : `import backrooms_setup; backrooms_setup.run(force=True)` (Output Log, onglet Python) |
 | Je veux l'écran sans l'effet caméscope | **Tab → PARAMÈTRES → EFFET CAMÉSCOPE (VHS) : DÉSACTIVÉ** |
 | **E** ne ramasse rien | Corrigé en v3. Visez l'objet (le point au centre grossit et « [E] Ramasser » s'affiche). Si vous avez changé la touche, le message affiche la nouvelle |
 | Une action ne répond plus | Une touche a pu lui être retirée en la donnant à une autre action : **Tab → TOUCHES**, ou **PAR DÉFAUT** |
@@ -415,6 +478,35 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | « Connexion perdue avec l'hôte » | L'hôte a quitté la partie, ou la connexion a coupé : rejoignez à nouveau |
 | Un ami ne voit pas les mêmes salles | Vous n'avez pas la même version du jeu : utilisez tous la même compilation |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |
+
+## 9. Tests automatiques
+
+Le jeu contient deux tests qui se pilotent seuls et se ferment à la fin. Lancez-les depuis un terminal
+(adaptez le chemin d'Unreal et du projet) :
+
+```bat
+"C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\...\Backrooms.uproject" -game -windowed -ResX=1600 -ResY=900 -BRAutoTest
+```
+
+- **`-BRAutoTest`** (solo, ~10 min) : pour chaque niveau, chargement, mesure des images par seconde, captures devant et
+  derrière, apparition de chaque entité du niveau (figée le temps de la photo), coupure de courant, lampe, vision
+  nocturne, nage dans un bassin profond et plongée (Niveau 37), marche dans l'eau (sillage) ; puis galerie des 9 entités,
+  inventaire, 3e personne, mort et réveil. Résultats : `Saved/AutoTest/Rapport.txt` (images/s, temps par image du
+  processeur graphique et des threads de jeu et de rendu, salles, lumières, objets, sorties, hauteur des vagues,
+  problèmes détectés, avertissements et erreurs du journal) et les captures `Saved/AutoTest/*.png`.
+  `-BRAutoTestLevels=0,37` limite le test à certains niveaux ; `-BRAutoTestStay` laisse le jeu ouvert à la fin ;
+  `-BRAutoTestGPU` écrit en plus le détail du temps de rendu (`ProfileGPU`) dans `Saved/Logs/Backrooms.log`.
+  `-BRRuntimeMaterials` ignore les matériaux importés et teste ceux que le jeu construit lui-même en C++ (secours).
+  *Fermez les autres jeux pendant la mesure : ils partagent la carte graphique et faussent les images par seconde.*
+- **`-BRNetTest`** (deux joueurs sur le même PC) : lancez d'abord l'hôte, puis le client :
+
+```bat
+UnrealEditor.exe "C:\...\Backrooms.uproject" "/Game/Backrooms/Maps/L_Backrooms?listen?BRLevel=0" -game -windowed -BRNetTest -ABSLOG=C:\Temp\Hote.log
+UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTest -ABSLOG=C:\Temp\Client.log
+```
+
+  L'hôte fait apparaître un Hound devant le client (le client doit le voir), puis emmène le groupe au Niveau 37 (le
+  client doit suivre avec la même graine). Rapports : `Saved/NetTest_Hote/` et `Saved/NetTest_Client/`.
 
 ---
 

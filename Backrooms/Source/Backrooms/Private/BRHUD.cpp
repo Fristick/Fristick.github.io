@@ -1863,7 +1863,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	// Aide de la ligne survolee
 	const FString Hint = HoverSetting != INDEX_NONE ? PC->GetSettingHint(HoverSetting) : FString();
 	float HY = IY + IH - 84.f * U;
-	for (const FString& L : Wrap(Hint.IsEmpty() ? FString(TEXT("Les r\u00e9glages sont sauvegard\u00e9s automatiquement (GameUserSettings.ini).")) : Hint,
+	for (const FString& L : Wrap(Hint.IsEmpty() ? FString(TEXT("Les r\u00e9glages sont sauvegard\u00e9s automatiquement (BackroomsPlayer.ini).")) : Hint,
 		W2 - 56.f * U, Small, 0.75f * U))
 	{
 		Txt(L, X + 28.f * U, HY, InkDim, 0.75f * U, Small, false, false);

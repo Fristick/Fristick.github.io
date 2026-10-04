@@ -17,3 +17,5 @@ Build/
 __pycache__/
 *.pyc
 Tools/SourceModels/
+# Ressources importees par Content/Python/backrooms_setup.py (regenerees depuis RawAssets/)
+Content/Backrooms/

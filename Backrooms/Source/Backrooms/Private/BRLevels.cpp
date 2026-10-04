@@ -60,7 +60,8 @@ namespace
 		// La Bacteria fait des rondes (lampes rouges a 10 m d'elle) ; les Smilers surgissent du noir, surtout pendant les coupures
 		D.Entities = { E(EBREntityKind::Smiler, 1.f) };
 		D.MaxEntities = 1; D.SpawnInterval = 100.f;
-		D.bPatrolEntity = true; D.PatrolKind = EBREntityKind::Bacteria; D.PatrolDelay = 25.f;
+		// Premiere ronde apres 50 s : le temps de lire les objectifs et de faire quelques salles
+		D.bPatrolEntity = true; D.PatrolKind = EBREntityKind::Bacteria; D.PatrolDelay = 50.f;
 		D.RedLightRadius = 1000.f;
 		D.BlackoutSmilers = 3;
 		D.HidingSpotChance = 0.85f;
@@ -339,7 +340,9 @@ namespace
 		D.Fixture = EBRFixture::None;
 		D.FogDensity = 0.02f; D.FogColor = C(0, 0, 0);
 		D.Saturation = 0.7f; D.Contrast = 1.1f;
-		D.MinEV = 3.5f; D.MaxEV = 9.f;
+		// Exposition minimale basse : sans lumiere tout reste noir, mais le faisceau de la lampe eclaire vraiment le beton
+		// sombre (a 3,5 l'oeil ne s'habituait jamais au noir et la lampe ne montrait presque rien)
+		D.MinEV = 1.5f; D.MaxEV = 9.f;
 		D.AmbientSound = TEXT("S_Amb_Dark"); D.AmbientVolume = 0.8f;
 		D.Step = EBRStep::Hard;
 		D.SanityDrain = 0.3f;
@@ -526,9 +529,10 @@ namespace
 		D.WallLineChance = 0.35f; D.SegmentLength = 3; D.DoorChance = 0.5f; D.DoorWidth = 220.f;
 		D.PillarChance = 0.25f; D.PillarSize = 70.f; D.OpenZoneChance = 0.35f;
 		D.bTrim = false; D.bLintels = true;
-		// D'apres la capture de reference : petit carrelage blanc casse tres brillant, plafonniers ovales,
-		// grandes verrieres, eau turquoise-verte limpide qui ondule
-		D.Floor = S(TEXT("T_PoolTile"), C(0.97f, 0.97f, 0.94f), 100.f, 0.12f, 0.1f);
+		// D'apres les captures de reference : petit carrelage blanc tres brillant, plafonniers ovales,
+		// grandes verrieres, eau turquoise limpide et presque immobile que seuls les joueurs font onduler.
+		// Le fond est a peine bleu-vert : la lumiere qui en rebondit teinte doucement les murs.
+		D.Floor = S(TEXT("T_PoolTile"), C(0.9f, 0.97f, 0.96f), 100.f, 0.12f, 0.1f);
 		D.Wall = S(TEXT("T_PoolTile"), C(0.95f, 0.95f, 0.91f), 100.f, 0.1f, 0.12f);
 		D.Ceiling = S(TEXT("T_PoolTile"), C(0.96f, 0.96f, 0.93f), 100.f, 0.14f, 0.08f);
 		D.Pillar = D.Wall;
@@ -537,9 +541,9 @@ namespace
 		D.LightLumens = 4200.f; D.LightColor = C(1.f, 0.99f, 0.96f); D.LightRadius = 1000.f; D.ShadowChance = 0.15f;
 		D.SkylightChance = 0.45f;
 		D.bWater = true; D.WaterHeight = 45.f;
-		D.Water = S(TEXT("T_WaterNormal"), C(0.22f, 0.68f, 0.64f), 300.f, 0.02f, 0.f);
-		D.WaterAbsorption = 1.1f; D.WaterScattering = 0.2f;
-		D.WaterWaves = 1.6f; D.WaterChop = 1.3f;
+		D.Water = S(TEXT("T_WaterNormal"), C(0.24f, 0.7f, 0.72f), 650.f, 0.02f, 0.f);
+		D.WaterAbsorption = 1.f; D.WaterScattering = 0.22f;
+		D.WaterWaves = 0.3f; D.WaterChop = 0.35f;
 		D.PoolChance = 0.32f; D.PoolDepth = 260.f;
 		D.FogDensity = 0.012f; D.FogColor = C(0.66f, 0.73f, 0.71f);
 		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.4f;
@@ -553,8 +557,8 @@ namespace
 			TEXT("L'eau est ti\u00e8de. Elle n'a pas de fond, a certains endroits. N'y plonge pas."),
 			TEXT("C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est \u00e7a, le pi\u00e8ge.")
 		};
-		// Reflets d'eau animes sur le carrelage
-		D.Floor.Caustics = 1.f; D.Wall.Caustics = 1.f; D.Pillar.Caustics = 1.f; D.Ceiling.Caustics = 0.6f;
+		// Reflets d'eau animes sur le carrelage (tres doux au plafond)
+		D.Floor.Caustics = 1.f; D.Wall.Caustics = 1.f; D.Pillar.Caustics = 1.f; D.Ceiling.Caustics = 0.35f;
 		return D;
 	}
 

@@ -12,7 +12,7 @@ Il importe :
   RawAssets/Icons/*.png         -> /Game/Backrooms/UI         (icones de l'inventaire)
   RawAssets/Sounds/*.wav        -> /Game/Backrooms/Sounds     (boucles d'apres loops.txt)
   RawAssets/Meshes/*.fbx        -> /Game/Backrooms/Meshes     (Tools/Blender/generate_models.py + import_user_models.py)
-puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_Water) et la carte L_Backrooms.
+puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface) et la carte L_Backrooms.
 
 Remarque : si cet import echoue, le jeu se debrouille quand meme dans l'editeur (il charge les textures
 directement depuis RawAssets et construit des materiaux equivalents en C++ : voir BRMaterialBuilder.cpp).
@@ -21,7 +21,7 @@ import os
 
 import unreal
 
-VERSION = 5
+VERSION = 7
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -30,7 +30,9 @@ SND = ROOT + "/Sounds"
 MESH = ROOT + "/Meshes"
 MAT = ROOT + "/Materials"
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
-MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_Water", "M_BR_WaterSurface")
+MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface")
+# Materiaux des versions precedentes, supprimes a la mise a jour (l'eau "Single Layer Water" a disparu en v7)
+OBSOLETE_MATERIALS = ("M_BR_Water",)
 
 EAL = unreal.EditorAssetLibrary
 MEL = unreal.MaterialEditingLibrary
@@ -266,6 +268,8 @@ class Graph(object):
         for o in ([out, ""] if out else [""]):
             try:
                 if MEL.connect_material_expressions(e, o, dst, inp):
+                    if out and not o:
+                        warn("Sortie %s introuvable sur %s : sortie par defaut utilisee" % (out, e.get_name()))
                     return True
             except Exception:
                 pass
@@ -295,6 +299,10 @@ class Graph(object):
         e.set_editor_property("parameter_name", name)
         e.set_editor_property("default_value", unreal.LinearColor(*rgba))
         return e
+
+    def vector4(self, name, rgba):
+        """Parametre vectoriel lu en float4 (sortie RGBA) : la sortie par defaut (RGB) perd la 4e composante"""
+        return (self.vector(name, rgba), "RGBA")
 
     def const(self, v):
         e = self.node(unreal.MaterialExpressionConstant)
@@ -333,6 +341,38 @@ class Graph(object):
 
     def vertex_normal(self):
         return self.node(unreal.MaterialExpressionVertexNormalWS)
+
+    def texobj(self, name, texture):
+        """Texture passee telle quelle a un noeud Custom (echantillonnee dans le HLSL : Nom, NomSampler)"""
+        e = self.node(unreal.MaterialExpressionTextureObjectParameter)
+        e.set_editor_property("parameter_name", name)
+        if texture:
+            e.set_editor_property("texture", texture)
+        safe_set(e, "sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+        return e
+
+    def _scene(self, cls, offset):
+        e = self.node(cls)
+        e.set_editor_property("input_mode", unreal.MaterialSceneAttributeInputMode.OFFSET_FRACTION)
+        if offset is not None:
+            self.link(offset, e, "")
+        return e
+
+    def scene_color(self, offset=None):
+        """Image de la scene derriere un materiau translucide, decalee de offset (fraction de l'ecran)"""
+        return self._scene(unreal.MaterialExpressionSceneColor, offset)
+
+    def scene_depth(self, offset=None):
+        """Profondeur de la scene opaque (cm), decalee de offset"""
+        return self._scene(unreal.MaterialExpressionSceneDepth, offset)
+
+    def world_to_view(self, a):
+        """Vecteur du monde exprime dans l'espace de la camera (X a droite, Y en haut)"""
+        e = self.node(unreal.MaterialExpressionTransform)
+        e.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD)
+        e.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_VIEW)
+        self.link(a, e, "")
+        return e
 
     def time(self):
         return self.node(unreal.MaterialExpressionTime)
@@ -424,6 +464,11 @@ def load_tex(name, folder=TEX):
     return unreal.load_asset(path) if exists(path) else None
 
 
+def black_tex():
+    """Texture par defaut de la simulation de l'eau (remplacee en jeu par celle de UBRWaterSim)"""
+    return unreal.load_asset("/Engine/EngineResources/Black") or unreal.load_asset("/Engine/EngineResources/DefaultTexture")
+
+
 def finish_material(m):
     try:
         MEL.layout_material_expressions(m)
@@ -477,15 +522,11 @@ def build_world_material():
     fmod = g.sub(g.const(1.0), g.mul(fg, g.add(g.const(0.45), g.mul(fn, g.const(0.55)))))
     col = g.mul(col, fmod)
 
-    # Caustiques (reflets de l'eau sur le carrelage)
-    caus_tex = load_tex("T_Caustics")
-    t = g.time()
-    cuv = g.lerp(g.append(g.dot(wp, g.c3(1.0, 1.0, 0.0)), z), g.mask(wp, "rg"), wz)
-    k1 = g.tex("CausticsTex", caus_tex, g.add(g.div(cuv, g.const(260.0)), g.mul(t, g.c2(0.031, 0.017))), out="R")
-    k2 = g.tex("CausticsTex", caus_tex, g.add(g.mul(cuv, g.c2(-1.0 / 330.0, 1.0 / 330.0)), g.mul(t, g.c2(-0.022, 0.026))), out="R")
-    k = g.min(k1, k2)
-    fade = g.lerp(g.sat(g.sub(g.const(1.0), g.div(g.abs(g.sub(z, g.const(45.0))), g.const(260.0)))), g.const(1.0), wz)
-    cm = g.add(g.const(1.0), g.mul(g.mul(g.scalar("Caustics", 0.0), fade), g.sub(g.mul(k, g.const(2.2)), g.const(0.35))))
+    # Caustiques (reflets de l'eau sur le carrelage), deformees par les vagues simulees autour du joueur
+    cm = g.custom("BRCaustics", BR_CAUSTICS_HLSL, [
+        ("WP", wp), ("Wz", wz), ("T", g.time()), ("Amount", g.scalar("Caustics", 0.0)),
+        ("CausTex", g.texobj("CausticsTex", load_tex("T_Caustics"))), ("SimTex", g.texobj("WaterSim", black_tex())),
+        ("SimWin", g.vector4("WaterSimWindow", (0.0, 0.0, 1000.0, 0.0)))], output="CMOT_FLOAT1")
     col = g.mul(col, cm)
 
     base = g.mul(col, g.vector("Tint", (1, 1, 1, 1)))
@@ -528,10 +569,10 @@ def build_mesh_material(name="M_BR_Mesh", skin=False):
     return m
 
 
-# Surface de l'eau (meme code que BRMaterialBuilder::WaterSurfaceHLSL en C++).
-# Entrees : P (XY monde, cm), T (temps, s), Amp (houle), Chop (clapot), R0..R7 (ondes : x, y, rayon, amplitude).
+# Code HLSL des noeuds Custom (meme code que BRMaterialBuilder.cpp en C++).
+
+# Houle et clapot de fond. Entrees : P (XY monde, cm), T (temps, s), Amp (houle), Chop (clapot).
 # Sortie : float3(pente X, pente Y, hauteur de la houle).
-NUM_RIPPLES = 8
 BR_WATER_SURFACE_HLSL = (
     "float3 acc = float3(0.0, 0.0, 0.0);\n"
     "float2 dir; float k; float ph;\n"
@@ -548,43 +589,72 @@ BR_WATER_SURFACE_HLSL = (
     "dir = float2(-0.94, -0.34); k = 6.2831853 / 75.0; sl += cos(dot(P, dir) * k + T * 3.1) * 0.16 * k * dir;\n"
     "dir = float2(0.57, -0.82); k = 6.2831853 / 46.0; sl += cos(dot(P, dir) * k + T * 4.2) * 0.08 * k * dir;\n"
     "acc.xy += sl * Amp * Chop;\n"
-    "// Ondes circulaires (pas du joueur, nage, gouttes) : front gaussien qui s'eloigne en s'elargissant\n"
-    "float4 R[8] = { R0, R1, R2, R3, R4, R5, R6, R7 };\n"
-    "[unroll] for (int i = 0; i < 8; i++)\n"
-    "{\n"
-    "  float4 r = R[i];\n"
-    "  if (r.w > 0.0005)\n"
-    "  {\n"
-    "    float2 d2 = P - r.xy;\n"
-    "    float d = max(length(d2), 0.5);\n"
-    "    float x = d - r.z;\n"
-    "    float w = 18.0 + 0.15 * r.z;\n"
-    "    float kk = 6.2831853 / 22.0;\n"
-    "    float env = exp(-(x * x) / (w * w));\n"
-    "    float dh = r.w * env * (kk * cos(kk * x) - 2.0 * x / (w * w) * sin(kk * x));\n"
-    "    acc.xy += dh * d2 / d;\n"
-    "  }\n"
-    "}\n"
     "return acc;\n")
 
+# Vagues simulees autour du joueur. Entrees : P, Win (centre X, centre Y, cote en cm, intensite), SimTex.
+# Sortie : float2(pente X, pente Y).
+BR_WATER_SIM_HLSL = (
+    "// Vagues simulees autour du joueur : pentes de la surface, estompees au bord de la zone simulee\n"
+    "float sz = max(Win.z, 1.0);\n"
+    "float2 d = abs(P - Win.xy) / (0.5 * sz);\n"
+    "float fade = Win.w * saturate((1.0 - max(d.x, d.y)) / 0.15);\n"
+    "return Texture2DSampleLevel(SimTex, SimTexSampler, P / sz, 0.0).rg * fade;\n")
 
-# Opacite de l'eau translucide (meme code que BRMaterialBuilder::WaterOpacityHLSL en C++).
-# Entrees : S (composantes XY de la normale), V (vecteur vers la camera), SceneD / PixD (profondeurs, cm),
-# Density (1/cm), BaseOpacity. Sortie : opacite (absorption selon l'epaisseur d'eau traversee + reflet de Fresnel).
-BR_WATER_OPACITY_HLSL = (
-    "float3 N = normalize(float3(S.x, S.y, 1.0));\n"
-    "float ndv = abs(dot(N, normalize(V)));\n"
-    "float fres = 0.02 + 0.98 * pow(1.0 - saturate(ndv), 5.0);\n"
-    "float thick = max(SceneD - PixD, 0.0);\n"
-    "float body = 1.0 - exp(-thick * Density);\n"
-    "float edge = saturate(thick / 6.0);\n"
-    "return saturate((max(body, BaseOpacity) + fres * 0.8) * edge);\n")
+# Refraction. Entrees : VN (inclinaison de la surface dans l'espace camera), PixD / D0 (profondeurs, cm), Strength.
+# Sortie : decalage de l'image du fond, en fraction de l'ecran.
+BR_WATER_REFRACT_HLSL = (
+    "// Plus l'eau est epaisse sous ce point, plus l'image du fond est deplacee par la pente de la surface\n"
+    "float thick = clamp(D0 - PixD, 0.0, 250.0);\n"
+    "return float2(VN.x, -VN.y) * (Strength * 0.12 * thick / max(PixD, 20.0));\n")
+
+# Lumiere qui traverse l'eau. Entrees : S (XY de la normale), V (vers la camera), Side (+1 dessus, -1 dessous),
+# PixD, D0 / C0 (profondeur / couleur de la scene juste derriere), D1 / C1 (idem, image refractee), Absorb (1/cm).
+# Sortie : float4(lumiere transmise, voile de l'eau 0..1).
+BR_WATER_SHADE_HLSL = (
+    "float3 N = normalize(float3(S, 1.0));\n"
+    "float ndv = saturate(abs(dot(N, normalize(V))));\n"
+    "// Image refractee, sauf si elle tombe sur un objet place devant l'eau\n"
+    "bool ok = D1 > PixD + 2.0;\n"
+    "float3 C = ok ? C1 : C0;\n"
+    "float thick = max((ok ? D1 : D0) - PixD, 0.0);\n"
+    "if (Side >= 0.0)\n"
+    "{\n"
+    "  // Vue de dessus : Fresnel de Schlick (eau : F0 = 0,02), absorption selon l'epaisseur traversee\n"
+    "  float F = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);\n"
+    "  float3 Tr = exp(-thick * Absorb);\n"
+    "  return float4(C * Tr * (1.0 - F), 1.0 - dot(Tr, float3(0.3333, 0.3334, 0.3333)));\n"
+    "}\n"
+    "// Vue de dessous : au-dela de ~49 degres, reflexion totale (on voit l'eau elle-meme)\n"
+    "float s2 = 1.7689 * (1.0 - ndv * ndv);\n"
+    "float F = s2 >= 1.0 ? 1.0 : 0.02 + 0.98 * pow(1.0 - sqrt(1.0 - s2), 5.0);\n"
+    "return float4(C * (1.0 - F), F);\n")
+
+# Caustiques du carrelage. Entrees : WP (position monde), Wz (poids des faces horizontales), T, Amount,
+# CausTex (T_Caustics), SimTex / SimWin (vagues simulees). Sortie : multiplicateur de la couleur.
+BR_CAUSTICS_HLSL = (
+    "// Reseau lumineux qui derive lentement (deux echelles, legerement ondulees) ; les vagues simulees autour\n"
+    "// du joueur le deforment d'autant plus que l'eau est profonde au-dessus du carrelage\n"
+    "float sz = max(SimWin.z, 1.0);\n"
+    "float2 sd = abs(WP.xy - SimWin.xy) / (0.5 * sz);\n"
+    "float sf = SimWin.w * saturate((1.0 - max(sd.x, sd.y)) / 0.15);\n"
+    "float2 slope = Texture2DSampleLevel(SimTex, SimTexSampler, WP.xy / sz, 0.0).rg * sf;\n"
+    "float depth = max(45.0 - WP.z, 0.0);\n"
+    "float2 uv = lerp(float2(WP.x + WP.y, WP.z), WP.xy, Wz) + slope * (20.0 + depth) * 2.0;\n"
+    "float2 wob = float2(sin(uv.y * 0.019 + T * 0.7) + sin(uv.x * 0.013 - T * 0.45), cos(uv.x * 0.017 + T * 0.6) + cos(uv.y * 0.011 - T * 0.5));\n"
+    "float k1 = Texture2DSample(CausTex, CausTexSampler, uv / 260.0 + T * float2(0.011, 0.006) + wob * 0.018).r;\n"
+    "float k2 = Texture2DSample(CausTex, CausTexSampler, uv * float2(-1.0, 1.0) / 430.0 + T * float2(-0.007, 0.01) - wob * 0.012).r;\n"
+    "float k = saturate(k1 + 0.45 * k2);\n"
+    "// Sous l'eau : partout ; au-dessus : reflets plus faibles qui s'eteignent 2 m au-dessus de la surface\n"
+    "float above = WP.z - 45.0;\n"
+    "float fade = lerp(above > 0.0 ? 0.75 * saturate(1.0 - above / 200.0) : saturate(1.0 + above / 300.0), 1.0, Wz);\n"
+    "return 1.0 + Amount * fade * (k * 1.5 - 0.27);\n")
 
 
 def build_water_surface_material():
-    """Eau translucide (rendu par defaut) : toujours visible quels que soient les reglages du projet.
-    Teinte selon l'epaisseur d'eau (SceneDepth - PixelDepth), reflets de Fresnel (reflets Lumen de la couche
-    translucide de devant), refraction, et la meme surface animee que l'eau Single Layer Water (houle, clapot, ondes)."""
+    """Eau translucide : l'image de la scene derriere l'eau est refractee par la surface, puis absorbee selon
+    l'epaisseur d'eau traversee (limpide en surface, turquoise puis vert-bleu en profondeur). Fresnel, reflets
+    Lumen, vue de dessous (reflexion totale). La surface ondule : houle de fond, et surtout les vagues simulees
+    autour du joueur (UBRWaterSim : sillage, plongeons, gouttes)."""
     m = new_material("M_BR_WaterSurface")
     g = Graph(m)
     P = unreal.MaterialProperty
@@ -592,71 +662,18 @@ def build_water_surface_material():
     safe_set(m, "shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
     safe_set(m, "two_sided", True)
     safe_set(m, "translucency_lighting_mode", unreal.TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING)
-    for prop in ("refraction_method", "refraction_mode"):
-        try:
-            m.set_editor_property(prop, unreal.RefractionMode.RM_PIXEL_NORMAL_OFFSET)
-            break
-        except Exception:
-            pass
 
     wp = g.world_pos()
     xy = g.mask(wp, "rg")
     t = g.time()
-    inputs = [("P", xy), ("T", t), ("Amp", g.scalar("WaveAmplitude", 1.0)), ("Chop", g.scalar("WaveChop", 1.0))]
-    for i in range(NUM_RIPPLES):
-        inputs.append(("R%d" % i, g.vector("Ripple%d" % i, (0.0, 0.0, 0.0, 0.0))))
-    surface = g.custom("BRWaterSurface", BR_WATER_SURFACE_HLSL, inputs)
-    h = g.mask(surface, "b")
-    slope = g.mask(surface, "rg")
-    g.output(g.append(g.c2(0.0, 0.0), h), P.MP_WORLD_POSITION_OFFSET)
+    surface = g.custom("BRWaterSurface", BR_WATER_SURFACE_HLSL, [
+        ("P", xy), ("T", t), ("Amp", g.scalar("WaveAmplitude", 1.0)), ("Chop", g.scalar("WaveChop", 1.0))])
+    g.output(g.append(g.c2(0.0, 0.0), g.mask(surface, "b")), P.MP_WORLD_POSITION_OFFSET)
 
-    ntex = load_tex("T_WaterNormal")
-    scale = g.scalar("TexScale", 300.0)
-    uva = g.add(g.div(xy, scale), g.mul(t, g.c2(0.012, 0.008)))
-    uvb = g.add(g.mul(g.div(xy, scale), g.c2(-1.6, 1.6)), g.mul(t, g.c2(-0.01, 0.014)))
-    na = g.tex("NormalTex", ntex, uva, normal=True)
-    nb = g.tex("NormalTex", ntex, uvb, normal=True)
-    detail = g.mul(g.mask(g.add(na, nb), "rg"), g.scalar("NormalStrength", 0.35))
-    nxy = g.sub(detail, slope)
-    g.output(g.append(nxy, g.const(1.0)), P.MP_NORMAL)
-
-    # Couleur de l'eau profonde (teinte assombrie) ; l'absorption regle la densite
-    tint = g.vector("Tint", (0.22, 0.68, 0.64, 1))
-    g.output(g.mul(tint, g.scalar("DeepColor", 0.35)), P.MP_BASE_COLOR)
-    g.output(g.const(0.5), P.MP_SPECULAR)
-    g.output(g.scalar("Roughness", 0.04), P.MP_ROUGHNESS)
-    opacity = g.custom("BRWaterOpacity", BR_WATER_OPACITY_HLSL, [
-        ("S", nxy), ("V", g.node(unreal.MaterialExpressionCameraVectorWS)),
-        ("SceneD", g.node(unreal.MaterialExpressionSceneDepth)), ("PixD", g.node(unreal.MaterialExpressionPixelDepth)),
-        ("Density", g.mul(g.scalar("Absorption", 1.2), g.const(0.006))), ("BaseOpacity", g.scalar("BaseOpacity", 0.12))],
-        output="CMOT_FLOAT1")
-    g.output(opacity, P.MP_OPACITY)
-    g.output(g.scalar("Refraction", 1.15), P.MP_REFRACTION)
-    finish_material(m)
-    return m
-
-
-def build_water_material():
-    """Eau "Single Layer Water" : vagues par World Position Offset, petites rides (normal maps qui defilent),
-    absorption et diffusion de la lumiere dans l'eau, reflets Lumen / ray tracing."""
-    m = new_material("M_BR_Water")
-    g = Graph(m)
-    P = unreal.MaterialProperty
-    safe_set(m, "shading_model", unreal.MaterialShadingModel.MSM_SINGLE_LAYER_WATER)
-    safe_set(m, "blend_mode", unreal.BlendMode.BLEND_OPAQUE)
-
-    wp = g.world_pos()
-    xy = g.mask(wp, "rg")
-    t = g.time()
-
-    # Surface : houle (deplace la surface), clapot (normales) et ondes circulaires autour du joueur
-    inputs = [("P", xy), ("T", t), ("Amp", g.scalar("WaveAmplitude", 1.0)), ("Chop", g.scalar("WaveChop", 1.0))]
-    for i in range(NUM_RIPPLES):
-        inputs.append(("R%d" % i, g.vector("Ripple%d" % i, (0.0, 0.0, 0.0, 0.0))))
-    surface = g.custom("BRWaterSurface", BR_WATER_SURFACE_HLSL, inputs)
-    h = g.mask(surface, "b")
-    slope = g.mask(surface, "rg")
-    g.output(g.append(g.c2(0.0, 0.0), h), P.MP_WORLD_POSITION_OFFSET)
+    # Vagues simulees autour du joueur
+    sim = g.custom("BRWaterSim", BR_WATER_SIM_HLSL, [
+        ("P", xy), ("Win", g.vector4("WaterSimWindow", (0.0, 0.0, 1000.0, 0.0))), ("SimTex", g.texobj("WaterSim", black_tex()))],
+        output="CMOT_FLOAT2")
 
     # Rides de detail
     ntex = load_tex("T_WaterNormal")
@@ -665,33 +682,31 @@ def build_water_material():
     uvb = g.add(g.mul(g.div(xy, scale), g.c2(-1.6, 1.6)), g.mul(t, g.c2(-0.01, 0.014)))
     na = g.tex("NormalTex", ntex, uva, normal=True)
     nb = g.tex("NormalTex", ntex, uvb, normal=True)
-    detail = g.mul(g.mask(g.add(na, nb), "rg"), g.scalar("NormalStrength", 0.35))
-    nxy = g.sub(detail, slope)
+    detail = g.mul(g.mask(g.add(na, nb), "rg"), g.scalar("NormalStrength", 0.1))
+    nxy = g.sub(g.sub(detail, g.mask(surface, "rg")), sim)
     g.output(g.append(nxy, g.const(1.0)), P.MP_NORMAL)
 
-    g.output(g.c3(0.0, 0.0, 0.0), P.MP_BASE_COLOR)
-    g.output(g.scalar("Roughness", 0.04), P.MP_ROUGHNESS)
-    g.output(g.const(0.5), P.MP_SPECULAR)
+    # Refraction : l'image du fond (couleur et profondeur de la scene) est decalee selon la pente de la surface
+    pixd = g.node(unreal.MaterialExpressionPixelDepth)
+    d0 = g.scene_depth()
+    offset = g.custom("BRWaterRefract", BR_WATER_REFRACT_HLSL, [
+        ("VN", g.world_to_view(g.append(nxy, g.const(0.0)))), ("PixD", pixd), ("D0", d0),
+        ("Strength", g.scalar("RefractionStrength", 1.0))], output="CMOT_FLOAT2")
 
-    # Proprietes optiques (coefficients exprimes par metre, convertis en 1/cm)
-    tint = g.vector("Tint", (0.35, 0.75, 0.8, 1))
-    absorb = g.mul(g.add(g.mul(g.sub(g.c3(1.0, 1.0, 1.0), tint), g.scalar("Absorption", 1.2)), g.c3(0.02, 0.02, 0.02)), g.const(0.01))
-    scatter = g.mul(g.mul(tint, g.scalar("Scattering", 0.15)), g.const(0.01))
-    out = g.node(unreal.MaterialExpressionSingleLayerWaterMaterialOutput)
-    for src, names in ((scatter, ("Scattering Coefficients", "ScatteringCoefficients")),
-                       (absorb, ("Absorption Coefficients", "AbsorptionCoefficients")),
-                       (g.const(0.1), ("Phase G", "PhaseG")),
-                       (g.const(1.0), ("Color Scale Behind Water", "ColorScaleBehindWater"))):
-        ok = False
-        for nm in names:
-            try:
-                if MEL.connect_material_expressions(src, "", out, nm):
-                    ok = True
-                    break
-            except Exception:
-                pass
-        if not ok:
-            warn("Sortie Single Layer Water non reliee : " + names[0])
+    # Absorption par centimetre d'eau traversee (la teinte est la couleur qui passe le mieux)
+    tint = g.vector("Tint", (0.24, 0.7, 0.72, 1))
+    absorb = g.mul(g.add(g.mul(g.sub(g.c3(1.0, 1.0, 1.0), tint), g.scalar("Absorption", 1.0)), g.c3(0.02, 0.02, 0.02)), g.const(0.01))
+    shade = g.custom("BRWaterShade", BR_WATER_SHADE_HLSL, [
+        ("S", nxy), ("V", g.node(unreal.MaterialExpressionCameraVectorWS)), ("Side", g.node(unreal.MaterialExpressionTwoSidedSign)),
+        ("PixD", pixd), ("D0", d0), ("D1", g.scene_depth(offset)), ("C0", g.scene_color()), ("C1", g.scene_color(offset)),
+        ("Absorb", absorb)], output="CMOT_FLOAT4")
+
+    # Lumiere transmise en emission ; voile de l'eau profonde eclaire par la scene ; reflets speculaires
+    g.output(g.mask(shade, "rgb"), P.MP_EMISSIVE_COLOR)
+    g.output(g.mul(g.mul(tint, g.scalar("Scattering", 0.2)), g.mask(shade, "a")), P.MP_BASE_COLOR)
+    g.output(g.const(0.35), P.MP_SPECULAR)
+    g.output(g.scalar("Roughness", 0.03), P.MP_ROUGHNESS)
+    g.output(g.const(1.0), P.MP_OPACITY)
     finish_material(m)
     return m
 
@@ -701,9 +716,15 @@ def materials_missing():
 
 
 def build_materials():
+    for name in OBSOLETE_MATERIALS:
+        if exists(MAT + "/" + name):
+            try:
+                EAL.delete_asset(MAT + "/" + name)
+            except Exception as e:
+                warn("Suppression impossible %s : %s" % (name, e))
     jobs = (("M_BR_World", build_world_material), ("M_BR_Mesh", build_mesh_material),
             ("M_BR_Skin", lambda: build_mesh_material("M_BR_Skin", skin=True)),
-            ("M_BR_Water", build_water_material), ("M_BR_WaterSurface", build_water_surface_material))
+            ("M_BR_WaterSurface", build_water_surface_material))
     for name, fn in jobs:
         try:
             fn()

@@ -18,6 +18,8 @@ class UPostProcessComponent;
 class UAudioComponent;
 class UMaterialInstanceDynamic;
 class ABRPlayerController;
+class APlayerState;
+class UBRWaterSim;
 
 /** Niveau en cours, choisi par le serveur et recopie chez les clients (multijoueur) */
 USTRUCT()
@@ -82,6 +84,10 @@ public:
 	void GetPlayers(TArray<ABRCharacter*>& Out) const;
 	/** Multijoueur : apres une mort, on se reveille au point de depart du niveau */
 	void RespawnLocalPlayer();
+	/** Place d'un joueur autour du point de depart (0 = l'hote) : rang de son identifiant, le meme chez tous */
+	int32 PlayerSlot(const APlayerState* PS) const;
+	/** Point d'apparition de cette place pour une capsule de demi-hauteur Half (au centre, puis en cercle) */
+	FVector SpawnSpot(int32 Slot, float Half) const;
 	/** Multijoueur : un coequipier vient de nous relever */
 	void CancelPlayerDeath() { DeathTimer = -1.f; }
 	/** A terre : secondes avant le reveil au point de depart (-1 sinon) */
@@ -154,15 +160,16 @@ public:
 	bool IsInHidingSpot(const FVector& Location, bool bCrouched) const;
 	/** Une cachette a moins de Radius cm (indication a l'ecran) */
 	bool FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const;
-	/** Reapplique le materiau de l'eau partout (reglage "Rendu de l'eau") */
-	void RefreshWater();
-	/** Onde circulaire a la surface de l'eau (pas, nage, plongeon). Strength ~ amplitude en cm */
+	/** Rond dans l'eau (pas, plongeon, sortie de l'eau). Strength ~ creux en cm */
 	void AddWaterRipple(const FVector& Location, float Strength);
+	/** Vagues simulees autour du joueur (nullptr hors des niveaux inondes) */
+	UBRWaterSim* GetWaterSim() const { return WaterSim; }
 	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire) */
 	float LightLevelAt(const FVector& P) const;
 	/** A* sur la grille */
 	bool FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes = 1500) const;
 	bool IsChunkLoaded(const FIntPoint& Chunk) const { return Chunks.Contains(Chunk); }
+	int32 GetChunkCount() const { return Chunks.Num(); }
 	uint32 GetSeed() const { return Seed; }
 
 	// ------------------------------------------------------------ Etat
@@ -210,9 +217,9 @@ protected:
 
 	float UnderwaterBlend = 0.f;
 
-	/** Materiau de l'eau du niveau (ses parametres Ripple0..7 dessinent les ondes) */
+	/** Vagues a la surface de l'eau autour du joueur (sillage des joueurs et des entites, plongeons, gouttes) */
 	UPROPERTY()
-	TObjectPtr<UMaterialInstanceDynamic> WaterMID;
+	TObjectPtr<UBRWaterSim> WaterSim;
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USkyAtmosphereComponent> SkyAtmosphere;
@@ -292,7 +299,8 @@ private:
 	void ApplyEnvironment();
 	void UpdateStreaming(bool bSynchronous);
 	void SpawnChunk(const FIntPoint& Coord);
-	void PlacePlayer();
+	/** Place le joueur local au point de depart. bKeepServerSpot : garde la place deja donnee par le serveur */
+	void PlacePlayer(bool bKeepServerSpot = false);
 	void UpdatePopulation(float Dt);
 	void UpdateAudio(float Dt);
 	void UpdatePhenomena(float Dt);
@@ -304,7 +312,7 @@ private:
 	void UpdateBlackout(float Dt);
 	void ApplyPower(bool bForce);
 	void CompleteTask(const FString& Text);
-	void UpdateRipples(float Dt);
+	void UpdateWaterSim(float Dt);
 	/** Niveau 0 : l'entite qui fait des rondes est toujours la (elle reapparait si elle s'eloigne trop) */
 	void UpdatePatrol(float Dt);
 	/** Cherche ou faire apparaitre une entite entre MinDist et MaxDist du joueur Anchor (hors de la vue de tous si bAvoidSight) */
@@ -317,18 +325,7 @@ private:
 	TArray<TWeakObjectPtr<ABREntity>> BlackoutEntities;
 	float PatrolSpawnTimer = 0.f;
 
-	struct FRipple
-	{
-		FVector2D Pos = FVector2D::ZeroVector;
-		float Age = 0.f;
-		float Strength = 0.f;
-		bool bActive = false;
-	};
-	static constexpr int32 MaxRipples = 8;
-	FRipple Ripples[MaxRipples];
-	int32 NextRipple = 0;
 	float DripTimer = 1.f;
-	bool bRipplesDirty = false;
 	bool bMeshesChecked = false;
 
 	const FBRLevelDef* Current = nullptr;

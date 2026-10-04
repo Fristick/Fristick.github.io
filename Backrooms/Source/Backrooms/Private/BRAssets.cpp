@@ -15,7 +15,9 @@
 #include "Components/MeshComponent.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundAttenuation.h"
+#include "Misc/CommandLine.h"
 #include "Misc/PackageName.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 
@@ -463,11 +465,14 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	}
 	ParentResolved[Index] = true;
 
-	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_Water"), TEXT("M_BR_WaterSurface") };
+	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
-	const TCHAR* V2Params[] = { TEXT("NormalTex"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaveChop"), TEXT("BaseOpacity") };
+	const TCHAR* V2Params[] = { TEXT("WaterSim"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
-	UMaterialInterface* M = Cast<UMaterialInterface>(LoadAsset(MatFolder, FName(AssetNames[Index]), UMaterialInterface::StaticClass()));
+	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
+	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
+	UMaterialInterface* M = bForceRuntime ? nullptr
+		: Cast<UMaterialInterface>(LoadAsset(MatFolder, FName(AssetNames[Index]), UMaterialInterface::StaticClass()));
 	if (M)
 	{
 		const FHashedMaterialParameterInfo Info{ FName(V2Params[Index]) };
@@ -484,7 +489,7 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 
 	if (!M && BRMaterialBuilder::IsAvailable())
 	{
-		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin, EBRMasterMaterial::Water,
+		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
 			EBRMasterMaterial::WaterSurface };
 		M = BRMaterialBuilder::Build(Kinds[Index], this, [this](FName TexName) { return Texture(TexName); });
 		if (M)
@@ -570,7 +575,22 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 	{
 		return Found->Get();
 	}
+	UMaterialInstanceDynamic* MID = CreateSurface(S, this);
+	if (MID)
+	{
+		MatCache.Add(Key, MID);
+	}
+	return MID;
+}
 
+UMaterialInstanceDynamic* UBRAssets::NewSurface(const FBRSurface& S, UObject* Outer)
+{
+	// Un MID ne peut pas avoir un autre MID pour parent : on repart du materiau maitre
+	return CreateSurface(S, Outer ? Outer : this);
+}
+
+UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject* Outer)
+{
 	UMaterialInterface* ParentMat = Parent(EParent::World);
 	const bool bCustom = ParentMat != nullptr;
 	if (!ParentMat)
@@ -582,7 +602,7 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 		return nullptr;
 	}
 
-	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, this);
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, Outer);
 	if (bCustom)
 	{
 		if (UTexture* Tex = Texture(S.Texture))
@@ -606,6 +626,13 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 			{
 				MID->SetTextureParameterValue(TEXT("CausticsTex"), Caus);
 			}
+			// Les vagues autour du joueur deforment les caustiques
+			WaterSimMIDs.Add(MID);
+			if (UTexture* Sim = WaterSimTexture.Get())
+			{
+				MID->SetTextureParameterValue(TEXT("WaterSim"), Sim);
+				MID->SetVectorParameterValue(TEXT("WaterSimWindow"), WaterSimWindow);
+			}
 		}
 		MID->SetVectorParameterValue(TEXT("Tint"), S.Tint);
 		MID->SetScalarParameterValue(TEXT("TexScale"), S.Scale);
@@ -621,19 +648,17 @@ UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 	{
 		MID->SetVectorParameterValue(TEXT("Color"), TextureAverage(S.Texture) * S.Tint);
 	}
-	MatCache.Add(Key, MID);
 	return MID;
 }
 
 UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorption, float Scattering, float Waves, float Chop)
 {
-	const bool bTranslucent = FBRSettings::Get().bTranslucentWater;
-	const FString Key = FString::Printf(TEXT("Water|%d|%.3f|%.3f|%.2f|%.2f|"), bTranslucent ? 1 : 0, Absorption, Scattering, Waves, Chop) + S.Key();
+	const FString Key = FString::Printf(TEXT("Water|%.3f|%.3f|%.2f|%.2f|"), Absorption, Scattering, Waves, Chop) + S.Key();
 	if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
 	{
 		return Found->Get();
 	}
-	UMaterialInterface* ParentMat = Parent(bTranslucent ? EParent::WaterSurface : EParent::Water);
+	UMaterialInterface* ParentMat = Parent(EParent::WaterSurface);
 	const bool bCustom = ParentMat != nullptr;
 	if (!ParentMat)
 	{
@@ -655,12 +680,18 @@ UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorpti
 		MID->SetScalarParameterValue(TEXT("Roughness"), FMath::Min(S.Roughness, 0.08f));
 		MID->SetScalarParameterValue(TEXT("WaveAmplitude"), Waves);
 		MID->SetScalarParameterValue(TEXT("WaveChop"), Chop);
-		MID->SetScalarParameterValue(TEXT("NormalStrength"), 0.25f + 0.12f * Chop);
+		// Rides de detail : quasi absentes sur une eau calme, nettes sur une eau agitee
+		MID->SetScalarParameterValue(TEXT("NormalStrength"), 0.03f + 0.14f * Chop);
 		MID->SetScalarParameterValue(TEXT("Absorption"), Absorption);
 		MID->SetScalarParameterValue(TEXT("Scattering"), Scattering);
-		// Eau translucide : teinte de l'eau profonde, opacite minimale (on voit toujours la surface)
-		MID->SetScalarParameterValue(TEXT("DeepColor"), 0.35f);
-		MID->SetScalarParameterValue(TEXT("BaseOpacity"), 0.12f);
+		// Refraction un peu exageree : les vagues se voient a travers l'eau, meme peu profonde
+		MID->SetScalarParameterValue(TEXT("RefractionStrength"), 1.8f);
+		WaterSimMIDs.Add(MID);
+		if (UTexture* Sim = WaterSimTexture.Get())
+		{
+			MID->SetTextureParameterValue(TEXT("WaterSim"), Sim);
+			MID->SetVectorParameterValue(TEXT("WaterSimWindow"), WaterSimWindow);
+		}
 	}
 	else
 	{
@@ -668,6 +699,31 @@ UMaterialInterface* UBRAssets::WaterMaterial(const FBRSurface& S, float Absorpti
 	}
 	MatCache.Add(Key, MID);
 	return MID;
+}
+
+void UBRAssets::SetWaterSim(UTexture* SimTexture, const FLinearColor& Window)
+{
+	const bool bNewTexture = WaterSimTexture.Get() != SimTexture;
+	if (!bNewTexture && Window.Equals(WaterSimWindow, 0.01f))
+	{
+		return; // le contenu de la texture change, pas les parametres des materiaux
+	}
+	WaterSimTexture = SimTexture;
+	WaterSimWindow = Window;
+	for (int32 i = WaterSimMIDs.Num() - 1; i >= 0; --i)
+	{
+		UMaterialInstanceDynamic* MID = WaterSimMIDs[i].Get();
+		if (!MID)
+		{
+			WaterSimMIDs.RemoveAtSwap(i);
+			continue;
+		}
+		if (bNewTexture && SimTexture)
+		{
+			MID->SetTextureParameterValue(TEXT("WaterSim"), SimTexture);
+		}
+		MID->SetVectorParameterValue(TEXT("WaterSimWindow"), Window);
+	}
 }
 
 FString UBRAssets::CheckImportedMeshes()

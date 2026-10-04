@@ -138,6 +138,10 @@ protected:
 	UFUNCTION()
 	void OnRep_Vanish();
 
+	/** Cri / bruit de l'entite entendu par tous les joueurs proches (signal d'alerte) */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastVoiceCue(float Volume);
+
 private:
 	enum class EState : uint8 { Idle, Wander, Stalk, Chase, Retreat, Frozen, Hide, Lure };
 	enum class ELimb : uint8 { UpperArm, LowerArm, Thigh, Shin, HoundUpper, HoundLower, Wing };
@@ -242,6 +246,8 @@ private:
 	float PatrolTime = 0.f;
 	int32 PatrolLeg = 0;
 	float Suspicion = 0.f;
+	/** Bacteria : le signal sonore "elle vous a remarque" a deja ete joue */
+	bool bSuspicionCue = false;
 	/** Le joueur est cache (placard, trou) : pas de ligne de vue, pas de bruit */
 	bool bTargetHidden = false;
 	bool bHostileVariant = true;
