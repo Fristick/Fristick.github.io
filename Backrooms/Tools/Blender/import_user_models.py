@@ -9,6 +9,8 @@ Placez les fichiers sources dans Tools/SourceModels/ :
     faceling.glb                              (Faceling style PS1, archive "backrooms-faceling-ps1psx-style.zip")
     partygoer.fbx + partygoer_BaseColor.jpeg  (Partygoer, archive "partygoer-from-backrooms-updated.zip")
     hound.blend + hound_Material.png          (Hound, archive "hound-backrooms.zip")
+    backrooms_lvl4_office.glb                 (scene du Niveau 4, "backrooms-level-4-abandoned-office.zip")
+    poolrooms/pooltile_1.png, pooltile_n_0.png, plaster_4.png, plaster_n_3.png   (scene "poolrooms.zip")
 Le Smiler et le Clump sont modelises ici d'apres les images de reference fournies (aucun fichier source).
 
 Puis :
@@ -20,6 +22,8 @@ Sorties :
         SM_FacelingET_*.fbx, SM_PartygoerET_*.fbx, SM_HoundET_*.fbx, SM_SmilerET.fbx, SM_ClumpET_*.fbx
     RawAssets/Textures/T_Hazmat_Suit.jpg, T_Hazmat_Mask.jpg, T_Deathmoth.jpg, T_SkinStealer_*.jpg, T_Faceling.jpg,
         T_Partygoer.jpg, T_Hound.jpg
+    v3.8 : SM_OfficeDeskET.fbx, SM_OfficeChairET.fbx, SM_WaterCoolerET.fbx ; T_PoolTile37, T_Plaster (+ _N),
+        T_OfficeCarpetNavy, T_OfficeCeiling (+ _N)
     RawAssets/Icons/I_Silhouette.png, RawAssets/Previews/*.jpg
     RawAssets/Meshes/user_models.json  (positions des articulations, en cm, reperes Unreal : +X avant, +Y droite)
 
@@ -1469,9 +1473,243 @@ def process_clump():
     print("  faisceaux de bras (cm, Unreal) :", joints)
 
 
+# ---------------------------------------------------------------------------
+# v3.8 : niveaux d'apres les scenes fournies (Poolrooms, Niveau 4 "Abandoned Office")
+# ---------------------------------------------------------------------------
+def _flip_green(img):
+    """Normal map OpenGL (glTF, vert vers le haut) -> convention du jeu et d'Unreal (vert vers le bas)"""
+    a = np.asarray(img.convert("RGB")).copy()
+    a[..., 1] = 255 - a[..., 1]
+    from PIL import Image
+    return Image.fromarray(a)
+
+
+def _save_jpg(im, name, size, quality):
+    from PIL import Image
+    im = im.convert("RGB")
+    if im.size[0] != size:
+        im = im.resize((size, size), Image.LANCZOS)
+    os.makedirs(OUT_TEX, exist_ok=True)
+    path = os.path.join(OUT_TEX, name + ".jpg")
+    im.save(path, quality=quality, optimize=True)
+    print("  texture", path, im.size)
+
+
+def process_pool_textures():
+    """Carrelage vert d'eau a joints gris et platre des plafonds, repris de la scene Poolrooms fournie"""
+    from PIL import Image
+    d = os.path.join(SRC, "poolrooms")
+    names = ("pooltile_1.png", "pooltile_n_0.png", "plaster_4.png", "plaster_n_3.png")
+    if not all(os.path.isfile(os.path.join(d, n)) for n in names):
+        print("!! textures des Poolrooms introuvables dans", d)
+        return
+    print("== Textures des Poolrooms")
+    _save_jpg(Image.open(os.path.join(d, "pooltile_1.png")), "T_PoolTile37", 512, 92)
+    _save_jpg(_flip_green(Image.open(os.path.join(d, "pooltile_n_0.png"))), "T_PoolTile37_N", 512, 95)
+    _save_jpg(Image.open(os.path.join(d, "plaster_4.png")), "T_Plaster", 512, 90)
+    _save_jpg(_flip_green(Image.open(os.path.join(d, "plaster_n_3.png"))), "T_Plaster_N", 512, 90)
+
+
+def _pnoise(size, beta, seed):
+    """Bruit periodique 1/f^beta (raccord parfait), moyenne 0, ecart-type 1"""
+    r = np.random.default_rng(seed)
+    F = np.fft.rfft2(r.standard_normal((size, size)))
+    fy = np.fft.fftfreq(size)[:, None] * size
+    fx = np.fft.rfftfreq(size)[None, :] * size
+    f = np.sqrt(fx ** 2 + fy ** 2)
+    f[0, 0] = 1.0
+    F *= 1.0 / f ** (beta / 2.0)
+    F[0, 0] = 0
+    n = np.fft.irfft2(F, s=(size, size))
+    return (n - n.mean()) / (n.std() + 1e-9)
+
+
+def _save_normal_from_height(name, h, size, quality=93):
+    """Normal map (x vers la droite, y vers le bas : meme convention que Tools/generate_textures.py)"""
+    from PIL import Image
+    dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5
+    dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.5
+    nx, ny, nz = -dx, -dy, np.ones_like(h)
+    ln = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
+    nrm = np.stack([nx / ln, ny / ln, nz / ln], -1) * 0.5 + 0.5
+    _save_jpg(Image.fromarray((np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB"), name + "_N", size, quality)
+
+
+def make_office_textures():
+    """Moquette bleu marine et dalles de faux plafond blanches, d'apres la scene du Niveau 4 fournie
+    (ses propres images, 150 px, sont trop petites pour le jeu : on les refait en 512 px, raccordables)"""
+    from PIL import Image
+    print("== Textures du bureau")
+    S = 512
+    # Moquette : couleur moyenne de la moquette de la scene (sRGB 0,06 / 0,11 / 0,24), fibres et boucles serrees
+    fib = _pnoise(S, 0.2, 801)
+    loops = _pnoise(S, 1.4, 802)
+    mott = _pnoise(S, 2.8, 803)
+    lum = np.clip(1.0 + 0.32 * fib + 0.1 * loops + 0.07 * mott, 0.4, 1.8)
+    base = np.array([0.062, 0.115, 0.245])
+    img = np.clip(lum[..., None] * base[None, None, :], 0, 1)
+    _save_jpg(Image.fromarray((img * 255 + 0.5).astype(np.uint8), "RGB"), "T_OfficeCarpetNavy", S, 90)
+    _save_normal_from_height("T_OfficeCarpetNavy", (0.8 * fib + 0.6 * loops) * 1.2, S, 85)
+
+    # Faux plafond : 2 x 2 dalles de 60 cm (la texture couvre 120 cm), ossature en T, fibre minerale fissuree
+    y, x = np.mgrid[0:S, 0:S].astype(np.float32) / S
+    u, v = (x * 2) % 1.0, (y * 2) % 1.0
+    edge = np.minimum(np.minimum(u, 1 - u), np.minimum(v, 1 - v))
+    grid = (edge < 0.018).astype(np.float32)               # ossature (~2 cm)
+    bevel = np.clip((edge - 0.018) / 0.03, 0, 1)            # bord de dalle legerement en retrait
+    worm = np.abs(_pnoise(S, 1.6, 811))
+    fiss = np.clip(1.0 - worm / 0.07, 0, 1) * np.clip(_pnoise(S, 2.0, 812) * 0.8 + 0.6, 0, 1)
+    pits = (np.random.default_rng(813).random((S, S)) < 0.004).astype(np.float32)
+    tile = 0.93 - 0.16 * fiss - 0.2 * pits + 0.012 * _pnoise(S, 2.5, 814)
+    tile *= 0.94 + 0.06 * bevel
+    col = np.where(grid > 0, 0.88, tile)
+    img = np.stack([col * 0.995, col * 0.99, col], -1)
+    _save_jpg(Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB"), "T_OfficeCeiling", S, 90)
+    hgt = 3.0 * grid + 1.2 * bevel - 1.5 * fiss - 2.0 * pits
+    _save_normal_from_height("T_OfficeCeiling", hgt, S)
+
+
+OFFICE_SCALE = 0.26  # la scene fournie est a l'echelle ~1/0,26 (plateau du bureau a 2,98 unites -> 77 cm)
+
+
+def _office_bounds(objs):
+    pts = [o.matrix_world @ Vector(c) for o in objs for c in o.bound_box]
+    return (Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts))),
+            Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts))))
+
+
+def _office_copy(src, slot_for, target=None):
+    """Copie independante (transformation monde appliquee), materiaux renommes, decimee a ~target sommets"""
+    me = bake_world(src)
+    obj = mesh_object(src.name + "_copy", me)
+    for i, m in enumerate(me.materials):
+        new = slot_for(src, m.name if m else "")
+        me.materials[i] = bpy.data.materials.get(new) or bpy.data.materials.new(new)
+    # Le glTF separe les sommets a chaque arete vive : on les soude, sinon la decimation ne peut rien fusionner
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=2e-4)
+    bm.to_mesh(me)
+    bm.free()
+    if target and len(me.vertices) > target:
+        decimate(obj, target / len(me.vertices))
+    for poly in me.polygons:
+        poly.use_smooth = True
+    try:
+        me.set_sharp_from_angle(angle=math.radians(40))  # Blender 4.1+ : aretes vives au-dela de 40 degres
+    except Exception:
+        pass
+    return obj
+
+
+def _office_join(objs, name, pivot):
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    if len(objs) > 1:
+        bpy.ops.object.join()
+    o = bpy.context.view_layer.objects.active
+    o.name = name
+    o.data.name = name
+    o.data.transform(Matrix.Scale(OFFICE_SCALE, 4) @ Matrix.Translation(-pivot))
+    o.data.update()
+    return o
+
+
+def process_office():
+    """Niveau 4 : un poste de travail de la scene fournie (bureau + ecran cathodique + tour + clavier),
+    sa chaise de bureau et sa fontaine a eau, a l'echelle du jeu. Avant du bureau (cote utilisateur) vers +X."""
+    path = os.path.join(SRC, "backrooms_lvl4_office.glb")
+    if not os.path.isfile(path):
+        print("!! introuvable :", path)
+        return
+    print("== Bureau (Niveau 4)")
+    reset()
+    bpy.ops.import_scene.gltf(filepath=path)
+    meshes = [o for o in bpy.data.objects if o.type == "MESH"]
+
+    def center(o):
+        mn, mx = _office_bounds([o])
+        return (mn + mx) / 2
+
+    def near(o, c, r):
+        return (center(o) - c).xy.length < r
+
+    tables = [o for o in meshes if o.name.startswith("Table")]
+    table = min(tables, key=lambda o: center(o).xy.length)
+    tc = center(table)
+
+    # Poste de travail : bureau, ecran, et les "Cube" poses sur le plateau (clavier, tour)
+    desk_mats = {"Material.004": "DeskDark", "Material.005": "DeskChrome", "Material.006": "DeskTop",
+                 "Material.007": "PCBeige", "Material.009": "PCBeige", "Material.012": "PCBeige",
+                 "Material.008": "PCScreen", "Material.010": "PCDark", "Material.011": "PCDark", "Material.015": "PCDark",
+                 "Material.013": "PCGrey", "Material.014": "PCLight"}
+    on_desk = [o for o in meshes if o.name.startswith("Cube.") and "_" not in o.name and near(o, tc, 5.0)
+               and _office_bounds([o])[0].z > 2.5 and _office_bounds([o])[1].z < 7.0]
+    pcs = [o for o in meshes if o.name.startswith("Computer") and near(o, tc, 5.0)]
+    desk_src = [table] + pcs + on_desk
+    desk_parts = [_office_copy(o, lambda src, m: desk_mats.get(m, "PCBeige"), 1400 if o.name.startswith("Computer") else 600)
+                  for o in desk_src]
+    mn, mx = _office_bounds(desk_src)
+    desk_pivot = Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, 0.0))
+
+    # Chaise : toutes les pieces autour de l'assise la plus proche
+    seat = min((o for o in meshes if o.name.startswith("ChairSeat")), key=lambda o: (center(o) - tc).xy.length)
+    sc_ = center(seat)
+    keys = ("ChairBack", "ChairSeat", "Leg_LP", "Wheel_LP", "Underside_LP", "pCube37", "pCube38", "pCylinder2")
+    chair_src = [o for o in meshes if o.name.startswith(keys) and near(o, sc_, 2.4)]
+    leather = ("ChairBack", "ChairSeat", "pCube37", "pCube38")
+    chair_parts = [_office_copy(o, lambda src, m: "ChairLeather" if src.name.startswith(leather) else "ChairBase",
+                                500 if o.name.startswith(("ChairBack", "ChairSeat", "Underside")) else None) for o in chair_src]
+    cmn, cmx = _office_bounds(chair_src)
+    chair_pivot = Vector(((cmn.x + cmx.x) / 2, (cmn.y + cmx.y) / 2, 0.0))
+
+    # Fontaine a eau : carrosserie, bonbonne, deux robinets (bleu a gauche, rouge a droite) ; sans l'etiquette
+    cool_src = [o for o in meshes if o.name.startswith("Cube.002_") and "Material.008" not in o.name and near(o, tc, 7.5)]
+    body = [o for o in cool_src if "Mainmetal" in o.name][0]
+    bc = center(body)
+
+    def cooler_slot(src, m):
+        if "Mainmetal" in src.name:
+            return "CoolerBody"
+        if m == "Material.021":
+            return "CoolerBottle"
+        return "TapBlue" if center(src).y < bc.y else "TapRed"
+    cool_parts = [_office_copy(o, cooler_slot, 700 if ("Material.002" in o.name or "Mainmetal" in o.name) else 150)
+                  for o in cool_src]
+    cool_pivot = Vector((bc.x, bc.y, 0.0))
+
+    desk = _office_join(desk_parts, "SM_OfficeDeskET", desk_pivot)
+    export_fbx(desk, "SM_OfficeDeskET")
+    chair = _office_join(chair_parts, "SM_OfficeChairET", chair_pivot)
+    export_fbx(chair, "SM_OfficeChairET")
+    cooler = _office_join(cool_parts, "SM_WaterCoolerET", cool_pivot)
+    export_fbx(cooler, "SM_WaterCoolerET")
+
+    # Disposition du poste dans la scene (cm, repere Unreal) : le jeu reproduit la meme
+    def ue_off(p):
+        return ue((p - desk_pivot) * OFFICE_SCALE)
+    dmn, dmx = _office_bounds([desk])
+    JOINTS["Office"] = {
+        "DeskMin": [round(dmn.x * 100, 1), round(-dmx.y * 100, 1), round(dmn.z * 100, 1)],
+        "DeskMax": [round(dmx.x * 100, 1), round(-dmn.y * 100, 1), round(dmx.z * 100, 1)],
+        "Chair": ue_off(chair_pivot), "Cooler": ue_off(cool_pivot),
+    }
+    print("  disposition :", JOINTS["Office"])
+    chair.location = (chair_pivot - desk_pivot) * OFFICE_SCALE
+    cooler.location = (cool_pivot - desk_pivot) * OFFICE_SCALE
+    for o in [o for o in bpy.data.objects if o not in (desk, chair, cooler)]:
+        bpy.data.objects.remove(o)
+    bpy.context.view_layer.update()
+    print("  apercu, bornes :", [tuple(round(c, 2) for c in b) for b in _office_bounds([desk, chair, cooler])])
+    preview([desk, chair, cooler], "SM_OfficeDeskET", Vector((1.0, 0.8, 0.6)))
+
+
 if __name__ == "__main__":
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    todo = args or ["hazmat", "bacteria", "moth", "skinstealer", "faceling", "partygoer", "hound", "smiler", "clump"]
+    todo = args or ["hazmat", "bacteria", "moth", "skinstealer", "faceling", "partygoer", "hound", "smiler", "clump",
+                    "pooltex", "officetex", "office"]
     if "hazmat" in todo:
         process_hazmat()
     if "bacteria" in todo:
@@ -1490,6 +1728,12 @@ if __name__ == "__main__":
         process_smiler()
     if "clump" in todo:
         process_clump()
+    if "pooltex" in todo:
+        process_pool_textures()
+    if "officetex" in todo:
+        make_office_textures()
+    if "office" in todo:
+        process_office()
     out = os.path.join(OUT_MESH, "user_models.json")
     old = {}
     if os.path.isfile(out):

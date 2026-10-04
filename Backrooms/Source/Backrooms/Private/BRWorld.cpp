@@ -714,6 +714,7 @@ FVector ABRWorld::SpawnSpot(int32 Slot, float Half) const
 		const float Ang = FMath::DegreesToRadians(90.f + 60.f * static_cast<float>(Slot - 1));
 		Loc += FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * FMath::Min(85.f, CellSize() * 0.3f);
 	}
+	Loc.Z += FloorZAt(Loc); // estrade du point de depart (Niveau 37)
 	return Loc;
 }
 
@@ -1676,7 +1677,82 @@ bool ABRWorld::IsPoolCell(int32 X, int32 Y) const
 float ABRWorld::FloorZAt(const FVector& P) const
 {
 	const FIntPoint C = WorldToCell(P);
-	return IsPoolCell(C.X, C.Y) ? -Def().PoolDepth : 0.f;
+	if (IsPoolCell(C.X, C.Y))
+	{
+		return -Def().PoolDepth;
+	}
+	return Def().DeckHeight > 0.f ? DeckZAt(P) : 0.f;
+}
+
+bool ABRWorld::HasDeck(int32 X, int32 Y, int32 Side) const
+{
+	const FBRLevelDef& D = Def();
+	if (D.DeckHeight <= 0.f || Side < 0 || Side > 3 || IsSolid(X, Y) || IsPoolCell(X, Y))
+	{
+		return false;
+	}
+	const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+	const FIntPoint Dir = Dirs[Side];
+	const int32 NX = X + Dir.X;
+	const int32 NY = Y + Dir.Y;
+	const bool bAlongY = Dir.X != 0; // le mur s'etend le long de Y
+	const EBREdge E = bAlongY ? EdgeE(Dir.X > 0 ? X : NX, Y) : EdgeN(X, Dir.Y > 0 ? Y : NY);
+	if (E == EBREdge::Open && !IsSolid(NX, NY))
+	{
+		return false;
+	}
+	if (E == EBREdge::Door)
+	{
+		// Une porte : trottoir des deux cotes (le seuil fait pont) ou d'aucun, jamais un quai qui tombe dans l'eau
+		if (IsPoolCell(NX, NY) || IsSolid(NX, NY))
+		{
+			return false;
+		}
+		const int32 KX = bAlongY ? FMath::Min(X, NX) : X;
+		const int32 KY = bAlongY ? Y : FMath::Min(Y, NY);
+		return BRHash::Rand(KX, KY, bAlongY ? 1803 : 1804, Seed) < D.DeckChance;
+	}
+	// Mur : decide par troncons de 3 cellules de chaque cote de la ligne, pour de longs trottoirs continus
+	const int32 Line = bAlongY ? (Dir.X > 0 ? X + 1 : X) : (Dir.Y > 0 ? Y + 1 : Y);
+	const int32 SideOfLine = (bAlongY ? Dir.X : Dir.Y) > 0 ? 0 : 1;
+	const int32 Run = BRHash::FloorDiv(bAlongY ? Y : X, 3);
+	return BRHash::Rand(Line * 2 + SideOfLine, Run, bAlongY ? 1801 : 1802, Seed) < D.DeckChance;
+}
+
+float ABRWorld::DeckZAt(const FVector& P) const
+{
+	const FBRLevelDef& D = Def();
+	if (D.DeckHeight <= 0.f)
+	{
+		return 0.f;
+	}
+	const FIntPoint C = WorldToCell(P);
+	if (IsSolid(C.X, C.Y) || IsPoolCell(C.X, C.Y))
+	{
+		return 0.f;
+	}
+	const float S = D.CellSize;
+	const float LX = static_cast<float>(P.X) - C.X * S;
+	const float LY = static_cast<float>(P.Y) - C.Y * S;
+	const float StepW = D.DeckStep > 0.f ? D.DeckStepWidth : 0.f;
+	// Point de depart : une estrade seche au milieu de l'eau, bordee d'une marche
+	if (C == FIntPoint(0, 0))
+	{
+		const float Edge = FMath::Min(FMath::Min(LX, S - LX), FMath::Min(LY, S - LY));
+		return Edge < StepW ? D.DeckStep : D.DeckHeight;
+	}
+	const float Reach = D.WallThickness * 0.5f + D.DeckWidth;
+	const float Dist[4] = { S - LX, LX, S - LY, LY };
+	float Z = 0.f;
+	for (int32 k = 0; k < 4; ++k)
+	{
+		if (Dist[k] >= Reach + StepW || !HasDeck(C.X, C.Y, k))
+		{
+			continue;
+		}
+		Z = FMath::Max(Z, Dist[k] < Reach ? D.DeckHeight : D.DeckStep);
+	}
+	return Z;
 }
 
 bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, const ABRCharacter* Anchor, float MinDist, float MaxDist, bool bAvoidSight, FVector& Out) const
@@ -1937,6 +2013,64 @@ float ABRWorld::ZoneDensity(int32 X, int32 Y) const
 	return 1.f;
 }
 
+int32 ABRWorld::CubicleRole(int32 X, int32 Y) const
+{
+	const FBRLevelDef& D = Def();
+	constexpr int32 Zone = 12;
+	if (D.CubicleZoneChance <= 0.f || D.Layout != EBRLayout::Rooms
+		|| BRHash::Rand(BRHash::FloorDiv(X, Zone), BRHash::FloorDiv(Y, Zone), 1901, Seed) >= D.CubicleZoneChance)
+	{
+		return -1;
+	}
+	// Rangees de bureaux dos a dos (portes vers les allees), une allee toutes les 3 rangees, une transversale toutes les 6 colonnes
+	const int32 LX = BRHash::PosMod(X, Zone);
+	const int32 LY = BRHash::PosMod(Y, Zone);
+	if (LX % 6 == 0 || LY % 3 == 0)
+	{
+		return 0;
+	}
+	return LY % 3 == 1 ? 1 : 2;
+}
+
+EBREdge ABRWorld::CubicleEdge(int32 X, int32 Y, bool bEast, bool& bOut) const
+{
+	const int32 A = CubicleRole(X, Y);
+	const int32 B = bEast ? CubicleRole(X + 1, Y) : CubicleRole(X, Y + 1);
+	bOut = A >= 0 || B >= 0;
+	if (!bOut)
+	{
+		return EBREdge::Open;
+	}
+	if (bEast)
+	{
+		// Bureaux voisins dans une rangee : cloison ; une allee : passage
+		return (A == 0 || B == 0) ? EBREdge::Open : EBREdge::Wall;
+	}
+	if (A == 2 || B == 1)
+	{
+		return EBREdge::Door; // porte du bureau sur l'allee
+	}
+	if (A == 1 && B == 2)
+	{
+		return EBREdge::Wall; // bureaux dos a dos
+	}
+	return (A == 0 || B == 0) ? EBREdge::Open : EBREdge::Wall;
+}
+
+bool ABRWorld::IsCubicle(int32 X, int32 Y, int32* OutDoorSide) const
+{
+	const int32 R = CubicleRole(X, Y);
+	if (R <= 0 || IsSpawnArea(X, Y))
+	{
+		return false;
+	}
+	if (OutDoorSide)
+	{
+		*OutDoorSide = R == 1 ? 3 : 2;
+	}
+	return true;
+}
+
 bool ABRWorld::MazeOpen(int32 X, int32 Y, bool bEast) const
 {
 	const FBRLevelDef& D = Def();
@@ -2039,6 +2173,12 @@ EBREdge ABRWorld::EdgeE(int32 X, int32 Y) const
 	}
 	if (D.Layout == EBRLayout::Rooms)
 	{
+		bool bCubicles = false;
+		const EBREdge CE = CubicleEdge(X, Y, true, bCubicles);
+		if (bCubicles)
+		{
+			return CE;
+		}
 		const int32 Seg = FMath::Max(1, D.SegmentLength);
 		const int32 Off = static_cast<int32>(BRHash::Hash(X, 0, 101, Seed) % static_cast<uint32>(Seg));
 		const int32 SegIdx = BRHash::FloorDiv(Y + Off, Seg);
@@ -2064,6 +2204,12 @@ EBREdge ABRWorld::EdgeN(int32 X, int32 Y) const
 	}
 	if (D.Layout == EBRLayout::Rooms)
 	{
+		bool bCubicles = false;
+		const EBREdge CE = CubicleEdge(X, Y, false, bCubicles);
+		if (bCubicles)
+		{
+			return CE;
+		}
 		const int32 Seg = FMath::Max(1, D.SegmentLength);
 		const int32 Off = static_cast<int32>(BRHash::Hash(0, Y, 111, Seed) % static_cast<uint32>(Seg));
 		const int32 SegIdx = BRHash::FloorDiv(X + Off, Seg);
@@ -2114,7 +2260,13 @@ bool ABRWorld::HasPillar(int32 X, int32 Y) const
 	{
 		return false;
 	}
-	const float Mult = ZoneDensity(X, Y) < 0.5f ? 2.5f : 1.f;
+	const bool bOpenZone = ZoneDensity(X, Y) < 0.5f;
+	if (D.bPillarGrid && bOpenZone)
+	{
+		// Grandes salles inondees : une colonnade reguliere, comme dans la scene de reference
+		return BRHash::PosMod(X, 2) == 1 && BRHash::PosMod(Y, 2) == 1;
+	}
+	const float Mult = bOpenZone ? 2.5f : 1.f;
 	return BRHash::Rand(X, Y, 301, Seed) < D.PillarChance * Mult;
 }
 

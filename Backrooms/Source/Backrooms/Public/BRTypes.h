@@ -217,6 +217,25 @@ struct FBRLevelDef
 	float PoolDepth = 260.f;
 	/** Grandes verrieres inclinees a la jonction mur / plafond (par chunk) */
 	float SkylightChance = 0.f;
+	// --- v3.8 : Poolrooms d'apres la scene fournie ---
+	/** Trottoirs carreles le long des murs, au-dessus de l'eau (DeckHeight 0 = aucun) : hauteur, largeur, et marche
+	 *  immergee le long du bord (DeckStep 0 = aucune) pour remonter du canal sans sauter */
+	float DeckHeight = 0.f;
+	float DeckWidth = 130.f;
+	float DeckStep = 0.f;
+	float DeckStepWidth = 35.f;
+	/** Proportion des murs bordes d'un trottoir (une porte en a des deux cotes, ou d'aucun) */
+	float DeckChance = 0.8f;
+	/** Portes en arche (plein cintre) au lieu d'un linteau droit ; sommet de l'arche en cm (0 : 60 cm sous le plafond) */
+	bool bArches = false;
+	float ArchApex = 0.f;
+	/** Corniche a 45 degres entre les murs et le plafond (cote en cm, 0 = aucune) */
+	float CoveSize = 0.f;
+	/** Piliers alignes en grille reguliere dans les grandes salles ouvertes */
+	bool bPillarGrid = false;
+	// --- v3.8 : Niveau 4 d'apres la scene fournie ---
+	/** Zones de bureaux cloisonnes (rangees de petits bureaux et allees) : proportion des zones de 12 x 12 cellules */
+	float CubicleZoneChance = 0.f;
 
 	// --- v3.2 : Niveau 0 ---
 	/** Une entite fait des rondes autour du joueur (elle passe regulierement dans son champ de vision) */

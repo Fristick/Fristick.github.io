@@ -147,8 +147,14 @@ public:
 	bool HasHouse(int32 LotX, int32 LotY) const;
 	/** Bassin profond (Niveau 37) : le sol de la cellule est a -PoolDepth */
 	bool IsPoolCell(int32 X, int32 Y) const;
-	/** Hauteur du sol sous un point (0, ou le fond d'un bassin) */
+	/** Hauteur du sol sous un point (0, le fond d'un bassin, ou le dessus d'un trottoir) */
 	float FloorZAt(const FVector& P) const;
+	/** Trottoir le long du cote Side de la cellule (0 : +X, 1 : -X, 2 : +Y, 3 : -Y), Niveau 37 */
+	bool HasDeck(int32 X, int32 Y, int32 Side) const;
+	/** Hauteur d'un trottoir (ou de sa marche immergee) sous un point, 0 ailleurs */
+	float DeckZAt(const FVector& P) const;
+	/** Bureau cloisonne (Niveau 4) ; OutDoorSide = cote de sa porte (0..3, comme HasDeck) */
+	bool IsCubicle(int32 X, int32 Y, int32* OutDoorSide = nullptr) const;
 	/** Camera sous l'eau (0..1) : brouillard turquoise dense */
 	void SetUnderwater(float Blend);
 	/** Surface (texture, teinte) de l'eau du niveau */
@@ -308,6 +314,10 @@ private:
 	bool SpawnHallucination(ABRCharacter* P);
 	ABRCharacter* GetPlayer() const;
 	float ZoneDensity(int32 X, int32 Y) const;
+	/** Motif des bureaux cloisonnes : -1 hors zone, 0 allee, 1 bureau ouvert vers -Y, 2 bureau ouvert vers +Y */
+	int32 CubicleRole(int32 X, int32 Y) const;
+	/** Arete dans une zone de bureaux (bOut = false : la regle ordinaire s'applique) */
+	EBREdge CubicleEdge(int32 X, int32 Y, bool bEast, bool& bOut) const;
 	bool MazeOpen(int32 X, int32 Y, bool bEast) const;
 	void UpdateBlackout(float Dt);
 	void ApplyPower(bool bForce);

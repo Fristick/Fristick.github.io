@@ -5,6 +5,7 @@
 #include "BRLevels.h"
 #include "BRInteractables.h"
 #include "BRItems.h"
+#include "BRRig.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -20,6 +21,14 @@
 namespace
 {
 	const FIntPoint GDirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+
+	// Poste de travail du Niveau 4 (RawAssets/Meshes/user_models.json, "Office") : origine du bureau au centre de son
+	// emprise au sol, +X vers l'utilisateur ; la chaise et la fontaine sont placees comme dans la scene fournie
+	constexpr float GDeskBack = 48.7f;
+	constexpr float GDeskHalfLen = 93.1f;
+	constexpr float GCoolerHalf = 23.f;
+	const FVector GChairOffset(71.23f, -22.24f, 0.f);
+	const FVector GCoolerOffset(-24.46f, -136.11f, 0.f);
 
 	float YawFromDir(float DX, float DY)
 	{
@@ -76,6 +85,20 @@ void ABRChunk::AddBox(const FBRSurface& S, const FVector& Center, const FVector&
 	const FString Key = FString::Printf(TEXT("BOX|%d|%s"), bCollision ? 1 : 0, *S.Key());
 	FBatch& B = GetBatch(Key, A->Cube(), A->Surface(S), bCollision, true, 0.f);
 	B.Transforms.Add(FTransform(FRotator(0.f, Yaw, 0.f), Center - GetActorLocation(), Size / 100.f));
+}
+
+bool ABRChunk::AddSurfaceMesh(FName MeshName, const FBRSurface& S, const FTransform& T, bool bCollision)
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	UStaticMesh* M = A ? A->Mesh(MeshName) : nullptr;
+	if (!M)
+	{
+		return false;
+	}
+	const FString Key = FString::Printf(TEXT("SURF|%s|%d|%s"), *MeshName.ToString(), bCollision ? 1 : 0, *S.Key());
+	FBatch& B = GetBatch(Key, M, A->Surface(S), bCollision, true, 0.f);
+	B.Transforms.Add(FTransform(T.GetRotation(), T.GetLocation() - GetActorLocation(), T.GetScale3D()));
+	return true;
 }
 
 void ABRChunk::AddProp(FName MeshName, const FTransform& T, bool bCollision, const FVector& FallbackSize,
@@ -244,6 +267,57 @@ void ABRChunk::BuildPools()
 	}
 }
 
+void ABRChunk::BuildDecks()
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float DH = D.DeckHeight;
+	const float StepW = D.DeckStep > 0.f ? D.DeckStepWidth : 0.f;
+	// Le trottoir part de la ligne de la grille (cache dans le mur, et fait pont sous une porte)
+	const float Depth = D.WallThickness * 0.5f + D.DeckWidth;
+	for (int32 X = Coord.X * N; X < (Coord.X + 1) * N; ++X)
+	{
+		for (int32 Y = Coord.Y * N; Y < (Coord.Y + 1) * N; ++Y)
+		{
+			const FVector C = W->CellCenter(FIntPoint(X, Y));
+			if (X == 0 && Y == 0)
+			{
+				// Estrade seche du point de depart, bordee d'une marche
+				AddBox(D.Floor, FVector(C.X, C.Y, DH * 0.5f), FVector(S - 2.f * StepW, S - 2.f * StepW, DH));
+				if (StepW > 0.f)
+				{
+					AddBox(D.Floor, FVector(C.X, C.Y, D.DeckStep * 0.5f), FVector(S, S, D.DeckStep));
+				}
+				continue;
+			}
+			for (int32 k = 0; k < 4; ++k)
+			{
+				if (!W->HasDeck(X, Y, k))
+				{
+					continue;
+				}
+				const FIntPoint Dir = GDirs[k];
+				const bool bAlongY = Dir.X != 0;
+				const FVector Out(Dir.X, Dir.Y, 0.f);
+				const FVector Line = C + Out * (S * 0.5f);
+				const FVector DeckC = Line - Out * (Depth * 0.5f) + FVector(0.f, 0.f, DH * 0.5f);
+				AddBox(D.Floor, DeckC, bAlongY ? FVector(Depth, S, DH) : FVector(S, Depth, DH));
+				if (StepW > 0.f)
+				{
+					const FVector StepC = Line - Out * (Depth + StepW * 0.5f) + FVector(0.f, 0.f, D.DeckStep * 0.5f);
+					AddBox(D.Floor, StepC, bAlongY ? FVector(StepW, S, D.DeckStep) : FVector(S, StepW, D.DeckStep));
+				}
+			}
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Murs
 // ---------------------------------------------------------------------------------------------------------------------
@@ -262,6 +336,19 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 	const FVector Center = bAlongY ? FVector(Fixed, Mid, (ZLo + ZHi) * 0.5f) : FVector(Mid, Fixed, (ZLo + ZHi) * 0.5f);
 	const FVector Size = bAlongY ? FVector(T, Len, ZHi - ZLo) : FVector(Len, T, ZHi - ZLo);
 	AddBox(D.Wall, Center, Size);
+
+	// Corniche a 45 degres sous le plafond, des deux cotes (Poolrooms) : le modele a la piece vers son -Y
+	if (D.CoveSize > 0.f && ZHi >= D.WallHeight - 1.f)
+	{
+		for (int32 Side = -1; Side <= 1; Side += 2)
+		{
+			const float Face = Fixed + Side * T * 0.5f;
+			const FVector P = bAlongY ? FVector(Face, Mid, D.WallHeight) : FVector(Mid, Face, D.WallHeight);
+			const float Yaw = bAlongY ? Side * 90.f : (Side > 0 ? 180.f : 0.f);
+			AddSurfaceMesh(TEXT("SM_Cove"), D.Ceiling, FTransform(FRotator(0.f, Yaw, 0.f), P, FVector(Len / 100.f, D.CoveSize / 50.f, D.CoveSize / 50.f)),
+				false);
+		}
+	}
 
 	if (bWithTrim && D.bTrim && ZLo < 1.f)
 	{
@@ -340,6 +427,21 @@ void ABRChunk::AddDoorway(bool bAlongY, float Fixed, float Mid)
 	const float End = Mid + S * 0.5f + T * 0.5f;
 	AddWallSegment(bAlongY, Fixed, Start, Mid - DW * 0.5f, 0.f, H, true, false);
 	AddWallSegment(bAlongY, Fixed, Mid + DW * 0.5f, End, 0.f, H, true, false);
+	if (D.bLintels && D.bArches)
+	{
+		// Arche en plein cintre (Poolrooms) : ecoincons etires a la largeur de la porte, linteau au-dessus
+		const float Apex = D.ArchApex > 0.f ? FMath::Min(D.ArchApex, H - 20.f) : H - 60.f;
+		const float Spring = Apex - DW * 0.5f;
+		const float Top = Spring + DW * 0.52f;
+		const FVector P = bAlongY ? FVector(Fixed, Mid, Spring) : FVector(Mid, Fixed, Spring);
+		if (Spring > 150.f && Top < H
+			&& AddSurfaceMesh(TEXT("SM_ArchSpandrel"), D.Wall, FTransform(FRotator(0.f, bAlongY ? 90.f : 0.f, 0.f), P, FVector(DW / 100.f, T / 100.f, DW / 100.f)),
+				false))
+		{
+			AddWallSegment(bAlongY, Fixed, Mid - DW * 0.5f, Mid + DW * 0.5f, Top, H, false, false);
+			return;
+		}
+	}
 	if (D.bLintels)
 	{
 		const float DoorTop = FMath::Min(225.f, H - 25.f);
@@ -615,6 +717,10 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 	else
 	{
 		AddBox(D.Floor, FVector(Mid.X, Mid.Y, -10.f), FVector(ChunkW, ChunkW, 20.f));
+	}
+	if (D.DeckHeight > 0.f)
+	{
+		BuildDecks();
 	}
 	if (D.bCeiling)
 	{
@@ -1075,8 +1181,40 @@ void ABRChunk::BuildCellProps(int32 X, int32 Y)
 		{
 			break;
 		}
+		const bool bFullDesk = BRRig::HasMesh(this, TEXT("SM_OfficeDeskET"));
+		int32 DoorSide = 0;
+		if (bFullDesk && W->IsCubicle(X, Y, &DoorSide))
+		{
+			// Bureau cloisonne : le poste de travail contre une cloison laterale, la fontaine au fond
+			const FIntPoint DoorDir = GDirs[DoorSide];
+			const FVector Back(-DoorDir.X, -DoorDir.Y, 0.f);
+			const FVector Left(Back.Y, -Back.X, 0.f);
+			auto Walled = [&](const FVector& V)
+			{
+				return !W->CanStep(FIntPoint(X, Y), FIntPoint(X + FMath::RoundToInt(V.X), Y + FMath::RoundToInt(V.Y)));
+			};
+			const bool bL = Walled(Left);
+			const bool bR = Walled(-Left);
+			if (bL || bR)
+			{
+				const FVector ToWall = (bL && (!bR || R(906) < 0.5f)) ? Left : -Left;
+				const FVector Face = C + ToWall * (S * 0.5f - D.WallThickness * 0.5f);
+				AddWorkstation(X, Y, Face, ToWall, Back, R(907) < 0.4f);
+			}
+			break;
+		}
 		const float Roll = R(901);
-		if (Roll < D.PropDensity)
+		if (Roll < D.PropDensity && bFullDesk)
+		{
+			// Open space : un poste au milieu de la piece, dos a une cloison basse
+			const float Yaw = 90.f * FMath::FloorToFloat(R(902) * 4.f);
+			const FRotator Rot(0.f, Yaw, 0.f);
+			const FVector ToWall = -Rot.Vector();
+			const FVector Along = Rot.RotateVector(FVector(0.f, -1.f, 0.f));
+			AddWorkstation(X, Y, C + ToWall * (GDeskBack + 6.f), ToWall, Along, false);
+			AddProp(TEXT("SM_Partition"), FTransform(Rot, C + ToWall * (GDeskBack + 9.f)), true, FVector(5.f, 120.f, 140.f));
+		}
+		else if (Roll < D.PropDensity)
 		{
 			const float Yaw = 90.f * FMath::FloorToFloat(R(902) * 4.f);
 			const FRotator Rot(0.f, Yaw, 0.f);
@@ -1091,7 +1229,8 @@ void ABRChunk::BuildCellProps(int32 X, int32 Y)
 		else if (Roll < D.PropDensity + 0.05f)
 		{
 			const FVector P = C + FVector(S * 0.5f - 45.f, S * 0.5f - 45.f, 0.f);
-			AddProp(TEXT("SM_WaterCooler"), FTransform(FRotator(0.f, 225.f, 0.f), P), true, FVector(32.f, 32.f, 140.f));
+			const FName Cooler = BRRig::HasMesh(this, TEXT("SM_WaterCoolerET")) ? FName(TEXT("SM_WaterCoolerET")) : FName(TEXT("SM_WaterCooler"));
+			AddProp(Cooler, FTransform(FRotator(0.f, 225.f, 0.f), P), true, FVector(32.f, 32.f, 140.f));
 		}
 		break;
 	}
@@ -1139,6 +1278,33 @@ void ABRChunk::BuildCellProps(int32 X, int32 Y)
 	}
 	default:
 		break;
+	}
+}
+
+void ABRChunk::AddWorkstation(int32 X, int32 Y, const FVector& WallFace, const FVector& ToWall, const FVector& Back, bool bCooler)
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const uint32 Seed = W->GetSeed();
+	auto R = [&](int32 Salt) { return BRHash::Rand(X, Y, Salt, Seed); };
+	// Le bureau tourne le dos au mur (+X local vers la piece) ; son -Y local doit aller vers Back, sinon on le retourne
+	const FRotator Rot(0.f, FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(-ToWall.Y), static_cast<float>(-ToWall.X))), 0.f);
+	const bool bMirror = FVector::DotProduct(Rot.RotateVector(FVector(0.f, -1.f, 0.f)), Back) < 0.f;
+	const float MY = bMirror ? -1.f : 1.f;
+	// Le groupe (bureau + fontaine) est centre le long du mur
+	const float Shift = bCooler ? -(GCoolerHalf - GCoolerOffset.Y - GDeskHalfLen) * 0.5f : 0.f;
+	const FVector DeskPos = WallFace - ToWall * (GDeskBack + 2.f) + Back * Shift;
+	AddProp(TEXT("SM_OfficeDeskET"), FTransform(Rot, DeskPos, FVector(1.f, MY, 1.f)), true, FVector(98.f, 186.f, 76.f));
+	const FVector ChairLocal(GChairOffset.X + (R(921) - 0.5f) * 30.f, (GChairOffset.Y + (R(922) - 0.5f) * 40.f) * MY, 0.f);
+	AddProp(TEXT("SM_OfficeChairET"), FTransform(FRotator(0.f, Rot.Yaw + (R(923) - 0.5f) * 70.f, 0.f), DeskPos + Rot.RotateVector(ChairLocal)), true,
+		FVector(60.f, 60.f, 110.f));
+	if (bCooler)
+	{
+		const FVector CoolerLocal(GCoolerOffset.X, GCoolerOffset.Y * MY, 0.f);
+		AddProp(TEXT("SM_WaterCoolerET"), FTransform(Rot, DeskPos + Rot.RotateVector(CoolerLocal)), true, FVector(45.f, 45.f, 160.f));
 	}
 }
 
@@ -1220,7 +1386,8 @@ void ABRChunk::BuildPickupsAndExits()
 		}
 		const float JX = (BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 7, Seed) - 0.5f) * S * 0.5f;
 		const float JY = (BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 8, Seed) - 0.5f) * S * 0.5f;
-		const FVector Pos = W->CellCenter(Cell, 1.f) + FVector(JX, JY, 0.f);
+		FVector Pos = W->CellCenter(Cell, 1.f) + FVector(JX, JY, 0.f);
+		Pos.Z += W->FloorZAt(Pos); // sur un trottoir (Niveau 37)
 		const FRotator Rot(0.f, BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 9, Seed) * 360.f, 0.f);
 		ABRPickup* P = GetWorld()->SpawnActor<ABRPickup>(ABRPickup::StaticClass(), FTransform(Rot, Pos), Params);
 		if (P)
@@ -1355,6 +1522,7 @@ void ABRChunk::BuildPickupsAndExits()
 				}
 				const float Inset = W->IsSolid(Next.X, Next.Y) ? 0.f : D.WallThickness * 0.5f;
 				Pos = W->CellCenter(Cell, 0.f) + FVector(Dir.X, Dir.Y, 0.f) * (S * 0.5f - Inset);
+				Pos.Z = W->FloorZAt(Pos - FVector(Dir.X, Dir.Y, 0.f) * 30.f); // pied de la sortie sur le trottoir
 				Yaw = YawFromDir(-Dir.X, -Dir.Y);
 				bFound = true;
 			}

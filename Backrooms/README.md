@@ -7,6 +7,26 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3.8** (Poolrooms et Niveau 4 d'après les deux scènes fournies) :
+- **Poolrooms (Niveau 37)**, sur le modèle de la carte fournie (`gm_poolrooms`) :
+  - de longs **couloirs bordés de canaux** (60 cm d'eau) et de **trottoirs carrelés** au ras de l'eau. Une marche
+    immergée longe chaque trottoir : on remonte du canal sans sauter, et on marche au sec (pas sur le carrelage) ;
+  - des **rangées d'arches en plein cintre** à la place des portes rectangulaires ;
+  - une **corniche à 45°** entre les murs et le **plafond en plâtre** ;
+  - de **grandes salles inondées à colonnade régulière**. Les bassins profonds où l'on nage restent, plus rares ;
+  - le **carrelage vert d'eau à joints gris** et le plâtre (avec leurs normal maps) viennent de la scène fournie ;
+  - on démarre sur une **estrade sèche** au milieu de l'eau. Les vagues simulées se brisent contre les trottoirs.
+- **Niveau 4 (Abandoned Office)**, sur le modèle de la scène fournie :
+  - des **zones de bureaux cloisonnés** jusqu'au plafond : rangées de petits bureaux dos à dos, chacun avec sa porte
+    sur une allée, des allées transversales régulières ;
+  - dans chaque bureau, le **poste de travail de la scène** : bureau blanc à pieds chromés, **écran cathodique, tour
+    et clavier beiges** des années 90, **chaise de bureau noire**, et parfois la **fontaine à eau** (bonbonne,
+    robinets bleu et rouge). Les mêmes meubles servent dans les open spaces ;
+  - **moquette bleu marine**, murs blancs avec plinthes grises, **faux plafond à dalles blanches**, plafond plus bas.
+- L'import passe en **version 9** (nouveaux modèles et textures, réimport automatique à l'ouverture de l'éditeur).
+
+![Niveaux de la version 3.8 (maquettes Blender reconstruites avec les règles du jeu)](Docs/apercu_niveaux_v38.jpg)
+
 **Nouveautés de la version 3.7** (entités d'après les images et les modèles fournis) :
 - **Skin-Stealer** : le modèle fourni, une chair rouge à vif sans peau, des bras qui pendent jusqu'aux genoux et
   des griffes démesurées. Il garde son déguisement en combinaison hazmat et sa masse de chair au repos.
@@ -347,14 +367,14 @@ L'écran imite une caméra « found footage » : REC, horodatage, grain et vigne
 | **1** | *Habitable Zone* | Entrepôt de béton brumeux, piliers, flaques, caisses | Smilers, Facelings, Hounds | Porte de secours → 2, ascenseur → 4 |
 | **2** | *Abandoned Utility Halls* (« Pipe Dreams ») | Labyrinthe de couloirs étroits, tuyaux, ampoules orange | Wretches, Hounds, Clump, Smilers | Porte → 3, échelle → 1 |
 | **3** | *Electrical Station* | Briques, grilles métalliques, armoires électriques, vacarme de machines | Hounds, Skin-Stealers, Smilers, Deathmoths, Wretches | Ascenseur → 4, porte → 2 |
-| **4** | *Abandoned Office* | Open-space éclairé, bureaux, fontaines, beaucoup d'eau d'amande | Facelings, Partygoer (rare) | Porte → 5, ascenseur → 1 |
+| **4** | *Abandoned Office* | Rangées de petits bureaux cloisonnés (ordinateur beige, chaise noire, fontaine à eau), allées à moquette bleu marine, faux plafond blanc ; quelques open spaces. Beaucoup d'eau d'amande | Facelings, Partygoer (rare) | Porte → 5, ascenseur → 1 |
 | **5** | *Terror Hotel* | Couloirs d'hôtel des années 1920, moquette rouge, appliques, portes numérotées | Skin-Stealers, Partygoers, Facelings | Porte « chaufferie » → 6 |
 | **6** | *Lights Out* | Obscurité totale : seule votre lampe éclaire | Smilers (nombreux) | Échelle → 8 |
 | **8** | *Cave System* | Grottes rocheuses, vieilles lampes de mine | Deathmoths, Clump, Hounds | Échelle → 9 |
 | **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10 |
 | **10** | *Field of Wheat* | Champ de blé infini sous un ciel couvert, granges, poteaux | Faceling (paisible) | Grange → 11 |
 | **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour | Facelings (paisibles) | Porte d'immeuble → niveau aléatoire |
-| **37** | *Sublimity* (« Poolrooms ») | Salles en petit carrelage blanc brillant, plafonniers ovales et grandes verrières inclinées, inondées d'une eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
+| **37** | *Sublimity* (« Poolrooms ») | Couloirs en carrelage vert d'eau bordés de canaux et de trottoirs, arches en plein cintre, corniches sous un plafond en plâtre, grandes salles inondées à colonnades, plafonniers ovales et grandes verrières inclinées. Eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
 
 Chaque niveau est une grille **infinie** générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
@@ -418,7 +438,8 @@ Backrooms/
 │   ├── Blender/generate_models.py    ★ Modélisation procédurale (décor, objets, formes de secours) + icônes (Blender)
 │   ├── Blender/preview_entities.py   Rendu d'aperçu des entités assemblées
 │   ├── Blender/import_user_models.py Découpe des modèles fournis en pièces articulées (hazmat, Bacteria, Deathmoth,
-│   │                                 Skin-Stealer, Faceling, Partygoer, Hound) + Smiler et Clump d'après les images
+│   │                                 Skin-Stealer, Faceling, Partygoer, Hound) + Smiler et Clump d'après les images,
+│   │                                 meubles et textures des scènes fournies (Niveau 4, Poolrooms)
 │   ├── SourceModels/                 (non versionné) Les fichiers d'origine des modèles fournis
 │   ├── generate_textures.py          Textures procédurales « tileables » (numpy + Pillow)
 │   └── generate_sounds.py            Synthèse de tous les sons (numpy)
@@ -434,7 +455,8 @@ blender -b -P Tools/Blender/generate_models.py -- SM_Smiler # un seul
 python Tools/generate_textures.py
 python Tools/generate_sounds.py
 # Modèles fournis (placer asyc_hazmat.glb, bacteria_recreation.blend, « peppered moth.obj » et sa texture,
-# skin_stealer.usdz, faceling.glb, partygoer.fbx + partygoer_BaseColor.jpeg, hound.blend + hound_Material.png
+# skin_stealer.usdz, faceling.glb, partygoer.fbx + partygoer_BaseColor.jpeg, hound.blend + hound_Material.png,
+# backrooms_lvl4_office.glb, poolrooms/ (pooltile_1.png, pooltile_n_0.png, plaster_4.png, plaster_n_3.png)
 # dans Tools/SourceModels/ ; détails en tête du script)
 blender -b -P Tools/Blender/import_user_models.py
 ```
@@ -538,5 +560,7 @@ des modèles de ce dossier sont générés par les scripts fournis. **Exceptions
 (`asyc_hazmat`), la Bacteria (`bacteria-lifeform-backrooms`), le Deathmoth (`deathmoth-backrooms`, phalène poivrée
 scannée), le Skin-Stealer (`Skin_Stealer_The_Backrooms_Blender_3`), le Hound (`hound-backrooms`), le Faceling
 (`backrooms-faceling-ps1psx-style`) et le Partygoer (`partygoer-from-backrooms-updated`, « Partygoer by FilinMinv »)
-viennent de modèles fournis par l'utilisateur. Le Smiler et le Clump sont modélisés d'après des images fournies. Ils ont été découpés et adaptés par
+viennent de modèles fournis par l'utilisateur, tout comme les meubles du Niveau 4 (scène `backrooms-level-4-abandoned-office`)
+et le carrelage et le plâtre des Poolrooms (scène `poolrooms`, carte Garry's Mod « gm_poolrooms »). Le Smiler et le
+Clump sont modélisés d'après des images fournies. Ils ont été découpés et adaptés par
 `Tools/Blender/import_user_models.py`. Vérifiez leur licence d'origine avant toute diffusion publique du jeu.*

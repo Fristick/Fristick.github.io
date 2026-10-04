@@ -1846,7 +1846,7 @@ FName ABRCharacter::StepSoundName() const
 		Kind = TEXT("Hard");
 		break;
 	case EBRStep::Water:
-		Kind = TEXT("Water");
+		Kind = WaterDepth > 2.f ? TEXT("Water") : TEXT("Hard"); // au sec sur un trottoir carrele
 		break;
 	case EBRStep::Grass:
 		Kind = TEXT("Grass");

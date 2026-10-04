@@ -213,6 +213,11 @@ bool UBRWaterSim::IsBlocked(float X, float Y, const ABRWorld* World)
 	{
 		return true;
 	}
+	// Trottoirs au-dessus de l'eau (Niveau 37) : les vagues s'y brisent
+	if (D.DeckHeight > D.WaterHeight && World->DeckZAt(FVector(X, Y, 0.f)) > D.WaterHeight)
+	{
+		return true;
+	}
 	if (D.Layout != EBRLayout::Rooms && D.Layout != EBRLayout::Maze)
 	{
 		return false;

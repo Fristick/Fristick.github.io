@@ -21,7 +21,7 @@ import os
 
 import unreal
 
-VERSION = 8
+VERSION = 9
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"

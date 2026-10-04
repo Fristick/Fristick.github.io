@@ -226,7 +226,7 @@ def t_l0_ceiling():
     shadow = (((u > bw) & (u < bw * 2.5)) | ((v > bw) & (v < bw * 2.5))).astype(np.float32)
     img = mix(img, np.ones_like(img) * np.array([0.80, 0.80, 0.77]), bar)
     img *= (1 - 0.15 * shadow)[..., None]
-    save("T_L0_Ceiling", img)
+    save("T_L0_Ceiling", img, size=1024)  # 1024 px pour 1,20 m : largement assez, et le zip reste sous 30 Mo
 
 
 # ---------------------------------------------------------------------------

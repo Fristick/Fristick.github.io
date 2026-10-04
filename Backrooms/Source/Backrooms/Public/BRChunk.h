@@ -80,6 +80,8 @@ protected:
 
 	/** Boite (cube moteur) texturee par projection monde */
 	void AddBox(const FBRSurface& S, const FVector& Center, const FVector& Size, bool bCollision = true, float Yaw = 0.f);
+	/** Modele d'architecture (arche, corniche) habille d'une surface du niveau ; false s'il n'est pas importe */
+	bool AddSurfaceMesh(FName MeshName, const FBRSurface& S, const FTransform& T, bool bCollision);
 	/** Modele Blender (ou boite de repli) */
 	void AddProp(FName MeshName, const FTransform& T, bool bCollision, const FVector& FallbackSize, const FBRSurface* FallbackSurface = nullptr,
 		float CullDistance = 0.f, bool bShadow = true);
@@ -95,6 +97,11 @@ protected:
 	void BuildCellProps(int32 X, int32 Y);
 	/** Sol cellule par cellule avec bassins profonds (Niveau 37) */
 	void BuildPools();
+	/** Trottoirs carreles le long des murs, marche immergee, estrade du point de depart (Niveau 37) */
+	void BuildDecks();
+	/** Poste de travail du Niveau 4 dos a un mur : bureau (ecran, tour, clavier), chaise, fontaine a eau.
+	 *  ToWall : vers le mur derriere le bureau ; Back : le long du mur, cote fontaine */
+	void AddWorkstation(int32 X, int32 Y, const FVector& WallFace, const FVector& ToWall, const FVector& Back, bool bCooler);
 	/** Verriere inclinee sur un mur + lumiere du jour qui inonde la piece (Niveau 37) */
 	void BuildSkylight();
 	/** Placards et trous dans le mur ou se cacher (Niveau 0) */

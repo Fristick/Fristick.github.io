@@ -1285,6 +1285,53 @@ def m_clump():
 # ---------------------------------------------------------------------------
 # Liste des modeles
 # ---------------------------------------------------------------------------
+def m_arch_spandrel():
+    """Ecoincons d'une arche en plein cintre (Poolrooms) : bloc de 100 x 100 x 52 cm dont le dessous est evide
+    d'un demi-cercle de 50 cm de rayon centre sur l'origine (naissance de l'arche). Le jeu l'etire a la largeur
+    de la porte (meme facteur en X et en Z : le cercle reste un cercle) et a l'epaisseur du mur (Y)."""
+    pts = [(-0.5, 0.0)]
+    seg = 40
+    for i in range(1, seg):
+        t = math.pi * (1.0 - i / seg)
+        pts.append((0.5 * math.cos(t), 0.5 * math.sin(t)))
+    pts += [(0.5, 0.0), (0.5, 0.52), (-0.5, 0.52)]
+    bm = bmesh.new()
+    vs = [bm.verts.new((x, -0.5, z)) for x, z in pts]
+    f = bm.faces.new(vs)
+    res = bmesh.ops.extrude_face_region(bm, geom=[f])
+    moved = [e for e in res["geom"] if isinstance(e, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=(0, 1.0, 0), verts=moved)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    me = bpy.data.meshes.new("SM_ArchSpandrel")
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new("SM_ArchSpandrel", me)
+    bpy.context.collection.objects.link(o)
+    return _finish(o, "Tile")
+
+
+def m_cove():
+    """Corniche a 45 degres entre mur et plafond (Poolrooms) : prisme de 100 cm de long, cotes de 50 cm.
+    Origine sur l'angle mur / plafond ; le mur est en Y < 0, le plafond en Z > 0 : la face inclinee regarde la piece."""
+    bm = bmesh.new()
+    prof = [(0.0, 0.0), (0.0, -0.5), (0.5, 0.0)]
+    a = [bm.verts.new((-0.5, y, z)) for y, z in prof]
+    b = [bm.verts.new((0.5, y, z)) for y, z in prof]
+    bm.faces.new(a[::-1])
+    bm.faces.new(b)
+    for i in range(3):
+        j = (i + 1) % 3
+        bm.faces.new((a[i], a[j], b[j], b[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new("SM_Cove")
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new("SM_Cove", me)
+    bpy.context.collection.objects.link(o)
+    return _finish(o, "Plaster")
+
+
 MODELS = {
     "SM_LightPanel": m_light_panel, "SM_SkyPanel": m_sky_panel, "SM_PoolSkylight": m_pool_skylight, "SM_LightTube": m_light_tube,
     "SM_LightBulb": m_light_bulb, "SM_Sconce": m_sconce, "SM_StreetLamp": m_street_lamp,
@@ -1302,6 +1349,7 @@ MODELS = {
     "SM_Hound_UpperLeg": m_hound_upper, "SM_Hound_LowerLeg": m_hound_lower,
     "SM_Deathmoth_Body": m_moth_body, "SM_Deathmoth_Wing": m_moth_wing, "SM_Clump": m_clump,
     "SM_SkinStealer_Mass": m_skinstealer_mass, "SM_Partygoer_Balloon": m_balloon,
+    "SM_ArchSpandrel": m_arch_spandrel, "SM_Cove": m_cove,
 }
 for _k in HUMANOIDS:
     for _part, _fn in (("Torso", m_torso), ("Head", m_head), ("UpperArm", m_upper_arm), ("LowerArm", m_lower_arm),

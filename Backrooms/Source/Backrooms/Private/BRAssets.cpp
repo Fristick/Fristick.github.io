@@ -133,6 +133,21 @@ namespace
 				{ TEXT("ClumpFlesh"), TEXT("T_Skin"), FLinearColor(0.86f, 0.7f, 0.6f), 0.45f, 0.f, 2.f },
 				{ TEXT("ClumpMouth"), TEXT("T_Grime"), FLinearColor(0.12f, 0.015f, 0.015f), 0.25f, 0.f, 1.f },
 				{ TEXT("ClumpTeeth"), TEXT("T_Grime"), FLinearColor(0.72f, 0.58f, 0.32f), 0.4f, 0.f, 1.f },
+				// v3.8 : poste de travail du Niveau 4 (scene fournie) ; T_Grime vaut ~0,59 en lineaire
+				{ TEXT("DeskTop"), TEXT("T_Grime"), FLinearColor(1.05f, 1.f, 0.7f), 0.45f, 0.f, 1.f },
+				{ TEXT("DeskChrome"), TEXT("T_Grime"), FLinearColor(1.2f, 1.2f, 1.22f), 0.22f, 1.f, 1.f },
+				{ TEXT("DeskDark"), TEXT("T_Grime"), FLinearColor(0.04f, 0.04f, 0.04f), 0.4f, 0.f, 1.f },
+				{ TEXT("PCBeige"), TEXT("T_Grime"), FLinearColor(1.1f, 0.92f, 0.62f), 0.55f, 0.f, 1.f },
+				{ TEXT("PCScreen"), TEXT("T_Grime"), FLinearColor(0.015f, 0.02f, 0.02f), 0.06f, 0.f, 1.f },
+				{ TEXT("PCDark"), TEXT("T_Grime"), FLinearColor(0.035f, 0.035f, 0.035f), 0.5f, 0.f, 1.f },
+				{ TEXT("PCGrey"), TEXT("T_Grime"), FLinearColor(0.17f, 0.17f, 0.17f), 0.5f, 0.f, 1.f },
+				{ TEXT("PCLight"), TEXT("T_Grime"), FLinearColor(0.8f, 0.8f, 0.8f), 0.5f, 0.f, 1.f },
+				{ TEXT("ChairLeather"), TEXT("T_Grime"), FLinearColor(0.045f, 0.045f, 0.045f), 0.42f, 0.f, 1.f },
+				{ TEXT("ChairBase"), TEXT("T_Grime"), FLinearColor(0.07f, 0.07f, 0.075f), 0.3f, 0.6f, 1.f },
+				{ TEXT("CoolerBody"), TEXT("T_Grime"), FLinearColor(1.05f, 0.88f, 0.55f), 0.5f, 0.f, 1.f },
+				{ TEXT("CoolerBottle"), TEXT("T_Grime"), FLinearColor(1.3f, 1.45f, 1.6f), 0.12f, 0.f, 1.f },
+				{ TEXT("TapBlue"), TEXT("T_Grime"), FLinearColor(0.08f, 0.3f, 1.3f), 0.3f, 0.f, 1.f },
+				{ TEXT("TapRed"), TEXT("T_Grime"), FLinearColor(1.3f, 0.08f, 0.06f), 0.3f, 0.f, 1.f },
 			};
 			// Les cles les plus longues d'abord ("DarkMetal" avant "Metal")
 			S.Sort([](const FSlotStyle& A, const FSlotStyle& B) { return FCString::Strlen(A.Key) > FCString::Strlen(B.Key); });
@@ -560,6 +575,10 @@ FLinearColor UBRAssets::TextureAverage(FName Texture)
 		{ TEXT("T_HotelWallpaper"), FLinearColor(0.5f, 0.49f, 0.35f) },
 		{ TEXT("T_Wood"), FLinearColor(0.28f, 0.16f, 0.08f) },
 		{ TEXT("T_PoolTile"), FLinearColor(0.88f, 0.91f, 0.92f) },
+		{ TEXT("T_PoolTile37"), FLinearColor(0.84f, 0.88f, 0.84f) },
+		{ TEXT("T_Plaster"), FLinearColor(0.84f, 0.85f, 0.84f) },
+		{ TEXT("T_OfficeCarpetNavy"), FLinearColor(0.07f, 0.12f, 0.25f) },
+		{ TEXT("T_OfficeCeiling"), FLinearColor(0.88f, 0.88f, 0.89f) },
 		{ TEXT("T_Hazmat_Suit"), FLinearColor(0.75f, 0.72f, 0.49f) },
 		{ TEXT("T_Hazmat_Mask"), FLinearColor(0.41f, 0.41f, 0.4f) },
 		{ TEXT("T_Deathmoth"), FLinearColor(0.69f, 0.6f, 0.49f) },

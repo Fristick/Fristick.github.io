@@ -235,21 +235,24 @@ namespace
 		D.Number = 4;
 		D.Title = TEXT("Abandoned Office");
 		D.Nickname = TEXT("Bureau abandonn\u00e9");
-		D.Description = TEXT("Un open-space vide, propre et bien \u00e9clair\u00e9. Bureaux, chaises, fontaines \u00e0 eau d'amande. ")
-			TEXT("Un rare moment de r\u00e9pit... si l'on ignore les fen\u00eatres qui donnent sur le n\u00e9ant.");
+		D.Description = TEXT("Des rang\u00e9es de petits bureaux cloisonn\u00e9s, vides, propres et bien \u00e9clair\u00e9s : un vieil ordinateur beige, ")
+			TEXT("une chaise, parfois une fontaine \u00e0 eau d'amande. Un rare moment de r\u00e9pit... si l'on ignore qu'ils sont tous identiques.");
 		D.SurvivalClass = 1;
 		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Peu d'entit\u00e9s");
 		D.Layout = EBRLayout::Rooms;
-		D.CellSize = 400.f; D.WallHeight = 300.f; D.WallThickness = 15.f;
-		D.WallLineChance = 0.45f; D.SegmentLength = 3; D.DoorChance = 0.35f; D.DoorWidth = 120.f;
+		// D'apres la scene fournie : rangees de petits bureaux cloisonnes jusqu'au plafond (un poste de travail beige
+		// des annees 90 dans chacun), allees, moquette bleu marine, murs blancs, faux plafond a dalles blanches
+		D.CellSize = 360.f; D.WallHeight = 280.f; D.WallThickness = 12.f;
+		D.WallLineChance = 0.45f; D.SegmentLength = 3; D.DoorChance = 0.35f; D.DoorWidth = 110.f;
 		D.PillarChance = 0.02f; D.OpenZoneChance = 0.3f;
-		D.Floor = S(TEXT("T_OfficeCarpet"), C(1, 1, 1), 200.f, 0.95f, 0.2f);
-		D.Wall = S(TEXT("T_OfficeWall"), C(1, 1, 1), 200.f, 0.8f, 0.15f);
-		D.Ceiling = S(TEXT("T_L0_Ceiling"), C(1.f, 1.f, 1.03f), 120.f, 0.9f, 0.05f);
-		D.Trim = S(TEXT("T_OfficeWall"), C(0.35f, 0.35f, 0.37f), 100.f, 0.5f, 0.1f);
+		D.CubicleZoneChance = 0.6f;
+		D.Floor = S(TEXT("T_OfficeCarpetNavy"), C(1, 1, 1), 150.f, 0.95f, 0.12f);
+		D.Wall = S(TEXT("T_Plaster"), C(1.12f, 1.12f, 1.14f), 250.f, 0.75f, 0.08f);
+		D.Ceiling = S(TEXT("T_OfficeCeiling"), C(1, 1, 1), 120.f, 0.9f, 0.04f);
+		D.Trim = S(TEXT("T_Plaster"), C(0.62f, 0.62f, 0.66f), 100.f, 0.5f, 0.05f);
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::Panel;
-		D.LightChance = 0.55f; D.BrokenChance = 0.02f; D.FlickerChance = 0.02f;
+		D.LightChance = 0.7f; D.BrokenChance = 0.03f; D.FlickerChance = 0.03f;
 		D.LightLumens = 3000.f; D.LightColor = C(0.95f, 0.97f, 1.f); D.LightRadius = 700.f;
 		D.ShadowChance = 0.12f;
 		D.FogDensity = 0.04f; D.FogColor = C(0.3f, 0.3f, 0.32f);
@@ -520,31 +523,33 @@ namespace
 		D.Number = 37;
 		D.Title = TEXT("Sublimity");
 		D.Nickname = TEXT("Les Poolrooms");
-		D.Description = TEXT("Un d\u00e9dale de salles carrel\u00e9es de blanc, inond\u00e9es d'une eau ti\u00e8de et claire. ")
+		D.Description = TEXT("Un d\u00e9dale de couloirs carrel\u00e9s bord\u00e9s de canaux, d'arches et de salles inond\u00e9es d'une eau ti\u00e8de et claire. ")
 			TEXT("La lumi\u00e8re est douce, l'\u00e9cho infini. Un calme presque r\u00e9confortant... presque.");
 		D.SurvivalClass = 1;
 		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Aucune entit\u00e9");
 		D.Layout = EBRLayout::Rooms;
 		D.CellSize = 500.f; D.WallHeight = 450.f; D.WallThickness = 40.f;
-		D.WallLineChance = 0.35f; D.SegmentLength = 3; D.DoorChance = 0.5f; D.DoorWidth = 220.f;
-		D.PillarChance = 0.25f; D.PillarSize = 70.f; D.OpenZoneChance = 0.35f;
-		D.bTrim = false; D.bLintels = true;
-		// D'apres les captures de reference : petit carrelage blanc tres brillant, plafonniers ovales,
-		// grandes verrieres, eau turquoise limpide et presque immobile que seuls les joueurs font onduler.
-		// Le fond est a peine bleu-vert : la lumiere qui en rebondit teinte doucement les murs.
-		D.Floor = S(TEXT("T_PoolTile"), C(0.9f, 0.97f, 0.96f), 100.f, 0.12f, 0.1f);
-		D.Wall = S(TEXT("T_PoolTile"), C(0.95f, 0.95f, 0.91f), 100.f, 0.1f, 0.12f);
-		D.Ceiling = S(TEXT("T_PoolTile"), C(0.96f, 0.96f, 0.93f), 100.f, 0.14f, 0.08f);
+		// D'apres la scene fournie (carte "gm_poolrooms") : longs couloirs bordes de canaux, trottoirs carreles au ras
+		// de l'eau, rangees d'arches en plein cintre, corniches a 45 degres sous un plafond en platre, grandes salles
+		// inondees a colonnades. Carrelage vert d'eau a joints gris, repris de la scene.
+		D.WallLineChance = 0.62f; D.SegmentLength = 6; D.DoorChance = 0.55f; D.DoorWidth = 220.f;
+		D.PillarChance = 0.12f; D.PillarSize = 90.f; D.OpenZoneChance = 0.3f; D.bPillarGrid = true;
+		D.bTrim = false; D.bLintels = true; D.bArches = true;
+		D.CoveSize = 45.f;
+		D.DeckHeight = 68.f; D.DeckWidth = 120.f; D.DeckStep = 34.f; D.DeckStepWidth = 40.f; D.DeckChance = 0.6f;
+		D.Floor = S(TEXT("T_PoolTile37"), C(1.f, 1.02f, 1.f), 100.f, 0.12f, 0.08f);
+		D.Wall = S(TEXT("T_PoolTile37"), C(1.02f, 1.02f, 1.f), 100.f, 0.1f, 0.1f);
+		D.Ceiling = S(TEXT("T_Plaster"), C(1.08f, 1.09f, 1.08f), 300.f, 0.55f, 0.05f);
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::SkyPanel;
 		D.LightChance = 0.6f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
 		D.LightLumens = 4200.f; D.LightColor = C(1.f, 0.99f, 0.96f); D.LightRadius = 1000.f; D.ShadowChance = 0.15f;
 		D.SkylightChance = 0.45f;
-		D.bWater = true; D.WaterHeight = 45.f;
+		D.bWater = true; D.WaterHeight = 60.f; // canaux de 60 cm ; trottoirs a 68 cm, marche immergee a 34 cm
 		D.Water = S(TEXT("T_WaterNormal"), C(0.24f, 0.7f, 0.72f), 650.f, 0.02f, 0.f);
 		D.WaterAbsorption = 1.f; D.WaterScattering = 0.22f;
 		D.WaterWaves = 0.3f; D.WaterChop = 0.35f;
-		D.PoolChance = 0.32f; D.PoolDepth = 260.f;
+		D.PoolChance = 0.15f; D.PoolDepth = 260.f;
 		D.FogDensity = 0.012f; D.FogColor = C(0.66f, 0.73f, 0.71f);
 		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.4f;
 		D.MinEV = 3.f; D.MaxEV = 10.f;
