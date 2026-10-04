@@ -42,8 +42,8 @@ namespace
 			TEXT("Une lampe torche robuste. \u00c0 \u00e9quiper dans la MAIN ou \u00e0 la CEINTURE. {Flashlight} pour l'allumer."),
 			TEXT("SM_Flashlight"), TEXT("I_Flashlight"), 1, EBREquipSlot::Hand, false, TEXT("\u00c9quiper"));
 		L[static_cast<int32>(EBRItem::Camcorder)] = Make(TEXT("Cam\u00e9scope"), TEXT("CAM\u00c9SCOPE"),
-			TEXT("Un cam\u00e9scope VHS des ann\u00e9es 90. Dans la MAIN : enregistre (REC), vision nocturne avec {NightVision}. Indispensable pour les t\u00e2ches d'enregistrement."),
-			TEXT("SM_Camcorder"), TEXT("I_Camcorder"), 1, EBREquipSlot::Hand, false, TEXT("\u00c9quiper"));
+			TEXT("Un cam\u00e9scope VHS des ann\u00e9es 90, accroch\u00e9 \u00e0 votre sac. Tant que vous l'avez sur vous, il filme ce que vous regardez (t\u00e2ches d'enregistrement). Vision nocturne avec {NightVision}."),
+			TEXT("SM_Camcorder"), TEXT("I_Camcorder"), 1, EBREquipSlot::None, false, TEXT(""));
 		L[static_cast<int32>(EBRItem::Headlamp)] = Make(TEXT("Lampe frontale"), TEXT("FRONTALE"),
 			TEXT("Une lampe frontale \u00e0 large faisceau, plus faible qu'une lampe torche. \u00c0 \u00e9quiper sur la T\u00caTE."),
 			TEXT("SM_Headlamp"), TEXT("I_Headlamp"), 1, EBREquipSlot::Head, false, TEXT("\u00c9quiper"));

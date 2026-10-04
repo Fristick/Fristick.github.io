@@ -84,7 +84,8 @@ public:
 	/** Double-clic : consomme, equipe ou desequipe */
 	void UseSlot(EBRSlotGroup Group, int32 Index);
 	EBRItem GetEquipped(EBREquipSlot Slot) const;
-	bool HasCamcorderInHand() const { return GetEquipped(EBREquipSlot::Hand) == EBRItem::Camcorder; }
+	/** Camescope sur soi (poches, sac) : il ne se tient plus en main (v4.2), il filme et donne la vision nocturne */
+	bool HasCamcorder() const { return CountItem(EBRItem::Camcorder) > 0; }
 	bool HasLightSource() const;
 	bool IsNightVision() const { return bNightVision; }
 	void ResetInventory();

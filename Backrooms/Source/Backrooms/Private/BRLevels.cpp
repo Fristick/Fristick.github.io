@@ -84,7 +84,7 @@ namespace
 			TEXT("Si les lumi\u00e8res sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir."),
 			TEXT("Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement."),
 			TEXT("Les sorties ne tiennent pas. Il faut r\u00e9cup\u00e9rer les six cassettes et filmer le noir pendant une coupure. Apr\u00e8s, les murs c\u00e8dent."),
-			TEXT("Quand les n\u00e9ons s'\u00e9teignent, sors le cam\u00e9scope et appuie sur {NightVision}. La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.")
+			TEXT("Quand les n\u00e9ons s'\u00e9teignent, allume la vision nocturne du cam\u00e9scope ({NightVision}). La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.")
 		};
 		return D;
 	}

@@ -2005,9 +2005,9 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 	case Row_VolumetricFog:
 		return TEXT("BROUILLARD VOLUM\u00c9TRIQUE");
 	case Row_FilmGrain:
-		return TEXT("GRAIN DE CAM\u00c9SCOPE");
+		return TEXT("GRAIN DE L'IMAGE");
 	case Row_VHSEffect:
-		return TEXT("EFFET CAM\u00c9SCOPE (VHS)");
+		return TEXT("EFFET VHS");
 	default:
 		return FString();
 	}
@@ -2090,7 +2090,7 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_VolumetricFog:
 		return TEXT("Halos de lumi\u00e8re dans l'air humide.");
 	case Row_VHSEffect:
-		return TEXT("D\u00e9sactiv\u00e9 : \u00e9cran normal, sans viseur REC, cadres, lignes, aberration ni salet\u00e9 d'objectif.");
+		return TEXT("Lignes de balayage, l\u00e9g\u00e8re aberration et salet\u00e9 d'objectif. D\u00e9sactiv\u00e9 : image nette.");
 	default:
 		return FString();
 	}

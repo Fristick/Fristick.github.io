@@ -107,13 +107,89 @@ namespace
 		return A + (B - A) * T;
 	}
 
-	/** Police de l'interface v4 : police par defaut de Slate (Roboto), graisse Light / Regular / Bold / Black */
+	/**
+	 * Police "objet" de l'interface. Le Canvas n'affiche un texte que si sa FSlateFontInfo porte une UFont
+	 * (FCanvasTextItem::HasValidText teste Font) : la police Slate par defaut seule (v4.0, v4.1) ne s'affichait pas.
+	 * On prend la police Roboto du moteur (police "runtime" composite de preference).
+	 */
+	UFont* UiFontObject()
+	{
+		static TWeakObjectPtr<UFont> Cached;
+		if (UFont* F = Cached.Get())
+		{
+			return F;
+		}
+		UFont* Best = nullptr;
+		if (GEngine)
+		{
+			for (UFont* F : { GEngine->GetMediumFont(), GEngine->GetLargeFont(), GEngine->GetSmallFont() })
+			{
+				if (F && F->FontCacheType == EFontCacheType::Runtime)
+				{
+					Best = F;
+					break;
+				}
+				Best = Best ? Best : F;
+			}
+		}
+		Cached = Best;
+		return Best;
+	}
+
+	/** Graisse demandee si la police la contient, sinon la plus proche ; NAME_None : premiere police de la famille */
+	FName PickTypeface(const FCompositeFont* Composite, int32 Weight)
+	{
+		static const TCHAR* const Wanted[4][2] = {
+			{ TEXT("Light"), TEXT("Regular") },
+			{ TEXT("Regular"), nullptr },
+			{ TEXT("Bold"), nullptr },
+			{ TEXT("Black"), TEXT("Bold") } };
+		if (!Composite)
+		{
+			return FName(Wanted[Weight][0]);
+		}
+		for (const TCHAR* Name : Wanted[Weight])
+		{
+			if (!Name)
+			{
+				break;
+			}
+			const FName Face(Name);
+			for (const FTypefaceEntry& Entry : Composite->DefaultTypeface.Fonts)
+			{
+				if (Entry.Name == Face)
+				{
+					return Face;
+				}
+			}
+		}
+		return NAME_None;
+	}
+
+	/** Police de l'interface v4 : Roboto, graisse Light / Regular / Bold / Black */
 	FSlateFontInfo UiFontInfo(float Size, int32 Weight, float U)
 	{
-		static const FName Faces[] = { FName(TEXT("Light")), FName(TEXT("Regular")), FName(TEXT("Bold")), FName(TEXT("Black")) };
 		// Tailles entieres : chaque taille occupe sa place dans l'atlas des polices
 		const float Pt = FMath::Max(6.f, FMath::RoundToFloat(Size * U));
-		return FCoreStyle::GetDefaultFontStyle(Faces[FMath::Clamp(Weight, 0, 3)], Pt);
+		const int32 Wt = FMath::Clamp(Weight, 0, 3);
+		UFont* Font = UiFontObject();
+		if (!Font)
+		{
+			static const FName Faces[] = { FName(TEXT("Light")), FName(TEXT("Regular")), FName(TEXT("Bold")), FName(TEXT("Black")) };
+			return FCoreStyle::GetDefaultFontStyle(Faces[Wt], Pt);
+		}
+		static TWeakObjectPtr<UFont> ResolvedFor;
+		static FName Faces[4];
+		if (ResolvedFor.Get() != Font)
+		{
+			ResolvedFor = Font;
+			const FSlateFontInfo Probe(Font, Pt);
+			for (int32 i = 0; i < 4; ++i)
+			{
+				Faces[i] = PickTypeface(Probe.GetCompositeFont(), i);
+			}
+		}
+		return FSlateFontInfo(Font, Pt, Faces[Wt]);
 	}
 
 	/** "Classe 1 : Sur - Stable" -> "CLASSE 1" */
@@ -279,20 +355,6 @@ void ABRHUD::Frame(float X, float Y, float W, float H, const FLinearColor& C, fl
 	DrawRect(C, X, Y + H - Thickness, W, Thickness);
 	DrawRect(C, X, Y + Thickness, Thickness, H - 2.f * Thickness);
 	DrawRect(C, X + W - Thickness, Y + Thickness, Thickness, H - 2.f * Thickness);
-}
-
-void ABRHUD::Corners(float X, float Y, float W, float H, float Len, const FLinearColor& C, float Thickness)
-{
-	const float RX = X + W;
-	const float BY = Y + H;
-	DrawRect(C, X, Y, Len, Thickness);
-	DrawRect(C, X, Y, Thickness, Len);
-	DrawRect(C, RX - Len, Y, Len, Thickness);
-	DrawRect(C, RX - Thickness, Y, Thickness, Len);
-	DrawRect(C, X, BY - Thickness, Len, Thickness);
-	DrawRect(C, X, BY - Len, Thickness, Len);
-	DrawRect(C, RX - Len, BY - Thickness, Len, Thickness);
-	DrawRect(C, RX - Thickness, BY - Len, Thickness, Len);
 }
 
 void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
@@ -749,7 +811,7 @@ void ABRHUD::DrawHUD()
 	}
 	if (C && !C->IsDead() && !bInv)
 	{
-		DrawCamcorder(C, W);
+		DrawRecording(C, W);
 		if (!W || W->GetTitleTime() < 0.5f)
 		{
 			DrawCrosshair(C);
@@ -793,7 +855,7 @@ void ABRHUD::DrawHUD()
 }
 
 // =====================================================================================================================
-// Menu titre (v4.0) : logo, cartes animees, carrousel des niveaux, astuces, viseur du camescope
+// Menu titre (v4.0) : logo, cartes animees, carrousel des niveaux, astuces
 // =====================================================================================================================
 
 void ABRHUD::DrawContentWarning(float Y)
@@ -854,24 +916,6 @@ void ABRHUD::DrawLogo(float X, float Y, float W, float A, bool bFlicker)
 	}
 }
 
-void ABRHUD::DrawRecOverlay(float A)
-{
-	const float U = Ui();
-	const float W = Canvas->ClipX;
-	const float H = Canvas->ClipY;
-	Corners(28.f * U, 28.f * U, W - 56.f * U, H - 56.f * U, 46.f * U, FLinearColor(1.f, 1.f, 1.f, 0.2f * A), FMath::Max(1.f, 2.f * U));
-	const float RX = W - 64.f * U;
-	const float RY = 52.f * U;
-	const FVector2f RS = TextSize(TEXT("REC"), 13.f, EUiWeight::Bold);
-	TextF(TEXT("REC"), RX, RY, FLinearColor(1.f, 1.f, 1.f, 0.78f * A), 13.f, EUiWeight::Bold, EUiAlign::Right);
-	if (FMath::Fmod(Clock, 1.4f) < 0.9f)
-	{
-		const float D = 13.f * U;
-		RoundRect(RX - RS.X - D - 9.f * U, RY + (RS.Y - D) * 0.5f, D, D, D * 0.5f, FLinearColor(0.95f, 0.12f, 0.1f, 0.95f * A));
-	}
-	TextF(TEXT("SP  ") + Timecode(MenuIntro + 3127.f), RX, RY + RS.Y, FLinearColor(1.f, 1.f, 1.f, 0.5f * A), 11.f, EUiWeight::Light, EUiAlign::Right);
-}
-
 void ABRHUD::DrawMenuBackdrop(bool bCentered, float A)
 {
 	const float W = Canvas->ClipX;
@@ -898,7 +942,6 @@ void ABRHUD::DrawMenuBackdrop(bool bCentered, float A)
 			DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.035f * A), 0.f, BY, W, FMath::Max(1.f, 2.f * U));
 			DrawRect(FLinearColor(1.f, 0.95f, 0.85f, 0.018f * A), 0.f, BY + 5.f * U, W, 16.f * U);
 		}
-		DrawRecOverlay(A);
 	}
 }
 
@@ -1057,7 +1100,7 @@ void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
 	const float U = Ui();
 	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	TextF(TEXT("v4.1   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
+	TextF(TEXT("v4.2   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
 		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
 	// Message de connexion / d'erreur reseau : pastille en haut au centre
 	if (!PC->GetMenuStatus().IsEmpty())
@@ -2220,71 +2263,41 @@ void ABRHUD::DrawTitleCard()
 // HUD de jeu
 // =====================================================================================================================
 
-void ABRHUD::DrawCamcorder(ABRCharacter* C, ABRWorld* W)
+void ABRHUD::DrawRecording(ABRCharacter* C, ABRWorld* W)
 {
-	if (!C->HasCamcorderInHand())
+	// v4.2 : plus de viseur de camescope (REC, coins, point rouge) ; seulement la tache d'enregistrement en cours
+	// et l'indicateur de vision nocturne
+	if (!C->HasCamcorder())
 	{
 		return;
 	}
 	const float U = Ui();
-	UFont* Medium = GEngine->GetMediumFont();
 	const float X = 40.f * U;
 	const float Y = 34.f * U;
-	const bool bNV = C->IsNightVision();
-	const FLinearColor TextC = bNV ? FLinearColor(0.75f, 1.f, 0.75f, 0.9f) : FLinearColor(1.f, 1.f, 1.f, 0.85f);
-	if (!FBRSettings::Get().bVHSEffect)
+	if (W && !W->GetRecordLabel().IsEmpty())
 	{
-		// Ecran normal : seulement les informations de jeu (tache d'enregistrement, vision nocturne)
-		if (W && !W->GetRecordLabel().IsEmpty())
+		const FString Label = TEXT("ENREGISTREMENT : ") + W->GetRecordLabel();
+		const float PW = FMath::Max(260.f * U, TextSize(Label, 11.f, EUiWeight::Bold).X + 36.f * U);
+		const float PH = 46.f * U;
+		RoundRect(X, Y, PW, PH, 12.f * U, FLinearColor(0.f, 0.f, 0.f, 0.45f));
+		TextF(Label, X + 18.f * U, Y + 7.f * U, Yellow, 11.f, EUiWeight::Bold);
+		const float BarW = PW - 36.f * U;
+		const float BarH = 5.f * U;
+		const float BarY = Y + PH - 13.f * U;
+		RoundRect(X + 18.f * U, BarY, BarW, BarH, BarH * 0.5f, FLinearColor(1.f, 1.f, 1.f, 0.15f));
+		const float Progress = FMath::Clamp(W->GetRecordProgress(), 0.f, 1.f);
+		if (Progress > 0.f)
 		{
-			Txt(TEXT("ENREGISTREMENT : ") + W->GetRecordLabel(), X, Y, Yellow, 0.8f * U, Medium);
-			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), X, Y + 26.f * U, 220.f * U, 6.f * U);
-			DrawRect(Yellow, X, Y + 26.f * U, 220.f * U * W->GetRecordProgress(), 6.f * U);
-		}
-		if (bNV)
-		{
-			TxtRight(TEXT("VISION NOCTURNE"), Canvas->ClipX - 40.f * U, Y, FLinearColor(0.5f, 1.f, 0.5f, 0.9f), 0.8f * U, Medium);
-		}
-		return;
-	}
-	if (FMath::Fmod(Clock, 1.4f) < 0.9f)
-	{
-		DrawRect(FLinearColor(0.9f, 0.05f, 0.05f, 0.9f), X, Y + 5.f * U, 14.f * U, 14.f * U);
-	}
-	Txt(TEXT("REC"), X + 22.f * U, Y, TextC, 0.95f * U, Medium);
-	if (W)
-	{
-		Txt(Timecode(W->GetLevelTime()), X + 80.f * U, Y, WithAlpha(TextC, 0.85f), 0.95f * U, Medium);
-		TxtRight(FString::Printf(TEXT("NIVEAU %d"), W->GetLevelNumber()), Canvas->ClipX - 40.f * U, Y, WithAlpha(TextC, 0.85f), 0.95f * U, Medium);
-
-		// Tache d'enregistrement en cours
-		if (!W->GetRecordLabel().IsEmpty())
-		{
-			const float RY = Y + 34.f * U;
-			Txt(TEXT("ENREGISTREMENT : ") + W->GetRecordLabel(), X, RY, Yellow, 0.8f * U, Medium);
-			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), X, RY + 26.f * U, 220.f * U, 6.f * U);
-			DrawRect(Yellow, X, RY + 26.f * U, 220.f * U * W->GetRecordProgress(), 6.f * U);
+			RoundRect(X + 18.f * U, BarY, FMath::Max(BarH, BarW * Progress), BarH, BarH * 0.5f, Yellow);
 		}
 	}
-	// Batterie du camescope
-	const float BW = 46.f * U;
-	const float BH = 20.f * U;
-	const float BX = Canvas->ClipX - 40.f * U - BW;
-	const float BY = Y + 36.f * U;
-	Frame(BX, BY, BW, BH, WithAlpha(TextC, 0.8f), 2.f * U);
-	DrawRect(WithAlpha(TextC, 0.8f), BX + BW, BY + BH * 0.3f, 4.f * U, BH * 0.4f);
-	const float Fill = FMath::Clamp(C->Battery / 100.f, 0.f, 1.f);
-	DrawRect(Fill < 0.2f ? Danger : WithAlpha(TextC, 0.8f), BX + 4.f * U, BY + 4.f * U, (BW - 8.f * U) * Fill, BH - 8.f * U);
-	if (bNV)
+	if (C->IsNightVision())
 	{
-		TxtRight(TEXT("VISION NOCTURNE"), BX - 12.f * U, BY - 2.f * U, FLinearColor(0.5f, 1.f, 0.5f, 0.9f), 0.8f * U, Medium);
-	}
-
-	// Coins du viseur
-	Corners(22.f * U, 22.f * U, Canvas->ClipX - 44.f * U, Canvas->ClipY - 44.f * U, 40.f * U, FLinearColor(1.f, 1.f, 1.f, 0.35f), 3.f * U);
-	if (bNV)
-	{
-		Scanlines(0.05f);
+		TextF(TEXT("VISION NOCTURNE"), Canvas->ClipX - 40.f * U, Y, FLinearColor(0.5f, 1.f, 0.5f, 0.92f), 11.f, EUiWeight::Bold, EUiAlign::Right);
+		if (FBRSettings::Get().bVHSEffect)
+		{
+			Scanlines(0.05f);
+		}
 	}
 }
 
@@ -2307,8 +2320,8 @@ void ABRHUD::DrawStats(ABRCharacter* C)
 	Bar(X, Y, BW, BH, C->Sanity / 100.f, FLinearColor(0.9f * Pulse, 0.45f * Pulse, 0.3f * Pulse, 0.85f), TEXT("SANT\u00c9 MENTALE"));
 	Y += 36.f * U;
 	Bar(X, Y, BW, BH, C->Stamina / 100.f, FLinearColor(0.9f, 0.9f, 0.85f, 0.75f), TEXT("ENDURANCE"));
-	// Piles : la batterie du camescope s'affiche dans le viseur, sauf si l'effet camescope est desactive
-	if ((C->HasLightSource() && !C->HasCamcorderInHand()) || (C->HasCamcorderInHand() && !FBRSettings::Get().bVHSEffect))
+	// Piles : lampe et camescope (vision nocturne)
+	if (C->HasLightSource() || C->HasCamcorder())
 	{
 		Y += 36.f * U;
 		Bar(X, Y, BW, BH, C->Battery / 100.f, FLinearColor(1.f, 0.85f, 0.3f, C->IsFlashlightOn() ? 0.9f : 0.45f), TEXT("PILES"));

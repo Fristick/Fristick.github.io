@@ -74,7 +74,6 @@ private:
 	/** Logo "THE BACKROOMS" (UI_Logo), avec un neon qui gresille de temps en temps */
 	void DrawLogo(float X, float Y, float W, float A, bool bFlicker);
 	/** Viseur du camescope autour du menu (REC, compteur) */
-	void DrawRecOverlay(float A);
 	void DrawTips(float X, float Y, float W, float A);
 	/** Carte du carrousel : apercu du niveau (ses vraies textures), numero, titre, classe */
 	void DrawLevelCard(int32 Index, float CX, float Top, float Scale, float Alpha, float Sel, bool bLocked, bool bCurrent);
@@ -102,7 +101,7 @@ private:
 	/** Pause en multijoueur : joueurs, hote et latence */
 	void DrawPlayerList();
 	void DrawTitleCard();
-	void DrawCamcorder(ABRCharacter* C, ABRWorld* W);
+	void DrawRecording(ABRCharacter* C, ABRWorld* W);
 	void DrawStats(ABRCharacter* C);
 	void DrawQuickBar(ABRCharacter* C);
 	void DrawObjectiveTracker(ABRWorld* W);
@@ -154,7 +153,6 @@ private:
 	float TextW(const FString& S, UFont* Font, float Scale);
 	void Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label);
 	void Frame(float X, float Y, float W, float H, const FLinearColor& C, float Thickness);
-	void Corners(float X, float Y, float W, float H, float Len, const FLinearColor& C, float Thickness);
 	void Panel(float X, float Y, float W, float H, const FString& Title);
 	void VLabel(const FString& S, float X, float Y, const FLinearColor& C, float Scale);
 	void TrendBox(float X, float Y, float Size, float Trend);

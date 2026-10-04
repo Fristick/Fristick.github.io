@@ -224,7 +224,8 @@ void ABRCharacter::ResetInventory()
 	Pockets[0] = FBRItemSlot{ EBRItem::AlmondWater, 1 };
 	Pockets[1] = FBRItemSlot{ EBRItem::Bandage, 1 };
 	Pockets[2] = FBRItemSlot{ EBRItem::Battery, 1 };
-	Equipment[static_cast<int32>(EBREquipSlot::Hand)] = FBRItemSlot{ EBRItem::Camcorder, 1 };
+	// Main libre (v4.2) : le camescope reste dans le sac, il filme tant qu'on l'a sur soi ; la lampe est a la ceinture
+	Storage[0] = FBRItemSlot{ EBRItem::Camcorder, 1 };
 	Equipment[static_cast<int32>(EBREquipSlot::Belt)] = FBRItemSlot{ EBRItem::Flashlight, 1 };
 }
 
@@ -520,7 +521,7 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 void ABRCharacter::OnEquipmentChanged()
 {
 	const EBRItem InHand = GetEquipped(EBREquipSlot::Hand);
-	if (!HasCamcorderInHand() && bNightVision)
+	if (!HasCamcorder() && bNightVision)
 	{
 		bNightVision = false;
 	}
@@ -549,16 +550,6 @@ void ABRCharacter::OnEquipmentChanged()
 				M = A->Mesh(TEXT("SM_Flashlight"));
 			}
 		}
-		else if (A && InHand == EBRItem::Camcorder)
-		{
-			M = A->Mesh(TEXT("SM_Camcorder_FP"));
-			if (!M)
-			{
-				M = A->Mesh(TEXT("SM_Camcorder"));
-			}
-			Pos = FVector(30.f, 18.f, -21.f);
-			Rot = FRotator(4.f, -8.f, 0.f);
-		}
 		HandMesh->SetStaticMesh(M);
 		HandMesh->SetRelativeLocation(Pos);
 		HandMesh->SetRelativeRotation(Rot);
@@ -566,7 +557,7 @@ void ABRCharacter::OnEquipmentChanged()
 		if (A && M)
 		{
 			TArray<UMaterialInstanceDynamic*> Glows;
-			A->ApplySlots(HandMesh, nullptr, true, &Glows, InHand == EBRItem::Camcorder ? 0.15f : 0.05f);
+			A->ApplySlots(HandMesh, nullptr, true, &Glows, 0.05f);
 			for (UMaterialInstanceDynamic* G : Glows)
 			{
 				HandGlow.Add(G);
@@ -615,10 +606,6 @@ void ABRCharacter::SetHeldVisual(EBRItem InHand)
 		if (A && InHand == EBRItem::Flashlight)
 		{
 			M = A->Mesh(TEXT("SM_Flashlight"));
-		}
-		else if (A && InHand == EBRItem::Camcorder)
-		{
-			M = A->Mesh(TEXT("SM_Camcorder"));
 		}
 		HeldMesh->SetStaticMesh(M);
 		if (A && M)
@@ -772,9 +759,9 @@ void ABRCharacter::ToggleNightVision()
 	{
 		return;
 	}
-	if (!HasCamcorderInHand())
+	if (!HasCamcorder())
 	{
-		ABRHUD::Notify(this, TEXT("Il faut tenir le cam\u00e9scope en main pour la vision nocturne."), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
+		ABRHUD::Notify(this, TEXT("Il faut avoir le cam\u00e9scope sur vous pour la vision nocturne."), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
 	}
 	if (!bNightVision && Battery <= 0.f)
@@ -1208,6 +1195,16 @@ void ABRCharacter::ReadFromSave(const UBRSaveGame* Save)
 			S->Count = It.Count;
 		}
 	}
+	// Anciennes sauvegardes (camescope en main) : un objet qui ne peut plus etre equipe la retourne dans le sac
+	for (int32 i = 0; i < Equipment.Num(); ++i)
+	{
+		if (!Equipment[i].IsEmpty() && !BRItems::CanEquipIn(Equipment[i].Item, static_cast<EBREquipSlot>(i)))
+		{
+			const FBRItemSlot Moved = Equipment[i];
+			Equipment[i].Clear();
+			AddItem(Moved.Item, Moved.Count);
+		}
+	}
 	// On ne reprend jamais une partie a l'agonie
 	Health = FMath::Clamp(Save->Health, 25.f, 100.f);
 	Sanity = FMath::Clamp(Save->Sanity, 25.f, 100.f);
@@ -1337,8 +1334,8 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	AnimateBody(Dt);
 	SwimInput = FVector::ZeroVector;
 
-	// Taches d'enregistrement : il suffit de tenir le camescope
-	if (HasCamcorderInHand() && !bDead && !bInputLocked)
+	// Taches d'enregistrement : il suffit d'avoir le camescope sur soi (il filme ce que l'on regarde)
+	if (HasCamcorder() && !bDead && !bInputLocked)
 	{
 		if (ABRWorld* W = ABRWorld::Get(this))
 		{
@@ -1688,8 +1685,7 @@ void ABRCharacter::UpdateCamera(float Dt)
 	LookLag = FMath::Vector2DInterpTo(LookLag, FVector2D::ZeroVector, Dt, 8.f);
 	if (HandMesh && HandMesh->IsVisible())
 	{
-		const bool bCam = HandVisual == EBRItem::Camcorder;
-		const FVector Base = bCam ? FVector(30.f, 18.f, -21.f) : FVector(30.f, 16.f, -19.f);
+		const FVector Base(30.f, 16.f, -19.f);
 		HandMesh->SetRelativeLocation(Base + FVector(0.f, -static_cast<float>(LookLag.X) * 0.15f, BobZ * 0.4f + static_cast<float>(LookLag.Y) * 0.15f));
 	}
 }
@@ -1701,6 +1697,12 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 		return;
 	}
 	const bool bHeadlamp = GetEquipped(EBREquipSlot::Hand) != EBRItem::Flashlight && GetEquipped(EBREquipSlot::Belt) != EBRItem::Flashlight;
+	if (bNightVision && !HasCamcorder())
+	{
+		// Camescope pose ou perdu : plus de vision nocturne
+		bNightVision = false;
+		UpdateViewMode();
+	}
 	if (bNightVision && !bDead)
 	{
 		Battery = FMath::Max(0.f, Battery - NightVisionDrain * Dt);
@@ -1752,17 +1754,6 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 			if (G)
 			{
 				G->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(1.f, 0.95f, 0.85f) * (5.f + 120.f * Glow));
-			}
-		}
-	}
-	else if (HandVisual == EBRItem::Camcorder)
-	{
-		const bool bBlink = FMath::Fmod(TimeAlive, 1.f) < 0.6f;
-		for (UMaterialInstanceDynamic* G : HandGlow)
-		{
-			if (G)
-			{
-				G->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(1.f, 0.05f, 0.03f) * (bBlink ? 30.f : 2.f));
 			}
 		}
 	}
@@ -2061,7 +2052,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 			S.bOverride_BloomDirtMask = true;
 			S.BloomDirtMask = Dirt;
 			S.bOverride_BloomDirtMaskIntensity = true;
-			S.BloomDirtMaskIntensity = !bVHS ? 0.f : (HasCamcorderInHand() ? 8.f : 3.f);
+			S.BloomDirtMaskIntensity = bVHS ? 3.f : 0.f;
 		}
 	}
 

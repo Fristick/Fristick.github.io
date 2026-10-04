@@ -7,6 +7,20 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.2** (corrections) :
+- **Les textes s'affichent à nouveau** (titres, boutons, astuces, touches, notifications…). Depuis la 4.0, l'interface
+  dessinait ses textes avec la police Slate par défaut sans objet police (`UFont`) : le Canvas d'Unreal ignore alors le
+  texte sans rien signaler. Les textes utilisent maintenant la police **Roboto du moteur** (`/Engine/EngineFonts/Roboto`)
+  et ses graisses (fine, normale, grasse, noire si elles existent, sinon la plus proche).
+- **Plus de caméscope dans la main** : la main est libre au départ (la lampe reste à la ceinture). Le caméscope est
+  **dans le sac** : tant que vous l'avez sur vous, il **filme ce que vous regardez** (tâches d'enregistrement du
+  Niveau 0, fiches du journal) et donne la **vision nocturne** (**N**). Il ne s'équipe plus en main ; dans une ancienne
+  sauvegarde, il retourne tout seul dans le sac.
+- **Plus d'écran de caméscope** : ni coins de viseur, ni « REC » avec point rouge clignotant, ni horodatage, dans le
+  menu comme en jeu. Il ne reste qu'une pastille discrète « ENREGISTREMENT : … » avec sa barre de progression pendant
+  une tâche, et « VISION NOCTURNE » quand elle est allumée. La batterie s'affiche dans la barre **PILES**.
+- Réglages renommés : **GRAIN DE L'IMAGE** et **EFFET VHS** (lignes de balayage, légère aberration, saleté d'objectif).
+
 **Nouveautés de la version 4.1** (sauvegardes, choix des niveaux, liquides en ray tracing) :
 - **Sauvegardes** : **SOLO** ouvre la page **VOS PARTIES** (jusqu'à 6 parties).
   - **NOUVELLE PARTIE** : vous lui donnez un nom et vous commencez **toujours au Niveau 0**, avec l'équipement de départ.
@@ -56,7 +70,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
     (plafond et néons, papier peint, moquette, eau, ciel), son numéro, son nom et sa classe ; on clique sur une carte
     voisine pour la choisir, sur celle du centre pour noclipper ;
   - **MULTIJOUEUR** : le conseil « qui doit héberger », le niveau de départ et votre adresse IP, en panneaux lisibles ;
-  - les touches s'affichent comme de **vraies touches de clavier**, le viseur du caméscope (REC) encadre le tout.
+  - les touches s'affichent comme de **vraies touches de clavier** (le viseur du caméscope a été retiré en 4.2).
 - **Interface en jeu** : polices nettes en plusieurs graisses (Roboto Light / Regular / Bold / Black du moteur),
   **formes arrondies**, notifications en pastilles, barres de vie arrondies, **pause** au même style que le menu
   (cartes, flou de l'arrière-plan), et une **carte de titre façon générique de film** à l'arrivée dans un niveau
@@ -298,7 +312,7 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 | S'accroupir / **plonger** (dans l'eau profonde) | **Ctrl** ou **C** | B / Rond |
 | Sauter / **remonter à la surface** / se hisser hors de l'eau | **Espace** | A / Croix |
 | Lampe torche (main, ceinture ou frontale) | **F** | Y / Triangle |
-| Vision nocturne (caméscope en main) | **N** | Croix haut |
+| Vision nocturne (caméscope sur soi) | **N** | Croix haut |
 | Interagir / ramasser / lire | **E** | X / Carré |
 | Utiliser la poche 1 à 4 | **1 2 3 4** (AZERTY : **& é " '**) | |
 | Boire de l'eau d'amande | **B** | LB / L1 |
@@ -332,7 +346,7 @@ L'écran reprend la disposition d'*Escape Together*, avec quelques différences 
 - colonne de gauche : **OBJECTIFS** (ex. « FILMER PENDANT UNE COUPURE 0/1 », « TROUVER LES CASSETTES VHS 1/6 ») et
   **BIOMÉTRIE** (santé mentale, santé, endurance, piles) avec des flèches de tendance ;
 - au centre : **POCHES** (4 cases, raccourcis 1 à 4) et **STOCKAGE** (20 cases) ;
-- à droite : **ÉQUIPEMENT** sur la silhouette en combinaison : TÊTE (frontale), TORSE (gilet), MAIN (caméscope ou lampe),
+- à droite : **ÉQUIPEMENT** sur la silhouette en combinaison : TÊTE (frontale), TORSE (gilet), MAIN (lampe),
   CEINTURE (lampe) ;
 - pied de page « © 1992 THRESHOLD SYSTEMS », fond sombre teinté de jaune avec lignes de balayage.
 
@@ -348,7 +362,7 @@ Le monde **continue de tourner** quand l'inventaire est ouvert : comme dans le j
 | Lampe torche | main ou ceinture, **F** |
 | Lampe frontale | tête : éclaire en gardant les mains libres |
 | Gilet de protection | torse : −30 % de dégâts |
-| Caméscope | main : REC, vision nocturne (**N**), tâches d'enregistrement |
+| Caméscope | dans le sac : filme (tâches d'enregistrement), vision nocturne (**N**) |
 
 L'onglet **PARAMÈTRES** règle la sensibilité, l'axe Y, le champ de vision, la qualité graphique, le **ray tracing matériel
 (RTX)**, les reflets ray tracés haute qualité, les néons surfaciques, le brouillard volumétrique et le grain.
@@ -421,12 +435,13 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
 - **Endurance** : courir fait du bruit, et le bruit attire les entités.
 - **Lampe torche** : les piles se vident en 4 minutes environ et la lampe vacille quand elles sont faibles.
   La lumière attire les Deathmoths et fait charger les Smilers.
-- **Caméscope** : tenu en main, il affiche le viseur REC et permet la **vision nocturne** (**N**, consomme les piles).
+- **Caméscope** : il reste dans le sac (pas en main, pas de viseur) ; tant que vous l'avez sur vous, il filme ce que vous
+  regardez et permet la **vision nocturne** (**N**, consomme les piles).
   Filmer une entité pendant 3 secondes l'ajoute au journal.
 - **Coupures de courant** (Niveaux 0, 1, 2, 3, 5) : les néons vacillent puis s'éteignent pendant 25 à 40 secondes.
   Les entités en profitent (Partygoers en chasse, Smilers plus nombreux).
 - **Objectifs du Niveau 0** : comme dans Escape Together, les sorties restent **instables** tant que vous n'avez pas
-  retrouvé **6 cassettes VHS** (elles luisent faiblement) et **filmé pendant une coupure** (5 secondes, caméscope en main).
+  retrouvé **6 cassettes VHS** (elles luisent faiblement) et **filmé pendant une coupure** (5 secondes, caméscope sur vous).
 - **Sorties** : chaque niveau contient des passages vers d'autres niveaux (mur qui « glitche », porte de secours,
   ascenseur, échelle, grange…). Ils émettent un **bourdonnement électrique** : écoutez-le pour les trouver.
 - **Notes** : des vagabonds ont laissé des notes, avec des indices et les règles de survie.
@@ -437,9 +452,10 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
   et appuyez sur **Espace** (ou continuez d'avancer) : le personnage se hisse sur le bord.
 - **Cachettes** (Niveau 0) : placards et trous dans le mur. Une fois caché, les entités perdent votre trace (sauf si
   elles vous ont vu y entrer juste devant elles). Idéal pendant les coupures, quand les Smilers rôdent.
-- **Mort** : vous vous réveillez au Niveau 0 avec l'équipement de départ (caméscope, lampe, eau, bandage, piles).
+- **Mort** : vous vous réveillez au Niveau 0 avec l'équipement de départ (caméscope dans le sac, lampe, eau, bandage,
+  piles).
 
-L'écran imite une caméra « found footage » : REC, horodatage, grain et vignettage.
+L'image garde un léger grain et un effet VHS (désactivables), sans cadre de caméscope depuis la 4.2.
 
 ---
 
@@ -510,7 +526,7 @@ Backrooms/
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
 │   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu principal, multijoueur, inventaire, paramètres, console
 │   ├── BRSave.*                 Sauvegardes : parties (6 emplacements), niveaux explorés, inventaire, journal
-│   ├── BRHUD.*                  Interface (Canvas) : menu titre animé, parties, carrousel des niveaux, REC, pause,
+│   ├── BRHUD.*                  Interface (Canvas) : menu titre animé, parties, carrousel des niveaux, pause,
 │   │                            carte de titre, inventaire TAB façon Escape Together
 │   ├── BRInteractables.*        Objets à ramasser et sorties de niveau (verrouillées par les objectifs)
 │   ├── BRAssets.*               Chargement des ressources + matériaux + secours (textures lues dans RawAssets)
@@ -612,7 +628,8 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | Trop sombre / trop clair | Ajuster `MinEV` / `MaxEV` / `ExposureBias` du niveau dans `BRLevels.cpp` |
 | Pas de lampes au plafond, pas d'eau, objets invisibles | Corrigé en v3.2 (échelle des FBX). Laissez l'import se relancer au démarrage de l'éditeur (v7). Si un message rouge parle d'échelle : `import backrooms_setup; backrooms_setup.run(force=True)` |
 | L'eau n'apparaît toujours pas | Relancer l'import : `import backrooms_setup; backrooms_setup.run(force=True)` (Output Log, onglet Python) |
-| Je veux l'écran sans l'effet caméscope | **Tab → PARAMÈTRES → EFFET CAMÉSCOPE (VHS) : DÉSACTIVÉ** |
+| Je veux l'image sans effet VHS | **Tab → PARAMÈTRES → EFFET VHS : DÉSACTIVÉ** (le cadre du caméscope n'existe plus depuis la 4.2) |
+| Aucun texte dans le menu (seulement les icônes) | Corrigé en 4.2 (police du Canvas). Recompilez le module C++ |
 | **E** ne ramasse rien | Corrigé en v3. Visez l'objet (le point au centre grossit et « [E] Ramasser » s'affiche). Si vous avez changé la touche, le message affiche la nouvelle |
 | Une action ne répond plus | Une touche a pu lui être retirée en la donnant à une autre action : **Tab → TOUCHES**, ou **PAR DÉFAUT** |
 | « Impossible de rejoindre la partie » | L'hôte doit avoir cliqué sur **HÉBERGER UNE PARTIE**. Vérifiez l'adresse, la redirection du port **7777 UDP** sur la box de l'hôte et son pare-feu Windows. Sinon, passez par Radmin VPN, ZeroTier ou Tailscale |

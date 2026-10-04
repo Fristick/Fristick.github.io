@@ -1436,7 +1436,7 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 			ABRHUD::Notify(this, TEXT("COUPURE DE COURANT"), 4.f, FLinearColor(1.f, 0.3f, 0.25f));
 			if (D.bRequireObjectives && !bBlackoutRecorded)
 			{
-				ABRHUD::Notify(this, TEXT("Filmez pendant la coupure : cam\u00e9scope en MAIN."), 5.f, FLinearColor(1.f, 0.85f, 0.4f));
+				ABRHUD::Notify(this, TEXT("Filmez pendant la coupure : gardez le cam\u00e9scope sur vous et regardez autour de vous."), 5.f, FLinearColor(1.f, 0.85f, 0.4f));
 			}
 		}
 		break;
