@@ -144,7 +144,7 @@ protected:
 
 private:
 	enum class EState : uint8 { Idle, Wander, Stalk, Chase, Retreat, Frozen, Hide, Lure };
-	enum class ELimb : uint8 { UpperArm, LowerArm, Thigh, Shin, HoundUpper, HoundLower, Wing };
+	enum class ELimb : uint8 { UpperArm, LowerArm, Thigh, Shin, HoundUpper, HoundLower, Wing, Tendril };
 
 	struct FLimb
 	{
@@ -171,6 +171,8 @@ private:
 		float FallbackDrop, const TMap<FString, FLinearColor>* Tints, bool bUniqueGlow = false, float GlowScale = 1.f);
 	FBRHumanoidParts BuildHumanoid(const TCHAR* Prefix, const FBRHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent);
 	void BuildHound(const TMap<FString, FLinearColor>* Tints);
+	bool BuildHoundModel();
+	bool BuildClumpModel();
 	bool BuildBacteriaModel();
 	bool BuildMothModel();
 	void AddLimb(USceneComponent* Pivot, ELimb Type, float Phase, float Amp, float Sign, const FRotator& Base);

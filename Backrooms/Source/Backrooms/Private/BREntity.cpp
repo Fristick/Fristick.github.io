@@ -377,7 +377,8 @@ FBRHumanoidParts ABREntity::BuildHumanoid(const TCHAR* Prefix, const FBRHumanoid
 	if (Kind == EBREntityKind::Partygoer && P.LowerArm[1])
 	{
 		const float LowerLen = static_cast<float>((Spec.Elbow[1] - Spec.Shoulder[1]).Size()) * 1.4f;
-		Balloon = AddPart(TEXT("SM_Partygoer_Balloon"), P.LowerArm[1], FVector(2.f, 0.f, -LowerLen), FVector::ZeroVector, 0.f, nullptr);
+		const TCHAR* BalloonMesh = BRRig::HasMesh(this, TEXT("SM_PartygoerET_Balloon")) ? TEXT("SM_PartygoerET_Balloon") : TEXT("SM_Partygoer_Balloon");
+		Balloon = AddPart(BalloonMesh, P.LowerArm[1], FVector(2.f, 0.f, -LowerLen), FVector::ZeroVector, 0.f, nullptr);
 		if (Balloon)
 		{
 			Balloon->SetUsingAbsoluteRotation(true);
@@ -450,6 +451,62 @@ void ABREntity::BuildHound(const TMap<FString, FLinearColor>* Tints)
 	}
 }
 
+bool ABREntity::BuildHoundModel()
+{
+	// Hound fourni (Tools/Blender/import_user_models.py) : corps, tete et huit segments de pattes, deja en pose
+	if (!BRRig::HasMesh(this, TEXT("SM_HoundET_Body")))
+	{
+		return false;
+	}
+	AddPart(TEXT("SM_HoundET_Body"), Visual, FVector(42.37f, 0.17f, 71.65f), FVector::ZeroVector, 0.f, nullptr);
+	HeadPivot = AddPart(TEXT("SM_HoundET_Head"), Visual, FVector(45.22f, 0.17f, 78.32f), FVector::ZeroVector, 0.f, nullptr);
+	struct FLeg
+	{
+		const TCHAR* Upper;
+		const TCHAR* Lower;
+		FVector Hip;
+		FVector Knee;
+		bool bFront;
+		float Phase;
+	};
+	// Articulations : RawAssets/Meshes/user_models.json ("Hound")
+	const FLeg Legs[4] = {
+		{ TEXT("SM_HoundET_FrontUpperL"), TEXT("SM_HoundET_FrontLowerL"), FVector(36.82f, -17.91f, 67.3f), FVector(28.36f, -20.87f, 43.17f), true, PI },
+		{ TEXT("SM_HoundET_FrontUpperR"), TEXT("SM_HoundET_FrontLowerR"), FVector(36.82f, 18.8f, 67.3f), FVector(28.36f, 21.75f, 43.17f), true, 0.f },
+		{ TEXT("SM_HoundET_BackUpperL"), TEXT("SM_HoundET_BackLowerL"), FVector(-36.71f, -10.83f, 58.65f), FVector(-35.5f, -12.28f, 39.07f), false, 0.f },
+		{ TEXT("SM_HoundET_BackUpperR"), TEXT("SM_HoundET_BackLowerR"), FVector(-36.93f, 9.95f, 59.39f), FVector(-35.43f, 12.69f, 39.07f), false, PI },
+	};
+	for (const FLeg& Leg : Legs)
+	{
+		USceneComponent* Up = AddPart(Leg.Upper, Visual, Leg.Hip, FVector::ZeroVector, 0.f, nullptr);
+		USceneComponent* Low = AddPart(Leg.Lower, Up, Leg.Knee - Leg.Hip, FVector::ZeroVector, 0.f, nullptr);
+		AddLimb(Up, ELimb::HoundUpper, Leg.Phase, 24.f, Leg.bFront ? -1.f : 1.f, FRotator::ZeroRotator);
+		AddLimb(Low, ELimb::HoundLower, Leg.Phase, 22.f, Leg.bFront ? -1.f : 1.f, FRotator::ZeroRotator);
+	}
+	return true;
+}
+
+bool ABREntity::BuildClumpModel()
+{
+	// Clump (d'apres l'image fournie) : une masse de chair a bouche de lamproie et huit faisceaux de bras qui se tordent
+	if (!BRRig::HasMesh(this, TEXT("SM_ClumpET_Core")))
+	{
+		return false;
+	}
+	USceneComponent* Core = AddPart(TEXT("SM_ClumpET_Core"), Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector::ZeroVector, 0.f, nullptr);
+	HeadPivot = Core;
+	// Racines des faisceaux par rapport au centre de la masse : RawAssets/Meshes/user_models.json ("Clump")
+	const FVector Roots[8] = { FVector(13.23f, -20.71f, 22.31f), FVector(11.09f, 24.04f, 20.45f), FVector(-17.33f, -15.f, 20.84f),
+		FVector(-20.51f, 19.24f, 13.85f), FVector(15.86f, -30.78f, -9.84f), FVector(10.78f, 16.3f, -27.09f), FVector(-12.12f, -18.48f, -23.14f),
+		FVector(-28.11f, 12.37f, -13.75f) };
+	for (int32 k = 0; k < 8; ++k)
+	{
+		USceneComponent* Arm = AddPart(*FString::Printf(TEXT("SM_ClumpET_Arm%d"), k), Core, Roots[k], FVector::ZeroVector, 0.f, nullptr);
+		AddLimb(Arm, ELimb::Tendril, k * 0.9f, 10.f + static_cast<float>(k % 3) * 4.f, (k % 2) ? 1.f : -1.f, FRotator::ZeroRotator);
+	}
+	return true;
+}
+
 void ABREntity::BuildVisual()
 {
 	TMap<FString, FLinearColor> Tints;
@@ -457,7 +514,9 @@ void ABREntity::BuildVisual()
 	{
 	case EBREntityKind::Smiler:
 	{
-		AddPart(TEXT("SM_Smiler"), Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(70.f, 70.f, 90.f), 0.f, nullptr, true, 0.5f);
+		// Le Smiler de l'image fournie (SM_SmilerET), sinon l'ancien modele procedural
+		const TCHAR* SmilerMesh = BRRig::HasMesh(this, TEXT("SM_SmilerET")) ? TEXT("SM_SmilerET") : TEXT("SM_Smiler");
+		AddPart(SmilerMesh, Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(70.f, 70.f, 90.f), 0.f, nullptr, true, 0.5f);
 		GlowLight = NewObject<UPointLightComponent>(this);
 		GlowLight->SetupAttachment(Visual);
 		GlowLight->SetRelativeLocation(FVector(70.f, 0.f, MyInfo().HalfHeight));
@@ -470,13 +529,24 @@ void ABREntity::BuildVisual()
 		break;
 	}
 	case EBREntityKind::Hound:
-		Tints.Add(TEXT("Skin"), FLinearColor(0.55f, 0.53f, 0.5f));
-		BuildHound(&Tints);
+		if (!BuildHoundModel())
+		{
+			Tints.Add(TEXT("Skin"), FLinearColor(0.55f, 0.53f, 0.5f));
+			BuildHound(&Tints);
+		}
 		break;
 	case EBREntityKind::Faceling:
 	{
 		const FLinearColor Shirts[5] = { FLinearColor(0.45f, 0.47f, 0.5f), FLinearColor(0.35f, 0.25f, 0.2f), FLinearColor(0.2f, 0.3f, 0.45f),
 			FLinearColor(0.5f, 0.45f, 0.35f), FLinearColor(0.3f, 0.35f, 0.3f) };
+		if (BRRig::HasMesh(this, TEXT("SM_FacelingET_Torso")))
+		{
+			// Faceling fourni (style PS1) : texture d'origine, legerement assombrie au hasard pour varier les silhouettes
+			const float Shade = FMath::FRandRange(0.75f, 1.f);
+			Tints.Add(TEXT("Faceling"), FLinearColor(Shade, Shade, Shade));
+			BuildHumanoid(TEXT("SM_FacelingET"), FBRHumanoidSpec::FacelingET(), &Tints, Visual);
+			break;
+		}
 		Tints.Add(TEXT("Cloth"), Shirts[FMath::RandRange(0, 4)]);
 		Tints.Add(TEXT("Skin"), FLinearColor(0.82f, 0.72f, 0.64f));
 		BuildHumanoid(TEXT("SM_Faceling"), SpecFor(Kind), &Tints, Visual);
@@ -488,7 +558,16 @@ void ABREntity::BuildVisual()
 		BodyForm = NewObject<USceneComponent>(this);
 		BodyForm->SetupAttachment(Visual);
 		BodyForm->RegisterComponent();
-		BuildHumanoid(TEXT("SM_SkinStealer"), SpecFor(Kind), &Tints, BodyForm);
+		if (BRRig::HasMesh(this, TEXT("SM_SkinStealerET_Torso")))
+		{
+			// Skin-Stealer fourni : chair a vif, griffes demesurees ; sa masse au repos prend la meme teinte rouge
+			BuildHumanoid(TEXT("SM_SkinStealerET"), FBRHumanoidSpec::SkinStealerET(), nullptr, BodyForm);
+			Tints.Add(TEXT("Flesh"), FLinearColor(0.5f, 0.14f, 0.12f));
+		}
+		else
+		{
+			BuildHumanoid(TEXT("SM_SkinStealer"), SpecFor(Kind), &Tints, BodyForm);
+		}
 		TrueHead = HeadPivot;
 		MassForm = AddPart(TEXT("SM_SkinStealer_Mass"), Visual, FVector::ZeroVector, FVector(110.f, 100.f, 90.f), 45.f, &Tints);
 		// Deguisement : la vraie combinaison hazmat (modele fourni), sinon la combinaison procedurale
@@ -512,7 +591,14 @@ void ABREntity::BuildVisual()
 		BuildHumanoid(TEXT("SM_Wretch"), SpecFor(Kind), &Tints, Visual);
 		break;
 	case EBREntityKind::Partygoer:
-		BuildHumanoid(TEXT("SM_Partygoer"), SpecFor(Kind), nullptr, Visual);
+		if (BRRig::HasMesh(this, TEXT("SM_PartygoerET_Torso")))
+		{
+			BuildHumanoid(TEXT("SM_PartygoerET"), FBRHumanoidSpec::PartygoerET(), nullptr, Visual);
+		}
+		else
+		{
+			BuildHumanoid(TEXT("SM_Partygoer"), SpecFor(Kind), nullptr, Visual);
+		}
 		break;
 	case EBREntityKind::Bacteria:
 		if (!BuildBacteriaModel())
@@ -550,7 +636,10 @@ void ABREntity::BuildVisual()
 		break;
 	}
 	case EBREntityKind::Clump:
-		AddPart(TEXT("SM_Clump"), Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(110.f, 110.f, 100.f), 0.f, nullptr);
+		if (!BuildClumpModel())
+		{
+			AddPart(TEXT("SM_Clump"), Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(110.f, 110.f, 100.f), 0.f, nullptr);
+		}
 		if (Visual)
 		{
 			Visual->SetRelativeScale3D(FVector(1.1f));
@@ -1620,6 +1709,7 @@ void ABREntity::Animate(float Dt)
 		Visual->SetRelativeRotation(FRotator(FMath::Sin(Life * 2.3f) * 6.f, FMath::Sin(Life * 1.1f) * 12.f, FMath::Cos(Life * 2.9f) * 6.f));
 		const float Sc = 1.1f * (1.f + 0.05f * FMath::Sin(Life * 5.f));
 		Visual->SetRelativeScale3D(FVector(Sc, Sc, 1.21f / Sc));
+		AnimateLimbs(Dt, Gait); // les faisceaux de bras se tordent (plus vite en poursuite)
 		return;
 	}
 	case EBREntityKind::Deathmoth:
@@ -1705,6 +1795,15 @@ void ABREntity::AnimateLimbs(float Dt, float Gait)
 		{
 			const float Flap = FMath::Sin(Life * 20.f) * L.Amp;
 			R = FRotator(0.f, 0.f, -Flap * L.Sign);
+			break;
+		}
+		case ELimb::Tendril:
+		{
+			// Ondulation lente et desynchronisee de chaque faisceau, plus violente quand la masse se deplace
+			const float T = Life * (1.6f + 0.25f * L.Phase) + L.Phase;
+			R.Pitch += FMath::Sin(T) * L.Amp * (0.7f + 0.6f * Gait);
+			R.Yaw += FMath::Sin(T * 0.7f + 1.3f) * L.Amp * 0.6f;
+			R.Roll += FMath::Cos(T * 1.3f) * L.Amp * L.Sign;
 			break;
 		}
 		}

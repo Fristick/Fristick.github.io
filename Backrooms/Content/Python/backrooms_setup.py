@@ -21,7 +21,7 @@ import os
 
 import unreal
 
-VERSION = 7
+VERSION = 8
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -230,6 +230,25 @@ def import_meshes(files):
 def delete_obsolete_meshes():
     """Pieces de la v1 remplacees par le squelette articule de la v2 ; combinaison d'un seul bloc remplacee en v3
     par les pieces articulees du modele fourni (SM_Hazmat_*)"""
+    # v3.5 : entites refaites a partir des modeles / images fournis (SM_*ET_*) -> anciennes pieces procedurales
+    replaced = {
+        "SM_HoundET_Body": ["SM_Hound_Body", "SM_Hound_Head", "SM_Hound_UpperLeg", "SM_Hound_LowerLeg"],
+        "SM_FacelingET_Torso": ["SM_Faceling_" + p for p in ("Torso", "Head", "UpperArm", "LowerArm", "Thigh", "Shin")],
+        "SM_PartygoerET_Torso": ["SM_Partygoer_" + p for p in ("Torso", "Head", "UpperArm", "LowerArm", "Thigh", "Shin", "Balloon")],
+        "SM_SkinStealerET_Torso": ["SM_SkinStealer_" + p for p in ("Torso", "Head", "UpperArm", "LowerArm", "Thigh", "Shin")],
+        "SM_SmilerET": ["SM_Smiler"],
+        "SM_ClumpET_Core": ["SM_Clump"],
+    }
+    for marker, olds in replaced.items():
+        if not os.path.exists(raw("Meshes", marker + ".fbx")):
+            continue
+        for name in olds:
+            path = MESH + "/" + name
+            if not os.path.exists(raw("Meshes", name + ".fbx")) and exists(path):
+                try:
+                    EAL.delete_asset(path)
+                except Exception as e:
+                    warn("Suppression impossible %s : %s" % (path, e))
     for name in ("SM_Faceling_Arm", "SM_Faceling_Leg", "SM_Hound_Leg", "SM_Partygoer_Arm", "SM_Partygoer_Leg",
                  "SM_SkinStealer_Arm", "SM_SkinStealer_Leg", "SM_Wretch_Arm", "SM_Wretch_Leg", "SM_Hazmat"):
         if name == "SM_Hazmat" and not os.path.exists(raw("Meshes", "SM_Hazmat_Torso.fbx")):

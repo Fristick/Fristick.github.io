@@ -34,6 +34,13 @@ struct FBRHumanoidSpec
 	static FBRHumanoidSpec Simple(float HipZ, float ShoulderZ, float ShoulderW, float HipW, float Hunch, float UpperArmLen, float ThighLen, float Neck);
 	/** Combinaison hazmat fournie (Tools/Blender/import_user_models.py, RawAssets/Meshes/user_models.json) */
 	static FBRHumanoidSpec Hazmat();
+	/** Modeles d'entites fournis (v3.5) : pieces SM_SkinStealerET_*, SM_FacelingET_*, SM_PartygoerET_* */
+	static FBRHumanoidSpec SkinStealerET();
+	static FBRHumanoidSpec FacelingET();
+	static FBRHumanoidSpec PartygoerET();
+	/** Articulations en cm (repere Unreal), dans l'ordre de user_models.json ; pose deja naturelle (bras le long du corps) */
+	static FBRHumanoidSpec FromJoints(const FVector& InTorso, const FVector& InHead, const FVector& ShoulderL, const FVector& ElbowL,
+		const FVector& ShoulderR, const FVector& ElbowR, const FVector& HipL, const FVector& KneeL, const FVector& HipR, const FVector& KneeR);
 };
 
 /** Pivots crees pour un humanoide (index 0 = gauche, 1 = droite) */
@@ -64,4 +71,6 @@ namespace BRRig
 
 	/** true si les pieces de la vraie combinaison hazmat sont importees */
 	bool HasHazmat(const UObject* WorldContext);
+	/** true si ce maillage est importe (modeles fournis optionnels) */
+	bool HasMesh(const UObject* WorldContext, FName MeshName);
 }

@@ -7,6 +7,25 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3.7** (entités d'après les images et les modèles fournis) :
+- **Skin-Stealer** : le modèle fourni, une chair rouge à vif sans peau, des bras qui pendent jusqu'aux genoux et
+  des griffes démesurées. Il garde son déguisement en combinaison hazmat et sa masse de chair au repos.
+- **Hound** : le chien fourni, un corps sombre et décharné couvert de longs cheveux noirs, des yeux ambrés qui
+  luisent dans le noir et la langue pendante. Ses quatre pattes sont articulées (épaule/hanche et genou) et il trotte.
+- **Faceling** : le modèle fourni, de style PS1 (visage lisse, t-shirt noir, jean). Chaque Faceling est un peu plus
+  clair ou plus sombre que les autres. Les silhouettes des hallucinations utilisent aussi ce modèle.
+- **Partygoer** : le modèle fourni (corps jaune, sourire =) ) avec son **ballon rouge** à la main.
+- **Smiler** refait d'après l'image : une masse sombre à peine visible, deux **yeux ovales lumineux** et un
+  **sourire en croissant** fait de dizaines de dents fines qui brillent.
+- **Clump** refait d'après l'image : une masse de chair hérissée d'une **trentaine de bras humains** terminés par des
+  mains, autour d'une **bouche ronde à trois rangées de dents**. Ses huit faisceaux de bras se tordent sans arrêt,
+  plus violemment quand il roule vers vous.
+- Les anciens modèles procéduraux de ces six entités sont retirés. Si un nouveau modèle n'est pas importé, le jeu
+  revient automatiquement à une forme de secours. L'import passe en **version 8** : il se refait tout seul à
+  l'ouverture de l'éditeur et supprime les anciens modèles remplacés.
+
+![Entités de la version 3.7](Docs/apercu_entites_v37.jpg)
+
 **Nouveautés de la version 3.6** (Poolrooms plus réalistes) :
 - **L'eau suit le joueur** : elle est presque immobile, et ce sont les joueurs qui la font bouger. Une simulation de
   vagues (équation des ondes sur une grille de 19 m × 19 m qui accompagne le joueur, `BRWaterSim`) dessine le **sillage**
@@ -348,18 +367,18 @@ quartier pavillonnaire (9), espace ouvert (10), îlots urbains (11).
 | Entité | N° wiki | Comportement dans le jeu | Comment survivre |
 |---|---|---|---|
 | **Bacteria** | (Niveau 0) | *(modèle fourni)* Silhouette démesurée en fils torsadés, aux gestes saccadés. Erre, vous traque dès qu'elle vous voit ou vous entend, puis fouille votre dernière position | Casser la ligne de vue : portes, virages. Ne pas courir vers elle |
-| **Smilers** | 3 | Flottent dans le noir et approchent quand on ne les regarde pas. **Chargent** dès qu'on les éclaire plus d'une fraction de seconde | Éteindre la lampe, reculer lentement. Une zone bien éclairée les dissipe. |
+| **Smilers** | 3 | *(d'après l'image fournie)* Flottent dans le noir et approchent quand on ne les regarde pas. **Chargent** dès qu'on les éclaire plus d'une fraction de seconde | Éteindre la lampe, reculer lentement. Une zone bien éclairée les dissipe. |
 | **Deathmoths** | 4 | *(modèle fourni : phalène scannée)* Papillons géants volants, attirés par la lampe torche, piqûre toxique | Éteindre la lampe |
-| **Clump** | 5 | Masse de membres qui roule vers vous | Le semer dans les couloirs |
-| **Hounds** | 8 | Rôdent à quatre pattes, sentent la peur et chargent si vous courez ou leur tournez le dos | Les regarder en face et reculer en marchant : ils finissent par fuir |
-| **Facelings** | 9 | Humains sans visage, surtout passifs. 15 % sont des adultes agressifs. Dans le champ de blé (Niveau 10), certains se tapissent dans les blés et vous attrapent | Garder ses distances |
-| **Skin-Stealers** | 10 | Masse de chair au repos ; à votre approche, se transforme en « explorateur en combinaison » (la même combinaison hazmat que la vôtre) qui marche vers vous, puis se révèle et charge | Se méfier des silhouettes en combinaison. Fuir et casser la ligne de vue |
+| **Clump** | 5 | *(d'après l'image fournie)* Masse de bras humains autour d'une bouche dentée, qui roule vers vous en agitant ses mains | Le semer dans les couloirs |
+| **Hounds** | 8 | *(modèle fourni)* Rôdent à quatre pattes, sentent la peur et chargent si vous courez ou leur tournez le dos | Les regarder en face et reculer en marchant : ils finissent par fuir |
+| **Facelings** | 9 | *(modèle fourni)* Humains sans visage, surtout passifs. 15 % sont des adultes agressifs. Dans le champ de blé (Niveau 10), certains se tapissent dans les blés et vous attrapent | Garder ses distances |
+| **Skin-Stealers** | 10 | *(modèle fourni)* Masse de chair au repos ; à votre approche, se transforme en « explorateur en combinaison » (la même combinaison hazmat que la vôtre) qui marche vers vous, puis se révèle et charge | Se méfier des silhouettes en combinaison. Fuir et casser la ligne de vue |
 | **Wretches** | 15 | Vagabonds dégénérés, lents mais tenaces | Ne pas se laisser acculer |
-| **Partygoers** | 67 | =) Restent immobiles en souriant, un ballon rouge à la main. Partent en chasse si vous soutenez leur regard plus de 3 s, ou pendant une coupure | Détourner le regard, se cacher pendant les coupures |
+| **Partygoers** | 67 | *(modèle fourni)* =) Restent immobiles en souriant, un ballon rouge à la main. Partent en chasse si vous soutenez leur regard plus de 3 s, ou pendant une coupure | Détourner le regard, se cacher pendant les coupures |
 
 Les humanoïdes ont un **squelette articulé** (torse, tête, bras, avant-bras, cuisses, tibias) animé de façon procédurale
 en C++ : marche avec flexion des genoux, bras tendus pendant les poursuites, tête qui suit le joueur, spasmes de la Bacteria.
-Les Hounds marchent à quatre pattes (pattes en deux segments).
+Les Hounds marchent à quatre pattes (pattes en deux segments). Les bras du Clump ondulent en huit faisceaux indépendants.
 Les entités se déplacent grâce à un **A\*** sur la grille du niveau, sans NavMesh.
 Le journal (**Tab**) enregistre chaque entité rencontrée, avec sa fiche et un conseil.
 
@@ -396,9 +415,10 @@ Backrooms/
 ├── RawAssets/                   Ressources sources (déjà générées)
 │   ├── Textures/ (+ normal maps *_N)  Icons/  Sounds/  Meshes/ (FBX)  Previews/ (rendus des modèles)
 ├── Tools/
-│   ├── Blender/generate_models.py    ★ Modélisation procédurale des 78 modèles + icônes d'inventaire (Blender)
+│   ├── Blender/generate_models.py    ★ Modélisation procédurale (décor, objets, formes de secours) + icônes (Blender)
 │   ├── Blender/preview_entities.py   Rendu d'aperçu des entités assemblées
-│   ├── Blender/import_user_models.py Découpe des modèles fournis (hazmat, Bacteria, Deathmoth) en pièces articulées
+│   ├── Blender/import_user_models.py Découpe des modèles fournis en pièces articulées (hazmat, Bacteria, Deathmoth,
+│   │                                 Skin-Stealer, Faceling, Partygoer, Hound) + Smiler et Clump d'après les images
 │   ├── SourceModels/                 (non versionné) Les fichiers d'origine des modèles fournis
 │   ├── generate_textures.py          Textures procédurales « tileables » (numpy + Pillow)
 │   └── generate_sounds.py            Synthèse de tous les sons (numpy)
@@ -413,8 +433,9 @@ blender -b -P Tools/Blender/generate_models.py -- SM_Smiler # un seul
 # Textures et sons (Python 3 + numpy + pillow)
 python Tools/generate_textures.py
 python Tools/generate_sounds.py
-# Modèles fournis (placer asyc_hazmat.glb, bacteria_recreation.blend, « peppered moth.obj » et sa texture
-# dans Tools/SourceModels/)
+# Modèles fournis (placer asyc_hazmat.glb, bacteria_recreation.blend, « peppered moth.obj » et sa texture,
+# skin_stealer.usdz, faceling.glb, partygoer.fbx + partygoer_BaseColor.jpeg, hound.blend + hound_Material.png
+# dans Tools/SourceModels/ ; détails en tête du script)
 blender -b -P Tools/Blender/import_user_models.py
 ```
 Ensuite, dans Unreal : `import backrooms_setup; backrooms_setup.run(force=True)`.
@@ -477,6 +498,7 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | On n'entend pas les autres | Vérifiez **Paramètres → CHAT VOCAL**. En « appuyer pour parler », il faut maintenir **T**. Vérifiez aussi l'accès au micro dans Windows (*Paramètres → Confidentialité → Microphone*) et le micro par défaut. Dans l'éditeur (PIE), le chat vocal peut ne pas fonctionner : testez en *Standalone Game* ou avec le jeu empaqueté, sur deux PC |
 | « Connexion perdue avec l'hôte » | L'hôte a quitté la partie, ou la connexion a coupé : rejoignez à nouveau |
 | Un ami ne voit pas les mêmes salles | Vous n'avez pas la même version du jeu : utilisez tous la même compilation |
+| Les entités ont encore leur ancienne apparence | Les modèles v3.5 (`SM_*ET*`) ne sont pas importés : relancer `backrooms_setup.run(force=True)` |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |
 
 ## 9. Tests automatiques
@@ -513,6 +535,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 *Les textes des niveaux et des entités sont des résumés en français librement inspirés du
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com) (CC BY-SA 3.0). Le code, les textures, les sons et la plupart
 des modèles de ce dossier sont générés par les scripts fournis. **Exceptions** : la combinaison hazmat
-(`asyc_hazmat`), la Bacteria (`bacteria-lifeform-backrooms`) et le Deathmoth (`deathmoth-backrooms`, phalène poivrée
-scannée) viennent de modèles fournis par l'utilisateur. Ils ont été découpés et adaptés par
+(`asyc_hazmat`), la Bacteria (`bacteria-lifeform-backrooms`), le Deathmoth (`deathmoth-backrooms`, phalène poivrée
+scannée), le Skin-Stealer (`Skin_Stealer_The_Backrooms_Blender_3`), le Hound (`hound-backrooms`), le Faceling
+(`backrooms-faceling-ps1psx-style`) et le Partygoer (`partygoer-from-backrooms-updated`, « Partygoer by FilinMinv »)
+viennent de modèles fournis par l'utilisateur. Le Smiler et le Clump sont modélisés d'après des images fournies. Ils ont été découpés et adaptés par
 `Tools/Blender/import_user_models.py`. Vérifiez leur licence d'origine avant toute diffusion publique du jeu.*

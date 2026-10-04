@@ -5,14 +5,21 @@ Placez les fichiers sources dans Tools/SourceModels/ :
     bacteria_recreation.blend                 (Bacteria, archive "bacteria-lifeform-backrooms.zip")
     peppered moth.obj + texture_0_baseColor.png (Deathmoth, archive "deathmoth-backrooms.zip")
     asyc_hazmat.glb                           (combinaison hazmat du joueur, archive "asyc_hazmat.rar")
+    skin_stealer.usdz                         (Skin-Stealer, "Skin_Stealer_The_Backrooms_Blender_3.usdz")
+    faceling.glb                              (Faceling style PS1, archive "backrooms-faceling-ps1psx-style.zip")
+    partygoer.fbx + partygoer_BaseColor.jpeg  (Partygoer, archive "partygoer-from-backrooms-updated.zip")
+    hound.blend + hound_Material.png          (Hound, archive "hound-backrooms.zip")
+Le Smiler et le Clump sont modelises ici d'apres les images de reference fournies (aucun fichier source).
 
 Puis :
     python Tools/Blender/import_user_models.py          (module pip "bpy")
     blender -b -P Tools/Blender/import_user_models.py   (avec Blender installe)
 
 Sorties :
-    RawAssets/Meshes/SM_Hazmat_*.fbx, SM_BacteriaET_*.fbx, SM_DeathmothET_*.fbx
-    RawAssets/Textures/T_Hazmat_Suit.jpg, T_Hazmat_Mask.jpg, T_Deathmoth.jpg
+    RawAssets/Meshes/SM_Hazmat_*.fbx, SM_BacteriaET_*.fbx, SM_DeathmothET_*.fbx, SM_SkinStealerET_*.fbx,
+        SM_FacelingET_*.fbx, SM_PartygoerET_*.fbx, SM_HoundET_*.fbx, SM_SmilerET.fbx, SM_ClumpET_*.fbx
+    RawAssets/Textures/T_Hazmat_Suit.jpg, T_Hazmat_Mask.jpg, T_Deathmoth.jpg, T_SkinStealer_*.jpg, T_Faceling.jpg,
+        T_Partygoer.jpg, T_Hound.jpg
     RawAssets/Icons/I_Silhouette.png, RawAssets/Previews/*.jpg
     RawAssets/Meshes/user_models.json  (positions des articulations, en cm, reperes Unreal : +X avant, +Y droite)
 
@@ -178,6 +185,10 @@ def preview(objs, name, view=Vector((1.0, -0.7, 0.45))):
     sun.data.energy = 3.0
     sun.rotation_euler = (math.radians(50), math.radians(10), math.radians(30))
     os.makedirs(OUT_PREV, exist_ok=True)
+    try:
+        sc.render.image_settings.media_type = "IMAGE"  # Blender 4.5+ (certaines scenes fournies sont reglees en video)
+    except Exception:
+        pass
     sc.render.image_settings.file_format = "JPEG"
     sc.render.image_settings.color_mode = "RGB"
     sc.render.image_settings.quality = 90
@@ -612,15 +623,873 @@ def process_moth():
     print("  articulations (cm, Unreal) :", joints)
 
 
+# ---------------------------------------------------------------------------
+# Modeles fournis (v3.5) : Skin-Stealer, Faceling, Partygoer (humanoides) et Hound (quadrupede).
+# Tous ont un squelette : chaque face va a la piece de l'os qui la deforme le plus.
+# ---------------------------------------------------------------------------
+HUMAN_PARTS = ["Torso", "Head", "UpperArmL", "LowerArmL", "UpperArmR", "LowerArmR", "ThighL", "ShinL", "ThighR", "ShinR"]
+HOUND_PARTS = ["Body", "Head", "FrontUpperL", "FrontLowerL", "FrontUpperR", "FrontLowerR",
+               "BackUpperL", "BackLowerL", "BackUpperR", "BackLowerR"]
+HOUND_PARENT = {"Head": "Body", "FrontUpperL": "Body", "FrontUpperR": "Body", "BackUpperL": "Body", "BackUpperR": "Body",
+                "FrontLowerL": "FrontUpperL", "FrontLowerR": "FrontUpperR", "BackLowerL": "BackUpperL", "BackLowerR": "BackUpperR"}
+
+
+def load_model(path):
+    reset()
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".blend":
+        bpy.ops.wm.open_mainfile(filepath=path)
+    elif ext in (".glb", ".gltf"):
+        bpy.ops.import_scene.gltf(filepath=path)
+    elif ext == ".fbx":
+        bpy.ops.import_scene.fbx(filepath=path)
+    else:
+        bpy.ops.wm.usd_import(filepath=path)
+    for o in list(bpy.data.objects):
+        if o.type == "MESH" and o.name.startswith("Icosphere"):
+            bpy.data.objects.remove(o)
+    bpy.context.view_layer.update()
+
+
+def save_texture_file(src, name, size=1024, quality=86):
+    """Image fournie -> RawAssets/Textures/<name>.jpg, reduite a size"""
+    from PIL import Image
+    im = Image.open(src).convert("RGB")
+    if max(im.size) > size:
+        im = im.resize((size, size), Image.LANCZOS)
+    os.makedirs(OUT_TEX, exist_ok=True)
+    path = os.path.join(OUT_TEX, name + ".jpg")
+    im.save(path, quality=quality)
+    print("  texture", path, im.size)
+
+
+def apply_shape_modifiers(o):
+    """Applique miroir / subdivision / epaisseur (tout sauf l'armature) : les groupes de sommets suivent"""
+    if not [m for m in o.modifiers if m.type != "ARMATURE"]:
+        return
+    o.data = o.data.copy()
+    bpy.ops.object.select_all(action="DESELECT")
+    o.hide_set(False)
+    o.hide_viewport = False
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    for m in list(o.modifiers):
+        if m.type != "ARMATURE":
+            bpy.ops.object.modifier_apply(modifier=m.name)
+
+
+def single_uv(o):
+    """Une seule couche UV nommee UVMap (sinon la jonction des maillages melange les couches)"""
+    uvs = o.data.uv_layers
+    if len(uvs) == 0:
+        uvs.new(name="UVMap")
+        return
+    keep = uvs.active or uvs[0]
+    for l in [l for l in uvs if l != keep]:
+        uvs.remove(l)
+    uvs[0].name = "UVMap"
+
+
+def thin_strands(o, keep):
+    """Cheveux en meches separees : on n'en garde qu'une sur 'keep' (avant le calcul des poids)"""
+    comps = loose_parts(o)
+    if len(comps) < 20:
+        return
+    drop = set()
+    for i, ids in enumerate(sorted(comps, key=lambda c: min(c))):
+        if i % keep:
+            drop.update(ids)
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bm.verts.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in drop], context="VERTS")
+    bm.to_mesh(o.data)
+    bm.free()
+    print("  meches :", len(comps), "->", len(comps) - len([1 for i in range(len(comps)) if i % keep]))
+
+
+def isolated_weights(o, part_of):
+    """Sommet dont la piece dominante n'est celle d'aucun de ses voisins (ex. un doigt lie au cou dans le modele
+    fourni) : il reprend les poids du voisin le plus representatif. Sinon il resterait en place quand le bras bouge."""
+    names = [g.name for g in o.vertex_groups]
+    me = o.data
+
+    def dominant(v):
+        tot = {}
+        for g in v.groups:
+            part = part_of(names[g.group].split("/")[-1])
+            if part:
+                tot[part] = tot.get(part, 0.0) + g.weight
+        return max(tot, key=tot.get) if tot else None
+
+    nbr = [[] for _ in me.vertices]
+    for e in me.edges:
+        a, b = e.vertices
+        nbr[a].append(b)
+        nbr[b].append(a)
+    fixed = 0
+    for _ in range(3):
+        dom = [dominant(v) for v in me.vertices]
+        todo = []
+        for v in me.vertices:
+            ns = nbr[v.index]
+            if not ns or dom[v.index] is None or any(dom[n] == dom[v.index] for n in ns):
+                continue
+            counts = {}
+            for n in ns:
+                if dom[n]:
+                    counts[dom[n]] = counts.get(dom[n], 0) + 1
+            if not counts:
+                continue
+            best = max(counts, key=counts.get)
+            src = next(n for n in ns if dom[n] == best)
+            todo.append((v.index, [(g.group, g.weight) for g in me.vertices[src].groups]))
+        for vi, ws in todo:
+            for g in list(me.vertices[vi].groups):
+                o.vertex_groups[g.group].remove([vi])
+            for gi, w in ws:
+                o.vertex_groups[gi].add([vi], w, "REPLACE")
+        fixed += len(todo)
+        if not todo:
+            break
+    if fixed:
+        print("  %s : %d sommets isoles rattaches a leurs voisins" % (o.name, fixed))
+
+
+def clean_weights(o, part_of, parent):
+    """Poids parasites du modele d'origine (ex. un sommet de l'epaule lie a la main) : invisibles bras en T, ils
+    etirent le maillage une fois les bras baisses. Un sommet ne garde que sa piece dominante et ses voisines."""
+    isolated_weights(o, part_of)
+    adj = {}
+    for c, p in parent.items():
+        adj.setdefault(c, set()).add(p)
+        adj.setdefault(p, set()).add(c)
+    names = [g.name for g in o.vertex_groups]
+    bad = []
+    for v in o.data.vertices:
+        tot = {}
+        for g in v.groups:
+            part = part_of(names[g.group].split("/")[-1])
+            if part:
+                tot[part] = tot.get(part, 0.0) + g.weight
+        if len(tot) < 2:
+            continue
+        main = max(tot, key=tot.get)
+        ok = {main} | adj.get(main, set())
+        for g in v.groups:
+            part = part_of(names[g.group].split("/")[-1])
+            if part and part not in ok and g.weight > 0.0:
+                bad.append((g.group, v.index))
+    for gi, vi in bad:
+        o.vertex_groups[gi].remove([vi])
+    if bad:
+        print("  %s : %d poids parasites retires" % (o.name, len(bad)))
+
+
+def drop_orphans(o):
+    """Sommets sans poids dans un maillage rigge : ils resteraient a la pose d'origine (bras en T) et tireraient
+    de longues pointes une fois les bras baisses. S'il y en a peu, on les supprime."""
+    if not o.vertex_groups:
+        return
+    orphans = [v.index for v in o.data.vertices if sum(g.weight for g in v.groups) <= 1e-4]
+    if not orphans or len(orphans) > 0.05 * len(o.data.vertices):
+        return
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bm.verts.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in orphans], context="VERTS")
+    bm.to_mesh(o.data)
+    bm.free()
+    print("  %s : %d sommets sans os retires" % (o.name, len(orphans)))
+
+
+def rigged_body(arm, part_of, parts, default, mat_map, default_slot, skip=(), budget=12000, drop_below=None, thin=None, parent=None):
+    """Maillages du squelette, deformes (pose courante), joints en un seul objet. Attributs w_<piece> = poids."""
+    srcs = [o for o in bpy.data.objects if o.type == "MESH" and o.find_armature() == arm and o.name not in skip
+            and len(o.data.vertices) > 0]
+    merged = []
+    for o in srcs:
+        apply_shape_modifiers(o)
+        if thin and o.name in thin:
+            thin_strands(o, thin[o.name])
+        drop_orphans(o)
+        if parent:
+            clean_weights(o, part_of, parent)
+        names = [g.name for g in o.vertex_groups]
+        nv = len(o.data.vertices)
+        w = {p: np.zeros(nv, dtype=np.float32) for p in parts}
+        for v in o.data.vertices:
+            tot = 0.0
+            for g in v.groups:
+                part = part_of(names[g.group].split("/")[-1])
+                if part and g.weight > 0.0:
+                    w[part][v.index] += g.weight
+                    tot += g.weight
+            if tot <= 1e-4:
+                w[default][v.index] = 1.0
+        me = bake_world(o)
+        assert len(me.vertices) == nv, (o.name, len(me.vertices), nv)
+        for part in parts:
+            a = me.attributes.new("w_" + part, "FLOAT", "POINT")
+            a.data.foreach_set("value", w[part])
+        no = mesh_object("R_" + o.name, me)
+        single_uv(no)
+        for slot in no.material_slots:
+            src_name = slot.material.name if slot.material else ""
+            new = mat_map.get(src_name, default_slot)
+            slot.material = bpy.data.materials.get(new) or bpy.data.materials.new(new)
+        if not no.material_slots:
+            no.data.materials.append(bpy.data.materials.get(default_slot) or bpy.data.materials.new(default_slot))
+        merged.append(no)
+    for o in srcs:
+        o.hide_render = True
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in merged:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = merged[0]
+    bpy.ops.object.join()
+    body = merged[0]
+    if drop_below is not None:
+        # geometrie parasite loin sous les pieds (sol de la scene d'origine)
+        bm = bmesh.new()
+        bm.from_mesh(body.data)
+        dead = [f for f in bm.faces if f.calc_center_median().z < drop_below]
+        bmesh.ops.delete(bm, geom=dead, context="FACES")
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+        bm.to_mesh(body.data)
+        bm.free()
+    nv = len(body.data.vertices)
+    for _ in range(4):
+        cur = len(body.data.vertices)
+        if cur <= budget * 1.08:
+            break
+        decimate(body, max(0.2, budget / cur))
+    print("  maillage", nv, "->", len(body.data.vertices), "sommets")
+    return body
+
+
+def to_game_frame(body, joints, forward, height, center_parts=None):
+    """Tourne le modele pour qu'il regarde vers +X, pieds a 0, mis a la taille voulue (m)"""
+    yaw = math.atan2(forward.y, forward.x)
+    R = Matrix.Rotation(-yaw, 4, "Z")
+    body.data.transform(R)
+    joints = {k: R @ v for k, v in joints.items()}
+    co = np.array([tuple(v.co) for v in body.data.vertices])
+    minz, maxz = co[:, 2].min(), co[:, 2].max()
+    s = height / (maxz - minz)
+    G = Matrix.Diagonal((s, s, s, 1.0)) @ Matrix.Translation((0, 0, -minz))
+    body.data.transform(G)
+    joints = {k: G @ v for k, v in joints.items()}
+    if center_parts:
+        c = sum((joints[k] for k in center_parts), Vector()) / len(center_parts)
+        T = Matrix.Translation((-c.x, -c.y, 0))
+        body.data.transform(T)
+        joints = {k: T @ v for k, v in joints.items()}
+        G = T @ G
+    return joints, G @ R
+
+
+def drop_unused_materials(o):
+    """Une piece n'emporte que les materiaux qu'elle utilise (moins d'emplacements dans Unreal)"""
+    used = sorted({p.material_index for p in o.data.polygons})
+    mats = [o.data.materials[i] for i in used]
+    remap = {old: new for new, old in enumerate(used)}
+    idx = [remap[p.material_index] for p in o.data.polygons]
+    o.data.materials.clear()
+    for m in mats:
+        o.data.materials.append(m)
+    for p, i in zip(o.data.polygons, idx):
+        p.material_index = i
+
+
+def export_parts(body, joints, parts, parent, prefix, budget_note=""):
+    """Decoupe par piece dominante (+ recouvrement rentre chez l'enfant), pivot sur l'articulation, export FBX"""
+    me = body.data
+    W = {}
+    for part in parts:
+        a = np.zeros(len(me.vertices), dtype=np.float32)
+        me.attributes["w_" + part].data.foreach_get("value", a)
+        W[part] = a
+    stack = np.stack([W[part] for part in parts], 1)
+    primary = {part: set() for part in parts}
+    overlap = {part: set() for part in parts}
+    for f in me.polygons:
+        vs = list(f.vertices)
+        sm = stack[vs].mean(0)
+        main = parts[int(np.argmax(sm))]
+        primary[main].add(f.index)
+        for child, par in parent.items():
+            if main == par and stack[vs, parts.index(child)].max() > 0.12:
+                overlap[child].add(f.index)
+    objs = []
+    for part in parts:
+        if not primary[part]:
+            print("  !! piece vide :", part)
+            continue
+        piece = split_faces(body, primary[part])
+        if overlap[part]:
+            cover = split_faces(body, overlap[part])
+            bm = bmesh.new()
+            bm.from_mesh(cover.data)
+            bm.normal_update()
+            for v in bm.verts:
+                v.co -= v.normal * 0.006
+            bm.to_mesh(cover.data)
+            bm.free()
+            bpy.ops.object.select_all(action="DESELECT")
+            piece.select_set(True)
+            cover.select_set(True)
+            bpy.context.view_layer.objects.active = piece
+            bpy.ops.object.join()
+        pivot = joints[part]
+        set_origin(piece, pivot)
+        piece.name = prefix + "_" + part
+        drop_unused_materials(piece)
+        export_fbx(piece, prefix + "_" + part)
+        piece.location = pivot
+        objs.append(piece)
+    return objs
+
+
+def humanoid(key, prefix, part_of, joint_bones, mat_map, default_slot, height, arm_drop=80.0, elbow=12.0, budget=9000,
+             skip=(), extra=None):
+    """Humanoide a squelette -> pieces Torso, Head, UpperArmL/R, LowerArmL/R, ThighL/R, ShinL/R (pose bras le long du corps)"""
+    arm = [o for o in bpy.data.objects if o.type == "ARMATURE"][0]
+    pbs = arm.pose.bones
+    mw = arm.matrix_world
+
+    def hw(b):
+        return mw @ pbs[b].head
+
+    def tw(b):
+        return mw @ pbs[b].tail
+
+    up = Vector((0, 0, 1))
+    left = hw(joint_bones["UpperArmL"]) - hw(joint_bones["UpperArmR"])
+    left.z = 0
+    left.normalize()
+    forward = left.cross(up).normalized()
+    # Bras le long du corps (modeles livres en T ou en A), avant-bras un peu plies vers l'avant
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        b = joint_bones["UpperArm" + side]
+        d = tw(b) - hw(b)
+        cur = math.degrees(math.atan2(-d.z, Vector((d.x, d.y, 0)).length))
+        rotate_pose_bone(arm, pbs[b], forward, math.radians(sgn * (arm_drop - cur)))
+        rotate_pose_bone(arm, pbs[joint_bones["LowerArm" + side]], left, math.radians(-elbow))
+    bpy.context.view_layer.update()
+    joints_w = {part: hw(b) for part, b in joint_bones.items()}
+
+    body = rigged_body(arm, part_of, HUMAN_PARTS, "Torso", mat_map, default_slot, skip=skip, budget=budget, parent=HAZMAT_PARENT)
+    joints, M = to_game_frame(body, joints_w, forward, height, center_parts=("ThighL", "ThighR"))
+    full = mesh_object(prefix, body.data.copy())
+    preview([full], prefix, Vector((1.0, -0.55, 0.3)))
+    full.hide_render = True
+    if extra:
+        extra(M, joints)
+    export_parts(body, joints, HUMAN_PARTS, HAZMAT_PARENT, prefix)
+    body.hide_render = True
+    JOINTS[key] = {k: ue(v) for k, v in joints.items()}
+    print("  articulations (cm, Unreal) :", JOINTS[key])
+
+
+def process_skinstealer():
+    path = os.path.join(SRC, "skin_stealer.usdz")
+    if not os.path.isfile(path):
+        print("!! introuvable :", path)
+        return
+    print("== Skin-Stealer")
+    load_model(path)
+    # Os sans nom (n15..n67) : colonne n15-17, tete n18-23, bras n24 / n42 (+ main et doigts), jambes n60 / n64
+    groups = [((15, 17), "Torso"), ((18, 23), "Head"), ((24, 24), "UpperArmL"), ((25, 41), "LowerArmL"), ((42, 42), "UpperArmR"),
+              ((43, 59), "LowerArmR"), ((60, 60), "ThighL"), ((61, 63), "ShinL"), ((64, 64), "ThighR"), ((65, 67), "ShinR")]
+
+    def part_of(b):
+        if not (b.startswith("n") and b[1:].isdigit()):
+            return None
+        n = int(b[1:])
+        for (lo, hi), part in groups:
+            if lo <= n <= hi:
+                return part
+        return None
+
+    joints = {"Torso": "n15", "Head": "n18", "UpperArmL": "n24", "LowerArmL": "n25", "UpperArmR": "n42", "LowerArmR": "n43",
+              "ThighL": "n60", "ShinL": "n61", "ThighR": "n64", "ShinR": "n65"}
+    tex = os.path.join(SRC, "skin_tex", "0")
+    if not os.path.isdir(tex):
+        import zipfile
+        with zipfile.ZipFile(path) as z:
+            z.extractall(os.path.join(SRC, "skin_tex"))
+    save_texture_file(os.path.join(tex, "Material.006_baseColor.jpg"), "T_SkinStealer_Flesh", 512)
+    save_texture_file(os.path.join(tex, "Material.003_baseColor.jpg"), "T_SkinStealer_Claw", 512)
+    save_texture_file(os.path.join(tex, "Material.004_baseColor.jpg"), "T_SkinStealer_Eye", 256)
+    mats = {"Material_001": "EyeDark", "Material_002": "SkinStealerFlesh", "Material_003": "StealerClaw", "Material_004": "StealerEye",
+            "Material_005": "StealerEye", "Material_006": "SkinStealerFlesh", "Material_007": "SkinStealerFlesh",
+            "Material_008": "SkinStealerFlesh"}
+    humanoid("SkinStealer", "SM_SkinStealerET", part_of, joints, mats, "SkinStealerFlesh", 2.05, arm_drop=82.0, budget=6500)
+
+
+def process_faceling():
+    path = os.path.join(SRC, "faceling.glb")
+    if not os.path.isfile(path):
+        print("!! introuvable :", path)
+        return
+    print("== Faceling")
+    load_model(path)
+
+    def part_of(b):
+        b = b.lower()
+        if b.startswith("neck") or b.startswith("head"):
+            return "Head"
+        for s in ("l", "r"):
+            S = s.upper()
+            if b.startswith("shoulder." + s):
+                return "UpperArm" + S
+            if b.startswith("foearm." + s) or b.startswith("forearm." + s) or b.startswith("hand." + s):
+                return "LowerArm" + S
+            if b.startswith("thigh." + s):
+                return "Thigh" + S
+            if b.startswith("calf." + s) or b.startswith("foot." + s):
+                return "Shin" + S
+        return "Torso"
+
+    joints = {"Torso": "spine1_11", "Head": "neck_1", "UpperArmL": "shoulder.L_3", "LowerArmL": "foearm.L_2",
+              "UpperArmR": "shoulder.R_5", "LowerArmR": "foearm.R_4", "ThighL": "thigh.L_8", "ShinL": "calf.L_7",
+              "ThighR": "thigh.R_10", "ShinR": "calf.R_9"}
+    # texture integree au .glb (le PNG livre a cote est retourne verticalement par rapport aux UV)
+    for img in bpy.data.images:
+        if img.size[0] > 0:
+            save_texture(img, "T_Faceling", size=512, quality=88)
+            break
+    humanoid("Faceling", "SM_FacelingET", part_of, joints, {"H_Body": "FacelingTex"}, "FacelingTex", 1.78, arm_drop=80.0, budget=4000)
+
+
+def process_partygoer():
+    path = os.path.join(SRC, "partygoer.fbx")
+    if not os.path.isfile(path):
+        print("!! introuvable :", path)
+        return
+    print("== Partygoer")
+    load_model(path)
+    fingers = ("Thumb", "Index", "Mid", "Ring", "Pinky")
+
+    def part_of(b):
+        if any(k in b for k in ("Head", "Neck", "Jaw", "Eye", "Tongue", "Teeth", "Facial")):
+            return "Head"
+        for S in ("L", "R"):
+            if "_%s_Upperarm" % S in b:
+                return "UpperArm" + S
+            if any("_%s_%s" % (S, k) in b for k in ("Forearm", "Hand", "Elbow") + fingers):
+                return "LowerArm" + S
+            if "_%s_Thigh" % S in b:
+                return "Thigh" + S
+            if any("_%s_%s" % (S, k) in b for k in ("Calf", "Foot", "Toe", "Knee")):
+                return "Shin" + S
+        return "Torso"
+
+    joints = {"Torso": "CC_Base_Hip", "Head": "CC_Base_NeckTwist01", "UpperArmL": "CC_Base_L_Upperarm",
+              "LowerArmL": "CC_Base_L_Forearm", "UpperArmR": "CC_Base_R_Upperarm", "LowerArmR": "CC_Base_R_Forearm",
+              "ThighL": "CC_Base_L_Thigh", "ShinL": "CC_Base_L_Calf", "ThighR": "CC_Base_R_Thigh", "ShinR": "CC_Base_R_Calf"}
+    save_texture_file(os.path.join(SRC, "partygoer_BaseColor.jpeg"), "T_Partygoer", 1024)
+    balloon = bpy.data.objects.get("Baloon red")
+
+    def export_balloon(M, joints_game):
+        # Ballon a part (non rigge) : pivot au bout de la ficelle, tenu par la main droite en jeu
+        if not balloon:
+            return
+        me = bake_world(balloon)
+        me.transform(M)
+        b = mesh_object("Balloon", me)
+        single_uv(b)
+        b.data.materials.clear()
+        b.data.materials.append(bpy.data.materials.get("Balloon") or bpy.data.materials.new("Balloon"))
+        for poly in b.data.polygons:
+            poly.material_index = 0
+        co = np.array([tuple(v.co) for v in b.data.vertices])
+        low = co[co[:, 2] < co[:, 2].min() + 0.02]
+        pivot = Vector(low.mean(0))
+        set_origin(b, pivot)
+        b.name = "SM_PartygoerET_Balloon"
+        export_fbx(b, "SM_PartygoerET_Balloon")
+        b.hide_render = True
+        JOINTS.setdefault("PartygoerBalloon", {})["Height"] = round(float((co[:, 2].max() - co[:, 2].min()) * 100.0), 2)
+
+    humanoid("Partygoer", "SM_PartygoerET", part_of, joints, {"Partygoer_LP.003": "PartygoerTex"}, "PartygoerTex", 1.92,
+             arm_drop=80.0, budget=6000, skip=("Baloon red",), extra=export_balloon)
+
+
+def process_hound():
+    path = os.path.join(SRC, "hound.blend")
+    if not os.path.isfile(path):
+        print("!! introuvable :", path)
+        return
+    print("== Hound")
+    load_model(path)
+    arm = [o for o in bpy.data.objects if o.type == "ARMATURE"][0]
+    pbs = arm.pose.bones
+    mw = arm.matrix_world
+
+    def hw(b):
+        return mw @ pbs[b].head
+
+    up = Vector((0, 0, 1))
+    forward = hw("Bone.003") - hw("Bone")
+    forward.z = 0
+    forward.normalize()
+    left = up.cross(forward)
+    center = (hw("Bone.025") + hw("Bone.029") + hw("Bone.017") + hw("Bone.021")) / 4
+
+    def side(b):
+        return "L" if (hw(b) - center).dot(left) > 0 else "R"
+
+    legs = {"Front": ("Bone.025", "Bone.029"), "Back": ("Bone.017", "Bone.021")}
+    lower = {"Bone.025": ("Bone.026", "Bone.027", "Bone.028", "Bone.030"), "Bone.029": ("Bone.031", "Bone.032", "Bone.033", "Bone.034"),
+             "Bone.017": ("Bone.018", "Bone.019", "Bone.020"), "Bone.021": ("Bone.022", "Bone.023", "Bone.024")}
+    bone_part = {"Bone": "Body", "Bone.001": "Body", "Bone.002": "Body"}
+    joints_w = {"Body": hw("Bone.002"), "Head": hw("Bone.003")}
+    for end, (a, b) in legs.items():
+        for upper_bone in (a, b):
+            S = side(upper_bone)
+            bone_part[upper_bone] = end + "Upper" + S
+            for lb in lower[upper_bone]:
+                bone_part[lb] = end + "Lower" + S
+            joints_w[end + "Upper" + S] = hw(upper_bone)
+            joints_w[end + "Lower" + S] = hw(lower[upper_bone][0])
+
+    def part_of(b):
+        if b in bone_part:
+            return bone_part[b]
+        return "Head" if b.startswith("Bone.0") else None
+
+    mats = {"Material.002": "HoundSkin", "Material": "HoundHair", "Fur Material": "HoundHair", "Material.001": "HoundFace",
+            "Material.003": "HoundMouth", "Material.004": "GlowAmberEye", "Material.007": "EyeDark", "Material.005": "HoundTongue",
+            "Material.006": "HoundTeeth"}
+    save_texture_file(os.path.join(SRC, "hound_Material.png"), "T_Hound", 1024)
+    feet = min(hw(b).z for b in ("Bone.028", "Bone.033", "Bone.020", "Bone.024"))
+    body = rigged_body(arm, part_of, HOUND_PARTS, "Body", mats, "HoundSkin", skip=("Cube.007",), budget=6500, drop_below=feet - 0.6,
+                       thin={"Mesh": 5}, parent=HOUND_PARENT)
+    joints, _ = to_game_frame(body, joints_w, forward, 1.15, center_parts=("FrontUpperL", "FrontUpperR", "BackUpperL", "BackUpperR"))
+    full = mesh_object("SM_HoundET", body.data.copy())
+    preview([full], "SM_HoundET", Vector((0.7, -1.0, 0.35)))
+    full.hide_render = True
+    export_parts(body, joints, HOUND_PARTS, HOUND_PARENT, "SM_HoundET")
+    body.hide_render = True
+    JOINTS["Hound"] = {k: ue(v) for k, v in joints.items()}
+    print("  articulations (cm, Unreal) :", JOINTS["Hound"])
+
+
+# ---------------------------------------------------------------------------
+# Smiler et Clump refaits d'apres les images fournies (pas de modele source : construction procedurale)
+# ---------------------------------------------------------------------------
+def mat_slot(obj, name):
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    if name not in [x.name for x in obj.data.materials]:
+        obj.data.materials.append(m)
+    return [x.name for x in obj.data.materials].index(name)
+
+
+def add_geometry(bm, verts, faces, mat):
+    vs = [bm.verts.new(v) for v in verts]
+    for f in faces:
+        try:
+            face = bm.faces.new([vs[i] for i in f])
+            face.material_index = mat
+        except ValueError:
+            pass
+
+
+def spike(bm, base, tip, width, depth, mat, twist=0.0):
+    """Dent / pointe : pyramide a base losange, de base vers tip"""
+    axis = (tip - base).normalized()
+    side = axis.cross(Vector((1, 0, 0)))
+    if side.length < 1e-3:
+        side = axis.cross(Vector((0, 1, 0)))
+    side.normalize()
+    side = Matrix.Rotation(twist, 4, axis) @ side
+    out = axis.cross(side).normalized()
+    v = [base + side * width, base + out * depth, base - side * width, base - out * depth, tip]
+    add_geometry(bm, v, [(0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4), (3, 2, 1, 0)], mat)
+
+
+def lumpy_sphere(bm, radius, subdiv, amp, mat, seed, squash=(1.0, 1.0, 1.0)):
+    rng = np.random.default_rng(seed)
+    ret = bmesh.ops.create_icosphere(bm, subdivisions=subdiv, radius=radius)
+    centers = [Vector(rng.normal(size=3)).normalized() for _ in range(14)]
+    for v in ret["verts"]:
+        n = v.co.normalized()
+        bump = sum(math.exp(-((n - c).length ** 2) / 0.12) for c in centers) * amp
+        v.co = Vector((n.x * squash[0], n.y * squash[1], n.z * squash[2])) * (radius + bump + rng.uniform(-amp, amp) * 0.25)
+    for f in bm.faces:
+        if f.verts[0] in set(ret["verts"]):
+            f.material_index = mat
+    return ret["verts"]
+
+
+def process_smiler():
+    """Smiler (image fournie) : deux grands yeux ovales lumineux et un sourire de dents fines et irregulieres,
+    flottant dans une masse noire a peine visible. Origine au centre, regard vers +X."""
+    print("== Smiler")
+    reset()
+    me = bpy.data.meshes.new("SmilerET")
+    obj = mesh_object("SM_SmilerET", me)
+    dark = mat_slot(obj, "SmilerDark")
+    glow = mat_slot(obj, "Glow")
+    rng = np.random.default_rng(7)
+    bm = bmesh.new()
+    # Masse sombre (on la devine a la lampe)
+    head = lumpy_sphere(bm, 0.40, 4, 0.03, dark, 3, squash=(0.8, 1.0, 1.0))
+    # visage lisse (pas de bosses devant) : les yeux et le sourire posent sur l'ellipsoide
+    for v in head:
+        n = Vector((v.co.x / 0.8, v.co.y, v.co.z)).normalized()
+        w = min(1.0, max(0.0, (n.x - 0.15) / 0.35))
+        v.co = v.co.lerp(Vector((n.x * 0.8, n.y, n.z)) * 0.40, w)
+    # Yeux : grands ovales legerement inclines vers l'exterieur
+    for sgn in (-1.0, 1.0):
+        r = bmesh.ops.create_uvsphere(bm, u_segments=14, v_segments=8, radius=1.0)
+        M = (Matrix.Translation((0.30, sgn * 0.165, 0.12)) @ Matrix.Rotation(sgn * math.radians(-14), 4, "X")
+             @ Matrix.Diagonal((0.035, 0.075, 0.058, 1.0)))
+        bmesh.ops.transform(bm, matrix=M, verts=r["verts"])
+        for f in {f for v in r["verts"] for f in v.link_faces}:
+            f.material_index = glow
+
+    # Sourire : levres en croissant (coins hauts, centre bas), sur la face bombee
+    W = 0.30
+
+    def front(y, z):
+        # sur la surface de la masse (ellipsoide 0,32 x 0,40 x 0,40) : le sourire l'enveloppe sans en sortir
+        return 0.32 * math.sqrt(max(0.0, 1.0 - (y / 0.40) ** 2 - (z / 0.40) ** 2)) + 0.012
+
+    def upper(y):
+        # coins releves jusque sous les yeux, centre bas : un croissant
+        return 0.05 - 0.20 * max(0.0, 1.0 - (y / W) ** 2) ** 1.2
+
+    def lower(y):
+        t = max(0.0, 1.0 - (y / W) ** 2)
+        return upper(y) - 0.12 * t ** 0.7
+
+    # fond de bouche noir (cache l'interieur)
+    n = 24
+    strip = []
+    for i in range(n + 1):
+        y = -W + 2 * W * i / n
+        zu, zl = upper(y) + 0.01, lower(y) - 0.01
+        strip += [Vector((front(y, zu) - 0.008, y, zu)), Vector((front(y, zl) - 0.008, y, zl))]
+    add_geometry(bm, strip, [(2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1) for i in range(n)], dark)
+    # dents du haut (vers le bas) et du bas (vers le haut), intercalees, longueurs irregulieres
+    count = 38
+    for row in (0, 1):
+        for i in range(count):
+            u = (i + 0.5 + row * 0.5) / (count + 0.5) * 2.0 - 1.0
+            y = u * W * 0.97
+            t = max(0.0, 1.0 - u * u)
+            gap = upper(y) - lower(y)
+            length = gap * rng.uniform(0.75, 1.15) + 0.01
+            z0 = upper(y) if row == 0 else lower(y)
+            z1 = z0 - length if row == 0 else z0 + length
+            y1 = y + rng.uniform(-0.01, 0.01) - u * 0.012
+            base = Vector((front(y, z0), y, z0))
+            tip = Vector((front(y1, z1) + 0.004, y1, z1))
+            width = (0.62 * W / count) * (0.8 + 0.4 * t)
+            spike(bm, base, tip, width, 0.012, glow, twist=rng.uniform(-0.3, 0.3))
+    # longues pointes aux coins, qui remontent vers les yeux (comme sur l'image), en restant sur le visage
+    for sgn in (-1.0, 1.0):
+        for k in range(5):
+            y = sgn * (W - 0.012 * k)
+            z0 = upper(y) - 0.01 * k
+            y1 = y - sgn * rng.uniform(0.0, 0.025)
+            z1 = z0 + 0.04 + 0.02 * k
+            spike(bm, Vector((front(y, z0), y, z0)), Vector((front(y1, z1) + 0.004, y1, z1)), 0.010, 0.008, glow)
+    bm.normal_update()
+    bm.to_mesh(me)
+    bm.free()
+    for poly in me.polygons:
+        poly.use_smooth = True
+    export_fbx(obj, "SM_SmilerET")
+    preview([obj], "SM_SmilerET", Vector((1.0, -0.35, 0.1)))
+
+
+def skin_limb(nodes, edges, radii, root=0, subdiv=1):
+    """Membre organique : graphe de points + rayons -> maillage (modificateur Peau + subdivision)"""
+    me = bpy.data.meshes.new("limb")
+    me.from_pydata([tuple(p) for p in nodes], edges, [])
+    obj = mesh_object("limb", me)
+    mod = obj.modifiers.new("skin", "SKIN")
+    for i, r in enumerate(radii):
+        sv = me.skin_vertices[0].data[i]
+        sv.radius = r if isinstance(r, tuple) else (r, r)
+        sv.use_root = (i == root)
+    if subdiv:
+        s = obj.modifiers.new("sub", "SUBSURF")
+        s.levels = subdiv
+    return obj
+
+
+def make_arm(root, d, rng, down):
+    """Bras humain (epaule -> coude -> poignet -> main a cinq doigts) qui sort de la masse dans la direction d"""
+    d = d.normalized()
+    side = d.cross(Vector((0, 0, 1)))
+    if side.length < 1e-3:
+        side = Vector((0, 1, 0))
+    side.normalize()
+    upper_len = rng.uniform(0.26, 0.36)
+    fore_len = rng.uniform(0.26, 0.34)
+    elbow = root + d * upper_len + Vector(rng.normal(scale=0.05, size=3))
+    if down:
+        # bras qui prend appui au sol (la masse se deplace sur ses mains)
+        wrist = Vector((elbow.x + d.x * 0.12, elbow.y + d.y * 0.12, -0.58))
+    else:
+        bend = (d + Vector(rng.normal(scale=0.6, size=3))).normalized()
+        wrist = elbow + bend * fore_len
+    hand_dir = (wrist - elbow).normalized()
+    if down:
+        hand_dir = Vector((d.x, d.y, 0.0)).normalized() if Vector((d.x, d.y, 0)).length > 1e-3 else Vector((1, 0, 0))
+    palm = wrist + hand_dir * 0.07
+    nodes = [root, elbow, wrist, palm]
+    edges = [(0, 1), (1, 2), (2, 3)]
+    radii = [(0.055, 0.055), (0.042, 0.042), (0.03, 0.026), (0.036, 0.016)]
+    fan = hand_dir.cross(side).normalized() if not down else side
+    for k, spread in enumerate((-0.6, -0.2, 0.2, 0.6)):
+        fd = (hand_dir + fan * spread * 0.5).normalized()
+        if down:
+            fd = (fd + Vector((0, 0, -0.25))).normalized()
+        a = palm + fan * spread * 0.035
+        b = a + fd * rng.uniform(0.045, 0.06)
+        c = b + (fd + Vector((0, 0, -0.3 if down else 0.0)) + Vector(rng.normal(scale=0.25, size=3))).normalized() * 0.04
+        i0 = len(nodes)
+        nodes += [a, b, c]
+        edges += [(3, i0), (i0, i0 + 1), (i0 + 1, i0 + 2)]
+        radii += [(0.011, 0.011), (0.0095, 0.0095), (0.008, 0.008)]
+    tb = wrist + hand_dir * 0.03 - fan * 0.04
+    tc = tb + (hand_dir - fan * 0.7).normalized() * 0.05
+    i0 = len(nodes)
+    nodes += [tb, tc]
+    edges += [(2, i0), (i0, i0 + 1)]
+    radii += [(0.012, 0.012), (0.009, 0.009)]
+    return skin_limb(nodes, edges, radii)
+
+
+def process_clump():
+    """Clump (image fournie) : un amas de bras humains autour d'une bouche ronde bordee de dents.
+    Origine au centre de la masse (0,60 cm au-dessus du sol en jeu), bouche vers +X. Les bras sont regroupes en
+    huit faisceaux exportes a part pour se tordre en jeu."""
+    print("== Clump")
+    reset()
+    rng = np.random.default_rng(11)
+    core_me = bpy.data.meshes.new("ClumpCore")
+    core = mesh_object("SM_ClumpET_Core", core_me)
+    flesh = mat_slot(core, "ClumpFlesh")
+    mouth = mat_slot(core, "ClumpMouth")
+    teeth = mat_slot(core, "ClumpTeeth")
+    bm = bmesh.new()
+    lumpy_sphere(bm, 0.42, 4, 0.05, flesh, 5, squash=(0.95, 1.0, 0.92))
+    # Bouche ronde (facon lamproie) : gorge sombre, levre epaisse, trois couronnes de dents tournees vers le centre
+    R = 0.17
+    fx = 0.40
+    lip = bmesh.ops.create_circle(bm, cap_ends=False, radius=1.0, segments=24)
+    ring_out = lip["verts"]
+    for v in ring_out:
+        y, z = v.co.x, v.co.y
+        v.co = Vector((fx - 0.02, y * (R + 0.06), z * (R + 0.06)))
+    throat = []
+    for k, (rr, xx) in enumerate(((R, fx), (R * 0.7, fx - 0.12), (R * 0.25, fx - 0.26))):
+        ring = bmesh.ops.create_circle(bm, cap_ends=(k == 2), radius=1.0, segments=24)["verts"]
+        for v in ring:
+            y, z = v.co.x, v.co.y
+            v.co = Vector((xx, y * rr, z * rr))
+        throat.append(ring)
+    def bridge(a, b, mat):
+        sa, sb = set(a), set(b)
+        edges = {e for v in a for e in v.link_edges if e.other_vert(v) in sa} | {e for v in b for e in v.link_edges if e.other_vert(v) in sb}
+        r = bmesh.ops.bridge_loops(bm, edges=list(edges))
+        for f in r["faces"]:
+            f.material_index = mat
+    bridge(ring_out, throat[0], flesh)
+    bridge(throat[0], throat[1], mouth)
+    bridge(throat[1], throat[2], mouth)
+    for f in bm.faces:
+        if all(v in set(throat[2]) for v in f.verts):
+            f.material_index = mouth
+    for ring_i, (rr, xx, ln) in enumerate(((R * 0.98, fx - 0.01, 0.075), (R * 0.82, fx - 0.06, 0.06), (R * 0.62, fx - 0.11, 0.05))):
+        cnt = 22 - ring_i * 4
+        for i in range(cnt):
+            a = 2 * math.pi * (i + 0.5 * ring_i) / cnt
+            base = Vector((xx, math.cos(a) * rr, math.sin(a) * rr))
+            inward = Vector((-0.35, -math.cos(a), -math.sin(a))).normalized()
+            spike(bm, base, base + inward * ln * rng.uniform(0.8, 1.25), 0.012, 0.01, teeth, twist=rng.uniform(-0.2, 0.2))
+    bm.normal_update()
+    bm.to_mesh(core_me)
+    bm.free()
+    for poly in core_me.polygons:
+        poly.use_smooth = True
+
+    # Bras : une trentaine, partout sauf devant la bouche ; ceux du bas prennent appui au sol
+    dirs = []
+    while len(dirs) < 30:
+        d = Vector(rng.normal(size=3)).normalized()
+        if d.x > 0.55 or any((d - o).length < 0.42 for o in dirs):
+            continue
+        dirs.append(d)
+    bundles = [Vector(c).normalized() for c in ((1, 1, 1), (1, -1, 1), (-1, 1, 1), (-1, -1, 1), (1, 1, -1), (1, -1, -1), (-1, 1, -1), (-1, -1, -1))]
+    groups = {k: [] for k in range(8)}
+    for d in dirs:
+        root = d * 0.36
+        arm = make_arm(root, d, rng, down=d.z < -0.35)
+        k = max(range(8), key=lambda i: d.dot(bundles[i]))
+        groups[k].append((arm, root))
+    joints = {}
+    objs = [core]
+    for k, items in groups.items():
+        if not items:
+            continue
+        meshes = []
+        for arm, root in items:
+            me = bake_world(arm)
+            o = mesh_object("A", me)
+            o.data.materials.append(bpy.data.materials.get("ClumpFlesh"))
+            meshes.append(o)
+            bpy.data.objects.remove(arm)
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in meshes:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = meshes[0]
+        bpy.ops.object.join()
+        bundle = meshes[0]
+        decimate(bundle, 0.42)
+        for poly in bundle.data.polygons:
+            poly.use_smooth = True
+        pivot = sum((r for _, r in items), Vector()) / len(items)
+        set_origin(bundle, pivot)
+        bundle.name = "SM_ClumpET_Arm%d" % k
+        export_fbx(bundle, "SM_ClumpET_Arm%d" % k)
+        bundle.location = pivot
+        joints["Arm%d" % k] = ue(pivot)
+        objs.append(bundle)
+    export_fbx(core, "SM_ClumpET_Core")
+    preview(objs, "SM_ClumpET", Vector((1.0, -0.6, 0.25)))
+    JOINTS["Clump"] = joints
+    print("  faisceaux de bras (cm, Unreal) :", joints)
+
+
 if __name__ == "__main__":
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    todo = args or ["hazmat", "bacteria", "moth"]
+    todo = args or ["hazmat", "bacteria", "moth", "skinstealer", "faceling", "partygoer", "hound", "smiler", "clump"]
     if "hazmat" in todo:
         process_hazmat()
     if "bacteria" in todo:
         process_bacteria()
     if "moth" in todo:
         process_moth()
+    if "skinstealer" in todo:
+        process_skinstealer()
+    if "faceling" in todo:
+        process_faceling()
+    if "partygoer" in todo:
+        process_partygoer()
+    if "hound" in todo:
+        process_hound()
+    if "smiler" in todo:
+        process_smiler()
+    if "clump" in todo:
+        process_clump()
     out = os.path.join(OUT_MESH, "user_models.json")
     old = {}
     if os.path.isfile(out):

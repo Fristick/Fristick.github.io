@@ -120,6 +120,19 @@ namespace
 				{ TEXT("HazmatGlass"), TEXT("T_Grime"), FLinearColor(0.015f, 0.02f, 0.025f), 0.04f, 0.7f, 1.f },
 				{ TEXT("MothTex"), TEXT("T_Deathmoth"), FLinearColor(1.f, 1.f, 1.f), 0.78f, 0.f, 1.f },
 				{ TEXT("BacteriaSkin"), TEXT("T_Grime"), FLinearColor(0.006f, 0.006f, 0.008f), 0.22f, 0.f, 1.f },
+				// v3.5 : Skin-Stealer, Faceling, Partygoer, Hound fournis ; Smiler et Clump refaits d'apres les images
+				{ TEXT("SkinStealerFlesh"), TEXT("T_SkinStealer_Flesh"), FLinearColor(1.f, 1.f, 1.f), 0.3f, 0.f, 1.f },
+				{ TEXT("StealerClaw"), TEXT("T_SkinStealer_Claw"), FLinearColor(1.f, 1.f, 1.f), 0.35f, 0.f, 1.f },
+				{ TEXT("StealerEye"), TEXT("T_SkinStealer_Eye"), FLinearColor(1.f, 1.f, 1.f), 0.08f, 0.f, 1.f },
+				{ TEXT("FacelingTex"), TEXT("T_Faceling"), FLinearColor(1.f, 1.f, 1.f), 0.8f, 0.f, 1.f },
+				{ TEXT("PartygoerTex"), TEXT("T_Partygoer"), FLinearColor(1.f, 1.f, 1.f), 0.5f, 0.f, 1.f },
+				{ TEXT("HoundSkin"), TEXT("T_Hound"), FLinearColor(1.f, 1.f, 1.f), 0.7f, 0.f, 1.f },
+				{ TEXT("HoundHair"), TEXT("T_Grime"), FLinearColor(0.012f, 0.011f, 0.011f), 0.35f, 0.f, 1.f },
+				{ TEXT("HoundFace"), TEXT("T_Skin"), FLinearColor(0.42f, 0.32f, 0.28f), 0.6f, 0.f, 2.f },
+				{ TEXT("HoundTongue"), TEXT("T_Skin"), FLinearColor(0.75f, 0.28f, 0.35f), 0.3f, 0.f, 2.f },
+				{ TEXT("ClumpFlesh"), TEXT("T_Skin"), FLinearColor(0.86f, 0.7f, 0.6f), 0.45f, 0.f, 2.f },
+				{ TEXT("ClumpMouth"), TEXT("T_Grime"), FLinearColor(0.12f, 0.015f, 0.015f), 0.25f, 0.f, 1.f },
+				{ TEXT("ClumpTeeth"), TEXT("T_Grime"), FLinearColor(0.72f, 0.58f, 0.32f), 0.4f, 0.f, 1.f },
 			};
 			// Les cles les plus longues d'abord ("DarkMetal" avant "Metal")
 			S.Sort([](const FSlotStyle& A, const FSlotStyle& B) { return FCString::Strlen(A.Key) > FCString::Strlen(B.Key); });
@@ -770,6 +783,10 @@ FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)
 	if (SlotName.Contains(TEXT("GlowRed"), ESearchCase::IgnoreCase))
 	{
 		return FLinearColor(1.f, 0.08f, 0.04f) * 40.f;
+	}
+	if (SlotName.Contains(TEXT("GlowAmber"), ESearchCase::IgnoreCase))
+	{
+		return FLinearColor(1.f, 0.55f, 0.12f) * 30.f; // yeux du Hound sous ses cheveux
 	}
 	if (SlotName.Contains(TEXT("GlowWarm"), ESearchCase::IgnoreCase))
 	{

@@ -29,17 +29,27 @@ void ABRHallucination::Init(EBRHallucination InForm, ABRCharacter* InViewer)
 	{
 		// Une silhouette sans visage (modele du Faceling) d'un noir d'encre, un peu trop grande, un peu voutee
 		TMap<FString, FLinearColor> Tints;
-		Tints.Add(TEXT("Cloth"), FLinearColor(0.004f, 0.004f, 0.005f));
-		Tints.Add(TEXT("Skin"), FLinearColor(0.004f, 0.004f, 0.005f));
-		FBRHumanoidSpec Spec = FBRHumanoidSpec::Simple(100.f, 160.f, 20.f, 10.f, 8.f, 36.f, 52.f, 7.f);
-		Spec.ArmPitch = 2.f;
-		Spec.ArmRoll = 3.f;
-		BRRig::BuildHumanoid(this, Root, TEXT("SM_Faceling"), Spec, &Tints, Parts, false);
+		const FLinearColor Ink(0.004f, 0.004f, 0.005f);
+		Tints.Add(TEXT("Faceling"), Ink);
+		Tints.Add(TEXT("Cloth"), Ink);
+		Tints.Add(TEXT("Skin"), Ink);
+		if (BRRig::HasMesh(this, TEXT("SM_FacelingET_Torso")))
+		{
+			BRRig::BuildHumanoid(this, Root, TEXT("SM_FacelingET"), FBRHumanoidSpec::FacelingET(), &Tints, Parts, false);
+		}
+		else
+		{
+			FBRHumanoidSpec Spec = FBRHumanoidSpec::Simple(100.f, 160.f, 20.f, 10.f, 8.f, 36.f, 52.f, 7.f);
+			Spec.ArmPitch = 2.f;
+			Spec.ArmRoll = 3.f;
+			BRRig::BuildHumanoid(this, Root, TEXT("SM_Faceling"), Spec, &Tints, Parts, false);
+		}
 	}
 	else
 	{
 		TArray<UMaterialInstanceDynamic*> Glows;
-		BRRig::AddPart(this, Root, TEXT("SM_Smiler"), FVector(0.f, 0.f, 140.f), FVector(70.f, 70.f, 90.f), 0.f, nullptr, Parts, nullptr, false,
+		const TCHAR* SmilerMesh = BRRig::HasMesh(this, TEXT("SM_SmilerET")) ? TEXT("SM_SmilerET") : TEXT("SM_Smiler");
+		BRRig::AddPart(this, Root, SmilerMesh, FVector(0.f, 0.f, 140.f), FVector(70.f, 70.f, 90.f), 0.f, nullptr, Parts, nullptr, false,
 			true, 0.5f, &Glows);
 		for (UMaterialInstanceDynamic* G : Glows)
 		{

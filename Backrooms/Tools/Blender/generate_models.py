@@ -1546,6 +1546,19 @@ def main():
     user_hazmat = os.path.isfile(os.path.join(OUT_MESH, "SM_Hazmat_Torso.fbx"))
     if user_hazmat and "SM_Hazmat" in names and len(names) > 1:
         names.remove("SM_Hazmat")
+    # Entites refaites a partir des modeles et images fournis (import_user_models.py) : plus de version procedurale
+    superseded = {
+        "SM_HoundET_Body": ["SM_Hound_Body", "SM_Hound_Head", "SM_Hound_UpperLeg", "SM_Hound_LowerLeg"],
+        "SM_FacelingET_Torso": ["SM_Faceling_" + p for p in ("Torso", "Head", "UpperArm", "LowerArm", "Thigh", "Shin")],
+        "SM_PartygoerET_Torso": ["SM_Partygoer_" + p for p in ("Torso", "Head", "UpperArm", "LowerArm", "Thigh", "Shin", "Balloon")],
+        "SM_SkinStealerET_Torso": ["SM_SkinStealer_" + p for p in ("Torso", "Head", "UpperArm", "LowerArm", "Thigh", "Shin")],
+        "SM_SmilerET": ["SM_Smiler"],
+        "SM_ClumpET_Core": ["SM_Clump"],
+    }
+    if len(names) > 1:
+        for marker, olds in superseded.items():
+            if os.path.isfile(os.path.join(OUT_MESH, marker + ".fbx")):
+                names = [n for n in names if n not in olds]
     print("Export FBX ->", OUT_MESH)
     for n in names:
         build(n, preview)
