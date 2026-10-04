@@ -95,6 +95,10 @@ protected:
 	/** Prises electriques, grilles d'aeration le long d'un mur */
 	void AddWallDetails(bool bAlongY, float Fixed, float A, float B);
 	void BuildCellProps(int32 X, int32 Y);
+	/** Parking souterrain (Niveau 1) : poutres du plafond, marquages au sol, bandes au pied des piliers */
+	void BuildGarage();
+	/** Trait de peinture au sol (marquage du parking), legerement au-dessus du beton */
+	void AddFloorPaint(const FVector& Center, float Length, float Width, float Yaw, bool bYellow);
 	/** Sol cellule par cellule avec bassins profonds (Niveau 37) */
 	void BuildPools();
 	/** Trottoirs carreles le long des murs, marche immergee, estrade du point de depart (Niveau 37) */

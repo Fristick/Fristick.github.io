@@ -93,6 +93,8 @@ struct FBRSurface
 	FLinearColor Emissive = FLinearColor::Black;
 	float Caustics = 0.f;     // reflets d'eau animes (Poolrooms)
 	float FloorGrime = 0.f;   // salete au pied des murs
+	float Puddles = 0.f;      // v4.1 : part du sol couverte de flaques (reflets ray traces), 0..1
+	float Wetness = 0.f;      // v4.1 : sol mouille (plus sombre, plus brillant), 0..1
 
 	FBRSurface() {}
 	FBRSurface(FName InTex, const FLinearColor& InTint, float InScale, float InRough = 0.85f, float InGrime = 0.35f)
@@ -100,8 +102,8 @@ struct FBRSurface
 
 	FString Key() const
 	{
-		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f"), *Texture.ToString(),
-			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime);
+		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f"), *Texture.ToString(),
+			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime, Puddles, Wetness);
 	}
 };
 
@@ -242,6 +244,11 @@ struct FBRLevelDef
 	// --- v3.8 : Niveau 4 d'apres la scene fournie ---
 	/** Zones de bureaux cloisonnes (rangees de petits bureaux et allees) : proportion des zones de 12 x 12 cellules */
 	float CubicleZoneChance = 0.f;
+	// --- v4.1 : Niveau 1 en parking souterrain ---
+	/** Places et fleches peintes au sol, bandes jaunes et noires au pied des piliers, poutres au plafond */
+	bool bGarage = false;
+	/** Couleur de la bande peinte le long des murs du parking */
+	FLinearColor GarageStripe = FLinearColor(0.12f, 0.42f, 0.55f);
 
 	// --- v3.2 : Niveau 0 ---
 	/** Une entite fait des rondes autour du joueur (elle passe regulierement dans son champ de vision) */

@@ -7,6 +7,7 @@
 #include "BRKeys.h"
 #include "BRLevels.h"
 #include "BRPlayerController.h"
+#include "BRSave.h"
 #include "BRWorld.h"
 
 #include "CanvasItem.h"
@@ -57,6 +58,7 @@ namespace
 		Btn_MenuLevelPrev = 980,
 		Btn_MenuLevelNext = 981,
 		Btn_MenuCard = 990,      // 990..996 : cartes du carrousel des niveaux (993 = carte centrale)
+		Btn_SaveDelete = 1500,   // 1500 + emplacement : corbeille d'une partie
 		Btn_KeySlot = 1000       // 1000 + action * 3 + case
 	};
 
@@ -769,6 +771,10 @@ void ABRHUD::DrawHUD()
 		DrawInventory(PC, C, W);
 	}
 	DrawMessages(Dt);
+	if (PC && PC->GetActiveSave() && PC->GetTimeSinceSave() < 3.f && !bInv)
+	{
+		DrawSaveIndicator(PC->GetTimeSinceSave());
+	}
 	if (W)
 	{
 		if (W->GetGlitch() > 0.01f)
@@ -963,7 +969,8 @@ void ABRHUD::MenuCard(int32 Item, float X, float Y, float W, float H, const FStr
 	}
 }
 
-void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHAR* IconName, bool bPrimary, bool bInteractive, float Alpha)
+void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHAR* IconName, bool bPrimary, bool bInteractive, float Alpha, bool bDanger,
+	bool bDisabled)
 {
 	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
 	if (!PC || Alpha <= 0.003f)
@@ -975,16 +982,21 @@ void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHA
 	Sel = FMath::FInterpTo(Sel, PC->GetMenuCursor() == Item ? 1.f : 0.f, UiDt, 14.f);
 	const float S = Smooth(Sel);
 	const FLinearColor DarkInk(0.07f, 0.055f, 0.02f, 1.f);
-	const FLinearColor Fill = bPrimary ? Mix(FLinearColor(0.86f, 0.68f, 0.16f, 0.92f), FLinearColor(1.f, 0.84f, 0.26f, 1.f), S)
-									   : Mix(FLinearColor(0.05f, 0.045f, 0.03f, 0.82f), FLinearColor(1.f, 0.82f, 0.22f, 0.97f), S);
-	const bool bDarkText = bPrimary || S > 0.5f;
-	Glow(X + W * 0.5f, Y + H * 0.5f, W * 0.8f, H * 1.7f, FLinearColor(1.f, 0.78f, 0.25f, (bPrimary ? 0.08f + 0.12f * S : 0.14f * S) * Alpha));
+	// Couleur d'accent : jaune, rouge (suppression) ou gris (bouton inactif : niveau verrouille)
+	const FLinearColor Accent = bDisabled ? FLinearColor(0.42f, 0.4f, 0.36f, 1.f) : (bDanger ? FLinearColor(0.9f, 0.3f, 0.24f, 1.f) : Yellow);
+	const FLinearColor Fill = bPrimary ? Mix(FLinearColor(Accent.R * 0.86f, Accent.G * 0.83f, Accent.B * 0.75f, 0.92f), FLinearColor(Accent.R, Accent.G, Accent.B, 1.f), S)
+									   : Mix(FLinearColor(0.05f, 0.045f, 0.03f, 0.82f), FLinearColor(Accent.R, Accent.G, Accent.B, 0.97f), S);
+	const bool bDarkText = (bPrimary || S > 0.5f) && !bDisabled;
+	if (!bDisabled)
+	{
+		Glow(X + W * 0.5f, Y + H * 0.5f, W * 0.8f, H * 1.7f, WithAlpha(Accent, (bPrimary ? 0.08f + 0.12f * S : 0.14f * S) * Alpha));
+	}
 	RoundRect(X, Y + 4.f * U, W, H, H * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.3f * Alpha));
 	RoundRect(X, Y, W, H, H * 0.5f, WithAlpha(Fill, Alpha));
 	Gradient(X + H * 0.5f, Y + 1.f * U, W - H, H * 0.45f, FLinearColor(1.f, 1.f, 1.f, 0.08f * Alpha), 2);
 	if (bPrimary)
 	{
-		RoundRect(X - 4.f * U, Y - 4.f * U, W + 8.f * U, H + 8.f * U, H * 0.5f + 4.f * U, FLinearColor(1.f, 0.9f, 0.5f, 0.6f * S * Alpha), true);
+		RoundRect(X - 4.f * U, Y - 4.f * U, W + 8.f * U, H + 8.f * U, H * 0.5f + 4.f * U, FLinearColor(Accent.R, Accent.G, Accent.B, 0.6f * S * Alpha), true);
 	}
 	else
 	{
@@ -995,11 +1007,12 @@ void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHA
 	const float IS = 18.f * U;
 	const float Total = IS + 12.f * U + LS.X;
 	const float TX = X + (W - Total) * 0.5f;
+	const FLinearColor TextC = bDisabled ? FLinearColor(0.85f, 0.82f, 0.75f, 0.8f) : (bDarkText ? DarkInk : Ink);
 	if (UTexture* T = UiTex(IconName))
 	{
-		DrawTexture(T, TX, Y + (H - IS) * 0.5f, IS, IS, 0.f, 0.f, 1.f, 1.f, WithAlpha(bDarkText ? DarkInk : Yellow, Alpha), BLEND_Translucent);
+		DrawTexture(T, TX, Y + (H - IS) * 0.5f, IS, IS, 0.f, 0.f, 1.f, 1.f, WithAlpha(bDisabled ? TextC : (bDarkText ? DarkInk : Accent), Alpha), BLEND_Translucent);
 	}
-	TextF(Label, TX + IS + 12.f * U, Y + (H - LS.Y) * 0.5f, WithAlpha(bDarkText ? DarkInk : Ink, Alpha), 14.5f, EUiWeight::Bold, EUiAlign::Left, false);
+	TextF(Label, TX + IS + 12.f * U, Y + (H - LS.Y) * 0.5f, WithAlpha(TextC, Alpha), 14.5f, EUiWeight::Bold, EUiAlign::Left, false);
 	if (bInteractive)
 	{
 		AddButton(Btn_Menu + Item, X, Y, W, H);
@@ -1044,7 +1057,7 @@ void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
 	const float U = Ui();
 	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	TextF(TEXT("v4.0   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
+	TextF(TEXT("v4.1   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
 		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
 	// Message de connexion / d'erreur reseau : pastille en haut au centre
 	if (!PC->GetMenuStatus().IsEmpty())
@@ -1091,7 +1104,7 @@ void ABRHUD::DrawMenu()
 
 	const float A = EaseOut(MenuIntro / 1.4f);
 	const EBRMenuPage P = PC->GetMenuPage();
-	DrawMenuBackdrop(P == EBRMenuPage::Solo || P == EBRMenuPage::Join, A);
+	DrawMenuBackdrop(P == EBRMenuPage::Solo || P == EBRMenuPage::Join || P == EBRMenuPage::NewSave, A);
 	switch (P)
 	{
 	case EBRMenuPage::Main:
@@ -1105,6 +1118,12 @@ void ABRHUD::DrawMenu()
 		break;
 	case EBRMenuPage::Join:
 		DrawMenuJoin(PC, bInteractive);
+		break;
+	case EBRMenuPage::Saves:
+		DrawMenuSaves(PC, bInteractive);
+		break;
+	case EBRMenuPage::NewSave:
+		DrawMenuNewSave(PC, bInteractive);
 		break;
 	}
 	DrawMenuFooter(PC, A);
@@ -1135,8 +1154,16 @@ void ABRHUD::DrawMenuMain(ABRPlayerController* PC, bool bInteractive)
 	TextF(TEXT("\u2026vous atterrissez dans les Backrooms."), X0 + 44.f * U, TY + 25.f * U, WithAlpha(Yellow, 0.95f * In), 14.5f, EUiWeight::Regular);
 
 	// Cartes : SOLO / MULTIJOUEUR / PARAMETRES / QUITTER (entree en cascade)
+	FString SoloSub = TEXT("Nouvelle partie : partir seul dans l'inconnu");
+	if (PC->GetSaveOrder().Num() > 0)
+	{
+		if (const UBRSaveGame* Last = PC->GetSaveInSlot(PC->GetSaveOrder()[0]))
+		{
+			SoloSub = FString::Printf(TEXT("Reprendre \u00ab %s \u00bb (Niveau %d) ou nouvelle partie"), *Last->SaveName, Last->CurrentLevel);
+		}
+	}
 	const TCHAR* Subs[] = {
-		TEXT("Partir seul dans l'inconnu"),
+		*SoloSub,
 		TEXT("Jusqu'\u00e0 4 explorateurs \u00b7 le meilleur PC h\u00e9berge"),
 		TEXT("Graphismes, son, touches, chat vocal"),
 		TEXT("Revenir \u00e0 la r\u00e9alit\u00e9\u2026 si elle existe"),
@@ -1241,6 +1268,27 @@ void ABRHUD::DrawLevelScene(const FBRLevelDef& D, float X, float Y, float W, flo
 		DrawRect(FLinearColor(0.85f, 1.f, 1.f, 0.4f * Alpha), X, WY, W, FMath::Max(1.f, 2.f * U * Scale));
 		Gradient(X, WY, W, (Y + H - WY) * 0.6f, FLinearColor(0.75f, 0.95f, 1.f, 0.18f * Alpha), 2);
 	}
+	// v4.1 : sol du parking (places peintes) et flaques qui refletent les lampes
+	const FBRSurface& Ground = D.Road.Puddles > D.Floor.Puddles ? D.Road : D.Floor;
+	if (D.bGarage)
+	{
+		for (int32 i = 0; i < 4; ++i)
+		{
+			const float LX = X + W * (0.12f + 0.25f * i);
+			DrawLine(LX, Y + H, LX + W * 0.07f, WallBot + 2.f * U * Scale, FLinearColor(0.9f, 0.9f, 0.85f, 0.55f * Alpha), FMath::Max(1.f, 1.5f * U * Scale));
+		}
+	}
+	if (Ground.Puddles > 0.f)
+	{
+		const float FloorH = Y + H - WallBot;
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const float PX = X + W * (0.2f + 0.3f * i);
+			const float PY = WallBot + FloorH * (0.35f + 0.2f * (i % 2));
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.25f * Alpha), PX - W * 0.11f, PY - FloorH * 0.06f, W * 0.22f, FloorH * 0.12f);
+			Glow(PX, PY, W * 0.1f, FloorH * 0.09f, WithAlpha(Light, 0.45f * Alpha));
+		}
+	}
 	// Lampes : plafonniers (rangee de trois) ou lampadaires a l'horizon
 	if (D.Fixture != EBRFixture::None)
 	{
@@ -1272,7 +1320,7 @@ void ABRHUD::DrawLevelScene(const FBRLevelDef& D, float X, float Y, float W, flo
 	Frame(X, Y, W, H, FLinearColor(1.f, 1.f, 1.f, 0.06f * Alpha), FMath::Max(1.f, U));
 }
 
-void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float Alpha, float Sel)
+void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float Alpha, float Sel, bool bLocked, bool bCurrent)
 {
 	const TArray<FBRLevelDef>& All = BRLevels::All();
 	if (!All.IsValidIndex(Index) || Alpha <= 0.003f)
@@ -1287,28 +1335,77 @@ void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float 
 	const float X = CX - W * 0.5f;
 	const float Y = Top + (392.f * U - H) * 0.5f;
 	const float R = 16.f * U * S;
+	const FLinearColor Accent = bLocked ? FLinearColor(0.55f, 0.52f, 0.46f, 1.f) : Yellow;
 
-	Glow(CX, Y + H * 0.5f, W * 0.95f, H * 0.75f, FLinearColor(1.f, 0.78f, 0.25f, 0.16f * Sel * Alpha));
+	Glow(CX, Y + H * 0.5f, W * 0.95f, H * 0.75f, FLinearColor(Accent.R, Accent.G * 0.95f, Accent.B, (bLocked ? 0.08f : 0.16f) * Sel * Alpha));
 	RoundRect(X + 4.f * U * S, Y + 10.f * U * S, W, H, R, FLinearColor(0.f, 0.f, 0.f, 0.5f * Alpha));
-	RoundRect(X, Y, W, H, R, FLinearColor(0.06f, 0.052f, 0.035f, 0.97f * Alpha));
+	RoundRect(X, Y, W, H, R, bLocked ? FLinearColor(0.035f, 0.033f, 0.03f, 0.97f * Alpha) : FLinearColor(0.06f, 0.052f, 0.035f, 0.97f * Alpha));
 
 	const float Pad = 10.f * U * S;
 	const float PW = W - 2.f * Pad;
 	const float PH = H * 0.52f;
-	DrawLevelScene(D, X + Pad, Y + Pad, PW, PH, S, Alpha);
+	const float PX = X + Pad;
+	const float PY = Y + Pad;
+	if (bLocked)
+	{
+		// Niveau pas encore explore : ecran neigeux, cadenas
+		DrawRect(FLinearColor(0.02f, 0.02f, 0.02f, Alpha), PX, PY, PW, PH);
+		const float Step = FMath::Max(2.f, 3.f * U * S);
+		for (float LY = PY; LY < PY + PH; LY += Step)
+		{
+			const float N = FMath::Frac(FMath::Sin((LY - PY) * 12.9898f + Index * 78.233f + FMath::FloorToFloat(Clock * 12.f) * 3.7f) * 43758.5453f);
+			DrawRect(FLinearColor(1.f, 1.f, 1.f, (0.015f + 0.05f * N) * Alpha), PX, LY, PW, FMath::Max(1.f, U));
+		}
+		Gradient(PX, PY, PW, PH * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.5f * Alpha), 2);
+		Gradient(PX, PY + PH * 0.5f, PW, PH * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.5f * Alpha), 3);
+		const float LD = 64.f * U * S;
+		RoundRect(CX - LD * 0.5f, PY + (PH - LD) * 0.5f, LD, LD, LD * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.55f * Alpha));
+		RoundRect(CX - LD * 0.5f, PY + (PH - LD) * 0.5f, LD, LD, LD * 0.5f, FLinearColor(1.f, 1.f, 1.f, 0.18f * Alpha), true);
+		if (UTexture* T = UiTex(TEXT("UI_IconLock")))
+		{
+			DrawTexture(T, CX - LD * 0.25f, PY + (PH - LD) * 0.5f + LD * 0.22f, LD * 0.5f, LD * 0.5f, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.85f, 0.82f, 0.75f, 0.85f * Alpha),
+				BLEND_Translucent);
+		}
+		Frame(PX, PY, PW, PH, FLinearColor(1.f, 1.f, 1.f, 0.06f * Alpha), FMath::Max(1.f, U));
+	}
+	else
+	{
+		DrawLevelScene(D, PX, PY, PW, PH, S, Alpha);
+	}
+	if (bCurrent)
+	{
+		// La ou la partie s'est arretee
+		const FString Badge = TEXT("DERNI\u00c8RE POSITION");
+		const FVector2f BS = TextSize(Badge, 8.5f * S, EUiWeight::Bold);
+		const float BH = 20.f * U * S;
+		const float BW = BS.X + 22.f * U * S;
+		RoundRect(CX - BW * 0.5f, PY + 8.f * U * S, BW, BH, BH * 0.5f, WithAlpha(Yellow, 0.95f * Alpha));
+		TextF(Badge, CX, PY + 8.f * U * S + (BH - BS.Y) * 0.5f, FLinearColor(0.07f, 0.055f, 0.02f, Alpha), 8.5f * S, EUiWeight::Bold, EUiAlign::Center, false);
+	}
 
-	float TY = Y + Pad + PH + 12.f * U * S;
-	TextSpaced(TEXT("NIVEAU"), CX, TY, WithAlpha(InkDim, Alpha), 9.5f * S, EUiWeight::Light, 4.f * U * S, EUiAlign::Center);
+	const FLinearColor Dim = bLocked ? FLinearColor(0.55f, 0.53f, 0.48f, 0.8f) : InkDim;
+	float TY = PY + PH + 12.f * U * S;
+	TextSpaced(TEXT("NIVEAU"), CX, TY, WithAlpha(Dim, Alpha), 9.5f * S, EUiWeight::Light, 4.f * U * S, EUiAlign::Center);
 	TY += 15.f * U * S;
-	TextF(FString::FromInt(D.Number), CX, TY, WithAlpha(Mix(Ink, Yellow, Sel), Alpha), 40.f * S, EUiWeight::Black, EUiAlign::Center);
+	const FLinearColor NumC = bLocked ? FLinearColor(0.5f, 0.48f, 0.43f, 1.f) : Mix(Ink, Yellow, Sel);
+	TextF(FString::FromInt(D.Number), CX, TY, WithAlpha(NumC, Alpha), 40.f * S, EUiWeight::Black, EUiAlign::Center);
 	TY += TextSize(TEXT("0"), 40.f * S, EUiWeight::Black).Y - 6.f * U * S;
-	TextF(Ellipsize(D.Title, PW, 14.f * S, EUiWeight::Bold), CX, TY, WithAlpha(Ink, Alpha), 14.f * S, EUiWeight::Bold, EUiAlign::Center, false);
-	TY += 21.f * U * S;
-	TextF(Ellipsize(D.Nickname, PW, 11.f * S, EUiWeight::Regular), CX, TY, WithAlpha(InkDim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
+	if (bLocked)
+	{
+		TextF(TEXT("? ? ?"), CX, TY, WithAlpha(Dim, Alpha), 14.f * S, EUiWeight::Bold, EUiAlign::Center, false);
+		TY += 21.f * U * S;
+		TextF(TEXT("Non explor\u00e9"), CX, TY, WithAlpha(Dim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
+	}
+	else
+	{
+		TextF(Ellipsize(D.Title, PW, 14.f * S, EUiWeight::Bold), CX, TY, WithAlpha(Ink, Alpha), 14.f * S, EUiWeight::Bold, EUiAlign::Center, false);
+		TY += 21.f * U * S;
+		TextF(Ellipsize(D.Nickname, PW, 11.f * S, EUiWeight::Regular), CX, TY, WithAlpha(InkDim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
+	}
 
-	// Classe de survie : pastille coloree en bas de la carte
-	const FString Cls = ClassShort(D.ClassText);
-	const FLinearColor CC = ClassColor(D.SurvivalClass);
+	// Classe de survie (inconnue tant que le niveau n'est pas explore)
+	const FString Cls = bLocked ? FString(TEXT("VERROUILL\u00c9")) : ClassShort(D.ClassText);
+	const FLinearColor CC = bLocked ? FLinearColor(0.6f, 0.57f, 0.52f, 1.f) : ClassColor(D.SurvivalClass);
 	const FVector2f CS = TextSize(Cls, 9.5f * S, EUiWeight::Bold);
 	const float PillH = 22.f * U * S;
 	const float PillW = CS.X + 34.f * U * S;
@@ -1320,7 +1417,7 @@ void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float 
 
 	if (Sel > 0.01f)
 	{
-		RoundRect(X - 3.f * U, Y - 3.f * U, W + 6.f * U, H + 6.f * U, R + 3.f * U, WithAlpha(Yellow, Sel * Alpha), true);
+		RoundRect(X - 3.f * U, Y - 3.f * U, W + 6.f * U, H + 6.f * U, R + 3.f * U, WithAlpha(Accent, Sel * Alpha), true);
 	}
 	else
 	{
@@ -1343,11 +1440,26 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 	}
 	const int32 Sel = FMath::Clamp(PC->GetMenuIndex(), 0, Num - 1);
 	const float In = EaseOut(MenuPageTime / 0.45f);
+	const UBRSaveGame* Save = PC->GetActiveSave();
+	int32 ExploredCount = 0;
+	for (const FBRLevelDef& L : All)
+	{
+		ExploredCount += PC->IsLevelUnlocked(L.Number) ? 1 : 0;
+	}
 
+	// En-tete : partie choisie et progression
 	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
-	TextSpaced(TEXT("CHOISISSEZ UN NIVEAU"), CX, 108.f * U, WithAlpha(Yellow, In), 13.f, EUiWeight::Bold, 5.f * U, EUiAlign::Center);
-	TextF(TEXT("Chaque niveau se g\u00e9n\u00e8re \u00e0 l'infini autour de vous. Aucun n'est vraiment s\u00fbr."), CX, 136.f * U, WithAlpha(InkDim, In),
-		12.5f, EUiWeight::Light, EUiAlign::Center);
+	TextSpaced(PC->IsHostFlow() ? TEXT("H\u00c9BERGER : CHOISISSEZ UN NIVEAU") : TEXT("CHOISISSEZ UN NIVEAU"), CX, 100.f * U, WithAlpha(Yellow, In), 13.f, EUiWeight::Bold,
+		5.f * U, EUiAlign::Center);
+	const FString Progress = FString::Printf(TEXT("%s  \u00b7  %d / %d niveaux explor\u00e9s"),
+		Save ? *FString::Printf(TEXT("\u00ab %s \u00bb"), *Save->SaveName) : TEXT("Sans partie"), ExploredCount, Num);
+	TextF(Progress, CX, 126.f * U, WithAlpha(Ink, 0.9f * In), 12.5f, EUiWeight::Regular, EUiAlign::Center);
+	{
+		const float BW = 320.f * U;
+		const float BY = 152.f * U;
+		RoundRect(CX - BW * 0.5f, BY, BW, 4.f * U, 2.f * U, FLinearColor(1.f, 1.f, 1.f, 0.12f * In));
+		RoundRect(CX - BW * 0.5f, BY, FMath::Max(4.f * U, BW * ExploredCount / Num), 4.f * U, 2.f * U, WithAlpha(Yellow, In));
+	}
 
 	// Carrousel : sa position suit la selection par le plus court chemin (la liste boucle)
 	if (Carousel < -500.f)
@@ -1379,7 +1491,9 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 		const float Scale = 1.f - 0.15f * FMath::Min(AOff, 2.f);
 		const float Alpha = In * FMath::Clamp(1.f - 0.36f * AOff, 0.f, 1.f) * FMath::Clamp((2.6f - AOff) / 0.4f, 0.f, 1.f);
 		const float CardCX = CX + Cd.Off * Spacing * (1.f - 0.06f * AOff);
-		DrawLevelCard(Cd.Index, CardCX, Top, Scale, Alpha, FMath::Clamp(1.f - AOff * 2.f, 0.f, 1.f));
+		const int32 LevelNum = All[Cd.Index].Number;
+		DrawLevelCard(Cd.Index, CardCX, Top, Scale, Alpha, FMath::Clamp(1.f - AOff * 2.f, 0.f, 1.f), !PC->IsLevelUnlocked(LevelNum),
+			Save && Save->CurrentLevel == LevelNum);
 		if (bInteractive && AOff < 2.2f)
 		{
 			// Ecart avec la selection (la liste boucle) : un clic sur une carte voisine la selectionne
@@ -1394,7 +1508,7 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 		}
 	}
 
-	// Pagination : fleches et points
+	// Pagination : fleches et points (pleins : explores, creux : verrouilles)
 	const float PagerY = Top + 392.f * U + 30.f * U;
 	const float Dot = 8.f * U;
 	const float DotGap = 9.f * U;
@@ -1403,8 +1517,11 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 	float DX = CX - DotsW * 0.5f;
 	for (int32 i = 0; i < Num; ++i)
 	{
+		const bool bOpen = PC->IsLevelUnlocked(All[i].Number);
 		const float DW = i == Sel ? Dot + Wide : Dot;
-		RoundRect(DX, PagerY - Dot * 0.5f, DW, Dot, Dot * 0.5f, i == Sel ? WithAlpha(Yellow, In) : FLinearColor(1.f, 1.f, 1.f, 0.22f * In));
+		const FLinearColor DC = i == Sel ? (bOpen ? WithAlpha(Yellow, In) : FLinearColor(0.6f, 0.57f, 0.52f, In))
+										 : FLinearColor(1.f, 1.f, 1.f, (bOpen ? 0.5f : 0.14f) * In);
+		RoundRect(DX, PagerY - Dot * 0.5f, DW, Dot, Dot * 0.5f, DC);
 		DX += DW + DotGap;
 	}
 	const float AD = 38.f * U;
@@ -1429,53 +1546,73 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 
 	// Details du niveau choisi
 	const FBRLevelDef& D = All[Sel];
+	const bool bLocked = !PC->IsLevelUnlocked(D.Number);
 	float Y = PagerY + 34.f * U;
-	TextF(D.ClassText, CX, Y, WithAlpha(ClassColor(D.SurvivalClass), In), 12.5f, EUiWeight::Bold, EUiAlign::Center);
-	Y += 28.f * U;
-	const TArray<FString> Lines = WrapF(D.Description, FMath::Min(880.f * U, W - 160.f * U), 13.5f, EUiWeight::Regular);
-	for (int32 i = 0; i < Lines.Num() && i < 3; ++i)
+	if (bLocked)
 	{
-		TextF(Lines[i], CX, Y, WithAlpha(Ink, 0.9f * In), 13.5f, EUiWeight::Regular, EUiAlign::Center);
+		TextSpaced(TEXT("NIVEAU NON EXPLOR\u00c9"), CX, Y, FLinearColor(0.75f, 0.72f, 0.65f, In), 12.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
+		Y += 30.f * U;
+		TextF(TEXT("Vous n'avez pas encore atteint ce niveau dans cette partie."), CX, Y, WithAlpha(Ink, 0.85f * In), 13.5f, EUiWeight::Regular, EUiAlign::Center);
+		Y += 22.f * U;
+		TextF(TEXT("Trouvez en jeu une sortie qui y m\u00e8ne : il deviendra s\u00e9lectionnable ici."), CX, Y, WithAlpha(InkDim, In), 13.f, EUiWeight::Light,
+			EUiAlign::Center);
 		Y += 22.f * U;
 	}
-	Y += 6.f * U;
-	if (D.bRequireObjectives)
+	else
 	{
-		TextF(FString::Printf(TEXT("Objectifs : %d cassettes VHS + filmer pendant une coupure de courant"), D.VHSRequired), CX, Y,
-			WithAlpha(Yellow, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
+		TextF(D.ClassText, CX, Y, WithAlpha(ClassColor(D.SurvivalClass), In), 12.5f, EUiWeight::Bold, EUiAlign::Center);
+		Y += 28.f * U;
+		const TArray<FString> Lines = WrapF(D.Description, FMath::Min(880.f * U, W - 160.f * U), 13.5f, EUiWeight::Regular);
+		for (int32 i = 0; i < Lines.Num() && i < 3; ++i)
+		{
+			TextF(Lines[i], CX, Y, WithAlpha(Ink, 0.9f * In), 13.5f, EUiWeight::Regular, EUiAlign::Center);
+			Y += 22.f * U;
+		}
+		Y += 6.f * U;
+		if (D.bRequireObjectives)
+		{
+			TextF(FString::Printf(TEXT("Objectifs : %d cassettes VHS + filmer pendant une coupure de courant"), D.VHSRequired), CX, Y,
+				WithAlpha(Yellow, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
+			Y += 21.f * U;
+		}
+		TArray<FString> Names;
+		for (const FBREntitySpawn& E : D.Entities)
+		{
+			Names.AddUnique(ABREntity::Info(E.Kind).Name);
+		}
+		if (D.bPatrolEntity)
+		{
+			Names.AddUnique(ABREntity::Info(D.PatrolKind).Name);
+		}
+		if (D.BlackoutSmilers > 0)
+		{
+			Names.AddUnique(ABREntity::Info(EBREntityKind::Smiler).Name);
+		}
+		TextF(Names.Num() > 0 ? TEXT("Entit\u00e9s : ") + FString::Join(Names, TEXT("  \u00b7  ")) : FString(TEXT("Aucune entit\u00e9 signal\u00e9e")), CX, Y,
+			WithAlpha(InkDim, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
 		Y += 21.f * U;
+		// Sorties connues : un niveau deja explore est nomme, les autres restent un mystere
+		TArray<FString> Exits;
+		for (const FBRExitDef& X : D.Exits)
+		{
+			Exits.AddUnique(X.Target < 0 ? FString(TEXT("al\u00e9atoire")) : (PC->IsLevelUnlocked(X.Target) ? FString::Printf(TEXT("Niveau %d"), X.Target)
+				: FString(TEXT("???"))));
+		}
+		if (Exits.Num() > 0)
+		{
+			TextF(TEXT("Sorties : ") + FString::Join(Exits, TEXT("  \u00b7  ")), CX, Y, WithAlpha(InkDim, 0.85f * In), 12.f, EUiWeight::Regular, EUiAlign::Center);
+			Y += 21.f * U;
+		}
 	}
-	if (Sel == 0)
-	{
-		TextF(TEXT("Recommand\u00e9 pour commencer : le vrai d\u00e9but de l'aventure"), CX, Y, FLinearColor(0.6f, 0.92f, 0.6f, 0.85f * In), 12.f,
-			EUiWeight::Regular, EUiAlign::Center);
-		Y += 21.f * U;
-	}
-	TArray<FString> Names;
-	for (const FBREntitySpawn& E : D.Entities)
-	{
-		Names.AddUnique(ABREntity::Info(E.Kind).Name);
-	}
-	if (D.bPatrolEntity)
-	{
-		Names.AddUnique(ABREntity::Info(D.PatrolKind).Name);
-	}
-	if (D.BlackoutSmilers > 0)
-	{
-		Names.AddUnique(ABREntity::Info(EBREntityKind::Smiler).Name);
-	}
-	TextF(Names.Num() > 0 ? TEXT("Entit\u00e9s : ") + FString::Join(Names, TEXT("  \u00b7  ")) : FString(TEXT("Aucune entit\u00e9 signal\u00e9e")), CX, Y,
-		WithAlpha(InkDim, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
-	Y += 21.f * U;
 
-	// NOCLIPPER / RETOUR
+	// NOCLIPPER (ou HEBERGER) / RETOUR
 	const float BH = 60.f * U;
 	const float PW0 = 300.f * U;
 	const float PW1 = 210.f * U;
 	const float BG = 18.f * U;
 	const float BX = CX - (PW0 + PW1 + BG) * 0.5f;
 	const float BY = FMath::Max(836.f * U, Y + 18.f * U);
-	MenuPill(0, BX, BY, PW0, BH, TEXT("UI_IconPlay"), true, bInteractive, In);
+	MenuPill(0, BX, BY, PW0, BH, bLocked ? TEXT("UI_IconLock") : TEXT("UI_IconPlay"), true, bInteractive, In, false, bLocked);
 	MenuPill(1, BX + PW0 + BG, BY, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, In);
 
 	TextF(ControlsLine(0), CX, H - 134.f * U, WithAlpha(InkDim, 0.75f * In), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
@@ -1484,7 +1621,7 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 	Hints.Emplace(TEXT("\u2190 \u2192"), TEXT("Niveau"));
 	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
 	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
-	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Parties"));
 	KeyHints(CX, H - 76.f * U, Hints, In, true);
 }
 
@@ -1542,36 +1679,25 @@ void ABRHUD::DrawMenuMulti(ABRPlayerController* PC, bool bInteractive)
 		PY += BoxH + 16.f * U;
 	}
 	{
-		// Niveau de depart
-		const TArray<FBRLevelDef>& All = BRLevels::All();
-		const FBRLevelDef& D = All[FMath::Clamp(PC->GetMenuIndex(), 0, All.Num() - 1)];
-		const float BoxH = 104.f * U;
+		// Partie hebergee : choisie a l'etape suivante, parmi vos sauvegardes
+		const TArray<FString> Lines = WrapF(TEXT("Apr\u00e8s H\u00c9BERGER, choisissez une de vos parties puis un niveau d\u00e9j\u00e0 explor\u00e9. Les niveaux que le groupe d\u00e9couvre s'ajoutent \u00e0 votre partie ; vos amis jouent dans la v\u00f4tre."),
+			PW - 96.f * U, 12.f, EUiWeight::Regular);
+		const float BoxH = 54.f * U + Lines.Num() * 19.f * U + 12.f * U;
 		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.78f * A));
 		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.12f * A), true);
-		TextSpaced(TEXT("NIVEAU DE D\u00c9PART"), PX + PW * 0.5f, PY + 16.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
-		const float AD = 38.f * U;
-		const float RowY = PY + 42.f * U;
-		for (int32 k = 0; k < 2; ++k)
+		const float D = 44.f * U;
+		RoundRect(PX + 20.f * U, PY + 18.f * U, D, D, D * 0.5f, WithAlpha(Yellow, 0.12f * A));
+		if (UTexture* T = UiTex(TEXT("UI_IconSave")))
 		{
-			const float AX = k == 0 ? PX + 20.f * U : PX + PW - 20.f * U - AD;
-			const bool bHov = bInteractive && Hover(AX, RowY, AD, AD);
-			RoundRect(AX, RowY, AD, AD, AD * 0.5f, bHov ? WithAlpha(Yellow, 0.95f * A) : FLinearColor(1.f, 0.82f, 0.22f, 0.12f * A));
-			if (UTexture* T = UiTex(TEXT("UI_IconArrow")))
-			{
-				const float IS = AD * 0.46f;
-				DrawTexture(T, AX + (AD - IS) * 0.5f, RowY + (AD - IS) * 0.5f, IS, IS, k == 0 ? 1.f : 0.f, 0.f, k == 0 ? -1.f : 1.f, 1.f,
-					bHov ? FLinearColor(0.07f, 0.055f, 0.02f, A) : WithAlpha(Yellow, A), BLEND_Translucent);
-			}
-			if (bInteractive)
-			{
-				AddButton(k == 0 ? Btn_MenuLevelPrev : Btn_MenuLevelNext, AX, RowY, AD, AD);
-			}
+			DrawTexture(T, PX + 20.f * U + D * 0.25f, PY + 18.f * U + D * 0.25f, D * 0.5f, D * 0.5f, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, A), BLEND_Translucent);
 		}
-		const float MidW = PW - 2.f * (AD + 34.f * U);
-		TextF(Ellipsize(FString::Printf(TEXT("Niveau %d  \u00b7  %s"), D.Number, *D.Title), MidW, 15.f, EUiWeight::Bold), PX + PW * 0.5f, RowY - 2.f * U,
-			WithAlpha(Ink, A), 15.f, EUiWeight::Bold, EUiAlign::Center);
-		TextF(ClassShort(D.ClassText) + TEXT("  \u00b7  ") + Ellipsize(D.Nickname, MidW * 0.6f, 11.f, EUiWeight::Regular), PX + PW * 0.5f, RowY + 24.f * U,
-			WithAlpha(ClassColor(D.SurvivalClass), 0.9f * A), 11.f, EUiWeight::Regular, EUiAlign::Center, false);
+		TextSpaced(TEXT("VOTRE PARTIE"), PX + 80.f * U, PY + 22.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U);
+		float LY = PY + 46.f * U;
+		for (const FString& L : Lines)
+		{
+			TextF(L, PX + 80.f * U, LY, WithAlpha(Ink, 0.9f * A), 12.f, EUiWeight::Regular, EUiAlign::Left, false);
+			LY += 19.f * U;
+		}
 		PY += BoxH + 16.f * U;
 	}
 	{
@@ -1595,7 +1721,6 @@ void ABRHUD::DrawMenuMulti(ABRPlayerController* PC, bool bInteractive)
 	}
 
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(TEXT("\u2190 \u2192"), TEXT("Niveau"));
 	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
 	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
 	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
@@ -1653,6 +1778,345 @@ void ABRHUD::DrawMenuJoin(ABRPlayerController* PC, bool bInteractive)
 	KeyHints(CX, H - 76.f * U, Hints, In, true);
 }
 
+void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y, float W, float H, bool bInteractive, float Appear)
+{
+	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	if (!PC || !Save)
+	{
+		return;
+	}
+	const float U = Ui();
+	const float Ap = FMath::Clamp(Appear, 0.f, 1.f);
+	float& Sel = MenuSel[FMath::Clamp(Item, 0, 7)];
+	Sel = FMath::FInterpTo(Sel, PC->GetMenuCursor() == Item && !PC->IsConfirmingDelete() ? 1.f : 0.f, UiDt, 14.f);
+	const float S = Smooth(Sel);
+	const FLinearColor DarkInk(0.07f, 0.055f, 0.02f, 1.f);
+	const float CX0 = X - (1.f - Ap) * 40.f * U + S * 14.f * U;
+	const float R = 14.f * U;
+	const TArray<FBRLevelDef>& All = BRLevels::All();
+	const int32 LevelIdx = FMath::Max(0, BRLevels::IndexOf(Save->CurrentLevel));
+	const FBRLevelDef& D = All[FMath::Clamp(LevelIdx, 0, All.Num() - 1)];
+
+	Glow(CX0 + W * 0.42f, Y + H * 0.5f, W * 0.75f, H * 1.5f, WithAlpha(Yellow, 0.16f * S * Ap));
+	RoundRect(CX0, Y + 4.f * U, W, H, R, FLinearColor(0.f, 0.f, 0.f, 0.3f * Ap));
+	RoundRect(CX0, Y, W, H, R, WithAlpha(Mix(FLinearColor(0.05f, 0.045f, 0.03f, 0.8f), FLinearColor(1.f, 0.82f, 0.22f, 0.97f), S), Ap));
+	RoundRect(CX0, Y, W, H, R, FLinearColor(1.f, 0.88f, 0.5f, 0.13f * (1.f - S) * Ap), true);
+	Gradient(CX0 + R, Y + 1.f * U, W - 2.f * R, H * 0.45f, FLinearColor(1.f, 1.f, 1.f, (0.03f + 0.07f * S) * Ap), 2);
+
+	// Pastille : numero du dernier niveau atteint
+	const float DD = H - 28.f * U;
+	const float DX = CX0 + 16.f * U;
+	const float DY = Y + (H - DD) * 0.5f - 2.f * U;
+	RoundRect(DX, DY, DD, DD, DD * 0.5f, WithAlpha(Mix(FLinearColor(1.f, 0.82f, 0.22f, 0.13f), FLinearColor(0.07f, 0.055f, 0.02f, 0.92f), S), Ap));
+	const FString Num = FString::FromInt(Save->CurrentLevel);
+	const FVector2f NS = TextSize(Num, 17.f, EUiWeight::Black);
+	TextF(Num, DX + DD * 0.5f, DY + (DD - NS.Y) * 0.5f, WithAlpha(Yellow, Ap), 17.f, EUiWeight::Black, EUiAlign::Center, false);
+
+	// Nom, dernier niveau ; a droite : progression, temps de jeu, date
+	const float TX = DX + DD + 18.f * U;
+	const FLinearColor LabelC = Mix(Ink, DarkInk, S);
+	const FLinearColor SubC = Mix(InkDim, FLinearColor(0.14f, 0.11f, 0.04f, 0.9f), S);
+	const FVector2f LS = TextSize(Save->SaveName, 18.f, EUiWeight::Bold);
+	const float TY = Y + (H - LS.Y - 16.f * U) * 0.5f - 2.f * U;
+	const float RightW = 170.f * U;
+	TextF(Ellipsize(Save->SaveName, W - (TX - CX0) - RightW - 20.f * U, 18.f, EUiWeight::Bold), TX, TY, WithAlpha(LabelC, Ap), 18.f, EUiWeight::Bold,
+		EUiAlign::Left, S < 0.5f);
+	TextF(Ellipsize(FString::Printf(TEXT("Niveau %d  \u00b7  %s"), D.Number, *D.Title), W - (TX - CX0) - RightW - 20.f * U, 11.5f, EUiWeight::Regular), TX,
+		TY + LS.Y - 3.f * U, WithAlpha(SubC, Ap), 11.5f, EUiWeight::Regular, EUiAlign::Left, false);
+	const float RX = CX0 + W - 22.f * U;
+	TextF(FString::Printf(TEXT("%d / %d niveaux"), Save->Explored.Num(), All.Num()), RX, TY + 2.f * U, WithAlpha(Mix(Yellow, DarkInk, S), Ap), 11.f,
+		EUiWeight::Bold, EUiAlign::Right, false);
+	TextF(BRSaves::FormatPlayTime(Save->PlayTime) + TEXT("  \u00b7  ") + BRSaves::FormatDate(Save->LastPlayed), RX, TY + LS.Y - 3.f * U, WithAlpha(SubC, Ap),
+		10.f, EUiWeight::Regular, EUiAlign::Right, false);
+
+	// Barre de progression (niveaux explores) au bas de la carte
+	const float BarX = CX0 + R;
+	const float BarW = W - 2.f * R;
+	const float BarY = Y + H - 9.f * U;
+	RoundRect(BarX, BarY, BarW, 3.f * U, 1.5f * U, FLinearColor(S > 0.5f ? 0.f : 1.f, S > 0.5f ? 0.f : 1.f, S > 0.5f ? 0.f : 1.f, 0.12f * Ap));
+	RoundRect(BarX, BarY, FMath::Max(3.f * U, BarW * Save->Explored.Num() / FMath::Max(1, All.Num())), 3.f * U, 1.5f * U,
+		WithAlpha(Mix(Yellow, DarkInk, S), 0.9f * Ap));
+	if (bInteractive && Ap > 0.5f)
+	{
+		AddButton(Btn_Menu + Item, X, Y, W, H);
+	}
+}
+
+void ABRHUD::DrawLevelGrid(const UBRSaveGame* Save, float X, float Y, float W, float A)
+{
+	// Les 12 niveaux en vignettes : apercu des niveaux explores, cadenas pour les autres
+	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	const TArray<FBRLevelDef>& All = BRLevels::All();
+	const float U = Ui();
+	const int32 Cols = 4;
+	const float Gap = 10.f * U;
+	const float TW = (W - (Cols - 1) * Gap) / Cols;
+	const float TH = TW * 0.62f;
+	for (int32 i = 0; i < All.Num(); ++i)
+	{
+		const FBRLevelDef& D = All[i];
+		const float TX = X + (i % Cols) * (TW + Gap);
+		const float TY = Y + (i / Cols) * (TH + Gap);
+		const bool bOpen = Save ? Save->IsExplored(D.Number) : (PC && PC->IsLevelUnlocked(D.Number));
+		if (bOpen)
+		{
+			DrawLevelScene(D, TX, TY, TW, TH, 0.45f, A);
+		}
+		else
+		{
+			DrawRect(FLinearColor(0.03f, 0.03f, 0.028f, 0.9f * A), TX, TY, TW, TH);
+			if (UTexture* T = UiTex(TEXT("UI_IconLock")))
+			{
+				const float LS = TH * 0.34f;
+				DrawTexture(T, TX + (TW - LS) * 0.5f, TY + (TH - LS) * 0.5f - 4.f * U, LS, LS, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.6f, 0.57f, 0.52f, 0.6f * A),
+					BLEND_Translucent);
+			}
+		}
+		const FString Num = FString::FromInt(D.Number);
+		const FVector2f NS = TextSize(Num, 10.f, EUiWeight::Black);
+		RoundRect(TX + 5.f * U, TY + TH - NS.Y - 7.f * U, NS.X + 12.f * U, NS.Y + 2.f * U, 6.f * U, FLinearColor(0.f, 0.f, 0.f, 0.6f * A));
+		TextF(Num, TX + 11.f * U, TY + TH - NS.Y - 6.f * U, bOpen ? WithAlpha(Yellow, A) : FLinearColor(0.6f, 0.57f, 0.52f, A), 10.f, EUiWeight::Black, EUiAlign::Left,
+			false);
+		const bool bHere = Save && Save->CurrentLevel == D.Number;
+		Frame(TX, TY, TW, TH, bHere ? WithAlpha(Yellow, 0.95f * A) : FLinearColor(1.f, 1.f, 1.f, 0.08f * A), FMath::Max(1.f, (bHere ? 2.f : 1.f) * U));
+	}
+}
+
+void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float X0 = FMath::Max(60.f * U, W * 0.0625f);
+	const float In = EaseOut(MenuPageTime / 0.45f);
+	const bool bConfirm = PC->IsConfirmingDelete();
+
+	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
+	TextF(PC->IsHostFlow() ? TEXT("H\u00c9BERGER UNE PARTIE") : TEXT("VOS PARTIES"), X0, 124.f * U, WithAlpha(Ink, In), 32.f, EUiWeight::Black);
+	TextF(PC->IsHostFlow() ? TEXT("Choisissez la partie que le groupe va jouer : ses niveaux explor\u00e9s seront propos\u00e9s.")
+						   : TEXT("Reprenez une partie, ou commencez-en une nouvelle (au Niveau 0)."),
+		X0, 178.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
+
+	// Liste : parties (de la plus recente a la plus ancienne), NOUVELLE PARTIE, RETOUR
+	const float CW = 600.f * U;
+	float Y = 236.f * U;
+	// (pendant la confirmation d'une suppression, seules les parties restent affichees, inactives)
+	const bool bListActive = bInteractive && !bConfirm;
+	const int32 Count = bConfirm ? PC->GetSaveOrder().Num() : PC->GetMenuItemCount();
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const int32 Slot = PC->GetMenuSaveSlot(i);
+		const float Appear = EaseOut((MenuPageTime - 0.06f * i) / 0.45f);
+		if (Slot >= 0)
+		{
+			const float CH = 84.f * U;
+			DrawSaveCard(i, PC->GetSaveInSlot(Slot), X0, Y, CW, CH, bListActive, Appear);
+			// Corbeille a droite de la carte
+			const float TD = 34.f * U;
+			const float TX = X0 + CW + 30.f * U;
+			const float TY = Y + (CH - TD) * 0.5f;
+			const bool bHov = bListActive && Hover(TX, TY, TD, TD);
+			const bool bShow = bHov || PC->GetMenuCursor() == i || Hover(X0, Y, CW, CH);
+			RoundRect(TX, TY, TD, TD, TD * 0.5f, bHov ? FLinearColor(0.9f, 0.3f, 0.24f, 0.95f * Appear) : FLinearColor(0.05f, 0.045f, 0.03f, (bShow ? 0.8f : 0.4f) * Appear));
+			if (UTexture* T = UiTex(TEXT("UI_IconTrash")))
+			{
+				DrawTexture(T, TX + TD * 0.27f, TY + TD * 0.25f, TD * 0.46f, TD * 0.46f, 0.f, 0.f, 1.f, 1.f,
+					bHov ? FLinearColor(1.f, 1.f, 1.f, Appear) : FLinearColor(0.95f, 0.5f, 0.42f, (bShow ? 0.9f : 0.35f) * Appear), BLEND_Translucent);
+			}
+			if (bListActive)
+			{
+				AddButton(Btn_SaveDelete + Slot, TX, TY, TD, TD);
+			}
+			Y += CH + 10.f * U;
+		}
+		else
+		{
+			const float CH = 70.f * U;
+			const bool bNew = Slot == ABRPlayerController::MenuItemNew;
+			MenuCard(i, X0, Y, CW, CH, bNew ? TEXT("Commence au Niveau 0, avec l'\u00e9quipement de d\u00e9part") : (PC->IsHostFlow() ? TEXT("Multijoueur")
+				: TEXT("Menu principal")), bNew ? TEXT("UI_IconPlus") : TEXT("UI_IconBack"), bInteractive, Appear);
+			Y += CH + 10.f * U;
+		}
+	}
+
+	// Panneau de droite : details de la partie sous le curseur (ou explication d'une nouvelle partie)
+	const float PX = FMath::Max(X0 + CW + 90.f * U, W - 56.f * U - 560.f * U);
+	const float PW = FMath::Max(300.f * U, FMath::Min(560.f * U, W - PX - 56.f * U));
+	const float A = EaseOut((MenuPageTime - 0.15f) / 0.5f);
+	const int32 Focus = PC->GetMenuSaveSlot(PC->GetMenuCursor());
+	const UBRSaveGame* Shown = (!bConfirm && Focus >= 0) ? PC->GetSaveInSlot(Focus) : nullptr;
+	float PY = 236.f * U;
+	if (Shown)
+	{
+		const TArray<FBRLevelDef>& All = BRLevels::All();
+		const FBRLevelDef& D = All[FMath::Clamp(BRLevels::IndexOf(Shown->CurrentLevel), 0, All.Num() - 1)];
+		const float TileW = (PW - 44.f * U - 30.f * U) / 4.f;
+		const float GridH = 3.f * TileW * 0.62f + 20.f * U;
+		const float BoxH = 200.f * U + GridH;
+		RoundRect(PX, PY, PW, BoxH, 16.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.82f * A));
+		RoundRect(PX, PY, PW, BoxH, 16.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.12f * A), true);
+		TextF(Ellipsize(Shown->SaveName, PW - 44.f * U, 24.f, EUiWeight::Black), PX + 22.f * U, PY + 16.f * U, WithAlpha(Ink, A), 24.f, EUiWeight::Black);
+		float LY = PY + 62.f * U;
+		const FString Lines[] = {
+			FString::Printf(TEXT("Derni\u00e8re position : Niveau %d  \u00b7  %s"), D.Number, *D.Title),
+			FString::Printf(TEXT("Temps de jeu : %s  \u00b7  morts : %d  \u00b7  entit\u00e9s rencontr\u00e9es : %d / %d"), *BRSaves::FormatPlayTime(Shown->PlayTime),
+				Shown->Deaths, Shown->Discovered.Num(), static_cast<int32>(EBREntityKind::Count)),
+			FString::Printf(TEXT("Cr\u00e9\u00e9e le %s  \u00b7  jou\u00e9e le %s"), *BRSaves::FormatDate(Shown->Created).Left(10), *BRSaves::FormatDate(Shown->LastPlayed)),
+		};
+		for (const FString& L : Lines)
+		{
+			TextF(Ellipsize(L, PW - 44.f * U, 12.f, EUiWeight::Regular), PX + 22.f * U, LY, WithAlpha(InkDim, A), 12.f, EUiWeight::Regular, EUiAlign::Left, false);
+			LY += 21.f * U;
+		}
+		LY += 14.f * U;
+		TextSpaced(FString::Printf(TEXT("NIVEAUX EXPLOR\u00c9S  %d / %d"), Shown->Explored.Num(), All.Num()), PX + 22.f * U, LY, WithAlpha(Yellow, A), 10.5f,
+			EUiWeight::Bold, 2.5f * U);
+		DrawLevelGrid(Shown, PX + 22.f * U, LY + 26.f * U, PW - 44.f * U, A);
+	}
+	else if (!bConfirm && Focus == ABRPlayerController::MenuItemNew)
+	{
+		const TArray<FString> Lines = WrapF(TEXT("Vous commencez au Niveau 0, avec l'\u00e9quipement de d\u00e9part. Chaque niveau que vous d\u00e9couvrez en jeu devient s\u00e9lectionnable quand vous reprenez la partie. Sauvegarde automatique \u00e0 chaque niveau, puis toutes les minutes."),
+			PW - 44.f * U, 12.5f, EUiWeight::Regular);
+		const float BoxH = 112.f * U + Lines.Num() * 20.f * U;
+		RoundRect(PX, PY, PW, BoxH, 16.f * U, FLinearColor(0.17f, 0.13f, 0.02f, 0.75f * A));
+		RoundRect(PX, PY, PW, BoxH, 16.f * U, WithAlpha(Yellow, 0.35f * A), true);
+		const float D = 44.f * U;
+		RoundRect(PX + 22.f * U, PY + 20.f * U, D, D, D * 0.5f, WithAlpha(Yellow, 0.16f * A));
+		if (UTexture* T = UiTex(TEXT("UI_IconPlus")))
+		{
+			DrawTexture(T, PX + 22.f * U + D * 0.25f, PY + 20.f * U + D * 0.25f, D * 0.5f, D * 0.5f, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, A), BLEND_Translucent);
+		}
+		TextSpaced(TEXT("NOUVELLE PARTIE"), PX + 80.f * U, PY + 24.f * U, WithAlpha(Yellow, A), 11.f, EUiWeight::Bold, 2.5f * U);
+		TextF(FString::Printf(TEXT("Emplacements libres : %d / 6"), 6 - PC->GetSaveOrder().Num()), PX + 80.f * U, PY + 44.f * U, WithAlpha(InkDim, A), 11.f,
+			EUiWeight::Regular, EUiAlign::Left, false);
+		float LY = PY + 84.f * U;
+		for (const FString& L : Lines)
+		{
+			TextF(L, PX + 22.f * U, LY, WithAlpha(Ink, 0.92f * A), 12.5f, EUiWeight::Regular, EUiAlign::Left, false);
+			LY += 20.f * U;
+		}
+	}
+
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
+	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Ouvrir"));
+	Hints.Emplace(TEXT("SUPPR"), TEXT("Supprimer"));
+	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	KeyHints(X0, H - 72.f * U, Hints, In, false);
+
+	// Confirmation de suppression
+	if (bConfirm)
+	{
+		const UBRSaveGame* Gone = PC->GetSaveInSlot(PC->GetDeleteSlot());
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), 0.f, 0.f, W, H);
+		const float CW2 = 640.f * U;
+		const float CH2 = 280.f * U;
+		const float CX = W * 0.5f;
+		const float CardY = H * 0.5f - CH2 * 0.5f;
+		Glow(CX, H * 0.5f, CW2 * 0.8f, CH2, FLinearColor(0.9f, 0.3f, 0.24f, 0.08f));
+		RoundRect(CX - CW2 * 0.5f, CardY, CW2, CH2, 22.f * U, FLinearColor(0.06f, 0.04f, 0.035f, 0.97f));
+		RoundRect(CX - CW2 * 0.5f, CardY, CW2, CH2, 22.f * U, FLinearColor(0.9f, 0.35f, 0.28f, 0.45f), true);
+		const float BD = 60.f * U;
+		RoundRect(CX - BD * 0.5f, CardY - BD * 0.5f, BD, BD, BD * 0.5f, FLinearColor(0.9f, 0.3f, 0.24f, 1.f));
+		if (UTexture* T = UiTex(TEXT("UI_IconTrash")))
+		{
+			DrawTexture(T, CX - BD * 0.28f, CardY - BD * 0.28f, BD * 0.56f, BD * 0.56f, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Translucent);
+		}
+		TextF(TEXT("SUPPRIMER LA PARTIE ?"), CX, CardY + 46.f * U, Ink, 22.f, EUiWeight::Black, EUiAlign::Center);
+		if (Gone)
+		{
+			TextF(FString::Printf(TEXT("\u00ab %s \u00bb sera effac\u00e9e d\u00e9finitivement"), *Gone->SaveName), CX, CardY + 92.f * U, InkDim, 13.f, EUiWeight::Regular,
+				EUiAlign::Center);
+			const int32 NumExp = Gone->Explored.Num();
+			TextF(FString::Printf(TEXT("%d niveau%s explor\u00e9%s  \u00b7  %s de jeu"), NumExp, NumExp > 1 ? TEXT("s") : TEXT(""), NumExp > 1 ? TEXT("s") : TEXT(""),
+				*BRSaves::FormatPlayTime(Gone->PlayTime)), CX,
+				CardY + 116.f * U, WithAlpha(InkDim, 0.8f), 12.f, EUiWeight::Light, EUiAlign::Center);
+		}
+		const float BH = 56.f * U;
+		const float PW0 = 250.f * U;
+		const float PW1 = 190.f * U;
+		const float BX = CX - (PW0 + PW1 + 16.f * U) * 0.5f;
+		MenuPill(0, BX, CardY + CH2 - BH - 34.f * U, PW0, BH, TEXT("UI_IconTrash"), true, bInteractive, 1.f, true);
+		MenuPill(1, BX + PW0 + 16.f * U, CardY + CH2 - BH - 34.f * U, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, 1.f);
+	}
+}
+
+void ABRHUD::DrawMenuNewSave(ABRPlayerController* PC, bool bInteractive)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float CX = W * 0.5f;
+	const float CY = H * 0.5f;
+	const float X0 = FMath::Max(60.f * U, W * 0.0625f);
+	const float In = EaseOut(MenuPageTime / 0.4f);
+
+	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
+	// Carte centrale autour du champ du nom (widget Slate de 520 x 52, centre a l'ecran)
+	const float CW = 700.f * U;
+	const float CH = 384.f * U;
+	const float CardX = CX - CW * 0.5f;
+	const float CardY = CY - 196.f * U + (1.f - In) * 24.f * U;
+	Glow(CX, CY, CW * 0.8f, CH * 0.9f, FLinearColor(1.f, 0.8f, 0.3f, 0.06f * In));
+	RoundRect(CardX, CardY + 6.f * U, CW, CH, 22.f * U, FLinearColor(0.f, 0.f, 0.f, 0.35f * In));
+	RoundRect(CardX, CardY, CW, CH, 22.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.92f * In));
+	RoundRect(CardX, CardY, CW, CH, 22.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.16f * In), true);
+	const float BD = 64.f * U;
+	RoundRect(CX - BD * 0.5f, CardY - BD * 0.5f, BD, BD, BD * 0.5f, WithAlpha(Yellow, In));
+	if (UTexture* T = UiTex(TEXT("UI_IconSave")))
+	{
+		DrawTexture(T, CX - BD * 0.28f, CardY - BD * 0.28f, BD * 0.56f, BD * 0.56f, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.07f, 0.055f, 0.02f, In), BLEND_Translucent);
+	}
+	TextF(PC->IsHostFlow() ? TEXT("NOUVELLE PARTIE EN LIGNE") : TEXT("NOUVELLE PARTIE"), CX, CardY + 46.f * U, WithAlpha(Ink, In), 24.f, EUiWeight::Black,
+		EUiAlign::Center);
+	TextF(TEXT("Donnez-lui un nom. Vous commencerez au Niveau 0, avec l'\u00e9quipement de d\u00e9part."), CX, CardY + 92.f * U, WithAlpha(InkDim, In), 12.5f,
+		EUiWeight::Light, EUiAlign::Center);
+	const float FW = 548.f * U;
+	const float FH = 68.f * U;
+	RoundRect(CX - FW * 0.5f, CY - FH * 0.5f, FW, FH, 12.f * U, FLinearColor(0.f, 0.f, 0.f, 0.45f * In));
+	RoundRect(CX - FW * 0.5f, CY - FH * 0.5f, FW, FH, 12.f * U, FLinearColor(1.f, 0.84f, 0.3f, (0.5f + 0.25f * FMath::Sin(Clock * 3.f)) * In), true);
+
+	const float BH = 56.f * U;
+	const float PW0 = 260.f * U;
+	const float PW1 = 180.f * U;
+	const float BG = 16.f * U;
+	const float BX = CX - (PW0 + PW1 + BG) * 0.5f;
+	MenuPill(0, BX, CY + 66.f * U, PW0, BH, TEXT("UI_IconPlay"), true, bInteractive, In);
+	MenuPill(1, BX + PW0 + BG, CY + 66.f * U, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, In);
+	TextF(FString::Printf(TEXT("Emplacement %d / 6   \u00b7   sauvegarde automatique \u00e0 chaque niveau"), PC->GetSaveOrder().Num() + 1), CX, CardY + CH - 40.f * U,
+		WithAlpha(InkDim, 0.85f * In), 11.5f, EUiWeight::Regular, EUiAlign::Center, false);
+
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Commencer"));
+	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	KeyHints(CX, H - 76.f * U, Hints, In, true);
+}
+
+void ABRHUD::DrawSaveIndicator(float Since)
+{
+	// Petite pastille en bas a droite pendant une sauvegarde automatique
+	const float A = FMath::Clamp(Since / 0.2f, 0.f, 1.f) * FMath::Clamp((2.6f - Since) / 0.6f, 0.f, 1.f);
+	if (A <= 0.01f)
+	{
+		return;
+	}
+	const float U = Ui();
+	const FString Label = TEXT("Sauvegarde");
+	const FVector2f LS = TextSize(Label, 10.5f, EUiWeight::Regular);
+	const float PH = 30.f * U;
+	const float PW = LS.X + 52.f * U;
+	const float PX = Canvas->ClipX - PW - 50.f * U;
+	const float PY = Canvas->ClipY - PH - 112.f * U;
+	RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.45f * A));
+	if (UTexture* T = UiTex(TEXT("UI_IconSave")))
+	{
+		const float IS = 15.f * U;
+		const float Pulse = 0.6f + 0.4f * FMath::Sin(Since * 9.f);
+		DrawTexture(T, PX + 13.f * U, PY + (PH - IS) * 0.5f, IS, IS, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, A * Pulse), BLEND_Translucent);
+	}
+	TextF(Label, PX + 36.f * U, PY + (PH - LS.Y) * 0.5f, FLinearColor(1.f, 1.f, 1.f, 0.85f * A), 10.5f, EUiWeight::Regular, EUiAlign::Left, false);
+}
+
 void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
 {
 	if (!PC || !PlayerOwner)
@@ -1679,6 +2143,10 @@ void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
 	else if (Id == Btn_MenuLevelPrev || Id == Btn_MenuLevelNext)
 	{
 		PC->MenuShiftLevel(Id == Btn_MenuLevelPrev ? -1 : 1);
+	}
+	else if (Id >= Btn_SaveDelete && Id < Btn_SaveDelete + 16)
+	{
+		PC->RequestDeleteSave(Id - Btn_SaveDelete);
 	}
 	else if (Id >= Btn_MenuCard && Id <= Btn_MenuCard + 6)
 	{
@@ -2071,6 +2539,11 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 	else
 	{
 		TextF(TEXT("Le temps s'est arr\u00eat\u00e9\u2026 pour l'instant."), X0, 214.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
+	}
+	if (const UBRSaveGame* Save = PC ? PC->GetActiveSave() : nullptr)
+	{
+		TextF(FString::Printf(TEXT("Partie \u00ab %s \u00bb  \u00b7  %s de jeu  \u00b7  sauvegarde automatique"), *Save->SaveName,
+			*BRSaves::FormatPlayTime(Save->PlayTime)), X0, 236.f * U, WithAlpha(Yellow, 0.8f * In), 11.f, EUiWeight::Regular);
 	}
 
 	// Cartes cliquables (meme style que le menu titre)

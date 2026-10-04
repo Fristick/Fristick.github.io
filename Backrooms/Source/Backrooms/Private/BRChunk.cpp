@@ -351,6 +351,16 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 		}
 	}
 
+	if (bWithTrim && D.bGarage && ZLo < 1.f && ZHi > 150.f)
+	{
+		// Parking : bande de couleur a hauteur de pare-chocs, soubassement plus clair
+		const FBRSurface Stripe(TEXT("T_Concrete"), D.GarageStripe * 2.2f, 300.f, 0.55f, 0.3f);
+		const FBRSurface Lower(TEXT("T_Concrete"), FLinearColor(1.35f, 1.35f, 1.32f), 300.f, 0.7f, 0.45f);
+		AddBox(Lower, bAlongY ? FVector(Fixed, Mid, 50.f) : FVector(Mid, Fixed, 50.f), bAlongY ? FVector(T + 1.f, Len, 100.f) : FVector(Len, T + 1.f, 100.f), false);
+		AddBox(Stripe, bAlongY ? FVector(Fixed, Mid, 112.f) : FVector(Mid, Fixed, 112.f), bAlongY ? FVector(T + 1.6f, Len, 24.f) : FVector(Len, T + 1.6f, 24.f),
+			false);
+	}
+
 	if (bWithTrim && D.bTrim && ZLo < 1.f)
 	{
 		const FVector TC = bAlongY ? FVector(Fixed, Mid, 6.f) : FVector(Mid, Fixed, 6.f);
@@ -801,9 +811,22 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 				{
 					AddBox(D.Pillar.Texture.IsNone() ? D.Wall : D.Pillar, FVector((X + 1) * S, (Y + 1) * S, H * 0.5f),
 						FVector(D.PillarSize, D.PillarSize, H));
+					if (D.bGarage)
+					{
+						// Bande jaune et noire au pied du pilier, lisere blanc au-dessus (pare-chocs)
+						static const FBRSurface Hazard(TEXT("T_Hazard"), FLinearColor::White, 80.f, 0.55f, 0.25f);
+						AddBox(Hazard, FVector((X + 1) * S, (Y + 1) * S, 55.f), FVector(D.PillarSize + 3.f, D.PillarSize + 3.f, 110.f), false);
+						const FBRSurface Band(TEXT("T_Concrete"), FLinearColor(1.65f, 1.65f, 1.6f), 300.f, 0.6f, 0.2f);
+						AddBox(Band, FVector((X + 1) * S, (Y + 1) * S, 128.f), FVector(D.PillarSize + 2.f, D.PillarSize + 2.f, 22.f), false);
+					}
 				}
 			}
 		}
+	}
+
+	if (D.bGarage)
+	{
+		BuildGarage();
 	}
 
 	// ---- Cellules pleines (hotel, grottes) ----
@@ -1123,6 +1146,123 @@ void ABRChunk::BuildSkylight()
 	}
 }
 
+void ABRChunk::AddFloorPaint(const FVector& Center, float Length, float Width, float Yaw, bool bYellow)
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	// Peinture sur le beton : meme texture (le grain du sol transparait), teintee ; les flaques la recouvrent aussi
+	const FBRSurface& Floor = W->Def().Floor;
+	FBRSurface Paint(TEXT("T_ConcreteFloor"), bYellow ? FLinearColor(2.1f, 1.62f, 0.32f) : FLinearColor(1.9f, 1.9f, 1.85f), Floor.Scale, 0.6f, 0.5f);
+	Paint.Puddles = Floor.Puddles;
+	Paint.Wetness = Floor.Wetness;
+	AddBox(Paint, FVector(Center.X, Center.Y, 0.3f), FVector(Length, Width, 0.6f), false, Yaw);
+}
+
+void ABRChunk::BuildGarage()
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float H = D.WallHeight;
+	const int32 X0 = Coord.X * N;
+	const int32 Y0 = Coord.Y * N;
+	const uint32 Seed = W->GetSeed();
+	const float ChunkW = N * S;
+
+	// Poutres de beton sous la dalle, dans un seul sens (a chaque ligne de la grille), et gaines le long de certaines
+	for (int32 X = X0; X < X0 + N; ++X)
+	{
+		const float Fixed = (X + 1) * S;
+		AddBox(D.Ceiling, FVector(Fixed, (Y0 + N * 0.5f) * S, H - 26.f), FVector(46.f, ChunkW, 52.f), false);
+		if (BRHash::Rand(X, Coord.Y, 1210, Seed) < 0.35f)
+		{
+			AddProp(TEXT("SM_Pipe"), FTransform(FRotator(0.f, 90.f, 0.f), FVector(Fixed + 70.f, (Y0 + N * 0.5f) * S, H - 30.f), FVector(ChunkW / 100.f, 0.9f, 0.9f)),
+				false, FVector::ZeroVector);
+		}
+	}
+
+	// Marquages : places de stationnement contre les murs, fleches et ligne jaune dans les allees
+	for (int32 X = X0; X < X0 + N; ++X)
+	{
+		for (int32 Y = Y0; Y < Y0 + N; ++Y)
+		{
+			if (!W->IsWalkable(FIntPoint(X, Y)) || W->IsSpawnArea(X, Y))
+			{
+				continue;
+			}
+			const FVector C = W->CellCenter(FIntPoint(X, Y));
+			auto R = [&](int32 Salt) { return BRHash::Rand(X, Y, Salt, Seed); };
+			// Cote adosse a un mur (0 : +X, 1 : -X, 2 : +Y, 3 : -Y), sinon allee
+			int32 Back = INDEX_NONE;
+			const EBREdge Sides[4] = { W->EdgeE(X, Y), W->EdgeE(X - 1, Y), W->EdgeN(X, Y), W->EdgeN(X, Y - 1) };
+			const int32 Start = static_cast<int32>(R(1220) * 4.f);
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const int32 Side = (Start + k) % 4;
+				if (Sides[Side] == EBREdge::Wall)
+				{
+					Back = Side;
+					break;
+				}
+			}
+			if (Back == INDEX_NONE && R(1221) < 0.45f)
+			{
+				Back = static_cast<int32>(R(1222) * 4.f) % 4; // places en epi au milieu d'une grande salle
+			}
+			if (Back != INDEX_NONE)
+			{
+				// Deux places de 2,5 m : trois traits perpendiculaires au mur, longs de 4,8 m
+				const FVector Out = Back == 0 ? FVector(-1.f, 0.f, 0.f) : Back == 1 ? FVector(1.f, 0.f, 0.f) : Back == 2 ? FVector(0.f, -1.f, 0.f) : FVector(0.f, 1.f, 0.f);
+				const FVector Along(-Out.Y, Out.X, 0.f);
+				const float Yaw = Back <= 1 ? 0.f : 90.f; // trait oriente le long de Out
+				const FVector Wall = C - Out * (S * 0.5f - D.WallThickness * 0.5f - 12.f);
+				for (int32 i = -1; i <= 1; ++i)
+				{
+					AddFloorPaint(Wall + Out * 240.f + Along * (i * 250.f), 480.f, 12.f, Yaw, false);
+				}
+				// Arret de roue (petit bloc de beton) au fond de chaque place
+				if (R(1223) < 0.6f)
+				{
+					static const FBRSurface Stop(TEXT("T_Concrete"), FLinearColor(1.2f, 1.2f, 1.15f), 120.f, 0.8f, 0.5f);
+					for (int32 i = 0; i < 2; ++i)
+					{
+						AddBox(Stop, Wall + Out * 70.f + Along * ((i - 0.5f) * 250.f) + FVector(0.f, 0.f, 6.f), Back <= 1 ? FVector(18.f, 150.f, 12.f)
+							: FVector(150.f, 18.f, 12.f), true);
+					}
+				}
+			}
+			else
+			{
+				// Allee : pointilles jaunes au milieu et parfois une fleche de sens de circulation
+				const bool bAlongX = R(1224) < 0.5f;
+				for (int32 i = -1; i <= 1; ++i)
+				{
+					const FVector P = C + (bAlongX ? FVector(i * 200.f, 0.f, 0.f) : FVector(0.f, i * 200.f, 0.f));
+					AddFloorPaint(P, 110.f, 12.f, bAlongX ? 0.f : 90.f, true);
+				}
+				if (R(1225) < 0.35f)
+				{
+					const float Dir = R(1226) < 0.5f ? 1.f : -1.f;
+					const float BaseYaw = (bAlongX ? 0.f : 90.f) + (Dir > 0.f ? 0.f : 180.f);
+					const FVector Fwd = FRotator(0.f, BaseYaw, 0.f).Vector();
+					const FVector Side = FVector(-Fwd.Y, Fwd.X, 0.f) * 140.f;
+					AddFloorPaint(C + Side, 170.f, 18.f, BaseYaw, false);
+					AddFloorPaint(C + Side + Fwd * 70.f + FRotator(0.f, BaseYaw + 140.f, 0.f).Vector() * 30.f, 70.f, 18.f, BaseYaw + 140.f, false);
+					AddFloorPaint(C + Side + Fwd * 70.f + FRotator(0.f, BaseYaw - 140.f, 0.f).Vector() * 30.f, 70.f, 18.f, BaseYaw - 140.f, false);
+				}
+			}
+		}
+	}
+}
+
 void ABRChunk::BuildCellProps(int32 X, int32 Y)
 {
 	ABRWorld* W = World.Get();
@@ -1152,7 +1292,7 @@ void ABRChunk::BuildCellProps(int32 X, int32 Y)
 				AddProp(TEXT("SM_Crate"), FTransform(FRotator(0.f, Yaw, 0.f), P + Off), true, FVector(60.f, 45.f, 40.f));
 			}
 		}
-		if (R(910) < 0.08f)
+		if (R(910) < 0.08f && D.Floor.Puddles <= 0.f)
 		{
 			const FVector P = C + FVector((R(911) - 0.5f) * S * 0.6f, (R(912) - 0.5f) * S * 0.6f, 0.6f);
 			AddWaterPlane(P, FVector2D(150.f + R(913) * 200.f, 120.f + R(914) * 150.f), true);

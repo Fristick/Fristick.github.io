@@ -17,6 +17,7 @@ class UPointLightComponent;
 class UStaticMeshComponent;
 class UAudioComponent;
 class UMaterialInstanceDynamic;
+class UBRSaveGame;
 
 UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
@@ -125,6 +126,12 @@ public:
 	bool ReceivePickup(EBRItem Item, const FString& Note);
 	void OnEnteredLevel(const FBRLevelDef& Def);
 	void ResetStats();
+
+	// ---- Sauvegardes (v4.1)
+	/** Ecrit l'inventaire, la sante et les notes lues dans la sauvegarde */
+	void WriteToSave(UBRSaveGame* Save) const;
+	/** Reprend l'etat enregistre (sans etat enregistre : equipement de depart, comme une nouvelle partie) */
+	void ReadFromSave(const UBRSaveGame* Save);
 
 	// ---- HUD ----
 	/** Son d'interface (inventaire, clic) */

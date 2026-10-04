@@ -8,6 +8,7 @@
 #include "BRKeys.h"
 #include "BRConfig.h"
 #include "BRAutoTest.h"
+#include "BRSave.h"
 #include "EngineUtils.h"
 
 #include "EnhancedInputComponent.h"
@@ -156,6 +157,22 @@ void ABRPlayerController::BeginPlay()
 		MenuIndex = BRLevels::IndexOf(W->StartLevel);
 	}
 
+	// Sauvegardes : liste des parties (sous-titre du menu), et pour l'hote d'une partie en ligne, la partie choisie
+	// dans le menu suit le rechargement de la carte (elle est appliquee quand son personnage est pret)
+	if (bInMenu)
+	{
+		RefreshSaves();
+	}
+	else if (HasAuthority() && BRSaves::ActiveSlot() != INDEX_NONE)
+	{
+		ActiveSave = BRSaves::Load(BRSaves::ActiveSlot());
+		bApplySaveOnSpawn = ActiveSave != nullptr;
+		if (!ActiveSave)
+		{
+			BRSaves::ActiveSlot() = INDEX_NONE;
+		}
+	}
+
 	// Test multijoueur (-BRNetTest) cote client : l'hote lance le sien depuis le mode de jeu
 	if (GetNetMode() == NM_Client && ABRAutoTest::IsNetTestRequested() && GetWorld())
 	{
@@ -175,7 +192,9 @@ void ABRPlayerController::BeginPlay()
 
 void ABRPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	WriteActiveSave(); // fermeture du jeu ou de l'editeur en pleine partie
 	ShowAddressBox(false);
+	ShowNameBox(false);
 	if (bTransmitting)
 	{
 		bTransmitting = false;
@@ -245,6 +264,7 @@ void ABRPlayerController::EnsureInput()
 	MenuUpAction = MakeAction(TEXT("IA_MenuUp"), EInputActionValueType::Boolean);
 	TalkAction = MakeAction(TEXT("IA_Talk"), EInputActionValueType::Boolean, true);
 	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean);
+	MenuDeleteAction = MakeAction(TEXT("IA_MenuDelete"), EInputActionValueType::Boolean);
 	PocketActions.Reset();
 	for (int32 i = 0; i < 4; ++i)
 	{
@@ -368,6 +388,8 @@ void ABRPlayerController::RebuildMappings()
 	MapKey(Ctx, MenuConfirmAction, EKeys::Enter);
 	MapKey(Ctx, MenuConfirmAction, EKeys::SpaceBar);
 	MapKey(Ctx, MenuConfirmAction, EKeys::Gamepad_FaceButton_Bottom);
+	MapKey(Ctx, MenuDeleteAction, EKeys::Delete);
+	MapKey(Ctx, MenuDeleteAction, EKeys::Gamepad_FaceButton_Top);
 
 	// Remplace l'ancien contexte
 	if (ULocalPlayer* LP = GetLocalPlayer())
@@ -443,6 +465,7 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(MenuConfirmAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuConfirm);
 	EIC->BindAction(MenuUpAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuUp);
 	EIC->BindAction(MenuDownAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuDown);
+	EIC->BindAction(MenuDeleteAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuDelete);
 }
 
 void ABRPlayerController::PlayerTick(float DeltaTime)
@@ -455,6 +478,46 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	PollKeyCapture();
 	UpdateVoice(DeltaTime);
 	UpdateMenuAmbience(DeltaTime);
+
+	if (bPendingNewSave)
+	{
+		bPendingNewSave = false;
+		StartNewSave();
+	}
+
+	// Sauvegarde automatique de la partie en cours : a chaque niveau, puis toutes les minutes
+	if (IsLocalController())
+	{
+		TimeSinceSave += DeltaTime;
+		ABRWorld* SaveWorld = ABRWorld::Get(this);
+		if (bApplySaveOnSpawn && GetPawn() && SaveWorld && SaveWorld->IsLevelReady())
+		{
+			bApplySaveOnSpawn = false;
+			ApplyActiveSave();
+			OnLevelLoaded(SaveWorld->GetLevelNumber());
+		}
+		if (ActiveSave && !bInMenu && GetNetMode() != NM_Client)
+		{
+			if (!(bPauseMenu && !IsNetGame()))
+			{
+				ActiveSave->PlayTime += DeltaTime;
+			}
+			if (PendingSaveDelay > 0.f)
+			{
+				PendingSaveDelay -= DeltaTime;
+				if (PendingSaveDelay <= 0.f)
+				{
+					WriteActiveSave();
+				}
+			}
+			AutoSaveTimer -= DeltaTime;
+			if (AutoSaveTimer <= 0.f)
+			{
+				AutoSaveTimer = 60.f;
+				WriteActiveSave();
+			}
+		}
+	}
 
 	// Arrivee dans une partie en ligne : rappel du role de l'hote et du chat vocal
 	if (!bNetIntroShown && IsNetGame() && GetHUD() && GetPawn())
@@ -863,6 +926,10 @@ void ABRPlayerController::TogglePause()
 		bInventory = false;
 		CancelKeyCapture();
 	}
+	else
+	{
+		WriteActiveSave();
+	}
 	// En multijoueur le monde continue de tourner pour les autres
 	if (!IsNetGame())
 	{
@@ -873,6 +940,7 @@ void ABRPlayerController::TogglePause()
 
 void ABRPlayerController::QuitToDesktop()
 {
+	WriteActiveSave();
 	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }
 
@@ -1029,6 +1097,18 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 	}
 }
 
+void ABRPlayerController::OnMenuDelete(const FInputActionValue& Value)
+{
+	if (bInMenu && !bInventory && MenuPage == EBRMenuPage::Saves && !bConfirmDelete)
+	{
+		const int32 Slot = GetMenuSaveSlot(MenuCursor);
+		if (Slot >= 0)
+		{
+			RequestDeleteSave(Slot);
+		}
+	}
+}
+
 // =====================================================================================================================
 // Menu principal
 // =====================================================================================================================
@@ -1041,32 +1121,76 @@ int32 ABRPlayerController::GetMenuItemCount() const
 		return 4;
 	case EBRMenuPage::Multi:
 		return 3;
+	case EBRMenuPage::Saves:
+		return bConfirmDelete ? 2 : SaveOrder.Num() + (CanCreateSave() ? 1 : 0) + 1;
 	default:
 		return 2;
 	}
 }
 
+int32 ABRPlayerController::GetMenuSaveSlot(int32 Item) const
+{
+	if (Item >= 0 && Item < SaveOrder.Num())
+	{
+		return SaveOrder[Item];
+	}
+	return (CanCreateSave() && Item == SaveOrder.Num()) ? MenuItemNew : MenuItemBack;
+}
+
+bool ABRPlayerController::IsLevelUnlocked(int32 LevelNumber) const
+{
+	// Sans partie choisie (tests, console), seul le Niveau 0 est propose
+	return ActiveSave ? ActiveSave->IsExplored(LevelNumber) : LevelNumber == 0;
+}
+
 FString ABRPlayerController::GetMenuItemLabel(int32 Item) const
 {
-	static const TCHAR* Main[] = { TEXT("SOLO"), TEXT("MULTIJOUEUR"), TEXT("PARAM\u00c8TRES"), TEXT("QUITTER") };
-	static const TCHAR* Solo[] = { TEXT("NOCLIPPER"), TEXT("RETOUR") };
-	static const TCHAR* Multi[] = { TEXT("H\u00c9BERGER UNE PARTIE"), TEXT("REJOINDRE UNE PARTIE"), TEXT("RETOUR") };
-	static const TCHAR* Join[] = { TEXT("SE CONNECTER"), TEXT("RETOUR") };
 	if (Item < 0 || Item >= GetMenuItemCount())
 	{
 		return FString();
 	}
+	static const TCHAR* Main[] = { TEXT("SOLO"), TEXT("MULTIJOUEUR"), TEXT("PARAM\u00c8TRES"), TEXT("QUITTER") };
+	static const TCHAR* Multi[] = { TEXT("H\u00c9BERGER UNE PARTIE"), TEXT("REJOINDRE UNE PARTIE"), TEXT("RETOUR") };
 	switch (MenuPage)
 	{
 	case EBRMenuPage::Main:
 		return Main[Item];
-	case EBRMenuPage::Solo:
-		return Solo[Item];
 	case EBRMenuPage::Multi:
 		return Multi[Item];
-	default:
-		return Join[Item];
+	case EBRMenuPage::Join:
+		return Item == 0 ? TEXT("SE CONNECTER") : TEXT("RETOUR");
+	case EBRMenuPage::NewSave:
+		return Item == 0 ? (bHostFlow ? TEXT("H\u00c9BERGER") : TEXT("COMMENCER")) : TEXT("RETOUR");
+	case EBRMenuPage::Solo:
+	{
+		if (Item == 1)
+		{
+			return TEXT("RETOUR");
+		}
+		const TArray<FBRLevelDef>& All = BRLevels::All();
+		const int32 Level = All[FMath::Clamp(MenuIndex, 0, All.Num() - 1)].Number;
+		if (!IsLevelUnlocked(Level))
+		{
+			return TEXT("VERROUILL\u00c9");
+		}
+		return bHostFlow ? TEXT("H\u00c9BERGER") : TEXT("NOCLIPPER");
 	}
+	case EBRMenuPage::Saves:
+	{
+		if (bConfirmDelete)
+		{
+			return Item == 0 ? TEXT("OUI, SUPPRIMER") : TEXT("ANNULER");
+		}
+		const int32 Slot = GetMenuSaveSlot(Item);
+		if (Slot >= 0)
+		{
+			const UBRSaveGame* S = GetSaveInSlot(Slot);
+			return S ? S->SaveName : FString();
+		}
+		return Slot == MenuItemNew ? TEXT("NOUVELLE PARTIE") : TEXT("RETOUR");
+	}
+	}
+	return FString();
 }
 
 void ABRPlayerController::SetMenuCursor(int32 Item)
@@ -1152,16 +1276,30 @@ void ABRPlayerController::SetMenuPage(EBRMenuPage Page)
 {
 	MenuPage = Page;
 	MenuCursor = 0;
+	bConfirmDelete = false;
 	if (Page == EBRMenuPage::Multi && LocalAddress.IsEmpty())
 	{
 		LocalAddress = FindLocalAddress();
 	}
+	if (Page == EBRMenuPage::Saves)
+	{
+		RefreshSaves();
+		// Curseur sur la partie choisie juste avant (retour depuis le choix du niveau)
+		const int32 Idx = SaveOrder.IndexOfByKey(BRSaves::ActiveSlot());
+		MenuCursor = Idx != INDEX_NONE ? Idx : 0;
+	}
+	if (Page == EBRMenuPage::NewSave)
+	{
+		const int32 Free = BRSaves::FreeSlot();
+		NewSaveName = FString::Printf(TEXT("Partie %d"), Free == INDEX_NONE ? 1 : Free + 1);
+	}
 	ShowAddressBox(Page == EBRMenuPage::Join);
+	ShowNameBox(Page == EBRMenuPage::NewSave);
 }
 
 void ABRPlayerController::MenuShiftLevel(int32 Direction)
 {
-	if (MenuPage != EBRMenuPage::Solo && MenuPage != EBRMenuPage::Multi)
+	if (MenuPage != EBRMenuPage::Solo)
 	{
 		return;
 	}
@@ -1172,12 +1310,25 @@ void ABRPlayerController::MenuShiftLevel(int32 Direction)
 
 void ABRPlayerController::MenuBack()
 {
+	if (bConfirmDelete)
+	{
+		bConfirmDelete = false;
+		const int32 Idx = SaveOrder.IndexOfByKey(DeleteSlot);
+		MenuCursor = Idx != INDEX_NONE ? Idx : 0;
+		return;
+	}
 	switch (MenuPage)
 	{
 	case EBRMenuPage::Join:
 		SetMenuPage(EBRMenuPage::Multi);
 		break;
 	case EBRMenuPage::Solo:
+	case EBRMenuPage::NewSave:
+		SetMenuPage(EBRMenuPage::Saves);
+		break;
+	case EBRMenuPage::Saves:
+		SetMenuPage(bHostFlow ? EBRMenuPage::Multi : EBRMenuPage::Main);
+		break;
 	case EBRMenuPage::Multi:
 		SetMenuPage(EBRMenuPage::Main);
 		break;
@@ -1192,14 +1343,28 @@ void ABRPlayerController::MenuActivate(int32 Item)
 	{
 		return;
 	}
-	PlayMenuSound(TEXT("S_UIConfirm"), 0.6f);
 	MenuCursor = Item;
+	// Niveau pas encore explore dans cette partie : on ne peut pas y aller depuis le menu
+	if (MenuPage == EBRMenuPage::Solo && Item == 0)
+	{
+		const TArray<FBRLevelDef>& All = BRLevels::All();
+		const FBRLevelDef& D = All[FMath::Clamp(MenuIndex, 0, All.Num() - 1)];
+		if (!IsLevelUnlocked(D.Number))
+		{
+			PlayMenuSound(TEXT("S_UIDeny"), 0.6f);
+			ABRHUD::Notify(this, FString::Printf(TEXT("Niveau %d : pas encore explor\u00e9 dans cette partie. Trouvez une sortie qui y m\u00e8ne."), D.Number), 4.f,
+				FLinearColor(1.f, 0.6f, 0.45f));
+			return;
+		}
+	}
+	PlayMenuSound(TEXT("S_UIConfirm"), 0.6f);
 	switch (MenuPage)
 	{
 	case EBRMenuPage::Main:
 		if (Item == 0)
 		{
-			SetMenuPage(EBRMenuPage::Solo);
+			bHostFlow = false;
+			SetMenuPage(EBRMenuPage::Saves);
 		}
 		else if (Item == 1)
 		{
@@ -1214,10 +1379,66 @@ void ABRPlayerController::MenuActivate(int32 Item)
 			QuitToDesktop();
 		}
 		break;
+	case EBRMenuPage::Saves:
+		if (bConfirmDelete)
+		{
+			if (Item == 0)
+			{
+				const UBRSaveGame* Gone = GetSaveInSlot(DeleteSlot);
+				const FString Name = Gone ? Gone->SaveName : FString();
+				if (ActiveSave && ActiveSave.Get() == Gone)
+				{
+					ActiveSave = nullptr;
+				}
+				BRSaves::Delete(DeleteSlot);
+				bConfirmDelete = false;
+				RefreshSaves();
+				MenuCursor = 0;
+				ABRHUD::Notify(this, FString::Printf(TEXT("Partie \u00ab %s \u00bb supprim\u00e9e."), *Name), 3.f, FLinearColor(1.f, 0.7f, 0.55f));
+			}
+			else
+			{
+				MenuBack();
+			}
+			break;
+		}
+		{
+			const int32 Slot = GetMenuSaveSlot(Item);
+			if (Slot >= 0)
+			{
+				SelectSave(Slot);
+			}
+			else if (Slot == MenuItemNew)
+			{
+				SetMenuPage(EBRMenuPage::NewSave);
+			}
+			else
+			{
+				MenuBack();
+			}
+		}
+		break;
+	case EBRMenuPage::NewSave:
+		if (Item == 0)
+		{
+			StartNewSave();
+		}
+		else
+		{
+			MenuBack();
+		}
+		break;
 	case EBRMenuPage::Solo:
 		if (Item == 0)
 		{
-			StartSolo();
+			if (bHostFlow)
+			{
+				HostGame();
+			}
+			else
+			{
+				StartSolo();
+			}
 		}
 		else
 		{
@@ -1227,7 +1448,8 @@ void ABRPlayerController::MenuActivate(int32 Item)
 	case EBRMenuPage::Multi:
 		if (Item == 0)
 		{
-			HostGame();
+			bHostFlow = true; // l'hote choisit une de ses parties, puis un niveau deja explore
+			SetMenuPage(EBRMenuPage::Saves);
 		}
 		else if (Item == 1)
 		{
@@ -1251,6 +1473,155 @@ void ABRPlayerController::MenuActivate(int32 Item)
 	}
 }
 
+// =====================================================================================================================
+// Sauvegardes
+// =====================================================================================================================
+
+void ABRPlayerController::RefreshSaves()
+{
+	SaveSlots.SetNum(BRSaves::MaxSlots);
+	SaveOrder.Reset();
+	for (int32 i = 0; i < BRSaves::MaxSlots; ++i)
+	{
+		SaveSlots[i] = BRSaves::Load(i);
+		if (SaveSlots[i])
+		{
+			SaveOrder.Add(i);
+		}
+	}
+	SaveOrder.Sort([this](int32 L, int32 R) { return SaveSlots[L]->LastPlayed > SaveSlots[R]->LastPlayed; });
+}
+
+void ABRPlayerController::SelectSave(int32 Slot)
+{
+	UBRSaveGame* S = GetSaveInSlot(Slot);
+	if (!S)
+	{
+		return;
+	}
+	ActiveSave = S;
+	BRSaves::ActiveSlot() = Slot;
+	// On reprend la ou on s'etait arrete
+	const int32 Level = S->IsExplored(S->CurrentLevel) ? S->CurrentLevel : 0;
+	SetMenuPage(EBRMenuPage::Solo);
+	MenuIndex = FMath::Max(0, BRLevels::IndexOf(Level));
+}
+
+void ABRPlayerController::StartNewSave()
+{
+	const int32 Slot = BRSaves::FreeSlot();
+	if (Slot == INDEX_NONE)
+	{
+		ABRHUD::Notify(this, TEXT("Les 6 emplacements sont occup\u00e9s : supprimez une partie (touche Suppr)."), 5.f, FLinearColor(1.f, 0.6f, 0.45f));
+		return;
+	}
+	UBRSaveGame* S = Cast<UBRSaveGame>(UGameplayStatics::CreateSaveGameObject(UBRSaveGame::StaticClass()));
+	if (!S)
+	{
+		return;
+	}
+	FString Name = NewSaveName.TrimStartAndEnd();
+	if (Name.IsEmpty())
+	{
+		Name = FString::Printf(TEXT("Partie %d"), Slot + 1);
+	}
+	S->SaveName = Name.Left(28);
+	S->Created = FDateTime::Now();
+	// Une nouvelle partie commence toujours au Niveau 0
+	S->CurrentLevel = 0;
+	S->MarkExplored(0);
+	BRSaves::Write(Slot, S);
+	BRSaves::ActiveSlot() = Slot;
+	ActiveSave = S;
+	MenuIndex = FMath::Max(0, BRLevels::IndexOf(0));
+	ShowNameBox(false);
+	if (bHostFlow)
+	{
+		HostGame();
+	}
+	else
+	{
+		StartSolo();
+	}
+}
+
+void ABRPlayerController::ApplyActiveSave()
+{
+	if (ABRCharacter* C = GetBRCharacter())
+	{
+		C->ReadFromSave(ActiveSave);
+	}
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->RestoreJournal(ActiveSave ? ActiveSave->Discovered : TArray<int32>(), ActiveSave ? ActiveSave->Explored : TArray<int32>());
+	}
+	AutoSaveTimer = 60.f;
+}
+
+void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
+{
+	if (!ActiveSave || BRSaves::ActiveSlot() == INDEX_NONE || bInMenu || !IsLocalController() || GetNetMode() == NM_Client)
+	{
+		return;
+	}
+	const bool bNew = !ActiveSave->IsExplored(LevelNumber);
+	ActiveSave->MarkExplored(LevelNumber);
+	ActiveSave->CurrentLevel = LevelNumber;
+	// Ecrit un peu plus tard : apres une mort, l'inventaire est remis a zero juste apres le chargement
+	PendingSaveDelay = 2.f;
+	if (bNew)
+	{
+		ABRHUD::Notify(this, FString::Printf(TEXT("Niveau %d ajout\u00e9 \u00e0 vos niveaux explor\u00e9s (%d / %d) : vous pourrez y revenir depuis le menu."),
+			LevelNumber, ActiveSave->Explored.Num(), BRLevels::All().Num()), 7.f, FLinearColor(0.75f, 1.f, 0.75f));
+	}
+}
+
+void ABRPlayerController::NotifyPlayerDeath()
+{
+	if (ActiveSave && IsLocalController())
+	{
+		++ActiveSave->Deaths;
+	}
+}
+
+void ABRPlayerController::WriteActiveSave()
+{
+	if (!ActiveSave || BRSaves::ActiveSlot() == INDEX_NONE || bInMenu || !IsLocalController() || GetNetMode() == NM_Client)
+	{
+		return;
+	}
+	const ABRCharacter* C = GetBRCharacter();
+	if (C && !C->IsDead())
+	{
+		C->WriteToSave(ActiveSave);
+	}
+	if (const ABRWorld* W = ABRWorld::Get(this))
+	{
+		ActiveSave->Discovered = W->GetDiscoveredList();
+		if (W->IsLevelReady() && !W->IsTransitioning())
+		{
+			ActiveSave->CurrentLevel = W->GetLevelNumber();
+			ActiveSave->MarkExplored(W->GetLevelNumber());
+		}
+	}
+	if (BRSaves::Write(BRSaves::ActiveSlot(), ActiveSave))
+	{
+		TimeSinceSave = 0.f;
+	}
+}
+
+void ABRPlayerController::RequestDeleteSave(int32 Slot)
+{
+	if (MenuPage != EBRMenuPage::Saves || !GetSaveInSlot(Slot))
+	{
+		return;
+	}
+	bConfirmDelete = true;
+	DeleteSlot = Slot;
+	MenuCursor = 1; // ANNULER par defaut
+	PlayMenuSound(TEXT("S_UIDeny"), 0.5f);
+}
+
 void ABRPlayerController::HostGame()
 {
 	// La carte est rechargee en serveur "listen" : les amis peuvent rejoindre sur le port 7777
@@ -1262,6 +1633,9 @@ void ABRPlayerController::HostGame()
 
 void ABRPlayerController::JoinGame()
 {
+	// Invite : la progression appartient a la partie de l'hote
+	BRSaves::ActiveSlot() = INDEX_NONE;
+	ActiveSave = nullptr;
 	const FString Address = JoinAddress.TrimStartAndEnd();
 	if (Address.IsEmpty())
 	{
@@ -1276,6 +1650,7 @@ void ABRPlayerController::JoinGame()
 
 void ABRPlayerController::ReturnToMainMenu()
 {
+	WriteActiveSave();
 	// Recharger la carte hors ligne : on quitte la session (l'hote ferme la partie pour tout le monde)
 	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);
 	UGameplayStatics::OpenLevel(this, FName(*Map), true);
@@ -1332,6 +1707,64 @@ void ABRPlayerController::ShowAddressBox(bool bShow)
 		}
 		AddressWidget.Reset();
 		AddressBox.Reset();
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().SetAllUserFocusToGameViewport();
+		}
+	}
+}
+
+void ABRPlayerController::ShowNameBox(bool bShow)
+{
+	UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	if (bShow && !NameWidget.IsValid() && Viewport && FSlateApplication::IsInitialized())
+	{
+		TWeakObjectPtr<ABRPlayerController> WeakThis(this);
+		NameWidget = SNew(SBox)
+			.HAlign(HAlign_Center)
+			.VAlign(VAlign_Center)
+			[
+				SNew(SBox)
+				.WidthOverride(520.f)
+				.HeightOverride(52.f)
+				[
+					SAssignNew(NameBox, SEditableTextBox)
+					.Text(FText::FromString(NewSaveName))
+					.HintText(FText::FromString(TEXT("Nom de la partie")))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 22))
+					.SelectAllTextWhenFocused(true)
+					.OnTextChanged_Lambda([WeakThis](const FText& NewText)
+					{
+						if (ABRPlayerController* Self = WeakThis.Get())
+						{
+							Self->NewSaveName = NewText.ToString();
+						}
+					})
+					.OnTextCommitted_Lambda([WeakThis](const FText& NewText, ETextCommit::Type CommitType)
+					{
+						ABRPlayerController* Self = WeakThis.Get();
+						if (Self && Self->MenuPage == EBRMenuPage::NewSave)
+						{
+							Self->NewSaveName = NewText.ToString();
+							if (CommitType == ETextCommit::OnEnter)
+							{
+								Self->bPendingNewSave = true; // lance a l'image suivante (le champ se ferme)
+							}
+						}
+					})
+				]
+			];
+		Viewport->AddViewportWidgetContent(NameWidget.ToSharedRef(), 50);
+		FSlateApplication::Get().SetKeyboardFocus(NameBox);
+	}
+	else if (!bShow && NameWidget.IsValid())
+	{
+		if (Viewport)
+		{
+			Viewport->RemoveViewportWidgetContent(NameWidget.ToSharedRef());
+		}
+		NameWidget.Reset();
+		NameBox.Reset();
 		if (FSlateApplication::IsInitialized())
 		{
 			FSlateApplication::Get().SetAllUserFocusToGameViewport();
@@ -1407,7 +1840,10 @@ void ABRPlayerController::StartSolo()
 	}
 	bInMenu = false;
 	ShowAddressBox(false);
+	ShowNameBox(false);
 	UpdateInputMode();
+	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart)
+	ApplyActiveSave();
 	const int32 Target = BRLevels::All()[MenuIndex].Number;
 	if (Target != W->GetLevelNumber())
 	{
@@ -1416,6 +1852,7 @@ void ABRPlayerController::StartSolo()
 	else
 	{
 		W->ReplayTitle();
+		OnLevelLoaded(Target);
 	}
 }
 
@@ -1647,7 +2084,7 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_HardwareRT:
 		return TEXT("Lumen en ray tracing mat\u00e9riel : reflets et lumi\u00e8re indirecte bien plus pr\u00e9cis (carte RTX / RX 6000+ requise).");
 	case Row_RTHitLighting:
-		return TEXT("Reflets calcul\u00e9s par lancer de rayons complet (eau, carrelage...). Tr\u00e8s co\u00fbteux.");
+		return TEXT("Reflets \u00e9clair\u00e9s par les rayons eux-m\u00eames (eau, flaques, carrelage). Toujours actif en qualit\u00e9 \u00c9pique et Cin\u00e9matique ; ici, forc\u00e9 dans toutes les qualit\u00e9s. Co\u00fbteux.");
 	case Row_AreaLights:
 		return TEXT("Ombres douces des n\u00e9ons. S'applique aux zones charg\u00e9es ensuite.");
 	case Row_VolumetricFog:
@@ -1810,7 +2247,12 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("scalability %d"), FMath::Clamp(S.Quality, 0, 4)));
 	// Le ray tracing materiel n'est utilise que si la carte le supporte (r.RayTracing=True dans DefaultEngine.ini)
 	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing %d"), S.bHardwareRT ? 1 : 0));
-	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing.LightingMode %d"), (S.bHardwareRT && S.bRTHitLighting) ? 1 : 0));
+	// Liquides "RTX" : en qualite Epique et au-dela, les reflets (flaques, eau, carrelage) sont eclaires par les rayons
+	// eux-memes (hit lighting) et non par le cache de surfaces de Lumen ; l'option les force dans toutes les qualites
+	const bool bHitLighting = S.bHardwareRT && (S.bRTHitLighting || S.Quality >= 3);
+	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing.LightingMode %d"), bHitLighting ? 1 : 0));
+	// Les flaques mouillees (rugosite 0,1 a 0,3) restent tracees, pas seulement les miroirs
+	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.MaxRoughnessToTrace %.2f"), S.Quality >= 3 ? 0.5f : 0.4f));
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), S.bHardwareRT ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.VolumetricFog %d"), S.bVolumetricFog ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.ScreenPercentage %d"), FMath::Clamp(S.RenderScale, 50, 100)));

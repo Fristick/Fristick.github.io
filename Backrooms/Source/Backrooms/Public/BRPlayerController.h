@@ -15,9 +15,10 @@ class SEditableTextBox;
 class UVOIPTalker;
 class APlayerState;
 class UAudioComponent;
+class UBRSaveGame;
 
-/** Pages du menu principal */
-enum class EBRMenuPage : uint8 { Main, Solo, Multi, Join };
+/** Pages du menu principal (Solo : choix du niveau parmi ceux deja explores de la partie choisie) */
+enum class EBRMenuPage : uint8 { Main, Solo, Multi, Join, Saves, NewSave };
 
 UCLASS()
 class BACKROOMS_API ABRPlayerController : public APlayerController
@@ -49,6 +50,36 @@ public:
 	const FString& GetLocalAddress() const { return LocalAddress; }
 	/** Quitte la partie (et la session reseau) pour revenir au menu principal */
 	void ReturnToMainMenu();
+
+	// ---- Sauvegardes (v4.1)
+	/** Partie choisie (en cours de jeu, ou selectionnee dans le menu) ; nullptr : aucune */
+	UBRSaveGame* GetActiveSave() const { return ActiveSave; }
+	/** Sauvegarde d'un emplacement (relue a l'ouverture de la page PARTIES) */
+	UBRSaveGame* GetSaveInSlot(int32 Slot) const { return SaveSlots.IsValidIndex(Slot) ? SaveSlots[Slot].Get() : nullptr; }
+	/** Page PARTIES : emplacement de l'element (sauvegarde), MenuItemNew, MenuItemBack */
+	int32 GetMenuSaveSlot(int32 Item) const;
+	static constexpr int32 MenuItemNew = -2;
+	static constexpr int32 MenuItemBack = -3;
+	bool CanCreateSave() const { return SaveOrder.Num() < 6; }
+	/** Emplacements occupes, du plus recemment joue au plus ancien */
+	const TArray<int32>& GetSaveOrder() const { return SaveOrder; }
+	/** Seuls les niveaux deja explores dans la partie choisie peuvent etre choisis */
+	bool IsLevelUnlocked(int32 LevelNumber) const;
+	/** Confirmation de suppression d'une partie (page PARTIES) */
+	bool IsConfirmingDelete() const { return bConfirmDelete; }
+	int32 GetDeleteSlot() const { return DeleteSlot; }
+	/** Demande la suppression d'une partie (touche Suppr ou corbeille) */
+	void RequestDeleteSave(int32 Slot);
+	/** Le choix de partie et de niveau sert a heberger une partie en ligne (et non a jouer seul) */
+	bool IsHostFlow() const { return bHostFlow; }
+	/** Secondes depuis la derniere sauvegarde automatique (icone a l'ecran) */
+	float GetTimeSinceSave() const { return TimeSinceSave; }
+	/** Appele par le monde a chaque niveau charge : il devient explore dans la partie en cours */
+	void OnLevelLoaded(int32 LevelNumber);
+	/** Le personnage local vient de mourir (compteur de la sauvegarde) */
+	void NotifyPlayerDeath();
+	/** Ecrit la partie en cours (etat du joueur, niveau, journal) */
+	void WriteActiveSave();
 	bool IsNetGame() const;
 
 	// ---- Chat vocal de proximite
@@ -193,6 +224,8 @@ protected:
 	TObjectPtr<UInputAction> MenuDownAction;
 	UPROPERTY()
 	TObjectPtr<UInputAction> TalkAction;
+	UPROPERTY()
+	TObjectPtr<UInputAction> MenuDeleteAction;
 
 private:
 	void EnsureInput();
@@ -246,6 +279,17 @@ private:
 	void ShowAddressBox(bool bShow);
 	/** Menu titre et pause : musique, camera qui derive lentement, flou de profondeur sur le niveau */
 	void UpdateMenuAmbience(float DeltaTime);
+	/** Relit les emplacements de sauvegarde (page PARTIES) */
+	void RefreshSaves();
+	/** Choisit une partie existante : page du choix des niveaux, sur le dernier niveau atteint */
+	void SelectSave(int32 Slot);
+	/** Cree une partie et la lance au Niveau 0 */
+	void StartNewSave();
+	/** Applique la partie choisie au personnage et au journal (debut de partie) */
+	void ApplyActiveSave();
+	/** Champ du nom d'une nouvelle partie (Slate, comme le champ de l'adresse IP) */
+	void ShowNameBox(bool bShow);
+	void OnMenuDelete(const FInputActionValue& Value);
 	/** Son d'interface (fonctionne aussi sans personnage) ; repli sur S_UIClick si le son n'est pas importe */
 	void PlayMenuSound(FName Sound, float Volume);
 
@@ -267,6 +311,26 @@ private:
 	FString JoinAddress;
 	TSharedPtr<SWidget> AddressWidget;
 	TSharedPtr<SEditableTextBox> AddressBox;
+	TSharedPtr<SWidget> NameWidget;
+	TSharedPtr<SEditableTextBox> NameBox;
+	FString NewSaveName;
+	bool bPendingNewSave = false;
+
+	// Sauvegardes
+	UPROPERTY()
+	TObjectPtr<UBRSaveGame> ActiveSave;
+	UPROPERTY()
+	TArray<TObjectPtr<UBRSaveGame>> SaveSlots;
+	/** Emplacements occupes, du plus recemment joue au plus ancien */
+	TArray<int32> SaveOrder;
+	bool bHostFlow = false;
+	bool bConfirmDelete = false;
+	int32 DeleteSlot = INDEX_NONE;
+	/** Hote d'une partie en ligne : la sauvegarde est appliquee quand son personnage est pret */
+	bool bApplySaveOnSpawn = false;
+	float AutoSaveTimer = 60.f;
+	float PendingSaveDelay = -1.f;
+	float TimeSinceSave = 100.f;
 
 	float MenuBlur = 0.f;
 	float MenuDrift = 0.f;

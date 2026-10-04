@@ -495,7 +495,8 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 
 	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
-	const TCHAR* V2Params[] = { TEXT("WaterSim"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
+	// (murs et sols : "Puddles", les flaques de la v4.1)
+	const TCHAR* V2Params[] = { TEXT("Puddles"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -651,6 +652,7 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 		if (UTexture* Grime = Texture(TEXT("T_Grime")))
 		{
 			MID->SetTextureParameterValue(TEXT("GrimeTex"), Grime);
+			MID->SetTextureParameterValue(TEXT("PuddleTex"), Grime);
 		}
 		if (S.Caustics > 0.f)
 		{
@@ -675,6 +677,8 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 		MID->SetVectorParameterValue(TEXT("Emissive"), S.Emissive);
 		MID->SetScalarParameterValue(TEXT("Caustics"), S.Caustics);
 		MID->SetScalarParameterValue(TEXT("FloorGrime"), S.FloorGrime);
+		MID->SetScalarParameterValue(TEXT("Puddles"), S.Puddles);
+		MID->SetScalarParameterValue(TEXT("Wetness"), S.Wetness);
 	}
 	else
 	{

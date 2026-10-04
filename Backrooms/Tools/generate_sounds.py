@@ -941,7 +941,22 @@ def s_ui_confirm():
     save("S_UIConfirm", x, 0.5)
 
 
-MENU_V4 = (s_menu_theme, s_ui_hover, s_ui_confirm)
+def s_ui_deny():
+    """Refus (niveau verrouille, suppression) : deux notes graves et sourdes, un peu desaccordees"""
+    n = int(0.42 * SR)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    for f, start in ((196.0, 0.0), (174.6, 0.11)):
+        i0 = int(start * SR)
+        t2 = tt[: n - i0]
+        note = (np.sin(2 * np.pi * f * t2) + 0.35 * np.sin(2 * np.pi * f * 2.01 * t2)
+                + 0.2 * np.sign(np.sin(2 * np.pi * f * t2)) * np.exp(-t2 * 30)) * np.exp(-t2 / 0.09)
+        x[i0:] += note * np.clip(t2 / 0.004, 0, 1)
+    x = reverb(x, t60=0.5, wet=0.18)[:n]
+    save("S_UIDeny", x, 0.45)
+
+
+MENU_V4 = (s_menu_theme, s_ui_hover, s_ui_confirm, s_ui_deny)
 
 
 if __name__ == "__main__":

@@ -186,6 +186,10 @@ public:
 	void UnregisterEntity(ABREntity* Entity);
 	ABREntity* SpawnEntity(EBREntityKind Kind, const FVector& Location);
 	const TArray<int32>& GetVisitedLevels() const { return Visited; }
+	/** Sauvegardes : entites deja rencontrees */
+	TArray<int32> GetDiscoveredList() const { return Discovered.Array(); }
+	/** Sauvegardes : reprend le journal d'une partie (entites rencontrees, niveaux visites), sans annonce */
+	void RestoreJournal(const TArray<int32>& InDiscovered, const TArray<int32>& InVisited);
 	const TArray<TObjectPtr<ABREntity>>& GetEntities() const { return Entities; }
 
 	// ------------------------------------------------------------ v2 : coupures de courant

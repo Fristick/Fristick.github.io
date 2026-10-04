@@ -12,6 +12,7 @@ class UTexture;
 class ABRCharacter;
 class ABRWorld;
 class ABRPlayerController;
+class UBRSaveGame;
 
 UCLASS()
 class BACKROOMS_API ABRHUD : public AHUD
@@ -76,13 +77,23 @@ private:
 	void DrawRecOverlay(float A);
 	void DrawTips(float X, float Y, float W, float A);
 	/** Carte du carrousel : apercu du niveau (ses vraies textures), numero, titre, classe */
-	void DrawLevelCard(int32 Index, float CX, float Top, float Scale, float Alpha, float Sel);
+	void DrawLevelCard(int32 Index, float CX, float Top, float Scale, float Alpha, float Sel, bool bLocked, bool bCurrent);
+	// ---- Parties (v4.1)
+	void DrawMenuSaves(ABRPlayerController* PC, bool bInteractive);
+	void DrawMenuNewSave(ABRPlayerController* PC, bool bInteractive);
+	/** Carte d'une partie : dernier niveau, nom, progression, temps de jeu, date */
+	void DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y, float W, float H, bool bInteractive, float Appear);
+	/** Les niveaux en vignettes : explores (apercu) ou verrouilles (cadenas) */
+	void DrawLevelGrid(const UBRSaveGame* Save, float X, float Y, float W, float A);
+	/** Icone de sauvegarde automatique (en jeu) */
+	void DrawSaveIndicator(float Since);
 	void DrawLevelScene(const FBRLevelDef& D, float X, float Y, float W, float H, float Scale, float Alpha);
 	/** Carte cliquable du menu : icone dans un cercle, libelle, sous-titre ; Sel = animation de selection (0..1) */
 	void DrawCard(float X, float Y, float W, float H, float Sel, const FString& Label, const FString& Sub, const TCHAR* IconName, float Alpha, bool bDanger = false);
 	void MenuCard(int32 Item, float X, float Y, float W, float H, const FString& Sub, const TCHAR* IconName, bool bInteractive, float Appear);
 	/** Bouton en pastille (pages Solo et Rejoindre) */
-	void MenuPill(int32 Item, float X, float Y, float W, float H, const TCHAR* IconName, bool bPrimary, bool bInteractive, float Alpha);
+	void MenuPill(int32 Item, float X, float Y, float W, float H, const TCHAR* IconName, bool bPrimary, bool bInteractive, float Alpha, bool bDanger = false,
+		bool bDisabled = false);
 	void HandleMenuMouse(ABRPlayerController* PC);
 	/** Noms des coequipiers au-dessus de leur tete */
 	void DrawTeammates(ABRCharacter* C);

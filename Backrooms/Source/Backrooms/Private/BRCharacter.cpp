@@ -8,6 +8,7 @@
 #include "BRInteractables.h"
 #include "BRPlayerController.h"
 #include "BREntity.h"
+#include "BRSave.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
@@ -938,6 +939,10 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	UpdateViewMode();
 	GetCharacterMovement()->DisableMovement();
 	PlaySound2D(TEXT("S_Death"), 1.f);
+	if (ABRPlayerController* OwnerPC = Cast<ABRPlayerController>(Controller))
+	{
+		OwnerPC->NotifyPlayerDeath();
+	}
 	if (!HasAuthority())
 	{
 		ServerSetDead(true);
@@ -1143,6 +1148,73 @@ void ABRCharacter::ResetStats()
 	{
 		ServerSetDead(false);
 	}
+}
+
+void ABRCharacter::WriteToSave(UBRSaveGame* Save) const
+{
+	if (!Save)
+	{
+		return;
+	}
+	Save->bHasPlayer = true;
+	Save->Items.Reset();
+	auto AddGroup = [Save](EBRSlotGroup Group, const TArray<FBRItemSlot>& Slots)
+	{
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			if (!Slots[i].IsEmpty())
+			{
+				FBRSavedItem It;
+				It.Group = static_cast<uint8>(Group);
+				It.Index = i;
+				It.Item = static_cast<uint8>(Slots[i].Item);
+				It.Count = Slots[i].Count;
+				Save->Items.Add(It);
+			}
+		}
+	};
+	AddGroup(EBRSlotGroup::Pockets, Pockets);
+	AddGroup(EBRSlotGroup::Storage, Storage);
+	AddGroup(EBRSlotGroup::Equipment, Equipment);
+	Save->Health = Health;
+	Save->Sanity = Sanity;
+	Save->Battery = Battery;
+	Save->Notes = ReadNotes;
+}
+
+void ABRCharacter::ReadFromSave(const UBRSaveGame* Save)
+{
+	ResetStats(); // equipement de depart, etat normal
+	if (!Save || !Save->bHasPlayer)
+	{
+		return;
+	}
+	for (TArray<FBRItemSlot>* Slots : { &Pockets, &Storage, &Equipment })
+	{
+		for (FBRItemSlot& S : *Slots)
+		{
+			S.Clear();
+		}
+	}
+	for (const FBRSavedItem& It : Save->Items)
+	{
+		if (It.Item == 0 || It.Item >= static_cast<uint8>(EBRItem::Count) || It.Count <= 0 || It.Group > 2)
+		{
+			continue;
+		}
+		if (FBRItemSlot* S = GetSlot(static_cast<EBRSlotGroup>(It.Group), It.Index))
+		{
+			S->Item = static_cast<EBRItem>(It.Item);
+			S->Count = It.Count;
+		}
+	}
+	// On ne reprend jamais une partie a l'agonie
+	Health = FMath::Clamp(Save->Health, 25.f, 100.f);
+	Sanity = FMath::Clamp(Save->Sanity, 25.f, 100.f);
+	Battery = FMath::Clamp(Save->Battery, 0.f, 100.f);
+	ReadNotes = Save->Notes;
+	NotesRead = ReadNotes.Num();
+	OnEquipmentChanged();
 }
 
 bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
@@ -1995,6 +2067,13 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 
 	S.bOverride_MotionBlurAmount = true;
 	S.MotionBlurAmount = 0.f;
+
+	// v4.1 : liquides "RTX" : reflets Lumen plus fins, et reflets de premier plan sur l'eau translucide (Poolrooms)
+	// (traces en ray tracing materiel quand la carte le permet)
+	S.bOverride_LumenReflectionQuality = true;
+	S.LumenReflectionQuality = Set.Quality >= 3 ? 2.f : 1.f;
+	S.bOverride_LumenFrontLayerTranslucencyReflections = true;
+	S.LumenFrontLayerTranslucencyReflections = Set.Quality >= 2;
 }
 
 // =====================================================================================================================

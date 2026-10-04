@@ -269,6 +269,53 @@ def icon_keys():
     finish(im, "UI_IconKeys")
 
 
+def icon_lock():
+    im, d = canvas()
+    d.arc(P(38, 14, 90, 70), 180, 360, fill=255, width=12 * SS)
+    d.line(P(44, 42, 44, 58), fill=255, width=12 * SS)
+    d.line(P(84, 42, 84, 58), fill=255, width=12 * SS)
+    d.rounded_rectangle(P(26, 56, 102, 116), radius=10 * SS, fill=255)
+    d.ellipse(P(57, 72, 71, 86), fill=0)
+    d.rectangle(P(61, 80, 67, 100), fill=0)
+    finish(im, "UI_IconLock")
+
+
+def icon_trash():
+    im, d = canvas()
+    d.rounded_rectangle(P(20, 26, 108, 38), radius=4 * SS, fill=255)
+    d.rounded_rectangle(P(50, 14, 78, 30), radius=4 * SS, fill=255)
+    d.polygon(P(30, 44, 98, 44, 92, 116, 36, 116), fill=255)
+    for x in (50, 64, 78):
+        d.line(P(x, 56, x, 104), fill=0, width=6 * SS)
+    finish(im, "UI_IconTrash")
+
+
+def icon_plus():
+    im, d = canvas()
+    d.rounded_rectangle(P(56, 18, 72, 110), radius=7 * SS, fill=255)
+    d.rounded_rectangle(P(18, 56, 110, 72), radius=7 * SS, fill=255)
+    finish(im, "UI_IconPlus")
+
+
+def icon_check():
+    im, d = canvas()
+    d.line(P(22, 68, 52, 98), fill=255, width=16 * SS)
+    d.line(P(52, 98, 108, 34), fill=255, width=16 * SS)
+    d.ellipse(P(44, 90, 60, 106), fill=255)
+    finish(im, "UI_IconCheck")
+
+
+def icon_save():
+    im, d = canvas()
+    d.rounded_rectangle(P(16, 16, 112, 112), radius=12 * SS, fill=255)
+    d.rectangle(P(36, 16, 86, 46), fill=0)
+    d.rectangle(P(70, 22, 80, 40), fill=255)
+    d.rounded_rectangle(P(32, 62, 96, 104), radius=4 * SS, fill=0)
+    d.line(P(42, 76, 86, 76), fill=255, width=5 * SS)
+    d.line(P(42, 90, 86, 90), fill=255, width=5 * SS)
+    finish(im, "UI_IconSave")
+
+
 # ---------------------------------------------------------------------------
 # Degrades et formes douces (fondus, halos, coins arrondis en 9 tranches)
 # ---------------------------------------------------------------------------
@@ -300,6 +347,7 @@ def gradients():
 if __name__ == "__main__":
     print("Interface ->", os.path.abspath(OUT), "(police :", os.path.basename(INTER) + ")")
     logo()
-    for fn in (icon_solo, icon_multi, icon_settings, icon_quit, icon_host, icon_join, icon_back, icon_play, icon_tip, icon_arrow, icon_keys):
+    for fn in (icon_solo, icon_multi, icon_settings, icon_quit, icon_host, icon_join, icon_back, icon_play, icon_tip, icon_arrow, icon_keys,
+               icon_lock, icon_trash, icon_plus, icon_check, icon_save):
         fn()
     gradients()

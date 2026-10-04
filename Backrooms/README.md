@@ -7,6 +7,41 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.1** (sauvegardes, choix des niveaux, liquides en ray tracing) :
+- **Sauvegardes** : **SOLO** ouvre la page **VOS PARTIES** (jusqu'à 6 parties).
+  - **NOUVELLE PARTIE** : vous lui donnez un nom et vous commencez **toujours au Niveau 0**, avec l'équipement de départ.
+  - **Reprendre une partie** : vous choisissez votre niveau, mais **seulement parmi les niveaux déjà explorés** dans
+    cette partie. Les autres apparaissent verrouillés (cadenas, « ? ? ? ») : il faut d'abord les trouver en jeu, par
+    une sortie. Le carrousel s'ouvre sur votre **dernière position**.
+  - La partie retient les niveaux explorés, le dernier niveau atteint, l'**inventaire** et l'équipement, la santé, la
+    santé mentale, les piles, le **journal** (entités rencontrées, notes lues), le temps de jeu et le nombre de morts.
+  - **Sauvegarde automatique** à chaque niveau atteint, toutes les minutes, à l'ouverture de la pause et en quittant
+    (une petite icône s'affiche en bas à droite). Fichiers : `Saved/SaveGames/BR_Partie_1.sav` à `_6.sav`.
+  - **Supprimer** une partie : touche **Suppr** ou la corbeille à droite de la carte, puis confirmation.
+  - **Multijoueur** : **HÉBERGER** passe par le même choix (partie puis niveau exploré) ; les niveaux découverts par le
+    groupe s'ajoutent à la partie de l'hôte. Les invités jouent dans la partie de l'hôte.
+- **Choix des niveaux amélioré** : progression de la partie (« 3 / 12 niveaux explorés »), cartes verrouillées
+  (écran neigeux et cadenas), badge **DERNIÈRE POSITION**, sorties connues de chaque niveau (« Niveau 2 · ??? »), et
+  sur la page VOS PARTIES, les 12 niveaux en vignettes (aperçu des niveaux explorés, cadenas pour les autres).
+- **Liquides en ray tracing (RTX)** :
+  - **flaques** dans le matériau des sols (`M_BR_World`) : surface plane au **reflet miroir** (rugosité 0,02), sol
+    mouillé et plus sombre autour, **ronds de gouttes** qui tombent du plafond. Avec Lumen en ray tracing matériel,
+    ces reflets sont tracés par la carte graphique (néons, piliers, lampe torche) ;
+  - en qualité **Épique** et **Cinématique**, les reflets sont **éclairés par les rayons eux-mêmes** (hit lighting)
+    et non plus par le cache de surfaces de Lumen, et les sols simplement mouillés sont aussi tracés ;
+  - l'**eau translucide** (Poolrooms) reçoit les **reflets de premier plan haute qualité** de Lumen ;
+  - flaques par niveau : **Niveau 1** (le garage, le plus inondé), couloirs techniques (fuites), station électrique,
+    Lights Out (la lampe se reflète dans l'eau noire), grottes, **rues mouillées** de la banlieue et de la ville (les
+    lampadaires s'y reflètent). Réglage par surface dans `BRLevels.cpp` : `Puddles` (part du sol inondée) et `Wetness`.
+- **Niveau 1 refait en parking souterrain** : plafond à 3,60 m avec **poutres de béton** et gaines, **places peintes**
+  contre les murs (et parfois en épi), **arrêts de roue**, **flèches** et **pointillés jaunes** dans les allées,
+  **piliers à bandes jaunes et noires** et liseré blanc, **bande bleue** peinte le long des murs, sol inondé.
+- Les matériaux sont reconstruits tout seuls à l'ouverture de l'éditeur (version des matériaux 2), sans réimporter
+  textures et modèles. Aperçu : `Docs/apercu_v41.jpg` (rendu Cycles du parking avec les mêmes règles que le jeu,
+  et maquette des nouvelles pages du menu).
+
+![Version 4.1 : parking du Niveau 1 et nouvelles pages du menu](Docs/apercu_v41.jpg)
+
 **Nouveautés de la version 4.0** (un jeu plus beau, un menu plus accueillant) :
 - **Nouveau menu principal** :
   - un vrai **logo** « THE BACKROOMS » (lettres taillées dans le papier peint du Niveau 0, néon qui grésille) ;
@@ -223,22 +258,22 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 
 **Étapes**
 1. Copiez le dossier `Backrooms/` où vous voulez sur votre PC.
-   - **Archives en plusieurs parties** (`Backrooms_UE5_v4.0_partie1-sur-N_...zip`, etc.) : extrayez-les **toutes dans
-     le même dossier**. Elles se complètent (projet, sons, textures, modèles) et recréent un seul dossier `Backrooms/`.
-   - **Ou depuis GitHub**, sans limite de taille : dépôt `Fristick/Fristick.github.io`, branche **`backrooms`**,
-     bouton « Code » → « Download ZIP » (ou `git clone -b backrooms ...`).
+   - **Depuis GitHub** : dépôt `Fristick/Fristick.github.io`, branche **`backrooms`**, bouton « Code » →
+     « Download ZIP » (ou `git clone -b backrooms ...`), puis gardez le dossier `Backrooms/`.
 2. Double-cliquez sur **`Backrooms.uproject`**.
    Unreal demande de compiler le module « Backrooms » : répondez **Oui** (1 à 3 minutes).
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 66 textures (dont 25 normal maps), 28 icônes et images d'interface, 69 sons, 126 modèles (FBX). Il crée aussi
+   toutes les ressources : 68 textures (dont 26 normal maps), 33 icônes et images d'interface, 70 sons, 126 modèles (FBX). Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
-   *(Depuis une v3.9 déjà importée, la v4.0 n'ajoute que les images du menu et 3 sons : ils sont importés tout seuls à l'ouverture de l'éditeur.)*
-4. Appuyez sur **Play** (Alt+P). Dans le menu principal, choisissez **SOLO**, puis le niveau (← / →), puis **NOCLIPPER**
-   (ou **Entrée**). Pour jouer à plusieurs : **MULTIJOUEUR** (voir § 2 ter).
+   *(Depuis une v3.9 ou v4.0 déjà importée, seuls les nouveaux fichiers (images du menu, sons, texture T_Hazard) sont importés et les
+   matériaux reconstruits (flaques), tout seuls à l'ouverture de l'éditeur.)*
+4. Appuyez sur **Play** (Alt+P). Dans le menu principal, choisissez **SOLO**, puis **NOUVELLE PARTIE** (nom, puis
+   **COMMENCER** : Niveau 0) ou une partie existante (choix du niveau parmi ceux déjà explorés, ← / →, puis
+   **NOCLIPPER**). Pour jouer à plusieurs : **MULTIJOUEUR** (voir § 2 ter).
 
 > Pour relancer l'import à la main : *Window → Output Log*, choisir **Python** en bas, puis
 > `import backrooms_setup; backrooms_setup.run(force=True)`
@@ -325,7 +360,8 @@ Les réglages et les touches sont sauvegardés dans `Saved/Config/<plateforme>/B
 
 ## 2 ter. Multijoueur (coopération, jusqu'à 4 joueurs)
 
-**Héberger** : menu principal → **MULTIJOUEUR** → choisir le niveau de départ (← / →) → **HÉBERGER UNE PARTIE**.
+**Héberger** : menu principal → **MULTIJOUEUR** → **HÉBERGER UNE PARTIE** → choisir une de vos parties (ou en créer une)
+→ choisir un niveau déjà exploré dans cette partie (← / →) → **HÉBERGER**.
 La carte se recharge en mode serveur et vous êtes directement en jeu. Votre adresse IP est affichée sur la page
 MULTIJOUEUR : donnez-la à vos amis. Au premier lancement, Windows peut demander d'autoriser le jeu dans le pare-feu :
 acceptez (au moins pour les réseaux privés).
@@ -473,7 +509,8 @@ Backrooms/
 │   ├── BRRig.*                  Humanoïdes articulés (entités et corps du joueur)
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
 │   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu principal, multijoueur, inventaire, paramètres, console
-│   ├── BRHUD.*                  Interface (Canvas) : menu titre animé, carrousel des niveaux, REC, pause,
+│   ├── BRSave.*                 Sauvegardes : parties (6 emplacements), niveaux explorés, inventaire, journal
+│   ├── BRHUD.*                  Interface (Canvas) : menu titre animé, parties, carrousel des niveaux, REC, pause,
 │   │                            carte de titre, inventaire TAB façon Escape Together
 │   ├── BRInteractables.*        Objets à ramasser et sorties de niveau (verrouillées par les objectifs)
 │   ├── BRAssets.*               Chargement des ressources + matériaux + secours (textures lues dans RawAssets)
@@ -584,6 +621,9 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | Un ami ne voit pas les mêmes salles | Vous n'avez pas la même version du jeu : utilisez tous la même compilation |
 | Les entités ont encore leur ancienne apparence | Les modèles v3.5 (`SM_*ET*`) ne sont pas importés : relancer `backrooms_setup.run(force=True)` |
 | Le menu n'a pas de musique / pas de logo | Les nouvelles ressources v4.0 (`UI_*`, `S_MenuTheme`, `S_UIHover`, `S_UIConfirm`) ne sont pas encore importées : rouvrez l'éditeur ou lancez `backrooms_setup.run()`. Sans import, le logo est lu dans `RawAssets/Icons`, mais les sons manquent |
+| Pas de flaques au sol / reflets flous | Les matériaux v4.1 ne sont pas encore reconstruits : rouvrez l'éditeur (ou `backrooms_setup.run()`). Les reflets les plus nets demandent le ray tracing matériel (**Paramètres → RTX**) et la qualité **Épique** ou **Cinématique** |
+| Un niveau est verrouillé dans le menu | Normal : seuls les niveaux déjà explorés dans la partie choisie sont proposés. Trouvez une sortie qui y mène en jeu |
+| Où sont mes sauvegardes ? | `Saved/SaveGames/BR_Partie_1.sav` à `BR_Partie_6.sav` (dossier du projet, ou du jeu empaqueté) |
 | Le jeu rame depuis la v4.0 | Désactivez **BROUILLARD VOLUMÉTRIQUE** dans les paramètres, ou baissez la qualité |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |
 

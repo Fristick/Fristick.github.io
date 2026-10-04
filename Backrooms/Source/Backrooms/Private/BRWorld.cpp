@@ -429,6 +429,11 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	ApplyEnvironment();
 	UpdateStreaming(true);
 	PlacePlayer(bFirstClientLoad);
+	// Sauvegarde de la partie en cours : ce niveau est desormais explore
+	if (ABRPlayerController* PC = LocalPC())
+	{
+		PC->OnLevelLoaded(Current->Number);
+	}
 	// Client arrive pendant une coupure : on reprend l'etat du serveur
 	if (!HasAuthority() && NetBlackout != 0)
 	{
@@ -784,6 +789,24 @@ void ABRWorld::PlacePlayer(bool bKeepServerSpot)
 	}
 	P->OnEnteredLevel(Def());
 	bPlayerPlaced = true;
+}
+
+void ABRWorld::RestoreJournal(const TArray<int32>& InDiscovered, const TArray<int32>& InVisited)
+{
+	Discovered.Empty();
+	for (const int32 K : InDiscovered)
+	{
+		Discovered.Add(K);
+	}
+	Visited.Reset();
+	if (Current)
+	{
+		Visited.Add(Current->Number);
+	}
+	for (const int32 L : InVisited)
+	{
+		Visited.AddUnique(L);
+	}
 }
 
 void ABRWorld::Discover(EBREntityKind Kind)

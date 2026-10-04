@@ -22,6 +22,8 @@ import os
 import unreal
 
 VERSION = 10
+# Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques)
+MATERIAL_VERSION = 2
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -61,19 +63,29 @@ def marker_path():
     return os.path.join(project_dir(), "Saved", "BackroomsSetup.txt")
 
 
-def installed_version():
+def _marker_values():
     try:
         with open(marker_path()) as fh:
-            return int(fh.read().strip() or 0)
+            return [int(v) for v in fh.read().split()]
     except Exception:
-        return 0
+        return []
+
+
+def installed_version():
+    v = _marker_values()
+    return v[0] if v else 0
+
+
+def installed_material_version():
+    v = _marker_values()
+    return v[1] if len(v) > 1 else (1 if v else 0)
 
 
 def write_marker():
     try:
         os.makedirs(os.path.dirname(marker_path()), exist_ok=True)
         with open(marker_path(), "w") as fh:
-            fh.write(str(VERSION))
+            fh.write("%d %d" % (VERSION, MATERIAL_VERSION))
     except Exception as e:
         warn("Impossible d'ecrire %s : %s" % (marker_path(), e))
 
@@ -580,18 +592,32 @@ def build_world_material():
     col = g.mul(col, cm)
 
     base = g.mul(col, g.vector("Tint", (1, 1, 1, 1)))
-    g.output(base, P.MP_BASE_COLOR)
 
-    # Rugosite variable (zones plus lisses / plus mates)
+    # v4.1 : flaques et sol mouille (reflets ray traces : rugosite quasi nulle, surface plane, ronds de gouttes)
+    pud = g.custom("BRPuddles", BR_PUDDLES_HLSL, [
+        ("WP", wp), ("N", g.vertex_normal()), ("T", g.time()), ("Amount", g.scalar("Puddles", 0.0)),
+        ("Wet", g.scalar("Wetness", 0.0)), ("Tex", g.texobj("PuddleTex", grime_tex))], output="CMOT_FLOAT4")
+    puddle = g.mask(pud, "r")
+    wet = g.mask(pud, "g")
+    ripple = g.mask(pud, "ba")
+    # Mouille : plus sombre ; sous l'eau d'une flaque : encore un peu plus (l'eau absorbe)
+    shaded = g.mul(base, g.lerp(g.const(1.0), g.const(0.55), wet))
+    shaded = g.mul(shaded, g.lerp(g.const(1.0), g.const(0.7), puddle))
+    g.output(shaded, P.MP_BASE_COLOR)
+
+    # Rugosite variable (zones plus lisses / plus mates), puis mouillee, puis miroir dans les flaques
     rv = g.tex("GrimeTex", grime_tex, g.mul(guv, g.const(3.1)), out="B")
     rough = g.sat(g.add(g.scalar("Roughness", 0.85), g.mul(g.sub(rv, g.const(0.5)), g.const(0.3))))
+    rough = g.lerp(rough, g.mul(rough, g.const(0.35)), wet)
+    rough = g.lerp(rough, g.const(0.02), puddle)
     g.output(rough, P.MP_ROUGHNESS)
-    g.output(g.scalar("Metallic", 0.0), P.MP_METALLIC)
+    g.output(g.mul(g.scalar("Metallic", 0.0), g.sub(g.const(1.0), puddle)), P.MP_METALLIC)
     g.output(g.add(g.mul(base, g.scalar("SelfIllum", 0.0)), g.vector("Emissive", (0, 0, 0, 1))), P.MP_EMISSIVE_COLOR)
 
-    # Normal maps (espace tangent, melange triplanaire)
+    # Normal maps (espace tangent, melange triplanaire) ; l'eau d'une flaque est plane, seules les gouttes la rident
     nrm = tri("NormalTex", load_tex("T_FlatNormal"), normal=True)
-    g.output(g.lerp(g.c3(0.0, 0.0, 1.0), nrm, g.scalar("NormalStrength", 1.0)), P.MP_NORMAL)
+    nrm = g.lerp(g.c3(0.0, 0.0, 1.0), nrm, g.scalar("NormalStrength", 1.0))
+    g.output(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), P.MP_NORMAL)
     finish_material(m)
     return m
 
@@ -698,6 +724,47 @@ BR_CAUSTICS_HLSL = (
     "float above = WP.z - 45.0;\n"
     "float fade = lerp(above > 0.0 ? 0.75 * saturate(1.0 - above / 200.0) : saturate(1.0 + above / 300.0), 1.0, Wz);\n"
     "return 1.0 + Amount * fade * (k * 1.5 - 0.27);\n")
+
+
+BR_PUDDLES_HLSL = (
+    "// Flaques et sol mouille (v4.1). Entrees : WP (position monde, cm), N (normale du sommet), T (temps, s),\n"
+    "// Amount (part du sol couverte de flaques, 0..1), Wet (humidite generale, 0..1), Tex (bruit : T_Grime).\n"
+    "// Sortie : float4(flaque 0..1, sol mouille 0..1, pente XY des ronds de gouttes dans les flaques).\n"
+    "if (Amount <= 0.0 && Wet <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
+    "float up = saturate((N.z - 0.6) * 4.0);\n"
+    "float2 p = WP.xy;\n"
+    "float n1 = Texture2DSample(Tex, TexSampler, p / 1150.0).r;\n"
+    "float n2 = Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g;\n"
+    "float n = n1 * 0.82 + n2 * 0.18;\n"
+    "// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~26 %, 1 -> ~57 % (bruit de T_Grime)\n"
+    "float th = lerp(0.94, 0.76, saturate(Amount));\n"
+    "float puddle = Amount > 0.0 ? saturate((n - th) / 0.01) * up : 0.0;\n"
+    "float wet = saturate(saturate((n - th + 0.035) / 0.035) * 0.9 * saturate(Amount * 4.0) + Wet) * up;\n"
+    "wet = max(wet, puddle);\n"
+    "// Gouttes qui tombent du plafond : un rond qui s'elargit par case de 70 cm, a un rythme propre a chaque case\n"
+    "float2 ripple = float2(0.0, 0.0);\n"
+    "if (puddle > 0.001)\n"
+    "{\n"
+    "  float2 cell = floor(p / 70.0);\n"
+    "  for (int i = -1; i <= 1; i++)\n"
+    "  {\n"
+    "    for (int j = -1; j <= 1; j++)\n"
+    "    {\n"
+    "      float2 c = cell + float2(i, j);\n"
+    "      float h = frac(sin(dot(c, float2(12.9898, 78.233))) * 43758.5453);\n"
+    "      float h2 = frac(h * 91.7);\n"
+    "      float2 center = (c + float2(h, h2)) * 70.0;\n"
+    "      float period = 1.8 + h2 * 2.6;\n"
+    "      float age = frac(T / period + h) * period;\n"
+    "      float2 d = p - center;\n"
+    "      float r = length(d);\n"
+    "      float ring = exp(-pow((r - age * 34.0) / 3.5, 2.0)) * exp(-age * 1.7);\n"
+    "      ripple += (d / max(r, 0.01)) * ring * 0.45;\n"
+    "    }\n"
+    "  }\n"
+    "}\n"
+    "return float4(puddle, wet, ripple * puddle);\n"
+)
 
 
 def build_water_surface_material():
@@ -814,7 +881,7 @@ def create_map():
 # Point d'entree
 # ---------------------------------------------------------------------------
 def needs_setup():
-    if installed_version() < VERSION:
+    if installed_version() < VERSION or installed_material_version() < MATERIAL_VERSION:
         return True
     return bool(materials_missing() or missing_in("Textures", TEX, IMG_EXT) or missing_in("Icons", UI, (".png",))
                 or missing_in("Sounds", SND, (".wav",)) or missing_in("Meshes", MESH, (".fbx",)) or not exists(MAP_PATH))
@@ -828,7 +895,7 @@ def run(force=False):
     ico = list_raw("Icons", (".png",)) if force else missing_in("Icons", UI, (".png",))
     snd = list_raw("Sounds", (".wav",)) if force else missing_in("Sounds", SND, (".wav",))
     msh = list_raw("Meshes", (".fbx",)) if force else missing_in("Meshes", MESH, (".fbx",))
-    mats = list(MATERIALS) if force else materials_missing()
+    mats = list(MATERIALS) if (force or installed_material_version() < MATERIAL_VERSION) else materials_missing()
     log("Installation v%d : %d textures, %d icones, %d sons, %d modeles, %d materiaux"
         % (VERSION, len(tex), len(ico), len(snd), len(msh), len(mats)))
     with unreal.ScopedSlowTask(6, "The Backrooms : import des ressources...") as task:

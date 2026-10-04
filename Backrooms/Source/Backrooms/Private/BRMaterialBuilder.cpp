@@ -336,15 +336,33 @@ namespace
 		Col = G.Mul(Col, G.Custom(TEXT("BRCaustics"), BRMaterialBuilder::CausticsHLSL(), CMOT_Float1, CausticIn));
 
 		const FPin Base = G.Mul(Col, G.Vector(TEXT("Tint"), FLinearColor::White));
-		FGraph::Link(Out->BaseColor, Base);
+
+		// v4.1 : flaques et sol mouille (reflets ray traces : rugosite quasi nulle, surface plane, ronds de gouttes)
+		TArray<TPair<FName, FPin>> PuddleIn;
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("WP"), WP));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("N"), G.VertexNormal()));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("T"), G.Time()));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("Amount"), G.Scalar(TEXT("Puddles"), 0.f)));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("Wet"), G.Scalar(TEXT("Wetness"), 0.f)));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("Tex"), G.TexObj(TEXT("PuddleTex"), Grime)));
+		const FPin Pud = G.Custom(TEXT("BRPuddles"), BRMaterialBuilder::PuddlesHLSL(), CMOT_Float4, PuddleIn);
+		const FPin Puddle = G.Mask(Pud, TEXT("r"));
+		const FPin Wet = G.Mask(Pud, TEXT("g"));
+		const FPin Ripple = G.Mask(Pud, TEXT("ba"));
+		FPin Shaded = G.Mul(Base, G.Lerp(G.Const(1.f), G.Const(0.55f), Wet));
+		Shaded = G.Mul(Shaded, G.Lerp(G.Const(1.f), G.Const(0.7f), Puddle));
+		FGraph::Link(Out->BaseColor, Shaded);
 
 		const FPin Rv = G.Tex(TEXT("GrimeTex"), Grime, false, G.Mul(GUv, G.Const(3.1f)), 3);
-		FGraph::Link(Out->Roughness, G.Sat(G.Add(G.Scalar(TEXT("Roughness"), 0.85f), G.Mul(G.Sub(Rv, G.Const(0.5f)), G.Const(0.3f)))));
-		FGraph::Link(Out->Metallic, G.Scalar(TEXT("Metallic"), 0.f));
+		FPin Rough = G.Sat(G.Add(G.Scalar(TEXT("Roughness"), 0.85f), G.Mul(G.Sub(Rv, G.Const(0.5f)), G.Const(0.3f))));
+		Rough = G.Lerp(Rough, G.Mul(Rough, G.Const(0.35f)), Wet);
+		Rough = G.Lerp(Rough, G.Const(0.02f), Puddle);
+		FGraph::Link(Out->Roughness, Rough);
+		FGraph::Link(Out->Metallic, G.Mul(G.Scalar(TEXT("Metallic"), 0.f), G.Sub(G.Const(1.f), Puddle)));
 		FGraph::Link(Out->EmissiveColor, G.Add(G.Mul(Base, G.Scalar(TEXT("SelfIllum"), 0.f)), G.Vector(TEXT("Emissive"), FLinearColor::Black)));
 
-		const FPin Nrm = Tri(TEXT("NormalTex"), NormalDefault, true);
-		FGraph::Link(Out->Normal, G.Lerp(G.C3(0.f, 0.f, 1.f), Nrm, G.Scalar(TEXT("NormalStrength"), 1.f)));
+		const FPin Nrm = G.Lerp(G.C3(0.f, 0.f, 1.f), Tri(TEXT("NormalTex"), NormalDefault, true), G.Scalar(TEXT("NormalStrength"), 1.f));
+		FGraph::Link(Out->Normal, G.Lerp(Nrm, G.Append(Ripple, G.Const(1.f)), Puddle));
 	}
 
 	void BuildMesh(FGraph& G, UMaterialEditorOnlyData* Out, bool bSkin, TFunctionRef<UTexture*(FName)> LoadTexture)
@@ -510,6 +528,51 @@ namespace BRMaterialBuilder
 			"float s2 = 1.7689 * (1.0 - ndv * ndv);\n"
 			"float F = s2 >= 1.0 ? 1.0 : 0.02 + 0.98 * pow(1.0 - sqrt(1.0 - s2), 5.0);\n"
 			"return float4(C * (1.0 - F), F);\n");
+		return Code;
+	}
+
+	const FString& PuddlesHLSL()
+	{
+		// Entrees : WP, N (normale du sommet), T, Amount (flaques), Wet (humidite), Tex (bruit).
+		// Sortie : float4(flaque, sol mouille, pente XY des ronds de gouttes)
+		static const FString Code = TEXT(
+			"// Flaques et sol mouille (v4.1). Entrees : WP (position monde, cm), N (normale du sommet), T (temps, s),\n"
+			"// Amount (part du sol couverte de flaques, 0..1), Wet (humidite generale, 0..1), Tex (bruit : T_Grime).\n"
+			"// Sortie : float4(flaque 0..1, sol mouille 0..1, pente XY des ronds de gouttes dans les flaques).\n"
+			"if (Amount <= 0.0 && Wet <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
+			"float up = saturate((N.z - 0.6) * 4.0);\n"
+			"float2 p = WP.xy;\n"
+			"float n1 = Texture2DSample(Tex, TexSampler, p / 1150.0).r;\n"
+			"float n2 = Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g;\n"
+			"float n = n1 * 0.82 + n2 * 0.18;\n"
+			"// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~26 %, 1 -> ~57 % (bruit de T_Grime)\n"
+			"float th = lerp(0.94, 0.76, saturate(Amount));\n"
+			"float puddle = Amount > 0.0 ? saturate((n - th) / 0.01) * up : 0.0;\n"
+			"float wet = saturate(saturate((n - th + 0.035) / 0.035) * 0.9 * saturate(Amount * 4.0) + Wet) * up;\n"
+			"wet = max(wet, puddle);\n"
+			"// Gouttes qui tombent du plafond : un rond qui s'elargit par case de 70 cm, a un rythme propre a chaque case\n"
+			"float2 ripple = float2(0.0, 0.0);\n"
+			"if (puddle > 0.001)\n"
+			"{\n"
+			"  float2 cell = floor(p / 70.0);\n"
+			"  for (int i = -1; i <= 1; i++)\n"
+			"  {\n"
+			"    for (int j = -1; j <= 1; j++)\n"
+			"    {\n"
+			"      float2 c = cell + float2(i, j);\n"
+			"      float h = frac(sin(dot(c, float2(12.9898, 78.233))) * 43758.5453);\n"
+			"      float h2 = frac(h * 91.7);\n"
+			"      float2 center = (c + float2(h, h2)) * 70.0;\n"
+			"      float period = 1.8 + h2 * 2.6;\n"
+			"      float age = frac(T / period + h) * period;\n"
+			"      float2 d = p - center;\n"
+			"      float r = length(d);\n"
+			"      float ring = exp(-pow((r - age * 34.0) / 3.5, 2.0)) * exp(-age * 1.7);\n"
+			"      ripple += (d / max(r, 0.01)) * ring * 0.45;\n"
+			"    }\n"
+			"  }\n"
+			"}\n"
+			"return float4(puddle, wet, ripple * puddle);\n");
 		return Code;
 	}
 

@@ -65,7 +65,7 @@ NORMAL_STRENGTH = {
     "T_L0_Carpet": 7.0, "T_L0_Ceiling": 5.0, "T_Concrete": 4.0, "T_ConcreteFloor": 5.0,
     "T_ConcreteDark": 4.0, "T_Brick": 8.0, "T_MetalPanel": 4.0, "T_OfficeCarpet": 6.0, "T_OfficeWall": 2.0,
     "T_HotelCarpet": 5.0, "T_HotelWallpaper": 3.0, "T_Wood": 3.0, "T_Rock": 10.0, "T_Dirt": 6.0,
-    "T_Asphalt": 5.0, "T_Grass": 6.0, "T_Facade": 4.0, "T_Siding": 7.0, "T_Skin": 4.0,
+    "T_Asphalt": 5.0, "T_Grass": 6.0, "T_Facade": 4.0, "T_Siding": 7.0, "T_Skin": 4.0, "T_Hazard": 3.0,
 }
 
 
@@ -483,6 +483,25 @@ def t_asphalt():
     save("T_Asphalt", img)
 
 
+def t_hazard():
+    """Bandes jaunes et noires a 45 degres (pieds des piliers du parking), peinture usee et ecaillee"""
+    S = 1024
+    x, y = grid_coords(S)
+    stripe = ((x + y) * 4.0) % 1.0  # 4 bandes par repetition, raccord parfait
+    yellow = smoothstep(0.47, 0.53, stripe) * (1 - smoothstep(0.97, 1.0, stripe)) + (1 - smoothstep(0.0, 0.03, stripe)) * 0.0
+    paint = mix(rgb_from(np.ones((S, S), np.float32), (0.05, 0.05, 0.05)), rgb_from(np.ones((S, S), np.float32), (0.86, 0.66, 0.08)), yellow)
+    a = noise(S, beta=1.6, seed=171)
+    paint *= (1 + 0.08 * a)[..., None]
+    # Ecailles : la peinture est partie, le beton apparait
+    chips = smoothstep(1.7, 2.1, noise(S, beta=1.1, seed=172)) + smoothstep(2.0, 2.3, noise(S, beta=0.6, seed=173))
+    concrete = rgb_from(1 + 0.1 * noise(S, beta=2.0, seed=174), (0.45, 0.44, 0.42))
+    img = mix(paint, concrete, np.clip(chips, 0, 1))
+    # Salissures en bas (projections, frottements de pneus)
+    dirt = smoothstep(0.3, 1.8, noise(S, beta=2.6, seed=175))
+    img *= (1 - 0.35 * dirt)[..., None]
+    save("T_Hazard", img)
+
+
 def t_grass():
     S = 512
     blades = noise(S, beta=0.6, seed=171, aniso=(1.0, 0.35))
@@ -640,6 +659,7 @@ if __name__ == "__main__":
     t_rock()
     t_dirt()
     t_asphalt()
+    t_hazard()
     t_grass()
     t_facade()
     t_siding()

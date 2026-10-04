@@ -29,6 +29,8 @@ namespace BRMaterialBuilder
 	const FString& WaterShadeHLSL();
 	/** Caustiques sur le carrelage, deformees par les vagues simulees -> multiplicateur de couleur */
 	const FString& CausticsHLSL();
+	/** Flaques et sol mouille (WP, N, T, Amount, Wet, Tex) -> float4(flaque, mouille, pente XY des gouttes) */
+	const FString& PuddlesHLSL();
 
 	/** true si l'executable peut compiler des materiaux (editeur, PIE, -game non cuisine) */
 	bool IsAvailable();

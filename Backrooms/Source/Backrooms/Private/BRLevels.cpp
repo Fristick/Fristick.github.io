@@ -96,16 +96,18 @@ namespace
 		D.Number = 1;
 		D.Title = TEXT("Habitable Zone");
 		D.Nickname = TEXT("Zone habitable");
-		D.Description = TEXT("Un entrep\u00f4t de b\u00e9ton immense et brumeux, ponctu\u00e9 de piliers et de flaques. Des caisses de ")
-			TEXT("ravitaillement apparaissent parfois. Quand les n\u00e9ons s'\u00e9teignent, quelque chose se met \u00e0 r\u00f4der.");
+		D.Description = TEXT("Un parking souterrain de b\u00e9ton, immense et brumeux : piliers, places peintes, flaques qui refl\u00e8tent les n\u00e9ons. ")
+			TEXT("Des caisses de ravitaillement apparaissent parfois. Quand les n\u00e9ons s'\u00e9teignent, quelque chose se met \u00e0 r\u00f4der.");
 		D.SurvivalClass = 1;
 		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Peu d'entit\u00e9s");
 		D.Layout = EBRLayout::Rooms;
-		D.CellSize = 600.f; D.WallHeight = 560.f; D.WallThickness = 40.f;
+		D.CellSize = 600.f; D.WallHeight = 360.f; D.WallThickness = 40.f;
 		D.WallLineChance = 0.28f; D.SegmentLength = 6; D.DoorChance = 0.45f; D.DoorWidth = 260.f;
 		D.PillarChance = 0.55f; D.PillarSize = 80.f; D.OpenZoneChance = 0.3f;
 		D.bTrim = false; D.bLintels = true;
 		D.Floor = S(TEXT("T_ConcreteFloor"), C(1, 1, 1), 400.f, 0.55f, 0.35f);
+		D.Floor.Puddles = 0.55f; D.Floor.Wetness = 0.12f; // le sol du garage : flaques en reflets ray traces
+		D.bGarage = true;
 		D.Wall = S(TEXT("T_Concrete"), C(0.95f, 0.95f, 0.95f), 350.f, 0.85f, 0.4f);
 		D.Ceiling = S(TEXT("T_Concrete"), C(0.6f, 0.6f, 0.6f), 400.f, 0.9f, 0.3f);
 		D.Pillar = S(TEXT("T_Concrete"), C(0.85f, 0.85f, 0.85f), 300.f, 0.85f, 0.5f);
@@ -154,6 +156,7 @@ namespace
 		D.LoopChance = 0.15f; D.OpenZoneChance = 0.06f;
 		D.bTrim = false; D.bLintels = false;
 		D.Floor = S(TEXT("T_ConcreteFloor"), C(0.8f, 0.76f, 0.7f), 250.f, 0.7f, 0.5f);
+		D.Floor.Puddles = 0.35f; D.Floor.Wetness = 0.1f; // fuites des tuyaux
 		D.Wall = S(TEXT("T_Concrete"), C(0.72f, 0.68f, 0.6f), 250.f, 0.9f, 0.55f);
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
 		D.Fixture = EBRFixture::Bulb;
@@ -201,6 +204,7 @@ namespace
 		D.bTrim = false; D.bLintels = false;
 		D.Floor = S(TEXT("T_MetalPanel"), C(0.6f, 0.6f, 0.6f), 200.f, 0.6f, 0.5f);
 		D.Floor.Metallic = 0.5f;
+		D.Floor.Puddles = 0.2f; // eau sur les toles (et courts-circuits...)
 		D.Wall = S(TEXT("T_Brick"), C(0.9f, 0.85f, 0.8f), 220.f, 0.9f, 0.5f);
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
 		D.Fixture = EBRFixture::Bulb;
@@ -342,6 +346,7 @@ namespace
 		D.CellSize = 350.f; D.WallHeight = 290.f;
 		D.WallLineChance = 0.6f; D.SegmentLength = 4; D.DoorChance = 0.3f;
 		D.Floor = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.8f, 0.3f);
+		D.Floor.Puddles = 0.3f; // la lampe se reflete dans l'eau noire
 		D.Wall = S(TEXT("T_ConcreteDark"), C(0.8f, 0.8f, 0.8f), 250.f, 0.9f, 0.3f);
 		D.Ceiling = D.Wall;
 		D.Trim = D.Wall;
@@ -384,6 +389,7 @@ namespace
 		D.CellSize = 400.f; D.WallHeight = 450.f; D.SolidChance = 0.38f;
 		D.bTrim = false; D.bLintels = false;
 		D.Floor = S(TEXT("T_Rock"), C(0.7f, 0.68f, 0.65f), 300.f, 0.9f, 0.5f);
+		D.Floor.Puddles = 0.35f; D.Floor.Wetness = 0.15f; // ruissellement de la grotte
 		D.Solid = S(TEXT("T_Rock"), C(1, 1, 1), 300.f, 0.9f, 0.5f);
 		D.Wall = D.Solid;
 		D.Ceiling = S(TEXT("T_Rock"), C(0.5f, 0.5f, 0.5f), 300.f, 0.9f, 0.5f);
@@ -426,6 +432,7 @@ namespace
 		D.bCeiling = false; D.bTrim = false; D.bOutdoor = true;
 		D.Floor = S(TEXT("T_Grass"), C(1, 1, 1), 300.f, 0.95f, 0.4f);
 		D.Road = S(TEXT("T_Asphalt"), C(1, 1, 1), 400.f, 0.75f, 0.3f);
+		D.Road.Puddles = 0.4f; D.Road.Wetness = 0.35f; // rues mouillees : les lampadaires s'y refletent
 		D.Wall = S(TEXT("T_Siding"), C(1, 1, 1), 200.f);
 		D.Fixture = EBRFixture::StreetLamp;
 		D.LightChance = 0.6f; D.BrokenChance = 0.2f; D.FlickerChance = 0.1f;
@@ -502,6 +509,7 @@ namespace
 		D.CellSize = 600.f; D.Spacing = 4; D.ViewDistance = 9000.f;
 		D.bCeiling = false; D.bTrim = false; D.bOutdoor = true;
 		D.Floor = S(TEXT("T_Asphalt"), C(1, 1, 1), 400.f, 0.75f, 0.3f);
+		D.Floor.Puddles = 0.3f; D.Floor.Wetness = 0.25f; // chaussee apres la pluie
 		D.Road = S(TEXT("T_Concrete"), C(0.9f, 0.9f, 0.9f), 300.f, 0.85f, 0.3f);
 		D.Solid = S(TEXT("T_Facade"), C(1, 1, 1), 800.f, 0.6f, 0.2f);
 		D.Wall = D.Solid;
