@@ -1896,6 +1896,21 @@ void ABRCharacter::UpdateAudio(float Dt)
 	}
 }
 
+void ABRCharacter::ApplyMenuBlur(float Amount)
+{
+	if (!Camera)
+	{
+		return;
+	}
+	// Mise au point a 25 cm, grande ouverture : tout le decor devient un bokeh doux (DOF cinematographique d'UE5)
+	FPostProcessSettings& S = Camera->PostProcessSettings;
+	const bool bOn = Amount > 0.01f;
+	S.bOverride_DepthOfFieldFocalDistance = bOn;
+	S.DepthOfFieldFocalDistance = 25.f;
+	S.bOverride_DepthOfFieldFstop = bOn;
+	S.DepthOfFieldFstop = FMath::Lerp(16.f, 1.4f, FMath::Clamp(Amount, 0.f, 1.f));
+}
+
 void ABRCharacter::UpdatePostProcess(float Dt)
 {
 	if (!Camera)

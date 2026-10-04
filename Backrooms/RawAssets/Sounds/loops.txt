@@ -13,5 +13,6 @@ S_Chase
 S_ExitHum
 S_Heartbeat
 S_Hum
+S_MenuTheme
 S_Moth
 S_Underwater

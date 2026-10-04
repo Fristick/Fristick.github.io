@@ -7,6 +7,34 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.0** (un jeu plus beau, un menu plus accueillant) :
+- **Nouveau menu principal** :
+  - un vrai **logo** « THE BACKROOMS » (lettres taillées dans le papier peint du Niveau 0, néon qui grésille) ;
+  - le **niveau reste visible derrière le menu** : la caméra regarde lentement autour d'elle et un **flou de profondeur**
+    transforme le décor en bokeh doux ;
+  - des **cartes animées** avec icône et sous-titre (« Partir seul dans l'inconnu »…), qui glissent et s'allument au
+    survol ; elles arrivent en cascade à l'ouverture ;
+  - une **musique d'ambiance** (32 s en boucle, nappes et boîte à musique désaccordée sur un bourdonnement de néon), des
+    sons de survol et de validation ;
+  - une **astuce** qui change toutes les 7 secondes (12 conseils de survie, avec vos touches) ;
+  - **SOLO** : un **carrousel des niveaux** ; chaque carte montre un aperçu du niveau avec **ses vraies textures**
+    (plafond et néons, papier peint, moquette, eau, ciel), son numéro, son nom et sa classe ; on clique sur une carte
+    voisine pour la choisir, sur celle du centre pour noclipper ;
+  - **MULTIJOUEUR** : le conseil « qui doit héberger », le niveau de départ et votre adresse IP, en panneaux lisibles ;
+  - les touches s'affichent comme de **vraies touches de clavier**, le viseur du caméscope (REC) encadre le tout.
+- **Interface en jeu** : polices nettes en plusieurs graisses (Roboto Light / Regular / Bold / Black du moteur),
+  **formes arrondies**, notifications en pastilles, barres de vie arrondies, **pause** au même style que le menu
+  (cartes, flou de l'arrière-plan), et une **carte de titre façon générique de film** à l'arrivée dans un niveau
+  (bandes noires, numéro géant, filet jaune qui s'étire, classe de survie).
+- **Graphismes** :
+  - **brouillard volumétrique** dans tous les niveaux : halos sous chaque néon, rayons de lumière du jour sous les
+    verrières des Poolrooms, faisceau de la lampe dans la poussière (désactivable dans les paramètres) ;
+  - **étalonnage « cinéma »** propre à chaque niveau : ombres et hautes lumières légèrement teintées (ombres verdâtres
+    et néons chauds au Niveau 0, ombres bleutées au Niveau 1, sarcelle et orange dans les couloirs techniques…) ;
+  - **exposition locale** : les néons ne brûlent plus l'image et les recoins sombres gardent leur détail ;
+  - image plus **nette** (filtre de netteté à partir de la qualité « Élevé »).
+- Aperçu : `Docs/apercu_menu_v40.jpg` (maquette fidèle de l'interface, mêmes coordonnées que le code).
+
 **Nouveautés de la version 3.9** (qualité maximale) :
 - **Plus aucun compromis de taille** : jusqu'ici, tout tenait dans un seul zip de moins de 30 Mo (la limite d'envoi
   de fichiers de la conversation). Le projet est maintenant livré en qualité maximale, en plusieurs archives
@@ -195,7 +223,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 
 **Étapes**
 1. Copiez le dossier `Backrooms/` où vous voulez sur votre PC.
-   - **Archives en plusieurs parties** (`Backrooms_UE5_v3.9_partie1-sur-N_...zip`, etc.) : extrayez-les **toutes dans
+   - **Archives en plusieurs parties** (`Backrooms_UE5_v4.0_partie1-sur-N_...zip`, etc.) : extrayez-les **toutes dans
      le même dossier**. Elles se complètent (projet, sons, textures, modèles) et recréent un seul dossier `Backrooms/`.
    - **Ou depuis GitHub**, sans limite de taille : dépôt `Fristick/Fristick.github.io`, branche **`backrooms`**,
      bouton « Code » → « Download ZIP » (ou `git clone -b backrooms ...`).
@@ -204,10 +232,11 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 66 textures (dont 25 normal maps), 11 icônes, 66 sons, 126 modèles (FBX). Il crée aussi
+   toutes les ressources : 66 textures (dont 25 normal maps), 28 icônes et images d'interface, 69 sons, 126 modèles (FBX). Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
+   *(Depuis une v3.9 déjà importée, la v4.0 n'ajoute que les images du menu et 3 sons : ils sont importés tout seuls à l'ouverture de l'éditeur.)*
 4. Appuyez sur **Play** (Alt+P). Dans le menu principal, choisissez **SOLO**, puis le niveau (← / →), puis **NOCLIPPER**
    (ou **Entrée**). Pour jouer à plusieurs : **MULTIJOUEUR** (voir § 2 ter).
 
@@ -444,7 +473,8 @@ Backrooms/
 │   ├── BRRig.*                  Humanoïdes articulés (entités et corps du joueur)
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
 │   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu principal, multijoueur, inventaire, paramètres, console
-│   ├── BRHUD.*                  Interface (Canvas) : menu, REC, inventaire TAB façon Escape Together
+│   ├── BRHUD.*                  Interface (Canvas) : menu titre animé, carrousel des niveaux, REC, pause,
+│   │                            carte de titre, inventaire TAB façon Escape Together
 │   ├── BRInteractables.*        Objets à ramasser et sorties de niveau (verrouillées par les objectifs)
 │   ├── BRAssets.*               Chargement des ressources + matériaux + secours (textures lues dans RawAssets)
 │   └── BRMaterialBuilder.*      Construction des matériaux maîtres en C++ (éditeur) si l'import Python manque
@@ -461,6 +491,7 @@ Backrooms/
 │   │                                 meubles et textures des scènes fournies (Niveau 4, Poolrooms)
 │   ├── SourceModels/                 (non versionné) Les fichiers d'origine des modèles fournis
 │   ├── generate_textures.py          Textures procédurales « tileables » (numpy + Pillow)
+│   ├── generate_ui.py                Logo, icônes du menu, dégradés et formes arrondies de l'interface
 │   └── generate_sounds.py            Synthèse de tous les sons (numpy)
 └── Docs/                        Images d'aperçu
 ```
@@ -473,6 +504,7 @@ blender -b -P Tools/Blender/generate_models.py -- SM_Smiler # un seul
 # Textures et sons (Python 3 + numpy + pillow)
 python Tools/generate_textures.py
 python Tools/generate_sounds.py
+python Tools/generate_ui.py      # logo et images du menu (police Inter, fournie avec Blender)
 # Modèles fournis (placer asyc_hazmat.glb, bacteria_recreation.blend, « peppered moth.obj » et sa texture,
 # skin_stealer.usdz, faceling.glb, partygoer.fbx + partygoer_BaseColor.jpeg, hound.blend + hound_Material.png,
 # backrooms_lvl4_office.glb, poolrooms/ (pooltile_1.png, pooltile_n_0.png, plaster_4.png, plaster_n_3.png)
@@ -514,6 +546,14 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 - **Nanite** : les modèles fournis (entités, combinaison hazmat, meubles du bureau) sont gardés à pleine résolution
   (jusqu'à 175 000 sommets pour le Hound) et l'import active Nanite sur eux : Unreal n'affiche que le détail visible
   à l'écran. Sur une carte sans Nanite (DirectX 11), Unreal utilise automatiquement une version allégée.
+- **Brouillard volumétrique** (tous les niveaux) : chaque néon diffuse un peu de sa lumière dans l'air
+  (`VolumetricScatter` par niveau dans `BRLevels.cpp`), les verrières des Poolrooms projettent des rayons, la lampe
+  trace un faisceau. Option **BROUILLARD VOLUMÉTRIQUE** dans les paramètres.
+- **Étalonnage par niveau** : `ShadowTint` et `HighlightTint` dans `BRLevels.cpp` (gain des ombres et des hautes
+  lumières du post-process), **exposition locale** (contraste des hautes lumières 0,8, des ombres 0,9, détail 1,12),
+  filtre de netteté `r.Tonemapper.Sharpen`.
+- **Menu et pause** : flou de profondeur cinématographique (mise au point à 25 cm, ouverture f/1,4) sur le niveau
+  affiché derrière.
 - Sur une petite configuration : onglet **PARAMÈTRES** (qualité « MOYEN », RTX désactivé, néons surfaciques désactivés),
   ou baissez `ViewDistance` / `LightChance` dans `BRLevels.cpp`.
 
@@ -543,6 +583,8 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | « Connexion perdue avec l'hôte » | L'hôte a quitté la partie, ou la connexion a coupé : rejoignez à nouveau |
 | Un ami ne voit pas les mêmes salles | Vous n'avez pas la même version du jeu : utilisez tous la même compilation |
 | Les entités ont encore leur ancienne apparence | Les modèles v3.5 (`SM_*ET*`) ne sont pas importés : relancer `backrooms_setup.run(force=True)` |
+| Le menu n'a pas de musique / pas de logo | Les nouvelles ressources v4.0 (`UI_*`, `S_MenuTheme`, `S_UIHover`, `S_UIConfirm`) ne sont pas encore importées : rouvrez l'éditeur ou lancez `backrooms_setup.run()`. Sans import, le logo est lu dans `RawAssets/Icons`, mais les sons manquent |
+| Le jeu rame depuis la v4.0 | Désactivez **BROUILLARD VOLUMÉTRIQUE** dans les paramètres, ou baissez la qualité |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |
 
 ## 9. Tests automatiques
@@ -584,5 +626,7 @@ scannée), le Skin-Stealer (`Skin_Stealer_The_Backrooms_Blender_3`), le Hound (`
 (`backrooms-faceling-ps1psx-style`) et le Partygoer (`partygoer-from-backrooms-updated`, « Partygoer by FilinMinv »)
 viennent de modèles fournis par l'utilisateur, tout comme les meubles du Niveau 4 (scène `backrooms-level-4-abandoned-office`)
 et le carrelage et le plâtre des Poolrooms (scène `poolrooms`, carte Garry's Mod « gm_poolrooms »). Le Smiler et le
-Clump sont modélisés d'après des images fournies. Ils ont été découpés et adaptés par
+Clump sont modélisés d'après des images fournies. Le logo du menu est dessiné avec la police **Inter**
+(© The Inter Project Authors, licence SIL Open Font License 1.1, fournie avec Blender) ; l'interface du jeu utilise
+la police Roboto du moteur. Ils ont été découpés et adaptés par
 `Tools/Blender/import_user_models.py`. Vérifiez leur licence d'origine avant toute diffusion publique du jeu.*

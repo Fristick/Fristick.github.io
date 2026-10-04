@@ -58,11 +58,31 @@ private:
 		float X = 0.f, Y = 0.f, W = 0.f, H = 0.f;
 	};
 
-	// ---- Jeu
+	/** Graisse et alignement du texte de l'interface v4 (polices Slate du moteur : Roboto Light / Regular / Bold / Black) */
+	enum class EUiWeight : uint8 { Light, Regular, Bold, Black };
+	enum class EUiAlign : uint8 { Left, Center, Right };
+
+	// ---- Menu principal (v4.0 : logo, cartes animees, carrousel des niveaux, astuces)
 	void DrawMenu();
-	void DrawLevelCard(float Y, bool bFull);
-	/** Bouton du menu principal (survol = selection clavier) */
-	void MenuButton(int32 Item, const FString& Label, float CX, float Y, float W, float H, bool bInteractive);
+	void DrawMenuBackdrop(bool bCentered, float A);
+	void DrawMenuMain(ABRPlayerController* PC, bool bInteractive);
+	void DrawMenuSolo(ABRPlayerController* PC, bool bInteractive);
+	void DrawMenuMulti(ABRPlayerController* PC, bool bInteractive);
+	void DrawMenuJoin(ABRPlayerController* PC, bool bInteractive);
+	void DrawMenuFooter(ABRPlayerController* PC, float A);
+	/** Logo "THE BACKROOMS" (UI_Logo), avec un neon qui gresille de temps en temps */
+	void DrawLogo(float X, float Y, float W, float A, bool bFlicker);
+	/** Viseur du camescope autour du menu (REC, compteur) */
+	void DrawRecOverlay(float A);
+	void DrawTips(float X, float Y, float W, float A);
+	/** Carte du carrousel : apercu du niveau (ses vraies textures), numero, titre, classe */
+	void DrawLevelCard(int32 Index, float CX, float Top, float Scale, float Alpha, float Sel);
+	void DrawLevelScene(const FBRLevelDef& D, float X, float Y, float W, float H, float Scale, float Alpha);
+	/** Carte cliquable du menu : icone dans un cercle, libelle, sous-titre ; Sel = animation de selection (0..1) */
+	void DrawCard(float X, float Y, float W, float H, float Sel, const FString& Label, const FString& Sub, const TCHAR* IconName, float Alpha, bool bDanger = false);
+	void MenuCard(int32 Item, float X, float Y, float W, float H, const FString& Sub, const TCHAR* IconName, bool bInteractive, float Appear);
+	/** Bouton en pastille (pages Solo et Rejoindre) */
+	void MenuPill(int32 Item, float X, float Y, float W, float H, const TCHAR* IconName, bool bPrimary, bool bInteractive, float Alpha);
 	void HandleMenuMouse(ABRPlayerController* PC);
 	/** Noms des coequipiers au-dessus de leur tete */
 	void DrawTeammates(ABRCharacter* C);
@@ -96,6 +116,26 @@ private:
 	void DrawSlot(ABRCharacter* C, const FSlotBox& Box);
 	void DrawTooltip(ABRCharacter* C);
 	void DrawInspect(ABRCharacter* C);
+
+	// ---- Primitives v4 : texte net en plusieurs graisses, formes arrondies, degrades, halos
+	/** Size : taille de police (points) a 1080p, mise a l'echelle de l'ecran */
+	void TextF(const FString& S, float X, float Y, const FLinearColor& C, float Size, EUiWeight Weight = EUiWeight::Regular,
+		EUiAlign Align = EUiAlign::Left, bool bShadow = true);
+	/** Texte espace (lettres separees de Spacing pixels) ; renvoie la largeur */
+	float TextSpaced(const FString& S, float X, float Y, const FLinearColor& C, float Size, EUiWeight Weight, float Spacing,
+		EUiAlign Align = EUiAlign::Left);
+	FVector2f TextSize(const FString& S, float Size, EUiWeight Weight) const;
+	TArray<FString> WrapF(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const;
+	FString Ellipsize(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const;
+	UTexture* UiTex(const TCHAR* Name);
+	/** Rectangle arrondi (UI_Round decoupee en 9) ; bOutline : contour seul (UI_RoundLine) */
+	void RoundRect(float X, float Y, float W, float H, float R, const FLinearColor& C, bool bOutline = false);
+	/** Degrade : Dir 0 opaque a gauche, 1 opaque a droite, 2 opaque en haut, 3 opaque en bas */
+	void Gradient(float X, float Y, float W, float H, const FLinearColor& C, int32 Dir);
+	void Glow(float CX, float CY, float RX, float RY, const FLinearColor& C);
+	/** Touche dessinee comme une touche de clavier, suivie de son action ; renvoie la largeur */
+	float KeyCap(float X, float Y, const FString& Key, const FString& Label, float Alpha, bool bDraw = true);
+	void KeyHints(float X, float Y, const TArray<TPair<FString, FString>>& Hints, float Alpha, bool bCenter);
 
 	// ---- Primitives
 	void Txt(const FString& S, float X, float Y, const FLinearColor& C, float Scale, UFont* Font, bool bCenter = false, bool bShadow = true);
@@ -135,6 +175,19 @@ private:
 	int32 HoverSetting = INDEX_NONE;
 	float LastMenuMouseX = -1.f;
 	float LastMenuMouseY = -1.f;
+
+	// Animations de l'interface v4
+	float UiDt = 0.f;
+	float MenuIntro = 0.f;      // temps depuis l'ouverture du menu titre
+	float MenuPageTime = 0.f;   // temps depuis le dernier changement de page
+	int32 LastMenuPage = -1;
+	float MenuSel[8] = { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f };
+	float Carousel = -1000.f;   // position animee du carrousel des niveaux (en niveaux)
+	float TipClock = 0.f;
+	float PauseTime = 0.f;
+	float PauseSel[5] = { 0.f, 0.f, 0.f, 0.f, 0.f };
+	bool bWasInMenu = false;
+	bool bWasPaused = false;
 	bool bWasInventoryOpen = false;
 
 	// Zone de l'inventaire (calculee a chaque image)

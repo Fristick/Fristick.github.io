@@ -167,7 +167,13 @@ struct FBRLevelDef
 	FLinearColor FogColor = FLinearColor(0.3f, 0.28f, 0.2f);
 	float FogStart = 0.f;
 	float FogFalloff = 0.02f;
-	bool bVolumetricFog = false;
+	/** Brouillard volumetrique : halos et rayons sous les lampes (desactivable dans les parametres) */
+	bool bVolumetricFog = true;
+	/** Part de la lumiere des lampes diffusee dans le brouillard volumetrique */
+	float VolumetricScatter = 0.6f;
+	/** Etalonnage "cinema" : teinte des ombres et des hautes lumieres (gain multiplie par la teinte) */
+	FLinearColor ShadowTint = FLinearColor::White;
+	FLinearColor HighlightTint = FLinearColor::White;
 	EBRSky Sky = EBRSky::None;
 	float SunLux = 6.f;
 	FLinearColor SunColor = FLinearColor(1.f, 0.97f, 0.92f);

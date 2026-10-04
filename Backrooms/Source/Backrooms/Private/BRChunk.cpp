@@ -234,6 +234,7 @@ void ABRChunk::BuildPools()
 					PL->SetAttenuationRadius(650.f);
 					PL->SetSourceRadius(12.f);
 					PL->SetCastShadows(false);
+					PL->SetVolumetricScatteringIntensity(0.2f); // projecteur sous l'eau : presque rien dans l'air
 					PL->MaxDrawDistance = D.ViewDistance * 0.6f;
 					PL->MaxDistanceFadeRange = 600.f;
 					PL->RegisterComponent();
@@ -662,7 +663,7 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 	LC->SetLightColor(D.LightColor);
 	LC->SetAttenuationRadius(D.LightRadius);
 	LC->SetCastShadows(L.bShadow);
-	LC->SetVolumetricScatteringIntensity(D.bVolumetricFog ? 1.f : 0.f);
+	LC->SetVolumetricScatteringIntensity(D.bVolumetricFog ? D.VolumetricScatter : 0.f);
 	LC->MaxDrawDistance = D.ViewDistance * 0.75f;
 	LC->MaxDistanceFadeRange = 800.f;
 	LC->SetVisibility(Power > 0.01f);
@@ -1113,6 +1114,7 @@ void ABRChunk::BuildSkylight()
 		RL->SetLightColor(FLinearColor(0.93f, 0.97f, 1.f));
 		RL->SetAttenuationRadius(2600.f);
 		RL->SetCastShadows(true);
+		RL->SetVolumetricScatteringIntensity(1.6f); // rayons de lumiere du jour dans l'air humide
 		RL->MaxDrawDistance = D.ViewDistance;
 		RL->MaxDistanceFadeRange = 1000.f;
 		RL->RegisterComponent();

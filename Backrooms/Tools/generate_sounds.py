@@ -875,6 +875,75 @@ def s_gasp():
 WATER_V3 = (s_splash, s_swim, s_underwater, s_gasp)
 
 
+# ---------------------------------------------------------------------------
+# v4.0 : menu (generateurs aleatoires independants : les sons precedents ne changent pas)
+# ---------------------------------------------------------------------------
+def s_menu_theme():
+    """Musique du menu : nappe nostalgique (la mineur - fa - do - sol, 8 s par accord) sur le bourdonnement des
+    neons, petites notes de boite a musique. Boucle parfaite de 32 s."""
+    rng = np.random.default_rng(4001)
+    dur, step = 32.0, 8.0
+    n = int(dur * SR)
+    x = np.zeros(n)
+    chords = [(110.0, 164.81, 220.0, 261.63, 329.63), (87.31, 130.81, 174.61, 220.0, 329.63),
+              (130.81, 196.0, 261.63, 329.63, 392.0), (98.0, 146.83, 196.0, 246.94, 293.66)]
+    seg = int((step + 4.0) * SR)
+    ts = np.arange(seg) / SR
+    win = np.clip(ts / 2.5, 0, 1) * np.clip((step + 4.0 - ts) / 3.0, 0, 1)
+    win = win * win * (3 - 2 * win)
+    for i, ch in enumerate(chords):
+        pad = np.zeros(seg)
+        for k, f0 in enumerate(ch):
+            for det in (-0.004, 0.0, 0.0037):
+                f = f0 * (1 + det) * (1 + 0.0015 * np.sin(2 * np.pi * 0.21 * ts + k))
+                pad += saw(np.full(seg, 1.0) * f) * (0.55 if k == 0 else 0.32)
+        pad = fft_filter(pad, lo=60, hi=1100, slope=3)
+        place(x, pad * win, int((i * step - 2.0) * SR))
+    # boite a musique : une note par seconde, a l'octave, en arpege qui monte et redescend
+    motif = [0, 2, 4, 3, 1, 3, 4, 2]
+    bell_n = int(2.5 * SR)
+    tb = np.arange(bell_n) / SR
+    for beat in range(int(dur)):
+        ch = chords[int(beat // step) % 4]
+        f = ch[motif[beat % len(motif)]] * 4.0
+        b = (np.sin(2 * np.pi * f * tb) + 0.25 * np.sin(2 * np.pi * f * 2.76 * tb) * np.exp(-tb * 6)) * np.exp(-tb / 0.6)
+        b *= np.clip(tb / 0.004, 0, 1) * (0.55 + 0.25 * rng.random())
+        place(x, b * 0.22, int((beat + 0.02 * rng.standard_normal()) * SR))
+    t = np.arange(n) / SR
+    # bourdon grave et ronronnement des neons (frequences arrondies pour boucler)
+    x += 0.18 * np.sin(2 * np.pi * loop_freq(55.0, dur) * t)
+    hum = sum(a * np.sin(2 * np.pi * loop_freq(h * 60.0, dur) * t) for h, a in ((1, 0.05), (2, 0.035), (3, 0.02), (5, 0.008)))
+    x += hum * (0.8 + 0.2 * np.sin(2 * np.pi * loop_freq(0.25, dur) * t))
+    x += fft_filter(rng.standard_normal(n), lo=2500, hi=9000, circular=True) * 0.012
+    x = reverb_loop(x, t60=3.2, wet=0.45)
+    save("S_MenuTheme", x, 0.8, loop=True)
+
+
+def s_ui_hover():
+    rng = np.random.default_rng(4002)
+    n = int(0.06 * SR)
+    tt = np.arange(n) / SR
+    f = 1750 - 300 * np.minimum(tt / 0.04, 1)
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt / 0.014) + fft_filter(rng.standard_normal(n), lo=3000, hi=9000) * np.exp(-tt * 300) * 0.15
+    save("S_UIHover", x, 0.35)
+
+
+def s_ui_confirm():
+    n = int(0.7 * SR)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    for f, start in ((659.25, 0.0), (880.0, 0.075)):
+        i0 = int(start * SR)
+        t2 = tt[: n - i0]
+        note = (np.sin(2 * np.pi * f * t2) + 0.18 * np.sin(2 * np.pi * f * 3 * t2) * np.exp(-t2 * 12)) * np.exp(-t2 / 0.22)
+        x[i0:] += note * np.clip(t2 / 0.003, 0, 1)
+    x = reverb(x, t60=0.9, wet=0.25)[:n]
+    save("S_UIConfirm", x, 0.5)
+
+
+MENU_V4 = (s_menu_theme, s_ui_hover, s_ui_confirm)
+
+
 if __name__ == "__main__":
     print("Synthese des sons dans", os.path.abspath(OUT))
     s_hum()
@@ -927,6 +996,8 @@ if __name__ == "__main__":
     s_objective()
     s_bacteria()
     for fn in WATER_V3:
+        fn()
+    for fn in MENU_V4:
         fn()
     with open(os.path.join(OUT, "loops.txt"), "w") as f:
         f.write("\n".join(sorted(LOOPS)) + "\n")

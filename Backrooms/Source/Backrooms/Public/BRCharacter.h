@@ -129,6 +129,8 @@ public:
 	// ---- HUD ----
 	/** Son d'interface (inventaire, clic) */
 	void PlayUISound(FName Sound, float Volume = 0.6f) { PlaySound2D(Sound, Volume); }
+	/** Flou de profondeur derriere le menu titre et la pause (0 = net, 1 = arriere-plan tres flou) */
+	void ApplyMenuBlur(float Amount);
 	const FString& GetFocusPrompt() const { return FocusPrompt; }
 	bool IsReadingNote() const { return bReadingNote; }
 	const FString& GetOpenNote() const { return OpenNote; }

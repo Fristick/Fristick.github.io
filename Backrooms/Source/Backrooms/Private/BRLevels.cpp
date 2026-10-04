@@ -51,6 +51,7 @@ namespace
 		D.LightLumens = 2400.f; D.LightColor = C(1.f, 0.96f, 0.84f); D.LightRadius = 620.f;
 		D.DarkZoneChance = 0.06f; D.ShadowChance = 0.15f;
 		D.FogDensity = 0.08f; D.FogColor = C(0.32f, 0.29f, 0.16f);
+		D.ShadowTint = C(0.97f, 1.f, 0.93f); D.HighlightTint = C(1.04f, 1.f, 0.92f); D.VolumetricScatter = 0.45f;
 		D.SceneTint = C(1.f, 0.98f, 0.9f); D.Saturation = 0.95f; D.Contrast = 1.05f;
 		D.MinEV = 3.f; D.MaxEV = 9.f; D.ExposureBias = 0.3f; D.Vignette = 0.5f; D.Grain = 0.3f;
 		D.AmbientSound = TEXT("S_Amb_L0"); D.AmbientVolume = 0.5f;
@@ -113,6 +114,7 @@ namespace
 		D.LightLumens = 4500.f; D.LightColor = C(0.88f, 0.94f, 1.f); D.LightRadius = 1100.f;
 		D.DarkZoneChance = 0.12f; D.ShadowChance = 0.2f;
 		D.FogDensity = 0.16f; D.FogColor = C(0.22f, 0.24f, 0.27f);
+		D.ShadowTint = C(0.94f, 0.98f, 1.06f); D.HighlightTint = C(1.f, 1.f, 0.98f); D.VolumetricScatter = 0.7f;
 		D.SceneTint = C(0.95f, 0.98f, 1.f); D.Saturation = 0.85f; D.Contrast = 1.08f;
 		D.MinEV = 3.f; D.MaxEV = 9.f;
 		D.AmbientSound = TEXT("S_Amb_Industrial"); D.AmbientVolume = 0.6f;
@@ -159,6 +161,7 @@ namespace
 		D.LightLumens = 1300.f; D.LightColor = C(1.f, 0.7f, 0.45f); D.LightRadius = 560.f;
 		D.DarkZoneChance = 0.15f; D.ShadowChance = 0.2f;
 		D.FogDensity = 0.12f; D.FogColor = C(0.18f, 0.13f, 0.08f);
+		D.ShadowTint = C(0.95f, 1.f, 1.03f); D.HighlightTint = C(1.05f, 0.98f, 0.9f); D.VolumetricScatter = 0.6f;
 		D.SceneTint = C(1.f, 0.93f, 0.85f); D.Saturation = 0.85f; D.Contrast = 1.12f;
 		D.MinEV = 2.5f; D.MaxEV = 9.f;
 		D.AmbientSound = TEXT("S_Amb_Industrial"); D.AmbientVolume = 0.7f;
@@ -205,6 +208,7 @@ namespace
 		D.LightLumens = 1500.f; D.LightColor = C(1.f, 0.85f, 0.6f); D.LightRadius = 620.f;
 		D.DarkZoneChance = 0.15f; D.ShadowChance = 0.2f;
 		D.FogDensity = 0.1f; D.FogColor = C(0.14f, 0.12f, 0.1f);
+		D.ShadowTint = C(0.97f, 0.98f, 1.03f); D.HighlightTint = C(1.04f, 0.98f, 0.92f); D.VolumetricScatter = 0.6f;
 		D.SceneTint = C(1.f, 0.95f, 0.88f); D.Saturation = 0.8f; D.Contrast = 1.15f;
 		D.MinEV = 2.5f; D.MaxEV = 9.f;
 		D.AmbientSound = TEXT("S_Amb_Machinery"); D.AmbientVolume = 0.75f;
@@ -256,6 +260,7 @@ namespace
 		D.LightLumens = 3000.f; D.LightColor = C(0.95f, 0.97f, 1.f); D.LightRadius = 700.f;
 		D.ShadowChance = 0.12f;
 		D.FogDensity = 0.04f; D.FogColor = C(0.3f, 0.3f, 0.32f);
+		D.ShadowTint = C(0.96f, 0.98f, 1.04f); D.HighlightTint = C(1.f, 1.f, 1.f); D.VolumetricScatter = 0.3f;
 		D.MinEV = 3.f; D.MaxEV = 9.f;
 		D.AmbientSound = TEXT("S_Amb_L0"); D.AmbientVolume = 0.35f;
 		D.HumSound = TEXT("S_Hum"); D.HumVolume = 0.25f;
@@ -300,6 +305,7 @@ namespace
 		D.LightLumens = 900.f; D.LightColor = C(1.f, 0.7f, 0.4f); D.LightRadius = 520.f;
 		D.DarkZoneChance = 0.1f; D.ShadowChance = 0.2f;
 		D.FogDensity = 0.06f; D.FogColor = C(0.2f, 0.12f, 0.08f);
+		D.ShadowTint = C(0.97f, 0.94f, 1.01f); D.HighlightTint = C(1.05f, 0.97f, 0.9f); D.VolumetricScatter = 0.5f;
 		D.SceneTint = C(1.f, 0.92f, 0.85f); D.Saturation = 0.9f; D.Contrast = 1.1f;
 		D.MinEV = 2.5f; D.MaxEV = 9.f;
 		D.AmbientSound = TEXT("S_Amb_Hotel"); D.AmbientVolume = 0.6f;
@@ -342,6 +348,7 @@ namespace
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::None;
 		D.FogDensity = 0.02f; D.FogColor = C(0, 0, 0);
+		D.ShadowTint = C(0.92f, 0.96f, 1.06f); D.HighlightTint = C(1.f, 1.f, 1.f); D.VolumetricScatter = 0.8f;
 		D.Saturation = 0.7f; D.Contrast = 1.1f;
 		// Exposition minimale basse : sans lumiere tout reste noir, mais le faisceau de la lampe eclaire vraiment le beton
 		// sombre (a 3,5 l'oeil ne s'habituait jamais au noir et la lampe ne montrait presque rien)
@@ -385,6 +392,7 @@ namespace
 		D.LightLumens = 1600.f; D.LightColor = C(1.f, 0.75f, 0.5f); D.LightRadius = 800.f;
 		D.DarkZoneChance = 0.2f; D.ShadowChance = 0.25f;
 		D.FogDensity = 0.1f; D.FogColor = C(0.08f, 0.08f, 0.08f);
+		D.ShadowTint = C(0.95f, 0.98f, 1.03f); D.HighlightTint = C(1.05f, 0.98f, 0.9f); D.VolumetricScatter = 0.7f;
 		D.Saturation = 0.85f;
 		D.MinEV = 2.5f; D.MaxEV = 9.f;
 		D.AmbientSound = TEXT("S_Amb_Cave"); D.AmbientVolume = 0.7f;
@@ -425,6 +433,7 @@ namespace
 		D.ShadowChance = 0.3f;
 		D.Sky = EBRSky::Night; D.SunLux = 0.15f; D.SunColor = C(0.6f, 0.7f, 1.f); D.SunPitch = -35.f;
 		D.FogDensity = 0.05f; D.FogColor = C(0.02f, 0.03f, 0.06f);
+		D.ShadowTint = C(0.92f, 0.96f, 1.08f); D.HighlightTint = C(1.05f, 0.97f, 0.88f); D.VolumetricScatter = 0.6f;
 		D.Saturation = 0.8f;
 		D.MinEV = 0.f; D.MaxEV = 8.f;
 		D.AmbientSound = TEXT("S_Amb_Night"); D.AmbientVolume = 0.6f;
@@ -460,6 +469,7 @@ namespace
 		D.Fixture = EBRFixture::None;
 		D.Sky = EBRSky::Overcast; D.SunLux = 4.f; D.SunColor = C(0.95f, 0.95f, 1.f); D.SunPitch = -40.f;
 		D.FogDensity = 0.035f; D.FogColor = C(0.55f, 0.58f, 0.62f);
+		D.ShadowTint = C(0.97f, 0.99f, 1.03f); D.HighlightTint = C(1.02f, 1.01f, 0.97f); D.VolumetricScatter = 0.4f;
 		D.Saturation = 0.9f;
 		D.MinEV = 1.f; D.MaxEV = 12.f;
 		D.AmbientSound = TEXT("S_Amb_Wind"); D.AmbientVolume = 0.6f;
@@ -500,6 +510,7 @@ namespace
 		D.ShadowChance = 0.f;
 		D.Sky = EBRSky::Day; D.SunLux = 8.f; D.SunPitch = -55.f;
 		D.FogDensity = 0.025f; D.FogColor = C(0.55f, 0.6f, 0.7f);
+		D.ShadowTint = C(0.95f, 0.98f, 1.04f); D.HighlightTint = C(1.04f, 1.f, 0.95f); D.VolumetricScatter = 0.4f;
 		D.MinEV = 1.f; D.MaxEV = 12.f;
 		D.AmbientSound = TEXT("S_Amb_City"); D.AmbientVolume = 0.6f;
 		D.Step = EBRStep::Hard;
@@ -551,6 +562,7 @@ namespace
 		D.WaterWaves = 0.3f; D.WaterChop = 0.35f;
 		D.PoolChance = 0.15f; D.PoolDepth = 260.f;
 		D.FogDensity = 0.012f; D.FogColor = C(0.66f, 0.73f, 0.71f);
+		D.ShadowTint = C(0.95f, 1.f, 1.02f); D.HighlightTint = C(1.02f, 1.02f, 1.f); D.VolumetricScatter = 0.5f;
 		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.4f;
 		D.MinEV = 3.f; D.MaxEV = 10.f;
 		D.AmbientSound = TEXT("S_Amb_Pool"); D.AmbientVolume = 0.7f;

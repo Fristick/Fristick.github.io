@@ -151,6 +151,10 @@ def import_textures(files, dest=TEX, ui=False):
             safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
             safe_set(tex, "mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
             safe_set(tex, "never_stream", True)
+            if name.startswith("UI_"):
+                # Degrades, formes arrondies, logo : pas de repetition (le filtrage ne melange pas les bords opposes)
+                safe_set(tex, "address_x", unreal.TextureAddress.TA_CLAMP)
+                safe_set(tex, "address_y", unreal.TextureAddress.TA_CLAMP)
         elif is_normal_map(name):
             safe_set(tex, "srgb", False)
             safe_set(tex, "compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)

@@ -9,17 +9,21 @@
 #include "BRPlayerController.h"
 #include "BRWorld.h"
 
+#include "CanvasItem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "EngineFontServices.h"
 #include "EngineUtils.h"
+#include "Fonts/FontMeasure.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 #include "HAL/PlatformTime.h"
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
+#include "Styling/CoreStyle.h"
 
 namespace
 {
@@ -52,6 +56,7 @@ namespace
 		Btn_Menu = 960,          // 960 + element de la page du menu principal
 		Btn_MenuLevelPrev = 980,
 		Btn_MenuLevelNext = 981,
+		Btn_MenuCard = 990,      // 990..996 : cartes du carrousel des niveaux (993 = carte centrale)
 		Btn_KeySlot = 1000       // 1000 + action * 3 + case
 	};
 
@@ -82,6 +87,63 @@ namespace
 		C.A *= A;
 		return C;
 	}
+
+	float EaseOut(float T)
+	{
+		T = FMath::Clamp(T, 0.f, 1.f);
+		return 1.f - (1.f - T) * (1.f - T) * (1.f - T);
+	}
+
+	float Smooth(float T)
+	{
+		T = FMath::Clamp(T, 0.f, 1.f);
+		return T * T * (3.f - 2.f * T);
+	}
+
+	FLinearColor Mix(const FLinearColor& A, const FLinearColor& B, float T)
+	{
+		return A + (B - A) * T;
+	}
+
+	/** Police de l'interface v4 : police par defaut de Slate (Roboto), graisse Light / Regular / Bold / Black */
+	FSlateFontInfo UiFontInfo(float Size, int32 Weight, float U)
+	{
+		static const FName Faces[] = { FName(TEXT("Light")), FName(TEXT("Regular")), FName(TEXT("Bold")), FName(TEXT("Black")) };
+		// Tailles entieres : chaque taille occupe sa place dans l'atlas des polices
+		const float Pt = FMath::Max(6.f, FMath::RoundToFloat(Size * U));
+		return FCoreStyle::GetDefaultFontStyle(Faces[FMath::Clamp(Weight, 0, 3)], Pt);
+	}
+
+	/** "Classe 1 : Sur - Stable" -> "CLASSE 1" */
+	FString ClassShort(const FString& ClassText)
+	{
+		int32 Colon = INDEX_NONE;
+		const FString Head = ClassText.FindChar(TEXT(':'), Colon) ? ClassText.Left(Colon).TrimEnd() : ClassText;
+		return Head.ToUpper();
+	}
+
+	/** Carte du carrousel a dessiner : niveau et ecart (en cartes) avec le centre */
+	struct FCardDraw
+	{
+		int32 Index;
+		float Off;
+	};
+
+	/** Astuces du menu titre ({Action} : touche configuree) */
+	const TCHAR* const MenuTips[] = {
+		TEXT("Smilers : ne braquez JAMAIS votre lampe sur eux. \u00c9teignez-la, ne courez pas et reculez lentement."),
+		TEXT("Hounds : ne fuyez pas en courant. Faites-leur face, regardez-les et reculez calmement."),
+		TEXT("Partygoers : ne soutenez pas leur regard. Pendant les coupures de courant, cachez-vous."),
+		TEXT("L'eau d'amande apaise l'esprit : buvez-en ({Drink}) quand votre sant\u00e9 mentale baisse."),
+		TEXT("Au Niveau 0, ramassez les cassettes VHS et filmez une coupure de courant pour ouvrir la sortie."),
+		TEXT("En multijoueur, c'est le joueur qui a le PC le plus puissant qui doit h\u00e9berger la partie."),
+		TEXT("{Inventory} ouvre l'inventaire : glissez les objets, double-cliquez pour les utiliser."),
+		TEXT("Placards, trous dans les murs : une fois cach\u00e9, les entit\u00e9s ne vous voient plus."),
+		TEXT("Deathmoths : \u00e9teignez votre lampe d\u00e8s que vous entendez des battements d'ailes."),
+		TEXT("Si vous entendez frapper au Niveau 0, \u00e9loignez-vous : la Bacteria n'est pas loin."),
+		TEXT("Toutes les touches se changent dans Param\u00e8tres > Touches (jusqu'\u00e0 3 par action)."),
+		TEXT("Coop : un co\u00e9quipier \u00e0 terre se rel\u00e8ve si vous maintenez {Interact} pr\u00e8s de lui."),
+	};
 
 }
 
@@ -199,9 +261,14 @@ TArray<FString> ABRHUD::Wrap(const FString& S, float MaxWidth, UFont* Font, floa
 void ABRHUD::Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label)
 {
 	const float U = Ui();
-	Txt(Label, X, Y - 18.f * U, FLinearColor(1.f, 1.f, 1.f, 0.75f), 0.8f * U, GEngine->GetSmallFont());
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X, Y, W, H);
-	DrawRect(C, X, Y, W * FMath::Clamp(Fill, 0.f, 1.f), H);
+	TextF(Label, X, Y - 20.f * U, FLinearColor(1.f, 1.f, 1.f, 0.78f), 9.5f, EUiWeight::Bold);
+	const float R = H * 0.5f;
+	RoundRect(X, Y, W, H, R, FLinearColor(0.f, 0.f, 0.f, 0.5f));
+	const float F = FMath::Clamp(Fill, 0.f, 1.f);
+	if (F > 0.f)
+	{
+		RoundRect(X, Y, FMath::Max(H, W * F), H, R, C);
+	}
 }
 
 void ABRHUD::Frame(float X, float Y, float W, float H, const FLinearColor& C, float Thickness)
@@ -229,13 +296,12 @@ void ABRHUD::Corners(float X, float Y, float W, float H, float Len, const FLinea
 void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
 {
 	const float U = Ui();
-	DrawRect(PanelBg, X, Y, W, H);
-	Frame(X, Y, W, H, FLinearColor(0.95f, 0.78f, 0.25f, 0.18f), 1.f * U);
-	Corners(X, Y, W, H, 16.f * U, Yellow, 2.f * U);
+	RoundRect(X, Y, W, H, 14.f * U, PanelBg);
+	RoundRect(X, Y, W, H, 14.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.22f), true);
 	if (!Title.IsEmpty())
 	{
-		Txt(Title, X + 18.f * U, Y + 12.f * U, Yellow, 0.95f * U, GEngine->GetMediumFont(), false, false);
-		DrawRect(YellowDim, X + 18.f * U, Y + 42.f * U, W - 36.f * U, 1.f * U);
+		TextSpaced(Title, X + 20.f * U, Y + 13.f * U, Yellow, 11.5f, EUiWeight::Bold, 2.5f * U);
+		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.25f), X + 18.f * U, Y + 42.f * U, W - 36.f * U, FMath::Max(1.f, U));
 	}
 }
 
@@ -341,6 +407,266 @@ UTexture* ABRHUD::ItemIcon(EBRItem Item)
 }
 
 // =====================================================================================================================
+// Primitives v4 : texte net (polices Slate), formes arrondies, degrades, halos
+// =====================================================================================================================
+
+void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, float Size, EUiWeight Weight, EUiAlign Align, bool bShadow)
+{
+	if (S.IsEmpty() || C.A <= 0.004f || !Canvas)
+	{
+		return;
+	}
+	if (Align != EUiAlign::Left)
+	{
+		const float W = TextSize(S, Size, Weight).X;
+		X -= Align == EUiAlign::Center ? W * 0.5f : W;
+	}
+	FCanvasTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), FText::FromString(S), UiFontInfo(Size, static_cast<int32>(Weight), Ui()), C);
+	if (bShadow)
+	{
+		const float Off = FMath::Max(1.f, FMath::RoundToFloat(1.5f * Ui()));
+		Item.EnableShadow(FLinearColor(0.f, 0.f, 0.f, 0.6f * C.A), FVector2D(Off, Off));
+	}
+	Canvas->DrawItem(Item);
+}
+
+float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor& C, float Size, EUiWeight Weight, float Spacing, EUiAlign Align)
+{
+	TArray<float> Widths;
+	float Total = 0.f;
+	for (int32 i = 0; i < S.Len(); ++i)
+	{
+		const float CW = TextSize(S.Mid(i, 1), Size, Weight).X;
+		Widths.Add(CW);
+		Total += CW + (i + 1 < S.Len() ? Spacing : 0.f);
+	}
+	if (Align != EUiAlign::Left)
+	{
+		X -= Align == EUiAlign::Center ? Total * 0.5f : Total;
+	}
+	for (int32 i = 0; i < S.Len(); ++i)
+	{
+		TextF(S.Mid(i, 1), X, Y, C, Size, Weight, EUiAlign::Left, false);
+		X += Widths[i] + Spacing;
+	}
+	return Total;
+}
+
+FVector2f ABRHUD::TextSize(const FString& S, float Size, EUiWeight Weight) const
+{
+	const FSlateFontInfo Font = UiFontInfo(Size, static_cast<int32>(Weight), Ui());
+	if (FEngineFontServices::IsInitialized())
+	{
+		const TSharedRef<FSlateFontMeasure> Measure = FEngineFontServices::Get().GetFontMeasure();
+		const float LineH = static_cast<float>(Measure->GetMaxCharacterHeight(Font));
+		if (S.IsEmpty())
+		{
+			return FVector2f(0.f, LineH);
+		}
+		const FVector2D M(Measure->Measure(S, Font));
+		return FVector2f(static_cast<float>(M.X), FMath::Max(static_cast<float>(M.Y), LineH));
+	}
+	const float Px = Font.Size * 4.f / 3.f;
+	return FVector2f(S.Len() * Px * 0.52f, Px * 1.2f);
+}
+
+TArray<FString> ABRHUD::WrapF(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const
+{
+	TArray<FString> Lines;
+	TArray<FString> Words;
+	S.ParseIntoArray(Words, TEXT(" "), true);
+	FString Line;
+	for (const FString& Word : Words)
+	{
+		const FString Test = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+		if (TextSize(Test, Size, Weight).X > MaxWidth && !Line.IsEmpty())
+		{
+			Lines.Add(Line);
+			Line = Word;
+		}
+		else
+		{
+			Line = Test;
+		}
+	}
+	if (!Line.IsEmpty())
+	{
+		Lines.Add(Line);
+	}
+	return Lines;
+}
+
+FString ABRHUD::Ellipsize(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const
+{
+	if (TextSize(S, Size, Weight).X <= MaxWidth)
+	{
+		return S;
+	}
+	FString Out = S;
+	while (Out.Len() > 1 && TextSize(Out + TEXT("\u2026"), Size, Weight).X > MaxWidth)
+	{
+		Out = Out.LeftChop(1);
+	}
+	return Out.TrimEnd() + TEXT("\u2026");
+}
+
+UTexture* ABRHUD::UiTex(const TCHAR* Name)
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	return A ? A->Icon(FName(Name)) : nullptr;
+}
+
+void ABRHUD::RoundRect(float X, float Y, float W, float H, float R, const FLinearColor& C, bool bOutline)
+{
+	if (C.A <= 0.003f || W < 1.f || H < 1.f)
+	{
+		return;
+	}
+	X = FMath::RoundToFloat(X);
+	Y = FMath::RoundToFloat(Y);
+	W = FMath::RoundToFloat(W);
+	H = FMath::RoundToFloat(H);
+	R = FMath::Min(FMath::RoundToFloat(R), FMath::FloorToFloat(FMath::Min(W, H) * 0.5f));
+	UTexture* T = UiTex(bOutline ? TEXT("UI_RoundLine") : TEXT("UI_Round"));
+	if (!T || R < 2.f)
+	{
+		if (bOutline)
+		{
+			Frame(X, Y, W, H, C, FMath::Max(1.f, FMath::RoundToFloat(Ui())));
+		}
+		else
+		{
+			DrawRect(C, X, Y, W, H);
+		}
+		return;
+	}
+	// 9 tranches : coins de R pixels (16 texels sur 64), bords etires, centre plein
+	const float E = 0.25f;
+	const float MW = W - 2.f * R;
+	const float MH = H - 2.f * R;
+	auto Piece = [&](float PX, float PY, float PW, float PH, float U0, float V0, float UL, float VL)
+	{
+		if (PW > 0.f && PH > 0.f)
+		{
+			DrawTexture(T, PX, PY, PW, PH, U0, V0, UL, VL, C, BLEND_Translucent);
+		}
+	};
+	Piece(X, Y, R, R, 0.f, 0.f, E, E);
+	Piece(X + W - R, Y, R, R, 1.f - E, 0.f, E, E);
+	Piece(X, Y + H - R, R, R, 0.f, 1.f - E, E, E);
+	Piece(X + W - R, Y + H - R, R, R, 1.f - E, 1.f - E, E, E);
+	Piece(X + R, Y, MW, R, E, 0.f, 1.f - 2.f * E, E);
+	Piece(X + R, Y + H - R, MW, R, E, 1.f - E, 1.f - 2.f * E, E);
+	Piece(X, Y + R, R, MH, 0.f, E, E, 1.f - 2.f * E);
+	Piece(X + W - R, Y + R, R, MH, 1.f - E, E, E, 1.f - 2.f * E);
+	if (!bOutline)
+	{
+		Piece(X + R, Y + R, MW, MH, E, E, 1.f - 2.f * E, 1.f - 2.f * E);
+	}
+}
+
+void ABRHUD::Gradient(float X, float Y, float W, float H, const FLinearColor& C, int32 Dir)
+{
+	if (C.A <= 0.003f || W < 1.f || H < 1.f)
+	{
+		return;
+	}
+	const bool bHoriz = Dir < 2;
+	if (UTexture* T = UiTex(bHoriz ? TEXT("UI_GradH") : TEXT("UI_GradV")))
+	{
+		// Une demi-texel de marge : le filtrage ne melange pas les deux extremites
+		const float In = 0.5f / 256.f;
+		const bool bFlip = Dir == 1 || Dir == 3;
+		const float A0 = bFlip ? 1.f - In : In;
+		const float AL = (bFlip ? -1.f : 1.f) * (1.f - 2.f * In);
+		if (bHoriz)
+		{
+			DrawTexture(T, X, Y, W, H, A0, 0.25f, AL, 0.5f, C, BLEND_Translucent);
+		}
+		else
+		{
+			DrawTexture(T, X, Y, W, H, 0.25f, A0, 0.5f, AL, C, BLEND_Translucent);
+		}
+		return;
+	}
+	// Repli sans texture : bandes successives
+	const int32 N = 24;
+	for (int32 i = 0; i < N; ++i)
+	{
+		const float T0 = static_cast<float>(i) / N;
+		const float K = 1.f - (T0 + 0.5f / N);
+		const float Fade = K * K * (3.f - 2.f * K);
+		const int32 Step = (Dir == 0 || Dir == 2) ? i : N - 1 - i;
+		const FLinearColor BandC = WithAlpha(C, Fade);
+		if (bHoriz)
+		{
+			DrawRect(BandC, X + W * Step / N, Y, W / N + 1.f, H);
+		}
+		else
+		{
+			DrawRect(BandC, X, Y + H * Step / N, W, H / N + 1.f);
+		}
+	}
+}
+
+void ABRHUD::Glow(float CX, float CY, float RX, float RY, const FLinearColor& C)
+{
+	if (C.A <= 0.003f)
+	{
+		return;
+	}
+	if (UTexture* T = UiTex(TEXT("UI_Radial")))
+	{
+		DrawTexture(T, CX - RX, CY - RY, RX * 2.f, RY * 2.f, 0.f, 0.f, 1.f, 1.f, C, BLEND_Translucent);
+	}
+}
+
+float ABRHUD::KeyCap(float X, float Y, const FString& Key, const FString& Label, float Alpha, bool bDraw)
+{
+	const float U = Ui();
+	const FVector2f KS = TextSize(Key, 10.5f, EUiWeight::Bold);
+	const float KH = 26.f * U;
+	const float KW = FMath::Max(KH, KS.X + 18.f * U);
+	float W = KW;
+	FVector2f LS = FVector2f::ZeroVector;
+	if (!Label.IsEmpty())
+	{
+		LS = TextSize(Label, 11.5f, EUiWeight::Regular);
+		W += 9.f * U + LS.X;
+	}
+	if (bDraw)
+	{
+		RoundRect(X, Y, KW, KH, 6.f * U, FLinearColor(1.f, 0.93f, 0.75f, 0.12f * Alpha));
+		RoundRect(X, Y, KW, KH, 6.f * U, FLinearColor(1.f, 0.9f, 0.6f, 0.38f * Alpha), true);
+		DrawRect(FLinearColor(1.f, 0.9f, 0.6f, 0.22f * Alpha), X + 5.f * U, Y + KH - 2.f * U, KW - 10.f * U, FMath::Max(1.f, U));
+		TextF(Key, X + KW * 0.5f, Y + (KH - KS.Y) * 0.5f, WithAlpha(Ink, Alpha), 10.5f, EUiWeight::Bold, EUiAlign::Center, false);
+		if (!Label.IsEmpty())
+		{
+			TextF(Label, X + KW + 9.f * U, Y + (KH - LS.Y) * 0.5f, WithAlpha(InkDim, Alpha), 11.5f, EUiWeight::Regular, EUiAlign::Left, false);
+		}
+	}
+	return W;
+}
+
+void ABRHUD::KeyHints(float X, float Y, const TArray<TPair<FString, FString>>& Hints, float Alpha, bool bCenter)
+{
+	const float Gap = 28.f * Ui();
+	if (bCenter)
+	{
+		float Total = 0.f;
+		for (const TPair<FString, FString>& H : Hints)
+		{
+			Total += KeyCap(0.f, 0.f, H.Key, H.Value, Alpha, false) + Gap;
+		}
+		X -= (Total - Gap) * 0.5f;
+	}
+	for (const TPair<FString, FString>& H : Hints)
+	{
+		X += KeyCap(X, Y, H.Key, H.Value, Alpha) + Gap;
+	}
+}
+
+// =====================================================================================================================
 // Boucle principale
 // =====================================================================================================================
 
@@ -355,10 +681,32 @@ void ABRHUD::DrawHUD()
 	const float Dt = LastTime > 0.0 ? FMath::Min(static_cast<float>(Now - LastTime), 0.1f) : 0.f;
 	LastTime = Now;
 	Clock += Dt;
+	UiDt = Dt;
 
 	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
 	ABRCharacter* C = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
 	ABRWorld* W = ABRWorld::Get(this);
+
+	// Animations d'ouverture du menu titre et de la pause
+	const bool bMenuNow = PC && PC->IsInMenu();
+	if (bMenuNow && !bWasInMenu)
+	{
+		MenuIntro = 0.f;
+		LastMenuPage = -1;
+		Carousel = -1000.f;
+		TipClock = FMath::FRand() * 90.f; // une astuce au hasard a chaque lancement
+	}
+	bWasInMenu = bMenuNow;
+	const bool bPauseNow = PC && PC->IsPauseMenuOpen();
+	if (bPauseNow && !bWasPaused)
+	{
+		PauseTime = 0.f;
+		for (float& S : PauseSel)
+		{
+			S = 0.f;
+		}
+	}
+	bWasPaused = bPauseNow;
 
 	if (PC && PC->IsInMenu())
 	{
@@ -393,17 +741,20 @@ void ABRHUD::DrawHUD()
 		DrawTeammates(C);
 		DrawVoiceIndicator(PC);
 	}
+	if (!bInv)
+	{
+		DrawTitleCard(); // bandes noires et titre du niveau, sous les informations du HUD
+	}
 	if (C && !C->IsDead() && !bInv)
 	{
 		DrawCamcorder(C, W);
-		DrawCrosshair(C);
+		if (!W || W->GetTitleTime() < 0.5f)
+		{
+			DrawCrosshair(C);
+		}
 		DrawStats(C);
 		DrawQuickBar(C);
 		DrawObjectiveTracker(W);
-	}
-	if (!bInv)
-	{
-		DrawTitleCard();
 	}
 	if (C && C->IsReadingNote() && !bInv)
 	{
@@ -436,7 +787,7 @@ void ABRHUD::DrawHUD()
 }
 
 // =====================================================================================================================
-// Menu titre, cartes de titre
+// Menu titre (v4.0) : logo, cartes animees, carrousel des niveaux, astuces, viseur du camescope
 // =====================================================================================================================
 
 void ABRHUD::DrawContentWarning(float Y)
@@ -448,93 +799,858 @@ void ABRHUD::DrawContentWarning(float Y)
 	}
 	const float U = Ui();
 	const float CX = Canvas->ClipX * 0.5f;
-	UFont* Medium = GEngine->GetMediumFont();
 	if (!A->HasContent())
 	{
-		Txt(TEXT("Textures indisponibles : ouvrez le projet dans l'\u00e9diteur (plugin Python actif) pour importer les ressources."), CX, Y,
-			Danger, 0.8f * U, Medium, true);
+		TextF(TEXT("Textures indisponibles : ouvrez le projet dans l'\u00e9diteur (plugin Python actif) pour importer les ressources."), CX, Y,
+			Danger, 11.5f, EUiWeight::Regular, EUiAlign::Center);
+		Y += 20.f * U;
 	}
 	else if (A->IsUsingRuntimeContent())
 	{
-		Txt(TEXT("Mode secours : textures lues dans RawAssets/. Relancez l'import (Output Log > Python : import backrooms_setup; backrooms_setup.run(True))"),
-			CX, Y, FLinearColor(1.f, 0.8f, 0.35f, 0.85f), 0.72f * U, Medium, true);
+		TextF(TEXT("Mode secours : textures lues dans RawAssets/. Relancez l'import (Output Log > Python : import backrooms_setup; backrooms_setup.run(True))"),
+			CX, Y, FLinearColor(1.f, 0.8f, 0.35f, 0.85f), 11.f, EUiWeight::Regular, EUiAlign::Center);
+		Y += 20.f * U;
 	}
 	if (!A->Sound(TEXT("S_Hum")))
 	{
-		Txt(TEXT("Sons non import\u00e9s : le jeu sera silencieux tant que l'import Python n'aura pas \u00e9t\u00e9 fait."), CX, Y + 22.f * U,
-			FLinearColor(1.f, 0.8f, 0.35f, 0.85f), 0.72f * U, Medium, true);
+		TextF(TEXT("Sons non import\u00e9s : le jeu sera silencieux tant que l'import Python n'aura pas \u00e9t\u00e9 fait."), CX, Y,
+			FLinearColor(1.f, 0.8f, 0.35f, 0.85f), 11.f, EUiWeight::Regular, EUiAlign::Center);
 	}
 }
 
-void ABRHUD::MenuButton(int32 Item, const FString& Label, float CX, float Y, float W, float H, bool bInteractive)
+void ABRHUD::DrawLogo(float X, float Y, float W, float A, bool bFlicker)
+{
+	if (A <= 0.003f)
+	{
+		return;
+	}
+	UTexture* T = UiTex(TEXT("UI_Logo"));
+	const float Aspect = (T && T->GetSurfaceWidth() > 0.f) ? T->GetSurfaceHeight() / T->GetSurfaceWidth() : 413.f / 1809.f;
+	const float H = W * Aspect;
+	float F = 1.f;
+	if (bFlicker)
+	{
+		// Toutes les 6,5 s, le neon du logo gresille une fraction de seconde
+		const float Ph = FMath::Fmod(Clock, 6.5f);
+		if (Ph > 5.85f && FMath::Sin(Clock * 57.f) > -0.2f)
+		{
+			F = 0.45f + 0.25f * FMath::Abs(FMath::Sin(Clock * 23.f));
+		}
+	}
+	Glow(X + W * 0.5f, Y + H * 0.55f, W * 0.66f, H * 1.35f, FLinearColor(1.f, 0.76f, 0.22f, 0.12f * A * F));
+	if (T)
+	{
+		DrawTexture(T, X, Y, W, H, 0.f, 0.f, 1.f, 1.f, FLinearColor(1.f, 1.f, 1.f, A * (0.35f + 0.65f * F)), BLEND_Translucent);
+	}
+	else
+	{
+		TextF(TEXT("THE BACKROOMS"), X + W * 0.03f, Y + H * 0.2f, WithAlpha(Yellow, A * F), W / Ui() * 0.075f, EUiWeight::Black);
+	}
+}
+
+void ABRHUD::DrawRecOverlay(float A)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	Corners(28.f * U, 28.f * U, W - 56.f * U, H - 56.f * U, 46.f * U, FLinearColor(1.f, 1.f, 1.f, 0.2f * A), FMath::Max(1.f, 2.f * U));
+	const float RX = W - 64.f * U;
+	const float RY = 52.f * U;
+	const FVector2f RS = TextSize(TEXT("REC"), 13.f, EUiWeight::Bold);
+	TextF(TEXT("REC"), RX, RY, FLinearColor(1.f, 1.f, 1.f, 0.78f * A), 13.f, EUiWeight::Bold, EUiAlign::Right);
+	if (FMath::Fmod(Clock, 1.4f) < 0.9f)
+	{
+		const float D = 13.f * U;
+		RoundRect(RX - RS.X - D - 9.f * U, RY + (RS.Y - D) * 0.5f, D, D, D * 0.5f, FLinearColor(0.95f, 0.12f, 0.1f, 0.95f * A));
+	}
+	TextF(TEXT("SP  ") + Timecode(MenuIntro + 3127.f), RX, RY + RS.Y, FLinearColor(1.f, 1.f, 1.f, 0.5f * A), 11.f, EUiWeight::Light, EUiAlign::Right);
+}
+
+void ABRHUD::DrawMenuBackdrop(bool bCentered, float A)
+{
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float U = Ui();
+	// Le niveau reste visible derriere le menu (camera qui derive, flou de profondeur) : on l'assombrit vers le texte
+	DrawRect(FLinearColor(0.02f, 0.017f, 0.008f, (bCentered ? 0.5f : 0.2f) * A), 0.f, 0.f, W, H);
+	if (!bCentered)
+	{
+		Gradient(0.f, 0.f, W * 0.68f, H, FLinearColor(0.012f, 0.01f, 0.004f, 0.93f * A), 0);
+	}
+	Gradient(0.f, H * 0.55f, W, H * 0.45f, FLinearColor(0.008f, 0.007f, 0.003f, 0.85f * A), 3);
+	Gradient(0.f, 0.f, W, H * 0.24f, FLinearColor(0.f, 0.f, 0.f, 0.5f * A), 2);
+	// Lumiere chaude des neons, en haut a droite
+	Glow(W * 0.8f, H * 0.12f, W * 0.42f, H * 0.5f, FLinearColor(1.f, 0.8f, 0.35f, 0.05f * A));
+	if (FBRSettings::Get().bVHSEffect)
+	{
+		Scanlines(0.022f * A);
+		// Bande de "tracking" qui descend l'ecran de temps en temps
+		const float Cycle = FMath::Fmod(Clock, 9.f);
+		if (Cycle < 0.8f)
+		{
+			const float BY = H * (Cycle / 0.8f);
+			DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.035f * A), 0.f, BY, W, FMath::Max(1.f, 2.f * U));
+			DrawRect(FLinearColor(1.f, 0.95f, 0.85f, 0.018f * A), 0.f, BY + 5.f * U, W, 16.f * U);
+		}
+		DrawRecOverlay(A);
+	}
+}
+
+void ABRHUD::DrawCard(float X, float Y, float W, float H, float Sel, const FString& Label, const FString& Sub, const TCHAR* IconName, float Alpha, bool bDanger)
+{
+	if (Alpha <= 0.003f)
+	{
+		return;
+	}
+	const float U = Ui();
+	const float S = Smooth(Sel);
+	const FLinearColor Accent = bDanger ? FLinearColor(0.93f, 0.33f, 0.25f, 1.f) : Yellow;
+	const FLinearColor DarkInk(0.07f, 0.055f, 0.02f, 1.f);
+	X += S * 14.f * U;
+	const float R = 14.f * U;
+
+	// Halo, ombre portee, fond (jaune quand la carte est selectionnee), lisere, reflet
+	Glow(X + W * 0.42f, Y + H * 0.5f, W * 0.75f, H * 1.5f, WithAlpha(Accent, 0.16f * S * Alpha));
+	RoundRect(X, Y + 4.f * U, W, H, R, FLinearColor(0.f, 0.f, 0.f, 0.3f * Alpha));
+	RoundRect(X, Y, W, H, R, WithAlpha(Mix(FLinearColor(0.05f, 0.045f, 0.03f, 0.78f), FLinearColor(Accent.R, Accent.G, Accent.B, 0.97f), S), Alpha));
+	RoundRect(X, Y, W, H, R, FLinearColor(1.f, 0.88f, 0.5f, 0.13f * (1.f - S) * Alpha), true);
+	Gradient(X + R, Y + 1.f * U, W - 2.f * R, H * 0.45f, FLinearColor(1.f, 1.f, 1.f, (0.03f + 0.07f * S) * Alpha), 2);
+
+	// Icone dans un cercle
+	const float D = H - 30.f * U;
+	const float CircX = X + 16.f * U;
+	const float CircY = Y + (H - D) * 0.5f;
+	RoundRect(CircX, CircY, D, D, D * 0.5f, WithAlpha(Mix(FLinearColor(Accent.R, Accent.G, Accent.B, 0.13f), FLinearColor(0.07f, 0.055f, 0.02f, 0.92f), S), Alpha));
+	if (UTexture* T = UiTex(IconName))
+	{
+		DrawTexture(T, CircX + D * 0.22f, CircY + D * 0.22f, D * 0.56f, D * 0.56f, 0.f, 0.f, 1.f, 1.f, WithAlpha(Accent, Alpha), BLEND_Translucent);
+	}
+
+	// Libelle et sous-titre
+	const float TX = CircX + D + 20.f * U;
+	const FVector2f LS = TextSize(Label, 19.f, EUiWeight::Bold);
+	const FVector2f SS = Sub.IsEmpty() ? FVector2f::ZeroVector : TextSize(Sub, 11.5f, EUiWeight::Regular);
+	const float Block = LS.Y + (Sub.IsEmpty() ? 0.f : SS.Y - 4.f * U);
+	const float TY = Y + (H - Block) * 0.5f;
+	TextF(Label, TX, TY, WithAlpha(Mix(Ink, DarkInk, S), Alpha), 19.f, EUiWeight::Bold, EUiAlign::Left, S < 0.5f);
+	if (!Sub.IsEmpty())
+	{
+		TextF(Ellipsize(Sub, X + W - TX - 60.f * U, 11.5f, EUiWeight::Regular), TX, TY + LS.Y - 4.f * U,
+			WithAlpha(Mix(InkDim, FLinearColor(0.14f, 0.11f, 0.04f, 0.9f), S), Alpha), 11.5f, EUiWeight::Regular, EUiAlign::Left, false);
+	}
+
+	// Chevron (glisse vers la droite a la selection)
+	if (UTexture* T = UiTex(TEXT("UI_IconArrow")))
+	{
+		const float AS = 22.f * U;
+		DrawTexture(T, X + W - AS - 22.f * U - (1.f - S) * 8.f * U, Y + (H - AS) * 0.5f, AS, AS, 0.f, 0.f, 1.f, 1.f,
+			WithAlpha(Mix(FLinearColor(1.f, 0.9f, 0.6f, 0.22f), DarkInk, S), Alpha), BLEND_Translucent);
+	}
+}
+
+void ABRHUD::MenuCard(int32 Item, float X, float Y, float W, float H, const FString& Sub, const TCHAR* IconName, bool bInteractive, float Appear)
 {
 	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
-	const float U = Ui();
-	const float X = CX - W * 0.5f;
-	const bool bSel = PC && PC->GetMenuCursor() == Item;
-	DrawRect(bSel ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.55f), X, Y, W, H);
-	Frame(X, Y, W, H, bSel ? Yellow : YellowDim, 1.f * U);
-	if (bSel)
+	const float Ap = FMath::Clamp(Appear, 0.f, 1.f);
+	const bool bSel = PC && PC->GetMenuCursor() == Item && Ap > 0.5f;
+	float& S = MenuSel[FMath::Clamp(Item, 0, 7)];
+	S = FMath::FInterpTo(S, bSel ? 1.f : 0.f, UiDt, 14.f);
+	const bool bDanger = PC && PC->GetMenuPage() == EBRMenuPage::Main && Item == 3; // QUITTER
+	DrawCard(X - (1.f - Ap) * 40.f * Ui(), Y, W, H, S, PC ? PC->GetMenuItemLabel(Item) : FString(), Sub, IconName, Ap, bDanger);
+	if (bInteractive && Ap > 0.5f)
 	{
-		Txt(TEXT(">"), X + 18.f * U, Y + (H - 26.f * U) * 0.5f, FLinearColor(0.05f, 0.04f, 0.01f), 1.05f * U, GEngine->GetMediumFont(), false, false);
+		AddButton(Btn_Menu + Item, X, Y, W, H);
 	}
-	Txt(Label, CX, Y + (H - 26.f * U) * 0.5f, bSel ? FLinearColor(0.05f, 0.04f, 0.01f) : Ink, 1.05f * U, GEngine->GetMediumFont(), true, false);
+}
+
+void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHAR* IconName, bool bPrimary, bool bInteractive, float Alpha)
+{
+	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	if (!PC || Alpha <= 0.003f)
+	{
+		return;
+	}
+	const float U = Ui();
+	float& Sel = MenuSel[FMath::Clamp(Item, 0, 7)];
+	Sel = FMath::FInterpTo(Sel, PC->GetMenuCursor() == Item ? 1.f : 0.f, UiDt, 14.f);
+	const float S = Smooth(Sel);
+	const FLinearColor DarkInk(0.07f, 0.055f, 0.02f, 1.f);
+	const FLinearColor Fill = bPrimary ? Mix(FLinearColor(0.86f, 0.68f, 0.16f, 0.92f), FLinearColor(1.f, 0.84f, 0.26f, 1.f), S)
+									   : Mix(FLinearColor(0.05f, 0.045f, 0.03f, 0.82f), FLinearColor(1.f, 0.82f, 0.22f, 0.97f), S);
+	const bool bDarkText = bPrimary || S > 0.5f;
+	Glow(X + W * 0.5f, Y + H * 0.5f, W * 0.8f, H * 1.7f, FLinearColor(1.f, 0.78f, 0.25f, (bPrimary ? 0.08f + 0.12f * S : 0.14f * S) * Alpha));
+	RoundRect(X, Y + 4.f * U, W, H, H * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.3f * Alpha));
+	RoundRect(X, Y, W, H, H * 0.5f, WithAlpha(Fill, Alpha));
+	Gradient(X + H * 0.5f, Y + 1.f * U, W - H, H * 0.45f, FLinearColor(1.f, 1.f, 1.f, 0.08f * Alpha), 2);
+	if (bPrimary)
+	{
+		RoundRect(X - 4.f * U, Y - 4.f * U, W + 8.f * U, H + 8.f * U, H * 0.5f + 4.f * U, FLinearColor(1.f, 0.9f, 0.5f, 0.6f * S * Alpha), true);
+	}
+	else
+	{
+		RoundRect(X, Y, W, H, H * 0.5f, FLinearColor(1.f, 0.88f, 0.5f, 0.2f * (1.f - S) * Alpha), true);
+	}
+	const FString Label = PC->GetMenuItemLabel(Item);
+	const FVector2f LS = TextSize(Label, 14.5f, EUiWeight::Bold);
+	const float IS = 18.f * U;
+	const float Total = IS + 12.f * U + LS.X;
+	const float TX = X + (W - Total) * 0.5f;
+	if (UTexture* T = UiTex(IconName))
+	{
+		DrawTexture(T, TX, Y + (H - IS) * 0.5f, IS, IS, 0.f, 0.f, 1.f, 1.f, WithAlpha(bDarkText ? DarkInk : Yellow, Alpha), BLEND_Translucent);
+	}
+	TextF(Label, TX + IS + 12.f * U, Y + (H - LS.Y) * 0.5f, WithAlpha(bDarkText ? DarkInk : Ink, Alpha), 14.5f, EUiWeight::Bold, EUiAlign::Left, false);
 	if (bInteractive)
 	{
 		AddButton(Btn_Menu + Item, X, Y, W, H);
 	}
 }
 
-void ABRHUD::DrawLevelCard(float Y, bool bFull)
+void ABRHUD::DrawTips(float X, float Y, float W, float A)
 {
-	const float U = Ui();
-	const float CX = Canvas->ClipX * 0.5f;
-	UFont* Large = GEngine->GetLargeFont();
-	UFont* Medium = GEngine->GetMediumFont();
-	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
-	const TArray<FBRLevelDef>& All = BRLevels::All();
-	const int32 Index = PC ? FMath::Clamp(PC->GetMenuIndex(), 0, All.Num() - 1) : 0;
-	const FBRLevelDef& D = All[Index];
-
-	// Selecteur de niveau : fleches cliquables de part et d'autre
-	const FString Sel = FString::Printf(TEXT("NIVEAU %d"), D.Number);
-	Txt(Sel, CX, Y, FLinearColor::White, 1.7f * U, Large, true);
-	const float SW = TextW(Sel, Large, 1.7f * U);
-	const float AW = 54.f * U;
-	const float AH = 54.f * U;
-	const float LX = CX - SW * 0.5f - AW - 40.f * U;
-	const float RX = CX + SW * 0.5f + 40.f * U;
-	for (int32 k = 0; k < 2; ++k)
-	{
-		const float AX = k == 0 ? LX : RX;
-		const bool bHov = Hover(AX, Y - 4.f * U, AW, AH);
-		Frame(AX, Y - 4.f * U, AW, AH, bHov ? Yellow : YellowDim, 1.f * U);
-		Txt(k == 0 ? TEXT("<") : TEXT(">"), AX + AW * 0.5f, Y + 4.f * U, bHov ? Yellow : Ink, 1.3f * U, Large, true, false);
-		AddButton(k == 0 ? Btn_MenuLevelPrev : Btn_MenuLevelNext, AX, Y - 4.f * U, AW, AH);
-	}
-	Txt(FString::Printf(TEXT("\u00ab %s \u00bb  -  %s"), *D.Title, *D.Nickname), CX, Y + 70.f * U, FLinearColor(1.f, 0.9f, 0.6f), 1.1f * U, Medium, true);
-	Txt(D.ClassText, CX, Y + 108.f * U, ClassColor(D.SurvivalClass), 0.95f * U, Medium, true);
-	if (!bFull)
+	if (A <= 0.003f)
 	{
 		return;
 	}
-	const TArray<FString> Lines = Wrap(D.Description, Canvas->ClipX * 0.5f, Medium, 0.9f * U);
-	float LY = Y + 150.f * U;
-	for (const FString& L : Lines)
+	const float U = Ui();
+	const int32 N = UE_ARRAY_COUNT(MenuTips);
+	const float Period = 7.5f;
+	const int32 Index = FMath::FloorToInt(TipClock / Period) % N;
+	const float Ph = FMath::Fmod(TipClock, Period);
+	const float TA = A * FMath::Clamp(Ph / 0.45f, 0.f, 1.f) * FMath::Clamp((Period - Ph) / 0.45f, 0.f, 1.f);
+	const float H = 100.f * U;
+	RoundRect(X, Y, W, H, 14.f * U, FLinearColor(0.035f, 0.03f, 0.018f, 0.62f * A));
+	RoundRect(X, Y, W, H, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.1f * A), true);
+	if (UTexture* T = UiTex(TEXT("UI_IconTip")))
 	{
-		Txt(L, CX, LY, FLinearColor(0.85f, 0.85f, 0.85f), 0.9f * U, Medium, true);
-		LY += 26.f * U;
+		DrawTexture(T, X + 20.f * U, Y + 16.f * U, 22.f * U, 22.f * U, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, 0.95f * A), BLEND_Translucent);
 	}
+	TextSpaced(TEXT("ASTUCE"), X + 52.f * U, Y + 18.f * U, WithAlpha(Yellow, 0.9f * A), 10.f, EUiWeight::Bold, 3.f * U);
+	TextF(FString::Printf(TEXT("%d / %d"), Index + 1, N), X + W - 20.f * U, Y + 18.f * U, WithAlpha(InkDim, 0.6f * A), 10.f, EUiWeight::Regular,
+		EUiAlign::Right, false);
+	const TArray<FString> Lines = WrapF(BRKeys::Expand(MenuTips[Index]), W - 72.f * U, 13.f, EUiWeight::Regular);
+	float LY = Y + 44.f * U;
+	for (int32 i = 0; i < Lines.Num() && i < 2; ++i)
+	{
+		TextF(Lines[i], X + 52.f * U, LY, WithAlpha(Ink, 0.92f * TA), 13.f, EUiWeight::Regular, EUiAlign::Left, false);
+		LY += 21.f * U;
+	}
+	// Temps restant avant l'astuce suivante
+	DrawRect(FLinearColor(1.f, 0.82f, 0.22f, 0.3f * A), X + 20.f * U, Y + H - 9.f * U, (W - 40.f * U) * (Ph / Period), FMath::Max(1.f, 2.f * U));
+}
+
+void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	TextF(TEXT("v4.0   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
+		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
+	// Message de connexion / d'erreur reseau : pastille en haut au centre
+	if (!PC->GetMenuStatus().IsEmpty())
+	{
+		const FString& St = PC->GetMenuStatus();
+		const FVector2f SS = TextSize(St, 13.f, EUiWeight::Regular);
+		const float PH = 40.f * U;
+		const float PW = SS.X + 60.f * U;
+		const float PX = (W - PW) * 0.5f;
+		const float PY = 40.f * U;
+		RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(0.05f, 0.04f, 0.02f, 0.88f * A));
+		RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(1.f, 0.7f, 0.35f, 0.35f * A), true);
+		const float D = 10.f * U;
+		RoundRect(PX + 20.f * U, PY + (PH - D) * 0.5f, D, D, D * 0.5f, FLinearColor(1.f, 0.7f, 0.35f, (0.6f + 0.4f * FMath::Sin(Clock * 5.f)) * A));
+		TextF(St, PX + 40.f * U, PY + (PH - SS.Y) * 0.5f, FLinearColor(1.f, 0.88f, 0.7f, A), 13.f, EUiWeight::Regular, EUiAlign::Left, false);
+	}
+	DrawContentWarning(10.f * U);
+}
+
+void ABRHUD::DrawMenu()
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	if (!PC)
+	{
+		return;
+	}
+	const bool bInteractive = !PC->IsInventoryOpen();
+	PlayerOwner->GetMousePosition(MouseX, MouseY);
+	Buttons.Reset();
+
+	MenuIntro += UiDt;
+	TipClock += UiDt;
+	const int32 Page = static_cast<int32>(PC->GetMenuPage());
+	if (Page != LastMenuPage)
+	{
+		LastMenuPage = Page;
+		MenuPageTime = 0.f;
+		for (float& S : MenuSel)
+		{
+			S = 0.f;
+		}
+	}
+	MenuPageTime += UiDt;
+
+	const float A = EaseOut(MenuIntro / 1.4f);
+	const EBRMenuPage P = PC->GetMenuPage();
+	DrawMenuBackdrop(P == EBRMenuPage::Solo || P == EBRMenuPage::Join, A);
+	switch (P)
+	{
+	case EBRMenuPage::Main:
+		DrawMenuMain(PC, bInteractive);
+		break;
+	case EBRMenuPage::Solo:
+		DrawMenuSolo(PC, bInteractive);
+		break;
+	case EBRMenuPage::Multi:
+		DrawMenuMulti(PC, bInteractive);
+		break;
+	case EBRMenuPage::Join:
+		DrawMenuJoin(PC, bInteractive);
+		break;
+	}
+	DrawMenuFooter(PC, A);
+	if (bInteractive)
+	{
+		HandleMenuMouse(PC);
+	}
+	// Ouverture du jeu : fondu depuis le noir
+	if (MenuIntro < 1.6f)
+	{
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 1.f - EaseOut(MenuIntro / 1.6f)), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	}
+}
+
+void ABRHUD::DrawMenuMain(ABRPlayerController* PC, bool bInteractive)
+{
+	const float U = Ui();
+	const float X0 = FMath::Max(60.f * U, Canvas->ClipX * 0.0625f);
+	const float In = EaseOut((MenuIntro - 0.2f) / 1.f);
+
+	// Logo (les lettres commencent a 3 % de l'image) et accroche
+	const float LogoW = 660.f * U;
+	const float LogoY = 92.f * U;
+	DrawLogo(X0 - LogoW * 0.03f - (1.f - In) * 50.f * U, LogoY, LogoW, In, true);
+	const float TY = LogoY + LogoW * 413.f / 1809.f * 0.86f + 18.f * U;
+	DrawRect(WithAlpha(Yellow, In), X0, TY + 11.f * U, 30.f * U, FMath::Max(1.f, 3.f * U));
+	TextF(TEXT("Si vous noclippez hors de la r\u00e9alit\u00e9 au mauvais endroit\u2026"), X0 + 44.f * U, TY, WithAlpha(Ink, 0.88f * In), 14.5f, EUiWeight::Light);
+	TextF(TEXT("\u2026vous atterrissez dans les Backrooms."), X0 + 44.f * U, TY + 25.f * U, WithAlpha(Yellow, 0.95f * In), 14.5f, EUiWeight::Regular);
+
+	// Cartes : SOLO / MULTIJOUEUR / PARAMETRES / QUITTER (entree en cascade)
+	const TCHAR* Subs[] = {
+		TEXT("Partir seul dans l'inconnu"),
+		TEXT("Jusqu'\u00e0 4 explorateurs \u00b7 le meilleur PC h\u00e9berge"),
+		TEXT("Graphismes, son, touches, chat vocal"),
+		TEXT("Revenir \u00e0 la r\u00e9alit\u00e9\u2026 si elle existe"),
+	};
+	const TCHAR* Icons[] = { TEXT("UI_IconSolo"), TEXT("UI_IconMulti"), TEXT("UI_IconSettings"), TEXT("UI_IconQuit") };
+	const float CW = 540.f * U;
+	const float CH = 90.f * U;
+	const float Gap = 14.f * U;
+	float Y = 336.f * U;
+	const float Base = FMath::Min(MenuPageTime, MenuIntro - 0.45f);
+	for (int32 i = 0; i < PC->GetMenuItemCount() && i < 4; ++i)
+	{
+		MenuCard(i, X0, Y, CW, CH, Subs[i], Icons[i], bInteractive, EaseOut((Base - 0.07f * i) / 0.45f));
+		Y += CH + Gap;
+	}
+	DrawTips(X0, Y + 12.f * U, CW, EaseOut((Base - 0.4f) / 0.5f));
+
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
+	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
+	Hints.Emplace(TEXT("FIN"), TEXT("Quitter"));
+	KeyHints(X0, Canvas->ClipY - 72.f * U, Hints, In, false);
+}
+
+void ABRHUD::DrawLevelScene(const FBRLevelDef& D, float X, float Y, float W, float H, float Scale, float Alpha)
+{
+	// Apercu "en coupe" du niveau avec ses vraies textures : plafond et ses lampes, mur, plinthe, sol, eau, brouillard
+	UBRAssets* A = UBRAssets::Get(this);
+	const float U = Ui();
+	const float Tile = 92.f * U * Scale;
+	const bool bOpen = D.bOutdoor || !D.bCeiling;
+	const bool bDark = D.Fixture == EBRFixture::None && !bOpen;
+	const float Lum = bDark ? 0.16f : 1.f;
+	const FLinearColor Light(D.LightColor.R, D.LightColor.G, D.LightColor.B, 1.f);
+	auto Surface = [&](const FBRSurface& Surf, float SX, float SY, float SW, float SH, float Rep, float Bright)
+	{
+		if (SW < 1.f || SH < 1.f)
+		{
+			return;
+		}
+		FLinearColor C = Surf.Tint * Light * (Bright * Lum);
+		C.A = Alpha;
+		UTexture* T = (A && !Surf.Texture.IsNone()) ? A->Texture(Surf.Texture) : nullptr;
+		if (T)
+		{
+			DrawTexture(T, SX, SY, SW, SH, 0.f, 0.f, SW / Rep, SH / Rep, C, BLEND_Translucent);
+		}
+		else
+		{
+			DrawRect(FLinearColor(C.R * 0.5f, C.G * 0.48f, C.B * 0.4f, Alpha), SX, SY, SW, SH);
+		}
+	};
+
+	DrawRect(FLinearColor(0.015f, 0.015f, 0.015f, Alpha), X, Y, W, H);
+	float WallTop = Y;
+	float WallBot = Y + H * 0.74f;
+	if (bOpen)
+	{
+		FLinearColor SkyTop(0.f, 0.f, 0.f, 1.f);
+		FLinearColor SkyLow(0.03f, 0.03f, 0.03f, 1.f);
+		switch (D.Sky)
+		{
+		case EBRSky::Night:
+			SkyTop = FLinearColor(0.005f, 0.01f, 0.03f, 1.f);
+			SkyLow = FLinearColor(0.05f, 0.06f, 0.11f, 1.f);
+			break;
+		case EBRSky::Overcast:
+			SkyTop = FLinearColor(0.38f, 0.41f, 0.46f, 1.f);
+			SkyLow = FLinearColor(0.7f, 0.72f, 0.74f, 1.f);
+			break;
+		case EBRSky::Day:
+			SkyTop = FLinearColor(0.22f, 0.42f, 0.78f, 1.f);
+			SkyLow = FLinearColor(0.72f, 0.8f, 0.9f, 1.f);
+			break;
+		default:
+			break;
+		}
+		DrawRect(WithAlpha(SkyLow, Alpha), X, Y, W, H * 0.62f);
+		Gradient(X, Y, W, H * 0.62f, WithAlpha(SkyTop, Alpha), 2);
+		WallTop = Y + H * 0.36f;
+		WallBot = Y + H * 0.62f;
+	}
+	else
+	{
+		const float CeilH = H * 0.16f;
+		Surface(D.Ceiling, X, Y, W, CeilH, Tile, 0.72f);
+		WallTop = Y + CeilH;
+	}
+	if (!D.Wall.Texture.IsNone())
+	{
+		Surface(D.Wall, X, WallTop, W, WallBot - WallTop, Tile, 0.95f);
+	}
+	if (D.bTrim && !bOpen)
+	{
+		DrawRect(FLinearColor(D.Trim.Tint.R * 0.3f * Lum, D.Trim.Tint.G * 0.28f * Lum, D.Trim.Tint.B * 0.24f * Lum, Alpha), X, WallBot - 4.f * U * Scale, W, 4.f * U * Scale);
+	}
+	Surface(D.Floor, X, WallBot, W, Y + H - WallBot, Tile * 0.8f, 0.7f);
+	if (D.bWater)
+	{
+		const float WY = WallBot - H * 0.07f;
+		DrawRect(FLinearColor(0.3f, 0.68f, 0.7f, 0.5f * Alpha), X, WY, W, Y + H - WY);
+		DrawRect(FLinearColor(0.85f, 1.f, 1.f, 0.4f * Alpha), X, WY, W, FMath::Max(1.f, 2.f * U * Scale));
+		Gradient(X, WY, W, (Y + H - WY) * 0.6f, FLinearColor(0.75f, 0.95f, 1.f, 0.18f * Alpha), 2);
+	}
+	// Lampes : plafonniers (rangee de trois) ou lampadaires a l'horizon
+	if (D.Fixture != EBRFixture::None)
+	{
+		if (!bOpen)
+		{
+			const float CeilH = WallTop - Y;
+			for (int32 i = 0; i < 3; ++i)
+			{
+				const float LX = X + W * (0.2f + 0.3f * i);
+				Glow(LX, WallTop, W * 0.26f, H * 0.42f, WithAlpha(Light, 0.26f * Alpha));
+				DrawRect(WithAlpha(Mix(Light, FLinearColor::White, 0.6f), Alpha), LX - W * 0.07f, Y + CeilH * 0.38f, W * 0.14f, FMath::Max(2.f, 5.f * U * Scale));
+			}
+		}
+		else
+		{
+			for (int32 i = 0; i < 2; ++i)
+			{
+				const float LX = X + W * (0.28f + 0.46f * i);
+				DrawRect(FLinearColor(0.05f, 0.05f, 0.05f, Alpha), LX - 1.5f * U * Scale, WallTop - H * 0.1f, 3.f * U * Scale, WallBot - WallTop + H * 0.1f);
+				Glow(LX, WallTop - H * 0.1f, W * 0.18f, H * 0.2f, WithAlpha(Light, 0.55f * Alpha));
+			}
+		}
+	}
+	// Brouillard du niveau puis vignettage
+	DrawRect(FLinearColor(D.FogColor.R, D.FogColor.G, D.FogColor.B, FMath::Clamp(D.FogDensity * 2.2f, 0.04f, 0.32f) * Alpha), X, Y, W, H);
+	Gradient(X, Y, W * 0.3f, H, FLinearColor(0.f, 0.f, 0.f, 0.5f * Alpha), 0);
+	Gradient(X + W * 0.7f, Y, W * 0.3f, H, FLinearColor(0.f, 0.f, 0.f, 0.5f * Alpha), 1);
+	Gradient(X, Y + H * 0.55f, W, H * 0.45f, FLinearColor(0.f, 0.f, 0.f, 0.45f * Alpha), 3);
+	Frame(X, Y, W, H, FLinearColor(1.f, 1.f, 1.f, 0.06f * Alpha), FMath::Max(1.f, U));
+}
+
+void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float Alpha, float Sel)
+{
+	const TArray<FBRLevelDef>& All = BRLevels::All();
+	if (!All.IsValidIndex(Index) || Alpha <= 0.003f)
+	{
+		return;
+	}
+	const FBRLevelDef& D = All[Index];
+	const float U = Ui();
+	const float S = Scale;
+	const float W = 294.f * U * S;
+	const float H = 392.f * U * S;
+	const float X = CX - W * 0.5f;
+	const float Y = Top + (392.f * U - H) * 0.5f;
+	const float R = 16.f * U * S;
+
+	Glow(CX, Y + H * 0.5f, W * 0.95f, H * 0.75f, FLinearColor(1.f, 0.78f, 0.25f, 0.16f * Sel * Alpha));
+	RoundRect(X + 4.f * U * S, Y + 10.f * U * S, W, H, R, FLinearColor(0.f, 0.f, 0.f, 0.5f * Alpha));
+	RoundRect(X, Y, W, H, R, FLinearColor(0.06f, 0.052f, 0.035f, 0.97f * Alpha));
+
+	const float Pad = 10.f * U * S;
+	const float PW = W - 2.f * Pad;
+	const float PH = H * 0.52f;
+	DrawLevelScene(D, X + Pad, Y + Pad, PW, PH, S, Alpha);
+
+	float TY = Y + Pad + PH + 12.f * U * S;
+	TextSpaced(TEXT("NIVEAU"), CX, TY, WithAlpha(InkDim, Alpha), 9.5f * S, EUiWeight::Light, 4.f * U * S, EUiAlign::Center);
+	TY += 15.f * U * S;
+	TextF(FString::FromInt(D.Number), CX, TY, WithAlpha(Mix(Ink, Yellow, Sel), Alpha), 40.f * S, EUiWeight::Black, EUiAlign::Center);
+	TY += TextSize(TEXT("0"), 40.f * S, EUiWeight::Black).Y - 6.f * U * S;
+	TextF(Ellipsize(D.Title, PW, 14.f * S, EUiWeight::Bold), CX, TY, WithAlpha(Ink, Alpha), 14.f * S, EUiWeight::Bold, EUiAlign::Center, false);
+	TY += 21.f * U * S;
+	TextF(Ellipsize(D.Nickname, PW, 11.f * S, EUiWeight::Regular), CX, TY, WithAlpha(InkDim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
+
+	// Classe de survie : pastille coloree en bas de la carte
+	const FString Cls = ClassShort(D.ClassText);
+	const FLinearColor CC = ClassColor(D.SurvivalClass);
+	const FVector2f CS = TextSize(Cls, 9.5f * S, EUiWeight::Bold);
+	const float PillH = 22.f * U * S;
+	const float PillW = CS.X + 34.f * U * S;
+	const float PillY = Y + H - PillH - 14.f * U * S;
+	RoundRect(CX - PillW * 0.5f, PillY, PillW, PillH, PillH * 0.5f, FLinearColor(CC.R, CC.G, CC.B, 0.16f * Alpha));
+	const float Dot = 7.f * U * S;
+	RoundRect(CX - PillW * 0.5f + 11.f * U * S, PillY + (PillH - Dot) * 0.5f, Dot, Dot, Dot * 0.5f, WithAlpha(CC, Alpha));
+	TextF(Cls, CX + 6.f * U * S, PillY + (PillH - CS.Y) * 0.5f, WithAlpha(CC, Alpha), 9.5f * S, EUiWeight::Bold, EUiAlign::Center, false);
+
+	if (Sel > 0.01f)
+	{
+		RoundRect(X - 3.f * U, Y - 3.f * U, W + 6.f * U, H + 6.f * U, R + 3.f * U, WithAlpha(Yellow, Sel * Alpha), true);
+	}
+	else
+	{
+		RoundRect(X, Y, W, H, R, FLinearColor(1.f, 0.9f, 0.6f, 0.1f * Alpha), true);
+	}
+}
+
+void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float CX = W * 0.5f;
+	const float X0 = FMath::Max(60.f * U, W * 0.0625f);
+	const TArray<FBRLevelDef>& All = BRLevels::All();
+	const int32 Num = All.Num();
+	if (Num == 0)
+	{
+		return;
+	}
+	const int32 Sel = FMath::Clamp(PC->GetMenuIndex(), 0, Num - 1);
+	const float In = EaseOut(MenuPageTime / 0.45f);
+
+	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
+	TextSpaced(TEXT("CHOISISSEZ UN NIVEAU"), CX, 108.f * U, WithAlpha(Yellow, In), 13.f, EUiWeight::Bold, 5.f * U, EUiAlign::Center);
+	TextF(TEXT("Chaque niveau se g\u00e9n\u00e8re \u00e0 l'infini autour de vous. Aucun n'est vraiment s\u00fbr."), CX, 136.f * U, WithAlpha(InkDim, In),
+		12.5f, EUiWeight::Light, EUiAlign::Center);
+
+	// Carrousel : sa position suit la selection par le plus court chemin (la liste boucle)
+	if (Carousel < -500.f)
+	{
+		Carousel = static_cast<float>(Sel);
+	}
+	float Delta = static_cast<float>(Sel) - Carousel;
+	Delta -= Num * FMath::RoundToFloat(Delta / Num);
+	Carousel += Delta * FMath::Min(1.f, UiDt * 11.f);
+	Carousel = FMath::Fmod(Carousel + Num, static_cast<float>(Num));
+
+	const float Top = 182.f * U;
+	const float Spacing = 336.f * U;
+	TArray<FCardDraw> Cards;
+	const int32 Center = FMath::RoundToInt(Carousel);
+	for (int32 k = -3; k <= 3; ++k)
+	{
+		const float Off = static_cast<float>(Center + k) - Carousel;
+		if (FMath::Abs(Off) <= 2.6f)
+		{
+			Cards.Add({ ((Center + k) % Num + Num) % Num, Off });
+		}
+	}
+	// Les plus eloignees d'abord : la carte centrale passe devant
+	Cards.Sort([](const FCardDraw& L, const FCardDraw& R) { return FMath::Abs(L.Off) > FMath::Abs(R.Off); });
+	for (const FCardDraw& Cd : Cards)
+	{
+		const float AOff = FMath::Abs(Cd.Off);
+		const float Scale = 1.f - 0.15f * FMath::Min(AOff, 2.f);
+		const float Alpha = In * FMath::Clamp(1.f - 0.36f * AOff, 0.f, 1.f) * FMath::Clamp((2.6f - AOff) / 0.4f, 0.f, 1.f);
+		const float CardCX = CX + Cd.Off * Spacing * (1.f - 0.06f * AOff);
+		DrawLevelCard(Cd.Index, CardCX, Top, Scale, Alpha, FMath::Clamp(1.f - AOff * 2.f, 0.f, 1.f));
+		if (bInteractive && AOff < 2.2f)
+		{
+			// Ecart avec la selection (la liste boucle) : un clic sur une carte voisine la selectionne
+			int32 Rel = Cd.Index - Sel;
+			Rel -= Num * FMath::RoundToInt(static_cast<float>(Rel) / Num);
+			if (FMath::Abs(Rel) <= 3)
+			{
+				const float CW = 294.f * U * Scale;
+				const float CH = 392.f * U * Scale;
+				AddButton(Btn_MenuCard + 3 + Rel, CardCX - CW * 0.5f, Top + (392.f * U - CH) * 0.5f, CW, CH);
+			}
+		}
+	}
+
+	// Pagination : fleches et points
+	const float PagerY = Top + 392.f * U + 30.f * U;
+	const float Dot = 8.f * U;
+	const float DotGap = 9.f * U;
+	const float Wide = 16.f * U;
+	const float DotsW = Num * Dot + (Num - 1) * DotGap + Wide;
+	float DX = CX - DotsW * 0.5f;
+	for (int32 i = 0; i < Num; ++i)
+	{
+		const float DW = i == Sel ? Dot + Wide : Dot;
+		RoundRect(DX, PagerY - Dot * 0.5f, DW, Dot, Dot * 0.5f, i == Sel ? WithAlpha(Yellow, In) : FLinearColor(1.f, 1.f, 1.f, 0.22f * In));
+		DX += DW + DotGap;
+	}
+	const float AD = 38.f * U;
+	for (int32 k = 0; k < 2; ++k)
+	{
+		const float AX = k == 0 ? CX - DotsW * 0.5f - 26.f * U - AD : CX + DotsW * 0.5f + 26.f * U;
+		const float AY = PagerY - AD * 0.5f;
+		const bool bHov = bInteractive && Hover(AX, AY, AD, AD);
+		RoundRect(AX, AY, AD, AD, AD * 0.5f, bHov ? WithAlpha(Yellow, 0.95f * In) : FLinearColor(0.05f, 0.045f, 0.03f, 0.8f * In));
+		RoundRect(AX, AY, AD, AD, AD * 0.5f, FLinearColor(1.f, 0.88f, 0.5f, 0.25f * In), true);
+		if (UTexture* T = UiTex(TEXT("UI_IconArrow")))
+		{
+			const float IS = AD * 0.46f;
+			DrawTexture(T, AX + (AD - IS) * 0.5f, AY + (AD - IS) * 0.5f, IS, IS, k == 0 ? 1.f : 0.f, 0.f, k == 0 ? -1.f : 1.f, 1.f,
+				bHov ? FLinearColor(0.07f, 0.055f, 0.02f, In) : WithAlpha(Yellow, In), BLEND_Translucent);
+		}
+		if (bInteractive)
+		{
+			AddButton(k == 0 ? Btn_MenuLevelPrev : Btn_MenuLevelNext, AX, AY, AD, AD);
+		}
+	}
+
+	// Details du niveau choisi
+	const FBRLevelDef& D = All[Sel];
+	float Y = PagerY + 34.f * U;
+	TextF(D.ClassText, CX, Y, WithAlpha(ClassColor(D.SurvivalClass), In), 12.5f, EUiWeight::Bold, EUiAlign::Center);
+	Y += 28.f * U;
+	const TArray<FString> Lines = WrapF(D.Description, FMath::Min(880.f * U, W - 160.f * U), 13.5f, EUiWeight::Regular);
+	for (int32 i = 0; i < Lines.Num() && i < 3; ++i)
+	{
+		TextF(Lines[i], CX, Y, WithAlpha(Ink, 0.9f * In), 13.5f, EUiWeight::Regular, EUiAlign::Center);
+		Y += 22.f * U;
+	}
+	Y += 6.f * U;
 	if (D.bRequireObjectives)
 	{
-		Txt(FString::Printf(TEXT("Objectifs : %d cassettes VHS + filmer pendant une coupure de courant"), D.VHSRequired), CX, LY + 6.f * U,
-			Yellow, 0.82f * U, Medium, true);
-		LY += 26.f * U;
+		TextF(FString::Printf(TEXT("Objectifs : %d cassettes VHS + filmer pendant une coupure de courant"), D.VHSRequired), CX, Y,
+			WithAlpha(Yellow, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
+		Y += 21.f * U;
 	}
-	if (Index == 0)
+	if (Sel == 0)
 	{
-		Txt(TEXT("(Recommand\u00e9 pour commencer : le vrai d\u00e9but de l'aventure)"), CX, LY + 6.f * U, FLinearColor(0.6f, 0.9f, 0.6f, 0.8f), 0.8f * U, Medium, true);
+		TextF(TEXT("Recommand\u00e9 pour commencer : le vrai d\u00e9but de l'aventure"), CX, Y, FLinearColor(0.6f, 0.92f, 0.6f, 0.85f * In), 12.f,
+			EUiWeight::Regular, EUiAlign::Center);
+		Y += 21.f * U;
 	}
+	TArray<FString> Names;
+	for (const FBREntitySpawn& E : D.Entities)
+	{
+		Names.AddUnique(ABREntity::Info(E.Kind).Name);
+	}
+	if (D.bPatrolEntity)
+	{
+		Names.AddUnique(ABREntity::Info(D.PatrolKind).Name);
+	}
+	if (D.BlackoutSmilers > 0)
+	{
+		Names.AddUnique(ABREntity::Info(EBREntityKind::Smiler).Name);
+	}
+	TextF(Names.Num() > 0 ? TEXT("Entit\u00e9s : ") + FString::Join(Names, TEXT("  \u00b7  ")) : FString(TEXT("Aucune entit\u00e9 signal\u00e9e")), CX, Y,
+		WithAlpha(InkDim, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
+	Y += 21.f * U;
+
+	// NOCLIPPER / RETOUR
+	const float BH = 60.f * U;
+	const float PW0 = 300.f * U;
+	const float PW1 = 210.f * U;
+	const float BG = 18.f * U;
+	const float BX = CX - (PW0 + PW1 + BG) * 0.5f;
+	const float BY = FMath::Max(836.f * U, Y + 18.f * U);
+	MenuPill(0, BX, BY, PW0, BH, TEXT("UI_IconPlay"), true, bInteractive, In);
+	MenuPill(1, BX + PW0 + BG, BY, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, In);
+
+	TextF(ControlsLine(0), CX, H - 134.f * U, WithAlpha(InkDim, 0.75f * In), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
+	TextF(ControlsLine(1), CX, H - 112.f * U, WithAlpha(InkDim, 0.75f * In), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(TEXT("\u2190 \u2192"), TEXT("Niveau"));
+	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
+	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
+	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	KeyHints(CX, H - 76.f * U, Hints, In, true);
+}
+
+void ABRHUD::DrawMenuMulti(ABRPlayerController* PC, bool bInteractive)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float X0 = FMath::Max(60.f * U, W * 0.0625f);
+	const float In = EaseOut(MenuPageTime / 0.45f);
+
+	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
+	TextF(TEXT("MULTIJOUEUR"), X0, 124.f * U, WithAlpha(Ink, In), 32.f, EUiWeight::Black);
+	TextF(TEXT("Coop\u00e9ration jusqu'\u00e0 4 explorateurs  \u00b7  chat vocal de proximit\u00e9"), X0, 178.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
+
+	const TCHAR* Subs[] = {
+		TEXT("Cr\u00e9er la partie sur ce PC (port 7777)"),
+		TEXT("Entrer l'adresse IP de l'h\u00f4te"),
+		TEXT("Revenir au menu principal"),
+	};
+	const TCHAR* Icons[] = { TEXT("UI_IconHost"), TEXT("UI_IconJoin"), TEXT("UI_IconBack") };
+	const float CW = 540.f * U;
+	const float CH = 90.f * U;
+	float Y = 250.f * U;
+	for (int32 i = 0; i < PC->GetMenuItemCount() && i < 3; ++i)
+	{
+		MenuCard(i, X0, Y, CW, CH, Subs[i], Icons[i], bInteractive, EaseOut((MenuPageTime - 0.07f * i) / 0.45f));
+		Y += CH + 14.f * U;
+	}
+
+	// Colonne de droite : qui doit heberger, niveau de depart, adresse IP
+	const float PX = FMath::Max(X0 + CW + 70.f * U, W - 56.f * U - 600.f * U);
+	const float PW = FMath::Max(320.f * U, FMath::Min(600.f * U, W - PX - 56.f * U));
+	const float A = EaseOut((MenuPageTime - 0.15f) / 0.5f);
+	float PY = 250.f * U;
+	{
+		const TArray<FString> Lines = WrapF(TEXT("Le joueur qui a l'ordinateur le plus puissant (et la meilleure connexion). Son PC fait tourner le monde, les entit\u00e9s et leurs d\u00e9placements pour tout le groupe ; les autres le rejoignent avec son adresse IP."),
+			PW - 96.f * U, 12.5f, EUiWeight::Regular);
+		const float BoxH = 54.f * U + Lines.Num() * 20.f * U + 14.f * U;
+		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.17f, 0.13f, 0.02f, 0.75f * A));
+		RoundRect(PX, PY, PW, BoxH, 14.f * U, WithAlpha(Yellow, 0.35f * A), true);
+		const float D = 44.f * U;
+		RoundRect(PX + 20.f * U, PY + 18.f * U, D, D, D * 0.5f, WithAlpha(Yellow, 0.16f * A));
+		if (UTexture* T = UiTex(TEXT("UI_IconHost")))
+		{
+			DrawTexture(T, PX + 20.f * U + D * 0.2f, PY + 18.f * U + D * 0.2f, D * 0.6f, D * 0.6f, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, A), BLEND_Translucent);
+		}
+		TextSpaced(TEXT("QUI DOIT H\u00c9BERGER ?"), PX + 80.f * U, PY + 22.f * U, WithAlpha(Yellow, A), 11.f, EUiWeight::Bold, 2.5f * U);
+		float LY = PY + 48.f * U;
+		for (const FString& L : Lines)
+		{
+			TextF(L, PX + 80.f * U, LY, WithAlpha(Ink, 0.92f * A), 12.5f, EUiWeight::Regular, EUiAlign::Left, false);
+			LY += 20.f * U;
+		}
+		PY += BoxH + 16.f * U;
+	}
+	{
+		// Niveau de depart
+		const TArray<FBRLevelDef>& All = BRLevels::All();
+		const FBRLevelDef& D = All[FMath::Clamp(PC->GetMenuIndex(), 0, All.Num() - 1)];
+		const float BoxH = 104.f * U;
+		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.78f * A));
+		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.12f * A), true);
+		TextSpaced(TEXT("NIVEAU DE D\u00c9PART"), PX + PW * 0.5f, PY + 16.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
+		const float AD = 38.f * U;
+		const float RowY = PY + 42.f * U;
+		for (int32 k = 0; k < 2; ++k)
+		{
+			const float AX = k == 0 ? PX + 20.f * U : PX + PW - 20.f * U - AD;
+			const bool bHov = bInteractive && Hover(AX, RowY, AD, AD);
+			RoundRect(AX, RowY, AD, AD, AD * 0.5f, bHov ? WithAlpha(Yellow, 0.95f * A) : FLinearColor(1.f, 0.82f, 0.22f, 0.12f * A));
+			if (UTexture* T = UiTex(TEXT("UI_IconArrow")))
+			{
+				const float IS = AD * 0.46f;
+				DrawTexture(T, AX + (AD - IS) * 0.5f, RowY + (AD - IS) * 0.5f, IS, IS, k == 0 ? 1.f : 0.f, 0.f, k == 0 ? -1.f : 1.f, 1.f,
+					bHov ? FLinearColor(0.07f, 0.055f, 0.02f, A) : WithAlpha(Yellow, A), BLEND_Translucent);
+			}
+			if (bInteractive)
+			{
+				AddButton(k == 0 ? Btn_MenuLevelPrev : Btn_MenuLevelNext, AX, RowY, AD, AD);
+			}
+		}
+		const float MidW = PW - 2.f * (AD + 34.f * U);
+		TextF(Ellipsize(FString::Printf(TEXT("Niveau %d  \u00b7  %s"), D.Number, *D.Title), MidW, 15.f, EUiWeight::Bold), PX + PW * 0.5f, RowY - 2.f * U,
+			WithAlpha(Ink, A), 15.f, EUiWeight::Bold, EUiAlign::Center);
+		TextF(ClassShort(D.ClassText) + TEXT("  \u00b7  ") + Ellipsize(D.Nickname, MidW * 0.6f, 11.f, EUiWeight::Regular), PX + PW * 0.5f, RowY + 24.f * U,
+			WithAlpha(ClassColor(D.SurvivalClass), 0.9f * A), 11.f, EUiWeight::Regular, EUiAlign::Center, false);
+		PY += BoxH + 16.f * U;
+	}
+	{
+		// Adresse IP a donner aux amis
+		const FString Ip = PC->GetLocalAddress().IsEmpty() ? FString(TEXT("inconnue")) : PC->GetLocalAddress();
+		const TArray<FString> Help = WrapF(TEXT("M\u00eame r\u00e9seau (LAN) : donnez cette adresse \u00e0 vos amis. Par Internet : redirigez le port UDP 7777 vers ce PC sur la box, ou utilisez un r\u00e9seau virtuel (Radmin VPN, ZeroTier, Tailscale\u2026) et son adresse. Chat vocal de proximit\u00e9 : Param\u00e8tres."),
+			PW - 44.f * U, 11.5f, EUiWeight::Regular);
+		const float BoxH = 100.f * U + Help.Num() * 18.f * U + 12.f * U;
+		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.78f * A));
+		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.12f * A), true);
+		TextSpaced(TEXT("VOTRE ADRESSE IP"), PX + 22.f * U, PY + 18.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U);
+		const FVector2f IS = TextSize(Ip, 26.f, EUiWeight::Black);
+		TextF(Ip, PX + 22.f * U, PY + 38.f * U, WithAlpha(Yellow, A), 26.f, EUiWeight::Black);
+		TextF(TEXT("port 7777 (UDP)"), PX + 34.f * U + IS.X, PY + 38.f * U + IS.Y - 30.f * U, WithAlpha(InkDim, A), 12.f, EUiWeight::Light, EUiAlign::Left, false);
+		float LY = PY + 100.f * U;
+		for (const FString& L : Help)
+		{
+			TextF(L, PX + 22.f * U, LY, WithAlpha(InkDim, 0.95f * A), 11.5f, EUiWeight::Regular, EUiAlign::Left, false);
+			LY += 18.f * U;
+		}
+	}
+
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(TEXT("\u2190 \u2192"), TEXT("Niveau"));
+	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
+	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
+	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	KeyHints(X0, H - 72.f * U, Hints, In, false);
+}
+
+void ABRHUD::DrawMenuJoin(ABRPlayerController* PC, bool bInteractive)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float CX = W * 0.5f;
+	const float CY = H * 0.5f;
+	const float X0 = FMath::Max(60.f * U, W * 0.0625f);
+	const float In = EaseOut(MenuPageTime / 0.4f);
+
+	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
+	// Carte centrale autour du champ de saisie (widget Slate de 520 x 52, centre a l'ecran)
+	const float CW = 700.f * U;
+	const float CH = 384.f * U;
+	const float CardX = CX - CW * 0.5f;
+	const float CardY = CY - 196.f * U + (1.f - In) * 24.f * U;
+	Glow(CX, CY, CW * 0.8f, CH * 0.9f, FLinearColor(1.f, 0.8f, 0.3f, 0.06f * In));
+	RoundRect(CardX, CardY + 6.f * U, CW, CH, 22.f * U, FLinearColor(0.f, 0.f, 0.f, 0.35f * In));
+	RoundRect(CardX, CardY, CW, CH, 22.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.92f * In));
+	RoundRect(CardX, CardY, CW, CH, 22.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.16f * In), true);
+	// Badge rond a cheval sur le bord superieur
+	const float BD = 64.f * U;
+	RoundRect(CX - BD * 0.5f, CardY - BD * 0.5f, BD, BD, BD * 0.5f, WithAlpha(Yellow, In));
+	if (UTexture* T = UiTex(TEXT("UI_IconJoin")))
+	{
+		DrawTexture(T, CX - BD * 0.3f, CardY - BD * 0.3f, BD * 0.6f, BD * 0.6f, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.07f, 0.055f, 0.02f, In), BLEND_Translucent);
+	}
+	TextF(TEXT("REJOINDRE UNE PARTIE"), CX, CardY + 46.f * U, WithAlpha(Ink, In), 24.f, EUiWeight::Black, EUiAlign::Center);
+	TextF(TEXT("Entrez l'adresse IP de l'h\u00f4te (il la voit dans son menu MULTIJOUEUR)"), CX, CardY + 92.f * U, WithAlpha(InkDim, In), 12.5f,
+		EUiWeight::Light, EUiAlign::Center);
+	const float FW = 548.f * U;
+	const float FH = 68.f * U;
+	RoundRect(CX - FW * 0.5f, CY - FH * 0.5f, FW, FH, 12.f * U, FLinearColor(0.f, 0.f, 0.f, 0.45f * In));
+	RoundRect(CX - FW * 0.5f, CY - FH * 0.5f, FW, FH, 12.f * U, FLinearColor(1.f, 0.84f, 0.3f, (0.5f + 0.25f * FMath::Sin(Clock * 3.f)) * In), true);
+
+	const float BH = 56.f * U;
+	const float PW0 = 260.f * U;
+	const float PW1 = 180.f * U;
+	const float BG = 16.f * U;
+	const float BX = CX - (PW0 + PW1 + BG) * 0.5f;
+	MenuPill(0, BX, CY + 66.f * U, PW0, BH, TEXT("UI_IconPlay"), true, bInteractive, In);
+	MenuPill(1, BX + PW0 + BG, CY + 66.f * U, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, In);
+	TextF(TEXT("Exemples :  192.168.1.20   \u00b7   26.45.120.7:7777"), CX, CardY + CH - 40.f * U, WithAlpha(InkDim, 0.85f * In), 11.5f,
+		EUiWeight::Regular, EUiAlign::Center, false);
+
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Se connecter"));
+	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	KeyHints(CX, H - 76.f * U, Hints, In, true);
 }
 
 void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
@@ -564,138 +1680,19 @@ void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
 	{
 		PC->MenuShiftLevel(Id == Btn_MenuLevelPrev ? -1 : 1);
 	}
-}
-
-void ABRHUD::DrawMenu()
-{
-	const float U = Ui();
-	const float CX = Canvas->ClipX * 0.5f;
-	const float H = Canvas->ClipY;
-	UFont* Large = GEngine->GetLargeFont();
-	UFont* Medium = GEngine->GetMediumFont();
-	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
-	if (!PC)
+	else if (Id >= Btn_MenuCard && Id <= Btn_MenuCard + 6)
 	{
-		return;
-	}
-	const bool bInteractive = !PC->IsInventoryOpen();
-	if (PlayerOwner)
-	{
-		PlayerOwner->GetMousePosition(MouseX, MouseY);
-	}
-	Buttons.Reset();
-
-	DrawRect(FLinearColor(0.02f, 0.02f, 0.01f, 0.62f), 0.f, 0.f, Canvas->ClipX, H);
-	Scanlines(0.05f);
-
-	const float Flick = (FMath::Sin(Clock * 23.f) > 0.97f) ? 0.5f : 1.f;
-	Txt(TEXT("THE BACKROOMS"), CX, H * 0.1f, FLinearColor(1.f, 0.92f, 0.6f, Flick), 2.8f * U, Large, true);
-	Txt(TEXT("Si vous ne faites pas attention et que vous noclippez hors de la r\u00e9alit\u00e9 au mauvais endroit..."),
-		CX, H * 0.2f, FLinearColor(0.85f, 0.82f, 0.7f, 0.9f), 1.f * U, Medium, true);
-
-	const float BW = 480.f * U;
-	const float BH = 54.f * U;
-	const float Gap = 14.f * U;
-	const float Blink = 0.6f + 0.4f * FMath::Sin(Clock * 3.f);
-	FString Hint;
-	switch (PC->GetMenuPage())
-	{
-	case EBRMenuPage::Main:
-	{
-		float Y = H * 0.34f;
-		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
+		// Carte du carrousel : celle du centre lance la partie, une voisine devient la selection
+		const int32 Rel = Id - Btn_MenuCard - 3;
+		if (Rel == 0)
 		{
-			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW, BH, bInteractive);
-			Y += BH + Gap;
+			PC->MenuActivate(0);
 		}
-		// Conseil multijoueur, visible des le lancement
-		const FString Tip = TEXT("MULTIJOUEUR : c'est le joueur qui a l'ordinateur le plus puissant qui devrait h\u00e9berger la partie.");
-		const float TW = TextW(Tip, Medium, 0.85f * U) + 40.f * U;
-		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), CX - TW * 0.5f, Y + 10.f * U, TW, 40.f * U);
-		Frame(CX - TW * 0.5f, Y + 10.f * U, TW, 40.f * U, YellowDim, 1.f * U);
-		Txt(Tip, CX, Y + 19.f * U, Yellow, 0.85f * U, Medium, true, false);
-		Hint = TEXT("[ \u2191 / \u2193 ]  choisir        [ ENTR\u00c9E ]  valider        [ FIN ]  quitter");
-		break;
-	}
-	case EBRMenuPage::Solo:
-	{
-		Txt(TEXT("PARTIE SOLO"), CX, H * 0.27f, Yellow, 1.1f * U, Medium, true);
-		DrawLevelCard(H * 0.31f, true);
-		float Y = H * 0.67f;
-		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
+		for (int32 k = 0; k < FMath::Abs(Rel); ++k)
 		{
-			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW * 0.8f, BH * 0.9f, bInteractive);
-			Y += BH * 0.9f + Gap;
+			PC->MenuShiftLevel(Rel > 0 ? 1 : -1);
 		}
-		Hint = TEXT("[ \u2190 / \u2192 ]  choisir le niveau        [ ENTR\u00c9E ]  noclipper        [ \u00c9CHAP ]  retour");
-		break;
 	}
-	case EBRMenuPage::Multi:
-	{
-		Txt(TEXT("MULTIJOUEUR  -  COOP\u00c9RATION JUSQU'\u00c0 4 JOUEURS"), CX, H * 0.25f, Yellow, 1.1f * U, Medium, true);
-		{
-			// Qui doit heberger ? Le PC de l'hote fait tourner le monde et les entites pour tout le groupe
-			const float BoxW = FMath::Min(Canvas->ClipX - 80.f * U, 1180.f * U);
-			const float BoxY = H * 0.25f + 40.f * U;
-			DrawRect(FLinearColor(0.12f, 0.09f, 0.f, 0.6f), CX - BoxW * 0.5f, BoxY, BoxW, 62.f * U);
-			Frame(CX - BoxW * 0.5f, BoxY, BoxW, 62.f * U, Yellow, 1.5f * U);
-			Txt(TEXT("CONSEIL : le joueur qui a l'ordinateur le plus puissant (et la meilleure connexion) devrait h\u00e9berger."), CX, BoxY + 8.f * U,
-				Yellow, 0.9f * U, Medium, true, false);
-			Txt(TEXT("Son PC fait tourner le monde, les entit\u00e9s et leurs d\u00e9placements pour tout le groupe ; les autres le rejoignent avec son adresse IP."),
-				CX, BoxY + 34.f * U, Ink, 0.75f * U, Medium, true, false);
-		}
-		DrawLevelCard(H * 0.37f, false);
-		float Y = H * 0.52f;
-		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
-		{
-			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW, BH, bInteractive);
-			Y += BH + Gap;
-		}
-		const FString Ip = PC->GetLocalAddress().IsEmpty() ? FString(TEXT("inconnue")) : PC->GetLocalAddress();
-		Txt(FString::Printf(TEXT("Votre adresse IP : %s   (port 7777, UDP)"), *Ip), CX, Y + 10.f * U, FLinearColor(0.75f, 0.95f, 0.75f), 0.95f * U, Medium, true);
-		Txt(TEXT("M\u00eame r\u00e9seau (LAN) : donnez cette adresse \u00e0 vos amis.  Par Internet : redirigez le port UDP 7777 vers ce PC sur la box,"),
-			CX, Y + 40.f * U, InkDim, 0.78f * U, Medium, true);
-		Txt(TEXT("ou utilisez un r\u00e9seau virtuel (Radmin VPN, ZeroTier, Tailscale...) et son adresse IP.  Chat vocal de proximit\u00e9 : Param\u00e8tres."),
-			CX, Y + 62.f * U, InkDim, 0.78f * U, Medium, true);
-		Hint = TEXT("[ \u2190 / \u2192 ]  niveau        [ \u2191 / \u2193 ]  choisir        [ ENTR\u00c9E ]  valider        [ \u00c9CHAP ]  retour");
-		break;
-	}
-	case EBRMenuPage::Join:
-	{
-		// Le champ de saisie (Slate) est centre a l'ecran : on dessine autour
-		Txt(TEXT("REJOINDRE UNE PARTIE"), CX, H * 0.3f, Yellow, 1.3f * U, Large, true);
-		Txt(TEXT("ADRESSE IP DE L'H\u00d4TE"), CX, H * 0.5f - 74.f * U, Ink, 0.95f * U, Medium, true);
-		Frame(CX - 268.f * U, H * 0.5f - 34.f * U, 536.f * U, 68.f * U, YellowDim, 1.f * U);
-		float Y = H * 0.5f + 58.f * U;
-		for (int32 i = 0; i < PC->GetMenuItemCount(); ++i)
-		{
-			MenuButton(i, PC->GetMenuItemLabel(i), CX, Y, BW, BH, bInteractive);
-			Y += BH + Gap;
-		}
-		Txt(TEXT("Exemples : 192.168.1.20   ou   26.45.120.7:7777   (l'h\u00f4te voit son adresse dans MULTIJOUEUR)"), CX, Y + 14.f * U, InkDim,
-			0.8f * U, Medium, true);
-		Hint = TEXT("[ ENTR\u00c9E ]  se connecter        [ \u00c9CHAP ]  retour");
-		break;
-	}
-	}
-
-	if (!PC->GetMenuStatus().IsEmpty())
-	{
-		Txt(PC->GetMenuStatus(), CX, H * 0.8f, FLinearColor(1.f, 0.7f, 0.35f), 0.95f * U, Medium, true);
-	}
-	Txt(Hint, CX, H * 0.845f, FLinearColor(1.f, 1.f, 1.f, Blink), 0.95f * U, Medium, true);
-	if (PC->GetMenuPage() == EBRMenuPage::Main || PC->GetMenuPage() == EBRMenuPage::Solo)
-	{
-		Txt(ControlsLine(0), CX, H * 0.88f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.75f * U, Medium, true);
-		Txt(ControlsLine(1), CX, H * 0.905f, FLinearColor(0.7f, 0.7f, 0.7f, 0.85f), 0.75f * U, Medium, true);
-	}
-	DrawContentWarning(H * 0.925f);
-	if (bInteractive)
-	{
-		HandleMenuMouse(PC);
-	}
-	Txt(TEXT("Inspir\u00e9 du Backrooms Wiki (backrooms-wiki.wikidot.com) - CC BY-SA 3.0  |  \u00a9 1992 THRESHOLD SYSTEMS"), CX, H * 0.96f,
-		FLinearColor(0.5f, 0.5f, 0.5f, 0.7f), 0.7f * U, Medium, true);
 }
 
 void ABRHUD::DrawTitleCard()
@@ -710,19 +1707,45 @@ void ABRHUD::DrawTitleCard()
 	{
 		return;
 	}
-	const float A = FMath::Clamp((7.f - T) / 1.2f, 0.f, 1.f) * FMath::Clamp(T / 1.5f, 0.f, 1.f);
+	// Carte de titre facon generique de film : bandes noires, numero du niveau, filet jaune qui s'etire
+	const float E = 7.f - T; // temps ecoule depuis l'arrivee
+	const float Bars = EaseOut(E / 0.8f) * FMath::Clamp(T / 0.9f, 0.f, 1.f);
+	const float A = FMath::Clamp((E - 0.35f) / 1.f, 0.f, 1.f) * FMath::Clamp(T / 1.3f, 0.f, 1.f);
 	const FBRLevelDef& D = W->Def();
 	const float U = Ui();
 	const float CX = Canvas->ClipX * 0.5f;
 	const float H = Canvas->ClipY;
-	UFont* Large = GEngine->GetLargeFont();
-	UFont* Medium = GEngine->GetMediumFont();
-	Txt(FString::Printf(TEXT("NIVEAU %d"), D.Number), CX, H * 0.33f, FLinearColor(1.f, 1.f, 1.f, A), 2.4f * U, Large, true);
-	Txt(FString::Printf(TEXT("\u00ab %s \u00bb"), *D.Title), CX, H * 0.43f, FLinearColor(1.f, 0.92f, 0.65f, A), 1.3f * U, Large, true);
-	Txt(D.Nickname, CX, H * 0.49f, FLinearColor(0.85f, 0.85f, 0.85f, A), 1.f * U, Medium, true);
-	FLinearColor CC = ClassColor(D.SurvivalClass);
-	CC.A = A;
-	Txt(D.ClassText, CX, H * 0.53f, CC, 0.9f * U, Medium, true);
+	const float BH = H * 0.085f * Bars;
+	DrawRect(FLinearColor::Black, 0.f, 0.f, Canvas->ClipX, BH);
+	DrawRect(FLinearColor::Black, 0.f, H - BH, Canvas->ClipX, BH);
+	if (A <= 0.003f)
+	{
+		return;
+	}
+	const float Y0 = H * 0.29f;
+	Glow(CX, Y0 + 150.f * U, 660.f * U, 320.f * U, FLinearColor(0.f, 0.f, 0.f, 0.65f * A));
+	Glow(CX, Y0 + 90.f * U, 380.f * U, 160.f * U, FLinearColor(1.f, 0.78f, 0.25f, 0.07f * A));
+	TextSpaced(TEXT("NIVEAU"), CX, Y0, FLinearColor(Ink.R, Ink.G, Ink.B, 0.9f * A), 15.f, EUiWeight::Regular, 12.f * U, EUiAlign::Center);
+	const FString Num = FString::FromInt(D.Number);
+	TextF(Num, CX, Y0 + 20.f * U, FLinearColor(1.f, 1.f, 1.f, A), 88.f, EUiWeight::Black, EUiAlign::Center);
+	const float LY = Y0 + 20.f * U + TextSize(Num, 88.f, EUiWeight::Black).Y + 2.f * U;
+	const float L = 230.f * U * EaseOut((E - 0.6f) / 1.2f);
+	const float Th = FMath::Max(1.f, 2.f * U);
+	DrawRect(WithAlpha(Yellow, 0.85f * A), CX - 18.f * U - L, LY, L, Th);
+	DrawRect(WithAlpha(Yellow, 0.85f * A), CX + 18.f * U, LY, L, Th);
+	RoundRect(CX - 5.f * U, LY + Th * 0.5f - 5.f * U, 10.f * U, 10.f * U, 5.f * U, WithAlpha(Yellow, A));
+	TextF(FString::Printf(TEXT("\u00ab %s \u00bb"), *D.Title), CX, LY + 22.f * U, WithAlpha(Ink, A), 26.f, EUiWeight::Bold, EUiAlign::Center);
+	TextF(D.Nickname, CX, LY + 66.f * U, FLinearColor(Ink.R, Ink.G, Ink.B, 0.85f * A), 16.f, EUiWeight::Regular, EUiAlign::Center);
+	const FLinearColor CC = ClassColor(D.SurvivalClass);
+	const FVector2f CS = TextSize(D.ClassText, 11.f, EUiWeight::Bold);
+	const float PH = 28.f * U;
+	const float PW = CS.X + 46.f * U;
+	const float PY = LY + 108.f * U;
+	RoundRect(CX - PW * 0.5f, PY, PW, PH, PH * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.45f * A));
+	RoundRect(CX - PW * 0.5f, PY, PW, PH, PH * 0.5f, FLinearColor(CC.R, CC.G, CC.B, 0.18f * A));
+	const float Dot = 8.f * U;
+	RoundRect(CX - PW * 0.5f + 14.f * U, PY + (PH - Dot) * 0.5f, Dot, Dot, Dot * 0.5f, WithAlpha(CC, A));
+	TextF(D.ClassText, CX + 8.f * U, PY + (PH - CS.Y) * 0.5f, WithAlpha(CC, A), 11.f, EUiWeight::Bold, EUiAlign::Center, false);
 }
 
 // =====================================================================================================================
@@ -832,20 +1855,19 @@ void ABRHUD::DrawQuickBar(ABRCharacter* C)
 	const float Total = S * ABRCharacter::NumPockets + G * (ABRCharacter::NumPockets - 1);
 	const float X0 = (Canvas->ClipX - Total) * 0.5f;
 	const float Y = Canvas->ClipY - S - 34.f * U;
-	UFont* Small = GEngine->GetSmallFont();
 	for (int32 i = 0; i < ABRCharacter::NumPockets; ++i)
 	{
 		const float X = X0 + i * (S + G);
-		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), X, Y, S, S);
-		Frame(X, Y, S, S, FLinearColor(0.95f, 0.78f, 0.25f, 0.3f), 1.f * U);
-		Txt(FString::FromInt(i + 1), X + 4.f * U, Y + 2.f * U, InkDim, 0.7f * U, Small);
+		RoundRect(X, Y, S, S, 10.f * U, FLinearColor(0.f, 0.f, 0.f, 0.38f));
+		RoundRect(X, Y, S, S, 10.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.24f), true);
+		TextF(FString::FromInt(i + 1), X + 7.f * U, Y + 4.f * U, InkDim, 8.5f, EUiWeight::Bold);
 		const FBRItemSlot* It = C->Pockets.IsValidIndex(i) ? &C->Pockets[i] : nullptr;
 		if (It && !It->IsEmpty())
 		{
-			Icon(ItemIcon(It->Item), X + S * 0.12f, Y + S * 0.12f, S * 0.76f, S * 0.76f, FLinearColor(1.f, 1.f, 1.f, 0.9f));
+			Icon(ItemIcon(It->Item), X + S * 0.14f, Y + S * 0.14f, S * 0.72f, S * 0.72f, FLinearColor(1.f, 1.f, 1.f, 0.92f));
 			if (It->Count > 1)
 			{
-				TxtRight(FString::Printf(TEXT("x%d"), It->Count), X + S - 4.f * U, Y + S - 18.f * U, Ink, 0.7f * U, Small);
+				TextF(FString::Printf(TEXT("x%d"), It->Count), X + S - 6.f * U, Y + S - 20.f * U, Ink, 9.5f, EUiWeight::Bold, EUiAlign::Right);
 			}
 		}
 	}
@@ -860,8 +1882,7 @@ void ABRHUD::DrawObjectiveTracker(ABRWorld* W)
 	TArray<FBRObjective> Objs;
 	W->GetObjectives(Objs);
 	const float U = Ui();
-	UFont* Small = GEngine->GetSmallFont();
-	const float RX = Canvas->ClipX - 44.f * U;
+	const float RX = Canvas->ClipX - 58.f * U;
 	float Y = 110.f * U;
 	for (const FBRObjective& O : Objs)
 	{
@@ -869,10 +1890,13 @@ void ABRHUD::DrawObjectiveTracker(ABRWorld* W)
 		{
 			continue;
 		}
-		const FLinearColor Col = O.IsDone() ? Done : (O.bRequired ? WithAlpha(Yellow, 0.9f) : WithAlpha(InkDim, 0.75f));
+		const FLinearColor Col = O.IsDone() ? Done : (O.bRequired ? WithAlpha(Yellow, 0.92f) : WithAlpha(InkDim, 0.8f));
 		const FString Line = O.Goal > 0 ? FString::Printf(TEXT("%s  %d/%d"), *O.Text, O.Progress, O.Goal) : O.Text;
-		TxtRight(Line, RX, Y, Col, 0.75f * U, Small);
-		Y += 22.f * U;
+		const FVector2f LS = TextSize(Line, 11.5f, EUiWeight::Regular);
+		TextF(Line, RX, Y, Col, 11.5f, O.IsDone() ? EUiWeight::Light : EUiWeight::Regular, EUiAlign::Right);
+		const float D = 7.f * U;
+		RoundRect(RX + 10.f * U, Y + (LS.Y - D) * 0.5f, D, D, D * 0.5f, Col);
+		Y += 24.f * U;
 	}
 }
 
@@ -882,27 +1906,32 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 	const float CX = Canvas->ClipX * 0.5f;
 	const float CY = Canvas->ClipY * 0.5f;
 	const bool bFocus = !C->GetFocusPrompt().IsEmpty();
-	const float S = (bFocus ? 6.f : 3.f) * U;
+	const float S = (bFocus ? 7.f : 4.f) * U;
 	if (C->IsHidden())
 	{
 		const float Pulse = 0.65f + 0.2f * FMath::Sin(Clock * 2.f);
-		Txt(TEXT("CACH\u00c9"), CX, Canvas->ClipY - 150.f * U, FLinearColor(0.75f, 0.9f, 1.f, Pulse), 1.1f * U, GEngine->GetMediumFont(), true);
+		TextSpaced(TEXT("CACH\u00c9"), CX, Canvas->ClipY - 152.f * U, FLinearColor(0.75f, 0.9f, 1.f, Pulse), 13.f, EUiWeight::Bold, 6.f * U, EUiAlign::Center);
 	}
-	DrawRect(FLinearColor(1.f, 1.f, 1.f, bFocus ? 0.9f : 0.45f), CX - S * 0.5f, CY - S * 0.5f, S, S);
+	RoundRect(CX - S * 0.5f - 1.f * U, CY - S * 0.5f - 1.f * U, S + 2.f * U, S + 2.f * U, S * 0.5f + 1.f * U, FLinearColor(0.f, 0.f, 0.f, bFocus ? 0.35f : 0.2f));
+	RoundRect(CX - S * 0.5f, CY - S * 0.5f, S, S, S * 0.5f, FLinearColor(1.f, 1.f, 1.f, bFocus ? 0.92f : 0.5f));
 	if (bFocus)
 	{
-		Txt(C->GetFocusPrompt(), CX, CY + 30.f * U, FLinearColor(1.f, 1.f, 1.f, 0.95f), 1.f * U, GEngine->GetMediumFont(), true);
+		const FString P = C->GetFocusPrompt();
+		const FVector2f PS = TextSize(P, 13.f, EUiWeight::Regular);
+		const float PH = 32.f * U;
+		const float PW = PS.X + 32.f * U;
+		RoundRect(CX - PW * 0.5f, CY + 26.f * U, PW, PH, PH * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.42f));
+		TextF(P, CX, CY + 26.f * U + (PH - PS.Y) * 0.5f, FLinearColor(1.f, 1.f, 1.f, 0.95f), 13.f, EUiWeight::Regular, EUiAlign::Center, false);
 	}
 	if (C->GetReviveProgress() > 0.f)
 	{
-		Bar(CX - 130.f * U, CY + 70.f * U, 260.f * U, 8.f * U, C->GetReviveProgress(), FLinearColor(0.55f, 1.f, 0.55f, 0.9f), TEXT("R\u00c9ANIMATION"));
+		Bar(CX - 130.f * U, CY + 84.f * U, 260.f * U, 8.f * U, C->GetReviveProgress(), FLinearColor(0.55f, 1.f, 0.55f, 0.9f), TEXT("R\u00c9ANIMATION"));
 	}
 }
 
 void ABRHUD::DrawMessages(float Dt)
 {
 	const float U = Ui();
-	float Y = Canvas->ClipY * 0.1f;
 	for (int32 i = Messages.Num() - 1; i >= 0; --i)
 	{
 		Messages[i].Age += Dt;
@@ -911,13 +1940,33 @@ void ABRHUD::DrawMessages(float Dt)
 			Messages.RemoveAt(i);
 		}
 	}
+	// Notifications : pastilles sombres avec un point de la couleur du message
+	float Y = Canvas->ClipY * 0.1f;
+	const float MaxW = FMath::Min(1100.f * U, Canvas->ClipX - 120.f * U);
+	const float LH = 21.f * U;
 	for (const FMsg& M : Messages)
 	{
-		const float A = FMath::Clamp(M.Duration - M.Age, 0.f, 1.f) * FMath::Clamp(M.Age * 4.f, 0.f, 1.f);
-		FLinearColor C = M.Color;
-		C.A = A;
-		Txt(M.Text, Canvas->ClipX * 0.5f, Y, C, 1.f * U, GEngine->GetMediumFont(), true);
-		Y += 30.f * U;
+		const float A = FMath::Clamp(M.Duration - M.Age, 0.f, 1.f) * FMath::Clamp(M.Age * 5.f, 0.f, 1.f);
+		const TArray<FString> Lines = WrapF(M.Text, MaxW - 70.f * U, 13.5f, EUiWeight::Regular);
+		float TW = 0.f;
+		for (const FString& L : Lines)
+		{
+			TW = FMath::Max(TW, TextSize(L, 13.5f, EUiWeight::Regular).X);
+		}
+		const float PH = Lines.Num() * LH + 18.f * U;
+		const float PW = TW + 62.f * U;
+		const float PX = (Canvas->ClipX - PW) * 0.5f;
+		const float PY = Y - (1.f - EaseOut(M.Age * 4.f)) * 10.f * U;
+		RoundRect(PX, PY, PW, PH, FMath::Min(PH * 0.5f, 20.f * U), FLinearColor(0.04f, 0.035f, 0.02f, 0.82f * A));
+		RoundRect(PX, PY, PW, PH, FMath::Min(PH * 0.5f, 20.f * U), FLinearColor(M.Color.R, M.Color.G, M.Color.B, 0.3f * A), true);
+		const float Dot = 10.f * U;
+		RoundRect(PX + 20.f * U, PY + 9.f * U + (LH - Dot) * 0.5f, Dot, Dot, Dot * 0.5f, FLinearColor(M.Color.R, M.Color.G, M.Color.B, A));
+		const FLinearColor TC = Mix(FLinearColor(M.Color.R, M.Color.G, M.Color.B, 1.f), FLinearColor::White, 0.35f);
+		for (int32 k = 0; k < Lines.Num(); ++k)
+		{
+			TextF(Lines[k], PX + 42.f * U, PY + 9.f * U + k * LH, WithAlpha(TC, A), 13.5f, EUiWeight::Regular, EUiAlign::Left, false);
+		}
+		Y += PH + 10.f * U;
 	}
 }
 
@@ -992,50 +2041,72 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 void ABRHUD::DrawPause(ABRPlayerController* PC)
 {
 	const float U = Ui();
-	const float CX = Canvas->ClipX * 0.5f;
+	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	UFont* Medium = GEngine->GetMediumFont();
+	const float CX = W * 0.5f;
 	if (PlayerOwner)
 	{
 		PlayerOwner->GetMousePosition(MouseX, MouseY);
 	}
 	Buttons.Reset();
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.72f), 0.f, 0.f, Canvas->ClipX, H);
-	Scanlines(0.05f);
-	Txt(TEXT("PAUSE"), CX, H * 0.14f, Yellow, 2.2f * U, GEngine->GetLargeFont(), true);
+	PauseTime += UiDt;
+	const float In = EaseOut(PauseTime / 0.35f);
+	const float X0 = FMath::Max(60.f * U, W * 0.0625f) - (1.f - In) * 30.f * U;
+
+	DrawRect(FLinearColor(0.01f, 0.01f, 0.005f, 0.45f * In), 0.f, 0.f, W, H);
+	Gradient(0.f, 0.f, W * 0.62f, H, FLinearColor(0.012f, 0.01f, 0.004f, 0.9f * In), 0);
+	Gradient(0.f, H * 0.6f, W, H * 0.4f, FLinearColor(0.f, 0.f, 0.f, 0.7f * In), 3);
+	Scanlines(0.03f * In);
+
+	DrawLogo(X0 - 240.f * U * 0.03f, 70.f * U, 240.f * U, In, false);
+	TextF(TEXT("PAUSE"), X0, 138.f * U, WithAlpha(Ink, In), 44.f, EUiWeight::Black);
 	if (PC && PC->IsNetGame())
 	{
 		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
 		const int32 Count = GS ? GS->PlayerArray.Num() : 1;
-		Txt(FString::Printf(TEXT("PARTIE EN LIGNE  -  %d joueur%s  -  le jeu continue pendant la pause"), Count, Count > 1 ? TEXT("s") : TEXT("")),
-			CX, H * 0.235f, FLinearColor(0.75f, 0.95f, 0.75f), 0.9f * U, Medium, true);
+		TextF(FString::Printf(TEXT("Partie en ligne  \u00b7  %d joueur%s  \u00b7  le jeu continue pendant la pause"), Count, Count > 1 ? TEXT("s") : TEXT("")),
+			X0, 214.f * U, FLinearColor(0.7f, 0.95f, 0.7f, In), 13.f, EUiWeight::Light);
 		DrawPlayerList();
 	}
+	else
+	{
+		TextF(TEXT("Le temps s'est arr\u00eat\u00e9\u2026 pour l'instant."), X0, 214.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
+	}
 
-	// Boutons cliquables
-	const TCHAR* Labels[] = { TEXT("REPRENDRE"), TEXT("PARAM\u00c8TRES / GRAPHISMES"), TEXT("TOUCHES"), TEXT("MENU PRINCIPAL"), TEXT("QUITTER LE JEU") };
+	// Cartes cliquables (meme style que le menu titre)
+	const TCHAR* Labels[] = { TEXT("REPRENDRE"), TEXT("PARAM\u00c8TRES"), TEXT("TOUCHES"), TEXT("MENU PRINCIPAL"), TEXT("QUITTER LE JEU") };
+	const TCHAR* Subs[] = {
+		TEXT("Retourner dans les Backrooms"),
+		TEXT("Graphismes, son, affichage, chat vocal"),
+		TEXT("Changer les touches (jusqu'\u00e0 3 par action)"),
+		(PC && PC->IsNetGame()) ? TEXT("Quitter la partie en ligne") : TEXT("Quitter la partie, revenir \u00e0 l'\u00e9cran titre"),
+		TEXT("Fermer le jeu"),
+	};
+	const TCHAR* Icons[] = { TEXT("UI_IconPlay"), TEXT("UI_IconSettings"), TEXT("UI_IconKeys"), TEXT("UI_IconBack"), TEXT("UI_IconQuit") };
 	const int32 Ids[] = { Btn_PauseResume, Btn_PauseSettings, Btn_PauseKeys, Btn_PauseMainMenu, Btn_PauseQuit };
-	const float BW = 460.f * U;
-	const float BH = 50.f * U;
-	float Y = H * 0.29f;
+	const float CW = 500.f * U;
+	const float CH = 78.f * U;
+	float Y = 262.f * U;
 	for (int32 i = 0; i < 5; ++i)
 	{
-		const float X = CX - BW * 0.5f;
-		const bool bHov = Hover(X, Y, BW, BH);
-		DrawRect(bHov ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.55f), X, Y, BW, BH);
-		Frame(X, Y, BW, BH, bHov ? Yellow : YellowDim, 1.f * U);
-		Txt(Labels[i], CX, Y + 10.f * U, bHov ? FLinearColor(0.05f, 0.04f, 0.01f) : Ink, 1.f * U, Medium, true, false);
-		AddButton(Ids[i], X, Y, BW, BH);
-		Y += BH + 14.f * U;
+		const bool bHov = Hover(X0, Y, CW, CH);
+		PauseSel[i] = FMath::FInterpTo(PauseSel[i], bHov ? 1.f : 0.f, UiDt, 14.f);
+		DrawCard(X0, Y, CW, CH, PauseSel[i], Labels[i], Subs[i], Icons[i], In * EaseOut((PauseTime - 0.05f * i) / 0.3f), i == 4);
+		AddButton(Ids[i], X0, Y, CW, CH);
+		Y += CH + 12.f * U;
 	}
 	HandlePauseMouse(PC);
 
-	Txt(ControlsLine(0), CX, H * 0.72f, FLinearColor(0.85f, 0.85f, 0.85f), 0.85f * U, Medium, true);
-	Txt(ControlsLine(1), CX, H * 0.755f, FLinearColor(0.85f, 0.85f, 0.85f), 0.85f * U, Medium, true);
-	Txt(FString::Printf(TEXT("%s  reprendre     %s  param\u00e8tres et touches     [ FIN ]  quitter"), *BRKeys::Tag(EBRAction::Pause),
-		*BRKeys::Tag(EBRAction::Inventory)), CX, H * 0.81f, FLinearColor(1.f, 0.92f, 0.6f), 0.9f * U, Medium, true);
-	Txt(TEXT("Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives"), CX,
-		H * 0.88f, FLinearColor(0.6f, 0.6f, 0.6f), 0.8f * U, Medium, true);
+	TextSpaced(TEXT("COMMANDES"), CX, H - 170.f * U, WithAlpha(Yellow, 0.8f * In), 10.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
+	TextF(ControlsLine(0), CX, H - 144.f * U, FLinearColor(0.85f, 0.83f, 0.76f, 0.9f * In), 11.5f, EUiWeight::Regular, EUiAlign::Center, false);
+	TextF(ControlsLine(1), CX, H - 120.f * U, FLinearColor(0.85f, 0.83f, 0.76f, 0.9f * In), 11.5f, EUiWeight::Regular, EUiAlign::Center, false);
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(BRKeys::Primary(EBRAction::Pause), TEXT("Reprendre"));
+	Hints.Emplace(BRKeys::Primary(EBRAction::Inventory), TEXT("Param\u00e8tres et touches"));
+	Hints.Emplace(TEXT("FIN"), TEXT("Quitter"));
+	KeyHints(CX, H - 84.f * U, Hints, In, true);
+	TextF(TEXT("Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives"), CX, H - 38.f * U,
+		WithAlpha(InkDim, 0.5f * In), 9.5f, EUiWeight::Light, EUiAlign::Center, false);
 }
 
 void ABRHUD::HandlePauseMouse(ABRPlayerController* PC)
@@ -2092,16 +3163,18 @@ void ABRHUD::DrawPlayerList()
 		return;
 	}
 	const float U = Ui();
-	UFont* Medium = GEngine->GetMediumFont();
-	const float W = 380.f * U;
-	const float X = Canvas->ClipX - W - 50.f * U;
-	float Y = Canvas->ClipY * 0.29f;
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X, Y, W, 44.f * U + GS->PlayerArray.Num() * 34.f * U);
-	Frame(X, Y, W, 44.f * U + GS->PlayerArray.Num() * 34.f * U, YellowDim, 1.f * U);
-	Txt(TEXT("JOUEURS"), X + 16.f * U, Y + 10.f * U, Yellow, 0.85f * U, Medium, false, false);
-	TxtRight(TEXT("LATENCE"), X + W - 16.f * U, Y + 10.f * U, InkDim, 0.7f * U, Medium);
-	Y += 44.f * U;
-	for (int32 i = 0; i < GS->PlayerArray.Num(); ++i)
+	const float PW = 400.f * U;
+	const float X = Canvas->ClipX - PW - 60.f * U;
+	float Y = 262.f * U;
+	const int32 N = GS->PlayerArray.Num();
+	const float RowH = 40.f * U;
+	const float BoxH = 58.f * U + N * RowH + 8.f * U;
+	RoundRect(X, Y, PW, BoxH, 14.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.85f));
+	RoundRect(X, Y, PW, BoxH, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.14f), true);
+	TextSpaced(TEXT("JOUEURS"), X + 22.f * U, Y + 20.f * U, Yellow, 10.5f, EUiWeight::Bold, 3.f * U);
+	TextF(TEXT("LATENCE"), X + PW - 22.f * U, Y + 20.f * U, InkDim, 9.5f, EUiWeight::Regular, EUiAlign::Right, false);
+	Y += 54.f * U;
+	for (int32 i = 0; i < N; ++i)
 	{
 		const APlayerState* PS = GS->PlayerArray[i];
 		if (!PS)
@@ -2115,10 +3188,28 @@ void ABRHUD::DrawPlayerList()
 			Name = Name.Left(18);
 		}
 		const bool bMe = PlayerOwner && PS == PlayerOwner->PlayerState;
-		Txt(Name + (i == 0 ? TEXT("  (H\u00d4TE)") : TEXT("")), X + 16.f * U, Y, bMe ? Yellow : Ink, 0.78f * U, Medium, false, false);
+		if (bMe)
+		{
+			RoundRect(X + 10.f * U, Y - 4.f * U, PW - 20.f * U, RowH - 4.f * U, 10.f * U, FLinearColor(1.f, 0.82f, 0.22f, 0.08f));
+		}
+		const float D = 26.f * U;
+		RoundRect(X + 20.f * U, Y + (RowH - 8.f * U - D) * 0.5f, D, D, D * 0.5f, bMe ? WithAlpha(Yellow, 0.9f) : FLinearColor(1.f, 1.f, 1.f, 0.14f));
+		TextF(Name.Left(1), X + 20.f * U + D * 0.5f, Y + (RowH - 8.f * U - D) * 0.5f + 3.f * U, bMe ? FLinearColor(0.07f, 0.055f, 0.02f, 1.f) : Ink, 10.5f,
+			EUiWeight::Bold, EUiAlign::Center, false);
+		const FVector2f NS = TextSize(Name, 13.f, EUiWeight::Regular);
+		const float NY = Y + (RowH - 8.f * U - NS.Y) * 0.5f;
+		TextF(Name, X + 58.f * U, NY, bMe ? Yellow : Ink, 13.f, EUiWeight::Regular, EUiAlign::Left, false);
+		if (i == 0)
+		{
+			const FVector2f HS = TextSize(TEXT("H\u00d4TE"), 8.5f, EUiWeight::Bold);
+			const float HX = X + 66.f * U + NS.X;
+			RoundRect(HX, NY + (NS.Y - 18.f * U) * 0.5f, HS.X + 16.f * U, 18.f * U, 9.f * U, FLinearColor(1.f, 0.82f, 0.22f, 0.2f));
+			TextF(TEXT("H\u00d4TE"), HX + 8.f * U, NY + (NS.Y - HS.Y) * 0.5f, Yellow, 8.5f, EUiWeight::Bold, EUiAlign::Left, false);
+		}
 		const int32 Ping = FMath::RoundToInt(PS->GetPingInMilliseconds());
 		const FLinearColor PingCol = Ping < 80 ? Done : (Ping < 160 ? Yellow : Danger);
-		TxtRight(i == 0 ? FString(TEXT("-")) : FString::Printf(TEXT("%d ms"), Ping), X + W - 16.f * U, Y, PingCol, 0.78f * U, Medium);
-		Y += 34.f * U;
+		TextF(i == 0 ? FString(TEXT("\u2014")) : FString::Printf(TEXT("%d ms"), Ping), X + PW - 22.f * U, NY, PingCol, 12.f, EUiWeight::Bold,
+			EUiAlign::Right, false);
+		Y += RowH;
 	}
 }

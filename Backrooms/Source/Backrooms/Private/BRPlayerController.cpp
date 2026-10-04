@@ -24,6 +24,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/PlatformTime.h"
 #include "IPAddress.h"
+#include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/ConfigCacheIni.h"
@@ -453,6 +454,7 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	}
 	PollKeyCapture();
 	UpdateVoice(DeltaTime);
+	UpdateMenuAmbience(DeltaTime);
 
 	// Arrivee dans une partie en ligne : rappel du role de l'hote et du chat vocal
 	if (!bNetIntroShown && IsNetGame() && GetHUD() && GetPawn())
@@ -1072,9 +1074,76 @@ void ABRPlayerController::SetMenuCursor(int32 Item)
 	if (Item != MenuCursor && Item >= 0 && Item < GetMenuItemCount())
 	{
 		MenuCursor = Item;
+		PlayMenuSound(TEXT("S_UIHover"), 0.35f);
+	}
+}
+
+void ABRPlayerController::PlayMenuSound(FName Sound, float Volume)
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	USoundBase* S = A ? A->Sound(Sound) : nullptr;
+	if (!S && A)
+	{
+		S = A->Sound(TEXT("S_UIClick"));
+	}
+	if (S)
+	{
+		UGameplayStatics::PlaySound2D(this, S, Volume);
+	}
+}
+
+void ABRPlayerController::UpdateMenuAmbience(float DeltaTime)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+	// Musique : seulement sur l'ecran titre ; fondu de sortie au lancement de la partie
+	if (bInMenu && !MenuMusic)
+	{
+		UBRAssets* A = UBRAssets::Get(this);
+		if (USoundBase* Theme = A ? A->Sound(TEXT("S_MenuTheme")) : nullptr)
+		{
+			MenuMusic = UGameplayStatics::SpawnSound2D(this, Theme, 0.55f);
+			if (MenuMusic)
+			{
+				MenuMusic->FadeIn(2.5f, 1.f);
+			}
+		}
+	}
+	else if (!bInMenu && MenuMusic)
+	{
+		MenuMusic->FadeOut(2.f, 0.f); // le composant se detruit a la fin du fondu
+		MenuMusic = nullptr;
+	}
+
+	// Camera du menu titre : le personnage regarde lentement autour de lui (le niveau vit derriere le menu)
+	if (bInMenu && GetPawn())
+	{
+		if (!bMenuDriftInit)
+		{
+			bMenuDriftInit = true;
+			MenuBaseYaw = GetControlRotation().Yaw;
+			MenuBasePitch = -4.f;
+		}
+		MenuDrift += DeltaTime;
+		const float Yaw = MenuBaseYaw + 26.f * FMath::Sin(MenuDrift * 0.045f);
+		const float Pitch = MenuBasePitch + 2.5f * FMath::Sin(MenuDrift * 0.11f + 0.7f);
+		SetControlRotation(FRotator(Pitch, Yaw, 0.f));
+	}
+	else
+	{
+		bMenuDriftInit = false;
+	}
+
+	// Flou de profondeur derriere le menu titre et la pause (ce controleur continue de tourner pendant la pause)
+	const float Want = (bInMenu || bPauseMenu) ? 1.f : 0.f;
+	if (MenuBlur != Want || Want > 0.f)
+	{
+		MenuBlur = FMath::FInterpConstantTo(MenuBlur, Want, FMath::Min(DeltaTime, 0.1f), 2.5f);
 		if (ABRCharacter* C = GetBRCharacter())
 		{
-			C->PlayUISound(TEXT("S_UIClick"), 0.25f);
+			C->ApplyMenuBlur(MenuBlur);
 		}
 	}
 }
@@ -1098,10 +1167,7 @@ void ABRPlayerController::MenuShiftLevel(int32 Direction)
 	}
 	const int32 Num = BRLevels::All().Num();
 	MenuIndex = (MenuIndex + (Direction >= 0 ? 1 : Num - 1)) % Num;
-	if (ABRCharacter* C = GetBRCharacter())
-	{
-		C->PlayUISound(TEXT("S_UIClick"), 0.4f);
-	}
+	PlayMenuSound(TEXT("S_UIHover"), 0.45f);
 }
 
 void ABRPlayerController::MenuBack()
@@ -1126,10 +1192,7 @@ void ABRPlayerController::MenuActivate(int32 Item)
 	{
 		return;
 	}
-	if (ABRCharacter* C = GetBRCharacter())
-	{
-		C->PlayUISound(TEXT("S_UIClick"));
-	}
+	PlayMenuSound(TEXT("S_UIConfirm"), 0.6f);
 	MenuCursor = Item;
 	switch (MenuPage)
 	{
@@ -1751,6 +1814,8 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), S.bHardwareRT ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.VolumetricFog %d"), S.bVolumetricFog ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.ScreenPercentage %d"), FMath::Clamp(S.RenderScale, 50, 100)));
+	// Image plus nette (filtre de nettete du tonemapper) a partir de la qualite Elevee
+	Cmd(FString::Printf(TEXT("r.Tonemapper.Sharpen %.2f"), S.Quality >= 2 ? 0.5f : 0.25f));
 
 	// Volume general
 	FAudioDeviceHandle Audio = W->GetAudioDevice();

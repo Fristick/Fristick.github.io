@@ -14,6 +14,7 @@ class SWidget;
 class SEditableTextBox;
 class UVOIPTalker;
 class APlayerState;
+class UAudioComponent;
 
 /** Pages du menu principal */
 enum class EBRMenuPage : uint8 { Main, Solo, Multi, Join };
@@ -74,6 +75,8 @@ public:
 	void ServerCheat(uint8 Command, int32 Value);
 
 	bool IsInMenu() const { return bInMenu; }
+	/** Le joueur vient d'etre place : la camera du menu repart de sa nouvelle orientation */
+	void ResetMenuDrift() { bMenuDriftInit = false; }
 	int32 GetMenuIndex() const { return MenuIndex; }
 	bool IsInventoryOpen() const { return bInventory; }
 	bool IsPauseMenuOpen() const { return bPauseMenu; }
@@ -137,6 +140,10 @@ public:
 	void BRObjectives();
 
 protected:
+	/** Musique du menu titre (fondu a l'ouverture et au lancement de la partie) */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> MenuMusic;
+
 	UPROPERTY()
 	TObjectPtr<UInputMappingContext> Mapping;
 
@@ -237,6 +244,10 @@ private:
 	void SpawnInFront(int32 Kind);
 	/** Champ de saisie de l'adresse IP (Slate : respecte la disposition du clavier, AZERTY compris) */
 	void ShowAddressBox(bool bShow);
+	/** Menu titre et pause : musique, camera qui derive lentement, flou de profondeur sur le niveau */
+	void UpdateMenuAmbience(float DeltaTime);
+	/** Son d'interface (fonctionne aussi sans personnage) ; repli sur S_UIClick si le son n'est pas importe */
+	void PlayMenuSound(FName Sound, float Volume);
 
 	bool bInMenu = true;
 	bool bInventory = false;
@@ -256,6 +267,12 @@ private:
 	FString JoinAddress;
 	TSharedPtr<SWidget> AddressWidget;
 	TSharedPtr<SEditableTextBox> AddressBox;
+
+	float MenuBlur = 0.f;
+	float MenuDrift = 0.f;
+	float MenuBaseYaw = 0.f;
+	float MenuBasePitch = 0.f;
+	bool bMenuDriftInit = false;
 
 	bool bTalkKeyHeld = false;
 	bool bNetIntroShown = false;

@@ -623,6 +623,15 @@ void ABRWorld::ApplyEnvironment()
 	UnderwaterBlend = 0.f;
 	Fog->SetFogMaxOpacity(1.f);
 	Fog->SetVolumetricFog(D.bVolumetricFog);
+	// Diffusion vers l'avant : halos autour des lampes quand on les regarde, rayons dans la poussiere
+	Fog->SetVolumetricFogScatteringDistribution(0.35f);
+	{
+		// Albedo teinte par la couleur du brouillard (eclaircie : c'est la lumiere des lampes qui colore le volume)
+		const float M = FMath::Max3(D.FogColor.R, D.FogColor.G, D.FogColor.B);
+		const FLinearColor Tint = M > 0.01f ? D.FogColor / M : FLinearColor::White;
+		const FLinearColor Albedo = FLinearColor::LerpUsingHSV(FLinearColor::White, Tint, 0.35f);
+		Fog->SetVolumetricFogAlbedo(Albedo.ToFColor(true));
+	}
 
 	// --- Ciel ---
 	const bool bSky = D.bOutdoor && D.Sky != EBRSky::None;
@@ -668,6 +677,19 @@ void ABRWorld::ApplyEnvironment()
 	S.BloomIntensity = D.Bloom;
 	S.bOverride_MotionBlurAmount = true;
 	S.MotionBlurAmount = 0.f;
+
+	// Etalonnage : ombres et hautes lumieres legerement teintees (split toning)
+	S.bOverride_ColorGainShadows = true;
+	S.ColorGainShadows = FVector4(D.ShadowTint.R, D.ShadowTint.G, D.ShadowTint.B, 1.f);
+	S.bOverride_ColorGainHighlights = true;
+	S.ColorGainHighlights = FVector4(D.HighlightTint.R, D.HighlightTint.G, D.HighlightTint.B, 1.f);
+	// Exposition locale : les neons ne brulent plus l'image, les recoins sombres gardent du detail
+	S.bOverride_LocalExposureHighlightContrastScale = true;
+	S.LocalExposureHighlightContrastScale = 0.8f;
+	S.bOverride_LocalExposureShadowContrastScale = true;
+	S.LocalExposureShadowContrastScale = 0.9f;
+	S.bOverride_LocalExposureDetailStrength = true;
+	S.LocalExposureDetailStrength = 1.12f;
 
 	// --- Audio ---
 	AmbientAudio->Stop();
@@ -755,6 +777,10 @@ void ABRWorld::PlacePlayer(bool bKeepServerSpot)
 	if (AController* C = P->GetController())
 	{
 		C->SetControlRotation(FRotator(0.f, Yaw, 0.f));
+		if (ABRPlayerController* PC = Cast<ABRPlayerController>(C))
+		{
+			PC->ResetMenuDrift();
+		}
 	}
 	P->OnEnteredLevel(Def());
 	bPlayerPlaced = true;
