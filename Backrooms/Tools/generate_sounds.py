@@ -2,7 +2,7 @@
 Synthese procedurale de tous les sons du jeu (ambiances bouclables, pas, entites...).
 
 Usage :  python generate_sounds.py      (necessite numpy)
-Sortie : ../RawAssets/Sounds/*.wav  (mono 16 bits)
+Sortie : ../RawAssets/Sounds/*.wav  (mono 16 bits, 48 kHz)
 
 Les sons "S_Amb_*", "S_Hum", "S_Heartbeat", "S_Breath", "S_Chase", "S_ExitHum" et
 "S_Moth", "S_Underwater" sont des boucles parfaites : ils sont filtres dans le domaine de Fourier
@@ -12,7 +12,7 @@ import os
 import wave
 import numpy as np
 
-SR = 32000
+SR = 48000  # qualite maximale (v3.9) : synthese et enregistrement a 48 kHz
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "RawAssets", "Sounds")
 os.makedirs(OUT, exist_ok=True)
 RNG = np.random.default_rng(1234)
@@ -149,10 +149,10 @@ def fade_edges(x, ms=8):
     return x
 
 
-# Frequences d'enregistrement possibles : un son sans aigus est stocke a une frequence plus basse
-# (fichier 2 fois plus petit, aucune difference audible). Seuil : energie au-dessus de la nouvelle
-# frequence de Nyquist inferieure a -60 dB de l'energie totale.
-STORE_RATES = (16000, 22050)
+# Frequences d'enregistrement reduites pour les sons sans aigus (ancien gain de place, inaudible). Desactive
+# depuis la v3.9 : tous les sons sont enregistres a la frequence de synthese. Pour reduire la taille des fichiers,
+# remettre par exemple (16000, 22050). Seuil : energie au-dessus de la nouvelle frequence de Nyquist < -60 dB.
+STORE_RATES = ()
 HF_LIMIT_DB = -60.0
 
 

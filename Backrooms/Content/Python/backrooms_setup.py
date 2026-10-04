@@ -21,7 +21,7 @@ import os
 
 import unreal
 
-VERSION = 9
+VERSION = 10
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -216,6 +216,31 @@ def fix_mesh_name(name):
     return False
 
 
+# Modeles fournis, gardes a pleine resolution (v3.9) : Nanite les affiche sans cout, quelle que soit leur densite
+NANITE_PREFIXES = ("SM_Hazmat_", "SM_BacteriaET_", "SM_DeathmothET_", "SM_SkinStealerET_", "SM_FacelingET_", "SM_PartygoerET_",
+                   "SM_HoundET_", "SM_SmilerET", "SM_ClumpET_", "SM_OfficeDeskET", "SM_OfficeChairET", "SM_WaterCoolerET")
+
+
+def enable_nanite(name):
+    if not name.startswith(NANITE_PREFIXES):
+        return
+    sm = unreal.load_asset(MESH + "/" + name)
+    if not isinstance(sm, unreal.StaticMesh):
+        return
+    try:
+        ns = sm.get_editor_property("nanite_settings")
+        if ns.get_editor_property("enabled"):
+            return
+        ns.set_editor_property("enabled", True)
+        try:
+            unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem).set_nanite_settings(sm, ns, apply_changes=True)
+        except Exception:
+            sm.set_editor_property("nanite_settings", ns)
+        EAL.save_loaded_asset(sm)
+    except Exception as e:
+        warn("Nanite non active pour %s : %s" % (name, e))
+
+
 def import_meshes(files):
     if not files:
         return
@@ -223,6 +248,8 @@ def import_meshes(files):
     tools().import_asset_tasks(tasks)
     for f in files:
         fix_mesh_name(os.path.splitext(f)[0])
+    for f in files:
+        enable_nanite(os.path.splitext(f)[0])
     EAL.save_directory(MESH, only_if_is_dirty=True, recursive=True)
     log("%d modeles importes" % len(files))
 

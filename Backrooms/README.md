@@ -7,6 +7,21 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 3.9** (qualité maximale) :
+- **Plus aucun compromis de taille** : jusqu'ici, tout tenait dans un seul zip de moins de 30 Mo (la limite d'envoi
+  de fichiers de la conversation). Le projet est maintenant livré en qualité maximale, en plusieurs archives
+  (voir § 1) ou directement depuis GitHub.
+- **Sons** synthétisés et enregistrés en **48 kHz** (au lieu de 32 kHz, et 16 à 22 kHz pour les sons sans aigus).
+- **Textures** à leur **résolution d'origine** : combinaison hazmat en **4096 px**, plâtre des Poolrooms en 2048,
+  plafond du Niveau 0 et Deathmoth de nouveau en 2048, griffes du Skin-Stealer en 2048, Partygoer en 2048,
+  Faceling en 1024. JPEG qualité 95 sans sous-échantillonnage des couleurs.
+- **Normal maps en PNG sans perte**, à la même résolution que leur texture : plus de blocs JPEG dans les reflets du
+  carrelage et des surfaces brillantes.
+- **Modèles fournis sans réduction de polygones** : Hound complet avec tous ses poils (175 000 sommets au lieu de
+  6 500), Skin-Stealer (46 000), combinaison hazmat (48 000), Deathmoth scanné (23 000), Clump, meubles du bureau.
+  L'import active **Nanite** sur ces modèles : Unreal les affiche à pleine finesse sans coût de rendu.
+- L'import passe en **version 10** (tout est réimporté automatiquement à l'ouverture de l'éditeur).
+
 **Nouveautés de la version 3.8** (Poolrooms et Niveau 4 d'après les deux scènes fournies) :
 - **Poolrooms (Niveau 37)**, sur le modèle de la carte fournie (`gm_poolrooms`) :
   - de longs **couloirs bordés de canaux** (60 cm d'eau) et de **trottoirs carrelés** au ras de l'eau. Une marche
@@ -180,12 +195,16 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 
 **Étapes**
 1. Copiez le dossier `Backrooms/` où vous voulez sur votre PC.
+   - **Archives en plusieurs parties** (`Backrooms_UE5_v3.9_partie1-sur-N_...zip`, etc.) : extrayez-les **toutes dans
+     le même dossier**. Elles se complètent (projet, sons, textures, modèles) et recréent un seul dossier `Backrooms/`.
+   - **Ou depuis GitHub**, sans limite de taille : dépôt `Fristick/Fristick.github.io`, branche **`backrooms`**,
+     bouton « Code » → « Download ZIP » (ou `git clone -b backrooms ...`).
 2. Double-cliquez sur **`Backrooms.uproject`**.
    Unreal demande de compiler le module « Backrooms » : répondez **Oui** (1 à 3 minutes).
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 52 textures (dont 21 normal maps), 11 icônes, 66 sons, 95 modèles (FBX). Il crée aussi
+   toutes les ressources : 66 textures (dont 25 normal maps), 11 icônes, 66 sons, 126 modèles (FBX). Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
@@ -492,6 +511,9 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
   entités y poussent l'eau, les murs et piliers du niveau renvoient les vagues, et les pentes sont envoyées chaque pas
   à une texture lue par l'eau et par les caustiques du carrelage. Réglages par niveau dans `BRLevels.cpp` :
   `WaterAbsorption` (limpidité), `WaterScattering` (voile de l'eau profonde), `WaterWaves` (houle), `WaterChop` (clapot).
+- **Nanite** : les modèles fournis (entités, combinaison hazmat, meubles du bureau) sont gardés à pleine résolution
+  (jusqu'à 175 000 sommets pour le Hound) et l'import active Nanite sur eux : Unreal n'affiche que le détail visible
+  à l'écran. Sur une carte sans Nanite (DirectX 11), Unreal utilise automatiquement une version allégée.
 - Sur une petite configuration : onglet **PARAMÈTRES** (qualité « MOYEN », RTX désactivé, néons surfaciques désactivés),
   ou baissez `ViewDistance` / `LightChance` dans `BRLevels.cpp`.
 

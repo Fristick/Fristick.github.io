@@ -72,19 +72,19 @@ def mesh_object(name, me):
     return link(bpy.data.objects.new(name, me))
 
 
-def save_texture(image, name, size=2048, quality=90):
-    """Image Blender (eventuellement empaquetee dans le .glb) -> JPG 2048"""
+def save_texture(image, name, size=None, quality=95):
+    """Image Blender (eventuellement empaquetee dans le .glb) -> JPG a sa resolution d'origine (ou reduite a size)"""
     from PIL import Image
     w, h = image.size
     px = np.empty(w * h * 4, dtype=np.float32)
     image.pixels.foreach_get(px)
     arr = (np.clip(px.reshape(h, w, 4)[::-1, :, :3], 0, 1) * 255 + 0.5).astype(np.uint8)
     im = Image.fromarray(arr, "RGB")
-    if max(w, h) > size:
+    if size and max(w, h) > size:
         im = im.resize((size, size), Image.LANCZOS)
     os.makedirs(OUT_TEX, exist_ok=True)
     path = os.path.join(OUT_TEX, name + ".jpg")
-    im.save(path, quality=quality)
+    im.save(path, quality=quality, subsampling=0)
     print("  texture", path, im.size)
 
 
@@ -316,8 +316,7 @@ def process_hazmat():
             a.data.foreach_set("value", w[p])
         no = mesh_object("H_" + o.name, me)
         rename_materials(no, {"Suit": "HazmatSuit", "Mask": "HazmatMask", "Glass": "HazmatGlass"})
-        # le masque a gaz est tres dense (28 000 sommets) : on allege
-        decimate(no, 0.3 if len(me.vertices) > 25000 else (0.6 if len(me.vertices) > 10000 else 1.0))
+        # maillage complet (v3.9) : le masque a gaz garde ses 28 000 sommets (Nanite dans Unreal)
         merged.append(no)
     bpy.ops.object.select_all(action="DESELECT")
     for o in merged:
@@ -573,7 +572,7 @@ def process_moth():
     moth = mesh_object("Moth", bake_world(src))
     bpy.data.objects.remove(src)
     rename_materials(moth, {m.name: "MothTex" for m in moth.data.materials if m})
-    decimate(moth, 0.35)
+    # maillage scanne complet (v3.9, Nanite dans Unreal)
 
     # Alignement par analyse en composantes principales : envergure -> Y, corps -> X (tete vers +X), epaisseur -> Z
     co = np.array([tuple(v.co) for v in moth.data.vertices])
@@ -655,15 +654,15 @@ def load_model(path):
     bpy.context.view_layer.update()
 
 
-def save_texture_file(src, name, size=1024, quality=86):
-    """Image fournie -> RawAssets/Textures/<name>.jpg, reduite a size"""
+def save_texture_file(src, name, size=None, quality=95):
+    """Image fournie -> RawAssets/Textures/<name>.jpg, a sa resolution d'origine (ou reduite a size)"""
     from PIL import Image
     im = Image.open(src).convert("RGB")
-    if max(im.size) > size:
+    if size and max(im.size) > size:
         im = im.resize((size, size), Image.LANCZOS)
     os.makedirs(OUT_TEX, exist_ok=True)
     path = os.path.join(OUT_TEX, name + ".jpg")
-    im.save(path, quality=quality)
+    im.save(path, quality=quality, subsampling=0)
     print("  texture", path, im.size)
 
 
@@ -863,7 +862,7 @@ def rigged_body(arm, part_of, parts, default, mat_map, default_slot, skip=(), bu
         bm.to_mesh(body.data)
         bm.free()
     nv = len(body.data.vertices)
-    for _ in range(4):
+    for _ in range(4 if budget else 0):
         cur = len(body.data.vertices)
         if cur <= budget * 1.08:
             break
@@ -1023,13 +1022,13 @@ def process_skinstealer():
         import zipfile
         with zipfile.ZipFile(path) as z:
             z.extractall(os.path.join(SRC, "skin_tex"))
-    save_texture_file(os.path.join(tex, "Material.006_baseColor.jpg"), "T_SkinStealer_Flesh", 512)
-    save_texture_file(os.path.join(tex, "Material.003_baseColor.jpg"), "T_SkinStealer_Claw", 512)
-    save_texture_file(os.path.join(tex, "Material.004_baseColor.jpg"), "T_SkinStealer_Eye", 256)
+    save_texture_file(os.path.join(tex, "Material.006_baseColor.jpg"), "T_SkinStealer_Flesh")
+    save_texture_file(os.path.join(tex, "Material.003_baseColor.jpg"), "T_SkinStealer_Claw")
+    save_texture_file(os.path.join(tex, "Material.004_baseColor.jpg"), "T_SkinStealer_Eye")
     mats = {"Material_001": "EyeDark", "Material_002": "SkinStealerFlesh", "Material_003": "StealerClaw", "Material_004": "StealerEye",
             "Material_005": "StealerEye", "Material_006": "SkinStealerFlesh", "Material_007": "SkinStealerFlesh",
             "Material_008": "SkinStealerFlesh"}
-    humanoid("SkinStealer", "SM_SkinStealerET", part_of, joints, mats, "SkinStealerFlesh", 2.05, arm_drop=82.0, budget=6500)
+    humanoid("SkinStealer", "SM_SkinStealerET", part_of, joints, mats, "SkinStealerFlesh", 2.05, arm_drop=82.0, budget=None)
 
 
 def process_faceling():
@@ -1062,9 +1061,9 @@ def process_faceling():
     # texture integree au .glb (le PNG livre a cote est retourne verticalement par rapport aux UV)
     for img in bpy.data.images:
         if img.size[0] > 0:
-            save_texture(img, "T_Faceling", size=512, quality=88)
+            save_texture(img, "T_Faceling")
             break
-    humanoid("Faceling", "SM_FacelingET", part_of, joints, {"H_Body": "FacelingTex"}, "FacelingTex", 1.78, arm_drop=80.0, budget=4000)
+    humanoid("Faceling", "SM_FacelingET", part_of, joints, {"H_Body": "FacelingTex"}, "FacelingTex", 1.78, arm_drop=80.0, budget=None)
 
 
 def process_partygoer():
@@ -1093,7 +1092,7 @@ def process_partygoer():
     joints = {"Torso": "CC_Base_Hip", "Head": "CC_Base_NeckTwist01", "UpperArmL": "CC_Base_L_Upperarm",
               "LowerArmL": "CC_Base_L_Forearm", "UpperArmR": "CC_Base_R_Upperarm", "LowerArmR": "CC_Base_R_Forearm",
               "ThighL": "CC_Base_L_Thigh", "ShinL": "CC_Base_L_Calf", "ThighR": "CC_Base_R_Thigh", "ShinR": "CC_Base_R_Calf"}
-    save_texture_file(os.path.join(SRC, "partygoer_BaseColor.jpeg"), "T_Partygoer", 1024)
+    save_texture_file(os.path.join(SRC, "partygoer_BaseColor.jpeg"), "T_Partygoer")
     balloon = bpy.data.objects.get("Baloon red")
 
     def export_balloon(M, joints_game):
@@ -1118,7 +1117,7 @@ def process_partygoer():
         JOINTS.setdefault("PartygoerBalloon", {})["Height"] = round(float((co[:, 2].max() - co[:, 2].min()) * 100.0), 2)
 
     humanoid("Partygoer", "SM_PartygoerET", part_of, joints, {"Partygoer_LP.003": "PartygoerTex"}, "PartygoerTex", 1.92,
-             arm_drop=80.0, budget=6000, skip=("Baloon red",), extra=export_balloon)
+             arm_drop=80.0, budget=None, skip=("Baloon red",), extra=export_balloon)
 
 
 def process_hound():
@@ -1167,10 +1166,10 @@ def process_hound():
     mats = {"Material.002": "HoundSkin", "Material": "HoundHair", "Fur Material": "HoundHair", "Material.001": "HoundFace",
             "Material.003": "HoundMouth", "Material.004": "GlowAmberEye", "Material.007": "EyeDark", "Material.005": "HoundTongue",
             "Material.006": "HoundTeeth"}
-    save_texture_file(os.path.join(SRC, "hound_Material.png"), "T_Hound", 1024)
+    save_texture_file(os.path.join(SRC, "hound_Material.png"), "T_Hound")
     feet = min(hw(b).z for b in ("Bone.028", "Bone.033", "Bone.020", "Bone.024"))
-    body = rigged_body(arm, part_of, HOUND_PARTS, "Body", mats, "HoundSkin", skip=("Cube.007",), budget=6500, drop_below=feet - 0.6,
-                       thin={"Mesh": 5}, parent=HOUND_PARENT)
+    body = rigged_body(arm, part_of, HOUND_PARTS, "Body", mats, "HoundSkin", skip=("Cube.007",), budget=None, drop_below=feet - 0.6,
+                       parent=HOUND_PARENT)
     joints, _ = to_game_frame(body, joints_w, forward, 1.15, center_parts=("FrontUpperL", "FrontUpperR", "BackUpperL", "BackUpperR"))
     full = mesh_object("SM_HoundET", body.data.copy())
     preview([full], "SM_HoundET", Vector((0.7, -1.0, 0.35)))
@@ -1457,7 +1456,7 @@ def process_clump():
         bpy.context.view_layer.objects.active = meshes[0]
         bpy.ops.object.join()
         bundle = meshes[0]
-        decimate(bundle, 0.42)
+        # faisceaux complets (v3.9, Nanite dans Unreal)
         for poly in bundle.data.polygons:
             poly.use_smooth = True
         pivot = sum((r for _, r in items), Vector()) / len(items)
@@ -1491,7 +1490,18 @@ def _save_jpg(im, name, size, quality):
         im = im.resize((size, size), Image.LANCZOS)
     os.makedirs(OUT_TEX, exist_ok=True)
     path = os.path.join(OUT_TEX, name + ".jpg")
-    im.save(path, quality=quality, optimize=True)
+    im.save(path, quality=quality, subsampling=0, optimize=True)
+    print("  texture", path, im.size)
+
+
+def _save_png(im, name):
+    """Sans perte (normal maps : le JPEG laisse des blocs dans les reflets) ; retire l'ancienne version JPEG"""
+    os.makedirs(OUT_TEX, exist_ok=True)
+    path = os.path.join(OUT_TEX, name + ".png")
+    im.convert("RGB").save(path, optimize=True)
+    old = os.path.join(OUT_TEX, name + ".jpg")
+    if os.path.exists(old):
+        os.remove(old)
     print("  texture", path, im.size)
 
 
@@ -1504,10 +1514,10 @@ def process_pool_textures():
         print("!! textures des Poolrooms introuvables dans", d)
         return
     print("== Textures des Poolrooms")
-    _save_jpg(Image.open(os.path.join(d, "pooltile_1.png")), "T_PoolTile37", 512, 92)
-    _save_jpg(_flip_green(Image.open(os.path.join(d, "pooltile_n_0.png"))), "T_PoolTile37_N", 512, 95)
-    _save_jpg(Image.open(os.path.join(d, "plaster_4.png")), "T_Plaster", 512, 90)
-    _save_jpg(_flip_green(Image.open(os.path.join(d, "plaster_n_3.png"))), "T_Plaster_N", 512, 90)
+    _save_jpg(Image.open(os.path.join(d, "pooltile_1.png")), "T_PoolTile37", 512, 95)
+    _save_png(_flip_green(Image.open(os.path.join(d, "pooltile_n_0.png"))), "T_PoolTile37_N")
+    _save_jpg(Image.open(os.path.join(d, "plaster_4.png")), "T_Plaster", 2048, 95)
+    _save_png(_flip_green(Image.open(os.path.join(d, "plaster_n_3.png"))), "T_Plaster_N")
 
 
 def _pnoise(size, beta, seed):
@@ -1524,7 +1534,7 @@ def _pnoise(size, beta, seed):
     return (n - n.mean()) / (n.std() + 1e-9)
 
 
-def _save_normal_from_height(name, h, size, quality=93):
+def _save_normal_from_height(name, h, size):
     """Normal map (x vers la droite, y vers le bas : meme convention que Tools/generate_textures.py)"""
     from PIL import Image
     dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5
@@ -1532,15 +1542,18 @@ def _save_normal_from_height(name, h, size, quality=93):
     nx, ny, nz = -dx, -dy, np.ones_like(h)
     ln = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
     nrm = np.stack([nx / ln, ny / ln, nz / ln], -1) * 0.5 + 0.5
-    _save_jpg(Image.fromarray((np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB"), name + "_N", size, quality)
+    im = Image.fromarray((np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
+    if im.size[0] != size:
+        im = im.resize((size, size), Image.LANCZOS)
+    _save_png(im, name + "_N")
 
 
 def make_office_textures():
     """Moquette bleu marine et dalles de faux plafond blanches, d'apres la scene du Niveau 4 fournie
-    (ses propres images, 150 px, sont trop petites pour le jeu : on les refait en 512 px, raccordables)"""
+    (ses propres images, 150 px, sont trop petites pour le jeu : on les refait en 1024 px, raccordables)"""
     from PIL import Image
     print("== Textures du bureau")
-    S = 512
+    S = 1024
     # Moquette : couleur moyenne de la moquette de la scene (sRGB 0,06 / 0,11 / 0,24), fibres et boucles serrees
     fib = _pnoise(S, 0.2, 801)
     loops = _pnoise(S, 1.4, 802)
@@ -1548,8 +1561,8 @@ def make_office_textures():
     lum = np.clip(1.0 + 0.32 * fib + 0.1 * loops + 0.07 * mott, 0.4, 1.8)
     base = np.array([0.062, 0.115, 0.245])
     img = np.clip(lum[..., None] * base[None, None, :], 0, 1)
-    _save_jpg(Image.fromarray((img * 255 + 0.5).astype(np.uint8), "RGB"), "T_OfficeCarpetNavy", S, 90)
-    _save_normal_from_height("T_OfficeCarpetNavy", (0.8 * fib + 0.6 * loops) * 1.2, S, 85)
+    _save_jpg(Image.fromarray((img * 255 + 0.5).astype(np.uint8), "RGB"), "T_OfficeCarpetNavy", S, 95)
+    _save_normal_from_height("T_OfficeCarpetNavy", (0.8 * fib + 0.6 * loops) * 1.2, S)
 
     # Faux plafond : 2 x 2 dalles de 60 cm (la texture couvre 120 cm), ossature en T, fibre minerale fissuree
     y, x = np.mgrid[0:S, 0:S].astype(np.float32) / S
@@ -1564,7 +1577,7 @@ def make_office_textures():
     tile *= 0.94 + 0.06 * bevel
     col = np.where(grid > 0, 0.88, tile)
     img = np.stack([col * 0.995, col * 0.99, col], -1)
-    _save_jpg(Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB"), "T_OfficeCeiling", S, 90)
+    _save_jpg(Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB"), "T_OfficeCeiling", S, 95)
     hgt = 3.0 * grid + 1.2 * bevel - 1.5 * fiss - 2.0 * pits
     _save_normal_from_height("T_OfficeCeiling", hgt, S)
 
@@ -1649,8 +1662,7 @@ def process_office():
                and _office_bounds([o])[0].z > 2.5 and _office_bounds([o])[1].z < 7.0]
     pcs = [o for o in meshes if o.name.startswith("Computer") and near(o, tc, 5.0)]
     desk_src = [table] + pcs + on_desk
-    desk_parts = [_office_copy(o, lambda src, m: desk_mats.get(m, "PCBeige"), 1400 if o.name.startswith("Computer") else 600)
-                  for o in desk_src]
+    desk_parts = [_office_copy(o, lambda src, m: desk_mats.get(m, "PCBeige")) for o in desk_src]
     mn, mx = _office_bounds(desk_src)
     desk_pivot = Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, 0.0))
 
@@ -1660,8 +1672,7 @@ def process_office():
     keys = ("ChairBack", "ChairSeat", "Leg_LP", "Wheel_LP", "Underside_LP", "pCube37", "pCube38", "pCylinder2")
     chair_src = [o for o in meshes if o.name.startswith(keys) and near(o, sc_, 2.4)]
     leather = ("ChairBack", "ChairSeat", "pCube37", "pCube38")
-    chair_parts = [_office_copy(o, lambda src, m: "ChairLeather" if src.name.startswith(leather) else "ChairBase",
-                                500 if o.name.startswith(("ChairBack", "ChairSeat", "Underside")) else None) for o in chair_src]
+    chair_parts = [_office_copy(o, lambda src, m: "ChairLeather" if src.name.startswith(leather) else "ChairBase") for o in chair_src]
     cmn, cmx = _office_bounds(chair_src)
     chair_pivot = Vector(((cmn.x + cmx.x) / 2, (cmn.y + cmx.y) / 2, 0.0))
 
@@ -1676,8 +1687,7 @@ def process_office():
         if m == "Material.021":
             return "CoolerBottle"
         return "TapBlue" if center(src).y < bc.y else "TapRed"
-    cool_parts = [_office_copy(o, cooler_slot, 700 if ("Material.002" in o.name or "Mainmetal" in o.name) else 150)
-                  for o in cool_src]
+    cool_parts = [_office_copy(o, cooler_slot) for o in cool_src]
     cool_pivot = Vector((bc.x, bc.y, 0.0))
 
     desk = _office_join(desk_parts, "SM_OfficeDeskET", desk_pivot)

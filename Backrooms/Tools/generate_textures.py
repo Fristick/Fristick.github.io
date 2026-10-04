@@ -90,21 +90,30 @@ def save_normal(name, rgb, strength, size=1024):
     img = Image.fromarray((np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
     if img.size[0] != size:
         img = img.resize((size, size), Image.LANCZOS)
-    path = os.path.join(OUT, f"{name}_N.jpg")
-    img.save(path, quality=93, optimize=True)
+    save_normal_png(name, img)
+
+
+def save_normal_png(name, img):
+    """Normal map sans perte (PNG) : le JPEG laisse des blocs visibles dans les reflets des surfaces brillantes"""
+    path = os.path.join(OUT, f"{name}_N.png")
+    img.save(path, optimize=True)
+    old = os.path.join(OUT, f"{name}_N.jpg")
+    if os.path.exists(old):
+        os.remove(old)
     print("  ->", os.path.relpath(path))
 
 
 def save(name, rgb, size=None, fmt="jpg"):
     rgb = np.clip(rgb, 0, 1)
     if name in NORMAL_STRENGTH:
-        save_normal(name, rgb, NORMAL_STRENGTH[name], 1024 if rgb.shape[0] >= 1024 else 512)
+        save_normal(name, rgb, NORMAL_STRENGTH[name], rgb.shape[0])  # meme resolution que la couleur
     img = Image.fromarray((rgb * 255 + 0.5).astype(np.uint8), "RGB" if rgb.ndim == 3 else "L")
     if size:
         img = img.resize((size, size), Image.LANCZOS)
     path = os.path.join(OUT, f"{name}.{fmt}")
     if fmt == "jpg":
-        img.save(path, quality=90, optimize=True)
+        # qualite 95 sans sous-echantillonnage des couleurs : indiscernable de l'original une fois compresse par Unreal
+        img.save(path, quality=95, subsampling=0, optimize=True)
     else:
         img.save(path, optimize=True)
     print("  ->", os.path.relpath(path))
@@ -226,7 +235,7 @@ def t_l0_ceiling():
     shadow = (((u > bw) & (u < bw * 2.5)) | ((v > bw) & (v < bw * 2.5))).astype(np.float32)
     img = mix(img, np.ones_like(img) * np.array([0.80, 0.80, 0.77]), bar)
     img *= (1 - 0.15 * shadow)[..., None]
-    save("T_L0_Ceiling", img, size=1024)  # 1024 px pour 1,20 m : largement assez, et le zip reste sous 30 Mo
+    save("T_L0_Ceiling", img)
 
 
 # ---------------------------------------------------------------------------
@@ -401,9 +410,7 @@ def save_height_normal(name, h, size=None):
     img = Image.fromarray((np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
     if size and img.size[0] != size:
         img = img.resize((size, size), Image.LANCZOS)
-    path = os.path.join(OUT, f"{name}_N.jpg")
-    img.save(path, quality=95, optimize=True)
-    print("  ->", os.path.relpath(path))
+    save_normal_png(name, img)
 
 
 def t_pool_tile():

@@ -26,15 +26,15 @@ FBRHumanoidSpec FBRHumanoidSpec::Hazmat()
 {
 	// Valeurs produites par Tools/Blender/import_user_models.py (RawAssets/Meshes/user_models.json)
 	FBRHumanoidSpec S;
-	S.Torso = FVector(0.12f, 0.f, 98.89f);
-	S.Head = FVector(-1.44f, 0.f, 144.23f);
-	S.Shoulder[0] = FVector(0.05f, -27.51f, 135.09f);
-	S.Shoulder[1] = FVector(-2.93f, 27.5f, 135.09f);
-	S.Elbow[0] = FVector(0.05f, -32.81f, 110.15f);
-	S.Elbow[1] = FVector(-2.93f, 32.8f, 110.17f);
-	S.Hip[0] = FVector(-0.1f, -10.17f, 93.86f);
-	S.Hip[1] = FVector(0.1f, 10.17f, 93.86f);
-	S.Knee[0] = FVector(0.27f, -10.25f, 55.51f);
+	S.Torso = FVector(0.12f, 0.f, 98.9f);
+	S.Head = FVector(-1.44f, 0.f, 144.25f);
+	S.Shoulder[0] = FVector(0.05f, -27.51f, 135.1f);
+	S.Shoulder[1] = FVector(-2.93f, 27.51f, 135.1f);
+	S.Elbow[0] = FVector(0.05f, -32.81f, 110.16f);
+	S.Elbow[1] = FVector(-2.93f, 32.8f, 110.18f);
+	S.Hip[0] = FVector(-0.1f, -10.17f, 93.87f);
+	S.Hip[1] = FVector(0.1f, 10.17f, 93.87f);
+	S.Knee[0] = FVector(0.27f, -10.25f, 55.52f);
 	S.Knee[1] = FVector(-0.14f, 10.25f, 55.5f);
 	S.bSidedMeshes = true;
 	S.ArmPitch = 0.f;
@@ -69,9 +69,9 @@ FBRHumanoidSpec FBRHumanoidSpec::FromJoints(const FVector& InTorso, const FVecto
 // Valeurs produites par Tools/Blender/import_user_models.py (RawAssets/Meshes/user_models.json)
 FBRHumanoidSpec FBRHumanoidSpec::SkinStealerET()
 {
-	FBRHumanoidSpec S = FromJoints(FVector(0.f, 0.3f, 103.81f), FVector(-0.24f, 0.55f, 164.1f), FVector(-4.62f, -11.62f, 154.41f),
-		FVector(-5.11f, -18.4f, 106.14f), FVector(-4.62f, 11.73f, 154.41f), FVector(-5.11f, 18.51f, 106.14f), FVector(0.f, -7.24f, 100.65f),
-		FVector(0.49f, -14.78f, 58.07f), FVector(0.f, 7.24f, 100.65f), FVector(0.49f, 15.51f, 58.07f));
+	FBRHumanoidSpec S = FromJoints(FVector(0.f, 0.3f, 103.95f), FVector(-0.24f, 0.55f, 164.33f), FVector(-4.63f, -11.64f, 154.64f),
+		FVector(-5.12f, -18.43f, 106.28f), FVector(-4.63f, 11.74f, 154.64f), FVector(-5.12f, 18.54f, 106.28f), FVector(0.f, -7.25f, 100.79f),
+		FVector(0.49f, -14.8f, 58.14f), FVector(0.f, 7.25f, 100.79f), FVector(0.49f, 15.53f, 58.14f));
 	S.ArmAmp = 14.f; // ses bras demesures balancent peu : ils pendent jusqu'aux genoux
 	S.LegAmp = 26.f;
 	return S;

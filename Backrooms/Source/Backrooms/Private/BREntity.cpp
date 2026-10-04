@@ -415,8 +415,8 @@ bool ABREntity::BuildMothModel()
 	}
 	const float Z = MyInfo().HalfHeight;
 	USceneComponent* Body = AddPart(TEXT("SM_DeathmothET_Body"), Visual, FVector(0.f, 0.f, Z), FVector::ZeroVector, 0.f, nullptr);
-	USceneComponent* WingL = AddPart(TEXT("SM_DeathmothET_WingL"), Body, FVector(2.53f, -8.f, -5.53f), FVector::ZeroVector, 0.f, nullptr);
-	USceneComponent* WingR = AddPart(TEXT("SM_DeathmothET_WingR"), Body, FVector(1.73f, 8.f, -4.66f), FVector::ZeroVector, 0.f, nullptr);
+	USceneComponent* WingL = AddPart(TEXT("SM_DeathmothET_WingL"), Body, FVector(-1.7f, -8.f, -4.88f), FVector::ZeroVector, 0.f, nullptr);
+	USceneComponent* WingR = AddPart(TEXT("SM_DeathmothET_WingR"), Body, FVector(-0.79f, 8.f, -5.48f), FVector::ZeroVector, 0.f, nullptr);
 	AddLimb(WingL, ELimb::Wing, 0.f, 45.f, -1.f, FRotator::ZeroRotator);
 	AddLimb(WingR, ELimb::Wing, 0.f, 45.f, 1.f, FRotator::ZeroRotator);
 	return true;
@@ -458,8 +458,8 @@ bool ABREntity::BuildHoundModel()
 	{
 		return false;
 	}
-	AddPart(TEXT("SM_HoundET_Body"), Visual, FVector(42.37f, 0.17f, 71.65f), FVector::ZeroVector, 0.f, nullptr);
-	HeadPivot = AddPart(TEXT("SM_HoundET_Head"), Visual, FVector(45.22f, 0.17f, 78.32f), FVector::ZeroVector, 0.f, nullptr);
+	AddPart(TEXT("SM_HoundET_Body"), Visual, FVector(42.26f, 0.17f, 71.49f), FVector::ZeroVector, 0.f, nullptr);
+	HeadPivot = AddPart(TEXT("SM_HoundET_Head"), Visual, FVector(45.1f, 0.17f, 78.14f), FVector::ZeroVector, 0.f, nullptr);
 	struct FLeg
 	{
 		const TCHAR* Upper;
@@ -471,10 +471,10 @@ bool ABREntity::BuildHoundModel()
 	};
 	// Articulations : RawAssets/Meshes/user_models.json ("Hound")
 	const FLeg Legs[4] = {
-		{ TEXT("SM_HoundET_FrontUpperL"), TEXT("SM_HoundET_FrontLowerL"), FVector(36.82f, -17.91f, 67.3f), FVector(28.36f, -20.87f, 43.17f), true, PI },
-		{ TEXT("SM_HoundET_FrontUpperR"), TEXT("SM_HoundET_FrontLowerR"), FVector(36.82f, 18.8f, 67.3f), FVector(28.36f, 21.75f, 43.17f), true, 0.f },
-		{ TEXT("SM_HoundET_BackUpperL"), TEXT("SM_HoundET_BackLowerL"), FVector(-36.71f, -10.83f, 58.65f), FVector(-35.5f, -12.28f, 39.07f), false, 0.f },
-		{ TEXT("SM_HoundET_BackUpperR"), TEXT("SM_HoundET_BackLowerR"), FVector(-36.93f, 9.95f, 59.39f), FVector(-35.43f, 12.69f, 39.07f), false, PI },
+		{ TEXT("SM_HoundET_FrontUpperL"), TEXT("SM_HoundET_FrontLowerL"), FVector(36.72f, -17.87f, 67.15f), FVector(28.29f, -20.81f, 43.08f), true, PI },
+		{ TEXT("SM_HoundET_FrontUpperR"), TEXT("SM_HoundET_FrontLowerR"), FVector(36.72f, 18.75f, 67.15f), FVector(28.29f, 21.69f, 43.08f), true, 0.f },
+		{ TEXT("SM_HoundET_BackUpperL"), TEXT("SM_HoundET_BackLowerL"), FVector(-36.62f, -10.8f, 58.53f), FVector(-35.41f, -12.25f, 39.f), false, 0.f },
+		{ TEXT("SM_HoundET_BackUpperR"), TEXT("SM_HoundET_BackLowerR"), FVector(-36.83f, 9.92f, 59.26f), FVector(-35.34f, 12.66f, 39.f), false, PI },
 	};
 	for (const FLeg& Leg : Legs)
 	{
