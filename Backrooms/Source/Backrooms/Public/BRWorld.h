@@ -299,6 +299,10 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UPostProcessComponent> PostProcess;
 
+	/** v4.7 : post-traitement des salles de fosses (le fond reste noir malgre le brouillard ordinaire) */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PitShadeMID;
+
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAudioComponent> AmbientAudio;
 

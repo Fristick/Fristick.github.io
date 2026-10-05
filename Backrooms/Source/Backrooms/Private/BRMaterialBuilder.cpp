@@ -24,6 +24,7 @@
 #include "Materials/MaterialExpressionSceneDepth.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionSceneColor.h"
+#include "Materials/MaterialExpressionSceneTexture.h"
 #include "Materials/MaterialExpressionSine.h"
 #include "Materials/MaterialExpressionSubtract.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
@@ -143,6 +144,14 @@ namespace
 		}
 
 		/** Profondeur de la scene opaque (cm), decalee de Offset si fourni */
+		/** v4.7 : image de la scene en entree d'un post-traitement (PostProcessInput0) */
+		FPin PostProcessInput()
+		{
+			UMaterialExpressionSceneTexture* E = New<UMaterialExpressionSceneTexture>();
+			E->SceneTextureId = PPI_PostProcessInput0;
+			return FPin{ E, 0 };
+		}
+
 		FPin SceneDepth(const FPin* Offset = nullptr)
 		{
 			UMaterialExpressionSceneDepth* E = New<UMaterialExpressionSceneDepth>();
@@ -343,6 +352,17 @@ namespace
 		const FPin Stain = G.Mul(G.Sat(G.Div(G.Sub(StainNoise, G.Const(0.7f)), G.Const(0.12f))), G.Mul(G.Scalar(TEXT("Stains"), 0.f), Wz));
 		Col = G.Mul(Col, G.Lerp(G.C3(1.f, 1.f, 1.f), G.C3(0.7f, 0.7f, 0.56f), Stain));
 
+		// v4.7 : murs : la texture se repete tous les 1,2 m (papier peint du Niveau 0) ; une variation de teinte et des
+		// aureoles d'humidite dessinees a l'echelle du monde (17 m) cassent la repetition sans toucher au motif.
+		// Les aureoles sont aussi un peu plus lisses (papier humide). WallVariation = 0 : murs v4.6.
+		const FPin WallVar = G.Mul(G.Scalar(TEXT("WallVariation"), 0.f), G.Sub(G.Const(1.f), Wz));
+		const FPin WallUv = G.Div(G.Append(G.Dot(XY, G.C2(0.707f, 0.707f)), G.Mask(WP, TEXT("b"))), G.Const(1700.f));
+		const FPin WallTone = G.Tex(TEXT("NoiseTex"), NoiseLF, false, WallUv, 2);
+		Col = G.Mul(Col, G.Add(G.Const(1.f), G.Mul(G.Mul(G.Sub(WallTone, G.Const(0.5f)), G.Const(0.3f)), WallVar)));
+		const FPin WallDampN = G.Tex(TEXT("NoiseTex"), NoiseLF, false, G.Add(G.Mul(WallUv, G.Const(1.9f)), G.C2(0.31f, 0.77f)), 1);
+		const FPin WallDamp = G.Mul(G.Sat(G.Div(G.Sub(WallDampN, G.Const(0.68f)), G.Const(0.1f))), WallVar);
+		Col = G.Mul(Col, G.Lerp(G.C3(1.f, 1.f, 1.f), G.C3(0.8f, 0.76f, 0.62f), WallDamp));
+
 		// Salete a grande echelle
 		const FPin GUv = G.Div(G.Append(G.Dot(WP, G.C3(0.7f, 0.3f, 0.f)), G.Dot(WP, G.C3(0.f, 0.5f, 1.f))), G.Scalar(TEXT("GrimeScale"), 900.f));
 		const FPin Gs = G.Tex(TEXT("GrimeTex"), Grime, false, GUv, 1);
@@ -389,7 +409,19 @@ namespace
 		FGraph::Link(Out->BaseColor, Shaded);
 
 		const FPin Rv = G.Tex(TEXT("GrimeTex"), Grime, false, G.Mul(GUv, G.Const(3.1f)), 3);
-		FPin Rough = G.Sat(G.Add(G.Scalar(TEXT("Roughness"), 0.85f), G.Mul(G.Sub(Rv, G.Const(0.5f)), G.Const(0.3f))));
+		// v4.7 : carte de rugosite de la matiere (<Texture>_R, lineaire, relative a Roughness : 0,5 = valeur nominale).
+		// Un seul echantillon, projete sur l'axe dominant de la face (les murs et sols sont alignes sur les axes) :
+		// joints de carrelage, ossature du plafond, taches d'huile et d'humidite repondent a la lumiere autrement que
+		// leur support. RoughContrast = 0 (pas de carte) : rugosite v4.6 inchangee.
+		const FPin StepX = G.Sat(G.Mul(G.Sub(Wx, Wy), G.Const(1000.f)));
+		const FPin StepZ = G.Sat(G.Mul(G.Sub(Wz, G.Const(0.5f)), G.Const(1000.f)));
+		const FPin UvR = G.Lerp(G.Lerp(UvY, UvX, StepX), UvZ, StepZ);
+		const FPin RMap = G.Tex(TEXT("RoughTex"), NoiseLF, false, UvR, 1);
+		const FPin RContrast = G.Scalar(TEXT("RoughContrast"), 0.f);
+		// La salete commune garde un peu de variation, moins quand la carte decrit deja la matiere
+		const FPin GrimeVar = G.Mul(G.Sub(Rv, G.Const(0.5f)), G.Sub(G.Const(0.3f), G.Mul(RContrast, G.Const(0.18f))));
+		FPin Rough = G.Sat(G.Add(G.Add(G.Scalar(TEXT("Roughness"), 0.85f), GrimeVar), G.Mul(G.Sub(RMap, G.Const(0.5f)), G.Mul(RContrast, G.Const(2.f)))));
+		Rough = G.Sat(G.Sub(Rough, G.Mul(WallDamp, G.Const(0.15f))));
 		Rough = G.Lerp(Rough, G.Mul(Rough, G.Const(0.35f)), Wet);
 		Rough = G.Lerp(Rough, G.Const(0.02f), Puddle);
 		FGraph::Link(Out->Roughness, Rough);
@@ -410,7 +442,19 @@ namespace
 		const FPin Uv = G.Mul(G.UV0(), G.Scalar(TEXT("TexScale"), 1.f));
 		const FPin Base = G.Mul(G.Tex(TEXT("BaseTex"), Def, false, Uv), G.Vector(TEXT("Tint"), FLinearColor::White));
 		FGraph::Link(Out->BaseColor, Base);
-		FGraph::Link(Out->Roughness, G.Scalar(TEXT("Roughness"), bSkin ? 0.6f : 0.85f));
+		// v4.7 : carte de rugosite des peaux (bouches et plaies luisantes, dents mi-brillantes, grain de peau), relative a
+		// Roughness ; sans carte (RoughContrast = 0), rugosite constante comme avant. Texture par defaut lineaire.
+		UTexture* RoughDef = LoadTexture(TEXT("T_NoiseLF"));
+		if (RoughDef && !RoughDef->SRGB)
+		{
+			const FPin RMap = G.Tex(TEXT("RoughTex"), RoughDef, false, Uv, 1);
+			FGraph::Link(Out->Roughness, G.Sat(G.Add(G.Scalar(TEXT("Roughness"), bSkin ? 0.6f : 0.85f),
+				G.Mul(G.Sub(RMap, G.Const(0.5f)), G.Mul(G.Scalar(TEXT("RoughContrast"), 0.f), G.Const(2.f))))));
+		}
+		else
+		{
+			FGraph::Link(Out->Roughness, G.Scalar(TEXT("Roughness"), bSkin ? 0.6f : 0.85f));
+		}
 		FGraph::Link(Out->Metallic, G.Scalar(TEXT("Metallic"), 0.f));
 		FGraph::Link(Out->EmissiveColor, G.Add(G.Mul(Base, G.Scalar(TEXT("SelfIllum"), 0.f)), G.Vector(TEXT("Emissive"), FLinearColor::Black)));
 		if (bSkin)
@@ -420,6 +464,23 @@ namespace
 			FGraph::Link(Out->SubsurfaceColor, G.Mul(Base, G.Vector(TEXT("SubsurfaceColor"), FLinearColor(1.f, 0.35f, 0.25f))));
 			FGraph::Link(Out->Opacity, G.Scalar(TEXT("Subsurface"), 0.6f));
 		}
+	}
+
+	/** v4.7 : salles de fosses. Le brouillard ordinaire (sans brouillard volumetrique) ajoute sa couleur a tout ce qui est
+	 *  loin, y compris le fond d'un puits de 14 m qui devrait etre noir : environ 11 % de voile jaune a 15 m (densite
+	 *  0,08). Ce post-traitement assombrit les pixels situes sous le sol (position monde reconstruite depuis la
+	 *  profondeur), progressivement de PitShadeStart a PitShadeStart + PitShadeRange sous PitFloorZ : le haut des parois,
+	 *  encore eclaire par la salle, reste visible, le fond redevient noir. Meme graphe que build_pit_shade_material(). */
+	void BuildPitShade(FGraph& G, UMaterialEditorOnlyData* Out)
+	{
+		const FPin Scene = G.Mask(G.PostProcessInput(), TEXT("rgb"));
+		const FPin Z = G.Mask(G.WorldPos(), TEXT("b"));
+		const FPin Below = G.Sub(G.Sub(G.Scalar(TEXT("PitFloorZ"), 0.f), G.Scalar(TEXT("PitShadeStart"), 60.f)), Z);
+		const FPin T = G.Sat(G.Div(Below, G.Scalar(TEXT("PitShadeRange"), 600.f)));
+		// Montee douce (T * (2 - T)), PitShadeAmount = 0 : aucun effet (niveau sans fosses, reglage)
+		const FPin Ease = G.Mul(G.Mul(T, G.Sub(G.Const(2.f), T)), G.Scalar(TEXT("PitShadeAmount"), 1.f));
+		const FPin Factor = G.Lerp(G.Const(1.f), G.Scalar(TEXT("PitShadeFloor"), 0.04f), Ease);
+		FGraph::Link(Out->EmissiveColor, G.Mul(Scene, Factor));
 	}
 
 	/** Eau translucide : meme graphe que build_water_surface_material() en Python */
@@ -662,7 +723,8 @@ namespace BRMaterialBuilder
 		{
 			return nullptr;
 		}
-		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_WaterSurface_Runtime") };
+		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_WaterSurface_Runtime"),
+			TEXT("M_BR_PitShade_Runtime") };
 		UMaterial* M = NewObject<UMaterial>(Outer ? Outer : GetTransientPackage(), FName(Names[static_cast<int32>(Which)]), RF_Transient);
 		M->MaterialDomain = MD_Surface;
 		M->BlendMode = BLEND_Opaque;
@@ -692,6 +754,12 @@ namespace BRMaterialBuilder
 			M->TwoSided = true;
 			M->TranslucencyLightingMode = TLM_SurfacePerPixelLighting;
 			BuildWaterTranslucent(G, Out);
+			break;
+		case EBRMasterMaterial::PitShade:
+			M->MaterialDomain = MD_PostProcess;
+			M->BlendableLocation = BL_SceneColorBeforeDOF;
+			M->SetShadingModel(MSM_Unlit);
+			BuildPitShade(G, Out);
 			break;
 		}
 

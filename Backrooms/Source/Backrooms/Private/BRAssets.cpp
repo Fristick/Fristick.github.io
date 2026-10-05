@@ -423,7 +423,8 @@ UTexture* UBRAssets::Texture(FName Name)
 	}
 	const FString N = Name.ToString();
 	// Normal maps et textures de donnees (bruits du materiau du monde) : valeurs lineaires
-	const bool bLinear = N.EndsWith(TEXT("_N")) || N.Contains(TEXT("Normal")) || N == TEXT("T_NoiseLF");
+	// v4.7 : cartes de rugosite (<Texture>_R) : donnees, lineaires
+	const bool bLinear = N.EndsWith(TEXT("_N")) || N.EndsWith(TEXT("_R")) || N.Contains(TEXT("Normal")) || N == TEXT("T_NoiseLF");
 	UTexture2D* Raw = LoadRawTexture(TEXT("Textures"), Name, bLinear, true);
 	if (Raw)
 	{
@@ -532,10 +533,10 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	}
 	ParentResolved[Index] = true;
 
-	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface") };
+	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface"), TEXT("M_BR_PitShade") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
-	// (murs et sols : "WaterLine", la ligne d'eau et les flaques a bords decoupes de la v4.5)
-	const TCHAR* V2Params[] = { TEXT("WaterLine"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
+	// (v4.7 : "RoughContrast", la carte de rugosite ; la peau et les modeles l'ont aussi)
+	const TCHAR* V2Params[] = { TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("WaterSim"), TEXT("PitShadeAmount") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -562,7 +563,7 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	if (!M && BRMaterialBuilder::IsAvailable())
 	{
 		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
-			EBRMasterMaterial::WaterSurface };
+			EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade };
 		M = BRMaterialBuilder::Build(Kinds[Index], this, [this](FName TexName) { return Texture(TexName); });
 		if (M)
 		{
@@ -644,6 +645,31 @@ FLinearColor UBRAssets::TextureAverage(FName Texture)
 	return FLinearColor(0.8f, 0.8f, 0.8f);
 }
 
+UMaterialInstanceDynamic* UBRAssets::NewPitShade(UObject* Outer)
+{
+	UMaterialInterface* M = Parent(EParent::PitShade);
+	return M ? UMaterialInstanceDynamic::Create(M, Outer ? Outer : this) : nullptr;
+}
+
+void UBRAssets::ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail)
+{
+	if (!MID)
+	{
+		return;
+	}
+	UTexture* Map = BaseTexture.IsNone() ? nullptr : Texture(FName(*(BaseTexture.ToString() + TEXT("_R"))));
+	// Le type d'echantillonneur est fige a la compilation du materiau parent : la carte n'est branchee que si sa valeur
+	// par defaut est lineaire, comme la carte (sinon le rendu serait faux sans message clair)
+	UTexture* Default = nullptr;
+	const bool bParam = MID->GetTextureParameterValue(FMaterialParameterInfo(TEXT("RoughTex")), Default);
+	const bool bUse = Map && !Map->SRGB && bParam && Default && !Default->SRGB && Detail > 0.f;
+	if (bUse)
+	{
+		MID->SetTextureParameterValue(TEXT("RoughTex"), Map);
+	}
+	MID->SetScalarParameterValue(TEXT("RoughContrast"), bUse ? Detail : 0.f);
+}
+
 UMaterialInterface* UBRAssets::Surface(const FBRSurface& S)
 {
 	const FString Key = TEXT("W|") + S.Key();
@@ -692,6 +718,7 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 			MID->SetTextureParameterValue(TEXT("NormalTex"), Nrm);
 		}
 		MID->SetScalarParameterValue(TEXT("NormalStrength"), Nrm ? 1.f : 0.f);
+		ApplyRoughMap(MID, S.Texture, S.RoughDetail);
 		if (UTexture* Grime = Texture(TEXT("T_Grime")))
 		{
 			MID->SetTextureParameterValue(TEXT("GrimeTex"), Grime);
@@ -725,6 +752,7 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 		MID->SetScalarParameterValue(TEXT("AntiTile"), S.AntiTile);
 		MID->SetScalarParameterValue(TEXT("Stains"), S.Stains);
 		MID->SetScalarParameterValue(TEXT("WaterLine"), S.WaterLine);
+		MID->SetScalarParameterValue(TEXT("WallVariation"), S.WallVariation);
 	}
 	else
 	{
@@ -961,6 +989,8 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 				MID->SetScalarParameterValue(TEXT("TexScale"), Style ? Style->TexScale : 1.f);
 				MID->SetScalarParameterValue(TEXT("Roughness"), Style ? Style->Rough : 0.7f);
 				MID->SetScalarParameterValue(TEXT("Metallic"), Style ? Style->Metal : 0.f);
+				// v4.7 : carte de rugosite de la texture du modele (peaux du Wretch et du Clump, metal rouille)
+				ApplyRoughMap(MID, Style ? FName(Style->Tex) : NAME_None, 1.f);
 				MID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor::Black);
 				if (bSkin)
 				{

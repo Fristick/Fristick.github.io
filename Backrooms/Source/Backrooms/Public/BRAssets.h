@@ -85,10 +85,16 @@ public:
 	/** v4.5 : un modele fourni (ou son derive) manque et une forme de secours le remplace. Signale une fois dans le
 	 *  journal (avertissement) et liste en mode developpeur : un modele fourni n'est jamais remplace en silence. */
 	static void ReportFallback(const FString& Model);
+	/** v4.7 : post-traitement des salles de fosses (assombrit ce qui est sous le sol) ; nullptr si indisponible */
+	UMaterialInstanceDynamic* NewPitShade(UObject* Outer);
 	static const TArray<FString>& GetFallbacks();
 
 private:
-	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, Count };
+	/** v4.7 : carte de rugosite <Texture>_R (relative a Roughness) si elle existe et si le materiau parent l'attend en
+	 *  lineaire ; sinon RoughContrast = 0 (rugosite v4.6) */
+	void ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail);
+
+	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, Count };
 
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);

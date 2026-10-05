@@ -570,8 +570,11 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 	if (bWithTrim && D.bGarage && ZLo < 1.f && ZHi > 150.f)
 	{
 		// Parking : bande de couleur a hauteur de pare-chocs, soubassement plus clair
-		const FBRSurface Stripe(TEXT("T_Concrete"), D.GarageStripe * 2.2f, 300.f, 0.55f, 0.3f);
-		const FBRSurface Lower(TEXT("T_Concrete"), FLinearColor(1.35f, 1.35f, 1.32f), 300.f, 0.7f, 0.45f);
+		// v4.7 : peinture : plus lisse que le beton nu, le grain du beton ne transparait qu'un peu (RoughDetail)
+		FBRSurface Stripe(TEXT("T_Concrete"), D.GarageStripe * 2.2f, 300.f, 0.42f, 0.3f);
+		Stripe.RoughDetail = 0.3f;
+		FBRSurface Lower(TEXT("T_Concrete"), FLinearColor(1.35f, 1.35f, 1.32f), 300.f, 0.6f, 0.45f);
+		Lower.RoughDetail = 0.45f;
 		AddBox(Lower, bAlongY ? FVector(Fixed, Mid, 50.f) : FVector(Mid, Fixed, 50.f), bAlongY ? FVector(T + 1.f, Len, 100.f) : FVector(Len, T + 1.f, 100.f), false);
 		AddBox(Stripe, bAlongY ? FVector(Fixed, Mid, 112.f) : FVector(Mid, Fixed, 112.f), bAlongY ? FVector(T + 1.6f, Len, 24.f) : FVector(Len, T + 1.6f, 24.f),
 			false);
@@ -1077,7 +1080,8 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 						// Bande jaune et noire au pied du pilier, lisere blanc au-dessus (pare-chocs)
 						static const FBRSurface Hazard(TEXT("T_Hazard"), FLinearColor::White, 80.f, 0.55f, 0.25f);
 						AddBox(Hazard, FVector((X + 1) * S, (Y + 1) * S, 55.f), FVector(D.PillarSize + 3.f, D.PillarSize + 3.f, 110.f), false);
-						const FBRSurface Band(TEXT("T_Concrete"), FLinearColor(1.65f, 1.65f, 1.6f), 300.f, 0.6f, 0.2f);
+						FBRSurface Band(TEXT("T_Concrete"), FLinearColor(1.65f, 1.65f, 1.6f), 300.f, 0.45f, 0.2f);
+						Band.RoughDetail = 0.3f;
 						AddBox(Band, FVector((X + 1) * S, (Y + 1) * S, 128.f), FVector(D.PillarSize + 2.f, D.PillarSize + 2.f, 22.f), false);
 					}
 				}
@@ -1428,7 +1432,9 @@ void ABRChunk::AddFloorPaint(const FVector& Center, float Length, float Width, f
 	}
 	// Peinture sur le beton : meme texture (le grain du sol transparait), teintee ; les flaques la recouvrent aussi
 	const FBRSurface& Floor = W->Def().Floor;
-	FBRSurface Paint(TEXT("T_ConcreteFloor"), bYellow ? FLinearColor(2.1f, 1.62f, 0.32f) : FLinearColor(1.9f, 1.9f, 1.85f), Floor.Scale, 0.6f, 0.5f);
+	// v4.7 : peinture de sol : satinee, l'huile du beton ne la rend pas plus brillante (RoughDetail faible)
+	FBRSurface Paint(TEXT("T_ConcreteFloor"), bYellow ? FLinearColor(2.1f, 1.62f, 0.32f) : FLinearColor(1.9f, 1.9f, 1.85f), Floor.Scale, 0.42f, 0.5f);
+	Paint.RoughDetail = 0.25f;
 	Paint.Puddles = Floor.Puddles;
 	Paint.Wetness = Floor.Wetness;
 	AddBox(Paint, FVector(Center.X, Center.Y, 0.3f), FVector(Length, Width, 0.6f), false, Yaw);

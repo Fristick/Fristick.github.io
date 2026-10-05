@@ -757,6 +757,27 @@ void ABRWorld::ApplyEnvironment()
 	S.bOverride_LocalExposureDetailStrength = true;
 	S.LocalExposureDetailStrength = 1.12f;
 
+	// v4.7 : salles de fosses : sans brouillard volumetrique, le brouillard ordinaire voilait le fond d'environ 11 %
+	// de sa couleur ; ce qui est sous le sol s'assombrit avec la profondeur (M_BR_PitShade). Le haut des parois,
+	// eclaire par la salle, reste visible ; le fond redevient noir. Seulement dans un niveau a fosses.
+	S.WeightedBlendables.Array.RemoveAll([this](const FWeightedBlendable& B) { return PitShadeMID && B.Object == PitShadeMID; });
+	if (HasPits() && A)
+	{
+		if (!PitShadeMID)
+		{
+			PitShadeMID = A->NewPitShade(this);
+		}
+		if (PitShadeMID)
+		{
+			PitShadeMID->SetScalarParameterValue(TEXT("PitFloorZ"), 0.f);
+			PitShadeMID->SetScalarParameterValue(TEXT("PitShadeStart"), D.PitLipThickness + 30.f);
+			PitShadeMID->SetScalarParameterValue(TEXT("PitShadeRange"), FMath::Min(600.f, D.PitDepth * 0.5f));
+			PitShadeMID->SetScalarParameterValue(TEXT("PitShadeFloor"), 0.04f);
+			PitShadeMID->SetScalarParameterValue(TEXT("PitShadeAmount"), 1.f);
+			S.WeightedBlendables.Array.Add(FWeightedBlendable(1.f, PitShadeMID));
+		}
+	}
+
 	// --- Audio ---
 	AmbientAudio->Stop();
 	HumAudio->Stop();

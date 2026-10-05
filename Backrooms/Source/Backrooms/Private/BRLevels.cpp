@@ -80,7 +80,10 @@ namespace
 		D.bBlackouts = true; D.BlackoutFirst = 75.f; D.BlackoutMinInterval = 120.f; D.BlackoutMaxInterval = 220.f;
 		D.WallDetailChance = 0.1f;
 		D.Wall.FloorGrime = 0.6f;
+		// v4.7 : le motif du papier peint reste, sa repetition tous les 1,2 m ne se voit plus (teinte et aureoles a 17 m)
+		D.Wall.WallVariation = 1.f;
 		D.Pillar.FloorGrime = 0.6f;
+		D.Pillar.WallVariation = 1.f;
 		D.bPhenomena = true;
 		// v4.6 : "Hole Variation" : salles jaunes percees d'une grille de fosses profondes. Rares (1 salle garantie sur les
 		// 12 chunks hors depart, 2 avec PitRoomChance >= 0.125) ; jamais au depart ; une galerie les contourne
@@ -150,6 +153,7 @@ namespace
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 120.f;
 		D.Wall.FloorGrime = 0.5f; D.Pillar.FloorGrime = 0.5f;
+		D.Wall.WallVariation = 0.7f; D.Pillar.WallVariation = 0.7f; // v4.7 : beton coule par banches, teintes inegales
 		D.BandageChance = 0.15f; D.EnergyBarChance = 0.12f; D.GearChance = 0.04f; D.WallDetailChance = 0.05f;
 		return D;
 	}

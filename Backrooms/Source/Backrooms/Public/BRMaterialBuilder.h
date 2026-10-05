@@ -13,7 +13,8 @@ enum class EBRMasterMaterial : uint8
 	World,       // murs/sols/plafonds : triplanaire, normal maps, salete, caustiques
 	Mesh,        // modeles Blender
 	Skin,        // peau / chair (subsurface)
-	WaterSurface // eau translucide : refraction, absorption selon la profondeur, vagues simulees
+	WaterSurface, // eau translucide : refraction, absorption selon la profondeur, vagues simulees
+	PitShade      // v4.7 : post-traitement des salles de fosses : ce qui est sous le sol s'assombrit avec la profondeur
 };
 
 namespace BRMaterialBuilder

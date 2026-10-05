@@ -23,8 +23,9 @@ import unreal
 
 VERSION = 10
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
-# v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau)
-MATERIAL_VERSION = 5
+# v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
+# v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles)
+MATERIAL_VERSION = 6
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"]}
 # Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
@@ -39,7 +40,7 @@ SND = ROOT + "/Sounds"
 MESH = ROOT + "/Meshes"
 MAT = ROOT + "/Materials"
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
-MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface")
+MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade")
 # Materiaux des versions precedentes, supprimes a la mise a jour (l'eau "Single Layer Water" a disparu en v7)
 OBSOLETE_MATERIALS = ("M_BR_Water",)
 
@@ -142,6 +143,11 @@ def is_normal_map(name):
     return name.endswith("_N") or "Normal" in name
 
 
+def is_roughness_map(name):
+    """v4.7 : cartes de rugosite <Texture>_R (Tools/generate_roughness.py) : donnees lineaires"""
+    return name.endswith("_R")
+
+
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
@@ -181,6 +187,11 @@ def import_textures(files, dest=TEX, ui=False):
         elif name == "T_NoiseLF":
             # Texture de donnees (bruits du materiau du monde) : valeurs lineaires
             safe_set(tex, "srgb", False)
+        elif is_roughness_map(name):
+            # v4.7 : rugosite relative (0,5 = valeur nominale de la surface) : lineaire, compression par defaut
+            # (echantillonneur "Linear Color", comme T_NoiseLF qui sert de valeur par defaut au parametre RoughTex)
+            safe_set(tex, "srgb", False)
+            safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
         elif name == "T_LensDirt":
             safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_EFFECTS)
         EAL.save_asset(path, only_if_is_dirty=False)
@@ -693,6 +704,16 @@ def build_world_material():
     stain = g.mul(g.sat(g.div(g.sub(stain_noise, g.const(0.7)), g.const(0.12))), g.mul(g.scalar("Stains", 0.0), wz))
     col = g.mul(col, g.lerp(g.c3(1.0, 1.0, 1.0), g.c3(0.7, 0.7, 0.56), stain))
 
+    # v4.7 : murs : variation de teinte et aureoles d'humidite a l'echelle du monde (17 m) : le papier peint se
+    # repete tous les 1,2 m, ces taches non ; les aureoles sont un peu plus lisses. WallVariation = 0 : murs v4.6
+    wall_var = g.mul(g.scalar("WallVariation", 0.0), g.sub(g.const(1.0), wz))
+    wall_uv = g.div(g.append(g.dot(xy, g.c2(0.707, 0.707)), g.mask(wp, "b")), g.const(1700.0))
+    wall_tone = g.tex("NoiseTex", noise_tex, wall_uv, out="G")
+    col = g.mul(col, g.add(g.const(1.0), g.mul(g.mul(g.sub(wall_tone, g.const(0.5)), g.const(0.3)), wall_var)))
+    wall_damp_n = g.tex("NoiseTex", noise_tex, g.add(g.mul(wall_uv, g.const(1.9)), g.c2(0.31, 0.77)), out="R")
+    wall_damp = g.mul(g.sat(g.div(g.sub(wall_damp_n, g.const(0.68)), g.const(0.1))), wall_var)
+    col = g.mul(col, g.lerp(g.c3(1.0, 1.0, 1.0), g.c3(0.8, 0.76, 0.62), wall_damp))
+
     # Salete a grande echelle (casse la repetition)
     guv = g.div(g.append(g.dot(wp, g.c3(0.7, 0.3, 0.0)), g.dot(wp, g.c3(0.0, 0.5, 1.0))), g.scalar("GrimeScale", 900.0))
     gs = g.tex("GrimeTex", grime_tex, guv, out="R")
@@ -733,7 +754,16 @@ def build_world_material():
 
     # Rugosite variable (zones plus lisses / plus mates), puis mouillee, puis miroir dans les flaques
     rv = g.tex("GrimeTex", grime_tex, g.mul(guv, g.const(3.1)), out="B")
-    rough = g.sat(g.add(g.scalar("Roughness", 0.85), g.mul(g.sub(rv, g.const(0.5)), g.const(0.3))))
+    # v4.7 : carte de rugosite de la matiere (<Texture>_R, lineaire, relative a Roughness : 0,5 = valeur nominale),
+    # un seul echantillon projete sur l'axe dominant de la face ; RoughContrast = 0 : rugosite v4.6
+    step_x = g.sat(g.mul(g.sub(wx, wy), g.const(1000.0)))
+    step_z = g.sat(g.mul(g.sub(wz, g.const(0.5)), g.const(1000.0)))
+    uvr = g.lerp(g.lerp(uvy, uvx, step_x), uvz, step_z)
+    rmap = g.tex("RoughTex", noise_tex, uvr, out="R")
+    rcon = g.scalar("RoughContrast", 0.0)
+    grime_var = g.mul(g.sub(rv, g.const(0.5)), g.sub(g.const(0.3), g.mul(rcon, g.const(0.18))))
+    rough = g.sat(g.add(g.add(g.scalar("Roughness", 0.85), grime_var), g.mul(g.sub(rmap, g.const(0.5)), g.mul(rcon, g.const(2.0)))))
+    rough = g.sat(g.sub(rough, g.mul(wall_damp, g.const(0.15))))
     rough = g.lerp(rough, g.mul(rough, g.const(0.35)), wet)
     rough = g.lerp(rough, g.const(0.02), puddle)
     g.output(rough, P.MP_ROUGHNESS)
@@ -744,6 +774,29 @@ def build_world_material():
     nrm = tri("NormalTex", load_tex("T_FlatNormal"), normal=True)
     nrm = g.lerp(g.c3(0.0, 0.0, 1.0), nrm, g.scalar("NormalStrength", 1.0))
     g.output(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), P.MP_NORMAL)
+    finish_material(m)
+    return m
+
+
+def build_pit_shade_material():
+    """v4.7 : post-traitement des salles de fosses (meme graphe que BuildPitShade en C++). Le brouillard ordinaire ajoute
+    sa couleur au fond d'un puits de 14 m (environ 11 % de voile a 15 m avec la densite du Niveau 0) : les pixels situes
+    sous le sol s'assombrissent progressivement avec la profondeur ; le haut des parois reste visible."""
+    m = new_material("M_BR_PitShade")
+    safe_set(m, "material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    safe_set(m, "blendable_location", unreal.BlendableLocation.BL_SCENE_COLOR_BEFORE_DOF)
+    safe_set(m, "shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    g = Graph(m)
+    P = unreal.MaterialProperty
+    st = g.node(unreal.MaterialExpressionSceneTexture)
+    st.set_editor_property("scene_texture_id", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0)
+    scene = g.mask((st, "Color"), "rgb")
+    z = g.mask(g.world_pos(), "b")
+    below = g.sub(g.sub(g.scalar("PitFloorZ", 0.0), g.scalar("PitShadeStart", 60.0)), z)
+    t = g.sat(g.div(below, g.scalar("PitShadeRange", 600.0)))
+    ease = g.mul(g.mul(t, g.sub(g.const(2.0), t)), g.scalar("PitShadeAmount", 1.0))
+    factor = g.lerp(g.const(1.0), g.scalar("PitShadeFloor", 0.04), ease)
+    g.output(g.mul(scene, factor), P.MP_EMISSIVE_COLOR)
     finish_material(m)
     return m
 
@@ -759,7 +812,14 @@ def build_mesh_material(name="M_BR_Mesh", skin=False):
     t = g.tex("BaseTex", load_tex("T_Skin" if skin else "T_Grime"), uv)
     base = g.mul(t, g.vector("Tint", (1, 1, 1, 1)))
     g.output(base, P.MP_BASE_COLOR)
-    g.output(g.scalar("Roughness", 0.6 if skin else 0.85), P.MP_ROUGHNESS)
+    # v4.7 : carte de rugosite des peaux (bouches luisantes, dents, grain), relative a Roughness ; defaut lineaire
+    noise_tex = load_tex("T_NoiseLF")
+    if noise_tex and not is_srgb(noise_tex):
+        rmap = g.tex("RoughTex", noise_tex, uv, out="R")
+        g.output(g.sat(g.add(g.scalar("Roughness", 0.6 if skin else 0.85),
+                             g.mul(g.sub(rmap, g.const(0.5)), g.mul(g.scalar("RoughContrast", 0.0), g.const(2.0))))), P.MP_ROUGHNESS)
+    else:
+        g.output(g.scalar("Roughness", 0.6 if skin else 0.85), P.MP_ROUGHNESS)
     g.output(g.scalar("Metallic", 0.0), P.MP_METALLIC)
     g.output(g.add(g.mul(base, g.scalar("SelfIllum", 0.0)), g.vector("Emissive", (0, 0, 0, 1))), P.MP_EMISSIVE_COLOR)
     if skin:
@@ -978,7 +1038,7 @@ def build_materials():
                 warn("Suppression impossible %s : %s" % (name, e))
     jobs = (("M_BR_World", build_world_material), ("M_BR_Mesh", build_mesh_material),
             ("M_BR_Skin", lambda: build_mesh_material("M_BR_Skin", skin=True)),
-            ("M_BR_WaterSurface", build_water_surface_material))
+            ("M_BR_WaterSurface", build_water_surface_material), ("M_BR_PitShade", build_pit_shade_material))
     for name, fn in jobs:
         try:
             fn()
