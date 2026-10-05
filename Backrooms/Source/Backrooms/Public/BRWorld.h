@@ -226,13 +226,37 @@ public:
 	float ChunkActorMsTotal = 0.f;
 	float MaxChunkPlanMs = 0.f;
 	int32 ForcedChunkBuilds = 0;
-	/** Budget de construction des chunks par image (ms) ; -BRChunkBudget=<ms> */
+	/** Budget de construction des chunks par image (ms) ; -BRChunkBudget=<ms>.
+	 *  v4.8 : budget de generation PARTAGE par image (planification, creation et demontage des chunks), -BRFrameBudget=<ms>
+	 *  (ou -BRChunkBudget=) ; il baisse tout seul quand l'image depasse 16,7 ms et remonte quand il y a de la marge */
 	float ChunkStepBudgetMs = 4.f;
+	/** v4.8 : budget de l'image en cours (adapte) et plafond configure */
+	float FrameBudgetMs = 4.f;
+	/** v4.8 : statistiques de fluidite du streaming : pire image de generation, images au-dela du budget, chunks
+	 *  demontes, collisions preparees a l'avance (position predite d'un joueur) */
+	int32 FramesOverBudget = 0;
+	int32 ChunksTornDown = 0;
+	int32 PredictedCollisionBuilds = 0;
+	float MaxTeardownMs = 0.f;
 	void ResetChunkStats()
 	{
 		MaxChunkBuildMs = 0.f; ChunkBuildMsTotal = 0.f; ChunksBuilt = 0; ChunkPlanMsTotal = 0.f; ChunkCollisionMsTotal = 0.f;
 		ChunkVisualMsTotal = 0.f; ChunkLightMsTotal = 0.f; ChunkActorMsTotal = 0.f; MaxChunkPlanMs = 0.f; ForcedChunkBuilds = 0;
+		FramesOverBudget = 0; ChunksTornDown = 0; PredictedCollisionBuilds = 0; MaxTeardownMs = 0.f;
 	}
+	/** v4.8 : une lumiere a cette position doit-elle projeter une ombre (distance au joueur local le plus proche, selon le
+	 *  profil graphique) ? */
+	bool ShouldCastLocalShadow(const FVector& LightPos) const;
+	/** v4.8 : distance d'ombre des lumieres locales (cm) pour le profil courant */
+	static float LocalShadowDistance();
+	/** v4.8 : reglages graphiques changes : lumieres des chunks deja construits (type, ombres), detail des entites */
+	void OnGraphicsSettingsChanged();
+	/** v4.8 : lumieres projetant une ombre (dernier passage) */
+	int32 GetShadowedLightCount() const { return ShadowedLights; }
+	/** v4.8 : temps passe a attendre la compilation des shaders derriere l'ecran noir de l'arrivee (0 : aucune attente) */
+	float GetShaderHold() const { return ShaderHold; }
+	/** v4.8 : des shaders (PSO, ou materiaux dans l'editeur) sont encore en compilation */
+	static int32 ShadersInFlight();
 	uint32 GetSeed() const { return Seed; }
 
 	// ------------------------------------------------------------ Etat
@@ -405,6 +429,27 @@ private:
 	void OnChunkReady(const ABRChunk* Chunk);
 	/** Temps passe a construire des chunks pendant l'image en cours (ms) */
 	float FrameChunkMs = 0.f;
+	/** v4.8 : chunks sortis de la vue, demontes quelques composants par image */
+	UPROPERTY()
+	TArray<TObjectPtr<ABRChunk>> TearingDown;
+	/** v4.8 : chunks dont les lumieres doivent changer de type (un chunk par image) */
+	TArray<TWeakObjectPtr<ABRChunk>> LightRefreshQueue;
+	float ShadowLODTimer = 0.f;
+	int32 ShadowedLights = 0;
+	/** v4.8 : arrivee dans un niveau : ecran noir tenu (8 s au plus) tant que des shaders se compilent ; modeles a
+	 *  squelette montres une fois derriere le noir pour preparer leurs shaders (PSO, ray tracing) et leurs textures */
+	float ShaderHold = 0.f;
+	float PrewarmTime = -1.f;
+	UPROPERTY()
+	TArray<TObjectPtr<USceneComponent>> PrewarmComps;
+	void PrewarmModels();
+	void EndPrewarm();
+	/** v4.8 : positions des joueurs pour la generation : actuelle et predite (vitesse x anticipation) */
+	void GetStreamingCenters(TArray<FVector>& OutNow, TArray<FVector>& OutPredicted) const;
+	/** v4.8 : demonte les chunks en attente dans le budget restant de l'image */
+	void StepTeardowns(double RemainingMs);
+	/** v4.8 : ombres des lumieres selon la distance (toutes les 0,25 s) et changement de type des lumieres (budget) */
+	void UpdateLightLOD(float Dt);
 	void BeginTransition(int32 TargetLevel, bool bFromDeath);
 	/** Client : suit le niveau du serveur. false tant qu'aucun niveau n'est construit */
 	bool SyncNetLevel();

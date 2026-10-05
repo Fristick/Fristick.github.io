@@ -391,8 +391,12 @@ struct FBRSettings
 	float Sensitivity = 1.f;
 	bool bInvertY = false;
 	float FOV = 88.f;
-	/** v4.5 : profil graphique : 0 Performance, 1 Qualite, 2 Cinematique, 3 Personnalise (un reglage modifie a la main) */
+	/** v4.5 : profil graphique : 0 Performance, 1 Qualite, 2 Cinematique, 3 Personnalise (un reglage modifie a la main),
+	 *  v4.8 : 4 RTX fluide (Lumen materiel, cache de surfaces, TSR a 67 %, ombres des neons limitees a 25 m) */
 	int32 GraphicsProfile = 1;
+	/** v4.8 : modeles complets des entites (Hound d'origine, 175 000 sommets, au lieu du derive allege) : reglage effectif,
+	 *  donne par le profil (Cinematique) ou choisi a la main (Personnalise) ; s'applique aussi aux entites presentes */
+	bool bFullCreatures = false;
 	int32 Quality = 3;          // 0 Bas .. 4 Cinematique
 	bool bHardwareRT = true;    // Lumen en ray tracing materiel (RTX)
 	bool bRTHitLighting = false;

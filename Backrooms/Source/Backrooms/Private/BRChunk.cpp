@@ -147,6 +147,9 @@ void ABRChunk::AddWaterPlane(const FVector& Center, const FVector2D& Size, bool 
 	UMaterialInterface* Mat = bCalm ? A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.2f, 0.4f)
 		: A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, D.WaterWaves, D.WaterChop);
 	FBatch& B = GetBatch(bCalm ? TEXT("WATER|CALM") : TEXT("WATER"), Grid ? Grid : A->Plane(), Mat, false, false, 0.f);
+	// v4.8 : l'eau translucide n'entre pas dans la scene ray tracee : les reflets des autres surfaces voient le fond du
+	// bassin au lieu d'une surface noire (l'eau garde ses propres reflets, Lumen "front layer")
+	B.bNoRayTracing = true;
 	B.Transforms.Add(FTransform(FRotator::ZeroRotator, Center - GetActorLocation(), FVector(Size.X / 100.f, Size.Y / 100.f, 1.f)));
 }
 
@@ -885,9 +888,52 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		return;
 	}
 
+	// v4.8 : la lumiere est decrite (FLightRecord) puis creee : elle peut etre recreee d'un autre type quand le reglage
+	// change, et son ombre coupee au loin
+	FLightRecord R;
+	R.Pos = LightPos;
+	R.Yaw = L.Yaw;
+	R.Fixture = D.Fixture;
+	R.SourceLength = SourceLength;
+	R.bShadow = L.bShadow;
+	R.bShadowOn = L.bShadow && W->ShouldCastLocalShadow(LightPos);
+	if (bIndividual && Flickers.Num() > 0)
+	{
+		R.FlickerIndex = Flickers.Num() - 1;
+	}
 	// Neons et dalles lumineuses : lumieres surfaciques (ombres douces, reflets realistes en ray tracing)
-	const bool bArea = FBRSettings::Get().bAreaLights
-		&& (D.Fixture == EBRFixture::Panel || D.Fixture == EBRFixture::SkyPanel || D.Fixture == EBRFixture::Tube);
+	ULocalLightComponent* LC = CreateLightComponent(R, FBRSettings::Get().bAreaLights && IsAreaFixture(D.Fixture));
+	++LightCount;
+	if (!bIndividual)
+	{
+		R.PoweredIndex = PoweredLights.Num();
+		PoweredLights.Add(LC);
+		PoweredBase.Add(R.Lumens);
+	}
+	else if (R.FlickerIndex != INDEX_NONE)
+	{
+		FBRFlicker& F = Flickers[R.FlickerIndex];
+		F.Light = LC;
+		F.BaseIntensity = R.Lumens;
+		F.Timer = FMath::FRandRange(0.1f, 2.f);
+	}
+	LightRecords.Add(R);
+}
+
+bool ABRChunk::IsAreaFixture(EBRFixture Fixture)
+{
+	return Fixture == EBRFixture::Panel || Fixture == EBRFixture::SkyPanel || Fixture == EBRFixture::Tube;
+}
+
+ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea)
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return nullptr;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float H = D.WallHeight;
 	ULocalLightComponent* LC = nullptr;
 	float Lumens = D.LightLumens;
 	if (bArea)
@@ -895,18 +941,18 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		URectLightComponent* RL = NewObject<URectLightComponent>(this);
 		RL->SetupAttachment(Root);
 		RL->SetMobility(EComponentMobility::Movable);
-		FVector RectPos = LightPos;
-		RectPos.Z = H - (D.Fixture == EBRFixture::Tube ? 12.f : 5.f);
+		FVector RectPos = R.Pos;
+		RectPos.Z = H - (R.Fixture == EBRFixture::Tube ? 12.f : 5.f);
 		RL->SetRelativeLocation(RectPos - GetActorLocation());
-		RL->SetRelativeRotation(FRotator(-90.f, L.Yaw, 0.f)); // eclaire vers le bas
+		RL->SetRelativeRotation(FRotator(-90.f, R.Yaw, 0.f)); // eclaire vers le bas
 		float Width = 55.f;
 		float Length = 115.f;
-		if (D.Fixture == EBRFixture::SkyPanel)
+		if (R.Fixture == EBRFixture::SkyPanel)
 		{
 			Width = 55.f;
 			Length = 150.f;
 		}
-		else if (D.Fixture == EBRFixture::Tube)
+		else if (R.Fixture == EBRFixture::Tube)
 		{
 			Width = 8.f;
 			Length = 120.f;
@@ -923,36 +969,99 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		UPointLightComponent* PL = NewObject<UPointLightComponent>(this);
 		PL->SetupAttachment(Root);
 		PL->SetMobility(EComponentMobility::Movable);
-		PL->SetRelativeLocation(LightPos - GetActorLocation());
-		PL->SetSourceRadius(D.Fixture == EBRFixture::SkyPanel ? 40.f : 8.f);
-		PL->SetSourceLength(SourceLength);
+		PL->SetRelativeLocation(R.Pos - GetActorLocation());
+		PL->SetSourceRadius(R.Fixture == EBRFixture::SkyPanel ? 40.f : 8.f);
+		PL->SetSourceLength(R.SourceLength);
 		LC = PL;
 	}
 	LC->SetIntensityUnits(ELightUnits::Lumens);
 	LC->SetIntensity(Lumens * Power);
 	LC->SetLightColor(D.LightColor);
 	LC->SetAttenuationRadius(D.LightRadius);
-	LC->SetCastShadows(L.bShadow);
+	LC->SetCastShadows(R.bShadow && R.bShadowOn);
 	LC->SetVolumetricScatteringIntensity(D.bVolumetricFog ? D.VolumetricScatter : 0.f);
 	LC->MaxDrawDistance = D.ViewDistance * 0.75f;
 	LC->MaxDistanceFadeRange = 800.f;
 	LC->SetVisibility(Power > 0.01f);
 	LC->RegisterComponent();
 	Extra.Add(LC);
-	++LightCount;
+	R.Comp = LC;
+	R.bArea = bArea;
+	R.Lumens = Lumens;
+	return LC;
+}
 
-	if (!bIndividual)
+bool ABRChunk::LightTypesMatch(bool bArea) const
+{
+	for (const FLightRecord& R : LightRecords)
 	{
-		PoweredLights.Add(LC);
-		PoweredBase.Add(Lumens);
+		if (IsAreaFixture(R.Fixture) && R.bArea != bArea)
+		{
+			return false;
+		}
 	}
+	return true;
+}
 
-	if (bIndividual && Flickers.Num() > 0)
+int32 ABRChunk::RefreshLightTypes(bool bArea)
+{
+	int32 Count = 0;
+	for (FLightRecord& R : LightRecords)
 	{
-		Flickers.Last().Light = LC;
-		Flickers.Last().BaseIntensity = Lumens;
-		Flickers.Last().Timer = FMath::FRandRange(0.1f, 2.f);
+		if (!IsAreaFixture(R.Fixture) || R.bArea == bArea)
+		{
+			continue;
+		}
+		ULocalLightComponent* Old = R.Comp.Get();
+		ULocalLightComponent* New = CreateLightComponent(R, bArea);
+		if (R.PoweredIndex != INDEX_NONE && PoweredLights.IsValidIndex(R.PoweredIndex))
+		{
+			PoweredLights[R.PoweredIndex] = New;
+			PoweredBase[R.PoweredIndex] = R.Lumens;
+		}
+		else if (Flickers.IsValidIndex(R.FlickerIndex))
+		{
+			Flickers[R.FlickerIndex].Light = New;
+			Flickers[R.FlickerIndex].BaseIntensity = R.Lumens;
+			Flickers[R.FlickerIndex].AppliedMod = -1.f; // intensite et couleur reappliquees a la prochaine image
+		}
+		if (Old)
+		{
+			Extra.Remove(Old);
+			Old->DestroyComponent();
+		}
+		++Count;
 	}
+	return Count;
+}
+
+int32 ABRChunk::UpdateShadowLOD(const TArray<FVector>& Viewers, float ShadowDistance)
+{
+	int32 Shadowed = 0;
+	for (FLightRecord& R : LightRecords)
+	{
+		if (!R.bShadow)
+		{
+			continue;
+		}
+		float Best = 1e20f;
+		for (const FVector& V : Viewers)
+		{
+			Best = FMath::Min(Best, static_cast<float>(FVector::Dist(V, R.Pos)));
+		}
+		// Marge de 10 % : une lumiere a la limite ne bascule pas a chaque pas
+		const bool bWant = Best < ShadowDistance * (R.bShadowOn ? 1.1f : 1.f);
+		if (bWant != R.bShadowOn)
+		{
+			R.bShadowOn = bWant;
+			if (ULocalLightComponent* LC = R.Comp.Get())
+			{
+				LC->SetCastShadows(bWant);
+			}
+		}
+		Shadowed += R.bShadowOn ? 1 : 0;
+	}
+	return Shadowed;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -967,19 +1076,37 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 
 void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 {
-	const double PlanStart = FPlatformTime::Seconds();
 	World = InWorld;
 	Coord = InCoord;
 	bReady = false;
 	bCollisionReady = false;
+	bPlanned = false;
 	BuildPhase = 0;
+	PlanStage = 0;
+	PlanCursor = 0;
+	ActorCursor = 0;
 	Stats = FBuildStats();
 	if (!InWorld)
 	{
-		bReady = bCollisionReady = true;
+		bReady = bCollisionReady = bPlanned = true;
 		return;
 	}
+	// v4.8 : rien n'est planifie ici (la planification d'un chunk riche prenait plusieurs millisecondes d'un bloc) :
+	// StepBuild la fait par colonnes de cellules, dans le budget de l'image. Les lumieres sont mises en attente.
 	bDeferLights = true;
+	// v4.6 : salle de fosses reservee avant tout le reste (murs, cachettes, sorties, objets et accessoires l'evitent)
+	bHasPitRoom = InWorld->GetPitRoom(Coord, PitRoom);
+}
+
+bool ABRChunk::StepPlan()
+{
+	ABRWorld* InWorld = World.Get();
+	if (!InWorld)
+	{
+		bPlanned = true;
+		bDeferLights = false;
+		return true;
+	}
 	const FBRLevelDef& D = InWorld->Def();
 	const int32 N = D.ChunkCells;
 	const float S = D.CellSize;
@@ -992,138 +1119,168 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 	const float ChunkW = N * S;
 	const FVector Mid(WX0 + ChunkW * 0.5f, WY0 + ChunkW * 0.5f, 0.f);
 	const uint32 Seed = InWorld->GetSeed();
-
-	// v4.6 : salle de fosses reservee avant tout le reste (murs, cachettes, sorties, objets et accessoires l'evitent)
-	bHasPitRoom = InWorld->GetPitRoom(Coord, PitRoom);
-
-	// ---- Sol & plafond ----
-	if (D.PoolChance > 0.f)
+	const bool bWalls = D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze;
+	// Une unite par appel : une etape courte, ou une colonne de cellules d'une etape par colonnes (meme ordre qu'en v4.7 :
+	// le resultat ne depend pas du decoupage)
+	auto NextColumn = [this, N]()
 	{
-		BuildPools();
+		if (++PlanCursor >= N)
+		{
+			PlanCursor = 0;
+			++PlanStage;
+		}
+	};
+	switch (PlanStage)
+	{
+	case 0:
+	{
+		// ---- Sol & plafond ----
+		if (D.PoolChance > 0.f)
+		{
+			BuildPools();
+		}
+		else if (bHasPitRoom)
+		{
+			BuildPitRoom(PitRoom);
+		}
+		else
+		{
+			AddBox(D.Floor, FVector(Mid.X, Mid.Y, -10.f), FVector(ChunkW, ChunkW, 20.f));
+		}
+		if (D.DeckHeight > 0.f)
+		{
+			BuildDecks();
+		}
+		if (D.bWater)
+		{
+			AddWaterPlane(FVector(Mid.X, Mid.Y, D.WaterHeight), FVector2D(ChunkW, ChunkW));
+		}
+		++PlanStage;
+		break;
 	}
-	else if (bHasPitRoom)
+	case 1:
 	{
-		BuildPitRoom(PitRoom);
-	}
-	else
-	{
-		AddBox(D.Floor, FVector(Mid.X, Mid.Y, -10.f), FVector(ChunkW, ChunkW, 20.f));
-	}
-	if (D.DeckHeight > 0.f)
-	{
-		BuildDecks();
-	}
-	if (D.bWater)
-	{
-		AddWaterPlane(FVector(Mid.X, Mid.Y, D.WaterHeight), FVector2D(ChunkW, ChunkW));
-	}
-
-	// ---- Murs (labyrinthes / salles) ----
-	if (D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze)
-	{
+		// ---- Murs (labyrinthes / salles) ----
+		if (!bWalls)
+		{
+			PlanStage = 4;
+			break;
+		}
 		const bool bPipes = D.Props == EBRProps::Pipes;
 		// Lignes verticales (X fixe) : aretes Est des cellules
-		for (int32 X = X0; X < X0 + N; ++X)
+		const int32 X = X0 + PlanCursor;
+		const float Fixed = (X + 1) * S;
+		int32 RunStart = MIN_int32;
+		for (int32 Y = Y0; Y <= Y0 + N; ++Y)
 		{
-			const float Fixed = (X + 1) * S;
-			int32 RunStart = MIN_int32;
-			for (int32 Y = Y0; Y <= Y0 + N; ++Y)
+			const EBREdge E = (Y < Y0 + N) ? InWorld->EdgeE(X, Y) : EBREdge::Open;
+			if (E == EBREdge::Wall)
 			{
-				const EBREdge E = (Y < Y0 + N) ? InWorld->EdgeE(X, Y) : EBREdge::Open;
-				if (E == EBREdge::Wall)
+				if (RunStart == MIN_int32)
 				{
-					if (RunStart == MIN_int32)
-					{
-						RunStart = Y;
-					}
-					continue;
+					RunStart = Y;
 				}
-				if (RunStart != MIN_int32)
-				{
-					const bool bRunPipes = bPipes || (D.Props == EBRProps::Electrical && BRHash::Rand(X, RunStart, 960, Seed) < 0.35f);
-					AddWallSegment(true, Fixed, RunStart * S - T * 0.5f, Y * S + T * 0.5f, 0.f, H, true, bRunPipes);
-					RunStart = MIN_int32;
-				}
-				if (E == EBREdge::Door)
-				{
-					AddDoorway(true, Fixed, (Y + 0.5f) * S);
-				}
+				continue;
+			}
+			if (RunStart != MIN_int32)
+			{
+				const bool bRunPipes = bPipes || (D.Props == EBRProps::Electrical && BRHash::Rand(X, RunStart, 960, Seed) < 0.35f);
+				AddWallSegment(true, Fixed, RunStart * S - T * 0.5f, Y * S + T * 0.5f, 0.f, H, true, bRunPipes);
+				RunStart = MIN_int32;
+			}
+			if (E == EBREdge::Door)
+			{
+				AddDoorway(true, Fixed, (Y + 0.5f) * S);
 			}
 		}
+		NextColumn();
+		break;
+	}
+	case 2:
+	{
+		const bool bPipes = D.Props == EBRProps::Pipes;
 		// Lignes horizontales (Y fixe) : aretes Nord
-		for (int32 Y = Y0; Y < Y0 + N; ++Y)
+		const int32 Y = Y0 + PlanCursor;
+		const float Fixed = (Y + 1) * S;
+		int32 RunStart = MIN_int32;
+		for (int32 X = X0; X <= X0 + N; ++X)
 		{
-			const float Fixed = (Y + 1) * S;
-			int32 RunStart = MIN_int32;
-			for (int32 X = X0; X <= X0 + N; ++X)
+			const EBREdge E = (X < X0 + N) ? InWorld->EdgeN(X, Y) : EBREdge::Open;
+			if (E == EBREdge::Wall)
 			{
-				const EBREdge E = (X < X0 + N) ? InWorld->EdgeN(X, Y) : EBREdge::Open;
-				if (E == EBREdge::Wall)
+				if (RunStart == MIN_int32)
 				{
-					if (RunStart == MIN_int32)
-					{
-						RunStart = X;
-					}
-					continue;
+					RunStart = X;
 				}
-				if (RunStart != MIN_int32)
-				{
-					const bool bRunPipes = bPipes || (D.Props == EBRProps::Electrical && BRHash::Rand(RunStart, Y, 961, Seed) < 0.35f);
-					AddWallSegment(false, Fixed, RunStart * S - T * 0.5f, X * S + T * 0.5f, 0.f, H, true, bRunPipes);
-					RunStart = MIN_int32;
-				}
-				if (E == EBREdge::Door)
-				{
-					AddDoorway(false, Fixed, (X + 0.5f) * S);
-				}
+				continue;
+			}
+			if (RunStart != MIN_int32)
+			{
+				const bool bRunPipes = bPipes || (D.Props == EBRProps::Electrical && BRHash::Rand(RunStart, Y, 961, Seed) < 0.35f);
+				AddWallSegment(false, Fixed, RunStart * S - T * 0.5f, X * S + T * 0.5f, 0.f, H, true, bRunPipes);
+				RunStart = MIN_int32;
+			}
+			if (E == EBREdge::Door)
+			{
+				AddDoorway(false, Fixed, (X + 0.5f) * S);
 			}
 		}
-		// Niveau fini (v4.3) : murs d'enceinte a l'ouest et au sud (a l'est et au nord, ce sont des aretes de la grille)
-		if (D.BoundsChunks > 0)
+		NextColumn();
+		break;
+	}
+	case 3:
+	{
+		if (PlanCursor == 0)
 		{
-			if (Coord.X == -D.BoundsChunks)
+			// Niveau fini (v4.3) : murs d'enceinte a l'ouest et au sud (a l'est et au nord, ce sont des aretes de la grille)
+			if (D.BoundsChunks > 0)
 			{
-				AddWallSegment(true, X0 * S, Y0 * S - T * 0.5f, (Y0 + N) * S + T * 0.5f, 0.f, H, true, false);
-			}
-			if (Coord.Y == -D.BoundsChunks)
-			{
-				AddWallSegment(false, Y0 * S, X0 * S - T * 0.5f, (X0 + N) * S + T * 0.5f, 0.f, H, true, false);
+				if (Coord.X == -D.BoundsChunks)
+				{
+					AddWallSegment(true, X0 * S, Y0 * S - T * 0.5f, (Y0 + N) * S + T * 0.5f, 0.f, H, true, false);
+				}
+				if (Coord.Y == -D.BoundsChunks)
+				{
+					AddWallSegment(false, Y0 * S, X0 * S - T * 0.5f, (X0 + N) * S + T * 0.5f, 0.f, H, true, false);
+				}
 			}
 		}
 		// Piliers aux coins
-		for (int32 X = X0; X < X0 + N; ++X)
+		const int32 X = X0 + PlanCursor;
+		for (int32 Y = Y0; Y < Y0 + N; ++Y)
 		{
-			for (int32 Y = Y0; Y < Y0 + N; ++Y)
+			if (InWorld->HasPillar(X, Y))
 			{
-				if (InWorld->HasPillar(X, Y))
+				AddBox(D.Pillar.Texture.IsNone() ? D.Wall : D.Pillar, FVector((X + 1) * S, (Y + 1) * S, H * 0.5f),
+					FVector(D.PillarSize, D.PillarSize, H));
+				if (D.bGarage)
 				{
-					AddBox(D.Pillar.Texture.IsNone() ? D.Wall : D.Pillar, FVector((X + 1) * S, (Y + 1) * S, H * 0.5f),
-						FVector(D.PillarSize, D.PillarSize, H));
-					if (D.bGarage)
-					{
-						// Bande jaune et noire au pied du pilier, lisere blanc au-dessus (pare-chocs)
-						static const FBRSurface Hazard(TEXT("T_Hazard"), FLinearColor::White, 80.f, 0.55f, 0.25f);
-						AddBox(Hazard, FVector((X + 1) * S, (Y + 1) * S, 55.f), FVector(D.PillarSize + 3.f, D.PillarSize + 3.f, 110.f), false);
-						FBRSurface Band(TEXT("T_Concrete"), FLinearColor(1.65f, 1.65f, 1.6f), 300.f, 0.45f, 0.2f);
-						Band.RoughDetail = 0.3f;
-						AddBox(Band, FVector((X + 1) * S, (Y + 1) * S, 128.f), FVector(D.PillarSize + 2.f, D.PillarSize + 2.f, 22.f), false);
-					}
+					// Bande jaune et noire au pied du pilier, lisere blanc au-dessus (pare-chocs)
+					static const FBRSurface Hazard(TEXT("T_Hazard"), FLinearColor::White, 80.f, 0.55f, 0.25f);
+					AddBox(Hazard, FVector((X + 1) * S, (Y + 1) * S, 55.f), FVector(D.PillarSize + 3.f, D.PillarSize + 3.f, 110.f), false);
+					FBRSurface Band(TEXT("T_Concrete"), FLinearColor(1.65f, 1.65f, 1.6f), 300.f, 0.45f, 0.2f);
+					Band.RoughDetail = 0.3f;
+					AddBox(Band, FVector((X + 1) * S, (Y + 1) * S, 128.f), FVector(D.PillarSize + 2.f, D.PillarSize + 2.f, 22.f), false);
 				}
 			}
 		}
+		NextColumn();
+		break;
 	}
-
-	if (D.bGarage)
-	{
-		BuildGarage();
-	}
-
-	// ---- Cellules pleines (hotel, grottes) ----
-	if (D.Layout == EBRLayout::Hotel || D.Layout == EBRLayout::Caves)
-	{
-		const FBRSurface& SolidS = D.Solid.Texture.IsNone() ? D.Wall : D.Solid;
-		for (int32 X = X0; X < X0 + N; ++X)
+	case 4:
+		if (D.bGarage)
 		{
+			BuildGarage();
+		}
+		PlanStage = (D.Layout == EBRLayout::Hotel || D.Layout == EBRLayout::Caves) ? 5 : 6;
+		break;
+	case 5:
+	{
+		// ---- Cellules pleines (hotel, grottes) ----
+		if (D.Layout == EBRLayout::Hotel || D.Layout == EBRLayout::Caves)
+		{
+			const FBRSurface& SolidS = D.Solid.Texture.IsNone() ? D.Wall : D.Solid;
+			const int32 X = X0 + PlanCursor;
 			for (int32 Y = Y0; Y < Y0 + N; ++Y)
 			{
 				if (!InWorld->IsSolid(X, Y))
@@ -1155,13 +1312,20 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 				}
 			}
 		}
+		NextColumn();
+		break;
 	}
-
-	// ---- Banlieue : routes et maisons ----
-	if (D.Layout == EBRLayout::Suburbs)
+	case 6:
 	{
-		for (int32 X = X0; X < X0 + N; ++X)
+		if (D.Layout != EBRLayout::Suburbs)
 		{
+			PlanStage = 7;
+			break;
+		}
+		// ---- Banlieue : routes et maisons ----
+		if (D.Layout == EBRLayout::Suburbs)
+		{
+			const int32 X = X0 + PlanCursor;
 			for (int32 Y = Y0; Y < Y0 + N; ++Y)
 			{
 				const bool bRoad = BRHash::PosMod(X, D.Spacing) == 0 || BRHash::PosMod(Y, D.Spacing) == 0;
@@ -1185,14 +1349,21 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 				}
 			}
 		}
+		NextColumn();
+		break;
 	}
-
-	// ---- Ville : immeubles ----
-	if (D.Layout == EBRLayout::City)
+	case 7:
 	{
-		const int32 Sp = D.Spacing;
-		for (int32 X = X0; X < X0 + N; ++X)
+		if (D.Layout != EBRLayout::City)
 		{
+			PlanStage = 8;
+			break;
+		}
+		// ---- Ville : immeubles ----
+		if (D.Layout == EBRLayout::City)
+		{
+			const int32 Sp = D.Spacing;
+			const int32 X = X0 + PlanCursor;
 			for (int32 Y = Y0; Y < Y0 + N; ++Y)
 			{
 				if (BRHash::PosMod(X, Sp) != 1 || BRHash::PosMod(Y, Sp) != 1)
@@ -1215,24 +1386,30 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 				}
 			}
 		}
+		NextColumn();
+		break;
 	}
-
-	// ---- Cachettes (avant les accessoires : on ne pose rien dans un placard) ----
-	if (D.HidingSpotChance > 0.f && (D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze))
+	case 8:
+		// ---- Cachettes (avant les accessoires : on ne pose rien dans un placard) ----
+		if (D.HidingSpotChance > 0.f && (D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze))
+		{
+			BuildHidingSpots();
+		}
+		++PlanStage;
+		break;
+	case 9:
+		// ---- Sorties (decidees avant le plafond : une echelle le perce d'une trappe) et plafond ----
+		PlanExits();
+		if (D.bCeiling)
+		{
+			BuildCeiling();
+		}
+		++PlanStage;
+		break;
+	case 10:
 	{
-		BuildHidingSpots();
-	}
-
-	// ---- Sorties (decidees avant le plafond : une echelle le perce d'une trappe) et plafond ----
-	PlanExits();
-	if (D.bCeiling)
-	{
-		BuildCeiling();
-	}
-
-	// ---- Lumieres & accessoires par cellule ----
-	for (int32 X = X0; X < X0 + N; ++X)
-	{
+		// ---- Lumieres & accessoires par cellule ----
+		const int32 X = X0 + PlanCursor;
 		for (int32 Y = Y0; Y < Y0 + N; ++Y)
 		{
 			const FBRLightInfo L = InWorld->CellLight(X, Y);
@@ -1249,16 +1426,20 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 				BuildCellProps(X, Y);
 			}
 		}
+		NextColumn();
+		break;
 	}
-
-	if (D.SkylightChance > 0.f)
-	{
-		BuildSkylight();
+	default:
+		if (D.SkylightChance > 0.f)
+		{
+			BuildSkylight();
+		}
+		// Rien n'est encore cree (sauf les quelques lumieres des bassins et verrieres des Poolrooms) : StepBuild s'en charge
+		bDeferLights = false;
+		bPlanned = true;
+		return true;
 	}
-
-	// v4.7 : rien n'est encore cree (sauf les quelques lumieres des bassins et verrieres des Poolrooms) : StepBuild s'en charge
-	bDeferLights = false;
-	Stats.PlanMs = static_cast<float>((FPlatformTime::Seconds() - PlanStart) * 1000.0);
+	return false;
 }
 
 FString ABRChunk::NextBatchKey(bool bCollision) const
@@ -1273,48 +1454,78 @@ FString ABRChunk::NextBatchKey(bool bCollision) const
 	return FString();
 }
 
-bool ABRChunk::StepBuild(double BudgetMs)
+float ABRChunk::CostPerInstanceMs[2] = { 0.02f, 0.004f };
+
+int32 ABRChunk::SubBatchSize(bool bCollision, double RemainingMs)
+{
+	// Autant d'instances que le budget restant en permet d'apres le cout moyen mesure (collisions : un corps physique par
+	// instance), au moins 16 pour avancer, au plus 1024 par composant
+	const double Cost = FMath::Max(0.0005, static_cast<double>(CostPerInstanceMs[bCollision ? 0 : 1]));
+	return FMath::Clamp(static_cast<int32>(FMath::Max(0.0, RemainingMs) / Cost), 16, 1024);
+}
+
+bool ABRChunk::StepBuild(double BudgetMs, bool bStopAtCollision)
 {
 	if (bReady)
 	{
 		return true;
+	}
+	if (bTearingDown)
+	{
+		return false;
 	}
 	const double Start = FPlatformTime::Seconds();
 	auto Elapsed = [Start]() { return (FPlatformTime::Seconds() - Start) * 1000.0; };
 	++Stats.Steps;
 	bool bDidWork = false;
 	auto Spent = [&]() { return bDidWork && Elapsed() > BudgetMs; };
-	while (!bReady && !Spent())
+	while (!bReady && !Spent() && !(bStopAtCollision && bCollisionReady))
 	{
 		const double T0 = FPlatformTime::Seconds();
 		float* Bucket = nullptr;
+		if (!bPlanned)
+		{
+			// v4.8 : planification par petites unites (colonnes de cellules)
+			StepPlan();
+			Stats.PlanMs += static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+			bDidWork = true;
+			continue;
+		}
 		switch (BuildPhase)
 		{
 		case 0:
-		{
-			// Collisions d'abord : sol, murs, boites de collision des meubles (on peut y marcher des la fin de l'etape)
-			const FString Key = NextBatchKey(true);
-			if (Key.IsEmpty())
-			{
-				bCollisionReady = true;
-				BuildPhase = 1;
-				break;
-			}
-			CreateBatch(Key);
-			Bucket = &Stats.CollisionMs;
-			break;
-		}
 		case 1:
+		case 3:
 		{
-			// Visuels sans collision : details, accessoires, eau, luminaires groupes
-			const FString Key = NextBatchKey(false);
+			// 0 : collisions d'abord (sol, murs, boites des meubles : on peut y marcher des la fin de l'etape) ;
+			// 1 : visuels sans collision (details, accessoires, eau, luminaires groupes) ;
+			// 3 : luminaires groupes ajoutes par les lumieres.
+			// v4.8 : par sous-lots, dimensionnes d'apres le cout mesure et le budget restant
+			const bool bCollisionPhase = BuildPhase == 0;
+			FString Key = NextBatchKey(bCollisionPhase);
+			if (Key.IsEmpty() && BuildPhase == 3)
+			{
+				Key = NextBatchKey(true);
+			}
 			if (Key.IsEmpty())
 			{
-				BuildPhase = 2;
+				if (BuildPhase == 0)
+				{
+					bCollisionReady = true;
+				}
+				BuildPhase = BuildPhase == 3 ? 4 : BuildPhase + 1;
 				break;
 			}
-			CreateBatch(Key);
-			Bucket = &Stats.VisualMs;
+			const FBatch* B = Batches.Find(Key);
+			const bool bCollisionBatch = B && B->bCollision;
+			const int32 Count = CreateBatchStep(Key, SubBatchSize(bCollisionBatch, BudgetMs - Elapsed()));
+			if (Count > 0)
+			{
+				const float Ms = static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+				float& Cost = CostPerInstanceMs[bCollisionBatch ? 0 : 1];
+				Cost = FMath::Lerp(Cost, Ms / Count, 0.2f);
+			}
+			Bucket = BuildPhase == 0 ? &Stats.CollisionMs : (BuildPhase == 1 ? &Stats.VisualMs : &Stats.LightMs);
 			break;
 		}
 		case 2:
@@ -1331,30 +1542,26 @@ bool ABRChunk::StepBuild(double BudgetMs)
 			}
 			Bucket = &Stats.LightMs;
 			break;
-		case 3:
+		default:
 		{
-			// Luminaires groupes ajoutes par les lumieres
-			FString Key = NextBatchKey(false);
-			if (Key.IsEmpty())
+			// v4.8 : objets un par un (tirages d'objets, puis sorties) ; puis animation des neons qui clignotent
+			const int32 Rolls = NumPickupRolls();
+			if (ActorCursor < Rolls)
 			{
-				Key = NextBatchKey(true);
+				SpawnPickupRoll(ActorCursor++);
 			}
-			if (Key.IsEmpty())
+			else if (ActorCursor < Rolls + PlannedExits.Num())
 			{
-				BuildPhase = 4;
-				break;
+				SpawnPlannedExit(ActorCursor++ - Rolls);
 			}
-			CreateBatch(Key);
-			Bucket = &Stats.LightMs;
+			else
+			{
+				SetActorTickEnabled(Flickers.Num() > 0);
+				bReady = true;
+			}
+			Bucket = &Stats.ActorMs;
 			break;
 		}
-		default:
-			// Objets : ramassables (sauf ceux deja pris) et sorties, puis animation des neons qui clignotent
-			BuildPickupsAndExits();
-			SetActorTickEnabled(Flickers.Num() > 0);
-			Bucket = &Stats.ActorMs;
-			bReady = true;
-			break;
 		}
 		if (Bucket)
 		{
@@ -1363,6 +1570,52 @@ bool ABRChunk::StepBuild(double BudgetMs)
 		}
 	}
 	return bReady;
+}
+
+bool ABRChunk::StepTeardown(double BudgetMs)
+{
+	// v4.8 : demontage etale : un chunk qui sort de la vue n'est plus detruit d'un bloc (composants, corps physiques,
+	// lumieres et objets dans la meme image) ; quelques elements par image, dans le budget
+	bTearingDown = true;
+	const double Start = FPlatformTime::Seconds();
+	bool bDidWork = false;
+	while (!bDidWork || (FPlatformTime::Seconds() - Start) * 1000.0 < BudgetMs)
+	{
+		bDidWork = true;
+		++TeardownStep;
+		if (Spawned.Num() > 0)
+		{
+			AActor* A = Spawned.Pop(EAllowShrinking::No);
+			if (IsValid(A))
+			{
+				A->Destroy();
+			}
+			continue;
+		}
+		if (Instances.Num() > 0)
+		{
+			UInstancedStaticMeshComponent* ISM = Instances.Pop(EAllowShrinking::No);
+			if (IsValid(ISM))
+			{
+				ISM->DestroyComponent();
+			}
+			continue;
+		}
+		if (Extra.Num() > 0)
+		{
+			UActorComponent* C = Extra.Pop(EAllowShrinking::No);
+			if (IsValid(C))
+			{
+				C->DestroyComponent();
+			}
+			continue;
+		}
+		PoweredLights.Reset();
+		Flickers.Reset();
+		LightRecords.Reset();
+		return true;
+	}
+	return false;
 }
 
 void ABRChunk::BuildHidingSpots()
@@ -1857,12 +2110,17 @@ void ABRChunk::AddWorkstation(int32 X, int32 Y, const FVector& WallFace, const F
 	}
 }
 
-void ABRChunk::BuildPickupsAndExits()
+int32 ABRChunk::NumPickupRolls()
+{
+	return 11;
+}
+
+bool ABRChunk::SpawnPickupRoll(int32 Index)
 {
 	ABRWorld* W = World.Get();
 	if (!W || !GetWorld())
 	{
-		return;
+		return false;
 	}
 	const FBRLevelDef& D = W->Def();
 	const uint32 Seed = W->GetSeed();
@@ -1893,70 +2151,95 @@ void ABRChunk::BuildPickupsAndExits()
 		{ EBRItem::Headlamp, D.GearChance, 1011 },
 		{ EBRItem::Vest, D.GearChance * 0.7f, 1012 },
 	};
-	const bool bBounded = D.BoundsChunks > 0;
-	for (const FPickupRoll& Roll : Rolls)
+	static_assert(UE_ARRAY_COUNT(Rolls) == 11, "NumPickupRolls doit suivre la table");
+	if (Index < 0 || Index >= static_cast<int32>(UE_ARRAY_COUNT(Rolls)))
 	{
-		bool bRoll = Roll.Chance > 0.f && BRHash::Rand(Coord.X, Coord.Y, Roll.Salt, Seed) < Roll.Chance;
-		if (bBounded && Roll.Item == EBRItem::VHSTape)
-		{
-			// Niveau fini : deux cassettes de plus que necessaire, une par chunk tire (loin du point de depart)
-			bRoll = VHS > 0.f && Roll.Salt == 1008 && W->IsChunkPicked(Coord, 1008, D.VHSRequired + 2, true);
-		}
-		if (!bRoll)
-		{
-			continue;
-		}
-		FIntPoint Cell(0, 0);
-		// v4.6 : niveau fini, cassette garantie : on balaie tout le chunk si les essais tires tombent mal
-		if (!PickFreeCell(Roll.Salt, Cell, bBounded && Roll.Item == EBRItem::VHSTape))
-		{
-			continue;
-		}
-		if (Roll.Item == EBRItem::VHSTape && W->IsSpawnArea(Cell.X, Cell.Y))
-		{
-			continue;
-		}
-		// La graine entre dans l'identifiant : un objet ramasse au niveau precedent ne cache rien dans le suivant
-		const uint64 Id = (static_cast<uint64>(static_cast<uint32>(Coord.X)) << 40) ^ (static_cast<uint64>(static_cast<uint32>(Coord.Y)) << 16)
-			^ static_cast<uint64>(Roll.Salt) ^ (static_cast<uint64>(Seed) * 0x9E3779B97F4A7C15ull);
-		if (W->IsCollected(Id))
-		{
-			continue;
-		}
-		const float JX = (BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 7, Seed) - 0.5f) * S * 0.5f;
-		const float JY = (BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 8, Seed) - 0.5f) * S * 0.5f;
-		FVector Pos = W->CellCenter(Cell, 1.f) + FVector(JX, JY, 0.f);
-		Pos.Z += W->FloorZAt(Pos); // sur un trottoir (Niveau 37)
-		const FRotator Rot(0.f, BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 9, Seed) * 360.f, 0.f);
-		ABRPickup* P = GetWorld()->SpawnActor<ABRPickup>(ABRPickup::StaticClass(), FTransform(Rot, Pos), Params);
-		if (P)
-		{
-			FString Note;
-			if (Roll.Item == EBRItem::Note)
-			{
-				const TArray<FString>& Common = BRLevels::CommonNotes();
-				const int32 Total = D.Notes.Num() + Common.Num();
-				const int32 Idx = Total > 0 ? static_cast<int32>(BRHash::Hash(Coord.X, Coord.Y, 1005, Seed) % static_cast<uint32>(Total)) : 0;
-				Note = Idx < D.Notes.Num() ? D.Notes[Idx] : (Common.IsValidIndex(Idx - D.Notes.Num()) ? Common[Idx - D.Notes.Num()] : FString());
-			}
-			P->Init(Roll.Item, Id, Note);
-			Spawned.Add(P);
-		}
+		return false;
 	}
-
-	// ---- Sorties vers d'autres niveaux (decidees par PlanExits avant le plafond) ----
-	for (const FPlannedExit& P : PlannedExits)
+	const bool bBounded = D.BoundsChunks > 0;
+	const FPickupRoll& Roll = Rolls[Index];
+	bool bRoll = Roll.Chance > 0.f && BRHash::Rand(Coord.X, Coord.Y, Roll.Salt, Seed) < Roll.Chance;
+	if (bBounded && Roll.Item == EBRItem::VHSTape)
 	{
-		ABRExit* Exit = GetWorld()->SpawnActor<ABRExit>(ABRExit::StaticClass(), FTransform(FRotator(0.f, P.Yaw, 0.f), P.Pos), Params);
-		if (Exit)
+		// Niveau fini : deux cassettes de plus que necessaire, une par chunk tire (loin du point de depart)
+		bRoll = VHS > 0.f && Roll.Salt == 1008 && W->IsChunkPicked(Coord, 1008, D.VHSRequired + 2, true);
+	}
+	if (!bRoll)
+	{
+		return true;
+	}
+	FIntPoint Cell(0, 0);
+	// v4.6 : niveau fini, cassette garantie : on balaie tout le chunk si les essais tires tombent mal
+	if (!PickFreeCell(Roll.Salt, Cell, bBounded && Roll.Item == EBRItem::VHSTape))
+	{
+		return true;
+	}
+	if (Roll.Item == EBRItem::VHSTape && W->IsSpawnArea(Cell.X, Cell.Y))
+	{
+		return true;
+	}
+	// La graine entre dans l'identifiant : un objet ramasse au niveau precedent ne cache rien dans le suivant
+	const uint64 Id = (static_cast<uint64>(static_cast<uint32>(Coord.X)) << 40) ^ (static_cast<uint64>(static_cast<uint32>(Coord.Y)) << 16)
+		^ static_cast<uint64>(Roll.Salt) ^ (static_cast<uint64>(Seed) * 0x9E3779B97F4A7C15ull);
+	if (W->IsCollected(Id))
+	{
+		return true;
+	}
+	const float JX = (BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 7, Seed) - 0.5f) * S * 0.5f;
+	const float JY = (BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 8, Seed) - 0.5f) * S * 0.5f;
+	FVector Pos = W->CellCenter(Cell, 1.f) + FVector(JX, JY, 0.f);
+	Pos.Z += W->FloorZAt(Pos); // sur un trottoir (Niveau 37)
+	const FRotator Rot(0.f, BRHash::Rand(Cell.X, Cell.Y, Roll.Salt + 9, Seed) * 360.f, 0.f);
+	ABRPickup* P = GetWorld()->SpawnActor<ABRPickup>(ABRPickup::StaticClass(), FTransform(Rot, Pos), Params);
+	if (P)
+	{
+		FString Note;
+		if (Roll.Item == EBRItem::Note)
 		{
-			Exit->Init(P.Target, P.Style);
-			if (P.Style == EBRExitStyle::Ladder)
-			{
-				Exit->InitLadder(D.WallHeight, P.Shaft);
-			}
-			Spawned.Add(Exit);
+			const TArray<FString>& Common = BRLevels::CommonNotes();
+			const int32 Total = D.Notes.Num() + Common.Num();
+			const int32 Idx = Total > 0 ? static_cast<int32>(BRHash::Hash(Coord.X, Coord.Y, 1005, Seed) % static_cast<uint32>(Total)) : 0;
+			Note = Idx < D.Notes.Num() ? D.Notes[Idx] : (Common.IsValidIndex(Idx - D.Notes.Num()) ? Common[Idx - D.Notes.Num()] : FString());
 		}
+		P->Init(Roll.Item, Id, Note);
+		Spawned.Add(P);
+	}
+	return true;
+}
+
+void ABRChunk::SpawnPlannedExit(int32 Index)
+{
+	ABRWorld* W = World.Get();
+	if (!W || !GetWorld() || !PlannedExits.IsValidIndex(Index))
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	const FPlannedExit& P = PlannedExits[Index];
+	ABRExit* Exit = GetWorld()->SpawnActor<ABRExit>(ABRExit::StaticClass(), FTransform(FRotator(0.f, P.Yaw, 0.f), P.Pos), Params);
+	if (Exit)
+	{
+		Exit->Init(P.Target, P.Style);
+		if (P.Style == EBRExitStyle::Ladder)
+		{
+			Exit->InitLadder(D.WallHeight, P.Shaft);
+		}
+		Spawned.Add(Exit);
+	}
+}
+
+void ABRChunk::BuildPickupsAndExits()
+{
+	for (int32 i = 0; i < NumPickupRolls(); ++i)
+	{
+		SpawnPickupRoll(i);
+	}
+	for (int32 i = 0; i < PlannedExits.Num(); ++i)
+	{
+		SpawnPlannedExit(i);
 	}
 }
 
@@ -2195,66 +2478,75 @@ void ABRChunk::BuildCeiling()
 	AddBox(Frame, FVector(B.X - 2.5f, CY, H - 1.f), FVector(5.f, B.Y - A.Y, 4.f), false);
 }
 
-void ABRChunk::CreateBatch(const FString& Key)
+int32 ABRChunk::CreateBatchStep(const FString& Key, int32 MaxInstances)
 {
 	UBRAssets* A = UBRAssets::Get(this);
-	FBatch Taken;
-	if (const FBatch* Found = Batches.Find(Key))
+	FBatch* Found = Batches.Find(Key);
+	if (!Found)
 	{
-		Taken = *Found;
+		return 0;
 	}
-	Batches.Remove(Key);
-	if (!A)
+	FBatch& B = *Found;
+	const int32 First = B.Cursor;
+	const int32 Count = FMath::Clamp(B.Transforms.Num() - First, 0, FMath::Max(1, MaxInstances));
+	B.Cursor += Count;
+	const bool bDone = B.Cursor >= B.Transforms.Num();
+	if (!A || !B.Mesh || Count <= 0)
 	{
-		return;
+		Batches.Remove(Key);
+		return 0;
 	}
+	UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
+	ISM->SetupAttachment(Root);
+	ISM->SetMobility(EComponentMobility::Static);
+	ISM->SetStaticMesh(B.Mesh);
+	ISM->SetCastShadow(B.bShadow && !B.bHidden);
+	if (B.bNoRayTracing)
 	{
-		FBatch& B = Taken;
-		if (!B.Mesh || B.Transforms.Num() == 0)
+		ISM->bVisibleInRayTracing = false;
+	}
+	if (B.bCollision)
+	{
+		ISM->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+		ISM->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
+	else
+	{
+		ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	if (B.bHidden)
+	{
+		ISM->SetVisibility(false);
+		ISM->SetHiddenInGame(true);
+	}
+	if (B.CullDistance > 0.f)
+	{
+		ISM->SetCullDistances(FMath::RoundToInt(B.CullDistance * 0.8f), FMath::RoundToInt(B.CullDistance));
+	}
+	TArray<FTransform> Part;
+	Part.Append(B.Transforms.GetData() + First, Count);
+	ISM->AddInstances(Part, false);
+	if (!B.bHidden)
+	{
+		if (B.Material)
 		{
-			return;
-		}
-		UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
-		ISM->SetupAttachment(Root);
-		ISM->SetMobility(EComponentMobility::Static);
-		ISM->SetStaticMesh(B.Mesh);
-		ISM->SetCastShadow(B.bShadow && !B.bHidden);
-		if (B.bCollision)
-		{
-			ISM->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
-			ISM->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			for (int32 i = 0; i < ISM->GetNumMaterials(); ++i)
+			{
+				ISM->SetMaterial(i, B.Material);
+			}
 		}
 		else
 		{
-			ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			A->ApplySlots(ISM, nullptr, false, nullptr, B.GlowScale, B.bPowered);
 		}
-		if (B.bHidden)
-		{
-			ISM->SetVisibility(false);
-			ISM->SetHiddenInGame(true);
-		}
-		if (B.CullDistance > 0.f)
-		{
-			ISM->SetCullDistances(FMath::RoundToInt(B.CullDistance * 0.8f), FMath::RoundToInt(B.CullDistance));
-		}
-		ISM->AddInstances(B.Transforms, false);
-		if (!B.bHidden)
-		{
-			if (B.Material)
-			{
-				for (int32 i = 0; i < ISM->GetNumMaterials(); ++i)
-				{
-					ISM->SetMaterial(i, B.Material);
-				}
-			}
-			else
-			{
-				A->ApplySlots(ISM, nullptr, false, nullptr, B.GlowScale, B.bPowered);
-			}
-		}
-		ISM->RegisterComponent();
-		Instances.Add(ISM);
 	}
+	ISM->RegisterComponent();
+	Instances.Add(ISM);
+	if (bDone)
+	{
+		Batches.Remove(Key);
+	}
+	return Count;
 }
 
 void ABRChunk::Tick(float DeltaSeconds)

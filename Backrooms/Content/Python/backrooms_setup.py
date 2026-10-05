@@ -290,6 +290,25 @@ def fbx_skeletal_options():
 # d'origine, 175 000 sommets, au plus pres ; ses LOD le remplacent au loin)
 # v4.6 : SK_HoundLite (45 % des meches de cheveux, -49 % de sommets) est celui des profils Performance et Qualite
 SKELETAL_LODS = {"SK_Hound": 4, "SK_HoundLite": 3, "SK_SkinStealer": 3, "SK_Hazmat": 3, "SK_Wretch": 3, "SK_Clump": 3}
+# v4.8 : niveau de detail utilise dans la scene ray tracee (reflets, ombres de la lampe) : les maillages a squelette sont
+# reconstruits a chaque image dans les structures RT ; le pelage complet du Hound y coutait le plus cher
+SKELETAL_RT_MIN_LOD = {"SK_Hound": 1, "SK_HoundLite": 1, "SK_Clump": 1, "SK_SkinStealer": 1}
+
+
+def tune_skeletal():
+    """Reglages des maillages a squelette deja importes (rejouable) : LOD minimal du ray tracing"""
+    for name, lod in SKELETAL_RT_MIN_LOD.items():
+        sk = unreal.load_asset(MESH + "/" + name) if exists(MESH + "/" + name) else None
+        if not isinstance(sk, unreal.SkeletalMesh):
+            continue
+        try:
+            if sk.get_editor_property("ray_tracing_min_lod") == lod:
+                continue
+        except Exception:
+            pass
+        if safe_set(sk, "ray_tracing_min_lod", lod):
+            EAL.save_loaded_asset(sk, only_if_is_dirty=False)
+            log("%s : LOD %d dans la scene ray tracee" % (name, lod))
 
 
 def generate_skeletal_lods(name, count):
@@ -473,6 +492,17 @@ class Graph(object):
                 pass
         warn("Liaison impossible vers %s" % prop)
         return False
+
+    def rt_switch(self, normal, raytraced):
+        """v4.8 : version simplifiee pour les rayons (reflets eclaires par les rayons, ombres ray tracees) : le noeud
+        RayTracingQualitySwitch garde le calcul complet a l'ecran et le cout minimal dans la scene ray tracee"""
+        cls = getattr(unreal, "MaterialExpressionRayTracingQualitySwitch", None)
+        if cls is None:
+            return normal
+        e = self.node(cls)
+        if not (self.link(normal, e, "Normal") and self.link(raytraced, e, "RayTraced")):
+            return normal
+        return e
 
     # --- feuilles
     def scalar(self, name, value):
@@ -782,7 +812,14 @@ def build_world_material():
     # Mouille : plus sombre ; sous l'eau d'une flaque : encore un peu plus (l'eau absorbe)
     shaded = g.mul(base, g.lerp(g.const(1.0), g.const(0.55), wet))
     shaded = g.mul(shaded, g.lerp(g.const(1.0), g.const(0.7), puddle))
-    g.output(shaded, P.MP_BASE_COLOR)
+    # v4.8 : dans la scene ray tracee (hit lighting du profil Cinematique), un seul echantillon de la texture projete sur
+    # l'axe dominant, sans bruits, caustiques ni flaques : meme teinte moyenne, cout bien moindre a chaque rayon
+    step_x0 = g.sat(g.mul(g.sub(wx, wy), g.const(1000.0)))
+    step_z0 = g.sat(g.mul(g.sub(wz, g.const(0.5)), g.const(1000.0)))
+    uv_dom = g.lerp(g.lerp(uvy, uvx, step_x0), uvz, step_z0)
+    rt_col = g.mul(g.mul(g.tex("BaseTex", load_tex("T_L0_Wallpaper"), uv_dom), g.lerp(g.const(1.0), gs, g.scalar("Grime", 0.35))),
+                   g.vector("Tint", (1, 1, 1, 1)))
+    g.output(g.rt_switch(shaded, rt_col), P.MP_BASE_COLOR)
 
     # Rugosite variable (zones plus lisses / plus mates), puis mouillee, puis miroir dans les flaques
     rv = g.tex("GrimeTex", grime_tex, g.mul(guv, g.const(3.1)), out="B")
@@ -798,14 +835,14 @@ def build_world_material():
     rough = g.sat(g.sub(rough, g.mul(wall_damp, g.const(0.15))))
     rough = g.lerp(rough, g.mul(rough, g.const(0.35)), wet)
     rough = g.lerp(rough, g.const(0.02), puddle)
-    g.output(rough, P.MP_ROUGHNESS)
+    g.output(g.rt_switch(rough, g.scalar("Roughness", 0.85)), P.MP_ROUGHNESS)
     g.output(g.mul(g.scalar("Metallic", 0.0), g.sub(g.const(1.0), puddle)), P.MP_METALLIC)
     g.output(g.add(g.mul(base, g.scalar("SelfIllum", 0.0)), g.vector("Emissive", (0, 0, 0, 1))), P.MP_EMISSIVE_COLOR)
 
     # Normal maps (espace tangent, melange triplanaire) ; l'eau d'une flaque est plane, seules les gouttes la rident
     nrm = tri("NormalTex", load_tex("T_FlatNormal"), normal=True)
     nrm = g.lerp(g.c3(0.0, 0.0, 1.0), nrm, g.scalar("NormalStrength", 1.0))
-    g.output(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), P.MP_NORMAL)
+    g.output(g.rt_switch(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), g.c3(0.0, 0.0, 1.0)), P.MP_NORMAL)
     finish_material(m)
     return m
 
@@ -1245,6 +1282,7 @@ def repair():
         import_skeletal([f for f in list_raw("Skeletal", (".fbx",)) if os.path.splitext(f)[0] in cats["skeletal"]])
     if "map" in cats:
         create_map()
+    tune_skeletal()
     if "slot" in cats:
         warn("Slots inattendus (%s) : reimporter le maillage concerne (backrooms_setup.run(force=True)) ; le jeu affiche le "
              "materiau d'erreur sur ces sections et les liste dans le journal (LogBackrooms)." % ", ".join(sorted(set(cats["slot"]))))
@@ -1302,6 +1340,7 @@ def run(force=False):
         delete_obsolete_meshes()
         import_meshes(msh)
         import_skeletal(skl)
+        tune_skeletal()
         task.enter_progress_frame(1, "Materiaux")
         if mats or tex:
             build_materials()

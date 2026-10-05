@@ -103,6 +103,20 @@ public:
 	/** v4.5 : un modele fourni (ou son derive) manque et une forme de secours le remplace. Signale une fois dans le
 	 *  journal (avertissement) et liste en mode developpeur : un modele fourni n'est jamais remplace en silence. */
 	static void ReportFallback(const FString& Model);
+	/** v4.8 : prechargement asynchrone de toutes les ressources du jeu (/Game/Backrooms : modeles, textures, sons),
+	 *  lance des le menu : en jeu, les modeles des entites et leurs textures sont deja en memoire (plus de chargement
+	 *  synchrone au premier besoin). Une fois par session. */
+	static void StartPreload();
+	/** Prechargement termine (ou impossible) */
+	static bool IsPreloadDone();
+	/** v4.8 : chargements synchrones survenus en jeu (nombre, pire duree, premiers noms) : rapport et mode developpeur */
+	static int32 SyncLoadsInGame;
+	static float MaxSyncLoadMs;
+	static TArray<FString> SyncLoadNames;
+	/** Compter les chargements synchrones (en jeu, hors menus et transitions) */
+	static bool bCountSyncLoads;
+	/** v4.8 : textures lues dans RawAssets (secours de l'editeur ; jamais dans un jeu empaquete) */
+	static int32 RawTextureLoads;
 	/** v4.7 : post-traitement des salles de fosses (assombrit ce qui est sous le sol) ; nullptr si indisponible */
 	UMaterialInstanceDynamic* NewPitShade(UObject* Outer);
 	static const TArray<FString>& GetFallbacks();

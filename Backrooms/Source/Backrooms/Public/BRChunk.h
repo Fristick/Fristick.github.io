@@ -52,12 +52,36 @@ public:
 	/** Construction complete, tout de suite (chargement d'un niveau, point de depart, tests) */
 	void Build(ABRWorld* InWorld, const FIntPoint& InCoord);
 
-	/** v4.7 : construction etalee sur plusieurs images. BeginBuild planifie tout (grille, lots d'instances, lumieres a
-	 *  creer) sans creer de composant ; StepBuild cree ensuite les composants dans l'ordre : collisions (sol, murs),
-	 *  visuels, lumieres, objets (ramassables, sorties), jusqu'a epuiser BudgetMs. true quand le chunk est pret.
-	 *  Chaque appel fait au moins un pas : la construction avance toujours. */
+	/** v4.7 : construction etalee sur plusieurs images. StepBuild cree les composants dans l'ordre : collisions (sol,
+	 *  murs), visuels, lumieres, objets (ramassables, sorties), jusqu'a epuiser BudgetMs. true quand le chunk est pret.
+	 *  Chaque appel fait au moins un pas : la construction avance toujours.
+	 *  v4.8 : BeginBuild ne fait plus qu'initialiser : la planification (grille, lots d'instances, lumieres a creer) est
+	 *  elle aussi faite par StepBuild, colonne par colonne de cellules, dans le meme budget. Les lots d'instances sont
+	 *  crees par sous-lots (curseur), et les objets un par un. */
 	void BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord);
-	bool StepBuild(double BudgetMs);
+	/** bStopAtCollision : s'arrete des que le sol et les murs existent (construction urgente sous un joueur) */
+	bool StepBuild(double BudgetMs, bool bStopAtCollision = false);
+	/** v4.8 : la planification est terminee (lots et lumieres connus) */
+	bool IsPlanned() const { return bPlanned; }
+
+	/** v4.8 : demontage etale : objets, puis composants, quelques-uns par image dans BudgetMs ; true quand il ne reste
+	 *  plus rien (le chunk peut etre detruit sans saccade). Un chunk en demontage n'est plus construit. */
+	bool StepTeardown(double BudgetMs);
+	bool IsTearingDown() const { return bTearingDown; }
+	/** Le demontage a commence a detruire des composants (le chunk ne peut plus etre repris tel quel) */
+	bool HasTeardownStarted() const { return TeardownStep > 0; }
+	void BeginTeardown() { bTearingDown = true; SetActorTickEnabled(false); }
+	/** Reprise d'un chunk en attente de demontage (le joueur est revenu avant qu'il ne commence) */
+	void CancelTeardown() { bTearingDown = false; SetActorTickEnabled(Flickers.Num() > 0); }
+
+	/** v4.8 : le type des lumieres (neons en lumieres surfaciques ou ponctuelles) suit le reglage courant : recree les
+	 *  lumieres dont le type a change. Retourne le nombre de lumieres recreees. */
+	int32 RefreshLightTypes(bool bArea);
+	/** Toutes les lumieres de ce chunk sont-elles deja du type demande ? */
+	bool LightTypesMatch(bool bArea) const;
+	/** v4.8 : ombres des lumieres selon la distance aux joueurs locaux (au-dela de ShadowDistance, plus d'ombre ; marge de
+	 *  10 % pour ne pas basculer sans cesse). Retourne le nombre de lumieres qui projettent une ombre. */
+	int32 UpdateShadowLOD(const TArray<FVector>& Viewers, float ShadowDistance);
 	/** Tous les composants et objets sont crees */
 	bool IsReady() const { return bReady; }
 	/** Sol et murs (collisions) crees : on peut marcher dessus */
@@ -98,7 +122,11 @@ protected:
 		float GlowScale = 1.f;
 		float CullDistance = 0.f;
 		bool bPowered = false;   // emissif eteint pendant les coupures
+		/** v4.8 : hors des structures ray tracees (eau translucide : noire dans les reflets d'autres surfaces) */
+		bool bNoRayTracing = false;
 		TArray<FTransform> Transforms;
+		/** v4.8 : instances deja creees (sous-lots) */
+		int32 Cursor = 0;
 	};
 
 	/** Boite (cube moteur) texturee par projection monde */
@@ -214,8 +242,50 @@ protected:
 	bool bReady = false;
 	bool bCollisionReady = false;
 	FBuildStats Stats;
-	/** Cree le composant d'instances d'un lot (et le retire de Batches) */
-	void CreateBatch(const FString& Key);
+	/** v4.8 : cree un sous-lot du lot Key (au plus MaxInstances instances, dans un composant a lui) et avance son curseur ;
+	 *  le lot est retire de Batches quand tout est cree. Retourne le nombre d'instances creees. */
+	int32 CreateBatchStep(const FString& Key, int32 MaxInstances);
+	/** Taille du prochain sous-lot d'apres le cout moyen mesure par instance et le budget restant */
+	static int32 SubBatchSize(bool bCollision, double RemainingMs);
+	/** v4.8 : cout moyen mesure d'une instance (ms), avec ou sans collision, partage par tous les chunks */
+	static float CostPerInstanceMs[2];
+
+	/** v4.8 : planification etalee : une unite (une colonne de cellules, ou une etape) ; true quand tout est planifie */
+	bool StepPlan();
+	int32 PlanStage = 0;
+	int32 PlanCursor = 0;
+	bool bPlanned = false;
+	/** v4.8 : objets et sorties crees un par un : indice du prochain tirage d'objet, puis de la prochaine sortie */
+	int32 ActorCursor = 0;
+	/** Un tirage d'objet (Index dans la table des tirages) ; false si l'indice depasse la table */
+	bool SpawnPickupRoll(int32 Index);
+	static int32 NumPickupRolls();
+	void SpawnPlannedExit(int32 Index);
+	/** v4.8 : demontage */
+	bool bTearingDown = false;
+	int32 TeardownStep = 0;
+
+	/** v4.8 : chaque lumiere creee, pour pouvoir la recreer d'un autre type ou couper son ombre au loin */
+	struct FLightRecord
+	{
+		FVector Pos = FVector::ZeroVector;
+		float Yaw = 0.f;
+		EBRFixture Fixture = EBRFixture::None;
+		float SourceLength = 0.f;
+		bool bShadow = false;
+		/** L'ombre est actuellement projetee (selon la distance aux joueurs) */
+		bool bShadowOn = false;
+		bool bArea = false;
+		/** Intensite nominale appliquee (lumens, deja reduits pour une lumiere surfacique) */
+		float Lumens = 0.f;
+		int32 FlickerIndex = INDEX_NONE;
+		int32 PoweredIndex = INDEX_NONE;
+		TWeakObjectPtr<ULocalLightComponent> Comp;
+	};
+	TArray<FLightRecord> LightRecords;
+	/** Cree le composant de lumiere d'un enregistrement (surfacique ou ponctuel), l'enregistre et le range dans Extra */
+	ULocalLightComponent* CreateLightComponent(FLightRecord& R, bool bArea);
+	static bool IsAreaFixture(EBRFixture Fixture);
 	/** Prochain lot a creer : avec collision d'abord si bCollisionFirst ; vide s'il n'y en a plus de ce type */
 	FString NextBatchKey(bool bCollision) const;
 	TWeakObjectPtr<ABRWorld> World;

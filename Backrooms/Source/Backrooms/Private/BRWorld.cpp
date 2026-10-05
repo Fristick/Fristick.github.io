@@ -1,5 +1,10 @@
 #include "BRWorld.h"
 #include "BRSave.h"
+#include "ShaderPipelineCache.h"
+#include "Components/SkeletalMeshComponent.h"
+#if WITH_EDITOR
+#include "ShaderCompiler.h"
+#endif
 #include "Backrooms.h"
 #include "BRLevels.h"
 #include "BRAssets.h"
@@ -108,11 +113,16 @@ void ABRWorld::BeginPlay()
 	Super::BeginPlay();
 	GWorldInstance = this;
 	// v4.7 : budget de construction des chunks par image (ms), reglable pour les mesures : -BRChunkBudget=2.5
+	// v4.8 : -BRFrameBudget=<ms> : budget de generation partage par image (meme effet que -BRChunkBudget=)
 	float Budget = 0.f;
-	if (FParse::Value(FCommandLine::Get(), TEXT("BRChunkBudget="), Budget) && Budget > 0.f)
+	if ((FParse::Value(FCommandLine::Get(), TEXT("BRFrameBudget="), Budget) || FParse::Value(FCommandLine::Get(), TEXT("BRChunkBudget="), Budget))
+		&& Budget > 0.f)
 	{
 		ChunkStepBudgetMs = FMath::Clamp(Budget, 0.5f, 50.f);
 	}
+	FrameBudgetMs = ChunkStepBudgetMs;
+	// v4.8 : toutes les ressources du jeu sont prechargees en arriere-plan des le menu
+	UBRAssets::StartPreload();
 
 	if (!HasAuthority())
 	{
@@ -273,6 +283,7 @@ void ABRWorld::BeginTransition(int32 TargetLevel, bool bFromDeath)
 	}
 	PendingLevel = TargetLevel;
 	bPendingDeath = bFromDeath;
+	UBRAssets::bCountSyncLoads = false; // v4.8 : chargements de la transition, derriere l'ecran noir : pas comptes
 	TransState = ETrans::FadingOut;
 	TransTimer = 0.f;
 	DeathTimer = -1.f;
@@ -342,6 +353,16 @@ void ABRWorld::ClearLevel()
 		}
 	}
 	Chunks.Empty();
+	// Changement de niveau (ecran noir) : les chunks en demontage partent tout de suite
+	for (ABRChunk* C : TearingDown)
+	{
+		if (IsValid(C))
+		{
+			C->Destroy();
+		}
+	}
+	TearingDown.Empty();
+	LightRefreshQueue.Empty();
 
 	TArray<TObjectPtr<ABREntity>> Copy = Entities;
 	Entities.Empty();
@@ -1107,6 +1128,23 @@ void ABRWorld::Tick(float DeltaSeconds)
 		}
 		break;
 	case ETrans::FadingIn:
+		if (TransTimer <= 0.f)
+		{
+			// v4.8 : derriere l'ecran noir de l'arrivee : modeles montres une fois pour preparer leurs shaders, puis attente
+			// des compilations en cours (8 s au plus) : les saccades de compilation n'arrivent pas en jeu
+			if (ShaderHold <= 0.f)
+			{
+				PrewarmModels();
+			}
+			if ((ShaderHold < 8.f && ShadersInFlight() > 0) || (ShaderHold < 0.5f && PrewarmComps.Num() > 0))
+			{
+				ShaderHold += Dt;
+				Fade = 1.f;
+				break;
+			}
+			ShaderHold = 0.f;
+			UBRAssets::bCountSyncLoads = true;
+		}
 		TransTimer += Dt;
 		Fade = 1.f - FMath::Clamp(TransTimer / 1.6f, 0.f, 1.f);
 		Glitch = Fade * 0.6f;
@@ -1115,6 +1153,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 			TransState = ETrans::None;
 			Fade = 0.f;
 			Glitch = 0.f;
+			EndPrewarm();
 			if (ABRCharacter* P = GetPlayer())
 			{
 				P->SetInputLocked(false);
@@ -1152,8 +1191,25 @@ void ABRWorld::Tick(float DeltaSeconds)
 		StreamTimer = 0.1f;
 		UpdateStreaming(false);
 	}
-	// v4.7 : construction etalee des chunks, a chaque image, dans un budget (pire image mesuree pour le rapport)
+	// v4.7 : construction etalee des chunks, a chaque image, dans un budget (pire image mesuree pour le rapport).
+	// v4.8 : budget partage par toute la generation (planification, creation, demontage), adapte a la duree de l'image :
+	// sous 60 images/s il baisse (jusqu'a 1,5 ms), avec de la marge il remonte vers le plafond configure
+	const float FrameMs = DeltaSeconds * 1000.f;
+	if (FrameMs > 17.5f)
+	{
+		FrameBudgetMs = FMath::Max(1.5f, FrameBudgetMs * 0.85f);
+	}
+	else if (FrameMs < 13.f)
+	{
+		FrameBudgetMs = FMath::Min(ChunkStepBudgetMs, FrameBudgetMs + 0.2f);
+	}
 	StepChunkBuilds();
+	StepTeardowns(FrameBudgetMs - FrameChunkMs);
+	UpdateLightLOD(Dt);
+	if (FrameChunkMs > FrameBudgetMs * 1.5f + 0.5f)
+	{
+		++FramesOverBudget;
+	}
 	MaxChunkBuildMs = FMath::Max(MaxChunkBuildMs, FrameChunkMs);
 	if (FrameChunkMs > 0.f)
 	{
@@ -1258,6 +1314,32 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 			}
 		}
 	}
+	// v4.8 : un chunk en attente de demontage qui redevient utile est repris tel quel (s'il n'a pas commence) ; sinon il
+	// est fini tout de suite, pour ne jamais avoir deux chunks au meme endroit
+	for (int32 i = TearingDown.Num() - 1; i >= 0; --i)
+	{
+		ABRChunk* Old = TearingDown[i];
+		if (!IsValid(Old))
+		{
+			TearingDown.RemoveAt(i);
+			continue;
+		}
+		if (!Wanted.Contains(Old->Coord))
+		{
+			continue;
+		}
+		TearingDown.RemoveAt(i);
+		if (!Old->HasTeardownStarted())
+		{
+			Old->CancelTeardown();
+			Chunks.Add(Old->Coord, Old);
+			Wanted.Remove(Old->Coord);
+		}
+		else
+		{
+			Old->Destroy();
+		}
+	}
 	Wanted.Sort([&](const FIntPoint& A, const FIntPoint& B) { return ChunkDist(A) < ChunkDist(B); });
 
 	// v4.5 : au plus 2 chunks par image, et pas de second chunk si le premier a deja pris plus de 5 ms (saccades).
@@ -1291,9 +1373,75 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 	{
 		if (ABRChunk* C = Chunks.FindRef(K))
 		{
-			C->Destroy();
+			// v4.8 : plus de destruction d'un bloc (composants, collisions, lumieres, objets) : demontage etale
+			C->BeginTeardown();
+			TearingDown.Add(C);
 		}
 		Chunks.Remove(K);
+	}
+}
+
+void ABRWorld::StepTeardowns(double RemainingMs)
+{
+	if (TearingDown.Num() == 0)
+	{
+		return;
+	}
+	// Au moins un pas par image (la file se vide toujours), sinon dans ce qui reste du budget de generation
+	const double Start = FPlatformTime::Seconds();
+	const double Budget = FMath::Max(0.25, RemainingMs);
+	while (TearingDown.Num() > 0)
+	{
+		ABRChunk* C = TearingDown[0];
+		const double Left = Budget - (FPlatformTime::Seconds() - Start) * 1000.0;
+		if (!IsValid(C))
+		{
+			TearingDown.RemoveAt(0);
+			continue;
+		}
+		if (C->StepTeardown(FMath::Max(0.0, Left)))
+		{
+			C->Destroy();
+			TearingDown.RemoveAt(0);
+			++ChunksTornDown;
+		}
+		if ((FPlatformTime::Seconds() - Start) * 1000.0 >= Budget)
+		{
+			break;
+		}
+	}
+	const float Ms = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+	MaxTeardownMs = FMath::Max(MaxTeardownMs, Ms);
+	FrameChunkMs += Ms;
+}
+
+void ABRWorld::GetStreamingCenters(TArray<FVector>& OutNow, TArray<FVector>& OutPredicted) const
+{
+	OutNow.Reset();
+	OutPredicted.Reset();
+	TArray<ABRCharacter*> All;
+	if (const ABRCharacter* P = GetPlayer())
+	{
+		All.Add(const_cast<ABRCharacter*>(P));
+	}
+	if (HasAuthority() && IsNetGame())
+	{
+		TArray<ABRCharacter*> Others;
+		GetPlayers(Others);
+		for (ABRCharacter* C : Others)
+		{
+			All.AddUnique(C);
+		}
+	}
+	const float ChunkWorld = Def().ChunkCells * Def().CellSize;
+	for (const ABRCharacter* C : All)
+	{
+		const FVector L = C->GetActorLocation();
+		OutNow.Add(L);
+		// Position dans 0,75 s a la vitesse actuelle (au plus 1,5 chunk) : le sol est pret avant l'arrivee
+		FVector V = C->GetVelocity();
+		V.Z = 0.f;
+		OutPredicted.Add(L + V.GetClampedToMaxSize(ChunkWorld * 2.f) * 0.75f);
 	}
 }
 
@@ -1339,46 +1487,30 @@ void ABRWorld::OnChunkReady(const ABRChunk* Chunk)
 void ABRWorld::StepChunkBuilds()
 {
 	const double Start = FPlatformTime::Seconds();
-	// 1) Sous chaque joueur (et autour), le sol doit exister : collisions terminees tout de suite si besoin (rare : les
-	//    chunks se preparent a la distance de vue). Le serveur s'en occupe pour tous les joueurs (IA, chutes).
-	TArray<FVector> Centers;
-	if (const ABRCharacter* P = GetPlayer())
+	TArray<FVector> Now;
+	TArray<FVector> Predicted;
+	GetStreamingCenters(Now, Predicted);
+	const float ChunkWorld = Def().ChunkCells * Def().CellSize;
+
+	// 1) Urgence : le chunk sous chaque joueur doit avoir son sol. v4.8 : seulement le chunk ou il se trouve (avant : les
+	//    3x3 autour de CHAQUE joueur, jusqu'a 36 chunks forces dans une image a quatre joueurs eloignes), et seulement
+	//    jusqu'aux collisions. Les voisins passent en tete de file, dans le budget, ci-dessous.
+	for (const FVector& Center : Now)
 	{
-		Centers.Add(P->GetActorLocation());
-	}
-	if (HasAuthority() && IsNetGame())
-	{
-		TArray<ABRCharacter*> All;
-		GetPlayers(All);
-		for (const ABRCharacter* C : All)
+		ABRChunk* C = Chunks.FindRef(CellToChunk(WorldToCell(Center)));
+		if (C && !C->HasCollision())
 		{
-			Centers.AddUnique(C->GetActorLocation());
-		}
-	}
-	for (const FVector& Center : Centers)
-	{
-		const FIntPoint Mine = CellToChunk(WorldToCell(Center));
-		for (int32 DX = -1; DX <= 1; ++DX)
-		{
-			for (int32 DY = -1; DY <= 1; ++DY)
+			++ForcedChunkBuilds;
+			C->StepBuild(1.0e9, true);
+			if (C->IsReady())
 			{
-				ABRChunk* C = Chunks.FindRef(FIntPoint(Mine.X + DX, Mine.Y + DY));
-				if (C && !C->HasCollision())
-				{
-					++ForcedChunkBuilds;
-					while (!C->HasCollision() && !C->IsReady())
-					{
-						C->StepBuild(0.0);
-					}
-					if (C->IsReady())
-					{
-						OnChunkReady(C);
-					}
-				}
+				OnChunkReady(C);
 			}
 		}
 	}
-	// 2) Le reste avance dans le budget de l'image, les plus proches d'abord
+
+	// 2) Le reste avance dans le budget de l'image. Priorite : les collisions des chunks ou les joueurs vont arriver
+	//    (position predite), puis la distance au joueur le plus proche (tous les joueurs, plus seulement le premier)
 	TArray<ABRChunk*> Pending;
 	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
 	{
@@ -1389,29 +1521,129 @@ void ABRWorld::StepChunkBuilds()
 	}
 	if (Pending.Num() > 0)
 	{
-		const FVector Ref = Centers.Num() > 0 ? Centers[0] : CellCenter(FIntPoint(0, 0));
-		const float ChunkWorld = Def().ChunkCells * Def().CellSize;
-		Pending.Sort([&](const ABRChunk& A, const ABRChunk& B)
+		auto Score = [&](const ABRChunk* C)
 		{
-			const FVector CA((A.Coord.X + 0.5f) * ChunkWorld, (A.Coord.Y + 0.5f) * ChunkWorld, Ref.Z);
-			const FVector CB((B.Coord.X + 0.5f) * ChunkWorld, (B.Coord.Y + 0.5f) * ChunkWorld, Ref.Z);
-			return FVector::DistSquared2D(CA, Ref) < FVector::DistSquared2D(CB, Ref);
-		});
+			const FVector CC((C->Coord.X + 0.5f) * ChunkWorld, (C->Coord.Y + 0.5f) * ChunkWorld, 0.f);
+			float Best = 1e20f;
+			for (const FVector& P : Predicted)
+			{
+				Best = FMath::Min(Best, static_cast<float>(FVector::Dist2D(CC, P)));
+			}
+			for (const FVector& P : Now)
+			{
+				Best = FMath::Min(Best, static_cast<float>(FVector::Dist2D(CC, P)));
+			}
+			// Sol pas encore pret a moins de 1,5 chunk d'un joueur (ou de la ou il sera) : avant tout le reste
+			return (!C->HasCollision() && Best < ChunkWorld * 1.5f) ? Best - 1e9f : Best;
+		};
+		Pending.Sort([&](const ABRChunk& A, const ABRChunk& B) { return Score(&A) < Score(&B); });
 		for (ABRChunk* C : Pending)
 		{
-			const double Left = ChunkStepBudgetMs - (FPlatformTime::Seconds() - Start) * 1000.0;
+			const double Left = FrameBudgetMs - (FPlatformTime::Seconds() - Start) * 1000.0;
 			if (Left <= 0.0)
 			{
 				break;
 			}
+			const bool bHadFloor = C->HasCollision();
 			if (C->StepBuild(Left))
 			{
 				OnChunkReady(C);
 			}
+			if (!bHadFloor && C->HasCollision() && Score(C) < 0.f)
+			{
+				++PredictedCollisionBuilds;
+			}
 		}
 	}
-	// Chunks termines par la construction forcee
 	FrameChunkMs += static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+}
+
+float ABRWorld::LocalShadowDistance()
+{
+	// Distance d'ombre des neons (cm) : au-dela, la lumiere eclaire sans ombre (elle est deja tamisee par la distance et
+	// le brouillard). Profils : Performance 15 m, Qualite et RTX fluide 25 m, Cinematique 40 m ; personnalise : selon
+	// la qualite
+	const FBRSettings& S = FBRSettings::Get();
+	switch (S.GraphicsProfile)
+	{
+	case 0: return 1500.f;
+	case 2: return 4000.f;
+	case 1:
+	case 4: return 2500.f;
+	default: return S.Quality >= 4 ? 4000.f : (S.Quality >= 3 ? 2500.f : 1500.f);
+	}
+}
+
+bool ABRWorld::ShouldCastLocalShadow(const FVector& LightPos) const
+{
+	const ABRCharacter* P = GetPlayer();
+	if (!P)
+	{
+		return true;
+	}
+	return FVector::Dist(P->GetActorLocation(), LightPos) < LocalShadowDistance();
+}
+
+void ABRWorld::UpdateLightLOD(float Dt)
+{
+	const double Start = FPlatformTime::Seconds();
+	// Lumieres qui changent de type (reglage NEONS EN LUMIERES SURFACIQUES) : un chunk par image
+	while (LightRefreshQueue.Num() > 0)
+	{
+		ABRChunk* C = LightRefreshQueue[0].Get();
+		LightRefreshQueue.RemoveAt(0);
+		if (IsValid(C) && !C->IsTearingDown())
+		{
+			C->RefreshLightTypes(FBRSettings::Get().bAreaLights);
+			break;
+		}
+	}
+	// Ombres selon la distance au joueur local
+	ShadowLODTimer -= Dt;
+	if (ShadowLODTimer <= 0.f)
+	{
+		ShadowLODTimer = 0.25f;
+		TArray<FVector> Viewers;
+		if (const ABRCharacter* P = GetPlayer())
+		{
+			Viewers.Add(P->GetActorLocation());
+		}
+		if (Viewers.Num() > 0)
+		{
+			const float Dist = LocalShadowDistance();
+			int32 Count = 0;
+			for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+			{
+				if (Pair.Value)
+				{
+					Count += Pair.Value->UpdateShadowLOD(Viewers, Dist);
+				}
+			}
+			ShadowedLights = Count;
+		}
+	}
+	FrameChunkMs += static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+}
+
+void ABRWorld::OnGraphicsSettingsChanged()
+{
+	// v4.8 : les reglages s'appliquent aussi a ce qui est deja construit (avant : seulement aux zones chargees ensuite)
+	const bool bArea = FBRSettings::Get().bAreaLights;
+	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		if (Pair.Value && !Pair.Value->LightTypesMatch(bArea))
+		{
+			LightRefreshQueue.AddUnique(Pair.Value.Get());
+		}
+	}
+	ShadowLODTimer = 0.f;
+	for (ABREntity* E : Entities)
+	{
+		if (IsValid(E))
+		{
+			E->RefreshModelDetail();
+		}
+	}
 }
 
 void ABRWorld::SpawnChunk(const FIntPoint& Coord, bool bNow)
@@ -1437,6 +1669,78 @@ void ABRWorld::SpawnChunk(const FIntPoint& Coord, bool bNow)
 			Chunk->SetPower(Power);
 		}
 	}
+}
+
+int32 ABRWorld::ShadersInFlight()
+{
+	int32 Count = static_cast<int32>(FShaderPipelineCache::NumPrecompilesRemaining());
+#if WITH_EDITOR
+	if (GShaderCompilingManager)
+	{
+		Count += GShaderCompilingManager->GetNumRemainingJobs();
+	}
+#endif
+	return Count;
+}
+
+void ABRWorld::PrewarmModels()
+{
+	// Une fois par session et par modele : les modeles a squelette (combinaison, entites) sont poses devant la camera,
+	// petits, le temps que leurs shaders (passe de base, ombres, ray tracing) et leurs textures soient prets
+	static TSet<FName> Warmed;
+	UBRAssets* A = UBRAssets::Get(this);
+	const ABRCharacter* P = GetPlayer();
+	if (!A || !P || !GetRootComponent())
+	{
+		return;
+	}
+	static const TCHAR* const Names[] = { TEXT("SK_Hazmat"), TEXT("SK_Hound"), TEXT("SK_HoundLite"), TEXT("SK_Faceling"), TEXT("SK_Partygoer"),
+		TEXT("SK_SkinStealer"), TEXT("SK_Wretch"), TEXT("SK_Clump") };
+	const FVector Eye = P->GetEyeLocation();
+	const FVector Fwd = P->GetViewDirection().GetSafeNormal2D();
+	const FVector Side(-Fwd.Y, Fwd.X, 0.f);
+	int32 Slot = 0;
+	for (const TCHAR* Name : Names)
+	{
+		if (Warmed.Contains(FName(Name)))
+		{
+			continue;
+		}
+		USkeletalMesh* Mesh = A->SkeletalMesh(FName(Name));
+		if (!Mesh)
+		{
+			continue;
+		}
+		Warmed.Add(FName(Name));
+		USkeletalMeshComponent* Comp = NewObject<USkeletalMeshComponent>(this);
+		Comp->SetupAttachment(GetRootComponent());
+		Comp->SetSkinnedAssetAndUpdate(Mesh);
+		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Comp->SetCastShadow(true);
+		const float Lateral = (Slot - 3.5f) * 45.f;
+		Comp->SetWorldLocationAndRotation(Eye + Fwd * 320.f + Side * Lateral - FVector(0.f, 0.f, 60.f), Fwd.Rotation());
+		Comp->SetWorldScale3D(FVector(0.35f));
+		Comp->RegisterComponent();
+		A->ApplySlots(Comp);
+		PrewarmComps.Add(Comp);
+		++Slot;
+	}
+	if (PrewarmComps.Num() > 0)
+	{
+		UE_LOG(LogBackrooms, Log, TEXT("Preparation des shaders : %d modeles a squelette montres derriere l'ecran noir"), PrewarmComps.Num());
+	}
+}
+
+void ABRWorld::EndPrewarm()
+{
+	for (USceneComponent* C : PrewarmComps)
+	{
+		if (IsValid(C))
+		{
+			C->DestroyComponent();
+		}
+	}
+	PrewarmComps.Empty();
 }
 
 // =====================================================================================

@@ -6,6 +6,7 @@
 
 #if WITH_EDITOR
 #include "Materials/MaterialExpressionAbs.h"
+#include "Materials/MaterialExpressionRayTracingQualitySwitch.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionAppendVector.h"
 #include "Materials/MaterialExpressionCameraVectorWS.h"
@@ -266,6 +267,15 @@ namespace
 			return FPin{ E, 0 };
 		}
 
+		/** v4.8 : calcul complet a l'ecran, version simplifiee dans la scene ray tracee (reflets eclaires par les rayons) */
+		FPin RTSwitch(const FPin& Normal, const FPin& RayTraced)
+		{
+			UMaterialExpressionRayTracingQualitySwitch* E = New<UMaterialExpressionRayTracingQualitySwitch>();
+			Link(E->Normal, Normal);
+			Link(E->RayTraced, RayTraced);
+			return FPin{ E, 0 };
+		}
+
 		UMaterial* Mat;
 	};
 
@@ -406,7 +416,13 @@ namespace
 		const FPin Ripple = G.Mask(Pud, TEXT("ba"));
 		FPin Shaded = G.Mul(Base, G.Lerp(G.Const(1.f), G.Const(0.55f), Wet));
 		Shaded = G.Mul(Shaded, G.Lerp(G.Const(1.f), G.Const(0.7f), Puddle));
-		FGraph::Link(Out->BaseColor, Shaded);
+		// v4.8 : dans la scene ray tracee, un seul echantillon projete sur l'axe dominant, sans bruits, caustiques ni flaques
+		const FPin StepX0 = G.Sat(G.Mul(G.Sub(Wx, Wy), G.Const(1000.f)));
+		const FPin StepZ0 = G.Sat(G.Mul(G.Sub(Wz, G.Const(0.5f)), G.Const(1000.f)));
+		const FPin UvDom = G.Lerp(G.Lerp(UvY, UvX, StepX0), UvZ, StepZ0);
+		const FPin RTCol = G.Mul(G.Mul(G.Tex(TEXT("BaseTex"), BaseDefault, false, UvDom), G.Lerp(G.Const(1.f), Gs, G.Scalar(TEXT("Grime"), 0.35f))),
+			G.Vector(TEXT("Tint"), FLinearColor::White));
+		FGraph::Link(Out->BaseColor, G.RTSwitch(Shaded, RTCol));
 
 		const FPin Rv = G.Tex(TEXT("GrimeTex"), Grime, false, G.Mul(GUv, G.Const(3.1f)), 3);
 		// v4.7 : carte de rugosite de la matiere (<Texture>_R, lineaire, relative a Roughness : 0,5 = valeur nominale).
@@ -424,12 +440,12 @@ namespace
 		Rough = G.Sat(G.Sub(Rough, G.Mul(WallDamp, G.Const(0.15f))));
 		Rough = G.Lerp(Rough, G.Mul(Rough, G.Const(0.35f)), Wet);
 		Rough = G.Lerp(Rough, G.Const(0.02f), Puddle);
-		FGraph::Link(Out->Roughness, Rough);
+		FGraph::Link(Out->Roughness, G.RTSwitch(Rough, G.Scalar(TEXT("Roughness"), 0.85f)));
 		FGraph::Link(Out->Metallic, G.Mul(G.Scalar(TEXT("Metallic"), 0.f), G.Sub(G.Const(1.f), Puddle)));
 		FGraph::Link(Out->EmissiveColor, G.Add(G.Mul(Base, G.Scalar(TEXT("SelfIllum"), 0.f)), G.Vector(TEXT("Emissive"), FLinearColor::Black)));
 
 		const FPin Nrm = G.Lerp(G.C3(0.f, 0.f, 1.f), Tri(TEXT("NormalTex"), NormalDefault, true), G.Scalar(TEXT("NormalStrength"), 1.f));
-		FGraph::Link(Out->Normal, G.Lerp(Nrm, G.Append(Ripple, G.Const(1.f)), Puddle));
+		FGraph::Link(Out->Normal, G.RTSwitch(G.Lerp(Nrm, G.Append(Ripple, G.Const(1.f)), Puddle), G.C3(0.f, 0.f, 1.f)));
 	}
 
 	void BuildMesh(FGraph& G, UMaterialEditorOnlyData* Out, bool bSkin, TFunctionRef<UTexture*(FName)> LoadTexture)

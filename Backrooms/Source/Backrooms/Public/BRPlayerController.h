@@ -156,6 +156,8 @@ public:
 	static bool IsHardwareRayTracingAvailable();
 	/** Profils : 0 Performance, 1 Qualite, 2 Cinematique */
 	static void ApplyGraphicsProfile(int32 Profile);
+	/** v4.8 : resolution calculee avant l'agrandissement TSR (fenetre de jeu x pourcentage de rendu) */
+	static FIntPoint InternalResolution();
 	void AdjustSetting(int32 Index, int32 Direction);
 	void LoadSettings();
 	void SaveSettings() const;

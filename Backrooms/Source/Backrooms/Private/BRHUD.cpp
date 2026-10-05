@@ -1,4 +1,5 @@
 #include "BRHUD.h"
+#include "BRLoc.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
 #include "BRCharacter.h"
@@ -855,6 +856,13 @@ void ABRHUD::DrawHUD()
 		if (W->GetFade() > 0.001f)
 		{
 			DrawRect(FLinearColor(0.f, 0.f, 0.f, W->GetFade()), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+		}
+		// v4.8 : ecran noir tenu le temps de preparer les shaders (une fois par modele et par session)
+		if (W->GetShaderHold() > 0.6f)
+		{
+			const float SA = FMath::Clamp((W->GetShaderHold() - 0.6f) / 0.5f, 0.f, 1.f);
+			TextF(BR_STR(NSLOCTEXT("BR", "Loading.Shaders", "Pr\u00e9paration des shaders\u2026")), Canvas->ClipX * 0.5f, Canvas->ClipY * 0.86f,
+				FLinearColor(0.9f, 0.85f, 0.6f, 0.75f * SA), 12.f, EUiWeight::Regular, EUiAlign::Center);
 		}
 	}
 	if (PC && PC->IsPauseMenuOpen() && !bInv)

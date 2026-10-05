@@ -27,6 +27,11 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
+#include "Engine/StreamableManager.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "HAL/PlatformTime.h"
 
 namespace
 {
@@ -196,6 +201,68 @@ UBRAssets* UBRAssets::Get(const UObject* WorldContext)
 	return World ? World->GetSubsystem<UBRAssets>() : nullptr;
 }
 
+int32 UBRAssets::SyncLoadsInGame = 0;
+float UBRAssets::MaxSyncLoadMs = 0.f;
+TArray<FString> UBRAssets::SyncLoadNames;
+bool UBRAssets::bCountSyncLoads = false;
+int32 UBRAssets::RawTextureLoads = 0;
+
+namespace
+{
+	FStreamableManager& Streamable()
+	{
+		static FStreamableManager Manager;
+		return Manager;
+	}
+	/** Garde les ressources prechargees en memoire pour toute la session (y compris apres un rechargement de la carte) */
+	TSharedPtr<FStreamableHandle>& PreloadHandle()
+	{
+		static TSharedPtr<FStreamableHandle> Handle;
+		return Handle;
+	}
+	bool GPreloadStarted = false;
+}
+
+void UBRAssets::StartPreload()
+{
+	if (GPreloadStarted)
+	{
+		return;
+	}
+	GPreloadStarted = true;
+	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	TArray<FAssetData> Assets;
+	Registry.GetAssetsByPath(FName(TEXT("/Game/Backrooms")), Assets, true);
+	TArray<FSoftObjectPath> Paths;
+	static const FName Classes[] = { FName(TEXT("StaticMesh")), FName(TEXT("SkeletalMesh")), FName(TEXT("Texture2D")), FName(TEXT("SoundWave")),
+		FName(TEXT("Material")) };
+	for (const FAssetData& D : Assets)
+	{
+		const FName Class = D.AssetClassPath.GetAssetName();
+		for (const FName& C : Classes)
+		{
+			if (Class == C)
+			{
+				Paths.Add(D.GetSoftObjectPath());
+				break;
+			}
+		}
+	}
+	if (Paths.Num() == 0)
+	{
+		UE_LOG(LogBackrooms, Log, TEXT("Prechargement : aucune ressource importee (secours de l'editeur)"));
+		return;
+	}
+	PreloadHandle() = Streamable().RequestAsyncLoad(Paths, FStreamableDelegate(), FStreamableManager::DefaultAsyncLoadPriority);
+	UE_LOG(LogBackrooms, Log, TEXT("Prechargement asynchrone de %d ressources (/Game/Backrooms)"), Paths.Num());
+}
+
+bool UBRAssets::IsPreloadDone()
+{
+	const TSharedPtr<FStreamableHandle>& H = PreloadHandle();
+	return !H.IsValid() || H->HasLoadCompleted();
+}
+
 UObject* UBRAssets::LoadAsset(const TCHAR* Folder, FName Name, UClass* Class)
 {
 	if (Name.IsNone())
@@ -214,10 +281,29 @@ UObject* UBRAssets::LoadAsset(const TCHAR* Folder, FName Name, UClass* Class)
 
 	const FString N = Name.ToString();
 	const FString PackageName = FString(Folder) + TEXT("/") + N;
-	UObject* Obj = nullptr;
-	if (FPackageName::DoesPackageExist(PackageName))
+	const FString ObjectPath = PackageName + TEXT(".") + N;
+	// v4.8 : deja en memoire (prechargement asynchrone) : aucun chargement
+	UObject* Obj = FindObject<UObject>(nullptr, *ObjectPath);
+	if (Obj && !Obj->IsA(Class))
 	{
-		Obj = StaticLoadObject(Class, nullptr, *(PackageName + TEXT(".") + N), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		Obj = nullptr;
+	}
+	if (!Obj && FPackageName::DoesPackageExist(PackageName))
+	{
+		const double T0 = FPlatformTime::Seconds();
+		Obj = StaticLoadObject(Class, nullptr, *ObjectPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (Obj && bCountSyncLoads)
+		{
+			// Chargement synchrone pendant le jeu : une saccade possible, comptee pour le rapport
+			const float Ms = static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+			++SyncLoadsInGame;
+			MaxSyncLoadMs = FMath::Max(MaxSyncLoadMs, Ms);
+			if (SyncLoadNames.Num() < 12)
+			{
+				SyncLoadNames.Add(FString::Printf(TEXT("%s (%.1f ms)"), *N, Ms));
+			}
+			UE_LOG(LogBackrooms, Log, TEXT("Chargement synchrone en jeu : %s (%.1f ms)"), *PackageName, Ms);
+		}
 	}
 
 	if (Obj)
@@ -234,6 +320,14 @@ UObject* UBRAssets::LoadAsset(const TCHAR* Folder, FName Name, UClass* Class)
 
 UTexture2D* UBRAssets::LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips)
 {
+	if (FPlatformProperties::RequiresCookedData())
+	{
+		// v4.8 : jeu empaquete : jamais de lecture de RawAssets (mips calcules sur le CPU, texture jamais streamee) ; la
+		// texture manque au paquet : on le signale
+		ReportMaterialProblem(FString::Printf(TEXT("texture %s absente du jeu empaquete (relancer l'import puis recuire)"), *Name.ToString()));
+		return nullptr;
+	}
+	++RawTextureLoads;
 	const FString Dir = FPaths::Combine(FPaths::ProjectDir(), TEXT("RawAssets"), SubFolder);
 	const TCHAR* Exts[] = { TEXT(".jpg"), TEXT(".png"), TEXT(".jpeg"), TEXT(".tga") };
 	FString File;

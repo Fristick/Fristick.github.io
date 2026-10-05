@@ -554,7 +554,8 @@ bool ABREntity::BuildHoundModel()
 	// 175 000) ; repli sur l'original s'il manque
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
-		USkeletalMesh* SkinMesh = FBRSettings::Get().GraphicsProfile != 2 ? A->SkeletalMesh(TEXT("SK_HoundLite")) : nullptr;
+		// v4.8 : reglage effectif (modeles complets), plus le numero du profil : le profil Personnalise peut l'avoir
+		USkeletalMesh* SkinMesh = !FBRSettings::Get().bFullCreatures ? A->SkeletalMesh(TEXT("SK_HoundLite")) : nullptr;
 		if (!SkinMesh)
 		{
 			SkinMesh = A->SkeletalMesh(TEXT("SK_Hound"));
@@ -629,6 +630,39 @@ bool ABREntity::BuildHoundModel()
 		AddLimb(Low, ELimb::HoundLower, Leg.Phase, 22.f, Leg.bFront ? -1.f : 1.f, FRotator::ZeroRotator);
 	}
 	return true;
+}
+
+void ABREntity::RefreshModelDetail()
+{
+	if (Kind != EBREntityKind::Hound || SkinDrivers.Num() == 0)
+	{
+		return;
+	}
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!A)
+	{
+		return;
+	}
+	USkeletalMesh* Want = !FBRSettings::Get().bFullCreatures ? A->SkeletalMesh(TEXT("SK_HoundLite")) : nullptr;
+	if (!Want)
+	{
+		Want = A->SkeletalMesh(TEXT("SK_Hound"));
+	}
+	for (FBRSkinDriver& Driver : SkinDrivers)
+	{
+		UPoseableMeshComponent* Skin = Driver.Skin.Get();
+		if (!Skin || !Want || Skin->GetSkinnedAsset() == Want)
+		{
+			continue;
+		}
+		Skin->SetSkinnedAssetAndUpdate(Want);
+		A->ApplySlots(Skin);
+		// Memes noms d'os : les indices sont relus (l'ordre peut differer d'un maillage a l'autre)
+		for (FBRSkinDriver::FLink& Link : Driver.Links)
+		{
+			Link.BoneIndex = Skin->GetBoneIndex(Link.Bone);
+		}
+	}
 }
 
 bool ABREntity::BuildClumpSkin()

@@ -74,6 +74,7 @@ namespace
 		Row_RTHitLighting,
 		Row_RTShadows,
 		Row_AreaLights,
+		Row_FullCreatures,
 		Row_VolumetricFog,
 		Row_FilmGrain,
 		Row_VHSEffect,
@@ -81,7 +82,9 @@ namespace
 		Row_Count
 	};
 
-	const TCHAR* ProfileNames[] = { TEXT("PERFORMANCE"), TEXT("QUALIT\u00c9"), TEXT("CIN\u00c9MATIQUE"), TEXT("PERSONNALIS\u00c9") };
+	const TCHAR* ProfileNames[] = { TEXT("PERFORMANCE"), TEXT("QUALIT\u00c9"), TEXT("CIN\u00c9MATIQUE"), TEXT("PERSONNALIS\u00c9"), TEXT("RTX FLUIDE") };
+	/** v4.8 : ordre des profils proposes (le profil PERSONNALISE ne se choisit pas : il vient d'un reglage modifie) */
+	const int32 ProfileCycle[] = { 0, 1, 4, 2 };
 	const TCHAR* QualityNames[] = { TEXT("BAS"), TEXT("MOYEN"), TEXT("\u00c9LEV\u00c9"), TEXT("\u00c9PIQUE"), TEXT("CIN\u00c9MATIQUE") };
 	const TCHAR* VoiceNames[] = { TEXT("VOIX OUVERTE"), TEXT("APPUYER POUR PARLER"), TEXT("MICRO COUP\u00c9") };
 	const TCHAR* WindowNames[] = { TEXT("PLEIN \u00c9CRAN"), TEXT("FEN\u00caTR\u00c9 SANS BORDURE"), TEXT("FEN\u00caTR\u00c9") };
@@ -2444,6 +2447,8 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return TEXT("OMBRES RAY TRAC\u00c9ES (LAMPE)");
 	case Row_AreaLights:
 		return TEXT("N\u00c9ONS EN LUMI\u00c8RES SURFACIQUES");
+	case Row_FullCreatures:
+		return TEXT("MOD\u00c8LES COMPLETS DES ENTIT\u00c9S");
 	case Row_VolumetricFog:
 		return TEXT("BROUILLARD VOLUM\u00c9TRIQUE");
 	case Row_FilmGrain:
@@ -2485,13 +2490,17 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 	case Row_WindowMode:
 		return WindowNames[FMath::Clamp(S.WindowMode, 0, 2)];
 	case Row_RenderScale:
-		return FString::Printf(TEXT("%d %%"), S.RenderScale);
+	{
+		// v4.8 : resolution interne reelle (celle que TSR agrandit), pas seulement le pourcentage
+		const FIntPoint In = InternalResolution();
+		return In.X > 0 ? FString::Printf(TEXT("%d %%  (%d\u00d7%d)"), S.RenderScale, In.X, In.Y) : FString::Printf(TEXT("%d %%"), S.RenderScale);
+	}
 	case Row_VSync:
 		return OnOff(S.bVSync);
 	case Row_MaxFPS:
 		return S.MaxFPS <= 0 ? FString(TEXT("ILLIMIT\u00c9")) : FString::Printf(TEXT("%d"), S.MaxFPS);
 	case Row_Profile:
-		return ProfileNames[FMath::Clamp(S.GraphicsProfile, 0, 3)];
+		return ProfileNames[FMath::Clamp(S.GraphicsProfile, 0, 4)];
 	case Row_Quality:
 		return QualityNames[FMath::Clamp(S.Quality, 0, 4)];
 	case Row_HardwareRT:
@@ -2502,6 +2511,8 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return !IsHardwareRayTracingAvailable() ? FString(TEXT("INDISPONIBLE")) : OnOff(S.bRTShadows);
 	case Row_AreaLights:
 		return OnOff(S.bAreaLights);
+	case Row_FullCreatures:
+		return OnOff(S.bFullCreatures);
 	case Row_VolumetricFog:
 		return OnOff(S.bVolumetricFog);
 	case Row_FilmGrain:
@@ -2543,8 +2554,10 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return TEXT("Limiter les images par seconde r\u00e9duit la chaleur et le bruit de la carte graphique. Sans effet dans l'\u00e9diteur.");
 	case Row_Profile:
 		return TEXT("PERFORMANCE : qualit\u00e9 \u00c9lev\u00e9e, Lumen logiciel, rendu \u00e0 67 % (TSR). QUALIT\u00c9 : \u00c9pique, Lumen en ray tracing ")
-			TEXT("mat\u00e9riel (cache de surfaces), rendu \u00e0 80 %. CIN\u00c9MATIQUE : reflets \u00e9clair\u00e9s par les rayons, ombres ray trac\u00e9es de la lampe, ")
-			TEXT("rendu \u00e0 100 %. Modifier un r\u00e9glage ci-dessous passe en PERSONNALIS\u00c9. S'applique tout de suite.");
+			TEXT("mat\u00e9riel (cache de surfaces), rendu \u00e0 80 %. RTX FLUIDE : ray tracing mat\u00e9riel, rendu \u00e0 67 % agrandi par TSR, ombres des ")
+			TEXT("n\u00e9ons jusqu'\u00e0 25 m, Hound all\u00e9g\u00e9 : vise 60 images/s stables avec une carte RTX. CIN\u00c9MATIQUE : reflets \u00e9clair\u00e9s par les ")
+			TEXT("rayons, ombres ray trac\u00e9es de la lampe, mod\u00e8les complets, rendu \u00e0 100 %. Modifier un r\u00e9glage ci-dessous passe en PERSONNALIS\u00c9. ")
+			TEXT("S'applique tout de suite, aussi aux zones d\u00e9j\u00e0 charg\u00e9es.");
 	case Row_Quality:
 		return TEXT("Ombres, Lumen, textures, anti-cr\u00e9nelage (scalability). S'applique tout de suite.");
 	case Row_HardwareRT:
@@ -2559,7 +2572,9 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return TEXT("Ombres de la lampe torche ray trac\u00e9es (contact net, pas de recalcul des ombres virtuelles \u00e0 chaque mouvement de la lampe). ")
 			TEXT("Les plafonniers gardent les ombres virtuelles (VSM), moins ch\u00e8res pour des dizaines de lumi\u00e8res fixes.");
 	case Row_AreaLights:
-		return TEXT("Ombres douces des n\u00e9ons. S'applique aux zones charg\u00e9es ensuite.");
+		return TEXT("Ombres douces des n\u00e9ons. S'applique tout de suite, zones d\u00e9j\u00e0 charg\u00e9es comprises (quelques lumi\u00e8res par image).");
+	case Row_FullCreatures:
+		return TEXT("Hound d'origine (175 000 sommets, pelage complet) au lieu du d\u00e9riv\u00e9 all\u00e9g\u00e9. Tr\u00e8s co\u00fbteux en ray tracing. S'applique aussi aux entit\u00e9s pr\u00e9sentes.");
 	case Row_VolumetricFog:
 		return TEXT("Halos de lumi\u00e8re dans l'air humide.");
 	case Row_VHSEffect:
@@ -2629,9 +2644,18 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		break;
 	}
 	case Row_Profile:
-		S.GraphicsProfile = (FMath::Clamp(S.GraphicsProfile, 0, 3) + Dir + 3) % 3; // le profil PERSONNALISE ne se choisit pas
+	{
+		// le profil PERSONNALISE ne se choisit pas ; depuis lui, on repart du profil Qualite
+		int32 Pos = 1;
+		for (int32 k = 0; k < UE_ARRAY_COUNT(ProfileCycle); ++k)
+		{
+			Pos = ProfileCycle[k] == S.GraphicsProfile ? k : Pos;
+		}
+		const int32 NumProfiles = UE_ARRAY_COUNT(ProfileCycle);
+		S.GraphicsProfile = ProfileCycle[(Pos + Dir + NumProfiles) % NumProfiles];
 		ApplyGraphicsProfile(S.GraphicsProfile);
 		break;
+	}
 	case Row_Quality:
 		S.Quality = (S.Quality + Dir + 5) % 5;
 		S.GraphicsProfile = 3;
@@ -2650,6 +2674,10 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		break;
 	case Row_AreaLights:
 		S.bAreaLights = !S.bAreaLights;
+		S.GraphicsProfile = 3;
+		break;
+	case Row_FullCreatures:
+		S.bFullCreatures = !S.bFullCreatures;
 		S.GraphicsProfile = 3;
 		break;
 	case Row_VolumetricFog:
@@ -2693,6 +2721,7 @@ void ABRPlayerController::LoadSettings()
 	Cfg.GetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
 	Cfg.GetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
 	Cfg.GetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
+	Cfg.GetBool(SettingsSection, TEXT("FullCreatures"), S.bFullCreatures);
 	Cfg.GetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
 	Cfg.GetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain);
 	Cfg.GetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
@@ -2719,8 +2748,8 @@ void ABRPlayerController::LoadSettings()
 	S.Sensitivity = FMath::Clamp(S.Sensitivity, 0.1f, 5.f);
 	S.FOV = FMath::Clamp(S.FOV, 70.f, 110.f);
 	S.Quality = FMath::Clamp(S.Quality, 0, 4);
-	S.GraphicsProfile = FMath::Clamp(S.GraphicsProfile, 0, 3);
-	if (S.GraphicsProfile < 3)
+	S.GraphicsProfile = FMath::Clamp(S.GraphicsProfile, 0, 4);
+	if (S.GraphicsProfile != 3)
 	{
 		ApplyGraphicsProfile(S.GraphicsProfile);
 	}
@@ -2735,18 +2764,23 @@ void ABRPlayerController::ApplyGraphicsProfile(int32 Profile)
 	{
 	case 0: // Performance
 		S.Quality = 2; S.bHardwareRT = false; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 67; S.bAreaLights = false;
-		S.bVolumetricFog = true;
+		S.bVolumetricFog = true; S.bFullCreatures = false;
 		break;
 	case 2: // Cinematique
 		S.Quality = 4; S.bHardwareRT = true; S.bRTHitLighting = true; S.bRTShadows = true; S.RenderScale = 100; S.bAreaLights = true;
-		S.bVolumetricFog = true;
+		S.bVolumetricFog = true; S.bFullCreatures = true;
+		break;
+	case 4: // v4.8 : RTX fluide : ray tracing materiel sans les deux reglages les plus chers (hit lighting, ombres RT de la
+		// lampe), TSR depuis 67 % (1440p -> 2160p : 1707x960 en 1440p), ombres des neons jusqu'a 25 m, Hound allege
+		S.Quality = 3; S.bHardwareRT = true; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 67; S.bAreaLights = true;
+		S.bVolumetricFog = true; S.bFullCreatures = false;
 		break;
 	default: // Qualite
 		S.Quality = 3; S.bHardwareRT = true; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 80; S.bAreaLights = true;
-		S.bVolumetricFog = true;
+		S.bVolumetricFog = true; S.bFullCreatures = false;
 		break;
 	}
-	S.GraphicsProfile = FMath::Clamp(Profile, 0, 2);
+	S.GraphicsProfile = (Profile == 4 || (Profile >= 0 && Profile <= 2)) ? Profile : 1;
 }
 
 bool ABRPlayerController::IsHardwareRayTracingAvailable()
@@ -2776,16 +2810,22 @@ FString ABRPlayerController::GetRenderModeText(bool bShort) const
 		VP = GEngine->GameViewport->Viewport->GetSizeXY();
 	}
 	const FIntPoint In(FMath::RoundToInt(VP.X * SP / 100.f), FMath::RoundToInt(VP.Y * SP / 100.f));
+	// v4.8 : affichage honnete : methode d'agrandissement reelle et resolution dynamique eventuelle
+	const int32 AA = FMath::RoundToInt(CVarF(TEXT("r.AntiAliasingMethod"), 4.f));
+	const TCHAR* Upscaler = AA == 4 ? TEXT("TSR") : (AA == 2 ? TEXT("TAA") : (AA == 1 ? TEXT("FXAA") : TEXT("sans AA")));
+	const bool bDynRes = CVarF(TEXT("r.DynamicRes.OperationMode"), 0.f) > 0.5f;
 	if (bShort)
 	{
-		return FString::Printf(TEXT("%s  \u00b7  %s  \u00b7  %dx%d \u2192 %dx%d"), *RHIName,
-			bLumenHW ? (bHit ? TEXT("RT + HIT LIGHTING") : TEXT("LUMEN RT")) : TEXT("LUMEN LOGICIEL"), In.X, In.Y, VP.X, VP.Y);
+		return FString::Printf(TEXT("%s  \u00b7  %s  \u00b7  %dx%d \u2192 %dx%d %s%s"), *RHIName,
+			bLumenHW ? (bHit ? TEXT("RT + HIT LIGHTING") : TEXT("LUMEN RT")) : TEXT("LUMEN LOGICIEL"), In.X, In.Y, VP.X, VP.Y, Upscaler,
+			bDynRes ? TEXT(" dyn.") : TEXT(""));
 	}
 	return FString::Printf(TEXT("Mode r\u00e9el : %s %s  \u00b7  ray tracing mat\u00e9riel %s  \u00b7  Lumen %s (reflets : %s)  \u00b7  ombres : %s%s  \u00b7  ")
-		TEXT("rendu %dx%d \u2192 %dx%d (%d %%, TSR)"),
+		TEXT("rendu %dx%d \u2192 %dx%d (%d %%, %s%s)"),
 		*RHIName, bSM6 ? TEXT("SM6") : TEXT("SM5"), bRTOn ? TEXT("actif") : TEXT("indisponible"), bLumenHW ? TEXT("mat\u00e9riel") : TEXT("logiciel"),
 		bHit ? TEXT("\u00e9clair\u00e9s par les rayons") : TEXT("cache de surfaces"), bVSM ? TEXT("virtuelles (VSM)") : TEXT("cartes classiques"),
-		bLampRT ? TEXT(", lampe ray trac\u00e9e") : TEXT(""), In.X, In.Y, VP.X, VP.Y, FMath::RoundToInt(SP));
+		bLampRT ? TEXT(", lampe ray trac\u00e9e") : TEXT(""), In.X, In.Y, VP.X, VP.Y, FMath::RoundToInt(SP), Upscaler,
+		bDynRes ? TEXT(", r\u00e9solution dynamique") : TEXT(""));
 }
 
 void ABRPlayerController::SaveSettings() const
@@ -2801,6 +2841,7 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
 	Cfg.SetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
 	Cfg.SetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
+	Cfg.SetBool(SettingsSection, TEXT("FullCreatures"), S.bFullCreatures);
 	Cfg.SetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
 	Cfg.SetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain);
 	Cfg.SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
@@ -2853,6 +2894,14 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("r.ScreenPercentage %d"), FMath::Clamp(S.RenderScale, 50, 100)));
 	// Image plus nette (filtre de nettete du tonemapper) a partir de la qualite Elevee
 	Cmd(FString::Printf(TEXT("r.Tonemapper.Sharpen %.2f"), S.Quality >= 2 ? 0.5f : 0.25f));
+	// v4.8 : sans hit lighting, le cache de surfaces de Lumen n'eclaire pas les maillages a squelette : dans les reflets
+	// ray traces, les entites et la combinaison devenaient noires. Ils ne sont dans la scene ray tracee que si les
+	// reflets sont eclaires par les rayons, ou pour les ombres ray tracees de la lampe ; sinon les reflets les prennent a
+	// l'ecran (traces d'ecran de Lumen)
+	Cmd(FString::Printf(TEXT("r.RayTracing.Geometry.SkeletalMeshes %d"), (bHitLighting || S.bRTShadows) ? 1 : 0));
+	// v4.8 : TSR : historique a 100 % (au lieu de 200 % en qualite Cinematique) hors profil Cinematique : a 1440p et
+	// au-dela, c'est l'un des postes les plus chers du TSR, pour un gain de nettete faible
+	Cmd(FString::Printf(TEXT("r.TSR.History.ScreenPercentage %d"), S.GraphicsProfile == 2 ? 200 : 100));
 
 	// Volume general
 	FAudioDeviceHandle Audio = W->GetAudioDevice();
@@ -2886,4 +2935,23 @@ void ABRPlayerController::ApplySettings()
 		Cmd(FString::Printf(TEXT("r.VSync %d"), S.bVSync ? 1 : 0));
 		Cmd(FString::Printf(TEXT("t.MaxFPS %d"), FMath::Max(0, S.MaxFPS)));
 	}
+	// v4.8 : ce qui est deja construit suit les reglages (type des lumieres, ombres au loin, detail des entites)
+	if (ABRWorld* BW = ABRWorld::Get(this))
+	{
+		BW->OnGraphicsSettingsChanged();
+	}
+}
+
+FIntPoint ABRPlayerController::InternalResolution()
+{
+	// v4.8 : resolution reellement calculee avant TSR : pourcentage de rendu (r.ScreenPercentage) et, s'il est actif, le
+	// pourcentage secondaire de la fenetre de jeu ; resolution dynamique signalee a part (GetRenderModeText)
+	IConsoleVariable* SP = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
+	const float Pct = FMath::Clamp(SP ? SP->GetFloat() : 100.f, 10.f, 200.f);
+	FIntPoint VP(0, 0);
+	if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
+	{
+		VP = GEngine->GameViewport->Viewport->GetSizeXY();
+	}
+	return FIntPoint(FMath::RoundToInt(VP.X * Pct / 100.f), FMath::RoundToInt(VP.Y * Pct / 100.f));
 }

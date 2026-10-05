@@ -226,6 +226,11 @@ private:
 		const TCHAR* SkinName = nullptr);
 	void BuildHound(const TMap<FString, FLinearColor>* Tints);
 	bool BuildHoundModel();
+public:
+	/** v4.8 : modele complet ou allege (Hound) selon le reglage effectif FBRSettings::bFullCreatures, applique tout de
+	 *  suite a une entite deja presente (meme squelette : on change le maillage, les os suivent) */
+	void RefreshModelDetail();
+private:
 	bool BuildClumpModel();
 	bool BuildBacteriaModel();
 	bool BuildMothModel();
