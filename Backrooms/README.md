@@ -7,6 +7,40 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.8** (combinaison texturée, fluidité RTX, 22 langues) :
+
+- **Où lire** : état des lieux dans [`Docs/AUDIT_v4.8.md`](Docs/AUDIT_v4.8.md) ; tableau des bogues, contrôles, mesures à
+  faire et commandes dans [`Docs/RAPPORT_v4.8.md`](Docs/RAPPORT_v4.8.md) ; couverture des traductions dans
+  [`Docs/LOCALISATION_COUVERTURE.md`](Docs/LOCALISATION_COUVERTURE.md).
+
+> **Toujours rien de compilé ni de lancé dans Unreal** (conteneur sans GPU ni moteur). La compilation, le rendu, les
+> captures du jeu et les images par seconde sont **non vérifiés** ; le rapport donne les commandes pour le faire.
+
+- **Combinaison du joueur texturée** :
+  - elle était sombre et sans texture en Standalone et en version empaquetée : les matériaux maîtres ne déclaraient
+    pas l'usage « maillage à squelette » ;
+  - usages déclarés (import Python et C++), slots affectés par leur nom, matériau d'erreur visible au lieu d'un noir
+    trompeur ;
+  - diagnostic par section dans le journal et le test ;
+  - `backrooms_setup.validate()` et `repair()` (réparation ciblée, rejouable).
+- **Fluidité** :
+  - nouveau profil **RTX FLUIDE** : ray tracing matériel, TSR à 67 %, sans *hit lighting* ni ombres ray tracées de la
+    lampe ;
+  - génération étalée dans un budget par image partagé (planification, sous-lots, démontage) ;
+  - collisions préparées là où les joueurs vont arriver ;
+  - préchargement des ressources dès le menu, précompilation des shaders (PSO) ;
+  - un changement de profil s'applique aussi aux lumières déjà construites et au Hound présent ;
+  - entités et eau plus noires dans les reflets.
+- **22 langues** (§ 2 quater) : détectées au premier lancement, changées en jeu, enregistrées, propres à chaque joueur
+  en coop. Arabe et persan de droite à gauche, chinois et japonais coupés correctement, polices Noto livrées.
+  **Traductions produites automatiquement : aucune n'est encore relue** par une personne qui parle la langue.
+- **Bogues** :
+  - une partie d'une version plus récente n'est plus réécrite au format ancien ;
+  - un échec d'écriture n'est plus effacé par l'écriture suivante ;
+  - santé et coups mortels décidés par le serveur ;
+  - réveil trop tôt refusé par le serveur.
+- **Tests** : `-BRAutoTest -BRAutoTestV48`, et une partie v4.8 dans `-BRNetTest`.
+
 **Nouveautés de la version 4.7** (finition et fiabilité) :
 
 - **Où lire** : état des lieux dans [`Docs/AUDIT_v4.7.md`](Docs/AUDIT_v4.7.md) ; rapport, contrôles et validations
@@ -672,6 +706,22 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
 
 ---
 
+## 2 quater. Langues (v4.8)
+
+- **22 langues** : français, anglais, allemand, espagnol (Espagne et Amérique latine), portugais (Brésil et Portugal),
+  italien, russe, ukrainien, polonais, tchèque, hongrois, suédois, turc, indonésien, chinois simplifié et traditionnel,
+  japonais, coréen, arabe, persan.
+- **Au premier lancement**, le jeu prend la langue du système s'il la propose, sinon l'anglais.
+- **Changer de langue** : carte **LANGUE** du menu principal, ou **Tab → PARAMÈTRES → LANGUE**. Le changement est
+  immédiat (textes, nombres, dates) et enregistré dans `BackroomsPlayer.ini`.
+- **En coop**, chaque joueur garde sa langue : seuls des identifiants circulent, chaque machine écrit ses textes.
+- La page Langue indique pour chaque langue si sa traduction est **relue** ou **produite automatiquement, à relire**.
+  En v4.8, seul le français (langue source) est relu.
+- **Pour traduire ou relire** : catalogues `Content/Localization/Game/<code>/Game.po`, puis
+  `python Tools/Localization/loc_build.py` (contrôle et compilation). Détails dans le rapport v4.8, § 8.
+- Non traduits : les noms des entités et des lieux, les sigles (VHS, RTX), les noms des langues (toujours dans leur
+  écriture) et le journal technique (`LogBackrooms`).
+
 ## 3. Mécaniques de survie
 
 - **Santé** : les entités vous blessent. Elle remonte lentement si vous êtes au calme.
@@ -870,6 +920,12 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
   | **Performance** | Élevé | logiciel | cache de surfaces | VSM | 67 % | non |
   | **Qualité** (défaut) | Épique | ray tracing matériel | cache de surfaces, reflets de premier plan de l'eau | VSM | 80 % | oui |
   | **Cinématique** | Cinématique | ray tracing matériel | *hit lighting* (éclairés par les rayons) | VSM + lampe ray tracée | 100 % | oui |
+  | **RTX fluide** (v4.8) | Épique | ray tracing matériel | cache de surfaces | VSM | 67 % | oui |
+
+  **v4.8** : les ombres des néons s'arrêtent à 15 m (Performance), 25 m (Qualité, RTX fluide) ou 40 m (Cinématique).
+  Le Hound complet (175 000 sommets) n'est utilisé qu'en Cinématique, ou avec **MODÈLES COMPLETS DES ENTITÉS** en Personnalisé. Un
+  changement de profil s'applique aussi à ce qui est déjà chargé. **RTX fluide** vise 60 images/s ou plus sur une
+  RTX 4080 ; **ce n'est pas encore mesuré** (rapport v4.8, § 4.2).
 
   Modifier un réglage à la main passe en **PERSONNALISÉ** ; des réglages d'une version précédente sont conservés tels
   quels (profil Personnalisé). Tout s'applique immédiatement, sauf le RHI et le support du ray tracing.
@@ -941,6 +997,10 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 | Où sont mes sauvegardes ? | `Saved/SaveGames/BR_Partie_1.sav` à `BR_Partie_6.sav` (dossier du projet, ou du jeu empaqueté) |
 | Le jeu rame depuis la v4.0 | Désactivez **BROUILLARD VOLUMÉTRIQUE** dans les paramètres, ou baissez la qualité |
 | La combinaison n'apparaît pas en 3e personne | Le jeu affiche des boîtes jaunes si les modèles `SM_Hazmat_*` ne sont pas importés : relancer l'import |
+| La combinaison est sombre, grise ou sans texture (v4.8) | Les matériaux maîtres d'avant la v4.8 n'ont pas l'usage « maillage à squelette ». Ouvrez l'éditeur une fois (reconstruction automatique, matériaux v7), ou dans l'Output Log (Python) : `import backrooms_setup; backrooms_setup.repair()`. Une section **magenta** signale un slot inattendu : le journal (`LogBackrooms`) dit lequel |
+| Des carrés à la place des lettres (chinois, japonais, coréen, arabe, persan) | Les polices de `Content/Fonts` manquent dans le paquet. Vérifiez `+DirectoriesToAlwaysStageAsUFS=(Path="Fonts")` dans `Config/DefaultGame.ini` et recuisez. Le journal liste les fichiers absents au lancement |
+| Le jeu reste en français ou ne change pas de langue | Le paquet doit contenir les cultures (`InternationalizationPreset=All` et `+CulturesToStage=` dans `DefaultGame.ini`) et les fichiers `Content/Localization/Game/<code>/Game.locres` |
+| Je veux revenir à la langue du système | Supprimez la ligne `Language=` de `Saved/Config/<plateforme>/BackroomsPlayer.ini` |
 
 ## 9. Tests automatiques
 
@@ -1008,6 +1068,29 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   - **attaque** : esquivée, puis reçue une seule fois dans sa vraie fenêtre ;
   - **streaming** : sprint de 25 s au Niveau 1, sans aucune image sans sol ;
   - **graines** : sorties et cassettes atteignables sur 5 graines.
+- **`-BRAutoTestV48`** (v4.8, avec `-BRAutoTest`) lance seules les vérifications v4.8. Elles sont aussi incluses dans
+  `-BRAutoTest`. Les parties du joueur, sa langue et ses réglages ne sont pas touchés (rétablis à la fin) :
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV48
+  ```
+  - **sauvegardes** : partie d'un format plus récent (lecture seule, fichier intact), échec d'écriture gardé puis
+    montré ;
+  - **journal** : notes d'une partie v4.7 converties en identifiants, texte dans la langue choisie ;
+  - **combinaison** : matériau de chaque section (ni matériau par défaut, ni matériau d'erreur), captures au Niveau 0
+    et dans les Poolrooms ;
+  - **profils** : lumières déjà construites et Hound présent mis à jour dans les 4 profils ;
+  - **RTX fluide** : mesures pendant une course de 20 s au Niveau 0 et dans les Poolrooms (objectif : 95 % des images
+    sous 16,7 ms) ;
+  - **langues** : les 22 langues (aucun texte sans traduction, nombres, dates, sens d'écriture, coupure des lignes),
+    préférence enregistrée et reprise, captures de la page Langue (arabe, japonais, chinois, russe), du menu et des
+    paramètres.
+
+  `Mesures.csv` a trois colonnes de plus : images hors budget de génération, pire démontage, chargements synchrones.
+  `-BRFrameBudget=<ms>` change le budget de génération par image.
+
+  **`-BRNetTest`, v4.8** : après la réanimation v4.7, le client passe en anglais (l'hôte garde sa langue), reçoit un
+  coup décidé par le serveur (appliqué une seule fois), puis un coup mortel ; sa demande de réveil immédiate doit être
+  refusée par le serveur, avant que l'hôte le relève.
 
   `-BRChunkBudget=<ms>` règle le budget de construction des chunks. `-BRPitShadows=half|none` mesure le coût des
   ombres des salles de fosses.
