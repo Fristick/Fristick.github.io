@@ -123,11 +123,47 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		Bact.HalfHeight = 108.f; Bact.Radius = 30.f; Bact.WalkSpeed = 140.f; Bact.ChaseSpeed = 440.f; Bact.SightRange = 2600.f;
 		Bact.AttackRange = 130.f; Bact.Damage = 60.f; Bact.SanityDamage = 20.f; Bact.AttackCooldown = 1.4f; Bact.Aura = 0.5f;
 		Bact.AuraRadius = 900.f; Bact.Voice = TEXT("S_Bacteria"); Bact.VoiceInterval = 0.f; Bact.VoiceFalloff = 3200.f; // v4.4 : ses cris en continu (enregistrement fourni)
+
+		// v4.7 : attaque en trois temps et demarche, espece par espece.
+		// Preparation, fenetre d'impact, recuperation (s) ; allonge de la fente (cm) ; vitesse gardee pendant la
+		// preparation ; acceleration, freinage (cm/s2) ; rotation (deg/s)
+		auto Tune = [&L](EBREntityKind K, float Windup, float Impact, float Recover, float Lunge, float Move, float Accel, float Brake, float Turn)
+		{
+			FBREntityInfo& E = L[static_cast<int32>(K)];
+			E.WindupTime = Windup;
+			E.ImpactWindow = Impact;
+			E.RecoveryTime = Recover;
+			E.LungeReach = Lunge;
+			E.WindupMove = Move;
+			E.Acceleration = Accel;
+			E.Braking = Brake;
+			E.TurnRate = Turn;
+		};
+		// Smiler : coup mortel, mais le sourire s'ouvre avant ; on peut encore reculer dans la lumiere
+		Tune(EBREntityKind::Smiler, 0.40f, 0.15f, 0.45f, 30.f, 0.15f, 2000.f, 2200.f, 400.f);
+		// Hound : se tasse, puis bondit loin ; foulees puissantes, virages larges
+		Tune(EBREntityKind::Hound, 0.30f, 0.18f, 0.55f, 70.f, 0.f, 2600.f, 1400.f, 240.f);
+		Tune(EBREntityKind::Faceling, 0.50f, 0.15f, 0.60f, 15.f, 0.3f, 700.f, 1200.f, 200.f);
+		// Skin-Stealer : trompeur, la preparation est courte, il continue d'avancer pendant qu'il arme
+		Tune(EBREntityKind::SkinStealer, 0.30f, 0.16f, 0.65f, 45.f, 0.4f, 900.f, 1800.f, 300.f);
+		Tune(EBREntityKind::Deathmoth, 0.45f, 0.15f, 0.60f, 30.f, 0.3f, 1400.f, 900.f, 260.f);
+		// Wretch : epuise, geste lent et long a recuperer
+		Tune(EBREntityKind::Wretch, 0.65f, 0.18f, 0.90f, 10.f, 0.2f, 420.f, 700.f, 110.f);
+		Tune(EBREntityKind::Partygoer, 0.45f, 0.15f, 0.50f, 35.f, 0.2f, 1800.f, 1500.f, 360.f);
+		// Clump : lourd, s'ecrase en avant sur ses bras d'appui
+		Tune(EBREntityKind::Clump, 0.60f, 0.20f, 0.85f, 25.f, 0.1f, 500.f, 2600.f, 80.f);
+		// Bacteria : saccadee, arrets et departs secs, demi-tours brusques
+		Tune(EBREntityKind::Bacteria, 0.32f, 0.15f, 0.50f, 45.f, 0.1f, 3200.f, 5000.f, 540.f);
 		return L;
 	}();
 	const int32 Index = FMath::Clamp(static_cast<int32>(InKind), 0, Infos.Num() - 1);
 	return Infos[Index];
 }
+
+int32 ABREntity::StatWindups = 0;
+int32 ABREntity::StatHits = 0;
+int32 ABREntity::StatMisses = 0;
+float ABREntity::StatLastHitDelay = -1.f;
 
 FBRHumanoidSpec ABREntity::SpecFor(EBREntityKind InKind)
 {
@@ -234,6 +270,10 @@ void ABREntity::BeginPlay()
 	UCharacterMovementComponent* M = GetCharacterMovement();
 	M->MaxWalkSpeed = I.WalkSpeed;
 	M->MaxFlySpeed = I.WalkSpeed;
+	// v4.7 : demarche propre a l'espece (departs, arrets, virages)
+	M->MaxAcceleration = I.Acceleration;
+	M->BrakingDecelerationWalking = I.Braking;
+	M->RotationRate = FRotator(0.f, I.TurnRate, 0.f);
 	if (I.bFlying)
 	{
 		M->GravityScale = 0.f;
@@ -1236,7 +1276,8 @@ void ABREntity::PlayVoice(float Volume)
 void ABREntity::MulticastStrike_Implementation()
 {
 	StrikeTime = 0.f;
-	WindupAnim = 0.f;
+	WindupClock = -1.f;
+	// (la pose armee se relache pendant la montee de la frappe : WindupAnim * (1 - Strike) dans AnimateLimbs)
 }
 
 void ABREntity::MulticastVoiceCue_Implementation(float Volume)
@@ -1320,6 +1361,8 @@ bool ABREntity::IsDirectPathClear(const FVector& Goal) const
 void ABREntity::MoveTowards(const FVector& Dest, float Speed)
 {
 	UCharacterMovementComponent* M = GetCharacterMovement();
+	// v4.7 : demarche de l'espece et phase d'attaque (preparation lente, fente, recuperation)
+	Speed *= GaitScale * AttackMoveScale();
 	M->MaxWalkSpeed = Speed;
 	M->MaxFlySpeed = Speed;
 	FVector Dir = Dest - GetActorLocation();
@@ -1492,17 +1535,195 @@ void ABREntity::FacePlayer(float Dt)
 
 void ABREntity::TryAttack(ABRCharacter* P, float Dist)
 {
-	if (!P || P->IsDead() || AttackTimer > 0.f)
+	// v4.7 : ne frappe plus dans la meme image : lance la preparation. Le coup n'est porte que pendant la fenetre
+	// d'impact, si la proie est encore a portee et visible (UpdateAttack)
+	if (!P || P->IsDead() || AttackTimer > 0.f || AttackPhase != EAttackPhase::None)
 	{
 		return;
 	}
 	const FBREntityInfo& I = MyInfo();
 	if (Dist <= I.AttackRange + 40.f && HasLineOfSight(P))
 	{
-		AttackTimer = I.AttackCooldown;
-		PlayVoice(1.f);
-		MulticastStrike();
-		P->ReceiveAttack(I.Damage, I.SanityDamage, this, I.Name);
+		AttackPhase = EAttackPhase::Windup;
+		AttackPhaseTime = 0.f;
+		AttackStartTime = Life;
+		bAttackLanded = false;
+		AttackVictim = P;
+		++StatWindups;
+		MulticastAttackWindup(I.WindupTime);
+		MulticastVoiceCue(1.f); // le cri annonce le coup, chez tous les joueurs proches
+	}
+}
+
+void ABREntity::MulticastAttackWindup_Implementation(float Duration)
+{
+	WindupClock = 0.f;
+	WindupDuration = FMath::Max(0.05f, Duration);
+}
+
+float ABREntity::AttackMoveScale() const
+{
+	const FBREntityInfo& I = MyInfo();
+	switch (AttackPhase)
+	{
+	case EAttackPhase::Windup:
+		return I.WindupMove;
+	case EAttackPhase::Impact:
+		// Fente : les especes qui bondissent gagnent de la vitesse, les autres ralentissent en frappant
+		return I.LungeReach >= 40.f ? 1.6f : 0.5f;
+	case EAttackPhase::Recover:
+		return 0.25f;
+	default:
+		return 1.f;
+	}
+}
+
+void ABREntity::UpdateAttack(float Dt)
+{
+	if (AttackPhase == EAttackPhase::None)
+	{
+		return;
+	}
+	const FBREntityInfo& I = MyInfo();
+	ABRCharacter* V = AttackVictim.Get();
+	AttackPhaseTime += Dt;
+	// Face a la proie pendant la preparation (lisible), sans pivoter pendant l'impact et la recuperation (poids)
+	if (V && AttackPhase == EAttackPhase::Windup)
+	{
+		FVector To = V->GetActorLocation() - GetActorLocation();
+		To.Z = 0.f;
+		if (!To.IsNearlyZero())
+		{
+			SetActorRotation(FMath::RInterpConstantTo(GetActorRotation(), To.Rotation(), Dt, I.TurnRate * 1.5f));
+		}
+	}
+	switch (AttackPhase)
+	{
+	case EAttackPhase::Windup:
+		// Proie hors d'atteinte (elle a fui loin, elle est morte, disparue) : l'entite abandonne son geste
+		if (!V || V->IsDead() || FVector::Dist2D(V->GetActorLocation(), GetActorLocation()) > (I.AttackRange + I.LungeReach) * 3.f)
+		{
+			AttackPhase = EAttackPhase::Recover;
+			AttackPhaseTime = 0.f;
+			++StatMisses;
+			break;
+		}
+		if (AttackPhaseTime >= I.WindupTime)
+		{
+			AttackPhase = EAttackPhase::Impact;
+			AttackPhaseTime = 0.f;
+			MulticastStrike();
+		}
+		break;
+	case EAttackPhase::Impact:
+	{
+		// Le bras atteint son allonge 0,05 s apres le debut du geste (StrikeCurve) : la fenetre commence la
+		if (!bAttackLanded && AttackPhaseTime >= 0.05f && V && !V->IsDead())
+		{
+			FVector To = V->GetActorLocation() - GetActorLocation();
+			const float Dist = static_cast<float>(To.Size2D());
+			To.Z = 0.f;
+			const float Facing = To.IsNearlyZero() ? 1.f : static_cast<float>(FVector::DotProduct(To.GetSafeNormal(), GetActorForwardVector()));
+			const bool bInReach = Dist <= I.AttackRange + 30.f + I.LungeReach;
+			const bool bVertical = FMath::Abs(V->GetActorLocation().Z - GetActorLocation().Z) < I.HalfHeight + 120.f;
+			if (bInReach && bVertical && Facing > 0.f && HasLineOfSight(V))
+			{
+				bAttackLanded = true;
+				++StatHits;
+				StatLastHitDelay = Life - AttackStartTime;
+				V->ReceiveAttack(I.Damage, I.SanityDamage, this, I.Name);
+			}
+		}
+		if (AttackPhaseTime >= 0.05f + I.ImpactWindow)
+		{
+			if (!bAttackLanded)
+			{
+				++StatMisses; // esquive : hors de portee, derriere un obstacle ou cache
+			}
+			AttackPhase = EAttackPhase::Recover;
+			AttackPhaseTime = 0.f;
+		}
+		break;
+	}
+	case EAttackPhase::Recover:
+		if (AttackPhaseTime >= I.RecoveryTime)
+		{
+			AttackPhase = EAttackPhase::None;
+			AttackVictim.Reset();
+			// Le delai entre deux attaques compte a partir de la fin du geste (au moins 0,2 s)
+			AttackTimer = FMath::Max(0.2f, I.AttackCooldown - I.WindupTime - I.ImpactWindow - I.RecoveryTime);
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+void ABREntity::UpdateGait(float Dt, const ABRCharacter* P)
+{
+	const FBREntityInfo& I = MyInfo();
+	const bool bChasing = State == EState::Chase;
+	GaitTimer -= Dt;
+	GaitCooldown -= Dt;
+	UCharacterMovementComponent* M = GetCharacterMovement();
+	switch (Kind)
+	{
+	case EBREntityKind::Bacteria:
+		// Saccades : elans courts puis arrets nets (plus frequents en poursuite)
+		if (GaitTimer <= 0.f)
+		{
+			bGaitBurst = !bGaitBurst;
+			GaitTimer = bGaitBurst ? FMath::FRandRange(bChasing ? 0.35f : 0.8f, bChasing ? 0.7f : 2.2f)
+				: FMath::FRandRange(bChasing ? 0.10f : 0.25f, bChasing ? 0.25f : 0.7f);
+		}
+		GaitScale = bGaitBurst ? (bChasing ? 1.25f : 1.f) : 0.05f;
+		break;
+	case EBREntityKind::Hound:
+		// Galop : la vitesse pulse au rythme des foulees
+		GaitScale = 1.f + (bChasing ? 0.12f : 0.05f) * FMath::Sin(Life * 2.f * PI * (bChasing ? 1.7f : 1.1f));
+		break;
+	case EBREntityKind::Wretch:
+		// Epuise : avance par a-coups, trebuche de temps en temps
+		if (GaitTimer <= 0.f)
+		{
+			bGaitBurst = !bGaitBurst; // vrai : trebuche
+			GaitTimer = bGaitBurst ? FMath::FRandRange(0.35f, 0.6f) : FMath::FRandRange(2.5f, 6.f);
+			if (bGaitBurst)
+			{
+				Twitch = FRotator(FMath::FRandRange(8.f, 16.f), FMath::FRandRange(-15.f, 15.f), FMath::FRandRange(-20.f, 20.f));
+				TwitchTimer = GaitTimer;
+			}
+		}
+		GaitScale = bGaitBurst ? 0.15f : 0.78f + 0.22f * FMath::Sin(Life * 1.9f);
+		break;
+	case EBREntityKind::SkinStealer:
+	{
+		// Trompeur : allure tranquille, puis brusque poussee quand la proie est proche
+		const float Dist = P ? static_cast<float>(FVector::Dist2D(P->GetActorLocation(), GetActorLocation())) : 1e9f;
+		if (bChasing && !bGaitBurst && GaitCooldown <= 0.f && Dist < 650.f && Dist > 180.f)
+		{
+			bGaitBurst = true;
+			GaitTimer = 1.1f;
+			GaitCooldown = 4.5f;
+		}
+		if (bGaitBurst && GaitTimer <= 0.f)
+		{
+			bGaitBurst = false;
+		}
+		GaitScale = bGaitBurst ? 1.4f : (bChasing ? 0.85f : 1.f);
+		if (M)
+		{
+			M->MaxAcceleration = bGaitBurst ? 3200.f : I.Acceleration;
+		}
+		break;
+	}
+	case EBREntityKind::Clump:
+		// Lourd : avance quand le poids retombe sur une main (Lurch), presque a l'arret entre deux appuis
+		GaitScale = ClumpArms.Num() > 0 ? 0.45f + 0.75f * Lurch : 0.6f + 0.4f * FMath::Abs(FMath::Sin(Life * 2.2f));
+		break;
+	default:
+		GaitScale = 1.f;
+		break;
 	}
 }
 
@@ -1518,6 +1739,9 @@ void ABREntity::Think(float Dt)
 	ChaseOut = 0.f;
 	NetChase = 0;
 	const FBREntityInfo& I = MyInfo();
+	// v4.7 : l'attaque en cours se deroule jusqu'au bout (meme si la proie change ou tombe), puis la demarche
+	UpdateAttack(Dt);
+	UpdateGait(Dt, P);
 	if (!W || !P || P->IsDead())
 	{
 		Reach = FMath::FInterpTo(Reach, 0.f, Dt, 3.f);
@@ -2124,6 +2348,92 @@ void ABREntity::PickPatrolGoal(ABRWorld* W, const ABRCharacter* P)
 // Animation procedurale
 // =====================================================================================================================
 
+void ABREntity::UpdateFootPlanting(float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const APawn* Viewer = UGameplayStatics::GetPlayerPawn(this, 0);
+	const float ViewDist = Viewer ? static_cast<float>(FVector::Dist(Viewer->GetActorLocation(), GetActorLocation())) : 0.f;
+	// Loin, en vol, figee ou sans jambes mesurees : pas de rayons, les reglages reviennent doucement a zero
+	const bool bActive = !I.bFlying && bFeetMeasured && FootLift.Num() == Limbs.Num() && ViewDist < 2500.f && !bScareOverride
+		&& GetCharacterMovement() && GetCharacterMovement()->IsMovingOnGround();
+	if (!bActive)
+	{
+		PelvisDrop = FMath::FInterpTo(PelvisDrop, 0.f, Dt, 6.f);
+		for (FLimb& L : Limbs)
+		{
+			L.PlantPitch = FMath::FInterpTo(L.PlantPitch, 0.f, Dt, 6.f);
+		}
+		return;
+	}
+	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : I.HalfHeight;
+	const float BaseZ = static_cast<float>(GetActorLocation().Z) - Half;
+	// Rayons au sol sous chaque pied, 20 fois par seconde (sol statique seulement : ni joueurs ni entites)
+	FootTraceTimer -= Dt;
+	if (FootTraceTimer <= 0.f && GetWorld())
+	{
+		FootTraceTimer = 0.05f;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BREntityFeet), false, this);
+		const FCollisionObjectQueryParams Obj(ECC_WorldStatic);
+		for (int32 i = 0; i < Limbs.Num(); ++i)
+		{
+			const FLimb& L = Limbs[i];
+			const USceneComponent* C = L.Pivot.Get();
+			if (!C || (L.Type != ELimb::Shin && L.Type != ELimb::HoundLower))
+			{
+				continue;
+			}
+			const FVector Foot = C->GetComponentTransform().TransformPosition(L.FootOffset);
+			FHitResult Hit;
+			const FVector From(Foot.X, Foot.Y, BaseZ + 45.f);
+			const FVector To(Foot.X, Foot.Y, BaseZ - 45.f);
+			// Pas de sol trouve (bord d'un bassin, d'une fosse) : on garde le niveau du corps, le pied ne plonge pas
+			FootGround[i] = GetWorld()->LineTraceSingleByObjectType(Hit, From, To, Obj, Q) && Hit.ImpactNormal.Z > 0.6f
+				? FMath::Clamp(static_cast<float>(Hit.ImpactPoint.Z) - BaseZ, -25.f, 35.f)
+				: 0.f;
+		}
+	}
+	// Le bassin descend vers le sol le plus bas sous un pied (marche descendante) ; les autres pieds plient le genou
+	float Lowest = 0.f;
+	for (int32 i = 0; i < Limbs.Num(); ++i)
+	{
+		if (Limbs[i].Type == ELimb::Shin || Limbs[i].Type == ELimb::HoundLower)
+		{
+			Lowest = FMath::Min(Lowest, FootGround[i]);
+		}
+	}
+	PelvisDrop = FMath::FInterpTo(PelvisDrop, Lowest, Dt, 10.f);
+	for (int32 i = 0; i < Limbs.Num(); ++i)
+	{
+		FLimb& L = Limbs[i];
+		if (L.Type != ELimb::Shin && L.Type != ELimb::HoundLower)
+		{
+			continue;
+		}
+		FootLift[i] = FMath::FInterpTo(FootLift[i], FMath::Clamp(FootGround[i] - PelvisDrop, 0.f, 35.f), Dt, 12.f);
+		const float Lift = FootLift[i];
+		if (L.Type == ELimb::HoundLower)
+		{
+			// Patte : le bas de la patte se replie (meme sens que le lever du pas)
+			L.PlantPitch = L.Sign * FMath::Clamp(FMath::RadiansToDegrees(Lift / FMath::Max(L.LowerLen, 10.f)) * 1.2f, 0.f, 40.f);
+			continue;
+		}
+		// Jambe : IK a deux segments. Raccourcir la distance hanche -> pied de Lift : la cuisse avance, le genou plie
+		const float A = FMath::Max(L.UpperLen, 5.f);
+		const float B = FMath::Max(L.LowerLen, 5.f);
+		const float D0 = A + B - 2.f;
+		const float D1 = FMath::Max(D0 - Lift, FMath::Abs(A - B) + 5.f);
+		auto HipAngle = [A, B](float D) { return FMath::Acos(FMath::Clamp((A * A + D * D - B * B) / (2.f * A * D), -1.f, 1.f)); };
+		auto KneeBend = [A, B](float D) { return PI - FMath::Acos(FMath::Clamp((A * A + B * B - D * D) / (2.f * A * B), -1.f, 1.f)); };
+		const float ThighDeg = FMath::RadiansToDegrees(HipAngle(D1) - HipAngle(D0));
+		const float KneeDeg = FMath::RadiansToDegrees(KneeBend(D1) - KneeBend(D0));
+		L.PlantPitch = -KneeDeg;
+		if (i > 0 && Limbs[i - 1].Type == ELimb::Thigh)
+		{
+			Limbs[i - 1].PlantPitch = ThighDeg;
+		}
+	}
+}
+
 bool ABREntity::MeasureFeet()
 {
 	bFeetMeasured = true;
@@ -2141,8 +2451,17 @@ bool ABREntity::MeasureFeet()
 		const FVector Knee = AT.InverseTransformPosition(C->GetComponentLocation());
 		const FVector FootWorld = AT.TransformPosition(FVector(Knee.X, Knee.Y, -I.HalfHeight));
 		L.FootOffset = C->GetComponentTransform().InverseTransformPosition(FootWorld);
+		// v4.7 : longueurs des deux segments (le segment du haut precede toujours celui du bas dans Limbs)
+		L.LowerLen = static_cast<float>(FVector::Dist(C->GetComponentLocation(), FootWorld));
+		const int32 Idx = static_cast<int32>(&L - Limbs.GetData());
+		if (Idx > 0 && Limbs[Idx - 1].Pivot.IsValid())
+		{
+			L.UpperLen = static_cast<float>(FVector::Dist(Limbs[Idx - 1].Pivot->GetComponentLocation(), C->GetComponentLocation()));
+		}
 		bAny = true;
 	}
+	FootLift.SetNumZeroed(Limbs.Num());
+	FootGround.SetNumZeroed(Limbs.Num());
 	return bAny;
 }
 
@@ -2202,8 +2521,13 @@ void ABREntity::Animate(float Dt)
 		Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, FMath::Sin(Life * 1.5f) * 6.f));
 		const bool bBlink = FMath::Fmod(Life + 0.37f * static_cast<float>(GetUniqueID() % 7), 5.3f) < 0.12f;
 		// Le sourire s'illumine davantage quand il est sur le point de charger
-		const float Rage = State == EState::Chase ? 1.6f : 1.f + FMath::Clamp(BeamTime * 2.f, 0.f, 0.6f);
-		const float G = bBlink ? 0.f : (0.85f + 0.15f * FMath::Sin(Life * 13.f)) * Rage;
+		const float Rage = (State == EState::Chase ? 1.6f : 1.f + FMath::Clamp(BeamTime * 2.f, 0.f, 0.6f)) + (WindupClock >= 0.f ? 0.35f : 0.f);
+		// v4.7 : emission tenue : de pres (jumpscare, couloir), le visage ne doit pas devenir une tache blanche qui cache
+		// les yeux et les dents ; de loin, il reste deux points et un trait dans le noir
+		const APawn* Viewer = UGameplayStatics::GetPlayerPawn(this, 0);
+		const float ViewDist = Viewer ? static_cast<float>(FVector::Dist(Viewer->GetActorLocation(), GetActorLocation())) : 1000.f;
+		const float Exposure = FMath::GetMappedRangeValueClamped(FVector2D(120.f, 650.f), FVector2D(0.5f, 1.f), ViewDist);
+		const float G = bBlink ? 0.f : FMath::Min((0.85f + 0.15f * FMath::Sin(Life * 13.f)) * Rage, 1.8f) * Exposure;
 		// v4.5 : chaque surface garde son intensite (coeur des yeux, dents, bords et racines plus faibles) :
 		// le visage a du relief au lieu d'un aplat blanc uniforme
 		for (int32 i = 0; i < GlowMIDs.Num(); ++i)
@@ -2244,6 +2568,8 @@ void ABREntity::Animate(float Dt)
 	{
 		AnimateLimbs(Dt, Gait);
 	}
+	// v4.7 : chaque pied cherche son propre sol (le reglage v4.6 supposait un sol plat sous tout le corps)
+	UpdateFootPlanting(Dt);
 
 	// Accroupissement (Faceling), palpitation de la masse (Skin-Stealer)
 	// v4.5 : armee (le corps se tasse), frappe (fente vers l'avant), sursaut de la detection
@@ -2260,7 +2586,7 @@ void ABREntity::Animate(float Dt)
 		Crouch = AlertAnim * 3.f;
 		Bob = GroundAdjust;
 	}
-	AppliedGroundZ = Bob - HideCrouch * 70.f - Crouch;
+	AppliedGroundZ = Bob + PelvisDrop - HideCrouch * 70.f - Crouch;
 	Visual->SetRelativeLocation(VisualBase + FVector(Strike * 16.f - WindupAnim * 4.f, 0.f, AppliedGroundZ));
 	if (Kind == EBREntityKind::Faceling)
 	{
@@ -2313,7 +2639,25 @@ void ABREntity::UpdateStatePose(float Dt)
 	const ABRCharacter* P = Target.Get();
 	const float Dist = P ? static_cast<float>(FVector::Dist(P->GetActorLocation(), GetActorLocation())) : 1e9f;
 	const bool bReady = State == EState::Chase && Dist < MyInfo().AttackRange * 1.9f && (StrikeTime < 0.f || StrikeTime > 0.9f);
-	WindupAnim = FMath::FInterpTo(WindupAnim, bReady ? 1.f : 0.f, Dt, bReady ? 6.f : 3.f);
+	// v4.7 : vraie preparation decidee par le serveur : le geste arme se forme sur toute sa duree, plus marque que
+	// la simple garde (bReady) pour que l'on sache qu'un coup arrive et quand
+	if (WindupClock >= 0.f)
+	{
+		WindupClock += Dt;
+		if (WindupClock > WindupDuration + 0.6f)
+		{
+			WindupClock = -1.f; // frappe jamais recue (entite retiree) : on relache
+		}
+	}
+	if (WindupClock >= 0.f && StrikeTime < 0.f)
+	{
+		const float T = FMath::Clamp(WindupClock / (WindupDuration * 0.85f), 0.f, 1.f);
+		WindupAnim = FMath::Max(WindupAnim, 1.25f * T * T * (3.f - 2.f * T));
+	}
+	else
+	{
+		WindupAnim = FMath::FInterpTo(WindupAnim, bReady ? 0.6f : 0.f, Dt, bReady ? 6.f : 3.f);
+	}
 	if (StrikeTime >= 0.f)
 	{
 		StrikeTime += Dt;
@@ -2389,17 +2733,18 @@ void ABREntity::AnimateLimbs(float Dt, float Gait)
 			R.Pitch += WindupAnim * (1.f - Strike) * 55.f - Strike * 10.f + AlertAnim * 20.f; // coude plie, puis bras detendu
 			break;
 		case ELimb::Thigh:
-			R.Pitch += L.Amp * Swing * Gait + Ready * 14.f;
+			R.Pitch += L.Amp * Swing * Gait + Ready * 14.f + L.PlantPitch;
 			break;
 		case ELimb::Shin:
 			R.Pitch -= L.Amp * Lift * Gait + Ready * 26.f; // le genou plie vers l'arriere ; flechi pour l'appel
+			R.Pitch += L.PlantPitch; // v4.7 : pied pose sur un sol plus haut (trottoir, marche)
 			break;
 		case ELimb::HoundUpper:
 			// Hound : tasse sur ses pattes avant de bondir, puis pattes avant lancees vers la proie
 			R.Pitch += L.Amp * Swing * Gait + L.Sign * (WindupAnim * 18.f - Strike * 30.f);
 			break;
 		case ELimb::HoundLower:
-			R.Pitch += L.Sign * L.Amp * Lift * Gait - L.Sign * WindupAnim * 30.f;
+			R.Pitch += L.Sign * L.Amp * Lift * Gait - L.Sign * WindupAnim * 30.f + L.PlantPitch;
 			break;
 		case ELimb::Wing:
 		{

@@ -41,6 +41,20 @@ struct FBREntityInfo
 	FName Voice = NAME_None;
 	float VoiceInterval = 8.f;
 	float VoiceFalloff = 2500.f;
+	// v4.7 : attaque en trois temps. Preparation (geste et cri lisibles, on peut encore s'echapper ou se mettre a
+	// couvert), impact (fenetre ou le coup touche, une seule fois, apres verification de distance et de ligne de vue),
+	// recuperation (l'entite est lente et vulnerable avant de pouvoir recommencer)
+	float WindupTime = 0.4f;
+	float ImpactWindow = 0.15f;
+	float RecoveryTime = 0.6f;
+	/** Allonge gagnee par la fente de l'impact (cm) */
+	float LungeReach = 25.f;
+	/** Vitesse gardee pendant la preparation (fraction de la vitesse demandee) */
+	float WindupMove = 0.2f;
+	// v4.7 : demarche (acceleration, freinage, vitesse de rotation)
+	float Acceleration = 1400.f;
+	float Braking = 900.f;
+	float TurnRate = 300.f;
 };
 
 UCLASS()
@@ -151,9 +165,27 @@ protected:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastVoiceCue(float Volume);
 
-	/** v4.5 : l'entite vient de frapper (le serveur decide) : chacun joue le geste de frappe puis de recuperation */
-	UFUNCTION(NetMulticast, Unreliable)
+	/** v4.5 : l'entite vient de frapper (le serveur decide) : chacun joue le geste de frappe puis de recuperation.
+	 *  v4.7 : envoye au debut de la fenetre d'impact (fiable : c'est ce que le joueur doit voir pour comprendre le coup) */
+	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStrike();
+
+	/** v4.7 : debut de la preparation d'une attaque (geste arme et cri chez tous les joueurs) */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastAttackWindup(float Duration);
+
+public:
+	/** v4.7 : phase de l'attaque en cours (tests automatiques, HUD) */
+	enum class EAttackPhase : uint8 { None, Windup, Impact, Recover };
+	EAttackPhase GetAttackPhase() const { return AttackPhase; }
+	/** v4.7 : compteurs pour les tests (preparations, coups portes, coups esquives) */
+	static int32 StatWindups;
+	static int32 StatHits;
+	static int32 StatMisses;
+	/** Temps entre le debut de la preparation et le dernier coup porte (s) */
+	static float StatLastHitDelay;
+
+protected:
 
 private:
 	enum class EState : uint8 { Idle, Wander, Stalk, Chase, Retreat, Frozen, Hide, Lure };
@@ -169,6 +201,11 @@ private:
 		FRotator Base = FRotator::ZeroRotator;
 		/** v4.6 : tibia / bas de patte : point d'appui au sol (pied), dans le repere du pivot, mesure au repos */
 		FVector FootOffset = FVector::ZeroVector;
+		/** v4.7 : longueurs mesurees au repos (cuisse : hanche -> genou ; tibia : genou -> pied), cm */
+		float UpperLen = 0.f;
+		float LowerLen = 0.f;
+		/** v4.7 : pli ajoute par l'appui au sol (degres), applique par AnimateLimbs */
+		float PlantPitch = 0.f;
 	};
 
 	/** Ce que l'entite percoit du joueur cette image */
@@ -234,6 +271,15 @@ private:
 	bool IsLookedAtBy(const ABRCharacter* P, float CosAngle) const;
 	bool IsDirectPathClear(const FVector& Goal) const;
 	void TryAttack(ABRCharacter* P, float Dist);
+	/** v4.7 : deroule l'attaque en cours (serveur, chaque image avant le comportement) */
+	void UpdateAttack(float Dt);
+	/** v4.7 : facteur de vitesse de la demarche propre a l'espece (saccades, foulees, titubements, poussees) */
+	void UpdateGait(float Dt, const ABRCharacter* P);
+	/** v4.7 : facteur de vitesse pendant une attaque (preparation lente, fente, recuperation) */
+	float AttackMoveScale() const;
+	/** v4.7 : appui de chaque pied sur le sol reel (trottoirs, marches, bords de bassin) : le bassin descend vers le
+	 *  sol le plus bas, chaque jambe plie le genou pour poser le pied sur un sol plus haut */
+	void UpdateFootPlanting(float Dt);
 	void PlayVoice(float Volume = 1.f);
 	void PlaySound2D(FName Sound, float Volume);
 	void StartVanish();
@@ -247,6 +293,24 @@ private:
 	int32 PathIndex = 0;
 	FIntPoint PathGoal = FIntPoint(MAX_int32, MAX_int32);
 	float AttackTimer = 0.f;
+	EAttackPhase AttackPhase = EAttackPhase::None;
+	float AttackPhaseTime = 0.f;
+	float AttackStartTime = 0.f;
+	bool bAttackLanded = false;
+	TWeakObjectPtr<ABRCharacter> AttackVictim;
+	/** Chez tous : temps ecoule depuis le debut de la preparation recue (-1 : aucune) */
+	float WindupClock = -1.f;
+	float WindupDuration = 0.4f;
+	/** v4.7 : demarche */
+	float GaitScale = 1.f;
+	float GaitTimer = 0.f;
+	bool bGaitBurst = false;
+	float GaitCooldown = 0.f;
+	/** v4.7 : appui des pieds : decalage du bassin vers le sol le plus bas, et pli de chaque genou */
+	float PelvisDrop = 0.f;
+	TArray<float> FootLift;
+	TArray<float> FootGround;
+	float FootTraceTimer = 0.f;
 	float VoiceTimer = 3.f;
 	float StuckTimer = 0.f;
 	float Agitation = 0.f;
