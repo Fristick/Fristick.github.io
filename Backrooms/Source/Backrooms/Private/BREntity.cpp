@@ -8,7 +8,9 @@
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -337,7 +339,10 @@ USceneComponent* ABREntity::AddPart(FName MeshName, USceneComponent* Parent, con
 		nullptr, Kind != EBREntityKind::Smiler, bUniqueGlow, GlowScale, &Glows);
 	for (UMaterialInstanceDynamic* G : Glows)
 	{
+		FLinearColor Base = FLinearColor::White;
+		G->GetVectorParameterValue(FHashedMaterialParameterInfo(FName(TEXT("Emissive"))), Base);
 		GlowMIDs.Add(G);
+		GlowBase.Add(Base);
 	}
 	return Pivot;
 }
@@ -359,10 +364,50 @@ void ABREntity::AddLimb(USceneComponent* Pivot, ELimb Type, float Phase, float A
 	Limbs.Add(L);
 }
 
-FBRHumanoidParts ABREntity::BuildHumanoid(const TCHAR* Prefix, const FBRHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent)
+FBRHumanoidParts ABREntity::BuildHumanoid(const TCHAR* Prefix, const FBRHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent,
+	const TCHAR* SkinName)
 {
-	FBRHumanoidParts P = BRRig::BuildHumanoid(this, Parent ? Parent : Visual.Get(), Prefix, Spec, Tints, PartComponents, Kind != EBREntityKind::Smiler);
+	USceneComponent* Root = Parent ? Parent : Visual.Get();
+	UBRAssets* A = UBRAssets::Get(this);
+	USkeletalMesh* SkinMesh = (A && SkinName) ? A->SkeletalMesh(SkinName) : nullptr;
+	FBRHumanoidParts P;
+	bool bSkinned = false;
+	if (SkinMesh)
+	{
+		// v4.5 : modele fourni d'un seul tenant (geometrie et poids d'origine), anime par les memes pivots
+		FBRSkinDriver Driver;
+		P = BRRig::BuildSkinnedHumanoid(this, Root, SkinMesh, Tints, PartComponents, Driver, Kind != EBREntityKind::Smiler);
+		bSkinned = P.Head && P.UpperArm[0] && P.UpperArm[1] && P.Thigh[0] && P.Thigh[1];
+		if (bSkinned)
+		{
+			SkinDrivers.Add(Driver);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Backrooms : %s n'a pas les os attendus (Head, LeftArm, LeftUpLeg...) : pieces rigides utilisees"), SkinName);
+			for (UPrimitiveComponent* M : P.Meshes)
+			{
+				if (M)
+				{
+					M->DestroyComponent();
+				}
+			}
+			P = FBRHumanoidParts();
+		}
+	}
+	if (!bSkinned)
+	{
+		P = BRRig::BuildHumanoid(this, Root, Prefix, Spec, Tints, PartComponents, Kind != EBREntityKind::Smiler);
+	}
 	HeadPivot = P.Head;
+	if (P.Thigh[0])
+	{
+		LegLength = FMath::Max(30.f, static_cast<float>(P.Thigh[0]->GetRelativeLocation().Z));
+	}
+	if (bSkinned && P.Torso)
+	{
+		TorsoPivots.Add(P.Torso);
+	}
 	for (int32 i = 0; i < 2; ++i)
 	{
 		const float Sgn = i == 0 ? -1.f : 1.f;
@@ -381,6 +426,11 @@ FBRHumanoidParts ABREntity::BuildHumanoid(const TCHAR* Prefix, const FBRHumanoid
 		Balloon = AddPart(BalloonMesh, P.LowerArm[1], FVector(2.f, 0.f, -LowerLen), FVector::ZeroVector, 0.f, nullptr);
 		if (Balloon)
 		{
+			if (bSkinned && P.Meshes.Num() > 0 && P.Meshes[0])
+			{
+				// La ficelle est tenue par l'os de la main (il suit le poignet, le coude et l'epaule)
+				Balloon->AttachToComponent(P.Meshes[0], FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("RightHand"));
+			}
 			Balloon->SetUsingAbsoluteRotation(true);
 		}
 	}
@@ -453,11 +503,53 @@ void ABREntity::BuildHound(const TMap<FString, FLinearColor>* Tints)
 
 bool ABREntity::BuildHoundModel()
 {
+	// v4.5 : Hound fourni d'un seul tenant (SK_Hound : geometrie, pelage et poids d'origine), memes pattes que ci-dessous
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		if (USkeletalMesh* SkinMesh = A->SkeletalMesh(TEXT("SK_Hound")))
+		{
+			FBRSkinDriver Driver;
+			Driver.Skin = BRRig::AddSkin(this, Visual, SkinMesh, nullptr, PartComponents, true);
+			HeadPivot = Driver.AddPivot(this, Visual, TEXT("Head"), PartComponents);
+			struct FSkinLeg
+			{
+				const TCHAR* Upper;
+				const TCHAR* Lower;
+				bool bFront;
+				float Phase;
+			};
+			const FSkinLeg Legs[4] = { { TEXT("FrontUpperL"), TEXT("FrontLowerL"), true, PI }, { TEXT("FrontUpperR"), TEXT("FrontLowerR"), true, 0.f },
+				{ TEXT("BackUpperL"), TEXT("BackLowerL"), false, 0.f }, { TEXT("BackUpperR"), TEXT("BackLowerR"), false, PI } };
+			int32 Found = 0;
+			for (const FSkinLeg& Leg : Legs)
+			{
+				USceneComponent* Up = Driver.AddPivot(this, Visual, Leg.Upper, PartComponents);
+				USceneComponent* Low = Up ? Driver.AddPivot(this, Up, Leg.Lower, PartComponents) : nullptr;
+				AddLimb(Up, ELimb::HoundUpper, Leg.Phase, 24.f, Leg.bFront ? -1.f : 1.f, FRotator::ZeroRotator);
+				AddLimb(Low, ELimb::HoundLower, Leg.Phase, 22.f, Leg.bFront ? -1.f : 1.f, FRotator::ZeroRotator);
+				Found += (Up && Low) ? 1 : 0;
+			}
+			if (Found == 4 && HeadPivot.IsValid())
+			{
+				SkinDrivers.Add(Driver);
+				LegLength = 67.f; // hanche avant -> sol (foulee liee a la distance parcourue)
+				return true;
+			}
+			UE_LOG(LogTemp, Warning, TEXT("Backrooms : SK_Hound n'a pas les os attendus (Head, FrontUpperL...) : pieces rigides utilisees"));
+			if (Driver.Skin.IsValid())
+			{
+				Driver.Skin->DestroyComponent();
+			}
+			Limbs.Reset();
+			HeadPivot = nullptr;
+		}
+	}
 	// Hound fourni (Tools/Blender/import_user_models.py) : corps, tete et huit segments de pattes, deja en pose
 	if (!BRRig::HasMesh(this, TEXT("SM_HoundET_Body")))
 	{
 		return false;
 	}
+	LegLength = 67.f;
 	AddPart(TEXT("SM_HoundET_Body"), Visual, FVector(42.26f, 0.17f, 71.49f), FVector::ZeroVector, 0.f, nullptr);
 	HeadPivot = AddPart(TEXT("SM_HoundET_Head"), Visual, FVector(45.1f, 0.17f, 78.14f), FVector::ZeroVector, 0.f, nullptr);
 	struct FLeg
@@ -484,6 +576,199 @@ bool ABREntity::BuildHoundModel()
 		AddLimb(Low, ELimb::HoundLower, Leg.Phase, 22.f, Leg.bFront ? -1.f : 1.f, FRotator::ZeroRotator);
 	}
 	return true;
+}
+
+bool ABREntity::BuildClumpSkin()
+{
+	// v4.5 : Clump reconstruit (Tools/Blender/build_creatures.py) : 14 bras complets fondus dans la masse, chacun avec
+	// ses os (bras, avant-bras, main) ; les mains d'appui sont posees au sol par IK, les autres bras se tordent
+	UBRAssets* A = UBRAssets::Get(this);
+	USkeletalMesh* ClumpMesh = A ? A->SkeletalMesh(TEXT("SK_Clump")) : nullptr;
+	if (!ClumpMesh)
+	{
+		return false;
+	}
+	FBRSkinDriver Driver;
+	Driver.Skin = BRRig::AddSkin(this, Visual, ClumpMesh, nullptr, PartComponents, true);
+	USceneComponent* Core = Driver.AddPivot(this, Visual, TEXT("Core"), PartComponents);
+	auto RestOf = [&Driver](FName Bone)
+	{
+		for (const FBRSkinDriver::FLink& L : Driver.Links)
+		{
+			if (L.Bone == Bone)
+			{
+				return L.RestPos;
+			}
+		}
+		return FVector::ZeroVector;
+	};
+	for (int32 k = 0; Core && k < 32; ++k)
+	{
+		const FName U(*FString::Printf(TEXT("Arm%d_Upper"), k));
+		USceneComponent* Up = Driver.AddPivot(this, Core, U, PartComponents);
+		if (!Up)
+		{
+			break;
+		}
+		FClumpArm Arm;
+		Arm.Upper = Up;
+		Arm.Fore = Driver.AddPivot(this, Up, *FString::Printf(TEXT("Arm%d_Fore"), k), PartComponents);
+		Arm.Hand = Arm.Fore.IsValid() ? Driver.AddPivot(this, Arm.Fore.Get(), *FString::Printf(TEXT("Arm%d_Hand"), k), PartComponents) : nullptr;
+		Arm.Shoulder = RestOf(U);
+		Arm.Elbow = RestOf(*FString::Printf(TEXT("Arm%d_Fore"), k));
+		Arm.Wrist = RestOf(*FString::Printf(TEXT("Arm%d_Hand"), k));
+		Arm.bGround = Arm.Wrist.Z < 12.f;
+		Arm.Phase = k * 1.7f;
+		if (Arm.Fore.IsValid() && Arm.Hand.IsValid())
+		{
+			ClumpArms.Add(Arm);
+		}
+	}
+	if (!Core || ClumpArms.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Backrooms : SK_Clump n'a pas les os attendus (Core, Arm0_Upper...) : pieces rigides utilisees"));
+		if (Driver.Skin.IsValid())
+		{
+			Driver.Skin->DestroyComponent();
+		}
+		ClumpArms.Reset();
+		return false;
+	}
+	HeadPivot = nullptr; // la masse ne tourne pas sur elle-meme : les bras libres se tendent vers la proie
+	SkinDrivers.Add(Driver);
+	return true;
+}
+
+void ABREntity::AnimateClumpSkin(float Dt)
+{
+	UPoseableMeshComponent* Skin = SkinDrivers.Num() > 0 ? SkinDrivers[0].Skin.Get() : nullptr;
+	if (!Skin || !Visual)
+	{
+		return;
+	}
+	const FVector Vel = GetVelocity();
+	const float Speed = static_cast<float>(Vel.Size2D());
+	const float Move = FMath::Clamp(Speed / 250.f, 0.f, 1.f);
+	const float Strike = StrikeCurve();
+	// La masse : affaissee par son poids, elle tangue et avance par a-coups a chaque main qui se pose
+	Lurch = FMath::Max(0.f, Lurch - Dt * 3.5f);
+	const float Breath = FMath::Sin(Life * 2.1f);
+	Visual->SetRelativeLocation(VisualBase + FVector(Lurch * 7.f + Strike * 28.f - WindupAnim * 8.f, 0.f,
+		-Lurch * 5.f - WindupAnim * 9.f + Breath * 1.5f - Move * 4.f));
+	Visual->SetRelativeRotation(FRotator(-Lurch * 4.f - Strike * 10.f + WindupAnim * 6.f, 0.f, FMath::Sin(Life * 1.3f) * 3.f * (1.f + Move)));
+
+	const FTransform ST = Skin->GetComponentTransform();
+	const FQuat SQ = ST.GetRotation();
+	const float Scale = static_cast<float>(ST.GetScale3D().X);
+	const FVector Lead = FVector(Vel.X, Vel.Y, 0.f) * 0.28f;
+	int32 Swinging = 0;
+	for (const FClumpArm& Arm : ClumpArms)
+	{
+		Swinging += (Arm.bGround && Arm.Swing >= 0.f) ? 1 : 0;
+	}
+	// Jumpscare : le modele est tenu devant la camera ; tous les bras se tendent vers le joueur (pas d'appui au sol)
+	const APawn* Prey = bScareOverride ? UGameplayStatics::GetPlayerPawn(this, 0) : static_cast<const APawn*>(Target.Get());
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(ClumpHand), false, this);
+
+	for (FClumpArm& Arm : ClumpArms)
+	{
+		USceneComponent* Up = Arm.Upper.Get();
+		USceneComponent* Fo = Arm.Fore.Get();
+		USceneComponent* Ha = Arm.Hand.Get();
+		if (!Up || !Fo || !Ha)
+		{
+			continue;
+		}
+		const FVector RestD1 = (Arm.Elbow - Arm.Shoulder).GetSafeNormal();
+		const FVector RestD2 = (Arm.Wrist - Arm.Elbow).GetSafeNormal();
+		const float L1 = static_cast<float>((Arm.Elbow - Arm.Shoulder).Size()) * Scale;
+		const float L2 = static_cast<float>((Arm.Wrist - Arm.Elbow).Size()) * Scale;
+		const FVector S = Up->GetComponentLocation();
+
+		if (bScareOverride)
+		{
+			Arm.bPlanted = false; // elles se reposeront au sol apres le jumpscare
+			Arm.Swing = -1.f;
+		}
+		if (Arm.bGround && !bScareOverride)
+		{
+			// Main d'appui : plantee au sol (IK a deux segments), elle ne glisse pas ; quand le corps l'a depassee,
+			// elle se leve et se repose plus loin (deux mains au plus en l'air)
+			FVector Home = ST.TransformPosition(Arm.Wrist) + Lead;
+			auto Ground = [this, &Q](FVector P)
+			{
+				FHitResult Hit;
+				if (GetWorld()->LineTraceSingleByChannel(Hit, P + FVector(0.f, 0.f, 60.f), P - FVector(0.f, 0.f, 90.f), ECC_Visibility, Q))
+				{
+					P.Z = Hit.ImpactPoint.Z + 4.f;
+				}
+				return P;
+			};
+			if (!Arm.bPlanted)
+			{
+				Arm.Planted = Ground(Home);
+				Arm.bPlanted = true;
+			}
+			const float Step = (Speed > 150.f ? 34.f : 24.f) * Scale;
+			if (Arm.Swing < 0.f && FVector::Dist2D(Arm.Planted, Home) > Step && Swinging < 2)
+			{
+				Arm.SwingFrom = Arm.Planted;
+				Arm.Swing = 0.f;
+				++Swinging;
+			}
+			FVector Hand = Arm.Planted;
+			if (Arm.Swing >= 0.f)
+			{
+				Arm.Swing += Dt / (Speed > 150.f ? 0.17f : 0.26f);
+				const FVector To = Ground(Home);
+				const float T = FMath::Clamp(Arm.Swing, 0.f, 1.f);
+				Hand = FMath::Lerp(Arm.SwingFrom, To, T * T * (3.f - 2.f * T)) + FVector(0.f, 0.f, FMath::Sin(T * PI) * 12.f * Scale);
+				if (Arm.Swing >= 1.f)
+				{
+					Arm.Planted = To;
+					Arm.Swing = -1.f;
+					Lurch = FMath::Min(1.f, Lurch + 0.45f); // le poids retombe sur la main
+				}
+			}
+			// IK : coude dans le plan qui contient l'epaule, la main et la direction "vers l'exterieur et le haut"
+			FVector ToHand = Hand - S;
+			float D = static_cast<float>(ToHand.Size());
+			D = FMath::Clamp(D, FMath::Abs(L1 - L2) + 1.f, (L1 + L2) * 0.999f);
+			const FVector Dir = ToHand.GetSafeNormal();
+			const FVector Out = (S - Visual->GetComponentLocation()).GetSafeNormal2D();
+			FVector Pole = (Out + FVector(0.f, 0.f, 1.2f)).GetSafeNormal();
+			Pole = (Pole - Dir * FVector::DotProduct(Pole, Dir)).GetSafeNormal();
+			const float CosA = FMath::Clamp((L1 * L1 + D * D - L2 * L2) / (2.f * L1 * D), -1.f, 1.f);
+			const FVector Elbow = S + (Dir * CosA + Pole * FMath::Sqrt(FMath::Max(0.f, 1.f - CosA * CosA))) * L1;
+			const FVector EndPos = S + Dir * D;
+			const FQuat Q1 = FQuat::FindBetweenNormals(RestD1, SQ.UnrotateVector((Elbow - S).GetSafeNormal()));
+			const FQuat Q2 = FQuat::FindBetweenNormals(RestD2, SQ.UnrotateVector((EndPos - Elbow).GetSafeNormal()));
+			Up->SetWorldRotation(SQ * Q1);
+			Fo->SetWorldRotation(SQ * Q2);
+			// main a plat (doigts qui se crispent pendant le pas)
+			const FVector Side = FVector::CrossProduct(FVector::UpVector, Dir).GetSafeNormal();
+			Ha->SetWorldRotation(FQuat(Side, Arm.Swing >= 0.f ? -0.5f * FMath::Sin(Arm.Swing * PI) : 0.f) * SQ);
+		}
+		else
+		{
+			// Bras libre : il se tord lentement ; en poursuite, il se tend vers la proie ; il frappe avec la masse
+			const float T = Life * (0.9f + 0.15f * FMath::Fmod(Arm.Phase, 3.f)) + Arm.Phase;
+			const FVector Ax1 = FVector::CrossProduct(RestD1, FVector::UpVector).GetSafeNormal();
+			const FVector Ax2 = FVector::CrossProduct(RestD1, Ax1).GetSafeNormal();
+			const float Agit = 1.f + Move + LeanAnim * 0.8f;
+			FQuat Q1 = FQuat(Ax1, FMath::Sin(T) * 0.35f * Agit) * FQuat(Ax2, FMath::Cos(T * 0.7f + 1.1f) * 0.3f * Agit);
+			if (Prey && (State == EState::Chase || Strike > 0.f || bScareOverride))
+			{
+				const FVector ToPrey = SQ.UnrotateVector((Prey->GetActorLocation() - S).GetSafeNormal());
+				const FQuat Aim = FQuat::FindBetweenNormals(RestD1, ToPrey);
+				Q1 = FQuat::Slerp(Q1, Aim * FQuat(Ax1, FMath::Sin(T * 2.f) * 0.15f), FMath::Clamp(0.35f * LeanAnim + 0.6f * WindupAnim + Strike, 0.f, 0.9f));
+			}
+			const FQuat Q2 = FQuat(Ax1, 0.5f + 0.35f * FMath::Sin(T * 1.3f + 0.7f) - Strike * 0.45f + WindupAnim * 0.3f);
+			Up->SetRelativeRotation(Q1);
+			Fo->SetRelativeRotation(Q2);
+			Ha->SetRelativeRotation(FQuat(Ax1, 0.4f * FMath::Sin(T * 2.3f) + WindupAnim * 0.6f));
+		}
+	}
 }
 
 bool ABREntity::BuildClumpModel()
@@ -532,6 +817,7 @@ void ABREntity::BuildVisual()
 	case EBREntityKind::Hound:
 		if (!BuildHoundModel())
 		{
+			UBRAssets::ReportFallback(TEXT("Hound (SK_Hound, SM_HoundET_*)"));
 			Tints.Add(TEXT("Skin"), FLinearColor(0.55f, 0.53f, 0.5f));
 			BuildHound(&Tints);
 		}
@@ -540,14 +826,15 @@ void ABREntity::BuildVisual()
 	{
 		const FLinearColor Shirts[5] = { FLinearColor(0.45f, 0.47f, 0.5f), FLinearColor(0.35f, 0.25f, 0.2f), FLinearColor(0.2f, 0.3f, 0.45f),
 			FLinearColor(0.5f, 0.45f, 0.35f), FLinearColor(0.3f, 0.35f, 0.3f) };
-		if (BRRig::HasMesh(this, TEXT("SM_FacelingET_Torso")))
+		if (BRRig::HasMesh(this, TEXT("SM_FacelingET_Torso")) || BRRig::HasSkeletalMesh(this, TEXT("SK_Faceling")))
 		{
 			// Faceling fourni (style PS1) : texture d'origine, legerement assombrie au hasard pour varier les silhouettes
 			const float Shade = FMath::FRandRange(0.75f, 1.f);
 			Tints.Add(TEXT("Faceling"), FLinearColor(Shade, Shade, Shade));
-			BuildHumanoid(TEXT("SM_FacelingET"), FBRHumanoidSpec::FacelingET(), &Tints, Visual);
+			BuildHumanoid(TEXT("SM_FacelingET"), FBRHumanoidSpec::FacelingET(), &Tints, Visual, TEXT("SK_Faceling"));
 			break;
 		}
+		UBRAssets::ReportFallback(TEXT("Faceling (SK_Faceling, SM_FacelingET_*)"));
 		Tints.Add(TEXT("Cloth"), Shirts[FMath::RandRange(0, 4)]);
 		Tints.Add(TEXT("Skin"), FLinearColor(0.82f, 0.72f, 0.64f));
 		BuildHumanoid(TEXT("SM_Faceling"), SpecFor(Kind), &Tints, Visual);
@@ -559,14 +846,15 @@ void ABREntity::BuildVisual()
 		BodyForm = NewObject<USceneComponent>(this);
 		BodyForm->SetupAttachment(Visual);
 		BodyForm->RegisterComponent();
-		if (BRRig::HasMesh(this, TEXT("SM_SkinStealerET_Torso")))
+		if (BRRig::HasMesh(this, TEXT("SM_SkinStealerET_Torso")) || BRRig::HasSkeletalMesh(this, TEXT("SK_SkinStealer")))
 		{
 			// Skin-Stealer fourni : chair a vif, griffes demesurees ; sa masse au repos prend la meme teinte rouge
-			BuildHumanoid(TEXT("SM_SkinStealerET"), FBRHumanoidSpec::SkinStealerET(), nullptr, BodyForm);
+			BuildHumanoid(TEXT("SM_SkinStealerET"), FBRHumanoidSpec::SkinStealerET(), nullptr, BodyForm, TEXT("SK_SkinStealer"));
 			Tints.Add(TEXT("Flesh"), FLinearColor(0.5f, 0.14f, 0.12f));
 		}
 		else
 		{
+			UBRAssets::ReportFallback(TEXT("Skin-Stealer (SK_SkinStealer, SM_SkinStealerET_*)"));
 			BuildHumanoid(TEXT("SM_SkinStealer"), SpecFor(Kind), &Tints, BodyForm);
 		}
 		TrueHead = HeadPivot;
@@ -575,35 +863,44 @@ void ABREntity::BuildVisual()
 		DisguiseForm = NewObject<USceneComponent>(this);
 		DisguiseForm->SetupAttachment(Visual);
 		DisguiseForm->RegisterComponent();
-		if (BRRig::HasHazmat(this))
+		if (BRRig::HasHazmat(this) || BRRig::HasSkeletalMesh(this, TEXT("SK_Hazmat")))
 		{
-			BuildHumanoid(TEXT("SM_Hazmat"), FBRHumanoidSpec::Hazmat(), nullptr, DisguiseForm);
+			BuildHumanoid(TEXT("SM_Hazmat"), FBRHumanoidSpec::Hazmat(), nullptr, DisguiseForm, TEXT("SK_Hazmat"));
 			DisguiseHead = HeadPivot;
 		}
 		else
 		{
+			UBRAssets::ReportFallback(TEXT("Combinaison hazmat (SK_Hazmat, SM_Hazmat_*)"));
 			AddPart(TEXT("SM_Hazmat"), DisguiseForm, FVector::ZeroVector, FVector(40.f, 50.f, 180.f), 90.f, nullptr);
 		}
 		HeadPivot = TrueHead;
 		break;
 	}
 	case EBREntityKind::Wretch:
+		if (BRRig::HasSkeletalMesh(this, TEXT("SK_Wretch")))
+		{
+			// v4.5 : Wretch reconstruit d'un seul tenant (peau cuite, cotes et vertebres sous la peau, machoire pendante)
+			BuildHumanoid(TEXT("SM_Wretch"), FBRHumanoidSpec::WretchSK(), nullptr, Visual, TEXT("SK_Wretch"));
+			break;
+		}
 		Tints.Add(TEXT("Skin"), FLinearColor(0.42f, 0.45f, 0.36f));
 		BuildHumanoid(TEXT("SM_Wretch"), SpecFor(Kind), &Tints, Visual);
 		break;
 	case EBREntityKind::Partygoer:
-		if (BRRig::HasMesh(this, TEXT("SM_PartygoerET_Torso")))
+		if (BRRig::HasMesh(this, TEXT("SM_PartygoerET_Torso")) || BRRig::HasSkeletalMesh(this, TEXT("SK_Partygoer")))
 		{
-			BuildHumanoid(TEXT("SM_PartygoerET"), FBRHumanoidSpec::PartygoerET(), nullptr, Visual);
+			BuildHumanoid(TEXT("SM_PartygoerET"), FBRHumanoidSpec::PartygoerET(), nullptr, Visual, TEXT("SK_Partygoer"));
 		}
 		else
 		{
+			UBRAssets::ReportFallback(TEXT("Partygoer (SK_Partygoer, SM_PartygoerET_*)"));
 			BuildHumanoid(TEXT("SM_Partygoer"), SpecFor(Kind), nullptr, Visual);
 		}
 		break;
 	case EBREntityKind::Bacteria:
 		if (!BuildBacteriaModel())
 		{
+			UBRAssets::ReportFallback(TEXT("Bacteria (SM_BacteriaET_*)"));
 			BuildHumanoid(TEXT("SM_Bacteria"), SpecFor(Kind), nullptr, Visual);
 		}
 		break;
@@ -613,6 +910,7 @@ void ABREntity::BuildVisual()
 		{
 			break;
 		}
+		UBRAssets::ReportFallback(TEXT("Deathmoth (SM_DeathmothET_*)"));
 		const float Z = MyInfo().HalfHeight;
 		AddPart(TEXT("SM_Deathmoth_Body"), Visual, FVector(0.f, 0.f, Z), FVector(60.f, 20.f, 20.f), 0.f, nullptr);
 		// L'aile s'etend d'un cote : on detecte lequel pour la mirer de l'autre
@@ -637,6 +935,10 @@ void ABREntity::BuildVisual()
 		break;
 	}
 	case EBREntityKind::Clump:
+		if (BuildClumpSkin())
+		{
+			break;
+		}
 		if (!BuildClumpModel())
 		{
 			AddPart(TEXT("SM_Clump"), Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(110.f, 110.f, 100.f), 0.f, nullptr);
@@ -688,10 +990,13 @@ void ABREntity::Tick(float DeltaSeconds)
 
 	if (bScareOverride)
 	{
-		// Jumpscare : l'entite se fige, son modele est tenu devant la camera du joueur
+		// Jumpscare : l'entite se fige, son modele est tenu devant la camera du joueur, bras lances vers elle
+		UpdateStatePose(Dt);
 		Animate(Dt);
 		UpdateHead(Dt);
 		Visual->SetWorldTransform(ScareTM);
+		SkinAccum = 1.f;
+		ApplySkins(Dt);
 		return;
 	}
 	if (Vanish >= 0.f)
@@ -728,9 +1033,11 @@ void ABREntity::Tick(float DeltaSeconds)
 		}
 		UpdateClientState(Dt);
 	}
+	UpdateStatePose(Dt);
 	Animate(Dt);
 	UpdateHead(Dt);
 	UpdateMorph(Dt);
+	ApplySkins(Dt);
 
 	// Detection de blocage
 	const float Speed = static_cast<float>(GetVelocity().Size());
@@ -763,6 +1070,31 @@ void ABREntity::Tick(float DeltaSeconds)
 				PlayVoice();
 			}
 		}
+	}
+}
+
+void ABREntity::ApplySkins(float Dt)
+{
+	if (SkinDrivers.Num() == 0)
+	{
+		return;
+	}
+	// LOD d'animation : chaque image si l'entite est proche et a l'ecran, 20 fois par seconde au-dela de 25 m,
+	// 5 fois par seconde hors de vue (ses os restent a jour pour l'ombre et les reflets ray traces)
+	const APawn* Local = UGameplayStatics::GetPlayerPawn(this, 0);
+	const float Dist = Local ? static_cast<float>(FVector::Dist(Local->GetActorLocation(), GetActorLocation())) : 0.f;
+	const UPrimitiveComponent* First = SkinDrivers[0].Skin.Get();
+	const bool bSeen = !First || First->WasRecentlyRendered(0.25f);
+	const float Period = !bSeen ? 0.2f : (Dist > 2500.f ? 0.05f : 0.f);
+	SkinAccum += Dt;
+	if (SkinAccum < Period)
+	{
+		return;
+	}
+	SkinAccum = 0.f;
+	for (const FBRSkinDriver& D : SkinDrivers)
+	{
+		D.Apply();
 	}
 }
 
@@ -871,6 +1203,12 @@ void ABREntity::PlayVoice(float Volume)
 		Voice->SetPitchMultiplier(FMath::FRandRange(0.9f, 1.1f));
 		Voice->Play();
 	}
+}
+
+void ABREntity::MulticastStrike_Implementation()
+{
+	StrikeTime = 0.f;
+	WindupAnim = 0.f;
 }
 
 void ABREntity::MulticastVoiceCue_Implementation(float Volume)
@@ -1087,6 +1425,7 @@ void ABREntity::TryAttack(ABRCharacter* P, float Dist)
 	{
 		AttackTimer = I.AttackCooldown;
 		PlayVoice(1.f);
+		MulticastStrike();
 		P->ReceiveAttack(I.Damage, I.SanityDamage, this, I.Name);
 	}
 }
@@ -1713,11 +2052,24 @@ void ABREntity::Animate(float Dt)
 {
 	const float Speed = static_cast<float>(GetVelocity().Size2D());
 	const bool bFrozen = State == EState::Frozen;
+	// v4.5 : amplitude du pas selon la vitesse (jusqu'a 1,5 x en poursuite), cadence deduite de la distance parcourue :
+	// pendant l'appui, le pied recule exactement de ce dont le corps avance (2 L sin A par demi-cycle) : pas de glissement
+	const float Gait = FMath::Clamp(Speed / 220.f, 0.f, 1.5f);
 	if (!bFrozen)
 	{
-		AnimTime += Dt * (0.6f + Speed / 100.f * 3.2f);
+		float LegAmpDeg = 26.f;
+		for (const FLimb& L : Limbs)
+		{
+			if (L.Type == ELimb::Thigh || L.Type == ELimb::HoundUpper)
+			{
+				LegAmpDeg = L.Amp;
+				break;
+			}
+		}
+		const float A = FMath::DegreesToRadians(LegAmpDeg * FMath::Max(Gait, 0.2f));
+		const float Omega = Speed > 5.f ? (PI * Speed) / (2.f * LegLength * FMath::Max(FMath::Sin(A), 0.05f)) : 0.f;
+		AnimTime += Dt * FMath::Clamp(Omega, 0.f, 16.f);
 	}
-	const float Gait = FMath::Clamp(Speed / 220.f, 0.f, 1.f);
 
 	switch (Kind)
 	{
@@ -1728,21 +2080,28 @@ void ABREntity::Animate(float Dt)
 		// Le sourire s'illumine davantage quand il est sur le point de charger
 		const float Rage = State == EState::Chase ? 1.6f : 1.f + FMath::Clamp(BeamTime * 2.f, 0.f, 0.6f);
 		const float G = bBlink ? 0.f : (0.85f + 0.15f * FMath::Sin(Life * 13.f)) * Rage;
-		for (UMaterialInstanceDynamic* M : GlowMIDs)
+		// v4.5 : chaque surface garde son intensite (coeur des yeux, dents, bords et racines plus faibles) :
+		// le visage a du relief au lieu d'un aplat blanc uniforme
+		for (int32 i = 0; i < GlowMIDs.Num(); ++i)
 		{
-			if (M)
+			if (UMaterialInstanceDynamic* M = GlowMIDs[i])
 			{
-				M->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(1.f, 0.96f, 0.86f) * 60.f * G);
+				M->SetVectorParameterValue(TEXT("Emissive"), (GlowBase.IsValidIndex(i) ? GlowBase[i] : FLinearColor(10.f, 9.6f, 8.6f)) * G);
 			}
 		}
 		if (GlowLight)
 		{
-			GlowLight->SetIntensity(60.f * G);
+			GlowLight->SetIntensity(40.f * G);
 		}
 		return;
 	}
 	case EBREntityKind::Clump:
 	{
+		if (ClumpArms.Num() > 0)
+		{
+			AnimateClumpSkin(Dt);
+			return;
+		}
 		Visual->SetRelativeRotation(FRotator(FMath::Sin(Life * 2.3f) * 6.f, FMath::Sin(Life * 1.1f) * 12.f, FMath::Cos(Life * 2.9f) * 6.f));
 		const float Sc = 1.1f * (1.f + 0.05f * FMath::Sin(Life * 5.f));
 		Visual->SetRelativeScale3D(FVector(Sc, Sc, 1.21f / Sc));
@@ -1763,11 +2122,29 @@ void ABREntity::Animate(float Dt)
 	}
 
 	// Rebond de la marche, accroupissement (Faceling), palpitation de la masse (Skin-Stealer)
-	const float Bob = FMath::Abs(FMath::Sin(AnimTime)) * 3.f * Gait;
-	Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, Bob - HideCrouch * 70.f));
+	// v4.5 : armee (le corps se tasse), frappe (fente vers l'avant), sursaut de la detection
+	const float Strike = StrikeCurve();
+	const float Bob = FMath::Abs(FMath::Sin(AnimTime)) * 3.f * FMath::Min(Gait, 1.f);
+	const float Crouch = WindupAnim * 7.f + AlertAnim * 3.f;
+	Visual->SetRelativeLocation(VisualBase + FVector(Strike * 16.f - WindupAnim * 4.f, 0.f, Bob - HideCrouch * 70.f - Crouch));
 	if (Kind == EBREntityKind::Faceling)
 	{
 		Visual->SetRelativeRotation(FRotator(-HideCrouch * 25.f, 0.f, 0.f));
+	}
+	else if (TorsoPivots.Num() == 0 && Kind != EBREntityKind::Deathmoth)
+	{
+		// pieces rigides et quadrupedes : tout le corps bascule (le buste rigide ne porte pas la tete ni les bras)
+		Visual->SetRelativeRotation(FRotator(-LeanAnim * 6.f - WindupAnim * 6.f + Strike * 4.f, 0.f, 0.f));
+	}
+	for (const TWeakObjectPtr<USceneComponent>& T : TorsoPivots)
+	{
+		if (USceneComponent* C = T.Get())
+		{
+			// buste du maillage a squelette : penche en poursuite, ramasse a l'armee, projete a la frappe, redresse au sursaut
+			const float Pitch = -LeanAnim * 16.f - WindupAnim * 10.f - Strike * 14.f + AlertAnim * 6.f;
+			const float Roll = FMath::Sin(AnimTime) * 3.f * FMath::Min(Gait, 1.f);
+			C->SetRelativeRotation(FRotator(Pitch, 0.f, Roll) + Twitch * (Kind == EBREntityKind::Wretch ? 0.25f : 0.f));
+		}
 	}
 	if (MassForm)
 	{
@@ -1780,6 +2157,60 @@ void ABREntity::Animate(float Dt)
 		// Le ballon flotte et se balance doucement
 		Balloon->SetWorldRotation(FRotator(FMath::Sin(Life * 0.9f) * 5.f, GetActorRotation().Yaw, FMath::Cos(Life * 1.3f) * 5.f));
 	}
+}
+
+void ABREntity::UpdateStatePose(float Dt)
+{
+	// Detection : passage du calme (rondes, attente, cachette) a la traque ou a la poursuite -> sursaut, tete braquee
+	if (State != AnimState)
+	{
+		const bool bWasCalm = AnimState == EState::Idle || AnimState == EState::Wander || AnimState == EState::Hide;
+		const bool bNowAlert = State == EState::Chase || State == EState::Stalk || State == EState::Lure;
+		if (bWasCalm && bNowAlert)
+		{
+			AlertAnim = 1.f;
+		}
+		AnimState = State;
+	}
+	AlertAnim = FMath::Max(0.f, AlertAnim - Dt / 0.8f);
+	LeanAnim = FMath::FInterpTo(LeanAnim, State == EState::Chase ? 1.f : (State == EState::Stalk ? 0.4f : 0.f), Dt, 3.f);
+	// Armee : la proie est presque a portee pendant une poursuite (calcule chez chacun : aucun effet sur le jeu)
+	const ABRCharacter* P = Target.Get();
+	const float Dist = P ? static_cast<float>(FVector::Dist(P->GetActorLocation(), GetActorLocation())) : 1e9f;
+	const bool bReady = State == EState::Chase && Dist < MyInfo().AttackRange * 1.9f && (StrikeTime < 0.f || StrikeTime > 0.9f);
+	WindupAnim = FMath::FInterpTo(WindupAnim, bReady ? 1.f : 0.f, Dt, bReady ? 6.f : 3.f);
+	if (StrikeTime >= 0.f)
+	{
+		StrikeTime += Dt;
+		if (StrikeTime > 1.2f)
+		{
+			StrikeTime = -1.f;
+		}
+	}
+	// Jumpscare : la frappe est figee au moment ou le modele remplit l'ecran
+	if (bScareOverride)
+	{
+		StrikeTime = FMath::Min(StrikeTime < 0.f ? 0.f : StrikeTime, 0.2f);
+	}
+}
+
+float ABREntity::StrikeCurve() const
+{
+	if (StrikeTime < 0.f)
+	{
+		return 0.f;
+	}
+	if (StrikeTime < 0.12f)
+	{
+		const float T = StrikeTime / 0.12f;
+		return T * T * (3.f - 2.f * T);
+	}
+	if (StrikeTime < 0.32f)
+	{
+		return 1.f;
+	}
+	const float T = FMath::Clamp((StrikeTime - 0.32f) / 0.58f, 0.f, 1.f);
+	return 1.f - T * T * (3.f - 2.f * T);
 }
 
 void ABREntity::AnimateLimbs(float Dt, float Gait)
@@ -1803,11 +2234,16 @@ void ABREntity::AnimateLimbs(float Dt, float Gait)
 		const float Swing = FMath::Sin(AnimTime + L.Phase);
 		const float Lift = FMath::Max(0.f, FMath::Cos(AnimTime + L.Phase));
 		FRotator R = L.Base;
+		const float Strike = StrikeCurve();
+		const float Ready = FMath::Max(WindupAnim, Strike);
 		switch (L.Type)
 		{
 		case ELimb::UpperArm:
-			R.Pitch += L.Amp * Swing * Gait * (1.f - Reach) + Reach * 75.f;
+			R.Pitch += L.Amp * Swing * Gait * (1.f - Reach) * (1.f - Ready) + Reach * 75.f * (1.f - Ready);
 			R.Roll += Reach * L.Sign * 8.f;
+			// v4.5 : armee (bras ramenes en arriere et ecartes), frappe (balayage vers l'avant et le bas), sursaut
+			R.Pitch += WindupAnim * (1.f - Strike) * -35.f + Strike * 105.f + AlertAnim * 14.f;
+			R.Roll += L.Sign * (WindupAnim * 22.f + AlertAnim * 10.f) * (1.f - Strike);
 			if (Kind == EBREntityKind::Bacteria || Kind == EBREntityKind::Wretch)
 			{
 				R.Pitch += Twitch.Pitch * 0.4f * L.Sign + FMath::Sin(Life * 17.f + L.Phase) * 2.5f;
@@ -1815,18 +2251,20 @@ void ABREntity::AnimateLimbs(float Dt, float Gait)
 			break;
 		case ELimb::LowerArm:
 			R.Pitch += (10.f * FMath::Max(0.f, Swing)) * Gait + Reach * 10.f;
+			R.Pitch += WindupAnim * (1.f - Strike) * 55.f - Strike * 10.f + AlertAnim * 20.f; // coude plie, puis bras detendu
 			break;
 		case ELimb::Thigh:
-			R.Pitch += L.Amp * Swing * Gait;
+			R.Pitch += L.Amp * Swing * Gait + Ready * 14.f;
 			break;
 		case ELimb::Shin:
-			R.Pitch -= L.Amp * Lift * Gait; // le genou plie vers l'arriere
+			R.Pitch -= L.Amp * Lift * Gait + Ready * 26.f; // le genou plie vers l'arriere ; flechi pour l'appel
 			break;
 		case ELimb::HoundUpper:
-			R.Pitch += L.Amp * Swing * Gait;
+			// Hound : tasse sur ses pattes avant de bondir, puis pattes avant lancees vers la proie
+			R.Pitch += L.Amp * Swing * Gait + L.Sign * (WindupAnim * 18.f - Strike * 30.f);
 			break;
 		case ELimb::HoundLower:
-			R.Pitch += L.Sign * L.Amp * Lift * Gait;
+			R.Pitch += L.Sign * L.Amp * Lift * Gait - L.Sign * WindupAnim * 30.f;
 			break;
 		case ELimb::Wing:
 		{
@@ -1863,7 +2301,9 @@ void ABREntity::UpdateHead(float Dt)
 	if (P && (bInterested || Dist < 1500.f) && State != EState::Frozen)
 	{
 		// La tete suit le joueur (dans les limites du cou)
-		const FTransform& VT = Visual->GetComponentTransform();
+		// Repere du parent de la tete : Visual pour les pieces rigides, le buste pour un maillage a squelette
+		const USceneComponent* HeadParent = Head->GetAttachParent() ? Head->GetAttachParent() : Visual.Get();
+		const FTransform& VT = HeadParent->GetComponentTransform();
 		const FVector Local = VT.InverseTransformPosition(P->GetEyeLocation()) - Head->GetRelativeLocation();
 		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Local.Y), static_cast<float>(Local.X)));
 		const float Pitch = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Local.Z), static_cast<float>(Local.Size2D())));
@@ -1881,7 +2321,7 @@ void ABREntity::UpdateHead(float Dt)
 	{
 		Want.Roll += FMath::Sin(Life * 0.7f) * 12.f; // tete penchee, "amicale"
 	}
-	const float Speed = (Kind == EBREntityKind::Bacteria) ? 14.f : 5.f;
+	const float Speed = ((Kind == EBREntityKind::Bacteria) ? 14.f : 5.f) * (1.f + 3.f * AlertAnim);
 	HeadRot = FMath::RInterpTo(HeadRot, Want, Dt, Speed);
 	Head->SetRelativeRotation(HeadRot);
 }

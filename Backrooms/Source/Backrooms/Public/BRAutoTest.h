@@ -57,6 +57,18 @@ private:
 		int32 Pickups = 0;
 		int32 Exits = 0;
 		int32 Entities = 0;
+		// v4.5 : fluidite (percentiles des temps d'image), memoire, construction des chunks
+		float P50Ms = 0.f;
+		float P95Ms = 0.f;
+		float P99Ms = 0.f;
+		float Low1FPS = 0.f;
+		float GpuMs = 0.f;
+		float GameMs = 0.f;
+		float RenderMs = 0.f;
+		float RamMB = 0.f;
+		float TexMB = 0.f;
+		float ChunkMaxMs = 0.f;
+		float ChunkAvgMs = 0.f;
 		TArray<FString> Notes;
 		int32 FirstLogLine = 0;
 		int32 LastLogLine = 0;
@@ -101,6 +113,8 @@ private:
 	double GpuMs = 0.0;
 	double GameMs = 0.0;
 	double RenderMs = 0.0;
+	/** v4.5 : chaque temps d'image de la mesure (percentiles, 1 % le plus lent) */
+	TArray<float> FrameMs;
 
 	TArray<FLevelReport> Reports;
 	TArray<FString> Problems;

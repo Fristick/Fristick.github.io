@@ -19,3 +19,5 @@ __pycache__/
 Tools/SourceModels/
 # Ressources importees par Content/Python/backrooms_setup.py (regenerees depuis RawAssets/)
 Content/Backrooms/
+# Copies faites avant de regenerer un fichier protege (Tools/protect_assets.py)
+RawAssets/_Backup/

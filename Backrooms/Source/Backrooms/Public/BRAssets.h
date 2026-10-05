@@ -82,6 +82,11 @@ public:
 	 */
 	FString CheckImportedMeshes();
 
+	/** v4.5 : un modele fourni (ou son derive) manque et une forme de secours le remplace. Signale une fois dans le
+	 *  journal (avertissement) et liste en mode developpeur : un modele fourni n'est jamais remplace en silence. */
+	static void ReportFallback(const FString& Model);
+	static const TArray<FString>& GetFallbacks();
+
 private:
 	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, Count };
 

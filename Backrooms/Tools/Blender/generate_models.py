@@ -22,6 +22,8 @@ import random
 import sys
 
 import bpy  # doit etre importe avant bmesh / mathutils (module pip)
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+import protect_assets  # noqa: E402
 import bmesh
 from mathutils import Matrix, Vector
 
@@ -1332,6 +1334,33 @@ def m_cove():
     return _finish(o, "Plaster")
 
 
+def m_baseboard():
+    """v4.5 : plinthe mouluree (Niveau 0, bureaux, hotel) : 12 cm de haut, sabot au sol, gorge, quart-de-rond en tete.
+    Profil de 100 cm de long en X, meme convention que SM_Cove : mur en Y < 0, la plinthe deborde vers la piece."""
+    bm = bmesh.new()
+    prof = [(0.0, 0.0), (0.026, 0.0), (0.026, 0.004), (0.019, 0.011), (0.018, 0.028), (0.0145, 0.031), (0.018, 0.034),
+            (0.018, 0.088), (0.0145, 0.094), (0.0145, 0.1)]
+    for k in range(1, 7):
+        a = math.radians(90 * k / 6)
+        prof.append((0.0145 * math.cos(a), 0.1 + 0.02 * math.sin(a)))
+    prof.append((0.0, 0.12))
+    n = len(prof)
+    a = [bm.verts.new((-0.5, y, z)) for y, z in prof]
+    b = [bm.verts.new((0.5, y, z)) for y, z in prof]
+    bm.faces.new(a[::-1])
+    bm.faces.new(b)
+    for i in range(n - 1):
+        bm.faces.new((a[i], a[i + 1], b[i + 1], b[i]))
+    bm.faces.new((a[n - 1], a[0], b[0], b[n - 1]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new("SM_Baseboard")
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new("SM_Baseboard", me)
+    bpy.context.collection.objects.link(o)
+    return _finish(o, "Trim")
+
+
 MODELS = {
     "SM_LightPanel": m_light_panel, "SM_SkyPanel": m_sky_panel, "SM_PoolSkylight": m_pool_skylight, "SM_LightTube": m_light_tube,
     "SM_LightBulb": m_light_bulb, "SM_Sconce": m_sconce, "SM_StreetLamp": m_street_lamp,
@@ -1349,7 +1378,7 @@ MODELS = {
     "SM_Hound_UpperLeg": m_hound_upper, "SM_Hound_LowerLeg": m_hound_lower,
     "SM_Deathmoth_Body": m_moth_body, "SM_Deathmoth_Wing": m_moth_wing, "SM_Clump": m_clump,
     "SM_SkinStealer_Mass": m_skinstealer_mass, "SM_Partygoer_Balloon": m_balloon,
-    "SM_ArchSpandrel": m_arch_spandrel, "SM_Cove": m_cove,
+    "SM_ArchSpandrel": m_arch_spandrel, "SM_Cove": m_cove, "SM_Baseboard": m_baseboard,
 }
 for _k in HUMANOIDS:
     for _part, _fn in (("Torso", m_torso), ("Head", m_head), ("UpperArm", m_upper_arm), ("LowerArm", m_lower_arm),
@@ -1380,10 +1409,14 @@ def export_fbx(o, name):
     geometrie, noeud sans rotation ni echelle. Un importeur qui ignore la transformation du noeud (Interchange,
     Unreal 5.5+) obtient ainsi exactement la meme taille et la meme orientation que l'importeur FBX classique."""
     os.makedirs(OUT_MESH, exist_ok=True)
+    path = os.path.join(OUT_MESH, name + ".fbx")
+    # v4.5 : jamais de forme procedurale a la place d'un modele fourni (Tools/protect_assets.py)
+    if protect_assets.is_protected(path):
+        print("  PROTEGE, non remplace :", name)
+        return
     bpy.ops.object.select_all(action="DESELECT")
     o.select_set(True)
     bpy.context.view_layer.objects.active = o
-    path = os.path.join(OUT_MESH, name + ".fbx")
     sc = bpy.context.scene
     old_unit = sc.unit_settings.scale_length
     bpy.context.view_layer.update()

@@ -26,6 +26,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Net/UnrealNetwork.h"
@@ -359,6 +360,12 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	ClearLevel();
 	Current = &BRLevels::Get(LevelNumber);
 	Seed = InSeed != 0 ? InSeed : (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17));
+	// v4.5 : -BRSeed=<n> : meme disposition a chaque lancement (captures avant / apres comparables, tests automatiques)
+	uint32 FixedSeed = 0;
+	if (InSeed == 0 && FParse::Value(FCommandLine::Get(), TEXT("BRSeed="), FixedSeed) && FixedSeed != 0)
+	{
+		Seed = BRHash::Mix(FixedSeed ^ static_cast<uint32>(LevelNumber * 7919 + 17));
+	}
 	Seed = Seed != 0 ? Seed : 1u;
 	bLevelReady = true;
 	Collected.Empty();
@@ -1011,14 +1018,22 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 	}
 	Wanted.Sort([&](const FIntPoint& A, const FIntPoint& B) { return ChunkDist(A) < ChunkDist(B); });
 
+	// v4.5 : au plus 2 chunks par image, et pas de second chunk si le premier a deja pris plus de 5 ms (saccades)
 	int32 Budget = bSynchronous ? MAX_int32 : 2;
+	const double BuildStart = FPlatformTime::Seconds();
 	for (const FIntPoint& C : Wanted)
 	{
-		if (Budget-- <= 0)
+		if (Budget-- <= 0 || (!bSynchronous && (FPlatformTime::Seconds() - BuildStart) * 1000.0 > 5.0))
 		{
 			break;
 		}
+		const double T0 = FPlatformTime::Seconds();
 		SpawnChunk(C);
+		const float Ms = static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+		LastChunkBuildMs = Ms;
+		MaxChunkBuildMs = FMath::Max(MaxChunkBuildMs, Ms);
+		++ChunksBuilt;
+		ChunkBuildMsTotal += Ms;
 	}
 
 	TArray<FIntPoint> ToRemove;

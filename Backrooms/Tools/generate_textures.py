@@ -11,6 +11,8 @@ import os
 import numpy as np
 from PIL import Image
 
+import protect_assets
+
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "RawAssets", "Textures")
 os.makedirs(OUT, exist_ok=True)
 
@@ -111,6 +113,9 @@ def save(name, rgb, size=None, fmt="jpg"):
     if size:
         img = img.resize((size, size), Image.LANCZOS)
     path = os.path.join(OUT, f"{name}.{fmt}")
+    if protect_assets.is_protected(path):
+        print("  PROTEGE, non remplace :", name)  # v4.5 : texture d'un modele ou d'une scene fournis
+        return
     if fmt == "jpg":
         # qualite 95 sans sous-echantillonnage des couleurs : indiscernable de l'original une fois compresse par Unreal
         img.save(path, quality=95, subsampling=0, optimize=True)

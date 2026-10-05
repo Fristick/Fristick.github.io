@@ -45,6 +45,8 @@ public:
 	void SetSprinting(bool bInSprint);
 	void ToggleCrouch();
 	void ToggleFlashlight();
+	/** v4.5 : ombres ray tracees pour la lampe (profil Cinematique) ; sinon ombres virtuelles */
+	void SetFlashlightRayTracedShadows(bool bEnable);
 	void ToggleNightVision();
 	/** Vue a la premiere / troisieme personne (le corps en combinaison devient visible) */
 	void ToggleThirdPerson();

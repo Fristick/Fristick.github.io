@@ -49,6 +49,11 @@ OUT_TEX = os.path.join(ROOT, "RawAssets", "Textures")
 OUT_ICON = os.path.join(ROOT, "RawAssets", "Icons")
 OUT_PREV = os.path.join(ROOT, "RawAssets", "Previews")
 JOINTS = {}
+# v4.5 : les fichiers derives des modeles fournis sont proteges (Tools/protect_assets.py) : sans --force, un script
+# relance ne les remplace pas ; avec --force, l'ancienne version est copiee dans RawAssets/_Backup/ avant d'etre remplacee
+sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..")))
+import protect_assets  # noqa: E402
+FORCE = "--force" in sys.argv
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +89,10 @@ def save_texture(image, name, size=None, quality=95):
         im = im.resize((size, size), Image.LANCZOS)
     os.makedirs(OUT_TEX, exist_ok=True)
     path = os.path.join(OUT_TEX, name + ".jpg")
+    if not protect_assets.may_write(path, FORCE):
+        return
     im.save(path, quality=quality, subsampling=0)
+    protect_assets.record(path, "texture d'un modele fourni")
     print("  texture", path, im.size)
 
 
@@ -93,10 +101,12 @@ def export_fbx(obj, name):
     geometrie, noeud sans rotation ni echelle. Un importeur qui ignore la transformation du noeud (Interchange,
     Unreal 5.5+) obtient ainsi exactement la meme taille et la meme orientation que l'importeur FBX classique."""
     os.makedirs(OUT_MESH, exist_ok=True)
+    path = os.path.join(OUT_MESH, name + ".fbx")
+    if not protect_assets.may_write(path, FORCE):
+        return
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
-    path = os.path.join(OUT_MESH, name + ".fbx")
     sc = bpy.context.scene
     old_unit = sc.unit_settings.scale_length
     bpy.context.view_layer.update()
@@ -115,6 +125,7 @@ def export_fbx(obj, name):
         obj.matrix_world = mw
         obj.data.update()
         sc.unit_settings.scale_length = old_unit
+    protect_assets.record(path, "derive d'un modele fourni (import_user_models.py)")
     print("  export", name, len(obj.data.vertices), "sommets")
 
 
@@ -662,7 +673,10 @@ def save_texture_file(src, name, size=None, quality=95):
         im = im.resize((size, size), Image.LANCZOS)
     os.makedirs(OUT_TEX, exist_ok=True)
     path = os.path.join(OUT_TEX, name + ".jpg")
+    if not protect_assets.may_write(path, FORCE):
+        return
     im.save(path, quality=quality, subsampling=0)
+    protect_assets.record(path, "texture d'un modele fourni")
     print("  texture", path, im.size)
 
 
@@ -1228,74 +1242,25 @@ def lumpy_sphere(bm, radius, subdiv, amp, mat, seed, squash=(1.0, 1.0, 1.0)):
 
 
 def process_smiler():
-    """Smiler v4.4 : une masse d'ombre informe (on ne devine pas de tete ronde), deux yeux en amande inclines vers le
-    nez qui brillent avec un halo, et un immense sourire en croissant : une gueule noire bordee de dents pointues
-    et serrees, de tailles inegales, qui s'entrecroisent, avec des crocs. Origine au centre, regard vers +X."""
+    """Smiler v4.5 : une masse d'ombre informe ou se creusent deux orbites en amande (yeux bombes au fond, lumineux au
+    centre, plus sombres vers les bords) et une gueule en croissant reellement creusee : fond rouge-noir, levres de la
+    masse, dents fines enracinees dans la levre (racines faiblement lumineuses, pointes plus claires), crocs.
+    Emplacements : SmilerDark, SmilerMouth, GlowEye, GlowTooth, GlowSoft. Origine au centre, regard vers +X."""
     print("== Smiler")
     reset()
     me = bpy.data.meshes.new("SmilerET")
     obj = mesh_object("SM_SmilerET", me)
     dark = mat_slot(obj, "SmilerDark")
     mouth = mat_slot(obj, "SmilerMouth")
-    glow = mat_slot(obj, "Glow")
+    eye = mat_slot(obj, "GlowEye")
+    tooth_m = mat_slot(obj, "GlowTooth")
     soft = mat_slot(obj, "GlowSoft")
     rng = np.random.default_rng(11)
     bm = bmesh.new()
 
-    # --- Masse d'ombre : ellipsoide etire, bosselee par du bruit, qui s'effiloche vers le bas comme une fumee
-    ret = bmesh.ops.create_icosphere(bm, subdivisions=4, radius=1.0)
-    lobes = [(Vector(rng.normal(size=3)).normalized(), rng.uniform(0.08, 0.2)) for _ in range(22)]
-    for v in ret["verts"]:
-        n = v.co.normalized()
-        r = 1.0 + sum(h * math.exp(-((n - c).length ** 2) / 0.09) for c, h in lobes) + rng.uniform(-0.03, 0.03)
-        p = Vector((n.x * 0.34, n.y * 0.46, n.z * 0.55)) * r
-        if n.z < -0.2:
-            # trainees sous le visage
-            p.z -= (abs(n.z) - 0.2) ** 1.6 * rng.uniform(0.25, 0.6)
-            p.x *= 0.85
-        if n.x > 0.25 and abs(n.z) < 0.75:
-            # face lisse ou se posent les yeux et le sourire
-            w = min(1.0, (n.x - 0.25) / 0.3)
-            q = Vector((n.x * 0.34, n.y * 0.46, n.z * 0.55))
-            p = p.lerp(q, w)
-        v.co = p
-    for f in {f for v in ret["verts"] for f in v.link_faces}:
-        f.material_index = dark
-
-    def front(y, z):
-        return 0.34 * math.sqrt(max(0.0, 1.0 - (y / 0.46) ** 2 - (z / 0.55) ** 2))
-
-    def blob(center, ax_y, ax_z, tilt, depth, mat, n=28, inset=0.0, ring=None):
-        """Forme plate en amande, posee sur la face (normale ~ +X), inclinee de tilt (radians)"""
-        pts = []
-        for i in range(n):
-            t = 2 * math.pi * i / n
-            yy = ax_y * math.cos(t)
-            zz = ax_z * math.sin(t) * (abs(math.sin(t)) ** 0.25)  # coins pointus
-            if ring is not None:
-                zz *= ring
-            c, s_ = math.cos(tilt), math.sin(tilt)
-            py, pz = center.y + yy * c - zz * s_, center.z + yy * s_ + zz * c
-            pts.append(Vector((front(py, pz) + depth, py, pz)))
-        cen = Vector((front(center.y, center.z) + depth + inset, center.y, center.z))
-        vs = [bm.verts.new(p) for p in pts]
-        vc = bm.verts.new(cen)
-        for i in range(n):
-            try:
-                f = bm.faces.new((vc, vs[i], vs[(i + 1) % n]))
-                f.material_index = mat
-            except ValueError:
-                pass
-
-    # --- Yeux : amandes inclinees vers le centre (regard mauvais), halo plus large et plus faible derriere
-    for sgn in (-1.0, 1.0):
-        c = Vector((0.0, sgn * 0.155, 0.16))
-        tilt = sgn * math.radians(17)  # coins interieurs plus bas : regard mauvais
-        blob(c, 0.098, 0.036, tilt, 0.004, soft, ring=1.45)
-        blob(c, 0.088, 0.026, tilt, 0.012, glow, inset=0.004)
-
-    # --- Sourire : croissant immense, coins remontes jusque sous les yeux
+    SX, SY, SZ = 0.34, 0.46, 0.55
     W = 0.34
+    EYES = [(Vector((0.0, sgn * 0.155, 0.16)), sgn * math.radians(17)) for sgn in (-1.0, 1.0)]
 
     def upper(u):
         return -0.12 + 0.20 * u * u
@@ -1303,35 +1268,99 @@ def process_smiler():
     def lower(u):
         return upper(u) - 0.13 * max(0.0, 1.0 - u * u) ** 0.75
 
-    # gueule : fond noir rougeatre en retrait
-    n = 40
-    strip = []
-    for i in range(n + 1):
-        u = -1.0 + 2.0 * i / n
-        y = u * W
-        zu, zl = upper(u) + 0.004, lower(u) - 0.004
-        strip += [Vector((front(y, zu) - 0.03, y, zu)), Vector((front(y, zl) - 0.03, y, zl))]
-    add_geometry(bm, strip, [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(n)], mouth)
+    def almond(y, z, c, tilt, ay, az):
+        """< 1 dans l'amande (coins pointus)"""
+        dy, dz = y - c.y, z - c.z
+        cs, sn = math.cos(-tilt), math.sin(-tilt)
+        ly, lz = dy * cs - dz * sn, dy * sn + dz * cs
+        t = min(1.0, abs(ly) / ay)
+        half = az * max(0.0, 1.0 - t * t) ** 0.6
+        return (ly / ay) ** 2 + (lz / max(half, 1e-4)) ** 2 if half > 1e-4 else 9.0
+
+    def mouth_mask(y, z):
+        if abs(y) >= W:
+            return 0.0
+        u = y / W
+        zu, zl = upper(u), lower(u)
+        if zl < z < zu:
+            edge = min(z - zl, zu - z, (W - abs(y)) * 0.5)
+            return min(1.0, edge / 0.012)
+        return 0.0
+
+    # --- Masse d'ombre : ellipsoide bossele qui s'effiloche vers le bas ; orbites et gueule creusees dans la face
+    ret = bmesh.ops.create_icosphere(bm, subdivisions=6, radius=1.0)
+    lobes = [(Vector(rng.normal(size=3)).normalized(), rng.uniform(0.08, 0.2)) for _ in range(22)]
+    trail = {}
+    for v in ret["verts"]:
+        n = v.co.normalized()
+        r = 1.0 + sum(h * math.exp(-((n - c).length ** 2) / 0.09) for c, h in lobes)
+        p = Vector((n.x * SX, n.y * SY, n.z * SZ)) * r
+        if n.z < -0.2:
+            key = (round(n.x * 6), round(n.y * 6))
+            trail.setdefault(key, rng.uniform(0.25, 0.6))
+            p.z -= (abs(n.z) - 0.2) ** 1.6 * trail[key]
+            p.x *= 0.85
+        if n.x > 0.25 and abs(n.z) < 0.75:
+            w = min(1.0, (n.x - 0.25) / 0.3)
+            p = p.lerp(Vector((n.x * SX, n.y * SY, n.z * SZ)), w)
+            # orbites : creusees de 3 cm, bord adouci
+            for c, tilt in EYES:
+                d = almond(p.y, p.z, c, tilt, 0.098, 0.04)
+                if d < 1.6:
+                    p.x -= 0.03 * max(0.0, min(1.0, (1.6 - d) / 0.7))
+            mm = mouth_mask(p.y, p.z)
+            if mm > 0:
+                p.x -= 0.075 * mm
+        v.co = p
+    for f in ret["faces"] if "faces" in ret else {f for v in ret["verts"] for f in v.link_faces}:
+        c = f.calc_center_median()
+        f.material_index = mouth if (c.x > 0.15 and mouth_mask(c.y, c.z) > 0.3) else dark
+
+    def front(y, z):
+        return SX * math.sqrt(max(0.0, 1.0 - (y / SY) ** 2 - (z / SZ) ** 2))
+
+    # --- Yeux : lentilles bombees au fond des orbites, coeur lumineux, couronne plus sombre vers le bord
+    for c, tilt in EYES:
+        rings = [(1.0, soft, 0.0), (0.8, soft, 0.004), (0.55, eye, 0.009), (0.0, eye, 0.013)]
+        n = 32
+        layers = []
+        for k, (sc, mat_i, bulge) in enumerate(rings):
+            pts = []
+            for i in range(n):
+                t = 2 * math.pi * i / n
+                yy = 0.086 * math.cos(t) * sc
+                zz = 0.034 * math.sin(t) * (abs(math.sin(t)) ** 0.25) * sc
+                cs, sn = math.cos(tilt), math.sin(tilt)
+                py, pz = c.y + yy * cs - zz * sn, c.z + yy * sn + zz * cs
+                pts.append(Vector((front(py, pz) - 0.026 + bulge, py, pz)))
+            layers.append((pts, mat_i))
+        vl = [[bm.verts.new(p) for p in pts] for pts, _ in layers]
+        for k in range(len(vl) - 1):
+            for i in range(n):
+                try:
+                    f = bm.faces.new((vl[k][i], vl[k][(i + 1) % n], vl[k + 1][(i + 1) % n], vl[k + 1][i]))
+                    f.material_index = layers[k + 1][1]
+                except ValueError:
+                    pass
 
     def tooth(base_u, row, length_k, width, fang=False):
-        """Dent pointue epaisse et legerement courbee vers l'interieur de la gueule"""
+        """Dent fine enracinee dans la levre : racine (GlowSoft) puis corps et pointe (GlowTooth), courbee vers la gorge"""
         u = base_u
         y = u * W
-        z0 = upper(u) if row == 0 else lower(u)
+        z0 = (upper(u) + 0.006) if row == 0 else (lower(u) - 0.006)
         gap = max(0.012, upper(u) - lower(u))
-        length = gap * length_k * (1.6 if fang else 1.0)
+        length = gap * length_k * (1.6 if fang else 1.0) + 0.006
         dz = -1.0 if row == 0 else 1.0
-        x0 = front(y, z0) + 0.002
         bend = rng.uniform(-0.006, 0.006)
-        segs = 4
+        segs = 5
         ring = []
         for k in range(segs + 1):
             t = k / segs
             wk = width * (1.0 - t) ** 0.9 + 0.0008
-            dk = wk * 0.55
+            dk = wk * 0.6
             zc = z0 + dz * length * t
             yc = y + bend * t * t - u * 0.01 * t
-            xc = front(yc, zc) + 0.004 - 0.022 * t * t  # la pointe rentre dans la gueule
+            xc = front(yc, zc) - 0.012 - 0.03 * t * t  # la pointe rentre dans la gueule
             ring.append([Vector((xc + dk, yc - wk, zc)), Vector((xc + dk * 1.6, yc, zc)), Vector((xc + dk, yc + wk, zc)),
                          Vector((xc - dk, yc, zc))])
         vs = [[bm.verts.new(p) for p in r] for r in ring]
@@ -1339,12 +1368,12 @@ def process_smiler():
             for j in range(4):
                 try:
                     f = bm.faces.new((vs[k][j], vs[k][(j + 1) % 4], vs[k + 1][(j + 1) % 4], vs[k + 1][j]))
-                    f.material_index = glow
+                    f.material_index = soft if k == 0 else tooth_m
                 except ValueError:
                     pass
         try:
             f = bm.faces.new(list(reversed(vs[0])))
-            f.material_index = glow
+            f.material_index = soft
         except ValueError:
             pass
 
@@ -1354,7 +1383,6 @@ def process_smiler():
             u = ((i + 0.5 + 0.5 * row) / (count + 0.5)) * 2.0 - 1.0
             u += rng.uniform(-0.01, 0.01)
             t = max(0.0, 1.0 - u * u)
-            # dents fines et pointues : la gueule noire se voit entre elles
             width = (W / count) * (0.5 + 0.35 * t) * rng.uniform(0.8, 1.2)
             k = rng.uniform(0.72, 1.15) * (0.8 + 0.2 * t)
             fang = abs(abs(u) - 0.52) < 0.035
@@ -1364,7 +1392,7 @@ def process_smiler():
     bm.to_mesh(me)
     bm.free()
     for poly in me.polygons:
-        poly.use_smooth = poly.material_index == dark
+        poly.use_smooth = poly.material_index in (dark, mouth)
     export_fbx(obj, "SM_SmilerET")
     preview([obj], "SM_SmilerET", Vector((1.0, -0.35, 0.1)))
 
@@ -1549,7 +1577,10 @@ def _save_jpg(im, name, size, quality):
         im = im.resize((size, size), Image.LANCZOS)
     os.makedirs(OUT_TEX, exist_ok=True)
     path = os.path.join(OUT_TEX, name + ".jpg")
+    if not protect_assets.may_write(path, FORCE):
+        return
     im.save(path, quality=quality, subsampling=0, optimize=True)
+    protect_assets.record(path, "texture d'une scene fournie")
     print("  texture", path, im.size)
 
 
@@ -1557,7 +1588,10 @@ def _save_png(im, name):
     """Sans perte (normal maps : le JPEG laisse des blocs dans les reflets) ; retire l'ancienne version JPEG"""
     os.makedirs(OUT_TEX, exist_ok=True)
     path = os.path.join(OUT_TEX, name + ".png")
+    if not protect_assets.may_write(path, FORCE):
+        return
     im.convert("RGB").save(path, optimize=True)
+    protect_assets.record(path, "texture d'une scene fournie")
     old = os.path.join(OUT_TEX, name + ".jpg")
     if os.path.exists(old):
         os.remove(old)
@@ -1776,7 +1810,7 @@ def process_office():
 
 
 if __name__ == "__main__":
-    args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    args = [a for a in (sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []) if not a.startswith("--")]
     todo = args or ["hazmat", "bacteria", "moth", "skinstealer", "faceling", "partygoer", "hound", "smiler", "clump",
                     "pooltex", "officetex", "office"]
     if "hazmat" in todo:

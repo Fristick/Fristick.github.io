@@ -183,6 +183,12 @@ public:
 	bool FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes = 1500) const;
 	bool IsChunkLoaded(const FIntPoint& Chunk) const { return Chunks.Contains(Chunk); }
 	int32 GetChunkCount() const { return Chunks.Num(); }
+	/** v4.5 : temps de construction des chunks (ms), pour le rapport du test automatique */
+	float LastChunkBuildMs = 0.f;
+	float MaxChunkBuildMs = 0.f;
+	float ChunkBuildMsTotal = 0.f;
+	int32 ChunksBuilt = 0;
+	void ResetChunkStats() { MaxChunkBuildMs = 0.f; ChunkBuildMsTotal = 0.f; ChunksBuilt = 0; }
 	uint32 GetSeed() const { return Seed; }
 
 	// ------------------------------------------------------------ Etat

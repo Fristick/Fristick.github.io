@@ -38,6 +38,8 @@ namespace
 		float Rough;
 		float Metal;
 		float TexScale;
+		/** v4.5 : normal map propre (modele cuit) ; sinon T_Skin_N pour la peau */
+		const TCHAR* Normal = nullptr;
 	};
 
 	// Style de chaque nom de materiau utilise par les modeles Blender (generate_models.py)
@@ -134,6 +136,11 @@ namespace
 				{ TEXT("ClumpFlesh"), TEXT("T_Skin"), FLinearColor(0.86f, 0.7f, 0.6f), 0.45f, 0.f, 2.f },
 				{ TEXT("ClumpMouth"), TEXT("T_Grime"), FLinearColor(0.12f, 0.015f, 0.015f), 0.25f, 0.f, 1.f },
 				{ TEXT("ClumpTeeth"), TEXT("T_Grime"), FLinearColor(0.72f, 0.58f, 0.32f), 0.4f, 0.f, 1.f },
+				// v4.5 : Wretch et Clump reconstruits (Tools/Blender/build_creatures.py) : couleur et relief cuits
+				{ TEXT("WretchSkin"), TEXT("T_Wretch"), FLinearColor(1.f, 1.f, 1.f), 0.55f, 0.f, 1.f, TEXT("T_Wretch_N") },
+				{ TEXT("WretchTeeth"), TEXT("T_Grime"), FLinearColor(0.95f, 0.86f, 0.62f), 0.38f, 0.f, 1.f },
+				{ TEXT("WretchEye"), TEXT("T_Grime"), FLinearColor(0.7f, 0.72f, 0.66f), 0.12f, 0.f, 1.f },
+				{ TEXT("ClumpSkin"), TEXT("T_Clump"), FLinearColor(1.f, 1.f, 1.f), 0.45f, 0.f, 1.f, TEXT("T_Clump_N") },
 				// v3.8 : poste de travail du Niveau 4 (scene fournie) ; T_Grime vaut ~0,59 en lineaire
 				{ TEXT("DeskTop"), TEXT("T_Grime"), FLinearColor(1.05f, 1.f, 0.7f), 0.45f, 0.f, 1.f },
 				{ TEXT("DeskChrome"), TEXT("T_Grime"), FLinearColor(1.2f, 1.2f, 1.22f), 0.22f, 1.f, 1.f },
@@ -328,6 +335,31 @@ UStaticMesh* UBRAssets::Mesh(FName Name)
 	return Cast<UStaticMesh>(LoadAsset(MeshFolder, Name, UStaticMesh::StaticClass()));
 }
 
+namespace
+{
+	TArray<FString>& FallbackList()
+	{
+		static TArray<FString> List;
+		return List;
+	}
+}
+
+void UBRAssets::ReportFallback(const FString& Model)
+{
+	TArray<FString>& L = FallbackList();
+	if (!L.Contains(Model))
+	{
+		L.Add(Model);
+		UE_LOG(LogTemp, Warning, TEXT("Backrooms : modele fourni absent, forme de secours utilisee : %s (relancer backrooms_setup.run() ; ")
+			TEXT("fichiers dans RawAssets/Meshes et RawAssets/Skeletal, voir Tools/protect_assets.py check)"), *Model);
+	}
+}
+
+const TArray<FString>& UBRAssets::GetFallbacks()
+{
+	return FallbackList();
+}
+
 USkeletalMesh* UBRAssets::SkeletalMesh(FName Name)
 {
 	return Cast<USkeletalMesh>(LoadAsset(MeshFolder, Name, USkeletalMesh::StaticClass()));
@@ -502,8 +534,8 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 
 	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
-	// (murs et sols : "AntiTile", l'anti-repetition des sols de la v4.3)
-	const TCHAR* V2Params[] = { TEXT("AntiTile"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
+	// (murs et sols : "WaterLine", la ligne d'eau et les flaques a bords decoupes de la v4.5)
+	const TCHAR* V2Params[] = { TEXT("WaterLine"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -692,6 +724,7 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 		MID->SetScalarParameterValue(TEXT("Wetness"), S.Wetness);
 		MID->SetScalarParameterValue(TEXT("AntiTile"), S.AntiTile);
 		MID->SetScalarParameterValue(TEXT("Stains"), S.Stains);
+		MID->SetScalarParameterValue(TEXT("WaterLine"), S.WaterLine);
 	}
 	else
 	{
@@ -810,7 +843,16 @@ FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)
 	}
 	if (SlotName.Contains(TEXT("GlowSoft"), ESearchCase::IgnoreCase))
 	{
-		return FLinearColor(1.f, 0.93f, 0.82f) * 10.f; // halo des yeux du Smiler (v4.4)
+		return FLinearColor(1.f, 0.93f, 0.82f) * 10.f; // bord des yeux et racines des dents du Smiler
+	}
+	// v4.5 : Smiler calibre (x 0,5 en jeu) : yeux ~14, dents ~10 ; assez pour percer le noir sans devenir un panneau plat
+	if (SlotName.Contains(TEXT("GlowEye"), ESearchCase::IgnoreCase))
+	{
+		return FLinearColor(1.f, 0.97f, 0.9f) * 28.f;
+	}
+	if (SlotName.Contains(TEXT("GlowTooth"), ESearchCase::IgnoreCase))
+	{
+		return FLinearColor(1.f, 0.95f, 0.86f) * 20.f;
 	}
 	if (SlotName.Contains(TEXT("GlowWindow"), ESearchCase::IgnoreCase))
 	{
@@ -922,7 +964,7 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 				MID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor::Black);
 				if (bSkin)
 				{
-					if (UTexture* N = Texture(TEXT("T_Skin_N")))
+					if (UTexture* N = Texture((Style && Style->Normal) ? FName(Style->Normal) : FName(TEXT("T_Skin_N"))))
 					{
 						MID->SetTextureParameterValue(TEXT("NormalTex"), N);
 					}

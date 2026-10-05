@@ -363,9 +363,21 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 
 	if (bWithTrim && D.bTrim && ZLo < 1.f)
 	{
-		const FVector TC = bAlongY ? FVector(Fixed, Mid, 6.f) : FVector(Mid, Fixed, 6.f);
-		const FVector TS = bAlongY ? FVector(T + 3.f, Len, 12.f) : FVector(Len, T + 3.f, 12.f);
-		AddBox(D.Trim, TC, TS, false);
+		// v4.5 : plinthe mouluree des deux cotes (sabot, gorge, quart-de-rond : SM_Baseboard) ; a defaut, une boite
+		bool bMolded = true;
+		for (int32 Side = -1; Side <= 1 && bMolded; Side += 2)
+		{
+			const float Face = Fixed + Side * T * 0.5f;
+			const FVector P = bAlongY ? FVector(Face, Mid, 0.f) : FVector(Mid, Face, 0.f);
+			const float Yaw = bAlongY ? Side * 90.f : (Side > 0 ? 180.f : 0.f);
+			bMolded = AddSurfaceMesh(TEXT("SM_Baseboard"), D.Trim, FTransform(FRotator(0.f, Yaw, 0.f), P, FVector(Len / 100.f, 1.f, 1.f)), false);
+		}
+		if (!bMolded)
+		{
+			const FVector TC = bAlongY ? FVector(Fixed, Mid, 6.f) : FVector(Mid, Fixed, 6.f);
+			const FVector TS = bAlongY ? FVector(T + 3.f, Len, 12.f) : FVector(Len, T + 3.f, 12.f);
+			AddBox(D.Trim, TC, TS, false);
+		}
 	}
 
 	if (bWithTrim && ZLo < 1.f && D.WallDetailChance > 0.f)

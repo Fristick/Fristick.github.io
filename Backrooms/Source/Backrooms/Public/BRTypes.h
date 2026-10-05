@@ -97,6 +97,7 @@ struct FBRSurface
 	float Wetness = 0.f;      // v4.1 : sol mouille (plus sombre, plus brillant), 0..1
 	float AntiTile = 0.f;     // v4.3 : sols/plafonds, 2e echantillon tourne melange a grande echelle (casse la repetition)
 	float Stains = 0.f;       // v4.3 : taches d'humidite a l'echelle du monde (sols), 0..1
+	float WaterLine = -1.f;   // v4.5 : hauteur de l'eau (cm) : bande mouillee juste au-dessus (murs, piliers, rebords) ; < 0 : aucune
 
 	FBRSurface() {}
 	FBRSurface(FName InTex, const FLinearColor& InTint, float InScale, float InRough = 0.85f, float InGrime = 0.35f)
@@ -104,9 +105,9 @@ struct FBRSurface
 
 	FString Key() const
 	{
-		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f"), *Texture.ToString(),
+		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.0f"), *Texture.ToString(),
 			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime, Puddles, Wetness,
-			AntiTile, Stains);
+			AntiTile, Stains, WaterLine);
 	}
 };
 
@@ -293,9 +294,13 @@ struct FBRSettings
 	float Sensitivity = 1.f;
 	bool bInvertY = false;
 	float FOV = 88.f;
+	/** v4.5 : profil graphique : 0 Performance, 1 Qualite, 2 Cinematique, 3 Personnalise (un reglage modifie a la main) */
+	int32 GraphicsProfile = 1;
 	int32 Quality = 3;          // 0 Bas .. 4 Cinematique
 	bool bHardwareRT = true;    // Lumen en ray tracing materiel (RTX)
 	bool bRTHitLighting = false;
+	/** v4.5 : ombres ray tracees pour la lampe torche (les plafonniers gardent les ombres virtuelles) */
+	bool bRTShadows = false;
 	bool bAreaLights = true;    // neons en lumieres surfaciques
 	bool bVolumetricFog = true;
 	bool bFilmGrain = true;

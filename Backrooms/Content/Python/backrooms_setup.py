@@ -24,13 +24,13 @@ import unreal
 VERSION = 10
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau)
-MATERIAL_VERSION = 4
+MATERIAL_VERSION = 5
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"]}
 # Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
 RESOUNDED = {4: ["S_Bacteria.wav"]}
 # Modeles refaits (v4.4 : nouveau Smiler)
-RESHAPED = {4: ["SM_SmilerET.fbx"]}
+RESHAPED = {4: ["SM_SmilerET.fbx"], 5: ["SM_SmilerET.fbx"]}
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -245,24 +245,57 @@ def fbx_skeletal_options():
     return o
 
 
+# v4.5 : niveaux de detail generes a l'import pour les maillages a squelette denses (le Hound garde son pelage
+# d'origine, 175 000 sommets, au plus pres ; ses LOD le remplacent au loin)
+SKELETAL_LODS = {"SK_Hound": 4, "SK_SkinStealer": 3, "SK_Hazmat": 3, "SK_Wretch": 3, "SK_Clump": 3}
+
+
+def generate_skeletal_lods(name, count):
+    sk = unreal.load_asset(MESH + "/" + name)
+    if not isinstance(sk, unreal.SkeletalMesh):
+        return
+    done = False
+    for owner, fn in ((lambda: unreal.get_editor_subsystem(unreal.SkeletalMeshEditorSubsystem), "regenerate_lod"),
+                      (lambda: unreal.EditorSkeletalMeshLibrary, "regenerate_lod")):
+        try:
+            done = bool(getattr(owner(), fn)(sk, count, False, False))
+            if done:
+                break
+        except Exception:
+            continue
+    if done:
+        EAL.save_loaded_asset(sk)
+        log("%s : %d niveaux de detail" % (name, count))
+    else:
+        warn("%s : niveaux de detail non generes (a faire dans l'editeur : Skeletal Mesh > LOD Settings)" % name)
+
+
 def import_skeletal(files):
     if not files:
         return
     tasks = [make_task(raw("Skeletal", f), MESH, os.path.splitext(f)[0], fbx_skeletal_options()) for f in files]
     tools().import_asset_tasks(tasks)
+    wanted = {os.path.splitext(f)[0].lower() for f in list_raw("Skeletal", (".fbx",))}
     for f in files:
         name = os.path.splitext(f)[0]
         target = MESH + "/" + name
-        if exists(target):
-            continue
-        # Interchange peut nommer l'asset autrement : on retrouve le maillage a squelette et on le renomme
-        for path in EAL.list_assets(MESH, recursive=True, include_folder=False):
-            obj = unreal.load_asset(path)
-            if isinstance(obj, unreal.SkeletalMesh) and name.lower() in path.split("/")[-1].lower():
-                EAL.rename_asset(path, target)
-                break
-        else:
-            warn("Maillage a squelette introuvable apres import : " + name)
+        if not exists(target):
+            # Interchange peut nommer l'asset autrement ("SK_Hound_Armature"...) : on retrouve CE maillage a squelette
+            # (nom commencant par le sien, qui n'est pas celui d'un autre fichier) et on le renomme
+            for path in EAL.list_assets(MESH, recursive=True, include_folder=False):
+                asset = path.split("/")[-1].split(".")[0]
+                low = asset.lower()
+                if low in wanted or not low.startswith(name.lower()):
+                    continue
+                obj = unreal.load_asset(path)
+                if isinstance(obj, unreal.SkeletalMesh):
+                    EAL.rename_asset(path, target)
+                    break
+            else:
+                warn("Maillage a squelette introuvable apres import : " + name)
+                continue
+        if name in SKELETAL_LODS:
+            generate_skeletal_lods(name, SKELETAL_LODS[name])
     EAL.save_directory(MESH, only_if_is_dirty=True, recursive=True)
     log("%d maillages a squelette importes" % len(files))
 
@@ -460,7 +493,9 @@ class Graph(object):
         e.set_editor_property("parameter_name", name)
         if texture:
             e.set_editor_property("texture", texture)
-        safe_set(e, "sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+        # meme regle que tex() : texture lineaire (T_NoiseLF) -> echantillonneur LinearColor, sinon le materiau ne compile pas
+        linear = texture is not None and not is_srgb(texture)
+        safe_set(e, "sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR if linear else unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
         return e
 
     def _scene(self, cls, offset):
@@ -684,7 +719,9 @@ def build_world_material():
     # v4.1 : flaques et sol mouille (reflets ray traces : rugosite quasi nulle, surface plane, ronds de gouttes)
     pud = g.custom("BRPuddles", BR_PUDDLES_HLSL, [
         ("WP", wp), ("N", g.vertex_normal()), ("T", g.time()), ("Amount", g.scalar("Puddles", 0.0)),
-        ("Wet", g.scalar("Wetness", 0.0)), ("Tex", g.texobj("PuddleTex", grime_tex))], output="CMOT_FLOAT4")
+        ("Wet", g.scalar("Wetness", 0.0)), ("Tex", g.texobj("PuddleTex", grime_tex)), ("Noise", g.texobj("PuddleNoise", noise_tex)),
+        ("WaterZ", g.scalar("WaterLine", -1.0))],
+        output="CMOT_FLOAT4")
     puddle = g.mask(pud, "r")
     wet = g.mask(pud, "g")
     ripple = g.mask(pud, "ba")
@@ -815,21 +852,31 @@ BR_CAUSTICS_HLSL = (
 
 
 BR_PUDDLES_HLSL = (
-    "// Flaques et sol mouille (v4.1). Entrees : WP (position monde, cm), N (normale du sommet), T (temps, s),\n"
-    "// Amount (part du sol couverte de flaques, 0..1), Wet (humidite generale, 0..1), Tex (bruit : T_Grime).\n"
-    "// Sortie : float4(flaque 0..1, sol mouille 0..1, pente XY des ronds de gouttes dans les flaques).\n"
-    "if (Amount <= 0.0 && Wet <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
+    "// Flaques, sol mouille et ligne d'eau (v4.5). Entrees : WP (position monde, cm), N (normale du sommet), T (temps, s),\n"
+    "// Amount (part du sol couverte de flaques, 0..1), Wet (humidite generale, 0..1), Tex (T_Grime), Noise (T_NoiseLF),\n"
+    "// WaterZ (hauteur de l'eau en cm, < 0 : pas d'eau). Sortie : float4(flaque 0..1, mouille 0..1, pente XY des ronds de gouttes).\n"
+    "if (Amount <= 0.0 && Wet <= 0.0 && WaterZ < -0.5) return float4(0.0, 0.0, 0.0, 0.0);\n"
     "float up = saturate((N.z - 0.6) * 4.0);\n"
     "float2 p = WP.xy;\n"
-    "// T_Grime est importee en sRGB : on revient aux valeurs du fichier (seuils calibres dessus)\n"
-    "float n1 = pow(Texture2DSample(Tex, TexSampler, p / 1150.0).r, 0.4545);\n"
-    "float n2 = pow(Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g, 0.4545);\n"
-    "float n = n1 * 0.82 + n2 * 0.18;\n"
-    "// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~26 %, 1 -> ~57 % (bruit de T_Grime)\n"
-    "float th = lerp(0.94, 0.76, saturate(Amount));\n"
-    "float puddle = Amount > 0.0 ? saturate((n - th) / 0.01) * up : 0.0;\n"
-    "float wet = saturate(saturate((n - th + 0.035) / 0.035) * 0.9 * saturate(Amount * 4.0) + Wet) * up;\n"
+    "// v4.5 : la forme vient d'un bruit doux (Noise : T_NoiseLF, lineaire) : de vraies flaques, pas un semis de taches ;\n"
+    "// T_Grime (sRGB : pow pour revenir aux valeurs du fichier) decoupe seulement leurs bords (anses, presqu'iles)\n"
+    "float base = Texture2DSample(Noise, NoiseSampler, p / 900.0).r * 0.7 + Texture2DSample(Noise, NoiseSampler, p / 370.0 + 0.41).g * 0.3;\n"
+    "float e1 = pow(Texture2DSample(Tex, TexSampler, p / 160.0 + 0.23).b, 0.4545);\n"
+    "float e2 = pow(Texture2DSample(Tex, TexSampler, p / 45.0 + 0.61).r, 0.4545);\n"
+    "float n = base + (e1 - 0.5) * 0.07 + (e2 - 0.5) * 0.025;\n"
+    "// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~25 %, 1 -> ~57 % (calibre sur les textures)\n"
+    "float th = lerp(0.755, 0.505, saturate(Amount));\n"
+    "float puddle = Amount > 0.0 ? saturate((n - th) / 0.004) * up : 0.0;\n"
+    "// lisere mouille irregulier autour de chaque flaque, plus large d'un cote que de l'autre\n"
+    "float wet = saturate(saturate((n - th + 0.03 + (e1 - 0.5) * 0.03) / 0.03) * 0.9 * saturate(Amount * 4.0) + Wet) * up;\n"
     "wet = max(wet, puddle);\n"
+    "// Ligne d'eau : bande mouillee de 4 a 9 cm au-dessus de la surface (murs, piliers, rebords), sous l'eau tout est mouille\n"
+    "if (WaterZ > -0.5)\n"
+    "{\n"
+    "  float h = WP.z - WaterZ;\n"
+    "  float band = 4.0 + 5.0 * e1 + 2.0 * e2;\n"
+    "  wet = max(wet, saturate(1.0 - h / band) * step(-60.0, h));\n"
+    "}\n"
     "// Gouttes qui tombent du plafond : un rond qui s'elargit par case de 70 cm, a un rythme propre a chaque case\n"
     "float2 ripple = float2(0.0, 0.0);\n"
     "if (puddle > 0.001)\n"

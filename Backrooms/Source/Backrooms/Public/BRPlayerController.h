@@ -139,6 +139,12 @@ public:
 	FString GetSettingLabel(int32 Index) const;
 	FString GetSettingValue(int32 Index) const;
 	FString GetSettingHint(int32 Index) const;
+	/** v4.5 : mode de rendu reellement actif (RHI, ray tracing, Lumen, ombres, resolution interne) */
+	FString GetRenderModeText(bool bShort = false) const;
+	/** true si le ray tracing materiel est actif (decide au demarrage : DirectX 12, carte compatible, r.RayTracing) */
+	static bool IsHardwareRayTracingAvailable();
+	/** Profils : 0 Performance, 1 Qualite, 2 Cinematique */
+	static void ApplyGraphicsProfile(int32 Profile);
 	void AdjustSetting(int32 Index, int32 Direction);
 	void LoadSettings();
 	void SaveSettings() const;

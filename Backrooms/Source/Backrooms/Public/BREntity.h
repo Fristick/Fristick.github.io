@@ -113,6 +113,9 @@ protected:
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> GlowMIDs;
 
+	/** Emission de base de chaque materiau de GlowMIDs (yeux, dents, bords plus faibles) */
+	TArray<FLinearColor> GlowBase;
+
 	/** Ballon rouge du Partygoer (reste vertical quoi que fasse le bras) */
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Balloon;
@@ -148,6 +151,10 @@ protected:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastVoiceCue(float Volume);
 
+	/** v4.5 : l'entite vient de frapper (le serveur decide) : chacun joue le geste de frappe puis de recuperation */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastStrike();
+
 private:
 	enum class EState : uint8 { Idle, Wander, Stalk, Chase, Retreat, Frozen, Hide, Lure };
 	enum class ELimb : uint8 { UpperArm, LowerArm, Thigh, Shin, HoundUpper, HoundLower, Wing, Tendril };
@@ -175,7 +182,9 @@ private:
 	void BuildVisual();
 	USceneComponent* AddPart(FName MeshName, USceneComponent* Parent, const FVector& Joint, const FVector& FallbackSize,
 		float FallbackDrop, const TMap<FString, FLinearColor>* Tints, bool bUniqueGlow = false, float GlowScale = 1.f);
-	FBRHumanoidParts BuildHumanoid(const TCHAR* Prefix, const FBRHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent);
+	/** Pieces rigides Prefix_* ; v4.5 : le maillage a squelette SkinName a la place s'il est importe */
+	FBRHumanoidParts BuildHumanoid(const TCHAR* Prefix, const FBRHumanoidSpec& Spec, const TMap<FString, FLinearColor>* Tints, USceneComponent* Parent,
+		const TCHAR* SkinName = nullptr);
 	void BuildHound(const TMap<FString, FLinearColor>* Tints);
 	bool BuildHoundModel();
 	bool BuildClumpModel();
@@ -204,6 +213,13 @@ private:
 
 	void Animate(float Dt);
 	void AnimateLimbs(float Dt, float Gait);
+	/** v4.5 : poses d'etat (detection, poursuite, armee, frappe, recuperation), calculees chez chaque joueur */
+	void UpdateStatePose(float Dt);
+	/** Courbe de la frappe : 0 -> 1 en 0,12 s, tenue, puis retour (recuperation) jusqu'a 0,9 s */
+	float StrikeCurve() const;
+	/** v4.5 : Clump a squelette (SK_Clump) : bras d'appui poses au sol par IK, bras libres qui se tordent */
+	bool BuildClumpSkin();
+	void AnimateClumpSkin(float Dt);
 	void UpdateHead(float Dt);
 	void UpdateMorph(float Dt);
 	void SetState(EState NewState);
@@ -264,6 +280,39 @@ private:
 	bool bWantsMove = false;
 	bool bWarned = false;
 	TArray<FLimb> Limbs;
+	/** v4.5 : maillages a squelette (corps, deguisement du Skin-Stealer) et leurs pivots */
+	TArray<FBRSkinDriver> SkinDrivers;
+	/** Bustes des maillages a squelette (la tete et les bras suivent : il se penche en poursuite) */
+	TArray<TWeakObjectPtr<USceneComponent>> TorsoPivots;
+	// Poses d'etat
+	float AlertAnim = 0.f;
+	float WindupAnim = 0.f;
+	float StrikeTime = -1.f;
+	float LeanAnim = 0.f;
+	float Lurch = 0.f;
+	/** Longueur de jambe (hanche -> sol, cm) : la foulee avance d'autant que le corps, sans glissement des pieds */
+	float LegLength = 90.f;
+	EState AnimState = EState::Wander;
+
+	struct FClumpArm
+	{
+		TWeakObjectPtr<USceneComponent> Upper;
+		TWeakObjectPtr<USceneComponent> Fore;
+		TWeakObjectPtr<USceneComponent> Hand;
+		FVector Shoulder = FVector::ZeroVector;   // repere du maillage, au repos
+		FVector Elbow = FVector::ZeroVector;
+		FVector Wrist = FVector::ZeroVector;
+		bool bGround = false;
+		bool bPlanted = false;
+		FVector Planted = FVector::ZeroVector;   // monde
+		FVector SwingFrom = FVector::ZeroVector;
+		float Swing = -1.f;                      // 0..1 pendant un pas, -1 main posee
+		float Phase = 0.f;
+	};
+	TArray<FClumpArm> ClumpArms;
+	/** Animation des os espacee quand l'entite est loin ou hors de vue */
+	float SkinAccum = 0.f;
+	void ApplySkins(float Dt);
 	TWeakObjectPtr<USceneComponent> HeadPivot;
 	TWeakObjectPtr<USceneComponent> TrueHead;
 	TWeakObjectPtr<USceneComponent> DisguiseHead;

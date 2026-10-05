@@ -591,6 +591,8 @@ namespace
 		};
 		// Reflets d'eau animes sur le carrelage (tres doux au plafond)
 		D.Floor.Caustics = 1.f; D.Wall.Caustics = 1.f; D.Pillar.Caustics = 1.f; D.Ceiling.Caustics = 0.35f;
+		// v4.5 : ligne d'eau sur les murs des canaux, les piliers et les rebords des trottoirs (carrelage plus sombre et brillant)
+		D.Floor.WaterLine = D.WaterHeight; D.Wall.WaterLine = D.WaterHeight; D.Pillar.WaterLine = D.WaterHeight;
 		return D;
 	}
 

@@ -125,7 +125,8 @@ namespace
 			UMaterialExpressionTextureObjectParameter* E = New<UMaterialExpressionTextureObjectParameter>();
 			E->ParameterName = FName(Name);
 			E->Texture = Default;
-			E->SamplerType = SAMPLERTYPE_Color;
+			// meme regle que Tex() : une texture lineaire (T_NoiseLF) avec un echantillonneur Color empecherait le materiau de compiler
+			E->SamplerType = (Default && !Default->SRGB) ? SAMPLERTYPE_LinearColor : SAMPLERTYPE_Color;
 			return FPin{ E, 0 };
 		}
 
@@ -376,7 +377,9 @@ namespace
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("T"), G.Time()));
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("Amount"), G.Scalar(TEXT("Puddles"), 0.f)));
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("Wet"), G.Scalar(TEXT("Wetness"), 0.f)));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("WaterZ"), G.Scalar(TEXT("WaterLine"), -1.f)));
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("Tex"), G.TexObj(TEXT("PuddleTex"), Grime)));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("Noise"), G.TexObj(TEXT("PuddleNoise"), NoiseLF)));
 		const FPin Pud = G.Custom(TEXT("BRPuddles"), BRMaterialBuilder::PuddlesHLSL(), CMOT_Float4, PuddleIn);
 		const FPin Puddle = G.Mask(Pud, TEXT("r"));
 		const FPin Wet = G.Mask(Pud, TEXT("g"));
@@ -565,24 +568,34 @@ namespace BRMaterialBuilder
 
 	const FString& PuddlesHLSL()
 	{
-		// Entrees : WP, N (normale du sommet), T, Amount (flaques), Wet (humidite), Tex (bruit).
-		// Sortie : float4(flaque, sol mouille, pente XY des ronds de gouttes)
+		// Entrees : WP, N (normale du sommet), T, Amount (flaques), Wet (humidite), Tex (bruit), WaterZ (ligne d'eau).
+		// Sortie : float4(flaque, sol mouille, pente XY des ronds de gouttes). Meme code que backrooms_setup.py.
 		static const FString Code = TEXT(
-			"// Flaques et sol mouille (v4.1). Entrees : WP (position monde, cm), N (normale du sommet), T (temps, s),\n"
-			"// Amount (part du sol couverte de flaques, 0..1), Wet (humidite generale, 0..1), Tex (bruit : T_Grime).\n"
-			"// Sortie : float4(flaque 0..1, sol mouille 0..1, pente XY des ronds de gouttes dans les flaques).\n"
-			"if (Amount <= 0.0 && Wet <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
+			"// Flaques, sol mouille et ligne d'eau (v4.5). Entrees : WP (position monde, cm), N (normale du sommet), T (temps, s),\n"
+			"// Amount (part du sol couverte de flaques, 0..1), Wet (humidite generale, 0..1), Tex (T_Grime), Noise (T_NoiseLF),\n"
+			"// WaterZ (hauteur de l'eau en cm, < 0 : pas d'eau). Sortie : float4(flaque 0..1, mouille 0..1, pente XY des ronds de gouttes).\n"
+			"if (Amount <= 0.0 && Wet <= 0.0 && WaterZ < -0.5) return float4(0.0, 0.0, 0.0, 0.0);\n"
 			"float up = saturate((N.z - 0.6) * 4.0);\n"
 			"float2 p = WP.xy;\n"
-			"// T_Grime est importee en sRGB : on revient aux valeurs du fichier (seuils calibres dessus)\n"
-			"float n1 = pow(Texture2DSample(Tex, TexSampler, p / 1150.0).r, 0.4545);\n"
-			"float n2 = pow(Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g, 0.4545);\n"
-			"float n = n1 * 0.82 + n2 * 0.18;\n"
-			"// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~26 %, 1 -> ~57 % (bruit de T_Grime)\n"
-			"float th = lerp(0.94, 0.76, saturate(Amount));\n"
-			"float puddle = Amount > 0.0 ? saturate((n - th) / 0.01) * up : 0.0;\n"
-			"float wet = saturate(saturate((n - th + 0.035) / 0.035) * 0.9 * saturate(Amount * 4.0) + Wet) * up;\n"
+			"// v4.5 : la forme vient d'un bruit doux (Noise : T_NoiseLF, lineaire) : de vraies flaques, pas un semis de taches ;\n"
+			"// T_Grime (sRGB : pow pour revenir aux valeurs du fichier) decoupe seulement leurs bords (anses, presqu'iles)\n"
+			"float base = Texture2DSample(Noise, NoiseSampler, p / 900.0).r * 0.7 + Texture2DSample(Noise, NoiseSampler, p / 370.0 + 0.41).g * 0.3;\n"
+			"float e1 = pow(Texture2DSample(Tex, TexSampler, p / 160.0 + 0.23).b, 0.4545);\n"
+			"float e2 = pow(Texture2DSample(Tex, TexSampler, p / 45.0 + 0.61).r, 0.4545);\n"
+			"float n = base + (e1 - 0.5) * 0.07 + (e2 - 0.5) * 0.025;\n"
+			"// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~25 %, 1 -> ~57 % (calibre sur les textures)\n"
+			"float th = lerp(0.755, 0.505, saturate(Amount));\n"
+			"float puddle = Amount > 0.0 ? saturate((n - th) / 0.004) * up : 0.0;\n"
+			"// lisere mouille irregulier autour de chaque flaque, plus large d'un cote que de l'autre\n"
+			"float wet = saturate(saturate((n - th + 0.03 + (e1 - 0.5) * 0.03) / 0.03) * 0.9 * saturate(Amount * 4.0) + Wet) * up;\n"
 			"wet = max(wet, puddle);\n"
+			"// Ligne d'eau : bande mouillee de 4 a 9 cm au-dessus de la surface (murs, piliers, rebords), sous l'eau tout est mouille\n"
+			"if (WaterZ > -0.5)\n"
+			"{\n"
+			"  float h = WP.z - WaterZ;\n"
+			"  float band = 4.0 + 5.0 * e1 + 2.0 * e2;\n"
+			"  wet = max(wet, saturate(1.0 - h / band) * step(-60.0, h));\n"
+			"}\n"
 			"// Gouttes qui tombent du plafond : un rond qui s'elargit par case de 70 cm, a un rythme propre a chaque case\n"
 			"float2 ripple = float2(0.0, 0.0);\n"
 			"if (puddle > 0.001)\n"

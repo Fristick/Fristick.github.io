@@ -146,6 +146,7 @@ ABRCharacter::ABRCharacter()
 void ABRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	SetFlashlightRayTracedShadows(FBRSettings::Get().bRTShadows && ABRPlayerController::IsHardwareRayTracingAvailable());
 
 	// Immobile tant que le monde ne nous a pas place sur un sol
 	if (ABRWorld* W = ABRWorld::Get(this))
@@ -756,6 +757,20 @@ void ABRCharacter::ToggleCrouch()
 	else
 	{
 		Crouch();
+	}
+}
+
+void ABRCharacter::SetFlashlightRayTracedShadows(bool bEnable)
+{
+	if (!Flashlight)
+	{
+		return;
+	}
+	const ECastRayTracedShadow::Type Want = bEnable ? ECastRayTracedShadow::Enabled : ECastRayTracedShadow::Disabled;
+	if (Flashlight->CastRaytracedShadow != Want)
+	{
+		Flashlight->CastRaytracedShadow = Want;
+		Flashlight->MarkRenderStateDirty();
 	}
 }
 
@@ -2078,7 +2093,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	// Effet camescope desactive : ni aberration de l'objectif, ni grain, ni salete, vignettage leger
 	const bool bVHS = Set.bVHSEffect;
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f + ClimbGlitch * 6.f + ScareFringe * 4.f;
+	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f + ClimbGlitch * 6.f + ScareFringe * 1.5f;
 
 	S.bOverride_FilmGrainIntensity = true;
 	S.FilmGrainIntensity = ((Set.bFilmGrain && bVHS) ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
@@ -2105,7 +2120,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.bOverride_SceneColorTint = true;
 	S.SceneColorTint = FMath::Lerp(Tint, Hurt, FMath::Clamp(DamageFlash * 0.6f + Dead * 0.5f, 0.f, 1.f));
 	// Jumpscare : eclair de la couleur de l'entite a l'impact
-	S.SceneColorTint = FMath::Lerp(S.SceneColorTint, ScareTint * 1.6f, FMath::Clamp(ScareFlash * 0.7f, 0.f, 0.85f));
+	S.SceneColorTint = FMath::Lerp(S.SceneColorTint, ScareTint * 1.3f, FMath::Clamp(ScareFlash * 0.35f, 0.f, 0.45f));
 
 	// Luminosite choisie par le joueur ; vision nocturne : amplification de lumiere
 	// (vision nocturne : l'exposition peut descendre tres bas et s'adapte vite ; c'est surtout le projecteur
@@ -2185,6 +2200,10 @@ void ABRCharacter::BuildBody()
 		// Pieces rigides de la combinaison fournie (Tools/Blender/import_user_models.py) ; a defaut, des boites jaunes
 		TMap<FString, FLinearColor> Fallback;
 		Fallback.Add(TEXT("FallbackHazmat"), FLinearColor(0.75f, 0.6f, 0.08f));
+		if (!BRRig::HasHazmat(this))
+		{
+			UBRAssets::ReportFallback(TEXT("Combinaison hazmat du joueur (SK_Hazmat, SM_Hazmat_*)"));
+		}
 		Body = BRRig::BuildHumanoid(this, BodyFeet, TEXT("SM_Hazmat"), FBRHumanoidSpec::Hazmat(), &Fallback, BodyComponents, true);
 	}
 

@@ -1,0 +1,498 @@
+{
+ "derived": {
+  "RawAssets/Meshes/SM_BacteriaET_ArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "95335c651a1869cf7ab532a1ec0f76d3ae3a6c5d8e674df521a3aede271c52e9"
+  },
+  "RawAssets/Meshes/SM_BacteriaET_ArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "e718d876e5876842847baf6efe7cd8ba218aa52d6090d4101a07839f35af2dfd"
+  },
+  "RawAssets/Meshes/SM_BacteriaET_Body.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "beee11e48c76696b8d306fc26b893cca725f3c27e9003849142ee02b72e9a83c"
+  },
+  "RawAssets/Meshes/SM_BacteriaET_Head.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "d9d8986b6fd0c86b51b6ada910818883a5f21c49e3ba9a4e68a95c6a3f9e1b42"
+  },
+  "RawAssets/Meshes/SM_DeathmothET_Body.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "b3c4d3e2277da4c2c49ecdfbf973a24c98dee09b23da03d17f5c02f64fa2a056"
+  },
+  "RawAssets/Meshes/SM_DeathmothET_WingL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "280fd45b36ab65ef75a67d4b99f7d8cf7ed2883472ab384d9f02ab7871a218ad"
+  },
+  "RawAssets/Meshes/SM_DeathmothET_WingR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "f10fa6c09cb1273b61779e18a414d32aa6266de91380ce97cf242969a468d114"
+  },
+  "RawAssets/Meshes/SM_FacelingET_Head.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "3c4cb04e7820ff26b8c7d0ace1c86291b4a1a22c8e738eb7c7a11088b818c6f4"
+  },
+  "RawAssets/Meshes/SM_FacelingET_LowerArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "c33ec4228b2ba57cc6bbf0ef08d75aceae39c794d8ee0edd92c9da6df1bc4cda"
+  },
+  "RawAssets/Meshes/SM_FacelingET_LowerArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "129575e5c7c2b0752b666dc5e8d58d4cb29f611a104d9c2bc9ce87da88b6abe6"
+  },
+  "RawAssets/Meshes/SM_FacelingET_ShinL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "df4dfe008f115346d00ce75760e7e54c5461957ffcf9dfef11c370c0e269b7f8"
+  },
+  "RawAssets/Meshes/SM_FacelingET_ShinR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "fc43121d29c87d292c3d4d01233356c0fbd9e3c9b7f7f2579f8e3f13807060e4"
+  },
+  "RawAssets/Meshes/SM_FacelingET_ThighL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "511192795245fe2ea5f9f749e9dd4df4c0541ba4ffb58f3a05c876cc0fcb08ff"
+  },
+  "RawAssets/Meshes/SM_FacelingET_ThighR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "94df2ae95a70febee0445b1fffaf9eea8688a392cc258f2eace796a3e3fbae1c"
+  },
+  "RawAssets/Meshes/SM_FacelingET_Torso.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "9cde1340d250bed89eed3ca94e258304b6ed67ac771901a2a26ee4a75293b693"
+  },
+  "RawAssets/Meshes/SM_FacelingET_UpperArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "0bd7ae6333bf67e1ec3a2e9696039004263cb01b315b31726e46d0cd070e0fc7"
+  },
+  "RawAssets/Meshes/SM_FacelingET_UpperArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "5214f8b639ade5d0def8a1e030ef58f246f76a8c091252d6bb614923403a52d1"
+  },
+  "RawAssets/Meshes/SM_Hazmat_Head.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "f49a1ac4442fa7a3e8957dd054d343cc925d76ad432bc2f80da094ab107d662d"
+  },
+  "RawAssets/Meshes/SM_Hazmat_LowerArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "a6cd9072171bf288520463508dc6029f3a2e1573ab9b7c1a728d8f8151645522"
+  },
+  "RawAssets/Meshes/SM_Hazmat_LowerArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "18012d284123bac827bcc72317458427c7796df7122935bd6ab02f56447f2af7"
+  },
+  "RawAssets/Meshes/SM_Hazmat_ShinL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "da0a3f29fef383316fdeea350385ca4ad1ba9117cd78d9a721f9fbb6b30ae8d2"
+  },
+  "RawAssets/Meshes/SM_Hazmat_ShinR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "7f691fefe832788fc978012788a1e576d1cda7c1a0b367adae3a1116ab1116cb"
+  },
+  "RawAssets/Meshes/SM_Hazmat_ThighL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "fc19c43bf7c71c3ffbd1ce785dad69f361a423d0908f799a1fbd91543bd64f56"
+  },
+  "RawAssets/Meshes/SM_Hazmat_ThighR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "df2ae926081d2683b0a3ecc106412f02d04ee9cd1248b97d0fd3d196e87d6f82"
+  },
+  "RawAssets/Meshes/SM_Hazmat_Torso.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "d56964ba1213ecb47edc5f43118b20e60763e7fa7ec72976faa1ce5b6779174d"
+  },
+  "RawAssets/Meshes/SM_Hazmat_UpperArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "7f30595e763e49c94d2eeb24d1842ac235fa14df34e3f21ef250d3083c4221e3"
+  },
+  "RawAssets/Meshes/SM_Hazmat_UpperArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "e97a5325b311d339fa3b575b43eb1041d36987cc07ca2a4aa4bbda940ac4b849"
+  },
+  "RawAssets/Meshes/SM_HoundET_BackLowerL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "ecb2599d9a71676725f64751ae45645ee62463e410bbc0ce0fa369f9f3fd1233"
+  },
+  "RawAssets/Meshes/SM_HoundET_BackLowerR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "9096401b0ad993c77be5fe01f98ff387465566ab002d670485135ead2cc64c9b"
+  },
+  "RawAssets/Meshes/SM_HoundET_BackUpperL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "5a44ee2868baae45f40e234481e648da518acc272adc52a02a9ca2c69bc10a49"
+  },
+  "RawAssets/Meshes/SM_HoundET_BackUpperR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "6777ffcae8646885922b518490bfe9c149ed23930c888b809ec6886600e0787f"
+  },
+  "RawAssets/Meshes/SM_HoundET_Body.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "d55e6ebea8d2303f22cf7d3a5d2b3b7a9602797157d190a7c61cfb8dcc7fa05f"
+  },
+  "RawAssets/Meshes/SM_HoundET_FrontLowerL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "e38b238d1fb3f7ccce965273fdd1243542204545655bb03b0166dbf8948d0832"
+  },
+  "RawAssets/Meshes/SM_HoundET_FrontLowerR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "6cd31fe99541f963e7ea89a34132590df138be5b01ff1dda07916decea002ec2"
+  },
+  "RawAssets/Meshes/SM_HoundET_FrontUpperL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "3bbaf1ea698edc8d891a29a4ec17283eb12d79ad40464b3c0535dc838beec7d0"
+  },
+  "RawAssets/Meshes/SM_HoundET_FrontUpperR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "a036dbae1a2457b8fb48e16acb1962afa37add3ebce46f1c5353cd2bcc5f8f1c"
+  },
+  "RawAssets/Meshes/SM_HoundET_Head.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "f34ae4926f6fe1fcf79b171b99cf71ba151fb5c2a8133c777f9570a23b6ab4f2"
+  },
+  "RawAssets/Meshes/SM_OfficeChairET.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "0a5f05c100be6131943b8d3c7218d3278f2fea77db6ceb52e98d35f350b6a15b"
+  },
+  "RawAssets/Meshes/SM_OfficeDeskET.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "59c14ce0d099b7eb6c113435acc989281e1b0c085fe70b7c04c0cf6fdd52bcef"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_Balloon.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "d20b24b8daeccb8c371ee8fbdd080a38fab6cee94b17fb37c76a40a3eba48666"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_Head.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "075a78d3c7c3b2f21d6d45434e45798d10df15e49da80a8dede14f9254983a2a"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_LowerArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "d502bf768432f94ab816f32ee144986a31b079e7312e9d33da7a017c32f81163"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_LowerArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "ceac56f59e5751e164b628386c26663961b6ff81382c6027f990a30e159dfa40"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_ShinL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "31908bf32f13448ec997e29f8a2f8fadbf0fa4ab16bf69a740cdb366e94ef95c"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_ShinR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "6d3e5592d06bcde6fd973eb69705f3c57a1adb7f0d76db01011bdf69eefdf756"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_ThighL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "3ef37152a0ca3b873623531682ee18866387ff6ad5a35a92ed1901449adc2d6b"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_ThighR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "1833aed79bda2543998760fd1364e148043cf6a610f4ce5baee4153c1fa0796b"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_Torso.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "98c5623976c46c2c1f2bf3e6b08fcdf62e686bbb42e338d11d047129ffeb0187"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_UpperArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "0e86a3cd4007ed32ffcdcd480babf001edb829606b0a06d1c854671541fafa0a"
+  },
+  "RawAssets/Meshes/SM_PartygoerET_UpperArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "d7d49b368cc403e674d9e050ba459f0e6f336ad4e1d26da510469c3f2cb98e71"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_Head.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "e4d95b000c079e3b51a2d15f51b4914d0f5ad60a3f1262de932120f07966bf26"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_LowerArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "2cbd9b44f33744ee5a2a3758f9d0bf1bed7c670f113b8ad889d8a000ac582424"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_LowerArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "fd5589a88199cef3ebbb5a758cd68031e5e3996afc950017a404155173639142"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_ShinL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "0a328401fe5e99d8480fd8612066f6df846875fc9981a62bb5e72a1b4495731d"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_ShinR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "6c5617b9b5425815f3b83290b26e828512947a3ce4303c9c28990a1df75e0dac"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_ThighL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "4e124bdea5e9030293b44bd2292b891bc868f4a24350c2f5a261073f6f68f16a"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_ThighR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "e237ba0ad843ca015be72cae75a61f68cec8bcf6557b5b5142389ab951e6d58c"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_Torso.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "6b263a47c0a2a06a221c8180b6c30f67059417237ac138fc983d973c956f9c61"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_UpperArmL.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "2ecbfbf7db639349bca415deff999e1811bef04923cc2d470731df28c48a1fed"
+  },
+  "RawAssets/Meshes/SM_SkinStealerET_UpperArmR.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "2cae2c33b605fbf80e4b858e8d9bcb4497b979e092477cb2991f0294081fd018"
+  },
+  "RawAssets/Meshes/SM_WaterCoolerET.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "5d42dc3ac5340c2f5e4b60cfab2b139d6a9a5b29624366c5f79e87417af78058"
+  },
+  "RawAssets/Skeletal/SK_Faceling.fbx": {
+   "note": "derive de Tools/SourceModels (build_entity_skeletal.py)",
+   "sha256": "574b3c6d84c760e8d7e769c60470fcde068d3dbb16df174cd5652928be85c580"
+  },
+  "RawAssets/Skeletal/SK_Hazmat.fbx": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "2eb5d8dd7449c146f9391501dab7ebe04e4d32dd62637b118a97b8978120d7ed"
+  },
+  "RawAssets/Skeletal/SK_Hound.fbx": {
+   "note": "derive de Tools/SourceModels (build_entity_skeletal.py)",
+   "sha256": "b6b8cea4b21ddff11c72024f52286436c9ee54a8b9412f9191c1278479d24b7f"
+  },
+  "RawAssets/Skeletal/SK_Partygoer.fbx": {
+   "note": "derive de Tools/SourceModels (build_entity_skeletal.py)",
+   "sha256": "18afc4c8287dbb3d5298888160fef5a8a053c0d543a5de397adce32bebce975c"
+  },
+  "RawAssets/Skeletal/SK_SkinStealer.fbx": {
+   "note": "derive de Tools/SourceModels (build_entity_skeletal.py)",
+   "sha256": "088db4c68bcf2d34c5f4ede8551fec6684e04c02283acdfa2155a4b6fe80a6b2"
+  },
+  "RawAssets/Sounds/S_Bacteria.wav": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "5d3d2556842c0a06e9a6ac371b873b941939c41f3fa5dd3de229ae37cf13251b"
+  },
+  "RawAssets/Sounds/S_LightBuzz.wav": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "997aa342a551bb2299e7cff7f67f11dc1eba01455fabc1c8266db3ad2f1d14d1"
+  },
+  "RawAssets/Sounds/S_Scare_Bacteria.wav": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "36a3c341c37d29883cc2e40d0a0e885d18d7770fac0dea7e834bb1ed49f606cc"
+  },
+  "RawAssets/Textures/T_Deathmoth.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "94594731358aaa43ce6da2c142a940b65cf8e0b6b563a70d16933da720d9f428"
+  },
+  "RawAssets/Textures/T_Faceling.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "138ff3de096d1dac7a6302605759e9468925de9f503e36c8bf6691cdbce0cec3"
+  },
+  "RawAssets/Textures/T_Hazmat_Mask.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "cb7dd12bf64a694fd5e337e721d970ab099c1a6811baef159084e8ba4ed961d2"
+  },
+  "RawAssets/Textures/T_Hazmat_Suit.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "7c3a9ca5faf9b7884d9c8725443d7877a7e2b33b316971d9ce3f41095600e8b5"
+  },
+  "RawAssets/Textures/T_Hound.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "1a21cf2dc7289752f997b8ebfbec76da68bd34a16814b807d03c37e5887a9902"
+  },
+  "RawAssets/Textures/T_Partygoer.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "ba421ee4f2a23401a4d0bf667691793ba5f9ae229ca68ec906da80ff135d47f4"
+  },
+  "RawAssets/Textures/T_Plaster.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "1a988e42724ad8239571858a45c753b6bfbd4376695bb474708854aeaf199b8a"
+  },
+  "RawAssets/Textures/T_Plaster_N.png": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "5a3dee7bdff68d365f4c41054e2e1753bc51e70e31811bdc24ffe5c9b6caa3aa"
+  },
+  "RawAssets/Textures/T_PoolTile37.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "152bac4d973b3f62aff82a2b847681cf1a1150888d5e63926de5860403ef444e"
+  },
+  "RawAssets/Textures/T_PoolTile37_N.png": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "aa7ff8d0ed3acb34509181077bb6f19f85ec18314564ac04c7a6adcbdd44d228"
+  },
+  "RawAssets/Textures/T_SkinStealer_Claw.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "b10cd09a7df08b3e157181653ed3da4adeee9673ff25da9fd55cdc6bc56c1717"
+  },
+  "RawAssets/Textures/T_SkinStealer_Eye.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "a6e93c473ca36422185c152ef5e3452e6c2c69a876d29961959c906a76d633a8"
+  },
+  "RawAssets/Textures/T_SkinStealer_Flesh.jpg": {
+   "note": "ressource fournie ou derivee",
+   "sha256": "3e25d698c052887670b6111c3950de3274a82278bfc86d6e1f15b39e85ef3bd0"
+  }
+ },
+ "sources": {
+  "Tools/SourceModels/asyc_hazmat.glb": {
+   "bytes": 23474416,
+   "sha256": "f5b893f228e7c0ea773f9732575b16106f994dec5d405ece273ca18427728a64"
+  },
+  "Tools/SourceModels/backrooms_lvl4_office.glb": {
+   "bytes": 5614544,
+   "sha256": "03ab7c6bfb61278075a46446bda6413b187120e6d8f525f3a28c4515dd7bac2d"
+  },
+  "Tools/SourceModels/bacteria_recreation.blend": {
+   "bytes": 1327292,
+   "sha256": "fb847baaf5c2fbfb3b849ae5b5d4feca47672b0eac84148b23f05e1521b4b929"
+  },
+  "Tools/SourceModels/faceling.glb": {
+   "bytes": 530924,
+   "sha256": "52fd7a7f5aa85683c8f3d5d4e820c4f2e5212f5a36176019e9d5cafcfd80913e"
+  },
+  "Tools/SourceModels/faceling/inner/facelingps1.glb": {
+   "bytes": 530924,
+   "sha256": "52fd7a7f5aa85683c8f3d5d4e820c4f2e5212f5a36176019e9d5cafcfd80913e"
+  },
+  "Tools/SourceModels/faceling/source/facelingps1.zip": {
+   "bytes": 467992,
+   "sha256": "7d22a9e379638fed890cec5179315230335d5bf569098088ea31ae6592e23bbc"
+  },
+  "Tools/SourceModels/faceling/textures/faceling_0.png": {
+   "bytes": 261940,
+   "sha256": "e12107e17c4c9d0de7233743e98718d7ff73ce006e6d1849cc326527bb9db4e8"
+  },
+  "Tools/SourceModels/faceling_0.png": {
+   "bytes": 261940,
+   "sha256": "e12107e17c4c9d0de7233743e98718d7ff73ce006e6d1849cc326527bb9db4e8"
+  },
+  "Tools/SourceModels/hound.blend": {
+   "bytes": 13282032,
+   "sha256": "e8bc196d3001f6a7d6e8405f5756cbefbd1276abcf54adbdd4a9dea5be1ff869"
+  },
+  "Tools/SourceModels/hound/source/hound.blend": {
+   "bytes": 13282032,
+   "sha256": "e8bc196d3001f6a7d6e8405f5756cbefbd1276abcf54adbdd4a9dea5be1ff869"
+  },
+  "Tools/SourceModels/hound/textures/Material.png": {
+   "bytes": 499588,
+   "sha256": "bc2dd5c317cbad4561fa23c35cb9620f6e4f6713bd1d75b32b5510755693aed2"
+  },
+  "Tools/SourceModels/hound_Material.png": {
+   "bytes": 499588,
+   "sha256": "bc2dd5c317cbad4561fa23c35cb9620f6e4f6713bd1d75b32b5510755693aed2"
+  },
+  "Tools/SourceModels/partygoer.fbx": {
+   "bytes": 626604,
+   "sha256": "fec7b0917094a760cfe9d0276348e9d27b1065daf6c0d8bda53c85159df59164"
+  },
+  "Tools/SourceModels/partygoer/source/PartygoerByFilinMinv.fbx": {
+   "bytes": 626604,
+   "sha256": "fec7b0917094a760cfe9d0276348e9d27b1065daf6c0d8bda53c85159df59164"
+  },
+  "Tools/SourceModels/partygoer/textures/Baloon_red_albedo.jpeg": {
+   "bytes": 36832,
+   "sha256": "33e049b9b1054107faec1dce9eb58077178142e97862942d5d7950bb7b5993e7"
+  },
+  "Tools/SourceModels/partygoer/textures/Baloon_red_metallic.jpeg": {
+   "bytes": 3406,
+   "sha256": "dbcbae3858ae790a3f36203b0fc466d6bbcb07b2ef95aabfffd812fcddf14482"
+  },
+  "Tools/SourceModels/partygoer/textures/Baloon_red_normal.png": {
+   "bytes": 86386,
+   "sha256": "8f4bf26e7d051d9457ac53829be7cf96bc7b3e9ac3c190fe274f850be285ab9f"
+  },
+  "Tools/SourceModels/partygoer/textures/Baloon_red_roughness.jpeg": {
+   "bytes": 102773,
+   "sha256": "ff4c59f99729a08bfce0d5ef42cb425617411724f22449de74b963da592e6fe3"
+  },
+  "Tools/SourceModels/partygoer/textures/Partygoer_LP_AO.jpeg": {
+   "bytes": 1174977,
+   "sha256": "2ba079be893e8a378c68e7e7cb4f4630385005c2c4e91dbc683c4f267bb7b964"
+  },
+  "Tools/SourceModels/partygoer/textures/Partygoer_LP_BaseColor.jpeg": {
+   "bytes": 2966967,
+   "sha256": "09ed6cfe6b584a8e4f749307f89724ef387d893d5a19fee5d07a190677414b40"
+  },
+  "Tools/SourceModels/partygoer/textures/Partygoer_LP_Metallic.jpeg": {
+   "bytes": 1365755,
+   "sha256": "b759741b640371127cbdb3fe24cf70e62a6e466a8e2e0c6e448806052f2c5e25"
+  },
+  "Tools/SourceModels/partygoer/textures/Partygoer_LP_Normal.jpeg": {
+   "bytes": 3288386,
+   "sha256": "64057b9a4d154bd7f6546793ec88f65cd582d8c4b716f1aaad392d988511e24b"
+  },
+  "Tools/SourceModels/partygoer/textures/Partygoer_LP_Roughness.jpeg": {
+   "bytes": 3239059,
+   "sha256": "29835eda10a76fcee5af809a2479a3f215621c6180299c873ba876ba41a55053"
+  },
+  "Tools/SourceModels/partygoer/textures/internal_ground_ao_texture.jpeg": {
+   "bytes": 39703,
+   "sha256": "fb7f3f0d93f65acf9ef31bdf6820fffe3f645eac62da1ea21c1c61fec5de017e"
+  },
+  "Tools/SourceModels/partygoer_BaseColor.jpeg": {
+   "bytes": 2966967,
+   "sha256": "09ed6cfe6b584a8e4f749307f89724ef387d893d5a19fee5d07a190677414b40"
+  },
+  "Tools/SourceModels/peppered moth.mtl": {
+   "bytes": 260,
+   "sha256": "663ff6ad14b10d1b06f7471abd0d6d8af0a421ff60b1f8593814de5356c9655c"
+  },
+  "Tools/SourceModels/peppered moth.obj": {
+   "bytes": 4288937,
+   "sha256": "2ce1b505d0f02dc49c5f0d4f8cfc81b99304065112465f1e2e471814855ea869"
+  },
+  "Tools/SourceModels/poolrooms/Poolrooms.glb": {
+   "bytes": 16723764,
+   "sha256": "0b066abc510e0f90bac78c02e7cc1dfc1b95a6e3e180554ab62b438c1621f008"
+  },
+  "Tools/SourceModels/poolrooms/plaster_4.png": {
+   "bytes": 1182609,
+   "sha256": "c979625a5854f1d5ef5c7fea06909e607b7c61e8dd0d07e6ff9cede2400cbaa7"
+  },
+  "Tools/SourceModels/poolrooms/plaster_n_3.png": {
+   "bytes": 2956350,
+   "sha256": "3bd03a5b3bab6c51427893aa502bc27b79bb183495f67c65e3d7a4eba56fc060"
+  },
+  "Tools/SourceModels/poolrooms/pooltile_1.png": {
+   "bytes": 51403,
+   "sha256": "5903bbedd35cbdc2da1345f24f6f2cd78a6afdab33a8d597ab6a322a489ee1fc"
+  },
+  "Tools/SourceModels/poolrooms/pooltile_n_0.png": {
+   "bytes": 84735,
+   "sha256": "42ef7e50ef1312db544102a5684b0778b0c960cbebe728e7ec6b0414056c093e"
+  },
+  "Tools/SourceModels/skin_stealer.usdz": {
+   "bytes": 6671063,
+   "sha256": "328f990adcc12fbed11ddd7d9db73b2980a0bfcc4e38523bbbfb3d9c93674df0"
+  },
+  "Tools/SourceModels/skin_tex/0/Material.002_baseColor.jpg": {
+   "bytes": 2958,
+   "sha256": "32f7661ffb7c43953e6e44538cc1037372ac153925aef8fb08be4759c016b2b8"
+  },
+  "Tools/SourceModels/skin_tex/0/Material.003_baseColor.jpg": {
+   "bytes": 1014959,
+   "sha256": "6d155e8ac504dec1baf2c694ac9cf91417913d01e0a5f55db444efd6004e77c4"
+  },
+  "Tools/SourceModels/skin_tex/0/Material.003_baseColor_scale0_norm.jpg": {
+   "bytes": 2950279,
+   "sha256": "6c5482c95f2d9eba58bf9eb98b39c9d11c9ae69362ff70bb60c7672184071ab6"
+  },
+  "Tools/SourceModels/skin_tex/0/Material.004_baseColor.jpg": {
+   "bytes": 58249,
+   "sha256": "b2594768883afc064e23b706d5b44c406a4c4081dc696622cf7c99f4b0b0b6f3"
+  },
+  "Tools/SourceModels/skin_tex/0/Material.006_baseColor.jpg": {
+   "bytes": 100784,
+   "sha256": "bc617b84b8a161689d093a6a0adf043f887278e814399bed6340f38576f01962"
+  },
+  "Tools/SourceModels/skin_tex/0/Material.007_baseColor.jpg": {
+   "bytes": 2755,
+   "sha256": "607e6c8865db3ee926b8c54f0754c22ea75bc25aea24385c89c5a42e4e6273c6"
+  },
+  "Tools/SourceModels/skin_tex/scene.usdc": {
+   "bytes": 2539645,
+   "sha256": "d58deaf0a79b34769fab1d63573f6293113dc203fa77a0aa16bf5023ffc2847f"
+  },
+  "Tools/SourceModels/texture_0_baseColor.png": {
+   "bytes": 7567796,
+   "sha256": "0fd58ee0b8e426f962da3189e2356149548d0137cd89f75a10efe8deab836290"
+  }
+ }
+}

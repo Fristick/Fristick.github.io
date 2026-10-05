@@ -48,11 +48,11 @@ namespace
 			// Deathmoth : un essaim traverse l'ecran, le papillon s'ecrase sur le visage
 			{ 1.8f, 0.f, 0.5f, 32.f, 4.f, FVector(0.f, -60.f, 60.f), 3.f, 5.f, -6.f, 0.f, 0.f, 0.f, 0.f, FLinearColor(0.65f, 0.48f, 0.25f), 35.f, 26.f, TEXT("S_Scare_Moth") },
 			// Wretch : avance par a-coups entre des images noires
-			{ 1.9f, 0.f, 0.75f, 38.f, -3.f, FVector::ZeroVector, 1.5f, 6.f, -8.f, 0.f, 12.f, 5.f, 0.f, FLinearColor(0.55f, 0.6f, 0.5f), 140.f, 16.f, TEXT("S_Scare_Wretch") },
+			{ 1.9f, 0.f, 0.75f, 38.f, -3.f, FVector::ZeroVector, 1.5f, 6.f, -8.f, 0.f, 12.f, 5.f, 0.f, FLinearColor(0.55f, 0.6f, 0.5f), 116.f, 30.f, TEXT("S_Scare_Wretch") },
 			// Partygoer : silence... puis il est la, d'un coup, avec ses confettis et son sourire =)
 			{ 2.4f, 0.5f, 0.04f, 48.f, 0.f, FVector::ZeroVector, 0.6f, 0.f, -16.f, 0.f, 0.f, 0.f, 0.f, FLinearColor(1.f, 0.85f, 0.15f), 172.f, 12.f, TEXT("S_Scare_Partygoer") },
-			// Clump : roule sur lui-meme jusqu'a vous, la camera encaisse le choc
-			{ 1.7f, 0.f, 0.42f, 50.f, -6.f, FVector(0.f, 0.f, -40.f), 8.f, 0.f, 6.f, 260.f, 0.f, 0.f, 0.f, FLinearColor(0.55f, 0.04f, 0.04f), 60.f, 40.f, TEXT("S_Scare_Clump") },
+			// Clump : il se jette sur vous, ses bras libres tendus, la bouche de lamproie ouverte devant la camera
+			{ 1.7f, 0.f, 0.42f, 46.f, -6.f, FVector(0.f, 0.f, -40.f), 6.f, 0.f, 6.f, 0.f, 0.f, 0.f, 0.f, FLinearColor(0.55f, 0.04f, 0.04f), 52.f, 36.f, TEXT("S_Scare_Clump") },
 			// Bacteria : elle vous domine ; la camera leve les yeux, sa tete descend vers vous, l'image se brouille
 			{ 2.0f, 0.15f, 0.45f, 36.f, 32.f, FVector(0.f, 0.f, 160.f), 3.f, 0.f, -10.f, 0.f, 0.f, 0.f, 0.f, FLinearColor(0.9f, 0.9f, 0.95f), 205.f, 14.f, TEXT("S_Scare_Bacteria") },
 		};
@@ -144,7 +144,8 @@ void ABRCharacter::UpdateJumpscare(float Dt)
 	const float SinceImpact = FMath::Max(0.f, T - ScareImpact);
 
 	// Camera : tournee vers l'entite, secouee, penchee ; le joueur ne la controle plus
-	const float ShakeAmp = St.Shake * (bArrived ? FMath::Max(0.35f, FMath::Exp(-SinceImpact * 1.5f)) : 0.35f * Ease);
+	// v4.5 : tremblement reduit de 40 % : le cadrage reste sur le visage de l'entite (son geste porte la peur)
+	const float ShakeAmp = 0.6f * St.Shake * (bArrived ? FMath::Max(0.35f, FMath::Exp(-SinceImpact * 1.5f)) : 0.35f * Ease);
 	FRotator V = ScareView;
 	V.Pitch += (FMath::Sin(T * 41.f) + 0.5f * FMath::Sin(T * 67.f)) * ShakeAmp;
 	V.Yaw += (FMath::Cos(T * 37.f) + 0.5f * FMath::Sin(T * 59.f)) * ShakeAmp;

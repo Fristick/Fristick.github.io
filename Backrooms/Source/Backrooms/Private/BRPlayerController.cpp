@@ -28,6 +28,12 @@
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "DynamicRHI.h"
+#include "Engine/GameViewportClient.h"
+#include "HAL/IConsoleManager.h"
+#include "RenderUtils.h"
+#include "RHI.h"
+#include "UnrealClient.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Net/VoiceConfig.h"
 #include "BRAssets.h"
@@ -56,9 +62,11 @@ namespace
 		Row_RenderScale,
 		Row_VSync,
 		Row_MaxFPS,
+		Row_Profile,
 		Row_Quality,
 		Row_HardwareRT,
 		Row_RTHitLighting,
+		Row_RTShadows,
 		Row_AreaLights,
 		Row_VolumetricFog,
 		Row_FilmGrain,
@@ -67,6 +75,7 @@ namespace
 		Row_Count
 	};
 
+	const TCHAR* ProfileNames[] = { TEXT("PERFORMANCE"), TEXT("QUALIT\u00c9"), TEXT("CIN\u00c9MATIQUE"), TEXT("PERSONNALIS\u00c9") };
 	const TCHAR* QualityNames[] = { TEXT("BAS"), TEXT("MOYEN"), TEXT("\u00c9LEV\u00c9"), TEXT("\u00c9PIQUE"), TEXT("CIN\u00c9MATIQUE") };
 	const TCHAR* VoiceNames[] = { TEXT("VOIX OUVERTE"), TEXT("APPUYER POUR PARLER"), TEXT("MICRO COUP\u00c9") };
 	const TCHAR* WindowNames[] = { TEXT("PLEIN \u00c9CRAN"), TEXT("FEN\u00caTR\u00c9 SANS BORDURE"), TEXT("FEN\u00caTR\u00c9") };
@@ -2100,12 +2109,16 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return TEXT("SYNCHRO VERTICALE (V-SYNC)");
 	case Row_MaxFPS:
 		return TEXT("IMAGES PAR SECONDE MAX.");
+	case Row_Profile:
+		return TEXT("PROFIL GRAPHIQUE");
 	case Row_Quality:
 		return TEXT("QUALIT\u00c9 GRAPHIQUE");
 	case Row_HardwareRT:
 		return TEXT("RAY TRACING MAT\u00c9RIEL (RTX)");
 	case Row_RTHitLighting:
 		return TEXT("REFLETS RAY TRAC\u00c9S HAUTE QUALIT\u00c9");
+	case Row_RTShadows:
+		return TEXT("OMBRES RAY TRAC\u00c9ES (LAMPE)");
 	case Row_AreaLights:
 		return TEXT("N\u00c9ONS EN LUMI\u00c8RES SURFACIQUES");
 	case Row_VolumetricFog:
@@ -2148,12 +2161,16 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return OnOff(S.bVSync);
 	case Row_MaxFPS:
 		return S.MaxFPS <= 0 ? FString(TEXT("ILLIMIT\u00c9")) : FString::Printf(TEXT("%d"), S.MaxFPS);
+	case Row_Profile:
+		return ProfileNames[FMath::Clamp(S.GraphicsProfile, 0, 3)];
 	case Row_Quality:
 		return QualityNames[FMath::Clamp(S.Quality, 0, 4)];
 	case Row_HardwareRT:
-		return OnOff(S.bHardwareRT);
+		return !IsHardwareRayTracingAvailable() ? FString(TEXT("INDISPONIBLE")) : OnOff(S.bHardwareRT);
 	case Row_RTHitLighting:
-		return OnOff(S.bRTHitLighting);
+		return !IsHardwareRayTracingAvailable() ? FString(TEXT("INDISPONIBLE")) : OnOff(S.bRTHitLighting);
+	case Row_RTShadows:
+		return !IsHardwareRayTracingAvailable() ? FString(TEXT("INDISPONIBLE")) : OnOff(S.bRTShadows);
 	case Row_AreaLights:
 		return OnOff(S.bAreaLights);
 	case Row_VolumetricFog:
@@ -2189,12 +2206,23 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return TEXT("Supprime les d\u00e9chirures d'image, ajoute un peu de latence.");
 	case Row_MaxFPS:
 		return TEXT("Limiter les images par seconde r\u00e9duit la chaleur et le bruit de la carte graphique. Sans effet dans l'\u00e9diteur.");
+	case Row_Profile:
+		return TEXT("PERFORMANCE : qualit\u00e9 \u00c9lev\u00e9e, Lumen logiciel, rendu \u00e0 67 % (TSR). QUALIT\u00c9 : \u00c9pique, Lumen en ray tracing ")
+			TEXT("mat\u00e9riel (cache de surfaces), rendu \u00e0 80 %. CIN\u00c9MATIQUE : reflets \u00e9clair\u00e9s par les rayons, ombres ray trac\u00e9es de la lampe, ")
+			TEXT("rendu \u00e0 100 %. Modifier un r\u00e9glage ci-dessous passe en PERSONNALIS\u00c9. S'applique tout de suite.");
 	case Row_Quality:
-		return TEXT("Ombres, Lumen, textures, anti-cr\u00e9nelage (scalability).");
+		return TEXT("Ombres, Lumen, textures, anti-cr\u00e9nelage (scalability). S'applique tout de suite.");
 	case Row_HardwareRT:
-		return TEXT("Lumen en ray tracing mat\u00e9riel : reflets et lumi\u00e8re indirecte bien plus pr\u00e9cis (carte RTX / RX 6000+ requise).");
+		return IsHardwareRayTracingAvailable()
+			? FString(TEXT("Lumen en ray tracing mat\u00e9riel : reflets et lumi\u00e8re indirecte bien plus pr\u00e9cis (carte RTX / RX 6000+). S'applique tout de suite."))
+			: FString(TEXT("Indisponible : le jeu a d\u00e9marr\u00e9 sans ray tracing (DirectX 12 et carte compatible requis, r.RayTracing=True). ")
+				TEXT("Lumen logiciel est utilis\u00e9. Changer de carte ou de RHI demande un red\u00e9marrage."));
 	case Row_RTHitLighting:
-		return TEXT("Reflets \u00e9clair\u00e9s par les rayons eux-m\u00eames (eau, flaques, carrelage). Toujours actif en qualit\u00e9 \u00c9pique et Cin\u00e9matique ; ici, forc\u00e9 dans toutes les qualit\u00e9s. Co\u00fbteux.");
+		return TEXT("Reflets \u00e9clair\u00e9s par les rayons eux-m\u00eames (eau, flaques, carrelage, m\u00e9tal) au lieu du cache de surfaces de Lumen. ")
+			TEXT("Le plus co\u00fbteux des r\u00e9glages : seul le profil CIN\u00c9MATIQUE l'active.");
+	case Row_RTShadows:
+		return TEXT("Ombres de la lampe torche ray trac\u00e9es (contact net, pas de recalcul des ombres virtuelles \u00e0 chaque mouvement de la lampe). ")
+			TEXT("Les plafonniers gardent les ombres virtuelles (VSM), moins ch\u00e8res pour des dizaines de lumi\u00e8res fixes.");
 	case Row_AreaLights:
 		return TEXT("Ombres douces des n\u00e9ons. S'applique aux zones charg\u00e9es ensuite.");
 	case Row_VolumetricFog:
@@ -2241,6 +2269,7 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		break;
 	case Row_RenderScale:
 		S.RenderScale = FMath::Clamp(S.RenderScale + Dir * 5, 50, 100);
+		S.GraphicsProfile = 3;
 		break;
 	case Row_VSync:
 		S.bVSync = !S.bVSync;
@@ -2255,20 +2284,33 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		S.MaxFPS = FPSSteps[(Step + Dir + NumFPSSteps) % NumFPSSteps];
 		break;
 	}
+	case Row_Profile:
+		S.GraphicsProfile = (FMath::Clamp(S.GraphicsProfile, 0, 3) + Dir + 3) % 3; // le profil PERSONNALISE ne se choisit pas
+		ApplyGraphicsProfile(S.GraphicsProfile);
+		break;
 	case Row_Quality:
 		S.Quality = (S.Quality + Dir + 5) % 5;
+		S.GraphicsProfile = 3;
 		break;
 	case Row_HardwareRT:
 		S.bHardwareRT = !S.bHardwareRT;
+		S.GraphicsProfile = 3;
 		break;
 	case Row_RTHitLighting:
 		S.bRTHitLighting = !S.bRTHitLighting;
+		S.GraphicsProfile = 3;
+		break;
+	case Row_RTShadows:
+		S.bRTShadows = !S.bRTShadows;
+		S.GraphicsProfile = 3;
 		break;
 	case Row_AreaLights:
 		S.bAreaLights = !S.bAreaLights;
+		S.GraphicsProfile = 3;
 		break;
 	case Row_VolumetricFog:
 		S.bVolumetricFog = !S.bVolumetricFog;
+		S.GraphicsProfile = 3;
 		break;
 	case Row_FilmGrain:
 		S.bFilmGrain = !S.bFilmGrain;
@@ -2297,7 +2339,13 @@ void ABRPlayerController::LoadSettings()
 	Cfg.GetFloat(SettingsSection, TEXT("Sensitivity"), S.Sensitivity);
 	Cfg.GetBool(SettingsSection, TEXT("InvertY"), S.bInvertY);
 	Cfg.GetFloat(SettingsSection, TEXT("FOV"), S.FOV);
-	Cfg.GetInt(SettingsSection, TEXT("Quality"), S.Quality);
+	// v4.5 : profil graphique ; des reglages d'une version precedente restent tels quels (profil PERSONNALISE)
+	const bool bHadQuality = Cfg.GetInt(SettingsSection, TEXT("Quality"), S.Quality);
+	if (!Cfg.GetInt(SettingsSection, TEXT("GraphicsProfile"), S.GraphicsProfile))
+	{
+		S.GraphicsProfile = bHadQuality ? 3 : 1;
+	}
+	Cfg.GetBool(SettingsSection, TEXT("RTShadows"), S.bRTShadows);
 	Cfg.GetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
 	Cfg.GetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
 	Cfg.GetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
@@ -2322,6 +2370,73 @@ void ABRPlayerController::LoadSettings()
 	S.Sensitivity = FMath::Clamp(S.Sensitivity, 0.1f, 5.f);
 	S.FOV = FMath::Clamp(S.FOV, 70.f, 110.f);
 	S.Quality = FMath::Clamp(S.Quality, 0, 4);
+	S.GraphicsProfile = FMath::Clamp(S.GraphicsProfile, 0, 3);
+	if (S.GraphicsProfile < 3)
+	{
+		ApplyGraphicsProfile(S.GraphicsProfile);
+	}
+}
+
+void ABRPlayerController::ApplyGraphicsProfile(int32 Profile)
+{
+	// Choix par besoin : le hit lighting (le plus cher) et les ombres ray tracees de la lampe sont reserves au profil
+	// Cinematique ; Qualite vise 60 images/s (objectif, a mesurer) avec Lumen en ray tracing materiel et TSR a 80 %
+	FBRSettings& S = FBRSettings::Get();
+	switch (Profile)
+	{
+	case 0: // Performance
+		S.Quality = 2; S.bHardwareRT = false; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 67; S.bAreaLights = false;
+		S.bVolumetricFog = true;
+		break;
+	case 2: // Cinematique
+		S.Quality = 4; S.bHardwareRT = true; S.bRTHitLighting = true; S.bRTShadows = true; S.RenderScale = 100; S.bAreaLights = true;
+		S.bVolumetricFog = true;
+		break;
+	default: // Qualite
+		S.Quality = 3; S.bHardwareRT = true; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 80; S.bAreaLights = true;
+		S.bVolumetricFog = true;
+		break;
+	}
+	S.GraphicsProfile = FMath::Clamp(Profile, 0, 2);
+}
+
+bool ABRPlayerController::IsHardwareRayTracingAvailable()
+{
+	// Le ray tracing ne s'active qu'au demarrage (RHI DirectX 12, carte compatible, r.RayTracing=True dans la config)
+	return IsRayTracingEnabled();
+}
+
+FString ABRPlayerController::GetRenderModeText(bool bShort) const
+{
+	auto CVarF = [](const TCHAR* Name, float Default)
+	{
+		IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(Name);
+		return V ? V->GetFloat() : Default;
+	};
+	const FString RHIName = GDynamicRHI ? FString(GDynamicRHI->GetName()) : FString(TEXT("?"));
+	const bool bSM6 = GMaxRHIFeatureLevel >= ERHIFeatureLevel::SM6;
+	const bool bRTOn = IsHardwareRayTracingAvailable();
+	const bool bLumenHW = bRTOn && CVarF(TEXT("r.Lumen.HardwareRayTracing"), 0.f) > 0.5f;
+	const bool bHit = bLumenHW && CVarF(TEXT("r.Lumen.HardwareRayTracing.LightingMode"), 0.f) > 0.5f;
+	const bool bVSM = CVarF(TEXT("r.Shadow.Virtual.Enable"), 0.f) > 0.5f;
+	const bool bLampRT = bRTOn && FBRSettings::Get().bRTShadows;
+	const float SP = FMath::Clamp(CVarF(TEXT("r.ScreenPercentage"), 100.f), 10.f, 200.f);
+	FIntPoint VP(0, 0);
+	if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
+	{
+		VP = GEngine->GameViewport->Viewport->GetSizeXY();
+	}
+	const FIntPoint In(FMath::RoundToInt(VP.X * SP / 100.f), FMath::RoundToInt(VP.Y * SP / 100.f));
+	if (bShort)
+	{
+		return FString::Printf(TEXT("%s  \u00b7  %s  \u00b7  %dx%d \u2192 %dx%d"), *RHIName,
+			bLumenHW ? (bHit ? TEXT("RT + HIT LIGHTING") : TEXT("LUMEN RT")) : TEXT("LUMEN LOGICIEL"), In.X, In.Y, VP.X, VP.Y);
+	}
+	return FString::Printf(TEXT("Mode r\u00e9el : %s %s  \u00b7  ray tracing mat\u00e9riel %s  \u00b7  Lumen %s (reflets : %s)  \u00b7  ombres : %s%s  \u00b7  ")
+		TEXT("rendu %dx%d \u2192 %dx%d (%d %%, TSR)"),
+		*RHIName, bSM6 ? TEXT("SM6") : TEXT("SM5"), bRTOn ? TEXT("actif") : TEXT("indisponible"), bLumenHW ? TEXT("mat\u00e9riel") : TEXT("logiciel"),
+		bHit ? TEXT("\u00e9clair\u00e9s par les rayons") : TEXT("cache de surfaces"), bVSM ? TEXT("virtuelles (VSM)") : TEXT("cartes classiques"),
+		bLampRT ? TEXT(", lampe ray trac\u00e9e") : TEXT(""), In.X, In.Y, VP.X, VP.Y, FMath::RoundToInt(SP));
 }
 
 void ABRPlayerController::SaveSettings() const
@@ -2332,6 +2447,8 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetBool(SettingsSection, TEXT("InvertY"), S.bInvertY);
 	Cfg.SetFloat(SettingsSection, TEXT("FOV"), S.FOV);
 	Cfg.SetInt64(SettingsSection, TEXT("Quality"), S.Quality);
+	Cfg.SetInt64(SettingsSection, TEXT("GraphicsProfile"), S.GraphicsProfile);
+	Cfg.SetBool(SettingsSection, TEXT("RTShadows"), S.bRTShadows);
 	Cfg.SetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
 	Cfg.SetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
 	Cfg.SetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
@@ -2365,10 +2482,18 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("scalability %d"), FMath::Clamp(S.Quality, 0, 4)));
 	// Le ray tracing materiel n'est utilise que si la carte le supporte (r.RayTracing=True dans DefaultEngine.ini)
 	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing %d"), S.bHardwareRT ? 1 : 0));
-	// Liquides "RTX" : en qualite Epique et au-dela, les reflets (flaques, eau, carrelage) sont eclaires par les rayons
-	// eux-memes (hit lighting) et non par le cache de surfaces de Lumen ; l'option les force dans toutes les qualites
-	const bool bHitLighting = S.bHardwareRT && (S.bRTHitLighting || S.Quality >= 3);
+	// v4.5 : reflets eclaires par les rayons (hit lighting) seulement si demandes (profil Cinematique) : c'est le reglage le
+	// plus couteux ; sinon le cache de surfaces de Lumen eclaire les reflets
+	const bool bHitLighting = S.bHardwareRT && S.bRTHitLighting;
 	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing.LightingMode %d"), bHitLighting ? 1 : 0));
+	// Reflets de premier plan de l'eau translucide (Poolrooms) a partir de la qualite Epique
+	Cmd(FString::Printf(TEXT("r.Lumen.TranslucencyReflections.FrontLayer.Enable %d"), S.Quality >= 3 ? 1 : 0));
+	// Ombres ray tracees : jamais globales (r.RayTracing.Shadows reste a 0), seulement la lampe torche, au cas par cas
+	Cmd(TEXT("r.RayTracing.Shadows 0"));
+	if (ABRCharacter* C = GetBRCharacter())
+	{
+		C->SetFlashlightRayTracedShadows(S.bRTShadows && IsHardwareRayTracingAvailable());
+	}
 	// Les flaques mouillees (rugosite 0,1 a 0,3) restent tracees, pas seulement les miroirs
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.MaxRoughnessToTrace %.2f"), S.Quality >= 3 ? 0.5f : 0.4f));
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), S.bHardwareRT ? 1 : 0));

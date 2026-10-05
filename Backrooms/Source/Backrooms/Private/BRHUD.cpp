@@ -1108,7 +1108,7 @@ void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
 	const float U = Ui();
 	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	TextF(TEXT("v4.4   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
+	TextF(TEXT("v4.5   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
 		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
 	// Message de connexion / d'erreur reseau : pastille en haut au centre
 	if (!PC->GetMenuStatus().IsEmpty())
@@ -2327,6 +2327,7 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 	{
 		Tag += TEXT("  \u00b7  hors partie");
 	}
+	Tag += TEXT("  \u00b7  ") + PC->GetRenderModeText(true);
 	const FVector2f TS = TextSize(Tag, 10.f, EUiWeight::Bold);
 	const float PW = TS.X + 28.f * U;
 	const float PH = 26.f * U;
@@ -2335,6 +2336,14 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 	RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(0.02f, 0.06f, 0.09f, 0.7f));
 	RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(0.55f, 0.88f, 1.f, 0.45f), true);
 	TextF(Tag, PX + 14.f * U, PY + (PH - TS.Y) * 0.5f, Cyan, 10.f, EUiWeight::Bold);
+
+	// v4.5 : modeles fournis remplaces par une forme de secours (import incomplet) : jamais en silence
+	const TArray<FString>& Fallbacks = UBRAssets::GetFallbacks();
+	if (Fallbacks.Num() > 0)
+	{
+		const FString Msg = TEXT("MOD\u00c8LES DE SECOURS (import incomplet) : ") + FString::Join(Fallbacks, TEXT("  \u00b7  "));
+		TextF(Msg, Canvas->ClipX * 0.5f, PY + PH + 8.f * U, FLinearColor(1.f, 0.45f, 0.35f, 0.95f), 9.f, EUiWeight::Bold, EUiAlign::Center);
+	}
 
 	// Aide des raccourcis : a l'arrivee dans un niveau et apres chaque raccourci
 	const float T = PC->GetDevHelpTime();
@@ -2388,19 +2397,20 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		Gradient(0.f, 0.f, W, H * Frac, Col, 2);
 		Gradient(0.f, H * (1.f - Frac), W, H * Frac, Col, 3);
 	};
-	// Une image noire a l'impact (sauf le Smiler, qui finit sur un eclair blanc)
-	if (K != 0 && bHit && Since < 0.05f)
+	// v4.5 : la peur vient du modele et de son geste ; l'ecran ne fait que ponctuer (effets divises par deux environ)
+	// Une image sombre a l'impact (sauf le Smiler, qui finit sur un eclair)
+	if (K != 0 && bHit && Since < 0.035f)
 	{
-		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.9f), 0.f, 0.f, W, H);
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), 0.f, 0.f, W, H);
 	}
 	switch (static_cast<EBREntityKind>(K))
 	{
 	case EBREntityKind::Smiler:
 	{
 		// Le noir se referme autour du sourire, puis un eclair blanc
-		Vignette(FLinearColor(0.f, 0.f, 0.f, 0.9f * Out), 0.38f);
+		Vignette(FLinearColor(0.f, 0.f, 0.f, 0.75f * Out), 0.32f);
 		const float Flash = FMath::Clamp((T - (Dur - 0.35f)) / 0.12f, 0.f, 1.f) * FMath::Clamp((Dur - T) / 0.23f, 0.f, 1.f);
-		DrawRect(FLinearColor(1.f, 1.f, 1.f, Flash), 0.f, 0.f, W, H);
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.55f * Flash), 0.f, 0.f, W, H);
 		break;
 	}
 	case EBREntityKind::Hound:
@@ -2408,7 +2418,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		// Trois griffures qui dechirent l'ecran, l'une apres l'autre, et un voile rouge
 		if (bHit)
 		{
-			DrawRect(FLinearColor(0.6f, 0.f, 0.f, 0.35f * FMath::Exp(-Since * 3.f)), 0.f, 0.f, W, H);
+			DrawRect(FLinearColor(0.6f, 0.f, 0.f, 0.18f * FMath::Exp(-Since * 3.f)), 0.f, 0.f, W, H);
 			for (int32 i = 0; i < 3; ++i)
 			{
 				const float Appear = Since - i * 0.06f;
@@ -2417,7 +2427,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 					continue;
 				}
 				const float Len = FMath::Min(1.f, Appear / 0.08f);
-				const float A = FMath::Clamp(1.4f - Since * 0.9f, 0.f, 1.f) * Out;
+				const float A = 0.6f * FMath::Clamp(1.4f - Since * 0.9f, 0.f, 1.f) * Out;
 				const float X0 = W * (0.66f + i * 0.07f);
 				const float Y0 = H * (0.1f + i * 0.04f);
 				const float X1 = X0 - W * 0.42f * Len;
@@ -2432,9 +2442,9 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 	case EBREntityKind::Faceling:
 	{
 		// La neige d'une television qui hurle
-		if (bHit && Since < 0.7f)
+		if (bHit && Since < 0.45f)
 		{
-			const float A = (Since < 0.5f ? 0.85f : 0.85f * (0.7f - Since) / 0.2f);
+			const float A = (Since < 0.3f ? 0.35f : 0.35f * (0.45f - Since) / 0.15f);
 			const float Cell = FMath::Max(4.f, 7.f * U);
 			for (float Y = 0.f; Y < H; Y += Cell)
 			{
@@ -2457,13 +2467,13 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 	{
 		// La scene vire a la chair : vignette rouge qui bat
 		const float Pulse = 0.55f + 0.45f * FMath::Sin(T * 14.f);
-		Vignette(FLinearColor(0.45f, 0.02f, 0.01f, 0.85f * Pulse * Out), 0.32f);
+		Vignette(FLinearColor(0.45f, 0.02f, 0.01f, 0.45f * Pulse * Out), 0.28f);
 		break;
 	}
 	case EBREntityKind::Deathmoth:
 	{
 		// Un essaim de papillons de nuit traverse l'ecran
-		for (int32 i = 0; i < 46; ++i)
+		for (int32 i = 0; i < 16; ++i)
 		{
 			const float Seed = static_cast<float>(i);
 			const float Start = FMath::Frac(Seed * 0.6180339f) * 0.6f;
@@ -2482,7 +2492,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 			RoundRect(X, Y - S * 0.35f, S * Flap, S * 0.7f, S * 0.3f, MothC);
 			DrawRect(FLinearColor(0.03f, 0.02f, 0.01f, 0.95f * Out), X - S * 0.08f, Y - S * 0.4f, S * 0.16f, S * 0.8f);
 		}
-		Vignette(FLinearColor(0.12f, 0.08f, 0.03f, 0.6f * Out), 0.25f);
+		Vignette(FLinearColor(0.12f, 0.08f, 0.03f, 0.35f * Out), 0.22f);
 		break;
 	}
 	case EBREntityKind::Wretch:
@@ -2493,7 +2503,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		{
 			DrawRect(FLinearColor(0.f, 0.f, 0.f, 1.f), 0.f, 0.f, W, H);
 		}
-		Vignette(FLinearColor(0.02f, 0.03f, 0.02f, 0.7f * Out), 0.3f);
+		Vignette(FLinearColor(0.02f, 0.03f, 0.02f, 0.45f * Out), 0.26f);
 		break;
 	}
 	case EBREntityKind::Partygoer:
@@ -2507,7 +2517,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		// Confettis qui jaillissent du centre et retombent
 		static const FLinearColor Colors[] = { FLinearColor(1.f, 0.2f, 0.25f), FLinearColor(0.2f, 0.6f, 1.f), FLinearColor(1.f, 0.85f, 0.1f),
 			FLinearColor(0.3f, 0.95f, 0.4f), FLinearColor(0.9f, 0.3f, 1.f) };
-		for (int32 i = 0; i < 160; ++i)
+		for (int32 i = 0; i < 60; ++i)
 		{
 			const float Seed = static_cast<float>(i);
 			const float Ang = FMath::Frac(Seed * 0.6180339f) * 2.f * PI;
@@ -2520,26 +2530,25 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 			Col.A = Out;
 			DrawRect(Col, X, Y, S, S * (0.3f + 0.7f * Flip));
 		}
-		const bool bFlicker = FMath::Frac(T * 9.f) < 0.85f;
-		if (bFlicker)
+		// (le sourire est celui du modele, tout pres : plus de "=)" geant a l'ecran)
+		if (Since < 0.9f)
 		{
-			TextF(TEXT("=)"), W * 0.5f + FMath::Sin(T * 40.f) * 6.f * U, H * 0.36f, FLinearColor(1.f, 0.88f, 0.15f, Out), 120.f, EUiWeight::Black,
+			TextF(TEXT("JOYEUX ANNIVERSAIRE"), W * 0.5f, H * 0.8f, FLinearColor(1.f, 1.f, 1.f, 0.6f * Out * (1.f - Since / 0.9f)), 16.f, EUiWeight::Bold,
 				EUiAlign::Center);
-			TextF(TEXT("JOYEUX ANNIVERSAIRE"), W * 0.5f, H * 0.62f, FLinearColor(1.f, 1.f, 1.f, 0.85f * Out), 26.f, EUiWeight::Black, EUiAlign::Center);
 		}
 		break;
 	}
 	case EBREntityKind::Clump:
 	{
 		const float Pulse = 0.5f + 0.5f * FMath::Sin(T * 18.f);
-		Vignette(FLinearColor(0.25f, 0.f, 0.f, (0.6f + 0.35f * Pulse) * Out), 0.36f);
+		Vignette(FLinearColor(0.25f, 0.f, 0.f, (0.3f + 0.2f * Pulse) * Out), 0.3f);
 		break;
 	}
 	case EBREntityKind::Bacteria:
 	{
 		// L'image se brouille : bandes noires et blanches qui sautent
 		const float Amount = FMath::Clamp(T / Dur * 1.4f, 0.f, 1.f);
-		const int32 Bars = 4 + static_cast<int32>(Amount * 14.f);
+		const int32 Bars = 3 + static_cast<int32>(Amount * 6.f);
 		for (int32 i = 0; i < Bars; ++i)
 		{
 			const float Y = FMath::FRand() * H;
@@ -3684,8 +3693,10 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		Txt(L, X + 28.f * U, HY, InkDim, 0.75f * U, Small, false, false);
 		HY += 20.f * U;
 	}
-	Txt(TEXT("RTX : n\u00e9cessite une carte compatible ray tracing (sinon Lumen logiciel est utilis\u00e9 automatiquement)."), X + 28.f * U,
-		IY + IH - 36.f * U, WithAlpha(InkDim, 0.7f), 0.68f * U, Small, false, false);
+	// v4.5 : le mode de rendu reellement actif (et non celui demande) ; RHI et support du ray tracing : au demarrage
+	Txt(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 40.f * U, WithAlpha(Yellow, 0.85f), 0.66f * U, Small, false, false);
+	Txt(TEXT("Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, ")
+		TEXT("cache de skinning (Config/DefaultEngine.ini)."), X + 28.f * U, IY + IH - 22.f * U, WithAlpha(InkDim, 0.7f), 0.62f * U, Small, false, false);
 }
 
 void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)

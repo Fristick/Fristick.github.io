@@ -7,6 +7,61 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.5** (qualité visuelle, entités, ray tracing, preuves) : audit dans
+[`Docs/AUDIT_v4.5.md`](Docs/AUDIT_v4.5.md), rapport et limites dans [`Docs/RAPPORT_v4.5.md`](Docs/RAPPORT_v4.5.md).
+> **Rien n'a encore été compilé ni lancé dans Unreal** : le travail a été fait sans le moteur (conteneur Linux sans GPU).
+> Le C++ a été vérifié en syntaxe hors moteur, les modèles dans Blender. Le rapport liste ce qui reste à vérifier et
+> les commandes pour le faire.
+
+- **Modèles fournis animés d'un seul tenant** : le Faceling, le Partygoer, le Skin-Stealer et le Hound ont maintenant
+  une version **skinnée** (`RawAssets/Skeletal/SK_*.fbx`) tirée de leur original **sans toucher à la géométrie** :
+  mêmes sommets, mêmes UV, mêmes poids de peau (le Faceling garde ses 1 387 sommets style PS1, le Partygoer son
+  sourire et son ballon rouge, tenu par l'os de la main). Le jeu les anime avec la même animation procédurale qu'avant,
+  mais les **coudes, genoux et épaules se plient** au lieu de se casser. Sans ces fichiers, les pièces rigides
+  reviennent automatiquement (script : `Tools/Blender/build_entity_skeletal.py`).
+- **Wretch, Clump et Smiler reconstruits** (`Tools/Blender/build_creatures.py`, `import_user_models.py -- smiler`) :
+  - **Wretch** : humanoïde décharné et voûté d'un seul tenant. Côtes, vertèbres et omoplates sous la peau, crâne
+    allongé, orbites creuses aux yeux laiteux, mâchoire pendante aux dents jaunies. Peau cuite en 2048 px (couleur,
+    normal map), 30 os.
+  - **Clump** : 20 bras humains complets (épaule, coude, poignet, main à cinq doigts) fondus dans la masse, autour de la
+    bouche de lamproie. 62 os : chaque bras bouge seul, six bras d'appui portent la masse.
+  - **Smiler** : orbites et gueule réellement creusées dans la masse d'ombre, yeux bombés plus lumineux au centre, dents
+    enracinées dans la lèvre. Son émission est calibrée surface par surface : elle était à 60 partout en v4.4, d'où
+    l'aspect de panneau plat.
+- **Animations par état** pour toutes les entités :
+  - sursaut et tête braquée à la détection, buste penché en poursuite ;
+  - armé quand la proie est à portée, frappe répliquée à tous les joueurs, puis récupération ;
+  - foulée calculée à partir de la distance parcourue : les pieds ne glissent plus ;
+  - Clump : mains d'appui posées au sol par **IK à deux segments** (elles ne glissent pas), la masse avance par à-coups ;
+  - animation espacée au loin et hors de vue (20 fois/s au-delà de 25 m, 5 fois/s hors champ).
+- **Jumpscares** : la créature finit en pose de frappe devant la caméra ; les effets d'écran sont réduits de moitié
+  environ, sans « =) » géant.
+- **Profils graphiques** **PERFORMANCE / QUALITÉ / CINÉMATIQUE** (voir § 7), avec le **mode de rendu réel** affiché :
+  RHI, SM6, ray tracing actif ou non, Lumen matériel ou logiciel, ombres, résolution interne. Le *hit lighting* est
+  réservé au profil Cinématique, ainsi que les **ombres ray tracées de la lampe** (les plafonniers gardent les VSM).
+- **Décors** :
+  - **plinthe moulurée** (sabot, gorge, quart-de-rond) au Niveau 0, dans les bureaux et à l'hôtel ;
+  - **flaques** au contour irrégulier mais cohérent (avant : un semis de taches), avec un liseré mouillé ;
+  - **ligne d'eau** sur le carrelage des Poolrooms (murs des canaux, piliers, rebords) ;
+  - comparaison des flaques simulée hors moteur : `Docs/v45/flaques_avant_apres.png`.
+- **Protection des modèles fournis** : `Tools/protect_assets.py` et `RawAssets/protected_assets.json` (empreintes
+  SHA-256 de 82 fichiers dérivés et de 41 originaux).
+  - Les scripts ne remplacent plus un dérivé protégé sans `--force`, et sauvegardent l'ancien d'abord.
+  - Un modèle fourni manquant n'est plus remplacé en silence : le journal et le mode développeur le signalent.
+- **Mesures** : le test automatique note désormais :
+  - percentiles des temps d'image et 1 % le plus lent ;
+  - GPU, thread de jeu et thread de rendu ;
+  - mémoire, temps de construction des chunks ;
+  - matériel et mode de rendu réel.
+
+  Il écrit aussi un tableau `Saved/AutoTest/Mesures.csv`. `-BRSeed=<n>` fixe la disposition des niveaux, pour des
+  comparaisons avant / après. La construction des chunks est limitée à 5 ms par image.
+- Version des matériaux 5 : à l'ouverture de l'éditeur, les nouveaux fichiers (maillages à squelette, textures cuites,
+  plinthe, Smiler) sont importés et les matériaux reconstruits, sans tout réimporter.
+
+![Entités avant / après (rendus Blender)](Docs/v45/apercu_entites_avant_apres.jpg)
+![Modèles fournis skinnés (rendus Blender)](Docs/v45/apercu_skinnes_originaux.jpg)
+
 **Nouveautés de la version 4.4** (textures, sons, mode développeur, corps animé, Smiler, jumpscares) :
 - **Les textures sont de retour.** Depuis la 4.3, le bruit doux `T_NoiseLF` (importé en linéaire) était lu par un
   échantillonneur « Color » (sRGB) : Unreal refuse alors de compiler le matériau et **tous** les murs, sols et plafonds
@@ -354,7 +409,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 69 textures (dont 26 normal maps), 33 icônes et images d'interface, 80 sons, 126 modèles (FBX) et 1 maillage à squelette. Il crée aussi
+   toutes les ressources : 73 textures (dont 28 normal maps), 33 icônes et images d'interface, 80 sons, 127 modèles (FBX) et 7 maillages à squelette. Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
@@ -604,7 +659,7 @@ Backrooms/
 │   ├── BRKeys.*                 Touches configurables (3 par action), sauvegarde, libellés « [E] »
 │   ├── BRConfig.*               Fichier des réglages du joueur (Saved/Config/<plateforme>/BackroomsPlayer.ini)
 │   ├── BRAutoTest.*             Tests automatiques (-BRAutoTest, -BRNetTest) : captures, images/s, rapport
-│   ├── BRRig.*                  Humanoïdes articulés (entités et corps du joueur)
+│   ├── BRRig.*                  Humanoïdes articulés ; v4.5 : maillages à squelette pilotés par des pivots (FBRSkinDriver)
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
 │   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu principal, multijoueur, inventaire, paramètres, console
 │   ├── BRSave.*                 Sauvegardes : parties (6 emplacements), niveaux explorés, inventaire, journal
@@ -618,10 +673,15 @@ Backrooms/
 │   └── backrooms_setup.py       Import des textures, icônes, sons, FBX + création des matériaux et de la carte
 ├── RawAssets/                   Ressources sources (déjà générées)
 │   ├── Textures/ (+ normal maps *_N)  Icons/  Sounds/  Meshes/ (FBX)  Skeletal/ (FBX à squelette)  Previews/
+│   ├── protected_assets.json    v4.5 : empreintes des fichiers tirés des modèles fournis (Tools/protect_assets.py)
 ├── Tools/
 │   ├── Blender/generate_models.py    ★ Modélisation procédurale (décor, objets, formes de secours) + icônes (Blender)
 │   ├── Blender/preview_entities.py   Rendu d'aperçu des entités assemblées
 │   ├── Blender/build_hazmat_skeletal.py  Combinaison du joueur en maillage à squelette (SK_Hazmat.fbx)
+│   ├── Blender/build_entity_skeletal.py  v4.5 : Faceling, Partygoer, Skin-Stealer, Hound skinnés (géométrie d'origine)
+│   ├── Blender/build_creatures.py    v4.5 : Wretch et Clump reconstruits (squelettes, peau cuite)
+│   ├── Blender/render_compare.py     v4.5 : rendus Blender avant / après (Docs/v45)
+│   ├── protect_assets.py             v4.5 : protection des modèles fournis (check / update / list)
 │   ├── Blender/import_user_models.py Découpe des modèles fournis en pièces articulées (hazmat, Bacteria, Deathmoth,
 │   │                                 Skin-Stealer, Faceling, Partygoer, Hound) + Smiler et Clump d'après les images,
 │   │                                 meubles et textures des scènes fournies (Niveau 4, Poolrooms)
@@ -648,7 +708,14 @@ python Tools/generate_ui.py      # logo et images du menu (police Inter, fournie
 blender -b -P Tools/Blender/import_user_models.py
 blender -b -P Tools/Blender/import_user_models.py -- smiler   # un seul (smiler, clump, hazmat...)
 blender -b -P Tools/Blender/build_hazmat_skeletal.py -- Tools/SourceModels   # combinaison à squelette
+# v4.5 (avec le module pip "bpy" : python au lieu de blender -b -P)
+python Tools/Blender/build_entity_skeletal.py -- faceling partygoer skinstealer hound --preview   # SK_* des modèles fournis
+python Tools/Blender/build_creatures.py -- wretch clump --preview                                 # Wretch, Clump
+python Tools/protect_assets.py check        # empreintes : dérivés protégés et originaux inchangés ?
 ```
+Les fichiers tirés des modèles fournis sont **protégés** : un script relancé ne les remplace pas (« PROTEGE, non
+remplacé »). Pour les régénérer volontairement, ajoutez `--force` : l'ancienne version est d'abord copiée dans
+`RawAssets/_Backup/<date>/`. Ensuite, `python Tools/protect_assets.py update` enregistre les nouvelles empreintes.
 Ensuite, dans Unreal : `import backrooms_setup; backrooms_setup.run(force=True)`.
 
 ![Modèles](Docs/apercu_modeles.jpg)
@@ -665,10 +732,28 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
 ## 7. Graphismes, RTX et performance
 
 - Éclairage entièrement dynamique : **Lumen** (GI + reflets) et **Virtual Shadow Maps**.
-- **RTX** : `r.RayTracing` et `r.Lumen.HardwareRayTracing` sont activés dans `Config/DefaultEngine.ini` (DirectX 12, SM6).
-  Sur une carte compatible (GeForce RTX, Radeon RX 6000+), Lumen utilise le ray tracing matériel ; sinon il revient
-  automatiquement au mode logiciel. L'option « Reflets ray tracés haute qualité » active le *hit lighting* (très coûteux).
-  *Le changement de `r.RayTracing` demande un redémarrage de l'éditeur (recompilation des shaders, plusieurs minutes la première fois).*
+- **RTX** : `r.RayTracing` et `r.Lumen.HardwareRayTracing` sont activés dans `Config/DefaultEngine.ini` (DirectX 12, SM6,
+  *Support Compute Skin Cache* et maillages à squelette dans le ray tracing). Sur une carte compatible (GeForce RTX,
+  Radeon RX 6000+), Lumen utilise le ray tracing matériel ; sinon il revient automatiquement au mode logiciel, et le
+  menu l'affiche (« INDISPONIBLE »). *Changer de RHI ou de support du ray tracing demande un redémarrage (recompilation
+  des shaders, plusieurs minutes la première fois).*
+- **Profils graphiques** (v4.5, Paramètres → PROFIL GRAPHIQUE). Le mode réellement actif est écrit en bas de la page des
+  paramètres et dans la pastille du mode développeur :
+
+  | Profil | Qualité | Lumen | Reflets | Ombres | Rendu (TSR) | Néons surfaciques |
+  |---|---|---|---|---|---|---|
+  | **Performance** | Élevé | logiciel | cache de surfaces | VSM | 67 % | non |
+  | **Qualité** (défaut) | Épique | ray tracing matériel | cache de surfaces, reflets de premier plan de l'eau | VSM | 80 % | oui |
+  | **Cinématique** | Cinématique | ray tracing matériel | *hit lighting* (éclairés par les rayons) | VSM + lampe ray tracée | 100 % | oui |
+
+  Modifier un réglage à la main passe en **PERSONNALISÉ** ; des réglages d'une version précédente sont conservés tels
+  quels (profil Personnalisé). Tout s'applique immédiatement, sauf le RHI et le support du ray tracing.
+  *Choix des ombres* : les dizaines de plafonniers fixes gardent les ombres virtuelles (VSM, mises en cache) ; la lampe
+  torche bouge à chaque image (elle invaliderait ses pages VSM en permanence) : en Cinématique, elle passe en ombres
+  ray tracées, nettes au contact. L'objectif de 60 images/s en profil Qualité **n'est pas encore mesuré** (voir le rapport).
+- **Entités dans les reflets** : les entités à squelette (`SK_*`) sont dans la scène de ray tracing grâce au cache de
+  skinning. En Lumen logiciel, elles n'ont pas de champ de distance : seuls les reflets en espace écran les montrent.
+  À vérifier en jeu (rapport, § Non vérifié).
 - **Murs** : projection triplanaire dans l'espace monde (aucune texture étirée), **normal maps** (relief du papier peint,
   de la moquette, des joints), saleté à grande échelle, saleté au pied des murs, rugosité variable. Sur les sols qui le
   demandent (`AntiTile`, `Stains`), un 2e échantillon tourné casse la répétition et des taches d'humidité sont dessinées
@@ -683,9 +768,10 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
   entités y poussent l'eau, les murs et piliers du niveau renvoient les vagues, et les pentes sont envoyées chaque pas
   à une texture lue par l'eau et par les caustiques du carrelage. Réglages par niveau dans `BRLevels.cpp` :
   `WaterAbsorption` (limpidité), `WaterScattering` (voile de l'eau profonde), `WaterWaves` (houle), `WaterChop` (clapot).
-- **Nanite** : les modèles fournis (entités, combinaison hazmat, meubles du bureau) sont gardés à pleine résolution
-  (jusqu'à 175 000 sommets pour le Hound) et l'import active Nanite sur eux : Unreal n'affiche que le détail visible
-  à l'écran. Sur une carte sans Nanite (DirectX 11), Unreal utilise automatiquement une version allégée.
+- **Nanite** : les pièces rigides des modèles fournis (combinaison hazmat, meubles du bureau, Smiler) sont gardées à
+  pleine résolution avec Nanite. Les maillages **à squelette** (`SK_*`) n'utilisent pas Nanite : l'import leur génère
+  des niveaux de détail (`SKELETAL_LODS` dans `backrooms_setup.py`). Le Hound garde son pelage d'origine
+  (175 000 sommets) au plus près : son coût (cache de skinning et ray tracing) est à mesurer.
 - **Brouillard volumétrique** (tous les niveaux) : chaque néon diffuse un peu de sa lumière dans l'air
   (`VolumetricScatter` par niveau dans `BRLevels.cpp`), les verrières des Poolrooms projettent des rayons, la lampe
   trace un faisceau. Option **BROUILLARD VOLUMÉTRIQUE** dans les paramètres.
@@ -749,6 +835,12 @@ Le jeu contient deux tests qui se pilotent seuls et se ferment à la fin. Lancez
   `-BRAutoTestLevels=0,37` limite le test à certains niveaux ; `-BRAutoTestStay` laisse le jeu ouvert à la fin ;
   `-BRAutoTestGPU` écrit en plus le détail du temps de rendu (`ProfileGPU`) dans `Saved/Logs/Backrooms.log`.
   `-BRRuntimeMaterials` ignore les matériaux importés et teste ceux que le jeu construit lui-même en C++ (secours).
+  **v4.5** : `-BRSeed=<n>` donne la même disposition à chaque lancement : lancez le même test avant et après un
+  changement, avec la même graine, la même résolution et le même profil, et comparez `Saved/AutoTest/Mesures.csv` et les
+  captures. Le rapport donne en tête le processeur, la carte graphique, le profil et le mode de rendu réel ; par niveau,
+  la médiane, les 95e et 99e centiles des temps d'image, le 1 % le plus lent, les temps GPU, jeu et rendu, la mémoire
+  et le temps de construction des chunks. Exemple :
+  `UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestLevels=0,1,37 -BRSeed=4242`
   *Fermez les autres jeux pendant la mesure : ils partagent la carte graphique et faussent les images par seconde.*
 - **`-BRNetTest`** (deux joueurs sur le même PC) : lancez d'abord l'hôte, puis le client :
 
@@ -770,7 +862,9 @@ scannée), le Skin-Stealer (`Skin_Stealer_The_Backrooms_Blender_3`), le Hound (`
 (`backrooms-faceling-ps1psx-style`) et le Partygoer (`partygoer-from-backrooms-updated`, « Partygoer by FilinMinv »)
 viennent de modèles fournis par l'utilisateur, tout comme les meubles du Niveau 4 (scène `backrooms-level-4-abandoned-office`)
 et le carrelage et le plâtre des Poolrooms (scène `poolrooms`, carte Garry's Mod « gm_poolrooms »). Le Smiler et le
-Clump sont modélisés d'après des images fournies. Les sons `S_Bacteria`, `S_Scare_Bacteria` (son de la Bacteria) et
+Clump sont modélisés d'après des images fournies (v4.5 : reconstruits par `Tools/Blender/build_creatures.py`, comme le
+Wretch). Les maillages skinnés `SK_Faceling`, `SK_Partygoer`, `SK_SkinStealer`, `SK_Hound` et `SK_Hazmat` reprennent la
+géométrie, les UV et les poids des modèles fournis. Les sons `S_Bacteria`, `S_Scare_Bacteria` (son de la Bacteria) et
 `S_LightBuzz` (bourdonnement des néons) sont tirés d'enregistrements fournis par l'utilisateur (vidéos en ligne,
 dont des sons du jeu *Escape the Backrooms*) : ils ne sont pas libres de droits. Le logo du menu est dessiné avec la police **Inter**
 (© The Inter Project Authors, licence SIL Open Font License 1.1, fournie avec Blender) ; l'interface du jeu utilise

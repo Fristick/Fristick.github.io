@@ -1,7 +1,10 @@
 #include "BRRig.h"
 #include "BRAssets.h"
 
+#include "AnimationRuntime.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -97,8 +100,139 @@ FBRHumanoidSpec FBRHumanoidSpec::PartygoerET()
 	return S;
 }
 
+// =====================================================================================================================
+// v4.5 : maillages a squelette pilotes par des pivots
+// =====================================================================================================================
+
+USceneComponent* FBRSkinDriver::AddPivot(AActor* Owner, USceneComponent* Parent, FName Bone, TArray<TObjectPtr<USceneComponent>>& OutComponents)
+{
+	UPoseableMeshComponent* S = Skin.Get();
+	USkinnedAsset* Asset = S ? S->GetSkinnedAsset() : nullptr;
+	if (!Owner || !Parent || !Asset)
+	{
+		return nullptr;
+	}
+	const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+	const int32 Index = Ref.FindBoneIndex(Bone);
+	if (Index == INDEX_NONE)
+	{
+		return nullptr;
+	}
+	FLink L;
+	L.Bone = Bone;
+	L.BoneIndex = Index;
+	const FTransform RestCS = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Index);
+	L.RestRot = RestCS.GetRotation();
+	L.RestPos = RestCS.GetLocation();
+
+	// Position relative au parent : au repos, tous les pivots sont alignes sur le repere du maillage (rotation nulle)
+	FVector Offset = L.RestPos;
+	for (const FLink& Other : Links)
+	{
+		if (Other.Pivot.Get() == Parent)
+		{
+			Offset = L.RestPos - Other.RestPos;
+			break;
+		}
+	}
+	USceneComponent* Pivot = NewObject<USceneComponent>(Owner);
+	Pivot->SetupAttachment(Parent);
+	Pivot->SetRelativeLocation(Offset);
+	Pivot->RegisterComponent();
+	OutComponents.Add(Pivot);
+	L.Pivot = Pivot;
+	Links.Add(L);
+	Links.Sort([](const FLink& A, const FLink& B) { return A.BoneIndex < B.BoneIndex; });
+	return Pivot;
+}
+
+void FBRSkinDriver::Apply() const
+{
+	UPoseableMeshComponent* S = Skin.Get();
+	if (!S || !S->GetSkinnedAsset())
+	{
+		return;
+	}
+	const FQuat SpaceInv = S->GetComponentQuat().Inverse();
+	for (const FLink& L : Links)
+	{
+		const USceneComponent* P = L.Pivot.Get();
+		if (!P)
+		{
+			continue;
+		}
+		// Rotation du pivot dans le repere du maillage (hierarchie des pivots comprise), appliquee a l'os au repos ;
+		// la position de l'os vient de son parent, deja mis a jour (les liens sont tries parents d'abord)
+		const FQuat Delta = SpaceInv * P->GetComponentQuat();
+		FTransform T = S->GetBoneTransformByName(L.Bone, EBoneSpaces::ComponentSpace);
+		T.SetRotation(Delta * L.RestRot);
+		S->SetBoneTransformByName(L.Bone, T, EBoneSpaces::ComponentSpace);
+	}
+}
+
+FBRHumanoidSpec FBRHumanoidSpec::WretchSK()
+{
+	// Articulations : celles du squelette (Tools/Blender/build_creatures.py, RawAssets/Skeletal/skeletal_models.json)
+	FBRHumanoidSpec S = FromJoints(FVector(3.f, 0.f, 95.f), FVector(24.f, 0.f, 117.f), FVector(17.f, -16.5f, 114.f), FVector(18.f, -20.5f, 84.f),
+		FVector(17.f, 16.5f, 114.f), FVector(18.f, 20.5f, 84.f), FVector(0.f, -8.5f, 82.f), FVector(8.f, -10.f, 47.f), FVector(0.f, 8.5f, 82.f),
+		FVector(8.f, 10.f, 47.f));
+	S.ArmAmp = 12.f;
+	S.LegAmp = 22.f;
+	return S;
+}
+
 namespace BRRig
 {
+	UPoseableMeshComponent* AddSkin(AActor* Owner, USceneComponent* Root, USkeletalMesh* Mesh, const TMap<FString, FLinearColor>* Tints,
+		TArray<TObjectPtr<USceneComponent>>& OutComponents, bool bCastShadow)
+	{
+		if (!Owner || !Root || !Mesh)
+		{
+			return nullptr;
+		}
+		UPoseableMeshComponent* Skin = NewObject<UPoseableMeshComponent>(Owner);
+		Skin->SetupAttachment(Root);
+		Skin->SetSkinnedAssetAndUpdate(Mesh);
+		Skin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Skin->SetCastShadow(bCastShadow);
+		Skin->RegisterComponent();
+		OutComponents.Add(Skin);
+		if (UBRAssets* A = UBRAssets::Get(Owner))
+		{
+			A->ApplySlots(Skin, Tints);
+		}
+		return Skin;
+	}
+
+	FBRHumanoidParts BuildSkinnedHumanoid(AActor* Owner, USceneComponent* Root, USkeletalMesh* Mesh, const TMap<FString, FLinearColor>* Tints,
+		TArray<TObjectPtr<USceneComponent>>& OutComponents, FBRSkinDriver& OutDriver, bool bCastShadow)
+	{
+		FBRHumanoidParts P;
+		UPoseableMeshComponent* Skin = AddSkin(Owner, Root, Mesh, Tints, OutComponents, bCastShadow);
+		if (!Skin)
+		{
+			return P;
+		}
+		P.Meshes.Add(Skin);
+		OutDriver.Skin = Skin;
+		OutDriver.Links.Reset();
+		P.Torso = OutDriver.AddPivot(Owner, Root, TEXT("Spine"), OutComponents);
+		USceneComponent* Upper = P.Torso ? P.Torso : Root;
+		P.Head = OutDriver.AddPivot(Owner, Upper, TEXT("Head"), OutComponents);
+		const TCHAR* Arm[2] = { TEXT("LeftArm"), TEXT("RightArm") };
+		const TCHAR* Fore[2] = { TEXT("LeftForeArm"), TEXT("RightForeArm") };
+		const TCHAR* UpLeg[2] = { TEXT("LeftUpLeg"), TEXT("RightUpLeg") };
+		const TCHAR* Leg[2] = { TEXT("LeftLeg"), TEXT("RightLeg") };
+		for (int32 i = 0; i < 2; ++i)
+		{
+			P.UpperArm[i] = OutDriver.AddPivot(Owner, Upper, Arm[i], OutComponents);
+			P.LowerArm[i] = P.UpperArm[i] ? OutDriver.AddPivot(Owner, P.UpperArm[i], Fore[i], OutComponents) : nullptr;
+			P.Thigh[i] = OutDriver.AddPivot(Owner, Root, UpLeg[i], OutComponents);
+			P.Shin[i] = P.Thigh[i] ? OutDriver.AddPivot(Owner, P.Thigh[i], Leg[i], OutComponents) : nullptr;
+		}
+		return P;
+	}
+
 	USceneComponent* AddPart(AActor* Owner, USceneComponent* Parent, FName MeshName, const FVector& Joint, const FVector& FallbackSize,
 		float FallbackDrop, const TMap<FString, FLinearColor>* Tints, TArray<TObjectPtr<USceneComponent>>& OutComponents,
 		UPrimitiveComponent** OutMesh, bool bCastShadow, bool bUniqueGlow, float GlowScale, TArray<UMaterialInstanceDynamic*>* OutGlow)
@@ -210,6 +344,12 @@ namespace BRRig
 	{
 		UBRAssets* A = UBRAssets::Get(WorldContext);
 		return A && A->Mesh(MeshName) != nullptr;
+	}
+
+	bool HasSkeletalMesh(const UObject* WorldContext, FName MeshName)
+	{
+		UBRAssets* A = UBRAssets::Get(WorldContext);
+		return A && A->SkeletalMesh(MeshName) != nullptr;
 	}
 
 	bool HasHazmat(const UObject* WorldContext)

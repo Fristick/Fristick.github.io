@@ -24,6 +24,10 @@
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
 #include "DynamicRHI.h"
+#include "GenericPlatform/GenericPlatformMisc.h"
+#include "HAL/PlatformMemory.h"
+#include "HAL/PlatformMisc.h"
+#include "RHI.h"
 #include "RenderTimer.h"
 #include "UObject/UObjectIterator.h"
 #include "UnrealClient.h"
@@ -549,6 +553,7 @@ void ABRAutoTest::AddLevelSteps(int32 Level)
 		MeasureTime = 0.f;
 		Worst = 0.f;
 		GpuMs = GameMs = RenderMs = 0.0;
+		FrameMs.Reset();
 		return true;
 	});
 	Add(FString::Printf(TEXT("Niveau %d : capture"), Level), 1.f, [this, Level]()
@@ -569,6 +574,45 @@ void ABRAutoTest::AddLevelSteps(int32 Level)
 		if (Frames > 0)
 		{
 			Note(FString::Printf(TEXT("temps par image : GPU %.1f ms, jeu %.1f ms, rendu %.1f ms"), GpuMs / Frames, GameMs / Frames, RenderMs / Frames));
+			R.GpuMs = static_cast<float>(GpuMs / Frames);
+			R.GameMs = static_cast<float>(GameMs / Frames);
+			R.RenderMs = static_cast<float>(RenderMs / Frames);
+		}
+		// v4.5 : fluidite (percentiles), 1 % le plus lent, memoire, construction des chunks, mode de rendu reel
+		if (FrameMs.Num() > 0)
+		{
+			TArray<float> Sorted = FrameMs;
+			Sorted.Sort();
+			auto Pct = [&Sorted](float P) { return Sorted[FMath::Clamp(FMath::FloorToInt(P * (Sorted.Num() - 1)), 0, Sorted.Num() - 1)]; };
+			R.P50Ms = Pct(0.5f);
+			R.P95Ms = Pct(0.95f);
+			R.P99Ms = Pct(0.99f);
+			const int32 NLow = FMath::Max(1, Sorted.Num() / 100);
+			float SumLow = 0.f;
+			for (int32 i = Sorted.Num() - NLow; i < Sorted.Num(); ++i)
+			{
+				SumLow += Sorted[i];
+			}
+			R.Low1FPS = SumLow > 0.f ? 1000.f / (SumLow / NLow) : 0.f;
+			Note(FString::Printf(TEXT("fluidite : mediane %.1f ms, 95 %% %.1f ms, 99 %% %.1f ms, 1 %% le plus lent %.0f img/s"), R.P50Ms, R.P95Ms, R.P99Ms,
+				R.Low1FPS));
+		}
+		R.RamMB = static_cast<float>(FPlatformMemory::GetStats().UsedPhysical / (1024.0 * 1024.0));
+		FTextureMemoryStats TexStats;
+		RHIGetTextureMemoryStats(TexStats);
+		R.TexMB = static_cast<float>((TexStats.StreamingMemorySize + TexStats.NonStreamingMemorySize) / (1024.0 * 1024.0));
+		Note(FString::Printf(TEXT("memoire : processus %.0f Mo, textures %.0f Mo (memoire video dediee %.0f Mo)"), R.RamMB, R.TexMB,
+			TexStats.DedicatedVideoMemory / (1024.0 * 1024.0)));
+		if (ABRWorld* W = GetBRWorld())
+		{
+			R.ChunkMaxMs = W->MaxChunkBuildMs;
+			R.ChunkAvgMs = W->ChunksBuilt > 0 ? W->ChunkBuildMsTotal / W->ChunksBuilt : 0.f;
+			Note(FString::Printf(TEXT("construction des chunks : %d, moyenne %.1f ms, pire %.1f ms"), W->ChunksBuilt, R.ChunkAvgMs, R.ChunkMaxMs));
+			W->ResetChunkStats();
+		}
+		if (ABRPlayerController* PC = GetPC())
+		{
+			Note(PC->GetRenderModeText());
 		}
 		// -BRAutoTestGPU : detail du temps passe par le processeur graphique (dans Saved/Logs/Backrooms.log)
 		if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestGPU")) && GEngine)
@@ -928,6 +972,7 @@ void ABRAutoTest::Tick(float DeltaSeconds)
 		MeasureTime += RealDt;
 		Worst = FMath::Max(Worst, RealDt);
 		GpuMs += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles(0));
+		FrameMs.Add(RealDt * 1000.f);
 		GameMs += FPlatformTime::ToMilliseconds(GGameThreadTime);
 		RenderMs += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 	}
@@ -1044,6 +1089,22 @@ void ABRAutoTest::WriteReport()
 	L.Add(TEXT("THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE"));
 	L.Add(FString::Printf(TEXT("Date : %s   Duree : %.0f s"), *FDateTime::Now().ToString(), FPlatformTime::Seconds() - StartTime));
 	L.Add(FString::Printf(TEXT("Moteur : %s   RHI : %s"), FApp::GetBuildVersion(), *FApp::GetGraphicsRHI()));
+	// v4.5 : machine, profil et mode de rendu reellement actif (a joindre a toute comparaison avant / apres)
+	L.Add(FString::Printf(TEXT("Processeur : %s   Carte graphique : %s   Memoire : %.0f Go"), *FPlatformMisc::GetCPUBrand().TrimStartAndEnd(),
+		*FPlatformMisc::GetPrimaryGPUBrand(), FPlatformMemory::GetConstants().TotalPhysical / (1024.0 * 1024.0 * 1024.0)));
+	{
+		const FBRSettings& S = FBRSettings::Get();
+		static const TCHAR* Profiles[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique"), TEXT("Personnalise") };
+		uint32 FixedSeed = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("BRSeed="), FixedSeed);
+		L.Add(FString::Printf(TEXT("Profil : %s (qualite %d, RT %d, hit lighting %d, ombres RT lampe %d, rendu %d %%)   Graine fixe : %s"),
+			Profiles[FMath::Clamp(S.GraphicsProfile, 0, 3)], S.Quality, S.bHardwareRT ? 1 : 0, S.bRTHitLighting ? 1 : 0, S.bRTShadows ? 1 : 0,
+			S.RenderScale, FixedSeed ? *FString::Printf(TEXT("%u"), FixedSeed) : TEXT("non (-BRSeed=<n>)")));
+	}
+	if (ABRPlayerController* PC = GetPC())
+	{
+		L.Add(PC->GetRenderModeText());
+	}
 	L.Add(TEXT(""));
 	L.Add(Problems.Num() == 0 ? FString(TEXT("RESULTAT : aucun probleme detecte.")) : FString::Printf(TEXT("RESULTAT : %d probleme(s)"), Problems.Num()));
 	for (const FString& P : Problems)
@@ -1051,15 +1112,32 @@ void ABRAutoTest::WriteReport()
 		L.Add(TEXT("  - ") + P);
 	}
 	L.Add(TEXT(""));
-	L.Add(TEXT("Niveau | Titre                     | img/s | pire (ms) | chunks | lumieres (ombres) | objets | sorties | entites"));
+	L.Add(TEXT("Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)"));
 	for (const FLevelReport& R : Reports)
 	{
 		if (R.Chunks == 0 && R.AvgFPS <= 0.f)
 		{
 			continue;
 		}
-		L.Add(FString::Printf(TEXT("%6d | %-25s | %5.0f | %9.1f | %6d | %8d (%d) | %6d | %7d | %7d"), R.Level, *R.Title.Left(25), R.AvgFPS, R.WorstMs,
-			R.Chunks, R.Lights, R.ShadowLights, R.Pickups, R.Exits, R.Entities));
+		L.Add(FString::Printf(TEXT("%6d | %-25s | %5.0f | %6.0f | %8.1f | %8.1f | %9.1f | %8.1f | %8.1f | %10.1f | %6d | %14.1f | %8d (%d) | %7d | %8.0f | %8.0f"),
+			R.Level, *R.Title.Left(25), R.AvgFPS, R.Low1FPS, R.P50Ms, R.P99Ms, R.WorstMs, R.GpuMs, R.GameMs, R.RenderMs, R.Chunks, R.ChunkMaxMs, R.Lights,
+			R.ShadowLights, R.Entities, R.RamMB, R.TexMB));
+	}
+	// Tableur : Saved/AutoTest/Mesures.csv (une ligne par niveau)
+	{
+		TArray<FString> Csv;
+		Csv.Add(TEXT("niveau;img_s;bas_1pct;mediane_ms;p95_ms;p99_ms;pire_ms;gpu_ms;jeu_ms;rendu_ms;chunks;chunk_max_ms;chunk_moy_ms;lumieres;ombres;entites;ram_mo;tex_mo"));
+		for (const FLevelReport& R : Reports)
+		{
+			if (R.Chunks == 0 && R.AvgFPS <= 0.f)
+			{
+				continue;
+			}
+			Csv.Add(FString::Printf(TEXT("%d;%.1f;%.1f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%d;%.2f;%.2f;%d;%d;%d;%.0f;%.0f"), R.Level, R.AvgFPS, R.Low1FPS, R.P50Ms,
+				R.P95Ms, R.P99Ms, R.WorstMs, R.GpuMs, R.GameMs, R.RenderMs, R.Chunks, R.ChunkMaxMs, R.ChunkAvgMs, R.Lights, R.ShadowLights, R.Entities, R.RamMB,
+				R.TexMB));
+		}
+		FFileHelper::SaveStringArrayToFile(Csv, *FPaths::Combine(OutDir, TEXT("Mesures.csv")), FFileHelper::EEncodingOptions::ForceUTF8);
 	}
 	for (const FLevelReport& R : Reports)
 	{
