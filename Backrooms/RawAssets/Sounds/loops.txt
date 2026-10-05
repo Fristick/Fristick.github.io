@@ -8,11 +8,13 @@ S_Amb_Machinery
 S_Amb_Night
 S_Amb_Pool
 S_Amb_Wind
+S_Bacteria
 S_Breath
 S_Chase
 S_ExitHum
 S_Heartbeat
 S_Hum
+S_LightBuzz
 S_MenuTheme
 S_Moth
 S_Underwater

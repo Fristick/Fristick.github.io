@@ -79,6 +79,12 @@ public:
 	/** Taille de l'acteur (aussi chez les clients) */
 	void SetVisualScale(float Scale);
 
+	/** v4.4, jumpscare (chez le joueur qui le subit) : le modele est place a WorldTM, devant la camera ; l'IA se fige.
+	 *  nullptr : fin, le modele reprend sa place */
+	void SetScareTransform(const FTransform* WorldTM);
+	bool IsScaring() const { return bScareOverride; }
+	USceneComponent* GetVisual() const { return Visual; }
+
 protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USceneComponent> Visual;
@@ -263,5 +269,8 @@ private:
 	TWeakObjectPtr<USceneComponent> DisguiseHead;
 	bool bDisguised = false;
 	FVector VisualBase = FVector::ZeroVector;
+	bool bScareOverride = false;
+	FTransform ScareTM;
+	FTransform ScareSavedRel;
 	TWeakObjectPtr<ABRWorld> World;
 };

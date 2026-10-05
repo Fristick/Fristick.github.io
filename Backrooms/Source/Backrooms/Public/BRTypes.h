@@ -316,6 +316,9 @@ struct FBRSettings
 	int32 MaxFPS = 0;
 	/** Balancement de la camera pendant la marche */
 	bool bHeadBob = true;
+	/** v4.4 : mode developpeur (actif par defaut hors version finale) : tous les niveaux jouables depuis le choix des
+	 *  niveaux, raccourcis en jeu (changer de niveau, voler a travers les murs, invincible, jumpscares...) */
+	bool bDevMode = UE_BUILD_SHIPPING == 0;
 
 	static FBRSettings& Get()
 	{

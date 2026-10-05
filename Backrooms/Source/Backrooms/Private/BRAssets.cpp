@@ -4,6 +4,7 @@
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
@@ -327,6 +328,11 @@ UStaticMesh* UBRAssets::Mesh(FName Name)
 	return Cast<UStaticMesh>(LoadAsset(MeshFolder, Name, UStaticMesh::StaticClass()));
 }
 
+USkeletalMesh* UBRAssets::SkeletalMesh(FName Name)
+{
+	return Cast<USkeletalMesh>(LoadAsset(MeshFolder, Name, USkeletalMesh::StaticClass()));
+}
+
 UStaticMesh* UBRAssets::Cube()
 {
 	if (!CubeMesh)
@@ -513,7 +519,11 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 		{
 			UE_LOG(LogBackrooms, Warning, TEXT("%s date d'une ancienne version : relancez l'import (backrooms_setup.run(force=True))."),
 				AssetNames[Index]);
-			M = nullptr;
+			// Sans constructeur de materiaux (jeu empaquete), une ancienne version vaut mieux que des couleurs unies
+			if (BRMaterialBuilder::IsAvailable())
+			{
+				M = nullptr;
+			}
 		}
 	}
 
@@ -797,6 +807,10 @@ FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)
 	if (!SlotName.Contains(TEXT("Glow"), ESearchCase::IgnoreCase))
 	{
 		return FLinearColor::Black;
+	}
+	if (SlotName.Contains(TEXT("GlowSoft"), ESearchCase::IgnoreCase))
+	{
+		return FLinearColor(1.f, 0.93f, 0.82f) * 10.f; // halo des yeux du Smiler (v4.4)
 	}
 	if (SlotName.Contains(TEXT("GlowWindow"), ESearchCase::IgnoreCase))
 	{

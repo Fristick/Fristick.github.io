@@ -56,8 +56,9 @@ namespace
 		D.ShadowTint = C(0.97f, 1.f, 0.93f); D.HighlightTint = C(1.04f, 1.f, 0.92f); D.VolumetricScatter = 0.45f;
 		D.SceneTint = C(1.f, 0.98f, 0.9f); D.Saturation = 0.95f; D.Contrast = 1.05f;
 		D.MinEV = 3.f; D.MaxEV = 9.f; D.ExposureBias = 0.3f; D.Vignette = 0.5f; D.Grain = 0.3f;
-		D.AmbientSound = TEXT("S_Amb_L0"); D.AmbientVolume = 0.5f;
-		D.HumSound = TEXT("S_Hum"); D.HumVolume = 0.55f;
+		// v4.4 : le vrai bourdonnement des neons (enregistrement fourni) par-dessus l'ambiance
+		D.AmbientSound = TEXT("S_Amb_L0"); D.AmbientVolume = 0.35f;
+		D.HumSound = TEXT("S_LightBuzz"); D.HumVolume = 0.6f;
 		D.Step = EBRStep::Carpet;
 		D.SanityDrain = 0.08f;
 		// La Bacteria fait des rondes (lampes rouges a 10 m d'elle) ; les Smilers surgissent du noir, surtout pendant les coupures

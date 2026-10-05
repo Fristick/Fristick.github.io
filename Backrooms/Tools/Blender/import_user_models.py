@@ -1228,84 +1228,143 @@ def lumpy_sphere(bm, radius, subdiv, amp, mat, seed, squash=(1.0, 1.0, 1.0)):
 
 
 def process_smiler():
-    """Smiler (image fournie) : deux grands yeux ovales lumineux et un sourire de dents fines et irregulieres,
-    flottant dans une masse noire a peine visible. Origine au centre, regard vers +X."""
+    """Smiler v4.4 : une masse d'ombre informe (on ne devine pas de tete ronde), deux yeux en amande inclines vers le
+    nez qui brillent avec un halo, et un immense sourire en croissant : une gueule noire bordee de dents pointues
+    et serrees, de tailles inegales, qui s'entrecroisent, avec des crocs. Origine au centre, regard vers +X."""
     print("== Smiler")
     reset()
     me = bpy.data.meshes.new("SmilerET")
     obj = mesh_object("SM_SmilerET", me)
     dark = mat_slot(obj, "SmilerDark")
+    mouth = mat_slot(obj, "SmilerMouth")
     glow = mat_slot(obj, "Glow")
-    rng = np.random.default_rng(7)
+    soft = mat_slot(obj, "GlowSoft")
+    rng = np.random.default_rng(11)
     bm = bmesh.new()
-    # Masse sombre (on la devine a la lampe)
-    head = lumpy_sphere(bm, 0.40, 4, 0.03, dark, 3, squash=(0.8, 1.0, 1.0))
-    # visage lisse (pas de bosses devant) : les yeux et le sourire posent sur l'ellipsoide
-    for v in head:
-        n = Vector((v.co.x / 0.8, v.co.y, v.co.z)).normalized()
-        w = min(1.0, max(0.0, (n.x - 0.15) / 0.35))
-        v.co = v.co.lerp(Vector((n.x * 0.8, n.y, n.z)) * 0.40, w)
-    # Yeux : grands ovales legerement inclines vers l'exterieur
-    for sgn in (-1.0, 1.0):
-        r = bmesh.ops.create_uvsphere(bm, u_segments=14, v_segments=8, radius=1.0)
-        M = (Matrix.Translation((0.30, sgn * 0.165, 0.12)) @ Matrix.Rotation(sgn * math.radians(-14), 4, "X")
-             @ Matrix.Diagonal((0.035, 0.075, 0.058, 1.0)))
-        bmesh.ops.transform(bm, matrix=M, verts=r["verts"])
-        for f in {f for v in r["verts"] for f in v.link_faces}:
-            f.material_index = glow
 
-    # Sourire : levres en croissant (coins hauts, centre bas), sur la face bombee
-    W = 0.30
+    # --- Masse d'ombre : ellipsoide etire, bosselee par du bruit, qui s'effiloche vers le bas comme une fumee
+    ret = bmesh.ops.create_icosphere(bm, subdivisions=4, radius=1.0)
+    lobes = [(Vector(rng.normal(size=3)).normalized(), rng.uniform(0.08, 0.2)) for _ in range(22)]
+    for v in ret["verts"]:
+        n = v.co.normalized()
+        r = 1.0 + sum(h * math.exp(-((n - c).length ** 2) / 0.09) for c, h in lobes) + rng.uniform(-0.03, 0.03)
+        p = Vector((n.x * 0.34, n.y * 0.46, n.z * 0.55)) * r
+        if n.z < -0.2:
+            # trainees sous le visage
+            p.z -= (abs(n.z) - 0.2) ** 1.6 * rng.uniform(0.25, 0.6)
+            p.x *= 0.85
+        if n.x > 0.25 and abs(n.z) < 0.75:
+            # face lisse ou se posent les yeux et le sourire
+            w = min(1.0, (n.x - 0.25) / 0.3)
+            q = Vector((n.x * 0.34, n.y * 0.46, n.z * 0.55))
+            p = p.lerp(q, w)
+        v.co = p
+    for f in {f for v in ret["verts"] for f in v.link_faces}:
+        f.material_index = dark
 
     def front(y, z):
-        # sur la surface de la masse (ellipsoide 0,32 x 0,40 x 0,40) : le sourire l'enveloppe sans en sortir
-        return 0.32 * math.sqrt(max(0.0, 1.0 - (y / 0.40) ** 2 - (z / 0.40) ** 2)) + 0.012
+        return 0.34 * math.sqrt(max(0.0, 1.0 - (y / 0.46) ** 2 - (z / 0.55) ** 2))
 
-    def upper(y):
-        # coins releves jusque sous les yeux, centre bas : un croissant
-        return 0.05 - 0.20 * max(0.0, 1.0 - (y / W) ** 2) ** 1.2
+    def blob(center, ax_y, ax_z, tilt, depth, mat, n=28, inset=0.0, ring=None):
+        """Forme plate en amande, posee sur la face (normale ~ +X), inclinee de tilt (radians)"""
+        pts = []
+        for i in range(n):
+            t = 2 * math.pi * i / n
+            yy = ax_y * math.cos(t)
+            zz = ax_z * math.sin(t) * (abs(math.sin(t)) ** 0.25)  # coins pointus
+            if ring is not None:
+                zz *= ring
+            c, s_ = math.cos(tilt), math.sin(tilt)
+            py, pz = center.y + yy * c - zz * s_, center.z + yy * s_ + zz * c
+            pts.append(Vector((front(py, pz) + depth, py, pz)))
+        cen = Vector((front(center.y, center.z) + depth + inset, center.y, center.z))
+        vs = [bm.verts.new(p) for p in pts]
+        vc = bm.verts.new(cen)
+        for i in range(n):
+            try:
+                f = bm.faces.new((vc, vs[i], vs[(i + 1) % n]))
+                f.material_index = mat
+            except ValueError:
+                pass
 
-    def lower(y):
-        t = max(0.0, 1.0 - (y / W) ** 2)
-        return upper(y) - 0.12 * t ** 0.7
+    # --- Yeux : amandes inclinees vers le centre (regard mauvais), halo plus large et plus faible derriere
+    for sgn in (-1.0, 1.0):
+        c = Vector((0.0, sgn * 0.155, 0.16))
+        tilt = sgn * math.radians(17)  # coins interieurs plus bas : regard mauvais
+        blob(c, 0.098, 0.036, tilt, 0.004, soft, ring=1.45)
+        blob(c, 0.088, 0.026, tilt, 0.012, glow, inset=0.004)
 
-    # fond de bouche noir (cache l'interieur)
-    n = 24
+    # --- Sourire : croissant immense, coins remontes jusque sous les yeux
+    W = 0.34
+
+    def upper(u):
+        return -0.12 + 0.20 * u * u
+
+    def lower(u):
+        return upper(u) - 0.13 * max(0.0, 1.0 - u * u) ** 0.75
+
+    # gueule : fond noir rougeatre en retrait
+    n = 40
     strip = []
     for i in range(n + 1):
-        y = -W + 2 * W * i / n
-        zu, zl = upper(y) + 0.01, lower(y) - 0.01
-        strip += [Vector((front(y, zu) - 0.008, y, zu)), Vector((front(y, zl) - 0.008, y, zl))]
-    add_geometry(bm, strip, [(2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1) for i in range(n)], dark)
-    # dents du haut (vers le bas) et du bas (vers le haut), intercalees, longueurs irregulieres
-    count = 38
+        u = -1.0 + 2.0 * i / n
+        y = u * W
+        zu, zl = upper(u) + 0.004, lower(u) - 0.004
+        strip += [Vector((front(y, zu) - 0.03, y, zu)), Vector((front(y, zl) - 0.03, y, zl))]
+    add_geometry(bm, strip, [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(n)], mouth)
+
+    def tooth(base_u, row, length_k, width, fang=False):
+        """Dent pointue epaisse et legerement courbee vers l'interieur de la gueule"""
+        u = base_u
+        y = u * W
+        z0 = upper(u) if row == 0 else lower(u)
+        gap = max(0.012, upper(u) - lower(u))
+        length = gap * length_k * (1.6 if fang else 1.0)
+        dz = -1.0 if row == 0 else 1.0
+        x0 = front(y, z0) + 0.002
+        bend = rng.uniform(-0.006, 0.006)
+        segs = 4
+        ring = []
+        for k in range(segs + 1):
+            t = k / segs
+            wk = width * (1.0 - t) ** 0.9 + 0.0008
+            dk = wk * 0.55
+            zc = z0 + dz * length * t
+            yc = y + bend * t * t - u * 0.01 * t
+            xc = front(yc, zc) + 0.004 - 0.022 * t * t  # la pointe rentre dans la gueule
+            ring.append([Vector((xc + dk, yc - wk, zc)), Vector((xc + dk * 1.6, yc, zc)), Vector((xc + dk, yc + wk, zc)),
+                         Vector((xc - dk, yc, zc))])
+        vs = [[bm.verts.new(p) for p in r] for r in ring]
+        for k in range(segs):
+            for j in range(4):
+                try:
+                    f = bm.faces.new((vs[k][j], vs[k][(j + 1) % 4], vs[k + 1][(j + 1) % 4], vs[k + 1][j]))
+                    f.material_index = glow
+                except ValueError:
+                    pass
+        try:
+            f = bm.faces.new(list(reversed(vs[0])))
+            f.material_index = glow
+        except ValueError:
+            pass
+
+    count = 22
     for row in (0, 1):
         for i in range(count):
-            u = (i + 0.5 + row * 0.5) / (count + 0.5) * 2.0 - 1.0
-            y = u * W * 0.97
+            u = ((i + 0.5 + 0.5 * row) / (count + 0.5)) * 2.0 - 1.0
+            u += rng.uniform(-0.01, 0.01)
             t = max(0.0, 1.0 - u * u)
-            gap = upper(y) - lower(y)
-            length = gap * rng.uniform(0.75, 1.15) + 0.01
-            z0 = upper(y) if row == 0 else lower(y)
-            z1 = z0 - length if row == 0 else z0 + length
-            y1 = y + rng.uniform(-0.01, 0.01) - u * 0.012
-            base = Vector((front(y, z0), y, z0))
-            tip = Vector((front(y1, z1) + 0.004, y1, z1))
-            width = (0.62 * W / count) * (0.8 + 0.4 * t)
-            spike(bm, base, tip, width, 0.012, glow, twist=rng.uniform(-0.3, 0.3))
-    # longues pointes aux coins, qui remontent vers les yeux (comme sur l'image), en restant sur le visage
-    for sgn in (-1.0, 1.0):
-        for k in range(5):
-            y = sgn * (W - 0.012 * k)
-            z0 = upper(y) - 0.01 * k
-            y1 = y - sgn * rng.uniform(0.0, 0.025)
-            z1 = z0 + 0.04 + 0.02 * k
-            spike(bm, Vector((front(y, z0), y, z0)), Vector((front(y1, z1) + 0.004, y1, z1)), 0.010, 0.008, glow)
+            # dents fines et pointues : la gueule noire se voit entre elles
+            width = (W / count) * (0.5 + 0.35 * t) * rng.uniform(0.8, 1.2)
+            k = rng.uniform(0.72, 1.15) * (0.8 + 0.2 * t)
+            fang = abs(abs(u) - 0.52) < 0.035
+            tooth(u, row, k, width * (1.25 if fang else 1.0), fang)
+
     bm.normal_update()
     bm.to_mesh(me)
     bm.free()
     for poly in me.polygons:
-        poly.use_smooth = True
+        poly.use_smooth = poly.material_index == dark
     export_fbx(obj, "SM_SmilerET")
     preview([obj], "SM_SmilerET", Vector((1.0, -0.35, 0.1)))
 

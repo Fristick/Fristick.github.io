@@ -168,7 +168,9 @@ namespace
 			UMaterialExpressionTextureSampleParameter2D* E = New<UMaterialExpressionTextureSampleParameter2D>();
 			E->ParameterName = FName(Name);
 			E->Texture = Default;
-			E->SamplerType = bNormal ? SAMPLERTYPE_Normal : SAMPLERTYPE_Color;
+			// Le type d'echantillonneur doit suivre la texture : une texture lineaire (bruits, donnees) lue en "Color"
+			// empeche le materiau de compiler (v4.3 : plus aucune texture a l'ecran)
+			E->SamplerType = bNormal ? SAMPLERTYPE_Normal : ((Default && !Default->SRGB) ? SAMPLERTYPE_LinearColor : SAMPLERTYPE_Color);
 			Link(E->Coordinates, UV);
 			return FPin{ E, Out };
 		}

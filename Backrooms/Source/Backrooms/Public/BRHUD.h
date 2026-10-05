@@ -102,6 +102,10 @@ private:
 	void DrawPlayerList();
 	void DrawTitleCard();
 	void DrawRecording(ABRCharacter* C, ABRWorld* W);
+	/** v4.4 : pastille "DEV" et aide des raccourcis du mode developpeur */
+	void DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W);
+	/** v4.4 : decor a l'ecran du jumpscare en cours (griffures, neige, essaim, confettis...), propre a chaque entite */
+	void DrawJumpscare(ABRCharacter* C);
 	void DrawStats(ABRCharacter* C);
 	void DrawQuickBar(ABRCharacter* C);
 	void DrawObjectiveTracker(ABRWorld* W);

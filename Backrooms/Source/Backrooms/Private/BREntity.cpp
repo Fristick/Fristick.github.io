@@ -120,7 +120,7 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		// Un peu moins rapide qu'un sprint (470) : on peut la semer en cassant la ligne de vue, pas en restant sur place
 		Bact.HalfHeight = 108.f; Bact.Radius = 30.f; Bact.WalkSpeed = 140.f; Bact.ChaseSpeed = 440.f; Bact.SightRange = 2600.f;
 		Bact.AttackRange = 130.f; Bact.Damage = 60.f; Bact.SanityDamage = 20.f; Bact.AttackCooldown = 1.4f; Bact.Aura = 0.5f;
-		Bact.AuraRadius = 900.f; Bact.Voice = TEXT("S_Bacteria"); Bact.VoiceInterval = 7.f; Bact.VoiceFalloff = 3200.f;
+		Bact.AuraRadius = 900.f; Bact.Voice = TEXT("S_Bacteria"); Bact.VoiceInterval = 0.f; Bact.VoiceFalloff = 3200.f; // v4.4 : ses cris en continu (enregistrement fourni)
 		return L;
 	}();
 	const int32 Index = FMath::Clamp(static_cast<int32>(InKind), 0, Infos.Num() - 1);
@@ -519,9 +519,10 @@ void ABREntity::BuildVisual()
 		AddPart(SmilerMesh, Visual, FVector(0.f, 0.f, MyInfo().HalfHeight), FVector(70.f, 70.f, 90.f), 0.f, nullptr, true, 0.5f);
 		GlowLight = NewObject<UPointLightComponent>(this);
 		GlowLight->SetupAttachment(Visual);
-		GlowLight->SetRelativeLocation(FVector(70.f, 0.f, MyInfo().HalfHeight));
+		// Faible lueur des dents et des yeux sur ce qui l'entoure (la masse d'ombre, elle, ne renvoie presque rien)
+		GlowLight->SetRelativeLocation(FVector(55.f, 0.f, MyInfo().HalfHeight - 5.f));
 		GlowLight->SetIntensityUnits(ELightUnits::Lumens);
-		GlowLight->SetIntensity(60.f);
+		GlowLight->SetIntensity(35.f);
 		GlowLight->SetAttenuationRadius(260.f);
 		GlowLight->SetLightColor(FLinearColor(1.f, 0.95f, 0.85f));
 		GlowLight->SetCastShadows(false);
@@ -654,6 +655,29 @@ void ABREntity::BuildVisual()
 // Tick
 // =====================================================================================================================
 
+void ABREntity::SetScareTransform(const FTransform* WorldTM)
+{
+	if (!Visual)
+	{
+		return;
+	}
+	if (WorldTM)
+	{
+		if (!bScareOverride)
+		{
+			ScareSavedRel = Visual->GetRelativeTransform();
+			bScareOverride = true;
+		}
+		ScareTM = *WorldTM;
+		Visual->SetWorldTransform(ScareTM);
+	}
+	else if (bScareOverride)
+	{
+		bScareOverride = false;
+		Visual->SetRelativeTransform(ScareSavedRel);
+	}
+}
+
 void ABREntity::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -662,6 +686,14 @@ void ABREntity::Tick(float DeltaSeconds)
 	StateTime += Dt;
 	AttackTimer -= Dt;
 
+	if (bScareOverride)
+	{
+		// Jumpscare : l'entite se fige, son modele est tenu devant la camera du joueur
+		Animate(Dt);
+		UpdateHead(Dt);
+		Visual->SetWorldTransform(ScareTM);
+		return;
+	}
 	if (Vanish >= 0.f)
 	{
 		Vanish += Dt;

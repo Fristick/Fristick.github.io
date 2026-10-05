@@ -63,6 +63,7 @@ namespace
 		Row_VolumetricFog,
 		Row_FilmGrain,
 		Row_VHSEffect,
+		Row_DevMode,
 		Row_Count
 	};
 
@@ -478,6 +479,11 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	PollKeyCapture();
 	UpdateVoice(DeltaTime);
 	UpdateMenuAmbience(DeltaTime);
+	DevHelpTime = FMath::Max(0.f, DevHelpTime - DeltaTime);
+	if (IsDevMode() && IsLocalController() && !bInMenu)
+	{
+		UpdateDevKeys();
+	}
 
 	if (bPendingNewSave)
 	{
@@ -1139,8 +1145,95 @@ int32 ABRPlayerController::GetMenuSaveSlot(int32 Item) const
 
 bool ABRPlayerController::IsLevelUnlocked(int32 LevelNumber) const
 {
-	// Sans partie choisie (tests, console), seul le Niveau 0 est propose
+	// Mode developpeur : tout est jouable. Sans partie choisie (tests, console), seul le Niveau 0 est propose
+	if (IsDevMode())
+	{
+		return true;
+	}
 	return ActiveSave ? ActiveSave->IsExplored(LevelNumber) : LevelNumber == 0;
+}
+
+bool ABRPlayerController::IsDevMode() const
+{
+	return FBRSettings::Get().bDevMode;
+}
+
+void ABRPlayerController::DevJumpLevel(int32 Delta)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	const TArray<FBRLevelDef>& All = BRLevels::All();
+	if (!W || All.Num() == 0)
+	{
+		return;
+	}
+	int32 Cur = 0;
+	for (int32 i = 0; i < All.Num(); ++i)
+	{
+		Cur = All[i].Number == W->GetLevelNumber() ? i : Cur;
+	}
+	const FBRLevelDef& Next = All[(Cur + Delta + All.Num()) % All.Num()];
+	bDevSession = true;
+	ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9V : Niveau %d - %s"), Next.Number, *Next.Title), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+	W->RequestTransition(Next.Number);
+}
+
+void ABRPlayerController::UpdateDevKeys()
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	ABRCharacter* C = GetBRCharacter();
+	if (!W || !W->IsLevelReady() || W->IsTransitioning() || IsPaused() || bInventory)
+	{
+		return;
+	}
+	// (F1 a F5, F8 et F9 sont pris par Unreal hors version finale : modes d'affichage, ejection, capture)
+	bool bUsed = true;
+	if (WasInputKeyJustPressed(EKeys::PageUp))
+	{
+		DevJumpLevel(1);
+	}
+	else if (WasInputKeyJustPressed(EKeys::PageDown))
+	{
+		DevJumpLevel(-1);
+	}
+	else if (WasInputKeyJustPressed(EKeys::Home))
+	{
+		// Meme niveau, nouvelle graine : une autre disposition
+		bDevSession = true;
+		W->RequestTransition(W->GetLevelNumber());
+	}
+	else if (WasInputKeyJustPressed(EKeys::End))
+	{
+		BRObjectives();
+		ABRHUD::Notify(this, TEXT("MODE D\u00c9V : objectifs remplis"), 2.f, FLinearColor(0.6f, 0.9f, 1.f));
+	}
+	else if (WasInputKeyJustPressed(EKeys::Insert))
+	{
+		BRBlackout();
+	}
+	else if (WasInputKeyJustPressed(EKeys::F6) && C)
+	{
+		C->SetDevFly(!C->IsDevFlying());
+		ABRHUD::Notify(this, C->IsDevFlying() ? TEXT("MODE D\u00c9V : vol libre (\u00e0 travers les murs, Espace pour monter, Maj pour acc\u00e9l\u00e9rer)")
+			: TEXT("MODE D\u00c9V : vol libre coup\u00e9"), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+	}
+	else if (WasInputKeyJustPressed(EKeys::F7))
+	{
+		BRGod();
+	}
+	else if (WasInputKeyJustPressed(EKeys::F10) && C)
+	{
+		const EBREntityKind Kind = static_cast<EBREntityKind>(DevScareKind % static_cast<int32>(EBREntityKind::Count));
+		++DevScareKind;
+		C->PlayJumpscare(Kind, nullptr, false);
+	}
+	else
+	{
+		bUsed = false;
+	}
+	if (bUsed)
+	{
+		DevHelpTime = FMath::Max(DevHelpTime, 6.f);
+	}
 }
 
 FString ABRPlayerController::GetMenuItemLabel(int32 Item) const
@@ -1560,11 +1653,21 @@ void ABRPlayerController::ApplyActiveSave()
 
 void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 {
+	if (IsDevMode() && !bInMenu)
+	{
+		DevHelpTime = 10.f;
+	}
 	if (!ActiveSave || BRSaves::ActiveSlot() == INDEX_NONE || bInMenu || !IsLocalController() || GetNetMode() == NM_Client)
 	{
 		return;
 	}
 	const bool bNew = !ActiveSave->IsExplored(LevelNumber);
+	if (bNew && bDevSession)
+	{
+		ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9VELOPPEUR : Niveau %d visit\u00e9 sans l'ajouter \u00e0 la partie \u00ab %s \u00bb."),
+			LevelNumber, *ActiveSave->SaveName), 6.f, FLinearColor(0.6f, 0.9f, 1.f));
+		return;
+	}
 	ActiveSave->MarkExplored(LevelNumber);
 	ActiveSave->CurrentLevel = LevelNumber;
 	// Ecrit un peu plus tard : apres une mort, l'inventaire est remis a zero juste apres le chargement
@@ -1598,7 +1701,7 @@ void ABRPlayerController::WriteActiveSave()
 	if (const ABRWorld* W = ABRWorld::Get(this))
 	{
 		ActiveSave->Discovered = W->GetDiscoveredList();
-		if (W->IsLevelReady() && !W->IsTransitioning())
+		if (W->IsLevelReady() && !W->IsTransitioning() && (!bDevSession || ActiveSave->IsExplored(W->GetLevelNumber())))
 		{
 			ActiveSave->CurrentLevel = W->GetLevelNumber();
 			ActiveSave->MarkExplored(W->GetLevelNumber());
@@ -1845,6 +1948,8 @@ void ABRPlayerController::StartSolo()
 	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart)
 	ApplyActiveSave();
 	const int32 Target = BRLevels::All()[MenuIndex].Number;
+	// Mode developpeur : un niveau pas encore explore se visite sans etre ajoute a la partie
+	bDevSession = ActiveSave && !ActiveSave->IsExplored(Target);
 	if (Target != W->GetLevelNumber())
 	{
 		W->RequestTransition(Target);
@@ -1864,6 +1969,7 @@ void ABRPlayerController::BRLevel(int32 Number)
 {
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
+		bDevSession = true;
 		bInMenu = false;
 		ShowAddressBox(false);
 		UpdateInputMode();
@@ -2008,6 +2114,8 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return TEXT("GRAIN DE L'IMAGE");
 	case Row_VHSEffect:
 		return TEXT("EFFET VHS");
+	case Row_DevMode:
+		return TEXT("MODE D\u00c9VELOPPEUR");
 	default:
 		return FString();
 	}
@@ -2054,6 +2162,8 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return OnOff(S.bFilmGrain);
 	case Row_VHSEffect:
 		return OnOff(S.bVHSEffect);
+	case Row_DevMode:
+		return OnOff(S.bDevMode);
 	default:
 		return FString();
 	}
@@ -2091,6 +2201,9 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return TEXT("Halos de lumi\u00e8re dans l'air humide.");
 	case Row_VHSEffect:
 		return TEXT("Lignes de balayage, l\u00e9g\u00e8re aberration et salet\u00e9 d'objectif. D\u00e9sactiv\u00e9 : image nette.");
+	case Row_DevMode:
+		return TEXT("Tous les niveaux jouables depuis le choix des niveaux (non ajout\u00e9s \u00e0 la partie). En jeu : Page pr\u00e9c. / suiv. niveau, ")
+			TEXT("D\u00e9but nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares.");
 	default:
 		return FString();
 	}
@@ -2163,6 +2276,9 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	case Row_VHSEffect:
 		S.bVHSEffect = !S.bVHSEffect;
 		break;
+	case Row_DevMode:
+		S.bDevMode = !S.bDevMode;
+		break;
 	default:
 		return;
 	}
@@ -2188,6 +2304,7 @@ void ABRPlayerController::LoadSettings()
 	Cfg.GetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
 	Cfg.GetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain);
 	Cfg.GetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
+	Cfg.GetBool(SettingsSection, TEXT("DevMode"), S.bDevMode);
 	Cfg.GetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
 	Cfg.GetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
 	Cfg.GetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);
@@ -2221,6 +2338,7 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
 	Cfg.SetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain);
 	Cfg.SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
+	Cfg.SetBool(SettingsSection, TEXT("DevMode"), S.bDevMode);
 	Cfg.SetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
 	Cfg.SetInt64(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
 	Cfg.SetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);

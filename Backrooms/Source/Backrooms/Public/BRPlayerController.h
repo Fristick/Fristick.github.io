@@ -65,6 +65,12 @@ public:
 	const TArray<int32>& GetSaveOrder() const { return SaveOrder; }
 	/** Seuls les niveaux deja explores dans la partie choisie peuvent etre choisis */
 	bool IsLevelUnlocked(int32 LevelNumber) const;
+	/** v4.4 : mode developpeur actif */
+	bool IsDevMode() const;
+	/** Secondes restantes d'affichage de l'aide du mode developpeur */
+	float GetDevHelpTime() const { return DevHelpTime; }
+	/** Niveau visite en mode developpeur, pas ajoute a la partie */
+	bool IsDevSession() const { return bDevSession; }
 	/** Confirmation de suppression d'une partie (page PARTIES) */
 	bool IsConfirmingDelete() const { return bConfirmDelete; }
 	int32 GetDeleteSlot() const { return DeleteSlot; }
@@ -169,6 +175,16 @@ public:
 	/** Valide les objectifs du niveau (cassettes VHS, enregistrement) */
 	UFUNCTION(Exec)
 	void BRObjectives();
+
+private:
+	/** Mode developpeur : raccourcis en jeu (Page prec./suiv., Debut, Fin, Inser, F6, F7, F10) */
+	void UpdateDevKeys();
+	/** Niveau precedent / suivant dans l'ordre du wiki */
+	void DevJumpLevel(int32 Delta);
+	/** Les niveaux visites en mode developpeur (sans les avoir explores) ne sont pas ajoutes a la partie */
+	bool bDevSession = false;
+	float DevHelpTime = 0.f;
+	int32 DevScareKind = 0;
 
 protected:
 	/** Musique du menu titre (fondu a l'ouverture et au lancement de la partie) */

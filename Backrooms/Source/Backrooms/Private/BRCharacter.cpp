@@ -14,10 +14,12 @@
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
@@ -622,13 +624,21 @@ void ABRCharacter::SetHeldVisual(EBRItem InHand)
 
 void ABRCharacter::InputMove(const FVector2D& Value)
 {
-	if (bInputLocked || bDead)
+	if (bInputLocked || bDead || ScareKind >= 0)
 	{
 		return;
 	}
 	if (bClimbing)
 	{
 		ClimbInput = FMath::Clamp(static_cast<float>(Value.Y), -1.f, 1.f);
+		return;
+	}
+	if (bDevFly)
+	{
+		// Vol libre (mode developpeur) : on avance dans la direction du regard
+		const FRotator View = GetViewRotation();
+		AddMovementInput(View.Vector(), Value.Y);
+		AddMovementInput(FRotator(0.f, View.Yaw, 0.f).RotateVector(FVector(0.f, 1.f, 0.f)), Value.X);
 		return;
 	}
 	if (bSwimming)
@@ -648,7 +658,7 @@ void ABRCharacter::InputMove(const FVector2D& Value)
 
 void ABRCharacter::InputLook(const FVector2D& DeltaDegrees)
 {
-	if (bInputLocked || bDead || !Controller)
+	if (bInputLocked || bDead || !Controller || ScareKind >= 0)
 	{
 		return;
 	}
@@ -686,6 +696,10 @@ void ABRCharacter::InputJump(bool bPressed)
 			StopClimb(); // lacher l'echelle
 		}
 		return;
+	}
+	if (bDevFly)
+	{
+		return; // monter : voir Tick (touche maintenue)
 	}
 	if (bSwimming)
 	{
@@ -902,7 +916,7 @@ void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Sourc
 		}
 		return;
 	}
-	if (bDead || bGodMode)
+	if (bDead || bGodMode || bScareLethal)
 	{
 		return;
 	}
@@ -919,9 +933,24 @@ void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Sourc
 		Controller->SetControlRotation(R);
 	}
 	PlaySound2D(TEXT("S_Hurt"), 1.f);
+	// v4.4 : jumpscare de l'entite qui frappe ; un coup mortel attend la fin du jumpscare
+	ABREntity* Attacker = Cast<ABREntity>(Source);
+	if (Attacker && (ScareKind >= 0 || ScareCooldown <= 0.f || Health <= 0.f))
+	{
+		PlayJumpscare(Attacker->Kind, Attacker, Health <= 0.f);
+	}
 	if (Health <= 0.f)
 	{
-		Die(SourceName, Source);
+		if (ScareKind >= 0)
+		{
+			bScareLethal = true;
+			ScareKillerName = SourceName;
+			ScareKiller = Source;
+		}
+		else
+		{
+			Die(SourceName, Source);
+		}
 	}
 }
 
@@ -932,6 +961,7 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 		return;
 	}
 	StopClimb();
+	SetDevFly(false);
 	bDead = true;
 	Health = 0.f;
 	DeathTime = 0.f;
@@ -1282,6 +1312,12 @@ void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 			GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 		}
 	}
+	if (bDevFly)
+	{
+		// Vol libre garde d'un niveau a l'autre (mode developpeur)
+		bDevFly = false;
+		SetDevFly(true);
+	}
 	if (Def.Fixture == EBRFixture::None && !Def.bOutdoor && !bFlashlightOn)
 	{
 		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Il fait noir comme dans un four. {Flashlight} lampe  -  {NightVision} vision nocturne")), 5.f, FLinearColor(1.f, 0.85f, 0.6f));
@@ -1344,7 +1380,19 @@ void ABRCharacter::Tick(float DeltaSeconds)
 
 	UpdateEntityEffects();
 	UpdateStats(Dt);
+	UpdateJumpscare(Dt);
 	UpdateClimb(Dt);
+	if (bDevFly)
+	{
+		if (UCharacterMovementComponent* Move = GetCharacterMovement())
+		{
+			Move->MaxFlySpeed = bWantsSprint ? 2600.f : 900.f;
+		}
+		if (bJumpHeld && !bInputLocked)
+		{
+			AddMovementInput(FVector::UpVector, 1.f);
+		}
+	}
 	UpdateWater(Dt);
 	UpdateHiding();
 	UpdateCamera(Dt);
@@ -1387,7 +1435,7 @@ void ABRCharacter::SyncNetState()
 	{
 		return;
 	}
-	const uint8 Flags = (IsFlashlightOn() ? 1 : 0) | (IsSprinting() ? 2 : 0) | (bSwimming ? 4 : 0);
+	const uint8 Flags = (IsFlashlightOn() ? 1 : 0) | (IsSprinting() ? 2 : 0) | (bSwimming ? 4 : 0) | (bClimbing ? 8 : 0);
 	const uint8 Hand = static_cast<uint8>(GetEquipped(EBREquipSlot::Hand));
 	const uint8 Lamp = LampSlot();
 	if (Flags == NetFlags && Hand == NetHand && Lamp == NetLamp)
@@ -1686,7 +1734,7 @@ void ABRCharacter::UpdateCamera(float Dt)
 	const float Wobble = Insanity > 0.5f ? FMath::Sin(TimeAlive * 0.8f) * (Insanity - 0.5f) * 8.f : 0.f;
 	const float SwimRoll = bSwimming ? FMath::Sin(BobTime * 0.5f) * 2.f : 0.f;
 	Camera->SetRelativeRotation(FRotator(0.f, 0.f, Wobble + SwimRoll + (bDead ? FMath::Min(DeathTime, 1.f) * 25.f : 0.f)));
-	Camera->SetFieldOfView(FBRSettings::Get().FOV + (IsSprinting() ? 4.f : 0.f) + FMath::Sin(TimeAlive * 0.6f) * Insanity * Insanity * 6.f);
+	Camera->SetFieldOfView(FBRSettings::Get().FOV + (IsSprinting() ? 4.f : 0.f) + FMath::Sin(TimeAlive * 0.6f) * Insanity * Insanity * 6.f + ScareFOV);
 
 	// Lampe : a la 3e personne elle reste sur le personnage (et non sur la camera qui recule)
 	if (Flashlight)
@@ -2030,14 +2078,14 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	// Effet camescope desactive : ni aberration de l'objectif, ni grain, ni salete, vignettage leger
 	const bool bVHS = Set.bVHSEffect;
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f + ClimbGlitch * 6.f;
+	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f + ClimbGlitch * 6.f + ScareFringe * 4.f;
 
 	S.bOverride_FilmGrainIntensity = true;
 	S.FilmGrainIntensity = ((Set.bFilmGrain && bVHS) ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
 
 	S.bOverride_VignetteIntensity = true;
 	S.VignetteIntensity = (D ? D->Vignette : 0.45f) * (bVHS ? 1.f : 0.4f) + (bHidden ? 0.45f : 0.f) + Insanity * 0.5f + DamageFlash * 0.6f + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
-		+ Choke * 0.9f;
+		+ Choke * 0.9f + ScareFringe * 0.25f;
 
 	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max3(Insanity * Insanity, Dead, Choke * 0.6f));
 	if (bNV)
@@ -2056,12 +2104,14 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	const FLinearColor Hurt(1.f, 0.35f, 0.3f);
 	S.bOverride_SceneColorTint = true;
 	S.SceneColorTint = FMath::Lerp(Tint, Hurt, FMath::Clamp(DamageFlash * 0.6f + Dead * 0.5f, 0.f, 1.f));
+	// Jumpscare : eclair de la couleur de l'entite a l'impact
+	S.SceneColorTint = FMath::Lerp(S.SceneColorTint, ScareTint * 1.6f, FMath::Clamp(ScareFlash * 0.7f, 0.f, 0.85f));
 
 	// Luminosite choisie par le joueur ; vision nocturne : amplification de lumiere
 	// (vision nocturne : l'exposition peut descendre tres bas et s'adapte vite ; c'est surtout le projecteur
 	// infrarouge qui eclaire, un gain trop fort brulait l'image des qu'un mur etait proche)
 	S.bOverride_AutoExposureBias = true;
-	S.AutoExposureBias = (D ? D->ExposureBias : 0.f) + Set.Brightness + (bNV ? 1.f : 0.f);
+	S.AutoExposureBias = (D ? D->ExposureBias : 0.f) + Set.Brightness + (bNV ? 1.f : 0.f) - ScareDark * 3.f;
 	S.bOverride_AutoExposureMinBrightness = bNV;
 	S.AutoExposureMinBrightness = (D ? D->MinEV : 2.f) - 6.f;
 	S.bOverride_AutoExposureSpeedUp = bNV;
@@ -2115,14 +2165,32 @@ void ABRCharacter::BuildBody()
 	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, -Capsule->GetUnscaledCapsuleHalfHeight()));
 	BodyFeet->RegisterComponent();
 
-	// Pieces de la combinaison fournie (Tools/Blender/import_user_models.py) ; a defaut, des boites jaunes
-	TMap<FString, FLinearColor> Fallback;
-	Fallback.Add(TEXT("FallbackHazmat"), FLinearColor(0.75f, 0.6f, 0.08f));
-	Body = BRRig::BuildHumanoid(this, BodyFeet, TEXT("SM_Hazmat"), FBRHumanoidSpec::Hazmat(), &Fallback, BodyComponents, true);
+	// v4.4 : combinaison a squelette (Tools/Blender/build_hazmat_skeletal.py), animee os par os, peau sans coutures
+	UBRAssets* A = UBRAssets::Get(this);
+	if (USkeletalMesh* Skin = A ? A->SkeletalMesh(TEXT("SK_Hazmat")) : nullptr)
+	{
+		BodySkin = NewObject<UPoseableMeshComponent>(this, TEXT("BodySkin"));
+		BodySkin->SetupAttachment(BodyFeet);
+		BodySkin->SetSkinnedAssetAndUpdate(Skin);
+		BodySkin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		BodySkin->SetCastShadow(true);
+		BodySkin->RegisterComponent();
+		A->ApplySlots(BodySkin);
+		Body.Meshes.Add(BodySkin);
+		Body.Torso = BodySkin;
+		BodyComponents.Add(BodySkin);
+	}
+	else
+	{
+		// Pieces rigides de la combinaison fournie (Tools/Blender/import_user_models.py) ; a defaut, des boites jaunes
+		TMap<FString, FLinearColor> Fallback;
+		Fallback.Add(TEXT("FallbackHazmat"), FLinearColor(0.75f, 0.6f, 0.08f));
+		Body = BRRig::BuildHumanoid(this, BodyFeet, TEXT("SM_Hazmat"), FBRHumanoidSpec::Hazmat(), &Fallback, BodyComponents, true);
+	}
 
 	// La tete et les bras suivent le buste (penche en avant quand on court / s'accroupit)
 	const FAttachmentTransformRules Keep(EAttachmentRule::KeepWorld, false);
-	if (Body.Torso)
+	if (Body.Torso && !BodySkin)
 	{
 		for (USceneComponent* Part : { Body.Head, Body.UpperArm[0], Body.UpperArm[1] })
 		{
@@ -2201,7 +2269,9 @@ void ABRCharacter::AnimateBody(float Dt)
 
 	CrouchBlend = FMath::FInterpTo(CrouchBlend, (bIsCrouched && !bSwimming) ? 1.f : 0.f, Dt, 10.f);
 	SwimBlend = FMath::FInterpTo(SwimBlend, bSwimming ? 1.f : 0.f, Dt, 5.f);
-	AirBlend = FMath::FInterpTo(AirBlend, (!bGrounded && !bSwimming && !bDead) ? 1.f : 0.f, Dt, 6.f);
+	const bool bClimbPose = bClimbing || (bRemoteView && (NetFlags & 8) != 0);
+	ClimbBlend = FMath::FInterpTo(ClimbBlend, bClimbPose ? 1.f : 0.f, Dt, 8.f);
+	AirBlend = FMath::FInterpTo(AirBlend, (!bGrounded && !bSwimming && !bDead && !bClimbPose && !bDevFly) ? 1.f : 0.f, Dt, 6.f);
 	DeathBlend = FMath::FInterpTo(DeathBlend, bDead ? 1.f : 0.f, Dt, 3.f);
 	const float SwimMove = bSwimming ? FMath::Clamp(static_cast<float>(Vel.Size()) / SwimSpeed, 0.f, 1.f) : 0.f;
 	const float Gait = bSwimming ? 0.f : FMath::Clamp(Speed2D / WalkSpeed, 0.f, 1.6f) * (1.f - 0.4f * CrouchBlend);
@@ -2260,6 +2330,17 @@ void ABRCharacter::AnimateBody(float Dt)
 			TP = FMath::Lerp(TP, STP, SwimBlend);
 			SP = FMath::Lerp(SP, SSP, SwimBlend);
 		}
+		// ---- Echelle (v4.4) : une main au-dessus de l'autre, un pied par barreau (le rythme suit la hauteur) ----
+		if (ClimbBlend > 0.01f)
+		{
+			const float CP = static_cast<float>(GetActorLocation().Z) / 30.f * PI + (i == 0 ? 0.f : PI);
+			const float Reach = FMath::Max(0.f, FMath::Sin(CP));
+			TP = FMath::Lerp(TP, 35.f + 45.f * Reach, ClimbBlend);
+			SP = FMath::Lerp(SP, -45.f - 55.f * Reach, ClimbBlend);
+			UP = FMath::Lerp(UP, 135.f + 30.f * Reach, ClimbBlend);
+			UR = FMath::Lerp(UR, Out * 8.f, ClimbBlend);
+			LP = FMath::Lerp(LP, 35.f - 25.f * Reach, ClimbBlend);
+		}
 		Thigh[i] = FRotator(TP, 0.f, Out * 4.f * SwimBlend * SwimMove);
 		Shin[i] = FRotator(SP, 0.f, 0.f);
 		Upper[i] = FRotator(UP, 0.f, UR);
@@ -2271,26 +2352,44 @@ void ABRCharacter::AnimateBody(float Dt)
 	const float TorsoPitch = -20.f * CrouchBlend - 7.f * (IsSprinting() ? 1.f : 0.f) * (1.f - SwimBlend);
 	if (HeldMesh && HeldMesh->GetStaticMesh())
 	{
-		const float Hold = 1.f - SwimBlend;
+		const float Hold = (1.f - SwimBlend) * (1.f - ClimbBlend);
 		Upper[1] = FMath::Lerp(Upper[1], FRotator(28.f + ViewPitch * 0.8f - TorsoPitch, 0.f, -6.f), Hold);
 		Lower[1] = FMath::Lerp(Lower[1], FRotator(62.f, 0.f, 0.f), Hold);
 	}
 
-	for (int32 i = 0; i < 2; ++i)
-	{
-		if (Body.Thigh[i]) { Body.Thigh[i]->SetRelativeRotation(Thigh[i]); }
-		if (Body.Shin[i]) { Body.Shin[i]->SetRelativeRotation(Shin[i]); }
-		if (Body.UpperArm[i]) { Body.UpperArm[i]->SetRelativeRotation(Upper[i]); }
-		if (Body.LowerArm[i]) { Body.LowerArm[i]->SetRelativeRotation(Lower[i]); }
-	}
-	Body.Torso->SetRelativeRotation(FRotator(TorsoPitch, 0.f, 0.f));
-
 	// Corps entier : penche a l'horizontale pendant la brasse, s'effondre a la mort
 	const float SwimPitch = -72.f * SwimMove * SwimBlend;
-	if (Body.Head)
+	// La tete regarde ou vise le joueur (et se redresse quand on nage a plat ventre ; vers le haut sur l'echelle)
+	const FRotator HeadRot(FMath::Lerp(ViewPitch * 0.6f - TorsoPitch - SwimPitch * 0.7f, 25.f, ClimbBlend), 0.f, 0.f);
+	if (BodySkin)
 	{
-		// La tete regarde ou vise le joueur (et se redresse quand on nage a plat ventre)
-		Body.Head->SetRelativeRotation(FRotator(ViewPitch * 0.6f - TorsoPitch - SwimPitch * 0.7f, 0.f, 0.f));
+		PoseSkin(Thigh, Shin, Upper, Lower, FRotator(TorsoPitch, 0.f, 0.f), HeadRot);
+		if (HeldMesh && HeldMesh->GetStaticMesh())
+		{
+			// L'objet tenu suit la main droite, dans l'axe de l'avant-bras
+			const FVector Hand = BodySkin->GetBoneTransformByName(TEXT("RightHand"), EBoneSpaces::WorldSpace).GetLocation();
+			const FVector Elbow = BodySkin->GetBoneTransformByName(TEXT("RightForeArm"), EBoneSpaces::WorldSpace).GetLocation();
+			const FVector Dir = (Hand - Elbow).GetSafeNormal();
+			if (!Dir.IsNearlyZero())
+			{
+				HeldMesh->SetWorldLocationAndRotation(Hand + Dir * 6.f, FRotationMatrix::MakeFromX(Dir).Rotator());
+			}
+		}
+	}
+	else
+	{
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (Body.Thigh[i]) { Body.Thigh[i]->SetRelativeRotation(Thigh[i]); }
+			if (Body.Shin[i]) { Body.Shin[i]->SetRelativeRotation(Shin[i]); }
+			if (Body.UpperArm[i]) { Body.UpperArm[i]->SetRelativeRotation(Upper[i]); }
+			if (Body.LowerArm[i]) { Body.LowerArm[i]->SetRelativeRotation(Lower[i]); }
+		}
+		Body.Torso->SetRelativeRotation(FRotator(TorsoPitch, 0.f, 0.f));
+		if (Body.Head)
+		{
+			Body.Head->SetRelativeRotation(HeadRot);
+		}
 	}
 	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
 	BodyRoot->SetRelativeRotation(FRotator(SwimPitch, 0.f, 80.f * DeathBlend));
@@ -2304,6 +2403,85 @@ void ABRCharacter::AnimateBody(float Dt)
 // =====================================================================================================================
 // Eau : marche ralentie, nage, plongee, apnee
 // =====================================================================================================================
+
+void ABRCharacter::PoseSkin(const FRotator* Thigh, const FRotator* Shin, const FRotator* Upper, const FRotator* Lower, const FRotator& Torso,
+	const FRotator& Head)
+{
+	// Os du squelette Mixamo renommes (index 0 = gauche, 1 = droite, comme les pieces rigides)
+	static const FName NSpine(TEXT("Spine"));
+	static const FName NHead(TEXT("Head"));
+	static const FName NArm[2] = { FName(TEXT("LeftArm")), FName(TEXT("RightArm")) };
+	static const FName NFore[2] = { FName(TEXT("LeftForeArm")), FName(TEXT("RightForeArm")) };
+	static const FName NUpLeg[2] = { FName(TEXT("LeftUpLeg")), FName(TEXT("RightUpLeg")) };
+	static const FName NLeg[2] = { FName(TEXT("LeftLeg")), FName(TEXT("RightLeg")) };
+	if (!BodySkin)
+	{
+		return;
+	}
+	if (SkinRest.Num() == 0)
+	{
+		// Pose de repos (bras le long du corps), une fois : les angles s'y ajoutent autour des articulations
+		for (const FName& N : { NSpine, NHead, NArm[0], NArm[1], NFore[0], NFore[1], NUpLeg[0], NUpLeg[1], NLeg[0], NLeg[1] })
+		{
+			if (BodySkin->GetBoneIndex(N) != INDEX_NONE)
+			{
+				SkinRest.Add(N, BodySkin->GetBoneTransformByName(N, EBoneSpaces::ComponentSpace).GetRotation());
+			}
+		}
+		if (SkinRest.Num() == 0)
+		{
+			return;
+		}
+	}
+	auto Set = [this](const FName& Bone, const FQuat& Delta)
+	{
+		if (const FQuat* Rest = SkinRest.Find(Bone))
+		{
+			FTransform T = BodySkin->GetBoneTransformByName(Bone, EBoneSpaces::ComponentSpace);
+			T.SetRotation(Delta * *Rest);
+			BodySkin->SetBoneTransformByName(Bone, T, EBoneSpaces::ComponentSpace);
+		}
+	};
+	// Du tronc vers les extremites : chaque os herite de la rotation de son parent (meme composition que les pivots)
+	const FQuat QT = Torso.Quaternion();
+	Set(NSpine, QT);
+	Set(NHead, QT * Head.Quaternion());
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const FQuat QU = QT * Upper[i].Quaternion();
+		Set(NArm[i], QU);
+		Set(NFore[i], QU * Lower[i].Quaternion());
+		const FQuat QTh = Thigh[i].Quaternion();
+		Set(NUpLeg[i], QTh);
+		Set(NLeg[i], QTh * Shin[i].Quaternion());
+	}
+}
+
+void ABRCharacter::SetDevFly(bool bFly)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (!Move || bFly == bDevFly || (bFly && bDead))
+	{
+		return;
+	}
+	if (bFly)
+	{
+		StopClimb();
+		StopSwimming();
+	}
+	bDevFly = bFly;
+	SetActorEnableCollision(!bFly);
+	if (bFly)
+	{
+		Move->SetMovementMode(MOVE_Flying);
+		Move->MaxFlySpeed = 900.f;
+		Move->BrakingDecelerationFlying = 3000.f;
+	}
+	else if (!bDead)
+	{
+		Move->SetMovementMode(MOVE_Falling);
+	}
+}
 
 void ABRCharacter::StartClimb(ABRExit* Ladder)
 {
@@ -2411,7 +2589,7 @@ void ABRCharacter::UpdateClimb(float Dt)
 void ABRCharacter::StartSwimming()
 {
 	UCharacterMovementComponent* Move = GetCharacterMovement();
-	if (bSwimming || !Move || bDead || bClimbing)
+	if (bSwimming || !Move || bDead || bClimbing || bDevFly)
 	{
 		return;
 	}

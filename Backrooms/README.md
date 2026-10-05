@@ -7,6 +7,56 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.4** (textures, sons, mode développeur, corps animé, Smiler, jumpscares) :
+- **Les textures sont de retour.** Depuis la 4.3, le bruit doux `T_NoiseLF` (importé en linéaire) était lu par un
+  échantillonneur « Color » (sRGB) : Unreal refuse alors de compiler le matériau et **tous** les murs, sols et plafonds
+  s'affichaient sans texture. Le type d'échantillonneur suit maintenant le format de chaque texture (C++ et Python).
+  Les matériaux sont reconstruits tout seuls à l'ouverture de l'éditeur (version des matériaux 4).
+- **Sons fournis** :
+  - la **Bacteria** a le son de l'enregistrement fourni (boucle de 21 s sans coupure, `S_Bacteria`), joué en continu
+    autour d'elle ;
+  - le **bourdonnement des néons** fourni (boucle de 30 s, `S_LightBuzz`) est l'ambiance du Niveau 0.
+- **Mode développeur** (actif par défaut hors version « Shipping », réglage **MODE DÉVELOPPEUR** dans les paramètres) :
+  - **tous les niveaux** sont débloqués dans le carrousel des niveaux (reprendre une partie, héberger) ;
+  - un niveau visité ainsi **ne compte pas** dans la partie (pastille « hors partie ») : la sauvegarde reste intacte ;
+  - touches (rappelées en jeu pendant 10 s à chaque niveau) :
+
+    | Touche | Effet |
+    |---|---|
+    | **Page préc. / Page suiv.** | niveau suivant / précédent |
+    | **Début** | même niveau, nouvelle disposition (autre graine) |
+    | **F6** | vol libre à travers les murs (**Espace** pour monter, **Maj** pour aller vite) |
+    | **F7** | invincible |
+    | **F10** | jumpscare suivant (une entité à chaque appui) |
+    | **Fin** | objectifs remplis (sorties ouvertes) |
+    | **Inser** | coupure de courant |
+- **Corps du joueur animé** (3e personne et coéquipiers) : la combinaison hazmat est maintenant un **maillage à
+  squelette** (`SK_Hazmat`, 79 os) dont la peau se plie aux genoux, aux coudes et aux épaules, sans coutures. Le C++ le
+  pose **os par os** (marche, course, accroupi, nage, échelle, mort) ; l'objet tenu suit la main droite. Sans ce
+  fichier, l'ancien corps en pièces rigides revient.
+- **Nouveau Smiler** : une masse d'ombre informe qui s'effiloche dans le noir, deux **yeux en amande** inclinés vers le
+  centre (regard mauvais, halo autour), et un **sourire en croissant** aux dents fines et serrées (22 par rangée, plus
+  des crocs) sur une bouche sombre. Il éclaire légèrement ce qui l'entoure.
+- **Jumpscares** : quand une entité vous frappe, son modèle se jette sur la caméra. Chacune a le sien (son, mouvement de
+  caméra, effets d'image), et un coup mortel attend la fin du jumpscare :
+
+  | Entité | Jumpscare |
+  |---|---|
+  | **Smiler** | tout s'éteint, le sourire fonce depuis le noir et remplit l'écran, éclair blanc |
+  | **Hound** | bondit depuis le sol, la caméra est projetée, trois griffures rouges |
+  | **Faceling** | s'approche lentement, tête penchée, sans visage… puis la neige d'une télévision |
+  | **Skin-Stealer** | surgit de côté, la caméra est arrachée vers lui, l'image vire à la chair |
+  | **Deathmoth** | un essaim de papillons traverse l'écran, le papillon s'écrase sur le visage |
+  | **Wretch** | avance par à-coups entre des images noires |
+  | **Partygoer** | silence… puis il est là, d'un coup : confettis, « =) » et « JOYEUX ANNIVERSAIRE » |
+  | **Clump** | roule sur lui-même jusqu'à vous, la caméra encaisse le choc, pulsation rouge |
+  | **Bacteria** | elle vous domine : la caméra lève les yeux, sa tête descend vers vous, l'image se brouille |
+
+  Il n'y a pas de nouveau jumpscare pendant 5 s (sauf pour un coup mortel). Huit cris sont synthétisés (`S_Scare_*`) ;
+  celui de la Bacteria (`S_Scare_Bacteria`) est tiré de l'enregistrement fourni.
+- Depuis une v4.3 déjà importée, l'ouverture de l'éditeur importe seulement les nouveautés : sons, Smiler et combinaison
+  à squelette (`RawAssets/Skeletal/SK_Hazmat.fbx`), puis reconstruit les matériaux.
+
 **Nouveautés de la version 4.3** (Niveau 0 retravaillé) :
 - **Sol du Niveau 0 sans répétition** : la grande tache sombre incrustée dans la texture de moquette (elle revenait tous
   les 2,2 m) a disparu. Le matériau mélange maintenant un 2e échantillon de la moquette, tourné de 37° et à une autre
@@ -304,7 +354,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 69 textures (dont 26 normal maps), 33 icônes et images d'interface, 70 sons, 126 modèles (FBX). Il crée aussi
+   toutes les ressources : 69 textures (dont 26 normal maps), 33 icônes et images d'interface, 80 sons, 126 modèles (FBX) et 1 maillage à squelette. Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
@@ -359,6 +409,10 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 `BRGiveAll` (remplit l'inventaire) · `BRBlackout` (coupure de courant) · `BRObjectives` (valide les objectifs) ·
 `BRSensitivity 1.5` · `BRInvertY`.
 Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau.
+
+**Mode développeur** (voir les nouveautés de la 4.4) : **Page préc. / Page suiv.** (niveau suivant / précédent),
+**Début** (nouvelle disposition), **F6** (vol libre), **F7** (invincible), **F10** (jumpscare suivant), **Fin**
+(objectifs remplis), **Inser** (coupure de courant).
 
 ---
 
@@ -545,7 +599,8 @@ Backrooms/
 │   ├── BRChunk.*                Construction d'un chunk : murs, portes, néons, accessoires, bassins (instances)
 │   ├── BREntity.*               Les 9 entités : fiches, IA, squelette articulé, animation procédurale
 │   ├── BRCharacter.*            Joueur : inventaire, équipement, caméscope, lampe, endurance, santé mentale,
-│   │                            nage / apnée, corps en combinaison et vue à la 3e personne
+│   │                            nage / apnée, corps en combinaison (squelette posé os par os) et vue à la 3e personne
+│   ├── BRJumpscare.cpp          Jumpscares : un par entité (mouvement, caméra, son, effets ; décor dessiné par BRHUD)
 │   ├── BRKeys.*                 Touches configurables (3 par action), sauvegarde, libellés « [E] »
 │   ├── BRConfig.*               Fichier des réglages du joueur (Saved/Config/<plateforme>/BackroomsPlayer.ini)
 │   ├── BRAutoTest.*             Tests automatiques (-BRAutoTest, -BRNetTest) : captures, images/s, rapport
@@ -562,10 +617,11 @@ Backrooms/
 │   ├── init_unreal.py           Lancé automatiquement par l'éditeur
 │   └── backrooms_setup.py       Import des textures, icônes, sons, FBX + création des matériaux et de la carte
 ├── RawAssets/                   Ressources sources (déjà générées)
-│   ├── Textures/ (+ normal maps *_N)  Icons/  Sounds/  Meshes/ (FBX)  Previews/ (rendus des modèles)
+│   ├── Textures/ (+ normal maps *_N)  Icons/  Sounds/  Meshes/ (FBX)  Skeletal/ (FBX à squelette)  Previews/
 ├── Tools/
 │   ├── Blender/generate_models.py    ★ Modélisation procédurale (décor, objets, formes de secours) + icônes (Blender)
 │   ├── Blender/preview_entities.py   Rendu d'aperçu des entités assemblées
+│   ├── Blender/build_hazmat_skeletal.py  Combinaison du joueur en maillage à squelette (SK_Hazmat.fbx)
 │   ├── Blender/import_user_models.py Découpe des modèles fournis en pièces articulées (hazmat, Bacteria, Deathmoth,
 │   │                                 Skin-Stealer, Faceling, Partygoer, Hound) + Smiler et Clump d'après les images,
 │   │                                 meubles et textures des scènes fournies (Niveau 4, Poolrooms)
@@ -590,6 +646,8 @@ python Tools/generate_ui.py      # logo et images du menu (police Inter, fournie
 # backrooms_lvl4_office.glb, poolrooms/ (pooltile_1.png, pooltile_n_0.png, plaster_4.png, plaster_n_3.png)
 # dans Tools/SourceModels/ ; détails en tête du script)
 blender -b -P Tools/Blender/import_user_models.py
+blender -b -P Tools/Blender/import_user_models.py -- smiler   # un seul (smiler, clump, hazmat...)
+blender -b -P Tools/Blender/build_hazmat_skeletal.py -- Tools/SourceModels   # combinaison à squelette
 ```
 Ensuite, dans Unreal : `import backrooms_setup; backrooms_setup.run(force=True)`.
 
@@ -712,7 +770,9 @@ scannée), le Skin-Stealer (`Skin_Stealer_The_Backrooms_Blender_3`), le Hound (`
 (`backrooms-faceling-ps1psx-style`) et le Partygoer (`partygoer-from-backrooms-updated`, « Partygoer by FilinMinv »)
 viennent de modèles fournis par l'utilisateur, tout comme les meubles du Niveau 4 (scène `backrooms-level-4-abandoned-office`)
 et le carrelage et le plâtre des Poolrooms (scène `poolrooms`, carte Garry's Mod « gm_poolrooms »). Le Smiler et le
-Clump sont modélisés d'après des images fournies. Le logo du menu est dessiné avec la police **Inter**
+Clump sont modélisés d'après des images fournies. Les sons `S_Bacteria`, `S_Scare_Bacteria` (son de la Bacteria) et
+`S_LightBuzz` (bourdonnement des néons) sont tirés d'enregistrements fournis par l'utilisateur (vidéos en ligne,
+dont des sons du jeu *Escape the Backrooms*) : ils ne sont pas libres de droits. Le logo du menu est dessiné avec la police **Inter**
 (© The Inter Project Authors, licence SIL Open Font License 1.1, fournie avec Blender) ; l'interface du jeu utilise
 la police Roboto du moteur. Ils ont été découpés et adaptés par
 `Tools/Blender/import_user_models.py`. Vérifiez leur licence d'origine avant toute diffusion publique du jeu.*

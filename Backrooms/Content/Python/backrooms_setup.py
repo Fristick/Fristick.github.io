@@ -23,10 +23,14 @@ import unreal
 
 VERSION = 10
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
-# v4.3 : anti-repetition des sols)
-MATERIAL_VERSION = 3
+# v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau)
+MATERIAL_VERSION = 4
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"]}
+# Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
+RESOUNDED = {4: ["S_Bacteria.wav"]}
+# Modeles refaits (v4.4 : nouveau Smiler)
+RESHAPED = {4: ["SM_SmilerET.fbx"]}
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -221,6 +225,46 @@ def fbx_options():
     safe_set(sm, "remove_degenerates", True)
     safe_set(sm, "compute_weighted_normals", True)
     return o
+
+
+def fbx_skeletal_options():
+    """v4.4 : combinaison du joueur a squelette (SK_Hazmat) ; le squelette est cree a l'import, sans animation"""
+    o = unreal.FbxImportUI()
+    safe_set(o, "import_mesh", True)
+    safe_set(o, "import_textures", False)
+    safe_set(o, "import_materials", False)
+    safe_set(o, "import_as_skeletal", True)
+    safe_set(o, "import_animations", False)
+    safe_set(o, "create_physics_asset", False)
+    safe_set(o, "automated_import_should_detect_type", False)
+    safe_set(o, "mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    sk = o.get_editor_property("skeletal_mesh_import_data")
+    safe_set(sk, "import_morph_targets", False)
+    safe_set(sk, "convert_scene", True)
+    safe_set(sk, "import_meshes_in_bone_hierarchy", True)
+    return o
+
+
+def import_skeletal(files):
+    if not files:
+        return
+    tasks = [make_task(raw("Skeletal", f), MESH, os.path.splitext(f)[0], fbx_skeletal_options()) for f in files]
+    tools().import_asset_tasks(tasks)
+    for f in files:
+        name = os.path.splitext(f)[0]
+        target = MESH + "/" + name
+        if exists(target):
+            continue
+        # Interchange peut nommer l'asset autrement : on retrouve le maillage a squelette et on le renomme
+        for path in EAL.list_assets(MESH, recursive=True, include_folder=False):
+            obj = unreal.load_asset(path)
+            if isinstance(obj, unreal.SkeletalMesh) and name.lower() in path.split("/")[-1].lower():
+                EAL.rename_asset(path, target)
+                break
+        else:
+            warn("Maillage a squelette introuvable apres import : " + name)
+    EAL.save_directory(MESH, only_if_is_dirty=True, recursive=True)
+    log("%d maillages a squelette importes" % len(files))
 
 
 def fix_mesh_name(name):
@@ -453,8 +497,14 @@ class Graph(object):
         e.set_editor_property("parameter_name", name)
         if texture:
             e.set_editor_property("texture", texture)
-        e.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL if normal
-                              else unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+        # Le type d'echantillonneur doit suivre la texture : une texture lineaire (bruits, donnees) lue en "Color"
+        # empeche le materiau de compiler (v4.3 : plus aucune texture a l'ecran)
+        st = unreal.MaterialSamplerType.SAMPLERTYPE_COLOR
+        if normal:
+            st = unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL
+        elif texture and not is_srgb(texture):
+            st = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR
+        e.set_editor_property("sampler_type", st)
         self.link(uv, e, "UVs")
         return (e, out)
 
@@ -525,6 +575,13 @@ def new_material(name):
     # Le monde est construit en instances (murs, sols, accessoires) : sans ce drapeau, materiau par defaut !
     safe_set(m, "used_with_instanced_static_meshes", True)
     return m
+
+
+def is_srgb(texture):
+    try:
+        return bool(texture.get_editor_property("srgb"))
+    except Exception:
+        return True
 
 
 def load_tex(name, folder=TEX):
@@ -916,7 +973,8 @@ def needs_setup():
     if installed_version() < VERSION or installed_material_version() < MATERIAL_VERSION:
         return True
     return bool(materials_missing() or missing_in("Textures", TEX, IMG_EXT) or missing_in("Icons", UI, (".png",))
-                or missing_in("Sounds", SND, (".wav",)) or missing_in("Meshes", MESH, (".fbx",)) or not exists(MAP_PATH))
+                or missing_in("Sounds", SND, (".wav",)) or missing_in("Meshes", MESH, (".fbx",))
+                or missing_in("Skeletal", MESH, (".fbx",)) or not exists(MAP_PATH))
 
 
 def run(force=False):
@@ -930,7 +988,16 @@ def run(force=False):
                 tex += [f for f in files if f not in tex and os.path.isfile(raw("Textures", f))]
     ico = list_raw("Icons", (".png",)) if force else missing_in("Icons", UI, (".png",))
     snd = list_raw("Sounds", (".wav",)) if force else missing_in("Sounds", SND, (".wav",))
+    if not force:
+        for mv, files in sorted(RESOUNDED.items()):
+            if installed_material_version() < mv:
+                snd += [f for f in files if f not in snd and os.path.isfile(raw("Sounds", f))]
     msh = list_raw("Meshes", (".fbx",)) if force else missing_in("Meshes", MESH, (".fbx",))
+    skl = list_raw("Skeletal", (".fbx",)) if force else missing_in("Skeletal", MESH, (".fbx",))
+    if not force:
+        for mv, files in sorted(RESHAPED.items()):
+            if installed_material_version() < mv:
+                msh += [f for f in files if f not in msh and os.path.isfile(raw("Meshes", f))]
     mats = list(MATERIALS) if (force or installed_material_version() < MATERIAL_VERSION) else materials_missing()
     log("Installation v%d : %d textures, %d icones, %d sons, %d modeles, %d materiaux"
         % (VERSION, len(tex), len(ico), len(snd), len(msh), len(mats)))
@@ -945,6 +1012,7 @@ def run(force=False):
         task.enter_progress_frame(1, "Modeles Blender (%d)" % len(msh))
         delete_obsolete_meshes()
         import_meshes(msh)
+        import_skeletal(skl)
         task.enter_progress_frame(1, "Materiaux")
         if mats or tex:
             build_materials()

@@ -7,6 +7,9 @@ Sortie : ../RawAssets/Sounds/*.wav  (mono 16 bits, 48 kHz)
 Les sons "S_Amb_*", "S_Hum", "S_Heartbeat", "S_Breath", "S_Chase", "S_ExitHum" et
 "S_Moth", "S_Underwater" sont des boucles parfaites : ils sont filtres dans le domaine de Fourier
 de facon circulaire, donc sans "clic" au raccord.
+
+v4.4 : S_Bacteria (boucle), S_Scare_Bacteria et S_LightBuzz (boucle) viennent des enregistrements fournis
+(cris de la Bacteria d'Escape the Backrooms, bourdonnement des neons) : ce script ne les ecrase plus.
 """
 import os
 import wave
@@ -959,6 +962,153 @@ def s_ui_deny():
 MENU_V4 = (s_menu_theme, s_ui_hover, s_ui_confirm, s_ui_deny)
 
 
+# ---------------------------------------------------------------------------
+# v4.4 : jumpscares (un son different par entite ; la Bacteria utilise l'enregistrement fourni S_Scare_Bacteria)
+# ---------------------------------------------------------------------------
+def boom(dur=1.6, f0=95.0, f1=28.0, decay=2.6):
+    """Impact grave : sinus qui plonge (coup de poing dans la poitrine)"""
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    f = f1 + (f0 - f1) * np.exp(-tt * 7.0)
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * decay)
+    return np.tanh(x * 1.6)
+
+
+def stab(dur, freqs, detune=0.012, lo=110, hi=6500, decay=None):
+    """Accord dissonant d'orchestre (cordes / cuivres) a l'attaque seche"""
+    n = int(dur * SR)
+    x = np.zeros(n)
+    for f in freqs:
+        for d in (-detune, 0.0, detune):
+            x += saw(np.full(n, f * (1 + d + RNG.uniform(-0.002, 0.002))))
+    x = fft_filter(x, lo=lo, hi=hi)
+    tau = decay if decay else dur / 3.0
+    return x / len(freqs) * exp_env(n, tau) * np.minimum(1.0, np.arange(n) / (0.004 * SR))
+
+
+def burst(dur, lo, hi, tau=None):
+    n = int(dur * SR)
+    return fft_filter(white(dur), lo=lo, hi=hi) * exp_env(n, tau if tau else dur / 4.0)
+
+
+def scream(dur, f_start, f_end, vowels, rough=0.6, breath=0.25, drive=2.5):
+    x = voice(dur, lambda t: f_start + (f_end - f_start) * (t / dur) + 18 * np.sin(2 * np.pi * 7 * t), [VOW[v] for v in vowels],
+              breath=breath, rough=rough)
+    return np.tanh(x / (np.std(x) + 1e-9) * drive * 0.5)
+
+
+def mix_at(total, parts):
+    out = np.zeros(int(total * SR))
+    for start, snd, gain in parts:
+        place(out, snd * gain, int(start * SR), False)
+    return out
+
+
+def s_scare_smiler():
+    # rire aigu qui grince + accord strident + impact
+    laugh = np.zeros(int(1.4 * SR))
+    for i in range(11):
+        v = voice(0.11, lambda t: 900 + 450 * RNG.random() - 900 * t, [VOW["i"]], breath=0.35)
+        place(laugh, np.tanh(v / (np.std(v) + 1e-9)), int(i * 0.115 * SR), False)
+    x = mix_at(2.4, [(0.0, boom(1.8, 110, 30), 1.0), (0.0, stab(1.6, [740, 784, 1046, 1480], hi=9000), 0.9),
+                     (0.02, laugh, 0.8), (0.0, burst(0.5, 2500, 12000), 0.5)])
+    save("S_Scare_Smiler", reverb(x, 2.0, 0.35), 0.95)
+
+
+def s_scare_hound():
+    n = int(0.9 * SR)
+    tt = np.arange(n) / SR
+    snarl = saw(70 + 20 * np.sin(2 * np.pi * 4 * tt)) * (0.5 + 0.5 * (np.sin(2 * np.pi * 31 * tt) > 0)) + 0.8 * RNG.standard_normal(n)
+    snarl = np.tanh(resonate(snarl, [380, 950, 2300], q=5) * 3.0) * env(n, 0.01, 0.2, 0.8, 0.5, 0.2)
+    bark = scream(0.45, 420, 160, ["a", "o"], rough=1.4, drive=4.0)
+    x = mix_at(2.2, [(0.0, boom(1.6, 80, 25), 1.0), (0.0, snarl, 0.8), (0.05, bark, 1.0), (0.05, stab(1.2, [92, 98, 139], lo=60, hi=3000), 0.7),
+                     (0.05, burst(0.25, 400, 6000), 0.6)])
+    save("S_Scare_Hound", reverb(x, 1.0, 0.25), 0.95)
+
+
+def s_scare_faceling():
+    # chuchotements qui montent, puis la neige d'une television qui hurle
+    n = int(1.0 * SR)
+    tt = np.arange(n) / SR
+    whisp = resonate(RNG.standard_normal(n), VOW["i"] + VOW["u"], q=6) * (tt / 1.0) ** 2
+    static = fft_filter(RNG.standard_normal(int(0.9 * SR)), lo=900, hi=9000)
+    static *= (RNG.random(len(static)) > 0.02) * (0.6 + 0.4 * (np.sin(np.arange(len(static)) / SR * 2 * np.pi * 13) > 0))
+    drone = stab(1.8, [55, 58.3, 82.4], lo=40, hi=1500, decay=1.2)
+    x = mix_at(2.4, [(0.0, whisp, 0.5), (0.9, static * exp_env(len(static), 0.5), 1.0), (0.9, boom(1.4, 70, 22), 0.9), (0.9, drone, 0.7)])
+    save("S_Scare_Faceling", reverb(x, 1.5, 0.3), 0.95)
+
+
+def s_scare_skinstealer():
+    # cri humain deforme, double une octave plus bas (une gorge qui n'est pas la sienne)
+    a = scream(1.3, 330, 520, ["a", "eh", "a"], rough=1.0, drive=3.5)
+    b = scream(1.3, 165, 120, ["o", "a", "u"], rough=1.6, drive=3.0)
+    x = mix_at(2.4, [(0.0, boom(1.6, 100, 28), 1.0), (0.0, a, 0.8), (0.0, b, 0.7),
+                     (0.0, stab(1.5, [233, 247, 349, 370], hi=7000), 0.6), (0.0, burst(0.3, 300, 5000), 0.5)])
+    save("S_Scare_SkinStealer", reverb(x, 1.4, 0.3), 0.95)
+
+
+def s_scare_moth():
+    # battements d'ailes qui s'emballent + stridulation d'insecte
+    n = int(1.6 * SR)
+    tt = np.arange(n) / SR
+    rate = 18 + 40 * tt
+    flutter = fft_filter(RNG.standard_normal(n), lo=60, hi=1200) * (0.5 + 0.5 * np.sin(2 * np.pi * np.cumsum(rate) / SR)) ** 2
+    chirp = np.zeros(n)
+    for i in range(14):
+        m = int(0.06 * SR)
+        c = np.sin(2 * np.pi * np.cumsum(np.linspace(3200, 5200, m)) / SR) * env(m, 0.003, 0.05)
+        place(chirp, c, int(RNG.uniform(0.1, 1.4) * SR), False)
+    x = mix_at(2.2, [(0.0, flutter, 0.9), (0.0, chirp, 0.6), (0.0, boom(1.5, 120, 35), 0.9), (0.0, stab(1.4, [1175, 1245, 1661], hi=10000), 0.6)])
+    save("S_Scare_Moth", reverb(x, 1.2, 0.3), 0.95)
+
+
+def s_scare_wretch():
+    # gemissement et os qui craquent, par a-coups
+    groan = scream(1.6, 110, 62, ["o", "u", "a"], rough=1.8, breath=0.6, drive=2.0)
+    cracks = np.zeros(int(1.6 * SR))
+    for i in range(9):
+        m = int(0.05 * SR)
+        c = resonate(RNG.standard_normal(m), [RNG.uniform(1800, 4200), RNG.uniform(600, 1200)], q=10) * exp_env(m, 0.01)
+        place(cracks, c, int((0.05 + i * 0.16 + RNG.uniform(0, 0.05)) * SR), False)
+    x = mix_at(2.4, [(0.0, boom(1.6, 85, 26), 1.0), (0.0, groan, 0.8), (0.0, cracks, 0.9), (0.0, stab(1.7, [65.4, 69.3, 98], lo=40, hi=2500), 0.7)])
+    save("S_Scare_Wretch", reverb(x, 1.6, 0.35), 0.95)
+
+
+def s_scare_partygoer():
+    # trompette de fete qui se degonfle, rires d'enfants deformes, petite boite a musique faussee
+    n = int(0.8 * SR)
+    tt = np.arange(n) / SR
+    horn = resonate(saw(440 * np.exp(-tt * 0.9) * (1 + 0.03 * np.sin(2 * np.pi * 6 * tt))), [900, 1800, 3000], q=5) * env(n, 0.01, 0.1, 0.8, 0.2, 0.5)
+    laugh = np.zeros(int(1.4 * SR))
+    for i in range(7):
+        v = voice(0.13, lambda t: 680 - 260 * t + 60 * RNG.random(), [VOW["a"]], breath=0.3)
+        place(laugh, np.tanh(v / (np.std(v) + 1e-9) * 1.5), int(i * 0.17 * SR), False)
+    box = np.zeros(int(1.6 * SR))
+    for i, f in enumerate((1568, 1480, 1319, 1175, 1109)):
+        m = int(0.35 * SR)
+        place(box, np.sin(2 * np.pi * f * 1.012 * np.arange(m) / SR) * exp_env(m, 0.12), int(i * 0.22 * SR), False)
+    x = mix_at(2.6, [(0.0, horn, 0.8), (0.1, laugh, 0.8), (0.0, box, 0.35), (0.0, boom(1.6, 90, 28), 0.9),
+                     (0.0, stab(1.4, [587, 622, 880], hi=8000), 0.5)])
+    save("S_Scare_Partygoer", reverb(x, 1.8, 0.35), 0.95)
+
+
+def s_scare_clump():
+    # broyage humide et choeur de gemissements
+    crunch = np.zeros(int(1.4 * SR))
+    for i in range(16):
+        m = int(0.09 * SR)
+        c = resonate(RNG.standard_normal(m), [RNG.uniform(150, 400), RNG.uniform(700, 1400)], q=6) * env(m, 0.005, 0.08)
+        place(crunch, c, int(RNG.uniform(0, 1.2) * SR), False)
+    choir = sum(scream(1.6, f, f * 0.8, ["o", "u"], rough=0.8, breath=0.4, drive=1.4) for f in (110, 131, 147, 165))
+    x = mix_at(2.4, [(0.0, boom(1.8, 70, 22, decay=2.0), 1.0), (0.0, crunch, 0.9), (0.05, choir, 0.45),
+                     (0.0, stab(1.6, [73.4, 77.8, 110], lo=40, hi=2500), 0.6)])
+    save("S_Scare_Clump", reverb(x, 1.5, 0.3), 0.95)
+
+
+SCARES_V44 = (s_scare_smiler, s_scare_hound, s_scare_faceling, s_scare_skinstealer, s_scare_moth, s_scare_wretch,
+              s_scare_partygoer, s_scare_clump)
+
+
 if __name__ == "__main__":
     print("Synthese des sons dans", os.path.abspath(OUT))
     s_hum()
@@ -1009,10 +1159,13 @@ if __name__ == "__main__":
     s_eat()
     s_inventory()
     s_objective()
-    s_bacteria()
+    # s_bacteria() : remplace par l'enregistrement fourni (v4.4)
+    LOOPS.update({"S_Bacteria", "S_LightBuzz"})
     for fn in WATER_V3:
         fn()
     for fn in MENU_V4:
+        fn()
+    for fn in SCARES_V44:
         fn()
     with open(os.path.join(OUT, "loops.txt"), "w") as f:
         f.write("\n".join(sorted(LOOPS)) + "\n")

@@ -820,6 +820,10 @@ void ABRHUD::DrawHUD()
 		DrawQuickBar(C);
 		DrawObjectiveTracker(W);
 	}
+	if (PC && PC->IsDevMode() && !bInv)
+	{
+		DrawDevOverlay(PC, C, W);
+	}
 	if (C && C->IsReadingNote() && !bInv)
 	{
 		DrawNote(C);
@@ -827,6 +831,10 @@ void ABRHUD::DrawHUD()
 	if (C && C->IsDead())
 	{
 		DrawDeath(C);
+	}
+	if (C && C->GetScareKind() >= 0)
+	{
+		DrawJumpscare(C);
 	}
 	if (bInv)
 	{
@@ -1100,7 +1108,7 @@ void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
 	const float U = Ui();
 	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	TextF(TEXT("v4.3   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
+	TextF(TEXT("v4.4   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
 		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
 	// Message de connexion / d'erreur reseau : pastille en haut au centre
 	if (!PC->GetMenuStatus().IsEmpty())
@@ -2298,6 +2306,256 @@ void ABRHUD::DrawRecording(ABRCharacter* C, ABRWorld* W)
 		{
 			Scanlines(0.05f);
 		}
+	}
+}
+
+void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W)
+{
+	const float U = Ui();
+	const FLinearColor Cyan(0.55f, 0.88f, 1.f, 0.95f);
+	// Pastille permanente, en haut au centre : niveau courant et etat des aides
+	FString Tag = W ? FString::Printf(TEXT("DEV  \u00b7  NIVEAU %d"), W->GetLevelNumber()) : FString(TEXT("DEV"));
+	if (C && C->IsDevFlying())
+	{
+		Tag += TEXT("  \u00b7  VOL");
+	}
+	if (C && C->bGodMode)
+	{
+		Tag += TEXT("  \u00b7  INVINCIBLE");
+	}
+	if (PC->IsDevSession())
+	{
+		Tag += TEXT("  \u00b7  hors partie");
+	}
+	const FVector2f TS = TextSize(Tag, 10.f, EUiWeight::Bold);
+	const float PW = TS.X + 28.f * U;
+	const float PH = 26.f * U;
+	const float PX = (Canvas->ClipX - PW) * 0.5f;
+	const float PY = 12.f * U;
+	RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(0.02f, 0.06f, 0.09f, 0.7f));
+	RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(0.55f, 0.88f, 1.f, 0.45f), true);
+	TextF(Tag, PX + 14.f * U, PY + (PH - TS.Y) * 0.5f, Cyan, 10.f, EUiWeight::Bold);
+
+	// Aide des raccourcis : a l'arrivee dans un niveau et apres chaque raccourci
+	const float T = PC->GetDevHelpTime();
+	if (T <= 0.f)
+	{
+		return;
+	}
+	const float A = FMath::Clamp(T / 0.6f, 0.f, 1.f);
+	static const TCHAR* const Keys[][2] = {
+		{ TEXT("PAGE PR\u00c9C. / SUIV."), TEXT("niveau suivant / pr\u00e9c\u00e9dent") },
+		{ TEXT("D\u00c9BUT"), TEXT("nouvelle disposition du niveau") },
+		{ TEXT("F6"), TEXT("vol libre \u00e0 travers les murs") },
+		{ TEXT("F7"), TEXT("invincible") },
+		{ TEXT("F10"), TEXT("jumpscare suivant (chaque entit\u00e9)") },
+		{ TEXT("FIN"), TEXT("objectifs remplis") },
+		{ TEXT("INSER"), TEXT("coupure de courant") },
+	};
+	const int32 N = UE_ARRAY_COUNT(Keys);
+	const float RowH = 24.f * U;
+	const float BW = 360.f * U;
+	const float BH = 44.f * U + N * RowH;
+	const float BX = 40.f * U;
+	const float BY = Canvas->ClipY * 0.5f - BH * 0.5f;
+	RoundRect(BX, BY, BW, BH, 12.f * U, FLinearColor(0.01f, 0.03f, 0.05f, 0.72f * A));
+	RoundRect(BX, BY, BW, BH, 12.f * U, FLinearColor(0.55f, 0.88f, 1.f, 0.35f * A), true);
+	TextF(TEXT("MODE D\u00c9VELOPPEUR"), BX + 16.f * U, BY + 12.f * U, WithAlpha(Cyan, A), 10.f, EUiWeight::Black);
+	for (int32 i = 0; i < N; ++i)
+	{
+		const float Y = BY + 40.f * U + i * RowH;
+		TextF(Keys[i][0], BX + 16.f * U, Y, WithAlpha(Yellow, A), 9.5f, EUiWeight::Bold);
+		TextF(Keys[i][1], BX + 150.f * U, Y, FLinearColor(0.92f, 0.9f, 0.84f, 0.92f * A), 9.5f, EUiWeight::Regular);
+	}
+}
+
+void ABRHUD::DrawJumpscare(ABRCharacter* C)
+{
+	const int32 K = C->GetScareKind();
+	const float T = C->GetScareTime();
+	const float Dur = FMath::Max(0.1f, C->GetScareDuration());
+	const float Impact = C->GetScareImpact();
+	const bool bHit = T >= Impact;
+	const float Since = FMath::Max(0.f, T - Impact);
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float U = Ui();
+	const float Out = FMath::Clamp((Dur - T) / 0.25f, 0.f, 1.f); // fondu de sortie
+	auto Vignette = [&](const FLinearColor& Col, float Frac)
+	{
+		Gradient(0.f, 0.f, W * Frac, H, Col, 0);
+		Gradient(W * (1.f - Frac), 0.f, W * Frac, H, Col, 1);
+		Gradient(0.f, 0.f, W, H * Frac, Col, 2);
+		Gradient(0.f, H * (1.f - Frac), W, H * Frac, Col, 3);
+	};
+	// Une image noire a l'impact (sauf le Smiler, qui finit sur un eclair blanc)
+	if (K != 0 && bHit && Since < 0.05f)
+	{
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.9f), 0.f, 0.f, W, H);
+	}
+	switch (static_cast<EBREntityKind>(K))
+	{
+	case EBREntityKind::Smiler:
+	{
+		// Le noir se referme autour du sourire, puis un eclair blanc
+		Vignette(FLinearColor(0.f, 0.f, 0.f, 0.9f * Out), 0.38f);
+		const float Flash = FMath::Clamp((T - (Dur - 0.35f)) / 0.12f, 0.f, 1.f) * FMath::Clamp((Dur - T) / 0.23f, 0.f, 1.f);
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, Flash), 0.f, 0.f, W, H);
+		break;
+	}
+	case EBREntityKind::Hound:
+	{
+		// Trois griffures qui dechirent l'ecran, l'une apres l'autre, et un voile rouge
+		if (bHit)
+		{
+			DrawRect(FLinearColor(0.6f, 0.f, 0.f, 0.35f * FMath::Exp(-Since * 3.f)), 0.f, 0.f, W, H);
+			for (int32 i = 0; i < 3; ++i)
+			{
+				const float Appear = Since - i * 0.06f;
+				if (Appear <= 0.f)
+				{
+					continue;
+				}
+				const float Len = FMath::Min(1.f, Appear / 0.08f);
+				const float A = FMath::Clamp(1.4f - Since * 0.9f, 0.f, 1.f) * Out;
+				const float X0 = W * (0.66f + i * 0.07f);
+				const float Y0 = H * (0.1f + i * 0.04f);
+				const float X1 = X0 - W * 0.42f * Len;
+				const float Y1 = Y0 + H * 0.78f * Len;
+				DrawLine(X0, Y0, X1, Y1, FLinearColor(0.15f, 0.f, 0.f, A), 26.f * U);
+				DrawLine(X0, Y0, X1, Y1, FLinearColor(0.75f, 0.05f, 0.03f, A), 12.f * U);
+				DrawLine(X0, Y0, X1, Y1, FLinearColor(1.f, 0.6f, 0.5f, 0.6f * A), 3.f * U);
+			}
+		}
+		break;
+	}
+	case EBREntityKind::Faceling:
+	{
+		// La neige d'une television qui hurle
+		if (bHit && Since < 0.7f)
+		{
+			const float A = (Since < 0.5f ? 0.85f : 0.85f * (0.7f - Since) / 0.2f);
+			const float Cell = FMath::Max(4.f, 7.f * U);
+			for (float Y = 0.f; Y < H; Y += Cell)
+			{
+				for (float X = 0.f; X < W; X += Cell * 3.f)
+				{
+					const float G = FMath::FRand();
+					DrawRect(FLinearColor(G, G, G, A), X, Y, Cell * 3.f, Cell);
+				}
+			}
+			const float Bar = FMath::Fmod(T * 1.7f, 1.f) * H;
+			DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.25f * A), 0.f, Bar, W, 40.f * U);
+		}
+		else
+		{
+			Vignette(FLinearColor(0.f, 0.f, 0.f, 0.6f * FMath::Min(1.f, T / Impact) * Out), 0.3f);
+		}
+		break;
+	}
+	case EBREntityKind::SkinStealer:
+	{
+		// La scene vire a la chair : vignette rouge qui bat
+		const float Pulse = 0.55f + 0.45f * FMath::Sin(T * 14.f);
+		Vignette(FLinearColor(0.45f, 0.02f, 0.01f, 0.85f * Pulse * Out), 0.32f);
+		break;
+	}
+	case EBREntityKind::Deathmoth:
+	{
+		// Un essaim de papillons de nuit traverse l'ecran
+		for (int32 i = 0; i < 46; ++i)
+		{
+			const float Seed = static_cast<float>(i);
+			const float Start = FMath::Frac(Seed * 0.6180339f) * 0.6f;
+			const float P = (T - Start) / (0.6f + FMath::Frac(Seed * 0.37f) * 0.6f);
+			if (P <= 0.f || P >= 1.f)
+			{
+				continue;
+			}
+			const bool bFromLeft = (i % 2) == 0;
+			const float X = bFromLeft ? -0.1f * W + P * 1.2f * W : 1.1f * W - P * 1.2f * W;
+			const float Y = H * (0.1f + FMath::Frac(Seed * 0.731f) * 0.8f) + FMath::Sin(P * 9.f + Seed) * 60.f * U;
+			const float S = (18.f + FMath::Frac(Seed * 0.913f) * 46.f) * U;
+			const float Flap = 0.25f + 0.75f * FMath::Abs(FMath::Sin(T * 38.f + Seed));
+			const FLinearColor MothC(0.08f, 0.06f, 0.04f, 0.92f * Out);
+			RoundRect(X - S * Flap, Y - S * 0.35f, S * Flap, S * 0.7f, S * 0.3f, MothC);
+			RoundRect(X, Y - S * 0.35f, S * Flap, S * 0.7f, S * 0.3f, MothC);
+			DrawRect(FLinearColor(0.03f, 0.02f, 0.01f, 0.95f * Out), X - S * 0.08f, Y - S * 0.4f, S * 0.16f, S * 0.8f);
+		}
+		Vignette(FLinearColor(0.12f, 0.08f, 0.03f, 0.6f * Out), 0.25f);
+		break;
+	}
+	case EBREntityKind::Wretch:
+	{
+		// Images noires entre chaque a-coup
+		const float Phase = (T - 0.f) / 0.75f * 5.f;
+		if (!bHit && FMath::Frac(Phase) < 0.16f)
+		{
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 1.f), 0.f, 0.f, W, H);
+		}
+		Vignette(FLinearColor(0.02f, 0.03f, 0.02f, 0.7f * Out), 0.3f);
+		break;
+	}
+	case EBREntityKind::Partygoer:
+	{
+		if (!bHit)
+		{
+			// Le silence : l'image s'assombrit un instant
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f * T / FMath::Max(Impact, 0.01f)), 0.f, 0.f, W, H);
+			break;
+		}
+		// Confettis qui jaillissent du centre et retombent
+		static const FLinearColor Colors[] = { FLinearColor(1.f, 0.2f, 0.25f), FLinearColor(0.2f, 0.6f, 1.f), FLinearColor(1.f, 0.85f, 0.1f),
+			FLinearColor(0.3f, 0.95f, 0.4f), FLinearColor(0.9f, 0.3f, 1.f) };
+		for (int32 i = 0; i < 160; ++i)
+		{
+			const float Seed = static_cast<float>(i);
+			const float Ang = FMath::Frac(Seed * 0.6180339f) * 2.f * PI;
+			const float Speed = (500.f + FMath::Frac(Seed * 0.377f) * 1100.f) * U;
+			const float X = W * 0.5f + FMath::Cos(Ang) * Speed * Since;
+			const float Y = H * 0.45f + FMath::Sin(Ang) * Speed * Since + 900.f * U * Since * Since;
+			const float S = (8.f + FMath::Frac(Seed * 0.913f) * 10.f) * U;
+			const float Flip = FMath::Abs(FMath::Sin(Since * 12.f + Seed));
+			FLinearColor Col = Colors[i % UE_ARRAY_COUNT(Colors)];
+			Col.A = Out;
+			DrawRect(Col, X, Y, S, S * (0.3f + 0.7f * Flip));
+		}
+		const bool bFlicker = FMath::Frac(T * 9.f) < 0.85f;
+		if (bFlicker)
+		{
+			TextF(TEXT("=)"), W * 0.5f + FMath::Sin(T * 40.f) * 6.f * U, H * 0.36f, FLinearColor(1.f, 0.88f, 0.15f, Out), 120.f, EUiWeight::Black,
+				EUiAlign::Center);
+			TextF(TEXT("JOYEUX ANNIVERSAIRE"), W * 0.5f, H * 0.62f, FLinearColor(1.f, 1.f, 1.f, 0.85f * Out), 26.f, EUiWeight::Black, EUiAlign::Center);
+		}
+		break;
+	}
+	case EBREntityKind::Clump:
+	{
+		const float Pulse = 0.5f + 0.5f * FMath::Sin(T * 18.f);
+		Vignette(FLinearColor(0.25f, 0.f, 0.f, (0.6f + 0.35f * Pulse) * Out), 0.36f);
+		break;
+	}
+	case EBREntityKind::Bacteria:
+	{
+		// L'image se brouille : bandes noires et blanches qui sautent
+		const float Amount = FMath::Clamp(T / Dur * 1.4f, 0.f, 1.f);
+		const int32 Bars = 4 + static_cast<int32>(Amount * 14.f);
+		for (int32 i = 0; i < Bars; ++i)
+		{
+			const float Y = FMath::FRand() * H;
+			const float BH = (2.f + FMath::FRand() * 26.f) * U;
+			const bool bWhite = FMath::FRand() < 0.35f;
+			DrawRect(bWhite ? FLinearColor(0.9f, 0.9f, 0.95f, 0.5f * Out) : FLinearColor(0.f, 0.f, 0.f, 0.85f * Out), 0.f, Y, W, BH);
+		}
+		Vignette(FLinearColor(0.f, 0.f, 0.f, 0.7f * Out), 0.3f);
+		if (T > Dur - 0.18f)
+		{
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 1.f), 0.f, 0.f, W, H);
+		}
+		break;
+	}
+	default:
+		break;
 	}
 }
 

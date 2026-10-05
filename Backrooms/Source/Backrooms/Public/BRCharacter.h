@@ -19,6 +19,8 @@ class UAudioComponent;
 class UMaterialInstanceDynamic;
 class UBRSaveGame;
 class ABRExit;
+class UPoseableMeshComponent;
+class ABREntity;
 
 UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
@@ -65,6 +67,19 @@ public:
 	void StartClimb(ABRExit* Ladder);
 	void StopClimb();
 	bool IsClimbing() const { return bClimbing; }
+
+	/** v4.4 : jumpscare propre a chaque entite. Source : l'entite qui frappe (son modele se jette sur la camera) ;
+	 *  sans Source (test du mode developpeur), elle apparait devant soi. bLethal : la mort attend la fin */
+	void PlayJumpscare(EBREntityKind Kind, ABREntity* Source, bool bLethal);
+	/** Jumpscare en cours (HUD) : type d'entite (-1 : aucun), temps ecoule, duree, instant ou elle atteint le visage */
+	int32 GetScareKind() const { return ScareKind; }
+	float GetScareTime() const { return ScareTime; }
+	float GetScareDuration() const { return ScareDur; }
+	float GetScareImpact() const { return ScareImpact; }
+
+	/** v4.4, mode developpeur : vol libre a travers les murs (regard pour diriger, Saut pour monter, Course pour accelerer) */
+	void SetDevFly(bool bFly);
+	bool IsDevFlying() const { return bDevFly; }
 
 	// ---- Etat ----
 	float Health = 100.f;
@@ -279,10 +294,32 @@ private:
 	/** Echelle en cours d'ascension */
 	TWeakObjectPtr<ABRExit> ClimbLadder;
 	bool bClimbing = false;
+	bool bDevFly = false;
 	float ClimbInput = 0.f;
 	float ClimbStepAcc = 0.f;
 	/** Dechirure de la realite en haut du conduit (aberration chromatique), 0..1 */
 	float ClimbGlitch = 0.f;
+
+	// ---- v4.4 : jumpscare en cours (BRJumpscare.cpp) ----
+	void UpdateJumpscare(float Dt);
+	void EndJumpscare();
+	TWeakObjectPtr<ABREntity> ScareEntity;
+	TWeakObjectPtr<AActor> ScareKiller;
+	FString ScareKillerName;
+	int32 ScareKind = -1;
+	float ScareTime = 0.f;
+	float ScareDur = 0.f;
+	float ScareImpact = 0.f;
+	float ScareCooldown = 0.f;
+	bool bScareLethal = false;
+	bool bScareSpawned = false;
+	FVector ScareStart = FVector::ZeroVector;
+	FRotator ScareView = FRotator::ZeroRotator;
+	float ScareFOV = 0.f;
+	float ScareFringe = 0.f;
+	float ScareDark = 0.f;
+	float ScareFlash = 0.f;
+	FLinearColor ScareTint = FLinearColor::White;
 	/** Pion vu de l'exterieur (autre joueur) : corps visible, pas de camera ni d'interface */
 	bool bRemoteView = false;
 	float RemoteStepTimer = 0.f;
@@ -326,6 +363,15 @@ private:
 	float WaterDepth = 0.f;
 	float WaterZ = -1.0e6f;
 	float BodyAnim = 0.f;
+	/** v4.4 : combinaison a squelette (SK_Hazmat), animee os par os ; nullptr : pieces rigides (repli) */
+	UPROPERTY()
+	TObjectPtr<UPoseableMeshComponent> BodySkin;
+	/** Rotations de repos (espace du composant) des os animes */
+	TMap<FName, FQuat> SkinRest;
+	float ClimbBlend = 0.f;
+	/** Applique la pose (memes angles que les pieces rigides) aux os de la combinaison */
+	void PoseSkin(const FRotator* Thigh, const FRotator* Shin, const FRotator* Upper, const FRotator* Lower, const FRotator& Torso,
+		const FRotator& Head);
 	float CrouchBlend = 0.f;
 	float SwimBlend = 0.f;
 	float StrokeTimer = 0.f;

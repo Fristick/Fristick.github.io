@@ -28,6 +28,8 @@ public:
 
 	/** /Game/Backrooms/Meshes/<Name> (nullptr si absent) */
 	UStaticMesh* Mesh(FName Name);
+	/** v4.4 : maillage a squelette (combinaison du joueur SK_Hazmat), nullptr s'il n'est pas importe */
+	class USkeletalMesh* SkeletalMesh(FName Name);
 	UStaticMesh* Cube();
 	UStaticMesh* Sphere();
 	UStaticMesh* Cylinder();
