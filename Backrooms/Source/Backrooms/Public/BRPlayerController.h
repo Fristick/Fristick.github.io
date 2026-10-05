@@ -24,6 +24,8 @@ UCLASS()
 class BACKROOMS_API ABRPlayerController : public APlayerController
 {
 	GENERATED_BODY()
+	/** v4.7 : le test automatique choisit la partie active et force les ecritures */
+	friend class ABRAutoTest;
 
 public:
 	ABRPlayerController();

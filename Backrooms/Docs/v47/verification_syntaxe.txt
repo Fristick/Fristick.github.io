@@ -1,0 +1,26 @@
+Verification syntaxique C++ hors moteur (clang++ -std=c++20 -fsyntax-only, en-tetes Unreal simplifies du conteneur)
+Ce n'est pas une compilation Unreal : UHT, MSVC et l'API exacte d'Unreal 5.8 restent a verifier (Docs/RAPPORT_v4.7.md, section 4).
+Date : 2026-10-05
+
+BRAssets.cpp : aucune erreur, aucun avertissement
+BRAutoTest.cpp : aucune erreur, aucun avertissement
+BRAutoTestV47.cpp : aucune erreur, aucun avertissement
+BRCharacter.cpp : aucune erreur, aucun avertissement
+BRChunk.cpp : aucune erreur, aucun avertissement
+BRConfig.cpp : 7 ligne(s) d'erreur (lacunes des en-tetes simplifies ; fichier inchange en v4.7)
+BREntity.cpp : aucune erreur, aucun avertissement
+BRGameMode.cpp : 7 ligne(s) d'erreur (lacunes des en-tetes simplifies ; fichier inchange en v4.7)
+BRHUD.cpp : aucune erreur, aucun avertissement
+BRInteractables.cpp : aucune erreur, aucun avertissement
+BRItems.cpp : aucune erreur, aucun avertissement
+BRJumpscare.cpp : aucune erreur, aucun avertissement
+BRKeys.cpp : aucune erreur, aucun avertissement
+BRLevels.cpp : aucune erreur, aucun avertissement
+BRMaterialBuilder.cpp : aucune erreur, aucun avertissement
+BRPhenomena.cpp : aucune erreur, aucun avertissement
+BRPlayerController.cpp : aucune erreur, aucun avertissement
+BRRig.cpp : aucune erreur, aucun avertissement
+BRSave.cpp : aucune erreur, aucun avertissement
+BRWaterSim.cpp : 12 ligne(s) d'erreur (lacunes des en-tetes simplifies ; fichier inchange en v4.7)
+BRWorld.cpp : aucune erreur, aucun avertissement
+Backrooms.cpp : aucune erreur, aucun avertissement

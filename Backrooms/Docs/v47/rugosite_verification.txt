@@ -1,0 +1,10 @@
+OK      T_L0_Wallpaper_R.png  ecart max 0/255
+OK      T_L0_Carpet_R.png  ecart max 0/255
+OK      T_L0_Ceiling_R.png  ecart max 0/255
+OK      T_ConcreteFloor_R.png  ecart max 0/255
+OK      T_Concrete_R.png  ecart max 0/255
+OK      T_MetalPanel_R.png  ecart max 0/255
+OK      T_PoolTile37_R.png  ecart max 0/255
+OK      T_Plaster_R.png  ecart max 0/255
+OK      T_Wretch_R.png  ecart max 0/255
+OK      T_Clump_R.png  ecart max 0/255

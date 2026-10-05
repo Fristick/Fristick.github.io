@@ -678,7 +678,8 @@ void UBRAssets::ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, 
 	// Le type d'echantillonneur est fige a la compilation du materiau parent : la carte n'est branchee que si sa valeur
 	// par defaut est lineaire, comme la carte (sinon le rendu serait faux sans message clair)
 	UTexture* Default = nullptr;
-	const bool bParam = MID->GetTextureParameterValue(FMaterialParameterInfo(TEXT("RoughTex")), Default);
+	const FHashedMaterialParameterInfo Info{ FName(TEXT("RoughTex")) };
+	const bool bParam = MID->GetTextureParameterValue(Info, Default);
 	const bool bUse = Map && !Map->SRGB && bParam && Default && !Default->SRGB && Detail > 0.f;
 	if (bUse)
 	{

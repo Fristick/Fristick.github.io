@@ -1,0 +1,16 @@
+Reaction 0.25 s. Distance de depart : AttackRange + 40 (debut de preparation au plus loin) et AttackRange.
+Colonnes : proie arretee qui se met a courir au signal (loin = a AttackRange + 40, pres = a AttackRange),
+proie deja en fuite au sprint quand la preparation commence, et proie qui se cache derriere un obstacle.
+Entite          prep.  sprint loin  sprint pres  marche loin  deja en fuite  cachette
+Smiler          0.40s      esquive       touche       touche        esquive   esquive
+Hound           0.30s       touche       touche       touche        esquive   esquive
+Faceling        0.50s      esquive      esquive      esquive        esquive   esquive
+Skin-Stealer    0.30s       touche       touche       touche        esquive   esquive
+Deathmoth       0.45s      esquive       touche       touche        esquive   esquive
+Wretch          0.65s      esquive      esquive      esquive        esquive   esquive
+Partygoer       0.45s      esquive       touche       touche        esquive   esquive
+Clump           0.60s      esquive      esquive      esquive        esquive   esquive
+Bacteria        0.32s       touche       touche       touche        esquive   esquive
+
+Esquive possible par la course : Smiler, Hound, Faceling, Skin-Stealer, Deathmoth, Wretch, Partygoer, Clump, Bacteria
+Seulement en se mettant a couvert (ligne de vue coupee pendant la preparation) : aucune

@@ -87,6 +87,14 @@ private:
 	void AddEntityShot(int32 Level, EBREntityKind Kind);
 	/** v4.6 : scenario de la salle de fosses */
 	void AddPitSteps();
+	/** v4.7 : non-regression (mort et reanimation, sauvegardes et reprise, attaque en trois temps, streaming, graines) */
+	void AddRegressionSteps();
+	/** v4.7 : charge un niveau avec une graine choisie (meme calcul que -BRSeed) et attend qu'il soit pret */
+	void AddSeedLoad(int32 Level, uint32 UserSeed, const FString& Title);
+	/** Lignes du journal deja recopiees (debut du rapport d'une scene) */
+	int32 LogLineCount() const;
+	/** v4.7 : multijoueur : mort d'un coequipier (blessure), reanimation par l'hote, etats sur les deux machines */
+	void AddNetDeathSteps(bool bClient);
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */
 	void StartMeasure();
 	void EndMeasure(FLevelReport& R);
@@ -104,6 +112,25 @@ private:
 	void CollectStats(FLevelReport& R) const;
 	void WriteReport();
 	void Finish();
+
+	// v4.7 : etat des etapes de non-regression
+	uint64 TestPickupId = 0;
+	uint32 TestSeed = 0;
+	int32 TestVHS = 0;
+	FVector TestSpot = FVector::ZeroVector;
+	FVector TestStart = FVector::ZeroVector;
+	float TestHealth = 100.f;
+	int32 TestHits = 0;
+	int32 TestMisses = 0;
+	int32 TestWindups = 0;
+	TWeakObjectPtr<ABREntity> TestEntity;
+	bool bSprintStarted = false;
+	float SprintT0 = 0.f;
+	int32 SprintHoles = 0;
+	int32 SprintFrames = 0;
+	int32 SprintMaxPreparing = 0;
+	/** v4.7 : test reseau : coequipier mis a terre, temps de la demande */
+	TWeakObjectPtr<ABRCharacter> NetMate;
 
 	TArray<FStep> Plan;
 	int32 StepIndex = 0;

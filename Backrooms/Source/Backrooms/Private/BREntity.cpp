@@ -2623,7 +2623,7 @@ void ABREntity::Animate(float Dt)
 		// les yeux et les dents ; de loin, il reste deux points et un trait dans le noir
 		const APawn* Viewer = UGameplayStatics::GetPlayerPawn(this, 0);
 		const float ViewDist = Viewer ? static_cast<float>(FVector::Dist(Viewer->GetActorLocation(), GetActorLocation())) : 1000.f;
-		const float Exposure = FMath::GetMappedRangeValueClamped(FVector2D(120.f, 650.f), FVector2D(0.5f, 1.f), ViewDist);
+		const float Exposure = static_cast<float>(FMath::GetMappedRangeValueClamped(FVector2D(120.0, 650.0), FVector2D(0.5, 1.0), static_cast<double>(ViewDist)));
 		const float G = bBlink ? 0.f : FMath::Min((0.85f + 0.15f * FMath::Sin(Life * 13.f)) * Rage, 1.8f) * Exposure;
 		// v4.5 : chaque surface garde son intensite (coeur des yeux, dents, bords et racines plus faibles) :
 		// le visage a du relief au lieu d'un aplat blanc uniforme

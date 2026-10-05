@@ -7,6 +7,59 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.7** (finition et fiabilité) :
+
+- **Où lire** : état des lieux dans [`Docs/AUDIT_v4.7.md`](Docs/AUDIT_v4.7.md) ; rapport, contrôles et validations
+  restantes dans [`Docs/RAPPORT_v4.7.md`](Docs/RAPPORT_v4.7.md).
+
+> **Toujours rien de compilé ni de lancé dans Unreal** (conteneur sans GPU ni moteur).
+>
+> Les contrôles faits ici :
+>
+> - syntaxe C++ hors moteur ;
+> - modèles Python ;
+> - génération rejouée sur 300 graines.
+>
+> Ce ne sont pas des validations du jeu. Le rapport donne chaque commande à lancer, et aucun chiffre d'images par
+> seconde ni aucune capture n'y est inventé.
+
+- **Mort et coopération** :
+  - cause explicite : blessure, noyade, chute, folie ;
+  - une mort dans un bassin des Poolrooms n'est plus annoncée comme une chute dans une fosse, et peut être relevée ;
+  - état tenu par le serveur et répliqué à tous ;
+  - réanimation vérifiée par le serveur ;
+  - délai selon la cause ;
+  - commandes de test et changements de niveau contrôlés par le serveur, désactivés en Shipping.
+- **« Reprendre » reprend vraiment** :
+  - même disposition, objectifs, objets déjà ramassés, dernier point sûr ;
+  - fermer le jeu à terre n'annule plus la mort, et une mort donne toujours une nouvelle graine ;
+  - anciennes parties migrées, copie de secours, fichier illisible mis de côté avec un message ;
+  - écritures sur un thread de fond, dans l'ordre.
+- **Attaques en trois temps** : préparation lisible (geste et cri), fenêtre d'impact (un seul coup, si la proie est à
+  portée et visible), récupération. On peut esquiver en s'éloignant ou en se mettant à couvert.
+- **Mouvements des entités** :
+  - démarches distinctes : Bacteria saccadée, Hound au galop, Wretch qui trébuche, Skin-Stealer qui accélère d'un
+    coup, Clump qui avance par appuis ;
+  - chaque pied se pose sur le sol réel (genoux pliés sur un trottoir ou une marche) ;
+  - pas audibles et localisables.
+- **Matières** :
+  - cartes de rugosité pour le papier peint, la moquette, le plafond, le béton, le métal, le carrelage, le plâtre, et
+    les peaux du Wretch et du Clump ;
+  - murs sans répétition visible ;
+  - peintures du parking satinées ;
+  - fond des fosses de nouveau noir, même sans brouillard volumétrique.
+- **Fluidité** :
+  - les chunks se construisent par étapes (collisions d'abord), dans un budget par image ;
+  - le sol sous les joueurs est toujours terminé à temps.
+- **Rythme** : calme, malaise, détection, poursuite, puis répit garanti (ni entité, ni phénomène, ni coupure).
+- **Son** : sons étouffés derrière les murs, réverbération propre à chaque lieu ; les sorties restent nettes.
+- **Jumpscares selon la situation** : complets pour un coup mortel, une première rencontre ou une attaque hors du champ
+  de vision.
+- **Confort** :
+  - réglages des tremblements de la caméra, des flashs et clignotements, du flou de mouvement ;
+  - aides des premières minutes au clavier ou à la manette.
+- **Tests** : `-BRAutoTestV47`, et `-BRNetLag` / `-BRNetLoss` pour le test réseau.
+
 **Nouveautés de la version 4.6** (fosses du Niveau 0) : état des lieux dans [`Docs/AUDIT_v4.6.md`](Docs/AUDIT_v4.6.md),
 rapport, vérifications et commandes dans [`Docs/RAPPORT_v4.6.md`](Docs/RAPPORT_v4.6.md).
 > **Toujours rien de compilé ni de lancé dans Unreal** (conteneur sans GPU ni moteur). La génération a été rejouée en
@@ -549,6 +602,18 @@ Le monde **continue de tourner** quand l'inventaire est ouvert : comme dans le j
 
 L'onglet **PARAMÈTRES** règle la sensibilité, l'axe Y, le champ de vision, la qualité graphique, le **ray tracing matériel
 (RTX)**, les reflets ray tracés haute qualité, les néons surfaciques, le brouillard volumétrique et le grain.
+
+**v4.7, confort** (les mécaniques ne changent pas) :
+
+- **TREMBLEMENTS DE LA CAMÉRA** : de 0 à 100 %, pour les coups reçus et les jumpscares.
+- **FLASHS ET CLIGNOTEMENTS** : normaux, atténués ou aucun. Cela concerne :
+  - les éclairs des jumpscares ;
+  - l'écran de mort ;
+  - les néons qui clignotent ;
+  - le vacillement des coupures ;
+  - les bandes du noclip.
+- **FLOU DE MOUVEMENT** : désactivé par défaut.
+
 Les réglages et les touches sont sauvegardés dans `Saved/Config/<plateforme>/BackroomsPlayer.ini`
 (section `[/Script/Backrooms.BRKeys]` pour les touches). Ce fichier n'est jamais effacé par Unreal, contrairement à
 `GameUserSettings.ini` où ils se trouvaient avant la v3.5 (ils en sont repris automatiquement).
@@ -918,8 +983,34 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" "/Game/Backrooms/Maps/L_Backrooms?l
 UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTest -ABSLOG=C:\Temp\Client.log
 ```
 
-  L'hôte fait apparaître un Hound devant le client (le client doit le voir), puis emmène le groupe au Niveau 37 (le
-  client doit suivre avec la même graine). Rapports : `Saved/NetTest_Hote/` et `Saved/NetTest_Client/`.
+  Le scénario :
+
+  1. L'hôte fait apparaître un Hound devant le client : le client doit le voir.
+  2. **v4.7** : l'hôte met le client à terre. Les deux machines vérifient la cause et l'état « relevable ».
+  3. L'hôte relève le client.
+  4. L'hôte emmène le groupe au Niveau 37 : le client doit suivre avec la même graine.
+
+  Rapports : `Saved/NetTest_Hote/` et `Saved/NetTest_Client/`.
+
+  **v4.7, réseau dégradé** : ajouter `-BRNetLag=150 -BRNetLoss=5` aux deux lignes (latence en ms, pertes en %).
+
+  **À 4 joueurs** : lancer trois clients.
+- **`-BRAutoTestV47`** (v4.7, avec `-BRAutoTest`) lance seul le scénario de non-régression. Il est aussi inclus dans
+  `-BRAutoTest`. Les sauvegardes du test sont à part (`BR_AutoTest_*`). Il vérifie :
+  - **sauvegardes** :
+    - migration d'une partie v4.6 ;
+    - fichier illisible ;
+    - copie de secours ;
+    - ordre des écritures ;
+    - reprise fidèle : graine, cassette ramassée, point de reprise ;
+    - mort pendant la partie : nouvelle graine ;
+  - **morts** : noyade dans un bassin (cause « noyade », relevable) ; chute dans une fosse (scénario v4.6) ;
+  - **attaque** : esquivée, puis reçue une seule fois dans sa vraie fenêtre ;
+  - **streaming** : sprint de 25 s au Niveau 1, sans aucune image sans sol ;
+  - **graines** : sorties et cassettes atteignables sur 5 graines.
+
+  `-BRChunkBudget=<ms>` règle le budget de construction des chunks. `-BRPitShadows=half|none` mesure le coût des
+  ombres des salles de fosses.
 
 ---
 

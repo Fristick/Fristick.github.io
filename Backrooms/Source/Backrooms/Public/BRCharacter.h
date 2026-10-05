@@ -56,6 +56,8 @@ UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
 {
 	GENERATED_BODY()
+	/** v4.7 : le test automatique regle le souffle (noyade) et lit l'etat interne */
+	friend class ABRAutoTest;
 
 public:
 	ABRCharacter();

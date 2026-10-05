@@ -1,0 +1,9 @@
+Point vise           distance   voile   fond sans PitShade (sRGB)   avec PitShade (sRGB)
+paroi a -1 m            3.7 m    2.9 %   0.012 ( 29/255)              0.011 ( 27/255)
+paroi a -3 m            5.6 m    4.4 %   0.016 ( 34/255)              0.006 ( 19/255)
+paroi a -6 m            8.5 m    6.5 %   0.023 ( 41/255)              0.001 (  4/255)
+fond a -14 m           16.2 m   12.2 %   0.038 ( 55/255)              0.002 (  5/255)
+fond, de loin          18.1 m   13.5 %   0.042 ( 58/255)              0.002 (  6/255)
+
+Lecture : sans le post-traitement, le fond d'un puits de 14 m apparait gris-jaune (le brouillard y ajoute sa couleur) ;
+avec, il redevient noir, alors que le haut des parois (moins de 1 m sous le sol) garde sa lumiere.

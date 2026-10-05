@@ -155,9 +155,29 @@ namespace BRSaves
 		}
 	}
 
+	namespace
+	{
+		FString& Prefix()
+		{
+			static FString Value = TEXT("BR_Partie_");
+			return Value;
+		}
+	}
+
+	void SetTestPrefix(const FString& InPrefix)
+	{
+		Flush();
+		Prefix() = InPrefix.IsEmpty() ? FString(TEXT("BR_Partie_")) : InPrefix;
+	}
+
+	FString FilePath(const FString& SlotFileName)
+	{
+		return PathOf(SlotFileName);
+	}
+
 	FString SlotName(int32 Slot)
 	{
-		return FString::Printf(TEXT("BR_Partie_%d"), Slot + 1);
+		return FString::Printf(TEXT("%s%d"), *Prefix(), Slot + 1);
 	}
 
 	FString BackupSlotName(int32 Slot)

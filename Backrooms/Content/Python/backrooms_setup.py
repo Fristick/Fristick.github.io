@@ -784,7 +784,9 @@ def build_pit_shade_material():
     sous le sol s'assombrissent progressivement avec la profondeur ; le haut des parois reste visible."""
     m = new_material("M_BR_PitShade")
     safe_set(m, "material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
-    safe_set(m, "blendable_location", unreal.BlendableLocation.BL_SCENE_COLOR_BEFORE_DOF)
+    location = getattr(unreal.BlendableLocation, "BL_SCENE_COLOR_BEFORE_DOF", None)
+    if location is not None:
+        safe_set(m, "blendable_location", location)
     safe_set(m, "shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     g = Graph(m)
     P = unreal.MaterialProperty

@@ -184,6 +184,10 @@ namespace BRSaves
 	/** v4.7 : messages pour le joueur depuis le dernier appel (sauvegarde restauree, fichier illisible mis de cote) */
 	BACKROOMS_API TArray<FString> TakeLoadMessages();
 	BACKROOMS_API void Delete(int32 Slot);
+	/** v4.7 : tests automatiques : prefixe des emplacements (les parties du joueur ne sont jamais touchees) et chemin
+	 *  complet d'un fichier de sauvegarde (Saved/SaveGames/<nom>.sav) */
+	BACKROOMS_API void SetTestPrefix(const FString& Prefix);
+	BACKROOMS_API FString FilePath(const FString& SlotFileName);
 	/** Premier emplacement libre (INDEX_NONE si tout est pris) */
 	BACKROOMS_API int32 FreeSlot();
 	/** Partie en cours : survit au rechargement de la carte (heberger une partie, revenir au menu). INDEX_NONE : aucune */

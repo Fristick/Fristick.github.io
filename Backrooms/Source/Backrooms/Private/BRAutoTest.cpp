@@ -145,6 +145,18 @@ void ABRAutoTest::BeginPlay()
 			Levels.Add(D.Number);
 		}
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV47")))
+	{
+		// v4.7 : les verifications de non-regression seules
+		AddRegressionSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Non-regression v4.7 : %d etapes. Rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestPits")))
 	{
 		// v4.6 : la salle de fosses seule
@@ -174,6 +186,11 @@ void ABRAutoTest::EndPlay(const EEndPlayReason::Type Reason)
 		GLog->RemoveOutputDevice(Capture.Get());
 	}
 	Super::EndPlay(Reason);
+}
+
+int32 ABRAutoTest::LogLineCount() const
+{
+	return Capture.IsValid() ? Capture->Num() : 0;
 }
 
 ABRWorld* ABRAutoTest::GetBRWorld() const
@@ -274,6 +291,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 	{
 		AddPitSteps(); // v4.6
 	}
+	AddRegressionSteps(); // v4.7
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
 	AddLoad(4, 8.f, TEXT("Galerie des entites"));
@@ -455,6 +473,24 @@ void ABRAutoTest::BuildNetPlan()
 		R.Title = bClient ? TEXT("Multijoueur (client)") : TEXT("Multijoueur (hote)");
 		Reports.Add(R);
 	}
+	// v4.7 : conditions reseau degradees, sur chaque machine : -BRNetLag=150 (ms) -BRNetLoss=5 (% de paquets perdus)
+	int32 Lag = 0;
+	int32 Loss = 0;
+	FParse::Value(FCommandLine::Get(), TEXT("BRNetLag="), Lag);
+	FParse::Value(FCommandLine::Get(), TEXT("BRNetLoss="), Loss);
+	if (Lag > 0 || Loss > 0)
+	{
+		Add(TEXT("Reseau degrade"), 0.f, [this, Lag, Loss]()
+		{
+			if (GEngine && GetWorld())
+			{
+				GEngine->Exec(GetWorld(), *FString::Printf(TEXT("Net PktLag=%d"), Lag));
+				GEngine->Exec(GetWorld(), *FString::Printf(TEXT("Net PktLoss=%d"), Loss));
+			}
+			Note(FString::Printf(TEXT("reseau simule : latence %d ms, pertes %d %%"), Lag, Loss));
+			return true;
+		});
+	}
 
 	Add(TEXT("Attente de la partie"), 8.f, [this, bClient]()
 	{
@@ -537,6 +573,9 @@ void ABRAutoTest::BuildNetPlan()
 		Shot(TEXT("Net_entite"));
 		return true;
 	});
+
+	// v4.7 : mort et reanimation en reseau (cause, etat tenu par le serveur, reveil vu des deux cotes)
+	AddNetDeathSteps(bClient);
 
 	// L'hote emmene le groupe au Niveau 37 : le client doit suivre avec la meme graine
 	Add(TEXT("Changement de niveau"), 0.f, [this, bClient]()
@@ -1257,8 +1296,11 @@ void ABRAutoTest::AddPitSteps()
 		if (C->IsDead())
 		{
 			WalkTime = 0.f;
-			Note(FString::Printf(TEXT("chute : mort %.1f s apres le premier pas, a Z = %.0f cm, cause : %s"), FPlatformTime::Seconds() - FallStart,
-				C->GetActorLocation().Z, *C->GetKilledBy()), !C->DiedInPit());
+			// v4.7 : cause explicite tenue par le serveur, et personne ne peut relever un joueur au fond d'une fosse
+			const FBRDeathState& DS = C->GetDeathState();
+			const bool bFallOk = C->DiedInPit() && DS.bDead && DS.Cause == static_cast<uint8>(EBRDeathCause::Fall) && !DS.bRevivable;
+			Note(FString::Printf(TEXT("chute : mort %.1f s apres le premier pas, a Z = %.0f cm, cause : %s, etat serveur : %s"), FPlatformTime::Seconds() - FallStart,
+				C->GetActorLocation().Z, *C->GetKilledBy(), bFallOk ? TEXT("chute, non relevable (OK)") : TEXT("INCORRECT")), !bFallOk);
 			return true;
 		}
 		if (StepTime > 7.f)
