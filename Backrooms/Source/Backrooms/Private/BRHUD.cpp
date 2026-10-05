@@ -519,9 +519,10 @@ float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor&
 FVector2f ABRHUD::TextSize(const FString& S, float Size, EUiWeight Weight) const
 {
 	const FSlateFontInfo Font = UiFontInfo(Size, static_cast<int32>(Weight), Ui());
-	if (FEngineFontServices::IsInitialized())
+	// GetFontMeasure() renvoie un TSharedPtr depuis Unreal 5.8
+	const TSharedPtr<FSlateFontMeasure> Measure = FEngineFontServices::IsInitialized() ? FEngineFontServices::Get().GetFontMeasure() : nullptr;
+	if (Measure.IsValid())
 	{
-		const TSharedRef<FSlateFontMeasure> Measure = FEngineFontServices::Get().GetFontMeasure();
 		const float LineH = static_cast<float>(Measure->GetMaxCharacterHeight(Font));
 		if (S.IsEmpty())
 		{

@@ -29,10 +29,10 @@ void ABRHallucination::Init(EBRHallucination InForm, ABRCharacter* InViewer)
 	{
 		// Une silhouette sans visage (modele du Faceling) d'un noir d'encre, un peu trop grande, un peu voutee
 		TMap<FString, FLinearColor> Tints;
-		const FLinearColor Ink(0.004f, 0.004f, 0.005f);
-		Tints.Add(TEXT("Faceling"), Ink);
-		Tints.Add(TEXT("Cloth"), Ink);
-		Tints.Add(TEXT("Skin"), Ink);
+		const FLinearColor InkBlack(0.004f, 0.004f, 0.005f);
+		Tints.Add(TEXT("Faceling"), InkBlack);
+		Tints.Add(TEXT("Cloth"), InkBlack);
+		Tints.Add(TEXT("Skin"), InkBlack);
 		if (BRRig::HasMesh(this, TEXT("SM_FacelingET_Torso")))
 		{
 			BRRig::BuildHumanoid(this, Root, TEXT("SM_FacelingET"), FBRHumanoidSpec::FacelingET(), &Tints, Parts, false);

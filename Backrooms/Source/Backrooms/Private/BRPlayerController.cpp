@@ -2794,7 +2794,7 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetInt64(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
 	Cfg.SetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob);
 	Cfg.SetFloat(SettingsSection, TEXT("CameraShake"), S.CameraShake);
-	Cfg.SetInt(SettingsSection, TEXT("Flashes"), S.Flashes);
+	Cfg.SetInt64(SettingsSection, TEXT("Flashes"), S.Flashes);
 	Cfg.SetBool(SettingsSection, TEXT("MotionBlur"), S.bMotionBlur);
 	BRConfig::Save();
 }
