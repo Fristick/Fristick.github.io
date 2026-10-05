@@ -380,6 +380,8 @@ private:
 	float ScareDur = 0.f;
 	float ScareImpact = 0.f;
 	float ScareCooldown = 0.f;
+	/** v4.7 : especes deja vues en jumpscare dans ce niveau (la premiere rencontre surprend, les suivantes moins) */
+	TSet<int32> ScaredKinds;
 	bool bScareLethal = false;
 	bool bScareSpawned = false;
 	FVector ScareStart = FVector::ZeroVector;

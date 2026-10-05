@@ -951,17 +951,30 @@ void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Sourc
 	LastDamageTime = TimeAlive;
 	if (Controller)
 	{
+		// v4.7 : secousse du coup recu, reglable (TREMBLEMENTS DE LA CAMERA)
+		const float Shake = FBRSettings::Get().CameraShake;
 		FRotator R = Controller->GetControlRotation();
-		R.Pitch += FMath::FRandRange(2.f, 5.f);
-		R.Yaw += FMath::FRandRange(-4.f, 4.f);
+		R.Pitch += FMath::FRandRange(2.f, 5.f) * Shake;
+		R.Yaw += FMath::FRandRange(-4.f, 4.f) * Shake;
 		Controller->SetControlRotation(R);
 	}
 	PlaySound2D(TEXT("S_Hurt"), 1.f);
-	// v4.4 : jumpscare de l'entite qui frappe ; un coup mortel attend la fin du jumpscare
+	// v4.4 : jumpscare de l'entite qui frappe ; un coup mortel attend la fin du jumpscare.
+	// v4.7 : selon la situation : toujours pour un coup mortel ; sinon seulement la premiere fois que cette espece
+	// frappe dans le niveau, ou quand elle frappe hors du champ de vision (surprise reelle). Les autres coups gardent la
+	// secousse, le son et la teinte : le jumpscare ne devient pas une routine qui cache le jeu.
 	ABREntity* Attacker = Cast<ABREntity>(Source);
-	if (Attacker && (ScareKind >= 0 || ScareCooldown <= 0.f || Health <= 0.f))
+	if (Attacker)
 	{
-		PlayJumpscare(Attacker->Kind, Attacker, Health <= 0.f);
+		const bool bLethal = Health <= 0.f;
+		const FVector ToAttacker = (Attacker->GetActorLocation() - GetEyeLocation()).GetSafeNormal();
+		const bool bUnseen = FVector::DotProduct(GetViewDirection(), ToAttacker) < 0.35f;
+		const bool bFirst = !ScaredKinds.Contains(static_cast<int32>(Attacker->Kind));
+		if (ScareKind >= 0 || bLethal || (ScareCooldown <= 0.f && (bFirst || bUnseen)))
+		{
+			ScaredKinds.Add(static_cast<int32>(Attacker->Kind));
+			PlayJumpscare(Attacker->Kind, Attacker, bLethal);
+		}
 	}
 	if (Health <= 0.f)
 	{
@@ -1511,6 +1524,7 @@ bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
 
 void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 {
+	ScaredKinds.Reset();
 	StopClimb();
 	ClimbGlitch = 0.f;
 	StepType = Def.Step;
@@ -2350,7 +2364,8 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	}
 
 	S.bOverride_MotionBlurAmount = true;
-	S.MotionBlurAmount = 0.f;
+	// v4.7 : flou de mouvement au choix du joueur (desactive par defaut)
+	S.MotionBlurAmount = Set.bMotionBlur ? 0.35f : 0.f;
 
 	// v4.1 : liquides "RTX" : reflets Lumen plus fins, et reflets de premier plan sur l'eau translucide (Poolrooms)
 	// (traces en ray tracing materiel quand la carte le permet)

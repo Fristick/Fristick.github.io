@@ -495,9 +495,9 @@ USoundAttenuation* UBRAssets::VoiceAttenuation()
 	return VoiceAtt;
 }
 
-USoundAttenuation* UBRAssets::Attenuation(float FalloffDistance)
+USoundAttenuation* UBRAssets::Attenuation(float FalloffDistance, bool bOcclude)
 {
-	const int32 Key = FMath::RoundToInt(FalloffDistance / 100.f);
+	const int32 Key = FMath::RoundToInt(FalloffDistance / 100.f) * 2 + (bOcclude ? 1 : 0);
 	if (TObjectPtr<USoundAttenuation>* Found = AttCache.Find(Key))
 	{
 		return Found->Get();
@@ -509,6 +509,23 @@ USoundAttenuation* UBRAssets::Attenuation(float FalloffDistance)
 	Att->Attenuation.AttenuationShapeExtents = FVector(FMath::Max(50.f, FalloffDistance * 0.08f), 0.f, 0.f);
 	Att->Attenuation.FalloffDistance = FalloffDistance;
 	Att->Attenuation.DistanceAlgorithm = EAttenuationDistanceModel::NaturalSound;
+	// v4.7 : ou est la menace ? Derriere un mur, le son est etouffe et plus faible (il ne vient pas de la ou on le croit) ;
+	// de loin, il perd ses aigus et se noie dans la reverberation du lieu ; de pres, il est sec et net
+	Att->Attenuation.bEnableOcclusion = bOcclude;
+	Att->Attenuation.OcclusionTraceChannel = ECC_Visibility;
+	Att->Attenuation.OcclusionLowPassFilterFrequency = 1100.f;
+	Att->Attenuation.OcclusionVolumeAttenuation = 0.5f;
+	Att->Attenuation.OcclusionInterpolationTime = 0.2f;
+	Att->Attenuation.bAttenuateWithLPF = true;
+	Att->Attenuation.LPFRadiusMin = FalloffDistance * 0.25f;
+	Att->Attenuation.LPFRadiusMax = FalloffDistance;
+	Att->Attenuation.LPFFrequencyAtMin = 20000.f;
+	Att->Attenuation.LPFFrequencyAtMax = 2800.f;
+	Att->Attenuation.bEnableReverbSend = true;
+	Att->Attenuation.ReverbWetLevelMin = 0.25f;
+	Att->Attenuation.ReverbWetLevelMax = 0.9f;
+	Att->Attenuation.ReverbDistanceMin = FalloffDistance * 0.1f;
+	Att->Attenuation.ReverbDistanceMax = FalloffDistance;
 	AttCache.Add(Key, Att);
 	return Att;
 }

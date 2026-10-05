@@ -58,6 +58,9 @@ namespace
 		Row_InvertY,
 		Row_FOV,
 		Row_HeadBob,
+		Row_CameraShake,
+		Row_Flashes,
+		Row_MotionBlur,
 		Row_Volume,
 		Row_Voice,
 		Row_Brightness,
@@ -512,6 +515,24 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	{
 		bPendingNewSave = false;
 		StartNewSave();
+	}
+
+	// v4.7 : manette ou clavier-souris ? (les aides des premieres minutes montrent les bons boutons)
+	if (IsLocalController())
+	{
+		const float Pad = FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_LeftX)) + FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_LeftY))
+			+ FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_RightX)) + FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_RightY));
+		if (Pad > 0.4f || IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom) || IsInputKeyDown(EKeys::Gamepad_FaceButton_Left))
+		{
+			bPadActive = true;
+		}
+		float MouseDX = 0.f;
+		float MouseDY = 0.f;
+		GetInputMouseDelta(MouseDX, MouseDY);
+		if (FMath::Abs(MouseDX) + FMath::Abs(MouseDY) > 1.f)
+		{
+			bPadActive = false;
+		}
 	}
 
 	// Sauvegarde automatique de la partie en cours : a chaque niveau, puis toutes les minutes
@@ -1198,6 +1219,11 @@ bool ABRPlayerController::IsLevelUnlocked(int32 LevelNumber) const
 		return true;
 	}
 	return ActiveSave ? ActiveSave->IsExplored(LevelNumber) : LevelNumber == 0;
+}
+
+bool ABRPlayerController::IsNewPlayer() const
+{
+	return !ActiveSave || ActiveSave->PlayTime < 900.f;
 }
 
 bool ABRPlayerController::IsDevMode() const
@@ -2366,6 +2392,12 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return TEXT("CHAMP DE VISION");
 	case Row_HeadBob:
 		return TEXT("BALANCEMENT DE LA CAM\u00c9RA");
+	case Row_CameraShake:
+		return TEXT("TREMBLEMENTS DE LA CAM\u00c9RA");
+	case Row_Flashes:
+		return TEXT("FLASHS ET CLIGNOTEMENTS");
+	case Row_MotionBlur:
+		return TEXT("FLOU DE MOUVEMENT");
 	case Row_Volume:
 		return TEXT("VOLUME G\u00c9N\u00c9RAL");
 	case Row_Voice:
@@ -2418,6 +2450,12 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return FString::Printf(TEXT("%d\u00b0"), FMath::RoundToInt(S.FOV));
 	case Row_HeadBob:
 		return OnOff(S.bHeadBob);
+	case Row_CameraShake:
+		return S.CameraShake <= 0.f ? FString(TEXT("AUCUN")) : FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.CameraShake * 100.f));
+	case Row_Flashes:
+		return S.Flashes <= 0 ? FString(TEXT("NORMAUX")) : (S.Flashes == 1 ? FString(TEXT("ATT\u00c9NU\u00c9S")) : FString(TEXT("AUCUN")));
+	case Row_MotionBlur:
+		return OnOff(S.bMotionBlur);
 	case Row_Volume:
 		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.MasterVolume * 100.f));
 	case Row_Voice:
@@ -2463,6 +2501,12 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	{
 	case Row_HeadBob:
 		return TEXT("D\u00e9sactivez-le si le mouvement de la cam\u00e9ra pendant la marche vous incommode.");
+	case Row_CameraShake:
+		return TEXT("Secousses de la cam\u00e9ra quand on est frapp\u00e9 et pendant les jumpscares. Les coups et leurs d\u00e9g\u00e2ts ne changent pas.");
+	case Row_Flashes:
+		return TEXT("\u00c9clairs des jumpscares, image de la mort, n\u00e9ons qui clignotent. Att\u00e9nu\u00e9s ou supprim\u00e9s si les lumi\u00e8res vives qui clignotent vous g\u00eanent ; les coupures de courant restent annonc\u00e9es par le son.");
+	case Row_MotionBlur:
+		return TEXT("Flou des mouvements rapides de la cam\u00e9ra. D\u00e9sactiv\u00e9 par d\u00e9faut.");
 	case Row_Volume:
 		return TEXT("Volume de tout le jeu (ambiance, entit\u00e9s, voix des co\u00e9quipiers).");
 	case Row_Voice:
@@ -2525,6 +2569,15 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		break;
 	case Row_HeadBob:
 		S.bHeadBob = !S.bHeadBob;
+		break;
+	case Row_CameraShake:
+		S.CameraShake = FMath::Clamp(FMath::RoundToFloat((S.CameraShake + Dir * 0.25f) * 4.f) / 4.f, 0.f, 1.f);
+		break;
+	case Row_Flashes:
+		S.Flashes = (S.Flashes + Dir + 3) % 3;
+		break;
+	case Row_MotionBlur:
+		S.bMotionBlur = !S.bMotionBlur;
 		break;
 	case Row_Volume:
 		S.MasterVolume = FMath::Clamp(FMath::RoundToFloat((S.MasterVolume + Dir * 0.05f) * 20.f) / 20.f, 0.f, 1.f);
@@ -2632,6 +2685,11 @@ void ABRPlayerController::LoadSettings()
 	Cfg.GetBool(SettingsSection, TEXT("VSync"), S.bVSync);
 	Cfg.GetInt(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
 	Cfg.GetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob);
+	Cfg.GetFloat(SettingsSection, TEXT("CameraShake"), S.CameraShake);
+	Cfg.GetInt(SettingsSection, TEXT("Flashes"), S.Flashes);
+	Cfg.GetBool(SettingsSection, TEXT("MotionBlur"), S.bMotionBlur);
+	S.CameraShake = FMath::Clamp(S.CameraShake, 0.f, 1.f);
+	S.Flashes = FMath::Clamp(S.Flashes, 0, 2);
 	S.MasterVolume = FMath::Clamp(S.MasterVolume, 0.f, 1.f);
 	S.VoiceMode = FMath::Clamp(S.VoiceMode, 0, 2);
 	S.Brightness = FMath::Clamp(S.Brightness, -1.5f, 1.5f);
@@ -2735,6 +2793,9 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetBool(SettingsSection, TEXT("VSync"), S.bVSync);
 	Cfg.SetInt64(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
 	Cfg.SetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob);
+	Cfg.SetFloat(SettingsSection, TEXT("CameraShake"), S.CameraShake);
+	Cfg.SetInt(SettingsSection, TEXT("Flashes"), S.Flashes);
+	Cfg.SetBool(SettingsSection, TEXT("MotionBlur"), S.bMotionBlur);
 	BRConfig::Save();
 }
 

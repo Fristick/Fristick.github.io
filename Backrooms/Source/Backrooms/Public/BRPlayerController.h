@@ -81,6 +81,10 @@ public:
 	void RequestDeleteSave(int32 Slot);
 	/** Le choix de partie et de niveau sert a heberger une partie en ligne (et non a jouer seul) */
 	bool IsHostFlow() const { return bHostFlow; }
+	/** v4.7 : la manette a servi en dernier (les aides affichent ses boutons) */
+	bool IsUsingGamepad() const { return bPadActive; }
+	/** v4.7 : joueur qui debute (moins de 15 minutes de jeu dans la partie, ou sans partie) : aides des premieres minutes */
+	bool IsNewPlayer() const;
 	/** Secondes depuis la derniere sauvegarde automatique (icone a l'ecran) */
 	float GetTimeSinceSave() const { return TimeSinceSave; }
 	/** Appele par le monde a chaque niveau charge : il devient explore dans la partie en cours */
@@ -383,6 +387,8 @@ private:
 	float SafeSpotTimer = 0.f;
 	/** v4.7 : un echec d'ecriture a deja ete signale */
 	bool bSaveFailShown = false;
+	/** v4.7 : derniere entree venue de la manette */
+	bool bPadActive = false;
 
 	float MenuBlur = 0.f;
 	float MenuDrift = 0.f;

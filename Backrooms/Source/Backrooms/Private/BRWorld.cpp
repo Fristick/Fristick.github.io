@@ -27,6 +27,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Sound/ReverbEffect.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -153,6 +154,7 @@ void ABRWorld::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ABRWorld, NetLevel);
+	DOREPLIFETIME(ABRWorld, NetTension);
 	DOREPLIFETIME(ABRWorld, NetBlackout);
 	DOREPLIFETIME(ABRWorld, NetCollected);
 	DOREPLIFETIME(ABRWorld, VHSFound);
@@ -406,6 +408,10 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		++NetLevel.Serial;
 		LoadedSerial = NetLevel.Serial;
 		NetBlackout = 0;
+		NetTension = static_cast<uint8>(ETension::Calm);
+		TensionTime = 0.f;
+		TensionLength = FMath::FRandRange(35.f, 60.f);
+		TensionQuiet = 0.f;
 		NetCollected.Reset();
 		VHSFound = 0;
 		bBlackoutRecorded = false;
@@ -802,6 +808,52 @@ void ABRWorld::ApplyEnvironment()
 			HumAudio->Play();
 		}
 	}
+
+	// v4.7 : reverberation propre au lieu, deduite du sol et de la taille des salles : moquette et faux plafond du
+	// Niveau 0 (courte, etouffee), beton du parking et des couloirs (longue, nette), carrelage et eau des Poolrooms
+	// (tres longue, brillante), dehors (presque rien). Les sons des entites y envoient plus de signal de loin.
+	if (!LevelReverb)
+	{
+		LevelReverb = NewObject<UReverbEffect>(this);
+	}
+	{
+		UReverbEffect* R = LevelReverb;
+		const float Size = FMath::Clamp((D.CellSize / 400.f) * (D.WallHeight / 300.f), 0.6f, 2.f);
+		float Decay = 1.f;
+		float Gain = 0.3f;
+		float GainHF = 0.6f;
+		switch (D.Step)
+		{
+		case EBRStep::Carpet:
+			Decay = 0.7f; Gain = 0.22f; GainHF = 0.35f;
+			break;
+		case EBRStep::Hard:
+			Decay = 1.6f; Gain = 0.34f; GainHF = 0.7f;
+			break;
+		case EBRStep::Water:
+			Decay = 2.9f; Gain = 0.42f; GainHF = 0.85f;
+			break;
+		default:
+			Decay = 0.4f; Gain = 0.12f; GainHF = 0.5f;
+			break;
+		}
+		if (D.bOutdoor)
+		{
+			Decay = 0.35f; Gain = 0.08f;
+		}
+		R->DecayTime = FMath::Clamp(Decay * Size, 0.2f, 6.f);
+		R->Density = D.Step == EBRStep::Carpet ? 0.6f : 0.9f;
+		R->Diffusion = 0.85f;
+		R->Gain = Gain;
+		R->GainHF = GainHF;
+		R->DecayHFRatio = D.Step == EBRStep::Carpet ? 0.45f : 0.8f;
+		R->ReflectionsGain = D.Step == EBRStep::Water ? 0.6f : 0.3f;
+		R->ReflectionsDelay = FMath::Clamp(0.008f * Size, 0.004f, 0.03f);
+		R->LateGain = D.Step == EBRStep::Water ? 1.4f : 1.f;
+		R->LateDelay = FMath::Clamp(0.015f * Size, 0.006f, 0.05f);
+		R->AirAbsorptionGainHF = 0.994f;
+		UGameplayStatics::ActivateReverbEffect(this, R, TEXT("BRLevel"), 1.f, 1.f, 1.f);
+	}
 }
 
 int32 ABRWorld::PlayerSlot(const APlayerState* PS) const
@@ -1125,6 +1177,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 
 	if (TransState == ETrans::None)
 	{
+		UpdateTension(bMenu ? 0.f : Dt);
 		if (HasAuthority())
 		{
 			UpdatePopulation(Dt);
@@ -1138,6 +1191,11 @@ void ABRWorld::Tick(float DeltaSeconds)
 		}
 	}
 	UpdateAudio(Dt);
+
+	if (!bMenu && TransState == ETrans::None)
+	{
+		UpdateFirstMinutes();
+	}
 
 	// Annonce des objectifs au debut d'un niveau qui en exige
 	if (!bObjectivesAnnounced && !bMenu && TransState == ETrans::None && LevelTime > 8.f && Def().bRequireObjectives)
@@ -1459,6 +1517,11 @@ void ABRWorld::UpdatePopulation(float Dt)
 		}
 	}
 	const FVector PL = P->GetActorLocation();
+	// v4.7 : pas de nouvelle rencontre pendant une poursuite ni pendant le repit qui la suit (le compte a rebours attend)
+	if (!AllowsNewEncounter())
+	{
+		return;
+	}
 	SpawnTimer -= Dt;
 	if (SpawnTimer > 0.f)
 	{
@@ -1528,6 +1591,176 @@ void ABRWorld::UpdatePopulation(float Dt)
 	}
 }
 
+void ABRWorld::UpdateFirstMinutes()
+{
+	// v4.7 : les premieres minutes : les commandes, l'inventaire, le camescope, puis comment echapper a une entite,
+	// espacees (le temps de les essayer), pour un joueur qui debute, une seule fois par lancement du jeu
+	static bool bDoneThisSession = false;
+	const ABRPlayerController* PC = LocalPC();
+	if (bDoneThisSession || !PC || !PC->IsNewPlayer() || FirstMinutesStep >= 4)
+	{
+		return;
+	}
+	static const float When[] = { 4.f, 19.f, 34.f, 52.f };
+	if (LevelTime < When[FirstMinutesStep])
+	{
+		return;
+	}
+	const bool bPad = PC->IsUsingGamepad();
+	FString Text;
+	switch (FirstMinutesStep)
+	{
+	case 0:
+		Text = bPad ? FString(TEXT("Stick gauche : se d\u00e9placer  \u00b7  clic du stick : courir  \u00b7  Y : lampe  \u00b7  B : s'accroupir"))
+			: BRKeys::Expand(TEXT("{MoveForward}{MoveLeft}{MoveBackward}{MoveRight} : se d\u00e9placer  \u00b7  {Sprint} : courir  \u00b7  {Flashlight} : lampe  \u00b7  {Crouch} : s'accroupir"));
+		break;
+	case 1:
+		Text = bPad ? FString(TEXT("Bouton Vue : inventaire, objectifs et journal  \u00b7  X : interagir"))
+			: BRKeys::Expand(TEXT("{Inventory} : inventaire, objectifs et journal  \u00b7  {Interact} : interagir"));
+		break;
+	case 2:
+		Text = Def().bRequireObjectives || Def().bBlackouts
+			? (bPad ? FString(TEXT("Le cam\u00e9scope est dans le sac : sortez-le pour filmer. Croix haut : vision nocturne dans le noir."))
+				: BRKeys::Expand(TEXT("Le cam\u00e9scope est dans le sac : sortez-le pour filmer. {NightVision} : vision nocturne dans le noir.")))
+			: FString(TEXT("Les sorties bourdonnent : \u00e9coutez, le son vous guide."));
+		break;
+	default:
+		Text = TEXT("Rep\u00e9r\u00e9 ? Cassez la ligne de vue (portes, virages). Les placards cachent ; les trous dans les murs se prennent accroupi.");
+		bDoneThisSession = true;
+		break;
+	}
+	++FirstMinutesStep;
+	ABRHUD::Notify(this, Text, 7.f, FLinearColor(0.85f, 0.92f, 1.f));
+}
+
+const TCHAR* ABRWorld::TensionName(ETension T)
+{
+	switch (T)
+	{
+	case ETension::Unease:
+		return TEXT("malaise");
+	case ETension::Detection:
+		return TEXT("d\u00e9tection");
+	case ETension::Chase:
+		return TEXT("poursuite");
+	case ETension::Recovery:
+		return TEXT("r\u00e9pit");
+	default:
+		return TEXT("calme");
+	}
+}
+
+bool ABRWorld::AllowsNewEncounter() const
+{
+	// Calme : apres 20 s seulement (on a le temps de decouvrir les lieux) ; malaise : oui ; le reste : non
+	const ETension T = GetTension();
+	return (T == ETension::Calm && TensionTime > 20.f) || T == ETension::Unease;
+}
+
+bool ABRWorld::AllowsPhenomena() const
+{
+	const ETension T = GetTension();
+	return (T == ETension::Calm && TensionTime > 15.f) || T == ETension::Unease;
+}
+
+void ABRWorld::SetTension(ETension NewTension)
+{
+	if (static_cast<uint8>(NewTension) == NetTension)
+	{
+		return;
+	}
+	UE_LOG(LogBackrooms, Log, TEXT("Tension : %s -> %s (apres %.0f s)"), TensionName(GetTension()), TensionName(NewTension), TensionTime);
+	NetTension = static_cast<uint8>(NewTension);
+	SeenTension = NetTension;
+	TensionTime = 0.f;
+	TensionQuiet = 0.f;
+	switch (NewTension)
+	{
+	case ETension::Calm:
+		TensionLength = FMath::FRandRange(35.f, 60.f);
+		break;
+	case ETension::Recovery:
+		// Repit garanti apres une poursuite : ni nouvelle entite, ni phenomene, ni coupure
+		TensionLength = FMath::FRandRange(25.f, 40.f);
+		break;
+	default:
+		break;
+	}
+}
+
+void ABRWorld::UpdateTension(float Dt)
+{
+	TensionTime += Dt;
+	if (!HasAuthority())
+	{
+		if (NetTension != SeenTension)
+		{
+			SeenTension = NetTension;
+			TensionTime = 0.f; // nouvelle phase recue du serveur
+		}
+		return;
+	}
+	// Ce que font les entites : l'une d'elles poursuit quelqu'un, ou en a remarque un (soupcon, traque)
+	bool bChase = false;
+	bool bAware = false;
+	for (const ABREntity* E : Entities)
+	{
+		if (!IsValid(E) || E->IsVanishing())
+		{
+			continue;
+		}
+		bChase = bChase || E->IsHunting();
+		bAware = bAware || E->GetSuspicion() > 0.3f || E->GetChaseIntensity() > 0.05f;
+	}
+	const bool bDark = BlackoutPhase == EBlackout::Dark;
+	switch (GetTension())
+	{
+	case ETension::Chase:
+		TensionQuiet = bChase ? 0.f : TensionQuiet + Dt;
+		if (TensionQuiet > 4.f)
+		{
+			SetTension(ETension::Recovery);
+		}
+		break;
+	case ETension::Recovery:
+		if (bChase)
+		{
+			SetTension(ETension::Chase);
+		}
+		else if (TensionTime > TensionLength && !bDark)
+		{
+			SetTension(ETension::Calm);
+		}
+		break;
+	case ETension::Detection:
+		if (bChase)
+		{
+			SetTension(ETension::Chase);
+			break;
+		}
+		TensionQuiet = (bAware || bDark) ? 0.f : TensionQuiet + Dt;
+		if (TensionQuiet > 6.f)
+		{
+			SetTension(ETension::Unease);
+		}
+		break;
+	default: // Calme, malaise
+		if (bChase)
+		{
+			SetTension(ETension::Chase);
+		}
+		else if (bAware || bDark)
+		{
+			SetTension(ETension::Detection);
+		}
+		else if (GetTension() == ETension::Calm && TensionTime > TensionLength)
+		{
+			SetTension(ETension::Unease);
+		}
+		break;
+	}
+}
+
 void ABRWorld::UpdatePhenomena(float Dt)
 {
 	const FBRLevelDef& D = Def();
@@ -1538,6 +1771,11 @@ void ABRWorld::UpdatePhenomena(float Dt)
 		return;
 	}
 
+	// v4.7 : pas de phenomene pendant une detection, une poursuite ou le repit (le compte a rebours attend)
+	if (!AllowsPhenomena())
+	{
+		return;
+	}
 	PhenomenaTimer -= Dt;
 	const bool bInsane = P->Sanity < 35.f;
 	const bool bTroubled = P->Sanity < 50.f;
@@ -1674,6 +1912,11 @@ void ABRWorld::UpdateBlackout(float Dt)
 	switch (BlackoutPhase)
 	{
 	case EBlackout::None:
+		// v4.7 : une coupure ne commence ni pendant une poursuite ni pendant le repit qui suit
+		if (bAuth && BlackoutTimer <= 0.f && (GetTension() == ETension::Chase || GetTension() == ETension::Recovery))
+		{
+			BlackoutTimer = 8.f;
+		}
 		if (bAuth && BlackoutTimer <= 0.f)
 		{
 			EnterBlackoutPhase(static_cast<uint8>(EBlackout::Failing));
@@ -1690,10 +1933,17 @@ void ABRWorld::UpdateBlackout(float Dt)
 			const float T = FMath::Clamp(BlackoutTimer / Total, 0.f, 1.f);
 			const float OnChance = bFailing ? T * 0.8f : 1.f - T * 0.8f;
 			PowerFlickerTimer -= Dt;
-			if (PowerFlickerTimer <= 0.f)
+			// v4.7 : reglage FLASHS : vacillement plus lent et moins profond (attenues), ou fondu regulier (aucun)
+			const float FS = FBRSettings::Get().FlashScale();
+			if (FS <= 0.f)
 			{
-				PowerFlickerTimer = FMath::FRandRange(0.04f, 0.16f);
-				Power = FMath::FRand() < OnChance ? FMath::FRandRange(0.6f, 1.f) : FMath::FRandRange(0.f, 0.08f);
+				Power = bFailing ? T : 1.f - T;
+			}
+			else if (PowerFlickerTimer <= 0.f)
+			{
+				PowerFlickerTimer = FMath::FRandRange(0.04f, 0.16f) / FMath::Max(FS, 0.25f);
+				const float Low = FMath::Lerp(0.45f, 0.f, FS);
+				Power = FMath::FRand() < OnChance ? FMath::FRandRange(0.6f, 1.f) : FMath::FRandRange(Low, Low + 0.08f);
 			}
 		}
 		else if (bAuth)

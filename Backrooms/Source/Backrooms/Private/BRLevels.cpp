@@ -64,8 +64,9 @@ namespace
 		// La Bacteria fait des rondes (lampes rouges a 10 m d'elle) ; les Smilers surgissent du noir, surtout pendant les coupures
 		D.Entities = { E(EBREntityKind::Smiler, 1.f) };
 		D.MaxEntities = 1; D.SpawnInterval = 100.f;
-		// Premiere ronde apres 50 s : le temps de lire les objectifs et de faire quelques salles
-		D.bPatrolEntity = true; D.PatrolKind = EBREntityKind::Bacteria; D.PatrolDelay = 50.f;
+		// v4.7 : premiere ronde a 110 s : la premiere coupure (75 s) et la premiere ronde ne se chevauchent plus, et le joueur a
+		// le temps de decouvrir les commandes, les objectifs et quelques salles
+		D.bPatrolEntity = true; D.PatrolKind = EBREntityKind::Bacteria; D.PatrolDelay = 110.f;
 		D.RedLightRadius = 1000.f;
 		D.BlackoutSmilers = 3;
 		D.HidingSpotChance = 0.85f;

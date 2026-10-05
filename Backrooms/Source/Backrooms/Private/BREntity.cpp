@@ -1107,6 +1107,7 @@ void ABREntity::Tick(float DeltaSeconds)
 	UpdateMorph(Dt);
 	ApplySkins(Dt);
 	UpdateDistanceLOD(Dt);
+	UpdateFootsteps();
 
 	// Detection de blocage
 	const float Speed = static_cast<float>(GetVelocity().Size());
@@ -1139,6 +1140,62 @@ void ABREntity::Tick(float DeltaSeconds)
 				PlayVoice();
 			}
 		}
+	}
+}
+
+void ABREntity::UpdateFootsteps()
+{
+	const FBREntityInfo& I = MyInfo();
+	if (I.bFlying || Kind == EBREntityKind::Smiler || Vanish >= 0.f || bScareOverride)
+	{
+		return;
+	}
+	// Une foulee = un demi-cycle d'AnimTime (le pied d'appui change)
+	const int32 Index = FMath::FloorToInt(AnimTime / PI);
+	if (Index == LastStepIndex)
+	{
+		return;
+	}
+	LastStepIndex = Index;
+	const float Speed = static_cast<float>(GetVelocity().Size2D());
+	const APawn* Listener = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (Speed < 40.f || !Listener || FVector::DistSquared(Listener->GetActorLocation(), GetActorLocation()) > FMath::Square(2600.f))
+	{
+		return;
+	}
+	float Pitch = 1.f;
+	float Volume = 0.45f;
+	switch (Kind)
+	{
+	case EBREntityKind::Hound:
+		Pitch = 1.3f; Volume = 0.3f; // pattes legeres et rapides
+		break;
+	case EBREntityKind::Clump:
+		Pitch = 0.55f; Volume = 0.9f; // masse qui retombe sur ses mains
+		break;
+	case EBREntityKind::Wretch:
+		Pitch = 0.82f; Volume = 0.38f; // pieds traines
+		break;
+	case EBREntityKind::SkinStealer:
+		Pitch = 1.f; Volume = 0.55f; // des pas d'explorateur : trompeur
+		break;
+	case EBREntityKind::Bacteria:
+		Pitch = FMath::FRandRange(0.65f, 0.85f); Volume = 0.5f; // a-coups irreguliers
+		break;
+	default:
+		break;
+	}
+	const ABRWorld* W = World.Get();
+	const EBRStep Surface = W ? W->Def().Step : EBRStep::Hard;
+	const TCHAR* Prefix = Surface == EBRStep::Carpet ? TEXT("S_Step_Carpet_") : (Surface == EBRStep::Water ? TEXT("S_Step_Water_")
+		: (Surface == EBRStep::Grass ? TEXT("S_Step_Grass_") : TEXT("S_Step_Hard_")));
+	UBRAssets* A = UBRAssets::Get(this);
+	USoundBase* S = A ? A->Sound(FName(*FString::Printf(TEXT("%s%d"), Prefix, 1 + (Index & 3)))) : nullptr;
+	if (S)
+	{
+		const float Run = FMath::Clamp(Speed / FMath::Max(I.ChaseSpeed, 1.f), 0.3f, 1.2f);
+		UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation() - FVector(0.f, 0.f, I.HalfHeight), Volume * (0.6f + 0.5f * Run),
+			Pitch * FMath::FRandRange(0.94f, 1.06f), 0.f, A->Attenuation(1800.f));
 	}
 }
 

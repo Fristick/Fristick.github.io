@@ -391,6 +391,10 @@ private:
 	/** v4.7 : ombres des entites lointaines coupees (au-dela de 30 m : une silhouette dans le brouillard, pas d'ombre
 	 *  lisible, mais un rendu d'ombre a chaque image) ; de pres, rien ne change. Etat d'origine de chaque piece garde */
 	void UpdateDistanceLOD(float Dt);
+	/** v4.7 : bruit de pas a chaque appui (synchronise sur la foulee), spatialise et etouffe par les murs : on entend ou
+	 *  est la menace, a quelle allure elle va, et quelle espece c'est (lourd, leger, trainant, humain) */
+	void UpdateFootsteps();
+	int32 LastStepIndex = 0;
 	TArray<TPair<TWeakObjectPtr<UPrimitiveComponent>, bool>> ShadowCasters;
 	bool bFarShadowsOff = false;
 	float LodTimer = 0.f;

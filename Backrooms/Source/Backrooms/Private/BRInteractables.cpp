@@ -357,7 +357,8 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 	if (USoundBase* Hum = A->Sound(TEXT("S_ExitHum")))
 	{
 		Audio->SetSound(Hum);
-		Audio->AttenuationSettings = A->Attenuation(IsInteractable() ? 900.f : 1400.f);
+		// v4.7 : signal fiable d'une sortie : pas etouffe par les murs (on peut s'orienter a l'oreille)
+		Audio->AttenuationSettings = A->Attenuation(IsInteractable() ? 900.f : 1400.f, false);
 		Audio->SetVolumeMultiplier(IsInteractable() ? 0.25f : 0.6f);
 		Audio->SetRelativeLocation(FVector(30.f, 0.f, 120.f));
 		Audio->Play(FMath::FRandRange(0.f, 2.f));

@@ -40,7 +40,9 @@ public:
 	/** Icone d'inventaire : /Game/Backrooms/UI/<Name>, sinon RawAssets/Icons/<Name>.png */
 	UTexture* Icon(FName Name);
 	USoundBase* Sound(FName Name);
-	USoundAttenuation* Attenuation(float FalloffDistance);
+	/** Attenuation spatialisee. v4.7 : bOcclude : etouffee derriere les murs (entites, bruits du monde) ; les sorties
+	 *  et les objectifs passent false (signal fiable) ; de loin, le son perd ses aigus et gagne de la reverberation */
+	USoundAttenuation* Attenuation(float FalloffDistance, bool bOcclude = true);
 	/** Voix des coequipiers : 3D, portee ~26 m, etouffee derriere les murs */
 	USoundAttenuation* VoiceAttenuation();
 

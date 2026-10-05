@@ -145,11 +145,13 @@ void ABRCharacter::UpdateJumpscare(float Dt)
 
 	// Camera : tournee vers l'entite, secouee, penchee ; le joueur ne la controle plus
 	// v4.5 : tremblement reduit de 40 % : le cadrage reste sur le visage de l'entite (son geste porte la peur)
-	const float ShakeAmp = 0.6f * St.Shake * (bArrived ? FMath::Max(0.35f, FMath::Exp(-SinceImpact * 1.5f)) : 0.35f * Ease);
+	// v4.7 : reglage TREMBLEMENTS (0 a 100 %) : le cadrage sur l'entite reste, seules les secousses changent
+	const FBRSettings& Comfort = FBRSettings::Get();
+	const float ShakeAmp = 0.6f * St.Shake * Comfort.CameraShake * (bArrived ? FMath::Max(0.35f, FMath::Exp(-SinceImpact * 1.5f)) : 0.35f * Ease);
 	FRotator V = ScareView;
 	V.Pitch += (FMath::Sin(T * 41.f) + 0.5f * FMath::Sin(T * 67.f)) * ShakeAmp;
 	V.Yaw += (FMath::Cos(T * 37.f) + 0.5f * FMath::Sin(T * 59.f)) * ShakeAmp;
-	V.Roll = St.Roll * FMath::Min(1.f, T / 0.25f) + FMath::Sin(T * 23.f) * ShakeAmp * 0.5f;
+	V.Roll = St.Roll * (0.3f + 0.7f * Comfort.CameraShake) * FMath::Min(1.f, T / 0.25f) + FMath::Sin(T * 23.f) * ShakeAmp * 0.5f;
 	if (Controller)
 	{
 		Controller->SetControlRotation(FMath::RInterpTo(Controller->GetControlRotation(), V, Dt, 24.f));
@@ -159,7 +161,7 @@ void ABRCharacter::UpdateJumpscare(float Dt)
 	ScareFOV = St.FOV * Ease;
 	ScareFringe = 0.3f + 1.2f * Ease + (bArrived ? 2.5f * FMath::Exp(-SinceImpact * 4.f) : 0.f);
 	ScareDark = St.Dark * FMath::Min(1.f, T / 0.15f);
-	ScareFlash = bArrived ? FMath::Exp(-SinceImpact * 5.f) : 0.f;
+	ScareFlash = bArrived ? FMath::Exp(-SinceImpact * 5.f) * Comfort.FlashScale() : 0.f;
 
 	// Le modele se jette sur la camera
 	if (ABREntity* E = ScareEntity.Get())

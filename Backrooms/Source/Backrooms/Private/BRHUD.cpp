@@ -2337,6 +2337,11 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 		Tag += TEXT("  \u00b7  hors partie");
 	}
 	Tag += TEXT("  \u00b7  ") + PC->GetRenderModeText(true);
+	if (W)
+	{
+		// v4.7 : phase du directeur de tension (et depuis combien de temps)
+		Tag += FString::Printf(TEXT("  \u00b7  tension : %s %.0f s"), ABRWorld::TensionName(W->GetTension()), W->GetTensionTime());
+	}
 	const FVector2f TS = TextSize(Tag, 10.f, EUiWeight::Bold);
 	const float PW = TS.X + 28.f * U;
 	const float PH = 26.f * U;
@@ -2409,9 +2414,11 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 	};
 	// v4.5 : la peur vient du modele et de son geste ; l'ecran ne fait que ponctuer (effets divises par deux environ)
 	// Une image sombre a l'impact (sauf le Smiler, qui finit sur un eclair)
+	// v4.7 : reglage FLASHS : l'image noire et les eclairs s'attenuent ou disparaissent ; le modele reste visible
+	const float FlashK = FBRSettings::Get().FlashScale();
 	if (K != 0 && bHit && Since < 0.035f)
 	{
-		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), 0.f, 0.f, W, H);
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f * FlashK), 0.f, 0.f, W, H);
 	}
 	switch (static_cast<EBREntityKind>(K))
 	{
@@ -2420,7 +2427,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		// Le noir se referme autour du sourire, puis un eclair blanc
 		Vignette(FLinearColor(0.f, 0.f, 0.f, 0.75f * Out), 0.32f);
 		const float Flash = FMath::Clamp((T - (Dur - 0.35f)) / 0.12f, 0.f, 1.f) * FMath::Clamp((Dur - T) / 0.23f, 0.f, 1.f);
-		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.55f * Flash), 0.f, 0.f, W, H);
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.55f * Flash * FlashK), 0.f, 0.f, W, H);
 		break;
 	}
 	case EBREntityKind::Hound:
@@ -2428,7 +2435,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		// Trois griffures qui dechirent l'ecran, l'une apres l'autre, et un voile rouge
 		if (bHit)
 		{
-			DrawRect(FLinearColor(0.6f, 0.f, 0.f, 0.18f * FMath::Exp(-Since * 3.f)), 0.f, 0.f, W, H);
+			DrawRect(FLinearColor(0.6f, 0.f, 0.f, 0.18f * FMath::Exp(-Since * 3.f) * FlashK), 0.f, 0.f, W, H);
 			for (int32 i = 0; i < 3; ++i)
 			{
 				const float Appear = Since - i * 0.06f;
@@ -2454,7 +2461,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		// La neige d'une television qui hurle
 		if (bHit && Since < 0.45f)
 		{
-			const float A = (Since < 0.3f ? 0.35f : 0.35f * (0.45f - Since) / 0.15f);
+			const float A = (Since < 0.3f ? 0.35f : 0.35f * (0.45f - Since) / 0.15f) * (0.25f + 0.75f * FlashK);
 			const float Cell = FMath::Max(4.f, 7.f * U);
 			for (float Y = 0.f; Y < H; Y += Cell)
 			{
@@ -2509,9 +2516,9 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 	{
 		// Images noires entre chaque a-coup
 		const float Phase = (T - 0.f) / 0.75f * 5.f;
-		if (!bHit && FMath::Frac(Phase) < 0.16f)
+		if (!bHit && FMath::Frac(Phase) < 0.16f && FlashK > 0.f)
 		{
-			DrawRect(FLinearColor(0.f, 0.f, 0.f, 1.f), 0.f, 0.f, W, H);
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, FlashK), 0.f, 0.f, W, H);
 		}
 		Vignette(FLinearColor(0.02f, 0.03f, 0.02f, 0.45f * Out), 0.26f);
 		break;
@@ -2759,7 +2766,8 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 	DrawRect(FLinearColor(0.15f, 0.f, 0.f, FMath::Clamp(T / 2.5f, 0.f, 0.85f)), 0.f, 0.f, Canvas->ClipX, H);
 	if (T < 0.25f)
 	{
-		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.6f * (1.f - T / 0.25f)), 0.f, 0.f, Canvas->ClipX, H);
+		// v4.7 : reglage FLASHS
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.6f * (1.f - T / 0.25f) * FBRSettings::Get().FlashScale()), 0.f, 0.f, Canvas->ClipX, H);
 	}
 	const float A = FMath::Clamp((T - 0.8f) / 1.f, 0.f, 1.f);
 	const ABRPlayerController* OwnerPC = Cast<ABRPlayerController>(PlayerOwner);
@@ -3007,6 +3015,8 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 
 void ABRHUD::DrawGlitch(float Amount)
 {
+	// v4.7 : reglage FLASHS : moins de bandes colorees qui clignotent (noclip, transitions)
+	Amount *= 0.2f + 0.8f * FBRSettings::Get().FlashScale();
 	const int32 Count = FMath::RoundToInt(Amount * 16.f);
 	for (int32 i = 0; i < Count; ++i)
 	{

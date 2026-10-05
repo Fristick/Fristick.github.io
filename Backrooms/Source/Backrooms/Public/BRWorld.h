@@ -17,6 +17,7 @@ class USkyLightComponent;
 class UPostProcessComponent;
 class UAudioComponent;
 class UMaterialInstanceDynamic;
+class UReverbEffect;
 class ABRPlayerController;
 class APlayerState;
 class UBRWaterSim;
@@ -258,6 +259,19 @@ public:
 	void RestoreJournal(const TArray<int32>& InDiscovered, const TArray<int32>& InVisited);
 	const TArray<TObjectPtr<ABREntity>>& GetEntities() const { return Entities; }
 
+	// ------------------------------------------------------------ v4.7 : directeur de tension
+	/** Rythme de la partie : calme (exploration), malaise (signes inquietants), detection (une entite a remarque
+	 *  quelqu'un), poursuite, retour au calme (repit garanti). Decide par le serveur, replique a tous */
+	enum class ETension : uint8 { Calm, Unease, Detection, Chase, Recovery };
+	ETension GetTension() const { return static_cast<ETension>(NetTension); }
+	/** Secondes passees dans la phase actuelle */
+	float GetTensionTime() const { return TensionTime; }
+	static const TCHAR* TensionName(ETension T);
+	/** Une nouvelle rencontre (entite qui apparait) est permise maintenant */
+	bool AllowsNewEncounter() const;
+	/** Phenomenes (bruits lointains, hallucinations) permis maintenant */
+	bool AllowsPhenomena() const;
+
 	// ------------------------------------------------------------ v2 : coupures de courant
 	/** Coupure de courant en cours (les neons sont eteints ou en train de lacher) */
 	bool IsBlackout() const { return BlackoutPhase == EBlackout::Failing || BlackoutPhase == EBlackout::Dark; }
@@ -309,6 +323,10 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UPostProcessComponent> PostProcess;
 
+	/** v4.7 : reverberation du lieu (moquette etouffee, beton, carrelage des Poolrooms) */
+	UPROPERTY()
+	TObjectPtr<UReverbEffect> LevelReverb;
+
 	/** v4.7 : post-traitement des salles de fosses (le fond reste noir malgre le brouillard ordinaire) */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PitShadeMID;
@@ -334,6 +352,9 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Collected)
 	TArray<uint64> NetCollected;
+
+	UPROPERTY(Replicated)
+	uint8 NetTension = 0;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Objectives)
 	int32 VHSFound = 0;
@@ -365,6 +386,16 @@ private:
 	enum class EBlackout : uint8 { None, Failing, Dark, Restoring };
 
 	void ClearLevel();
+	/** v4.7 : aides des premieres minutes (deplacements, inventaire, camescope, se cacher), une fois par session */
+	void UpdateFirstMinutes();
+	int32 FirstMinutesStep = 0;
+	/** v4.7 : directeur de tension (serveur) ; chez les clients, seul le temps passe dans la phase avance */
+	void UpdateTension(float Dt);
+	void SetTension(ETension NewTension);
+	float TensionTime = 0.f;
+	float TensionLength = 40.f;
+	float TensionQuiet = 0.f;
+	uint8 SeenTension = 0;
 	/** v4.7 : fait avancer les chunks en preparation (budget par image), et termine sans attendre les collisions des
 	 *  chunks sous les joueurs */
 	void StepChunkBuilds();

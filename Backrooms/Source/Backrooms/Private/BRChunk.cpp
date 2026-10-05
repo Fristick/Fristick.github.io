@@ -2285,7 +2285,9 @@ void ABRChunk::Tick(float DeltaSeconds)
 				}
 			}
 			F.Phase += DeltaSeconds * 37.f;
-			Mod *= F.bOn ? (0.85f + 0.15f * FMath::Sin(F.Phase)) : 0.03f;
+			// v4.7 : reglage FLASHS : le neon defaillant baisse sans s'eteindre (attenues), ou ne clignote plus (aucun)
+			const float FS = FBRSettings::Get().FlashScale();
+			Mod *= F.bOn ? (1.f - 0.15f * FS + 0.15f * FS * FMath::Sin(F.Phase)) : FMath::Lerp(0.85f, 0.03f, FS);
 		}
 
 		// Niveau 0 : la lampe vire au rouge quand l'entite qui fait des rondes passe a moins de RedRadius

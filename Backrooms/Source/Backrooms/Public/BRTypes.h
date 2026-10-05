@@ -406,6 +406,14 @@ struct FBRSettings
 	int32 MaxFPS = 0;
 	/** Balancement de la camera pendant la marche */
 	bool bHeadBob = true;
+	/** v4.7 : confort. Tremblements de la camera (coups recus, jumpscares) : 0..1 */
+	float CameraShake = 1.f;
+	/** v4.7 : flashs (eclairs des jumpscares, image de la mort, neons qui clignotent) : 0 normaux, 1 attenues, 2 aucun */
+	int32 Flashes = 0;
+	/** v4.7 : flou de mouvement (desactive par defaut) */
+	bool bMotionBlur = false;
+	/** Facteur des flashs et clignotements (1, 0,35 ou 0) ; les mecaniques ne changent pas */
+	float FlashScale() const { return Flashes <= 0 ? 1.f : (Flashes == 1 ? 0.35f : 0.f); }
 	/** v4.4 : mode developpeur (actif par defaut hors version finale) : tous les niveaux jouables depuis le choix des
 	 *  niveaux, raccourcis en jeu (changer de niveau, voler a travers les murs, invincible, jumpscares...) */
 	bool bDevMode = UE_BUILD_SHIPPING == 0;
