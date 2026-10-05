@@ -1,4 +1,5 @@
 #include "BRPlayerController.h"
+#include "BRLoc.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
 #include "BRWorld.h"
@@ -54,6 +55,7 @@ namespace
 	// Ordre d'affichage (deux colonnes) : controles, son, affichage, puis graphismes
 	enum ESettingRow
 	{
+		Row_Language,
 		Row_Sensitivity,
 		Row_InvertY,
 		Row_FOV,
@@ -82,18 +84,34 @@ namespace
 		Row_Count
 	};
 
-	const TCHAR* ProfileNames[] = { TEXT("PERFORMANCE"), TEXT("QUALIT\u00c9"), TEXT("CIN\u00c9MATIQUE"), TEXT("PERSONNALIS\u00c9"), TEXT("RTX FLUIDE") };
+	FString ProfileNames(int32 Index)
+	{
+		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.Performance", "PERFORMANCE")), BR_STR(NSLOCTEXT("BR", "Menu.Qualite", "QUALIT\u00c9")), BR_STR(NSLOCTEXT("BR", "Menu.Cinematique", "CIN\u00c9MATIQUE")), BR_STR(NSLOCTEXT("BR", "Menu.Personnalise", "PERSONNALIS\u00c9")), BR_STR(NSLOCTEXT("BR", "Menu.RtxFluide", "RTX FLUIDE")) };
+		return Items[FMath::Clamp(Index, 0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	}
 	/** v4.8 : ordre des profils proposes (le profil PERSONNALISE ne se choisit pas : il vient d'un reglage modifie) */
 	const int32 ProfileCycle[] = { 0, 1, 4, 2 };
-	const TCHAR* QualityNames[] = { TEXT("BAS"), TEXT("MOYEN"), TEXT("\u00c9LEV\u00c9"), TEXT("\u00c9PIQUE"), TEXT("CIN\u00c9MATIQUE") };
-	const TCHAR* VoiceNames[] = { TEXT("VOIX OUVERTE"), TEXT("APPUYER POUR PARLER"), TEXT("MICRO COUP\u00c9") };
-	const TCHAR* WindowNames[] = { TEXT("PLEIN \u00c9CRAN"), TEXT("FEN\u00caTR\u00c9 SANS BORDURE"), TEXT("FEN\u00caTR\u00c9") };
+	FString QualityNames(int32 Index)
+	{
+		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.Bas", "BAS")), BR_STR(NSLOCTEXT("BR", "Menu.Moyen", "MOYEN")), BR_STR(NSLOCTEXT("BR", "Menu.Eleve", "\u00c9LEV\u00c9")), BR_STR(NSLOCTEXT("BR", "Menu.Epique", "\u00c9PIQUE")), BR_STR(NSLOCTEXT("BR", "Menu.Cinematique", "CIN\u00c9MATIQUE")) };
+		return Items[FMath::Clamp(Index, 0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	}
+	FString VoiceNames(int32 Index)
+	{
+		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.VoixOuverte", "VOIX OUVERTE")), BR_STR(NSLOCTEXT("BR", "Menu.AppuyerParler", "APPUYER POUR PARLER")), BR_STR(NSLOCTEXT("BR", "Menu.MicroCoupe", "MICRO COUP\u00c9")) };
+		return Items[FMath::Clamp(Index, 0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	}
+	FString WindowNames(int32 Index)
+	{
+		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.PleinEcran", "PLEIN \u00c9CRAN")), BR_STR(NSLOCTEXT("BR", "Menu.FenetreSansBordure", "FEN\u00caTR\u00c9 SANS BORDURE")), BR_STR(NSLOCTEXT("BR", "Menu.Fenetre", "FEN\u00caTR\u00c9")) };
+		return Items[FMath::Clamp(Index, 0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	}
 	const int32 FPSSteps[] = { 0, 30, 60, 90, 120, 144, 165, 240 };
 	const int32 NumFPSSteps = UE_ARRAY_COUNT(FPSSteps);
 
 	FString OnOff(bool b)
 	{
-		return b ? FString(TEXT("ACTIV\u00c9")) : FString(TEXT("D\u00c9SACTIV\u00c9"));
+		return b ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Active", "ACTIV\u00c9"))) : FString(BR_STR(NSLOCTEXT("BR", "Menu.Desactive", "D\u00c9SACTIV\u00c9")));
 	}
 
 	// Erreurs reseau : la connexion echoue ou se perd, le moteur recharge la carte et le menu les affiche
@@ -105,24 +123,24 @@ namespace
 		switch (Type)
 		{
 		case ENetworkFailure::PendingConnectionFailure:
-			GNetMessage = TEXT("Impossible de rejoindre la partie : v\u00e9rifiez l'adresse, le port 7777 (UDP) et le pare-feu de l'h\u00f4te.");
+			GNetMessage = BR_STR(NSLOCTEXT("BR", "Menu.ImpossibleRejoindrePartieVerifiezAdresse", "Impossible de rejoindre la partie : v\u00e9rifiez l'adresse, le port 7777 (UDP) et le pare-feu de l'h\u00f4te."));
 			break;
 		case ENetworkFailure::ConnectionLost:
 		case ENetworkFailure::ConnectionTimeout:
-			GNetMessage = TEXT("Connexion perdue avec l'h\u00f4te.");
+			GNetMessage = BR_STR(NSLOCTEXT("BR", "Menu.ConnexionPerdueHote", "Connexion perdue avec l'h\u00f4te."));
 			break;
 		case ENetworkFailure::NetDriverListenFailure:
-			GNetMessage = TEXT("Impossible d'h\u00e9berger : le port 7777 est peut-\u00eatre d\u00e9j\u00e0 utilis\u00e9.");
+			GNetMessage = BR_STR(NSLOCTEXT("BR", "Menu.ImpossibleHebergerPort7777Peut", "Impossible d'h\u00e9berger : le port 7777 est peut-\u00eatre d\u00e9j\u00e0 utilis\u00e9."));
 			break;
 		default:
-			GNetMessage = TEXT("Erreur r\u00e9seau : ") + Error;
+			GNetMessage = BR_STR(NSLOCTEXT("BR", "Menu.ErreurReseau", "Erreur r\u00e9seau : ")) + Error;
 			break;
 		}
 	}
 
 	void HandleTravelFailure(UWorld* World, ETravelFailure::Type Type, const FString& Error)
 	{
-		GNetMessage = TEXT("Impossible de rejoindre la partie : ") + Error;
+		GNetMessage = BR_STR(NSLOCTEXT("BR", "Menu.ImpossibleRejoindrePartie", "Impossible de rejoindre la partie : ")) + Error;
 	}
 
 	FString FindLocalAddress()
@@ -595,17 +613,17 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 		bNetIntroShown = true;
 		if (HasAuthority())
 		{
-			ABRHUD::Notify(this, TEXT("Vous h\u00e9bergez la partie : votre PC fait tourner le monde et les entit\u00e9s pour tout le groupe. Gardez le jeu ouvert jusqu'\u00e0 la fin."),
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.HebergezPartieVotrePcFait", "Vous h\u00e9bergez la partie : votre PC fait tourner le monde et les entit\u00e9s pour tout le groupe. Gardez le jeu ouvert jusqu'\u00e0 la fin.")),
 				9.f, FLinearColor(1.f, 0.85f, 0.4f));
 		}
 		else
 		{
-			ABRHUD::Notify(this, TEXT("Connect\u00e9 \u00e0 la partie de l'h\u00f4te. Restez group\u00e9s : on s'entend mieux de pr\u00e8s."), 7.f,
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.ConnectePartieHoteRestezGroupes", "Connect\u00e9 \u00e0 la partie de l'h\u00f4te. Restez group\u00e9s : on s'entend mieux de pr\u00e8s.")), 7.f,
 				FLinearColor(0.75f, 1.f, 0.75f));
 		}
 		if (FBRSettings::Get().VoiceMode == 1)
 		{
-			ABRHUD::Notify(this, BRKeys::Expand(TEXT("Chat vocal de proximit\u00e9 : maintenez {PushToTalk} pour parler.")), 7.f, FLinearColor(0.75f, 0.9f, 1.f));
+			ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Menu.ChatVocalProximiteMaintenezPushtotalk", "Chat vocal de proximit\u00e9 : maintenez {PushToTalk} pour parler."))), 7.f, FLinearColor(0.75f, 0.9f, 1.f));
 		}
 	}
 }
@@ -716,7 +734,7 @@ void ABRPlayerController::ResetKeys()
 	BRKeys::ResetDefaults();
 	BRKeys::Save();
 	CancelKeyCapture();
-	ABRHUD::Notify(this, TEXT("Touches par d\u00e9faut r\u00e9tablies."), 2.5f);
+	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.TouchesDefautRetablies", "Touches par d\u00e9faut r\u00e9tablies.")), 2.5f);
 }
 
 void ABRPlayerController::PollKeyCapture()
@@ -760,7 +778,7 @@ void ABRPlayerController::PollKeyCapture()
 		BRKeys::Save();
 		if (!Removed.IsEmpty())
 		{
-			ABRHUD::Notify(this, FString::Printf(TEXT("%s retir\u00e9e de : %s"), *BRKeys::KeyName(K), *Removed), 3.f,
+			ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.KRetireeRemoved", "{K} retir\u00e9e de : {Removed}"), { { TEXT("K"), BRLoc::Arg(BRKeys::KeyName(K)) }, { TEXT("Removed"), BRLoc::Arg(Removed) } }), 3.f,
 				FLinearColor(1.f, 0.8f, 0.4f));
 		}
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1131,6 +1149,13 @@ void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 {
 	if (bInMenu && !bInventory)
 	{
+		if (MenuPage == EBRMenuPage::Language)
+		{
+			// Deux colonnes de langues : gauche / droite change de colonne
+			const int32 Half = (BRLoc::Languages().Num() + 1) / 2;
+			SetMenuCursor(MenuCursor >= Half && MenuCursor < BRLoc::Languages().Num() ? MenuCursor - Half : MenuCursor);
+			return;
+		}
 		MenuShiftLevel(-1);
 	}
 }
@@ -1139,6 +1164,12 @@ void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 {
 	if (bInMenu && !bInventory)
 	{
+		if (MenuPage == EBRMenuPage::Language)
+		{
+			const int32 Half = (BRLoc::Languages().Num() + 1) / 2;
+			SetMenuCursor(MenuCursor < Half ? FMath::Min(MenuCursor + Half, BRLoc::Languages().Num() - 1) : MenuCursor);
+			return;
+		}
 		MenuShiftLevel(1);
 	}
 }
@@ -1188,7 +1219,9 @@ int32 ABRPlayerController::GetMenuItemCount() const
 	switch (MenuPage)
 	{
 	case EBRMenuPage::Main:
-		return 4;
+		return 5;
+	case EBRMenuPage::Language:
+		return BRLoc::Languages().Num() + 1;
 	case EBRMenuPage::Multi:
 		return 3;
 	case EBRMenuPage::Saves:
@@ -1247,7 +1280,7 @@ bool ABRPlayerController::CheatGate()
 	{
 		return true;
 	}
-	ABRHUD::Notify(this, TEXT("Commande de test d\u00e9sactiv\u00e9e (mode d\u00e9veloppeur requis, absent des versions publi\u00e9es)."), 3.f);
+	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.CommandeTestDesactiveeModeDeveloppeur", "Commande de test d\u00e9sactiv\u00e9e (mode d\u00e9veloppeur requis, absent des versions publi\u00e9es).")), 3.f);
 	return false;
 }
 
@@ -1266,7 +1299,7 @@ void ABRPlayerController::DevJumpLevel(int32 Delta)
 	}
 	const FBRLevelDef& Next = All[(Cur + Delta + All.Num()) % All.Num()];
 	bDevSession = true;
-	ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9V : Niveau %d - %s"), Next.Number, *Next.Title), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ModeDevNiveauNumberTitle", "MODE D\u00c9V : Niveau {Number} - {Title}"), { { TEXT("Number"), BRLoc::Int(Next.Number) }, { TEXT("Title"), BRLoc::Arg(Next.Title) } }), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
 	W->RequestTransition(Next.Number);
 }
 
@@ -1297,7 +1330,7 @@ void ABRPlayerController::UpdateDevKeys()
 	else if (WasInputKeyJustPressed(EKeys::End))
 	{
 		BRObjectives();
-		ABRHUD::Notify(this, TEXT("MODE D\u00c9V : objectifs remplis"), 2.f, FLinearColor(0.6f, 0.9f, 1.f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.ModeDevObjectifsRemplis", "MODE D\u00c9V : objectifs remplis")), 2.f, FLinearColor(0.6f, 0.9f, 1.f));
 	}
 	else if (WasInputKeyJustPressed(EKeys::Insert))
 	{
@@ -1310,8 +1343,8 @@ void ABRPlayerController::UpdateDevKeys()
 	else if (WasInputKeyJustPressed(EKeys::F6) && C)
 	{
 		C->SetDevFly(!C->IsDevFlying());
-		ABRHUD::Notify(this, C->IsDevFlying() ? TEXT("MODE D\u00c9V : vol libre (\u00e0 travers les murs, Espace pour monter, Maj pour acc\u00e9l\u00e9rer)")
-			: TEXT("MODE D\u00c9V : vol libre coup\u00e9"), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+		ABRHUD::Notify(this, C->IsDevFlying() ? BR_STR(NSLOCTEXT("BR", "Menu.ModeDevVolLibreTravers", "MODE D\u00c9V : vol libre (\u00e0 travers les murs, Espace pour monter, Maj pour acc\u00e9l\u00e9rer)"))
+			: BR_STR(NSLOCTEXT("BR", "Menu.ModeDevVolLibreCoupe", "MODE D\u00c9V : vol libre coup\u00e9")), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
 	}
 	else if (WasInputKeyJustPressed(EKeys::F7))
 	{
@@ -1339,37 +1372,40 @@ FString ABRPlayerController::GetMenuItemLabel(int32 Item) const
 	{
 		return FString();
 	}
-	static const TCHAR* Main[] = { TEXT("SOLO"), TEXT("MULTIJOUEUR"), TEXT("PARAM\u00c8TRES"), TEXT("QUITTER") };
-	static const TCHAR* Multi[] = { TEXT("H\u00c9BERGER UNE PARTIE"), TEXT("REJOINDRE UNE PARTIE"), TEXT("RETOUR") };
+	const FString Main[] = { BR_STR(NSLOCTEXT("BR", "Menu.Solo", "SOLO")), BR_STR(NSLOCTEXT("BR", "Menu.Multijoueur", "MULTIJOUEUR")), BR_STR(NSLOCTEXT("BR", "Menu.Parametres", "PARAM\u00c8TRES")), BR_STR(NSLOCTEXT("BR", "Menu.Language", "LANGUE")), BR_STR(NSLOCTEXT("BR", "Menu.Quitter", "QUITTER")) };
+	const FString Multi[] = { BR_STR(NSLOCTEXT("BR", "Menu.HebergerPartie", "H\u00c9BERGER UNE PARTIE")), BR_STR(NSLOCTEXT("BR", "Menu.RejoindrePartie", "REJOINDRE UNE PARTIE")), BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR")) };
 	switch (MenuPage)
 	{
 	case EBRMenuPage::Main:
 		return Main[Item];
+	case EBRMenuPage::Language:
+		// Noms natifs (jamais traduits) : chacun reconnait sa langue
+		return BRLoc::Languages().IsValidIndex(Item) ? FString(BRLoc::Languages()[Item].NativeName) : BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR"));
 	case EBRMenuPage::Multi:
 		return Multi[Item];
 	case EBRMenuPage::Join:
-		return Item == 0 ? TEXT("SE CONNECTER") : TEXT("RETOUR");
+		return Item == 0 ? BR_STR(NSLOCTEXT("BR", "Menu.Connecter", "SE CONNECTER")) : BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR"));
 	case EBRMenuPage::NewSave:
-		return Item == 0 ? (bHostFlow ? TEXT("H\u00c9BERGER") : TEXT("COMMENCER")) : TEXT("RETOUR");
+		return Item == 0 ? (bHostFlow ? BR_STR(NSLOCTEXT("BR", "Menu.Heberger", "H\u00c9BERGER")) : BR_STR(NSLOCTEXT("BR", "Menu.Commencer", "COMMENCER"))) : BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR"));
 	case EBRMenuPage::Solo:
 	{
 		if (Item == 1)
 		{
-			return TEXT("RETOUR");
+			return BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR"));
 		}
 		const TArray<FBRLevelDef>& All = BRLevels::All();
 		const int32 Level = All[FMath::Clamp(MenuIndex, 0, All.Num() - 1)].Number;
 		if (!IsLevelUnlocked(Level))
 		{
-			return TEXT("VERROUILL\u00c9");
+			return BR_STR(NSLOCTEXT("BR", "Menu.Verrouille", "VERROUILL\u00c9"));
 		}
-		return bHostFlow ? TEXT("H\u00c9BERGER") : TEXT("NOCLIPPER");
+		return bHostFlow ? BR_STR(NSLOCTEXT("BR", "Menu.Heberger", "H\u00c9BERGER")) : BR_STR(NSLOCTEXT("BR", "Menu.Noclipper", "NOCLIPPER"));
 	}
 	case EBRMenuPage::Saves:
 	{
 		if (bConfirmDelete)
 		{
-			return Item == 0 ? TEXT("OUI, SUPPRIMER") : TEXT("ANNULER");
+			return Item == 0 ? BR_STR(NSLOCTEXT("BR", "Menu.OuiSupprimer", "OUI, SUPPRIMER")) : BR_STR(NSLOCTEXT("BR", "Menu.Annuler", "ANNULER"));
 		}
 		const int32 Slot = GetMenuSaveSlot(Item);
 		if (Slot >= 0)
@@ -1377,7 +1413,7 @@ FString ABRPlayerController::GetMenuItemLabel(int32 Item) const
 			const UBRSaveGame* S = GetSaveInSlot(Slot);
 			return S ? S->SaveName : FString();
 		}
-		return Slot == MenuItemNew ? TEXT("NOUVELLE PARTIE") : TEXT("RETOUR");
+		return Slot == MenuItemNew ? BR_STR(NSLOCTEXT("BR", "Menu.NouvellePartie", "NOUVELLE PARTIE")) : BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR"));
 	}
 	}
 	return FString();
@@ -1481,7 +1517,11 @@ void ABRPlayerController::SetMenuPage(EBRMenuPage Page)
 	if (Page == EBRMenuPage::NewSave)
 	{
 		const int32 Free = BRSaves::FreeSlot();
-		NewSaveName = FString::Printf(TEXT("Partie %d"), Free == INDEX_NONE ? 1 : Free + 1);
+		NewSaveName = BRLoc::Fmt(NSLOCTEXT("BR", "Menu.PartieFree", "Partie {Free}"), { { TEXT("Free"), BRLoc::Int(Free == INDEX_NONE ? 1 : Free + 1) } });
+	}
+	if (Page == EBRMenuPage::Language)
+	{
+		MenuCursor = FMath::Max(0, BRLoc::CurrentIndex());
 	}
 	ShowAddressBox(Page == EBRMenuPage::Join);
 	ShowNameBox(Page == EBRMenuPage::NewSave);
@@ -1522,8 +1562,31 @@ void ABRPlayerController::MenuBack()
 	case EBRMenuPage::Multi:
 		SetMenuPage(EBRMenuPage::Main);
 		break;
+	case EBRMenuPage::Language:
+		SetMenuPage(EBRMenuPage::Main);
+		MenuCursor = 3;
+		break;
 	default:
 		break;
+	}
+}
+
+void ABRPlayerController::ChooseLanguage(int32 Index)
+{
+	if (!BRLoc::Languages().IsValidIndex(Index))
+	{
+		return;
+	}
+	const FString Code = BRLoc::Languages()[Index].Code;
+	if (BRLoc::SetLanguage(Code))
+	{
+		BRLoc::SavePreference(Code);
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.LanguageChanged", "Langue : {Language}"),
+			{ { TEXT("Language"), BRLoc::Arg(BRLoc::Languages()[Index].NativeName) } }), 3.f, FLinearColor(0.85f, 0.95f, 1.f));
+	}
+	else
+	{
+		PlayMenuSound(TEXT("S_UIDeny"), 0.6f);
 	}
 }
 
@@ -1542,7 +1605,7 @@ void ABRPlayerController::MenuActivate(int32 Item)
 		if (!IsLevelUnlocked(D.Number))
 		{
 			PlayMenuSound(TEXT("S_UIDeny"), 0.6f);
-			ABRHUD::Notify(this, FString::Printf(TEXT("Niveau %d : pas encore explor\u00e9 dans cette partie. Trouvez une sortie qui y m\u00e8ne."), D.Number), 4.f,
+			ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.NiveauNumberEncoreExploreCette", "Niveau {Number} : pas encore explor\u00e9 dans cette partie. Trouvez une sortie qui y m\u00e8ne."), { { TEXT("Number"), BRLoc::Int(D.Number) } }), 4.f,
 				FLinearColor(1.f, 0.6f, 0.45f));
 			return;
 		}
@@ -1564,9 +1627,24 @@ void ABRPlayerController::MenuActivate(int32 Item)
 		{
 			SetInventoryOpen(true, 2); // onglet PARAMETRES
 		}
+		else if (Item == 3)
+		{
+			SetMenuPage(EBRMenuPage::Language);
+		}
 		else
 		{
 			QuitToDesktop();
+		}
+		break;
+	case EBRMenuPage::Language:
+		if (BRLoc::Languages().IsValidIndex(Item))
+		{
+			ChooseLanguage(Item);
+		}
+		else
+		{
+			SetMenuPage(EBRMenuPage::Main);
+			MenuCursor = 3;
 		}
 		break;
 	case EBRMenuPage::Saves:
@@ -1584,7 +1662,7 @@ void ABRPlayerController::MenuActivate(int32 Item)
 				bConfirmDelete = false;
 				RefreshSaves();
 				MenuCursor = 0;
-				ABRHUD::Notify(this, FString::Printf(TEXT("Partie \u00ab %s \u00bb supprim\u00e9e."), *Name), 3.f, FLinearColor(1.f, 0.7f, 0.55f));
+				ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.PartieNameSupprimee", "Partie \u00ab {Name} \u00bb supprim\u00e9e."), { { TEXT("Name"), BRLoc::Arg(Name) } }), 3.f, FLinearColor(1.f, 0.7f, 0.55f));
 			}
 			else
 			{
@@ -1697,8 +1775,25 @@ void ABRPlayerController::ShowSaveFailures()
 		UE_LOG(LogBackrooms, Warning, TEXT("Sauvegarde : echec de la demande %u (emplacement %d) : %s"), F.RequestId, F.Slot + 1, *F.Reason);
 	}
 	const FWriteFailure& F = Failed.Last();
-	ABRHUD::Notify(this, FString::Printf(TEXT("\u00c9chec de la sauvegarde (emplacement %d, demande n\u00b0 %u) : %s. La partie continue ; nouvel essai \u00e0 la prochaine sauvegarde."),
-		F.Slot + 1, F.RequestId, *F.Reason), 9.f, FLinearColor(1.f, 0.5f, 0.4f));
+	// Message compose ici, dans la langue du joueur, d'apres la cause (le fil d'ecriture ne compose aucun texte)
+	FText Cause;
+	switch (F.Error)
+	{
+	case EBRSaveError::Replace:
+		Cause = BRLoc::FmtText(NSLOCTEXT("BR", "Save.Error.Replace", "le fichier {File}.sav n'a pas pu \u00eatre remplac\u00e9 (ouvert par un autre programme ?)"),
+			{ { TEXT("File"), BRLoc::Arg(F.File) } });
+		break;
+	case EBRSaveError::FutureFormat:
+		Cause = BRLoc::FmtText(NSLOCTEXT("BR", "Save.Error.FutureFormat", "partie d'une version plus r\u00e9cente du jeu (format {Format}) : r\u00e9\u00e9criture refus\u00e9e, fichier pr\u00e9serv\u00e9"),
+			{ { TEXT("Format"), BRLoc::Int(F.Version) } });
+		break;
+	default:
+		Cause = BRLoc::FmtText(NSLOCTEXT("BR", "Save.Error.TempWrite", "\u00e9criture impossible de {File} (disque plein ou dossier prot\u00e9g\u00e9 ?)"),
+			{ { TEXT("File"), BRLoc::Arg(F.File) } });
+		break;
+	}
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Save.Error.Notice", "\u00c9chec de la sauvegarde (emplacement {Slot}, demande n\u00b0 {Request}) : {Cause}. La partie continue ; nouvel essai \u00e0 la prochaine sauvegarde."),
+		{ { TEXT("Slot"), BRLoc::Int(F.Slot + 1) }, { TEXT("Request"), BRLoc::Int(F.RequestId) }, { TEXT("Cause"), BRLoc::Arg(Cause) } }), 9.f, FLinearColor(1.f, 0.5f, 0.4f));
 	BRSaves::AcknowledgeFailures(Last);
 }
 
@@ -1726,7 +1821,7 @@ void ABRPlayerController::ResolvePendingDeath(UBRSaveGame* Save)
 	Save->Battery = 100.f;
 	Save->Session = FBRSessionState();
 	Save->CurrentLevel = Save->IsExplored(Save->PendingDeathLevel) ? Save->PendingDeathLevel : 0;
-	ABRHUD::Notify(this, TEXT("La derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort : vous repartez avec l'\u00e9quipement de d\u00e9part."), 7.f,
+	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.DerniereSessionArreteePendantMort", "La derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort : vous repartez avec l'\u00e9quipement de d\u00e9part.")), 7.f,
 		FLinearColor(1.f, 0.7f, 0.5f));
 }
 
@@ -1740,8 +1835,7 @@ void ABRPlayerController::SelectSave(int32 Slot)
 	if (S->bFutureFormat)
 	{
 		// v4.8 : partie d'une version plus recente : lecture seule, jamais reprise ni reecrite par ce jeu
-		ABRHUD::Notify(this, FString::Printf(TEXT("Cette partie vient d'une version plus r\u00e9cente du jeu (format %d) : elle reste intacte et ne peut pas \u00eatre reprise ici."),
-			S->LoadedVersion), 6.f, FLinearColor(1.f, 0.7f, 0.45f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.CettePartieVientVersionRecente", "Cette partie vient d'une version plus r\u00e9cente du jeu (format {LoadedVersion}) : elle reste intacte et ne peut pas \u00eatre reprise ici."), { { TEXT("LoadedVersion"), BRLoc::Int(S->LoadedVersion) } }), 6.f, FLinearColor(1.f, 0.7f, 0.45f));
 		PlayMenuSound(TEXT("S_UIDeny"), 0.5f);
 		return;
 	}
@@ -1759,7 +1853,7 @@ void ABRPlayerController::StartNewSave()
 	const int32 Slot = BRSaves::FreeSlot();
 	if (Slot == INDEX_NONE)
 	{
-		ABRHUD::Notify(this, TEXT("Les 6 emplacements sont occup\u00e9s : supprimez une partie (touche Suppr)."), 5.f, FLinearColor(1.f, 0.6f, 0.45f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.6EmplacementsSontOccupesSupprimez", "Les 6 emplacements sont occup\u00e9s : supprimez une partie (touche Suppr).")), 5.f, FLinearColor(1.f, 0.6f, 0.45f));
 		return;
 	}
 	UBRSaveGame* S = Cast<UBRSaveGame>(UGameplayStatics::CreateSaveGameObject(UBRSaveGame::StaticClass()));
@@ -1770,7 +1864,7 @@ void ABRPlayerController::StartNewSave()
 	FString Name = NewSaveName.TrimStartAndEnd();
 	if (Name.IsEmpty())
 	{
-		Name = FString::Printf(TEXT("Partie %d"), Slot + 1);
+		Name = BRLoc::Fmt(NSLOCTEXT("BR", "Menu.PartieSlot", "Partie {Slot}"), { { TEXT("Slot"), BRLoc::Int(Slot + 1) } });
 	}
 	S->SaveName = Name.Left(28);
 	S->Created = FDateTime::Now();
@@ -1822,8 +1916,7 @@ void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 	const bool bNew = !ActiveSave->IsExplored(LevelNumber);
 	if (bNew && bDevSession)
 	{
-		ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9VELOPPEUR : Niveau %d visit\u00e9 sans l'ajouter \u00e0 la partie \u00ab %s \u00bb."),
-			LevelNumber, *ActiveSave->SaveName), 6.f, FLinearColor(0.6f, 0.9f, 1.f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ModeDeveloppeurNiveauLevelnumberVisite", "MODE D\u00c9VELOPPEUR : Niveau {LevelNumber} visit\u00e9 sans l'ajouter \u00e0 la partie \u00ab {SaveName} \u00bb."), { { TEXT("LevelNumber"), BRLoc::Int(LevelNumber) }, { TEXT("SaveName"), BRLoc::Arg(ActiveSave->SaveName) } }), 6.f, FLinearColor(0.6f, 0.9f, 1.f));
 		return;
 	}
 	ActiveSave->MarkExplored(LevelNumber);
@@ -1832,8 +1925,7 @@ void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 	PendingSaveDelay = 2.f;
 	if (bNew)
 	{
-		ABRHUD::Notify(this, FString::Printf(TEXT("Niveau %d ajout\u00e9 \u00e0 vos niveaux explor\u00e9s (%d / %d) : vous pourrez y revenir depuis le menu."),
-			LevelNumber, ActiveSave->Explored.Num(), BRLevels::All().Num()), 7.f, FLinearColor(0.75f, 1.f, 0.75f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.NiveauLevelnumberAjouteVosNiveaux", "Niveau {LevelNumber} ajout\u00e9 \u00e0 vos niveaux explor\u00e9s ({Explored} / {All}) : vous pourrez y revenir depuis le menu."), { { TEXT("LevelNumber"), BRLoc::Int(LevelNumber) }, { TEXT("Explored"), BRLoc::Int(ActiveSave->Explored.Num()) }, { TEXT("All"), BRLoc::Int(BRLevels::All().Num()) } }), 7.f, FLinearColor(0.75f, 1.f, 0.75f));
 	}
 }
 
@@ -1920,7 +2012,7 @@ void ABRPlayerController::HostGame()
 {
 	// La carte est rechargee en serveur "listen" : les amis peuvent rejoindre sur le port 7777
 	const int32 Level = BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number;
-	MenuStatus = TEXT("Cr\u00e9ation de la partie...");
+	MenuStatus = BR_STR(NSLOCTEXT("BR", "Menu.CreationPartie", "Cr\u00e9ation de la partie..."));
 	// v4.7 : l'hote reprend sa session (la carte est rechargee : le monde la retrouve dans BRSaves::PendingResume)
 	BRSaves::PendingResume() = FBRSessionState();
 	if (ActiveSave && ActiveSave->Session.bValid && ActiveSave->Session.Level == Level && ActiveSave->Session.Seed != 0)
@@ -1940,12 +2032,12 @@ void ABRPlayerController::JoinGame()
 	const FString Address = JoinAddress.TrimStartAndEnd();
 	if (Address.IsEmpty())
 	{
-		MenuStatus = TEXT("Entrez l'adresse IP de l'h\u00f4te (ex. 192.168.1.20).");
+		MenuStatus = BR_STR(NSLOCTEXT("BR", "Menu.EntrezAdresseIpHoteEx", "Entrez l'adresse IP de l'h\u00f4te (ex. 192.168.1.20)."));
 		return;
 	}
 	BRConfig::Get().SetString(SettingsSection, TEXT("LastAddress"), *Address);
 	BRConfig::Save();
-	MenuStatus = FString::Printf(TEXT("Connexion \u00e0 %s..."), *Address);
+	MenuStatus = BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ConnexionAddress", "Connexion \u00e0 {Address}..."), { { TEXT("Address"), BRLoc::Arg(Address) } });
 	ClientTravel(Address, TRAVEL_Absolute);
 }
 
@@ -1973,7 +2065,7 @@ void ABRPlayerController::ShowAddressBox(bool bShow)
 				[
 					SAssignNew(AddressBox, SEditableTextBox)
 					.Text(FText::FromString(JoinAddress))
-					.HintText(FText::FromString(TEXT("Adresse IP de l'h\u00f4te, ex. 192.168.1.20")))
+					.HintText(FText::FromString(BR_STR(NSLOCTEXT("BR", "Menu.AdresseIpHoteEx192", "Adresse IP de l'h\u00f4te, ex. 192.168.1.20"))))
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 22))
 					.SelectAllTextWhenFocused(true)
 					.OnTextChanged_Lambda([WeakThis](const FText& NewText)
@@ -2031,7 +2123,7 @@ void ABRPlayerController::ShowNameBox(bool bShow)
 				[
 					SAssignNew(NameBox, SEditableTextBox)
 					.Text(FText::FromString(NewSaveName))
-					.HintText(FText::FromString(TEXT("Nom de la partie")))
+					.HintText(FText::FromString(BR_STR(NSLOCTEXT("BR", "Menu.NomPartie", "Nom de la partie"))))
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 22))
 					.SelectAllTextWhenFocused(true)
 					.OnTextChanged_Lambda([WeakThis](const FText& NewText)
@@ -2187,8 +2279,7 @@ void ABRPlayerController::StartSolo()
 	if (Session && Session->bValid && Session->Level == Target && Session->Seed != 0 && !bDevSession)
 	{
 		BRSaves::PendingResume() = *Session;
-		ABRHUD::Notify(this, FString::Printf(TEXT("Reprise de la partie \u00ab %s \u00bb : Niveau %d, l\u00e0 o\u00f9 vous l'aviez laiss\u00e9."),
-			*ActiveSave->SaveName, Target), 5.f, FLinearColor(0.75f, 0.95f, 1.f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ReprisePartieSavenameNiveauTarget", "Reprise de la partie \u00ab {SaveName} \u00bb : Niveau {Target}, l\u00e0 o\u00f9 vous l'aviez laiss\u00e9."), { { TEXT("SaveName"), BRLoc::Arg(ActiveSave->SaveName) }, { TEXT("Target"), BRLoc::Int(Target) } }), 5.f, FLinearColor(0.75f, 0.95f, 1.f));
 		W->RequestTransition(Target, false, Session->Seed);
 	}
 	else if (Target != W->GetLevelNumber())
@@ -2244,13 +2335,12 @@ void ABRPlayerController::BRPits()
 		C->GetCharacterMovement()->StopMovementImmediately();
 		SetControlRotation(Rot);
 		bDevSession = true;
-		ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9V : salle de fosses (Niveau %d, graine %u). Attention au bord."), W->GetLevelNumber(),
-			W->GetSeed()), 4.f, FLinearColor(0.6f, 0.9f, 1.f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ModeDevSalleFossesNiveau", "MODE D\u00c9V : salle de fosses (Niveau {LevelNumber}, graine {Seed}). Attention au bord."), { { TEXT("LevelNumber"), BRLoc::Int(W->GetLevelNumber()) }, { TEXT("Seed"), BRLoc::Int(W->GetSeed()) } }), 4.f, FLinearColor(0.6f, 0.9f, 1.f));
 		return;
 	}
 	if (!HasAuthority())
 	{
-		ABRHUD::Notify(this, TEXT("Pas de salle de fosses dans ce niveau (l'h\u00f4te peut charger le Niveau 0 : BRPits)."), 4.f);
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.SalleFossesNiveauHotePeut", "Pas de salle de fosses dans ce niveau (l'h\u00f4te peut charger le Niveau 0 : BRPits).")), 4.f);
 		return;
 	}
 	// Pas de salle ici : Niveau 0 avec la graine de demonstration, puis placement au bord des fosses
@@ -2259,7 +2349,7 @@ void ABRPlayerController::BRPits()
 	ShowAddressBox(false);
 	UpdateInputMode();
 	bPendingPitTeleport = true;
-	ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9V : Niveau 0, graine de d\u00e9monstration %u"), ABRWorld::DemoSeed), 3.f,
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ModeDevNiveau0Graine", "MODE D\u00c9V : Niveau 0, graine de d\u00e9monstration {DemoSeed}"), { { TEXT("DemoSeed"), BRLoc::Int(ABRWorld::DemoSeed) } }), 3.f,
 		FLinearColor(0.6f, 0.9f, 1.f));
 	W->RequestTransition(0, false, ABRWorld::SeedFromUser(ABRWorld::DemoSeed, 0));
 }
@@ -2277,12 +2367,12 @@ void ABRPlayerController::BRSeed(int32 Number)
 	}
 	if (!HasAuthority())
 	{
-		ABRHUD::Notify(this, TEXT("BRSeed : r\u00e9serv\u00e9 \u00e0 l'h\u00f4te de la partie."), 3.f);
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.SeedHostOnly", "BRSeed : r\u00e9serv\u00e9 \u00e0 l'h\u00f4te de la partie.")), 3.f);
 		return;
 	}
 	bDevSession = true;
 	const int32 Level = W->GetLevelNumber();
-	ABRHUD::Notify(this, FString::Printf(TEXT("Niveau %d, graine %d"), Level, Number), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.NiveauLevelGraineNumber", "Niveau {Level}, graine {Number}"), { { TEXT("Level"), BRLoc::Int(Level) }, { TEXT("Number"), BRLoc::Int(Number) } }), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
 	W->RequestTransition(Level, false, ABRWorld::SeedFromUser(static_cast<uint32>(Number), Level));
 }
 
@@ -2295,7 +2385,7 @@ void ABRPlayerController::BRGod()
 	if (ABRCharacter* C = GetBRCharacter())
 	{
 		C->bGodMode = !C->bGodMode;
-		ABRHUD::Notify(this, C->bGodMode ? TEXT("Mode invincible : ON") : TEXT("Mode invincible : OFF"), 2.f);
+		ABRHUD::Notify(this, C->bGodMode ? BR_STR(NSLOCTEXT("BR", "Menu.ModeInvincible", "Mode invincible : ON")) : BR_STR(NSLOCTEXT("BR", "Menu.ModeInvincibleOff", "Mode invincible : OFF")), 2.f);
 	}
 }
 
@@ -2332,14 +2422,14 @@ void ABRPlayerController::BRSensitivity(float Value)
 {
 	FBRSettings::Get().Sensitivity = FMath::Clamp(Value, 0.05f, 10.f);
 	SaveSettings();
-	ABRHUD::Notify(this, FString::Printf(TEXT("Sensibilit\u00e9 : %.2f"), FBRSettings::Get().Sensitivity), 2.f);
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.SensibiliteSensitivity", "Sensibilit\u00e9 : {Sensitivity}"), { { TEXT("Sensitivity"), BRLoc::Num(FBRSettings::Get().Sensitivity, 2) } }), 2.f);
 }
 
 void ABRPlayerController::BRInvertY()
 {
 	FBRSettings::Get().bInvertY = !FBRSettings::Get().bInvertY;
 	SaveSettings();
-	ABRHUD::Notify(this, FBRSettings::Get().bInvertY ? TEXT("Axe Y invers\u00e9") : TEXT("Axe Y normal"), 2.f);
+	ABRHUD::Notify(this, FBRSettings::Get().bInvertY ? BR_STR(NSLOCTEXT("BR", "Menu.AxeInverse", "Axe Y invers\u00e9")) : BR_STR(NSLOCTEXT("BR", "Menu.AxeNormal", "Axe Y normal")), 2.f);
 }
 
 void ABRPlayerController::BRGiveAll()
@@ -2407,56 +2497,58 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 {
 	switch (Index)
 	{
+	case Row_Language:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LanguageRow", "LANGUE"));
 	case Row_Sensitivity:
-		return TEXT("SENSIBILIT\u00c9 DE LA SOURIS");
+		return BR_STR(NSLOCTEXT("BR", "Menu.SensibiliteSouris", "SENSIBILIT\u00c9 DE LA SOURIS"));
 	case Row_InvertY:
-		return TEXT("INVERSER L'AXE VERTICAL");
+		return BR_STR(NSLOCTEXT("BR", "Menu.InverserAxeVertical", "INVERSER L'AXE VERTICAL"));
 	case Row_FOV:
-		return TEXT("CHAMP DE VISION");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ChampVision", "CHAMP DE VISION"));
 	case Row_HeadBob:
-		return TEXT("BALANCEMENT DE LA CAM\u00c9RA");
+		return BR_STR(NSLOCTEXT("BR", "Menu.BalancementCamera", "BALANCEMENT DE LA CAM\u00c9RA"));
 	case Row_CameraShake:
-		return TEXT("TREMBLEMENTS DE LA CAM\u00c9RA");
+		return BR_STR(NSLOCTEXT("BR", "Menu.TremblementsCamera", "TREMBLEMENTS DE LA CAM\u00c9RA"));
 	case Row_Flashes:
-		return TEXT("FLASHS ET CLIGNOTEMENTS");
+		return BR_STR(NSLOCTEXT("BR", "Menu.FlashsClignotements", "FLASHS ET CLIGNOTEMENTS"));
 	case Row_MotionBlur:
-		return TEXT("FLOU DE MOUVEMENT");
+		return BR_STR(NSLOCTEXT("BR", "Menu.FlouMouvement", "FLOU DE MOUVEMENT"));
 	case Row_Volume:
-		return TEXT("VOLUME G\u00c9N\u00c9RAL");
+		return BR_STR(NSLOCTEXT("BR", "Menu.VolumeGeneral", "VOLUME G\u00c9N\u00c9RAL"));
 	case Row_Voice:
-		return TEXT("CHAT VOCAL (PROXIMIT\u00c9)");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ChatVocalProximite", "CHAT VOCAL (PROXIMIT\u00c9)"));
 	case Row_Brightness:
-		return TEXT("LUMINOSIT\u00c9");
+		return BR_STR(NSLOCTEXT("BR", "Menu.Luminosite", "LUMINOSIT\u00c9"));
 	case Row_WindowMode:
-		return TEXT("MODE D'AFFICHAGE");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ModeAffichage", "MODE D'AFFICHAGE"));
 	case Row_RenderScale:
-		return TEXT("R\u00c9SOLUTION DE RENDU");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ResolutionRendu", "R\u00c9SOLUTION DE RENDU"));
 	case Row_VSync:
-		return TEXT("SYNCHRO VERTICALE (V-SYNC)");
+		return BR_STR(NSLOCTEXT("BR", "Menu.SynchroVerticaleVSync", "SYNCHRO VERTICALE (V-SYNC)"));
 	case Row_MaxFPS:
-		return TEXT("IMAGES PAR SECONDE MAX.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ImagesSecondeMax", "IMAGES PAR SECONDE MAX."));
 	case Row_Profile:
-		return TEXT("PROFIL GRAPHIQUE");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ProfilGraphique", "PROFIL GRAPHIQUE"));
 	case Row_Quality:
-		return TEXT("QUALIT\u00c9 GRAPHIQUE");
+		return BR_STR(NSLOCTEXT("BR", "Menu.QualiteGraphique", "QUALIT\u00c9 GRAPHIQUE"));
 	case Row_HardwareRT:
-		return TEXT("RAY TRACING MAT\u00c9RIEL (RTX)");
+		return BR_STR(NSLOCTEXT("BR", "Menu.RayTracingMaterielRtx", "RAY TRACING MAT\u00c9RIEL (RTX)"));
 	case Row_RTHitLighting:
-		return TEXT("REFLETS RAY TRAC\u00c9S HAUTE QUALIT\u00c9");
+		return BR_STR(NSLOCTEXT("BR", "Menu.RefletsRayTracesHauteQualite", "REFLETS RAY TRAC\u00c9S HAUTE QUALIT\u00c9"));
 	case Row_RTShadows:
-		return TEXT("OMBRES RAY TRAC\u00c9ES (LAMPE)");
+		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresRayTraceesLampe", "OMBRES RAY TRAC\u00c9ES (LAMPE)"));
 	case Row_AreaLights:
-		return TEXT("N\u00c9ONS EN LUMI\u00c8RES SURFACIQUES");
+		return BR_STR(NSLOCTEXT("BR", "Menu.NeonsLumieresSurfaciques", "N\u00c9ONS EN LUMI\u00c8RES SURFACIQUES"));
 	case Row_FullCreatures:
-		return TEXT("MOD\u00c8LES COMPLETS DES ENTIT\u00c9S");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ModelesCompletsEntites", "MOD\u00c8LES COMPLETS DES ENTIT\u00c9S"));
 	case Row_VolumetricFog:
-		return TEXT("BROUILLARD VOLUM\u00c9TRIQUE");
+		return BR_STR(NSLOCTEXT("BR", "Menu.VolumetricFog", "BROUILLARD VOLUM\u00c9TRIQUE"));
 	case Row_FilmGrain:
-		return TEXT("GRAIN DE L'IMAGE");
+		return BR_STR(NSLOCTEXT("BR", "Menu.GrainImage", "GRAIN DE L'IMAGE"));
 	case Row_VHSEffect:
-		return TEXT("EFFET VHS");
+		return BR_STR(NSLOCTEXT("BR", "Menu.EffetVhs", "EFFET VHS"));
 	case Row_DevMode:
-		return TEXT("MODE D\u00c9VELOPPEUR");
+		return BR_STR(NSLOCTEXT("BR", "Menu.ModeDeveloppeur", "MODE D\u00c9VELOPPEUR"));
 	default:
 		return FString();
 	}
@@ -2467,6 +2559,8 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 	const FBRSettings& S = FBRSettings::Get();
 	switch (Index)
 	{
+	case Row_Language:
+		return BRLoc::Current().NativeName;
 	case Row_Sensitivity:
 		return FString::Printf(TEXT("%.2f"), S.Sensitivity);
 	case Row_InvertY:
@@ -2476,39 +2570,39 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 	case Row_HeadBob:
 		return OnOff(S.bHeadBob);
 	case Row_CameraShake:
-		return S.CameraShake <= 0.f ? FString(TEXT("AUCUN")) : FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.CameraShake * 100.f));
+		return S.CameraShake <= 0.f ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Aucun", "AUCUN"))) : FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.CameraShake * 100.f));
 	case Row_Flashes:
-		return S.Flashes <= 0 ? FString(TEXT("NORMAUX")) : (S.Flashes == 1 ? FString(TEXT("ATT\u00c9NU\u00c9S")) : FString(TEXT("AUCUN")));
+		return S.Flashes <= 0 ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Normaux", "NORMAUX"))) : (S.Flashes == 1 ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Attenues", "ATT\u00c9NU\u00c9S"))) : FString(BR_STR(NSLOCTEXT("BR", "Menu.Aucun", "AUCUN"))));
 	case Row_MotionBlur:
 		return OnOff(S.bMotionBlur);
 	case Row_Volume:
 		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.MasterVolume * 100.f));
 	case Row_Voice:
-		return VoiceNames[FMath::Clamp(S.VoiceMode, 0, 2)];
+		return VoiceNames(FMath::Clamp(S.VoiceMode, 0, 2));
 	case Row_Brightness:
 		return FString::Printf(TEXT("%+.1f"), S.Brightness);
 	case Row_WindowMode:
-		return WindowNames[FMath::Clamp(S.WindowMode, 0, 2)];
+		return WindowNames(FMath::Clamp(S.WindowMode, 0, 2));
 	case Row_RenderScale:
 	{
 		// v4.8 : resolution interne reelle (celle que TSR agrandit), pas seulement le pourcentage
 		const FIntPoint In = InternalResolution();
-		return In.X > 0 ? FString::Printf(TEXT("%d %%  (%d\u00d7%d)"), S.RenderScale, In.X, In.Y) : FString::Printf(TEXT("%d %%"), S.RenderScale);
+		return In.X > 0 ? BRLoc::Fmt(NSLOCTEXT("BR", "Menu.RenderscaleX", "{RenderScale} %  ({X}\u00d7{Y})"), { { TEXT("RenderScale"), BRLoc::Int(S.RenderScale) }, { TEXT("X"), BRLoc::Int(In.X) }, { TEXT("Y"), BRLoc::Int(In.Y) } }) : FString::Printf(TEXT("%d %%"), S.RenderScale);
 	}
 	case Row_VSync:
 		return OnOff(S.bVSync);
 	case Row_MaxFPS:
-		return S.MaxFPS <= 0 ? FString(TEXT("ILLIMIT\u00c9")) : FString::Printf(TEXT("%d"), S.MaxFPS);
+		return S.MaxFPS <= 0 ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Illimite", "ILLIMIT\u00c9"))) : FString::Printf(TEXT("%d"), S.MaxFPS);
 	case Row_Profile:
-		return ProfileNames[FMath::Clamp(S.GraphicsProfile, 0, 4)];
+		return ProfileNames(FMath::Clamp(S.GraphicsProfile, 0, 4));
 	case Row_Quality:
-		return QualityNames[FMath::Clamp(S.Quality, 0, 4)];
+		return QualityNames(FMath::Clamp(S.Quality, 0, 4));
 	case Row_HardwareRT:
-		return !IsHardwareRayTracingAvailable() ? FString(TEXT("INDISPONIBLE")) : OnOff(S.bHardwareRT);
+		return !IsHardwareRayTracingAvailable() ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Indisponible", "INDISPONIBLE"))) : OnOff(S.bHardwareRT);
 	case Row_RTHitLighting:
-		return !IsHardwareRayTracingAvailable() ? FString(TEXT("INDISPONIBLE")) : OnOff(S.bRTHitLighting);
+		return !IsHardwareRayTracingAvailable() ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Indisponible", "INDISPONIBLE"))) : OnOff(S.bRTHitLighting);
 	case Row_RTShadows:
-		return !IsHardwareRayTracingAvailable() ? FString(TEXT("INDISPONIBLE")) : OnOff(S.bRTShadows);
+		return !IsHardwareRayTracingAvailable() ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Indisponible", "INDISPONIBLE"))) : OnOff(S.bRTShadows);
 	case Row_AreaLights:
 		return OnOff(S.bAreaLights);
 	case Row_FullCreatures:
@@ -2530,58 +2624,52 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 {
 	switch (Index)
 	{
+	case Row_Language:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LanguageHint", "Langue des textes, des nombres et des dates. S'applique tout de suite et reste enregistr\u00e9e. En coop, chaque joueur garde la sienne. Les voix et les sons ne changent pas (pas de doublage)."));
 	case Row_HeadBob:
-		return TEXT("D\u00e9sactivez-le si le mouvement de la cam\u00e9ra pendant la marche vous incommode.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.DesactivezMouvementCameraPendantMarche", "D\u00e9sactivez-le si le mouvement de la cam\u00e9ra pendant la marche vous incommode."));
 	case Row_CameraShake:
-		return TEXT("Secousses de la cam\u00e9ra quand on est frapp\u00e9 et pendant les jumpscares. Les coups et leurs d\u00e9g\u00e2ts ne changent pas.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.SecoussesCameraQuandFrappePendant", "Secousses de la cam\u00e9ra quand on est frapp\u00e9 et pendant les jumpscares. Les coups et leurs d\u00e9g\u00e2ts ne changent pas."));
 	case Row_Flashes:
-		return TEXT("\u00c9clairs des jumpscares, image de la mort, n\u00e9ons qui clignotent. Att\u00e9nu\u00e9s ou supprim\u00e9s si les lumi\u00e8res vives qui clignotent vous g\u00eanent ; les coupures de courant restent annonc\u00e9es par le son.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.EclairsJumpscaresImageMortNeons", "\u00c9clairs des jumpscares, image de la mort, n\u00e9ons qui clignotent. Att\u00e9nu\u00e9s ou supprim\u00e9s si les lumi\u00e8res vives qui clignotent vous g\u00eanent ; les coupures de courant restent annonc\u00e9es par le son."));
 	case Row_MotionBlur:
-		return TEXT("Flou des mouvements rapides de la cam\u00e9ra. D\u00e9sactiv\u00e9 par d\u00e9faut.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.FlouMouvementsRapidesCameraDesactive", "Flou des mouvements rapides de la cam\u00e9ra. D\u00e9sactiv\u00e9 par d\u00e9faut."));
 	case Row_Volume:
-		return TEXT("Volume de tout le jeu (ambiance, entit\u00e9s, voix des co\u00e9quipiers).");
+		return BR_STR(NSLOCTEXT("BR", "Menu.VolumeToutJeuAmbianceEntites", "Volume de tout le jeu (ambiance, entit\u00e9s, voix des co\u00e9quipiers)."));
 	case Row_Voice:
-		return BRKeys::Expand(TEXT("On entend les autres joueurs pr\u00e8s de leur personnage, \u00e9touff\u00e9s par les murs. Appuyer pour parler : touche {PushToTalk}. Voix ouverte : le micro transmet en permanence. Micro coup\u00e9 : vous entendez toujours les autres."));
+		return BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Menu.EntendAutresJoueursPresLeur", "On entend les autres joueurs pr\u00e8s de leur personnage, \u00e9touff\u00e9s par les murs. Appuyer pour parler : touche {PushToTalk}. Voix ouverte : le micro transmet en permanence. Micro coup\u00e9 : vous entendez toujours les autres.")));
 	case Row_Brightness:
-		return TEXT("Rend l'image plus claire ou plus sombre (les zones sans lumi\u00e8re restent noires).");
+		return BR_STR(NSLOCTEXT("BR", "Menu.RendImageClaireSombreZones", "Rend l'image plus claire ou plus sombre (les zones sans lumi\u00e8re restent noires)."));
 	case Row_WindowMode:
-		return TEXT("Plein \u00e9cran exclusif, plein \u00e9cran fen\u00eatr\u00e9 (Alt+Tab instantan\u00e9) ou fen\u00eatre. Sans effet dans l'\u00e9diteur.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.PleinEcranExclusifPleinEcran", "Plein \u00e9cran exclusif, plein \u00e9cran fen\u00eatr\u00e9 (Alt+Tab instantan\u00e9) ou fen\u00eatre. Sans effet dans l'\u00e9diteur."));
 	case Row_RenderScale:
-		return TEXT("En dessous de 100 %, l'image est calcul\u00e9e plus petite puis agrandie par TSR : beaucoup plus fluide, l\u00e9g\u00e8rement plus floue.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.Dessous100ImageCalculeePetite", "En dessous de 100 %, l'image est calcul\u00e9e plus petite puis agrandie par TSR : beaucoup plus fluide, l\u00e9g\u00e8rement plus floue."));
 	case Row_VSync:
-		return TEXT("Supprime les d\u00e9chirures d'image, ajoute un peu de latence.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.SupprimeDechiruresImageAjoutePeu", "Supprime les d\u00e9chirures d'image, ajoute un peu de latence."));
 	case Row_MaxFPS:
-		return TEXT("Limiter les images par seconde r\u00e9duit la chaleur et le bruit de la carte graphique. Sans effet dans l'\u00e9diteur.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.LimiterImagesSecondeReduitChaleur", "Limiter les images par seconde r\u00e9duit la chaleur et le bruit de la carte graphique. Sans effet dans l'\u00e9diteur."));
 	case Row_Profile:
-		return TEXT("PERFORMANCE : qualit\u00e9 \u00c9lev\u00e9e, Lumen logiciel, rendu \u00e0 67 % (TSR). QUALIT\u00c9 : \u00c9pique, Lumen en ray tracing ")
-			TEXT("mat\u00e9riel (cache de surfaces), rendu \u00e0 80 %. RTX FLUIDE : ray tracing mat\u00e9riel, rendu \u00e0 67 % agrandi par TSR, ombres des ")
-			TEXT("n\u00e9ons jusqu'\u00e0 25 m, Hound all\u00e9g\u00e9 : vise 60 images/s stables avec une carte RTX. CIN\u00c9MATIQUE : reflets \u00e9clair\u00e9s par les ")
-			TEXT("rayons, ombres ray trac\u00e9es de la lampe, mod\u00e8les complets, rendu \u00e0 100 %. Modifier un r\u00e9glage ci-dessous passe en PERSONNALIS\u00c9. ")
-			TEXT("S'applique tout de suite, aussi aux zones d\u00e9j\u00e0 charg\u00e9es.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.PerformanceQualiteEleveeLumenLogiciel", "PERFORMANCE : qualit\u00e9 \u00c9lev\u00e9e, Lumen logiciel, rendu \u00e0 67 % (TSR). QUALIT\u00c9 : \u00c9pique, Lumen en ray tracing mat\u00e9riel (cache de surfaces), rendu \u00e0 80 %. RTX FLUIDE : ray tracing mat\u00e9riel, rendu \u00e0 67 % agrandi par TSR, ombres des n\u00e9ons jusqu'\u00e0 25 m, Hound all\u00e9g\u00e9 : vise 60 images/s stables avec une carte RTX. CIN\u00c9MATIQUE : reflets \u00e9clair\u00e9s par les rayons, ombres ray trac\u00e9es de la lampe, mod\u00e8les complets, rendu \u00e0 100 %. Modifier un r\u00e9glage ci-dessous passe en PERSONNALIS\u00c9. S'applique tout de suite, aussi aux zones d\u00e9j\u00e0 charg\u00e9es."));
 	case Row_Quality:
-		return TEXT("Ombres, Lumen, textures, anti-cr\u00e9nelage (scalability). S'applique tout de suite.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresLumenTexturesAntiCrenelage", "Ombres, Lumen, textures, anti-cr\u00e9nelage (scalability). S'applique tout de suite."));
 	case Row_HardwareRT:
 		return IsHardwareRayTracingAvailable()
-			? FString(TEXT("Lumen en ray tracing mat\u00e9riel : reflets et lumi\u00e8re indirecte bien plus pr\u00e9cis (carte RTX / RX 6000+). S'applique tout de suite."))
-			: FString(TEXT("Indisponible : le jeu a d\u00e9marr\u00e9 sans ray tracing (DirectX 12 et carte compatible requis, r.RayTracing=True). ")
-				TEXT("Lumen logiciel est utilis\u00e9. Changer de carte ou de RHI demande un red\u00e9marrage."));
+			? FString(BR_STR(NSLOCTEXT("BR", "Menu.LumenRayTracingMaterielReflets", "Lumen en ray tracing mat\u00e9riel : reflets et lumi\u00e8re indirecte bien plus pr\u00e9cis (carte RTX / RX 6000+). S'applique tout de suite.")))
+			: FString(BR_STR(NSLOCTEXT("BR", "Menu.IndisponibleJeuDemarreSansRay", "Indisponible : le jeu a d\u00e9marr\u00e9 sans ray tracing (DirectX 12 et carte compatible requis, r.RayTracing=True). Lumen logiciel est utilis\u00e9. Changer de carte ou de RHI demande un red\u00e9marrage.")));
 	case Row_RTHitLighting:
-		return TEXT("Reflets \u00e9clair\u00e9s par les rayons eux-m\u00eames (eau, flaques, carrelage, m\u00e9tal) au lieu du cache de surfaces de Lumen. ")
-			TEXT("Le plus co\u00fbteux des r\u00e9glages : seul le profil CIN\u00c9MATIQUE l'active.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.RefletsEclairesRayonsEuxMemes", "Reflets \u00e9clair\u00e9s par les rayons eux-m\u00eames (eau, flaques, carrelage, m\u00e9tal) au lieu du cache de surfaces de Lumen. Le plus co\u00fbteux des r\u00e9glages : seul le profil CIN\u00c9MATIQUE l'active."));
 	case Row_RTShadows:
-		return TEXT("Ombres de la lampe torche ray trac\u00e9es (contact net, pas de recalcul des ombres virtuelles \u00e0 chaque mouvement de la lampe). ")
-			TEXT("Les plafonniers gardent les ombres virtuelles (VSM), moins ch\u00e8res pour des dizaines de lumi\u00e8res fixes.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresLampeTorcheRayTracees", "Ombres de la lampe torche ray trac\u00e9es (contact net, pas de recalcul des ombres virtuelles \u00e0 chaque mouvement de la lampe). Les plafonniers gardent les ombres virtuelles (VSM), moins ch\u00e8res pour des dizaines de lumi\u00e8res fixes."));
 	case Row_AreaLights:
-		return TEXT("Ombres douces des n\u00e9ons. S'applique tout de suite, zones d\u00e9j\u00e0 charg\u00e9es comprises (quelques lumi\u00e8res par image).");
+		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresDoucesNeonsAppliqueTout", "Ombres douces des n\u00e9ons. S'applique tout de suite, zones d\u00e9j\u00e0 charg\u00e9es comprises (quelques lumi\u00e8res par image)."));
 	case Row_FullCreatures:
-		return TEXT("Hound d'origine (175 000 sommets, pelage complet) au lieu du d\u00e9riv\u00e9 all\u00e9g\u00e9. Tr\u00e8s co\u00fbteux en ray tracing. S'applique aussi aux entit\u00e9s pr\u00e9sentes.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.HoundOrigine175000Sommets", "Hound d'origine (175 000 sommets, pelage complet) au lieu du d\u00e9riv\u00e9 all\u00e9g\u00e9. Tr\u00e8s co\u00fbteux en ray tracing. S'applique aussi aux entit\u00e9s pr\u00e9sentes."));
 	case Row_VolumetricFog:
-		return TEXT("Halos de lumi\u00e8re dans l'air humide.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.HalosLumiereAirHumide", "Halos de lumi\u00e8re dans l'air humide."));
 	case Row_VHSEffect:
-		return TEXT("Lignes de balayage, l\u00e9g\u00e8re aberration et salet\u00e9 d'objectif. D\u00e9sactiv\u00e9 : image nette.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.LignesBalayageLegereAberrationSalete", "Lignes de balayage, l\u00e9g\u00e8re aberration et salet\u00e9 d'objectif. D\u00e9sactiv\u00e9 : image nette."));
 	case Row_DevMode:
-		return TEXT("Tous les niveaux jouables depuis le choix des niveaux (non ajout\u00e9s \u00e0 la partie). En jeu : Page pr\u00e9c. / suiv. niveau, ")
-			TEXT("D\u00e9but nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares.");
+		return BR_STR(NSLOCTEXT("BR", "Menu.TousNiveauxJouablesDepuisChoix", "Tous les niveaux jouables depuis le choix des niveaux (non ajout\u00e9s \u00e0 la partie). En jeu : Page pr\u00e9c. / suiv. niveau, D\u00e9but nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares."));
 	default:
 		return FString();
 	}
@@ -2593,6 +2681,12 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	const int32 Dir = Direction >= 0 ? 1 : -1;
 	switch (Index)
 	{
+	case Row_Language:
+	{
+		const int32 Num = BRLoc::Languages().Num();
+		ChooseLanguage((FMath::Max(0, BRLoc::CurrentIndex()) + Dir + Num) % Num);
+		break;
+	}
 	case Row_Sensitivity:
 		S.Sensitivity = FMath::Clamp(FMath::RoundToFloat((S.Sensitivity + Dir * 0.1f) * 100.f) / 100.f, 0.1f, 5.f);
 		break;
@@ -2816,16 +2910,9 @@ FString ABRPlayerController::GetRenderModeText(bool bShort) const
 	const bool bDynRes = CVarF(TEXT("r.DynamicRes.OperationMode"), 0.f) > 0.5f;
 	if (bShort)
 	{
-		return FString::Printf(TEXT("%s  \u00b7  %s  \u00b7  %dx%d \u2192 %dx%d %s%s"), *RHIName,
-			bLumenHW ? (bHit ? TEXT("RT + HIT LIGHTING") : TEXT("LUMEN RT")) : TEXT("LUMEN LOGICIEL"), In.X, In.Y, VP.X, VP.Y, Upscaler,
-			bDynRes ? TEXT(" dyn.") : TEXT(""));
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.RhinameHitXXX2", "{RHIName}  \u00b7  {Hit}  \u00b7  {X}x{Y} \u2192 {X2}x{Y2} {Upscaler}{DynRes}"), { { TEXT("RHIName"), BRLoc::Arg(RHIName) }, { TEXT("Hit"), BRLoc::Arg(bLumenHW ? (bHit ? BR_STR(NSLOCTEXT("BR", "Menu.RtHitLighting", "RT + HIT LIGHTING")) : BR_STR(NSLOCTEXT("BR", "Menu.LumenRt", "LUMEN RT"))) : BR_STR(NSLOCTEXT("BR", "Menu.LumenLogiciel", "LUMEN LOGICIEL"))) }, { TEXT("X"), BRLoc::Int(In.X) }, { TEXT("Y"), BRLoc::Int(In.Y) }, { TEXT("X2"), BRLoc::Int(VP.X) }, { TEXT("Y2"), BRLoc::Int(VP.Y) }, { TEXT("Upscaler"), BRLoc::Arg(Upscaler) }, { TEXT("DynRes"), BRLoc::Arg(bDynRes ? BR_STR(NSLOCTEXT("BR", "Menu.Dyn", " dyn.")) : TEXT("")) } });
 	}
-	return FString::Printf(TEXT("Mode r\u00e9el : %s %s  \u00b7  ray tracing mat\u00e9riel %s  \u00b7  Lumen %s (reflets : %s)  \u00b7  ombres : %s%s  \u00b7  ")
-		TEXT("rendu %dx%d \u2192 %dx%d (%d %%, %s%s)"),
-		*RHIName, bSM6 ? TEXT("SM6") : TEXT("SM5"), bRTOn ? TEXT("actif") : TEXT("indisponible"), bLumenHW ? TEXT("mat\u00e9riel") : TEXT("logiciel"),
-		bHit ? TEXT("\u00e9clair\u00e9s par les rayons") : TEXT("cache de surfaces"), bVSM ? TEXT("virtuelles (VSM)") : TEXT("cartes classiques"),
-		bLampRT ? TEXT(", lampe ray trac\u00e9e") : TEXT(""), In.X, In.Y, VP.X, VP.Y, FMath::RoundToInt(SP), Upscaler,
-		bDynRes ? TEXT(", r\u00e9solution dynamique") : TEXT(""));
+	return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ModeReelRhinameSm6Ray", "Mode r\u00e9el : {RHIName} {SM6}  \u00b7  ray tracing mat\u00e9riel {RTOn}  \u00b7  Lumen {LumenHW} (reflets : {Hit})  \u00b7  ombres : {VSM}{LampRT}  \u00b7  rendu {X}x{Y} \u2192 {X2}x{Y2} ({SP} %, {Upscaler}{DynRes})"), { { TEXT("RHIName"), BRLoc::Arg(RHIName) }, { TEXT("SM6"), BRLoc::Arg(bSM6 ? TEXT("SM6") : TEXT("SM5")) }, { TEXT("RTOn"), BRLoc::Arg(bRTOn ? BR_STR(NSLOCTEXT("BR", "Menu.Actif", "actif")) : BR_STR(NSLOCTEXT("BR", "Menu.Indisponible2", "indisponible"))) }, { TEXT("LumenHW"), BRLoc::Arg(bLumenHW ? BR_STR(NSLOCTEXT("BR", "Menu.Materiel", "mat\u00e9riel")) : BR_STR(NSLOCTEXT("BR", "Menu.Logiciel", "logiciel"))) }, { TEXT("Hit"), BRLoc::Arg(bHit ? BR_STR(NSLOCTEXT("BR", "Menu.EclairesRayons", "\u00e9clair\u00e9s par les rayons")) : BR_STR(NSLOCTEXT("BR", "Menu.CacheSurfaces", "cache de surfaces"))) }, { TEXT("VSM"), BRLoc::Arg(bVSM ? BR_STR(NSLOCTEXT("BR", "Menu.VirtuellesVsm", "virtuelles (VSM)")) : BR_STR(NSLOCTEXT("BR", "Menu.CartesClassiques", "cartes classiques"))) }, { TEXT("LampRT"), BRLoc::Arg(bLampRT ? BR_STR(NSLOCTEXT("BR", "Menu.LampeRayTracee", ", lampe ray trac\u00e9e")) : TEXT("")) }, { TEXT("X"), BRLoc::Int(In.X) }, { TEXT("Y"), BRLoc::Int(In.Y) }, { TEXT("X2"), BRLoc::Int(VP.X) }, { TEXT("Y2"), BRLoc::Int(VP.Y) }, { TEXT("SP"), BRLoc::Int(FMath::RoundToInt(SP)) }, { TEXT("Upscaler"), BRLoc::Arg(Upscaler) }, { TEXT("DynRes"), BRLoc::Arg(bDynRes ? BR_STR(NSLOCTEXT("BR", "Menu.ResolutionDynamique", ", r\u00e9solution dynamique")) : TEXT("")) } });
 }
 
 void ABRPlayerController::SaveSettings() const

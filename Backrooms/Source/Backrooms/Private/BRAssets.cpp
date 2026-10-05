@@ -1,6 +1,7 @@
 #include "BRAssets.h"
 #include "Backrooms.h"
 #include "BRMaterialBuilder.h"
+#include "BRLoc.h"
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -1049,9 +1050,8 @@ FString UBRAssets::CheckImportedMeshes()
 		const float Size = static_cast<float>(M->GetBoundingBox().GetSize().GetMax());
 		if (Size < R.Expected * 0.2f || Size > R.Expected * 5.f)
 		{
-			return FString::Printf(TEXT("Mod\u00e8les 3D import\u00e9s \u00e0 la mauvaise \u00e9chelle (%s : %.1f cm au lieu de %.0f) : ils sont invisibles. ")
-				TEXT("Relancez l'import : Fen\u00eatre > Journal de sortie > Python : import backrooms_setup; backrooms_setup.run(force=True)"),
-				R.Name, Size, R.Expected);
+			return BRLoc::Fmt(NSLOCTEXT("BR", "Assets.WrongScale", "Mod\u00e8les 3D import\u00e9s \u00e0 la mauvaise \u00e9chelle ({Mesh} : {Size} cm au lieu de {Expected}) : ils sont invisibles. Relancez l'import : Fen\u00eatre > Journal de sortie > Python : import backrooms_setup; backrooms_setup.run(force=True)"),
+				{ { TEXT("Mesh"), BRLoc::Arg(R.Name) }, { TEXT("Size"), BRLoc::Num(Size, 1) }, { TEXT("Expected"), BRLoc::Num(R.Expected, 0) } });
 		}
 	}
 	return FString();

@@ -31,94 +31,85 @@ const FBREntityInfo& ABREntity::Info(EBREntityKind InKind)
 		L.SetNum(static_cast<int32>(EBREntityKind::Count));
 
 		FBREntityInfo& Smiler = L[static_cast<int32>(EBREntityKind::Smiler)];
-		Smiler.Name = TEXT("Smilers");
-		Smiler.Number = TEXT("Entit\u00e9 3");
-		Smiler.Description = TEXT("Une silhouette invisible dans l'obscurit\u00e9, dont on ne distingue que deux yeux et un sourire ")
-			TEXT("lumineux. On les trouve dans les zones o\u00f9 la lumi\u00e8re est morte.");
-		Smiler.Advice = TEXT("Ne braquez JAMAIS votre lampe sur eux : ils chargent. Eteignez la lumi\u00e8re, ne courez pas et reculez lentement.");
+		Smiler.Name = NSLOCTEXT("BR", "Entity.Smiler.Name", "Smilers");
+		Smiler.Number = NSLOCTEXT("BR", "Entity.Smiler.Number", "Entit\u00e9 3");
+		Smiler.Description = NSLOCTEXT("BR", "Entity.Smiler.Description", "Une silhouette invisible dans l'obscurit\u00e9, dont on ne distingue que deux yeux et un sourire lumineux. On les trouve dans les zones o\u00f9 la lumi\u00e8re est morte.");
+		Smiler.Advice = NSLOCTEXT("BR", "Entity.Smiler.Advice", "Ne braquez JAMAIS votre lampe sur eux : ils chargent. Eteignez la lumi\u00e8re, ne courez pas et reculez lentement.");
 		Smiler.HalfHeight = 50.f; Smiler.Radius = 45.f; Smiler.bFlying = true; Smiler.HoverHeight = 165.f; Smiler.bNeedsDark = true;
 		Smiler.WalkSpeed = 110.f; Smiler.ChaseSpeed = 700.f; Smiler.SightRange = 1800.f; Smiler.AttackRange = 110.f;
 		Smiler.Damage = 100.f; Smiler.SanityDamage = 30.f; Smiler.AttackCooldown = 1.f; Smiler.Aura = 0.8f; Smiler.AuraRadius = 900.f;
 		Smiler.Voice = TEXT("S_Smiler"); Smiler.VoiceInterval = 12.f; Smiler.VoiceFalloff = 2000.f;
 
 		FBREntityInfo& Hound = L[static_cast<int32>(EBREntityKind::Hound)];
-		Hound.Name = TEXT("Hounds");
-		Hound.Number = TEXT("Entit\u00e9 8");
-		Hound.Description = TEXT("Des humano\u00efdes p\u00e2les et d\u00e9charn\u00e9s qui se d\u00e9placent \u00e0 quatre pattes, le visage ")
-			TEXT("cach\u00e9 sous de longs cheveux noirs. Ils chassent en sentant la peur.");
-		Hound.Advice = TEXT("Ne fuyez jamais en courant devant un Hound. Faites-lui face, regardez-le et reculez calmement.");
+		Hound.Name = NSLOCTEXT("BR", "Entity.Hound.Name", "Hounds");
+		Hound.Number = NSLOCTEXT("BR", "Entity.Hound.Number", "Entit\u00e9 8");
+		Hound.Description = NSLOCTEXT("BR", "Entity.Hound.Description", "Des humano\u00efdes p\u00e2les et d\u00e9charn\u00e9s qui se d\u00e9placent \u00e0 quatre pattes, le visage cach\u00e9 sous de longs cheveux noirs. Ils chassent en sentant la peur.");
+		Hound.Advice = NSLOCTEXT("BR", "Entity.Hound.Advice", "Ne fuyez jamais en courant devant un Hound. Faites-lui face, regardez-le et reculez calmement.");
 		Hound.HalfHeight = 45.f; Hound.Radius = 38.f; Hound.WalkSpeed = 180.f; Hound.ChaseSpeed = 465.f; Hound.SightRange = 2200.f;
 		Hound.AttackRange = 130.f; Hound.Damage = 30.f; Hound.SanityDamage = 10.f; Hound.AttackCooldown = 1.3f; Hound.Aura = 0.3f;
 		Hound.Voice = TEXT("S_Hound"); Hound.VoiceInterval = 7.f;
 
 		FBREntityInfo& Faceling = L[static_cast<int32>(EBREntityKind::Faceling)];
-		Faceling.Name = TEXT("Facelings");
-		Faceling.Number = TEXT("Entit\u00e9 9");
-		Faceling.Description = TEXT("Des \u00eatres d'apparence humaine, v\u00eatus normalement, mais sans le moindre visage. ")
-			TEXT("La plupart errent sans but et ignorent les vagabonds.");
-		Faceling.Advice = TEXT("Restez poli et gardez vos distances. Dans les champs, certains se tapissent dans les bl\u00e9s et attrapent ceux qui passent trop pr\u00e8s.");
+		Faceling.Name = NSLOCTEXT("BR", "Entity.Faceling.Name", "Facelings");
+		Faceling.Number = NSLOCTEXT("BR", "Entity.Faceling.Number", "Entit\u00e9 9");
+		Faceling.Description = NSLOCTEXT("BR", "Entity.Faceling.Description", "Des \u00eatres d'apparence humaine, v\u00eatus normalement, mais sans le moindre visage. La plupart errent sans but et ignorent les vagabonds.");
+		Faceling.Advice = NSLOCTEXT("BR", "Entity.Faceling.Advice", "Restez poli et gardez vos distances. Dans les champs, certains se tapissent dans les bl\u00e9s et attrapent ceux qui passent trop pr\u00e8s.");
 		Faceling.HalfHeight = 92.f; Faceling.Radius = 30.f; Faceling.WalkSpeed = 115.f; Faceling.ChaseSpeed = 300.f;
 		Faceling.SightRange = 1500.f; Faceling.AttackRange = 110.f; Faceling.Damage = 15.f; Faceling.SanityDamage = 5.f;
 		Faceling.AttackCooldown = 1.8f; Faceling.Aura = 0.2f; Faceling.AuraRadius = 450.f;
 		Faceling.Voice = TEXT("S_Faceling"); Faceling.VoiceInterval = 14.f;
 
 		FBREntityInfo& Skin = L[static_cast<int32>(EBREntityKind::SkinStealer)];
-		Skin.Name = TEXT("Skin-Stealers");
-		Skin.Number = TEXT("Entit\u00e9 10");
-		Skin.Description = TEXT("Une cr\u00e9ature longiligne qui porte la peau de ses victimes et imite leurs voix pour attirer ")
-			TEXT("les vagabonds. Au repos, ce n'est qu'une masse de chair translucide ; \u00e0 votre approche, elle prend l'apparence d'un ")
-			TEXT("explorateur en combinaison. Extr\u00eamement dangereuse.");
-		Skin.Advice = TEXT("M\u00e9fiez-vous des explorateurs qui s'approchent sans rien dire. Ne r\u00e9pondez jamais \u00e0 une voix famili\u00e8re : fuyez.");
+		Skin.Name = NSLOCTEXT("BR", "Entity.Skin.Name", "Skin-Stealers");
+		Skin.Number = NSLOCTEXT("BR", "Entity.Skin.Number", "Entit\u00e9 10");
+		Skin.Description = NSLOCTEXT("BR", "Entity.Skin.Description", "Une cr\u00e9ature longiligne qui porte la peau de ses victimes et imite leurs voix pour attirer les vagabonds. Au repos, ce n'est qu'une masse de chair translucide ; \u00e0 votre approche, elle prend l'apparence d'un explorateur en combinaison. Extr\u00eamement dangereuse.");
+		Skin.Advice = NSLOCTEXT("BR", "Entity.Skin.Advice", "M\u00e9fiez-vous des explorateurs qui s'approchent sans rien dire. Ne r\u00e9pondez jamais \u00e0 une voix famili\u00e8re : fuyez.");
 		Skin.HalfHeight = 112.f; Skin.Radius = 32.f; Skin.WalkSpeed = 160.f; Skin.ChaseSpeed = 440.f; Skin.SightRange = 2400.f;
 		Skin.AttackRange = 140.f; Skin.Damage = 45.f; Skin.SanityDamage = 15.f; Skin.AttackCooldown = 1.5f; Skin.Aura = 0.5f;
 		Skin.Voice = TEXT("S_SkinStealer"); Skin.VoiceInterval = 9.f; Skin.VoiceFalloff = 3000.f;
 
 		FBREntityInfo& Moth = L[static_cast<int32>(EBREntityKind::Deathmoth)];
-		Moth.Name = TEXT("Deathmoths");
-		Moth.Number = TEXT("Entit\u00e9 4");
-		Moth.Description = TEXT("Des papillons de nuit g\u00e9ants dont la piq\u00fbre est toxique. Ils sont irr\u00e9sistiblement ")
-			TEXT("attir\u00e9s par la lumi\u00e8re.");
-		Moth.Advice = TEXT("Eteignez votre lampe quand vous entendez des battements d'ailes. Sans lumi\u00e8re, ils se d\u00e9sint\u00e9ressent de vous.");
+		Moth.Name = NSLOCTEXT("BR", "Entity.Moth.Name", "Deathmoths");
+		Moth.Number = NSLOCTEXT("BR", "Entity.Moth.Number", "Entit\u00e9 4");
+		Moth.Description = NSLOCTEXT("BR", "Entity.Moth.Description", "Des papillons de nuit g\u00e9ants dont la piq\u00fbre est toxique. Ils sont irr\u00e9sistiblement attir\u00e9s par la lumi\u00e8re.");
+		Moth.Advice = NSLOCTEXT("BR", "Entity.Moth.Advice", "Eteignez votre lampe quand vous entendez des battements d'ailes. Sans lumi\u00e8re, ils se d\u00e9sint\u00e9ressent de vous.");
 		Moth.HalfHeight = 30.f; Moth.Radius = 40.f; Moth.bFlying = true; Moth.HoverHeight = 210.f; Moth.WalkSpeed = 220.f;
 		Moth.ChaseSpeed = 380.f; Moth.SightRange = 2000.f; Moth.AttackRange = 130.f; Moth.Damage = 12.f; Moth.SanityDamage = 8.f;
 		Moth.AttackCooldown = 2.f; Moth.Aura = 0.2f;
 		Moth.Voice = TEXT("S_Moth"); Moth.VoiceInterval = 0.f; Moth.VoiceFalloff = 1500.f;
 
 		FBREntityInfo& Wretch = L[static_cast<int32>(EBREntityKind::Wretch)];
-		Wretch.Name = TEXT("Wretches");
-		Wretch.Number = TEXT("Entit\u00e9 15");
-		Wretch.Description = TEXT("D'anciens vagabonds d\u00e9g\u00e9n\u00e9r\u00e9s, d\u00e9charn\u00e9s et vo\u00fbt\u00e9s, priv\u00e9s d'eau ")
-			TEXT("d'amande trop longtemps. Lents, mais agressifs.");
-		Wretch.Advice = TEXT("Ils sont lents : ne les laissez pas vous acculer, et gardez toujours de l'eau d'amande.");
+		Wretch.Name = NSLOCTEXT("BR", "Entity.Wretch.Name", "Wretches");
+		Wretch.Number = NSLOCTEXT("BR", "Entity.Wretch.Number", "Entit\u00e9 15");
+		Wretch.Description = NSLOCTEXT("BR", "Entity.Wretch.Description", "D'anciens vagabonds d\u00e9g\u00e9n\u00e9r\u00e9s, d\u00e9charn\u00e9s et vo\u00fbt\u00e9s, priv\u00e9s d'eau d'amande trop longtemps. Lents, mais agressifs.");
+		Wretch.Advice = NSLOCTEXT("BR", "Entity.Wretch.Advice", "Ils sont lents : ne les laissez pas vous acculer, et gardez toujours de l'eau d'amande.");
 		Wretch.HalfHeight = 80.f; Wretch.Radius = 30.f; Wretch.WalkSpeed = 90.f; Wretch.ChaseSpeed = 240.f; Wretch.SightRange = 1100.f;
 		Wretch.AttackRange = 120.f; Wretch.Damage = 20.f; Wretch.SanityDamage = 15.f; Wretch.AttackCooldown = 2.f; Wretch.Aura = 0.4f;
 		Wretch.Voice = TEXT("S_Wretch"); Wretch.VoiceInterval = 8.f;
 
 		FBREntityInfo& Party = L[static_cast<int32>(EBREntityKind::Partygoer)];
-		Party.Name = TEXT("Partygoers");
-		Party.Number = TEXT("Entit\u00e9 67");
-		Party.Description = TEXT("=) Des silhouettes jaunes au sourire dessin\u00e9, qui vous invitent \u00e0 \"faire la f\u00eate\". ")
-			TEXT("Personne n'est jamais revenu d'une de leurs f\u00eates.");
-		Party.Advice = TEXT("Ne soutenez pas leur regard plus de quelques secondes. Pendant les coupures de courant, ils partent \u00e0 la chasse : cachez-vous.");
+		Party.Name = NSLOCTEXT("BR", "Entity.Party.Name", "Partygoers");
+		Party.Number = NSLOCTEXT("BR", "Entity.Party.Number", "Entit\u00e9 67");
+		Party.Description = NSLOCTEXT("BR", "Entity.Party.Description", "=) Des silhouettes jaunes au sourire dessin\u00e9, qui vous invitent \u00e0 \"faire la f\u00eate\". Personne n'est jamais revenu d'une de leurs f\u00eates.");
+		Party.Advice = NSLOCTEXT("BR", "Entity.Party.Advice", "Ne soutenez pas leur regard plus de quelques secondes. Pendant les coupures de courant, ils partent \u00e0 la chasse : cachez-vous.");
 		Party.HalfHeight = 92.f; Party.Radius = 30.f; Party.WalkSpeed = 70.f; Party.ChaseSpeed = 520.f; Party.SightRange = 3000.f;
 		Party.AttackRange = 120.f; Party.Damage = 100.f; Party.SanityDamage = 25.f; Party.AttackCooldown = 1.f; Party.Aura = 0.6f;
 		Party.Voice = TEXT("S_Partygoer"); Party.VoiceInterval = 9.f;
 
 		FBREntityInfo& Clump = L[static_cast<int32>(EBREntityKind::Clump)];
-		Clump.Name = TEXT("Clump");
-		Clump.Number = TEXT("Entit\u00e9 5");
-		Clump.Description = TEXT("Une masse de chair h\u00e9riss\u00e9e de bras et de jambes fusionn\u00e9s, qui roule et rampe vers ses proies.");
-		Clump.Advice = TEXT("Lent dans les virages : utilisez les couloirs pour le semer.");
+		Clump.Name = NSLOCTEXT("BR", "Entity.Clump.Name", "Clump");
+		Clump.Number = NSLOCTEXT("BR", "Entity.Clump.Number", "Entit\u00e9 5");
+		Clump.Description = NSLOCTEXT("BR", "Entity.Clump.Description", "Une masse de chair h\u00e9riss\u00e9e de bras et de jambes fusionn\u00e9s, qui roule et rampe vers ses proies.");
+		Clump.Advice = NSLOCTEXT("BR", "Entity.Clump.Advice", "Lent dans les virages : utilisez les couloirs pour le semer.");
 		Clump.HalfHeight = 60.f; Clump.Radius = 60.f; Clump.WalkSpeed = 100.f; Clump.ChaseSpeed = 300.f; Clump.SightRange = 1300.f;
 		Clump.AttackRange = 150.f; Clump.Damage = 40.f; Clump.SanityDamage = 12.f; Clump.AttackCooldown = 1.8f; Clump.Aura = 0.5f;
 		Clump.Voice = TEXT("S_Clump"); Clump.VoiceInterval = 6.f;
 
 		FBREntityInfo& Bact = L[static_cast<int32>(EBREntityKind::Bacteria)];
-		Bact.Name = TEXT("Bacteria");
-		Bact.Number = TEXT("Entit\u00e9 du Niveau 0");
-		Bact.Description = TEXT("Une silhouette humano\u00efde d\u00e9mesur\u00e9e, faite de fils torsad\u00e9s comme un squelette de c\u00e2bles. ")
-			TEXT("Elle erre dans le Niveau 0 en se tordant et imite des coups frapp\u00e9s aux murs pour attirer les vagabonds.");
-		Bact.Advice = TEXT("Si vous entendez frapper, \u00e9loignez-vous. D\u00e8s qu'elle vous voit, cassez la ligne de vue : portes, virages, recoins.");
+		Bact.Name = NSLOCTEXT("BR", "Entity.Bact.Name", "Bacteria");
+		Bact.Number = NSLOCTEXT("BR", "Entity.Bact.Number", "Entit\u00e9 du Niveau 0");
+		Bact.Description = NSLOCTEXT("BR", "Entity.Bact.Description", "Une silhouette humano\u00efde d\u00e9mesur\u00e9e, faite de fils torsad\u00e9s comme un squelette de c\u00e2bles. Elle erre dans le Niveau 0 en se tordant et imite des coups frapp\u00e9s aux murs pour attirer les vagabonds.");
+		Bact.Advice = NSLOCTEXT("BR", "Entity.Bact.Advice", "Si vous entendez frapper, \u00e9loignez-vous. D\u00e8s qu'elle vous voit, cassez la ligne de vue : portes, virages, recoins.");
 		// Un peu moins rapide qu'un sprint (470) : on peut la semer en cassant la ligne de vue, pas en restant sur place
 		Bact.HalfHeight = 108.f; Bact.Radius = 30.f; Bact.WalkSpeed = 140.f; Bact.ChaseSpeed = 440.f; Bact.SightRange = 2600.f;
 		Bact.AttackRange = 130.f; Bact.Damage = 60.f; Bact.SanityDamage = 20.f; Bact.AttackCooldown = 1.4f; Bact.Aura = 0.5f;
@@ -1115,7 +1106,7 @@ void ABREntity::Tick(float DeltaSeconds)
 		{
 			if (PW->HasPits() && GetActorLocation().Z < -PW->Def().PitKillDepth)
 			{
-				UE_LOG(LogBackrooms, Warning, TEXT("%s est tombee dans une fosse (%s) : retiree"), *MyInfo().Name, *GetActorLocation().ToString());
+				UE_LOG(LogBackrooms, Warning, TEXT("%s est tombee dans une fosse (%s) : retiree"), *MyInfo().Name.ToString(), *GetActorLocation().ToString());
 				Destroy();
 				return;
 			}

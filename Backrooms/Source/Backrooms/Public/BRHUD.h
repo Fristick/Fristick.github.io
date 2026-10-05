@@ -80,6 +80,8 @@ private:
 	// ---- Parties (v4.1)
 	void DrawMenuSaves(ABRPlayerController* PC, bool bInteractive);
 	void DrawMenuNewSave(ABRPlayerController* PC, bool bInteractive);
+	/** v4.8 : page Langue (22 langues sur deux colonnes, noms natifs) */
+	void DrawMenuLanguage(ABRPlayerController* PC, bool bInteractive);
 	/** Carte d'une partie : dernier niveau, nom, progression, temps de jeu, date */
 	void DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y, float W, float H, bool bInteractive, float Appear);
 	/** Les niveaux en vignettes : explores (apercu) ou verrouilles (cadenas) */
@@ -139,8 +141,13 @@ private:
 	float TextSpaced(const FString& S, float X, float Y, const FLinearColor& C, float Size, EUiWeight Weight, float Spacing,
 		EUiAlign Align = EUiAlign::Left);
 	FVector2f TextSize(const FString& S, float Size, EUiWeight Weight) const;
+	/** Lignes d'au plus MaxWidth pixels. v4.8 : coupure selon les regles Unicode de la langue (entre les ideogrammes en
+	 *  chinois et en japonais, jamais devant un point ou un guillemet fermant), mots trop longs coupes entre deux graphemes, retours a la ligne gardes */
 	TArray<FString> WrapF(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const;
+	/** Raccourcit avec des points de suspension sans couper un grapheme (lettre + accents, paire de substitution) */
 	FString Ellipsize(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const;
+	/** Paragraphe deja coupe : aligne a gauche, ou a droite dans une langue ecrite de droite a gauche (arabe, persan) */
+	void DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight);
 	UTexture* UiTex(const TCHAR* Name);
 	/** Rectangle arrondi (UI_Round decoupee en 9) ; bOutline : contour seul (UI_RoundLine) */
 	void RoundRect(float X, float Y, float W, float H, float R, const FLinearColor& C, bool bOutline = false);
@@ -151,10 +158,12 @@ private:
 	float KeyCap(float X, float Y, const FString& Key, const FString& Label, float Alpha, bool bDraw = true);
 	void KeyHints(float X, float Y, const TArray<TPair<FString, FString>>& Hints, float Alpha, bool bCenter);
 
-	// ---- Primitives
+	// ---- Primitives (v4.8 : dessinees avec la police de l'interface et ses ecritures, a la taille de l'ancienne police)
 	void Txt(const FString& S, float X, float Y, const FLinearColor& C, float Scale, UFont* Font, bool bCenter = false, bool bShadow = true);
 	void TxtRight(const FString& S, float RightX, float Y, const FLinearColor& C, float Scale, UFont* Font);
 	float TextW(const FString& S, UFont* Font, float Scale);
+	/** Ligne d'un paragraphe de largeur W (Wrap) : a gauche, ou a droite en arabe et en persan */
+	void TxtLine(const FString& S, float X, float Y, float W, const FLinearColor& C, float Scale, UFont* Font);
 	void Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label);
 	void Frame(float X, float Y, float W, float H, const FLinearColor& C, float Thickness);
 	void Panel(float X, float Y, float W, float H, const FString& Title);
@@ -194,7 +203,9 @@ private:
 	float MenuIntro = 0.f;      // temps depuis l'ouverture du menu titre
 	float MenuPageTime = 0.f;   // temps depuis le dernier changement de page
 	int32 LastMenuPage = -1;
-	float MenuSel[8] = { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f };
+	float MenuSel[24] = {};     // selection animee des elements de la page (24 : page Langue, 22 langues + RETOUR)
+	int32 CoverageFor = -2;     // v4.8 : langue dont la couverture des traductions est en cache
+	int32 CoverageMissing = 0;
 	float Carousel = -1000.f;   // position animee du carrousel des niveaux (en niveaux)
 	float TipClock = 0.f;
 	float PauseTime = 0.f;

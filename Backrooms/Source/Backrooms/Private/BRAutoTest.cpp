@@ -259,7 +259,7 @@ void ABRAutoTest::AddLoad(int32 Level, float Settle, const FString& Title)
 		// Le rapport du niveau commence ici : les avertissements du chargement lui sont attribues
 		FLevelReport R;
 		R.Level = Level;
-		R.Title = Title.IsEmpty() ? BRLevels::Get(Level).Title : Title;
+		R.Title = Title.IsEmpty() ? BRLevels::Get(Level).Title.ToString() : Title;
 		R.FirstLogLine = Capture.IsValid() ? Capture->Num() : 0;
 		Reports.Add(R);
 		PC->BRLevel(Level); // ferme aussi le menu principal
@@ -1365,7 +1365,8 @@ void ABRAutoTest::AddPitSteps()
 
 void ABRAutoTest::AddEntityShot(int32 Level, EBREntityKind Kind)
 {
-	const FString Name = ABREntity::Info(Kind).Name.Replace(TEXT("-"), TEXT(""));
+	const FString* Source = FTextInspector::GetSourceString(ABREntity::Info(Kind).Name);
+	const FString Name = (Source ? *Source : FString::FromInt(static_cast<int32>(Kind))).Replace(TEXT("-"), TEXT(""));
 	Add(FString::Printf(TEXT("Niveau %d : entite %s"), Level, *Name), 1.2f, [this, Kind, Name]()
 	{
 		ABRWorld* W = GetBRWorld();

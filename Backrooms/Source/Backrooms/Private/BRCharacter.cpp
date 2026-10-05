@@ -1,4 +1,6 @@
 #include "BRCharacter.h"
+#include "BRLoc.h"
+#include "BRLevels.h"
 #include "Backrooms.h"
 #include "EngineUtils.h"
 #include "BRAssets.h"
@@ -346,8 +348,7 @@ bool ABRCharacter::MoveItem(EBRSlotGroup FromGroup, int32 FromIndex, EBRSlotGrou
 	// Contraintes d'equipement
 	if (ToGroup == EBRSlotGroup::Equipment && !BRItems::CanEquipIn(From->Item, static_cast<EBREquipSlot>(ToIndex)))
 	{
-		ABRHUD::Notify(this, FString::Printf(TEXT("%s ne peut pas aller dans l'emplacement %s."), *BRItems::Get(From->Item).Name,
-			*BRItems::SlotName(static_cast<EBREquipSlot>(ToIndex))), 2.5f, FLinearColor(1.f, 0.7f, 0.5f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Player.ItemPeutAllerEmplacementToindex", "{Item} ne peut pas aller dans l'emplacement {ToIndex}."), { { TEXT("Item"), BRLoc::Arg(BRItems::Get(From->Item).Name) }, { TEXT("ToIndex"), BRLoc::Arg(BRItems::SlotName(static_cast<EBREquipSlot>(ToIndex))) } }), 2.5f, FLinearColor(1.f, 0.7f, 0.5f));
 		return false;
 	}
 	if (FromGroup == EBRSlotGroup::Equipment && !To->IsEmpty() && !BRItems::CanEquipIn(To->Item, static_cast<EBREquipSlot>(FromIndex)))
@@ -434,7 +435,7 @@ void ABRCharacter::UseSlot(EBRSlotGroup Group, int32 Index)
 				}
 			}
 		}
-		ABRHUD::Notify(this, TEXT("Inventaire plein."), 2.f, FLinearColor(1.f, 0.7f, 0.5f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.InventairePlein", "Inventaire plein.")), 2.f, FLinearColor(1.f, 0.7f, 0.5f));
 		return;
 	}
 	// Equiper : la lampe torche va dans la main (ou la ceinture si la main est prise)
@@ -468,7 +469,7 @@ void ABRCharacter::QuickUse(EBRItem Item)
 			return;
 		}
 	}
-	ABRHUD::Notify(this, FString::Printf(TEXT("Plus de %s."), *BRItems::Get(Item).Name.ToLower()), 2.f, FLinearColor(1.f, 0.7f, 0.5f));
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Player.OutOfItem", "{Item} : il n'en reste plus."), { { TEXT("Item"), BRLoc::Arg(BRItems::Get(Item).Name) } }), 2.f, FLinearColor(1.f, 0.7f, 0.5f));
 }
 
 void ABRCharacter::UsePocket(int32 Index)
@@ -487,7 +488,7 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 	case EBRItem::AlmondWater:
 		if (Sanity >= 99.f && Health >= 99.f)
 		{
-			ABRHUD::Notify(this, TEXT("Vous n'en avez pas besoin pour l'instant."), 2.f);
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.AvezBesoinInstant", "Vous n'en avez pas besoin pour l'instant.")), 2.f);
 			return false;
 		}
 		Sanity = FMath::Min(100.f, Sanity + 40.f);
@@ -497,12 +498,12 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 			ServerUseHeal(static_cast<uint8>(EBRItem::AlmondWater)); // v4.8 : la sante officielle est celle du serveur
 		}
 		PlaySound2D(TEXT("S_Drink"), 0.9f);
-		ABRHUD::Notify(this, TEXT("Vous buvez de l'eau d'amande. Votre esprit s'\u00e9claircit."), 3.f, FLinearColor(0.85f, 0.95f, 1.f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BuvezEauAmandeVotreEsprit", "Vous buvez de l'eau d'amande. Votre esprit s'\u00e9claircit.")), 3.f, FLinearColor(0.85f, 0.95f, 1.f));
 		return true;
 	case EBRItem::Bandage:
 		if (Health >= 99.f)
 		{
-			ABRHUD::Notify(this, TEXT("Vous n'\u00eates pas bless\u00e9."), 2.f);
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.EtesBlesse", "Vous n'\u00eates pas bless\u00e9.")), 2.f);
 			return false;
 		}
 		Health = FMath::Min(100.f, Health + 35.f);
@@ -511,24 +512,24 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 			ServerUseHeal(static_cast<uint8>(EBRItem::Bandage));
 		}
 		PlaySound2D(TEXT("S_Bandage"), 0.9f);
-		ABRHUD::Notify(this, TEXT("Vous bandez vos blessures."), 2.5f, FLinearColor(0.9f, 0.95f, 0.9f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BandezVosBlessures", "Vous bandez vos blessures.")), 2.5f, FLinearColor(0.9f, 0.95f, 0.9f));
 		return true;
 	case EBRItem::Battery:
 		if (Battery > 90.f)
 		{
-			ABRHUD::Notify(this, TEXT("Les piles sont encore pleines."), 2.f);
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.PilesSontEncorePleines", "Les piles sont encore pleines.")), 2.f);
 			return false;
 		}
 		Battery = 100.f;
 		PlaySound2D(TEXT("S_Battery"), 0.8f);
-		ABRHUD::Notify(this, TEXT("Piles remplac\u00e9es."), 2.f);
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.PilesRemplacees", "Piles remplac\u00e9es.")), 2.f);
 		return true;
 	case EBRItem::EnergyBar:
 		Stamina = 100.f;
 		bExhausted = false;
 		EnergyBoost = 30.f;
 		PlaySound2D(TEXT("S_Eat"), 0.9f);
-		ABRHUD::Notify(this, TEXT("Un regain d'\u00e9nergie !"), 2.f, FLinearColor(1.f, 0.9f, 0.6f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.RegainEnergie", "Un regain d'\u00e9nergie !")), 2.f, FLinearColor(1.f, 0.9f, 0.6f));
 		return true;
 	default:
 		return false;
@@ -796,12 +797,12 @@ void ABRCharacter::ToggleFlashlight()
 	}
 	if (!HasLightSource())
 	{
-		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Aucune lampe \u00e9quip\u00e9e (inventaire : {Inventory}).")), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
+		ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.AucuneLampeEquipeeInventaireInventory", "Aucune lampe \u00e9quip\u00e9e (inventaire : {Inventory})."))), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
 	}
 	if (!bFlashlightOn && Battery <= 0.f)
 	{
-		ABRHUD::Notify(this, CountItem(EBRItem::Battery) > 0 ? BRKeys::Expand(TEXT("Piles vides : {Battery} pour les changer")) : FString(TEXT("Piles vides... il faut en trouver.")),
+		ABRHUD::Notify(this, CountItem(EBRItem::Battery) > 0 ? BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.PilesVidesBatteryChanger", "Piles vides : {Battery} pour les changer"))) : FString(BR_STR(NSLOCTEXT("BR", "Player.PilesVidesFautTrouver", "Piles vides... il faut en trouver."))),
 			3.f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
 	}
@@ -817,12 +818,12 @@ void ABRCharacter::ToggleNightVision()
 	}
 	if (!HasCamcorder())
 	{
-		ABRHUD::Notify(this, TEXT("Il faut avoir le cam\u00e9scope sur vous pour la vision nocturne."), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.FautAvoirCamescopeVisionNocturne", "Il faut avoir le cam\u00e9scope sur vous pour la vision nocturne.")), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
 	}
 	if (!bNightVision && Battery <= 0.f)
 	{
-		ABRHUD::Notify(this, TEXT("Batterie du cam\u00e9scope vide."), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BatterieCamescopeVide", "Batterie du cam\u00e9scope vide.")), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
 	}
 	bNightVision = !bNightVision;
@@ -1355,13 +1356,13 @@ void ABRCharacter::OnRep_DeathState()
 			}
 		}
 		const APlayerState* PS = GetPlayerState();
-		const FString Name = PS ? PS->GetPlayerName() : FString(TEXT("Un explorateur"));
-		ABRHUD::Notify(this, Name + BRDeath::TeammateMessage(Cause), 4.f, FLinearColor(1.f, 0.45f, 0.4f));
+		const FString Name = PS ? PS->GetPlayerName() : FString(BR_STR(NSLOCTEXT("BR", "Player.Explorateur", "Un explorateur")));
+		ABRHUD::Notify(this, BRLoc::Fmt(BRDeath::TeammateMessage(Cause), { { TEXT("Name"), BRLoc::Arg(Name) } }), 4.f, FLinearColor(1.f, 0.45f, 0.4f));
 	}
 	else if (!bDead && bWas && DeathState.Event == 2)
 	{
 		const APlayerState* PS = GetPlayerState();
-		ABRHUD::Notify(this, FString::Printf(TEXT("%s a \u00e9t\u00e9 relev\u00e9 par %s."), PS ? *PS->GetPlayerName() : TEXT("Un explorateur"), *DeathState.By), 3.f,
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Player.PlayernameEteReleveBy", "{PlayerName} a \u00e9t\u00e9 relev\u00e9 par {By}."), { { TEXT("PlayerName"), BRLoc::Arg(PS ? *PS->GetPlayerName() : BR_STR(NSLOCTEXT("BR", "Player.Explorateur", "Un explorateur"))) }, { TEXT("By"), BRLoc::Arg(DeathState.By) } }), 3.f,
 			FLinearColor(0.6f, 1.f, 0.6f));
 	}
 }
@@ -1413,7 +1414,7 @@ void ABRCharacter::FallDeath()
 			SetActorLocation(W->CellCenter(W->WorldToCell(GetActorLocation()), Half + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
 			GetCharacterMovement()->StopMovementImmediately();
 		}
-		ABRHUD::Notify(this, TEXT("MODE D\u00c9V : chute annul\u00e9e (invincible)"), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.ModeDevChuteAnnuleeInvincible", "MODE D\u00c9V : chute annul\u00e9e (invincible)")), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
 		return;
 	}
 	Health = 0.f;
@@ -1509,7 +1510,7 @@ void ABRCharacter::ReviveBy(ABRCharacter* By)
 		return;
 	}
 	const APlayerState* PS = By ? By->GetPlayerState() : nullptr;
-	const FString Name = PS ? PS->GetPlayerName() : FString(TEXT("un co\u00e9quipier"));
+	const FString Name = PS ? PS->GetPlayerName() : FString(BR_STR(NSLOCTEXT("BR", "Player.Coequipier", "un co\u00e9quipier")));
 	// v4.7 : etat officiel (replique) ; le proprietaire se releve en le recevant (OnRep_DeathState)
 	ServerApplyDeathState(false, EBRDeathCause::None, 2, Name);
 }
@@ -1537,7 +1538,7 @@ void ABRCharacter::Revived(const FString& ByName)
 		W->CancelPlayerDeath();
 	}
 	PlaySound2D(TEXT("S_Gasp"), 0.85f);
-	ABRHUD::Notify(this, FString::Printf(TEXT("%s vous a relev\u00e9 !"), *ByName), 4.f, FLinearColor(0.6f, 1.f, 0.6f));
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Player.BynameReleve", "{ByName} vous a relev\u00e9 !"), { { TEXT("ByName"), BRLoc::Arg(ByName) } }), 4.f, FLinearColor(0.6f, 1.f, 0.6f));
 }
 
 void ABRCharacter::ServerSetState_Implementation(uint8 Flags, uint8 Hand, uint8 Lamp)
@@ -1663,7 +1664,7 @@ void ABRCharacter::ReadFromSave(const UBRSaveGame* Save)
 	Health = FMath::Clamp(Save->Health, 25.f, 100.f);
 	Sanity = FMath::Clamp(Save->Sanity, 25.f, 100.f);
 	Battery = FMath::Clamp(Save->Battery, 0.f, 100.f);
-	ReadNotes = Save->Notes;
+	ReadNotes = Save->Notes; // identifiants (migres depuis le texte francais des anciennes sauvegardes par BRSaves::Load)
 	NotesRead = ReadNotes.Num();
 	OnEquipmentChanged();
 }
@@ -1673,14 +1674,18 @@ bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
 	if (Item == EBRItem::Note)
 	{
 		++NotesRead;
-		OpenNote = Note.IsEmpty() ? FString(TEXT("(La note est illisible, l'encre a coul\u00e9.)")) : Note;
-		ReadNotes.AddUnique(OpenNote);
+		// v4.8 : identifiant de la note (son texte est compose a l'affichage, dans la langue du joueur)
+		OpenNote = Note;
+		if (!Note.IsEmpty())
+		{
+			ReadNotes.AddUnique(Note);
+		}
 		bReadingNote = true;
 		return true;
 	}
 	if (AddItem(Item, 1) > 0)
 	{
-		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Inventaire plein ! {Inventory} pour faire de la place.")), 2.5f, FLinearColor(1.f, 0.6f, 0.5f));
+		ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.InventairePleinInventoryFairePlace", "Inventaire plein ! {Inventory} pour faire de la place."))), 2.5f, FLinearColor(1.f, 0.6f, 0.5f));
 		return false;
 	}
 	const FBRItemInfo& Info = BRItems::Get(Item);
@@ -1693,7 +1698,7 @@ bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
 	}
 	else
 	{
-		ABRHUD::Notify(this, FString::Printf(TEXT("+1 %s  (%d)"), *Info.Name, CountItem(Item)), 2.5f, FLinearColor(0.9f, 0.88f, 0.75f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Player.PickedUpCount", "+1 {Item}  ({Count})"), { { TEXT("Item"), BRLoc::Arg(Info.Name) }, { TEXT("Count"), BRLoc::Int(CountItem(Item)) } }), 2.5f, FLinearColor(0.9f, 0.88f, 0.75f));
 	}
 	return true;
 }
@@ -1726,7 +1731,7 @@ void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 	}
 	if (Def.Fixture == EBRFixture::None && !Def.bOutdoor && !bFlashlightOn)
 	{
-		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Il fait noir comme dans un four. {Flashlight} lampe  -  {NightVision} vision nocturne")), 5.f, FLinearColor(1.f, 0.85f, 0.6f));
+		ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.FaitNoirCommeFourFlashlight", "Il fait noir comme dans un four. {Flashlight} lampe  -  {NightVision} vision nocturne"))), 5.f, FLinearColor(1.f, 0.85f, 0.6f));
 	}
 }
 
@@ -2202,7 +2207,7 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 		{
 			bNightVision = false;
 			UpdateViewMode();
-			ABRHUD::Notify(this, BRKeys::Expand(TEXT("Batterie vide : vision nocturne coup\u00e9e. {Battery} changer les piles")), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
+			ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.BatterieVideVisionNocturneCoupee", "Batterie vide : vision nocturne coup\u00e9e. {Battery} changer les piles"))), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
 		}
 	}
 	if (InfraredLight)
@@ -2231,7 +2236,7 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 		if (Battery <= 0.f)
 		{
 			bFlashlightOn = false;
-			ABRHUD::Notify(this, BRKeys::Expand(TEXT("La lampe s'\u00e9teint. {Battery} changer les piles")), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
+			ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.LampeEteintBatteryChangerPiles", "La lampe s'\u00e9teint. {Battery} changer les piles"))), 3.f, FLinearColor(1.f, 0.8f, 0.4f));
 		}
 	}
 	else
@@ -2261,7 +2266,7 @@ void ABRCharacter::UpdateFocus()
 	}
 	if (bClimbing)
 	{
-		FocusPrompt = BRKeys::Expand(TEXT("{MoveForward} monter  -  {MoveBackward} descendre  -  {Jump} l\u00e2cher l'\u00e9chelle"));
+		FocusPrompt = BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.MoveforwardMonterMovebackwardDescendreJu", "{MoveForward} monter  -  {MoveBackward} descendre  -  {Jump} l\u00e2cher l'\u00e9chelle")));
 		return;
 	}
 	// 0) Coequipier a terre : le relever (multijoueur)
@@ -2269,8 +2274,7 @@ void ABRCharacter::UpdateFocus()
 	{
 		FocusActor = Mate;
 		const APlayerState* PS = Mate->GetPlayerState();
-		FocusPrompt = FString::Printf(TEXT("Maintenir %s : relever %s"), *BRKeys::Tag(EBRAction::Interact),
-			PS ? *PS->GetPlayerName() : TEXT("votre co\u00e9quipier"));
+		FocusPrompt = BRLoc::Fmt(NSLOCTEXT("BR", "Player.MaintenirInteractReleverPlayername", "Maintenir {Interact} : relever {PlayerName}"), { { TEXT("Interact"), BRLoc::Arg(BRKeys::Tag(EBRAction::Interact)) }, { TEXT("PlayerName"), BRLoc::Arg(PS ? *PS->GetPlayerName() : BR_STR(NSLOCTEXT("BR", "Player.VotreCoequipier", "votre co\u00e9quipier"))) } });
 		return;
 	}
 
@@ -2350,7 +2354,7 @@ void ABRCharacter::UpdateFocus()
 	// 3) Nage : se hisser hors du bassin
 	if (bSwimming && IsNearPoolEdge())
 	{
-		FocusPrompt = BRKeys::Tag(EBRAction::Jump) + TEXT(" Sortir de l'eau");
+		FocusPrompt = BRKeys::Tag(EBRAction::Jump) + BR_STR(NSLOCTEXT("BR", "Player.SortirEau", " Sortir de l'eau"));
 		return;
 	}
 
@@ -2359,8 +2363,8 @@ void ABRCharacter::UpdateFocus()
 	const ABRWorld* HW = ABRWorld::Get(this);
 	if (!bHidden && HW && HW->FindHidingSpotNear(GetActorLocation(), 110.f, bNeedsCrouch))
 	{
-		FocusPrompt = bNeedsCrouch ? BRKeys::Tag(EBRAction::Crouch) + TEXT(" S'accroupir et se glisser dans le trou pour se cacher")
-			: FString(TEXT("Entrer dans le placard pour se cacher"));
+		FocusPrompt = bNeedsCrouch ? BRKeys::Tag(EBRAction::Crouch) + BR_STR(NSLOCTEXT("BR", "Player.AccroupirGlisserTrouCacher", " S'accroupir et se glisser dans le trou pour se cacher"))
+			: FString(BR_STR(NSLOCTEXT("BR", "Player.EntrerPlacardCacher", "Entrer dans le placard pour se cacher")));
 	}
 }
 
@@ -2375,7 +2379,7 @@ void ABRCharacter::UpdateHiding()
 		if (!bHideHint)
 		{
 			bHideHint = true;
-			ABRHUD::Notify(this, TEXT("Vous \u00eates cach\u00e9 : les entit\u00e9s ne vous voient plus. Restez immobile et attendez qu'elles s'\u00e9loignent."),
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.EtesCacheEntitesVoientRestez", "Vous \u00eates cach\u00e9 : les entit\u00e9s ne vous voient plus. Restez immobile et attendez qu'elles s'\u00e9loignent.")),
 				5.f, FLinearColor(0.75f, 0.9f, 1.f));
 		}
 	}
@@ -2691,7 +2695,7 @@ void ABRCharacter::ToggleThirdPerson()
 	}
 	bThirdPerson = !bThirdPerson;
 	UpdateViewMode();
-	ABRHUD::Notify(this, bThirdPerson ? FString(TEXT("Vue \u00e0 la 3e personne")) : FString(TEXT("Vue \u00e0 la 1re personne")), 1.5f,
+	ABRHUD::Notify(this, bThirdPerson ? FString(BR_STR(NSLOCTEXT("BR", "Player.Vue3ePersonne", "Vue \u00e0 la 3e personne"))) : FString(BR_STR(NSLOCTEXT("BR", "Player.Vue1rePersonne", "Vue \u00e0 la 1re personne"))), 1.5f,
 		FLinearColor(0.85f, 0.9f, 1.f));
 }
 
@@ -3059,7 +3063,7 @@ void ABRCharacter::StartSwimming()
 	if (!bSwimHint)
 	{
 		bSwimHint = true;
-		ABRHUD::Notify(this, BRKeys::Expand(TEXT("Vous nagez : le regard guide la nage.  {Jump} remonter / sortir au bord  -  {Crouch} plonger  -  {Sprint} nager vite")),
+		ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.NagezRegardGuideNageJump", "Vous nagez : le regard guide la nage.  {Jump} remonter / sortir au bord  -  {Crouch} plonger  -  {Sprint} nager vite"))),
 			6.f, FLinearColor(0.7f, 0.95f, 1.f));
 	}
 }
@@ -3281,4 +3285,13 @@ void ABRCharacter::UpdateWater(float Dt)
 	{
 		EdgePush = 0.f;
 	}
+}
+
+FString ABRCharacter::GetOpenNote() const
+{
+	if (OpenNote.IsEmpty())
+	{
+		return BR_STR(NSLOCTEXT("BR", "Player.NoteIllisibleEncreCoule", "(La note est illisible, l'encre a coul\u00e9.)"));
+	}
+	return BRLevels::NoteText(OpenNote).ToString();
 }

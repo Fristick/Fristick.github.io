@@ -6,20 +6,21 @@
 
 struct FBRItemInfo
 {
-	FString Name;          // nom affiche (FR)
-	FString Short;         // libelle court au-dessus de l'icone
-	FString Description;
+	// v4.8 : textes localises
+	FText Name;            // nom affiche
+	FText Short;           // libelle court au-dessus de l'icone
+	FText Description;
 	FName Mesh;            // modele 3D au sol
 	FName Icon;            // icone d'inventaire (RawAssets/Icons)
 	int32 MaxStack = 1;
 	EBREquipSlot Slot = EBREquipSlot::None;
 	bool bConsumable = false;
-	FString UseVerb;       // "Boire", "Utiliser"...
+	FText UseVerb;         // "Boire", "Utiliser"...
 };
 
 namespace BRItems
 {
 	const FBRItemInfo& Get(EBRItem Item);
 	bool CanEquipIn(EBRItem Item, EBREquipSlot Slot);
-	FString SlotName(EBREquipSlot Slot);
+	FText SlotName(EBREquipSlot Slot);
 }

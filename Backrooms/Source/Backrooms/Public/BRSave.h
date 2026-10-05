@@ -77,8 +77,8 @@ class BACKROOMS_API UBRSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
-	/** Format du fichier (1 : v4.1 a v4.6 ; 2 : v4.7, session reprise) */
-	static constexpr int32 CurrentVersion = 2;
+	/** Format du fichier (1 : v4.1 a v4.6 ; 2 : v4.7, session reprise ; 3 : v4.8, journal par identifiants de notes) */
+	static constexpr int32 CurrentVersion = 3;
 
 	/** Format du fichier. La valeur par defaut reste 1 : les proprietes egales a celles de l'objet par defaut ne sont
 	 *  pas ecrites, et un fichier v4.1-v4.6 (Version = 1, donc absente du fichier) doit etre reconnu comme tel.
@@ -128,6 +128,8 @@ public:
 	UPROPERTY(SaveGame)
 	TArray<int32> Discovered;
 
+	/** Notes lues. v4.8 (format 3) : identifiants stables (Note.L0.3) ; le texte suit la langue du joueur. Formats 1 et
+	 *  2 : texte francais de la note, converti a la migration (un texte inconnu reste tel quel) */
 	UPROPERTY(SaveGame)
 	TArray<FString> Notes;
 
@@ -158,12 +160,29 @@ public:
 	void MarkExplored(int32 Level) { Explored.AddUnique(Level); }
 };
 
+/** v4.8 : cause d'un echec d'ecriture (le message est compose a l'affichage, dans la langue du joueur) */
+enum class EBRSaveError : uint8
+{
+	/** Le fichier temporaire n'a pas pu etre ecrit (disque plein, dossier protege) */
+	TempWrite,
+	/** Le fichier n'a pas pu etre remplace (verrouille par un autre programme) */
+	Replace,
+	/** Partie d'un format plus recent : reecriture refusee, fichier preserve */
+	FutureFormat
+};
+
 /** v4.8 : ecriture de sauvegarde echouee, gardee jusqu'a son acquittement */
 struct FWriteFailure
 {
 	int32 Slot = INDEX_NONE;
 	/** Numero de la demande d'ecriture (croissant) */
 	uint32 RequestId = 0;
+	EBRSaveError Error = EBRSaveError::TempWrite;
+	/** Fichier concerne (nom sans dossier) */
+	FString File;
+	/** Format du fichier preserve (FutureFormat) */
+	int32 Version = 0;
+	/** Description technique (journal) */
 	FString Reason;
 	FDateTime When;
 };
@@ -216,6 +235,8 @@ namespace BRSaves
 	BACKROOMS_API FBRSessionState& PendingResume();
 	/** "2 h 05", "14 min" */
 	BACKROOMS_API FString FormatPlayTime(float Seconds);
-	/** "04/10/2026 22:54" */
+	/** Date et heure au format de la langue courante */
 	BACKROOMS_API FString FormatDate(const FDateTime& Date);
+	/** v4.8 : date seule au format de la langue courante */
+	BACKROOMS_API FString FormatDay(const FDateTime& Date);
 }

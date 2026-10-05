@@ -2196,10 +2196,12 @@ bool ABRChunk::SpawnPickupRoll(int32 Index)
 		FString Note;
 		if (Roll.Item == EBRItem::Note)
 		{
-			const TArray<FString>& Common = BRLevels::CommonNotes();
+			// v4.8 : la note est designee par son identifiant (meme tirage qu'avant) ; son texte suit la langue de chacun
+			const TArray<FBRNote>& Common = BRLevels::CommonNotes();
 			const int32 Total = D.Notes.Num() + Common.Num();
 			const int32 Idx = Total > 0 ? static_cast<int32>(BRHash::Hash(Coord.X, Coord.Y, 1005, Seed) % static_cast<uint32>(Total)) : 0;
-			Note = Idx < D.Notes.Num() ? D.Notes[Idx] : (Common.IsValidIndex(Idx - D.Notes.Num()) ? Common[Idx - D.Notes.Num()] : FString());
+			Note = Idx < D.Notes.Num() ? D.Notes[Idx].Id.ToString()
+				: (Common.IsValidIndex(Idx - D.Notes.Num()) ? Common[Idx - D.Notes.Num()].Id.ToString() : FString());
 		}
 		P->Init(Roll.Item, Id, Note);
 		Spawned.Add(P);

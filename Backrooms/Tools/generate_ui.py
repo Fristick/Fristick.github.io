@@ -344,10 +344,24 @@ def gradients():
     save(Image.merge("RGBA", (Image.new("L", (64, 64), 255),) * 3 + (a,)), "UI_RoundLine")
 
 
+def icon_language():
+    """v4.8 : globe (entree Langue du menu)"""
+    im, d = canvas()
+    w = 9 * SS
+    d.ellipse(P(16, 16, 112, 112), outline=255, width=w)
+    d.ellipse(P(42, 16, 86, 112), outline=255, width=w)
+    d.line(P(64, 18, 64, 110), fill=255, width=w)
+    d.line(P(18, 64, 110, 64), fill=255, width=w)
+    for y in (38, 90):
+        half = math.sqrt(48 ** 2 - (y - 64) ** 2) - 3
+        d.line(P(64 - half, y, 64 + half, y), fill=255, width=w)
+    finish(im, "UI_IconLanguage")
+
+
 if __name__ == "__main__":
     print("Interface ->", os.path.abspath(OUT), "(police :", os.path.basename(INTER) + ")")
     logo()
     for fn in (icon_solo, icon_multi, icon_settings, icon_quit, icon_host, icon_join, icon_back, icon_play, icon_tip, icon_arrow, icon_keys,
-               icon_lock, icon_trash, icon_plus, icon_check, icon_save):
+               icon_lock, icon_trash, icon_plus, icon_check, icon_save, icon_language):
         fn()
     gradients()

@@ -20,10 +20,11 @@ class ABRWorld;
 /** Fiche descriptive + parametres de comportement d'une espece */
 struct FBREntityInfo
 {
-	FString Name;
-	FString Number;
-	FString Description;
-	FString Advice;
+	// v4.8 : textes localises (fiche du journal, nom dans les messages)
+	FText Name;
+	FText Number;
+	FText Description;
+	FText Advice;
 	float HalfHeight = 90.f;
 	float Radius = 30.f;
 	bool bFlying = false;

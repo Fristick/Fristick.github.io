@@ -1,4 +1,5 @@
 #include "BRLevels.h"
+#include "Internationalization/Text.h"
 
 namespace
 {
@@ -31,12 +32,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 0;
-		D.Title = TEXT("Threshold");
-		D.Nickname = TEXT("Le Seuil - \"Yellow Hell\"");
-		D.Description = TEXT("Un labyrinthe clos de salles de bureau vides : papier peint jaune moisi, moquette humide, ")
-			TEXT("n\u00e9ons qui bourdonnent sans fin. Les salles se ressemblent toutes. Quelque part, une \u00e9chelle monte dans le plafond.");
+		D.Title = NSLOCTEXT("BR", "Level.0.Title", "Threshold");
+		D.Nickname = NSLOCTEXT("BR", "Level.0.Nickname", "Le Seuil - \"Yellow Hell\"");
+		D.Description = NSLOCTEXT("BR", "Level.0.Description", "Un labyrinthe clos de salles de bureau vides : papier peint jaune moisi, moquette humide, n\u00e9ons qui bourdonnent sans fin. Les salles se ressemblent toutes. Quelque part, une \u00e9chelle monte dans le plafond.");
 		D.SurvivalClass = 1;
-		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Entit\u00e9s quasi absentes");
+		D.ClassText = NSLOCTEXT("BR", "Level.0.ClassText", "Classe 1 : S\u00fbr - Stable - Entit\u00e9s quasi absentes");
 		D.Layout = EBRLayout::Rooms;
 		D.CellSize = 350.f; D.WallHeight = 290.f; D.WallThickness = 60.f;
 		D.WallLineChance = 0.55f; D.SegmentLength = 4; D.DoorChance = 0.3f; D.DoorWidth = 150.f;
@@ -94,15 +94,15 @@ namespace
 		// v4.6 : chambranles autour des portes (bureaux)
 		D.bDoorCasings = true;
 		D.Notes = {
-			TEXT("Si tu lis ceci, tu as \"noclipp\u00e9\" hors de la r\u00e9alit\u00e9. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds."),
-			TEXT("Le bourdonnement ne s'arr\u00eate jamais. J'ai compte plus de six cents salles. Toujours la m\u00eame moquette humide. Toujours la m\u00eame odeur."),
-			TEXT("Certains murs ont l'air FAUX, comme une image qui se brouille. Touche-les. C'est comme \u00e7a que j'ai quitt\u00e9 cet endroit."),
-			TEXT("L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. {Drink} pour boire."),
-			TEXT("Si les lumi\u00e8res sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir."),
-			TEXT("Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement."),
-			TEXT("Il y a une \u00e9chelle contre un mur, elle monte dans une trappe du plafond. Une lueur violette l\u00e0-haut. Monte, et ne regarde pas en bas."),
-			TEXT("Les sorties ne tiennent pas. Il faut r\u00e9cup\u00e9rer les six cassettes et filmer le noir pendant une coupure. Apr\u00e8s, les murs c\u00e8dent."),
-			TEXT("Quand les n\u00e9ons s'\u00e9teignent, allume la vision nocturne du cam\u00e9scope ({NightVision}). La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.")
+			{ FName(TEXT("Note.L0.1")), NSLOCTEXT("BR", "Note.L0.1", "Si tu lis ceci, tu as \"noclipp\u00e9\" hors de la r\u00e9alit\u00e9. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds.") },
+			{ FName(TEXT("Note.L0.2")), NSLOCTEXT("BR", "Note.L0.2", "Le bourdonnement ne s'arr\u00eate jamais. J'ai compte plus de six cents salles. Toujours la m\u00eame moquette humide. Toujours la m\u00eame odeur.") },
+			{ FName(TEXT("Note.L0.3")), NSLOCTEXT("BR", "Note.L0.3", "Certains murs ont l'air FAUX, comme une image qui se brouille. Touche-les. C'est comme \u00e7a que j'ai quitt\u00e9 cet endroit.") },
+			{ FName(TEXT("Note.L0.4")), NSLOCTEXT("BR", "Note.L0.4", "L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. {Drink} pour boire.") },
+			{ FName(TEXT("Note.L0.5")), NSLOCTEXT("BR", "Note.L0.5", "Si les lumi\u00e8res sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir.") },
+			{ FName(TEXT("Note.L0.6")), NSLOCTEXT("BR", "Note.L0.6", "Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement.") },
+			{ FName(TEXT("Note.L0.7")), NSLOCTEXT("BR", "Note.L0.7", "Il y a une \u00e9chelle contre un mur, elle monte dans une trappe du plafond. Une lueur violette l\u00e0-haut. Monte, et ne regarde pas en bas.") },
+			{ FName(TEXT("Note.L0.8")), NSLOCTEXT("BR", "Note.L0.8", "Les sorties ne tiennent pas. Il faut r\u00e9cup\u00e9rer les six cassettes et filmer le noir pendant une coupure. Apr\u00e8s, les murs c\u00e8dent.") },
+			{ FName(TEXT("Note.L0.9")), NSLOCTEXT("BR", "Note.L0.9", "Quand les n\u00e9ons s'\u00e9teignent, allume la vision nocturne du cam\u00e9scope ({NightVision}). La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.") }
 		};
 		return D;
 	}
@@ -112,12 +112,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 1;
-		D.Title = TEXT("Habitable Zone");
-		D.Nickname = TEXT("Zone habitable");
-		D.Description = TEXT("Un parking souterrain de b\u00e9ton, immense et brumeux : piliers, places peintes, flaques qui refl\u00e8tent les n\u00e9ons. ")
-			TEXT("Des caisses de ravitaillement apparaissent parfois. Quand les n\u00e9ons s'\u00e9teignent, quelque chose se met \u00e0 r\u00f4der.");
+		D.Title = NSLOCTEXT("BR", "Level.1.Title", "Habitable Zone");
+		D.Nickname = NSLOCTEXT("BR", "Level.1.Nickname", "Zone habitable");
+		D.Description = NSLOCTEXT("BR", "Level.1.Description", "Un parking souterrain de b\u00e9ton, immense et brumeux : piliers, places peintes, flaques qui refl\u00e8tent les n\u00e9ons. Des caisses de ravitaillement apparaissent parfois. Quand les n\u00e9ons s'\u00e9teignent, quelque chose se met \u00e0 r\u00f4der.");
 		D.SurvivalClass = 1;
-		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Peu d'entit\u00e9s");
+		D.ClassText = NSLOCTEXT("BR", "Level.1.ClassText", "Classe 1 : S\u00fbr - Stable - Peu d'entit\u00e9s");
 		D.Layout = EBRLayout::Rooms;
 		D.CellSize = 600.f; D.WallHeight = 360.f; D.WallThickness = 120.f;
 		D.WallLineChance = 0.28f; D.SegmentLength = 6; D.DoorChance = 0.45f; D.DoorWidth = 260.f;
@@ -147,10 +146,10 @@ namespace
 		D.Exits = { X(2, EBRExitStyle::Door, 0.18f), X(4, EBRExitStyle::Elevator, 0.05f) };
 		D.Props = EBRProps::Warehouse; D.PropDensity = 0.12f;
 		D.Notes = {
-			TEXT("Les caisses contiennent parfois de l'eau d'amande et des piles. Fouille-les. Ici, on peut presque survivre."),
-			TEXT("Quand les tubes au plafond clignotent, eloigne-toi. Quand ils s'\u00e9teignent, cours."),
-			TEXT("Les portes de service m\u00e8nent plus bas. Plus bas, c'est pire. Mais c'est peut-etre la seule sortie."),
-			TEXT("Les Facelings ne sont pas m\u00e9chants. La plupart. Ne les regarde pas trop longtemps.")
+			{ FName(TEXT("Note.L1.1")), NSLOCTEXT("BR", "Note.L1.1", "Les caisses contiennent parfois de l'eau d'amande et des piles. Fouille-les. Ici, on peut presque survivre.") },
+			{ FName(TEXT("Note.L1.2")), NSLOCTEXT("BR", "Note.L1.2", "Quand les tubes au plafond clignotent, eloigne-toi. Quand ils s'\u00e9teignent, cours.") },
+			{ FName(TEXT("Note.L1.3")), NSLOCTEXT("BR", "Note.L1.3", "Les portes de service m\u00e8nent plus bas. Plus bas, c'est pire. Mais c'est peut-etre la seule sortie.") },
+			{ FName(TEXT("Note.L1.4")), NSLOCTEXT("BR", "Note.L1.4", "Les Facelings ne sont pas m\u00e9chants. La plupart. Ne les regarde pas trop longtemps.") }
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 120.f;
 		D.Wall.FloorGrime = 0.5f; D.Pillar.FloorGrime = 0.5f;
@@ -164,12 +163,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 2;
-		D.Title = TEXT("Abandoned Utility Halls");
-		D.Nickname = TEXT("Couloirs techniques abandonn\u00e9s - \"Pipe Dreams\"");
-		D.Description = TEXT("Un r\u00e9seau sans fin de tunnels de maintenance \u00e9troits, en b\u00e9ton sale, couverts de tuyaux. ")
-			TEXT("La chaleur y est \u00e9touffante et l'\u00e9clairage rare.");
+		D.Title = NSLOCTEXT("BR", "Level.2.Title", "Abandoned Utility Halls");
+		D.Nickname = NSLOCTEXT("BR", "Level.2.Nickname", "Couloirs techniques abandonn\u00e9s - \"Pipe Dreams\"");
+		D.Description = NSLOCTEXT("BR", "Level.2.Description", "Un r\u00e9seau sans fin de tunnels de maintenance \u00e9troits, en b\u00e9ton sale, couverts de tuyaux. La chaleur y est \u00e9touffante et l'\u00e9clairage rare.");
 		D.SurvivalClass = 2;
-		D.ClassText = TEXT("Classe 2 : Instable - Entit\u00e9s pr\u00e9sentes");
+		D.ClassText = NSLOCTEXT("BR", "Level.2.ClassText", "Classe 2 : Instable - Entit\u00e9s pr\u00e9sentes");
 		D.Layout = EBRLayout::Maze;
 		D.CellSize = 260.f; D.WallHeight = 280.f; D.WallThickness = 90.f;
 		D.LoopChance = 0.15f; D.OpenZoneChance = 0.06f;
@@ -196,9 +194,9 @@ namespace
 		D.Exits = { X(3, EBRExitStyle::Door, 0.15f), X(1, EBRExitStyle::Ladder, 0.05f) };
 		D.Props = EBRProps::Pipes; D.PropDensity = 0.6f;
 		D.Notes = {
-			TEXT("Il fait si chaud. Les tuyaux sifflent. Ne touche pas ceux qui fument."),
-			TEXT("Les Wretches \u00e9taient des gens comme nous. Ils sont lents. Ne les laisse pas s'approcher."),
-			TEXT("Une porte de secours plus loin. On dit qu'elle m\u00e8ne \u00e0 la Station \u00e9lectrique. Pr\u00e9pare-toi.")
+			{ FName(TEXT("Note.L2.1")), NSLOCTEXT("BR", "Note.L2.1", "Il fait si chaud. Les tuyaux sifflent. Ne touche pas ceux qui fument.") },
+			{ FName(TEXT("Note.L2.2")), NSLOCTEXT("BR", "Note.L2.2", "Les Wretches \u00e9taient des gens comme nous. Ils sont lents. Ne les laisse pas s'approcher.") },
+			{ FName(TEXT("Note.L2.3")), NSLOCTEXT("BR", "Note.L2.3", "Une porte de secours plus loin. On dit qu'elle m\u00e8ne \u00e0 la Station \u00e9lectrique. Pr\u00e9pare-toi.") }
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 100.f;
 		D.Wall.FloorGrime = 0.5f;
@@ -211,12 +209,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 3;
-		D.Title = TEXT("Electrical Station");
-		D.Nickname = TEXT("Station \u00e9lectrique");
-		D.Description = TEXT("Un d\u00e9dale assourdissant de briques, de grilles et de machines \u00e9lectriques. ")
-			TEXT("L'un des niveaux les plus hostiles connus : les entit\u00e9s y sont nombreuses.");
+		D.Title = NSLOCTEXT("BR", "Level.3.Title", "Electrical Station");
+		D.Nickname = NSLOCTEXT("BR", "Level.3.Nickname", "Station \u00e9lectrique");
+		D.Description = NSLOCTEXT("BR", "Level.3.Description", "Un d\u00e9dale assourdissant de briques, de grilles et de machines \u00e9lectriques. L'un des niveaux les plus hostiles connus : les entit\u00e9s y sont nombreuses.");
 		D.SurvivalClass = 4;
-		D.ClassText = TEXT("Classe 4 : Dangereux - Infest\u00e9 d'entit\u00e9s");
+		D.ClassText = NSLOCTEXT("BR", "Level.3.ClassText", "Classe 4 : Dangereux - Infest\u00e9 d'entit\u00e9s");
 		D.Layout = EBRLayout::Maze;
 		D.CellSize = 300.f; D.WallHeight = 320.f; D.WallThickness = 90.f;
 		D.LoopChance = 0.2f; D.OpenZoneChance = 0.1f;
@@ -245,9 +242,9 @@ namespace
 		D.Exits = { X(4, EBRExitStyle::Elevator, 0.15f), X(2, EBRExitStyle::Door, 0.05f) };
 		D.Props = EBRProps::Electrical; D.PropDensity = 0.35f;
 		D.Notes = {
-			TEXT("LES HOUNDS SENTENT LA PEUR. Ne cours pas devant eux. Regarde-les dans les yeux et recule."),
-			TEXT("Si quelqu'un t'appelle par ton nom dans ces couloirs, ce n'est pas un humain. Ne r\u00e9ponds pas."),
-			TEXT("Les ascenseurs fonctionnent encore. Ils m\u00e8nent \u00e0 un bureau. Un endroit calme. Trouve-les.")
+			{ FName(TEXT("Note.L3.1")), NSLOCTEXT("BR", "Note.L3.1", "LES HOUNDS SENTENT LA PEUR. Ne cours pas devant eux. Regarde-les dans les yeux et recule.") },
+			{ FName(TEXT("Note.L3.2")), NSLOCTEXT("BR", "Note.L3.2", "Si quelqu'un t'appelle par ton nom dans ces couloirs, ce n'est pas un humain. Ne r\u00e9ponds pas.") },
+			{ FName(TEXT("Note.L3.3")), NSLOCTEXT("BR", "Note.L3.3", "Les ascenseurs fonctionnent encore. Ils m\u00e8nent \u00e0 un bureau. Un endroit calme. Trouve-les.") }
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 90.f;
 		D.Wall.FloorGrime = 0.45f;
@@ -260,12 +257,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 4;
-		D.Title = TEXT("Abandoned Office");
-		D.Nickname = TEXT("Bureau abandonn\u00e9");
-		D.Description = TEXT("Des rang\u00e9es de petits bureaux cloisonn\u00e9s, vides, propres et bien \u00e9clair\u00e9s : un vieil ordinateur beige, ")
-			TEXT("une chaise, parfois une fontaine \u00e0 eau d'amande. Un rare moment de r\u00e9pit... si l'on ignore qu'ils sont tous identiques.");
+		D.Title = NSLOCTEXT("BR", "Level.4.Title", "Abandoned Office");
+		D.Nickname = NSLOCTEXT("BR", "Level.4.Nickname", "Bureau abandonn\u00e9");
+		D.Description = NSLOCTEXT("BR", "Level.4.Description", "Des rang\u00e9es de petits bureaux cloisonn\u00e9s, vides, propres et bien \u00e9clair\u00e9s : un vieil ordinateur beige, une chaise, parfois une fontaine \u00e0 eau d'amande. Un rare moment de r\u00e9pit... si l'on ignore qu'ils sont tous identiques.");
 		D.SurvivalClass = 1;
-		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Peu d'entit\u00e9s");
+		D.ClassText = NSLOCTEXT("BR", "Level.4.ClassText", "Classe 1 : S\u00fbr - Stable - Peu d'entit\u00e9s");
 		D.Layout = EBRLayout::Rooms;
 		// D'apres la scene fournie : rangees de petits bureaux cloisonnes jusqu'au plafond (un poste de travail beige
 		// des annees 90 dans chacun), allees, moquette bleu marine, murs blancs, faux plafond a dalles blanches
@@ -295,9 +291,9 @@ namespace
 		D.Exits = { X(5, EBRExitStyle::Door, 0.15f), X(1, EBRExitStyle::Elevator, 0.05f) };
 		D.Props = EBRProps::Office; D.PropDensity = 0.35f;
 		D.Notes = {
-			TEXT("Les fontaines distribuent de l'eau d'amande. Remplis tes bouteilles ici."),
-			TEXT("La cage d'escalier descend vers un h\u00f4tel. Ne t'y attarde pas."),
-			TEXT("Si tu vois quelqu'un de jaune qui sourit, NE LE QUITTE PAS DES YEUX.")
+			{ FName(TEXT("Note.L4.1")), NSLOCTEXT("BR", "Note.L4.1", "Les fontaines distribuent de l'eau d'amande. Remplis tes bouteilles ici.") },
+			{ FName(TEXT("Note.L4.2")), NSLOCTEXT("BR", "Note.L4.2", "La cage d'escalier descend vers un h\u00f4tel. Ne t'y attarde pas.") },
+			{ FName(TEXT("Note.L4.3")), NSLOCTEXT("BR", "Note.L4.3", "Si tu vois quelqu'un de jaune qui sourit, NE LE QUITTE PAS DES YEUX.") }
 		};
 		D.Wall.FloorGrime = 0.3f; D.WallDetailChance = 0.12f;
 		D.BandageChance = 0.12f; D.EnergyBarChance = 0.15f; D.GearChance = 0.04f;
@@ -309,12 +305,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 5;
-		D.Title = TEXT("Terror Hotel");
-		D.Nickname = TEXT("L'h\u00f4tel de la terreur");
-		D.Description = TEXT("Un h\u00f4tel des ann\u00e9es 1920 qui ne finit jamais : couloirs feutr\u00e9s, moquette rouge, portes ")
-			TEXT("num\u00e9rot\u00e9es qui ne s'ouvrent pas. Une musique lointaine. L'impression d'\u00eatre observ\u00e9.");
+		D.Title = NSLOCTEXT("BR", "Level.5.Title", "Terror Hotel");
+		D.Nickname = NSLOCTEXT("BR", "Level.5.Nickname", "L'h\u00f4tel de la terreur");
+		D.Description = NSLOCTEXT("BR", "Level.5.Description", "Un h\u00f4tel des ann\u00e9es 1920 qui ne finit jamais : couloirs feutr\u00e9s, moquette rouge, portes num\u00e9rot\u00e9es qui ne s'ouvrent pas. Une musique lointaine. L'impression d'\u00eatre observ\u00e9.");
 		D.SurvivalClass = 2;
-		D.ClassText = TEXT("Classe 2 : Instable - Entit\u00e9s pr\u00e9sentes");
+		D.ClassText = NSLOCTEXT("BR", "Level.5.ClassText", "Classe 2 : Instable - Entit\u00e9s pr\u00e9sentes");
 		D.Layout = EBRLayout::Hotel;
 		D.CellSize = 300.f; D.WallHeight = 320.f; D.Spacing = 5; D.OpenZoneChance = 0.08f;
 		D.Floor = S(TEXT("T_HotelCarpet"), C(1, 1, 1), 150.f, 0.95f, 0.25f);
@@ -340,9 +335,9 @@ namespace
 		D.Exits = { X(6, EBRExitStyle::HotelDoor, 0.12f), X(4, EBRExitStyle::Door, 0.04f) };
 		D.Props = EBRProps::Hotel; D.PropDensity = 0.5f;
 		D.Notes = {
-			TEXT("Chambre 1508... ou \u00e9tait-ce 5108 ? Les num\u00e9ros changent quand on ne regarde pas."),
-			TEXT("La chaufferie est au bout du couloir. Apr\u00e8s elle, il n'y a plus de lumi\u00e8re du tout."),
-			TEXT("Quelqu'un frappe aux portes la nuit. N'ouvre jamais.")
+			{ FName(TEXT("Note.L5.1")), NSLOCTEXT("BR", "Note.L5.1", "Chambre 1508... ou \u00e9tait-ce 5108 ? Les num\u00e9ros changent quand on ne regarde pas.") },
+			{ FName(TEXT("Note.L5.2")), NSLOCTEXT("BR", "Note.L5.2", "La chaufferie est au bout du couloir. Apr\u00e8s elle, il n'y a plus de lumi\u00e8re du tout.") },
+			{ FName(TEXT("Note.L5.3")), NSLOCTEXT("BR", "Note.L5.3", "Quelqu'un frappe aux portes la nuit. N'ouvre jamais.") }
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 110.f;
 		D.Wall.FloorGrime = 0.4f; D.WallDetailChance = 0.06f;
@@ -355,12 +350,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 6;
-		D.Title = TEXT("Lights Out");
-		D.Nickname = TEXT("Lumi\u00e8res \u00e9teintes");
-		D.Description = TEXT("Une obscurit\u00e9 totale. Aucune source de lumi\u00e8re ne fonctionne, sauf celle que l'on apporte. ")
-			TEXT("Des bruits \u00e9tranges, des murmures... et des sourires dans le noir.");
+		D.Title = NSLOCTEXT("BR", "Level.6.Title", "Lights Out");
+		D.Nickname = NSLOCTEXT("BR", "Level.6.Nickname", "Lumi\u00e8res \u00e9teintes");
+		D.Description = NSLOCTEXT("BR", "Level.6.Description", "Une obscurit\u00e9 totale. Aucune source de lumi\u00e8re ne fonctionne, sauf celle que l'on apporte. Des bruits \u00e9tranges, des murmures... et des sourires dans le noir.");
 		D.SurvivalClass = 4;
-		D.ClassText = TEXT("Classe 4 : Dangereux - Obscurit\u00e9 totale");
+		D.ClassText = NSLOCTEXT("BR", "Level.6.ClassText", "Classe 4 : Dangereux - Obscurit\u00e9 totale");
 		D.Layout = EBRLayout::Rooms;
 		D.CellSize = 350.f; D.WallHeight = 290.f;
 		D.WallLineChance = 0.6f; D.SegmentLength = 4; D.DoorChance = 0.3f;
@@ -386,9 +380,9 @@ namespace
 		D.Exits = { X(8, EBRExitStyle::Ladder, 0.12f) };
 		D.bPhenomena = true;
 		D.Notes = {
-			TEXT("Garde ta lampe \u00e9teinte quand tu vois deux yeux. Recule. Lentement."),
-			TEXT("Les piles sont plus pr\u00e9cieuses que l'eau ici. {Battery} pour en changer."),
-			TEXT("Il y a des \u00e9chelles qui descendent. En bas, \u00e7a sent la terre mouill\u00e9e.")
+			{ FName(TEXT("Note.L6.1")), NSLOCTEXT("BR", "Note.L6.1", "Garde ta lampe \u00e9teinte quand tu vois deux yeux. Recule. Lentement.") },
+			{ FName(TEXT("Note.L6.2")), NSLOCTEXT("BR", "Note.L6.2", "Les piles sont plus pr\u00e9cieuses que l'eau ici. {Battery} pour en changer.") },
+			{ FName(TEXT("Note.L6.3")), NSLOCTEXT("BR", "Note.L6.3", "Il y a des \u00e9chelles qui descendent. En bas, \u00e7a sent la terre mouill\u00e9e.") }
 		};
 		return D;
 	}
@@ -398,12 +392,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 8;
-		D.Title = TEXT("Cave System");
-		D.Nickname = TEXT("Le r\u00e9seau de grottes");
-		D.Description = TEXT("Un enchev\u00eatrement de grottes humides, \u00e9clair\u00e9es \u00e7\u00e0 et l\u00e0 par de vieilles lampes de mine. ")
-			TEXT("Des Deathmoths nichent au plafond, attir\u00e9es par la moindre lumi\u00e8re.");
+		D.Title = NSLOCTEXT("BR", "Level.8.Title", "Cave System");
+		D.Nickname = NSLOCTEXT("BR", "Level.8.Nickname", "Le r\u00e9seau de grottes");
+		D.Description = NSLOCTEXT("BR", "Level.8.Description", "Un enchev\u00eatrement de grottes humides, \u00e9clair\u00e9es \u00e7\u00e0 et l\u00e0 par de vieilles lampes de mine. Des Deathmoths nichent au plafond, attir\u00e9es par la moindre lumi\u00e8re.");
 		D.SurvivalClass = 4;
-		D.ClassText = TEXT("Classe 4 : Dangereux - Entit\u00e9s nombreuses");
+		D.ClassText = NSLOCTEXT("BR", "Level.8.ClassText", "Classe 4 : Dangereux - Entit\u00e9s nombreuses");
 		D.Layout = EBRLayout::Caves;
 		D.CellSize = 400.f; D.WallHeight = 450.f; D.SolidChance = 0.38f;
 		D.bTrim = false; D.bLintels = false;
@@ -429,8 +422,8 @@ namespace
 		D.Exits = { X(9, EBRExitStyle::Ladder, 0.12f) };
 		D.Props = EBRProps::Caves; D.PropDensity = 0.3f;
 		D.Notes = {
-			TEXT("Les papillons. \u00c9normes. Ils viennent vers la lumi\u00e8re. \u00c9teins ta lampe quand tu entends les ailes."),
-			TEXT("Une \u00e9chelle remonte vers la surface. Il fait nuit l\u00e0-haut. Toujours nuit.")
+			{ FName(TEXT("Note.L8.1")), NSLOCTEXT("BR", "Note.L8.1", "Les papillons. \u00c9normes. Ils viennent vers la lumi\u00e8re. \u00c9teins ta lampe quand tu entends les ailes.") },
+			{ FName(TEXT("Note.L8.2")), NSLOCTEXT("BR", "Note.L8.2", "Une \u00e9chelle remonte vers la surface. Il fait nuit l\u00e0-haut. Toujours nuit.") }
 		};
 		return D;
 	}
@@ -440,12 +433,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 9;
-		D.Title = TEXT("The Suburbs");
-		D.Nickname = TEXT("La banlieue");
-		D.Description = TEXT("Un quartier r\u00e9sidentiel sans fin, plong\u00e9 dans une nuit \u00e9ternelle. Les lampadaires gr\u00e9sillent, ")
-			TEXT("les maisons sont vides. Ne restez pas dans la rue.");
+		D.Title = NSLOCTEXT("BR", "Level.9.Title", "The Suburbs");
+		D.Nickname = NSLOCTEXT("BR", "Level.9.Nickname", "La banlieue");
+		D.Description = NSLOCTEXT("BR", "Level.9.Description", "Un quartier r\u00e9sidentiel sans fin, plong\u00e9 dans une nuit \u00e9ternelle. Les lampadaires gr\u00e9sillent, les maisons sont vides. Ne restez pas dans la rue.");
 		D.SurvivalClass = 4;
-		D.ClassText = TEXT("Classe 4 : Dangereux la nuit");
+		D.ClassText = NSLOCTEXT("BR", "Level.9.ClassText", "Classe 4 : Dangereux la nuit");
 		D.Layout = EBRLayout::Suburbs;
 		D.CellSize = 500.f; D.Spacing = 5; D.ViewDistance = 8000.f;
 		D.bCeiling = false; D.bTrim = false; D.bOutdoor = true;
@@ -471,8 +463,8 @@ namespace
 		D.Exits = { X(10, EBRExitStyle::HouseDoor, 0.12f) };
 		D.Props = EBRProps::Suburbs;
 		D.Notes = {
-			TEXT("Certaines maisons ont la porte entrouverte. Derri\u00e8re l'une d'elles, j'ai vu un champ de bl\u00e9 en plein jour."),
-			TEXT("Les lampadaires ne te prot\u00e8gent pas. Ils te rendent juste plus visible.")
+			{ FName(TEXT("Note.L9.1")), NSLOCTEXT("BR", "Note.L9.1", "Certaines maisons ont la porte entrouverte. Derri\u00e8re l'une d'elles, j'ai vu un champ de bl\u00e9 en plein jour.") },
+			{ FName(TEXT("Note.L9.2")), NSLOCTEXT("BR", "Note.L9.2", "Les lampadaires ne te prot\u00e8gent pas. Ils te rendent juste plus visible.") }
 		};
 		return D;
 	}
@@ -482,12 +474,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 10;
-		D.Title = TEXT("Field of Wheat");
-		D.Nickname = TEXT("Le champ de bl\u00e9");
-		D.Description = TEXT("Un champ de bl\u00e9 infini sous un ciel couvert. Le vent, le bruissement des \u00e9pis, quelques ")
-			TEXT("granges isol\u00e9es. Un endroit \u00e9trangement paisible.");
+		D.Title = NSLOCTEXT("BR", "Level.10.Title", "Field of Wheat");
+		D.Nickname = NSLOCTEXT("BR", "Level.10.Nickname", "Le champ de bl\u00e9");
+		D.Description = NSLOCTEXT("BR", "Level.10.Description", "Un champ de bl\u00e9 infini sous un ciel couvert. Le vent, le bruissement des \u00e9pis, quelques granges isol\u00e9es. Un endroit \u00e9trangement paisible.");
 		D.SurvivalClass = 1;
-		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable");
+		D.ClassText = NSLOCTEXT("BR", "Level.10.ClassText", "Classe 1 : S\u00fbr - Stable");
 		D.Layout = EBRLayout::Open;
 		D.CellSize = 400.f; D.ViewDistance = 9000.f;
 		D.bCeiling = false; D.bTrim = false; D.bOutdoor = true;
@@ -507,8 +498,8 @@ namespace
 		D.Exits = { X(11, EBRExitStyle::Barn, 0.1f) };
 		D.Props = EBRProps::Field; D.PropDensity = 1.f;
 		D.Notes = {
-			TEXT("Les granges ont toujours une porte. L'une d'elles s'ouvre sur une ville."),
-			TEXT("Pour la premiere fois depuis des semaines, j'ai dormi.")
+			{ FName(TEXT("Note.L10.1")), NSLOCTEXT("BR", "Note.L10.1", "Les granges ont toujours une porte. L'une d'elles s'ouvre sur une ville.") },
+			{ FName(TEXT("Note.L10.2")), NSLOCTEXT("BR", "Note.L10.2", "Pour la premiere fois depuis des semaines, j'ai dormi.") }
 		};
 		return D;
 	}
@@ -518,12 +509,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 11;
-		D.Title = TEXT("The Endless City");
-		D.Nickname = TEXT("La ville sans fin");
-		D.Description = TEXT("Une m\u00e9tropole infinie de gratte-ciel et d'avenues d\u00e9sertes, baign\u00e9e de soleil. ")
-			TEXT("Des Facelings y vivent paisiblement. Ses immeubles m\u00e8nent un peu partout.");
+		D.Title = NSLOCTEXT("BR", "Level.11.Title", "The Endless City");
+		D.Nickname = NSLOCTEXT("BR", "Level.11.Nickname", "La ville sans fin");
+		D.Description = NSLOCTEXT("BR", "Level.11.Description", "Une m\u00e9tropole infinie de gratte-ciel et d'avenues d\u00e9sertes, baign\u00e9e de soleil. Des Facelings y vivent paisiblement. Ses immeubles m\u00e8nent un peu partout.");
 		D.SurvivalClass = 1;
-		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Habit\u00e9");
+		D.ClassText = NSLOCTEXT("BR", "Level.11.ClassText", "Classe 1 : S\u00fbr - Stable - Habit\u00e9");
 		D.Layout = EBRLayout::City;
 		D.CellSize = 600.f; D.Spacing = 4; D.ViewDistance = 9000.f;
 		D.bCeiling = false; D.bTrim = false; D.bOutdoor = true;
@@ -548,8 +538,8 @@ namespace
 		D.Exits = { X(-1, EBRExitStyle::BuildingDoor, 0.15f) };
 		D.Props = EBRProps::City;
 		D.Notes = {
-			TEXT("Les portes des immeubles m\u00e8nent n'importe o\u00f9. Vraiment n'importe o\u00f9."),
-			TEXT("Les Facelings d'ici sont gentils. Ils ne parlent pas, mais ils ne font pas de mal.")
+			{ FName(TEXT("Note.L11.1")), NSLOCTEXT("BR", "Note.L11.1", "Les portes des immeubles m\u00e8nent n'importe o\u00f9. Vraiment n'importe o\u00f9.") },
+			{ FName(TEXT("Note.L11.2")), NSLOCTEXT("BR", "Note.L11.2", "Les Facelings d'ici sont gentils. Ils ne parlent pas, mais ils ne font pas de mal.") }
 		};
 		return D;
 	}
@@ -559,12 +549,11 @@ namespace
 	{
 		FBRLevelDef D;
 		D.Number = 37;
-		D.Title = TEXT("Sublimity");
-		D.Nickname = TEXT("Les Poolrooms");
-		D.Description = TEXT("Un d\u00e9dale de couloirs carrel\u00e9s bord\u00e9s de canaux, d'arches et de salles inond\u00e9es d'une eau ti\u00e8de et claire. ")
-			TEXT("La lumi\u00e8re est douce, l'\u00e9cho infini. Un calme presque r\u00e9confortant... presque.");
+		D.Title = NSLOCTEXT("BR", "Level.37.Title", "Sublimity");
+		D.Nickname = NSLOCTEXT("BR", "Level.37.Nickname", "Les Poolrooms");
+		D.Description = NSLOCTEXT("BR", "Level.37.Description", "Un d\u00e9dale de couloirs carrel\u00e9s bord\u00e9s de canaux, d'arches et de salles inond\u00e9es d'une eau ti\u00e8de et claire. La lumi\u00e8re est douce, l'\u00e9cho infini. Un calme presque r\u00e9confortant... presque.");
 		D.SurvivalClass = 1;
-		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Aucune entit\u00e9");
+		D.ClassText = NSLOCTEXT("BR", "Level.37.ClassText", "Classe 1 : S\u00fbr - Stable - Aucune entit\u00e9");
 		D.Layout = EBRLayout::Rooms;
 		D.CellSize = 500.f; D.WallHeight = 450.f; D.WallThickness = 120.f;
 		// D'apres la scene fournie (carte "gm_poolrooms") : longs couloirs bordes de canaux, trottoirs carreles au ras
@@ -598,8 +587,8 @@ namespace
 		D.AlmondWaterChance = 0.2f; D.BatteryChance = 0.1f; D.NoteChance = 0.15f;
 		D.Exits = { X(0, EBRExitStyle::NoclipFloor, 0.08f), X(4, EBRExitStyle::Ladder, 0.06f) };
 		D.Notes = {
-			TEXT("L'eau est ti\u00e8de. Elle n'a pas de fond, a certains endroits. N'y plonge pas."),
-			TEXT("C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est \u00e7a, le pi\u00e8ge.")
+			{ FName(TEXT("Note.L37.1")), NSLOCTEXT("BR", "Note.L37.1", "L'eau est ti\u00e8de. Elle n'a pas de fond, a certains endroits. N'y plonge pas.") },
+			{ FName(TEXT("Note.L37.2")), NSLOCTEXT("BR", "Note.L37.2", "C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est \u00e7a, le pi\u00e8ge.") }
 		};
 		// Reflets d'eau animes sur le carrelage (tres doux au plafond)
 		D.Floor.Caustics = 1.f; D.Wall.Caustics = 1.f; D.Pillar.Caustics = 1.f; D.Ceiling.Caustics = 0.35f;
@@ -665,15 +654,79 @@ namespace BRLevels
 		return All()[IndexOf(Number)];
 	}
 
-	const TArray<FString>& CommonNotes()
+	const TArray<FBRNote>& CommonNotes()
 	{
-		static const TArray<FString> Notes = {
-			TEXT("R\u00c8GLE N\u00b01 : ne cours pas si tu n'y es pas oblig\u00e9. Le bruit attire les choses."),
-			TEXT("R\u00c8GLE N\u00b02 : bois de l'eau d'amande quand ta t\u00eate commence \u00e0 tourner. La folie tue aussi s\u00fbrement que les entites."),
-			TEXT("R\u00c8GLE N\u00b03 : une lampe allum\u00e9e se voit de loin. Parfois, il vaut mieux rester dans le noir."),
-			TEXT("Ils l'appellent le \"Front\" - la r\u00e9alit\u00e9 d'o\u00f9 nous venons. Je ne suis plus s\u00fbr qu'elle ait exist\u00e9."),
-			TEXT("Note pour moi-m\u00eame : {Inventory} pour ouvrir le journal. Ne pas oublier ce que j'ai vu.")
+		static const TArray<FBRNote> Notes = {
+			{ FName(TEXT("Note.Common.1")), NSLOCTEXT("BR", "Note.Common.1", "R\u00c8GLE N\u00b01 : ne cours pas si tu n'y es pas oblig\u00e9. Le bruit attire les choses.") },
+			{ FName(TEXT("Note.Common.2")), NSLOCTEXT("BR", "Note.Common.2", "R\u00c8GLE N\u00b02 : bois de l'eau d'amande quand ta t\u00eate commence \u00e0 tourner. La folie tue aussi s\u00fbrement que les entites.") },
+			{ FName(TEXT("Note.Common.3")), NSLOCTEXT("BR", "Note.Common.3", "R\u00c8GLE N\u00b03 : une lampe allum\u00e9e se voit de loin. Parfois, il vaut mieux rester dans le noir.") },
+			{ FName(TEXT("Note.Common.4")), NSLOCTEXT("BR", "Note.Common.4", "Ils l'appellent le \"Front\" - la r\u00e9alit\u00e9 d'o\u00f9 nous venons. Je ne suis plus s\u00fbr qu'elle ait exist\u00e9.") },
+			{ FName(TEXT("Note.Common.5")), NSLOCTEXT("BR", "Note.Common.5", "Note pour moi-m\u00eame : {Inventory} pour ouvrir le journal. Ne pas oublier ce que j'ai vu.") }
 		};
 		return Notes;
+	}
+
+	const FBRNote* FindNote(FName Id)
+	{
+		if (Id.IsNone())
+		{
+			return nullptr;
+		}
+		for (const FBRLevelDef& D : All())
+		{
+			for (const FBRNote& N : D.Notes)
+			{
+				if (N.Id == Id)
+				{
+					return &N;
+				}
+			}
+		}
+		for (const FBRNote& N : CommonNotes())
+		{
+			if (N.Id == Id)
+			{
+				return &N;
+			}
+		}
+		return nullptr;
+	}
+
+	FName NoteIdFromLegacyText(const FString& FrenchText)
+	{
+		// Le texte source (francais) de chaque note, pas sa traduction courante
+		auto Match = [&FrenchText](const FBRNote& N)
+		{
+			const FString* Source = FTextInspector::GetSourceString(N.Text);
+			return Source && Source->Equals(FrenchText, ESearchCase::CaseSensitive);
+		};
+		for (const FBRLevelDef& D : All())
+		{
+			for (const FBRNote& N : D.Notes)
+			{
+				if (Match(N))
+				{
+					return N.Id;
+				}
+			}
+		}
+		for (const FBRNote& N : CommonNotes())
+		{
+			if (Match(N))
+			{
+				return N.Id;
+			}
+		}
+		return NAME_None;
+	}
+
+	FText NoteText(const FString& JournalEntry)
+	{
+		if (const FBRNote* N = FindNote(FName(*JournalEntry)))
+		{
+			return N->Text;
+		}
+		// Entree d'une ancienne sauvegarde que la migration n'a pas reconnue : affichee telle quelle
+		return FText::AsCultureInvariant(JournalEntry);
 	}
 }

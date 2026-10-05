@@ -1,4 +1,5 @@
 #include "BRInteractables.h"
+#include "BRLoc.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
 #include "BRWorld.h"
@@ -169,9 +170,9 @@ FString ABRPickup::GetPrompt() const
 {
 	if (Item == EBRItem::Note)
 	{
-		return BRKeys::Tag(EBRAction::Interact) + TEXT(" Lire la note");
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.ReadNote", "{Key} Lire la note"), { { TEXT("Key"), BRLoc::Arg(BRKeys::Tag(EBRAction::Interact)) } });
 	}
-	return FString::Printf(TEXT("%s Ramasser : %s"), *BRKeys::Tag(EBRAction::Interact), *BRItems::Get(Item).Name);
+	return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.InteractRamasserItem", "{Interact} Ramasser : {Item}"), { { TEXT("Interact"), BRLoc::Arg(BRKeys::Tag(EBRAction::Interact)) }, { TEXT("Item"), BRLoc::Arg(BRItems::Get(Item).Name) } });
 }
 
 void ABRPickup::Collect(ABRCharacter* By)
@@ -397,24 +398,24 @@ void ABRExit::NotifyActorBeginOverlap(AActor* OtherActor)
 
 FString ABRExit::GetPrompt() const
 {
-	const FString Dest = (Target >= 0 && BRLevels::Exists(Target)) ? FString::Printf(TEXT("Niveau %d ?"), Target) : FString(TEXT("???"));
+	const FString Dest = (Target >= 0 && BRLevels::Exists(Target)) ? BRLoc::Fmt(NSLOCTEXT("BR", "Interact.NiveauTarget", "Niveau {Target} ?"), { { TEXT("Target"), BRLoc::Int(Target) } }) : FString(TEXT("???"));
 	const FString Key = BRKeys::Tag(EBRAction::Interact);
 	switch (Style)
 	{
 	case EBRExitStyle::Door:
-		return FString::Printf(TEXT("%s Ouvrir la porte de secours  (%s)"), *Key, *Dest);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyOuvrirPorteSecoursDest", "{Key} Ouvrir la porte de secours  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::HotelDoor:
-		return FString::Printf(TEXT("%s Ouvrir la porte \"CHAUFFERIE\"  (%s)"), *Key, *Dest);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyOuvrirPorteChaufferieDest", "{Key} Ouvrir la porte \"CHAUFFERIE\"  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::Elevator:
-		return FString::Printf(TEXT("%s Prendre l'ascenseur  (%s)"), *Key, *Dest);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyPrendreAscenseurDest", "{Key} Prendre l'ascenseur  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::Ladder:
-		return FString::Printf(TEXT("%s Monter \u00e0 l'\u00e9chelle  (%s)"), *Key, *Dest);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyMonterEchelleDest", "{Key} Monter \u00e0 l'\u00e9chelle  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::Barn:
-		return FString::Printf(TEXT("%s Entrer dans la grange  (%s)"), *Key, *Dest);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyEntrerGrangeDest", "{Key} Entrer dans la grange  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::HouseDoor:
-		return FString::Printf(TEXT("%s Pousser la porte entrouverte  (%s)"), *Key, *Dest);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyPousserPorteEntrouverteDest", "{Key} Pousser la porte entrouverte  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::BuildingDoor:
-		return FString::Printf(TEXT("%s Entrer dans l'immeuble  (%s)"), *Key, *Dest);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyEntrerImmeubleDest", "{Key} Entrer dans l'immeuble  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	default:
 		return FString();
 	}

@@ -141,6 +141,7 @@ public:
 	float Battery = 100.f;
 	int32 NotesRead = 0;
 	bool bGodMode = false;
+	/** Notes lues : identifiants (v4.8) ; texte : BRLevels::NoteText */
 	TArray<FString> ReadNotes;
 
 	// ---- Inventaire ----
@@ -219,7 +220,8 @@ public:
 	void ApplyMenuBlur(float Amount);
 	const FString& GetFocusPrompt() const { return FocusPrompt; }
 	bool IsReadingNote() const { return bReadingNote; }
-	const FString& GetOpenNote() const { return OpenNote; }
+	/** v4.8 : texte de la note ouverte, dans la langue courante (illisible si elle n'a pas d'identifiant) */
+	FString GetOpenNote() const;
 	void CloseNote() { bReadingNote = false; }
 
 protected:

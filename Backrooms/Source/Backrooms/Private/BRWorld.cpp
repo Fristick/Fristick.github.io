@@ -1,4 +1,5 @@
 #include "BRWorld.h"
+#include "BRLoc.h"
 #include "BRSave.h"
 #include "ShaderPipelineCache.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -339,7 +340,7 @@ void ABRWorld::RespawnLocalPlayer()
 	TransState = ETrans::FadingIn;
 	TransTimer = 0.f;
 	Fade = 1.f;
-	ABRHUD::Notify(this, TEXT("Vous vous r\u00e9veillez au point de d\u00e9part. Votre \u00e9quipement est rest\u00e9 l\u00e0 o\u00f9 vous \u00eates tomb\u00e9."), 6.f,
+	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "World.ReveillezPointDepartVotreEquipement", "Vous vous r\u00e9veillez au point de d\u00e9part. Votre \u00e9quipement est rest\u00e9 l\u00e0 o\u00f9 vous \u00eates tomb\u00e9.")), 6.f,
 		FLinearColor(1.f, 0.85f, 0.6f));
 }
 
@@ -519,7 +520,7 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		A->SetWaterSim(nullptr, FLinearColor(0.f, 0.f, 1000.f, 0.f));
 	}
 
-	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title, Seed);
+	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title.ToString(), Seed);
 
 	ApplyEnvironment();
 	UpdateStreaming(true);
@@ -606,11 +607,11 @@ void ABRWorld::OnRep_Objectives()
 		}
 		if (bBlackoutRecorded && !bPrevBlackoutRecorded)
 		{
-			CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
+			CompleteTask(BR_STR(NSLOCTEXT("BR", "World.FilmerPendantCoupure", "FILMER PENDANT UNE COUPURE")));
 		}
 		if (bEntityRecorded && !bPrevEntityRecorded)
 		{
-			CompleteTask(TEXT("FILMER UNE ENTIT\u00c9"));
+			CompleteTask(BR_STR(NSLOCTEXT("BR", "World.FilmerEntite", "FILMER UNE ENTIT\u00c9")));
 		}
 	}
 	PrevVHSFound = VHSFound;
@@ -683,12 +684,12 @@ void ABRWorld::ServerCompleteObjective(uint8 Which)
 	if (Which == 0 && !bBlackoutRecorded)
 	{
 		bBlackoutRecorded = bPrevBlackoutRecorded = true;
-		CompleteTask(TEXT("FILMER PENDANT UNE COUPURE"));
+		CompleteTask(BR_STR(NSLOCTEXT("BR", "World.FilmerPendantCoupure", "FILMER PENDANT UNE COUPURE")));
 	}
 	else if (Which == 1 && !bEntityRecorded)
 	{
 		bEntityRecorded = bPrevEntityRecorded = true;
-		CompleteTask(TEXT("FILMER UNE ENTIT\u00c9"));
+		CompleteTask(BR_STR(NSLOCTEXT("BR", "World.FilmerEntite", "FILMER UNE ENTIT\u00c9")));
 	}
 }
 
@@ -1070,7 +1071,7 @@ void ABRWorld::Discover(EBREntityKind Kind)
 	}
 	Discovered.Add(K);
 	const FBREntityInfo& Info = ABREntity::Info(Kind);
-	ABRHUD::Notify(this, FString::Printf(TEXT("Nouvelle entr\u00e9e du journal : %s - %s  %s"), *Info.Number, *Info.Name, *BRKeys::Tag(EBRAction::Inventory)),
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "World.NouvelleEntreeJournalNumberName", "Nouvelle entr\u00e9e du journal : {Number} - {Name}  {Inventory}"), { { TEXT("Number"), BRLoc::Arg(Info.Number) }, { TEXT("Name"), BRLoc::Arg(Info.Name) }, { TEXT("Inventory"), BRLoc::Arg(BRKeys::Tag(EBRAction::Inventory)) } }),
 		6.f, FLinearColor(1.f, 0.4f, 0.35f));
 }
 
@@ -1258,8 +1259,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 	if (!bObjectivesAnnounced && !bMenu && TransState == ETrans::None && LevelTime > 8.f && Def().bRequireObjectives)
 	{
 		bObjectivesAnnounced = true;
-		ABRHUD::Notify(this, FString::Printf(TEXT("OBJECTIFS : trouver %d cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  %s"),
-			Def().VHSRequired, *BRKeys::Tag(EBRAction::Inventory)), 8.f, FLinearColor(1.f, 0.85f, 0.4f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "World.ObjectifsTrouverVhsrequiredCassettesVhs", "OBJECTIFS : trouver {VHSRequired} cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  {Inventory}"), { { TEXT("VHSRequired"), BRLoc::Int(Def().VHSRequired) }, { TEXT("Inventory"), BRLoc::Arg(BRKeys::Tag(EBRAction::Inventory)) } }), 8.f, FLinearColor(1.f, 0.85f, 0.4f));
 	}
 }
 
@@ -1916,21 +1916,21 @@ void ABRWorld::UpdateFirstMinutes()
 	switch (FirstMinutesStep)
 	{
 	case 0:
-		Text = bPad ? FString(TEXT("Stick gauche : se d\u00e9placer  \u00b7  clic du stick : courir  \u00b7  Y : lampe  \u00b7  B : s'accroupir"))
-			: BRKeys::Expand(TEXT("{MoveForward}{MoveLeft}{MoveBackward}{MoveRight} : se d\u00e9placer  \u00b7  {Sprint} : courir  \u00b7  {Flashlight} : lampe  \u00b7  {Crouch} : s'accroupir"));
+		Text = bPad ? FString(BR_STR(NSLOCTEXT("BR", "World.StickGaucheDeplacerClicStick", "Stick gauche : se d\u00e9placer  \u00b7  clic du stick : courir  \u00b7  Y : lampe  \u00b7  B : s'accroupir")))
+			: BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "World.MoveforwardMoveleftMovebackwardMoveright", "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight} : se d\u00e9placer  \u00b7  {Sprint} : courir  \u00b7  {Flashlight} : lampe  \u00b7  {Crouch} : s'accroupir")));
 		break;
 	case 1:
-		Text = bPad ? FString(TEXT("Bouton Vue : inventaire, objectifs et journal  \u00b7  X : interagir"))
-			: BRKeys::Expand(TEXT("{Inventory} : inventaire, objectifs et journal  \u00b7  {Interact} : interagir"));
+		Text = bPad ? FString(BR_STR(NSLOCTEXT("BR", "World.BoutonVueInventaireObjectifsJournal", "Bouton Vue : inventaire, objectifs et journal  \u00b7  X : interagir")))
+			: BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "World.InventoryInventaireObjectifsJournalInter", "{Inventory} : inventaire, objectifs et journal  \u00b7  {Interact} : interagir")));
 		break;
 	case 2:
 		Text = Def().bRequireObjectives || Def().bBlackouts
-			? (bPad ? FString(TEXT("Le cam\u00e9scope est dans le sac : sortez-le pour filmer. Croix haut : vision nocturne dans le noir."))
-				: BRKeys::Expand(TEXT("Le cam\u00e9scope est dans le sac : sortez-le pour filmer. {NightVision} : vision nocturne dans le noir.")))
-			: FString(TEXT("Les sorties bourdonnent : \u00e9coutez, le son vous guide."));
+			? (bPad ? FString(BR_STR(NSLOCTEXT("BR", "World.CamescopeSacSortezFilmerCroix", "Le cam\u00e9scope est dans le sac : sortez-le pour filmer. Croix haut : vision nocturne dans le noir.")))
+				: BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "World.CamescopeSacSortezFilmerNightvision", "Le cam\u00e9scope est dans le sac : sortez-le pour filmer. {NightVision} : vision nocturne dans le noir."))))
+			: FString(BR_STR(NSLOCTEXT("BR", "World.SortiesBourdonnentEcoutezGuide", "Les sorties bourdonnent : \u00e9coutez, le son vous guide.")));
 		break;
 	default:
-		Text = TEXT("Rep\u00e9r\u00e9 ? Cassez la ligne de vue (portes, virages). Les placards cachent ; les trous dans les murs se prennent accroupi.");
+		Text = BR_STR(NSLOCTEXT("BR", "World.RepereCassezLigneVuePortes", "Rep\u00e9r\u00e9 ? Cassez la ligne de vue (portes, virages). Les placards cachent ; les trous dans les murs se prennent accroupi."));
 		bDoneThisSession = true;
 		break;
 	}
@@ -2330,10 +2330,10 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 		}
 		if (!bSilent)
 		{
-			ABRHUD::Notify(this, TEXT("COUPURE DE COURANT"), 4.f, FLinearColor(1.f, 0.3f, 0.25f));
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "World.CoupureCourant", "COUPURE DE COURANT")), 4.f, FLinearColor(1.f, 0.3f, 0.25f));
 			if (D.bRequireObjectives && !bBlackoutRecorded)
 			{
-				ABRHUD::Notify(this, TEXT("Filmez pendant la coupure : gardez le cam\u00e9scope sur vous et regardez autour de vous."), 5.f, FLinearColor(1.f, 0.85f, 0.4f));
+				ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "World.FilmezPendantCoupureGardezCamescope", "Filmez pendant la coupure : gardez le cam\u00e9scope sur vous et regardez autour de vous.")), 5.f, FLinearColor(1.f, 0.85f, 0.4f));
 			}
 		}
 		break;
@@ -2387,7 +2387,7 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 	if (D.bRequireObjectives)
 	{
 		FBRObjective Vhs;
-		Vhs.Text = TEXT("TROUVER LES CASSETTES VHS");
+		Vhs.Text = BR_STR(NSLOCTEXT("BR", "World.TrouverCassettesVhs", "TROUVER LES CASSETTES VHS"));
 		Vhs.Progress = FMath::Min(VHSFound, D.VHSRequired);
 		Vhs.Goal = D.VHSRequired;
 		Vhs.bRequired = true;
@@ -2396,7 +2396,7 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 	if (D.bBlackouts)
 	{
 		FBRObjective Rec;
-		Rec.Text = TEXT("FILMER PENDANT UNE COUPURE");
+		Rec.Text = BR_STR(NSLOCTEXT("BR", "World.FilmerPendantCoupure", "FILMER PENDANT UNE COUPURE"));
 		Rec.Progress = bBlackoutRecorded ? 1 : 0;
 		Rec.Partial = bBlackoutRecorded ? 1.f : FMath::Clamp(BlackoutRecordTime / 5.f, 0.f, 1.f);
 		Rec.bRequired = D.bRequireObjectives;
@@ -2405,13 +2405,13 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 	if (D.Entities.Num() > 0 && D.MaxEntities > 0)
 	{
 		FBRObjective Ent;
-		Ent.Text = TEXT("FILMER UNE ENTIT\u00c9");
+		Ent.Text = BR_STR(NSLOCTEXT("BR", "World.FilmerEntite", "FILMER UNE ENTIT\u00c9"));
 		Ent.Progress = bEntityRecorded ? 1 : 0;
 		Ent.Partial = bEntityRecorded ? 1.f : FMath::Clamp(EntityRecordTime / 3.f, 0.f, 1.f);
 		Out.Add(Ent);
 	}
 	FBRObjective Exit;
-	Exit.Text = D.bRequireObjectives ? TEXT("STABILISER ET PRENDRE LA SORTIE") : TEXT("TROUVER UNE SORTIE");
+	Exit.Text = D.bRequireObjectives ? BR_STR(NSLOCTEXT("BR", "World.StabiliserPrendreSortie", "STABILISER ET PRENDRE LA SORTIE")) : BR_STR(NSLOCTEXT("BR", "World.TrouverSortie", "TROUVER UNE SORTIE"));
 	Exit.Progress = 0;
 	Out.Add(Exit);
 }
@@ -2433,10 +2433,10 @@ bool ABRWorld::CanLeaveLevel(FString& OutReason) const
 		return true;
 	}
 	const FBRLevelDef& D = Def();
-	OutReason = FString::Printf(TEXT("La sortie est instable... Cassettes VHS %d/%d"), FMath::Min(VHSFound, D.VHSRequired), D.VHSRequired);
+	OutReason = BRLoc::Fmt(NSLOCTEXT("BR", "World.ExitUnstableTapes", "La sortie est instable... Cassettes VHS {Found}/{Required}"), { { TEXT("Found"), BRLoc::Int(FMath::Min(VHSFound, D.VHSRequired)) }, { TEXT("Required"), BRLoc::Int(D.VHSRequired) } });
 	if (D.bBlackouts)
 	{
-		OutReason += FString::Printf(TEXT(", filmer pendant une coupure %d/1"), bBlackoutRecorded ? 1 : 0);
+		OutReason += BRLoc::Fmt(NSLOCTEXT("BR", "World.FilmerPendantCoupureBlackoutrecorded1", ", filmer pendant une coupure {BlackoutRecorded}/1"), { { TEXT("BlackoutRecorded"), BRLoc::Int(bBlackoutRecorded ? 1 : 0) } });
 	}
 	OutReason += TEXT("  ") + BRKeys::Tag(EBRAction::Inventory);
 	return false;
@@ -2444,7 +2444,7 @@ bool ABRWorld::CanLeaveLevel(FString& OutReason) const
 
 void ABRWorld::CompleteTask(const FString& Text)
 {
-	ABRHUD::Notify(this, FString::Printf(TEXT("T\u00c2CHE ACCOMPLIE : %s"), *Text), 5.f, FLinearColor(0.55f, 1.f, 0.55f));
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "World.TacheAccomplieText", "T\u00c2CHE ACCOMPLIE : {Text}"), { { TEXT("Text"), BRLoc::Arg(Text) } }), 5.f, FLinearColor(0.55f, 1.f, 0.55f));
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
 		if (USoundBase* S = A->Sound(TEXT("S_Objective")))
@@ -2454,7 +2454,7 @@ void ABRWorld::CompleteTask(const FString& Text)
 	}
 	if (Def().bRequireObjectives && AreObjectivesComplete())
 	{
-		ABRHUD::Notify(this, TEXT("Les sorties se sont stabilis\u00e9es. Trouvez un passage (noclip) pour quitter le Niveau."), 7.f,
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "World.SortiesSontStabiliseesTrouvezPassage", "Les sorties se sont stabilis\u00e9es. Trouvez un passage (noclip) pour quitter le Niveau.")), 7.f,
 			FLinearColor(1.f, 0.9f, 0.5f));
 	}
 }
@@ -2480,16 +2480,16 @@ void ABRWorld::AnnounceVHS()
 	const FBRLevelDef& D = Def();
 	if (!D.bRequireObjectives)
 	{
-		ABRHUD::Notify(this, FString::Printf(TEXT("+1 Cassette VHS  (%d)"), VHSFound), 3.f, FLinearColor(0.9f, 0.88f, 0.75f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "World.1CassetteVhsVhsfound", "+1 Cassette VHS  ({VHSFound})"), { { TEXT("VHSFound"), BRLoc::Int(VHSFound) } }), 3.f, FLinearColor(0.9f, 0.88f, 0.75f));
 		return;
 	}
 	if (VHSFound == D.VHSRequired)
 	{
-		CompleteTask(FString::Printf(TEXT("CASSETTES VHS %d/%d"), D.VHSRequired, D.VHSRequired));
+		CompleteTask(BRLoc::Fmt(NSLOCTEXT("BR", "World.TapesTaskDone", "CASSETTES VHS {Found}/{Required}"), { { TEXT("Found"), BRLoc::Int(D.VHSRequired) }, { TEXT("Required"), BRLoc::Int(D.VHSRequired) } }));
 	}
 	else if (VHSFound < D.VHSRequired)
 	{
-		ABRHUD::Notify(this, FString::Printf(TEXT("Cassette VHS  %d/%d"), VHSFound, D.VHSRequired), 3.f, FLinearColor(1.f, 0.85f, 0.4f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "World.CassetteVhsVhsfoundVhsrequired", "Cassette VHS  {VHSFound}/{VHSRequired}"), { { TEXT("VHSFound"), BRLoc::Int(VHSFound) }, { TEXT("VHSRequired"), BRLoc::Int(D.VHSRequired) } }), 3.f, FLinearColor(1.f, 0.85f, 0.4f));
 	}
 }
 
@@ -2551,7 +2551,7 @@ void ABRWorld::NotifyRecording(float Dt, const FVector& Eye, const FVector& Dir)
 	if (D.bBlackouts && !bBlackoutRecorded && !bObjectiveSent[0] && BlackoutPhase == EBlackout::Dark)
 	{
 		BlackoutRecordTime += Dt;
-		RecordLabel = TEXT("COUPURE DE COURANT");
+		RecordLabel = BR_STR(NSLOCTEXT("BR", "World.CoupureCourant", "COUPURE DE COURANT"));
 		RecordProgress = FMath::Clamp(BlackoutRecordTime / 5.f, 0.f, 1.f);
 		if (BlackoutRecordTime >= 5.f)
 		{
@@ -2566,7 +2566,7 @@ void ABRWorld::NotifyRecording(float Dt, const FVector& Eye, const FVector& Dir)
 		if (ABREntity* E = FindVisibleEntity(Eye, Dir, 2600.f, 0.9f))
 		{
 			EntityRecordTime += Dt;
-			RecordLabel = ABREntity::Info(E->Kind).Name.ToUpper();
+			RecordLabel = ABREntity::Info(E->Kind).Name.ToUpper().ToString();
 			RecordProgress = FMath::Clamp(EntityRecordTime / 3.f, 0.f, 1.f);
 			if (EntityRecordTime >= 3.f)
 			{

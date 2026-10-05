@@ -1,4 +1,5 @@
 #include "BRHUD.h"
+#include "BRFonts.h"
 #include "BRLoc.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
@@ -19,11 +20,14 @@
 #include "Engine/World.h"
 #include "EngineFontServices.h"
 #include "EngineUtils.h"
+#include "Fonts/FontCache.h"
 #include "Fonts/FontMeasure.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 #include "HAL/PlatformTime.h"
 #include "InputCoreTypes.h"
+#include "Internationalization/BreakIterator.h"
+#include "Internationalization/Internationalization.h"
 #include "Kismet/GameplayStatics.h"
 #include "Styling/CoreStyle.h"
 
@@ -59,6 +63,7 @@ namespace
 		Btn_MenuLevelPrev = 980,
 		Btn_MenuLevelNext = 981,
 		Btn_MenuCard = 990,      // 990..996 : cartes du carrousel des niveaux (993 = carte centrale)
+		Btn_Language = 1400,     // 1400 + element de la page Langue (22 langues + RETOUR)
 		Btn_SaveDelete = 1500,   // 1500 + emplacement : corbeille d'une partie
 		Btn_KeySlot = 1000       // 1000 + action * 3 + case
 	};
@@ -133,6 +138,8 @@ namespace
 				Best = Best ? Best : F;
 			}
 		}
+		// v4.8 : la police du moteur plus les ecritures qu'elle n'a pas (arabe, persan, chinois, japonais, coreen)
+		Best = BRFonts::WithScripts(Best);
 		Cached = Best;
 		return Best;
 	}
@@ -193,12 +200,226 @@ namespace
 		return FSlateFontInfo(Font, Pt, Faces[Wt]);
 	}
 
-	/** "Classe 1 : Sur - Stable" -> "CLASSE 1" */
+	// ---- v4.8 : ecritures (mise en forme, graphemes, coupure des lignes)
+
+	bool IsJoiningScript(uint32 C)
+	{
+		// Hebreu, arabe, syriaque, thaana, persan, formes de presentation ; marques de direction et liants invisibles
+		return (C >= 0x0590 && C <= 0x08FF) || (C >= 0xFB1D && C <= 0xFDFF) || (C >= 0xFE70 && C <= 0xFEFF) || (C >= 0x200C && C <= 0x200F)
+			|| (C >= 0x202A && C <= 0x202E) || (C >= 0x2066 && C <= 0x2069);
+	}
+
+	/** Texte a mettre en forme avant le dessin : lettres liees de l'arabe et du persan, ordre de droite a gauche.
+	 *  Le Canvas dessine sinon caractere par caractere, de gauche a droite (lettres isolees et mot a l'envers). */
+	bool NeedsShaping(const FString& S)
+	{
+		for (int32 i = 0; i < S.Len(); ++i)
+		{
+			if (IsJoiningScript(static_cast<uint32>(S[i])))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Fins des graphemes de S (lettre + accents combines, paire de substitution, emoji compose : jamais separes) */
+	TArray<int32> GraphemeEnds(const FString& S)
+	{
+		TArray<int32> Ends;
+		bool bSimple = true;
+		for (int32 i = 0; i < S.Len() && bSimple; ++i)
+		{
+			const uint32 C = static_cast<uint32>(S[i]);
+			bSimple = !((C >= 0x0300 && C <= 0x036F) || (C >= 0x1AB0 && C <= 0x1AFF) || (C >= 0x1DC0 && C <= 0x1DFF) || (C >= 0x20D0 && C <= 0x20FF)
+				|| (C >= 0xFE00 && C <= 0xFE2F) || (C >= 0xD800 && C <= 0xDFFF) || (C >= 0x1100 && C <= 0x11FF) || C == 0x200D || IsJoiningScript(C));
+		}
+		if (bSimple)
+		{
+			// Cas courant (latin, cyrillique, ideogrammes, kana, hangeul precompose) : un caractere = un grapheme
+			Ends.Reserve(S.Len());
+			for (int32 i = 1; i <= S.Len(); ++i)
+			{
+				Ends.Add(i);
+			}
+			return Ends;
+		}
+		const TSharedRef<IBreakIterator> It = FBreakIterator::CreateCharacterBoundaryIterator();
+		It->SetString(FString(S));
+		for (int32 B = It->MoveToNext(); B != INDEX_NONE; B = It->MoveToNext())
+		{
+			Ends.Add(B);
+		}
+		if (Ends.Num() == 0 || Ends.Last() != S.Len())
+		{
+			Ends.Add(S.Len());
+		}
+		return Ends;
+	}
+
+	/** Points ou une ligne peut finir (regles Unicode UAX #14, ICU : apres les espaces et les traits d'union, entre deux
+	 *  ideogrammes, jamais devant une ponctuation fermante) ; le dernier est la fin du texte */
+	TArray<int32> LineBreaks(const FString& S)
+	{
+		TArray<int32> Out;
+		const TSharedRef<IBreakIterator> It = FBreakIterator::CreateLineBreakIterator();
+		It->SetString(FString(S));
+		for (int32 B = It->MoveToNext(); B != INDEX_NONE; B = It->MoveToNext())
+		{
+			Out.Add(B);
+		}
+		if (Out.Num() == 0 || Out.Last() != S.Len())
+		{
+			Out.Add(S.Len());
+		}
+		return Out;
+	}
+
+	/** Coupe S en lignes d'au plus MaxWidth (Measure : largeur d'un texte en pixels) */
+	TArray<FString> WrapText(const FString& S, float MaxWidth, TFunctionRef<float(const FString&)> Measure)
+	{
+		TArray<FString> Lines;
+		TArray<FString> Paragraphs;
+		S.ParseIntoArray(Paragraphs, TEXT("\n"), false);
+		for (const FString& P : Paragraphs)
+		{
+			if (P.TrimStartAndEnd().IsEmpty())
+			{
+				Lines.Add(FString());
+				continue;
+			}
+			const TArray<int32> Breaks = LineBreaks(P);
+			int32 Start = 0;
+			int32 Fit = INDEX_NONE; // dernier point de coupure qui tient sur la ligne en cours
+			int32 k = 0;
+			while (k < Breaks.Num())
+			{
+				const int32 B = Breaks[k];
+				if (B <= Start)
+				{
+					++k;
+					continue;
+				}
+				if (Measure(P.Mid(Start, B - Start).TrimEnd()) <= MaxWidth)
+				{
+					Fit = B;
+					++k;
+					continue;
+				}
+				if (Fit != INDEX_NONE)
+				{
+					// La ligne finit au dernier point qui tenait ; le meme segment est repris sur la ligne suivante
+					Lines.Add(P.Mid(Start, Fit - Start).TrimEnd());
+					Start = Fit;
+					Fit = INDEX_NONE;
+					continue;
+				}
+				// Un segment seul plus large que la ligne (mot tres long, adresse) : coupe entre deux graphemes
+				const FString Segment = P.Mid(Start, B - Start);
+				const TArray<int32> Ends = GraphemeEnds(Segment);
+				int32 Cut = Ends.Num() > 0 ? Ends[0] : Segment.Len();
+				for (int32 g = 1; g < Ends.Num() && Measure(Segment.Left(Ends[g])) <= MaxWidth; ++g)
+				{
+					Cut = Ends[g];
+				}
+				if (Cut >= Segment.Len())
+				{
+					// Le segment ne depasse qu'a cause de ses espaces de fin : il tient
+					Fit = B;
+					++k;
+					continue;
+				}
+				Lines.Add(Segment.Left(Cut));
+				Start += Cut;
+			}
+			if (Start < P.Len())
+			{
+				const FString Rest = P.Mid(Start).TrimEnd();
+				if (!Rest.IsEmpty())
+				{
+					Lines.Add(Rest);
+				}
+			}
+		}
+		return Lines;
+	}
+
+	/** Culture courante : les caches de texte mis en forme ou coupe en dependent (sous-polices propres a une langue) */
+	bool CultureChanged(FString& Seen)
+	{
+		const FString Now = FInternationalization::Get().GetCurrentLanguage()->GetName();
+		if (Now != Seen)
+		{
+			Seen = Now;
+			return true;
+		}
+		return false;
+	}
+
+	/** Texte mis en forme (HarfBuzz, ordre bidirectionnel), garde pour les images suivantes */
+	TOptional<FShapedGlyphSequenceRef> ShapeText(const FString& S, const FSlateFontInfo& Font)
+	{
+		static TMap<FString, FShapedGlyphSequenceRef> Cache;
+		static FString Culture;
+		if (CultureChanged(Culture) || Cache.Num() > 512)
+		{
+			Cache.Reset();
+		}
+		const TSharedPtr<FSlateFontCache> FontCache = FEngineFontServices::IsInitialized() ? FEngineFontServices::Get().GetFontCache() : nullptr;
+		if (!FontCache.IsValid())
+		{
+			return TOptional<FShapedGlyphSequenceRef>();
+		}
+		const bool bRtl = BRLoc::IsRightToLeft();
+		const FString Key = FString::Printf(TEXT("%d|%s|%d|%s"), FMath::RoundToInt(static_cast<float>(Font.Size)), *Font.TypefaceFontName.ToString(), bRtl ? 1 : 0, *S);
+		if (const FShapedGlyphSequenceRef* Found = Cache.Find(Key))
+		{
+			if (!(*Found)->IsDirty())
+			{
+				return *Found;
+			}
+		}
+		const FShapedGlyphSequenceRef Shaped = FontCache->ShapeBidirectionalText(S, Font, 1.f,
+			bRtl ? TextBiDi::ETextDirection::RightToLeft : TextBiDi::ETextDirection::LeftToRight, ETextShapingMethod::Auto);
+		Cache.Add(Key, Shaped);
+		return Shaped;
+	}
+
+	/** Taille, en points de l'interface, d'un texte des anciennes primitives (police du moteur a l'echelle Scale) */
+	float LegacySize(UFont* Font, float Scale, float U)
+	{
+		const int32 Pt = Font && Font->LegacyFontSize > 0 ? Font->LegacyFontSize : 24;
+		return Pt * Scale / FMath::Max(U, 0.01f);
+	}
+
+	/** "Classe 1 : Sur - Stable" -> "CLASSE 1" (deux-points latin ou pleine chasse ; majuscules selon la langue : I turc...) */
 	FString ClassShort(const FString& ClassText)
 	{
 		int32 Colon = INDEX_NONE;
-		const FString Head = ClassText.FindChar(TEXT(':'), Colon) ? ClassText.Left(Colon).TrimEnd() : ClassText;
-		return Head.ToUpper();
+		if (!ClassText.FindChar(TEXT(':'), Colon))
+		{
+			ClassText.FindChar(TEXT('\xFF1A'), Colon);
+		}
+		const FString Head = Colon != INDEX_NONE ? ClassText.Left(Colon).TrimEnd() : ClassText;
+		return FText::AsCultureInvariant(Head).ToUpper().ToString();
+	}
+
+	/** Phase du directeur de tension (mode developpeur) */
+	FText TensionLabel(ABRWorld::ETension T)
+	{
+		switch (T)
+		{
+		case ABRWorld::ETension::Unease:
+			return NSLOCTEXT("BR", "HUD.Tension.Unease", "malaise");
+		case ABRWorld::ETension::Detection:
+			return NSLOCTEXT("BR", "HUD.Tension.Detection", "d\u00e9tection");
+		case ABRWorld::ETension::Chase:
+			return NSLOCTEXT("BR", "HUD.Tension.Chase", "poursuite");
+		case ABRWorld::ETension::Recovery:
+			return NSLOCTEXT("BR", "HUD.Tension.Recovery", "r\u00e9pit");
+		default:
+			return NSLOCTEXT("BR", "HUD.Tension.Calm", "calme");
+		}
 	}
 
 	/** Carte du carrousel a dessiner : niveau et ecart (en cartes) avec le centre */
@@ -209,20 +430,24 @@ namespace
 	};
 
 	/** Astuces du menu titre ({Action} : touche configuree) */
-	const TCHAR* const MenuTips[] = {
-		TEXT("Smilers : ne braquez JAMAIS votre lampe sur eux. \u00c9teignez-la, ne courez pas et reculez lentement."),
-		TEXT("Hounds : ne fuyez pas en courant. Faites-leur face, regardez-les et reculez calmement."),
-		TEXT("Partygoers : ne soutenez pas leur regard. Pendant les coupures de courant, cachez-vous."),
-		TEXT("L'eau d'amande apaise l'esprit : buvez-en ({Drink}) quand votre sant\u00e9 mentale baisse."),
-		TEXT("Au Niveau 0, ramassez les cassettes VHS et filmez une coupure de courant pour ouvrir la sortie."),
-		TEXT("En multijoueur, c'est le joueur qui a le PC le plus puissant qui doit h\u00e9berger la partie."),
-		TEXT("{Inventory} ouvre l'inventaire : glissez les objets, double-cliquez pour les utiliser."),
-		TEXT("Placards, trous dans les murs : une fois cach\u00e9, les entit\u00e9s ne vous voient plus."),
-		TEXT("Deathmoths : \u00e9teignez votre lampe d\u00e8s que vous entendez des battements d'ailes."),
-		TEXT("Si vous entendez frapper au Niveau 0, \u00e9loignez-vous : la Bacteria n'est pas loin."),
-		TEXT("Toutes les touches se changent dans Param\u00e8tres > Touches (jusqu'\u00e0 3 par action)."),
-		TEXT("Coop : un co\u00e9quipier \u00e0 terre se rel\u00e8ve si vous maintenez {Interact} pr\u00e8s de lui."),
-	};
+	const TArray<FText>& MenuTips()
+	{
+		static const TArray<FText> Tips = {
+			NSLOCTEXT("BR", "HUD.SmilersBraquezJamaisVotreLampe", "Smilers : ne braquez JAMAIS votre lampe sur eux. \u00c9teignez-la, ne courez pas et reculez lentement."),
+			NSLOCTEXT("BR", "HUD.HoundsFuyezCourantFaitesLeur", "Hounds : ne fuyez pas en courant. Faites-leur face, regardez-les et reculez calmement."),
+			NSLOCTEXT("BR", "HUD.PartygoersSoutenezLeurRegardPendant", "Partygoers : ne soutenez pas leur regard. Pendant les coupures de courant, cachez-vous."),
+			NSLOCTEXT("BR", "HUD.EauAmandeApaiseEspritBuvez", "L'eau d'amande apaise l'esprit : buvez-en ({Drink}) quand votre sant\u00e9 mentale baisse."),
+			NSLOCTEXT("BR", "HUD.Niveau0RamassezCassettesVhs", "Au Niveau 0, ramassez les cassettes VHS et filmez une coupure de courant pour ouvrir la sortie."),
+			NSLOCTEXT("BR", "HUD.MultijoueurJoueurPcPuissantDoit", "En multijoueur, c'est le joueur qui a le PC le plus puissant qui doit h\u00e9berger la partie."),
+			NSLOCTEXT("BR", "HUD.InventoryOuvreInventaireGlissezObjets", "{Inventory} ouvre l'inventaire : glissez les objets, double-cliquez pour les utiliser."),
+			NSLOCTEXT("BR", "HUD.PlacardsTrousMursFoisCache", "Placards, trous dans les murs : une fois cach\u00e9, les entit\u00e9s ne vous voient plus."),
+			NSLOCTEXT("BR", "HUD.DeathmothsEteignezVotreLampeEntendez", "Deathmoths : \u00e9teignez votre lampe d\u00e8s que vous entendez des battements d'ailes."),
+			NSLOCTEXT("BR", "HUD.EntendezFrapperNiveau0Eloignez", "Si vous entendez frapper au Niveau 0, \u00e9loignez-vous : la Bacteria n'est pas loin."),
+			NSLOCTEXT("BR", "HUD.ToutesTouchesChangentParametresTouches", "Toutes les touches se changent dans Param\u00e8tres > Touches (jusqu'\u00e0 3 par action)."),
+			NSLOCTEXT("BR", "HUD.CoopCoequipierTerreReleveMaintenez", "Coop : un co\u00e9quipier \u00e0 terre se rel\u00e8ve si vous maintenez {Interact} pr\u00e8s de lui.")
+		};
+		return Tips;
+	}
 
 }
 
@@ -231,15 +456,9 @@ FString ABRHUD::ControlsLine(int32 Line) const
 	using namespace BRKeys;
 	if (Line == 0)
 	{
-		return FString::Printf(TEXT("%s%s%s%s  se d\u00e9placer     %s  courir     %s  s'accroupir     %s  sauter     %s  interagir     %s  vue 3e personne"),
-			*Primary(EBRAction::MoveForward), *Primary(EBRAction::MoveLeft), *Primary(EBRAction::MoveBackward), *Primary(EBRAction::MoveRight),
-			*Primary(EBRAction::Sprint), *Primary(EBRAction::Crouch), *Primary(EBRAction::Jump), *Primary(EBRAction::Interact),
-			*Primary(EBRAction::ThirdPerson));
+		return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MoveforwardMoveleftMovebackwardMoveright", "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}  se d\u00e9placer     {Sprint}  courir     {Crouch}  s'accroupir     {Jump}  sauter     {Interact}  interagir     {ThirdPerson}  vue 3e personne"), { { TEXT("MoveForward"), BRLoc::Arg(Primary(EBRAction::MoveForward)) }, { TEXT("MoveLeft"), BRLoc::Arg(Primary(EBRAction::MoveLeft)) }, { TEXT("MoveBackward"), BRLoc::Arg(Primary(EBRAction::MoveBackward)) }, { TEXT("MoveRight"), BRLoc::Arg(Primary(EBRAction::MoveRight)) }, { TEXT("Sprint"), BRLoc::Arg(Primary(EBRAction::Sprint)) }, { TEXT("Crouch"), BRLoc::Arg(Primary(EBRAction::Crouch)) }, { TEXT("Jump"), BRLoc::Arg(Primary(EBRAction::Jump)) }, { TEXT("Interact"), BRLoc::Arg(Primary(EBRAction::Interact)) }, { TEXT("ThirdPerson"), BRLoc::Arg(Primary(EBRAction::ThirdPerson)) } });
 	}
-	return FString::Printf(TEXT("%s  lampe     %s  vision nocturne     %s-%s  poches     %s  eau d'amande     %s  bandage     %s  piles     %s  inventaire     %s  pause"),
-		*Primary(EBRAction::Flashlight), *Primary(EBRAction::NightVision), *Primary(EBRAction::Pocket1), *Primary(EBRAction::Pocket4),
-		*Primary(EBRAction::Drink), *Primary(EBRAction::Bandage), *Primary(EBRAction::Battery), *Primary(EBRAction::Inventory),
-		*Primary(EBRAction::Pause));
+	return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.FlashlightLampeNightvisionVisionNocturne", "{Flashlight}  lampe     {NightVision}  vision nocturne     {Pocket1}-{Pocket4}  poches     {Drink}  eau d'amande     {Bandage}  bandage     {Battery}  piles     {Inventory}  inventaire     {Pause}  pause"), { { TEXT("Flashlight"), BRLoc::Arg(Primary(EBRAction::Flashlight)) }, { TEXT("NightVision"), BRLoc::Arg(Primary(EBRAction::NightVision)) }, { TEXT("Pocket1"), BRLoc::Arg(Primary(EBRAction::Pocket1)) }, { TEXT("Pocket4"), BRLoc::Arg(Primary(EBRAction::Pocket4)) }, { TEXT("Drink"), BRLoc::Arg(Primary(EBRAction::Drink)) }, { TEXT("Bandage"), BRLoc::Arg(Primary(EBRAction::Bandage)) }, { TEXT("Battery"), BRLoc::Arg(Primary(EBRAction::Battery)) }, { TEXT("Inventory"), BRLoc::Arg(Primary(EBRAction::Inventory)) }, { TEXT("Pause"), BRLoc::Arg(Primary(EBRAction::Pause)) } });
 }
 
 float ABRHUD::Ui() const
@@ -283,58 +502,31 @@ void ABRHUD::AddMessage(const FString& Text, float Duration, const FLinearColor&
 
 void ABRHUD::Txt(const FString& S, float X, float Y, const FLinearColor& C, float Scale, UFont* Font, bool bCenter, bool bShadow)
 {
-	if (!Font)
-	{
-		Font = GEngine->GetMediumFont();
-	}
-	if (bCenter)
-	{
-		X -= TextW(S, Font, Scale) * 0.5f;
-	}
-	if (bShadow)
-	{
-		DrawText(S, FLinearColor(0.f, 0.f, 0.f, C.A * 0.8f), X + 2.f * Ui(), Y + 2.f * Ui(), Font, Scale);
-	}
-	DrawText(S, C, X, Y, Font, Scale);
+	// v4.8 : meme taille qu'avant (police du moteur x Scale), mais avec la police de l'interface : ecritures non latines,
+	// arabe mis en forme. L'ancienne police n'avait ni ideogrammes ni lettres arabes.
+	TextF(S, X, Y, C, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular, bCenter ? EUiAlign::Center : EUiAlign::Left, bShadow);
 }
 
 void ABRHUD::TxtRight(const FString& S, float RightX, float Y, const FLinearColor& C, float Scale, UFont* Font)
 {
-	Txt(S, RightX - TextW(S, Font ? Font : GEngine->GetMediumFont(), Scale), Y, C, Scale, Font);
+	TextF(S, RightX, Y, C, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular, EUiAlign::Right, true);
 }
 
 float ABRHUD::TextW(const FString& S, UFont* Font, float Scale)
 {
-	float TW = 0.f;
-	float TH = 0.f;
-	GetTextSize(S, TW, TH, Font ? Font : GEngine->GetMediumFont(), Scale);
-	return TW;
+	return TextSize(S, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular).X;
+}
+
+void ABRHUD::TxtLine(const FString& S, float X, float Y, float W, const FLinearColor& C, float Scale, UFont* Font)
+{
+	// Ligne d'un paragraphe coupe par Wrap : alignee a droite du bloc dans une langue ecrite de droite a gauche
+	const bool bRtl = BRLoc::IsRightToLeft();
+	TextF(S, bRtl ? X + W : X, Y, C, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular, bRtl ? EUiAlign::Right : EUiAlign::Left, false);
 }
 
 TArray<FString> ABRHUD::Wrap(const FString& S, float MaxWidth, UFont* Font, float Scale)
 {
-	TArray<FString> Lines;
-	TArray<FString> Words;
-	S.ParseIntoArray(Words, TEXT(" "), true);
-	FString Line;
-	for (const FString& Word : Words)
-	{
-		const FString Test = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
-		if (TextW(Test, Font, Scale) > MaxWidth && !Line.IsEmpty())
-		{
-			Lines.Add(Line);
-			Line = Word;
-		}
-		else
-		{
-			Line = Test;
-		}
-	}
-	if (!Line.IsEmpty())
-	{
-		Lines.Add(Line);
-	}
-	return Lines;
+	return WrapF(S, MaxWidth, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular);
 }
 
 void ABRHUD::Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label)
@@ -372,14 +564,27 @@ void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
 
 void ABRHUD::VLabel(const FString& S, float X, float Y, const FLinearColor& C, float Scale)
 {
-	// Libelle vertical : lettres empilees
-	UFont* Font = GEngine->GetSmallFont();
-	float LY = Y;
-	for (int32 i = 0; i < S.Len(); ++i)
+	const float U = Ui();
+	const float Size = 11.3f * Scale / FMath::Max(U, 0.01f);
+	if (NeedsShaping(S))
 	{
-		const FString Ch = S.Mid(i, 1);
-		Txt(Ch, X - TextW(Ch, Font, Scale) * 0.5f, LY, C, Scale, Font, false, false);
-		LY += 15.f * Scale;
+		// Arabe, persan : lettres liees, le mot ne s'empile pas. Il est tourne d'un quart de tour (lu de bas en haut)
+		const FVector2f TS = TextSize(S, Size, EUiWeight::Bold);
+		const FVector Pivot(X, Y + TS.X, 0.f);
+		Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, -90.f, 0.f)) * FTranslationMatrix(Pivot));
+		TextF(S, Pivot.X, Pivot.Y - TS.Y * 0.5f, C, Size, EUiWeight::Bold, EUiAlign::Left, false);
+		Canvas->Canvas->PopTransform();
+		return;
+	}
+	// Libelle vertical : graphemes empiles (ideogrammes et kana : l'ecriture verticale habituelle)
+	const TArray<int32> Ends = GraphemeEnds(S);
+	float LY = Y;
+	int32 Prev = 0;
+	for (const int32 End : Ends)
+	{
+		TextF(S.Mid(Prev, End - Prev), X, LY, C, Size, EUiWeight::Bold, EUiAlign::Center, false);
+		LY += 16.f * Scale;
+		Prev = End;
 	}
 }
 
@@ -481,15 +686,36 @@ void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, fl
 	{
 		return;
 	}
+	const FSlateFontInfo Font = UiFontInfo(Size, static_cast<int32>(Weight), Ui());
+	const float Off = FMath::Max(1.f, FMath::RoundToFloat(1.5f * Ui()));
+	if (NeedsShaping(S))
+	{
+		// v4.8 : arabe, persan : texte mis en forme (lettres liees, droite a gauche) puis dessine tel quel
+		const TOptional<FShapedGlyphSequenceRef> Shaped = ShapeText(S, Font);
+		if (Shaped.IsSet())
+		{
+			if (Align != EUiAlign::Left)
+			{
+				const float W = static_cast<float>(Shaped.GetValue()->GetMeasuredWidth());
+				X -= Align == EUiAlign::Center ? W * 0.5f : W;
+			}
+			FCanvasShapedTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), Shaped.GetValue(), C);
+			if (bShadow)
+			{
+				Item.EnableShadow(FLinearColor(0.f, 0.f, 0.f, 0.6f * C.A), FVector2D(Off, Off));
+			}
+			Canvas->DrawItem(Item);
+			return;
+		}
+	}
 	if (Align != EUiAlign::Left)
 	{
 		const float W = TextSize(S, Size, Weight).X;
 		X -= Align == EUiAlign::Center ? W * 0.5f : W;
 	}
-	FCanvasTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), FText::FromString(S), UiFontInfo(Size, static_cast<int32>(Weight), Ui()), C);
+	FCanvasTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), FText::FromString(S), Font, C);
 	if (bShadow)
 	{
-		const float Off = FMath::Max(1.f, FMath::RoundToFloat(1.5f * Ui()));
 		Item.EnableShadow(FLinearColor(0.f, 0.f, 0.f, 0.6f * C.A), FVector2D(Off, Off));
 	}
 	Canvas->DrawItem(Item);
@@ -497,22 +723,40 @@ void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, fl
 
 float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor& C, float Size, EUiWeight Weight, float Spacing, EUiAlign Align)
 {
-	TArray<float> Widths;
-	float Total = 0.f;
-	for (int32 i = 0; i < S.Len(); ++i)
+	if (S.IsEmpty())
 	{
-		const float CW = TextSize(S.Mid(i, 1), Size, Weight).X;
+		return 0.f;
+	}
+	if (NeedsShaping(S))
+	{
+		// v4.8 : arabe, persan : l'espacement separerait des lettres liees ; le titre est dessine d'un bloc
+		const float Total = TextSize(S, Size, Weight).X;
+		TextF(S, X, Y, C, Size, Weight, Align, false);
+		return Total;
+	}
+	// Espacement entre graphemes : une lettre et ses accents combines (ou une paire de substitution) restent ensemble
+	const TArray<int32> Ends = GraphemeEnds(S);
+	TArray<float> Widths;
+	Widths.Reserve(Ends.Num());
+	float Total = 0.f;
+	int32 Prev = 0;
+	for (int32 i = 0; i < Ends.Num(); ++i)
+	{
+		const float CW = TextSize(S.Mid(Prev, Ends[i] - Prev), Size, Weight).X;
 		Widths.Add(CW);
-		Total += CW + (i + 1 < S.Len() ? Spacing : 0.f);
+		Total += CW + (i + 1 < Ends.Num() ? Spacing : 0.f);
+		Prev = Ends[i];
 	}
 	if (Align != EUiAlign::Left)
 	{
 		X -= Align == EUiAlign::Center ? Total * 0.5f : Total;
 	}
-	for (int32 i = 0; i < S.Len(); ++i)
+	Prev = 0;
+	for (int32 i = 0; i < Ends.Num(); ++i)
 	{
-		TextF(S.Mid(i, 1), X, Y, C, Size, Weight, EUiAlign::Left, false);
+		TextF(S.Mid(Prev, Ends[i] - Prev), X, Y, C, Size, Weight, EUiAlign::Left, false);
 		X += Widths[i] + Spacing;
+		Prev = Ends[i];
 	}
 	return Total;
 }
@@ -529,6 +773,15 @@ FVector2f ABRHUD::TextSize(const FString& S, float Size, EUiWeight Weight) const
 		{
 			return FVector2f(0.f, LineH);
 		}
+		if (NeedsShaping(S))
+		{
+			// Largeur du texte mis en forme (les lettres liees de l'arabe n'ont pas la largeur des lettres isolees)
+			const TOptional<FShapedGlyphSequenceRef> Shaped = ShapeText(S, Font);
+			if (Shaped.IsSet())
+			{
+				return FVector2f(static_cast<float>(Shaped.GetValue()->GetMeasuredWidth()), FMath::Max(static_cast<float>(Shaped.GetValue()->GetMaxTextHeight()), LineH));
+			}
+		}
 		const FVector2D M(Measure->Measure(S, Font));
 		return FVector2f(static_cast<float>(M.X), FMath::Max(static_cast<float>(M.Y), LineH));
 	}
@@ -538,28 +791,31 @@ FVector2f ABRHUD::TextSize(const FString& S, float Size, EUiWeight Weight) const
 
 TArray<FString> ABRHUD::WrapF(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const
 {
-	TArray<FString> Lines;
-	TArray<FString> Words;
-	S.ParseIntoArray(Words, TEXT(" "), true);
-	FString Line;
-	for (const FString& Word : Words)
+	// Les memes textes sont coupes a chaque image : le resultat est garde (cle : largeur, taille en pixels, graisse, texte)
+	static TMap<FString, TArray<FString>> Cache;
+	static FString Culture;
+	if (CultureChanged(Culture) || Cache.Num() > 256)
 	{
-		const FString Test = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
-		if (TextSize(Test, Size, Weight).X > MaxWidth && !Line.IsEmpty())
-		{
-			Lines.Add(Line);
-			Line = Word;
-		}
-		else
-		{
-			Line = Test;
-		}
+		Cache.Reset();
 	}
-	if (!Line.IsEmpty())
+	const FString Key = FString::Printf(TEXT("%d|%d|%d|%s"), FMath::RoundToInt(MaxWidth), FMath::RoundToInt(Size * Ui() * 10.f), static_cast<int32>(Weight), *S);
+	if (const TArray<FString>* Found = Cache.Find(Key))
 	{
-		Lines.Add(Line);
+		return *Found;
 	}
+	TArray<FString> Lines = WrapText(S, MaxWidth, [this, Size, Weight](const FString& T) { return TextSize(T, Size, Weight).X; });
+	Cache.Add(Key, Lines);
 	return Lines;
+}
+
+void ABRHUD::DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight)
+{
+	const bool bRtl = BRLoc::IsRightToLeft();
+	for (const FString& L : Lines)
+	{
+		TextF(L, bRtl ? X + W : X, Y, C, Size, Weight, bRtl ? EUiAlign::Right : EUiAlign::Left, false);
+		Y += LineH;
+	}
 }
 
 FString ABRHUD::Ellipsize(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const
@@ -568,12 +824,17 @@ FString ABRHUD::Ellipsize(const FString& S, float MaxWidth, float Size, EUiWeigh
 	{
 		return S;
 	}
-	FString Out = S;
-	while (Out.Len() > 1 && TextSize(Out + TEXT("\u2026"), Size, Weight).X > MaxWidth)
+	// Coupe entre deux graphemes (jamais au milieu d'une lettre accentuee composee ou d'une paire de substitution)
+	const TArray<int32> Ends = GraphemeEnds(S);
+	for (int32 g = Ends.Num() - 2; g >= 0; --g)
 	{
-		Out = Out.LeftChop(1);
+		const FString Cut = S.Left(Ends[g]).TrimEnd() + TEXT("\u2026");
+		if (TextSize(Cut, Size, Weight).X <= MaxWidth)
+		{
+			return Cut;
+		}
 	}
-	return Out.TrimEnd() + TEXT("\u2026");
+	return TEXT("\u2026");
 }
 
 UTexture* ABRHUD::UiTex(const TCHAR* Name)
@@ -886,19 +1147,19 @@ void ABRHUD::DrawContentWarning(float Y)
 	const float CX = Canvas->ClipX * 0.5f;
 	if (!A->HasContent())
 	{
-		TextF(TEXT("Textures indisponibles : ouvrez le projet dans l'\u00e9diteur (plugin Python actif) pour importer les ressources."), CX, Y,
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.TexturesIndisponiblesOuvrezProjetEditeur", "Textures indisponibles : ouvrez le projet dans l'\u00e9diteur (plugin Python actif) pour importer les ressources.")), CX, Y,
 			Danger, 11.5f, EUiWeight::Regular, EUiAlign::Center);
 		Y += 20.f * U;
 	}
 	else if (A->IsUsingRuntimeContent())
 	{
-		TextF(TEXT("Mode secours : textures lues dans RawAssets/. Relancez l'import (Output Log > Python : import backrooms_setup; backrooms_setup.run(True))"),
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.ModeSecoursTexturesLuesRawassets", "Mode secours : textures lues dans RawAssets/. Relancez l'import (Output Log > Python : import backrooms_setup; backrooms_setup.run(True))")),
 			CX, Y, FLinearColor(1.f, 0.8f, 0.35f, 0.85f), 11.f, EUiWeight::Regular, EUiAlign::Center);
 		Y += 20.f * U;
 	}
 	if (!A->Sound(TEXT("S_Hum")))
 	{
-		TextF(TEXT("Sons non import\u00e9s : le jeu sera silencieux tant que l'import Python n'aura pas \u00e9t\u00e9 fait."), CX, Y,
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.SonsNonImportesJeuSera", "Sons non import\u00e9s : le jeu sera silencieux tant que l'import Python n'aura pas \u00e9t\u00e9 fait.")), CX, Y,
 			FLinearColor(1.f, 0.8f, 0.35f, 0.85f), 11.f, EUiWeight::Regular, EUiAlign::Center);
 	}
 }
@@ -929,7 +1190,7 @@ void ABRHUD::DrawLogo(float X, float Y, float W, float A, bool bFlicker)
 	}
 	else
 	{
-		TextF(TEXT("THE BACKROOMS"), X + W * 0.03f, Y + H * 0.2f, WithAlpha(Yellow, A * F), W / Ui() * 0.075f, EUiWeight::Black);
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.TheBackrooms", "THE BACKROOMS")), X + W * 0.03f, Y + H * 0.2f, WithAlpha(Yellow, A * F), W / Ui() * 0.075f, EUiWeight::Black);
 	}
 }
 
@@ -1019,9 +1280,9 @@ void ABRHUD::MenuCard(int32 Item, float X, float Y, float W, float H, const FStr
 	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
 	const float Ap = FMath::Clamp(Appear, 0.f, 1.f);
 	const bool bSel = PC && PC->GetMenuCursor() == Item && Ap > 0.5f;
-	float& S = MenuSel[FMath::Clamp(Item, 0, 7)];
+	float& S = MenuSel[FMath::Clamp(Item, 0, static_cast<int32>(UE_ARRAY_COUNT(MenuSel)) - 1)];
 	S = FMath::FInterpTo(S, bSel ? 1.f : 0.f, UiDt, 14.f);
-	const bool bDanger = PC && PC->GetMenuPage() == EBRMenuPage::Main && Item == 3; // QUITTER
+	const bool bDanger = PC && PC->GetMenuPage() == EBRMenuPage::Main && Item == 4; // QUITTER
 	DrawCard(X - (1.f - Ap) * 40.f * Ui(), Y, W, H, S, PC ? PC->GetMenuItemLabel(Item) : FString(), Sub, IconName, Ap, bDanger);
 	if (bInteractive && Ap > 0.5f)
 	{
@@ -1038,7 +1299,7 @@ void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHA
 		return;
 	}
 	const float U = Ui();
-	float& Sel = MenuSel[FMath::Clamp(Item, 0, 7)];
+	float& Sel = MenuSel[FMath::Clamp(Item, 0, static_cast<int32>(UE_ARRAY_COUNT(MenuSel)) - 1)];
 	Sel = FMath::FInterpTo(Sel, PC->GetMenuCursor() == Item ? 1.f : 0.f, UiDt, 14.f);
 	const float S = Smooth(Sel);
 	const FLinearColor DarkInk(0.07f, 0.055f, 0.02f, 1.f);
@@ -1086,7 +1347,7 @@ void ABRHUD::DrawTips(float X, float Y, float W, float A)
 		return;
 	}
 	const float U = Ui();
-	const int32 N = UE_ARRAY_COUNT(MenuTips);
+	const int32 N = MenuTips().Num();
 	const float Period = 7.5f;
 	const int32 Index = FMath::FloorToInt(TipClock / Period) % N;
 	const float Ph = FMath::Fmod(TipClock, Period);
@@ -1098,16 +1359,12 @@ void ABRHUD::DrawTips(float X, float Y, float W, float A)
 	{
 		DrawTexture(T, X + 20.f * U, Y + 16.f * U, 22.f * U, 22.f * U, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, 0.95f * A), BLEND_Translucent);
 	}
-	TextSpaced(TEXT("ASTUCE"), X + 52.f * U, Y + 18.f * U, WithAlpha(Yellow, 0.9f * A), 10.f, EUiWeight::Bold, 3.f * U);
+	TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.Astuce", "ASTUCE")), X + 52.f * U, Y + 18.f * U, WithAlpha(Yellow, 0.9f * A), 10.f, EUiWeight::Bold, 3.f * U);
 	TextF(FString::Printf(TEXT("%d / %d"), Index + 1, N), X + W - 20.f * U, Y + 18.f * U, WithAlpha(InkDim, 0.6f * A), 10.f, EUiWeight::Regular,
 		EUiAlign::Right, false);
-	const TArray<FString> Lines = WrapF(BRKeys::Expand(MenuTips[Index]), W - 72.f * U, 13.f, EUiWeight::Regular);
-	float LY = Y + 44.f * U;
-	for (int32 i = 0; i < Lines.Num() && i < 2; ++i)
-	{
-		TextF(Lines[i], X + 52.f * U, LY, WithAlpha(Ink, 0.92f * TA), 13.f, EUiWeight::Regular, EUiAlign::Left, false);
-		LY += 21.f * U;
-	}
+	const TArray<FString> Lines = WrapF(BRKeys::Expand(MenuTips()[Index].ToString()), W - 72.f * U, 13.f, EUiWeight::Regular);
+	DrawParagraph(TArray<FString>(Lines.GetData(), FMath::Min(Lines.Num(), 2)), X + 52.f * U, Y + 44.f * U, W - 72.f * U, 21.f * U, WithAlpha(Ink, 0.92f * TA), 13.f,
+		EUiWeight::Regular);
 	// Temps restant avant l'astuce suivante
 	DrawRect(FLinearColor(1.f, 0.82f, 0.22f, 0.3f * A), X + 20.f * U, Y + H - 9.f * U, (W - 40.f * U) * (Ph / Period), FMath::Max(1.f, 2.f * U));
 }
@@ -1117,7 +1374,7 @@ void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
 	const float U = Ui();
 	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	TextF(TEXT("v4.5   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.V45InspireBackroomsWiki", "v4.5   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS")), W - 100.f * U, H - 34.f * U,
 		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
 	// Message de connexion / d'erreur reseau : pastille en haut au centre
 	if (!PC->GetMenuStatus().IsEmpty())
@@ -1185,6 +1442,9 @@ void ABRHUD::DrawMenu()
 	case EBRMenuPage::NewSave:
 		DrawMenuNewSave(PC, bInteractive);
 		break;
+	case EBRMenuPage::Language:
+		DrawMenuLanguage(PC, bInteractive);
+		break;
 	}
 	DrawMenuFooter(PC, A);
 	if (bInteractive)
@@ -1210,31 +1470,35 @@ void ABRHUD::DrawMenuMain(ABRPlayerController* PC, bool bInteractive)
 	DrawLogo(X0 - LogoW * 0.03f - (1.f - In) * 50.f * U, LogoY, LogoW, In, true);
 	const float TY = LogoY + LogoW * 413.f / 1809.f * 0.86f + 18.f * U;
 	DrawRect(WithAlpha(Yellow, In), X0, TY + 11.f * U, 30.f * U, FMath::Max(1.f, 3.f * U));
-	TextF(TEXT("Si vous noclippez hors de la r\u00e9alit\u00e9 au mauvais endroit\u2026"), X0 + 44.f * U, TY, WithAlpha(Ink, 0.88f * In), 14.5f, EUiWeight::Light);
-	TextF(TEXT("\u2026vous atterrissez dans les Backrooms."), X0 + 44.f * U, TY + 25.f * U, WithAlpha(Yellow, 0.95f * In), 14.5f, EUiWeight::Regular);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.NoclippezHorsRealiteMauvaisEndroit", "Si vous noclippez hors de la r\u00e9alit\u00e9 au mauvais endroit\u2026")), X0 + 44.f * U, TY, WithAlpha(Ink, 0.88f * In), 14.5f, EUiWeight::Light);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.AtterrissezBackrooms", "\u2026vous atterrissez dans les Backrooms.")), X0 + 44.f * U, TY + 25.f * U, WithAlpha(Yellow, 0.95f * In), 14.5f, EUiWeight::Regular);
 
-	// Cartes : SOLO / MULTIJOUEUR / PARAMETRES / QUITTER (entree en cascade)
-	FString SoloSub = TEXT("Nouvelle partie : partir seul dans l'inconnu");
+	// Cartes : SOLO / MULTIJOUEUR / PARAMETRES / LANGUE / QUITTER (entree en cascade)
+	FString SoloSub = BR_STR(NSLOCTEXT("BR", "HUD.NouvellePartiePartirSeulInconnu", "Nouvelle partie : partir seul dans l'inconnu"));
 	if (PC->GetSaveOrder().Num() > 0)
 	{
 		if (const UBRSaveGame* Last = PC->GetSaveInSlot(PC->GetSaveOrder()[0]))
 		{
-			SoloSub = FString::Printf(TEXT("Reprendre \u00ab %s \u00bb (Niveau %d) ou nouvelle partie"), *Last->SaveName, Last->CurrentLevel);
+			SoloSub = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ReprendreSavenameNiveauCurrentlevelNouve", "Reprendre \u00ab {SaveName} \u00bb (Niveau {CurrentLevel}) ou nouvelle partie"), { { TEXT("SaveName"), BRLoc::Arg(Last->SaveName) }, { TEXT("CurrentLevel"), BRLoc::Int(Last->CurrentLevel) } });
 		}
 	}
-	const TCHAR* Subs[] = {
-		*SoloSub,
-		TEXT("Jusqu'\u00e0 4 explorateurs \u00b7 le meilleur PC h\u00e9berge"),
-		TEXT("Graphismes, son, touches, chat vocal"),
-		TEXT("Revenir \u00e0 la r\u00e9alit\u00e9\u2026 si elle existe"),
+	// Sous-titre de LANGUE : la langue courante, dans sa propre ecriture
+	const FString LanguageSub = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LanguageCurrent", "Actuelle : {Language}  \u00b7  22 langues"),
+		{ { TEXT("Language"), BRLoc::Arg(BRLoc::Current().NativeName) } });
+	const FString Subs[] = {
+		SoloSub,
+		BR_STR(NSLOCTEXT("BR", "HUD.Jusqu4ExplorateursMeilleurPc", "Jusqu'\u00e0 4 explorateurs \u00b7 le meilleur PC h\u00e9berge")),
+		BR_STR(NSLOCTEXT("BR", "HUD.GraphismesTouchesChatVocal", "Graphismes, son, touches, chat vocal")),
+		LanguageSub,
+		BR_STR(NSLOCTEXT("BR", "HUD.RevenirRealiteExiste", "Revenir \u00e0 la r\u00e9alit\u00e9\u2026 si elle existe")),
 	};
-	const TCHAR* Icons[] = { TEXT("UI_IconSolo"), TEXT("UI_IconMulti"), TEXT("UI_IconSettings"), TEXT("UI_IconQuit") };
+	const TCHAR* Icons[] = { TEXT("UI_IconSolo"), TEXT("UI_IconMulti"), TEXT("UI_IconSettings"), TEXT("UI_IconLanguage"), TEXT("UI_IconQuit") };
 	const float CW = 540.f * U;
-	const float CH = 90.f * U;
-	const float Gap = 14.f * U;
+	const float CH = 78.f * U;
+	const float Gap = 12.f * U;
 	float Y = 336.f * U;
 	const float Base = FMath::Min(MenuPageTime, MenuIntro - 0.45f);
-	for (int32 i = 0; i < PC->GetMenuItemCount() && i < 4; ++i)
+	for (int32 i = 0; i < PC->GetMenuItemCount() && i < 5; ++i)
 	{
 		MenuCard(i, X0, Y, CW, CH, Subs[i], Icons[i], bInteractive, EaseOut((Base - 0.07f * i) / 0.45f));
 		Y += CH + Gap;
@@ -1242,10 +1506,195 @@ void ABRHUD::DrawMenuMain(ABRPlayerController* PC, bool bInteractive)
 	DrawTips(X0, Y + 12.f * U, CW, EaseOut((Base - 0.4f) / 0.5f));
 
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
-	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
-	Hints.Emplace(TEXT("FIN"), TEXT("Quitter"));
+	Hints.Emplace(TEXT("\u2191 \u2193"), BR_STR(NSLOCTEXT("BR", "HUD.Choisir", "Choisir")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Entree", "ENTR\u00c9E")), BR_STR(NSLOCTEXT("BR", "HUD.Valider", "Valider")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Fin", "FIN")), BR_STR(NSLOCTEXT("BR", "HUD.Quitter", "Quitter")));
 	KeyHints(X0, Canvas->ClipY - 72.f * U, Hints, In, false);
+}
+
+void ABRHUD::DrawMenuLanguage(ABRPlayerController* PC, bool bInteractive)
+{
+	const float U = Ui();
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float X0 = FMath::Max(60.f * U, W * 0.0625f);
+	const float In = EaseOut(MenuPageTime / 0.45f);
+	const TArray<BRLoc::FLanguage>& Langs = BRLoc::Languages();
+	const int32 Current = BRLoc::CurrentIndex();
+	const int32 Num = Langs.Num();
+	static const FString SystemCode = BRLoc::DetectSystemLanguage();
+	const FLinearColor DarkInk(0.07f, 0.055f, 0.02f, 1.f);
+
+	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
+	const FString Title = BR_STR(NSLOCTEXT("BR", "HUD.LanguageTitle", "LANGUE"));
+	TextF(Title, X0, 124.f * U, WithAlpha(Ink, In), 32.f, EUiWeight::Black);
+	// Le mot anglais a cote du titre : la page se retrouve meme dans une langue qu'on ne lit pas
+	if (Current == INDEX_NONE || FString(Langs[Current].Code) != TEXT("en"))
+	{
+		TextF(TEXT("Language"), X0 + TextSize(Title, 32.f, EUiWeight::Black).X + 18.f * U, 140.f * U, WithAlpha(InkDim, 0.7f * In), 15.f, EUiWeight::Light);
+	}
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.LanguageSubtitle", "Textes, nombres et dates  \u00b7  s'applique tout de suite  \u00b7  en coop, chacun garde la sienne")), X0, 178.f * U,
+		WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
+
+	// Deux colonnes de langues (noms natifs, jamais traduits), la langue actuelle cochee
+	const int32 Half = (Num + 1) / 2;
+	const float CW = 330.f * U;
+	const float RH = 46.f * U;
+	const float RG = 8.f * U;
+	const float Y0 = 228.f * U;
+	const int32 LastSel = static_cast<int32>(UE_ARRAY_COUNT(MenuSel)) - 1;
+	for (int32 i = 0; i < Num; ++i)
+	{
+		const BRLoc::FLanguage& L = Langs[i];
+		const int32 Col = i / Half;
+		const int32 Row = i % Half;
+		const float Ap = EaseOut((MenuPageTime - 0.025f * Row - 0.06f * Col) / 0.4f);
+		if (Ap <= 0.003f)
+		{
+			continue;
+		}
+		float& Sel = MenuSel[FMath::Clamp(i, 0, LastSel)];
+		Sel = FMath::FInterpTo(Sel, PC->GetMenuCursor() == i ? 1.f : 0.f, UiDt, 14.f);
+		const float S = Smooth(Sel);
+		const bool bCur = i == Current;
+		const float RX = X0 + Col * (CW + 16.f * U) - (1.f - Ap) * 30.f * U + S * 8.f * U;
+		const float RY = Y0 + Row * (RH + RG);
+		RoundRect(RX, RY + 3.f * U, CW, RH, 12.f * U, FLinearColor(0.f, 0.f, 0.f, 0.25f * Ap));
+		RoundRect(RX, RY, CW, RH, 12.f * U, WithAlpha(Mix(FLinearColor(0.05f, 0.045f, 0.03f, 0.78f), FLinearColor(Yellow.R, Yellow.G, Yellow.B, 0.97f), S), Ap));
+		RoundRect(RX, RY, CW, RH, 12.f * U, bCur ? WithAlpha(Yellow, (0.7f - 0.5f * S) * Ap) : FLinearColor(1.f, 0.88f, 0.5f, 0.12f * (1.f - S) * Ap), true);
+		// Code de culture (pastille), nom natif, langue du systeme, coche
+		const FString Code = FString(L.Code).ToUpper();
+		const float BW = 70.f * U;
+		const float BH = 24.f * U;
+		RoundRect(RX + 12.f * U, RY + (RH - BH) * 0.5f, BW, BH, BH * 0.5f, WithAlpha(Mix(FLinearColor(1.f, 0.88f, 0.5f, 0.1f), FLinearColor(0.07f, 0.055f, 0.02f, 0.18f), S), Ap));
+		const FVector2f CS = TextSize(Code, 9.5f, EUiWeight::Bold);
+		TextF(Code, RX + 12.f * U + BW * 0.5f, RY + (RH - CS.Y) * 0.5f, WithAlpha(Mix(InkDim, DarkInk, S), Ap), 9.5f, EUiWeight::Bold, EUiAlign::Center, false);
+		const EUiWeight NW = bCur ? EUiWeight::Bold : EUiWeight::Regular;
+		const FVector2f NS = TextSize(L.NativeName, 15.f, NW);
+		float RightX = RX + CW - 14.f * U;
+		if (bCur)
+		{
+			const float IS = 20.f * U;
+			if (UTexture* T = UiTex(TEXT("UI_IconCheck")))
+			{
+				DrawTexture(T, RightX - IS, RY + (RH - IS) * 0.5f, IS, IS, 0.f, 0.f, 1.f, 1.f, WithAlpha(S > 0.5f ? DarkInk : Yellow, Ap), BLEND_Translucent);
+			}
+			RightX -= IS + 10.f * U;
+		}
+		if (SystemCode == L.Code)
+		{
+			const FString Tag = BR_STR(NSLOCTEXT("BR", "HUD.LanguageSystem", "SYST\u00c8ME"));
+			const FVector2f TS = TextSize(Tag, 8.5f, EUiWeight::Bold);
+			TextF(Tag, RightX, RY + (RH - TS.Y) * 0.5f, WithAlpha(Mix(InkDim, DarkInk, S), 0.8f * Ap), 8.5f, EUiWeight::Bold, EUiAlign::Right, false);
+			RightX -= TS.X + 10.f * U;
+		}
+		const float NX = RX + 12.f * U + BW + 14.f * U;
+		TextF(Ellipsize(L.NativeName, RightX - NX, 15.f, NW), NX, RY + (RH - NS.Y) * 0.5f, WithAlpha(Mix(Ink, DarkInk, S), Ap), 15.f, NW, EUiAlign::Left, S < 0.5f);
+		if (bInteractive && Ap > 0.5f)
+		{
+			AddButton(Btn_Language + i, RX, RY, CW, RH);
+		}
+	}
+
+	// RETOUR
+	const float BY = Y0 + Half * (RH + RG) + 10.f * U;
+	const float BackW = 220.f * U;
+	const float BackH = 52.f * U;
+	const float BackA = EaseOut((MenuPageTime - 0.3f) / 0.4f);
+	MenuPill(Num, X0, BY, BackW, BackH, TEXT("UI_IconBack"), false, false, BackA);
+	if (bInteractive && BackA > 0.5f)
+	{
+		AddButton(Btn_Language + Num, X0, BY, BackW, BackH);
+	}
+
+	// Colonne de droite : etat honnete de la langue actuelle (couverture, relecture, voix)
+	const float PX = FMath::Max(X0 + 2.f * CW + 72.f * U, W - 56.f * U - 600.f * U);
+	const float PW = FMath::Max(300.f * U, FMath::Min(600.f * U, W - PX - 56.f * U));
+	const float A = EaseOut((MenuPageTime - 0.15f) / 0.5f);
+	if (A <= 0.003f || Current == INDEX_NONE)
+	{
+		return;
+	}
+	const BRLoc::FLanguage& Cur = Langs[Current];
+	const bool bSource = FString(Cur.Code) == TEXT("fr");
+	if (CoverageFor != Current)
+	{
+		// Recense une fois par langue (environ mille recherches dans la table des textes)
+		CoverageFor = Current;
+		CoverageMissing = BRLoc::CountMissing();
+	}
+	const int32 Total = BRLoc::KeyCount();
+	const int32 Translated = FMath::Max(0, Total - CoverageMissing);
+	const bool bReviewed = BRLoc::IsReviewed(Cur.Code);
+
+	TArray<FString> Paras;
+	if (bSource)
+	{
+		Paras.Add(BR_STR(NSLOCTEXT("BR", "HUD.LanguageSourceNote", "Langue d'origine du jeu : tous les textes sont \u00e9crits en fran\u00e7ais, puis traduits.")));
+	}
+	else if (bReviewed)
+	{
+		Paras.Add(BR_STR(NSLOCTEXT("BR", "HUD.LanguageReviewedNote", "Traduction relue par une personne qui parle cette langue.")));
+	}
+	else
+	{
+		Paras.Add(BR_STR(NSLOCTEXT("BR", "HUD.LanguageMachineNote", "Traduction produite automatiquement, pas encore relue par une personne qui parle cette langue : des tournures peuvent sonner faux.")));
+	}
+	if (!bSource && CoverageMissing > 0)
+	{
+		Paras.Add(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LanguageMissingNote", "{Count}|plural(one=Un texte n'est pas encore traduit : il s'affiche en fran\u00e7ais.,other={Count} textes ne sont pas encore traduits : ils s'affichent en fran\u00e7ais.)"),
+			{ { TEXT("Count"), BRLoc::Int(CoverageMissing) } }));
+	}
+	Paras.Add(BR_STR(NSLOCTEXT("BR", "HUD.LanguageAudioNote", "Voix et sons : pas de doublage. Les bruits et les voix sont les m\u00eames dans toutes les langues ; seuls les textes \u00e0 l'\u00e9cran changent.")));
+	static const int32 MissingFonts = BRFonts::MissingFiles().Num();
+	if (MissingFonts > 0)
+	{
+		Paras.Add(BR_STR(NSLOCTEXT("BR", "HUD.LanguageFontsMissing", "Des polices manquent dans le jeu install\u00e9 (dossier Content/Fonts) : le chinois, le japonais, le cor\u00e9en, l'arabe ou le persan peuvent s'afficher en carr\u00e9s.")));
+	}
+	if (Cur.bRightToLeft)
+	{
+		Paras.Add(BR_STR(NSLOCTEXT("BR", "HUD.LanguageRtlNote", "\u00c9criture de droite \u00e0 gauche : les paragraphes sont align\u00e9s \u00e0 droite.")));
+	}
+	TArray<TArray<FString>> Wrapped;
+	float BodyH = 0.f;
+	for (const FString& P : Paras)
+	{
+		Wrapped.Add(WrapF(P, PW - 48.f * U, 12.5f, EUiWeight::Regular));
+		BodyH += Wrapped.Last().Num() * 20.f * U + 10.f * U;
+	}
+	const float BoxH = 150.f * U + BodyH;
+	float PY = Y0;
+	RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.035f, 0.03f, 0.018f, 0.72f * A));
+	RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.14f * A), true);
+	TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.LanguageCurrentHeader", "LANGUE ACTUELLE")), PX + 24.f * U, PY + 20.f * U, WithAlpha(Yellow, A), 10.f, EUiWeight::Bold, 3.f * U);
+	TextF(Cur.NativeName, PX + 24.f * U, PY + 42.f * U, WithAlpha(Ink, A), 24.f, EUiWeight::Bold);
+	// Couverture : textes traduits / textes du jeu
+	const FString Cov = bSource ? BR_STR(NSLOCTEXT("BR", "HUD.LanguageSourceCoverage", "Langue source"))
+		: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LanguageCoverage", "{Done} / {Total} textes traduits"), { { TEXT("Done"), BRLoc::Int(Translated) }, { TEXT("Total"), BRLoc::Int(Total) } });
+	TextF(Cov, PX + 24.f * U, PY + 86.f * U, WithAlpha(InkDim, A), 12.f, EUiWeight::Regular);
+	const float BarW = PW - 48.f * U;
+	const float Frac = bSource || Total <= 0 ? 1.f : static_cast<float>(Translated) / static_cast<float>(Total);
+	RoundRect(PX + 24.f * U, PY + 112.f * U, BarW, 6.f * U, 3.f * U, FLinearColor(1.f, 1.f, 1.f, 0.1f * A));
+	RoundRect(PX + 24.f * U, PY + 112.f * U, FMath::Max(6.f * U, BarW * Frac), 6.f * U, 3.f * U, WithAlpha(bReviewed ? Done : Yellow, A));
+	float LY = PY + 134.f * U;
+	for (const TArray<FString>& Lines : Wrapped)
+	{
+		DrawParagraph(Lines, PX + 24.f * U, LY, PW - 48.f * U, 20.f * U, WithAlpha(Ink, 0.88f * A), 12.5f, EUiWeight::Regular);
+		LY += Lines.Num() * 20.f * U + 10.f * U;
+	}
+	// Langue sous le curseur : ce qu'ENTREE fera
+	const int32 Cursor = PC->GetMenuCursor();
+	if (Langs.IsValidIndex(Cursor) && Cursor != Current)
+	{
+		TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LanguageSwitchTo", "ENTR\u00c9E : passer en {Language}"), { { TEXT("Language"), BRLoc::Arg(Langs[Cursor].NativeName) } }),
+			PX + 24.f * U, PY + BoxH + 18.f * U, WithAlpha(Yellow, 0.9f * A), 12.5f, EUiWeight::Bold);
+	}
+
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Emplace(TEXT("\u2191 \u2193 \u2190 \u2192"), BR_STR(NSLOCTEXT("BR", "HUD.Choisir", "Choisir")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Entree", "ENTR\u00c9E")), BR_STR(NSLOCTEXT("BR", "HUD.Valider", "Valider")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Echap", "\u00c9CHAP")), BR_STR(NSLOCTEXT("BR", "HUD.Retour", "Retour")));
+	KeyHints(X0, H - 72.f * U, Hints, In, false);
 }
 
 void ABRHUD::DrawLevelScene(const FBRLevelDef& D, float X, float Y, float W, float H, float Scale, float Alpha)
@@ -1435,7 +1884,7 @@ void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float 
 	if (bCurrent)
 	{
 		// La ou la partie s'est arretee
-		const FString Badge = TEXT("DERNI\u00c8RE POSITION");
+		const FString Badge = BR_STR(NSLOCTEXT("BR", "HUD.DernierePosition", "DERNI\u00c8RE POSITION"));
 		const FVector2f BS = TextSize(Badge, 8.5f * S, EUiWeight::Bold);
 		const float BH = 20.f * U * S;
 		const float BW = BS.X + 22.f * U * S;
@@ -1445,7 +1894,7 @@ void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float 
 
 	const FLinearColor Dim = bLocked ? FLinearColor(0.55f, 0.53f, 0.48f, 0.8f) : InkDim;
 	float TY = PY + PH + 12.f * U * S;
-	TextSpaced(TEXT("NIVEAU"), CX, TY, WithAlpha(Dim, Alpha), 9.5f * S, EUiWeight::Light, 4.f * U * S, EUiAlign::Center);
+	TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.Niveau", "NIVEAU")), CX, TY, WithAlpha(Dim, Alpha), 9.5f * S, EUiWeight::Light, 4.f * U * S, EUiAlign::Center);
 	TY += 15.f * U * S;
 	const FLinearColor NumC = bLocked ? FLinearColor(0.5f, 0.48f, 0.43f, 1.f) : Mix(Ink, Yellow, Sel);
 	TextF(FString::FromInt(D.Number), CX, TY, WithAlpha(NumC, Alpha), 40.f * S, EUiWeight::Black, EUiAlign::Center);
@@ -1454,17 +1903,17 @@ void ABRHUD::DrawLevelCard(int32 Index, float CX, float Top, float Scale, float 
 	{
 		TextF(TEXT("? ? ?"), CX, TY, WithAlpha(Dim, Alpha), 14.f * S, EUiWeight::Bold, EUiAlign::Center, false);
 		TY += 21.f * U * S;
-		TextF(TEXT("Non explor\u00e9"), CX, TY, WithAlpha(Dim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.NonExplore", "Non explor\u00e9")), CX, TY, WithAlpha(Dim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
 	}
 	else
 	{
-		TextF(Ellipsize(D.Title, PW, 14.f * S, EUiWeight::Bold), CX, TY, WithAlpha(Ink, Alpha), 14.f * S, EUiWeight::Bold, EUiAlign::Center, false);
+		TextF(Ellipsize(D.Title.ToString(), PW, 14.f * S, EUiWeight::Bold), CX, TY, WithAlpha(Ink, Alpha), 14.f * S, EUiWeight::Bold, EUiAlign::Center, false);
 		TY += 21.f * U * S;
-		TextF(Ellipsize(D.Nickname, PW, 11.f * S, EUiWeight::Regular), CX, TY, WithAlpha(InkDim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
+		TextF(Ellipsize(D.Nickname.ToString(), PW, 11.f * S, EUiWeight::Regular), CX, TY, WithAlpha(InkDim, Alpha), 11.f * S, EUiWeight::Regular, EUiAlign::Center, false);
 	}
 
 	// Classe de survie (inconnue tant que le niveau n'est pas explore)
-	const FString Cls = bLocked ? FString(TEXT("VERROUILL\u00c9")) : ClassShort(D.ClassText);
+	const FString Cls = bLocked ? FString(BR_STR(NSLOCTEXT("BR", "HUD.Verrouille", "VERROUILL\u00c9"))) : ClassShort(D.ClassText.ToString());
 	const FLinearColor CC = bLocked ? FLinearColor(0.6f, 0.57f, 0.52f, 1.f) : ClassColor(D.SurvivalClass);
 	const FVector2f CS = TextSize(Cls, 9.5f * S, EUiWeight::Bold);
 	const float PillH = 22.f * U * S;
@@ -1509,10 +1958,9 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 
 	// En-tete : partie choisie et progression
 	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
-	TextSpaced(PC->IsHostFlow() ? TEXT("H\u00c9BERGER : CHOISISSEZ UN NIVEAU") : TEXT("CHOISISSEZ UN NIVEAU"), CX, 100.f * U, WithAlpha(Yellow, In), 13.f, EUiWeight::Bold,
+	TextSpaced(PC->IsHostFlow() ? BR_STR(NSLOCTEXT("BR", "HUD.HebergerChoisissezNiveau", "H\u00c9BERGER : CHOISISSEZ UN NIVEAU")) : BR_STR(NSLOCTEXT("BR", "HUD.ChoisissezNiveau", "CHOISISSEZ UN NIVEAU")), CX, 100.f * U, WithAlpha(Yellow, In), 13.f, EUiWeight::Bold,
 		5.f * U, EUiAlign::Center);
-	const FString Progress = FString::Printf(TEXT("%s  \u00b7  %d / %d niveaux explor\u00e9s"),
-		Save ? *FString::Printf(TEXT("\u00ab %s \u00bb"), *Save->SaveName) : TEXT("Sans partie"), ExploredCount, Num);
+	const FString Progress = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.SavenameExploredcountValueNiveauxExplore", "{SaveName}  \u00b7  {ExploredCount} / {Value} niveaux explor\u00e9s"), { { TEXT("SaveName"), BRLoc::Arg(Save ? *FString::Printf(TEXT("\u00ab %s \u00bb"), *Save->SaveName) : BR_STR(NSLOCTEXT("BR", "HUD.SansPartie", "Sans partie"))) }, { TEXT("ExploredCount"), BRLoc::Int(ExploredCount) }, { TEXT("Value"), BRLoc::Int(Num) } });
 	TextF(Progress, CX, 126.f * U, WithAlpha(Ink, 0.9f * In), 12.5f, EUiWeight::Regular, EUiAlign::Center);
 	{
 		const float BW = 320.f * U;
@@ -1610,19 +2058,19 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 	float Y = PagerY + 34.f * U;
 	if (bLocked)
 	{
-		TextSpaced(TEXT("NIVEAU NON EXPLOR\u00c9"), CX, Y, FLinearColor(0.75f, 0.72f, 0.65f, In), 12.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
+		TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.NiveauNonExplore", "NIVEAU NON EXPLOR\u00c9")), CX, Y, FLinearColor(0.75f, 0.72f, 0.65f, In), 12.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
 		Y += 30.f * U;
-		TextF(TEXT("Vous n'avez pas encore atteint ce niveau dans cette partie."), CX, Y, WithAlpha(Ink, 0.85f * In), 13.5f, EUiWeight::Regular, EUiAlign::Center);
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.AvezEncoreAtteintNiveauCette", "Vous n'avez pas encore atteint ce niveau dans cette partie.")), CX, Y, WithAlpha(Ink, 0.85f * In), 13.5f, EUiWeight::Regular, EUiAlign::Center);
 		Y += 22.f * U;
-		TextF(TEXT("Trouvez en jeu une sortie qui y m\u00e8ne : il deviendra s\u00e9lectionnable ici."), CX, Y, WithAlpha(InkDim, In), 13.f, EUiWeight::Light,
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.TrouvezJeuSortieMeneDeviendra", "Trouvez en jeu une sortie qui y m\u00e8ne : il deviendra s\u00e9lectionnable ici.")), CX, Y, WithAlpha(InkDim, In), 13.f, EUiWeight::Light,
 			EUiAlign::Center);
 		Y += 22.f * U;
 	}
 	else
 	{
-		TextF(D.ClassText, CX, Y, WithAlpha(ClassColor(D.SurvivalClass), In), 12.5f, EUiWeight::Bold, EUiAlign::Center);
+		TextF(D.ClassText.ToString(), CX, Y, WithAlpha(ClassColor(D.SurvivalClass), In), 12.5f, EUiWeight::Bold, EUiAlign::Center);
 		Y += 28.f * U;
-		const TArray<FString> Lines = WrapF(D.Description, FMath::Min(880.f * U, W - 160.f * U), 13.5f, EUiWeight::Regular);
+		const TArray<FString> Lines = WrapF(D.Description.ToString(), FMath::Min(880.f * U, W - 160.f * U), 13.5f, EUiWeight::Regular);
 		for (int32 i = 0; i < Lines.Num() && i < 3; ++i)
 		{
 			TextF(Lines[i], CX, Y, WithAlpha(Ink, 0.9f * In), 13.5f, EUiWeight::Regular, EUiAlign::Center);
@@ -1631,36 +2079,36 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 		Y += 6.f * U;
 		if (D.bRequireObjectives)
 		{
-			TextF(FString::Printf(TEXT("Objectifs : %d cassettes VHS + filmer pendant une coupure de courant"), D.VHSRequired), CX, Y,
+			TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ObjectifsVhsrequiredCassettesVhsFilmer", "Objectifs : {VHSRequired} cassettes VHS + filmer pendant une coupure de courant"), { { TEXT("VHSRequired"), BRLoc::Int(D.VHSRequired) } }), CX, Y,
 				WithAlpha(Yellow, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
 			Y += 21.f * U;
 		}
 		TArray<FString> Names;
 		for (const FBREntitySpawn& E : D.Entities)
 		{
-			Names.AddUnique(ABREntity::Info(E.Kind).Name);
+			Names.AddUnique(ABREntity::Info(E.Kind).Name.ToString());
 		}
 		if (D.bPatrolEntity)
 		{
-			Names.AddUnique(ABREntity::Info(D.PatrolKind).Name);
+			Names.AddUnique(ABREntity::Info(D.PatrolKind).Name.ToString());
 		}
 		if (D.BlackoutSmilers > 0)
 		{
-			Names.AddUnique(ABREntity::Info(EBREntityKind::Smiler).Name);
+			Names.AddUnique(ABREntity::Info(EBREntityKind::Smiler).Name.ToString());
 		}
-		TextF(Names.Num() > 0 ? TEXT("Entit\u00e9s : ") + FString::Join(Names, TEXT("  \u00b7  ")) : FString(TEXT("Aucune entit\u00e9 signal\u00e9e")), CX, Y,
+		TextF(Names.Num() > 0 ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.EntitiesList", "Entit\u00e9s : {List}"), { { TEXT("List"), BRLoc::Arg(FString::Join(Names, TEXT("  \u00b7  "))) } }) : FString(BR_STR(NSLOCTEXT("BR", "HUD.AucuneEntiteSignalee", "Aucune entit\u00e9 signal\u00e9e"))), CX, Y,
 			WithAlpha(InkDim, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
 		Y += 21.f * U;
 		// Sorties connues : un niveau deja explore est nomme, les autres restent un mystere
 		TArray<FString> Exits;
 		for (const FBRExitDef& X : D.Exits)
 		{
-			Exits.AddUnique(X.Target < 0 ? FString(TEXT("al\u00e9atoire")) : (PC->IsLevelUnlocked(X.Target) ? FString::Printf(TEXT("Niveau %d"), X.Target)
+			Exits.AddUnique(X.Target < 0 ? FString(BR_STR(NSLOCTEXT("BR", "HUD.Aleatoire", "al\u00e9atoire"))) : (PC->IsLevelUnlocked(X.Target) ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauTarget", "Niveau {Target}"), { { TEXT("Target"), BRLoc::Int(X.Target) } })
 				: FString(TEXT("???"))));
 		}
 		if (Exits.Num() > 0)
 		{
-			TextF(TEXT("Sorties : ") + FString::Join(Exits, TEXT("  \u00b7  ")), CX, Y, WithAlpha(InkDim, 0.85f * In), 12.f, EUiWeight::Regular, EUiAlign::Center);
+			TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ExitsList", "Sorties : {List}"), { { TEXT("List"), BRLoc::Arg(FString::Join(Exits, TEXT("  \u00b7  "))) } }), CX, Y, WithAlpha(InkDim, 0.85f * In), 12.f, EUiWeight::Regular, EUiAlign::Center);
 			Y += 21.f * U;
 		}
 	}
@@ -1678,10 +2126,10 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 	TextF(ControlsLine(0), CX, H - 134.f * U, WithAlpha(InkDim, 0.75f * In), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
 	TextF(ControlsLine(1), CX, H - 112.f * U, WithAlpha(InkDim, 0.75f * In), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(TEXT("\u2190 \u2192"), TEXT("Niveau"));
-	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
-	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
-	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Parties"));
+	Hints.Emplace(TEXT("\u2190 \u2192"), BR_STR(NSLOCTEXT("BR", "HUD.Niveau3", "Niveau")));
+	Hints.Emplace(TEXT("\u2191 \u2193"), BR_STR(NSLOCTEXT("BR", "HUD.Choisir", "Choisir")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Entree", "ENTR\u00c9E")), BR_STR(NSLOCTEXT("BR", "HUD.Valider", "Valider")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Echap", "\u00c9CHAP")), BR_STR(NSLOCTEXT("BR", "HUD.Parties", "Parties")));
 	KeyHints(CX, H - 76.f * U, Hints, In, true);
 }
 
@@ -1694,13 +2142,13 @@ void ABRHUD::DrawMenuMulti(ABRPlayerController* PC, bool bInteractive)
 	const float In = EaseOut(MenuPageTime / 0.45f);
 
 	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
-	TextF(TEXT("MULTIJOUEUR"), X0, 124.f * U, WithAlpha(Ink, In), 32.f, EUiWeight::Black);
-	TextF(TEXT("Coop\u00e9ration jusqu'\u00e0 4 explorateurs  \u00b7  chat vocal de proximit\u00e9"), X0, 178.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.Multijoueur", "MULTIJOUEUR")), X0, 124.f * U, WithAlpha(Ink, In), 32.f, EUiWeight::Black);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.CooperationJusqu4ExplorateursChat", "Coop\u00e9ration jusqu'\u00e0 4 explorateurs  \u00b7  chat vocal de proximit\u00e9")), X0, 178.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
 
-	const TCHAR* Subs[] = {
-		TEXT("Cr\u00e9er la partie sur ce PC (port 7777)"),
-		TEXT("Entrer l'adresse IP de l'h\u00f4te"),
-		TEXT("Revenir au menu principal"),
+	const FString Subs[] = {
+		BR_STR(NSLOCTEXT("BR", "HUD.CreerPartiePcPort7777", "Cr\u00e9er la partie sur ce PC (port 7777)")),
+		BR_STR(NSLOCTEXT("BR", "HUD.EntrerAdresseIpHote", "Entrer l'adresse IP de l'h\u00f4te")),
+		BR_STR(NSLOCTEXT("BR", "HUD.RevenirMenuPrincipal", "Revenir au menu principal")),
 	};
 	const TCHAR* Icons[] = { TEXT("UI_IconHost"), TEXT("UI_IconJoin"), TEXT("UI_IconBack") };
 	const float CW = 540.f * U;
@@ -1718,7 +2166,7 @@ void ABRHUD::DrawMenuMulti(ABRPlayerController* PC, bool bInteractive)
 	const float A = EaseOut((MenuPageTime - 0.15f) / 0.5f);
 	float PY = 250.f * U;
 	{
-		const TArray<FString> Lines = WrapF(TEXT("Le joueur qui a l'ordinateur le plus puissant (et la meilleure connexion). Son PC fait tourner le monde, les entit\u00e9s et leurs d\u00e9placements pour tout le groupe ; les autres le rejoignent avec son adresse IP."),
+		const TArray<FString> Lines = WrapF(BR_STR(NSLOCTEXT("BR", "HUD.JoueurOrdinateurPuissantMeilleureConnexi", "Le joueur qui a l'ordinateur le plus puissant (et la meilleure connexion). Son PC fait tourner le monde, les entit\u00e9s et leurs d\u00e9placements pour tout le groupe ; les autres le rejoignent avec son adresse IP.")),
 			PW - 96.f * U, 12.5f, EUiWeight::Regular);
 		const float BoxH = 54.f * U + Lines.Num() * 20.f * U + 14.f * U;
 		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.17f, 0.13f, 0.02f, 0.75f * A));
@@ -1729,18 +2177,13 @@ void ABRHUD::DrawMenuMulti(ABRPlayerController* PC, bool bInteractive)
 		{
 			DrawTexture(T, PX + 20.f * U + D * 0.2f, PY + 18.f * U + D * 0.2f, D * 0.6f, D * 0.6f, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, A), BLEND_Translucent);
 		}
-		TextSpaced(TEXT("QUI DOIT H\u00c9BERGER ?"), PX + 80.f * U, PY + 22.f * U, WithAlpha(Yellow, A), 11.f, EUiWeight::Bold, 2.5f * U);
-		float LY = PY + 48.f * U;
-		for (const FString& L : Lines)
-		{
-			TextF(L, PX + 80.f * U, LY, WithAlpha(Ink, 0.92f * A), 12.5f, EUiWeight::Regular, EUiAlign::Left, false);
-			LY += 20.f * U;
-		}
+		TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.DoitHeberger", "QUI DOIT H\u00c9BERGER ?")), PX + 80.f * U, PY + 22.f * U, WithAlpha(Yellow, A), 11.f, EUiWeight::Bold, 2.5f * U);
+		DrawParagraph(Lines, PX + 80.f * U, PY + 48.f * U, PW - 96.f * U, 20.f * U, WithAlpha(Ink, 0.92f * A), 12.5f, EUiWeight::Regular);
 		PY += BoxH + 16.f * U;
 	}
 	{
 		// Partie hebergee : choisie a l'etape suivante, parmi vos sauvegardes
-		const TArray<FString> Lines = WrapF(TEXT("Apr\u00e8s H\u00c9BERGER, choisissez une de vos parties puis un niveau d\u00e9j\u00e0 explor\u00e9. Les niveaux que le groupe d\u00e9couvre s'ajoutent \u00e0 votre partie ; vos amis jouent dans la v\u00f4tre."),
+		const TArray<FString> Lines = WrapF(BR_STR(NSLOCTEXT("BR", "HUD.ApresHebergerChoisissezVosParties", "Apr\u00e8s H\u00c9BERGER, choisissez une de vos parties puis un niveau d\u00e9j\u00e0 explor\u00e9. Les niveaux que le groupe d\u00e9couvre s'ajoutent \u00e0 votre partie ; vos amis jouent dans la v\u00f4tre.")),
 			PW - 96.f * U, 12.f, EUiWeight::Regular);
 		const float BoxH = 54.f * U + Lines.Num() * 19.f * U + 12.f * U;
 		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.78f * A));
@@ -1751,39 +2194,29 @@ void ABRHUD::DrawMenuMulti(ABRPlayerController* PC, bool bInteractive)
 		{
 			DrawTexture(T, PX + 20.f * U + D * 0.25f, PY + 18.f * U + D * 0.25f, D * 0.5f, D * 0.5f, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, A), BLEND_Translucent);
 		}
-		TextSpaced(TEXT("VOTRE PARTIE"), PX + 80.f * U, PY + 22.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U);
-		float LY = PY + 46.f * U;
-		for (const FString& L : Lines)
-		{
-			TextF(L, PX + 80.f * U, LY, WithAlpha(Ink, 0.9f * A), 12.f, EUiWeight::Regular, EUiAlign::Left, false);
-			LY += 19.f * U;
-		}
+		TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.VotrePartie", "VOTRE PARTIE")), PX + 80.f * U, PY + 22.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U);
+		DrawParagraph(Lines, PX + 80.f * U, PY + 46.f * U, PW - 96.f * U, 19.f * U, WithAlpha(Ink, 0.9f * A), 12.f, EUiWeight::Regular);
 		PY += BoxH + 16.f * U;
 	}
 	{
 		// Adresse IP a donner aux amis
-		const FString Ip = PC->GetLocalAddress().IsEmpty() ? FString(TEXT("inconnue")) : PC->GetLocalAddress();
-		const TArray<FString> Help = WrapF(TEXT("M\u00eame r\u00e9seau (LAN) : donnez cette adresse \u00e0 vos amis. Par Internet : redirigez le port UDP 7777 vers ce PC sur la box, ou utilisez un r\u00e9seau virtuel (Radmin VPN, ZeroTier, Tailscale\u2026) et son adresse. Chat vocal de proximit\u00e9 : Param\u00e8tres."),
+		const FString Ip = PC->GetLocalAddress().IsEmpty() ? FString(BR_STR(NSLOCTEXT("BR", "HUD.Inconnue", "inconnue"))) : PC->GetLocalAddress();
+		const TArray<FString> Help = WrapF(BR_STR(NSLOCTEXT("BR", "HUD.MemeReseauLanDonnezCette", "M\u00eame r\u00e9seau (LAN) : donnez cette adresse \u00e0 vos amis. Par Internet : redirigez le port UDP 7777 vers ce PC sur la box, ou utilisez un r\u00e9seau virtuel (Radmin VPN, ZeroTier, Tailscale\u2026) et son adresse. Chat vocal de proximit\u00e9 : Param\u00e8tres.")),
 			PW - 44.f * U, 11.5f, EUiWeight::Regular);
 		const float BoxH = 100.f * U + Help.Num() * 18.f * U + 12.f * U;
 		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.78f * A));
 		RoundRect(PX, PY, PW, BoxH, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.12f * A), true);
-		TextSpaced(TEXT("VOTRE ADRESSE IP"), PX + 22.f * U, PY + 18.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U);
+		TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.VotreAdresseIp", "VOTRE ADRESSE IP")), PX + 22.f * U, PY + 18.f * U, WithAlpha(InkDim, A), 10.f, EUiWeight::Bold, 3.f * U);
 		const FVector2f IS = TextSize(Ip, 26.f, EUiWeight::Black);
 		TextF(Ip, PX + 22.f * U, PY + 38.f * U, WithAlpha(Yellow, A), 26.f, EUiWeight::Black);
-		TextF(TEXT("port 7777 (UDP)"), PX + 34.f * U + IS.X, PY + 38.f * U + IS.Y - 30.f * U, WithAlpha(InkDim, A), 12.f, EUiWeight::Light, EUiAlign::Left, false);
-		float LY = PY + 100.f * U;
-		for (const FString& L : Help)
-		{
-			TextF(L, PX + 22.f * U, LY, WithAlpha(InkDim, 0.95f * A), 11.5f, EUiWeight::Regular, EUiAlign::Left, false);
-			LY += 18.f * U;
-		}
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.Port7777Udp", "port 7777 (UDP)")), PX + 34.f * U + IS.X, PY + 38.f * U + IS.Y - 30.f * U, WithAlpha(InkDim, A), 12.f, EUiWeight::Light, EUiAlign::Left, false);
+		DrawParagraph(Help, PX + 22.f * U, PY + 100.f * U, PW - 44.f * U, 18.f * U, WithAlpha(InkDim, 0.95f * A), 11.5f, EUiWeight::Regular);
 	}
 
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
-	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Valider"));
-	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	Hints.Emplace(TEXT("\u2191 \u2193"), BR_STR(NSLOCTEXT("BR", "HUD.Choisir", "Choisir")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Entree", "ENTR\u00c9E")), BR_STR(NSLOCTEXT("BR", "HUD.Valider", "Valider")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Echap", "\u00c9CHAP")), BR_STR(NSLOCTEXT("BR", "HUD.Retour", "Retour")));
 	KeyHints(X0, H - 72.f * U, Hints, In, false);
 }
 
@@ -1814,8 +2247,8 @@ void ABRHUD::DrawMenuJoin(ABRPlayerController* PC, bool bInteractive)
 	{
 		DrawTexture(T, CX - BD * 0.3f, CardY - BD * 0.3f, BD * 0.6f, BD * 0.6f, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.07f, 0.055f, 0.02f, In), BLEND_Translucent);
 	}
-	TextF(TEXT("REJOINDRE UNE PARTIE"), CX, CardY + 46.f * U, WithAlpha(Ink, In), 24.f, EUiWeight::Black, EUiAlign::Center);
-	TextF(TEXT("Entrez l'adresse IP de l'h\u00f4te (il la voit dans son menu MULTIJOUEUR)"), CX, CardY + 92.f * U, WithAlpha(InkDim, In), 12.5f,
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.RejoindrePartie", "REJOINDRE UNE PARTIE")), CX, CardY + 46.f * U, WithAlpha(Ink, In), 24.f, EUiWeight::Black, EUiAlign::Center);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.EntrezAdresseIpHoteVoit", "Entrez l'adresse IP de l'h\u00f4te (il la voit dans son menu MULTIJOUEUR)")), CX, CardY + 92.f * U, WithAlpha(InkDim, In), 12.5f,
 		EUiWeight::Light, EUiAlign::Center);
 	const float FW = 548.f * U;
 	const float FH = 68.f * U;
@@ -1829,12 +2262,12 @@ void ABRHUD::DrawMenuJoin(ABRPlayerController* PC, bool bInteractive)
 	const float BX = CX - (PW0 + PW1 + BG) * 0.5f;
 	MenuPill(0, BX, CY + 66.f * U, PW0, BH, TEXT("UI_IconPlay"), true, bInteractive, In);
 	MenuPill(1, BX + PW0 + BG, CY + 66.f * U, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, In);
-	TextF(TEXT("Exemples :  192.168.1.20   \u00b7   26.45.120.7:7777"), CX, CardY + CH - 40.f * U, WithAlpha(InkDim, 0.85f * In), 11.5f,
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.Exemples192168120", "Exemples :  192.168.1.20   \u00b7   26.45.120.7:7777")), CX, CardY + CH - 40.f * U, WithAlpha(InkDim, 0.85f * In), 11.5f,
 		EUiWeight::Regular, EUiAlign::Center, false);
 
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Se connecter"));
-	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Entree", "ENTR\u00c9E")), BR_STR(NSLOCTEXT("BR", "HUD.Connecter", "Se connecter")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Echap", "\u00c9CHAP")), BR_STR(NSLOCTEXT("BR", "HUD.Retour", "Retour")));
 	KeyHints(CX, H - 76.f * U, Hints, In, true);
 }
 
@@ -1847,7 +2280,7 @@ void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y,
 	}
 	const float U = Ui();
 	const float Ap = FMath::Clamp(Appear, 0.f, 1.f);
-	float& Sel = MenuSel[FMath::Clamp(Item, 0, 7)];
+	float& Sel = MenuSel[FMath::Clamp(Item, 0, static_cast<int32>(UE_ARRAY_COUNT(MenuSel)) - 1)];
 	Sel = FMath::FInterpTo(Sel, PC->GetMenuCursor() == Item && !PC->IsConfirmingDelete() ? 1.f : 0.f, UiDt, 14.f);
 	const float S = Smooth(Sel);
 	const FLinearColor DarkInk(0.07f, 0.055f, 0.02f, 1.f);
@@ -1881,10 +2314,10 @@ void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y,
 	const float RightW = 170.f * U;
 	TextF(Ellipsize(Save->SaveName, W - (TX - CX0) - RightW - 20.f * U, 18.f, EUiWeight::Bold), TX, TY, WithAlpha(LabelC, Ap), 18.f, EUiWeight::Bold,
 		EUiAlign::Left, S < 0.5f);
-	TextF(Ellipsize(FString::Printf(TEXT("Niveau %d  \u00b7  %s"), D.Number, *D.Title), W - (TX - CX0) - RightW - 20.f * U, 11.5f, EUiWeight::Regular), TX,
+	TextF(Ellipsize(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauNumberTitle", "Niveau {Number}  \u00b7  {Title}"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } }), W - (TX - CX0) - RightW - 20.f * U, 11.5f, EUiWeight::Regular), TX,
 		TY + LS.Y - 3.f * U, WithAlpha(SubC, Ap), 11.5f, EUiWeight::Regular, EUiAlign::Left, false);
 	const float RX = CX0 + W - 22.f * U;
-	TextF(FString::Printf(TEXT("%d / %d niveaux"), Save->Explored.Num(), All.Num()), RX, TY + 2.f * U, WithAlpha(Mix(Yellow, DarkInk, S), Ap), 11.f,
+	TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ExploredAllNiveaux", "{Explored} / {All} niveaux"), { { TEXT("Explored"), BRLoc::Int(Save->Explored.Num()) }, { TEXT("All"), BRLoc::Int(All.Num()) } }), RX, TY + 2.f * U, WithAlpha(Mix(Yellow, DarkInk, S), Ap), 11.f,
 		EUiWeight::Bold, EUiAlign::Right, false);
 	TextF(BRSaves::FormatPlayTime(Save->PlayTime) + TEXT("  \u00b7  ") + BRSaves::FormatDate(Save->LastPlayed), RX, TY + LS.Y - 3.f * U, WithAlpha(SubC, Ap),
 		10.f, EUiWeight::Regular, EUiAlign::Right, false);
@@ -1952,9 +2385,9 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 	const bool bConfirm = PC->IsConfirmingDelete();
 
 	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
-	TextF(PC->IsHostFlow() ? TEXT("H\u00c9BERGER UNE PARTIE") : TEXT("VOS PARTIES"), X0, 124.f * U, WithAlpha(Ink, In), 32.f, EUiWeight::Black);
-	TextF(PC->IsHostFlow() ? TEXT("Choisissez la partie que le groupe va jouer : ses niveaux explor\u00e9s seront propos\u00e9s.")
-						   : TEXT("Reprenez une partie, ou commencez-en une nouvelle (au Niveau 0)."),
+	TextF(PC->IsHostFlow() ? BR_STR(NSLOCTEXT("BR", "HUD.HebergerPartie", "H\u00c9BERGER UNE PARTIE")) : BR_STR(NSLOCTEXT("BR", "HUD.VosParties", "VOS PARTIES")), X0, 124.f * U, WithAlpha(Ink, In), 32.f, EUiWeight::Black);
+	TextF(PC->IsHostFlow() ? BR_STR(NSLOCTEXT("BR", "HUD.ChoisissezPartieGroupeVaJouer", "Choisissez la partie que le groupe va jouer : ses niveaux explor\u00e9s seront propos\u00e9s."))
+						   : BR_STR(NSLOCTEXT("BR", "HUD.ReprenezPartieCommencezNouvelleNiveau", "Reprenez une partie, ou commencez-en une nouvelle (au Niveau 0).")),
 		X0, 178.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
 
 	// Liste : parties (de la plus recente a la plus ancienne), NOUVELLE PARTIE, RETOUR
@@ -1993,8 +2426,8 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		{
 			const float CH = 70.f * U;
 			const bool bNew = Slot == ABRPlayerController::MenuItemNew;
-			MenuCard(i, X0, Y, CW, CH, bNew ? TEXT("Commence au Niveau 0, avec l'\u00e9quipement de d\u00e9part") : (PC->IsHostFlow() ? TEXT("Multijoueur")
-				: TEXT("Menu principal")), bNew ? TEXT("UI_IconPlus") : TEXT("UI_IconBack"), bInteractive, Appear);
+			MenuCard(i, X0, Y, CW, CH, bNew ? BR_STR(NSLOCTEXT("BR", "HUD.CommenceNiveau0EquipementDepart", "Commence au Niveau 0, avec l'\u00e9quipement de d\u00e9part")) : (PC->IsHostFlow() ? BR_STR(NSLOCTEXT("BR", "HUD.Multijoueur2", "Multijoueur"))
+				: BR_STR(NSLOCTEXT("BR", "HUD.MenuPrincipal", "Menu principal"))), bNew ? TEXT("UI_IconPlus") : TEXT("UI_IconBack"), bInteractive, Appear);
 			Y += CH + 10.f * U;
 		}
 	}
@@ -2020,19 +2453,17 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		// v4.7 : ce que donnera "Reprendre" (meme disposition et objectifs, ou niveau neuf)
 		const FBRSessionState& Ses = Shown->Session;
 		const FString Resume = Shown->bFutureFormat
-			? FString::Printf(TEXT("Version plus r\u00e9cente du jeu (format %d) : partie conserv\u00e9e intacte, lecture seule"), Shown->LoadedVersion)
+			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.VersionRecenteJeuFormatLoadedversion", "Version plus r\u00e9cente du jeu (format {LoadedVersion}) : partie conserv\u00e9e intacte, lecture seule"), { { TEXT("LoadedVersion"), BRLoc::Int(Shown->LoadedVersion) } })
 			: Shown->bPendingDeath
-			? FString(TEXT("Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, niveau neuf)"))
+			? FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseDerniereSessionArreteePendant", "Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, niveau neuf)")))
 			: (Ses.bValid && Ses.Level == D.Number
-				? FString::Printf(TEXT("Reprise \u00e0 l'identique : m\u00eame disposition, %d cassette(s), %d objet(s) ramass\u00e9(s)%s"), Ses.VHSFound,
-					Ses.Collected.Num(), Ses.bHasSpot ? TEXT(", derni\u00e8re position") : TEXT(", point de d\u00e9part"))
-				: FString(TEXT("Reprise : nouvelle disposition du niveau (partie d'une version ant\u00e9rieure ou apr\u00e8s une mort)")));
+				? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.RepriseIdentiqueMemeDispositionVhsfound", "Reprise \u00e0 l'identique : m\u00eame disposition, {VHSFound} cassette(s), {Collected} objet(s) ramass\u00e9(s){HasSpot}"), { { TEXT("VHSFound"), BRLoc::Int(Ses.VHSFound) }, { TEXT("Collected"), BRLoc::Int(Ses.Collected.Num()) }, { TEXT("HasSpot"), BRLoc::Arg(Ses.bHasSpot ? BR_STR(NSLOCTEXT("BR", "HUD.DernierePosition2", ", derni\u00e8re position")) : BR_STR(NSLOCTEXT("BR", "HUD.PointDepart", ", point de d\u00e9part"))) } })
+				: FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseNouvelleDispositionNiveauPartie", "Reprise : nouvelle disposition du niveau (partie d'une version ant\u00e9rieure ou apr\u00e8s une mort)"))));
 		const FString Lines[] = {
-			FString::Printf(TEXT("Derni\u00e8re position : Niveau %d  \u00b7  %s"), D.Number, *D.Title),
+			BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DernierePositionNiveauNumberTitle", "Derni\u00e8re position : Niveau {Number}  \u00b7  {Title}"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } }),
 			Resume,
-			FString::Printf(TEXT("Temps de jeu : %s  \u00b7  morts : %d  \u00b7  entit\u00e9s rencontr\u00e9es : %d / %d"), *BRSaves::FormatPlayTime(Shown->PlayTime),
-				Shown->Deaths, Shown->Discovered.Num(), static_cast<int32>(EBREntityKind::Count)),
-			FString::Printf(TEXT("Cr\u00e9\u00e9e le %s  \u00b7  jou\u00e9e le %s"), *BRSaves::FormatDate(Shown->Created).Left(10), *BRSaves::FormatDate(Shown->LastPlayed)),
+			BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TempsJeuPlaytimeMortsDeaths", "Temps de jeu : {PlayTime}  \u00b7  morts : {Deaths}  \u00b7  entit\u00e9s rencontr\u00e9es : {Discovered} / {Count}"), { { TEXT("PlayTime"), BRLoc::Arg(BRSaves::FormatPlayTime(Shown->PlayTime)) }, { TEXT("Deaths"), BRLoc::Int(Shown->Deaths) }, { TEXT("Discovered"), BRLoc::Int(Shown->Discovered.Num()) }, { TEXT("Count"), BRLoc::Int(static_cast<int32>(EBREntityKind::Count)) } }),
+			BRLoc::Fmt(NSLOCTEXT("BR", "HUD.CreeeCreatedJoueeLastplayed", "Cr\u00e9\u00e9e le {Created}  \u00b7  jou\u00e9e le {LastPlayed}"), { { TEXT("Created"), BRLoc::Arg(BRSaves::FormatDay(Shown->Created)) }, { TEXT("LastPlayed"), BRLoc::Arg(BRSaves::FormatDate(Shown->LastPlayed)) } }),
 		};
 		for (const FString& L : Lines)
 		{
@@ -2040,13 +2471,13 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 			LY += 21.f * U;
 		}
 		LY += 14.f * U;
-		TextSpaced(FString::Printf(TEXT("NIVEAUX EXPLOR\u00c9S  %d / %d"), Shown->Explored.Num(), All.Num()), PX + 22.f * U, LY, WithAlpha(Yellow, A), 10.5f,
+		TextSpaced(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauxExploresExploredAll", "NIVEAUX EXPLOR\u00c9S  {Explored} / {All}"), { { TEXT("Explored"), BRLoc::Int(Shown->Explored.Num()) }, { TEXT("All"), BRLoc::Int(All.Num()) } }), PX + 22.f * U, LY, WithAlpha(Yellow, A), 10.5f,
 			EUiWeight::Bold, 2.5f * U);
 		DrawLevelGrid(Shown, PX + 22.f * U, LY + 26.f * U, PW - 44.f * U, A);
 	}
 	else if (!bConfirm && Focus == ABRPlayerController::MenuItemNew)
 	{
-		const TArray<FString> Lines = WrapF(TEXT("Vous commencez au Niveau 0, avec l'\u00e9quipement de d\u00e9part. Chaque niveau que vous d\u00e9couvrez en jeu devient s\u00e9lectionnable quand vous reprenez la partie. Sauvegarde automatique \u00e0 chaque niveau, puis toutes les minutes."),
+		const TArray<FString> Lines = WrapF(BR_STR(NSLOCTEXT("BR", "HUD.CommencezNiveau0EquipementDepart", "Vous commencez au Niveau 0, avec l'\u00e9quipement de d\u00e9part. Chaque niveau que vous d\u00e9couvrez en jeu devient s\u00e9lectionnable quand vous reprenez la partie. Sauvegarde automatique \u00e0 chaque niveau, puis toutes les minutes.")),
 			PW - 44.f * U, 12.5f, EUiWeight::Regular);
 		const float BoxH = 112.f * U + Lines.Num() * 20.f * U;
 		RoundRect(PX, PY, PW, BoxH, 16.f * U, FLinearColor(0.17f, 0.13f, 0.02f, 0.75f * A));
@@ -2057,22 +2488,17 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		{
 			DrawTexture(T, PX + 22.f * U + D * 0.25f, PY + 20.f * U + D * 0.25f, D * 0.5f, D * 0.5f, 0.f, 0.f, 1.f, 1.f, WithAlpha(Yellow, A), BLEND_Translucent);
 		}
-		TextSpaced(TEXT("NOUVELLE PARTIE"), PX + 80.f * U, PY + 24.f * U, WithAlpha(Yellow, A), 11.f, EUiWeight::Bold, 2.5f * U);
-		TextF(FString::Printf(TEXT("Emplacements libres : %d / 6"), 6 - PC->GetSaveOrder().Num()), PX + 80.f * U, PY + 44.f * U, WithAlpha(InkDim, A), 11.f,
+		TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.NouvellePartie", "NOUVELLE PARTIE")), PX + 80.f * U, PY + 24.f * U, WithAlpha(Yellow, A), 11.f, EUiWeight::Bold, 2.5f * U);
+		TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.EmplacementsLibresSaveorder6", "Emplacements libres : {SaveOrder} / 6"), { { TEXT("SaveOrder"), BRLoc::Int(6 - PC->GetSaveOrder().Num()) } }), PX + 80.f * U, PY + 44.f * U, WithAlpha(InkDim, A), 11.f,
 			EUiWeight::Regular, EUiAlign::Left, false);
-		float LY = PY + 84.f * U;
-		for (const FString& L : Lines)
-		{
-			TextF(L, PX + 22.f * U, LY, WithAlpha(Ink, 0.92f * A), 12.5f, EUiWeight::Regular, EUiAlign::Left, false);
-			LY += 20.f * U;
-		}
+		DrawParagraph(Lines, PX + 22.f * U, PY + 84.f * U, PW - 44.f * U, 20.f * U, WithAlpha(Ink, 0.92f * A), 12.5f, EUiWeight::Regular);
 	}
 
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(TEXT("\u2191 \u2193"), TEXT("Choisir"));
-	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Ouvrir"));
-	Hints.Emplace(TEXT("SUPPR"), TEXT("Supprimer"));
-	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	Hints.Emplace(TEXT("\u2191 \u2193"), BR_STR(NSLOCTEXT("BR", "HUD.Choisir", "Choisir")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Entree", "ENTR\u00c9E")), BR_STR(NSLOCTEXT("BR", "HUD.Ouvrir", "Ouvrir")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Suppr", "SUPPR")), BR_STR(NSLOCTEXT("BR", "HUD.Supprimer", "Supprimer")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Echap", "\u00c9CHAP")), BR_STR(NSLOCTEXT("BR", "HUD.Retour", "Retour")));
 	KeyHints(X0, H - 72.f * U, Hints, In, false);
 
 	// Confirmation de suppression
@@ -2093,14 +2519,13 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		{
 			DrawTexture(T, CX - BD * 0.28f, CardY - BD * 0.28f, BD * 0.56f, BD * 0.56f, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Translucent);
 		}
-		TextF(TEXT("SUPPRIMER LA PARTIE ?"), CX, CardY + 46.f * U, Ink, 22.f, EUiWeight::Black, EUiAlign::Center);
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.SupprimerPartie", "SUPPRIMER LA PARTIE ?")), CX, CardY + 46.f * U, Ink, 22.f, EUiWeight::Black, EUiAlign::Center);
 		if (Gone)
 		{
-			TextF(FString::Printf(TEXT("\u00ab %s \u00bb sera effac\u00e9e d\u00e9finitivement"), *Gone->SaveName), CX, CardY + 92.f * U, InkDim, 13.f, EUiWeight::Regular,
+			TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.SavenameSeraEffaceeDefinitivement", "\u00ab {SaveName} \u00bb sera effac\u00e9e d\u00e9finitivement"), { { TEXT("SaveName"), BRLoc::Arg(Gone->SaveName) } }), CX, CardY + 92.f * U, InkDim, 13.f, EUiWeight::Regular,
 				EUiAlign::Center);
 			const int32 NumExp = Gone->Explored.Num();
-			TextF(FString::Printf(TEXT("%d niveau%s explor\u00e9%s  \u00b7  %s de jeu"), NumExp, NumExp > 1 ? TEXT("s") : TEXT(""), NumExp > 1 ? TEXT("s") : TEXT(""),
-				*BRSaves::FormatPlayTime(Gone->PlayTime)), CX,
+			TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LevelsExploredPlayTime", "{Count} {Count}|plural(one=niveau explor\u00e9,other=niveaux explor\u00e9s)  \u00b7  {PlayTime} de jeu"), { { TEXT("Count"), BRLoc::Int(NumExp) }, { TEXT("PlayTime"), BRLoc::Arg(BRSaves::FormatPlayTime(Gone->PlayTime)) } }), CX,
 				CardY + 116.f * U, WithAlpha(InkDim, 0.8f), 12.f, EUiWeight::Light, EUiAlign::Center);
 		}
 		const float BH = 56.f * U;
@@ -2138,9 +2563,9 @@ void ABRHUD::DrawMenuNewSave(ABRPlayerController* PC, bool bInteractive)
 	{
 		DrawTexture(T, CX - BD * 0.28f, CardY - BD * 0.28f, BD * 0.56f, BD * 0.56f, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.07f, 0.055f, 0.02f, In), BLEND_Translucent);
 	}
-	TextF(PC->IsHostFlow() ? TEXT("NOUVELLE PARTIE EN LIGNE") : TEXT("NOUVELLE PARTIE"), CX, CardY + 46.f * U, WithAlpha(Ink, In), 24.f, EUiWeight::Black,
+	TextF(PC->IsHostFlow() ? BR_STR(NSLOCTEXT("BR", "HUD.NouvellePartieLigne", "NOUVELLE PARTIE EN LIGNE")) : BR_STR(NSLOCTEXT("BR", "HUD.NouvellePartie", "NOUVELLE PARTIE")), CX, CardY + 46.f * U, WithAlpha(Ink, In), 24.f, EUiWeight::Black,
 		EUiAlign::Center);
-	TextF(TEXT("Donnez-lui un nom. Vous commencerez au Niveau 0, avec l'\u00e9quipement de d\u00e9part."), CX, CardY + 92.f * U, WithAlpha(InkDim, In), 12.5f,
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.DonnezLuiNomCommencerezNiveau", "Donnez-lui un nom. Vous commencerez au Niveau 0, avec l'\u00e9quipement de d\u00e9part.")), CX, CardY + 92.f * U, WithAlpha(InkDim, In), 12.5f,
 		EUiWeight::Light, EUiAlign::Center);
 	const float FW = 548.f * U;
 	const float FH = 68.f * U;
@@ -2154,12 +2579,12 @@ void ABRHUD::DrawMenuNewSave(ABRPlayerController* PC, bool bInteractive)
 	const float BX = CX - (PW0 + PW1 + BG) * 0.5f;
 	MenuPill(0, BX, CY + 66.f * U, PW0, BH, TEXT("UI_IconPlay"), true, bInteractive, In);
 	MenuPill(1, BX + PW0 + BG, CY + 66.f * U, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, In);
-	TextF(FString::Printf(TEXT("Emplacement %d / 6   \u00b7   sauvegarde automatique \u00e0 chaque niveau"), PC->GetSaveOrder().Num() + 1), CX, CardY + CH - 40.f * U,
+	TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.EmplacementSaveorder6SauvegardeAutomatiq", "Emplacement {SaveOrder} / 6   \u00b7   sauvegarde automatique \u00e0 chaque niveau"), { { TEXT("SaveOrder"), BRLoc::Int(PC->GetSaveOrder().Num() + 1) } }), CX, CardY + CH - 40.f * U,
 		WithAlpha(InkDim, 0.85f * In), 11.5f, EUiWeight::Regular, EUiAlign::Center, false);
 
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(TEXT("ENTR\u00c9E"), TEXT("Commencer"));
-	Hints.Emplace(TEXT("\u00c9CHAP"), TEXT("Retour"));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Entree", "ENTR\u00c9E")), BR_STR(NSLOCTEXT("BR", "HUD.Commencer", "Commencer")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Echap", "\u00c9CHAP")), BR_STR(NSLOCTEXT("BR", "HUD.Retour", "Retour")));
 	KeyHints(CX, H - 76.f * U, Hints, In, true);
 }
 
@@ -2172,7 +2597,7 @@ void ABRHUD::DrawSaveIndicator(float Since)
 		return;
 	}
 	const float U = Ui();
-	const FString Label = TEXT("Sauvegarde");
+	const FString Label = BR_STR(NSLOCTEXT("BR", "HUD.Sauvegarde", "Sauvegarde"));
 	const FVector2f LS = TextSize(Label, 10.5f, EUiWeight::Regular);
 	const float PH = 30.f * U;
 	const float PW = LS.X + 52.f * U;
@@ -2203,6 +2628,10 @@ void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
 	{
 		PC->SetMenuCursor(Id - Btn_Menu);
 	}
+	if (bMoved && Id >= Btn_Language && Id < Btn_Language + 32)
+	{
+		PC->SetMenuCursor(Id - Btn_Language);
+	}
 	if (!PlayerOwner->WasInputKeyJustPressed(EKeys::LeftMouseButton))
 	{
 		return;
@@ -2218,6 +2647,10 @@ void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
 	else if (Id >= Btn_SaveDelete && Id < Btn_SaveDelete + 16)
 	{
 		PC->RequestDeleteSave(Id - Btn_SaveDelete);
+	}
+	else if (Id >= Btn_Language && Id < Btn_Language + 32)
+	{
+		PC->MenuActivate(Id - Btn_Language);
 	}
 	else if (Id >= Btn_MenuCard && Id <= Btn_MenuCard + 6)
 	{
@@ -2264,7 +2697,7 @@ void ABRHUD::DrawTitleCard()
 	const float Y0 = H * 0.29f;
 	Glow(CX, Y0 + 150.f * U, 660.f * U, 320.f * U, FLinearColor(0.f, 0.f, 0.f, 0.65f * A));
 	Glow(CX, Y0 + 90.f * U, 380.f * U, 160.f * U, FLinearColor(1.f, 0.78f, 0.25f, 0.07f * A));
-	TextSpaced(TEXT("NIVEAU"), CX, Y0, FLinearColor(Ink.R, Ink.G, Ink.B, 0.9f * A), 15.f, EUiWeight::Regular, 12.f * U, EUiAlign::Center);
+	TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.Niveau", "NIVEAU")), CX, Y0, FLinearColor(Ink.R, Ink.G, Ink.B, 0.9f * A), 15.f, EUiWeight::Regular, 12.f * U, EUiAlign::Center);
 	const FString Num = FString::FromInt(D.Number);
 	TextF(Num, CX, Y0 + 20.f * U, FLinearColor(1.f, 1.f, 1.f, A), 88.f, EUiWeight::Black, EUiAlign::Center);
 	const float LY = Y0 + 20.f * U + TextSize(Num, 88.f, EUiWeight::Black).Y + 2.f * U;
@@ -2273,10 +2706,10 @@ void ABRHUD::DrawTitleCard()
 	DrawRect(WithAlpha(Yellow, 0.85f * A), CX - 18.f * U - L, LY, L, Th);
 	DrawRect(WithAlpha(Yellow, 0.85f * A), CX + 18.f * U, LY, L, Th);
 	RoundRect(CX - 5.f * U, LY + Th * 0.5f - 5.f * U, 10.f * U, 10.f * U, 5.f * U, WithAlpha(Yellow, A));
-	TextF(FString::Printf(TEXT("\u00ab %s \u00bb"), *D.Title), CX, LY + 22.f * U, WithAlpha(Ink, A), 26.f, EUiWeight::Bold, EUiAlign::Center);
-	TextF(D.Nickname, CX, LY + 66.f * U, FLinearColor(Ink.R, Ink.G, Ink.B, 0.85f * A), 16.f, EUiWeight::Regular, EUiAlign::Center);
+	TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.QuotedTitle", "\u00ab {Title} \u00bb"), { { TEXT("Title"), BRLoc::Arg(D.Title) } }), CX, LY + 22.f * U, WithAlpha(Ink, A), 26.f, EUiWeight::Bold, EUiAlign::Center);
+	TextF(D.Nickname.ToString(), CX, LY + 66.f * U, FLinearColor(Ink.R, Ink.G, Ink.B, 0.85f * A), 16.f, EUiWeight::Regular, EUiAlign::Center);
 	const FLinearColor CC = ClassColor(D.SurvivalClass);
-	const FVector2f CS = TextSize(D.ClassText, 11.f, EUiWeight::Bold);
+	const FVector2f CS = TextSize(D.ClassText.ToString(), 11.f, EUiWeight::Bold);
 	const float PH = 28.f * U;
 	const float PW = CS.X + 46.f * U;
 	const float PY = LY + 108.f * U;
@@ -2284,7 +2717,7 @@ void ABRHUD::DrawTitleCard()
 	RoundRect(CX - PW * 0.5f, PY, PW, PH, PH * 0.5f, FLinearColor(CC.R, CC.G, CC.B, 0.18f * A));
 	const float Dot = 8.f * U;
 	RoundRect(CX - PW * 0.5f + 14.f * U, PY + (PH - Dot) * 0.5f, Dot, Dot, Dot * 0.5f, WithAlpha(CC, A));
-	TextF(D.ClassText, CX + 8.f * U, PY + (PH - CS.Y) * 0.5f, WithAlpha(CC, A), 11.f, EUiWeight::Bold, EUiAlign::Center, false);
+	TextF(D.ClassText.ToString(), CX + 8.f * U, PY + (PH - CS.Y) * 0.5f, WithAlpha(CC, A), 11.f, EUiWeight::Bold, EUiAlign::Center, false);
 }
 
 // =====================================================================================================================
@@ -2304,7 +2737,7 @@ void ABRHUD::DrawRecording(ABRCharacter* C, ABRWorld* W)
 	const float Y = 34.f * U;
 	if (W && !W->GetRecordLabel().IsEmpty())
 	{
-		const FString Label = TEXT("ENREGISTREMENT : ") + W->GetRecordLabel();
+		const FString Label = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.RecordingLabel", "ENREGISTREMENT : {Label}"), { { TEXT("Label"), BRLoc::Arg(W->GetRecordLabel()) } });
 		const float PW = FMath::Max(260.f * U, TextSize(Label, 11.f, EUiWeight::Bold).X + 36.f * U);
 		const float PH = 46.f * U;
 		RoundRect(X, Y, PW, PH, 12.f * U, FLinearColor(0.f, 0.f, 0.f, 0.45f));
@@ -2321,7 +2754,7 @@ void ABRHUD::DrawRecording(ABRCharacter* C, ABRWorld* W)
 	}
 	if (C->IsNightVision())
 	{
-		TextF(TEXT("VISION NOCTURNE"), Canvas->ClipX - 40.f * U, Y, FLinearColor(0.5f, 1.f, 0.5f, 0.92f), 11.f, EUiWeight::Bold, EUiAlign::Right);
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.VisionNocturne", "VISION NOCTURNE")), Canvas->ClipX - 40.f * U, Y, FLinearColor(0.5f, 1.f, 0.5f, 0.92f), 11.f, EUiWeight::Bold, EUiAlign::Right);
 		if (FBRSettings::Get().bVHSEffect)
 		{
 			Scanlines(0.05f);
@@ -2334,24 +2767,24 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 	const float U = Ui();
 	const FLinearColor Cyan(0.55f, 0.88f, 1.f, 0.95f);
 	// Pastille permanente, en haut au centre : niveau courant et etat des aides
-	FString Tag = W ? FString::Printf(TEXT("DEV  \u00b7  NIVEAU %d"), W->GetLevelNumber()) : FString(TEXT("DEV"));
+	FString Tag = W ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DevNiveauLevelnumber", "DEV  \u00b7  NIVEAU {LevelNumber}"), { { TEXT("LevelNumber"), BRLoc::Int(W->GetLevelNumber()) } }) : FString(BR_STR(NSLOCTEXT("BR", "HUD.Dev", "DEV")));
 	if (C && C->IsDevFlying())
 	{
-		Tag += TEXT("  \u00b7  VOL");
+		Tag += BR_STR(NSLOCTEXT("BR", "HUD.Vol", "  \u00b7  VOL"));
 	}
 	if (C && C->bGodMode)
 	{
-		Tag += TEXT("  \u00b7  INVINCIBLE");
+		Tag += BR_STR(NSLOCTEXT("BR", "HUD.Invincible", "  \u00b7  INVINCIBLE"));
 	}
 	if (PC->IsDevSession())
 	{
-		Tag += TEXT("  \u00b7  hors partie");
+		Tag += BR_STR(NSLOCTEXT("BR", "HUD.HorsPartie", "  \u00b7  hors partie"));
 	}
 	Tag += TEXT("  \u00b7  ") + PC->GetRenderModeText(true);
 	if (W)
 	{
 		// v4.7 : phase du directeur de tension (et depuis combien de temps)
-		Tag += FString::Printf(TEXT("  \u00b7  tension : %s %.0f s"), ABRWorld::TensionName(W->GetTension()), W->GetTensionTime());
+		Tag += BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TensionTensionTensiontime", "  \u00b7  tension : {Tension} {TensionTime} s"), { { TEXT("Tension"), BRLoc::Arg(TensionLabel(W->GetTension())) }, { TEXT("TensionTime"), BRLoc::Num(W->GetTensionTime(), 0) } });
 	}
 	const FVector2f TS = TextSize(Tag, 10.f, EUiWeight::Bold);
 	const float PW = TS.X + 28.f * U;
@@ -2366,14 +2799,14 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 	const TArray<FString>& Fallbacks = UBRAssets::GetFallbacks();
 	if (Fallbacks.Num() > 0)
 	{
-		const FString Msg = TEXT("MOD\u00c8LES DE SECOURS (import incomplet) : ") + FString::Join(Fallbacks, TEXT("  \u00b7  "));
+		const FString Msg = BR_STR(NSLOCTEXT("BR", "HUD.ModelesSecoursImportIncomplet", "MOD\u00c8LES DE SECOURS (import incomplet) : ")) + FString::Join(Fallbacks, TEXT("  \u00b7  "));
 		TextF(Msg, Canvas->ClipX * 0.5f, PY + PH + 8.f * U, FLinearColor(1.f, 0.45f, 0.35f, 0.95f), 9.f, EUiWeight::Bold, EUiAlign::Center);
 	}
 	// v4.8 : materiaux en erreur (usage absent, slot inattendu, materiau de secours) : le premier, et leur nombre
 	const TArray<FString>& MatProblems = UBRAssets::GetMaterialProblems();
 	if (MatProblems.Num() > 0)
 	{
-		const FString Msg = FString::Printf(TEXT("MAT\u00c9RIAUX (%d) : %s"), MatProblems.Num(), *MatProblems[0]);
+		const FString Msg = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MateriauxMatproblemsMatproblems2", "MAT\u00c9RIAUX ({MatProblems}) : {MatProblems2}"), { { TEXT("MatProblems"), BRLoc::Int(MatProblems.Num()) }, { TEXT("MatProblems2"), BRLoc::Arg(MatProblems[0]) } });
 		TextF(Ellipsize(Msg, Canvas->ClipX * 0.9f, 9.f, EUiWeight::Bold), Canvas->ClipX * 0.5f, PY + PH + 24.f * U,
 			FLinearColor(1.f, 0.35f, 0.85f, 0.95f), 9.f, EUiWeight::Bold, EUiAlign::Center);
 	}
@@ -2385,15 +2818,15 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 		return;
 	}
 	const float A = FMath::Clamp(T / 0.6f, 0.f, 1.f);
-	static const TCHAR* const Keys[][2] = {
-		{ TEXT("PAGE PR\u00c9C. / SUIV."), TEXT("niveau suivant / pr\u00e9c\u00e9dent") },
-		{ TEXT("D\u00c9BUT"), TEXT("nouvelle disposition du niveau") },
-		{ TEXT("F6"), TEXT("vol libre \u00e0 travers les murs") },
-		{ TEXT("F7"), TEXT("invincible") },
-		{ TEXT("F10"), TEXT("jumpscare suivant (chaque entit\u00e9)") },
-		{ TEXT("FIN"), TEXT("objectifs remplis") },
-		{ TEXT("INSER"), TEXT("coupure de courant") },
-		{ TEXT("SUPPR"), TEXT("salle de fosses (Niveau 0)") },
+	const FString Keys[][2] = {
+		{ BR_STR(NSLOCTEXT("BR", "HUD.PagePrecSuiv", "PAGE PR\u00c9C. / SUIV.")), BR_STR(NSLOCTEXT("BR", "HUD.NiveauSuivantPrecedent", "niveau suivant / pr\u00e9c\u00e9dent")) },
+		{ BR_STR(NSLOCTEXT("BR", "HUD.Debut", "D\u00c9BUT")), BR_STR(NSLOCTEXT("BR", "HUD.NouvelleDispositionNiveau", "nouvelle disposition du niveau")) },
+		{ BR_STR(NSLOCTEXT("BR", "HUD.F6", "F6")), BR_STR(NSLOCTEXT("BR", "HUD.VolLibreTraversMurs", "vol libre \u00e0 travers les murs")) },
+		{ BR_STR(NSLOCTEXT("BR", "HUD.F7", "F7")), BR_STR(NSLOCTEXT("BR", "HUD.Invincible2", "invincible")) },
+		{ BR_STR(NSLOCTEXT("BR", "HUD.F10", "F10")), BR_STR(NSLOCTEXT("BR", "HUD.JumpscareSuivantChaqueEntite", "jumpscare suivant (chaque entit\u00e9)")) },
+		{ BR_STR(NSLOCTEXT("BR", "HUD.Fin", "FIN")), BR_STR(NSLOCTEXT("BR", "HUD.ObjectifsRemplis", "objectifs remplis")) },
+		{ BR_STR(NSLOCTEXT("BR", "HUD.Inser", "INSER")), BR_STR(NSLOCTEXT("BR", "HUD.CoupureCourant", "coupure de courant")) },
+		{ BR_STR(NSLOCTEXT("BR", "HUD.Suppr", "SUPPR")), BR_STR(NSLOCTEXT("BR", "HUD.SalleFossesNiveau0", "salle de fosses (Niveau 0)")) },
 	};
 	const int32 N = UE_ARRAY_COUNT(Keys);
 	const float RowH = 24.f * U;
@@ -2403,7 +2836,7 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 	const float BY = Canvas->ClipY * 0.5f - BH * 0.5f;
 	RoundRect(BX, BY, BW, BH, 12.f * U, FLinearColor(0.01f, 0.03f, 0.05f, 0.72f * A));
 	RoundRect(BX, BY, BW, BH, 12.f * U, FLinearColor(0.55f, 0.88f, 1.f, 0.35f * A), true);
-	TextF(TEXT("MODE D\u00c9VELOPPEUR"), BX + 16.f * U, BY + 12.f * U, WithAlpha(Cyan, A), 10.f, EUiWeight::Black);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.ModeDeveloppeur", "MODE D\u00c9VELOPPEUR")), BX + 16.f * U, BY + 12.f * U, WithAlpha(Cyan, A), 10.f, EUiWeight::Black);
 	for (int32 i = 0; i < N; ++i)
 	{
 		const float Y = BY + 40.f * U + i * RowH;
@@ -2569,7 +3002,7 @@ void ABRHUD::DrawJumpscare(ABRCharacter* C)
 		// (le sourire est celui du modele, tout pres : plus de "=)" geant a l'ecran)
 		if (Since < 0.9f)
 		{
-			TextF(TEXT("JOYEUX ANNIVERSAIRE"), W * 0.5f, H * 0.8f, FLinearColor(1.f, 1.f, 1.f, 0.6f * Out * (1.f - Since / 0.9f)), 16.f, EUiWeight::Bold,
+			TextF(BR_STR(NSLOCTEXT("BR", "HUD.JoyeuxAnniversaire", "JOYEUX ANNIVERSAIRE")), W * 0.5f, H * 0.8f, FLinearColor(1.f, 1.f, 1.f, 0.6f * Out * (1.f - Since / 0.9f)), 16.f, EUiWeight::Bold,
 				EUiAlign::Center);
 		}
 		break;
@@ -2615,19 +3048,19 @@ void ABRHUD::DrawStats(ABRCharacter* C)
 	if (C->IsUnderwater() || C->GetBreath() < 99.5f)
 	{
 		const float Low = C->GetBreath() < 30.f ? 0.55f + 0.45f * FMath::Sin(Clock * 8.f) : 1.f;
-		Bar(X, Y - 36.f * U, BW, BH, C->GetBreath() / 100.f, FLinearColor(0.35f * Low, 0.85f * Low, 1.f * Low, 0.9f), TEXT("OXYG\u00c8NE"));
+		Bar(X, Y - 36.f * U, BW, BH, C->GetBreath() / 100.f, FLinearColor(0.35f * Low, 0.85f * Low, 1.f * Low, 0.9f), BR_STR(NSLOCTEXT("BR", "HUD.Oxygene", "OXYG\u00c8NE")));
 	}
-	Bar(X, Y, BW, BH, C->Health / 100.f, FLinearColor(0.85f, 0.15f, 0.12f, 0.85f), TEXT("SANT\u00c9"));
+	Bar(X, Y, BW, BH, C->Health / 100.f, FLinearColor(0.85f, 0.15f, 0.12f, 0.85f), BR_STR(NSLOCTEXT("BR", "HUD.Sante", "SANT\u00c9")));
 	Y += 36.f * U;
 	const float Pulse = C->Sanity < 30.f ? 0.6f + 0.4f * FMath::Sin(Clock * 6.f) : 1.f;
-	Bar(X, Y, BW, BH, C->Sanity / 100.f, FLinearColor(0.9f * Pulse, 0.45f * Pulse, 0.3f * Pulse, 0.85f), TEXT("SANT\u00c9 MENTALE"));
+	Bar(X, Y, BW, BH, C->Sanity / 100.f, FLinearColor(0.9f * Pulse, 0.45f * Pulse, 0.3f * Pulse, 0.85f), BR_STR(NSLOCTEXT("BR", "HUD.SanteMentale", "SANT\u00c9 MENTALE")));
 	Y += 36.f * U;
-	Bar(X, Y, BW, BH, C->Stamina / 100.f, FLinearColor(0.9f, 0.9f, 0.85f, 0.75f), TEXT("ENDURANCE"));
+	Bar(X, Y, BW, BH, C->Stamina / 100.f, FLinearColor(0.9f, 0.9f, 0.85f, 0.75f), BR_STR(NSLOCTEXT("BR", "HUD.Endurance", "ENDURANCE")));
 	// Piles : lampe et camescope (vision nocturne)
 	if (C->HasLightSource() || C->HasCamcorder())
 	{
 		Y += 36.f * U;
-		Bar(X, Y, BW, BH, C->Battery / 100.f, FLinearColor(1.f, 0.85f, 0.3f, C->IsFlashlightOn() ? 0.9f : 0.45f), TEXT("PILES"));
+		Bar(X, Y, BW, BH, C->Battery / 100.f, FLinearColor(1.f, 0.85f, 0.3f, C->IsFlashlightOn() ? 0.9f : 0.45f), BR_STR(NSLOCTEXT("BR", "HUD.Piles", "PILES")));
 	}
 }
 
@@ -2651,7 +3084,7 @@ void ABRHUD::DrawQuickBar(ABRCharacter* C)
 			Icon(ItemIcon(It->Item), X + S * 0.14f, Y + S * 0.14f, S * 0.72f, S * 0.72f, FLinearColor(1.f, 1.f, 1.f, 0.92f));
 			if (It->Count > 1)
 			{
-				TextF(FString::Printf(TEXT("x%d"), It->Count), X + S - 6.f * U, Y + S - 20.f * U, Ink, 9.5f, EUiWeight::Bold, EUiAlign::Right);
+				TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt", "x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }), X + S - 6.f * U, Y + S - 20.f * U, Ink, 9.5f, EUiWeight::Bold, EUiAlign::Right);
 			}
 		}
 	}
@@ -2694,7 +3127,7 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 	if (C->IsHidden())
 	{
 		const float Pulse = 0.65f + 0.2f * FMath::Sin(Clock * 2.f);
-		TextSpaced(TEXT("CACH\u00c9"), CX, Canvas->ClipY - 152.f * U, FLinearColor(0.75f, 0.9f, 1.f, Pulse), 13.f, EUiWeight::Bold, 6.f * U, EUiAlign::Center);
+		TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.Cache", "CACH\u00c9")), CX, Canvas->ClipY - 152.f * U, FLinearColor(0.75f, 0.9f, 1.f, Pulse), 13.f, EUiWeight::Bold, 6.f * U, EUiAlign::Center);
 	}
 	RoundRect(CX - S * 0.5f - 1.f * U, CY - S * 0.5f - 1.f * U, S + 2.f * U, S + 2.f * U, S * 0.5f + 1.f * U, FLinearColor(0.f, 0.f, 0.f, bFocus ? 0.35f : 0.2f));
 	RoundRect(CX - S * 0.5f, CY - S * 0.5f, S, S, S * 0.5f, FLinearColor(1.f, 1.f, 1.f, bFocus ? 0.92f : 0.5f));
@@ -2709,7 +3142,7 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 	}
 	if (C->GetReviveProgress() > 0.f)
 	{
-		Bar(CX - 130.f * U, CY + 84.f * U, 260.f * U, 8.f * U, C->GetReviveProgress(), FLinearColor(0.55f, 1.f, 0.55f, 0.9f), TEXT("R\u00c9ANIMATION"));
+		Bar(CX - 130.f * U, CY + 84.f * U, 260.f * U, 8.f * U, C->GetReviveProgress(), FLinearColor(0.55f, 1.f, 0.55f, 0.9f), BR_STR(NSLOCTEXT("BR", "HUD.Reanimation", "R\u00c9ANIMATION")));
 	}
 }
 
@@ -2765,14 +3198,14 @@ void ABRHUD::DrawNote(ABRCharacter* C)
 	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
 	DrawRect(FLinearColor(0.86f, 0.83f, 0.71f, 0.97f), X, Y, W, H);
 	DrawRect(FLinearColor(0.75f, 0.68f, 0.5f, 0.6f), X, Y, W, 6.f * U);
-	Txt(TEXT("Une note froiss\u00e9e..."), X + 40.f * U, Y + 30.f * U, FLinearColor(0.25f, 0.18f, 0.1f), 1.1f * U, Medium, false, false);
+	Txt(BR_STR(NSLOCTEXT("BR", "HUD.NoteFroissee", "Une note froiss\u00e9e...")), X + 40.f * U, Y + 30.f * U, FLinearColor(0.25f, 0.18f, 0.1f), 1.1f * U, Medium, false, false);
 	float LY = Y + 90.f * U;
 	for (const FString& L : Wrap(BRKeys::Expand(C->GetOpenNote()), W - 80.f * U, Medium, 1.05f * U))
 	{
-		Txt(L, X + 40.f * U, LY, FLinearColor(0.12f, 0.1f, 0.25f), 1.05f * U, Medium, false, false);
+		TxtLine(L, X + 40.f * U, LY, W - 80.f * U, FLinearColor(0.12f, 0.1f, 0.25f), 1.05f * U, Medium);
 		LY += 34.f * U;
 	}
-	Txt(BRKeys::Expand(TEXT("{Interact} Ranger la note  (elle reste dans le journal : {Inventory})")), X + W * 0.5f, Y + H - 50.f * U, FLinearColor(0.3f, 0.25f, 0.2f), 0.9f * U,
+	Txt(BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.InteractRangerNoteResteJournal", "{Interact} Ranger la note  (elle reste dans le journal : {Inventory})"))), X + W * 0.5f, Y + H - 50.f * U, FLinearColor(0.3f, 0.25f, 0.2f), 0.9f * U,
 		Medium, true, false);
 }
 
@@ -2796,18 +3229,18 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 	switch (Cause)
 	{
 	case EBRDeathCause::Drowning:
-		Detail = TEXT("Vous avez manqu\u00e9 d'air.");
+		Detail = BR_STR(NSLOCTEXT("BR", "HUD.AvezManqueAir", "Vous avez manqu\u00e9 d'air."));
 		break;
 	case EBRDeathCause::Fall:
-		Detail = TEXT("Vous \u00eates tomb\u00e9 au fond d'une fosse.");
+		Detail = BR_STR(NSLOCTEXT("BR", "HUD.EtesTombeFondFosse", "Vous \u00eates tomb\u00e9 au fond d'une fosse."));
 		break;
 	case EBRDeathCause::Madness:
-		Detail = TEXT("Votre esprit a l\u00e2ch\u00e9.");
+		Detail = BR_STR(NSLOCTEXT("BR", "HUD.VotreEspritLache", "Votre esprit a l\u00e2ch\u00e9."));
 		break;
 	default:
 		if (C->GetKillerKind() >= 0)
 		{
-			Detail = TEXT("Abattu par : ") + ABREntity::Info(static_cast<EBREntityKind>(C->GetKillerKind())).Name;
+			Detail = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.KilledByTeam", "Abattu par : {Entity}"), { { TEXT("Entity"), BRLoc::Arg(ABREntity::Info(static_cast<EBREntityKind>(C->GetKillerKind())).Name) } });
 		}
 		break;
 	}
@@ -2817,7 +3250,7 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 		const ABRWorld* W = ABRWorld::Get(this);
 		const float Left = W ? FMath::Max(0.f, W->GetDeathTimer()) : 0.f;
 		const bool bHelp = W && W->HasLivingTeammate() && BRDeath::CanRevive(Cause);
-		const TCHAR* Title = Cause == EBRDeathCause::Drowning ? TEXT("NOY\u00c9") : (Cause == EBRDeathCause::Fall ? TEXT("CHUTE") : TEXT("\u00c0 TERRE"));
+		const FString Title = Cause == EBRDeathCause::Drowning ? BR_STR(NSLOCTEXT("BR", "HUD.Noye", "NOY\u00c9")) : (Cause == EBRDeathCause::Fall ? BR_STR(NSLOCTEXT("BR", "HUD.Chute", "CHUTE")) : BR_STR(NSLOCTEXT("BR", "HUD.Terre", "\u00c0 TERRE")));
 		Txt(Title, CX, H * 0.34f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
 		if (!Detail.IsEmpty())
 		{
@@ -2826,28 +3259,27 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 		if (bHelp)
 		{
 			const FString Hint = Cause == EBRDeathCause::Drowning
-				? FString::Printf(TEXT("Un co\u00e9quipier doit vous sortir de l'eau : il maintient %s pr\u00e8s de vous."), *BRKeys::Tag(EBRAction::Interact))
-				: FString::Printf(TEXT("Un co\u00e9quipier peut vous relever : il doit maintenir %s pr\u00e8s de vous."), *BRKeys::Tag(EBRAction::Interact));
+				? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.CoequipierDoitSortirEauMaintient", "Un co\u00e9quipier doit vous sortir de l'eau : il maintient {Interact} pr\u00e8s de vous."), { { TEXT("Interact"), BRLoc::Arg(BRKeys::Tag(EBRAction::Interact)) } })
+				: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.CoequipierPeutReleverDoitMaintenir", "Un co\u00e9quipier peut vous relever : il doit maintenir {Interact} pr\u00e8s de vous."), { { TEXT("Interact"), BRLoc::Arg(BRKeys::Tag(EBRAction::Interact)) } });
 			Txt(Hint, CX, H * 0.52f, FLinearColor(0.75f, 1.f, 0.75f, A), 1.f * U, GEngine->GetMediumFont(), true);
 		}
 		else if (Cause == EBRDeathCause::Fall)
 		{
-			Txt(TEXT("Personne ne peut vous atteindre l\u00e0 o\u00f9 vous \u00eates."), CX, H * 0.52f, FLinearColor(0.85f, 0.85f, 0.85f, A), 1.f * U,
+			Txt(BR_STR(NSLOCTEXT("BR", "HUD.PersonnePeutAtteindreEtes", "Personne ne peut vous atteindre l\u00e0 o\u00f9 vous \u00eates.")), CX, H * 0.52f, FLinearColor(0.85f, 0.85f, 0.85f, A), 1.f * U,
 				GEngine->GetMediumFont(), true);
 		}
-		Txt(FString::Printf(TEXT("R\u00e9veil au point de d\u00e9part du niveau dans %d s      %s  abandonner"), FMath::CeilToInt(Left),
-			*BRKeys::Tag(EBRAction::Jump)), CX, H * 0.58f, FLinearColor(0.9f, 0.85f, 0.6f, A), 1.f * U, GEngine->GetMediumFont(), true);
+		Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ReveilPointDepartNiveauValue", "R\u00e9veil au point de d\u00e9part du niveau dans {Value} s      {Jump}  abandonner"), { { TEXT("Value"), BRLoc::Int(FMath::CeilToInt(Left)) }, { TEXT("Jump"), BRLoc::Arg(BRKeys::Tag(EBRAction::Jump)) } }), CX, H * 0.58f, FLinearColor(0.9f, 0.85f, 0.6f, A), 1.f * U, GEngine->GetMediumFont(), true);
 		return;
 	}
-	Txt(TEXT("VOUS \u00caTES MORT"), CX, H * 0.38f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
+	Txt(BR_STR(NSLOCTEXT("BR", "HUD.EtesMort", "VOUS \u00caTES MORT")), CX, H * 0.38f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
 	if (!Detail.IsEmpty())
 	{
 		Txt(Cause == EBRDeathCause::Injury && C->GetKillerKind() >= 0
-			? TEXT("Tu\u00e9 par : ") + ABREntity::Info(static_cast<EBREntityKind>(C->GetKillerKind())).Name : Detail, CX, H * 0.48f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U,
+			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.KilledBy", "Tu\u00e9 par : {Entity}"), { { TEXT("Entity"), BRLoc::Arg(ABREntity::Info(static_cast<EBREntityKind>(C->GetKillerKind())).Name) } }) : Detail, CX, H * 0.48f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U,
 			GEngine->GetMediumFont(), true);
 	}
 	const float A2 = FMath::Clamp((T - 2.2f) / 1.f, 0.f, 1.f);
-	Txt(TEXT("Vous vous r\u00e9veillez... sur une moquette humide. Encore."), CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U,
+	Txt(BR_STR(NSLOCTEXT("BR", "HUD.ReveillezMoquetteHumideEncore", "Vous vous r\u00e9veillez... sur une moquette humide. Encore.")), CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U,
 		GEngine->GetMediumFont(), true);
 }
 
@@ -2872,33 +3304,32 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 	Scanlines(0.03f * In);
 
 	DrawLogo(X0 - 240.f * U * 0.03f, 70.f * U, 240.f * U, In, false);
-	TextF(TEXT("PAUSE"), X0, 138.f * U, WithAlpha(Ink, In), 44.f, EUiWeight::Black);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.Pause", "PAUSE")), X0, 138.f * U, WithAlpha(Ink, In), 44.f, EUiWeight::Black);
 	if (PC && PC->IsNetGame())
 	{
 		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
 		const int32 Count = GS ? GS->PlayerArray.Num() : 1;
-		TextF(FString::Printf(TEXT("Partie en ligne  \u00b7  %d joueur%s  \u00b7  le jeu continue pendant la pause"), Count, Count > 1 ? TEXT("s") : TEXT("")),
+		TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.OnlinePlayersPause", "Partie en ligne  \u00b7  {Count} {Count}|plural(one=joueur,other=joueurs)  \u00b7  le jeu continue pendant la pause"), { { TEXT("Count"), BRLoc::Int(Count) } }),
 			X0, 214.f * U, FLinearColor(0.7f, 0.95f, 0.7f, In), 13.f, EUiWeight::Light);
 		DrawPlayerList();
 	}
 	else
 	{
-		TextF(TEXT("Le temps s'est arr\u00eat\u00e9\u2026 pour l'instant."), X0, 214.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.TempsArreteInstant", "Le temps s'est arr\u00eat\u00e9\u2026 pour l'instant.")), X0, 214.f * U, WithAlpha(InkDim, In), 13.f, EUiWeight::Light);
 	}
 	if (const UBRSaveGame* Save = PC ? PC->GetActiveSave() : nullptr)
 	{
-		TextF(FString::Printf(TEXT("Partie \u00ab %s \u00bb  \u00b7  %s de jeu  \u00b7  sauvegarde automatique"), *Save->SaveName,
-			*BRSaves::FormatPlayTime(Save->PlayTime)), X0, 236.f * U, WithAlpha(Yellow, 0.8f * In), 11.f, EUiWeight::Regular);
+		TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PartieSavenamePlaytimeJeuSauvegarde", "Partie \u00ab {SaveName} \u00bb  \u00b7  {PlayTime} de jeu  \u00b7  sauvegarde automatique"), { { TEXT("SaveName"), BRLoc::Arg(Save->SaveName) }, { TEXT("PlayTime"), BRLoc::Arg(BRSaves::FormatPlayTime(Save->PlayTime)) } }), X0, 236.f * U, WithAlpha(Yellow, 0.8f * In), 11.f, EUiWeight::Regular);
 	}
 
 	// Cartes cliquables (meme style que le menu titre)
-	const TCHAR* Labels[] = { TEXT("REPRENDRE"), TEXT("PARAM\u00c8TRES"), TEXT("TOUCHES"), TEXT("MENU PRINCIPAL"), TEXT("QUITTER LE JEU") };
-	const TCHAR* Subs[] = {
-		TEXT("Retourner dans les Backrooms"),
-		TEXT("Graphismes, son, affichage, chat vocal"),
-		TEXT("Changer les touches (jusqu'\u00e0 3 par action)"),
-		(PC && PC->IsNetGame()) ? TEXT("Quitter la partie en ligne") : TEXT("Quitter la partie, revenir \u00e0 l'\u00e9cran titre"),
-		TEXT("Fermer le jeu"),
+	const FString Labels[] = { BR_STR(NSLOCTEXT("BR", "HUD.Reprendre", "REPRENDRE")), BR_STR(NSLOCTEXT("BR", "HUD.Parametres", "PARAM\u00c8TRES")), BR_STR(NSLOCTEXT("BR", "HUD.Touches", "TOUCHES")), BR_STR(NSLOCTEXT("BR", "HUD.MenuPrincipal2", "MENU PRINCIPAL")), BR_STR(NSLOCTEXT("BR", "HUD.QuitterJeu", "QUITTER LE JEU")) };
+	const FString Subs[] = {
+		BR_STR(NSLOCTEXT("BR", "HUD.RetournerBackrooms", "Retourner dans les Backrooms")),
+		BR_STR(NSLOCTEXT("BR", "HUD.GraphismesAffichageChatVocal", "Graphismes, son, affichage, chat vocal")),
+		BR_STR(NSLOCTEXT("BR", "HUD.ChangerTouchesJusqu3Action", "Changer les touches (jusqu'\u00e0 3 par action)")),
+		(PC && PC->IsNetGame()) ? BR_STR(NSLOCTEXT("BR", "HUD.QuitterPartieLigne", "Quitter la partie en ligne")) : BR_STR(NSLOCTEXT("BR", "HUD.QuitterPartieRevenirEcranTitre", "Quitter la partie, revenir \u00e0 l'\u00e9cran titre")),
+		BR_STR(NSLOCTEXT("BR", "HUD.FermerJeu", "Fermer le jeu")),
 	};
 	const TCHAR* Icons[] = { TEXT("UI_IconPlay"), TEXT("UI_IconSettings"), TEXT("UI_IconKeys"), TEXT("UI_IconBack"), TEXT("UI_IconQuit") };
 	const int32 Ids[] = { Btn_PauseResume, Btn_PauseSettings, Btn_PauseKeys, Btn_PauseMainMenu, Btn_PauseQuit };
@@ -2915,15 +3346,15 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 	}
 	HandlePauseMouse(PC);
 
-	TextSpaced(TEXT("COMMANDES"), CX, H - 170.f * U, WithAlpha(Yellow, 0.8f * In), 10.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
+	TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.Commandes", "COMMANDES")), CX, H - 170.f * U, WithAlpha(Yellow, 0.8f * In), 10.f, EUiWeight::Bold, 3.f * U, EUiAlign::Center);
 	TextF(ControlsLine(0), CX, H - 144.f * U, FLinearColor(0.85f, 0.83f, 0.76f, 0.9f * In), 11.5f, EUiWeight::Regular, EUiAlign::Center, false);
 	TextF(ControlsLine(1), CX, H - 120.f * U, FLinearColor(0.85f, 0.83f, 0.76f, 0.9f * In), 11.5f, EUiWeight::Regular, EUiAlign::Center, false);
 	TArray<TPair<FString, FString>> Hints;
-	Hints.Emplace(BRKeys::Primary(EBRAction::Pause), TEXT("Reprendre"));
-	Hints.Emplace(BRKeys::Primary(EBRAction::Inventory), TEXT("Param\u00e8tres et touches"));
-	Hints.Emplace(TEXT("FIN"), TEXT("Quitter"));
+	Hints.Emplace(BRKeys::Primary(EBRAction::Pause), BR_STR(NSLOCTEXT("BR", "HUD.Reprendre2", "Reprendre")));
+	Hints.Emplace(BRKeys::Primary(EBRAction::Inventory), BR_STR(NSLOCTEXT("BR", "HUD.ParametresTouches", "Param\u00e8tres et touches")));
+	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Fin", "FIN")), BR_STR(NSLOCTEXT("BR", "HUD.Quitter", "Quitter")));
 	KeyHints(CX, H - 84.f * U, Hints, In, true);
-	TextF(TEXT("Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives"), CX, H - 38.f * U,
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.ConsoleTouche2Brlevel37", "Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives")), CX, H - 38.f * U,
 		WithAlpha(InkDim, 0.5f * In), 9.5f, EUiWeight::Light, EUiAlign::Center, false);
 }
 
@@ -2966,7 +3397,7 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 	UFont* Small = GEngine->GetSmallFont();
 	const float W = FMath::Min(IW, 1240.f * U);
 	const float X = IX + (IW - W) * 0.5f;
-	Panel(X, IY, W, IH, TEXT("TOUCHES"));
+	Panel(X, IY, W, IH, BR_STR(NSLOCTEXT("BR", "HUD.Touches", "TOUCHES")));
 
 	const int32 Count = BRKeys::NumActions();
 	const float Top = IY + 56.f * U;
@@ -2975,7 +3406,7 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 	const float SlotGap = 12.f * U;
 	const float SlotsX = X + W - 24.f * U - 3.f * SlotW - 2.f * SlotGap;
 	// En-tetes de colonnes
-	const TCHAR* Heads[] = { TEXT("TOUCHE 1"), TEXT("TOUCHE 2"), TEXT("TOUCHE 3") };
+	const FString Heads[] = { BR_STR(NSLOCTEXT("BR", "HUD.Touche1", "TOUCHE 1")), BR_STR(NSLOCTEXT("BR", "HUD.Touche2", "TOUCHE 2")), BR_STR(NSLOCTEXT("BR", "HUD.Touche3", "TOUCHE 3")) };
 	for (int32 k = 0; k < 3; ++k)
 	{
 		Txt(Heads[k], SlotsX + k * (SlotW + SlotGap) + SlotW * 0.5f, Top - 4.f * U, InkDim, 0.65f * U, Small, true, false);
@@ -3001,7 +3432,7 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 			DrawRect(bCap ? WithAlpha(Yellow, bBlink ? 0.85f : 0.45f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), SX, SY, SlotW, SH);
 			Frame(SX, SY, SlotW, SH, bHov || bCap ? Yellow : YellowDim, 1.f * U);
 			const FKey K = BRKeys::GetKey(Act, Slot);
-			const FString Label = bCap ? FString(TEXT("APPUYEZ...")) : BRKeys::KeyName(K);
+			const FString Label = bCap ? FString(BR_STR(NSLOCTEXT("BR", "HUD.Appuyez", "APPUYEZ..."))) : BRKeys::KeyName(K);
 			const FLinearColor Col = bCap ? FLinearColor(0.05f, 0.04f, 0.01f) : (K.IsValid() ? Ink : WithAlpha(InkDim, 0.5f));
 			float LS = 0.72f * U;
 			const float LW = TextW(Label, Small, LS);
@@ -3017,7 +3448,7 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 	}
 
 	// Bouton de reinitialisation + aide
-	const FString ResetLabel(TEXT("TOUCHES PAR D\u00c9FAUT"));
+	const FString ResetLabel(BR_STR(NSLOCTEXT("BR", "HUD.TouchesDefaut", "TOUCHES PAR D\u00c9FAUT")));
 	const float RW = TextW(ResetLabel, Medium, 0.8f * U) + 40.f * U;
 	const float RH = 36.f * U;
 	const float RX = X + 24.f * U;
@@ -3028,8 +3459,8 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 	Txt(ResetLabel, RX + RW * 0.5f, RY + 6.f * U, bHovR ? FLinearColor(0.05f, 0.04f, 0.01f) : Yellow, 0.8f * U, Medium, true, false);
 	AddButton(Btn_KeysReset, RX, RY, RW, RH);
 	const FString Help = PC->IsCapturingKey()
-		? FString(TEXT("Appuyez sur la nouvelle touche (clavier ou bouton de souris).  \u00c9chap : annuler   -   Retour arri\u00e8re : effacer"))
-		: FString(TEXT("Cliquez sur une case puis appuyez sur une touche. Clic droit : effacer. Les changements s'appliquent imm\u00e9diatement."));
+		? FString(BR_STR(NSLOCTEXT("BR", "HUD.AppuyezNouvelleToucheClavierBouton", "Appuyez sur la nouvelle touche (clavier ou bouton de souris).  \u00c9chap : annuler   -   Retour arri\u00e8re : effacer")))
+		: FString(BR_STR(NSLOCTEXT("BR", "HUD.CliquezCasePuisAppuyezTouche", "Cliquez sur une case puis appuyez sur une touche. Clic droit : effacer. Les changements s'appliquent imm\u00e9diatement.")));
 	Txt(Help, RX + RW + 24.f * U, RY + 8.f * U, PC->IsCapturingKey() ? Yellow : InkDim, 0.72f * U, Small, false, false);
 }
 
@@ -3084,7 +3515,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	ColX[2] = ColX[1] + ColW[1] + Gap;
 
 	// En-tete "MENU >" et onglets
-	Txt(TEXT("MENU >"), IX, 44.f * U, Yellow, 1.25f * U, Large, false, false);
+	Txt(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), IX, 44.f * U, Yellow, 1.25f * U, Large, false, false);
 	DrawRect(YellowDim, IX, 92.f * U, IW, 1.f * U);
 	if (PC)
 	{
@@ -3098,7 +3529,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	{
 		Tab = ETab::Settings;
 	}
-	const TCHAR* TabNames[] = { TEXT("PERSONNAGE"), TEXT("JOURNAL"), TEXT("PARAM\u00c8TRES"), TEXT("TOUCHES") };
+	const FString TabNames[] = { BR_STR(NSLOCTEXT("BR", "HUD.Personnage", "PERSONNAGE")), BR_STR(NSLOCTEXT("BR", "HUD.Journal", "JOURNAL")), BR_STR(NSLOCTEXT("BR", "HUD.Parametres", "PARAM\u00c8TRES")), BR_STR(NSLOCTEXT("BR", "HUD.Touches", "TOUCHES")) };
 	float TX = IX;
 	for (int32 i = 0; i < 4; ++i)
 	{
@@ -3116,7 +3547,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	}
 	if (W)
 	{
-		TxtRight(FString::Printf(TEXT("NIVEAU %d  \u00ab %s \u00bb"), W->GetLevelNumber(), *W->Def().Title), IX + IW, 106.f * U, InkDim, 0.85f * U, Medium);
+		TxtRight(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauLevelnumberTitle", "NIVEAU {LevelNumber}  \u00ab {Title} \u00bb"), { { TEXT("LevelNumber"), BRLoc::Int(W->GetLevelNumber()) }, { TEXT("Title"), BRLoc::Arg(W->Def().Title) } }), IX + IW, 106.f * U, InkDim, 0.85f * U, Medium);
 	}
 
 	switch (Tab)
@@ -3145,16 +3576,16 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	// Pied de page
 	const float FY = Canvas->ClipY - 70.f * U;
 	DrawRect(YellowDim, IX, FY - 14.f * U, IW, 1.f * U);
-	Txt(TEXT("\u00a9 1992 THRESHOLD SYSTEMS"), IX, FY, InkDim, 0.8f * U, Small, false, false);
+	Txt(BR_STR(NSLOCTEXT("BR", "HUD.1992ThresholdSystems", "\u00a9 1992 THRESHOLD SYSTEMS")), IX, FY, InkDim, 0.8f * U, Small, false, false);
 	if (Tab == ETab::Character)
 	{
-		TxtRight(BRKeys::Expand(TEXT("[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER")), IX + IW, FY,
+		TxtRight(BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.GlisserDeplacerDoubleClicUtiliser", "[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER"))), IX + IW, FY,
 			InkDim, 0.8f * U, Small);
 	}
 	else
 	{
-		TxtRight(Tab == ETab::Keys ? FString(TEXT("[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [\u00c9CHAP]  ANNULER / FERMER"))
-			: FString(TEXT("[CLIC]  CHOISIR     [\u00c9CHAP]  FERMER")), IX + IW, FY, InkDim, 0.8f * U, Small);
+		TxtRight(Tab == ETab::Keys ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChangerClicDroitEffacer", "[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [\u00c9CHAP]  ANNULER / FERMER")))
+			: FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChoisirEchapFermer", "[CLIC]  CHOISIR     [\u00c9CHAP]  FERMER"))), IX + IW, FY, InkDim, 0.8f * U, Small);
 	}
 
 	// Infobulle et objet en cours de deplacement (au-dessus de tout)
@@ -3238,7 +3669,7 @@ void ABRHUD::LayoutCharacterTab(ABRCharacter* C)
 		B.X = E.X;
 		B.Y = E.Y;
 		B.S = EqS;
-		B.Caption = BRItems::SlotName(E.Slot);
+		B.Caption = BRItems::SlotName(E.Slot).ToString();
 		Slots.Add(B);
 	}
 	(void)C;
@@ -3270,7 +3701,7 @@ void ABRHUD::DrawSlot(ABRCharacter* C, const FSlotBox& Box)
 		Txt(Box.Caption, X, Y - 22.f * U, Yellow, 0.75f * U, Small, false, false);
 		if (bEmpty)
 		{
-			Txt(TEXT("VIDE"), X + S * 0.5f, Y + S * 0.5f - 9.f * U, WithAlpha(InkDim, 0.5f), 0.7f * U, Small, true, false);
+			Txt(BR_STR(NSLOCTEXT("BR", "HUD.Vide", "VIDE")), X + S * 0.5f, Y + S * 0.5f - 9.f * U, WithAlpha(InkDim, 0.5f), 0.7f * U, Small, true, false);
 		}
 	}
 	if (bEmpty)
@@ -3281,12 +3712,12 @@ void ABRHUD::DrawSlot(ABRCharacter* C, const FSlotBox& Box)
 	const float A = bSrc ? 0.3f : 1.f;
 	// Nom court au-dessus de l'icone (reduit s'il est trop long)
 	float LS = 0.62f * U;
-	const float LW = TextW(Info.Short, Small, LS);
+	const float LW = TextW(Info.Short.ToString(), Small, LS);
 	if (LW > S - 8.f * U)
 	{
 		LS *= (S - 8.f * U) / LW;
 	}
-	Txt(Info.Short, X + S * 0.5f, Y + 4.f * U, WithAlpha(Ink, A), LS, Small, true, false);
+	Txt(Info.Short.ToString(), X + S * 0.5f, Y + 4.f * U, WithAlpha(Ink, A), LS, Small, true, false);
 	UTexture* Tex = ItemIcon(It->Item);
 	if (Tex)
 	{
@@ -3298,7 +3729,7 @@ void ABRHUD::DrawSlot(ABRCharacter* C, const FSlotBox& Box)
 	}
 	if (It->Count > 1)
 	{
-		TxtRight(FString::Printf(TEXT("x%d"), It->Count), X + S - 6.f * U, Y + S - 20.f * U, WithAlpha(Ink, A), 0.75f * U, Small);
+		TxtRight(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt", "x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }), X + S - 6.f * U, Y + S - 20.f * U, WithAlpha(Ink, A), 0.75f * U, Small);
 	}
 }
 
@@ -3312,7 +3743,7 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 	const float LX = ColX[0];
 	const float LW = ColW[0];
 	const float ObjH = IH * 0.44f;
-	Panel(LX, IY, LW, ObjH, TEXT("OBJECTIFS"));
+	Panel(LX, IY, LW, ObjH, BR_STR(NSLOCTEXT("BR", "HUD.Objectifs", "OBJECTIFS")));
 	float Y = IY + 58.f * U;
 	if (W)
 	{
@@ -3345,10 +3776,10 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		{
 			const bool bOk = W->AreObjectivesComplete();
 			Y = FMath::Max(Y, IY + ObjH - 60.f * U);
-			for (const FString& L : Wrap(bOk ? TEXT("Les sorties sont stables : trouvez un mur qui gr\u00e9sille.")
-				: TEXT("Objectifs requis pour stabiliser les sorties du niveau."), LW - 40.f * U, Small, 0.7f * U))
+			for (const FString& L : Wrap(bOk ? BR_STR(NSLOCTEXT("BR", "HUD.SortiesSontStablesTrouvezMur", "Les sorties sont stables : trouvez un mur qui gr\u00e9sille."))
+				: BR_STR(NSLOCTEXT("BR", "HUD.ObjectifsRequisStabiliserSortiesNiveau", "Objectifs requis pour stabiliser les sorties du niveau.")), LW - 40.f * U, Small, 0.7f * U))
 			{
-				Txt(L, LX + 18.f * U, Y, bOk ? Done : InkDim, 0.7f * U, Small, false, false);
+				TxtLine(L, LX + 18.f * U, Y, LW - 40.f * U, bOk ? Done : InkDim, 0.7f * U, Small);
 				Y += 18.f * U;
 			}
 		}
@@ -3356,12 +3787,12 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 
 	const float BioY = IY + ObjH + 18.f * U;
 	const float BioH = IH - ObjH - 18.f * U;
-	Panel(LX, BioY, LW, BioH, TEXT("BIOM\u00c9TRIE"));
+	Panel(LX, BioY, LW, BioH, BR_STR(NSLOCTEXT("BR", "HUD.Biometrie", "BIOM\u00c9TRIE")));
 	if (C)
 	{
 		struct FRow
 		{
-			const TCHAR* Label;
+			FString Label;
 			float Value;
 			float Trend;
 			FLinearColor Color;
@@ -3369,10 +3800,10 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		const float SanityK = FMath::Clamp(C->Sanity / 100.f, 0.f, 1.f);
 		const float BatTrend = (C->IsFlashlightOn() || C->IsNightVision()) ? -1.f : 0.f;
 		const FRow Rows[] = {
-			{ TEXT("SANT\u00c9 MENTALE"), C->Sanity, C->GetSanityTrend(), FMath::Lerp(FLinearColor(0.9f, 0.18f, 0.12f), FLinearColor(0.95f, 0.55f, 0.35f), SanityK) },
-			{ TEXT("SANT\u00c9"), C->Health, C->GetHealthTrend(), FLinearColor(0.85f, 0.2f, 0.16f) },
-			{ TEXT("ENDURANCE"), C->Stamina, C->GetStaminaTrend(), FLinearColor(0.92f, 0.9f, 0.82f) },
-			{ TEXT("PILES"), C->Battery, BatTrend, FLinearColor(1.f, 0.82f, 0.3f) },
+			{ BR_STR(NSLOCTEXT("BR", "HUD.SanteMentale", "SANT\u00c9 MENTALE")), C->Sanity, C->GetSanityTrend(), FMath::Lerp(FLinearColor(0.9f, 0.18f, 0.12f), FLinearColor(0.95f, 0.55f, 0.35f), SanityK) },
+			{ BR_STR(NSLOCTEXT("BR", "HUD.Sante", "SANT\u00c9")), C->Health, C->GetHealthTrend(), FLinearColor(0.85f, 0.2f, 0.16f) },
+			{ BR_STR(NSLOCTEXT("BR", "HUD.Endurance", "ENDURANCE")), C->Stamina, C->GetStaminaTrend(), FLinearColor(0.92f, 0.9f, 0.82f) },
+			{ BR_STR(NSLOCTEXT("BR", "HUD.Piles", "PILES")), C->Battery, BatTrend, FLinearColor(1.f, 0.82f, 0.3f) },
 		};
 		const float Box = 26.f * U;
 		const float BarW = LW - 36.f * U - Box - 12.f * U;
@@ -3396,7 +3827,7 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 	}
 
 	// ---------------- Colonne du milieu : INVENTAIRE
-	Panel(ColX[1], IY, ColW[1], IH, TEXT("INVENTAIRE"));
+	Panel(ColX[1], IY, ColW[1], IH, BR_STR(NSLOCTEXT("BR", "HUD.Inventaire", "INVENTAIRE")));
 	const FSlotBox* FirstPocket = nullptr;
 	const FSlotBox* FirstStorage = nullptr;
 	for (const FSlotBox& B : Slots)
@@ -3412,15 +3843,15 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 	}
 	if (FirstPocket)
 	{
-		VLabel(TEXT("POCHES"), ColX[1] + 28.f * U, FirstPocket->Y, Yellow, 0.75f * U);
+		VLabel(BR_STR(NSLOCTEXT("BR", "HUD.Poches", "POCHES")), ColX[1] + 28.f * U, FirstPocket->Y, Yellow, 0.75f * U);
 	}
 	if (FirstStorage)
 	{
-		VLabel(TEXT("STOCKAGE"), ColX[1] + 28.f * U, FirstStorage->Y, Yellow, 0.75f * U);
+		VLabel(BR_STR(NSLOCTEXT("BR", "HUD.Stockage", "STOCKAGE")), ColX[1] + 28.f * U, FirstStorage->Y, Yellow, 0.75f * U);
 	}
 
 	// ---------------- Colonne de droite : EQUIPEMENT
-	Panel(ColX[2], IY, ColW[2], IH, TEXT("\u00c9QUIPEMENT"));
+	Panel(ColX[2], IY, ColW[2], IH, BR_STR(NSLOCTEXT("BR", "HUD.Equipement", "\u00c9QUIPEMENT")));
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
 		Icon(A->Icon(TEXT("I_Silhouette")), SilX, SilY, SilW, SilH, FLinearColor(0.85f, 0.82f, 0.72f, 0.95f));
@@ -3477,15 +3908,15 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 	UFont* Medium = GEngine->GetMediumFont();
 	const FBRItemInfo& Info = BRItems::Get(It->Item);
 	const float W = 380.f * U;
-	const TArray<FString> Lines = Wrap(BRKeys::Expand(Info.Description), W - 28.f * U, Small, 0.72f * U);
+	const TArray<FString> Lines = Wrap(BRKeys::Expand(Info.Description.ToString()), W - 28.f * U, Small, 0.72f * U);
 	FString Hint;
 	if (Info.bConsumable)
 	{
-		Hint = FString::Printf(TEXT("[DOUBLE-CLIC]  %s"), *Info.UseVerb.ToUpper());
+		Hint = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DoubleClicUseverb", "[DOUBLE-CLIC]  {UseVerb}"), { { TEXT("UseVerb"), BRLoc::Arg(Info.UseVerb.ToUpper()) } });
 	}
 	else if (Info.Slot != EBREquipSlot::None)
 	{
-		Hint = HoverSlot.Group == EBRSlotGroup::Equipment ? TEXT("[DOUBLE-CLIC]  RETIRER") : TEXT("[DOUBLE-CLIC]  \u00c9QUIPER");
+		Hint = HoverSlot.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicRetirer", "[DOUBLE-CLIC]  RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicEquiper", "[DOUBLE-CLIC]  \u00c9QUIPER"));
 	}
 	const float H = 52.f * U + Lines.Num() * 19.f * U + (Hint.IsEmpty() ? 0.f : 26.f * U);
 	float X = MouseX + 20.f * U;
@@ -3494,12 +3925,12 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 	Y = FMath::Min(Y, Canvas->ClipY - H - 10.f * U);
 	DrawRect(FLinearColor(0.02f, 0.018f, 0.008f, 0.95f), X, Y, W, H);
 	Frame(X, Y, W, H, YellowDim, 1.f * U);
-	Txt(FString::Printf(TEXT("%s%s"), *Info.Name.ToUpper(), It->Count > 1 ? *FString::Printf(TEXT("  x%d"), It->Count) : TEXT("")), X + 14.f * U,
+	Txt(FString::Printf(TEXT("%s%s"), *Info.Name.ToUpper().ToString(), It->Count > 1 ? *BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt2", "  x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }) : TEXT("")), X + 14.f * U,
 		Y + 10.f * U, Yellow, 0.85f * U, Medium, false, false);
 	float LY = Y + 44.f * U;
 	for (const FString& L : Lines)
 	{
-		Txt(L, X + 14.f * U, LY, Ink, 0.72f * U, Small, false, false);
+		TxtLine(L, X + 14.f * U, LY, W - 28.f * U, Ink, 0.72f * U, Small);
 		LY += 19.f * U;
 	}
 	if (!Hint.IsEmpty())
@@ -3526,7 +3957,7 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 	const float X = (Canvas->ClipX - W) * 0.5f;
 	const float Y = (Canvas->ClipY - H) * 0.5f;
 	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
-	Panel(X, Y, W, H, TEXT("INSPECTER"));
+	Panel(X, Y, W, H, BR_STR(NSLOCTEXT("BR", "HUD.Inspecter", "INSPECTER")));
 	const float IconS = 220.f * U;
 	DrawRect(SlotBg, X + 24.f * U, Y + 66.f * U, IconS, IconS);
 	Frame(X + 24.f * U, Y + 66.f * U, IconS, IconS, YellowDim, 1.f * U);
@@ -3536,17 +3967,17 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 
 	const float TX = X + IconS + 50.f * U;
 	const float TW = W - IconS - 74.f * U;
-	Txt(Info.Name.ToUpper(), TX, Y + 64.f * U, Yellow, 1.05f * U, Large, false, false);
-	FString Kind = Info.bConsumable ? TEXT("CONSOMMABLE") : TEXT("OBJET");
+	Txt(Info.Name.ToUpper().ToString(), TX, Y + 64.f * U, Yellow, 1.05f * U, Large, false, false);
+	FString Kind = Info.bConsumable ? BR_STR(NSLOCTEXT("BR", "HUD.Consommable", "CONSOMMABLE")) : BR_STR(NSLOCTEXT("BR", "HUD.Objet", "OBJET"));
 	if (Info.Slot != EBREquipSlot::None)
 	{
-		Kind = TEXT("\u00c9QUIPEMENT - ") + BRItems::SlotName(Info.Slot);
+		Kind = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.EquipmentSlot", "\u00c9QUIPEMENT - {Slot}"), { { TEXT("Slot"), BRLoc::Arg(BRItems::SlotName(Info.Slot)) } });
 	}
-	Txt(FString::Printf(TEXT("%s     QUANTIT\u00c9 : %d"), *Kind, It->Count), TX, Y + 112.f * U, InkDim, 0.75f * U, Small, false, false);
+	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.KindQuantiteIt", "{Kind}     QUANTIT\u00c9 : {It}"), { { TEXT("Kind"), BRLoc::Arg(Kind) }, { TEXT("It"), BRLoc::Int(It->Count) } }), TX, Y + 112.f * U, InkDim, 0.75f * U, Small, false, false);
 	float LY = Y + 146.f * U;
-	for (const FString& L : Wrap(BRKeys::Expand(Info.Description), TW, Medium, 0.8f * U))
+	for (const FString& L : Wrap(BRKeys::Expand(Info.Description.ToString()), TW, Medium, 0.8f * U))
 	{
-		Txt(L, TX, LY, Ink, 0.8f * U, Medium, false, false);
+		TxtLine(L, TX, LY, TW, Ink, 0.8f * U, Medium);
 		LY += 24.f * U;
 	}
 
@@ -3556,11 +3987,11 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 	FString UseLabel;
 	if (Info.bConsumable)
 	{
-		UseLabel = Info.UseVerb.ToUpper();
+		UseLabel = Info.UseVerb.ToUpper().ToString();
 	}
 	else if (Info.Slot != EBREquipSlot::None)
 	{
-		UseLabel = Inspecting.Group == EBRSlotGroup::Equipment ? TEXT("RETIRER") : TEXT("\u00c9QUIPER");
+		UseLabel = Inspecting.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.Retirer", "RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.Equiper", "\u00c9QUIPER"));
 	}
 	float BX = TX;
 	if (!UseLabel.IsEmpty())
@@ -3573,7 +4004,7 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 		AddButton(Btn_InspectUse, BX, BY, BW, BH);
 		BX += BW + 16.f * U;
 	}
-	const FString CloseLabel(TEXT("FERMER"));
+	const FString CloseLabel(BR_STR(NSLOCTEXT("BR", "HUD.Fermer", "FERMER")));
 	const float CW = TextW(CloseLabel, Medium, 0.85f * U) + 40.f * U;
 	const bool bHovC = Hover(BX, BY, CW, BH);
 	DrawRect(bHovC ? WithAlpha(Ink, 0.85f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), BX, BY, CW, BH);
@@ -3599,19 +4030,19 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	const float RW = IW - LW - Gap;
 
 	// ---- Niveau actuel + notes
-	Panel(IX, IY, LW, IH, TEXT("JOURNAL DU VAGABOND"));
+	Panel(IX, IY, LW, IH, BR_STR(NSLOCTEXT("BR", "HUD.JournalVagabond", "JOURNAL DU VAGABOND")));
 	float X = IX + 20.f * U;
 	float Y = IY + 60.f * U;
 	const float ColWidth = LW - 40.f * U;
-	Txt(FString::Printf(TEXT("NIVEAU %d - \u00ab %s \u00bb"), D.Number, *D.Title), X, Y, Ink, 0.95f * U, Large, false, false);
+	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauNumberTitle2", "NIVEAU {Number} - \u00ab {Title} \u00bb"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } }), X, Y, Ink, 0.95f * U, Large, false, false);
 	Y += 40.f * U;
-	Txt(D.Nickname, X, Y, InkDim, 0.85f * U, Medium, false, false);
+	Txt(D.Nickname.ToString(), X, Y, InkDim, 0.85f * U, Medium, false, false);
 	Y += 26.f * U;
-	Txt(D.ClassText, X, Y, ClassColor(D.SurvivalClass), 0.85f * U, Medium, false, false);
+	Txt(D.ClassText.ToString(), X, Y, ClassColor(D.SurvivalClass), 0.85f * U, Medium, false, false);
 	Y += 32.f * U;
-	for (const FString& L : Wrap(D.Description, ColWidth, Medium, 0.8f * U))
+	for (const FString& L : Wrap(D.Description.ToString(), ColWidth, Medium, 0.8f * U))
 	{
-		Txt(L, X, Y, Ink, 0.8f * U, Medium, false, false);
+		TxtLine(L, X, Y, ColWidth, Ink, 0.8f * U, Medium);
 		Y += 23.f * U;
 	}
 	Y += 12.f * U;
@@ -3620,32 +4051,32 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	{
 		Visited += Visited.IsEmpty() ? FString::FromInt(N) : FString(TEXT(", ")) + FString::FromInt(N);
 	}
-	Txt(TEXT("Niveaux visit\u00e9s : ") + Visited, X, Y, FLinearColor(0.7f, 0.8f, 0.9f), 0.8f * U, Medium, false, false);
+	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LevelsVisited", "Niveaux visit\u00e9s : {List}"), { { TEXT("List"), BRLoc::Arg(Visited) } }), X, Y, FLinearColor(0.7f, 0.8f, 0.9f), 0.8f * U, Medium, false, false);
 	Y += 26.f * U;
-	Txt(FString::Printf(TEXT("Temps sur ce niveau : %s"), *Timecode(W->GetLevelTime())), X, Y, FLinearColor(0.7f, 0.8f, 0.9f), 0.8f * U, Medium,
+	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TempsNiveauLeveltime", "Temps sur ce niveau : {LevelTime}"), { { TEXT("LevelTime"), BRLoc::Arg(Timecode(W->GetLevelTime())) } }), X, Y, FLinearColor(0.7f, 0.8f, 0.9f), 0.8f * U, Medium,
 		false, false);
 	Y += 26.f * U;
-	for (const FString& L : Wrap(TEXT("Pour quitter un niveau : cherchez un passage (mur qui gr\u00e9sille, porte, \u00e9chelle...). ")
-		TEXT("Les sorties \u00e9mettent un bourdonnement \u00e9lectrique : \u00e9coutez."), ColWidth, Small, 0.75f * U))
+	for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.QuitterNiveauCherchezPassageMur", "Pour quitter un niveau : cherchez un passage (mur qui gr\u00e9sille, porte, \u00e9chelle...). Les sorties \u00e9mettent un bourdonnement \u00e9lectrique : \u00e9coutez.")), ColWidth, Small, 0.75f * U))
 	{
-		Txt(L, X, Y, Yellow, 0.75f * U, Small, false, false);
+		TxtLine(L, X, Y, ColWidth, Yellow, 0.75f * U, Small);
 		Y += 20.f * U;
 	}
 	Y += 14.f * U;
 	if (C)
 	{
-		Txt(FString::Printf(TEXT("NOTES TROUV\u00c9ES (%d)"), C->ReadNotes.Num()), X, Y, Yellow, 0.85f * U, Medium, false, false);
+		Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NotesTrouveesReadnotes", "NOTES TROUV\u00c9ES ({ReadNotes})"), { { TEXT("ReadNotes"), BRLoc::Int(C->ReadNotes.Num()) } }), X, Y, Yellow, 0.85f * U, Medium, false, false);
 		Y += 30.f * U;
 		for (int32 i = C->ReadNotes.Num() - 1; i >= 0 && Y < IY + IH - 40.f * U; --i)
 		{
-			const TArray<FString> NoteLines = Wrap(TEXT("\u00ab ") + C->ReadNotes[i] + TEXT(" \u00bb"), ColWidth, Small, 0.7f * U);
+			const TArray<FString> NoteLines = Wrap(BRKeys::Expand(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.QuotedNote", "\u00ab {Note} \u00bb"),
+				{ { TEXT("Note"), BRLoc::Arg(BRLevels::NoteText(C->ReadNotes[i])) } })), ColWidth, Small, 0.7f * U);
 			for (const FString& L : NoteLines)
 			{
 				if (Y > IY + IH - 30.f * U)
 				{
 					break;
 				}
-				Txt(L, X, Y, InkDim, 0.7f * U, Small, false, false);
+				TxtLine(L, X, Y, ColWidth, InkDim, 0.7f * U, Small);
 				Y += 18.f * U;
 			}
 			Y += 8.f * U;
@@ -3653,7 +4084,7 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	}
 
 	// ---- Entites
-	Panel(RX, IY, RW, IH, TEXT("ENTIT\u00c9S RENCONTR\u00c9ES"));
+	Panel(RX, IY, RW, IH, BR_STR(NSLOCTEXT("BR", "HUD.EntitesRencontrees", "ENTIT\u00c9S RENCONTR\u00c9ES")));
 	X = RX + 20.f * U;
 	Y = IY + 60.f * U;
 	const float EW = RW - 40.f * U;
@@ -3667,16 +4098,16 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 		}
 		bAny = true;
 		const FBREntityInfo& Info = ABREntity::Info(Kind);
-		Txt(FString::Printf(TEXT("%s - %s"), *Info.Number, *Info.Name), X, Y, FLinearColor(1.f, 0.6f, 0.5f), 0.9f * U, Medium, false, false);
+		Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.EntityNumberName", "{Number} - {Name}"), { { TEXT("Number"), BRLoc::Arg(Info.Number) }, { TEXT("Name"), BRLoc::Arg(Info.Name) } }), X, Y, FLinearColor(1.f, 0.6f, 0.5f), 0.9f * U, Medium, false, false);
 		Y += 28.f * U;
-		for (const FString& L : Wrap(Info.Description, EW, Small, 0.72f * U))
+		for (const FString& L : Wrap(Info.Description.ToString(), EW, Small, 0.72f * U))
 		{
-			Txt(L, X + 12.f * U, Y, Ink, 0.72f * U, Small, false, false);
+			TxtLine(L, X + 12.f * U, Y, EW, Ink, 0.72f * U, Small);
 			Y += 19.f * U;
 		}
-		for (const FString& L : Wrap(TEXT("Conseil : ") + Info.Advice, EW, Small, 0.72f * U))
+		for (const FString& L : Wrap(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.AdviceLine", "Conseil : {Advice}"), { { TEXT("Advice"), BRLoc::Arg(Info.Advice) } }), EW, Small, 0.72f * U))
 		{
-			Txt(L, X + 12.f * U, Y, Done, 0.72f * U, Small, false, false);
+			TxtLine(L, X + 12.f * U, Y, EW, Done, 0.72f * U, Small);
 			Y += 19.f * U;
 		}
 		Y += 12.f * U;
@@ -3687,11 +4118,11 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	}
 	if (!bAny)
 	{
-		Txt(TEXT("Aucune pour l'instant... et c'est tr\u00e8s bien comme \u00e7a."), X, Y, InkDim, 0.8f * U, Medium, false, false);
+		Txt(BR_STR(NSLOCTEXT("BR", "HUD.AucuneInstantTresBienComme", "Aucune pour l'instant... et c'est tr\u00e8s bien comme \u00e7a.")), X, Y, InkDim, 0.8f * U, Medium, false, false);
 		Y += 30.f * U;
-		for (const FString& L : Wrap(TEXT("Astuce : filmer une entit\u00e9 au cam\u00e9scope pendant 3 secondes ajoute sa fiche au journal."), EW, Small, 0.72f * U))
+		for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.AstuceFilmerEntiteCamescopePendant", "Astuce : filmer une entit\u00e9 au cam\u00e9scope pendant 3 secondes ajoute sa fiche au journal.")), EW, Small, 0.72f * U))
 		{
-			Txt(L, X, Y, InkDim, 0.72f * U, Small, false, false);
+			TxtLine(L, X, Y, EW, InkDim, 0.72f * U, Small);
 			Y += 19.f * U;
 		}
 	}
@@ -3708,7 +4139,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	UFont* Small = GEngine->GetSmallFont();
 	const float PanelW = FMath::Min(IW, 1760.f * U);
 	const float PanelX = IX + (IW - PanelW) * 0.5f;
-	Panel(PanelX, IY, PanelW, IH, TEXT("PARAM\u00c8TRES"));
+	Panel(PanelX, IY, PanelW, IH, BR_STR(NSLOCTEXT("BR", "HUD.Parametres", "PARAM\u00c8TRES")));
 
 	// Deux colonnes : controles, son et affichage a gauche, graphismes a droite
 	const int32 Count = PC->GetSettingsCount();
@@ -3754,16 +4185,15 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	// Aide de la ligne survolee
 	const FString Hint = HoverSetting != INDEX_NONE ? PC->GetSettingHint(HoverSetting) : FString();
 	float HY = IY + IH - 84.f * U;
-	for (const FString& L : Wrap(Hint.IsEmpty() ? FString(TEXT("Les r\u00e9glages sont sauvegard\u00e9s automatiquement (BackroomsPlayer.ini).")) : Hint,
+	for (const FString& L : Wrap(Hint.IsEmpty() ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ReglagesSontSauvegardesAutomatiquementBa", "Les r\u00e9glages sont sauvegard\u00e9s automatiquement (BackroomsPlayer.ini)."))) : Hint,
 		W2 - 56.f * U, Small, 0.75f * U))
 	{
-		Txt(L, X + 28.f * U, HY, InkDim, 0.75f * U, Small, false, false);
+		TxtLine(L, X + 28.f * U, HY, W2 - 56.f * U, InkDim, 0.75f * U, Small);
 		HY += 20.f * U;
 	}
 	// v4.5 : le mode de rendu reellement actif (et non celui demande) ; RHI et support du ray tracing : au demarrage
 	Txt(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 40.f * U, WithAlpha(Yellow, 0.85f), 0.66f * U, Small, false, false);
-	Txt(TEXT("Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, ")
-		TEXT("cache de skinning (Config/DefaultEngine.ini)."), X + 28.f * U, IY + IH - 22.f * U, WithAlpha(InkDim, 0.7f), 0.62f * U, Small, false, false);
+	Txt(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 22.f * U, WithAlpha(InkDim, 0.7f), 0.62f * U, Small, false, false);
 }
 
 void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
@@ -3921,7 +4351,7 @@ void ABRHUD::DrawTeammates(ABRCharacter* C)
 			continue;
 		}
 		const APlayerState* PS = Other->GetPlayerState();
-		FString Name = PS ? PS->GetPlayerName() : FString(TEXT("Explorateur"));
+		FString Name = PS ? PS->GetPlayerName() : FString(BR_STR(NSLOCTEXT("BR", "HUD.Explorateur", "Explorateur")));
 		if (Name.Len() > 20)
 		{
 			Name = Name.Left(20);
@@ -3931,8 +4361,8 @@ void ABRHUD::DrawTeammates(ABRCharacter* C)
 		{
 			// v4.7 : etat tenu par le serveur ; au fond d'une fosse, inutile d'aller le chercher
 			Name += Other->CanBeRevived()
-				? (Other->GetDeathCause() == EBRDeathCause::Drowning ? TEXT("  (noy\u00e9 : sortez-le)") : TEXT("  (\u00e0 terre)"))
-				: TEXT("  (hors d'atteinte)");
+				? (Other->GetDeathCause() == EBRDeathCause::Drowning ? BR_STR(NSLOCTEXT("BR", "HUD.NoyeSortez", "  (noy\u00e9 : sortez-le)")) : BR_STR(NSLOCTEXT("BR", "HUD.Terre2", "  (\u00e0 terre)")))
+				: BR_STR(NSLOCTEXT("BR", "HUD.HorsAtteinte", "  (hors d'atteinte)"));
 		}
 		const FLinearColor Col = Other->IsDead() ? FLinearColor(1.f, 0.45f, 0.4f, A) : FLinearColor(0.8f, 1.f, 0.8f, A);
 		Txt(Name, static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 22.f * U, Col, 0.8f * U, Medium, true);
@@ -3948,7 +4378,7 @@ void ABRHUD::DrawTeammates(ABRCharacter* C)
 				DrawRect(FLinearColor(0.6f, 1.f, 0.6f, A), BX + k * 6.f * U, static_cast<float>(Screen.Y) - 6.f * U - BH, 3.f * U, BH);
 			}
 		}
-		Txt(FString::Printf(TEXT("%d m"), FMath::RoundToInt(Dist / 100.f)), static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 2.f * U,
+		Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DistM", "{Dist} m"), { { TEXT("Dist"), BRLoc::Int(FMath::RoundToInt(Dist / 100.f)) } }), static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 2.f * U,
 			WithAlpha(InkDim, A), 0.65f * U, Medium, true);
 	}
 }
@@ -3968,15 +4398,15 @@ void ABRHUD::DrawVoiceIndicator(ABRPlayerController* PC)
 	{
 		const float Pulse = 0.7f + 0.3f * FMath::Sin(Clock * 6.f);
 		DrawRect(FLinearColor(0.95f, 0.2f, 0.15f, Pulse), X, Y + 4.f * U, 10.f * U, 10.f * U);
-		Txt(Mode == 0 ? TEXT("MICRO OUVERT") : TEXT("VOUS PARLEZ"), X + 18.f * U, Y, FLinearColor(1.f, 0.85f, 0.8f, 0.9f), 0.75f * U, Small, false);
+		Txt(Mode == 0 ? BR_STR(NSLOCTEXT("BR", "HUD.MicroOuvert", "MICRO OUVERT")) : BR_STR(NSLOCTEXT("BR", "HUD.Parlez", "VOUS PARLEZ")), X + 18.f * U, Y, FLinearColor(1.f, 0.85f, 0.8f, 0.9f), 0.75f * U, Small, false);
 	}
 	else if (Mode == 1)
 	{
-		Txt(BRKeys::Tag(EBRAction::PushToTalk) + TEXT(" parler"), X, Y, WithAlpha(InkDim, 0.7f), 0.7f * U, Small, false);
+		Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PushToTalkHint", "{Key} parler"), { { TEXT("Key"), BRLoc::Arg(BRKeys::Tag(EBRAction::PushToTalk)) } }), X, Y, WithAlpha(InkDim, 0.7f), 0.7f * U, Small, false);
 	}
 	else if (Mode == 2)
 	{
-		Txt(TEXT("MICRO COUP\u00c9"), X, Y, WithAlpha(InkDim, 0.6f), 0.7f * U, Small, false);
+		Txt(BR_STR(NSLOCTEXT("BR", "HUD.MicroCoupe", "MICRO COUP\u00c9")), X, Y, WithAlpha(InkDim, 0.6f), 0.7f * U, Small, false);
 	}
 }
 
@@ -3996,8 +4426,8 @@ void ABRHUD::DrawPlayerList()
 	const float BoxH = 58.f * U + N * RowH + 8.f * U;
 	RoundRect(X, Y, PW, BoxH, 14.f * U, FLinearColor(0.05f, 0.045f, 0.03f, 0.85f));
 	RoundRect(X, Y, PW, BoxH, 14.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.14f), true);
-	TextSpaced(TEXT("JOUEURS"), X + 22.f * U, Y + 20.f * U, Yellow, 10.5f, EUiWeight::Bold, 3.f * U);
-	TextF(TEXT("LATENCE"), X + PW - 22.f * U, Y + 20.f * U, InkDim, 9.5f, EUiWeight::Regular, EUiAlign::Right, false);
+	TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.Joueurs", "JOUEURS")), X + 22.f * U, Y + 20.f * U, Yellow, 10.5f, EUiWeight::Bold, 3.f * U);
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.Latence", "LATENCE")), X + PW - 22.f * U, Y + 20.f * U, InkDim, 9.5f, EUiWeight::Regular, EUiAlign::Right, false);
 	Y += 54.f * U;
 	for (int32 i = 0; i < N; ++i)
 	{
@@ -4026,14 +4456,14 @@ void ABRHUD::DrawPlayerList()
 		TextF(Name, X + 58.f * U, NY, bMe ? Yellow : Ink, 13.f, EUiWeight::Regular, EUiAlign::Left, false);
 		if (i == 0)
 		{
-			const FVector2f HS = TextSize(TEXT("H\u00d4TE"), 8.5f, EUiWeight::Bold);
+			const FVector2f HS = TextSize(BR_STR(NSLOCTEXT("BR", "HUD.Hote", "H\u00d4TE")), 8.5f, EUiWeight::Bold);
 			const float HX = X + 66.f * U + NS.X;
 			RoundRect(HX, NY + (NS.Y - 18.f * U) * 0.5f, HS.X + 16.f * U, 18.f * U, 9.f * U, FLinearColor(1.f, 0.82f, 0.22f, 0.2f));
-			TextF(TEXT("H\u00d4TE"), HX + 8.f * U, NY + (NS.Y - HS.Y) * 0.5f, Yellow, 8.5f, EUiWeight::Bold, EUiAlign::Left, false);
+			TextF(BR_STR(NSLOCTEXT("BR", "HUD.Hote", "H\u00d4TE")), HX + 8.f * U, NY + (NS.Y - HS.Y) * 0.5f, Yellow, 8.5f, EUiWeight::Bold, EUiAlign::Left, false);
 		}
 		const int32 Ping = FMath::RoundToInt(PS->GetPingInMilliseconds());
 		const FLinearColor PingCol = Ping < 80 ? Done : (Ping < 160 ? Yellow : Danger);
-		TextF(i == 0 ? FString(TEXT("\u2014")) : FString::Printf(TEXT("%d ms"), Ping), X + PW - 22.f * U, NY, PingCol, 12.f, EUiWeight::Bold,
+		TextF(i == 0 ? FString(TEXT("\u2014")) : BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PingMs", "{Ping} ms"), { { TEXT("Ping"), BRLoc::Int(Ping) } }), X + PW - 22.f * U, NY, PingCol, 12.f, EUiWeight::Bold,
 			EUiAlign::Right, false);
 		Y += RowH;
 	}

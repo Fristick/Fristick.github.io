@@ -124,19 +124,19 @@ namespace BRDeath
 		default: return TEXT("None");
 		}
 	}
-	/** Message vu par les coequipiers ("<nom> est a terre.") */
-	FORCEINLINE const TCHAR* TeammateMessage(EBRDeathCause C)
+	/** Message vu par les coequipiers. v4.8 : motif localise, compose par chaque machine dans sa langue ({Name} : le joueur) */
+	FORCEINLINE FText TeammateMessage(EBRDeathCause C)
 	{
 		switch (C)
 		{
 		case EBRDeathCause::Drowning:
-			return TEXT(" se noie : remontez-le !");
+			return NSLOCTEXT("BR", "Death.Teammate.Drowning", "{Name} se noie : remontez-le !");
 		case EBRDeathCause::Fall:
-			return TEXT(" est tomb\u00e9 dans une fosse.");
+			return NSLOCTEXT("BR", "Death.Teammate.Fall", "{Name} est tomb\u00e9 dans une fosse.");
 		case EBRDeathCause::Madness:
-			return TEXT(" a perdu la raison : il est \u00e0 terre.");
+			return NSLOCTEXT("BR", "Death.Teammate.Madness", "{Name} a perdu la raison : il est \u00e0 terre.");
 		default:
-			return TEXT(" est \u00e0 terre.");
+			return NSLOCTEXT("BR", "Death.Teammate.Injury", "{Name} est \u00e0 terre.");
 		}
 	}
 }
@@ -198,15 +198,23 @@ struct FBRExitDef
 	float ChancePerChunk = 0.2f;
 };
 
+/** v4.8 : note trouvable. Id : identifiant stable, enregistre dans le journal de la sauvegarde (le texte suit la langue) */
+struct FBRNote
+{
+	FName Id;
+	FText Text;
+};
+
 /** Description complete d'un niveau */
 struct FBRLevelDef
 {
 	int32 Number = 0;
-	FString Title;          // titre du wiki
-	FString Nickname;       // surnom (FR)
-	FString Description;    // description courte (FR)
+	// v4.8 : textes localises (NSLOCTEXT, cle stable "Level.<n>...")
+	FText Title;            // titre du wiki
+	FText Nickname;         // surnom
+	FText Description;      // description courte
 	int32 SurvivalClass = 1;
-	FString ClassText;
+	FText ClassText;
 
 	// --- Grille ---
 	EBRLayout Layout = EBRLayout::Rooms;
@@ -285,7 +293,8 @@ struct FBRLevelDef
 	float BatteryChance = 0.2f;
 	float NoteChance = 0.15f;
 	TArray<FBRExitDef> Exits;
-	TArray<FString> Notes;
+	/** v4.8 : notes par identifiant stable (journal des sauvegardes) et texte localise */
+	TArray<FBRNote> Notes;
 	EBRProps Props = EBRProps::None;
 	float PropDensity = 0.1f;
 	bool bWater = false;

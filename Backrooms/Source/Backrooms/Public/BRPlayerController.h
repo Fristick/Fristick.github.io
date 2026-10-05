@@ -18,7 +18,7 @@ class UAudioComponent;
 class UBRSaveGame;
 
 /** Pages du menu principal (Solo : choix du niveau parmi ceux deja explores de la partie choisie) */
-enum class EBRMenuPage : uint8 { Main, Solo, Multi, Join, Saves, NewSave };
+enum class EBRMenuPage : uint8 { Main, Solo, Multi, Join, Saves, NewSave, Language };
 
 UCLASS()
 class BACKROOMS_API ABRPlayerController : public APlayerController
@@ -156,6 +156,9 @@ public:
 	static bool IsHardwareRayTracingAvailable();
 	/** Profils : 0 Performance, 1 Qualite, 2 Cinematique */
 	static void ApplyGraphicsProfile(int32 Profile);
+	/** v4.8 : choisit la langue (indice dans BRLoc::Languages()), l'applique tout de suite et l'enregistre ; propre a
+	 *  cette machine (en coop, chacun la sienne : seuls des identifiants et des valeurs circulent) */
+	void ChooseLanguage(int32 Index);
 	/** v4.8 : resolution calculee avant l'agrandissement TSR (fenetre de jeu x pourcentage de rendu) */
 	static FIntPoint InternalResolution();
 	void AdjustSetting(int32 Index, int32 Direction);

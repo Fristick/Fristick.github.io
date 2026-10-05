@@ -1,4 +1,6 @@
 #include "BRSave.h"
+#include "BRLoc.h"
+#include "BRLevels.h"
 #include "Backrooms.h"
 
 #include "Kismet/GameplayStatics.h"
@@ -60,12 +62,15 @@ namespace BRSaves
 			return Map;
 		}
 		/** File protegee par QueueLock */
-		void AddFailure(int32 Slot, uint32 RequestId, const FString& Reason)
+		void AddFailure(int32 Slot, uint32 RequestId, const FString& Reason, EBRSaveError Error, const FString& File, int32 Version = 0)
 		{
 			FWriteFailure F;
 			F.Slot = Slot;
 			F.RequestId = RequestId;
 			F.Reason = Reason;
+			F.Error = Error;
+			F.File = File;
+			F.Version = Version;
 			F.When = FDateTime::Now();
 			Failures().Add(F);
 		}
@@ -92,7 +97,7 @@ namespace BRSaves
 
 		/** Fichier temporaire puis renommage : un arret brutal laisse l'ancien fichier entier, jamais un fichier coupe.
 		 *  v4.8 : OutReason dit quelle etape a echoue */
-		bool WriteFileAtomic(const FString& Name, const TArray<uint8>& Bytes, FString* OutReason = nullptr)
+		bool WriteFileAtomic(const FString& Name, const TArray<uint8>& Bytes, FString* OutReason = nullptr, EBRSaveError* OutError = nullptr)
 		{
 			const FString Path = PathOf(Name);
 			const FString Tmp = Path + TEXT(".tmp");
@@ -102,6 +107,10 @@ namespace BRSaves
 				{
 					*OutReason = FString::Printf(TEXT("ecriture de %s.tmp impossible (disque plein ou dossier protege)"), *Name);
 				}
+				if (OutError)
+				{
+					*OutError = EBRSaveError::TempWrite;
+				}
 				return false;
 			}
 			if (!IFileManager::Get().Move(*Path, *Tmp, true, true))
@@ -110,21 +119,35 @@ namespace BRSaves
 				{
 					*OutReason = FString::Printf(TEXT("remplacement de %s.sav impossible (fichier verrouille ?)"), *Name);
 				}
+				if (OutError)
+				{
+					*OutError = EBRSaveError::Replace;
+				}
 				return false;
 			}
 			return true;
 		}
 
 		/** Principal, puis secours : a tout instant l'un des deux est complet */
-		bool WriteBoth(int32 Slot, const TArray<uint8>& Bytes, FString* OutReason = nullptr)
+		bool WriteBoth(int32 Slot, const TArray<uint8>& Bytes, FString* OutReason = nullptr, EBRSaveError* OutError = nullptr, FString* OutFile = nullptr)
 		{
 			FString MainReason;
 			FString BackupReason;
-			const bool bMain = WriteFileAtomic(SlotName(Slot), Bytes, &MainReason);
-			const bool bBackup = WriteFileAtomic(BackupSlotName(Slot), Bytes, &BackupReason);
+			EBRSaveError MainError = EBRSaveError::TempWrite;
+			EBRSaveError BackupError = EBRSaveError::TempWrite;
+			const bool bMain = WriteFileAtomic(SlotName(Slot), Bytes, &MainReason, &MainError);
+			const bool bBackup = WriteFileAtomic(BackupSlotName(Slot), Bytes, &BackupReason, &BackupError);
 			if (OutReason)
 			{
 				*OutReason = !bMain ? MainReason : BackupReason;
+			}
+			if (OutError)
+			{
+				*OutError = !bMain ? MainError : BackupError;
+			}
+			if (OutFile)
+			{
+				*OutFile = !bMain ? SlotName(Slot) : BackupSlotName(Slot);
 			}
 			return bMain && bBackup;
 		}
@@ -164,12 +187,14 @@ namespace BRSaves
 					Queue().RemoveAt(0);
 				}
 				FString Reason;
-				const bool bOk = WriteBoth(Job.Slot, Job.Bytes, &Reason);
+				FString File;
+				EBRSaveError Error = EBRSaveError::TempWrite;
+				const bool bOk = WriteBoth(Job.Slot, Job.Bytes, &Reason, &Error, &File);
 				FScopeLock Lock(&QueueLock());
 				if (!bOk)
 				{
 					// v4.8 : l'echec reste jusqu'a son acquittement, avec l'emplacement et le numero de la demande
-					AddFailure(Job.Slot, Job.RequestId, Reason);
+					AddFailure(Job.Slot, Job.RequestId, Reason, Error, File);
 				}
 			}
 		}
@@ -189,8 +214,8 @@ namespace BRSaves
 				}
 				UE_LOG(LogBackrooms, Warning, TEXT("%s : format %d plus recent que ce jeu (%d) : fichier preserve, partie en lecture seule"),
 					*SlotName(Slot), Save->Version, UBRSaveGame::CurrentVersion);
-				Messages().Add(FString::Printf(TEXT("Partie \u00ab %s \u00bb : cr\u00e9\u00e9e par une version plus r\u00e9cente du jeu (format %d). ")
-					TEXT("Elle est conserv\u00e9e intacte et ne peut pas \u00eatre reprise ici."), *Save->SaveName, Save->Version));
+				Messages().Add(BRLoc::Fmt(NSLOCTEXT("BR", "Save.FutureFormat", "Partie \u00ab {Name} \u00bb : cr\u00e9\u00e9e par une version plus r\u00e9cente du jeu (format {Format}). Elle est conserv\u00e9e intacte et ne peut pas \u00eatre reprise ici."),
+					{ { TEXT("Name"), BRLoc::Arg(Save->SaveName) }, { TEXT("Format"), BRLoc::Int(Save->Version) } }));
 				return;
 			}
 			if (Save->Version == UBRSaveGame::CurrentVersion)
@@ -202,11 +227,31 @@ namespace BRSaves
 			{
 				FFileHelper::SaveArrayToFile(OriginalBytes, *PathOf(Legacy));
 			}
-			// Format 1 : ni graine ni position. Inventaire, journal, niveaux explores et temps de jeu sont gardes ;
-			// le prochain niveau charge sera une disposition neuve (comme en v4.6).
-			Save->Session = FBRSessionState();
-			Save->bPendingDeath = false;
-			Save->PendingDeathLevel = 0;
+			if (Save->LoadedVersion < 2)
+			{
+				// Format 1 : ni graine ni position. Inventaire, journal, niveaux explores et temps de jeu sont gardes ;
+				// le prochain niveau charge sera une disposition neuve (comme en v4.6).
+				Save->Session = FBRSessionState();
+				Save->bPendingDeath = false;
+				Save->PendingDeathLevel = 0;
+			}
+			if (Save->LoadedVersion < 3)
+			{
+				// Formats 1 et 2 : le journal gardait le texte francais des notes ; v4.8 : leur identifiant (le texte suit la
+				// langue). Un texte inconnu (note d'une version retiree) reste tel quel et s'affiche comme avant
+				int32 Converted = 0;
+				for (FString& Entry : Save->Notes)
+				{
+					const FName Id = BRLevels::NoteIdFromLegacyText(Entry);
+					if (!Id.IsNone())
+					{
+						Entry = Id.ToString();
+						++Converted;
+					}
+				}
+				UE_LOG(LogBackrooms, Log, TEXT("%s : journal converti en identifiants (%d / %d notes reconnues)"), *SlotName(Slot), Converted,
+					Save->Notes.Num());
+			}
 			Save->Version = UBRSaveGame::CurrentVersion;
 			UE_LOG(LogBackrooms, Log, TEXT("%s : sauvegarde au format %d migree vers le format %d (copie d'origine : %s.sav)"), *SlotName(Slot),
 				Save->LoadedVersion, UBRSaveGame::CurrentVersion, *Legacy);
@@ -296,8 +341,8 @@ namespace BRSaves
 				Save->bRecovered = true;
 				Bytes = MoveTemp(BackupBytes);
 				UE_LOG(LogBackrooms, Warning, TEXT("%s illisible : partie reprise depuis la copie de secours"), *Main);
-				Messages().Add(FString::Printf(TEXT("Partie \u00ab %s \u00bb : fichier principal illisible, reprise depuis la copie de secours."),
-					*Save->SaveName));
+				Messages().Add(BRLoc::Fmt(NSLOCTEXT("BR", "Save.RestoredFromBackup", "Partie \u00ab {Name} \u00bb : fichier principal illisible, reprise depuis la copie de secours."),
+					{ { TEXT("Name"), BRLoc::Arg(Save->SaveName) } }));
 			}
 		}
 		if (!Save)
@@ -313,8 +358,8 @@ namespace BRSaves
 				IFileManager::Get().Move(*PathOf(Aside + TEXT("_Secours")), *PathOf(Backup), true, true);
 			}
 			UE_LOG(LogBackrooms, Error, TEXT("%s illisible, sans copie de secours valide : mise de cote sous %s.sav"), *Main, *Aside);
-			Messages().Add(FString::Printf(TEXT("Emplacement %d : sauvegarde illisible. Le fichier est gard\u00e9 \u00e0 part (Saved/SaveGames/%s.sav) et l'emplacement est libre."),
-				Slot + 1, *Aside));
+			Messages().Add(BRLoc::Fmt(NSLOCTEXT("BR", "Save.Unreadable", "Emplacement {Slot} : sauvegarde illisible. Le fichier est gard\u00e9 \u00e0 part (Saved/SaveGames/{File}.sav) et l'emplacement est libre."),
+				{ { TEXT("Slot"), BRLoc::Int(Slot + 1) }, { TEXT("File"), BRLoc::Arg(Aside) } }));
 			return nullptr;
 		}
 		Migrate(Save, Slot, Bytes);
@@ -333,7 +378,8 @@ namespace BRSaves
 				return false;
 			}
 			const int32 Version = Future ? *Future : Save->LoadedVersion;
-			AddFailure(Slot, RequestId, FString::Printf(TEXT("partie d'un format plus recent (%d) : reecriture refusee, fichier preserve"), Version));
+			AddFailure(Slot, RequestId, FString::Printf(TEXT("partie d'un format plus recent (%d) : reecriture refusee, fichier preserve"), Version),
+				EBRSaveError::FutureFormat, SlotName(Slot), Version);
 			UE_LOG(LogBackrooms, Warning, TEXT("%s : format %d plus recent que ce jeu : ecriture refusee"), *SlotName(Slot), Version);
 			return true;
 		}
@@ -358,11 +404,13 @@ namespace BRSaves
 		}
 		Flush(); // les ecritures deja demandees passent avant
 		FString Reason;
-		const bool bOk = WriteBoth(Slot, Bytes, &Reason);
+		FString File;
+		EBRSaveError Error = EBRSaveError::TempWrite;
+		const bool bOk = WriteBoth(Slot, Bytes, &Reason, &Error, &File);
 		if (!bOk)
 		{
 			FScopeLock Lock(&QueueLock());
-			AddFailure(Slot, RequestId, Reason);
+			AddFailure(Slot, RequestId, Reason, Error, File);
 			UE_LOG(LogBackrooms, Warning, TEXT("Echec de l'ecriture de la sauvegarde %s (demande %u) : %s"), *SlotName(Slot), RequestId, *Reason);
 		}
 		return bOk;
@@ -523,13 +571,21 @@ namespace BRSaves
 		const int32 Minutes = FMath::FloorToInt(FMath::Max(0.f, Seconds) / 60.f);
 		if (Minutes < 60)
 		{
-			return FString::Printf(TEXT("%d min"), Minutes);
+			return BRLoc::Fmt(NSLOCTEXT("BR", "Save.PlayTimeMinutes", "{Minutes} min"), { { TEXT("Minutes"), BRLoc::Int(Minutes) } });
 		}
-		return FString::Printf(TEXT("%d h %02d"), Minutes / 60, Minutes % 60);
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Save.PlayTimeHours", "{Hours} h {Minutes}"), { { TEXT("Hours"), BRLoc::Int(Minutes / 60) },
+			{ TEXT("Minutes"), BRLoc::Pad(Minutes % 60, 2) } });
 	}
 
 	FString FormatDate(const FDateTime& Date)
 	{
-		return FString::Printf(TEXT("%02d/%02d/%04d %02d:%02d"), Date.GetDay(), Date.GetMonth(), Date.GetYear(), Date.GetHour(), Date.GetMinute());
+		// v4.8 : date et heure au format de la langue (04/10/2026 22:54, 10/4/26 10:54 PM, 2026/10/04 22:54...) ; l'heure
+		// enregistree est deja locale : pas de conversion de fuseau
+		return FText::AsDateTime(Date, EDateTimeStyle::Short, EDateTimeStyle::Short, FText::GetInvariantTimeZone()).ToString();
+	}
+
+	FString FormatDay(const FDateTime& Date)
+	{
+		return FText::AsDate(Date, EDateTimeStyle::Medium, FText::GetInvariantTimeZone()).ToString();
 	}
 }

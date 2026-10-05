@@ -30,6 +30,7 @@ public:
 
 	EBRItem Item = EBRItem::AlmondWater;
 	uint64 Id = 0;
+	/** v4.8 : identifiant de la note (Note.L0.3) : chaque joueur la lit dans sa langue */
 	FString NoteText;
 
 protected:

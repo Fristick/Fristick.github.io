@@ -7,6 +7,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Internationalization/Text.h"
+#include <initializer_list>
 
 /** FText mis en cache a ce site d'appel (constante de localisation : NSLOCTEXT, INVTEXT) */
 #define BR_CACHED(...) ([]() -> const FText& { static const FText BRCachedText = __VA_ARGS__; return BRCachedText; }())
@@ -15,6 +17,25 @@
 
 namespace BRLoc
 {
+	// ---- Arguments nommes de FText::Format (le motif traduit place lui-meme les valeurs : {Name}, {Count}...) ----
+	/** Texte deja compose (nom de partie, nom de joueur, touche) : insere tel quel */
+	inline FFormatArgumentValue Arg(const FString& S) { return FFormatArgumentValue(FText::AsCultureInvariant(S)); }
+	inline FFormatArgumentValue Arg(const TCHAR* S) { return FFormatArgumentValue(FText::AsCultureInvariant(FString(S))); }
+	/** Texte localise (nom d'entite, de niveau, d'objet) : suit la langue */
+	inline FFormatArgumentValue Arg(const FText& T) { return FFormatArgumentValue(T); }
+	/** Entier, avec les separateurs de la langue (pluriels : {Count}|plural(one=...,other=...)) */
+	inline FFormatArgumentValue Int(int64 V) { return FFormatArgumentValue(V); }
+	/** Nombre a Digits decimales, au format de la langue (virgule ou point) */
+	BACKROOMS_API FFormatArgumentValue Num(double V, int32 Digits);
+	/** Meme chose avec le signe + devant les valeurs positives */
+	BACKROOMS_API FFormatArgumentValue Signed(double V, int32 Digits);
+	/** Entier complete par des zeros (horloges : 04:07) */
+	BACKROOMS_API FFormatArgumentValue Pad(int64 V, int32 Width);
+	/** Compose Pattern (FText localise, arguments nommes) en FString pour le dessin du HUD */
+	BACKROOMS_API FString Fmt(const FText& Pattern, std::initializer_list<TPair<const TCHAR*, FFormatArgumentValue>> Args);
+	/** Meme chose en FText (texte compose qui reste un argument d'un autre motif) */
+	BACKROOMS_API FText FmtText(const FText& Pattern, std::initializer_list<TPair<const TCHAR*, FFormatArgumentValue>> Args);
+
 	/** Une langue proposee */
 	struct FLanguage
 	{
@@ -46,6 +67,15 @@ namespace BRLoc
 	/** Cles sans traduction dans la langue courante (le texte francais est affiche) : recensees au changement de langue
 	 *  (journal LogBackrooms, mode developpeur, tests) ; jamais de texte vide */
 	BACKROOMS_API int32 CountMissing(TArray<FString>* OutKeys = nullptr);
-	/** Le texte d'une cle (namespace BR) dans la langue courante, si elle est traduite ; nullptr sinon */
+	/** La cle (namespace BR) a une traduction dans la langue courante (fournie par un .locres) */
 	BACKROOMS_API bool HasTranslation(const TCHAR* Key);
+	/** Nombre de textes du jeu (cles du namespace BR) */
+	BACKROOMS_API int32 KeyCount();
+	/** Traduction relue par une personne qui parle la langue (DefaultGame.ini, [/Script/Backrooms.BRLocalization]
+	 *  +ReviewedCultures=<code>) ; sinon traduction produite automatiquement, a relire. Le francais est la source. */
+	BACKROOMS_API bool IsReviewed(const FString& Code);
+	/** Au demarrage : langue enregistree, sinon celle du systeme, sinon l'anglais */
+	BACKROOMS_API void ApplyStartupLanguage();
+	/** Enregistre le choix du joueur (fichier de reglages, propre a chaque machine : chacun sa langue en coop) */
+	BACKROOMS_API void SavePreference(const FString& Code);
 }

@@ -10,33 +10,33 @@ namespace
 	struct FActionDef
 	{
 		const TCHAR* Id;      // nom dans GameUserSettings.ini
-		const TCHAR* Label;   // libelle affiche
+		FText Label;          // libelle affiche (v4.8 : localise)
 	};
 
 	const FActionDef& Def(EBRAction Action)
 	{
 		static const FActionDef Defs[] = {
-			{ TEXT("MoveForward"), TEXT("AVANCER") },
-			{ TEXT("MoveBackward"), TEXT("RECULER") },
-			{ TEXT("MoveLeft"), TEXT("ALLER \u00c0 GAUCHE") },
-			{ TEXT("MoveRight"), TEXT("ALLER \u00c0 DROITE") },
-			{ TEXT("Jump"), TEXT("SAUTER / REMONTER (NAGE)") },
-			{ TEXT("Sprint"), TEXT("COURIR / NAGER VITE") },
-			{ TEXT("Crouch"), TEXT("S'ACCROUPIR / PLONGER") },
-			{ TEXT("Interact"), TEXT("INTERAGIR / RAMASSER") },
-			{ TEXT("Flashlight"), TEXT("LAMPE") },
-			{ TEXT("NightVision"), TEXT("VISION NOCTURNE") },
-			{ TEXT("Inventory"), TEXT("INVENTAIRE") },
-			{ TEXT("Pocket1"), TEXT("POCHE 1") },
-			{ TEXT("Pocket2"), TEXT("POCHE 2") },
-			{ TEXT("Pocket3"), TEXT("POCHE 3") },
-			{ TEXT("Pocket4"), TEXT("POCHE 4") },
-			{ TEXT("Drink"), TEXT("BOIRE DE L'EAU D'AMANDE") },
-			{ TEXT("Bandage"), TEXT("METTRE UN BANDAGE") },
-			{ TEXT("Battery"), TEXT("CHANGER LES PILES") },
-			{ TEXT("ThirdPerson"), TEXT("VUE \u00c0 LA 3E PERSONNE") },
-			{ TEXT("Pause"), TEXT("PAUSE") },
-			{ TEXT("PushToTalk"), TEXT("PARLER (CHAT VOCAL)") },
+			{ TEXT("MoveForward"), NSLOCTEXT("BR", "Key.Action.MoveForward", "AVANCER") },
+			{ TEXT("MoveBackward"), NSLOCTEXT("BR", "Key.Action.MoveBackward", "RECULER") },
+			{ TEXT("MoveLeft"), NSLOCTEXT("BR", "Key.Action.MoveLeft", "ALLER \u00c0 GAUCHE") },
+			{ TEXT("MoveRight"), NSLOCTEXT("BR", "Key.Action.MoveRight", "ALLER \u00c0 DROITE") },
+			{ TEXT("Jump"), NSLOCTEXT("BR", "Key.Action.Jump", "SAUTER / REMONTER (NAGE)") },
+			{ TEXT("Sprint"), NSLOCTEXT("BR", "Key.Action.Sprint", "COURIR / NAGER VITE") },
+			{ TEXT("Crouch"), NSLOCTEXT("BR", "Key.Action.Crouch", "S'ACCROUPIR / PLONGER") },
+			{ TEXT("Interact"), NSLOCTEXT("BR", "Key.Action.Interact", "INTERAGIR / RAMASSER") },
+			{ TEXT("Flashlight"), NSLOCTEXT("BR", "Key.Action.Flashlight", "LAMPE") },
+			{ TEXT("NightVision"), NSLOCTEXT("BR", "Key.Action.NightVision", "VISION NOCTURNE") },
+			{ TEXT("Inventory"), NSLOCTEXT("BR", "Key.Action.Inventory", "INVENTAIRE") },
+			{ TEXT("Pocket1"), NSLOCTEXT("BR", "Key.Action.Pocket1", "POCHE 1") },
+			{ TEXT("Pocket2"), NSLOCTEXT("BR", "Key.Action.Pocket2", "POCHE 2") },
+			{ TEXT("Pocket3"), NSLOCTEXT("BR", "Key.Action.Pocket3", "POCHE 3") },
+			{ TEXT("Pocket4"), NSLOCTEXT("BR", "Key.Action.Pocket4", "POCHE 4") },
+			{ TEXT("Drink"), NSLOCTEXT("BR", "Key.Action.Drink", "BOIRE DE L'EAU D'AMANDE") },
+			{ TEXT("Bandage"), NSLOCTEXT("BR", "Key.Action.Bandage", "METTRE UN BANDAGE") },
+			{ TEXT("Battery"), NSLOCTEXT("BR", "Key.Action.Battery", "CHANGER LES PILES") },
+			{ TEXT("ThirdPerson"), NSLOCTEXT("BR", "Key.Action.ThirdPerson", "VUE \u00c0 LA 3E PERSONNE") },
+			{ TEXT("Pause"), NSLOCTEXT("BR", "Key.Action.Pause", "PAUSE") },
+			{ TEXT("PushToTalk"), NSLOCTEXT("BR", "Key.Action.PushToTalk", "PARLER (CHAT VOCAL)") },
 		};
 		static_assert(UE_ARRAY_COUNT(Defs) == static_cast<int32>(EBRAction::Count), "Une ligne par action");
 		return Defs[FMath::Clamp(static_cast<int32>(Action), 0, static_cast<int32>(EBRAction::Count) - 1)];
@@ -82,7 +82,7 @@ namespace BRKeys
 
 	FString ActionLabel(EBRAction Action)
 	{
-		return Def(Action).Label;
+		return Def(Action).Label.ToString();
 	}
 
 	FKey GetKey(EBRAction Action, int32 Slot)
