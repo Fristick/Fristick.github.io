@@ -21,3 +21,4 @@ Tools/SourceModels/
 Content/Backrooms/
 # Copies faites avant de regenerer un fichier protege (Tools/protect_assets.py)
 RawAssets/_Backup/
+Tools/Localization/.fonts_cache/

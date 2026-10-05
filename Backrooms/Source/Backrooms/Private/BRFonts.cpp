@@ -23,6 +23,31 @@ namespace
 		return FInt32Range(FInt32Range::BoundsType::Inclusive(First), FInt32Range::BoundsType::Inclusive(Last));
 	}
 
+	/** Plages sans un caractere : il passe a la sous-police suivante (ideogramme absent d'une police propre a une langue) */
+	TArray<FInt32Range> Without(const TArray<FInt32Range>& Ranges, int32 Codepoint)
+	{
+		TArray<FInt32Range> Out;
+		for (const FInt32Range& R : Ranges)
+		{
+			const int32 Lo = R.GetLowerBoundValue();
+			const int32 Hi = R.GetUpperBoundValue();
+			if (Codepoint < Lo || Codepoint > Hi)
+			{
+				Out.Add(R);
+				continue;
+			}
+			if (Codepoint > Lo)
+			{
+				Out.Add(Span(Lo, Codepoint - 1));
+			}
+			if (Codepoint < Hi)
+			{
+				Out.Add(Span(Codepoint + 1, Hi));
+			}
+		}
+		return Out;
+	}
+
 	const TArray<FScriptFont>& ScriptFonts()
 	{
 		// Ideogrammes, ponctuation et formes pleine chasse communs aux langues CJK
@@ -41,11 +66,14 @@ namespace
 			}
 			return Out;
 		};
+		// \u7B80 (premier caractere de \u7B80\u4F53\u4E2D\u6587, nom natif du chinois simplifie) manque aux polices TC et JP : il
+		// passe a la police SC. Tools/Localization/build_fonts.py signale tout autre caractere des noms natifs absent.
+		const TArray<FInt32Range> HanNoSimplified = Without(Han, 0x7B80);
 		static const TArray<FScriptFont> List = {
-			// Propres a une langue : les ideogrammes y prennent la forme locale
-			{ TEXT("NotoSansJP-Regular.ttf"), TEXT("NotoSansJP-Bold.ttf"), TEXT("ja"), Join({ &Han, &Kana }) },
-			{ TEXT("NotoSansKR-Regular.ttf"), TEXT("NotoSansKR-Bold.ttf"), TEXT("ko"), Join({ &Han, &Hangul }) },
-			{ TEXT("NotoSansTC-Regular.ttf"), TEXT("NotoSansTC-Bold.ttf"), TEXT("zh-Hant;zh-TW;zh-HK;zh-MO"), Join({ &Han, &Bopomofo }) },
+			// Propres a une langue : les ideogrammes y prennent la forme locale (le coreen garde les ideogrammes de la police SC,
+			// rares dans l'interface ; sa police couvre le hangeul)
+			{ TEXT("NotoSansJP-Regular.ttf"), TEXT("NotoSansJP-Bold.ttf"), TEXT("ja"), Join({ &HanNoSimplified, &Kana }) },
+			{ TEXT("NotoSansTC-Regular.ttf"), TEXT("NotoSansTC-Bold.ttf"), TEXT("zh-Hant;zh-TW;zh-HK;zh-MO"), Join({ &HanNoSimplified, &Bopomofo }) },
 			// Pour toutes les langues
 			{ TEXT("NotoSansSC-Regular.ttf"), TEXT("NotoSansSC-Bold.ttf"), TEXT(""), Join({ &Han, &Bopomofo }) },
 			{ TEXT("NotoSansJP-Regular.ttf"), TEXT("NotoSansJP-Bold.ttf"), TEXT(""), Kana },
