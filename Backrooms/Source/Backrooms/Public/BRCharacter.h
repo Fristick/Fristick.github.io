@@ -50,6 +50,11 @@ struct FBRDeathState
 	/** Nom du coequipier qui l'a releve */
 	UPROPERTY()
 	FString By;
+
+	/** v4.8 : entite qui a porte le coup mortel (EBREntityKind, -1 : aucune). Le nom est compose par chaque machine dans
+	 *  sa propre langue (aucun texte ne circule) */
+	UPROPERTY()
+	int8 Killer = -1;
 };
 
 UCLASS()
@@ -123,7 +128,7 @@ public:
 	/** Etat de mort tenu par le serveur (replique a toutes les machines) */
 	const FBRDeathState& GetDeathState() const { return DeathState; }
 	/** v4.7, serveur : fixe l'etat de mort (valide) et le replique ; Event : 1 mort, 2 releve, 3 reveille */
-	void ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint8 Event, const FString& By = FString());
+	void ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint8 Event, const FString& By = FString(), int8 InKiller = -1);
 
 	/** v4.4, mode developpeur : vol libre a travers les murs (regard pour diriger, Saut pour monter, Course pour accelerer) */
 	void SetDevFly(bool bFly);
@@ -177,7 +182,8 @@ public:
 	FVector GetViewDirection() const;
 	/** Rotation de visee : celle du controleur, ou la visee repliquee pour le pion d'un autre joueur */
 	FRotator GetAimRotation() const;
-	const FString& GetKilledBy() const { return KilledBy; }
+	/** v4.8 : entite qui a tue (EBREntityKind, -1 : aucune) */
+	int8 GetKillerKind() const { return KillerKind; }
 	float GetDeathTime() const { return DeathTime; }
 	float GetDamageFlash() const { return DamageFlash; }
 	float GetChaseLevel() const { return ChaseLevel; }
@@ -186,8 +192,10 @@ public:
 	float GetHealthTrend() const { return HealthTrend; }
 	float GetStaminaTrend() const { return StaminaTrend; }
 
-	/** Attaque d'une entite (degats de sante et de sante mentale) */
-	void ReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName);
+	/** Attaque d'une entite (degats de sante et de sante mentale).
+	 *  v4.8 : decidee par le serveur seul : il retire la sante (armure comprise), decide si le coup tue, puis envoie au
+	 *  joueur touche l'effet du coup avec sa nouvelle sante (aucune double application). Ignoree sur un client. */
+	void ReceiveAttack(float Damage, float SanityDamage, AActor* Source);
 	/** Pression mentale continue (entite proche, obscurite...) en points par seconde */
 	void AddSanityPressure(float PointsPerSecond) { SanityPressure += PointsPerSecond; }
 	/** Une entite poursuit le joueur (musique de poursuite) */
@@ -286,9 +294,24 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerReportRespawn();
 
-	/** Une entite (simulee par le serveur) frappe ce joueur : les degats sont appliques chez lui */
+	/** v4.8 : effet d'un coup decide par le serveur (secousse, son, jumpscare) et sante qui en resulte, a appliquer telle
+	 *  quelle. SourceKind : EBREntityKind de l'entite (-1 : autre) ; Serial : numero du coup (accuse dans ServerSyncVitals) */
 	UFUNCTION(Client, Reliable)
-	void ClientReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName);
+	void ClientHitFeedback(float Damage, float SanityDamage, AActor* Source, int8 SourceKind, float NewHealth, uint16 Serial, bool bLethal);
+
+	/** v4.8 : le proprietaire envoie sa sante (soins, noyade, folie, recuperation) au serveur, avec le dernier coup recu ;
+	 *  un envoi anterieur au dernier coup est ignore (il effacerait ce coup), une hausse est plafonnee */
+	UFUNCTION(Server, Unreliable, WithValidation)
+	void ServerSyncVitals(float InHealth, uint16 AckSerial);
+
+	/** v4.8 : soin par un objet (eau d'amande, bandage) : le serveur ajoute le soin connu de l'objet, au plus une fois par
+	 *  seconde */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerUseHeal(uint8 Item);
+
+	/** v4.8 : reveil refuse par le serveur (trop tot pour cette cause) : le joueur reste a terre le temps restant */
+	UFUNCTION(Client, Reliable)
+	void ClientRespawnDenied(float Remaining);
 
 	UFUNCTION()
 	void OnRep_DeathState();
@@ -353,8 +376,32 @@ private:
 	 *  frappe d'entite recue (une mort par blessure sans frappe recente est notee dans le journal) */
 	float ServerDeathTime = -100.f;
 	float ServerLastHitTime = -100.f;
+	/** v4.8, serveur : un coequipier vivant existait-il a la mort (le delai de reanimation s'applique alors) ? */
+	bool bServerTeammateAtDeath = false;
+
+	// ---- v4.8 : sante decidee par le serveur ----
+	/** Numero du dernier coup applique par le serveur, et du dernier coup recu (proprietaire) */
+	uint16 HitSerial = 0;
+	uint16 AckHitSerial = 0;
+	/** Serveur : coup mortel recu, mort officielle a la fin du jumpscare (ou du delai de secours) */
+	bool bServerDying = false;
+	float ServerDyingTimer = 0.f;
+	int8 ServerDyingKiller = -1;
+	/** Serveur : dernier envoi de sante accepte et dernier soin par objet */
+	float ServerLastVitalsTime = -100.f;
+	float ServerLastHealTime = -100.f;
+	/** Proprietaire : envoi periodique de la sante */
+	float VitalsSyncTimer = 0.f;
+	float LastSentHealth = 100.f;
+	/** Effet local d'un coup (proprietaire) : sante du serveur, secousse, son, jumpscare, mort si le coup est mortel */
+	void ApplyHitFeedback(float Damage, float SanityDamage, AActor* Source, int8 SourceKind, float NewHealth, bool bLethal);
+	/** Serveur : temps minimal avant un reveil au point de depart, selon la cause (meme regle que le client) */
+	float MinRespawnDelay() const;
+	/** Serveur : la reanimation est-elle encore possible (cause relevable, delai pas ecoule) ? */
+	bool ServerCanStillRevive() const;
+	void TickServerVitals(float Dt);
 	/** Mort avec sa cause (v4.7) : chaque appelant dit pourquoi */
-	void DieOf(EBRDeathCause Cause, const FString& By, AActor* Killer);
+	void DieOf(EBRDeathCause Cause, int8 InKiller, AActor* Killer);
 
 	/** v4.6 : chute dans une fosse : le corps continue de tomber, pas de reanimation */
 	void FallDeath();
@@ -376,7 +423,7 @@ private:
 	void EndJumpscare();
 	TWeakObjectPtr<ABREntity> ScareEntity;
 	TWeakObjectPtr<AActor> ScareKiller;
-	FString ScareKillerName;
+	int8 ScareKillerKind = -1;
 	int32 ScareKind = -1;
 	float ScareTime = 0.f;
 	float ScareDur = 0.f;
@@ -469,6 +516,7 @@ private:
 	FString FocusPrompt;
 	TWeakObjectPtr<AActor> FocusActor;
 	FString OpenNote;
-	FString KilledBy;
+	/** v4.8 : entite qui a tue (EBREntityKind, -1 : aucune) ; son nom est compose a l'affichage, dans la langue choisie */
+	int8 KillerKind = -1;
 	TWeakObjectPtr<AActor> KillerActor;
 };

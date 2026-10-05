@@ -17,6 +17,7 @@ class USoundAttenuation;
 class UTexture;
 class UTexture2D;
 class UMeshComponent;
+enum class EBRMasterMaterial : uint8;
 
 UCLASS()
 class BACKROOMS_API UBRAssets : public UWorldSubsystem
@@ -68,6 +69,21 @@ public:
 	void ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColor>* TintOverrides = nullptr,
 		bool bUniqueGlow = false, TArray<UMaterialInstanceDynamic*>* OutGlow = nullptr, float GlowScale = 1.f, bool bPowered = false);
 
+	/**
+	 * v4.8 : affectation explicite des slots d'un modele (combinaison du joueur) : nom de slot -> style (SlotStyles).
+	 * Le nom est compare exactement, puis par inclusion (suffixe ajoute par l'import) ; jamais par indice. Un slot
+	 * inattendu recoit le materiau d'erreur (magenta hors Shipping) et est signale (GetMaterialProblems).
+	 */
+	void ApplySlotMap(UMeshComponent* Comp, const TArray<TPair<FString, FString>>& SlotStylesByName, const FString& Label);
+	/** v4.8 : une ligne par section (LOD, section, slot, materiau final, parent, texture, usage, secours) ; les sections
+	 *  sans usage "squelette" ou en materiau de secours sont aussi signalees comme problemes */
+	TArray<FString> DescribeSections(UMeshComponent* Comp, const FString& Label);
+	/** v4.8 : materiau visible des erreurs d'affectation (magenta en developpement, gris neutre en Shipping) */
+	UMaterialInterface* ErrorMaterial();
+	/** v4.8 : problemes de materiaux constates (usage absent, slot inattendu, secours) : journal, mode developpeur, tests */
+	static void ReportMaterialProblem(const FString& Problem);
+	static const TArray<FString>& GetMaterialProblems();
+
 	/** Intensite des neons alimentes par le secteur (0 = coupure de courant) */
 	void SetGlowScale(float Scale);
 
@@ -101,6 +117,8 @@ private:
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);
 	UMaterialInterface* Parent(EParent Which);
+	/** v4.8 : le materiau maitre declare-t-il ses usages ? Editeur : ajoutes en memoire ; sinon signale. */
+	bool EnsureUsages(UMaterialInterface* M, EBRMasterMaterial Kind, const TCHAR* AssetName);
 	UMaterialInterface* FallbackParent();
 	/** Nouveau materiau de surface (parametres remplis), sans passer par le cache */
 	UMaterialInstanceDynamic* CreateSurface(const FBRSurface& S, UObject* Outer);

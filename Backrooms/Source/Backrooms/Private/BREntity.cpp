@@ -1728,7 +1728,7 @@ void ABREntity::UpdateAttack(float Dt)
 				bAttackLanded = true;
 				++StatHits;
 				StatLastHitDelay = Life - AttackStartTime;
-				V->ReceiveAttack(I.Damage, I.SanityDamage, this, I.Name);
+				V->ReceiveAttack(I.Damage, I.SanityDamage, this);
 			}
 		}
 		if (AttackPhaseTime >= 0.05f + I.ImpactWindow)

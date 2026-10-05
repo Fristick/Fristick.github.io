@@ -151,9 +151,21 @@ public:
 	bool bRecovered = false;
 	/** Format lu sur le disque avant migration ; non enregistre */
 	int32 LoadedVersion = CurrentVersion;
+	/** v4.8 : fichier d'un format plus recent que ce jeu : lecture seule (ni reprise, ni reecriture) ; non enregistre */
+	bool bFutureFormat = false;
 
 	bool IsExplored(int32 Level) const { return Explored.Contains(Level); }
 	void MarkExplored(int32 Level) { Explored.AddUnique(Level); }
+};
+
+/** v4.8 : ecriture de sauvegarde echouee, gardee jusqu'a son acquittement */
+struct FWriteFailure
+{
+	int32 Slot = INDEX_NONE;
+	/** Numero de la demande d'ecriture (croissant) */
+	uint32 RequestId = 0;
+	FString Reason;
+	FDateTime When;
 };
 
 namespace BRSaves
@@ -172,15 +184,22 @@ namespace BRSaves
 	 *  illisibles -> le fichier est mis de cote (UnreadableSlotName) et signale par TakeLoadMessages ; ancien format ->
 	 *  migre en memoire (une copie intacte est gardee sous LegacySlotName) */
 	BACKROOMS_API UBRSaveGame* Load(int32 Slot);
-	/** Ecriture immediate (attend aussi les ecritures en cours) */
+	/** Ecriture immediate (attend aussi les ecritures en cours). v4.8 : refusee (false, echec garde) si l'emplacement
+	 *  contient une partie d'un format plus recent */
 	BACKROOMS_API bool Write(int32 Slot, UBRSaveGame* Save);
 	/** v4.7 : instantane serialise tout de suite (thread du jeu), fichier ecrit sur un thread de fond.
 	 *  Les ecritures se font dans l'ordre des appels. false si l'instantane n'a pas pu etre fait */
-	BACKROOMS_API bool WriteAsync(int32 Slot, UBRSaveGame* Save);
+	BACKROOMS_API bool WriteAsync(int32 Slot, UBRSaveGame* Save, uint32* OutRequestId = nullptr);
 	/** v4.7 : attend la fin de toutes les ecritures en cours (fermeture du jeu, retour au menu) */
 	BACKROOMS_API void Flush();
-	/** v4.7 : resultat de la derniere ecriture terminee (false : echec signale au joueur) */
+	/** v4.7 : false tant qu'un echec d'ecriture n'est pas acquitte (v4.8 : une reussite suivante ne l'efface plus) */
 	BACKROOMS_API bool LastWriteSucceeded();
+	/** v4.8 : echecs d'ecriture non acquittes (emplacement, numero de demande, raison) */
+	BACKROOMS_API TArray<FWriteFailure> PendingFailures();
+	/** v4.8 : acquitte les echecs jusqu'a cette demande (incluse), une fois montres au joueur */
+	BACKROOMS_API void AcknowledgeFailures(uint32 UpToRequestId);
+	/** v4.8 : format du fichier de cet emplacement s'il est plus recent que ce jeu (0 sinon) : lecture seule */
+	BACKROOMS_API int32 FutureFormatOf(int32 Slot);
 	/** v4.7 : messages pour le joueur depuis le dernier appel (sauvegarde restauree, fichier illisible mis de cote) */
 	BACKROOMS_API TArray<FString> TakeLoadMessages();
 	BACKROOMS_API void Delete(int32 Slot);

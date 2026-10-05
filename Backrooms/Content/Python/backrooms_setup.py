@@ -7,6 +7,11 @@ On peut aussi le relancer a la main depuis l'Output Log (onglet "Python") :
 
     import backrooms_setup; backrooms_setup.run(force=True)
 
+v4.8 : validation et reparation ciblee (rejouables, sans tout reimporter) :
+
+    import backrooms_setup; backrooms_setup.validate(verbose=True)   # Saved/BackroomsSetup_Validation.txt
+    import backrooms_setup; backrooms_setup.repair()                 # ne refait que ce qui manque
+
 Il importe :
   RawAssets/Textures/*.jpg|png  -> /Game/Backrooms/Textures   (les *_N sont des normal maps)
   RawAssets/Icons/*.png         -> /Game/Backrooms/UI         (icones de l'inventaire)
@@ -24,8 +29,10 @@ import unreal
 VERSION = 10
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
-# v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles)
-MATERIAL_VERSION = 6
+# v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles,
+# v4.8 : usages "maillage a squelette" et "Nanite" sur M_BR_Mesh et M_BR_Skin : sans eux, la combinaison du joueur et les
+# entites SK_* recevaient le materiau par defaut, gris et sans texture, en jeu autonome et en paquet)
+MATERIAL_VERSION = 7
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"]}
 # Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
@@ -41,6 +48,29 @@ MESH = ROOT + "/Meshes"
 MAT = ROOT + "/Materials"
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
 MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade")
+# v4.8 : usages que chaque materiau maitre doit declarer (meme liste que BRMaterialBuilder::RequiredUsages en C++)
+_MODEL_USAGES = ("used_with_instanced_static_meshes", "used_with_skeletal_mesh", "used_with_nanite")
+USAGES = {
+    "M_BR_World": ("used_with_instanced_static_meshes",),
+    "M_BR_Mesh": _MODEL_USAGES,
+    "M_BR_Skin": _MODEL_USAGES,
+    "M_BR_WaterSurface": ("used_with_instanced_static_meshes",),
+    "M_BR_PitShade": (),
+}
+# v4.8 : slots attendus apres l'import de chaque maillage a squelette (noms des materiaux du FBX) : la validation
+# signale un slot renomme par l'importeur (le jeu affecte les materiaux par nom, jamais par indice)
+EXPECTED_SLOTS = {
+    "SK_Hazmat": ("HazmatMask", "HazmatGlass", "HazmatSuit"),
+    "SK_Faceling": ("FacelingTex",),
+    "SK_Partygoer": ("PartygoerTex",),
+    "SK_SkinStealer": ("SkinStealerFlesh", "EyeDark", "StealerEye", "StealerClaw"),
+    "SK_Hound": ("HoundSkin", "HoundMouth", "HoundTeeth", "HoundHair", "HoundFace", "GlowAmberEye", "EyeDark", "HoundTongue"),
+    "SK_HoundLite": ("HoundSkin", "HoundMouth", "HoundTeeth", "HoundHair", "HoundFace", "GlowAmberEye", "EyeDark", "HoundTongue"),
+    "SK_Wretch": ("WretchSkin", "WretchTeeth", "WretchEye"),
+    "SK_Clump": ("ClumpSkin", "ClumpTeeth"),
+}
+# v4.8 : textures dont la combinaison du joueur depend (taille minimale attendue apres import)
+HAZMAT_TEXTURES = ("T_Hazmat_Suit", "T_Hazmat_Mask")
 # Materiaux des versions precedentes, supprimes a la mise a jour (l'eau "Single Layer Water" a disparu en v7)
 OBSOLETE_MATERIALS = ("M_BR_Water",)
 
@@ -620,7 +650,9 @@ def new_material(name):
         EAL.delete_asset(path)
     m = tools().create_asset(name, MAT, unreal.Material, unreal.MaterialFactoryNew())
     # Le monde est construit en instances (murs, sols, accessoires) : sans ce drapeau, materiau par defaut !
-    safe_set(m, "used_with_instanced_static_meshes", True)
+    # v4.8 : les modeles aussi sont des maillages a squelette (combinaison, entites) et des maillages Nanite
+    for prop in USAGES.get(name, ("used_with_instanced_static_meshes",)):
+        safe_set(m, prop, True)
     return m
 
 
@@ -1077,6 +1109,153 @@ def create_map():
 
 
 # ---------------------------------------------------------------------------
+# v4.8 : validation de l'installation et reparation ciblee
+# ---------------------------------------------------------------------------
+def validation_report_path():
+    return os.path.join(project_dir(), "Saved", "BackroomsSetup_Validation.txt")
+
+
+def _material_problems(name):
+    path = MAT + "/" + name
+    if not exists(path):
+        return [("material", name, "absent")]
+    m = unreal.load_asset(path)
+    if not isinstance(m, unreal.Material):
+        return [("material", name, "n'est pas un materiau")]
+    out = []
+    for prop in USAGES.get(name, ()):
+        try:
+            if not m.get_editor_property(prop):
+                out.append(("usage", name, prop))
+        except Exception as e:
+            out.append(("usage", name, "%s illisible (%s)" % (prop, e)))
+    return out
+
+
+def _skeletal_slot_names(sk):
+    names = []
+    try:
+        for entry in sk.get_editor_property("materials"):
+            names.append(str(entry.get_editor_property("material_slot_name")))
+    except Exception as e:
+        warn("Slots de %s illisibles : %s" % (sk.get_name(), e))
+    return names
+
+
+def validate(verbose=False):
+    """Verifie ce que l'installation doit produire : textures, maillages (statiques et a squelette), slots des maillages
+    a squelette, usages des materiaux maitres, carte. Retourne la liste des problemes (categorie, nom, detail) et ecrit
+    Saved/BackroomsSetup_Validation.txt. La compilation des shaders se verifie en jeu (diagnostic par section)."""
+    problems = []
+    for name in MATERIALS:
+        problems += _material_problems(name)
+    for f in missing_in("Textures", TEX, IMG_EXT):
+        problems.append(("texture", os.path.splitext(f)[0], "absente"))
+    for f in missing_in("Icons", UI, (".png",)):
+        problems.append(("icon", os.path.splitext(f)[0], "absente"))
+    for f in missing_in("Sounds", SND, (".wav",)):
+        problems.append(("sound", os.path.splitext(f)[0], "absent"))
+    for f in missing_in("Meshes", MESH, (".fbx",)):
+        problems.append(("mesh", os.path.splitext(f)[0], "absent"))
+    for name in HAZMAT_TEXTURES:
+        tex = load_tex(name)
+        if tex is None:
+            continue  # deja signalee absente
+        try:
+            size = min(tex.blueprint_get_size_x(), tex.blueprint_get_size_y())
+            if size < 1024:
+                problems.append(("texture", name, "taille %d (attendu 4096)" % size))
+            if not is_srgb(tex):
+                problems.append(("texture", name, "importee en lineaire (sRGB attendu)"))
+        except Exception:
+            pass
+    for f in list_raw("Skeletal", (".fbx",)):
+        name = os.path.splitext(f)[0]
+        sk = unreal.load_asset(MESH + "/" + name) if exists(MESH + "/" + name) else None
+        if not isinstance(sk, unreal.SkeletalMesh):
+            problems.append(("skeletal", name, "absent"))
+            continue
+        slots = _skeletal_slot_names(sk)
+        for want in EXPECTED_SLOTS.get(name, ()):
+            if not any(want.lower() == s.lower() or want.lower() in s.lower() for s in slots):
+                problems.append(("slot", name, "slot %s introuvable (slots importes : %s)" % (want, ", ".join(slots) or "aucun")))
+    if not exists(MAP_PATH):
+        problems.append(("map", MAP_PATH, "absente"))
+    try:
+        os.makedirs(os.path.dirname(validation_report_path()), exist_ok=True)
+        with open(validation_report_path(), "w", encoding="utf-8") as fh:
+            fh.write("Validation de l'installation Backrooms v%d (materiaux v%d)\n" % (VERSION, MATERIAL_VERSION))
+            fh.write("%d probleme(s)\n" % len(problems))
+            for cat, name, detail in problems:
+                fh.write("%s\t%s\t%s\n" % (cat, name, detail))
+    except Exception as e:
+        warn("Rapport de validation non ecrit : %s" % e)
+    if verbose:
+        for cat, name, detail in problems:
+            warn("Validation : [%s] %s : %s" % (cat, name, detail))
+        if not problems:
+            log("Validation : tout est en place (textures, maillages, slots, usages des materiaux, carte)")
+    return problems
+
+
+def fix_usages(name):
+    """Ajoute les usages manquants a un materiau maitre existant, le recompile et l'enregistre (sans le reconstruire)"""
+    m = unreal.load_asset(MAT + "/" + name)
+    if not isinstance(m, unreal.Material):
+        return False
+    changed = False
+    for prop in USAGES.get(name, ()):
+        try:
+            if not m.get_editor_property(prop):
+                changed = safe_set(m, prop, True) or changed
+        except Exception:
+            pass
+    if changed:
+        MEL.recompile_material(m)
+        EAL.save_loaded_asset(m, only_if_is_dirty=False)
+        log("%s : usages ajoutes, recompile et enregistre" % name)
+    return changed
+
+
+def repair():
+    """Reparation ciblee et rejouable : ne refait que ce que la validation signale (materiau sans usage, texture, son,
+    modele ou carte manquants), puis valide de nouveau et ecrit le marqueur si tout est en ordre."""
+    problems = validate(verbose=True)
+    if not problems:
+        write_marker()
+        return []
+    cats = {}
+    for cat, name, detail in problems:
+        cats.setdefault(cat, []).append(name)
+    rebuild = sorted(set(cats.get("material", [])))
+    for name in sorted(set(cats.get("usage", []))):
+        if name not in rebuild and not fix_usages(name):
+            rebuild.append(name)
+    if rebuild or "texture" in cats:
+        if "texture" in cats:
+            import_textures([f for f in list_raw("Textures", IMG_EXT) if os.path.splitext(f)[0] in cats["texture"]])
+        build_materials()
+    if "icon" in cats:
+        import_textures([f for f in list_raw("Icons", (".png",)) if os.path.splitext(f)[0] in cats["icon"]], UI, ui=True)
+    if "sound" in cats:
+        import_sounds([f for f in list_raw("Sounds", (".wav",)) if os.path.splitext(f)[0] in cats["sound"]])
+    if "mesh" in cats:
+        import_meshes([f for f in list_raw("Meshes", (".fbx",)) if os.path.splitext(f)[0] in cats["mesh"]])
+    if "skeletal" in cats:
+        import_skeletal([f for f in list_raw("Skeletal", (".fbx",)) if os.path.splitext(f)[0] in cats["skeletal"]])
+    if "map" in cats:
+        create_map()
+    if "slot" in cats:
+        warn("Slots inattendus (%s) : reimporter le maillage concerne (backrooms_setup.run(force=True)) ; le jeu affiche le "
+             "materiau d'erreur sur ces sections et les liste dans le journal (LogBackrooms)." % ", ".join(sorted(set(cats["slot"]))))
+    remaining = validate(verbose=True)
+    if not remaining:
+        write_marker()
+        log("Reparation terminee : installation valide. Recuire le jeu avant d'empaqueter.")
+    return remaining
+
+
+# ---------------------------------------------------------------------------
 # Point d'entree
 # ---------------------------------------------------------------------------
 def needs_setup():
@@ -1128,9 +1307,13 @@ def run(force=False):
             build_materials()
         task.enter_progress_frame(1, "Carte")
         create_map()
-    if not materials_missing():
+    problems = validate(verbose=True)
+    if not problems:
         write_marker()
-    log("Installation terminee. Appuyez sur Play !")
+        log("Installation terminee et verifiee. Appuyez sur Play !")
+    else:
+        warn("Installation incomplete (%d probleme(s)) : marqueur non ecrit. Reparer : import backrooms_setup; "
+             "backrooms_setup.repair()" % len(problems))
     try:
         unreal.EditorDialog.show_message(
             "The Backrooms",

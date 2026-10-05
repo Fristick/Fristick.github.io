@@ -209,6 +209,6 @@ void ABRCharacter::EndJumpscare()
 	if (bScareLethal && !bDead)
 	{
 		bScareLethal = false;
-		DieOf(EBRDeathCause::Injury, ScareKillerName, ScareKiller.Get());
+		DieOf(EBRDeathCause::Injury, ScareKillerKind, ScareKiller.Get());
 	}
 }

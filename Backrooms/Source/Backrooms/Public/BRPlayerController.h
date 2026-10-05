@@ -337,6 +337,8 @@ private:
 	/** v4.7 : partie fermee pendant une mort : la mort va a son terme (equipement de depart, niveau neuf) */
 	void ResolvePendingDeath(UBRSaveGame* Save);
 	/** v4.7 : messages du chargement des sauvegardes (copie de secours, fichier illisible) */
+	/** v4.8 : echecs d'ecriture non acquittes : montres au joueur (emplacement, demande, raison), puis acquittes */
+	void ShowSaveFailures();
 	void ShowSaveLoadMessages();
 	/** Champ du nom d'une nouvelle partie (Slate, comme le champ de l'adresse IP) */
 	void ShowNameBox(bool bShow);
@@ -387,8 +389,6 @@ private:
 	FVector SafeSpot = FVector::ZeroVector;
 	float SafeYaw = 0.f;
 	float SafeSpotTimer = 0.f;
-	/** v4.7 : un echec d'ecriture a deja ete signale */
-	bool bSaveFailShown = false;
 	/** v4.7 : derniere entree venue de la manette */
 	bool bPadActive = false;
 

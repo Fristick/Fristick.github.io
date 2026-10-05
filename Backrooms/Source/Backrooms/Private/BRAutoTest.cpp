@@ -363,7 +363,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 			return false;
 		}
 		C->bGodMode = false;
-		C->ReceiveAttack(1000.f, 0.f, nullptr, TEXT("le test automatique"));
+		C->ReceiveAttack(1000.f, 0.f, nullptr);
 		if (!C->IsDead())
 		{
 			Note(TEXT("le personnage ne meurt pas apres 1000 points de degats"), true);
@@ -985,7 +985,7 @@ void ABRAutoTest::AddPitSteps()
 		UserSeed = ABRWorld::DemoSeed;
 	}
 	const uint32 LevelSeed = ABRWorld::SeedFromUser(UserSeed, 0);
-	static const TCHAR* const ProfileNames[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique") };
+	static const TCHAR* const PitProfileNames[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique") };
 
 	Add(TEXT("Fosses : chargement"), 0.f, [this, LevelSeed, UserSeed]()
 	{
@@ -1080,7 +1080,7 @@ void ABRAutoTest::AddPitSteps()
 	// Cout de la salle dans chaque profil (meme point de vue, meme graine)
 	for (int32 P = 0; P < 3; ++P)
 	{
-		const FString Name = ProfileNames[P];
+		const FString Name = PitProfileNames[P];
 		Add(FString::Printf(TEXT("Fosses : profil %s"), *Name), 3.f, [this, P, Name, UserSeed]()
 		{
 			ABRPlayerController::ApplyGraphicsProfile(P);
@@ -1300,7 +1300,7 @@ void ABRAutoTest::AddPitSteps()
 			const FBRDeathState& DS = C->GetDeathState();
 			const bool bFallOk = C->DiedInPit() && DS.bDead && DS.Cause == static_cast<uint8>(EBRDeathCause::Fall) && !DS.bRevivable;
 			Note(FString::Printf(TEXT("chute : mort %.1f s apres le premier pas, a Z = %.0f cm, cause : %s, etat serveur : %s"), FPlatformTime::Seconds() - FallStart,
-				C->GetActorLocation().Z, *C->GetKilledBy(), bFallOk ? TEXT("chute, non relevable (OK)") : TEXT("INCORRECT")), !bFallOk);
+				C->GetActorLocation().Z, BRDeath::CauseId(C->GetDeathCause()), bFallOk ? TEXT("chute, non relevable (OK)") : TEXT("INCORRECT")), !bFallOk);
 			return true;
 		}
 		if (StepTime > 7.f)

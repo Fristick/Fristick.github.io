@@ -1,5 +1,6 @@
 #include "BRCharacter.h"
 #include "Backrooms.h"
+#include "EngineUtils.h"
 #include "BRAssets.h"
 #include "BRItems.h"
 #include "BRKeys.h"
@@ -491,6 +492,10 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 		}
 		Sanity = FMath::Min(100.f, Sanity + 40.f);
 		Health = FMath::Min(100.f, Health + 10.f);
+		if (!HasAuthority())
+		{
+			ServerUseHeal(static_cast<uint8>(EBRItem::AlmondWater)); // v4.8 : la sante officielle est celle du serveur
+		}
 		PlaySound2D(TEXT("S_Drink"), 0.9f);
 		ABRHUD::Notify(this, TEXT("Vous buvez de l'eau d'amande. Votre esprit s'\u00e9claircit."), 3.f, FLinearColor(0.85f, 0.95f, 1.f));
 		return true;
@@ -501,6 +506,10 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 			return false;
 		}
 		Health = FMath::Min(100.f, Health + 35.f);
+		if (!HasAuthority())
+		{
+			ServerUseHeal(static_cast<uint8>(EBRItem::Bandage));
+		}
 		PlaySound2D(TEXT("S_Bandage"), 0.9f);
 		ABRHUD::Notify(this, TEXT("Vous bandez vos blessures."), 2.5f, FLinearColor(0.9f, 0.95f, 0.9f));
 		return true;
@@ -925,28 +934,67 @@ FRotator ABRCharacter::GetAimRotation() const
 	return GetBaseAimRotation(); // pion d'un autre joueur : lacet de l'acteur + tangage replique
 }
 
-void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName)
+void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Source)
 {
-	if (HasAuthority() && GetWorld())
-	{
-		ServerLastHitTime = GetWorld()->GetTimeSeconds(); // v4.7 : une mort par blessure suit une frappe
-	}
-	if (!IsLocallyControlled())
-	{
-		// Les entites vivent sur le serveur : le coup est transmis au joueur concerne
-		if (HasAuthority() && !bDead)
-		{
-			ClientReceiveAttack(Damage, SanityDamage, Source, SourceName);
-		}
-		return;
-	}
-	if (bDead || bGodMode || bScareLethal)
+	// v4.8 : le serveur decide seul : il retire la sante, decide si le coup tue, puis envoie l'effet au joueur touche.
+	// Avant : le coup etait transmis au client, qui appliquait lui-meme les degats (le serveur ignorait sa sante).
+	if (!HasAuthority() || !GetWorld())
 	{
 		return;
 	}
-	const float Armor = GetEquipped(EBREquipSlot::Chest) == EBRItem::Vest ? 0.7f : 1.f;
-	Health -= Damage * (Damage >= 100.f ? 1.f : Armor);
+	if (DeathState.bDead || bServerDying || (IsLocallyControlled() && (bDead || bScareLethal)))
+	{
+		return;
+	}
+	ServerLastHitTime = GetWorld()->GetTimeSeconds();
+	const bool bGod = IsLocallyControlled() ? bGodMode : ((NetFlags & 16) != 0 && ABRPlayerController::AreCheatsAllowed());
+	// Gilet : connu du proprietaire (equipement), et du serveur par l'etat replique (bit 32)
+	const bool bVest = IsLocallyControlled() ? GetEquipped(EBREquipSlot::Chest) == EBRItem::Vest : (NetFlags & 32) != 0;
+	const float Applied = bGod ? 0.f : Damage * (Damage >= 100.f ? 1.f : (bVest ? 0.7f : 1.f));
+	Health = FMath::Max(0.f, Health - Applied);
+	++HitSerial;
+	const ABREntity* Attacker = Cast<ABREntity>(Source);
+	const int8 Kind = Attacker ? static_cast<int8>(Attacker->Kind) : int8(-1);
+	const bool bLethal = !bGod && Health <= 0.f;
+	if (bLethal)
+	{
+		// Mort officielle a la fin du jumpscare (le joueur la signale) ; delai de secours si son message se perd
+		bServerDying = true;
+		ServerDyingTimer = 6.f;
+		ServerDyingKiller = Kind;
+	}
+	if (IsLocallyControlled())
+	{
+		AckHitSerial = HitSerial;
+		ApplyHitFeedback(Applied, SanityDamage, Source, Kind, Health, bLethal);
+	}
+	else
+	{
+		ClientHitFeedback(Applied, SanityDamage, Source, Kind, Health, HitSerial, bLethal);
+	}
+}
+
+void ABRCharacter::ClientHitFeedback_Implementation(float Damage, float SanityDamage, AActor* Source, int8 SourceKind, float NewHealth, uint16 Serial,
+	bool bLethal)
+{
+	AckHitSerial = Serial;
+	ApplyHitFeedback(Damage, SanityDamage, Source, SourceKind, NewHealth, bLethal);
+}
+
+void ABRCharacter::ApplyHitFeedback(float Damage, float SanityDamage, AActor* Source, int8 SourceKind, float NewHealth, bool bLethal)
+{
+	if (bDead || bScareLethal)
+	{
+		return;
+	}
+	// Sante decidee par le serveur, appliquee telle quelle (le client ne retire rien lui-meme : pas de double application)
+	Health = NewHealth;
+	LastSentHealth = NewHealth;
 	Sanity = FMath::Max(0.f, Sanity - SanityDamage);
+	if (Damage <= 0.f && !bLethal)
+	{
+		return; // invincible (mode developpeur)
+	}
 	DamageFlash = 1.f;
 	LastDamageTime = TimeAlive;
 	if (Controller)
@@ -966,7 +1014,6 @@ void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Sourc
 	ABREntity* Attacker = Cast<ABREntity>(Source);
 	if (Attacker)
 	{
-		const bool bLethal = Health <= 0.f;
 		const FVector ToAttacker = (Attacker->GetActorLocation() - GetEyeLocation()).GetSafeNormal();
 		const bool bUnseen = FVector::DotProduct(GetViewDirection(), ToAttacker) < 0.35f;
 		const bool bFirst = !ScaredKinds.Contains(static_cast<int32>(Attacker->Kind));
@@ -976,22 +1023,92 @@ void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Sourc
 			PlayJumpscare(Attacker->Kind, Attacker, bLethal);
 		}
 	}
-	if (Health <= 0.f)
+	if (bLethal)
 	{
 		if (ScareKind >= 0)
 		{
 			bScareLethal = true;
-			ScareKillerName = SourceName;
+			ScareKillerKind = SourceKind;
 			ScareKiller = Source;
 		}
 		else
 		{
-			DieOf(EBRDeathCause::Injury, SourceName, Source);
+			DieOf(EBRDeathCause::Injury, SourceKind, Source);
 		}
 	}
 }
 
-void ABRCharacter::DieOf(EBRDeathCause Cause, const FString& By, AActor* Killer)
+void ABRCharacter::TickServerVitals(float Dt)
+{
+	if (!bServerDying)
+	{
+		return;
+	}
+	if (DeathState.bDead)
+	{
+		bServerDying = false;
+		return;
+	}
+	ServerDyingTimer -= Dt;
+	if (ServerDyingTimer <= 0.f)
+	{
+		// Le joueur n'a pas signale sa mort (message perdu, client modifie) : le serveur l'applique
+		bServerDying = false;
+		UE_LOG(LogBackrooms, Warning, TEXT("%s : coup mortel sans mort signalee : mort appliquee par le serveur"), *GetName());
+		ServerApplyDeathState(true, EBRDeathCause::Injury, 1, FString(), ServerDyingKiller);
+	}
+}
+
+bool ABRCharacter::ServerSyncVitals_Validate(float InHealth, uint16 AckSerial)
+{
+	return FMath::IsFinite(InHealth) && InHealth >= -1.f && InHealth <= 101.f;
+}
+
+void ABRCharacter::ServerSyncVitals_Implementation(float InHealth, uint16 AckSerial)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	const float Since = FMath::Clamp(Now - ServerLastVitalsTime, 0.f, 5.f);
+	ServerLastVitalsTime = Now;
+	// Un envoi parti avant le dernier coup l'effacerait : ignore (le suivant portera le bon numero)
+	if (AckSerial != HitSerial || DeathState.bDead || bServerDying)
+	{
+		return;
+	}
+	const float Wanted = FMath::Clamp(InHealth, 0.f, 100.f);
+	// Baisse (noyade, folie) : acceptee. Hausse : recuperation lente seulement (1 point/s) ; les soins d'objets passent par
+	// ServerUseHeal
+	Health = Wanted <= Health ? Wanted : FMath::Min(Wanted, Health + 1.2f * Since + 0.5f);
+}
+
+bool ABRCharacter::ServerUseHeal_Validate(uint8 Item)
+{
+	return Item < static_cast<uint8>(EBRItem::Count);
+}
+
+void ABRCharacter::ServerUseHeal_Implementation(uint8 Item)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (DeathState.bDead || bServerDying || Now - ServerLastHealTime < 0.8f)
+	{
+		return;
+	}
+	float Amount = 0.f;
+	switch (static_cast<EBRItem>(Item))
+	{
+	case EBRItem::AlmondWater:
+		Amount = 10.f;
+		break;
+	case EBRItem::Bandage:
+		Amount = 35.f;
+		break;
+	default:
+		return;
+	}
+	ServerLastHealTime = Now;
+	Health = FMath::Min(100.f, Health + Amount);
+}
+
+void ABRCharacter::DieOf(EBRDeathCause Cause, int8 InKiller, AActor* Killer)
 {
 	if (bDead)
 	{
@@ -1003,7 +1120,7 @@ void ABRCharacter::DieOf(EBRDeathCause Cause, const FString& By, AActor* Killer)
 	LocalCause = Cause;
 	Health = 0.f;
 	DeathTime = 0.f;
-	KilledBy = By;
+	KillerKind = InKiller;
 	KillerActor = Killer;
 	bReadingNote = false;
 	bNightVision = false;
@@ -1033,7 +1150,8 @@ void ABRCharacter::DieOf(EBRDeathCause Cause, const FString& By, AActor* Killer)
 	// v4.7 : l'etat officiel est celui du serveur (hote ou solo : tout de suite ; client : apres verification)
 	if (HasAuthority())
 	{
-		ServerApplyDeathState(true, Cause, 1);
+		bServerDying = false;
+		ServerApplyDeathState(true, Cause, 1, FString(), InKiller);
 	}
 	else
 	{
@@ -1045,11 +1163,31 @@ void ABRCharacter::DieOf(EBRDeathCause Cause, const FString& By, AActor* Killer)
 	}
 }
 
-void ABRCharacter::ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint8 Event, const FString& By)
+void ABRCharacter::ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint8 Event, const FString& By, int8 InKiller)
 {
 	if (!HasAuthority())
 	{
 		return;
+	}
+	DeathState.Killer = bInDead ? InKiller : int8(-1);
+	if (bInDead)
+	{
+		// v4.8 : le delai de reanimation ne s'applique que si un coequipier vivant pouvait venir (regle du client)
+		bServerTeammateAtDeath = false;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			if (*It != this && !It->DeathState.bDead)
+			{
+				bServerTeammateAtDeath = true;
+				break;
+			}
+		}
+		Health = 0.f;
+	}
+	else
+	{
+		bServerDying = false;
+		Health = Event == 2 ? 35.f : 100.f; // releve : un peu de sante ; reveille : sante pleine
 	}
 	DeathState.bDead = bInDead;
 	DeathState.Cause = bInDead ? static_cast<uint8>(Cause) : 0;
@@ -1095,7 +1233,7 @@ void ABRCharacter::ServerReportDeath_Implementation(uint8 InCause)
 		}
 		break;
 	case EBRDeathCause::Injury:
-		if (Now - ServerLastHitTime > 6.f)
+		if (!bServerDying && Now - ServerLastHitTime > 6.f)
 		{
 			UE_LOG(LogBackrooms, Warning, TEXT("%s : mort par blessure sans frappe recente vue par le serveur"), *GetName());
 		}
@@ -1106,7 +1244,40 @@ void ABRCharacter::ServerReportDeath_Implementation(uint8 InCause)
 		Cause = EBRDeathCause::Injury;
 		break;
 	}
-	ServerApplyDeathState(true, Cause, 1);
+	const int8 Killer = (Cause == EBRDeathCause::Injury && bServerDying) ? ServerDyingKiller : int8(-1);
+	bServerDying = false;
+	ServerApplyDeathState(true, Cause, 1, FString(), Killer);
+}
+
+float ABRCharacter::MinRespawnDelay() const
+{
+	// Meme regle que ABRWorld::HandlePlayerDeath cote client (delai de reanimation si un coequipier vivant pouvait venir,
+	// sinon 6 s), moins une marge pour la latence et l'ecart des horloges
+	const EBRDeathCause Cause = static_cast<EBRDeathCause>(DeathState.Cause);
+	const float Rule = (DeathState.bRevivable && bServerTeammateAtDeath) ? BRDeath::ReviveWindow(Cause) : 6.f;
+	return FMath::Max(1.5f, Rule - 1.5f);
+}
+
+bool ABRCharacter::ServerCanStillRevive() const
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	const EBRDeathCause Cause = static_cast<EBRDeathCause>(DeathState.Cause);
+	// Un peu de marge apres la fin du delai : le geste de reanimation a commence avant
+	return CanBeRevived() && Now - ServerDeathTime <= BRDeath::ReviveWindow(Cause) + 1.f;
+}
+
+void ABRCharacter::ClientRespawnDenied_Implementation(float Remaining)
+{
+	// Le serveur nous voit encore a terre : on y retourne pour le temps restant (meme cause, meme entite)
+	const EBRDeathCause Cause = static_cast<EBRDeathCause>(DeathState.Cause);
+	if (!bDead)
+	{
+		DieOf(Cause == EBRDeathCause::None ? EBRDeathCause::Injury : Cause, DeathState.Killer, nullptr);
+	}
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->SetDeathTimer(FMath::Max(Remaining, 0.5f) + 0.25f);
+	}
 }
 
 void ABRCharacter::ServerReportRespawn_Implementation()
@@ -1115,10 +1286,16 @@ void ABRCharacter::ServerReportRespawn_Implementation()
 	{
 		return;
 	}
+	// v4.8 : regles reelles selon la cause (avant : simple avertissement sous 2 s). Trop tot : refuse, le joueur reste a
+	// terre le temps restant
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-	if (Now - ServerDeathTime < 2.f)
+	const float Elapsed = Now - ServerDeathTime;
+	const float MinDelay = MinRespawnDelay();
+	if (Elapsed < MinDelay)
 	{
-		UE_LOG(LogBackrooms, Warning, TEXT("%s : reveil demande %.1f s apres la mort (minimum 2 s)"), *GetName(), Now - ServerDeathTime);
+		UE_LOG(LogBackrooms, Warning, TEXT("%s : reveil refuse %.1f s apres la mort (minimum %.1f s pour cette cause)"), *GetName(), Elapsed, MinDelay);
+		ClientRespawnDenied(MinDelay - Elapsed);
+		return;
 	}
 	ServerApplyDeathState(false, EBRDeathCause::None, 3);
 }
@@ -1140,9 +1317,13 @@ void ABRCharacter::OnRep_DeathState()
 			{
 				FallDeath(); // chute constatee par le serveur, arrivee avant (ou sans) la RPC
 			}
+			else if (ScareKind >= 0 && bScareLethal)
+			{
+				// v4.8 : coup mortel decide par le serveur : la mort viendra a la fin du jumpscare (EndJumpscare)
+			}
 			else
 			{
-				DieOf(Cause, FString(), nullptr);
+				DieOf(Cause, DeathState.Killer, nullptr);
 			}
 		}
 		else if (DeathState.Event == 1 && DeathState.bDead && bDead && Cause != LocalCause)
@@ -1236,7 +1417,7 @@ void ABRCharacter::FallDeath()
 		return;
 	}
 	Health = 0.f;
-	DieOf(EBRDeathCause::Fall, TEXT("une chute dans une fosse"), nullptr);
+	DieOf(EBRDeathCause::Fall, -1, nullptr);
 }
 
 ABRCharacter* ABRCharacter::FindDownedTeammate() const
@@ -1311,7 +1492,7 @@ void ABRCharacter::UpdateRevive(float Dt)
 void ABRCharacter::ServerRevive_Implementation(ABRCharacter* Mate)
 {
 	// v4.7 : verifie par le serveur : coequipier mort d'une cause relevable, sauveteur vivant et a portee
-	if (Mate && Mate != this && Mate->CanBeRevived() && !DeathState.bDead && FVector::Dist(Mate->GetActorLocation(), GetActorLocation()) < 450.f)
+	if (Mate && Mate != this && Mate->ServerCanStillRevive() && !DeathState.bDead && FVector::Dist(Mate->GetActorLocation(), GetActorLocation()) < 450.f)
 	{
 		Mate->ReviveBy(this);
 	}
@@ -1323,7 +1504,7 @@ void ABRCharacter::ServerRevive_Implementation(ABRCharacter* Mate)
 
 void ABRCharacter::ReviveBy(ABRCharacter* By)
 {
-	if (!HasAuthority() || !CanBeRevived())
+	if (!HasAuthority() || !ServerCanStillRevive())
 	{
 		return;
 	}
@@ -1347,7 +1528,7 @@ void ABRCharacter::Revived(const FString& ByName)
 	DamageFlash = 0.f;
 	DeathTime = 0.f;
 	LastDamageTime = TimeAlive;
-	KilledBy.Empty();
+	KillerKind = -1;
 	KillerActor.Reset();
 	LocalCause = EBRDeathCause::None;
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
@@ -1357,11 +1538,6 @@ void ABRCharacter::Revived(const FString& ByName)
 	}
 	PlaySound2D(TEXT("S_Gasp"), 0.85f);
 	ABRHUD::Notify(this, FString::Printf(TEXT("%s vous a relev\u00e9 !"), *ByName), 4.f, FLinearColor(0.6f, 1.f, 0.6f));
-}
-
-void ABRCharacter::ClientReceiveAttack_Implementation(float Damage, float SanityDamage, AActor* Source, const FString& SourceName)
-{
-	ReceiveAttack(Damage, SanityDamage, Source, SourceName);
 }
 
 void ABRCharacter::ServerSetState_Implementation(uint8 Flags, uint8 Hand, uint8 Lamp)
@@ -1388,7 +1564,7 @@ void ABRCharacter::ResetStats()
 	Breath = 100.f;
 	bSwimming = bDiving = bUnderwater = bMantling = false;
 	DeathBlend = 0.f;
-	KilledBy.Empty();
+	KillerKind = -1;
 	KillerActor.Reset();
 	LocalCause = EBRDeathCause::None;
 	ResetInventory();
@@ -1594,11 +1770,26 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
 	TimeAlive += Dt;
+	if (HasAuthority())
+	{
+		TickServerVitals(Dt); // v4.8 : coup mortel en attente de la fin du jumpscare
+	}
 
 	if (!IsLocallyControlled())
 	{
 		TickRemote(Dt);
 		return;
+	}
+	// v4.8 : client : la sante (soins, noyade, folie, recuperation) est envoyee au serveur, qui decide des coups
+	if (!HasAuthority() && !bDead)
+	{
+		VitalsSyncTimer -= Dt;
+		if (VitalsSyncTimer <= 0.f || FMath::Abs(Health - LastSentHealth) > 8.f)
+		{
+			VitalsSyncTimer = 0.5f;
+			LastSentHealth = Health;
+			ServerSyncVitals(Health, AckHitSerial);
+		}
 	}
 	if (bRemoteView)
 	{
@@ -1665,7 +1856,8 @@ void ABRCharacter::SyncNetState()
 	{
 		return;
 	}
-	const uint8 Flags = (IsFlashlightOn() ? 1 : 0) | (IsSprinting() ? 2 : 0) | (bSwimming ? 4 : 0) | (bClimbing ? 8 : 0) | (bGodMode ? 16 : 0);
+	const uint8 Flags = (IsFlashlightOn() ? 1 : 0) | (IsSprinting() ? 2 : 0) | (bSwimming ? 4 : 0) | (bClimbing ? 8 : 0) | (bGodMode ? 16 : 0)
+		| (GetEquipped(EBREquipSlot::Chest) == EBRItem::Vest ? 32 : 0);
 	const uint8 Hand = static_cast<uint8>(GetEquipped(EBREquipSlot::Hand));
 	const uint8 Lamp = LampSlot();
 	if (Flags == NetFlags && Hand == NetHand && Lamp == NetLamp)
@@ -1891,7 +2083,7 @@ void ABRCharacter::UpdateStats(float Dt)
 		Health -= 1.5f * Dt;
 		if (Health <= 0.f)
 		{
-			DieOf(EBRDeathCause::Madness, TEXT("la folie"), nullptr);
+			DieOf(EBRDeathCause::Madness, -1, nullptr);
 			return;
 		}
 	}
@@ -2406,7 +2598,22 @@ void ABRCharacter::BuildBody()
 		BodySkin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		BodySkin->SetCastShadow(true);
 		BodySkin->RegisterComponent();
-		A->ApplySlots(BodySkin);
+		// v4.8 : slots de la combinaison affectes explicitement par leur nom : combinaison -> T_Hazmat_Suit, masque ->
+		// T_Hazmat_Mask, visiere -> son propre materiau. Un slot inattendu est signale (materiau d'erreur), il n'est plus
+		// habille en silence par le style sombre generique "Body"
+		static const TArray<TPair<FString, FString>> HazmatSlots = {
+			{ TEXT("HazmatSuit"), TEXT("HazmatSuit") }, { TEXT("HazmatMask"), TEXT("HazmatMask") }, { TEXT("HazmatGlass"), TEXT("HazmatGlass") } };
+		A->ApplySlotMap(BodySkin, HazmatSlots, TEXT("SK_Hazmat"));
+		// Diagnostic par section (une fois par session) : maillage, slot, materiau final, parent, texture, usage, secours
+		static bool bDescribed = false;
+		if (!bDescribed)
+		{
+			bDescribed = true;
+			for (const FString& Line : A->DescribeSections(BodySkin, TEXT("SK_Hazmat")))
+			{
+				UE_LOG(LogBackrooms, Log, TEXT("Combinaison : %s"), *Line);
+			}
+		}
 		Body.Meshes.Add(BodySkin);
 		Body.Torso = BodySkin;
 		BodyComponents.Add(BodySkin);
@@ -2988,7 +3195,7 @@ void ABRCharacter::UpdateWater(float Dt)
 			LastDamageTime = TimeAlive;
 			if (Health <= 0.f)
 			{
-				DieOf(EBRDeathCause::Drowning, TEXT("la noyade"), nullptr);
+				DieOf(EBRDeathCause::Drowning, -1, nullptr);
 				return;
 			}
 		}

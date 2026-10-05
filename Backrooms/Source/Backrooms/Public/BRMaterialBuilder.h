@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Materials/MaterialInterface.h"
 
 class UMaterial;
 class UTexture;
@@ -32,6 +33,11 @@ namespace BRMaterialBuilder
 	const FString& CausticsHLSL();
 	/** Flaques et sol mouille (WP, N, T, Amount, Wet, Tex) -> float4(flaque, mouille, pente XY des gouttes) */
 	const FString& PuddlesHLSL();
+
+	/** v4.8 : usages que le materiau maitre doit declarer (instances, maillages a squelette, Nanite selon le materiau).
+	 *  Un usage absent donne le materiau par defaut, gris et sans texture, la ou le moteur ne peut pas recompiler. */
+	TArray<EMaterialUsage> RequiredUsages(EBRMasterMaterial Which);
+	const TCHAR* UsageName(EMaterialUsage Usage);
 
 	/** true si l'executable peut compiler des materiaux (editeur, PIE, -game non cuisine) */
 	bool IsAvailable();

@@ -12,6 +12,12 @@
 #include "ImageCore.h"
 #include "ImageUtils.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstance.h"
+#include "Components/SkinnedMeshComponent.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
+#include "Engine/SkinnedAssetCommon.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/MeshComponent.h"
 #include "Sound/SoundBase.h"
@@ -577,6 +583,15 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 		}
 	}
 
+	// v4.8 : usages declares (instances, maillages a squelette, Nanite). Un materiau importe avant la v4.8 n'a que l'usage
+	// "instances" : la combinaison et les entites a squelette recevaient le materiau par defaut hors de l'editeur
+	static const EBRMasterMaterial UsageKinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
+		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade };
+	if (M && !EnsureUsages(M, UsageKinds[Index], AssetNames[Index]) && BRMaterialBuilder::IsAvailable())
+	{
+		M = nullptr; // jeu autonome non cuisine : le materiau construit a la volee declare tous ses usages
+	}
+
 	if (!M && BRMaterialBuilder::IsAvailable())
 	{
 		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
@@ -598,6 +613,73 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	Parents[Index] = M;
 	ParentCustom[Index] = M != nullptr;
 	return M;
+}
+
+namespace
+{
+	TArray<FString>& MaterialProblemList()
+	{
+		static TArray<FString> List;
+		return List;
+	}
+}
+
+void UBRAssets::ReportMaterialProblem(const FString& Problem)
+{
+	TArray<FString>& L = MaterialProblemList();
+	if (!L.Contains(Problem))
+	{
+		L.Add(Problem);
+		UE_LOG(LogBackrooms, Error, TEXT("Materiaux : %s"), *Problem);
+	}
+}
+
+const TArray<FString>& UBRAssets::GetMaterialProblems()
+{
+	return MaterialProblemList();
+}
+
+bool UBRAssets::EnsureUsages(UMaterialInterface* M, EBRMasterMaterial Kind, const TCHAR* AssetName)
+{
+	UMaterial* Base = M ? M->GetMaterial() : nullptr;
+	if (!Base)
+	{
+		return false;
+	}
+	TArray<EMaterialUsage> Absent;
+	for (const EMaterialUsage Usage : BRMaterialBuilder::RequiredUsages(Kind))
+	{
+		if (!Base->GetUsageByFlag(Usage))
+		{
+			Absent.Add(Usage);
+		}
+	}
+	if (Absent.Num() == 0)
+	{
+		return true;
+	}
+	FString Names;
+	for (const EMaterialUsage Usage : Absent)
+	{
+		Names += (Names.IsEmpty() ? TEXT("") : TEXT(", ")) + FString(BRMaterialBuilder::UsageName(Usage));
+	}
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		// Editeur (PIE) : l'usage est ajoute en memoire et le materiau recompile ; il reste a l'enregistrer
+		for (const EMaterialUsage Usage : Absent)
+		{
+			bool bNeedsRecompile = false;
+			Base->SetMaterialUsage(bNeedsRecompile, Usage);
+		}
+		UE_LOG(LogBackrooms, Warning, TEXT("%s : usage(s) %s ajoute(s) en memoire. Pour l'enregistrer : backrooms_setup.repair() ")
+			TEXT("(Fenetre > Journal de sortie > Python)."), AssetName, *Names);
+		return true;
+	}
+#endif
+	ReportMaterialProblem(FString::Printf(TEXT("%s n'a pas l'usage %s : materiau par defaut sur les modeles concernes. ")
+		TEXT("Reparer dans l'editeur : import backrooms_setup; backrooms_setup.repair(), puis recuire le jeu."), AssetName, *Names));
+	return false;
 }
 
 UMaterialInterface* UBRAssets::FallbackParent()
@@ -1053,7 +1135,13 @@ void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColo
 	const int32 Num = Comp->GetNumMaterials();
 	for (int32 i = 0; i < Num; ++i)
 	{
-		const FString Slot = Names.IsValidIndex(i) ? Names[i].ToString() : FString(TEXT("Body"));
+		// v4.8 : un slot sans nom n'est plus deguise en "Body" (presque noir) : il est nomme par son indice et signale
+		FString Slot = Names.IsValidIndex(i) ? Names[i].ToString() : FString();
+		if (Slot.IsEmpty() || Slot == TEXT("None"))
+		{
+			Slot = FString::Printf(TEXT("Slot%d"), i);
+			ReportMaterialProblem(FString::Printf(TEXT("%s : slot %d sans nom (materiau neutre)"), *GetNameSafe(Comp), i));
+		}
 		const FLinearColor Glow = GlowColorForSlot(Slot);
 		UMaterialInterface* Mat = nullptr;
 		// Les panneaux de sortie (vert), voyants (rouge) et fenetres ne dependent pas du secteur
@@ -1117,6 +1205,140 @@ void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColo
 			Comp->SetMaterial(i, Mat);
 		}
 	}
+}
+
+void UBRAssets::ApplySlotMap(UMeshComponent* Comp, const TArray<TPair<FString, FString>>& SlotStylesByName, const FString& Label)
+{
+	if (!Comp)
+	{
+		return;
+	}
+	const TArray<FName> Names = Comp->GetMaterialSlotNames();
+	const int32 Num = Comp->GetNumMaterials();
+	for (int32 i = 0; i < Num; ++i)
+	{
+		const FString Slot = Names.IsValidIndex(i) ? Names[i].ToString() : FString();
+		// Correspondance explicite par nom (exact, sinon contenu : Interchange peut ajouter un suffixe) ; jamais par indice
+		const FString* StyleKey = nullptr;
+		for (const TPair<FString, FString>& Pair : SlotStylesByName)
+		{
+			if (Slot.Equals(Pair.Key, ESearchCase::IgnoreCase))
+			{
+				StyleKey = &Pair.Value;
+				break;
+			}
+		}
+		for (int32 k = 0; !StyleKey && k < SlotStylesByName.Num(); ++k)
+		{
+			if (!Slot.IsEmpty() && Slot.Contains(SlotStylesByName[k].Key, ESearchCase::IgnoreCase))
+			{
+				StyleKey = &SlotStylesByName[k].Value;
+			}
+		}
+		if (!StyleKey)
+		{
+			FString Expected;
+			for (const TPair<FString, FString>& Pair : SlotStylesByName)
+			{
+				Expected += (Expected.IsEmpty() ? TEXT("") : TEXT(", ")) + Pair.Key;
+			}
+			ReportMaterialProblem(FString::Printf(TEXT("%s : slot %d \"%s\" inattendu (attendus : %s) ; materiau d'erreur affiche"),
+				*Label, i, *Slot, *Expected));
+			Comp->SetMaterial(i, ErrorMaterial());
+			continue;
+		}
+		if (UMaterialInterface* Mat = SlotMaterial(*StyleKey))
+		{
+			Comp->SetMaterial(i, Mat);
+		}
+	}
+}
+
+UMaterialInterface* UBRAssets::ErrorMaterial()
+{
+	const FString Key = TEXT("ERROR");
+	if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
+	{
+		return Found->Get();
+	}
+	// Developpement : magenta franc (une erreur se voit) ; version Shipping : gris neutre (jamais noir)
+#if UE_BUILD_SHIPPING
+	const FLinearColor Color(0.45f, 0.45f, 0.45f);
+#else
+	const FLinearColor Color(1.f, 0.f, 0.85f);
+#endif
+	UMaterialInterface* ParentMat = Parent(EParent::Mesh);
+	const bool bCustom = ParentMat != nullptr;
+	ParentMat = ParentMat ? ParentMat : FallbackParent();
+	UMaterialInstanceDynamic* MID = ParentMat ? UMaterialInstanceDynamic::Create(ParentMat, this) : nullptr;
+	if (MID)
+	{
+		MID->SetVectorParameterValue(bCustom ? TEXT("Tint") : TEXT("Color"), Color);
+		MatCache.Add(Key, MID);
+	}
+	return MID;
+}
+
+TArray<FString> UBRAssets::DescribeSections(UMeshComponent* Comp, const FString& Label)
+{
+	TArray<FString> Lines;
+	if (!Comp)
+	{
+		return Lines;
+	}
+	const TArray<FName> Names = Comp->GetMaterialSlotNames();
+	auto Describe = [&](int32 Lod, int32 Section, int32 MatIndex, bool bSkeletal)
+	{
+		UMaterialInterface* Mat = Comp->GetMaterial(MatIndex);
+		const UMaterialInstance* Inst = Cast<UMaterialInstance>(Mat);
+		const UMaterialInterface* ParentMat = Inst ? Inst->Parent.Get() : nullptr;
+		const UMaterial* Base = Mat ? Mat->GetMaterial() : nullptr;
+		UTexture* Tex = nullptr;
+		if (Mat)
+		{
+			Mat->GetTextureParameterValue(FHashedMaterialParameterInfo(FName(TEXT("BaseTex"))), Tex);
+		}
+		const bool bUsage = Base && (!bSkeletal || Base->GetUsageByFlag(MATUSAGE_SkeletalMesh));
+		const bool bFallback = !Mat || Mat == ErrorMaterial() || (ParentMat && ParentMat == FallbackMat) || !Base
+			|| (Base && Base->GetName().StartsWith(TEXT("WorldGrid"))) || (Base && Base->GetName().StartsWith(TEXT("DefaultMaterial")));
+		Lines.Add(FString::Printf(TEXT("%s LOD%d section %d -> slot %d \"%s\" : %s (parent %s, BaseTex %s, usage %s, secours %s)"),
+			*Label, Lod, Section, MatIndex, Names.IsValidIndex(MatIndex) ? *Names[MatIndex].ToString() : TEXT("?"), *GetNameSafe(Mat),
+			*GetNameSafe(ParentMat), *GetNameSafe(Tex), bSkeletal ? (bUsage ? TEXT("squelette OK") : TEXT("SQUELETTE ABSENT")) : TEXT("-"),
+			bFallback ? TEXT("OUI") : TEXT("non")));
+		if (!bUsage || bFallback)
+		{
+			ReportMaterialProblem(Lines.Last());
+		}
+	};
+	const USkinnedMeshComponent* Skinned = Cast<USkinnedMeshComponent>(Comp);
+	const USkeletalMesh* Skel = Skinned ? Cast<USkeletalMesh>(Skinned->GetSkinnedAsset()) : nullptr;
+	const FSkeletalMeshRenderData* RD = Skel ? Skel->GetResourceForRendering() : nullptr;
+	if (RD)
+	{
+		// Sections de chaque niveau de detail, avec la table de remplacement des materiaux par LOD (LODMaterialMap)
+		for (int32 Lod = 0; Lod < RD->LODRenderData.Num(); ++Lod)
+		{
+			const FSkeletalMeshLODInfo* Info = Skel->GetLODInfo(Lod);
+			const TArray<FSkelMeshRenderSection>& Sections = RD->LODRenderData[Lod].RenderSections;
+			for (int32 Sec = 0; Sec < Sections.Num(); ++Sec)
+			{
+				int32 MatIndex = Sections[Sec].MaterialIndex;
+				if (Info && Info->LODMaterialMap.IsValidIndex(Sec) && Info->LODMaterialMap[Sec] != INDEX_NONE)
+				{
+					MatIndex = Info->LODMaterialMap[Sec];
+				}
+				Describe(Lod, Sec, MatIndex, true);
+			}
+		}
+	}
+	else
+	{
+		for (int32 i = 0; i < Comp->GetNumMaterials(); ++i)
+		{
+			Describe(0, i, i, false);
+		}
+	}
+	return Lines;
 }
 
 void UBRAssets::SetGlowScale(float Scale)

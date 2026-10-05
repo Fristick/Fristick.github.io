@@ -298,7 +298,7 @@ void ABRAutoTest::AddRegressionSteps()
 			return false;
 		}
 		C->bGodMode = false;
-		C->ReceiveAttack(500.f, 0.f, nullptr, TEXT("le test automatique"));
+		C->ReceiveAttack(500.f, 0.f, nullptr);
 		BRSaves::Flush();
 		const UBRSaveGame* L = BRSaves::Load(4);
 		const FBRDeathState& DS = C->GetDeathState();
@@ -639,7 +639,7 @@ void ABRAutoTest::AddNetDeathSteps(bool bClient)
 			if (Other && !Other->IsLocallyControlled())
 			{
 				Other->bGodMode = false;
-				Other->ReceiveAttack(500.f, 0.f, nullptr, TEXT("le test reseau"));
+				Other->ReceiveAttack(500.f, 0.f, nullptr);
 				NetMate = Other;
 				return true;
 			}

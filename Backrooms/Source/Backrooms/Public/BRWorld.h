@@ -82,6 +82,8 @@ public:
 	void CancelPlayerDeath() { DeathTimer = -1.f; }
 	/** A terre : secondes avant le reveil au point de depart (-1 sinon) */
 	float GetDeathTimer() const { return DeathTimer; }
+	/** v4.8 : reveil refuse par le serveur : le joueur reste a terre le temps restant */
+	void SetDeathTimer(float Seconds) { DeathTimer = Seconds; }
 	/** A terre : abandonner et se reveiller tout de suite au point de depart */
 	void GiveUpDowned() { DeathTimer = FMath::Min(DeathTimer, 0.3f); }
 	/** Un autre joueur est encore debout (il peut nous relever) */

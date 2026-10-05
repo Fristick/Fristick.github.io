@@ -112,6 +112,18 @@ namespace BRDeath
 			return 0.f;
 		}
 	}
+	/** v4.8 : identifiant stable de la cause (journal, tests) */
+	FORCEINLINE const TCHAR* CauseId(EBRDeathCause C)
+	{
+		switch (C)
+		{
+		case EBRDeathCause::Injury: return TEXT("Injury");
+		case EBRDeathCause::Drowning: return TEXT("Drowning");
+		case EBRDeathCause::Fall: return TEXT("Fall");
+		case EBRDeathCause::Madness: return TEXT("Madness");
+		default: return TEXT("None");
+		}
+	}
 	/** Message vu par les coequipiers ("<nom> est a terre.") */
 	FORCEINLINE const TCHAR* TeammateMessage(EBRDeathCause C)
 	{

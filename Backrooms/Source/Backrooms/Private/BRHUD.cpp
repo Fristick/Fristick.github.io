@@ -2011,7 +2011,9 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		float LY = PY + 62.f * U;
 		// v4.7 : ce que donnera "Reprendre" (meme disposition et objectifs, ou niveau neuf)
 		const FBRSessionState& Ses = Shown->Session;
-		const FString Resume = Shown->bPendingDeath
+		const FString Resume = Shown->bFutureFormat
+			? FString::Printf(TEXT("Version plus r\u00e9cente du jeu (format %d) : partie conserv\u00e9e intacte, lecture seule"), Shown->LoadedVersion)
+			: Shown->bPendingDeath
 			? FString(TEXT("Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, niveau neuf)"))
 			: (Ses.bValid && Ses.Level == D.Number
 				? FString::Printf(TEXT("Reprise \u00e0 l'identique : m\u00eame disposition, %d cassette(s), %d objet(s) ramass\u00e9(s)%s"), Ses.VHSFound,
@@ -2358,6 +2360,14 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 	{
 		const FString Msg = TEXT("MOD\u00c8LES DE SECOURS (import incomplet) : ") + FString::Join(Fallbacks, TEXT("  \u00b7  "));
 		TextF(Msg, Canvas->ClipX * 0.5f, PY + PH + 8.f * U, FLinearColor(1.f, 0.45f, 0.35f, 0.95f), 9.f, EUiWeight::Bold, EUiAlign::Center);
+	}
+	// v4.8 : materiaux en erreur (usage absent, slot inattendu, materiau de secours) : le premier, et leur nombre
+	const TArray<FString>& MatProblems = UBRAssets::GetMaterialProblems();
+	if (MatProblems.Num() > 0)
+	{
+		const FString Msg = FString::Printf(TEXT("MAT\u00c9RIAUX (%d) : %s"), MatProblems.Num(), *MatProblems[0]);
+		TextF(Ellipsize(Msg, Canvas->ClipX * 0.9f, 9.f, EUiWeight::Bold), Canvas->ClipX * 0.5f, PY + PH + 24.f * U,
+			FLinearColor(1.f, 0.35f, 0.85f, 0.95f), 9.f, EUiWeight::Bold, EUiAlign::Center);
 	}
 
 	// Aide des raccourcis : a l'arrivee dans un niveau et apres chaque raccourci
@@ -2787,9 +2797,9 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 		Detail = TEXT("Votre esprit a l\u00e2ch\u00e9.");
 		break;
 	default:
-		if (!C->GetKilledBy().IsEmpty())
+		if (C->GetKillerKind() >= 0)
 		{
-			Detail = TEXT("Abattu par : ") + C->GetKilledBy();
+			Detail = TEXT("Abattu par : ") + ABREntity::Info(static_cast<EBREntityKind>(C->GetKillerKind())).Name;
 		}
 		break;
 	}
@@ -2824,7 +2834,8 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 	Txt(TEXT("VOUS \u00caTES MORT"), CX, H * 0.38f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
 	if (!Detail.IsEmpty())
 	{
-		Txt(Cause == EBRDeathCause::Injury ? TEXT("Tu\u00e9 par : ") + C->GetKilledBy() : Detail, CX, H * 0.48f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U,
+		Txt(Cause == EBRDeathCause::Injury && C->GetKillerKind() >= 0
+			? TEXT("Tu\u00e9 par : ") + ABREntity::Info(static_cast<EBREntityKind>(C->GetKillerKind())).Name : Detail, CX, H * 0.48f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U,
 			GEngine->GetMediumFont(), true);
 	}
 	const float A2 = FMath::Clamp((T - 2.2f) / 1.f, 0.f, 1.f);

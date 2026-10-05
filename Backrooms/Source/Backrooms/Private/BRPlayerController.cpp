@@ -565,17 +565,10 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 					SafeYaw = static_cast<float>(GetControlRotation().Yaw);
 				}
 			}
-			// v4.7 : une ecriture de fond a echoue (disque plein, droits) : on le dit une fois
-			if (!BRSaves::LastWriteSucceeded() && !bSaveFailShown)
-			{
-				bSaveFailShown = true;
-				ABRHUD::Notify(this, TEXT("\u00c9chec de la sauvegarde (disque plein ou dossier prot\u00e9g\u00e9 ?). La partie continue ; nouvel essai \u00e0 la prochaine sauvegarde."),
-					8.f, FLinearColor(1.f, 0.5f, 0.4f));
-			}
-			else if (BRSaves::LastWriteSucceeded())
-			{
-				bSaveFailShown = false;
-			}
+			// v4.7 : une ecriture de fond a echoue (disque plein, droits) : on le dit.
+			// v4.8 : chaque echec est garde (emplacement, numero de demande) jusqu'a ce qu'il soit montre puis acquitte ; une
+			// reussite suivante ne l'efface plus en silence
+			ShowSaveFailures();
 			if (PendingSaveDelay > 0.f)
 			{
 				PendingSaveDelay -= DeltaTime;
@@ -1687,6 +1680,25 @@ void ABRPlayerController::RefreshSaves()
 	ShowSaveLoadMessages();
 }
 
+void ABRPlayerController::ShowSaveFailures()
+{
+	const TArray<FWriteFailure> Failed = BRSaves::PendingFailures();
+	if (Failed.Num() == 0)
+	{
+		return;
+	}
+	uint32 Last = 0;
+	for (const FWriteFailure& F : Failed)
+	{
+		Last = FMath::Max(Last, F.RequestId);
+		UE_LOG(LogBackrooms, Warning, TEXT("Sauvegarde : echec de la demande %u (emplacement %d) : %s"), F.RequestId, F.Slot + 1, *F.Reason);
+	}
+	const FWriteFailure& F = Failed.Last();
+	ABRHUD::Notify(this, FString::Printf(TEXT("\u00c9chec de la sauvegarde (emplacement %d, demande n\u00b0 %u) : %s. La partie continue ; nouvel essai \u00e0 la prochaine sauvegarde."),
+		F.Slot + 1, F.RequestId, *F.Reason), 9.f, FLinearColor(1.f, 0.5f, 0.4f));
+	BRSaves::AcknowledgeFailures(Last);
+}
+
 void ABRPlayerController::ShowSaveLoadMessages()
 {
 	for (const FString& Msg : BRSaves::TakeLoadMessages())
@@ -1720,6 +1732,14 @@ void ABRPlayerController::SelectSave(int32 Slot)
 	UBRSaveGame* S = GetSaveInSlot(Slot);
 	if (!S)
 	{
+		return;
+	}
+	if (S->bFutureFormat)
+	{
+		// v4.8 : partie d'une version plus recente : lecture seule, jamais reprise ni reecrite par ce jeu
+		ABRHUD::Notify(this, FString::Printf(TEXT("Cette partie vient d'une version plus r\u00e9cente du jeu (format %d) : elle reste intacte et ne peut pas \u00eatre reprise ici."),
+			S->LoadedVersion), 6.f, FLinearColor(1.f, 0.7f, 0.45f));
+		PlayMenuSound(TEXT("S_UIDeny"), 0.5f);
 		return;
 	}
 	ActiveSave = S;

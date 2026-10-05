@@ -707,6 +707,33 @@ namespace BRMaterialBuilder
 		return Code;
 	}
 
+	TArray<EMaterialUsage> RequiredUsages(EBRMasterMaterial Which)
+	{
+		switch (Which)
+		{
+		case EBRMasterMaterial::Mesh:
+		case EBRMasterMaterial::Skin:
+			// Modeles Blender en instances, modeles fournis en Nanite, combinaison et entites a squelette
+			return { MATUSAGE_InstancedStaticMeshes, MATUSAGE_SkeletalMesh, MATUSAGE_Nanite };
+		case EBRMasterMaterial::World:
+		case EBRMasterMaterial::WaterSurface:
+			return { MATUSAGE_InstancedStaticMeshes };
+		default:
+			return {};
+		}
+	}
+
+	const TCHAR* UsageName(EMaterialUsage Usage)
+	{
+		switch (Usage)
+		{
+		case MATUSAGE_SkeletalMesh: return TEXT("SkeletalMesh");
+		case MATUSAGE_InstancedStaticMeshes: return TEXT("InstancedStaticMeshes");
+		case MATUSAGE_Nanite: return TEXT("Nanite");
+		default: return TEXT("?");
+		}
+	}
+
 	bool IsAvailable()
 	{
 #if WITH_EDITOR
@@ -728,7 +755,13 @@ namespace BRMaterialBuilder
 		UMaterial* M = NewObject<UMaterial>(Outer ? Outer : GetTransientPackage(), FName(Names[static_cast<int32>(Which)]), RF_Transient);
 		M->MaterialDomain = MD_Surface;
 		M->BlendMode = BLEND_Opaque;
-		M->SetUsageByFlag(MATUSAGE_InstancedStaticMeshes, true);
+		// v4.8 : tous les usages des maillages qui portent ce materiau, avant la compilation. Sans l'usage "maillage a
+		// squelette", la combinaison du joueur (SK_Hazmat) et les entites SK_* recevaient le materiau par defaut (gris, sans
+		// texture) dans un jeu autonome ou empaquete, faute de pouvoir le recompiler
+		for (const EMaterialUsage Usage : RequiredUsages(Which))
+		{
+			M->SetUsageByFlag(Usage, true);
+		}
 		M->bTangentSpaceNormal = true;
 
 		UMaterialEditorOnlyData* Out = M->GetEditorOnlyData();
