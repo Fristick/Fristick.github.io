@@ -7,6 +7,45 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.9** (HUD sans vie, affichage confirmé, Linux et macOS, Steam) :
+
+- **Où lire** : état des lieux dans [`Docs/AUDIT_v4.9.md`](Docs/AUDIT_v4.9.md) ; corrections (problème, modification,
+  fichiers, test, résultat), tableau des plateformes et commandes dans [`Docs/RAPPORT_v4.9.md`](Docs/RAPPORT_v4.9.md).
+
+> **Toujours rien de compilé ni de lancé dans Unreal** : ni GPU, ni moteur, ni Xcode, ni Steamworks dans le conteneur de
+> travail. Les paquets Linux et macOS, la signature Apple, l'envoi Steam, les captures et les images par seconde sont
+> **préparés, non exécutés**. Le rapport donne chaque commande.
+
+- **HUD** :
+  - **plus aucune barre de vie**, et aucune jauge en exploration (ni vie, ni endurance, ni santé mentale) ;
+  - la santé reste une mécanique : dégâts, bandages, gilet, mort, réanimation, serveur ;
+  - une blessure grave se voit à la vignette, un manque d'air par un message sous l'eau ;
+  - la charge des piles se lit en inspectant la lampe ou les piles.
+- **Inventaire (Tab)** :
+  - s'ouvre toujours sur **PERSONNAGE**, avec un panneau **ÉTAT** à deux jauges : **ENDURANCE** (segments) et
+    **SANTÉ MENTALE** (barre continue), chacune avec son pourcentage, un état en mots et une tendance ;
+  - touches enfoncées purgées à l'ouverture et à la fermeture ; fermé pendant un changement de niveau ;
+  - au menu titre : paramètres et touches seulement.
+- **Interface** : catégories JEU / VIDÉO / INTERFACE / GRAPHISMES ; taille et opacité de l'interface ; réticule ;
+  objets rapides et objectifs affichés brièvement, toujours, ou masqués ; objectifs et journal qui défilent. Les noms
+  des coéquipiers ne traversent plus les murs.
+- **Affichage** (§ 7) :
+  - plein écran, plein écran fenêtré ou fenêtre, et une résolution adaptée au mode ;
+  - chaque changement est **à confirmer en 15 s**, sinon l'affichage précédent revient, même après un arrêt du jeu ;
+  - mode réellement obtenu affiché sous Linux et macOS.
+- **Rendu** :
+  - réglage **CRÉATURES DANS LES REFLETS** (écran seulement, ou rayons si le moteur le permet) ;
+  - animation à pleine cadence pour une créature proche hors champ ;
+  - lumières changées sur plusieurs images ;
+  - préchargement par niveau au lieu de tout le jeu.
+- **Linux (Vulkan) et macOS (Metal, arm64 + x86_64)** (§ 10) : configurations, ray tracing matériel coupé (Lumen
+  logiciel), messages selon la plateforme, scripts de construction reproductibles, description du micro, signature
+  et notarisation, contrôle de la casse des chemins.
+- **Steam** : fichiers SteamPipe à identifiants externes, un depot par système, sans publication automatique.
+  Steamworks n'est pas activé : la coop reste en connexion directe.
+- **Traductions** : 54 nouveaux textes dans les 22 langues, produits automatiquement, **non relus**.
+- **Tests** : `-BRAutoTest -BRAutoTestV49`, et les noms des coéquipiers dans `-BRNetTest`.
+
 **Nouveautés de la version 4.8** (combinaison texturée, fluidité RTX, 22 langues) :
 
 - **Où lire** : état des lieux dans [`Docs/AUDIT_v4.8.md`](Docs/AUDIT_v4.8.md) ; tableau des bogues, contrôles, mesures à
@@ -613,8 +652,10 @@ Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau ; `-BR
 
 L'écran reprend la disposition d'*Escape Together*, avec quelques différences :
 - en-tête **MENU >** et onglets **PERSONNAGE**, **JOURNAL**, **PARAMÈTRES**, **TOUCHES** ;
-- colonne de gauche : **OBJECTIFS** (ex. « FILMER PENDANT UNE COUPURE 0/1 », « TROUVER LES CASSETTES VHS 1/6 ») et
-  **BIOMÉTRIE** (santé mentale, santé, endurance, piles) avec des flèches de tendance ;
+- colonne de gauche : **OBJECTIFS** (ex. « FILMER PENDANT UNE COUPURE 0/1 », « TROUVER LES CASSETTES VHS 1/6 »), qui
+  passent à la ligne et défilent à la molette, et **ÉTAT** (v4.9) : exactement deux jauges. **ENDURANCE** a 10
+  segments et une icône en chevrons ; **SANTÉ MENTALE** est une barre continue avec une icône en œil. Chacune donne un
+  pourcentage, un état en mots et une tendance. Il n'y a **pas de jauge de santé** ;
 - au centre : **POCHES** (4 cases, raccourcis 1 à 4) et **STOCKAGE** (20 cases) ;
 - à droite : **ÉQUIPEMENT** sur la silhouette en combinaison : TÊTE (frontale), TORSE (gilet), MAIN (lampe),
   CEINTURE (lampe) ;
@@ -636,6 +677,24 @@ Le monde **continue de tourner** quand l'inventaire est ouvert : comme dans le j
 
 L'onglet **PARAMÈTRES** règle la sensibilité, l'axe Y, le champ de vision, la qualité graphique, le **ray tracing matériel
 (RTX)**, les reflets ray tracés haute qualité, les néons surfaciques, le brouillard volumétrique et le grain.
+
+**v4.9** :
+
+- Tab ouvre l'inventaire sur **PERSONNAGE** en partie, et sur PARAMÈTRES depuis le menu titre ou la pause ; au menu
+  titre, il n'y a ni personnage ni jauges.
+- Les touches enfoncées sont purgées à l'ouverture et à la fermeture : une course ne reprend pas toute seule.
+- L'inventaire se ferme pendant un changement de niveau ou à la mort. Il ne met **pas** le jeu en pause et ne protège
+  de rien.
+- Les paramètres sont rangés en quatre catégories :
+  - **JEU** ;
+  - **VIDÉO** : mode d'affichage, résolution, rendu, synchronisation, images/s max, luminosité ;
+  - **INTERFACE** :
+    - **TAILLE** de 0,8 à 1,25 ;
+    - **OPACITÉ** de 40 à 100 % (les consignes restent lisibles) ;
+    - **RÉTICULE** : point, sur les objets, aucun ;
+    - **OBJETS RAPIDES** : brièvement après un changement, toujours, ou masqués ;
+    - **OBJECTIFS** : brièvement à l'arrivée et à chaque progrès, toujours, ou masqués ;
+  - **GRAPHISMES**.
 
 **v4.7, confort** (les mécaniques ne changent pas) :
 
@@ -724,14 +783,17 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
 
 ## 3. Mécaniques de survie
 
-- **Santé** : les entités vous blessent. Elle remonte lentement si vous êtes au calme.
+- **Santé** : les entités vous blessent. Elle remonte lentement si vous êtes au calme. **v4.9** : aucune barre ne
+  l'affiche. Une blessure grave assombrit et désature un peu les bords de l'image, et le cœur s'entend battre ; les bandages
+  soignent comme avant.
 - **Santé mentale** : elle baisse avec le temps, dans le noir, près des entités et pendant les poursuites.
   En dessous de 30 % surviennent vertiges, aberrations chromatiques, murmures et faux bruits de pas.
   Sous 50 %, les **hallucinations** commencent : une silhouette sans visage au coin de l'œil (elle disparaît dès
   qu'on la regarde), un sourire qui flotte dans le noir… En multijoueur, vous êtes seul à les voir.
   À 0, la folie vous tue. **L'eau d'amande** rend +40 de santé mentale.
 - **Endurance** : courir fait du bruit, et le bruit attire les entités.
-- **Lampe torche** : les piles se vident en 4 minutes environ et la lampe vacille quand elles sont faibles.
+- **Lampe torche** : les piles se vident en 4 minutes environ et la lampe vacille quand elles sont faibles
+  (v4.9 : un avertissement sous 15 % ; la charge exacte se lit en inspectant la lampe ou les piles).
   La lumière attire les Deathmoths et fait charger les Smilers.
 - **Caméscope** : il reste dans le sac (pas en main, pas de viseur) ; tant que vous l'avez sur vous, il filme ce que vous
   regardez et permet la **vision nocturne** (**N**, consomme les piles).
@@ -747,8 +809,9 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
 - **Notes** : des vagabonds ont laissé des notes, avec des indices et les règles de survie.
 - **Eau** (Niveau 37) : l'eau ralentit la marche (jusqu'à −40 % quand elle arrive à la taille). Dans les **bassins
   profonds** (2,6 m sous le carrelage), on **nage** : on avance dans la direction du regard (regarder vers le bas pour
-  descendre), **Espace** pour remonter, **Ctrl/C** pour plonger, **Maj** pour nager vite (fatigant). Sous l'eau, la
-  jauge **OXYGÈNE** se vide en 18 s environ ; ensuite on se noie. Pour sortir, nagez contre un rebord sans mur au-dessus
+  descendre), **Espace** pour remonter, **Ctrl/C** pour plonger, **Maj** pour nager vite (fatigant). Sous l'eau, l'air
+  dure 18 s environ ; ensuite on se noie. Pas de jauge (v4.9) : un message « Manque d'air » apparaît, puis l'image se
+  voile. Pour sortir, nagez contre un rebord sans mur au-dessus
   et appuyez sur **Espace** (ou continuez d'avancer) : le personnage se hisse sur le bord.
 - **Cachettes** (Niveau 0) : placards et trous dans le mur. Une fois caché, les entités perdent votre trace (sauf si
   elles vous ont vu y entrer juste devant elles). Idéal pendant les coupures, quand les Smilers rôdent.
@@ -812,6 +875,8 @@ Le journal (**Tab**) enregistre chaque entité rencontrée, avec sa fiche et un 
 Backrooms/
 ├── Backrooms.uproject           Projet UE 5.8 (plugins : EnhancedInput, PythonScriptPlugin, EditorScriptingUtilities)
 ├── Config/                      Lumen, ombres virtuelles, mode de jeu par défaut, Enhanced Input
+│   ├── Linux/LinuxEngine.ini    v4.9 : Linux (Vulkan), ray tracing matériel coupé
+│   └── Mac/MacEngine.ini        v4.9 : macOS (Metal), ray tracing matériel coupé
 ├── Source/Backrooms/
 │   ├── BRTypes.h                Structures des niveaux, hachage déterministe
 │   ├── BRLevels.cpp             ★ Définition des 12 niveaux (tout est réglable ici)
@@ -824,7 +889,9 @@ Backrooms/
 │   ├── BRJumpscare.cpp          Jumpscares : un par entité (mouvement, caméra, son, effets ; décor dessiné par BRHUD)
 │   ├── BRKeys.*                 Touches configurables (3 par action), sauvegarde, libellés « [E] »
 │   ├── BRConfig.*               Fichier des réglages du joueur (Saved/Config/<plateforme>/BackroomsPlayer.ini)
+│   ├── BRDisplay.*              v4.9 : modes d'affichage (UGameUserSettings), résolutions, confirmation de 15 s
 │   ├── BRAutoTest.*             Tests automatiques (-BRAutoTest, -BRNetTest) : captures, images/s, rapport
+│   │                            (BRAutoTestV47/V48/V49.cpp : vérifications propres à chaque version)
 │   ├── BRRig.*                  Humanoïdes articulés ; v4.5 : maillages à squelette pilotés par des pivots (FBRSkinDriver)
 │   ├── BRItems.*                Catalogue des objets (nom, icône, effet, emplacement)
 │   ├── BRPlayerController.*     Entrées (Enhanced Input en C++), menu principal, multijoueur, inventaire, paramètres, console
@@ -849,6 +916,9 @@ Backrooms/
 │   ├── Blender/render_compare.py     v4.5 : rendus Blender avant / après (Docs/v45)
 │   ├── protect_assets.py             v4.5 : protection des modèles fournis (check / update / list)
 │   ├── verify_pitfalls.py            v4.6 : génération du Niveau 0 rejouée en Python (fosses, accès, raccords, IA)
+│   ├── check_paths.py                v4.9 : casse des noms de ressources, polices et inclusions (Linux, macOS)
+│   ├── Build/                        v4.9 : construction Windows, Linux, macOS (versions.env, build_*, check_package.py)
+│   ├── Steam/                        v4.9 : fichiers SteamPipe (make_steam_vdf.py) et envoi (upload_steam.sh)
 │   ├── Blender/render_pitroom.py     v4.6 : rendu Blender de la salle de fosses générée (Docs/v46)
 │   ├── Blender/check_rig_motion.py   v4.6 : maillages à squelette livrés, posés en mouvement et mesurés
 │   ├── Blender/build_hound_lite.py   v4.6 : SK_HoundLite (Hound allégé, même corps et même squelette)
@@ -932,9 +1002,27 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
   *Choix des ombres* : les dizaines de plafonniers fixes gardent les ombres virtuelles (VSM, mises en cache) ; la lampe
   torche bouge à chaque image (elle invaliderait ses pages VSM en permanence) : en Cinématique, elle passe en ombres
   ray tracées, nettes au contact. L'objectif de 60 images/s en profil Qualité **n'est pas encore mesuré** (voir le rapport).
-- **Entités dans les reflets** : les entités à squelette (`SK_*`) sont dans la scène de ray tracing grâce au cache de
-  skinning. En Lumen logiciel, elles n'ont pas de champ de distance : seuls les reflets en espace écran les montrent.
-  À vérifier en jeu (rapport, § Non vérifié).
+- **Créatures dans les reflets** (v4.9, Paramètres → GRAPHISMES) :
+  - **ÉCRAN SEULEMENT** : une créature n'est reflétée que si elle est à l'écran ;
+  - **RAYONS** : elles sont dans la scène ray tracée et éclairées par les rayons là où le cache de surfaces ne les
+    couvre pas, hors champ compris. C'est plus coûteux, et cela demande le ray tracing matériel et une variable du
+    moteur que le jeu vérifie au lancement (sinon : **ÉCRAN (MOTEUR)**) ;
+  - les reflets **HAUTE QUALITÉ** (*hit lighting*) les montrent toujours.
+
+  Une créature proche, hors champ, reste animée à pleine cadence ; ses décisions sont prises à chaque image.
+- **Modes d'affichage** (v4.9, Paramètres → VIDÉO) :
+  - **PLEIN ÉCRAN**, **PLEIN ÉCRAN FENÊTRÉ** (sans bordures, à la taille de l'écran, Alt+Tab instantané) ou
+    **FENÊTRÉ**, et une **RÉSOLUTION** adaptée au mode : les modes de l'écran en plein écran, les tailles qui tiennent
+    sur le bureau en fenêtre ;
+  - l'échelle de rendu (RÉSOLUTION DE RENDU) est un réglage à part ;
+  - chaque changement est **à confirmer en 15 s** (Entrée : conserver, Échap : rétablir). Sinon, la dernière
+    configuration confirmée revient, même si le jeu s'est arrêté entre-temps ;
+  - les réglages vivent dans `GameUserSettings.ini` seulement. Un profil graphique ne touche plus à la fenêtre ;
+    Alt+Entrée et le redimensionnement à la souris sont suivis ;
+  - sous Linux et macOS, le plein écran exclusif n'existe pas : le menu affiche « demandé → obtenu » ;
+  - dans l'éditeur, ces réglages sont sans effet : le jeu doit être lancé seul.
+- **Linux et macOS** : Lumen logiciel ; le ray tracing matériel est coupé (`Config/Linux`, `Config/Mac`). Sans ray
+  tracing disponible, les réglages RT ne bougent plus et le menu dit pourquoi, selon le système et le RHI.
 - **Murs** : projection triplanaire dans l'espace monde (aucune texture étirée), **normal maps** (relief du papier peint,
   de la moquette, des joints), saleté à grande échelle, saleté au pied des murs, rugosité variable. Sur les sols qui le
   demandent (`AntiTile`, `Stains`), un 2e échantillon tourné casse la répétition et des taches d'humidité sont dessinées
@@ -1094,6 +1182,54 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 
   `-BRChunkBudget=<ms>` règle le budget de construction des chunks. `-BRPitShadows=half|none` mesure le coût des
   ombres des salles de fosses.
+- **`-BRAutoTestV49`** (v4.9, avec `-BRAutoTest`) lance seules les vérifications v4.9 ; elles sont aussi dans
+  `-BRAutoTest`. Les tests d'affichage demandent le **jeu lancé seul** (pas l'éditeur en PIE). Réglages, langue,
+  touches, poches et affichage du joueur sont rétablis à la fin :
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV49
+  ```
+  - **HUD** : aucune jauge en exploration, deux dans l'onglet Personnage, aucune au menu titre, avertissement des
+    piles ;
+  - **Tab** : onglet à l'ouverture, Tab pendant une réaffectation, touche réaffectée, sprint non repris, coup reçu
+    inventaire ouvert, changement de niveau inventaire ouvert ;
+  - **interface** : objets rapides, objectifs et réticule dans chaque mode ; inventaire dans l'écran à 0,8, à 1,25 en
+    allemand et à 1 en arabe ; lignes des paramètres ; réglages RT bloqués sans RT ;
+  - **affichage** : essai, RÉTABLIR, CONSERVER, profil sans effet, retour après 15 s ;
+  - **rendu** : cadence d'une créature de face et de dos, variables des reflets, lumières changées de type (mesure de
+    3 s) ;
+  - **préchargement** : ensembles au Niveau 0, au 37, puis au retour au 0 (aucune accumulation).
+
+  **`-BRNetTest`, v4.9** : l'hôte se place à 3 m du client (nom affiché), puis derrière un mur (nom caché).
+  `-BRPreloadAll` rétablit le préchargement complet de la v4.8, pour comparer les mesures.
+
+---
+
+## 10. Plateformes, construction et Steam (v4.9)
+
+| Système | Rendu | Construction | État |
+|---|---|---|---|
+| Windows 64 bits | DirectX 12, RT matériel si disponible | `Tools\Build\build_windows.ps1 -UERoot <moteur>` (`-NoUnityCheck` : éditeur compilé sans unity d'abord) | préparé, non exécuté pour la v4.9 |
+| Linux x86_64 | Vulkan SM6 (SM5 en repli), Lumen logiciel | `UE_ROOT=<moteur> Tools/Build/build_linux.sh`, ou `build_windows.ps1 -Platform Linux` en croisé | préparé, non exécuté |
+| macOS | Metal, binaire universel arm64 + x86_64, Lumen logiciel | sur un Mac : `UE_ROOT=<moteur> Tools/Build/build_mac.sh` | préparé, non exécuté |
+
+- `Tools/Build/versions.env` fixe la version du moteur (5.8.3) ; un script s'arrête devant une autre version. Chaque
+  paquet va dans `Build/<Plateforme>/<Config>/`, avec un manifeste (commit, outils). `check_package.py` vérifie
+  l'exécutable, les paquets, les polices, les 22 langues et la carte, et qu'aucune source d'import n'est livrée.
+- **macOS** : `build_mac.sh` contrôle les deux architectures et ajoute la description d'usage du micro (le chat
+  vocal reste facultatif). Il signe si `MAC_SIGN_IDENTITY` est défini, puis notarise et agrafe si `NOTARY_PROFILE` est
+  défini. Certificats et identifiants restent hors du dépôt.
+- **Casse des chemins** : `python Tools/check_paths.py` (Linux et macOS distinguent les majuscules).
+- **Steam** :
+  - préparer les fichiers :
+    ```bash
+    python Tools/Steam/make_steam_vdf.py --app <AppID> --depot-windows <id> --depot-linux <id> --depot-mac <id>
+    ```
+    Ils sont écrits dans `Build/SteamPipe/`, avec un depot par système. Ils sont en aperçu par défaut : rien n'est
+    envoyé, et aucune branche n'est publiée ;
+  - envoyer : `STEAM_BUILD_USER=<compte> Tools/Steam/upload_steam.sh` ;
+  - options de lancement à déclarer dans Steamworks : `Backrooms.exe`, `Backrooms.sh`, `Backrooms.app` ;
+  - Steamworks (`OnlineSubsystemSteam`) **n'est pas activé** : la coop passe par l'adresse IP et le chat vocal par le
+    moteur. N'annoncer Linux et macOS sur Steam qu'après un paquet natif installé et testé.
 
 ---
 

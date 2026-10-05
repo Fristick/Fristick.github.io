@@ -249,6 +249,38 @@ void ABRAutoTest::AddV49Steps()
 			PC->IsInventoryOpen() || H->LastFrameStatusGauges != 0);
 		return true;
 	});
+	Add(TEXT("v4.9 Tab : coup recu inventaire ouvert"), 0.5f, [this]()
+	{
+		ABRPlayerController* PC = GetPC();
+		ABRCharacter* C = GetPlayer();
+		if (!PC || !C)
+		{
+			return true;
+		}
+		// L'inventaire n'est ni une pause ni une protection : le coup porte, l'ecran reste coherent
+		PC->SetInventoryOpen(true);
+		C->bGodMode = false;
+		C->Health = 100.f;
+		C->ReceiveAttack(15.f, 0.f, nullptr);
+		return true;
+	});
+	Add(TEXT("v4.9 Tab : apres le coup"), 0.f, [this]()
+	{
+		ABRPlayerController* PC = GetPC();
+		ABRCharacter* C = GetPlayer();
+		if (!PC || !C)
+		{
+			return true;
+		}
+		const float Health = C->Health;
+		const bool bOpen = PC->IsInventoryOpen();
+		Note(FString::Printf(TEXT("coup de 15 inventaire ouvert : sante %.0f (attendu : moins de 100, sans barre affichee), inventaire toujours ouvert %s"), Health, YesNo(bOpen)),
+			Health >= 100.f || !bOpen);
+		C->Health = 100.f;
+		C->bGodMode = true;
+		PC->SetInventoryOpen(false);
+		return true;
+	});
 	Add(TEXT("v4.9 Tab : pendant la reaffectation d'une touche"), 0.3f, [this]()
 	{
 		ABRPlayerController* PC = GetPC();
@@ -970,12 +1002,25 @@ void ABRAutoTest::AddV49Steps()
 		}
 		return true;
 	});
+	Add(TEXT("v4.9 transition : inventaire ouvert"), 0.f, [this]()
+	{
+		// Changement de niveau pendant l'inventaire : il doit se fermer au debut de la transition
+		if (ABRPlayerController* PC = GetPC())
+		{
+			PC->SetInventoryOpen(true);
+		}
+		return true;
+	});
 	AddLoad(37, 4.f, TEXT("v4.9 : prechargement (Niveau 37)"));
 	Add(TEXT("v4.9 prechargement : Niveau 37"), 0.f, [this]()
 	{
 		if (!UBRAssets::IsPreloadDone() && StepTime < 30.f)
 		{
 			return false;
+		}
+		if (ABRPlayerController* PC = GetPC())
+		{
+			Note(FString::Printf(TEXT("changement de niveau inventaire ouvert : inventaire ferme a l'arrivee %s"), YesNo(!PC->IsInventoryOpen())), PC->IsInventoryOpen());
 		}
 		const TArray<FString> Sets = UBRAssets::PreloadedSetNames();
 		const bool bOk = UBRAssets::PreloadCatalogCount() == 0 || Sets.Contains(TEXT("common"));
