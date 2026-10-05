@@ -21,21 +21,21 @@ Le jeu le dit sur la page Langue. Une langue passe en « relue » dans le jeu qu
 | Portugais (Brésil) | `pt-BR` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 | Russe | `ru` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 | Italien | `it` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
-| Turc | `tr` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
+| Turc | `tr` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 | Espagnol (Amérique latine) | `es-419` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
-| Polonais | `pl` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
+| Polonais | `pl` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 | Chinois simplifié | `zh-Hans` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
-| Ukrainien | `uk` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
+| Ukrainien | `uk` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 | Arabe | `ar` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
 | Coréen | `ko` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
 | Persan | `fa` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
 | Japonais | `ja` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
-| Hongrois | `hu` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
-| Tchèque | `cs` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
+| Hongrois | `hu` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
+| Tchèque | `cs` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 | Portugais (Portugal) | `pt-PT` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
-| Suédois | `sv` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
+| Suédois | `sv` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 | Chinois traditionnel | `zh-Hant` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
-| Indonésien | `id` | 0 / 676 (0 %) | 0 | 676 | 0 | 0 |
+| Indonésien | `id` | 676 / 676 (100 %) | 0 | 0 | 0 | 0 |
 
 ## Ce qui n'est pas traduit
 
