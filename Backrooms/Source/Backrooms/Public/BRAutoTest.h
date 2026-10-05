@@ -7,6 +7,10 @@
 // incluse quand le Niveau 0 est teste ; -BRAutoTestPits : ce scenario seul. Graine : -BRSeed=<n>, sinon celle de demonstration.
 // Test multijoueur : -BRNetTest sur un hote (carte ouverte avec "?listen") et sur un client qui le rejoint
 // (rapports dans Saved/NetTest_Hote et Saved/NetTest_Client).
+// v4.8 : -BRAutoTestV48 : combinaison (materiaux par section), profils graphiques appliques a ce qui est deja charge, profil
+// RTX fluide (mesures), 22 langues (traductions, formats, coupure des lignes, preference), notes des anciennes sauvegardes,
+// partie d'un format plus recent, echecs d'ecriture. Inclus dans -BRAutoTest ; -BRNetTest y ajoute degats decides par le
+// serveur, reveil premature refuse et langue differente sur chaque machine.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -71,6 +75,10 @@ private:
 		float TexMB = 0.f;
 		float ChunkMaxMs = 0.f;
 		float ChunkAvgMs = 0.f;
+		/** v4.8 : images ou la generation a depasse son budget, pire demontage d'un chunk, chargements synchrones en jeu */
+		int32 FramesOverBudget = 0;
+		float MaxTeardownMs = 0.f;
+		int32 SyncLoads = 0;
 		/** v4.6 : scene mesuree dans le niveau ("vue" : point de depart ; "fosses_Qualite"... : salle de fosses par profil) */
 		FString Scene = TEXT("vue");
 		TArray<FString> Notes;
@@ -95,6 +103,13 @@ private:
 	int32 LogLineCount() const;
 	/** v4.7 : multijoueur : mort d'un coequipier (blessure), reanimation par l'hote, etats sur les deux machines */
 	void AddNetDeathSteps(bool bClient);
+	/** v4.8 : combinaison, profils, RTX fluide, langues, notes, sauvegardes (BRAutoTestV48.cpp) */
+	void AddV48Steps();
+	/** v4.8 : multijoueur : langue propre a chaque machine, coup decide par le serveur (sans double application), reveil
+	 *  premature refuse par le serveur, reanimation */
+	void AddNetV48Steps(bool bClient);
+	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
+	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */
 	void StartMeasure();
 	void EndMeasure(FLevelReport& R);
@@ -131,6 +146,21 @@ private:
 	int32 SprintMaxPreparing = 0;
 	/** v4.7 : test reseau : coequipier mis a terre, temps de la demande */
 	TWeakObjectPtr<ABRCharacter> NetMate;
+
+	// v4.8 : etat des etapes v4.8
+	/** Langue courante et preference du joueur avant le test (retablies a la fin) */
+	FString TestLanguage;
+	FString TestLanguagePref;
+	bool bLanguageSaved = false;
+	/** Le menu principal etait ouvert avant les captures de la page Langue */
+	bool bWasInMenu = false;
+	/** Premiere ligne du journal a examiner (refus attendu) */
+	int32 TestFirstLog = 0;
+	/** Reseau : sante du coequipier vue par le serveur juste apres le coup ; reveil premature demande */
+	float TestServerHealth = 0.f;
+	bool bRespawnRequested = false;
+	/** Contenu d'un fichier avant une ecriture refusee (il doit rester identique) */
+	TArray<uint8> TestBytes;
 
 	TArray<FStep> Plan;
 	int32 StepIndex = 0;

@@ -18,6 +18,8 @@ UCLASS()
 class BACKROOMS_API ABRHUD : public AHUD
 {
 	GENERATED_BODY()
+	/** v4.8 : le test automatique mesure et coupe les textes comme le HUD (langues sans espaces, ecriture arabe) */
+	friend class ABRAutoTest;
 
 public:
 	virtual void DrawHUD() override;
@@ -146,6 +148,11 @@ private:
 	TArray<FString> WrapF(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const;
 	/** Raccourcit avec des points de suspension sans couper un grapheme (lettre + accents, paire de substitution) */
 	FString Ellipsize(const FString& S, float MaxWidth, float Size, EUiWeight Weight) const;
+	/** Taille a laquelle S tient dans MaxWidth (reduite jusqu'a MinScale x Size) */
+	float FitSize(const FString& S, float MaxWidth, float Size, EUiWeight Weight, float MinScale = 0.72f) const;
+	/** TextF ajuste a MaxWidth : taille reduite si besoin, puis points de suspension */
+	void TextFit(const FString& S, float X, float Y, float MaxWidth, const FLinearColor& C, float Size, EUiWeight Weight = EUiWeight::Regular,
+		EUiAlign Align = EUiAlign::Left, bool bShadow = true);
 	/** Paragraphe deja coupe : aligne a gauche, ou a droite dans une langue ecrite de droite a gauche (arabe, persan) */
 	void DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight);
 	UTexture* UiTex(const TCHAR* Name);

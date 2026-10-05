@@ -808,6 +808,25 @@ TArray<FString> ABRHUD::WrapF(const FString& S, float MaxWidth, float Size, EUiW
 	return Lines;
 }
 
+float ABRHUD::FitSize(const FString& S, float MaxWidth, float Size, EUiWeight Weight, float MinScale) const
+{
+	// v4.8 : les libelles traduits sont plus ou moins longs que le francais : la taille baisse (jusqu'a MinScale) pour tenir
+	const float W = TextSize(S, Size, Weight).X;
+	if (W <= MaxWidth || W <= 0.f)
+	{
+		return Size;
+	}
+	return Size * FMath::Max(MinScale, MaxWidth / W);
+}
+
+void ABRHUD::TextFit(const FString& S, float X, float Y, float MaxWidth, const FLinearColor& C, float Size, EUiWeight Weight, EUiAlign Align, bool bShadow)
+{
+	const float Fitted = FitSize(S, MaxWidth, Size, Weight);
+	// Hauteur gardee : le texte reduit reste centre sur la ligne prevue
+	const float DY = (TextSize(S, Size, Weight).Y - TextSize(S, Fitted, Weight).Y) * 0.5f;
+	TextF(Ellipsize(S, MaxWidth, Fitted, Weight), X, Y + DY, C, Fitted, Weight, Align, bShadow);
+}
+
 void ABRHUD::DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight)
 {
 	const bool bRtl = BRLoc::IsRightToLeft();
@@ -1259,7 +1278,7 @@ void ABRHUD::DrawCard(float X, float Y, float W, float H, float Sel, const FStri
 	const FVector2f SS = Sub.IsEmpty() ? FVector2f::ZeroVector : TextSize(Sub, 11.5f, EUiWeight::Regular);
 	const float Block = LS.Y + (Sub.IsEmpty() ? 0.f : SS.Y - 4.f * U);
 	const float TY = Y + (H - Block) * 0.5f;
-	TextF(Label, TX, TY, WithAlpha(Mix(Ink, DarkInk, S), Alpha), 19.f, EUiWeight::Bold, EUiAlign::Left, S < 0.5f);
+	TextFit(Label, TX, TY, X + W - TX - 60.f * U, WithAlpha(Mix(Ink, DarkInk, S), Alpha), 19.f, EUiWeight::Bold, EUiAlign::Left, S < 0.5f);
 	if (!Sub.IsEmpty())
 	{
 		TextF(Ellipsize(Sub, X + W - TX - 60.f * U, 11.5f, EUiWeight::Regular), TX, TY + LS.Y - 4.f * U,
@@ -1324,8 +1343,10 @@ void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHA
 		RoundRect(X, Y, W, H, H * 0.5f, FLinearColor(1.f, 0.88f, 0.5f, 0.2f * (1.f - S) * Alpha), true);
 	}
 	const FString Label = PC->GetMenuItemLabel(Item);
-	const FVector2f LS = TextSize(Label, 14.5f, EUiWeight::Bold);
 	const float IS = 18.f * U;
+	// v4.8 : libelle ajuste a la largeur du bouton (traductions plus longues)
+	const float LabelSize = FitSize(Label, W - IS - 12.f * U - 32.f * U, 14.5f, EUiWeight::Bold);
+	const FVector2f LS = TextSize(Label, LabelSize, EUiWeight::Bold);
 	const float Total = IS + 12.f * U + LS.X;
 	const float TX = X + (W - Total) * 0.5f;
 	const FLinearColor TextC = bDisabled ? FLinearColor(0.85f, 0.82f, 0.75f, 0.8f) : (bDarkText ? DarkInk : Ink);
@@ -1333,7 +1354,8 @@ void ABRHUD::MenuPill(int32 Item, float X, float Y, float W, float H, const TCHA
 	{
 		DrawTexture(T, TX, Y + (H - IS) * 0.5f, IS, IS, 0.f, 0.f, 1.f, 1.f, WithAlpha(bDisabled ? TextC : (bDarkText ? DarkInk : Accent), Alpha), BLEND_Translucent);
 	}
-	TextF(Label, TX + IS + 12.f * U, Y + (H - LS.Y) * 0.5f, WithAlpha(TextC, Alpha), 14.5f, EUiWeight::Bold, EUiAlign::Left, false);
+	TextF(Ellipsize(Label, W - IS - 12.f * U - 32.f * U, LabelSize, EUiWeight::Bold), TX + IS + 12.f * U, Y + (H - LS.Y) * 0.5f, WithAlpha(TextC, Alpha), LabelSize, EUiWeight::Bold,
+		EUiAlign::Left, false);
 	if (bInteractive)
 	{
 		AddButton(Btn_Menu + Item, X, Y, W, H);
@@ -4162,7 +4184,9 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		}
 		AddButton(Btn_SettingRow + i, X + 10.f * U, Y, W - 20.f * U - (ValueW + Btn * 2.f + 40.f * U), RowH - 6.f * U);
 		const float TY = Y + (RowH - 6.f * U) * 0.5f - 11.f * U;
-		Txt(PC->GetSettingLabel(i), X + 28.f * U, TY, bHov ? Yellow : Ink, 0.85f * U, Medium, false, false);
+		// v4.8 : libelle ajuste a la place libre avant les fleches (langues aux mots longs)
+		const float LabelW = W - 56.f * U - (ValueW + Btn * 2.f + 40.f * U);
+		TextFit(PC->GetSettingLabel(i), X + 28.f * U, TY, LabelW, bHov ? Yellow : Ink, LegacySize(Medium, 0.85f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
 
 		// [<]  valeur  [>]
 		const float PX = X + W - 28.f * U - Btn;
@@ -4174,7 +4198,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		Frame(PX, BY, Btn, Btn, bHovP ? Yellow : YellowDim, 1.f * U);
 		Txt(TEXT("<"), MX + Btn * 0.5f, BY + 4.f * U, bHovM ? Yellow : Ink, 0.85f * U, Medium, true, false);
 		Txt(TEXT(">"), PX + Btn * 0.5f, BY + 4.f * U, bHovP ? Yellow : Ink, 0.85f * U, Medium, true, false);
-		Txt(PC->GetSettingValue(i), MX + Btn + ValueW * 0.5f, TY, Yellow, 0.85f * U, Medium, true, false);
+		TextFit(PC->GetSettingValue(i), MX + Btn + ValueW * 0.5f, TY, ValueW - 12.f * U, Yellow, LegacySize(Medium, 0.85f * U, U), EUiWeight::Regular, EUiAlign::Center, false);
 		AddButton(Btn_SettingBase + i * 2, MX, BY, Btn, Btn);
 		AddButton(Btn_SettingBase + i * 2 + 1, PX, BY, Btn, Btn);
 		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.12f), X + 18.f * U, Y + RowH - 4.f * U, W - 36.f * U, 1.f * U);

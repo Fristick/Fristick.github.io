@@ -1,5 +1,6 @@
 #include "BRAutoTest.h"
 #include "Backrooms.h"
+#include "BRAssets.h"
 #include "BRCharacter.h"
 #include "BREntity.h"
 #include "BRInteractables.h"
@@ -157,6 +158,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Non-regression v4.7 : %d etapes. Rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV48")))
+	{
+		// v4.8 : combinaison, profils, RTX fluide, langues, notes, sauvegardes
+		AddV48Steps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.8 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestPits")))
 	{
 		// v4.6 : la salle de fosses seule
@@ -191,6 +204,22 @@ void ABRAutoTest::EndPlay(const EEndPlayReason::Type Reason)
 int32 ABRAutoTest::LogLineCount() const
 {
 	return Capture.IsValid() ? Capture->Num() : 0;
+}
+
+bool ABRAutoTest::LogContains(int32 From, const TCHAR* Needle) const
+{
+	if (!Capture.IsValid())
+	{
+		return false;
+	}
+	for (const FString& Line : Capture->Range(From, Capture->Num()))
+	{
+		if (Line.Contains(Needle))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 ABRWorld* ABRAutoTest::GetBRWorld() const
@@ -292,6 +321,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 		AddPitSteps(); // v4.6
 	}
 	AddRegressionSteps(); // v4.7
+	AddV48Steps(); // v4.8
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
 	AddLoad(4, 8.f, TEXT("Galerie des entites"));
@@ -576,6 +606,8 @@ void ABRAutoTest::BuildNetPlan()
 
 	// v4.7 : mort et reanimation en reseau (cause, etat tenu par le serveur, reveil vu des deux cotes)
 	AddNetDeathSteps(bClient);
+	// v4.8 : langue propre a chaque machine, coup decide par le serveur, reveil premature refuse
+	AddNetV48Steps(bClient);
 
 	// L'hote emmene le groupe au Niveau 37 : le client doit suivre avec la meme graine
 	Add(TEXT("Changement de niveau"), 0.f, [this, bClient]()
@@ -683,6 +715,16 @@ void ABRAutoTest::EndMeasure(FLevelReport& R)
 				W->ChunkPlanMsTotal / N, W->MaxChunkPlanMs, W->ChunkCollisionMsTotal / N, W->ChunkVisualMsTotal / N, W->ChunkLightMsTotal / N,
 				W->ChunkActorMsTotal / N, W->ForcedChunkBuilds));
 		}
+		// v4.8 : budget partage par image, demontage etale, collisions preparees a l'avance, chargements synchrones en jeu
+		R.FramesOverBudget = W->FramesOverBudget;
+		R.MaxTeardownMs = W->MaxTeardownMs;
+		R.SyncLoads = UBRAssets::SyncLoadsInGame;
+		Note(FString::Printf(TEXT("v4.8 streaming : budget %.1f ms (plafond %.1f), %d image(s) au-dela du budget, %d chunk(s) demonte(s) (pire %.1f ms), %d collision(s) preparee(s) a l'avance, ombres locales %d"),
+			W->FrameBudgetMs, W->ChunkStepBudgetMs, W->FramesOverBudget, W->ChunksTornDown, W->MaxTeardownMs, W->PredictedCollisionBuilds,
+			W->GetShadowedLightCount()));
+		Note(FString::Printf(TEXT("v4.8 chargements synchrones en jeu : %d (pire %.1f ms)%s%s ; attente des shaders a l'arrivee : %.1f s"),
+			UBRAssets::SyncLoadsInGame, UBRAssets::MaxSyncLoadMs, UBRAssets::SyncLoadNames.Num() > 0 ? TEXT(" : ") : TEXT(""),
+			*FString::Join(UBRAssets::SyncLoadNames, TEXT(", ")).Left(300), W->GetShaderHold()));
 		W->ResetChunkStats();
 	}
 	if (ABRPlayerController* PC = GetPC())
@@ -1593,11 +1635,12 @@ void ABRAutoTest::WriteReport()
 		*FPlatformMisc::GetPrimaryGPUBrand(), FPlatformMemory::GetConstants().TotalPhysical / (1024.0 * 1024.0 * 1024.0)));
 	{
 		const FBRSettings& S = FBRSettings::Get();
-		static const TCHAR* Profiles[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique"), TEXT("Personnalise") };
+		// v4.8 : 4 RTX fluide (avant : borne a 3, il apparaissait comme "Personnalise")
+		static const TCHAR* Profiles[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique"), TEXT("Personnalise"), TEXT("RTX fluide") };
 		uint32 FixedSeed = 0;
 		FParse::Value(FCommandLine::Get(), TEXT("BRSeed="), FixedSeed);
 		L.Add(FString::Printf(TEXT("Profil : %s (qualite %d, RT %d, hit lighting %d, ombres RT lampe %d, rendu %d %%)   Graine fixe : %s"),
-			Profiles[FMath::Clamp(S.GraphicsProfile, 0, 3)], S.Quality, S.bHardwareRT ? 1 : 0, S.bRTHitLighting ? 1 : 0, S.bRTShadows ? 1 : 0,
+			Profiles[FMath::Clamp(S.GraphicsProfile, 0, 4)], S.Quality, S.bHardwareRT ? 1 : 0, S.bRTHitLighting ? 1 : 0, S.bRTShadows ? 1 : 0,
 			S.RenderScale, FixedSeed ? *FString::Printf(TEXT("%u"), FixedSeed) : TEXT("non (-BRSeed=<n>)")));
 	}
 	if (ABRPlayerController* PC = GetPC())
@@ -1625,16 +1668,16 @@ void ABRAutoTest::WriteReport()
 	// Tableur : Saved/AutoTest/Mesures.csv (une ligne par niveau)
 	{
 		TArray<FString> Csv;
-		Csv.Add(TEXT("niveau;img_s;bas_1pct;mediane_ms;p95_ms;p99_ms;pire_ms;gpu_ms;jeu_ms;rendu_ms;chunks;chunk_max_ms;chunk_moy_ms;lumieres;ombres;entites;ram_mo;tex_mo;scene"));
+		Csv.Add(TEXT("niveau;img_s;bas_1pct;mediane_ms;p95_ms;p99_ms;pire_ms;gpu_ms;jeu_ms;rendu_ms;chunks;chunk_max_ms;chunk_moy_ms;lumieres;ombres;entites;ram_mo;tex_mo;scene;hors_budget;demontage_max_ms;chargements_sync"));
 		for (const FLevelReport& R : Reports)
 		{
 			if (R.Chunks == 0 && R.AvgFPS <= 0.f)
 			{
 				continue;
 			}
-			Csv.Add(FString::Printf(TEXT("%d;%.1f;%.1f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%d;%.2f;%.2f;%d;%d;%d;%.0f;%.0f;%s"), R.Level, R.AvgFPS, R.Low1FPS, R.P50Ms,
-				R.P95Ms, R.P99Ms, R.WorstMs, R.GpuMs, R.GameMs, R.RenderMs, R.Chunks, R.ChunkMaxMs, R.ChunkAvgMs, R.Lights, R.ShadowLights, R.Entities, R.RamMB,
-				R.TexMB, *R.Scene));
+			Csv.Add(FString::Printf(TEXT("%d;%.1f;%.1f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%d;%.2f;%.2f;%d;%d;%d;%.0f;%.0f;%s;%d;%.2f;%d"), R.Level, R.AvgFPS, R.Low1FPS,
+				R.P50Ms, R.P95Ms, R.P99Ms, R.WorstMs, R.GpuMs, R.GameMs, R.RenderMs, R.Chunks, R.ChunkMaxMs, R.ChunkAvgMs, R.Lights, R.ShadowLights, R.Entities,
+				R.RamMB, R.TexMB, *R.Scene, R.FramesOverBudget, R.MaxTeardownMs, R.SyncLoads));
 		}
 		FFileHelper::SaveStringArrayToFile(Csv, *FPaths::Combine(OutDir, TEXT("Mesures.csv")), FFileHelper::EEncodingOptions::ForceUTF8);
 	}
