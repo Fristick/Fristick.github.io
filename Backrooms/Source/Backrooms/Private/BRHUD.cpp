@@ -1097,6 +1097,12 @@ void ABRHUD::DrawHUD()
 	// v4.9 (tests) : jauges de statut dessinees pendant cette image
 	LastFrameStatusGauges = StatusGaugesDrawn;
 	StatusGaugesDrawn = 0;
+	LastFrameMateNames = MateNamesDrawn;
+	LastFrameMatesHidden = MateNamesHidden;
+	MateNamesDrawn = 0;
+	MateNamesHidden = 0;
+	LastFrameExplore = ExploreDrawn;
+	ExploreDrawn = 0;
 
 	// Animations d'ouverture du menu titre et de la pause
 	const bool bMenuNow = PC && PC->IsInMenu();
@@ -3179,6 +3185,7 @@ void ABRHUD::DrawQuickBar(ABRCharacter* C)
 			return;
 		}
 	}
+	ExploreDrawn |= 1;
 	const float A = Show * HudAlpha();
 	const float U = Ui();
 	const float S = 58.f * U;
@@ -3241,6 +3248,7 @@ void ABRHUD::DrawObjectiveTracker(ABRWorld* W)
 			return;
 		}
 	}
+	ExploreDrawn |= 2;
 	const float A = Show * HudAlpha();
 	const float U = Ui();
 	const float RX = Canvas->ClipX - 58.f * U;
@@ -3279,6 +3287,7 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 	const int32 Mode = FBRSettings::Get().CrosshairMode;
 	if (Mode == 0 || (Mode == 1 && bFocus))
 	{
+		ExploreDrawn |= 4;
 		RoundRect(CX - S * 0.5f - 1.f * U, CY - S * 0.5f - 1.f * U, S + 2.f * U, S + 2.f * U, S * 0.5f + 1.f * U, FLinearColor(0.f, 0.f, 0.f, (bFocus ? 0.35f : 0.2f) * A));
 		RoundRect(CX - S * 0.5f, CY - S * 0.5f, S, S, S * 0.5f, FLinearColor(1.f, 1.f, 1.f, (bFocus ? 0.92f : 0.5f) * A));
 	}
@@ -4694,6 +4703,7 @@ void ABRHUD::DrawTeammates(ABRCharacter* C)
 		const bool bLineOfSight = !World->LineTraceTestByChannel(ViewLoc, Head, ECC_Visibility, Query);
 		if (!bLineOfSight)
 		{
+			++MateNamesHidden;
 			if (Other->IsDead() && Other->CanBeRevived())
 			{
 				const float MA = FMath::Clamp(1.1f - Dist / 5000.f, 0.3f, 0.75f);
@@ -4706,6 +4716,7 @@ void ABRHUD::DrawTeammates(ABRCharacter* C)
 			}
 			continue;
 		}
+		++MateNamesDrawn;
 		const APlayerState* PS = Other->GetPlayerState();
 		FString Name = PS ? PS->GetPlayerName() : FString(BR_STR(NSLOCTEXT("BR", "HUD.Explorateur", "Explorateur")));
 		if (Name.Len() > 20)

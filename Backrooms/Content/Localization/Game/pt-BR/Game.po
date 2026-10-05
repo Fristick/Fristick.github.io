@@ -14,8 +14,8 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
 #. Key:	Assets.WrongScale
-#. SourceLocation:	Source/Backrooms/Private/BRAssets.cpp(1282)
-#: Source/Backrooms/Private/BRAssets.cpp(1282)
+#. SourceLocation:	Source/Backrooms/Private/BRAssets.cpp(1295)
+#: Source/Backrooms/Private/BRAssets.cpp(1295)
 #, fuzzy
 msgctxt "BR,Assets.WrongScale"
 msgid "Modèles 3D importés à la mauvaise échelle ({Mesh} : {Size} cm au lieu de {Expected}) : ils sont invisibles. Relancez l'import : Fenêtre > Journal de sortie > Python : import backrooms_setup; backrooms_setup.run(force=True)"
@@ -774,2008 +774,2008 @@ msgid "{Flashlight}  lampe     {NightVision}  vision nocturne     {Pocket1}-{Poc
 msgstr "{Flashlight}  lanterna     {NightVision}  visão noturna     {Pocket1}-{Pocket4}  bolsos     {Drink}  água de amêndoas     {Bandage}  bandagem     {Battery}  pilhas     {Inventory}  inventário     {Pause}  pausa"
 
 #. Key:	Loading.Shaders
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1217)
-#: Source/Backrooms/Private/BRHUD.cpp(1217)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1223)
+#: Source/Backrooms/Private/BRHUD.cpp(1223)
 #, fuzzy
 msgctxt "BR,Loading.Shaders"
 msgid "Préparation des shaders…"
 msgstr "Preparando os shaders…"
 
 #. Key:	HUD.TexturesIndisponiblesOuvrezProjetEditeur
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1243)
-#: Source/Backrooms/Private/BRHUD.cpp(1243)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1249)
+#: Source/Backrooms/Private/BRHUD.cpp(1249)
 #, fuzzy
 msgctxt "BR,HUD.TexturesIndisponiblesOuvrezProjetEditeur"
 msgid "Textures indisponibles : ouvrez le projet dans l'éditeur (plugin Python actif) pour importer les ressources."
 msgstr "Texturas indisponíveis: abra o projeto no editor (plugin de Python ativo) para importar os recursos."
 
 #. Key:	HUD.ModeSecoursTexturesLuesRawassets
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1249)
-#: Source/Backrooms/Private/BRHUD.cpp(1249)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1255)
+#: Source/Backrooms/Private/BRHUD.cpp(1255)
 #, fuzzy
 msgctxt "BR,HUD.ModeSecoursTexturesLuesRawassets"
 msgid "Mode secours : textures lues dans RawAssets/. Relancez l'import (Output Log > Python : import backrooms_setup; backrooms_setup.run(True))"
 msgstr "Modo de emergência: texturas lidas em RawAssets/. Execute a importação de novo (Output Log > Python: import backrooms_setup; backrooms_setup.run(True))"
 
 #. Key:	HUD.SonsNonImportesJeuSera
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1255)
-#: Source/Backrooms/Private/BRHUD.cpp(1255)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1261)
+#: Source/Backrooms/Private/BRHUD.cpp(1261)
 #, fuzzy
 msgctxt "BR,HUD.SonsNonImportesJeuSera"
 msgid "Sons non importés : le jeu sera silencieux tant que l'import Python n'aura pas été fait."
 msgstr "Sons não importados: o jogo ficará em silêncio até a importação em Python ser feita."
 
 #. Key:	HUD.TheBackrooms
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1286)
-#: Source/Backrooms/Private/BRHUD.cpp(1286)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1292)
+#: Source/Backrooms/Private/BRHUD.cpp(1292)
 #, fuzzy
 msgctxt "BR,HUD.TheBackrooms"
 msgid "THE BACKROOMS"
 msgstr "THE BACKROOMS"
 
 #. Key:	HUD.Astuce
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1458)
-#: Source/Backrooms/Private/BRHUD.cpp(1458)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1464)
+#: Source/Backrooms/Private/BRHUD.cpp(1464)
 #, fuzzy
 msgctxt "BR,HUD.Astuce"
 msgid "ASTUCE"
 msgstr "DICA"
 
 #. Key:	HUD.V45InspireBackroomsWiki
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1473)
-#: Source/Backrooms/Private/BRHUD.cpp(1473)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1479)
+#: Source/Backrooms/Private/BRHUD.cpp(1479)
 #, fuzzy
 msgctxt "BR,HUD.V45InspireBackroomsWiki"
 msgid "v4.5   ·   Inspiré du Backrooms Wiki (CC BY-SA 3.0)   ·   © 1992 THRESHOLD SYSTEMS"
 msgstr "v4.5   ·   Inspirado na Backrooms Wiki (CC BY-SA 3.0)   ·   © 1992 THRESHOLD SYSTEMS"
 
 #. Key:	HUD.NoclippezHorsRealiteMauvaisEndroit
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1569)
-#: Source/Backrooms/Private/BRHUD.cpp(1569)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1575)
+#: Source/Backrooms/Private/BRHUD.cpp(1575)
 #, fuzzy
 msgctxt "BR,HUD.NoclippezHorsRealiteMauvaisEndroit"
 msgid "Si vous noclippez hors de la réalité au mauvais endroit…"
 msgstr "Se você der noclip para fora da realidade no lugar errado…"
 
 #. Key:	HUD.AtterrissezBackrooms
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1570)
-#: Source/Backrooms/Private/BRHUD.cpp(1570)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1576)
+#: Source/Backrooms/Private/BRHUD.cpp(1576)
 #, fuzzy
 msgctxt "BR,HUD.AtterrissezBackrooms"
 msgid "…vous atterrissez dans les Backrooms."
 msgstr "…vai parar nas Backrooms."
 
 #. Key:	HUD.NouvellePartiePartirSeulInconnu
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1573)
-#: Source/Backrooms/Private/BRHUD.cpp(1573)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1579)
+#: Source/Backrooms/Private/BRHUD.cpp(1579)
 #, fuzzy
 msgctxt "BR,HUD.NouvellePartiePartirSeulInconnu"
 msgid "Nouvelle partie : partir seul dans l'inconnu"
 msgstr "Novo jogo: partir sozinho rumo ao desconhecido"
 
 #. Key:	HUD.ReprendreSavenameNiveauCurrentlevelNouve
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1578)
-#: Source/Backrooms/Private/BRHUD.cpp(1578)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1584)
+#: Source/Backrooms/Private/BRHUD.cpp(1584)
 #, fuzzy
 msgctxt "BR,HUD.ReprendreSavenameNiveauCurrentlevelNouve"
 msgid "Reprendre « {SaveName} » (Niveau {CurrentLevel}) ou nouvelle partie"
 msgstr "Continuar “{SaveName}” (Nível {CurrentLevel}) ou novo jogo"
 
 #. Key:	HUD.LanguageCurrent
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1582)
-#: Source/Backrooms/Private/BRHUD.cpp(1582)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1588)
+#: Source/Backrooms/Private/BRHUD.cpp(1588)
 #, fuzzy
 msgctxt "BR,HUD.LanguageCurrent"
 msgid "Actuelle : {Language}  ·  22 langues"
 msgstr "Atual: {Language}  ·  22 idiomas"
 
 #. Key:	HUD.Jusqu4ExplorateursMeilleurPc
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1586)
-#: Source/Backrooms/Private/BRHUD.cpp(1586)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1592)
+#: Source/Backrooms/Private/BRHUD.cpp(1592)
 #, fuzzy
 msgctxt "BR,HUD.Jusqu4ExplorateursMeilleurPc"
 msgid "Jusqu'à 4 explorateurs · le meilleur PC héberge"
 msgstr "Até 4 exploradores · o melhor PC hospeda"
 
 #. Key:	HUD.GraphismesTouchesChatVocal
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1587)
-#: Source/Backrooms/Private/BRHUD.cpp(1587)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1593)
+#: Source/Backrooms/Private/BRHUD.cpp(1593)
 #, fuzzy
 msgctxt "BR,HUD.GraphismesTouchesChatVocal"
 msgid "Graphismes, son, touches, chat vocal"
 msgstr "Gráficos, som, controles, chat de voz"
 
 #. Key:	HUD.RevenirRealiteExiste
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1589)
-#: Source/Backrooms/Private/BRHUD.cpp(1589)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1595)
+#: Source/Backrooms/Private/BRHUD.cpp(1595)
 #, fuzzy
 msgctxt "BR,HUD.RevenirRealiteExiste"
 msgid "Revenir à la réalité… si elle existe"
 msgstr "Voltar à realidade… se ela existir"
 
 #. Key:	HUD.Choisir
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1605)
-#: Source/Backrooms/Private/BRHUD.cpp(1605) Source/Backrooms/Private/BRHUD.cpp(1790) Source/Backrooms/Private/BRHUD.cpp(2226) Source/Backrooms/Private/BRHUD.cpp(2313)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1611)
+#: Source/Backrooms/Private/BRHUD.cpp(1611) Source/Backrooms/Private/BRHUD.cpp(1796) Source/Backrooms/Private/BRHUD.cpp(2232) Source/Backrooms/Private/BRHUD.cpp(2319)
 #, fuzzy
 msgctxt "BR,HUD.Choisir"
 msgid "Choisir"
 msgstr "Escolher"
 
 #. Key:	HUD.Entree
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1606)
-#: Source/Backrooms/Private/BRHUD.cpp(1606) Source/Backrooms/Private/BRHUD.cpp(1791) Source/Backrooms/Private/BRHUD.cpp(2227) Source/Backrooms/Private/BRHUD.cpp(2314)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1612)
+#: Source/Backrooms/Private/BRHUD.cpp(1612) Source/Backrooms/Private/BRHUD.cpp(1797) Source/Backrooms/Private/BRHUD.cpp(2233) Source/Backrooms/Private/BRHUD.cpp(2320)
 #, fuzzy
 msgctxt "BR,HUD.Entree"
 msgid "ENTRÉE"
 msgstr "ENTER"
 
 #. Key:	HUD.Valider
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1606)
-#: Source/Backrooms/Private/BRHUD.cpp(1606) Source/Backrooms/Private/BRHUD.cpp(1791) Source/Backrooms/Private/BRHUD.cpp(2227) Source/Backrooms/Private/BRHUD.cpp(2314)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1612)
+#: Source/Backrooms/Private/BRHUD.cpp(1612) Source/Backrooms/Private/BRHUD.cpp(1797) Source/Backrooms/Private/BRHUD.cpp(2233) Source/Backrooms/Private/BRHUD.cpp(2320)
 #, fuzzy
 msgctxt "BR,HUD.Valider"
 msgid "Valider"
 msgstr "Confirmar"
 
 #. Key:	HUD.Fin
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1607)
-#: Source/Backrooms/Private/BRHUD.cpp(1607) Source/Backrooms/Private/BRHUD.cpp(2923) Source/Backrooms/Private/BRHUD.cpp(3509)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1613)
+#: Source/Backrooms/Private/BRHUD.cpp(1613) Source/Backrooms/Private/BRHUD.cpp(2929) Source/Backrooms/Private/BRHUD.cpp(3518)
 #, fuzzy
 msgctxt "BR,HUD.Fin"
 msgid "FIN"
 msgstr "END"
 
 #. Key:	HUD.Quitter
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1607)
-#: Source/Backrooms/Private/BRHUD.cpp(1607) Source/Backrooms/Private/BRHUD.cpp(3509)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1613)
+#: Source/Backrooms/Private/BRHUD.cpp(1613) Source/Backrooms/Private/BRHUD.cpp(3518)
 #, fuzzy
 msgctxt "BR,HUD.Quitter"
 msgid "Quitter"
 msgstr "Sair"
 
 #. Key:	HUD.LanguageTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1625)
-#: Source/Backrooms/Private/BRHUD.cpp(1625)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1631)
+#: Source/Backrooms/Private/BRHUD.cpp(1631)
 #, fuzzy
 msgctxt "BR,HUD.LanguageTitle"
 msgid "LANGUE"
 msgstr "IDIOMA"
 
 #. Key:	HUD.LanguageSubtitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1632)
-#: Source/Backrooms/Private/BRHUD.cpp(1632)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1638)
+#: Source/Backrooms/Private/BRHUD.cpp(1638)
 #, fuzzy
 msgctxt "BR,HUD.LanguageSubtitle"
 msgid "Textes, nombres et dates  ·  s'applique tout de suite  ·  en coop, chacun garde la sienne"
 msgstr "Textos, números e datas  ·  aplica na hora  ·  no cooperativo, cada um mantém o seu"
 
 #. Key:	HUD.LanguageSystem
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1682)
-#: Source/Backrooms/Private/BRHUD.cpp(1682)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1688)
+#: Source/Backrooms/Private/BRHUD.cpp(1688)
 #, fuzzy
 msgctxt "BR,HUD.LanguageSystem"
 msgid "SYSTÈME"
 msgstr "SISTEMA"
 
 #. Key:	HUD.LanguageSourceNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1729)
-#: Source/Backrooms/Private/BRHUD.cpp(1729)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1735)
+#: Source/Backrooms/Private/BRHUD.cpp(1735)
 #, fuzzy
 msgctxt "BR,HUD.LanguageSourceNote"
 msgid "Langue d'origine du jeu : tous les textes sont écrits en français, puis traduits."
 msgstr "Idioma original do jogo: todos os textos foram escritos em francês e depois traduzidos."
 
 #. Key:	HUD.LanguageReviewedNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1733)
-#: Source/Backrooms/Private/BRHUD.cpp(1733)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1739)
+#: Source/Backrooms/Private/BRHUD.cpp(1739)
 #, fuzzy
 msgctxt "BR,HUD.LanguageReviewedNote"
 msgid "Traduction relue par une personne qui parle cette langue."
 msgstr "Tradução revisada por alguém que fala este idioma."
 
 #. Key:	HUD.LanguageMachineNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1737)
-#: Source/Backrooms/Private/BRHUD.cpp(1737)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1743)
+#: Source/Backrooms/Private/BRHUD.cpp(1743)
 #, fuzzy
 msgctxt "BR,HUD.LanguageMachineNote"
 msgid "Traduction produite automatiquement, pas encore relue par une personne qui parle cette langue : des tournures peuvent sonner faux."
 msgstr "Tradução gerada automaticamente, ainda não revisada por alguém que fala este idioma: algumas frases podem soar estranhas."
 
 #. Key:	HUD.LanguageMissingNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1741)
-#: Source/Backrooms/Private/BRHUD.cpp(1741)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1747)
+#: Source/Backrooms/Private/BRHUD.cpp(1747)
 #, fuzzy
 msgctxt "BR,HUD.LanguageMissingNote"
 msgid "{Count}|plural(one=Un texte n'est pas encore traduit : il s'affiche en français.,other={Count} textes ne sont pas encore traduits : ils s'affichent en français.)"
 msgstr "{Count}|plural(one=Um texto ainda não foi traduzido: ele aparece em francês.,other={Count} textos ainda não foram traduzidos: eles aparecem em francês.)"
 
 #. Key:	HUD.LanguageAudioNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1744)
-#: Source/Backrooms/Private/BRHUD.cpp(1744)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1750)
+#: Source/Backrooms/Private/BRHUD.cpp(1750)
 #, fuzzy
 msgctxt "BR,HUD.LanguageAudioNote"
 msgid "Voix et sons : pas de doublage. Les bruits et les voix sont les mêmes dans toutes les langues ; seuls les textes à l'écran changent."
 msgstr "Vozes e sons: sem dublagem. Os ruídos e as vozes são os mesmos em todos os idiomas; só os textos na tela mudam."
 
 #. Key:	HUD.LanguageFontsMissing
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1748)
-#: Source/Backrooms/Private/BRHUD.cpp(1748)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1754)
+#: Source/Backrooms/Private/BRHUD.cpp(1754)
 #, fuzzy
 msgctxt "BR,HUD.LanguageFontsMissing"
 msgid "Des polices manquent dans le jeu installé (dossier Content/Fonts) : le chinois, le japonais, le coréen, l'arabe ou le persan peuvent s'afficher en carrés."
 msgstr "Faltam fontes no jogo instalado (pasta Content/Fonts): chinês, japonês, coreano, árabe ou persa podem aparecer como quadradinhos."
 
 #. Key:	HUD.LanguageRtlNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1752)
-#: Source/Backrooms/Private/BRHUD.cpp(1752)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1758)
+#: Source/Backrooms/Private/BRHUD.cpp(1758)
 #, fuzzy
 msgctxt "BR,HUD.LanguageRtlNote"
 msgid "Écriture de droite à gauche : les paragraphes sont alignés à droite."
 msgstr "Escrita da direita para a esquerda: os parágrafos são alinhados à direita."
 
 #. Key:	HUD.LanguageCurrentHeader
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1765)
-#: Source/Backrooms/Private/BRHUD.cpp(1765)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1771)
+#: Source/Backrooms/Private/BRHUD.cpp(1771)
 #, fuzzy
 msgctxt "BR,HUD.LanguageCurrentHeader"
 msgid "LANGUE ACTUELLE"
 msgstr "IDIOMA ATUAL"
 
 #. Key:	HUD.LanguageSourceCoverage
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1768)
-#: Source/Backrooms/Private/BRHUD.cpp(1768)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1774)
+#: Source/Backrooms/Private/BRHUD.cpp(1774)
 #, fuzzy
 msgctxt "BR,HUD.LanguageSourceCoverage"
 msgid "Langue source"
 msgstr "Idioma de origem"
 
 #. Key:	HUD.LanguageCoverage
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1769)
-#: Source/Backrooms/Private/BRHUD.cpp(1769)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1775)
+#: Source/Backrooms/Private/BRHUD.cpp(1775)
 #, fuzzy
 msgctxt "BR,HUD.LanguageCoverage"
 msgid "{Done} / {Total} textes traduits"
 msgstr "{Done} / {Total} textos traduzidos"
 
 #. Key:	HUD.LanguageSwitchTo
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1785)
-#: Source/Backrooms/Private/BRHUD.cpp(1785)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1791)
+#: Source/Backrooms/Private/BRHUD.cpp(1791)
 #, fuzzy
 msgctxt "BR,HUD.LanguageSwitchTo"
 msgid "ENTRÉE : passer en {Language}"
 msgstr "ENTER: mudar para {Language}"
 
 #. Key:	HUD.Echap
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1792)
-#: Source/Backrooms/Private/BRHUD.cpp(1792) Source/Backrooms/Private/BRHUD.cpp(2228) Source/Backrooms/Private/BRHUD.cpp(2315) Source/Backrooms/Private/BRHUD.cpp(2366)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1798)
+#: Source/Backrooms/Private/BRHUD.cpp(1798) Source/Backrooms/Private/BRHUD.cpp(2234) Source/Backrooms/Private/BRHUD.cpp(2321) Source/Backrooms/Private/BRHUD.cpp(2372)
 #, fuzzy
 msgctxt "BR,HUD.Echap"
 msgid "ÉCHAP"
 msgstr "ESC"
 
 #. Key:	HUD.Retour
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1792)
-#: Source/Backrooms/Private/BRHUD.cpp(1792) Source/Backrooms/Private/BRHUD.cpp(2315) Source/Backrooms/Private/BRHUD.cpp(2366) Source/Backrooms/Private/BRHUD.cpp(2597)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1798)
+#: Source/Backrooms/Private/BRHUD.cpp(1798) Source/Backrooms/Private/BRHUD.cpp(2321) Source/Backrooms/Private/BRHUD.cpp(2372) Source/Backrooms/Private/BRHUD.cpp(2603)
 #, fuzzy
 msgctxt "BR,HUD.Retour"
 msgid "Retour"
 msgstr "Voltar"
 
 #. Key:	HUD.DernierePosition
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1983)
-#: Source/Backrooms/Private/BRHUD.cpp(1983)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1989)
+#: Source/Backrooms/Private/BRHUD.cpp(1989)
 #, fuzzy
 msgctxt "BR,HUD.DernierePosition"
 msgid "DERNIÈRE POSITION"
 msgstr "ÚLTIMA POSIÇÃO"
 
 #. Key:	HUD.Niveau
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1993)
-#: Source/Backrooms/Private/BRHUD.cpp(1993) Source/Backrooms/Private/BRHUD.cpp(2796)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(1999)
+#: Source/Backrooms/Private/BRHUD.cpp(1999) Source/Backrooms/Private/BRHUD.cpp(2802)
 #, fuzzy
 msgctxt "BR,HUD.Niveau"
 msgid "NIVEAU"
 msgstr "NÍVEL"
 
 #. Key:	HUD.NonExplore
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2002)
-#: Source/Backrooms/Private/BRHUD.cpp(2002)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2008)
+#: Source/Backrooms/Private/BRHUD.cpp(2008)
 #, fuzzy
 msgctxt "BR,HUD.NonExplore"
 msgid "Non exploré"
 msgstr "Não explorado"
 
 #. Key:	HUD.Verrouille
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2012)
-#: Source/Backrooms/Private/BRHUD.cpp(2012)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2018)
+#: Source/Backrooms/Private/BRHUD.cpp(2018)
 #, fuzzy
 msgctxt "BR,HUD.Verrouille"
 msgid "VERROUILLÉ"
 msgstr "BLOQUEADO"
 
 #. Key:	HUD.HebergerChoisissezNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2057)
-#: Source/Backrooms/Private/BRHUD.cpp(2057)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2063)
+#: Source/Backrooms/Private/BRHUD.cpp(2063)
 #, fuzzy
 msgctxt "BR,HUD.HebergerChoisissezNiveau"
 msgid "HÉBERGER : CHOISISSEZ UN NIVEAU"
 msgstr "HOSPEDAR: ESCOLHA UM NÍVEL"
 
 #. Key:	HUD.ChoisissezNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2057)
-#: Source/Backrooms/Private/BRHUD.cpp(2057)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2063)
+#: Source/Backrooms/Private/BRHUD.cpp(2063)
 #, fuzzy
 msgctxt "BR,HUD.ChoisissezNiveau"
 msgid "CHOISISSEZ UN NIVEAU"
 msgstr "ESCOLHA UM NÍVEL"
 
 #. Key:	HUD.SavenameExploredcountValueNiveauxExplore
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2059)
-#: Source/Backrooms/Private/BRHUD.cpp(2059)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2065)
+#: Source/Backrooms/Private/BRHUD.cpp(2065)
 #, fuzzy
 msgctxt "BR,HUD.SavenameExploredcountValueNiveauxExplore"
 msgid "{SaveName}  ·  {ExploredCount} / {Value} niveaux explorés"
 msgstr "{SaveName}  ·  {ExploredCount} / {Value} níveis explorados"
 
 #. Key:	HUD.SansPartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2059)
-#: Source/Backrooms/Private/BRHUD.cpp(2059)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2065)
+#: Source/Backrooms/Private/BRHUD.cpp(2065)
 #, fuzzy
 msgctxt "BR,HUD.SansPartie"
 msgid "Sans partie"
 msgstr "Sem jogo salvo"
 
 #. Key:	HUD.NiveauNonExplore
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2157)
-#: Source/Backrooms/Private/BRHUD.cpp(2157)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2163)
+#: Source/Backrooms/Private/BRHUD.cpp(2163)
 #, fuzzy
 msgctxt "BR,HUD.NiveauNonExplore"
 msgid "NIVEAU NON EXPLORÉ"
 msgstr "NÍVEL NÃO EXPLORADO"
 
 #. Key:	HUD.AvezEncoreAtteintNiveauCette
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2159)
-#: Source/Backrooms/Private/BRHUD.cpp(2159)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2165)
+#: Source/Backrooms/Private/BRHUD.cpp(2165)
 #, fuzzy
 msgctxt "BR,HUD.AvezEncoreAtteintNiveauCette"
 msgid "Vous n'avez pas encore atteint ce niveau dans cette partie."
 msgstr "Você ainda não chegou a este nível neste jogo."
 
 #. Key:	HUD.TrouvezJeuSortieMeneDeviendra
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2161)
-#: Source/Backrooms/Private/BRHUD.cpp(2161)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2167)
+#: Source/Backrooms/Private/BRHUD.cpp(2167)
 #, fuzzy
 msgctxt "BR,HUD.TrouvezJeuSortieMeneDeviendra"
 msgid "Trouvez en jeu une sortie qui y mène : il deviendra sélectionnable ici."
 msgstr "Encontre no jogo uma saída que leve até ele: ele ficará disponível aqui."
 
 #. Key:	HUD.ObjectifsVhsrequiredCassettesVhsFilmer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2178)
-#: Source/Backrooms/Private/BRHUD.cpp(2178)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2184)
+#: Source/Backrooms/Private/BRHUD.cpp(2184)
 #, fuzzy
 msgctxt "BR,HUD.ObjectifsVhsrequiredCassettesVhsFilmer"
 msgid "Objectifs : {VHSRequired} cassettes VHS + filmer pendant une coupure de courant"
 msgstr "Objetivos: {VHSRequired} fitas VHS + filmar durante um apagão"
 
 #. Key:	HUD.EntitiesList
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2195)
-#: Source/Backrooms/Private/BRHUD.cpp(2195)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2201)
+#: Source/Backrooms/Private/BRHUD.cpp(2201)
 #, fuzzy
 msgctxt "BR,HUD.EntitiesList"
 msgid "Entités : {List}"
 msgstr "Entidades: {List}"
 
 #. Key:	HUD.AucuneEntiteSignalee
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2195)
-#: Source/Backrooms/Private/BRHUD.cpp(2195)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2201)
+#: Source/Backrooms/Private/BRHUD.cpp(2201)
 #, fuzzy
 msgctxt "BR,HUD.AucuneEntiteSignalee"
 msgid "Aucune entité signalée"
 msgstr "Nenhuma entidade registrada"
 
 #. Key:	HUD.Aleatoire
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2202)
-#: Source/Backrooms/Private/BRHUD.cpp(2202)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2208)
+#: Source/Backrooms/Private/BRHUD.cpp(2208)
 #, fuzzy
 msgctxt "BR,HUD.Aleatoire"
 msgid "aléatoire"
 msgstr "aleatório"
 
 #. Key:	HUD.NiveauTarget
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2202)
-#: Source/Backrooms/Private/BRHUD.cpp(2202)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2208)
+#: Source/Backrooms/Private/BRHUD.cpp(2208)
 #, fuzzy
 msgctxt "BR,HUD.NiveauTarget"
 msgid "Niveau {Target}"
 msgstr "Nível {Target}"
 
 #. Key:	HUD.ExitsList
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2207)
-#: Source/Backrooms/Private/BRHUD.cpp(2207)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2213)
+#: Source/Backrooms/Private/BRHUD.cpp(2213)
 #, fuzzy
 msgctxt "BR,HUD.ExitsList"
 msgid "Sorties : {List}"
 msgstr "Saídas: {List}"
 
 #. Key:	HUD.Niveau3
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2225)
-#: Source/Backrooms/Private/BRHUD.cpp(2225)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2231)
+#: Source/Backrooms/Private/BRHUD.cpp(2231)
 #, fuzzy
 msgctxt "BR,HUD.Niveau3"
 msgid "Niveau"
 msgstr "Nível"
 
 #. Key:	HUD.Parties
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2228)
-#: Source/Backrooms/Private/BRHUD.cpp(2228)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2234)
+#: Source/Backrooms/Private/BRHUD.cpp(2234)
 #, fuzzy
 msgctxt "BR,HUD.Parties"
 msgid "Parties"
 msgstr "Jogos salvos"
 
 #. Key:	HUD.Multijoueur
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2241)
-#: Source/Backrooms/Private/BRHUD.cpp(2241)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2247)
+#: Source/Backrooms/Private/BRHUD.cpp(2247)
 #, fuzzy
 msgctxt "BR,HUD.Multijoueur"
 msgid "MULTIJOUEUR"
 msgstr "MULTIJOGADOR"
 
 #. Key:	HUD.CooperationJusqu4ExplorateursChat
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2242)
-#: Source/Backrooms/Private/BRHUD.cpp(2242)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2248)
+#: Source/Backrooms/Private/BRHUD.cpp(2248)
 #, fuzzy
 msgctxt "BR,HUD.CooperationJusqu4ExplorateursChat"
 msgid "Coopération jusqu'à 4 explorateurs  ·  chat vocal de proximité"
 msgstr "Cooperativo com até 4 exploradores  ·  chat de voz por proximidade"
 
 #. Key:	HUD.CreerPartiePcPort7777
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2245)
-#: Source/Backrooms/Private/BRHUD.cpp(2245)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2251)
+#: Source/Backrooms/Private/BRHUD.cpp(2251)
 #, fuzzy
 msgctxt "BR,HUD.CreerPartiePcPort7777"
 msgid "Créer la partie sur ce PC (port 7777)"
 msgstr "Criar a partida neste PC (porta 7777)"
 
 #. Key:	HUD.EntrerAdresseIpHote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2246)
-#: Source/Backrooms/Private/BRHUD.cpp(2246)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2252)
+#: Source/Backrooms/Private/BRHUD.cpp(2252)
 #, fuzzy
 msgctxt "BR,HUD.EntrerAdresseIpHote"
 msgid "Entrer l'adresse IP de l'hôte"
 msgstr "Digitar o endereço IP do anfitrião"
 
 #. Key:	HUD.RevenirMenuPrincipal
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2247)
-#: Source/Backrooms/Private/BRHUD.cpp(2247)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2253)
+#: Source/Backrooms/Private/BRHUD.cpp(2253)
 #, fuzzy
 msgctxt "BR,HUD.RevenirMenuPrincipal"
 msgid "Revenir au menu principal"
 msgstr "Voltar ao menu principal"
 
 #. Key:	HUD.JoueurOrdinateurPuissantMeilleureConnexi
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2265)
-#: Source/Backrooms/Private/BRHUD.cpp(2265)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2271)
+#: Source/Backrooms/Private/BRHUD.cpp(2271)
 #, fuzzy
 msgctxt "BR,HUD.JoueurOrdinateurPuissantMeilleureConnexi"
 msgid "Le joueur qui a l'ordinateur le plus puissant (et la meilleure connexion). Son PC fait tourner le monde, les entités et leurs déplacements pour tout le groupe ; les autres le rejoignent avec son adresse IP."
 msgstr "O jogador com o computador mais potente (e a melhor conexão). O PC dele roda o mundo, as entidades e seus movimentos para todo o grupo; os outros entram com o endereço IP dele."
 
 #. Key:	HUD.DoitHeberger
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2276)
-#: Source/Backrooms/Private/BRHUD.cpp(2276)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2282)
+#: Source/Backrooms/Private/BRHUD.cpp(2282)
 #, fuzzy
 msgctxt "BR,HUD.DoitHeberger"
 msgid "QUI DOIT HÉBERGER ?"
 msgstr "QUEM DEVE HOSPEDAR?"
 
 #. Key:	HUD.ApresHebergerChoisissezVosParties
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2282)
-#: Source/Backrooms/Private/BRHUD.cpp(2282)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2288)
+#: Source/Backrooms/Private/BRHUD.cpp(2288)
 #, fuzzy
 msgctxt "BR,HUD.ApresHebergerChoisissezVosParties"
 msgid "Après HÉBERGER, choisissez une de vos parties puis un niveau déjà exploré. Les niveaux que le groupe découvre s'ajoutent à votre partie ; vos amis jouent dans la vôtre."
 msgstr "Depois de HOSPEDAR, escolha um dos seus jogos salvos e depois um nível já explorado. Os níveis que o grupo descobrir são adicionados ao seu jogo; seus amigos jogam no seu."
 
 #. Key:	HUD.VotrePartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2293)
-#: Source/Backrooms/Private/BRHUD.cpp(2293)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2299)
+#: Source/Backrooms/Private/BRHUD.cpp(2299)
 #, fuzzy
 msgctxt "BR,HUD.VotrePartie"
 msgid "VOTRE PARTIE"
 msgstr "SEU JOGO"
 
 #. Key:	HUD.Inconnue
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2299)
-#: Source/Backrooms/Private/BRHUD.cpp(2299)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2305)
+#: Source/Backrooms/Private/BRHUD.cpp(2305)
 #, fuzzy
 msgctxt "BR,HUD.Inconnue"
 msgid "inconnue"
 msgstr "desconhecido"
 
 #. Key:	HUD.MemeReseauLanDonnezCette
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2300)
-#: Source/Backrooms/Private/BRHUD.cpp(2300)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2306)
+#: Source/Backrooms/Private/BRHUD.cpp(2306)
 #, fuzzy
 msgctxt "BR,HUD.MemeReseauLanDonnezCette"
 msgid "Même réseau (LAN) : donnez cette adresse à vos amis. Par Internet : redirigez le port UDP 7777 vers ce PC sur la box, ou utilisez un réseau virtuel (Radmin VPN, ZeroTier, Tailscale…) et son adresse. Chat vocal de proximité : Paramètres."
 msgstr "Mesma rede (LAN): passe este endereço aos seus amigos. Pela Internet: redirecione a porta UDP 7777 para este PC no roteador ou use uma rede virtual (Radmin VPN, ZeroTier, Tailscale…) e o endereço dela. Chat de voz por proximidade: Configurações."
 
 #. Key:	HUD.VotreAdresseIp
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2305)
-#: Source/Backrooms/Private/BRHUD.cpp(2305)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2311)
+#: Source/Backrooms/Private/BRHUD.cpp(2311)
 #, fuzzy
 msgctxt "BR,HUD.VotreAdresseIp"
 msgid "VOTRE ADRESSE IP"
 msgstr "SEU ENDEREÇO IP"
 
 #. Key:	HUD.Port7777Udp
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2308)
-#: Source/Backrooms/Private/BRHUD.cpp(2308)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2314)
+#: Source/Backrooms/Private/BRHUD.cpp(2314)
 #, fuzzy
 msgctxt "BR,HUD.Port7777Udp"
 msgid "port 7777 (UDP)"
 msgstr "porta 7777 (UDP)"
 
 #. Key:	HUD.RejoindrePartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2346)
-#: Source/Backrooms/Private/BRHUD.cpp(2346)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2352)
+#: Source/Backrooms/Private/BRHUD.cpp(2352)
 #, fuzzy
 msgctxt "BR,HUD.RejoindrePartie"
 msgid "REJOINDRE UNE PARTIE"
 msgstr "ENTRAR EM UMA PARTIDA"
 
 #. Key:	HUD.EntrezAdresseIpHoteVoit
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2347)
-#: Source/Backrooms/Private/BRHUD.cpp(2347)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2353)
+#: Source/Backrooms/Private/BRHUD.cpp(2353)
 #, fuzzy
 msgctxt "BR,HUD.EntrezAdresseIpHoteVoit"
 msgid "Entrez l'adresse IP de l'hôte (il la voit dans son menu MULTIJOUEUR)"
 msgstr "Digite o endereço IP do anfitrião (ele o vê no menu MULTIJOGADOR)"
 
 #. Key:	HUD.Exemples192168120
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2361)
-#: Source/Backrooms/Private/BRHUD.cpp(2361)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2367)
+#: Source/Backrooms/Private/BRHUD.cpp(2367)
 #, fuzzy
 msgctxt "BR,HUD.Exemples192168120"
 msgid "Exemples :  192.168.1.20   ·   26.45.120.7:7777"
 msgstr "Exemplos:  192.168.1.20   ·   26.45.120.7:7777"
 
 #. Key:	HUD.Connecter
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2365)
-#: Source/Backrooms/Private/BRHUD.cpp(2365)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2371)
+#: Source/Backrooms/Private/BRHUD.cpp(2371)
 #, fuzzy
 msgctxt "BR,HUD.Connecter"
 msgid "Se connecter"
 msgstr "Conectar"
 
 #. Key:	HUD.NiveauNumberTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2413)
-#: Source/Backrooms/Private/BRHUD.cpp(2413)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2419)
+#: Source/Backrooms/Private/BRHUD.cpp(2419)
 #, fuzzy
 msgctxt "BR,HUD.NiveauNumberTitle"
 msgid "Niveau {Number}  ·  {Title}"
 msgstr "Nível {Number}  ·  {Title}"
 
 #. Key:	HUD.ExploredAllNiveaux
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2416)
-#: Source/Backrooms/Private/BRHUD.cpp(2416)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2422)
+#: Source/Backrooms/Private/BRHUD.cpp(2422)
 #, fuzzy
 msgctxt "BR,HUD.ExploredAllNiveaux"
 msgid "{Explored} / {All} niveaux"
 msgstr "{Explored} / {All} níveis"
 
 #. Key:	HUD.HebergerPartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2484)
-#: Source/Backrooms/Private/BRHUD.cpp(2484)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2490)
+#: Source/Backrooms/Private/BRHUD.cpp(2490)
 #, fuzzy
 msgctxt "BR,HUD.HebergerPartie"
 msgid "HÉBERGER UNE PARTIE"
 msgstr "HOSPEDAR UMA PARTIDA"
 
 #. Key:	HUD.VosParties
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2484)
-#: Source/Backrooms/Private/BRHUD.cpp(2484)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2490)
+#: Source/Backrooms/Private/BRHUD.cpp(2490)
 #, fuzzy
 msgctxt "BR,HUD.VosParties"
 msgid "VOS PARTIES"
 msgstr "SEUS JOGOS"
 
 #. Key:	HUD.ChoisissezPartieGroupeVaJouer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2485)
-#: Source/Backrooms/Private/BRHUD.cpp(2485)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2491)
+#: Source/Backrooms/Private/BRHUD.cpp(2491)
 #, fuzzy
 msgctxt "BR,HUD.ChoisissezPartieGroupeVaJouer"
 msgid "Choisissez la partie que le groupe va jouer : ses niveaux explorés seront proposés."
 msgstr "Escolha o jogo que o grupo vai jogar: os níveis explorados nele serão oferecidos."
 
 #. Key:	HUD.ReprenezPartieCommencezNouvelleNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2486)
-#: Source/Backrooms/Private/BRHUD.cpp(2486)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2492)
+#: Source/Backrooms/Private/BRHUD.cpp(2492)
 #, fuzzy
 msgctxt "BR,HUD.ReprenezPartieCommencezNouvelleNiveau"
 msgid "Reprenez une partie, ou commencez-en une nouvelle (au Niveau 0)."
 msgstr "Continue um jogo ou comece um novo (no Nível 0)."
 
 #. Key:	HUD.CommenceNiveau0EquipementDepart
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2525)
-#: Source/Backrooms/Private/BRHUD.cpp(2525)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2531)
+#: Source/Backrooms/Private/BRHUD.cpp(2531)
 #, fuzzy
 msgctxt "BR,HUD.CommenceNiveau0EquipementDepart"
 msgid "Commence au Niveau 0, avec l'équipement de départ"
 msgstr "Começa no Nível 0, com o equipamento inicial"
 
 #. Key:	HUD.Multijoueur2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2525)
-#: Source/Backrooms/Private/BRHUD.cpp(2525)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2531)
+#: Source/Backrooms/Private/BRHUD.cpp(2531)
 #, fuzzy
 msgctxt "BR,HUD.Multijoueur2"
 msgid "Multijoueur"
 msgstr "Multijogador"
 
 #. Key:	HUD.MenuPrincipal
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2526)
-#: Source/Backrooms/Private/BRHUD.cpp(2526)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2532)
+#: Source/Backrooms/Private/BRHUD.cpp(2532)
 #, fuzzy
 msgctxt "BR,HUD.MenuPrincipal"
 msgid "Menu principal"
 msgstr "Menu principal"
 
 #. Key:	HUD.VersionRecenteJeuFormatLoadedversion
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2552)
-#: Source/Backrooms/Private/BRHUD.cpp(2552)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2558)
+#: Source/Backrooms/Private/BRHUD.cpp(2558)
 #, fuzzy
 msgctxt "BR,HUD.VersionRecenteJeuFormatLoadedversion"
 msgid "Version plus récente du jeu (format {LoadedVersion}) : partie conservée intacte, lecture seule"
 msgstr "Versão mais recente do jogo (formato {LoadedVersion}): jogo mantido intacto, somente leitura"
 
 #. Key:	HUD.RepriseDerniereSessionArreteePendant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2554)
-#: Source/Backrooms/Private/BRHUD.cpp(2554)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2560)
+#: Source/Backrooms/Private/BRHUD.cpp(2560)
 #, fuzzy
 msgctxt "BR,HUD.RepriseDerniereSessionArreteePendant"
 msgid "Reprise : la dernière session s'est arrêtée pendant une mort (équipement de départ, niveau neuf)"
 msgstr "Retomada: a última sessão terminou durante uma morte (equipamento inicial, nível novo)"
 
 #. Key:	HUD.RepriseIdentiqueMemeDispositionVhsfound
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2556)
-#: Source/Backrooms/Private/BRHUD.cpp(2556)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2562)
+#: Source/Backrooms/Private/BRHUD.cpp(2562)
 #, fuzzy
 msgctxt "BR,HUD.RepriseIdentiqueMemeDispositionVhsfound"
 msgid "Reprise à l'identique : même disposition, {VHSFound} cassette(s), {Collected} objet(s) ramassé(s){HasSpot}"
 msgstr "Retomada exata: mesmo layout, {VHSFound} fita(s), {Collected} item(ns) coletado(s){HasSpot}"
 
 #. Key:	HUD.DernierePosition2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2556)
-#: Source/Backrooms/Private/BRHUD.cpp(2556)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2562)
+#: Source/Backrooms/Private/BRHUD.cpp(2562)
 #, fuzzy
 msgctxt "BR,HUD.DernierePosition2"
 msgid ", dernière position"
 msgstr ", última posição"
 
 #. Key:	HUD.PointDepart
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2556)
-#: Source/Backrooms/Private/BRHUD.cpp(2556)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2562)
+#: Source/Backrooms/Private/BRHUD.cpp(2562)
 #, fuzzy
 msgctxt "BR,HUD.PointDepart"
 msgid ", point de départ"
 msgstr ", ponto de partida"
 
 #. Key:	HUD.RepriseNouvelleDispositionNiveauPartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2557)
-#: Source/Backrooms/Private/BRHUD.cpp(2557)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2563)
+#: Source/Backrooms/Private/BRHUD.cpp(2563)
 #, fuzzy
 msgctxt "BR,HUD.RepriseNouvelleDispositionNiveauPartie"
 msgid "Reprise : nouvelle disposition du niveau (partie d'une version antérieure ou après une mort)"
 msgstr "Retomada: novo layout do nível (jogo de uma versão anterior ou após uma morte)"
 
 #. Key:	HUD.DernierePositionNiveauNumberTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2559)
-#: Source/Backrooms/Private/BRHUD.cpp(2559)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2565)
+#: Source/Backrooms/Private/BRHUD.cpp(2565)
 #, fuzzy
 msgctxt "BR,HUD.DernierePositionNiveauNumberTitle"
 msgid "Dernière position : Niveau {Number}  ·  {Title}"
 msgstr "Última posição: Nível {Number}  ·  {Title}"
 
 #. Key:	HUD.TempsJeuPlaytimeMortsDeaths
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2561)
-#: Source/Backrooms/Private/BRHUD.cpp(2561)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2567)
+#: Source/Backrooms/Private/BRHUD.cpp(2567)
 #, fuzzy
 msgctxt "BR,HUD.TempsJeuPlaytimeMortsDeaths"
 msgid "Temps de jeu : {PlayTime}  ·  morts : {Deaths}  ·  entités rencontrées : {Discovered} / {Count}"
 msgstr "Tempo de jogo: {PlayTime}  ·  mortes: {Deaths}  ·  entidades encontradas: {Discovered} / {Count}"
 
 #. Key:	HUD.CreeeCreatedJoueeLastplayed
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2562)
-#: Source/Backrooms/Private/BRHUD.cpp(2562)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2568)
+#: Source/Backrooms/Private/BRHUD.cpp(2568)
 #, fuzzy
 msgctxt "BR,HUD.CreeeCreatedJoueeLastplayed"
 msgid "Créée le {Created}  ·  jouée le {LastPlayed}"
 msgstr "Criado em {Created}  ·  jogado em {LastPlayed}"
 
 #. Key:	HUD.NiveauxExploresExploredAll
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2570)
-#: Source/Backrooms/Private/BRHUD.cpp(2570)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2576)
+#: Source/Backrooms/Private/BRHUD.cpp(2576)
 #, fuzzy
 msgctxt "BR,HUD.NiveauxExploresExploredAll"
 msgid "NIVEAUX EXPLORÉS  {Explored} / {All}"
 msgstr "NÍVEIS EXPLORADOS  {Explored} / {All}"
 
 #. Key:	HUD.CommencezNiveau0EquipementDepart
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2576)
-#: Source/Backrooms/Private/BRHUD.cpp(2576)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2582)
+#: Source/Backrooms/Private/BRHUD.cpp(2582)
 #, fuzzy
 msgctxt "BR,HUD.CommencezNiveau0EquipementDepart"
 msgid "Vous commencez au Niveau 0, avec l'équipement de départ. Chaque niveau que vous découvrez en jeu devient sélectionnable quand vous reprenez la partie. Sauvegarde automatique à chaque niveau, puis toutes les minutes."
 msgstr "Você começa no Nível 0, com o equipamento inicial. Cada nível que você descobrir no jogo fica disponível quando você continuar o jogo. Salvamento automático a cada nível e depois a cada minuto."
 
 #. Key:	HUD.NouvellePartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2587)
-#: Source/Backrooms/Private/BRHUD.cpp(2587) Source/Backrooms/Private/BRHUD.cpp(2662)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2593)
+#: Source/Backrooms/Private/BRHUD.cpp(2593) Source/Backrooms/Private/BRHUD.cpp(2668)
 #, fuzzy
 msgctxt "BR,HUD.NouvellePartie"
 msgid "NOUVELLE PARTIE"
 msgstr "NOVO JOGO"
 
 #. Key:	HUD.EmplacementsLibresSaveorder6
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2588)
-#: Source/Backrooms/Private/BRHUD.cpp(2588)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2594)
+#: Source/Backrooms/Private/BRHUD.cpp(2594)
 #, fuzzy
 msgctxt "BR,HUD.EmplacementsLibresSaveorder6"
 msgid "Emplacements libres : {SaveOrder} / 6"
 msgstr "Espaços livres: {SaveOrder} / 6"
 
 #. Key:	HUD.Ouvrir
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2595)
-#: Source/Backrooms/Private/BRHUD.cpp(2595)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2601)
+#: Source/Backrooms/Private/BRHUD.cpp(2601)
 #, fuzzy
 msgctxt "BR,HUD.Ouvrir"
 msgid "Ouvrir"
 msgstr "Abrir"
 
 #. Key:	HUD.Suppr
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2596)
-#: Source/Backrooms/Private/BRHUD.cpp(2596) Source/Backrooms/Private/BRHUD.cpp(2925)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2602)
+#: Source/Backrooms/Private/BRHUD.cpp(2602) Source/Backrooms/Private/BRHUD.cpp(2931)
 #, fuzzy
 msgctxt "BR,HUD.Suppr"
 msgid "SUPPR"
 msgstr "DEL"
 
 #. Key:	HUD.Supprimer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2596)
-#: Source/Backrooms/Private/BRHUD.cpp(2596)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2602)
+#: Source/Backrooms/Private/BRHUD.cpp(2602)
 #, fuzzy
 msgctxt "BR,HUD.Supprimer"
 msgid "Supprimer"
 msgstr "Excluir"
 
 #. Key:	HUD.SupprimerPartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2618)
-#: Source/Backrooms/Private/BRHUD.cpp(2618)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2624)
+#: Source/Backrooms/Private/BRHUD.cpp(2624)
 #, fuzzy
 msgctxt "BR,HUD.SupprimerPartie"
 msgid "SUPPRIMER LA PARTIE ?"
 msgstr "EXCLUIR O JOGO?"
 
 #. Key:	HUD.SavenameSeraEffaceeDefinitivement
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2621)
-#: Source/Backrooms/Private/BRHUD.cpp(2621)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2627)
+#: Source/Backrooms/Private/BRHUD.cpp(2627)
 #, fuzzy
 msgctxt "BR,HUD.SavenameSeraEffaceeDefinitivement"
 msgid "« {SaveName} » sera effacée définitivement"
 msgstr "“{SaveName}” será apagado definitivamente"
 
 #. Key:	HUD.LevelsExploredPlayTime
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2624)
-#: Source/Backrooms/Private/BRHUD.cpp(2624)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2630)
+#: Source/Backrooms/Private/BRHUD.cpp(2630)
 #, fuzzy
 msgctxt "BR,HUD.LevelsExploredPlayTime"
 msgid "{Count} {Count}|plural(one=niveau exploré,other=niveaux explorés)  ·  {PlayTime} de jeu"
 msgstr "{Count} {Count}|plural(one=nível explorado,other=níveis explorados)  ·  {PlayTime} de jogo"
 
 #. Key:	HUD.NouvellePartieLigne
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2662)
-#: Source/Backrooms/Private/BRHUD.cpp(2662)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2668)
+#: Source/Backrooms/Private/BRHUD.cpp(2668)
 #, fuzzy
 msgctxt "BR,HUD.NouvellePartieLigne"
 msgid "NOUVELLE PARTIE EN LIGNE"
 msgstr "NOVA PARTIDA ON-LINE"
 
 #. Key:	HUD.DonnezLuiNomCommencerezNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2664)
-#: Source/Backrooms/Private/BRHUD.cpp(2664)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2670)
+#: Source/Backrooms/Private/BRHUD.cpp(2670)
 #, fuzzy
 msgctxt "BR,HUD.DonnezLuiNomCommencerezNiveau"
 msgid "Donnez-lui un nom. Vous commencerez au Niveau 0, avec l'équipement de départ."
 msgstr "Dê um nome a ela. Você vai começar no Nível 0, com o equipamento inicial."
 
 #. Key:	HUD.EmplacementSaveorder6SauvegardeAutomatiq
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2678)
-#: Source/Backrooms/Private/BRHUD.cpp(2678)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2684)
+#: Source/Backrooms/Private/BRHUD.cpp(2684)
 #, fuzzy
 msgctxt "BR,HUD.EmplacementSaveorder6SauvegardeAutomatiq"
 msgid "Emplacement {SaveOrder} / 6   ·   sauvegarde automatique à chaque niveau"
 msgstr "Espaço {SaveOrder} / 6   ·   salvamento automático a cada nível"
 
 #. Key:	HUD.Commencer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2682)
-#: Source/Backrooms/Private/BRHUD.cpp(2682)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2688)
+#: Source/Backrooms/Private/BRHUD.cpp(2688)
 #, fuzzy
 msgctxt "BR,HUD.Commencer"
 msgid "Commencer"
 msgstr "Começar"
 
 #. Key:	HUD.Sauvegarde
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2696)
-#: Source/Backrooms/Private/BRHUD.cpp(2696)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2702)
+#: Source/Backrooms/Private/BRHUD.cpp(2702)
 #, fuzzy
 msgctxt "BR,HUD.Sauvegarde"
 msgid "Sauvegarde"
 msgstr "Jogo salvo"
 
 #. Key:	HUD.QuotedTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2805)
-#: Source/Backrooms/Private/BRHUD.cpp(2805)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2811)
+#: Source/Backrooms/Private/BRHUD.cpp(2811)
 #, fuzzy
 msgctxt "BR,HUD.QuotedTitle"
 msgid "« {Title} »"
 msgstr "“{Title}”"
 
 #. Key:	HUD.RecordingLabel
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2836)
-#: Source/Backrooms/Private/BRHUD.cpp(2836)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2842)
+#: Source/Backrooms/Private/BRHUD.cpp(2842)
 #, fuzzy
 msgctxt "BR,HUD.RecordingLabel"
 msgid "ENREGISTREMENT : {Label}"
 msgstr "GRAVANDO: {Label}"
 
 #. Key:	HUD.VisionNocturne
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2853)
-#: Source/Backrooms/Private/BRHUD.cpp(2853)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2859)
+#: Source/Backrooms/Private/BRHUD.cpp(2859)
 #, fuzzy
 msgctxt "BR,HUD.VisionNocturne"
 msgid "VISION NOCTURNE"
 msgstr "VISÃO NOTURNA"
 
 #. Key:	HUD.DevNiveauLevelnumber
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2866)
-#: Source/Backrooms/Private/BRHUD.cpp(2866)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2872)
+#: Source/Backrooms/Private/BRHUD.cpp(2872)
 #, fuzzy
 msgctxt "BR,HUD.DevNiveauLevelnumber"
 msgid "DEV  ·  NIVEAU {LevelNumber}"
 msgstr "DEV  ·  NÍVEL {LevelNumber}"
 
 #. Key:	HUD.Dev
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2866)
-#: Source/Backrooms/Private/BRHUD.cpp(2866)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2872)
+#: Source/Backrooms/Private/BRHUD.cpp(2872)
 #, fuzzy
 msgctxt "BR,HUD.Dev"
 msgid "DEV"
 msgstr "DEV"
 
 #. Key:	HUD.Vol
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2869)
-#: Source/Backrooms/Private/BRHUD.cpp(2869)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2875)
+#: Source/Backrooms/Private/BRHUD.cpp(2875)
 #, fuzzy
 msgctxt "BR,HUD.Vol"
 msgid "  ·  VOL"
 msgstr "  ·  VOO"
 
 #. Key:	HUD.Invincible
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2873)
-#: Source/Backrooms/Private/BRHUD.cpp(2873)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2879)
+#: Source/Backrooms/Private/BRHUD.cpp(2879)
 #, fuzzy
 msgctxt "BR,HUD.Invincible"
 msgid "  ·  INVINCIBLE"
 msgstr "  ·  INVENCÍVEL"
 
 #. Key:	HUD.HorsPartie
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2877)
-#: Source/Backrooms/Private/BRHUD.cpp(2877)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2883)
+#: Source/Backrooms/Private/BRHUD.cpp(2883)
 #, fuzzy
 msgctxt "BR,HUD.HorsPartie"
 msgid "  ·  hors partie"
 msgstr "  ·  sem jogo salvo"
 
 #. Key:	HUD.TensionTensionTensiontime
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2883)
-#: Source/Backrooms/Private/BRHUD.cpp(2883)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2889)
+#: Source/Backrooms/Private/BRHUD.cpp(2889)
 #, fuzzy
 msgctxt "BR,HUD.TensionTensionTensiontime"
 msgid "  ·  tension : {Tension} {TensionTime} s"
 msgstr "  ·  tensão: {Tension} {TensionTime} s"
 
 #. Key:	HUD.ModelesSecoursImportIncomplet
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2898)
-#: Source/Backrooms/Private/BRHUD.cpp(2898)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2904)
+#: Source/Backrooms/Private/BRHUD.cpp(2904)
 #, fuzzy
 msgctxt "BR,HUD.ModelesSecoursImportIncomplet"
 msgid "MODÈLES DE SECOURS (import incomplet) : "
 msgstr "MODELOS DE RESERVA (importação incompleta): "
 
 #. Key:	HUD.MateriauxMatproblemsMatproblems2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2905)
-#: Source/Backrooms/Private/BRHUD.cpp(2905)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2911)
+#: Source/Backrooms/Private/BRHUD.cpp(2911)
 #, fuzzy
 msgctxt "BR,HUD.MateriauxMatproblemsMatproblems2"
 msgid "MATÉRIAUX ({MatProblems}) : {MatProblems2}"
 msgstr "MATERIAIS ({MatProblems}): {MatProblems2}"
 
 #. Key:	HUD.PagePrecSuiv
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2918)
-#: Source/Backrooms/Private/BRHUD.cpp(2918)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2924)
+#: Source/Backrooms/Private/BRHUD.cpp(2924)
 #, fuzzy
 msgctxt "BR,HUD.PagePrecSuiv"
 msgid "PAGE PRÉC. / SUIV."
 msgstr "PAGE UP / DOWN"
 
 #. Key:	HUD.NiveauSuivantPrecedent
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2918)
-#: Source/Backrooms/Private/BRHUD.cpp(2918)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2924)
+#: Source/Backrooms/Private/BRHUD.cpp(2924)
 #, fuzzy
 msgctxt "BR,HUD.NiveauSuivantPrecedent"
 msgid "niveau suivant / précédent"
 msgstr "nível seguinte / anterior"
 
 #. Key:	HUD.Debut
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2919)
-#: Source/Backrooms/Private/BRHUD.cpp(2919)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2925)
+#: Source/Backrooms/Private/BRHUD.cpp(2925)
 #, fuzzy
 msgctxt "BR,HUD.Debut"
 msgid "DÉBUT"
 msgstr "HOME"
 
 #. Key:	HUD.NouvelleDispositionNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2919)
-#: Source/Backrooms/Private/BRHUD.cpp(2919)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2925)
+#: Source/Backrooms/Private/BRHUD.cpp(2925)
 #, fuzzy
 msgctxt "BR,HUD.NouvelleDispositionNiveau"
 msgid "nouvelle disposition du niveau"
 msgstr "novo layout do nível"
 
 #. Key:	HUD.F6
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2920)
-#: Source/Backrooms/Private/BRHUD.cpp(2920)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2926)
+#: Source/Backrooms/Private/BRHUD.cpp(2926)
 #, fuzzy
 msgctxt "BR,HUD.F6"
 msgid "F6"
 msgstr "F6"
 
 #. Key:	HUD.VolLibreTraversMurs
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2920)
-#: Source/Backrooms/Private/BRHUD.cpp(2920)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2926)
+#: Source/Backrooms/Private/BRHUD.cpp(2926)
 #, fuzzy
 msgctxt "BR,HUD.VolLibreTraversMurs"
 msgid "vol libre à travers les murs"
 msgstr "voo livre através das paredes"
 
 #. Key:	HUD.F7
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2921)
-#: Source/Backrooms/Private/BRHUD.cpp(2921)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2927)
+#: Source/Backrooms/Private/BRHUD.cpp(2927)
 #, fuzzy
 msgctxt "BR,HUD.F7"
 msgid "F7"
 msgstr "F7"
 
 #. Key:	HUD.Invincible2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2921)
-#: Source/Backrooms/Private/BRHUD.cpp(2921)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2927)
+#: Source/Backrooms/Private/BRHUD.cpp(2927)
 #, fuzzy
 msgctxt "BR,HUD.Invincible2"
 msgid "invincible"
 msgstr "invencível"
 
 #. Key:	HUD.F10
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2922)
-#: Source/Backrooms/Private/BRHUD.cpp(2922)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2928)
+#: Source/Backrooms/Private/BRHUD.cpp(2928)
 #, fuzzy
 msgctxt "BR,HUD.F10"
 msgid "F10"
 msgstr "F10"
 
 #. Key:	HUD.JumpscareSuivantChaqueEntite
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2922)
-#: Source/Backrooms/Private/BRHUD.cpp(2922)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2928)
+#: Source/Backrooms/Private/BRHUD.cpp(2928)
 #, fuzzy
 msgctxt "BR,HUD.JumpscareSuivantChaqueEntite"
 msgid "jumpscare suivant (chaque entité)"
 msgstr "próximo jumpscare (cada entidade)"
 
 #. Key:	HUD.ObjectifsRemplis
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2923)
-#: Source/Backrooms/Private/BRHUD.cpp(2923)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2929)
+#: Source/Backrooms/Private/BRHUD.cpp(2929)
 #, fuzzy
 msgctxt "BR,HUD.ObjectifsRemplis"
 msgid "objectifs remplis"
 msgstr "objetivos cumpridos"
 
 #. Key:	HUD.Inser
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2924)
-#: Source/Backrooms/Private/BRHUD.cpp(2924)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2930)
+#: Source/Backrooms/Private/BRHUD.cpp(2930)
 #, fuzzy
 msgctxt "BR,HUD.Inser"
 msgid "INSER"
 msgstr "INSERT"
 
 #. Key:	HUD.CoupureCourant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2924)
-#: Source/Backrooms/Private/BRHUD.cpp(2924)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2930)
+#: Source/Backrooms/Private/BRHUD.cpp(2930)
 #, fuzzy
 msgctxt "BR,HUD.CoupureCourant"
 msgid "coupure de courant"
 msgstr "apagão"
 
 #. Key:	HUD.SalleFossesNiveau0
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2925)
-#: Source/Backrooms/Private/BRHUD.cpp(2925)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2931)
+#: Source/Backrooms/Private/BRHUD.cpp(2931)
 #, fuzzy
 msgctxt "BR,HUD.SalleFossesNiveau0"
 msgid "salle de fosses (Niveau 0)"
 msgstr "sala dos fossos (Nível 0)"
 
 #. Key:	HUD.ModeDeveloppeur
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2935)
-#: Source/Backrooms/Private/BRHUD.cpp(2935)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(2941)
+#: Source/Backrooms/Private/BRHUD.cpp(2941)
 #, fuzzy
 msgctxt "BR,HUD.ModeDeveloppeur"
 msgid "MODE DÉVELOPPEUR"
 msgstr "MODO DESENVOLVEDOR"
 
 #. Key:	HUD.JoyeuxAnniversaire
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3101)
-#: Source/Backrooms/Private/BRHUD.cpp(3101)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3107)
+#: Source/Backrooms/Private/BRHUD.cpp(3107)
 #, fuzzy
 msgctxt "BR,HUD.JoyeuxAnniversaire"
 msgid "JOYEUX ANNIVERSAIRE"
 msgstr "FELIZ ANIVERSÁRIO"
 
 #. Key:	HUD.AirCritical
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3147)
-#: Source/Backrooms/Private/BRHUD.cpp(3147)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3153)
+#: Source/Backrooms/Private/BRHUD.cpp(3153)
 #, fuzzy
 msgctxt "BR,HUD.AirCritical"
 msgid "PLUS D'AIR : REMONTEZ !"
 msgstr "SEM AR: SUBA!"
 
 #. Key:	HUD.AirLow
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3148)
-#: Source/Backrooms/Private/BRHUD.cpp(3148)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3154)
+#: Source/Backrooms/Private/BRHUD.cpp(3154)
 #, fuzzy
 msgctxt "BR,HUD.AirLow"
 msgid "Manque d'air : remontez respirer"
 msgstr "O ar está acabando: suba para respirar"
 
 #. Key:	HUD.XIt
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3201)
-#: Source/Backrooms/Private/BRHUD.cpp(3201) Source/Backrooms/Private/BRHUD.cpp(3890)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3208)
+#: Source/Backrooms/Private/BRHUD.cpp(3208) Source/Backrooms/Private/BRHUD.cpp(3899)
 #, fuzzy
 msgctxt "BR,HUD.XIt"
 msgid "x{It}"
 msgstr "x{It}"
 
 #. Key:	HUD.Cache
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3276)
-#: Source/Backrooms/Private/BRHUD.cpp(3276)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3284)
+#: Source/Backrooms/Private/BRHUD.cpp(3284)
 #, fuzzy
 msgctxt "BR,HUD.Cache"
 msgid "CACHÉ"
 msgstr "ESCONDIDO"
 
 #. Key:	HUD.Reanimation
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3299)
-#: Source/Backrooms/Private/BRHUD.cpp(3299)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3308)
+#: Source/Backrooms/Private/BRHUD.cpp(3308)
 #, fuzzy
 msgctxt "BR,HUD.Reanimation"
 msgid "RÉANIMATION"
 msgstr "REANIMANDO"
 
 #. Key:	HUD.NoteFroissee
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3355)
-#: Source/Backrooms/Private/BRHUD.cpp(3355)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3364)
+#: Source/Backrooms/Private/BRHUD.cpp(3364)
 #, fuzzy
 msgctxt "BR,HUD.NoteFroissee"
 msgid "Une note froissée..."
 msgstr "Um bilhete amassado..."
 
 #. Key:	HUD.InteractRangerNoteResteJournal
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3362)
-#: Source/Backrooms/Private/BRHUD.cpp(3362)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3371)
+#: Source/Backrooms/Private/BRHUD.cpp(3371)
 #, fuzzy
 msgctxt "BR,HUD.InteractRangerNoteResteJournal"
 msgid "{Interact} Ranger la note  (elle reste dans le journal : {Inventory})"
 msgstr "{Interact} Guardar o bilhete  (ele fica no diário: {Inventory})"
 
 #. Key:	HUD.AvezManqueAir
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3386)
-#: Source/Backrooms/Private/BRHUD.cpp(3386)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3395)
+#: Source/Backrooms/Private/BRHUD.cpp(3395)
 #, fuzzy
 msgctxt "BR,HUD.AvezManqueAir"
 msgid "Vous avez manqué d'air."
 msgstr "Você ficou sem ar."
 
 #. Key:	HUD.EtesTombeFondFosse
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3389)
-#: Source/Backrooms/Private/BRHUD.cpp(3389)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3398)
+#: Source/Backrooms/Private/BRHUD.cpp(3398)
 #, fuzzy
 msgctxt "BR,HUD.EtesTombeFondFosse"
 msgid "Vous êtes tombé au fond d'une fosse."
 msgstr "Você caiu no fundo de um fosso."
 
 #. Key:	HUD.VotreEspritLache
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3392)
-#: Source/Backrooms/Private/BRHUD.cpp(3392)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3401)
+#: Source/Backrooms/Private/BRHUD.cpp(3401)
 #, fuzzy
 msgctxt "BR,HUD.VotreEspritLache"
 msgid "Votre esprit a lâché."
 msgstr "Sua mente cedeu."
 
 #. Key:	HUD.KilledByTeam
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3397)
-#: Source/Backrooms/Private/BRHUD.cpp(3397)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3406)
+#: Source/Backrooms/Private/BRHUD.cpp(3406)
 #, fuzzy
 msgctxt "BR,HUD.KilledByTeam"
 msgid "Abattu par : {Entity}"
 msgstr "Derrubado por: {Entity}"
 
 #. Key:	HUD.Noye
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3407)
-#: Source/Backrooms/Private/BRHUD.cpp(3407)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3416)
+#: Source/Backrooms/Private/BRHUD.cpp(3416)
 #, fuzzy
 msgctxt "BR,HUD.Noye"
 msgid "NOYÉ"
 msgstr "AFOGADO"
 
 #. Key:	HUD.Chute
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3407)
-#: Source/Backrooms/Private/BRHUD.cpp(3407)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3416)
+#: Source/Backrooms/Private/BRHUD.cpp(3416)
 #, fuzzy
 msgctxt "BR,HUD.Chute"
 msgid "CHUTE"
 msgstr "QUEDA"
 
 #. Key:	HUD.Terre
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3407)
-#: Source/Backrooms/Private/BRHUD.cpp(3407)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3416)
+#: Source/Backrooms/Private/BRHUD.cpp(3416)
 #, fuzzy
 msgctxt "BR,HUD.Terre"
 msgid "À TERRE"
 msgstr "CAÍDO"
 
 #. Key:	HUD.CoequipierDoitSortirEauMaintient
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3416)
-#: Source/Backrooms/Private/BRHUD.cpp(3416)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3425)
+#: Source/Backrooms/Private/BRHUD.cpp(3425)
 #, fuzzy
 msgctxt "BR,HUD.CoequipierDoitSortirEauMaintient"
 msgid "Un coéquipier doit vous sortir de l'eau : il maintient {Interact} près de vous."
 msgstr "Um colega precisa tirar você da água: ele segura {Interact} perto de você."
 
 #. Key:	HUD.CoequipierPeutReleverDoitMaintenir
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3417)
-#: Source/Backrooms/Private/BRHUD.cpp(3417)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3426)
+#: Source/Backrooms/Private/BRHUD.cpp(3426)
 #, fuzzy
 msgctxt "BR,HUD.CoequipierPeutReleverDoitMaintenir"
 msgid "Un coéquipier peut vous relever : il doit maintenir {Interact} près de vous."
 msgstr "Um colega pode reanimar você: ele precisa segurar {Interact} perto de você."
 
 #. Key:	HUD.PersonnePeutAtteindreEtes
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3422)
-#: Source/Backrooms/Private/BRHUD.cpp(3422)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3431)
+#: Source/Backrooms/Private/BRHUD.cpp(3431)
 #, fuzzy
 msgctxt "BR,HUD.PersonnePeutAtteindreEtes"
 msgid "Personne ne peut vous atteindre là où vous êtes."
 msgstr "Ninguém consegue alcançar você onde está."
 
 #. Key:	HUD.ReveilPointDepartNiveauValue
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3425)
-#: Source/Backrooms/Private/BRHUD.cpp(3425)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3434)
+#: Source/Backrooms/Private/BRHUD.cpp(3434)
 #, fuzzy
 msgctxt "BR,HUD.ReveilPointDepartNiveauValue"
 msgid "Réveil au point de départ du niveau dans {Value} s      {Jump}  abandonner"
 msgstr "Você acorda no ponto de partida do nível em {Value} s      {Jump}  desistir"
 
 #. Key:	HUD.EtesMort
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3428)
-#: Source/Backrooms/Private/BRHUD.cpp(3428)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3437)
+#: Source/Backrooms/Private/BRHUD.cpp(3437)
 #, fuzzy
 msgctxt "BR,HUD.EtesMort"
 msgid "VOUS ÊTES MORT"
 msgstr "VOCÊ MORREU"
 
 #. Key:	HUD.KilledBy
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3432)
-#: Source/Backrooms/Private/BRHUD.cpp(3432)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3441)
+#: Source/Backrooms/Private/BRHUD.cpp(3441)
 #, fuzzy
 msgctxt "BR,HUD.KilledBy"
 msgid "Tué par : {Entity}"
 msgstr "Morto por: {Entity}"
 
 #. Key:	HUD.ReveillezMoquetteHumideEncore
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3436)
-#: Source/Backrooms/Private/BRHUD.cpp(3436)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3445)
+#: Source/Backrooms/Private/BRHUD.cpp(3445)
 #, fuzzy
 msgctxt "BR,HUD.ReveillezMoquetteHumideEncore"
 msgid "Vous vous réveillez... sur une moquette humide. Encore."
 msgstr "Você acorda... sobre um carpete úmido. De novo."
 
 #. Key:	HUD.Pause
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3461)
-#: Source/Backrooms/Private/BRHUD.cpp(3461)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3470)
+#: Source/Backrooms/Private/BRHUD.cpp(3470)
 #, fuzzy
 msgctxt "BR,HUD.Pause"
 msgid "PAUSE"
 msgstr "PAUSA"
 
 #. Key:	HUD.OnlinePlayersPause
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3466)
-#: Source/Backrooms/Private/BRHUD.cpp(3466)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3475)
+#: Source/Backrooms/Private/BRHUD.cpp(3475)
 #, fuzzy
 msgctxt "BR,HUD.OnlinePlayersPause"
 msgid "Partie en ligne  ·  {Count} {Count}|plural(one=joueur,other=joueurs)  ·  le jeu continue pendant la pause"
 msgstr "Partida on-line  ·  {Count} {Count}|plural(one=jogador,other=jogadores)  ·  o jogo continua durante a pausa"
 
 #. Key:	HUD.TempsArreteInstant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3472)
-#: Source/Backrooms/Private/BRHUD.cpp(3472)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3481)
+#: Source/Backrooms/Private/BRHUD.cpp(3481)
 #, fuzzy
 msgctxt "BR,HUD.TempsArreteInstant"
 msgid "Le temps s'est arrêté… pour l'instant."
 msgstr "O tempo parou… por enquanto."
 
 #. Key:	HUD.PartieSavenamePlaytimeJeuSauvegarde
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3476)
-#: Source/Backrooms/Private/BRHUD.cpp(3476)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3485)
+#: Source/Backrooms/Private/BRHUD.cpp(3485)
 #, fuzzy
 msgctxt "BR,HUD.PartieSavenamePlaytimeJeuSauvegarde"
 msgid "Partie « {SaveName} »  ·  {PlayTime} de jeu  ·  sauvegarde automatique"
 msgstr "Jogo “{SaveName}”  ·  {PlayTime} de jogo  ·  salvamento automático"
 
 #. Key:	HUD.Reprendre
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3480)
-#: Source/Backrooms/Private/BRHUD.cpp(3480)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3489)
+#: Source/Backrooms/Private/BRHUD.cpp(3489)
 #, fuzzy
 msgctxt "BR,HUD.Reprendre"
 msgid "REPRENDRE"
 msgstr "CONTINUAR"
 
 #. Key:	HUD.Parametres
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3480)
-#: Source/Backrooms/Private/BRHUD.cpp(3480) Source/Backrooms/Private/BRHUD.cpp(3686) Source/Backrooms/Private/BRHUD.cpp(4439)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3489)
+#: Source/Backrooms/Private/BRHUD.cpp(3489) Source/Backrooms/Private/BRHUD.cpp(3695) Source/Backrooms/Private/BRHUD.cpp(4448)
 #, fuzzy
 msgctxt "BR,HUD.Parametres"
 msgid "PARAMÈTRES"
 msgstr "CONFIGURAÇÕES"
 
 #. Key:	HUD.Touches
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3480)
-#: Source/Backrooms/Private/BRHUD.cpp(3480) Source/Backrooms/Private/BRHUD.cpp(3554) Source/Backrooms/Private/BRHUD.cpp(3686)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3489)
+#: Source/Backrooms/Private/BRHUD.cpp(3489) Source/Backrooms/Private/BRHUD.cpp(3563) Source/Backrooms/Private/BRHUD.cpp(3695)
 #, fuzzy
 msgctxt "BR,HUD.Touches"
 msgid "TOUCHES"
 msgstr "CONTROLES"
 
 #. Key:	HUD.MenuPrincipal2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3480)
-#: Source/Backrooms/Private/BRHUD.cpp(3480)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3489)
+#: Source/Backrooms/Private/BRHUD.cpp(3489)
 #, fuzzy
 msgctxt "BR,HUD.MenuPrincipal2"
 msgid "MENU PRINCIPAL"
 msgstr "MENU PRINCIPAL"
 
 #. Key:	HUD.QuitterJeu
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3480)
-#: Source/Backrooms/Private/BRHUD.cpp(3480)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3489)
+#: Source/Backrooms/Private/BRHUD.cpp(3489)
 #, fuzzy
 msgctxt "BR,HUD.QuitterJeu"
 msgid "QUITTER LE JEU"
 msgstr "SAIR DO JOGO"
 
 #. Key:	HUD.RetournerBackrooms
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3482)
-#: Source/Backrooms/Private/BRHUD.cpp(3482)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3491)
+#: Source/Backrooms/Private/BRHUD.cpp(3491)
 #, fuzzy
 msgctxt "BR,HUD.RetournerBackrooms"
 msgid "Retourner dans les Backrooms"
 msgstr "Voltar para as Backrooms"
 
 #. Key:	HUD.GraphismesAffichageChatVocal
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3483)
-#: Source/Backrooms/Private/BRHUD.cpp(3483)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3492)
+#: Source/Backrooms/Private/BRHUD.cpp(3492)
 #, fuzzy
 msgctxt "BR,HUD.GraphismesAffichageChatVocal"
 msgid "Graphismes, son, affichage, chat vocal"
 msgstr "Gráficos, som, tela, chat de voz"
 
 #. Key:	HUD.ChangerTouchesJusqu3Action
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3484)
-#: Source/Backrooms/Private/BRHUD.cpp(3484)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3493)
+#: Source/Backrooms/Private/BRHUD.cpp(3493)
 #, fuzzy
 msgctxt "BR,HUD.ChangerTouchesJusqu3Action"
 msgid "Changer les touches (jusqu'à 3 par action)"
 msgstr "Alterar as teclas (até 3 por ação)"
 
 #. Key:	HUD.QuitterPartieLigne
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3485)
-#: Source/Backrooms/Private/BRHUD.cpp(3485)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3494)
+#: Source/Backrooms/Private/BRHUD.cpp(3494)
 #, fuzzy
 msgctxt "BR,HUD.QuitterPartieLigne"
 msgid "Quitter la partie en ligne"
 msgstr "Sair da partida on-line"
 
 #. Key:	HUD.QuitterPartieRevenirEcranTitre
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3485)
-#: Source/Backrooms/Private/BRHUD.cpp(3485)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3494)
+#: Source/Backrooms/Private/BRHUD.cpp(3494)
 #, fuzzy
 msgctxt "BR,HUD.QuitterPartieRevenirEcranTitre"
 msgid "Quitter la partie, revenir à l'écran titre"
 msgstr "Sair do jogo e voltar à tela inicial"
 
 #. Key:	HUD.FermerJeu
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3486)
-#: Source/Backrooms/Private/BRHUD.cpp(3486)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3495)
+#: Source/Backrooms/Private/BRHUD.cpp(3495)
 #, fuzzy
 msgctxt "BR,HUD.FermerJeu"
 msgid "Fermer le jeu"
 msgstr "Fechar o jogo"
 
 #. Key:	HUD.Commandes
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3503)
-#: Source/Backrooms/Private/BRHUD.cpp(3503)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3512)
+#: Source/Backrooms/Private/BRHUD.cpp(3512)
 #, fuzzy
 msgctxt "BR,HUD.Commandes"
 msgid "COMMANDES"
 msgstr "COMANDOS"
 
 #. Key:	HUD.Reprendre2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3507)
-#: Source/Backrooms/Private/BRHUD.cpp(3507)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3516)
+#: Source/Backrooms/Private/BRHUD.cpp(3516)
 #, fuzzy
 msgctxt "BR,HUD.Reprendre2"
 msgid "Reprendre"
 msgstr "Continuar"
 
 #. Key:	HUD.ParametresTouches
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3508)
-#: Source/Backrooms/Private/BRHUD.cpp(3508)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3517)
+#: Source/Backrooms/Private/BRHUD.cpp(3517)
 #, fuzzy
 msgctxt "BR,HUD.ParametresTouches"
 msgid "Paramètres et touches"
 msgstr "Configurações e controles"
 
 #. Key:	HUD.ConsoleTouche2Brlevel37
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3511)
-#: Source/Backrooms/Private/BRHUD.cpp(3511)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3520)
+#: Source/Backrooms/Private/BRHUD.cpp(3520)
 #, fuzzy
 msgctxt "BR,HUD.ConsoleTouche2Brlevel37"
 msgid "Console (touche ²) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives"
 msgstr "Console (tecla '): BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives"
 
 #. Key:	HUD.Touche1
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3563)
-#: Source/Backrooms/Private/BRHUD.cpp(3563)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3572)
+#: Source/Backrooms/Private/BRHUD.cpp(3572)
 #, fuzzy
 msgctxt "BR,HUD.Touche1"
 msgid "TOUCHE 1"
 msgstr "TECLA 1"
 
 #. Key:	HUD.Touche2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3563)
-#: Source/Backrooms/Private/BRHUD.cpp(3563)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3572)
+#: Source/Backrooms/Private/BRHUD.cpp(3572)
 #, fuzzy
 msgctxt "BR,HUD.Touche2"
 msgid "TOUCHE 2"
 msgstr "TECLA 2"
 
 #. Key:	HUD.Touche3
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3563)
-#: Source/Backrooms/Private/BRHUD.cpp(3563)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3572)
+#: Source/Backrooms/Private/BRHUD.cpp(3572)
 #, fuzzy
 msgctxt "BR,HUD.Touche3"
 msgid "TOUCHE 3"
 msgstr "TECLA 3"
 
 #. Key:	HUD.Appuyez
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3589)
-#: Source/Backrooms/Private/BRHUD.cpp(3589)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3598)
+#: Source/Backrooms/Private/BRHUD.cpp(3598)
 #, fuzzy
 msgctxt "BR,HUD.Appuyez"
 msgid "APPUYEZ..."
 msgstr "PRESSIONE..."
 
 #. Key:	HUD.TouchesDefaut
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3605)
-#: Source/Backrooms/Private/BRHUD.cpp(3605)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3614)
+#: Source/Backrooms/Private/BRHUD.cpp(3614)
 #, fuzzy
 msgctxt "BR,HUD.TouchesDefaut"
 msgid "TOUCHES PAR DÉFAUT"
 msgstr "TECLAS PADRÃO"
 
 #. Key:	HUD.AppuyezNouvelleToucheClavierBouton
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3616)
-#: Source/Backrooms/Private/BRHUD.cpp(3616)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3625)
+#: Source/Backrooms/Private/BRHUD.cpp(3625)
 #, fuzzy
 msgctxt "BR,HUD.AppuyezNouvelleToucheClavierBouton"
 msgid "Appuyez sur la nouvelle touche (clavier ou bouton de souris).  Échap : annuler   -   Retour arrière : effacer"
 msgstr "Pressione a nova tecla (teclado ou botão do mouse).  Esc: cancelar   -   Backspace: apagar"
 
 #. Key:	HUD.CliquezCasePuisAppuyezTouche
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3617)
-#: Source/Backrooms/Private/BRHUD.cpp(3617)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3626)
+#: Source/Backrooms/Private/BRHUD.cpp(3626)
 #, fuzzy
 msgctxt "BR,HUD.CliquezCasePuisAppuyezTouche"
 msgid "Cliquez sur une case puis appuyez sur une touche. Clic droit : effacer. Les changements s'appliquent immédiatement."
 msgstr "Clique em um campo e pressione uma tecla. Botão direito: apagar. As mudanças valem na hora."
 
 #. Key:	HUD.Menu
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3672)
-#: Source/Backrooms/Private/BRHUD.cpp(3672)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3681)
+#: Source/Backrooms/Private/BRHUD.cpp(3681)
 #, fuzzy
 msgctxt "BR,HUD.Menu"
 msgid "MENU >"
 msgstr "MENU >"
 
 #. Key:	HUD.Personnage
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3686)
-#: Source/Backrooms/Private/BRHUD.cpp(3686)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3695)
+#: Source/Backrooms/Private/BRHUD.cpp(3695)
 #, fuzzy
 msgctxt "BR,HUD.Personnage"
 msgid "PERSONNAGE"
 msgstr "PERSONAGEM"
 
 #. Key:	HUD.Journal
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3686)
-#: Source/Backrooms/Private/BRHUD.cpp(3686)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3695)
+#: Source/Backrooms/Private/BRHUD.cpp(3695)
 #, fuzzy
 msgctxt "BR,HUD.Journal"
 msgid "JOURNAL"
 msgstr "DIÁRIO"
 
 #. Key:	HUD.NiveauLevelnumberTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3708)
-#: Source/Backrooms/Private/BRHUD.cpp(3708)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3717)
+#: Source/Backrooms/Private/BRHUD.cpp(3717)
 #, fuzzy
 msgctxt "BR,HUD.NiveauLevelnumberTitle"
 msgid "NIVEAU {LevelNumber}  « {Title} »"
 msgstr "NÍVEL {LevelNumber}  “{Title}”"
 
 #. Key:	HUD.1992ThresholdSystems
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3737)
-#: Source/Backrooms/Private/BRHUD.cpp(3737)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3746)
+#: Source/Backrooms/Private/BRHUD.cpp(3746)
 #, fuzzy
 msgctxt "BR,HUD.1992ThresholdSystems"
 msgid "© 1992 THRESHOLD SYSTEMS"
 msgstr "© 1992 THRESHOLD SYSTEMS"
 
 #. Key:	HUD.GlisserDeplacerDoubleClicUtiliser
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3740)
-#: Source/Backrooms/Private/BRHUD.cpp(3740)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3749)
+#: Source/Backrooms/Private/BRHUD.cpp(3749)
 #, fuzzy
 msgctxt "BR,HUD.GlisserDeplacerDoubleClicUtiliser"
 msgid "[GLISSER]  DÉPLACER     [DOUBLE-CLIC]  UTILISER / ÉQUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER"
 msgstr "[ARRASTAR]  MOVER     [CLIQUE DUPLO]  USAR / EQUIPAR     [BOTÃO DIREITO]  INSPECIONAR     {Inventory}  FECHAR"
 
 #. Key:	HUD.ClicChangerClicDroitEffacer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3745)
-#: Source/Backrooms/Private/BRHUD.cpp(3745)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3754)
+#: Source/Backrooms/Private/BRHUD.cpp(3754)
 #, fuzzy
 msgctxt "BR,HUD.ClicChangerClicDroitEffacer"
 msgid "[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [ÉCHAP]  ANNULER / FERMER"
 msgstr "[CLIQUE]  ALTERAR     [BOTÃO DIREITO]  APAGAR     [ESC]  CANCELAR / FECHAR"
 
 #. Key:	HUD.ClicChoisirEchapFermer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3746)
-#: Source/Backrooms/Private/BRHUD.cpp(3746)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3755)
+#: Source/Backrooms/Private/BRHUD.cpp(3755)
 #, fuzzy
 msgctxt "BR,HUD.ClicChoisirEchapFermer"
 msgid "[CLIC]  CHOISIR     [ÉCHAP]  FERMER"
 msgstr "[CLIQUE]  ESCOLHER     [ESC]  FECHAR"
 
 #. Key:	HUD.Vide
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3862)
-#: Source/Backrooms/Private/BRHUD.cpp(3862)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3871)
+#: Source/Backrooms/Private/BRHUD.cpp(3871)
 #, fuzzy
 msgctxt "BR,HUD.Vide"
 msgid "VIDE"
 msgstr "VAZIO"
 
 #. Key:	HUD.Objectifs
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3905)
-#: Source/Backrooms/Private/BRHUD.cpp(3905)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3914)
+#: Source/Backrooms/Private/BRHUD.cpp(3914)
 #, fuzzy
 msgctxt "BR,HUD.Objectifs"
 msgid "OBJECTIFS"
 msgstr "OBJETIVOS"
 
 #. Key:	HUD.SortiesSontStablesTrouvezMur
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3915)
-#: Source/Backrooms/Private/BRHUD.cpp(3915)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3924)
+#: Source/Backrooms/Private/BRHUD.cpp(3924)
 #, fuzzy
 msgctxt "BR,HUD.SortiesSontStablesTrouvezMur"
 msgid "Les sorties sont stables : trouvez un mur qui grésille."
 msgstr "As saídas estão estáveis: encontre uma parede que chia."
 
 #. Key:	HUD.ObjectifsRequisStabiliserSortiesNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3916)
-#: Source/Backrooms/Private/BRHUD.cpp(3916)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3925)
+#: Source/Backrooms/Private/BRHUD.cpp(3925)
 #, fuzzy
 msgctxt "BR,HUD.ObjectifsRequisStabiliserSortiesNiveau"
 msgid "Objectifs requis pour stabiliser les sorties du niveau."
 msgstr "Objetivos necessários para estabilizar as saídas do nível."
 
 #. Key:	HUD.Inventaire
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3971)
-#: Source/Backrooms/Private/BRHUD.cpp(3971)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3980)
+#: Source/Backrooms/Private/BRHUD.cpp(3980)
 #, fuzzy
 msgctxt "BR,HUD.Inventaire"
 msgid "INVENTAIRE"
 msgstr "INVENTÁRIO"
 
 #. Key:	HUD.Poches
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3987)
-#: Source/Backrooms/Private/BRHUD.cpp(3987)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3996)
+#: Source/Backrooms/Private/BRHUD.cpp(3996)
 #, fuzzy
 msgctxt "BR,HUD.Poches"
 msgid "POCHES"
 msgstr "BOLSOS"
 
 #. Key:	HUD.Stockage
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3991)
-#: Source/Backrooms/Private/BRHUD.cpp(3991)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4000)
+#: Source/Backrooms/Private/BRHUD.cpp(4000)
 #, fuzzy
 msgctxt "BR,HUD.Stockage"
 msgid "STOCKAGE"
 msgstr "DEPÓSITO"
 
 #. Key:	HUD.Equipement
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3995)
-#: Source/Backrooms/Private/BRHUD.cpp(3995)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4004)
+#: Source/Backrooms/Private/BRHUD.cpp(4004)
 #, fuzzy
 msgctxt "BR,HUD.Equipement"
 msgid "ÉQUIPEMENT"
 msgstr "EQUIPAMENTO"
 
 #. Key:	HUD.StatusPanel
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4038)
-#: Source/Backrooms/Private/BRHUD.cpp(4038)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4047)
+#: Source/Backrooms/Private/BRHUD.cpp(4047)
 #, fuzzy
 msgctxt "BR,HUD.StatusPanel"
 msgid "ÉTAT"
 msgstr "ESTADO"
 
 #. Key:	HUD.StaminaRested
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4047)
-#: Source/Backrooms/Private/BRHUD.cpp(4047)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4056)
+#: Source/Backrooms/Private/BRHUD.cpp(4056)
 #, fuzzy
 msgctxt "BR,HUD.StaminaRested"
 msgid "reposé"
 msgstr "descansado"
 
 #. Key:	HUD.StaminaWinded
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4048)
-#: Source/Backrooms/Private/BRHUD.cpp(4048)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4057)
+#: Source/Backrooms/Private/BRHUD.cpp(4057)
 #, fuzzy
 msgctxt "BR,HUD.StaminaWinded"
 msgid "essoufflé"
 msgstr "ofegante"
 
 #. Key:	HUD.StaminaSpent
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4048)
-#: Source/Backrooms/Private/BRHUD.cpp(4048)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4057)
+#: Source/Backrooms/Private/BRHUD.cpp(4057)
 #, fuzzy
 msgctxt "BR,HUD.StaminaSpent"
 msgid "à bout de souffle"
 msgstr "sem fôlego"
 
 #. Key:	HUD.SanityStable
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4049)
-#: Source/Backrooms/Private/BRHUD.cpp(4049)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4058)
+#: Source/Backrooms/Private/BRHUD.cpp(4058)
 #, fuzzy
 msgctxt "BR,HUD.SanityStable"
 msgid "stable"
 msgstr "estável"
 
 #. Key:	HUD.SanityShaken
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4050)
-#: Source/Backrooms/Private/BRHUD.cpp(4050)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4059)
+#: Source/Backrooms/Private/BRHUD.cpp(4059)
 #, fuzzy
 msgctxt "BR,HUD.SanityShaken"
 msgid "nerveux"
 msgstr "nervoso"
 
 #. Key:	HUD.SanityBreaking
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4050)
-#: Source/Backrooms/Private/BRHUD.cpp(4050)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4059)
+#: Source/Backrooms/Private/BRHUD.cpp(4059)
 #, fuzzy
 msgctxt "BR,HUD.SanityBreaking"
 msgid "au bord de la rupture"
 msgstr "à beira de um colapso"
 
 #. Key:	HUD.Endurance
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4052)
-#: Source/Backrooms/Private/BRHUD.cpp(4052)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4061)
+#: Source/Backrooms/Private/BRHUD.cpp(4061)
 #, fuzzy
 msgctxt "BR,HUD.Endurance"
 msgid "ENDURANCE"
 msgstr "RESISTÊNCIA"
 
 #. Key:	HUD.SanteMentale
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4053)
-#: Source/Backrooms/Private/BRHUD.cpp(4053)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4062)
+#: Source/Backrooms/Private/BRHUD.cpp(4062)
 #, fuzzy
 msgctxt "BR,HUD.SanteMentale"
 msgid "SANTÉ MENTALE"
 msgstr "SANIDADE"
 
 #. Key:	HUD.DoubleClicUseverb
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4162)
-#: Source/Backrooms/Private/BRHUD.cpp(4162)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4171)
+#: Source/Backrooms/Private/BRHUD.cpp(4171)
 #, fuzzy
 msgctxt "BR,HUD.DoubleClicUseverb"
 msgid "[DOUBLE-CLIC]  {UseVerb}"
 msgstr "[CLIQUE DUPLO]  {UseVerb}"
 
 #. Key:	HUD.DoubleClicRetirer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4166)
-#: Source/Backrooms/Private/BRHUD.cpp(4166)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4175)
+#: Source/Backrooms/Private/BRHUD.cpp(4175)
 #, fuzzy
 msgctxt "BR,HUD.DoubleClicRetirer"
 msgid "[DOUBLE-CLIC]  RETIRER"
 msgstr "[CLIQUE DUPLO]  REMOVER"
 
 #. Key:	HUD.DoubleClicEquiper
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4166)
-#: Source/Backrooms/Private/BRHUD.cpp(4166)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4175)
+#: Source/Backrooms/Private/BRHUD.cpp(4175)
 #, fuzzy
 msgctxt "BR,HUD.DoubleClicEquiper"
 msgid "[DOUBLE-CLIC]  ÉQUIPER"
 msgstr "[CLIQUE DUPLO]  EQUIPAR"
 
 #. Key:	HUD.XIt2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4175)
-#: Source/Backrooms/Private/BRHUD.cpp(4175)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4184)
+#: Source/Backrooms/Private/BRHUD.cpp(4184)
 #, fuzzy
 msgctxt "BR,HUD.XIt2"
 msgid "  x{It}"
 msgstr "  x{It}"
 
 #. Key:	HUD.Inspecter
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4207)
-#: Source/Backrooms/Private/BRHUD.cpp(4207)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4216)
+#: Source/Backrooms/Private/BRHUD.cpp(4216)
 #, fuzzy
 msgctxt "BR,HUD.Inspecter"
 msgid "INSPECTER"
 msgstr "INSPECIONAR"
 
 #. Key:	HUD.Consommable
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4218)
-#: Source/Backrooms/Private/BRHUD.cpp(4218)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4227)
+#: Source/Backrooms/Private/BRHUD.cpp(4227)
 #, fuzzy
 msgctxt "BR,HUD.Consommable"
 msgid "CONSOMMABLE"
 msgstr "CONSUMÍVEL"
 
 #. Key:	HUD.Objet
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4218)
-#: Source/Backrooms/Private/BRHUD.cpp(4218)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4227)
+#: Source/Backrooms/Private/BRHUD.cpp(4227)
 #, fuzzy
 msgctxt "BR,HUD.Objet"
 msgid "OBJET"
 msgstr "ITEM"
 
 #. Key:	HUD.EquipmentSlot
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4221)
-#: Source/Backrooms/Private/BRHUD.cpp(4221)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4230)
+#: Source/Backrooms/Private/BRHUD.cpp(4230)
 #, fuzzy
 msgctxt "BR,HUD.EquipmentSlot"
 msgid "ÉQUIPEMENT - {Slot}"
 msgstr "EQUIPAMENTO - {Slot}"
 
 #. Key:	HUD.KindQuantiteIt
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4223)
-#: Source/Backrooms/Private/BRHUD.cpp(4223)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4232)
+#: Source/Backrooms/Private/BRHUD.cpp(4232)
 #, fuzzy
 msgctxt "BR,HUD.KindQuantiteIt"
 msgid "{Kind}     QUANTITÉ : {It}"
 msgstr "{Kind}     QUANTIDADE: {It}"
 
 #. Key:	HUD.Retirer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4252)
-#: Source/Backrooms/Private/BRHUD.cpp(4252)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4261)
+#: Source/Backrooms/Private/BRHUD.cpp(4261)
 #, fuzzy
 msgctxt "BR,HUD.Retirer"
 msgid "RETIRER"
 msgstr "REMOVER"
 
 #. Key:	HUD.Equiper
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4252)
-#: Source/Backrooms/Private/BRHUD.cpp(4252)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4261)
+#: Source/Backrooms/Private/BRHUD.cpp(4261)
 #, fuzzy
 msgctxt "BR,HUD.Equiper"
 msgid "ÉQUIPER"
 msgstr "EQUIPAR"
 
 #. Key:	HUD.Fermer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4265)
-#: Source/Backrooms/Private/BRHUD.cpp(4265)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4274)
+#: Source/Backrooms/Private/BRHUD.cpp(4274)
 #, fuzzy
 msgctxt "BR,HUD.Fermer"
 msgid "FERMER"
 msgstr "FECHAR"
 
 #. Key:	HUD.JournalVagabond
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4291)
-#: Source/Backrooms/Private/BRHUD.cpp(4291)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4300)
+#: Source/Backrooms/Private/BRHUD.cpp(4300)
 #, fuzzy
 msgctxt "BR,HUD.JournalVagabond"
 msgid "JOURNAL DU VAGABOND"
 msgstr "DIÁRIO DO ANDARILHO"
 
 #. Key:	HUD.NiveauNumberTitle2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4295)
-#: Source/Backrooms/Private/BRHUD.cpp(4295)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4304)
+#: Source/Backrooms/Private/BRHUD.cpp(4304)
 #, fuzzy
 msgctxt "BR,HUD.NiveauNumberTitle2"
 msgid "NIVEAU {Number} - « {Title} »"
 msgstr "NÍVEL {Number} - “{Title}”"
 
 #. Key:	HUD.LevelsVisited
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4312)
-#: Source/Backrooms/Private/BRHUD.cpp(4312)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4321)
+#: Source/Backrooms/Private/BRHUD.cpp(4321)
 #, fuzzy
 msgctxt "BR,HUD.LevelsVisited"
 msgid "Niveaux visités : {List}"
 msgstr "Níveis visitados: {List}"
 
 #. Key:	HUD.TempsNiveauLeveltime
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4314)
-#: Source/Backrooms/Private/BRHUD.cpp(4314)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4323)
+#: Source/Backrooms/Private/BRHUD.cpp(4323)
 #, fuzzy
 msgctxt "BR,HUD.TempsNiveauLeveltime"
 msgid "Temps sur ce niveau : {LevelTime}"
 msgstr "Tempo neste nível: {LevelTime}"
 
 #. Key:	HUD.QuitterNiveauCherchezPassageMur
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4317)
-#: Source/Backrooms/Private/BRHUD.cpp(4317)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4326)
+#: Source/Backrooms/Private/BRHUD.cpp(4326)
 #, fuzzy
 msgctxt "BR,HUD.QuitterNiveauCherchezPassageMur"
 msgid "Pour quitter un niveau : cherchez un passage (mur qui grésille, porte, échelle...). Les sorties émettent un bourdonnement électrique : écoutez."
 msgstr "Para sair de um nível: procure uma passagem (parede que chia, porta, escada...). As saídas emitem um zumbido elétrico: escute."
 
 #. Key:	HUD.NotesTrouveesReadnotes
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4325)
-#: Source/Backrooms/Private/BRHUD.cpp(4325)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4334)
+#: Source/Backrooms/Private/BRHUD.cpp(4334)
 #, fuzzy
 msgctxt "BR,HUD.NotesTrouveesReadnotes"
 msgid "NOTES TROUVÉES ({ReadNotes})"
 msgstr "BILHETES ENCONTRADOS ({ReadNotes})"
 
 #. Key:	HUD.QuotedNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4332)
-#: Source/Backrooms/Private/BRHUD.cpp(4332)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4341)
+#: Source/Backrooms/Private/BRHUD.cpp(4341)
 #, fuzzy
 msgctxt "BR,HUD.QuotedNote"
 msgid "« {Note} »"
 msgstr "“{Note}”"
 
 #. Key:	HUD.EntitesRencontrees
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4355)
-#: Source/Backrooms/Private/BRHUD.cpp(4355)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4364)
+#: Source/Backrooms/Private/BRHUD.cpp(4364)
 #, fuzzy
 msgctxt "BR,HUD.EntitesRencontrees"
 msgid "ENTITÉS RENCONTRÉES"
 msgstr "ENTIDADES ENCONTRADAS"
 
 #. Key:	HUD.EntityNumberName
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4380)
-#: Source/Backrooms/Private/BRHUD.cpp(4380)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4389)
+#: Source/Backrooms/Private/BRHUD.cpp(4389)
 #, fuzzy
 msgctxt "BR,HUD.EntityNumberName"
 msgid "{Number} - {Name}"
 msgstr "{Number} - {Name}"
 
 #. Key:	HUD.AdviceLine
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4388)
-#: Source/Backrooms/Private/BRHUD.cpp(4388)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4397)
+#: Source/Backrooms/Private/BRHUD.cpp(4397)
 #, fuzzy
 msgctxt "BR,HUD.AdviceLine"
 msgid "Conseil : {Advice}"
 msgstr "Conselho: {Advice}"
 
 #. Key:	HUD.AucuneInstantTresBienComme
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4418)
-#: Source/Backrooms/Private/BRHUD.cpp(4418)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4427)
+#: Source/Backrooms/Private/BRHUD.cpp(4427)
 #, fuzzy
 msgctxt "BR,HUD.AucuneInstantTresBienComme"
 msgid "Aucune pour l'instant... et c'est très bien comme ça."
 msgstr "Nenhuma por enquanto... e é melhor assim."
 
 #. Key:	HUD.AstuceFilmerEntiteCamescopePendant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4420)
-#: Source/Backrooms/Private/BRHUD.cpp(4420)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4429)
+#: Source/Backrooms/Private/BRHUD.cpp(4429)
 #, fuzzy
 msgctxt "BR,HUD.AstuceFilmerEntiteCamescopePendant"
 msgid "Astuce : filmer une entité au caméscope pendant 3 secondes ajoute sa fiche au journal."
 msgstr "Dica: filmar uma entidade com a filmadora por 3 segundos adiciona a ficha dela ao diário."
 
 #. Key:	HUD.SettingsGame
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4442)
-#: Source/Backrooms/Private/BRHUD.cpp(4442)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4451)
+#: Source/Backrooms/Private/BRHUD.cpp(4451)
 #, fuzzy
 msgctxt "BR,HUD.SettingsGame"
 msgid "JEU"
 msgstr "JOGO"
 
 #. Key:	HUD.SettingsVideo
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4442)
-#: Source/Backrooms/Private/BRHUD.cpp(4442)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4451)
+#: Source/Backrooms/Private/BRHUD.cpp(4451)
 #, fuzzy
 msgctxt "BR,HUD.SettingsVideo"
 msgid "VIDÉO"
 msgstr "VÍDEO"
 
 #. Key:	HUD.SettingsInterface
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4443)
-#: Source/Backrooms/Private/BRHUD.cpp(4443)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4452)
+#: Source/Backrooms/Private/BRHUD.cpp(4452)
 #, fuzzy
 msgctxt "BR,HUD.SettingsInterface"
 msgid "INTERFACE"
 msgstr "INTERFACE"
 
 #. Key:	HUD.SettingsGraphics
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4443)
-#: Source/Backrooms/Private/BRHUD.cpp(4443)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4452)
+#: Source/Backrooms/Private/BRHUD.cpp(4452)
 #, fuzzy
 msgctxt "BR,HUD.SettingsGraphics"
 msgid "GRAPHISMES"
 msgstr "GRÁFICOS"
 
 #. Key:	HUD.ReglagesSontSauvegardesAutomatiquementBa
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4511)
-#: Source/Backrooms/Private/BRHUD.cpp(4511)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4520)
+#: Source/Backrooms/Private/BRHUD.cpp(4520)
 #, fuzzy
 msgctxt "BR,HUD.ReglagesSontSauvegardesAutomatiquementBa"
 msgid "Les réglages sont sauvegardés automatiquement (BackroomsPlayer.ini)."
 msgstr "As configurações são salvas automaticamente (BackroomsPlayer.ini)."
 
 #. Key:	HUD.ImmediatProfilQualiteRayTracing
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4519)
-#: Source/Backrooms/Private/BRHUD.cpp(4519)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4528)
+#: Source/Backrooms/Private/BRHUD.cpp(4528)
 #, fuzzy
 msgctxt "BR,HUD.ImmediatProfilQualiteRayTracing"
 msgid "Immédiat : profil, qualité, ray tracing, reflets, ombres de la lampe, résolution.  Au redémarrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini)."
 msgstr "Na hora: perfil, qualidade, ray tracing, reflexos, sombras da lanterna, resolução.  Ao reiniciar: DirectX 12 / 11, suporte a ray tracing, cache de skinning (Config/DefaultEngine.ini)."
 
 #. Key:	HUD.DistM
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4704)
-#: Source/Backrooms/Private/BRHUD.cpp(4704) Source/Backrooms/Private/BRHUD.cpp(4737)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4714)
+#: Source/Backrooms/Private/BRHUD.cpp(4714) Source/Backrooms/Private/BRHUD.cpp(4748)
 #, fuzzy
 msgctxt "BR,HUD.DistM"
 msgid "{Dist} m"
 msgstr "{Dist} m"
 
 #. Key:	HUD.Explorateur
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4710)
-#: Source/Backrooms/Private/BRHUD.cpp(4710)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4721)
+#: Source/Backrooms/Private/BRHUD.cpp(4721)
 #, fuzzy
 msgctxt "BR,HUD.Explorateur"
 msgid "Explorateur"
 msgstr "Explorador"
 
 #. Key:	HUD.NoyeSortez
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4720)
-#: Source/Backrooms/Private/BRHUD.cpp(4720)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4731)
+#: Source/Backrooms/Private/BRHUD.cpp(4731)
 #, fuzzy
 msgctxt "BR,HUD.NoyeSortez"
 msgid "  (noyé : sortez-le)"
 msgstr "  (afogando: tire-o da água)"
 
 #. Key:	HUD.Terre2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4720)
-#: Source/Backrooms/Private/BRHUD.cpp(4720)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4731)
+#: Source/Backrooms/Private/BRHUD.cpp(4731)
 #, fuzzy
 msgctxt "BR,HUD.Terre2"
 msgid "  (à terre)"
 msgstr "  (caído)"
 
 #. Key:	HUD.HorsAtteinte
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4721)
-#: Source/Backrooms/Private/BRHUD.cpp(4721)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4732)
+#: Source/Backrooms/Private/BRHUD.cpp(4732)
 #, fuzzy
 msgctxt "BR,HUD.HorsAtteinte"
 msgid "  (hors d'atteinte)"
 msgstr "  (fora de alcance)"
 
 #. Key:	Display.KeepTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4759)
-#: Source/Backrooms/Private/BRHUD.cpp(4759)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4770)
+#: Source/Backrooms/Private/BRHUD.cpp(4770)
 #, fuzzy
 msgctxt "BR,Display.KeepTitle"
 msgid "CONSERVER CET AFFICHAGE ?"
 msgstr "MANTER ESTA EXIBIÇÃO?"
 
 #. Key:	Display.Countdown
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4761)
-#: Source/Backrooms/Private/BRHUD.cpp(4761)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4772)
+#: Source/Backrooms/Private/BRHUD.cpp(4772)
 #, fuzzy
 msgctxt "BR,Display.Countdown"
 msgid "Retour à l'affichage précédent dans {Seconds} s."
 msgstr "Voltando à exibição anterior em {Seconds} s."
 
 #. Key:	Display.Keep
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4763)
-#: Source/Backrooms/Private/BRHUD.cpp(4763)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4774)
+#: Source/Backrooms/Private/BRHUD.cpp(4774)
 #, fuzzy
 msgctxt "BR,Display.Keep"
 msgid "CONSERVER  [ENTRÉE]"
 msgstr "MANTER  [ENTER]"
 
 #. Key:	Display.Revert
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4764)
-#: Source/Backrooms/Private/BRHUD.cpp(4764)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4775)
+#: Source/Backrooms/Private/BRHUD.cpp(4775)
 #, fuzzy
 msgctxt "BR,Display.Revert"
 msgid "RÉTABLIR  [ÉCHAP]"
 msgstr "RESTAURAR  [ESC]"
 
 #. Key:	HUD.MicroOuvert
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4805)
-#: Source/Backrooms/Private/BRHUD.cpp(4805)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4816)
+#: Source/Backrooms/Private/BRHUD.cpp(4816)
 #, fuzzy
 msgctxt "BR,HUD.MicroOuvert"
 msgid "MICRO OUVERT"
 msgstr "MICROFONE ABERTO"
 
 #. Key:	HUD.Parlez
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4805)
-#: Source/Backrooms/Private/BRHUD.cpp(4805)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4816)
+#: Source/Backrooms/Private/BRHUD.cpp(4816)
 #, fuzzy
 msgctxt "BR,HUD.Parlez"
 msgid "VOUS PARLEZ"
 msgstr "VOCÊ ESTÁ FALANDO"
 
 #. Key:	HUD.PushToTalkHint
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4809)
-#: Source/Backrooms/Private/BRHUD.cpp(4809)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4820)
+#: Source/Backrooms/Private/BRHUD.cpp(4820)
 #, fuzzy
 msgctxt "BR,HUD.PushToTalkHint"
 msgid "{Key} parler"
 msgstr "{Key} falar"
 
 #. Key:	HUD.MicroCoupe
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4813)
-#: Source/Backrooms/Private/BRHUD.cpp(4813)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4824)
+#: Source/Backrooms/Private/BRHUD.cpp(4824)
 #, fuzzy
 msgctxt "BR,HUD.MicroCoupe"
 msgid "MICRO COUPÉ"
 msgstr "MICROFONE MUDO"
 
 #. Key:	HUD.Joueurs
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4859)
-#: Source/Backrooms/Private/BRHUD.cpp(4859)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4870)
+#: Source/Backrooms/Private/BRHUD.cpp(4870)
 #, fuzzy
 msgctxt "BR,HUD.Joueurs"
 msgid "JOUEURS"
 msgstr "JOGADORES"
 
 #. Key:	HUD.Latence
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4860)
-#: Source/Backrooms/Private/BRHUD.cpp(4860)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4871)
+#: Source/Backrooms/Private/BRHUD.cpp(4871)
 #, fuzzy
 msgctxt "BR,HUD.Latence"
 msgid "LATENCE"
 msgstr "LATÊNCIA"
 
 #. Key:	HUD.Hote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4889)
-#: Source/Backrooms/Private/BRHUD.cpp(4889) Source/Backrooms/Private/BRHUD.cpp(4892)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4900)
+#: Source/Backrooms/Private/BRHUD.cpp(4900) Source/Backrooms/Private/BRHUD.cpp(4903)
 #, fuzzy
 msgctxt "BR,HUD.Hote"
 msgid "HÔTE"
 msgstr "ANFITRIÃO"
 
 #. Key:	HUD.PingMs
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4896)
-#: Source/Backrooms/Private/BRHUD.cpp(4896)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4907)
+#: Source/Backrooms/Private/BRHUD.cpp(4907)
 #, fuzzy
 msgctxt "BR,HUD.PingMs"
 msgid "{Ping} ms"
@@ -4247,7 +4247,7 @@ msgstr "SOBRE OBJETOS"
 
 #. Key:	Menu.Aucun
 #. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(126)
-#: Source/Backrooms/Private/BRPlayerController.cpp(126) Source/Backrooms/Private/BRPlayerController.cpp(2694) Source/Backrooms/Private/BRPlayerController.cpp(2696)
+#: Source/Backrooms/Private/BRPlayerController.cpp(126) Source/Backrooms/Private/BRPlayerController.cpp(2716) Source/Backrooms/Private/BRPlayerController.cpp(2718)
 #, fuzzy
 msgctxt "BR,Menu.Aucun"
 msgid "AUCUN"
@@ -4774,760 +4774,760 @@ msgid "Axe Y normal"
 msgstr "Eixo Y normal"
 
 #. Key:	Menu.RtUnavailableMac
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2595)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2595)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2617)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2617)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableMac"
 msgid "Indisponible sur macOS dans cette version ({RHI}) : Lumen logiciel est utilisé. Le ray tracing matériel Metal d'Unreal est expérimental, limité à certains Mac Apple Silicon, et n'est pas validé pour ce jeu."
 msgstr "Indisponível no macOS nesta versão ({RHI}): o Lumen por software é usado. O ray tracing por hardware Metal da Unreal é experimental, limitado a alguns Macs com Apple silicon, e não foi validado para este jogo."
 
 #. Key:	Menu.RtUnavailableLinux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2597)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2597)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2619)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2619)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableLinux"
 msgid "Indisponible sur Linux dans cette version ({RHI}) : Lumen logiciel est utilisé. Le ray tracing Vulkan d'Unreal dépend du pilote et n'est pas validé pour ce jeu."
 msgstr "Indisponível no Linux nesta versão ({RHI}): o Lumen por software é usado. O ray tracing Vulkan da Unreal depende do driver e não foi validado para este jogo."
 
 #. Key:	Menu.RtUnavailableWindows
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2599)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2599)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2621)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2621)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableWindows"
 msgid "Indisponible : le jeu a démarré sans ray tracing matériel ({RHI}). Il faut DirectX 12 et une carte qui le prend en charge. Lumen logiciel est utilisé ; un changement de carte ou de RHI demande un redémarrage."
 msgstr "Indisponível: o jogo foi iniciado sem ray tracing por hardware ({RHI}). É preciso DirectX 12 e uma placa compatível. O Lumen por software é usado; trocar de placa ou de RHI exige reiniciar."
 
 #. Key:	Menu.LanguageRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2608)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2608)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2630)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2630)
 #, fuzzy
 msgctxt "BR,Menu.LanguageRow"
 msgid "LANGUE"
 msgstr "IDIOMA"
 
 #. Key:	Menu.SensibiliteSouris
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2610)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2610)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2632)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2632)
 #, fuzzy
 msgctxt "BR,Menu.SensibiliteSouris"
 msgid "SENSIBILITÉ DE LA SOURIS"
 msgstr "SENSIBILIDADE DO MOUSE"
 
 #. Key:	Menu.InverserAxeVertical
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2612)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2612)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2634)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2634)
 #, fuzzy
 msgctxt "BR,Menu.InverserAxeVertical"
 msgid "INVERSER L'AXE VERTICAL"
 msgstr "INVERTER O EIXO VERTICAL"
 
 #. Key:	Menu.ChampVision
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2614)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2614)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2636)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2636)
 #, fuzzy
 msgctxt "BR,Menu.ChampVision"
 msgid "CHAMP DE VISION"
 msgstr "CAMPO DE VISÃO"
 
 #. Key:	Menu.BalancementCamera
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2616)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2616)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2638)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2638)
 #, fuzzy
 msgctxt "BR,Menu.BalancementCamera"
 msgid "BALANCEMENT DE LA CAMÉRA"
 msgstr "BALANÇO DA CÂMERA"
 
 #. Key:	Menu.TremblementsCamera
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2618)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2618)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2640)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2640)
 #, fuzzy
 msgctxt "BR,Menu.TremblementsCamera"
 msgid "TREMBLEMENTS DE LA CAMÉRA"
 msgstr "TREMORES DA CÂMERA"
 
 #. Key:	Menu.FlashsClignotements
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2620)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2620)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2642)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2642)
 #, fuzzy
 msgctxt "BR,Menu.FlashsClignotements"
 msgid "FLASHS ET CLIGNOTEMENTS"
 msgstr "FLASHES E PISCADAS"
 
 #. Key:	Menu.FlouMouvement
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2622)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2622)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2644)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2644)
 #, fuzzy
 msgctxt "BR,Menu.FlouMouvement"
 msgid "FLOU DE MOUVEMENT"
 msgstr "DESFOQUE DE MOVIMENTO"
 
 #. Key:	Menu.VolumeGeneral
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2624)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2624)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2646)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2646)
 #, fuzzy
 msgctxt "BR,Menu.VolumeGeneral"
 msgid "VOLUME GÉNÉRAL"
 msgstr "VOLUME GERAL"
 
 #. Key:	Menu.ChatVocalProximite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2626)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2626)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2648)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2648)
 #, fuzzy
 msgctxt "BR,Menu.ChatVocalProximite"
 msgid "CHAT VOCAL (PROXIMITÉ)"
 msgstr "CHAT DE VOZ (PROXIMIDADE)"
 
 #. Key:	Menu.Luminosite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2628)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2628)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2650)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2650)
 #, fuzzy
 msgctxt "BR,Menu.Luminosite"
 msgid "LUMINOSITÉ"
 msgstr "BRILHO"
 
 #. Key:	Menu.ModeAffichage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2630)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2630)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2652)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2652)
 #, fuzzy
 msgctxt "BR,Menu.ModeAffichage"
 msgid "MODE D'AFFICHAGE"
 msgstr "MODO DE EXIBIÇÃO"
 
 #. Key:	Menu.ResolutionFenetre
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2632)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2632)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2654)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2654)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionFenetre"
 msgid "RÉSOLUTION"
 msgstr "RESOLUÇÃO"
 
 #. Key:	Menu.CreatureReflections
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2634)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2634)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2656)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2656)
 #, fuzzy
 msgctxt "BR,Menu.CreatureReflections"
 msgid "CRÉATURES DANS LES REFLETS"
 msgstr "CRIATURAS NOS REFLEXOS"
 
 #. Key:	Menu.UiScale
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2636)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2636)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2658)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2658)
 #, fuzzy
 msgctxt "BR,Menu.UiScale"
 msgid "TAILLE DE L'INTERFACE"
 msgstr "TAMANHO DA INTERFACE"
 
 #. Key:	Menu.HudOpacity
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2638)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2638)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2660)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2660)
 #, fuzzy
 msgctxt "BR,Menu.HudOpacity"
 msgid "OPACITÉ DE L'INTERFACE"
 msgstr "OPACIDADE DA INTERFACE"
 
 #. Key:	Menu.Crosshair
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2640)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2640)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2662)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2662)
 #, fuzzy
 msgctxt "BR,Menu.Crosshair"
 msgid "RÉTICULE"
 msgstr "MIRA"
 
 #. Key:	Menu.QuickBarRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2642)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2642)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2664)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2664)
 #, fuzzy
 msgctxt "BR,Menu.QuickBarRow"
 msgid "OBJETS RAPIDES"
 msgstr "ITENS RÁPIDOS"
 
 #. Key:	Menu.ObjectivesRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2644)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2644)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2666)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2666)
 #, fuzzy
 msgctxt "BR,Menu.ObjectivesRow"
 msgid "OBJECTIFS À L'ÉCRAN"
 msgstr "OBJETIVOS NA TELA"
 
 #. Key:	Menu.ResolutionRendu
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2646)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2646)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2668)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2668)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionRendu"
 msgid "RÉSOLUTION DE RENDU"
 msgstr "RESOLUÇÃO DE RENDERIZAÇÃO"
 
 #. Key:	Menu.SynchroVerticaleVSync
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2648)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2648)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2670)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2670)
 #, fuzzy
 msgctxt "BR,Menu.SynchroVerticaleVSync"
 msgid "SYNCHRO VERTICALE (V-SYNC)"
 msgstr "SINCRONIZAÇÃO VERTICAL (V-SYNC)"
 
 #. Key:	Menu.ImagesSecondeMax
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2650)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2650)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2672)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2672)
 #, fuzzy
 msgctxt "BR,Menu.ImagesSecondeMax"
 msgid "IMAGES PAR SECONDE MAX."
 msgstr "QUADROS POR SEGUNDO MÁX."
 
 #. Key:	Menu.ProfilGraphique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2652)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2652)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2674)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2674)
 #, fuzzy
 msgctxt "BR,Menu.ProfilGraphique"
 msgid "PROFIL GRAPHIQUE"
 msgstr "PERFIL GRÁFICO"
 
 #. Key:	Menu.QualiteGraphique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2654)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2654)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2676)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2676)
 #, fuzzy
 msgctxt "BR,Menu.QualiteGraphique"
 msgid "QUALITÉ GRAPHIQUE"
 msgstr "QUALIDADE GRÁFICA"
 
 #. Key:	Menu.RayTracingMaterielRtx
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2656)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2656)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2678)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2678)
 #, fuzzy
 msgctxt "BR,Menu.RayTracingMaterielRtx"
 msgid "RAY TRACING MATÉRIEL (RTX)"
 msgstr "RAY TRACING POR HARDWARE (RTX)"
 
 #. Key:	Menu.RefletsRayTracesHauteQualite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2658)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2658)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2680)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2680)
 #, fuzzy
 msgctxt "BR,Menu.RefletsRayTracesHauteQualite"
 msgid "REFLETS RAY TRACÉS HAUTE QUALITÉ"
 msgstr "REFLEXOS COM RAY TRACING DE ALTA QUALIDADE"
 
 #. Key:	Menu.OmbresRayTraceesLampe
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2660)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2660)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2682)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2682)
 #, fuzzy
 msgctxt "BR,Menu.OmbresRayTraceesLampe"
 msgid "OMBRES RAY TRACÉES (LAMPE)"
 msgstr "SOMBRAS COM RAY TRACING (LANTERNA)"
 
 #. Key:	Menu.NeonsLumieresSurfaciques
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2662)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2662)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2684)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2684)
 #, fuzzy
 msgctxt "BR,Menu.NeonsLumieresSurfaciques"
 msgid "NÉONS EN LUMIÈRES SURFACIQUES"
 msgstr "LÂMPADAS COMO LUZES DE ÁREA"
 
 #. Key:	Menu.ModelesCompletsEntites
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2664)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2664)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2686)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2686)
 #, fuzzy
 msgctxt "BR,Menu.ModelesCompletsEntites"
 msgid "MODÈLES COMPLETS DES ENTITÉS"
 msgstr "MODELOS COMPLETOS DAS ENTIDADES"
 
 #. Key:	Menu.VolumetricFog
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2666)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2666)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2688)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2688)
 #, fuzzy
 msgctxt "BR,Menu.VolumetricFog"
 msgid "BROUILLARD VOLUMÉTRIQUE"
 msgstr "NÉVOA VOLUMÉTRICA"
 
 #. Key:	Menu.GrainImage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2668)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2668)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2690)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2690)
 #, fuzzy
 msgctxt "BR,Menu.GrainImage"
 msgid "GRAIN DE L'IMAGE"
 msgstr "GRANULAÇÃO DA IMAGEM"
 
 #. Key:	Menu.EffetVhs
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2670)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2670)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2692)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2692)
 #, fuzzy
 msgctxt "BR,Menu.EffetVhs"
 msgid "EFFET VHS"
 msgstr "EFEITO VHS"
 
 #. Key:	Menu.ModeDeveloppeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2672)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2672)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2694)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2694)
 #, fuzzy
 msgctxt "BR,Menu.ModeDeveloppeur"
 msgid "MODE DÉVELOPPEUR"
 msgstr "MODO DESENVOLVEDOR"
 
 #. Key:	Menu.Normaux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2696)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2696)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2718)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2718)
 #, fuzzy
 msgctxt "BR,Menu.Normaux"
 msgid "NORMAUX"
 msgstr "NORMAIS"
 
 #. Key:	Menu.Attenues
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2696)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2696)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2718)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2718)
 #, fuzzy
 msgctxt "BR,Menu.Attenues"
 msgid "ATTÉNUÉS"
 msgstr "ATENUADOS"
 
 #. Key:	Menu.WindowModeEffective
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2710)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2710)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2732)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2732)
 #, fuzzy
 msgctxt "BR,Menu.WindowModeEffective"
 msgid "{Want} → {Got}"
 msgstr "{Want} → {Got}"
 
 #. Key:	Menu.ResolutionScreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2717)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2717)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2739)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2739)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionScreen"
 msgid "{Res} (écran)"
 msgstr "{Res} (tela)"
 
 #. Key:	Menu.ReflectScreenOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2723)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2723) Source/Backrooms/Private/BRPlayerController.cpp(2733)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2745)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2745) Source/Backrooms/Private/BRPlayerController.cpp(2755)
 #, fuzzy
 msgctxt "BR,Menu.ReflectScreenOnly"
 msgid "ÉCRAN SEULEMENT"
 msgstr "SÓ TELA"
 
 #. Key:	Menu.ReflectFullHit
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2727)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2727)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2749)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2749)
 #, fuzzy
 msgctxt "BR,Menu.ReflectFullHit"
 msgid "COMPLETS (RAYONS)"
 msgstr "COMPLETOS (RAIOS)"
 
 #. Key:	Menu.ReflectNotInEngine
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2731)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2731)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2753)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2753)
 #, fuzzy
 msgctxt "BR,Menu.ReflectNotInEngine"
 msgid "ÉCRAN (MOTEUR)"
 msgstr "TELA (MOTOR)"
 
 #. Key:	Menu.ReflectRetrace
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2733)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2733)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2755)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2755)
 #, fuzzy
 msgctxt "BR,Menu.ReflectRetrace"
 msgid "RAYONS"
 msgstr "RAIOS"
 
 #. Key:	Menu.RenderscaleX
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2749)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2749)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2771)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2771)
 #, fuzzy
 msgctxt "BR,Menu.RenderscaleX"
 msgid "{RenderScale} %  ({X}×{Y})"
 msgstr "{RenderScale}%  ({X}×{Y})"
 
 #. Key:	Menu.Illimite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2754)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2754)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2776)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2776)
 #, fuzzy
 msgctxt "BR,Menu.Illimite"
 msgid "ILLIMITÉ"
 msgstr "ILIMITADO"
 
 #. Key:	Menu.Indisponible
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2760)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2760) Source/Backrooms/Private/BRPlayerController.cpp(2762) Source/Backrooms/Private/BRPlayerController.cpp(2764)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2782)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2782) Source/Backrooms/Private/BRPlayerController.cpp(2784) Source/Backrooms/Private/BRPlayerController.cpp(2786)
 #, fuzzy
 msgctxt "BR,Menu.Indisponible"
 msgid "INDISPONIBLE"
 msgstr "INDISPONÍVEL"
 
 #. Key:	Menu.LanguageHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2787)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2787)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2809)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2809)
 #, fuzzy
 msgctxt "BR,Menu.LanguageHint"
 msgid "Langue des textes, des nombres et des dates. S'applique tout de suite et reste enregistrée. En coop, chaque joueur garde la sienne. Les voix et les sons ne changent pas (pas de doublage)."
 msgstr "Idioma dos textos, números e datas. Aplica na hora e fica salvo. No cooperativo, cada jogador mantém o seu. As vozes e os sons não mudam (sem dublagem)."
 
 #. Key:	Menu.DesactivezMouvementCameraPendantMarche
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2789)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2789)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2811)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2811)
 #, fuzzy
 msgctxt "BR,Menu.DesactivezMouvementCameraPendantMarche"
 msgid "Désactivez-le si le mouvement de la caméra pendant la marche vous incommode."
 msgstr "Desative se o movimento da câmera ao andar incomodar você."
 
 #. Key:	Menu.SecoussesCameraQuandFrappePendant
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2791)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2791)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2813)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2813)
 #, fuzzy
 msgctxt "BR,Menu.SecoussesCameraQuandFrappePendant"
 msgid "Secousses de la caméra quand on est frappé et pendant les jumpscares. Les coups et leurs dégâts ne changent pas."
 msgstr "Tremores da câmera ao ser atingido e durante os jumpscares. Os golpes e o dano deles não mudam."
 
 #. Key:	Menu.EclairsJumpscaresImageMortNeons
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2793)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2793)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2815)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2815)
 #, fuzzy
 msgctxt "BR,Menu.EclairsJumpscaresImageMortNeons"
 msgid "Éclairs des jumpscares, image de la mort, néons qui clignotent. Atténués ou supprimés si les lumières vives qui clignotent vous gênent ; les coupures de courant restent annoncées par le son."
 msgstr "Clarões dos jumpscares, imagem da morte, lâmpadas piscando. Atenuados ou removidos se luzes fortes piscando incomodarem você; os apagões continuam sendo anunciados pelo som."
 
 #. Key:	Menu.FlouMouvementsRapidesCameraDesactive
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2795)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2795)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2817)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2817)
 #, fuzzy
 msgctxt "BR,Menu.FlouMouvementsRapidesCameraDesactive"
 msgid "Flou des mouvements rapides de la caméra. Désactivé par défaut."
 msgstr "Desfoque em movimentos rápidos da câmera. Desativado por padrão."
 
 #. Key:	Menu.VolumeToutJeuAmbianceEntites
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2797)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2797)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2819)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2819)
 #, fuzzy
 msgctxt "BR,Menu.VolumeToutJeuAmbianceEntites"
 msgid "Volume de tout le jeu (ambiance, entités, voix des coéquipiers)."
 msgstr "Volume de todo o jogo (ambiente, entidades, vozes dos colegas)."
 
 #. Key:	Menu.EntendAutresJoueursPresLeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2799)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2799)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2821)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2821)
 #, fuzzy
 msgctxt "BR,Menu.EntendAutresJoueursPresLeur"
 msgid "On entend les autres joueurs près de leur personnage, étouffés par les murs. Appuyer pour parler : touche {PushToTalk}. Voix ouverte : le micro transmet en permanence. Micro coupé : vous entendez toujours les autres."
 msgstr "Você ouve os outros jogadores perto do personagem deles, abafados pelas paredes. Apertar para falar: tecla {PushToTalk}. Voz aberta: o microfone transmite o tempo todo. Microfone mudo: você continua ouvindo os outros."
 
 #. Key:	Menu.RendImageClaireSombreZones
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2801)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2801)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2823)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2823)
 #, fuzzy
 msgctxt "BR,Menu.RendImageClaireSombreZones"
 msgid "Rend l'image plus claire ou plus sombre (les zones sans lumière restent noires)."
 msgstr "Deixa a imagem mais clara ou mais escura (as áreas sem luz continuam pretas)."
 
 #. Key:	Menu.WindowModeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2805)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2805)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2827)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2827)
 #, fuzzy
 msgctxt "BR,Menu.WindowModeHint"
 msgid "Plein écran, plein écran fenêtré (sans bordures, à la taille de l'écran, Alt+Tab instantané) ou fenêtre. Chaque changement est à confirmer dans les 15 secondes, sinon l'affichage précédent revient. Sans effet dans l'éditeur."
 msgstr "Tela cheia, tela cheia em janela (sem bordas, do tamanho da tela, Alt+Tab instantâneo) ou janela. Cada mudança deve ser confirmada em até 15 segundos; senão, a exibição anterior volta. Sem efeito no editor."
 
 #. Key:	Menu.NoExclusiveFullscreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2808)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2808)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2830)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2830)
 #, fuzzy
 msgctxt "BR,Menu.NoExclusiveFullscreen"
 msgid "Sur ce système, le plein écran est une fenêtre sans bordures à la taille de l'écran : le mode réellement obtenu est indiqué après la flèche."
 msgstr "Neste sistema, a tela cheia é uma janela sem bordas do tamanho da tela: o modo realmente obtido aparece depois da seta."
 
 #. Key:	Menu.ResolutionHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2813)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2813)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2835)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2835)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionHint"
 msgid "Taille de la fenêtre, ou définition de l'écran en plein écran. Le plein écran fenêtré prend toujours celle de l'écran. À confirmer dans les 15 secondes. L'échelle de rendu (RÉSOLUTION DE RENDU) est un réglage à part."
 msgstr "Tamanho da janela, ou resolução da tela em tela cheia. A tela cheia em janela sempre usa a da tela. Confirme em até 15 segundos. A escala de renderização (RESOLUÇÃO DE RENDERIZAÇÃO) é uma configuração separada."
 
 #. Key:	Menu.CreatureReflectionsHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2815)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2815)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2837)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2837)
 #, fuzzy
 msgctxt "BR,Menu.CreatureReflectionsHint"
 msgid "ÉCRAN SEULEMENT : les reflets montrent une créature seulement si elle est à l'écran ; hors champ, elle n'y apparaît pas. RAYONS : les créatures sont dans la scène ray tracée et éclairées par les rayons là où le cache de surfaces de Lumen ne les couvre pas, y compris hors champ ; plus coûteux. Demande le ray tracing matériel et une version du moteur qui le permet (sinon : ÉCRAN (MOTEUR)). Les reflets HAUTE QUALITÉ les montrent toujours."
 msgstr "SÓ TELA: os reflexos mostram uma criatura apenas quando ela está na tela; fora dela, não aparece. RAIOS: as criaturas fazem parte da cena com ray tracing e são iluminadas pelos raios onde o cache de superfícies do Lumen não as cobre, inclusive fora da tela; mais pesado. Exige ray tracing por hardware e uma versão do motor que permita (senão: TELA (MOTOR)). Os reflexos de ALTA QUALIDADE sempre as mostram."
 
 #. Key:	Menu.UiScaleHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2817)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2817)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2839)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2839)
 #, fuzzy
 msgctxt "BR,Menu.UiScaleHint"
 msgid "Taille des textes et des panneaux, pour tous les écrans (de 1280×720 à l'ultra large et aux écrans Retina)."
 msgstr "Tamanho dos textos e painéis, para todas as telas (de 1280×720 a ultrawide e telas Retina)."
 
 #. Key:	Menu.HudOpacityHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2819)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2819)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2841)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2841)
 #, fuzzy
 msgctxt "BR,Menu.HudOpacityHint"
 msgid "Opacité des informations affichées pendant l'exploration (objets rapides, objectifs, réticule). Les messages importants restent lisibles."
 msgstr "Opacidade das informações exibidas durante a exploração (itens rápidos, objetivos, mira). As mensagens importantes continuam legíveis."
 
 #. Key:	Menu.CrosshairHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2821)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2821)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2843)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2843)
 #, fuzzy
 msgctxt "BR,Menu.CrosshairHint"
 msgid "Point au centre de l'écran : toujours, seulement sur un objet utilisable, ou jamais. Les consignes d'interaction et la réanimation restent affichées."
 msgstr "Ponto no centro da tela: sempre, só sobre um objeto utilizável, ou nunca. Os avisos de interação e a reanimação continuam visíveis."
 
 #. Key:	Menu.QuickBarHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2823)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2823)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2845)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2845)
 #, fuzzy
 msgctxt "BR,Menu.QuickBarHint"
 msgid "Poches 1 à 4 en bas de l'écran : brièvement après un changement (ramassage, utilisation), toujours, ou masquées. Elles restent dans l'inventaire."
 msgstr "Bolsos 1 a 4 na parte de baixo da tela: brevemente após uma mudança (pegar, usar), sempre, ou ocultos. Eles continuam no inventário."
 
 #. Key:	Menu.ObjectivesHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2825)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2825)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2847)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2847)
 #, fuzzy
 msgctxt "BR,Menu.ObjectivesHint"
 msgid "Objectifs en haut à droite : brièvement à l'arrivée et à chaque progrès, toujours, ou masqués. Ils restent dans l'inventaire (onglet Personnage)."
 msgstr "Objetivos no canto superior direito: brevemente na chegada e a cada avanço, sempre, ou ocultos. Eles continuam no inventário (aba Personagem)."
 
 #. Key:	Menu.Dessous100ImageCalculeePetite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2827)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2827)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2849)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2849)
 #, fuzzy
 msgctxt "BR,Menu.Dessous100ImageCalculeePetite"
 msgid "En dessous de 100 %, l'image est calculée plus petite puis agrandie par TSR : beaucoup plus fluide, légèrement plus floue."
 msgstr "Abaixo de 100%, a imagem é calculada menor e ampliada pelo TSR: muito mais fluida, um pouco mais borrada."
 
 #. Key:	Menu.SupprimeDechiruresImageAjoutePeu
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2829)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2829)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2851)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2851)
 #, fuzzy
 msgctxt "BR,Menu.SupprimeDechiruresImageAjoutePeu"
 msgid "Supprime les déchirures d'image, ajoute un peu de latence."
 msgstr "Elimina o tearing da imagem, adiciona um pouco de latência."
 
 #. Key:	Menu.LimiterImagesSecondeReduitChaleur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2831)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2831)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2853)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2853)
 #, fuzzy
 msgctxt "BR,Menu.LimiterImagesSecondeReduitChaleur"
 msgid "Limiter les images par seconde réduit la chaleur et le bruit de la carte graphique. Sans effet dans l'éditeur."
 msgstr "Limitar os quadros por segundo reduz o calor e o barulho da placa de vídeo. Sem efeito no editor."
 
 #. Key:	Menu.PerformanceQualiteEleveeLumenLogiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2833)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2833)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2855)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2855)
 #, fuzzy
 msgctxt "BR,Menu.PerformanceQualiteEleveeLumenLogiciel"
 msgid "PERFORMANCE : qualité Élevée, Lumen logiciel, rendu à 67 % (TSR). QUALITÉ : Épique, Lumen en ray tracing matériel (cache de surfaces), rendu à 80 %. RTX FLUIDE : ray tracing matériel, rendu à 67 % agrandi par TSR, ombres des néons jusqu'à 25 m, Hound allégé : vise 60 images/s stables avec une carte RTX. CINÉMATIQUE : reflets éclairés par les rayons, ombres ray tracées de la lampe, modèles complets, rendu à 100 %. Modifier un réglage ci-dessous passe en PERSONNALISÉ. S'applique tout de suite, aussi aux zones déjà chargées."
 msgstr "DESEMPENHO: qualidade Alta, Lumen por software, renderização a 67% (TSR). QUALIDADE: Épica, Lumen com ray tracing por hardware (cache de superfícies), renderização a 80%. RTX FLUIDO: ray tracing por hardware, renderização a 67% ampliada pelo TSR, sombras das lâmpadas até 25 m, Hound simplificado: busca 60 quadros/s estáveis com uma placa RTX. CINEMATOGRÁFICO: reflexos iluminados pelos raios, sombras da lanterna com ray tracing, modelos completos, renderização a 100%. Alterar uma configuração abaixo muda para PERSONALIZADO. Aplica na hora, inclusive nas áreas já carregadas."
 
 #. Key:	Menu.OmbresLumenTexturesAntiCrenelage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2835)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2835)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2857)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2857)
 #, fuzzy
 msgctxt "BR,Menu.OmbresLumenTexturesAntiCrenelage"
 msgid "Ombres, Lumen, textures, anti-crénelage (scalability). S'applique tout de suite."
 msgstr "Sombras, Lumen, texturas, antisserrilhado (escalabilidade). Aplica na hora."
 
 #. Key:	Menu.LumenRayTracingMaterielReflets
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2838)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2838)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2860)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2860)
 #, fuzzy
 msgctxt "BR,Menu.LumenRayTracingMaterielReflets"
 msgid "Lumen en ray tracing matériel : reflets et lumière indirecte bien plus précis (carte RTX / RX 6000+). S'applique tout de suite."
 msgstr "Lumen com ray tracing por hardware: reflexos e luz indireta muito mais precisos (placa RTX / RX 6000+). Aplica na hora."
 
 #. Key:	Menu.RefletsEclairesRayonsEuxMemes
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2841)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2841)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2863)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2863)
 #, fuzzy
 msgctxt "BR,Menu.RefletsEclairesRayonsEuxMemes"
 msgid "Reflets éclairés par les rayons eux-mêmes (eau, flaques, carrelage, métal) au lieu du cache de surfaces de Lumen. Le plus coûteux des réglages : seul le profil CINÉMATIQUE l'active."
 msgstr "Reflexos iluminados pelos próprios raios (água, poças, azulejos, metal) em vez do cache de superfícies do Lumen. A configuração mais pesada: só o perfil CINEMATOGRÁFICO a ativa."
 
 #. Key:	Menu.OmbresLampeTorcheRayTracees
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2843)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2843)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2865)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2865)
 #, fuzzy
 msgctxt "BR,Menu.OmbresLampeTorcheRayTracees"
 msgid "Ombres de la lampe torche ray tracées (contact net, pas de recalcul des ombres virtuelles à chaque mouvement de la lampe). Les plafonniers gardent les ombres virtuelles (VSM), moins chères pour des dizaines de lumières fixes."
 msgstr "Sombras da lanterna com ray tracing (contato nítido, sem recalcular as sombras virtuais a cada movimento da lanterna). As luzes do teto mantêm as sombras virtuais (VSM), mais baratas para dezenas de luzes fixas."
 
 #. Key:	Menu.OmbresDoucesNeonsAppliqueTout
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2845)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2845)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2867)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2867)
 #, fuzzy
 msgctxt "BR,Menu.OmbresDoucesNeonsAppliqueTout"
 msgid "Ombres douces des néons. S'applique tout de suite, zones déjà chargées comprises (quelques lumières par image)."
 msgstr "Sombras suaves das lâmpadas fluorescentes. Aplica na hora, inclusive nas áreas já carregadas (algumas luzes por quadro)."
 
 #. Key:	Menu.HoundOrigine175000Sommets
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2847)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2847)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2869)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2869)
 #, fuzzy
 msgctxt "BR,Menu.HoundOrigine175000Sommets"
 msgid "Hound d'origine (175 000 sommets, pelage complet) au lieu du dérivé allégé. Très coûteux en ray tracing. S'applique aussi aux entités présentes."
 msgstr "Hound original (175.000 vértices, pelagem completa) em vez da versão simplificada. Muito pesado com ray tracing. Também vale para as entidades já presentes."
 
 #. Key:	Menu.HalosLumiereAirHumide
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2849)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2849)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2871)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2871)
 #, fuzzy
 msgctxt "BR,Menu.HalosLumiereAirHumide"
 msgid "Halos de lumière dans l'air humide."
 msgstr "Halos de luz no ar úmido."
 
 #. Key:	Menu.LignesBalayageLegereAberrationSalete
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2851)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2851)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2873)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2873)
 #, fuzzy
 msgctxt "BR,Menu.LignesBalayageLegereAberrationSalete"
 msgid "Lignes de balayage, légère aberration et saleté d'objectif. Désactivé : image nette."
 msgstr "Linhas de varredura, leve aberração e sujeira na lente. Desativado: imagem limpa."
 
 #. Key:	Menu.TousNiveauxJouablesDepuisChoix
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2853)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2853)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2875)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2875)
 #, fuzzy
 msgctxt "BR,Menu.TousNiveauxJouablesDepuisChoix"
 msgid "Tous les niveaux jouables depuis le choix des niveaux (non ajoutés à la partie). En jeu : Page préc. / suiv. niveau, Début nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares."
 msgstr "Todos os níveis jogáveis pela seleção de níveis (sem adicionar ao jogo). No jogo: Page Up / Down nível, Home novo layout, End objetivos, Insert apagão, F6 voo livre, F7 invencível, F10 jumpscares."
 
 #. Key:	Display.EditorOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2907)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2907)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2929)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2929)
 #, fuzzy
 msgctxt "BR,Display.EditorOnly"
 msgid "Mode d'affichage : sans effet dans l'éditeur (lancez le jeu seul)."
 msgstr "Modo de exibição: sem efeito no editor (execute o jogo separadamente)."
 
 #. Key:	Display.BorderlessFollowsScreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2921)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2921)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2943)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2943)
 #, fuzzy
 msgctxt "BR,Display.BorderlessFollowsScreen"
 msgid "Le plein écran fenêtré prend la définition de l'écran. Changez le mode pour choisir une résolution."
 msgstr "A tela cheia em janela usa a resolução da tela. Mude o modo para escolher uma resolução."
 
 #. Key:	Menu.RhinameHitXXX2
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3177)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3177)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3199)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3199)
 #, fuzzy
 msgctxt "BR,Menu.RhinameHitXXX2"
 msgid "{RHIName}  ·  {Hit}  ·  {X}x{Y} → {X2}x{Y2} {Upscaler}{DynRes}"
 msgstr "{RHIName}  ·  {Hit}  ·  {X}x{Y} → {X2}x{Y2} {Upscaler}{DynRes}"
 
 #. Key:	Menu.RtHitLighting
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3177)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3177)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3199)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3199)
 #, fuzzy
 msgctxt "BR,Menu.RtHitLighting"
 msgid "RT + HIT LIGHTING"
 msgstr "RT + HIT LIGHTING"
 
 #. Key:	Menu.LumenRt
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3177)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3177)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3199)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3199)
 #, fuzzy
 msgctxt "BR,Menu.LumenRt"
 msgid "LUMEN RT"
 msgstr "LUMEN RT"
 
 #. Key:	Menu.LumenLogiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3177)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3177)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3199)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3199)
 #, fuzzy
 msgctxt "BR,Menu.LumenLogiciel"
 msgid "LUMEN LOGICIEL"
 msgstr "LUMEN POR SOFTWARE"
 
 #. Key:	Menu.Dyn
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3177)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3177)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3199)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3199)
 #, fuzzy
 msgctxt "BR,Menu.Dyn"
 msgid " dyn."
 msgstr " din."
 
 #. Key:	Menu.ModeReelRhinameSm6Ray
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.ModeReelRhinameSm6Ray"
 msgid "Mode réel : {RHIName} {SM6}  ·  ray tracing matériel {RTOn}  ·  Lumen {LumenHW} (reflets : {Hit})  ·  ombres : {VSM}{LampRT}  ·  rendu {X}x{Y} → {X2}x{Y2} ({SP} %, {Upscaler}{DynRes})"
 msgstr "Modo real: {RHIName} {SM6}  ·  ray tracing por hardware {RTOn}  ·  Lumen {LumenHW} (reflexos: {Hit})  ·  sombras: {VSM}{LampRT}  ·  renderização {X}x{Y} → {X2}x{Y2} ({SP}%, {Upscaler}{DynRes})"
 
 #. Key:	Menu.Actif
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.Actif"
 msgid "actif"
 msgstr "ativo"
 
 #. Key:	Menu.Indisponible2
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.Indisponible2"
 msgid "indisponible"
 msgstr "indisponível"
 
 #. Key:	Menu.Materiel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.Materiel"
 msgid "matériel"
 msgstr "por hardware"
 
 #. Key:	Menu.Logiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.Logiciel"
 msgid "logiciel"
 msgstr "por software"
 
 #. Key:	Menu.EclairesRayons
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.EclairesRayons"
 msgid "éclairés par les rayons"
 msgstr "iluminados pelos raios"
 
 #. Key:	Menu.CacheSurfaces
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.CacheSurfaces"
 msgid "cache de surfaces"
 msgstr "cache de superfícies"
 
 #. Key:	Menu.VirtuellesVsm
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.VirtuellesVsm"
 msgid "virtuelles (VSM)"
 msgstr "virtuais (VSM)"
 
 #. Key:	Menu.CartesClassiques
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.CartesClassiques"
 msgid "cartes classiques"
 msgstr "mapas clássicos"
 
 #. Key:	Menu.LampeRayTracee
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.LampeRayTracee"
 msgid ", lampe ray tracée"
 msgstr ", lanterna com ray tracing"
 
 #. Key:	Menu.ResolutionDynamique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionDynamique"
 msgid ", résolution dynamique"

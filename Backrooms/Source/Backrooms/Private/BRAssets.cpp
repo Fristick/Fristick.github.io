@@ -461,6 +461,19 @@ void UBRAssets::PreloadForLevel(int32 Level)
 	}
 }
 
+TArray<FString> UBRAssets::PreloadedSetNames()
+{
+	TArray<FString> Names;
+	PreloadSets().GetKeys(Names);
+	Names.Sort();
+	return Names;
+}
+
+int32 UBRAssets::PreloadCatalogCount()
+{
+	return Catalog().Num();
+}
+
 bool UBRAssets::IsPreloadDone()
 {
 	UpdatePreloadStats();
@@ -488,8 +501,8 @@ TArray<FString> UBRAssets::PreloadReport()
 				Set.RamMB, Set.TexMB));
 	}
 	Lines.Sort();
-	Lines.Insert(FString::Printf(TEXT("prechargement : %d ensemble(s) en memoire, %d ressources, %d ensemble(s) libere(s) depuis le lancement%s"), PreloadSets().Num(), Total,
-		GPreloadReleased, FParse::Param(FCommandLine::Get(), TEXT("BRPreloadAll")) ? TEXT(" (-BRPreloadAll : tout precharge)") : TEXT("")), 0);
+	Lines.Insert(FString::Printf(TEXT("prechargement : %d ensemble(s) en memoire sur %d au catalogue, %d ressources, %d ensemble(s) libere(s) depuis le lancement%s"),
+		PreloadSets().Num(), Catalog().Num(), Total, GPreloadReleased, FParse::Param(FCommandLine::Get(), TEXT("BRPreloadAll")) ? TEXT(" (-BRPreloadAll : tout precharge)") : TEXT("")), 0);
 	return Lines;
 }
 

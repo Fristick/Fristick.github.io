@@ -170,6 +170,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.8 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV49")))
+	{
+		// v4.9 : jauges, Tab, reglages d'interface, modes d'affichage, rendu et prechargement
+		AddV49Steps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.9 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestPits")))
 	{
 		// v4.6 : la salle de fosses seule
@@ -322,6 +334,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 	}
 	AddRegressionSteps(); // v4.7
 	AddV48Steps(); // v4.8
+	AddV49Steps(); // v4.9
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
 	AddLoad(4, 8.f, TEXT("Galerie des entites"));
@@ -608,6 +621,8 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetDeathSteps(bClient);
 	// v4.8 : langue propre a chaque machine, coup decide par le serveur, reveil premature refuse
 	AddNetV48Steps(bClient);
+	// v4.9 : nom du coequipier affiche a vue, cache derriere un mur
+	AddNetV49Steps(bClient);
 
 	// L'hote emmene le groupe au Niveau 37 : le client doit suivre avec la meme graine
 	Add(TEXT("Changement de niveau"), 0.f, [this, bClient]()
@@ -725,6 +740,12 @@ void ABRAutoTest::EndMeasure(FLevelReport& R)
 		Note(FString::Printf(TEXT("v4.8 chargements synchrones en jeu : %d (pire %.1f ms)%s%s ; attente des shaders a l'arrivee : %.1f s"),
 			UBRAssets::SyncLoadsInGame, UBRAssets::MaxSyncLoadMs, UBRAssets::SyncLoadNames.Num() > 0 ? TEXT(" : ") : TEXT(""),
 			*FString::Join(UBRAssets::SyncLoadNames, TEXT(", ")).Left(300), W->GetShaderHold()));
+		// v4.9 : lumieres changees de type (etalees sur plusieurs images) et prechargement par ensembles
+		Note(FString::Printf(TEXT("v4.9 lumieres recreees : %d (pire tranche %.2f ms)"), W->LightsRecreated, W->MaxLightRefreshMs));
+		for (const FString& Line : UBRAssets::PreloadReport())
+		{
+			Note(TEXT("v4.9 ") + Line);
+		}
 		W->ResetChunkStats();
 	}
 	if (ABRPlayerController* PC = GetPC())

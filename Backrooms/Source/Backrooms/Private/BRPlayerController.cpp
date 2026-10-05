@@ -2553,6 +2553,28 @@ FString ABRPlayerController::GetDisplaySummary() const
 	return FString::Printf(TEXT("%s  \u00b7  %d \u00d7 %d"), *WindowNames(M.Window), M.Resolution.X, M.Resolution.Y);
 }
 
+int32 ABRPlayerController::FindSettingRow(const FString& Name)
+{
+	struct FNamedRow
+	{
+		const TCHAR* Name;
+		int32 Row;
+	};
+	static const FNamedRow Rows[] = { { TEXT("WindowMode"), Row_WindowMode }, { TEXT("Resolution"), Row_Resolution }, { TEXT("RenderScale"), Row_RenderScale },
+		{ TEXT("Profile"), Row_Profile }, { TEXT("HardwareRT"), Row_HardwareRT }, { TEXT("RTHitLighting"), Row_RTHitLighting },
+		{ TEXT("CreatureReflections"), Row_CreatureReflections }, { TEXT("RTShadows"), Row_RTShadows }, { TEXT("AreaLights"), Row_AreaLights },
+		{ TEXT("UiScale"), Row_UiScale }, { TEXT("HudOpacity"), Row_HudOpacity }, { TEXT("Crosshair"), Row_Crosshair }, { TEXT("QuickBar"), Row_QuickBar },
+		{ TEXT("Objectives"), Row_Objectives } };
+	for (const FNamedRow& R : Rows)
+	{
+		if (Name == R.Name)
+		{
+			return R.Row;
+		}
+	}
+	return INDEX_NONE;
+}
+
 int32 ABRPlayerController::GetSettingCategory(int32 Index) const
 {
 	switch (Index)

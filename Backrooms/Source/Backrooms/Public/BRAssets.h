@@ -112,6 +112,9 @@ public:
 	static void PreloadForLevel(int32 Level);
 	/** v4.9 : ensembles en memoire, nombre de ressources, duree et memoire de chaque chargement (rapport du test) */
 	static TArray<FString> PreloadReport();
+	/** v4.9 (tests) : noms des ensembles en memoire ("common", "entity:Hound", "tex:T_...") et nombre d'ensembles au catalogue */
+	static TArray<FString> PreloadedSetNames();
+	static int32 PreloadCatalogCount();
 	/** Prechargement termine (ou impossible) */
 	static bool IsPreloadDone();
 	/** v4.8 : chargements synchrones survenus en jeu (nombre, pire duree, premiers noms) : rapport et mode developpeur */

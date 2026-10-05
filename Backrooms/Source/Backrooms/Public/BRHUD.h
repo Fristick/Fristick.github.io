@@ -244,6 +244,14 @@ private:
 	/** v4.9 (tests) : jauges de statut dessinees pendant l'image (0 en exploration, 2 dans l'onglet Personnage) */
 	int32 StatusGaugesDrawn = 0;
 	int32 LastFrameStatusGauges = 0;
+	/** v4.9 (tests) : coequipiers proches et a l'ecran dont le nom est affiche, ou cache par un mur (image precedente) */
+	int32 MateNamesDrawn = 0;
+	int32 MateNamesHidden = 0;
+	int32 LastFrameMateNames = 0;
+	int32 LastFrameMatesHidden = 0;
+	/** v4.9 (tests) : informations d'exploration dessinees (1 objets rapides, 2 objectifs, 4 point du reticule) */
+	int32 ExploreDrawn = 0;
+	int32 LastFrameExplore = 0;
 	/** v4.9 : categorie de l'onglet Parametres (0 jeu, 1 video, 2 interface, 3 graphismes) */
 	int32 SettingsCategory = 0;
 	/** v4.9 : defilement des objectifs et des deux colonnes du journal */

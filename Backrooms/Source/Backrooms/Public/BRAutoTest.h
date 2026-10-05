@@ -11,10 +11,16 @@
 // RTX fluide (mesures), 22 langues (traductions, formats, coupure des lignes, preference), notes des anciennes sauvegardes,
 // partie d'un format plus recent, echecs d'ecriture. Inclus dans -BRAutoTest ; -BRNetTest y ajoute degats decides par le
 // serveur, reveil premature refuse et langue differente sur chaque machine.
+// v4.9 : -BRAutoTestV49 : aucune jauge en exploration et deux dans l'onglet Personnage, Tab (onglet a l'ouverture,
+// capture d'une touche, touche reaffectee, touches purgees), reglages d'interface (taille, opacite, reticule, objets
+// rapides, objectifs), lignes des parametres, ray tracing indisponible, modes d'affichage (essai, retour, confirmation,
+// expiration ; jeu lance seul), cadence des creatures, lumieres changees sur plusieurs images, prechargement par
+// ensembles. Inclus dans -BRAutoTest ; -BRNetTest y ajoute le nom du coequipier cache par un mur.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "InputCoreTypes.h"
 #include "BRTypes.h"
 #include "BRAutoTest.generated.h"
 
@@ -108,6 +114,10 @@ private:
 	/** v4.8 : multijoueur : langue propre a chaque machine, coup decide par le serveur (sans double application), reveil
 	 *  premature refuse par le serveur, reanimation */
 	void AddNetV48Steps(bool bClient);
+	/** v4.9 : interface, commandes, affichage, rendu et prechargement (BRAutoTestV49.cpp) */
+	void AddV49Steps();
+	/** v4.9 : multijoueur : nom du coequipier a vue, puis cache par un mur (repere seulement s'il est a terre) */
+	void AddNetV49Steps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
 	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */
@@ -161,6 +171,25 @@ private:
 	bool bRespawnRequested = false;
 	/** Contenu d'un fichier avant une ecriture refusee (il doit rester identique) */
 	TArray<uint8> TestBytes;
+
+	// v4.9 : etat des etapes v4.9
+	/** Touches de l'inventaire avant le test (retablies) */
+	TArray<FKey> TestKeys;
+	/** Affichage confirme avant le test (fenetre, resolution) ; le jeu peut changer la fenetre (pas dans l'editeur) */
+	int32 TestWindow = 1;
+	FIntPoint TestResolution = FIntPoint::ZeroValue;
+	bool bDisplayTestable = false;
+	/** Ensembles precharges au premier passage au Niveau 0 */
+	TArray<FString> TestSets;
+	/** Lampe allumee avant le test des piles ; type des lumieres avant le test d'etalement */
+	bool bTestFlashlight = false;
+	bool bTestAreaLights = false;
+	/** Orientation du joueur avant un demi-tour */
+	FRotator TestRotation = FRotator::ZeroRotator;
+	/** Poche modifiee pour montrer les objets rapides (retablie) */
+	FBRItemSlot TestPocket;
+	/** Reseau : une place derriere un mur a ete trouvee pres du coequipier */
+	bool bMateBehindWall = false;
 
 	TArray<FStep> Plan;
 	int32 StepIndex = 0;
