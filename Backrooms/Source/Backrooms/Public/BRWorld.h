@@ -130,6 +130,13 @@ public:
 	FVector CellCenter(const FIntPoint& C, float Z = 0.f) const;
 	FIntPoint CellToChunk(const FIntPoint& C) const;
 	bool IsSpawnArea(int32 X, int32 Y) const;
+	/** v4.3 : niveau fini (BoundsChunks > 0) : ce chunk / cette cellule est dans l'enceinte (toujours vrai sinon) */
+	bool IsChunkInBounds(const FIntPoint& Chunk) const;
+	bool IsCellInBounds(int32 X, int32 Y) const;
+	/** Niveau fini : nombre de chunks de l'enceinte (sans les 4 du point de depart si bAvoidSpawn) */
+	int32 BoundedChunkCount(bool bAvoidSpawn) const;
+	/** Niveau fini : ce chunk fait partie des Count chunks tires pour Salt (le meme tirage chez tous les joueurs) */
+	bool IsChunkPicked(const FIntPoint& Chunk, int32 Salt, int32 Count, bool bAvoidSpawn) const;
 	bool IsSolid(int32 X, int32 Y) const;
 	/** Arete entre (X,Y) et (X+1,Y) */
 	EBREdge EdgeE(int32 X, int32 Y) const;
@@ -334,7 +341,13 @@ private:
 	/** Aucun joueur ne voit ce point */
 	bool IsHiddenFromPlayers(const FVector& Loc) const;
 	void SpawnBlackoutEntities();
+	/** Un Smiler de plus pendant la coupure ; bInView : il surgit dans le champ de vision du joueur */
+	bool SpawnBlackoutSmiler(const ABRCharacter* P, bool bInView);
+	/** Point dans le noir que le joueur voit (ligne de vue degagee), devant lui, entre 5 et 14 m */
+	bool FindBlackoutSpot(const ABRCharacter* P, FVector& Out) const;
 	void DismissBlackoutEntities();
+	/** Coupure en cours : prochain Smiler qui surgit */
+	float BlackoutSpawnTimer = 0.f;
 	TArray<FVector> RedSources;
 	TArray<TWeakObjectPtr<ABREntity>> BlackoutEntities;
 	float PatrolSpawnTimer = 0.f;

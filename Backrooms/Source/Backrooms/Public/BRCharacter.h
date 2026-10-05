@@ -18,6 +18,7 @@ class UStaticMeshComponent;
 class UAudioComponent;
 class UMaterialInstanceDynamic;
 class UBRSaveGame;
+class ABRExit;
 
 UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
@@ -58,6 +59,12 @@ public:
 	/** Serveur : ce joueur, a terre, est releve par By */
 	void ReviveBy(ABRCharacter* By);
 	bool IsInputLocked() const { return bInputLocked; }
+
+	/** v4.3 : echelle (sortie du Niveau 0...) : avancer / reculer pour monter / descendre, Saut ou Interagir pour lacher ;
+	 *  en haut, dans le conduit au-dessus de la trappe, on noclippe vers le niveau suivant */
+	void StartClimb(ABRExit* Ladder);
+	void StopClimb();
+	bool IsClimbing() const { return bClimbing; }
 
 	// ---- Etat ----
 	float Health = 100.f;
@@ -255,6 +262,7 @@ private:
 	void BuildBody();
 	void AnimateBody(float Dt);
 	void UpdateWater(float Dt);
+	void UpdateClimb(float Dt);
 	void UpdateHiding();
 	void UpdateViewMode();
 	void StartSwimming();
@@ -268,6 +276,13 @@ private:
 	bool bDead = false;
 
 	bool bInputLocked = true;
+	/** Echelle en cours d'ascension */
+	TWeakObjectPtr<ABRExit> ClimbLadder;
+	bool bClimbing = false;
+	float ClimbInput = 0.f;
+	float ClimbStepAcc = 0.f;
+	/** Dechirure de la realite en haut du conduit (aberration chromatique), 0..1 */
+	float ClimbGlitch = 0.f;
 	/** Pion vu de l'exterieur (autre joueur) : corps visible, pas de camera ni d'interface */
 	bool bRemoteView = false;
 	float RemoteStepTimer = 0.f;

@@ -7,6 +7,31 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.3** (Niveau 0 retravaillé) :
+- **Sol du Niveau 0 sans répétition** : la grande tache sombre incrustée dans la texture de moquette (elle revenait tous
+  les 2,2 m) a disparu. Le matériau mélange maintenant un 2e échantillon de la moquette, tourné de 37° et à une autre
+  échelle, selon un bruit à grande échelle (paramètre `AntiTile`), fait varier légèrement la teinte par zones de
+  plusieurs mètres, et dessine des **taches d'humidité** à l'échelle du monde (paramètre `Stains`) : aucun motif ne
+  s'aligne plus. Nouvelle texture de bruits doux `T_NoiseLF` (importée en linéaire).
+- **Niveau 0 plus petit** : une zone close de **112 m de côté** (4 × 4 chunks) autour du point de départ, fermée par des
+  murs d'enceinte (réglage `BoundsChunks` dans `BRLevels.cpp`). Le niveau y garantit **8 cassettes VHS** (6 nécessaires),
+  **2 échelles** et **2 murs qui glitchent**, tirés parmi les chunks (jamais au point de départ).
+- **Murs trois fois plus épais** dans tous les niveaux (60 cm au Niveau 0, 1,20 m au parking et dans les Poolrooms…).
+- **Smilers pendant les coupures** : ils apparaissaient entre 9 et 19 m, derrière les murs, et restaient immobiles hors
+  de vue, si bien qu'on ne les voyait jamais. Maintenant, à chaque coupure, le premier **surgit dans votre champ de vision**
+  (5 à 14 m, ligne de vue dégagée : ses yeux et son sourire s'allument dans le noir), d'autres apparaissent autour, puis
+  **un nouveau toutes les 6 à 9 s** tant que dure le noir (jusqu'à 6). Dans le noir, ils **rôdent vers vous** et
+  surgissent à l'angle d'une porte. Ne les éclairez pas.
+- **Échelle de sortie** (à la place du sol qui glitchait) : une échelle contre un mur monte dans une **trappe du
+  plafond**, d'où filtre une lueur violette. **E** pour s'y accrocher, **Z/S** (avancer / reculer) pour monter ou
+  descendre, **Espace** ou **E** pour lâcher. Elle continue dans un conduit sombre de 3 m : en montant, l'image se
+  déchire, puis vous **noclippez** (vers les Poolrooms). Les objectifs du Niveau 0 restent nécessaires. Les échelles
+  des autres niveaux se grimpent de la même façon.
+- Correction : le bruit des **flaques** (v4.1) était lu en sRGB, si bien qu'elles couvraient moins de sol que prévu ;
+  elles retrouvent la taille de l'aperçu.
+- Les matériaux sont reconstruits tout seuls à l'ouverture de l'éditeur (version des matériaux 3) ; la moquette et
+  `T_NoiseLF` sont importées à ce moment-là, sans tout réimporter.
+
 **Nouveautés de la version 4.2** (corrections) :
 - **Les textes s'affichent à nouveau** (titres, boutons, astuces, touches, notifications…). Depuis la 4.0, l'interface
   dessinait ses textes avec la police Slate par défaut sans objet police (`UFont`) : le Canvas d'Unreal ignore alors le
@@ -279,7 +304,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 68 textures (dont 26 normal maps), 33 icônes et images d'interface, 70 sons, 126 modèles (FBX). Il crée aussi
+   toutes les ressources : 69 textures (dont 26 normal maps), 33 icônes et images d'interface, 70 sons, 126 modèles (FBX). Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
@@ -444,6 +469,8 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
   retrouvé **6 cassettes VHS** (elles luisent faiblement) et **filmé pendant une coupure** (5 secondes, caméscope sur vous).
 - **Sorties** : chaque niveau contient des passages vers d'autres niveaux (mur qui « glitche », porte de secours,
   ascenseur, échelle, grange…). Ils émettent un **bourdonnement électrique** : écoutez-le pour les trouver.
+  Les **échelles** se grimpent (**E** pour s'accrocher, avancer / reculer pour monter ou descendre, **Espace** pour
+  lâcher) : on noclippe en haut, dans le conduit au-dessus de la trappe.
 - **Notes** : des vagabonds ont laissé des notes, avec des indices et les règles de survie.
 - **Eau** (Niveau 37) : l'eau ralentit la marche (jusqu'à −40 % quand elle arrive à la taille). Dans les **bassins
   profonds** (2,6 m sous le carrelage), on **nage** : on avance dans la direction du regard (regarder vers le bas pour
@@ -463,7 +490,7 @@ L'image garde un léger grain et un effet VHS (désactivables), sans cadre de ca
 
 | N° | Titre (wiki) | Ambiance dans le jeu | Entités | Sorties |
 |---|---|---|---|---|
-| **0** | *Threshold* (« The Lobby ») | Salles jaunes à l'infini, papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent, sautent lors des coupures et **rougissent près de la Bacteria**. Placards et trous dans le mur pour se cacher | Bacteria (fait des rondes), Smilers (dans le noir et à chaque coupure) | Mur qui glitche → 1, sol qui glitche → 37 (rare). **Objectifs requis** : 6 cassettes VHS + filmer une coupure |
+| **0** | *Threshold* (« The Lobby ») | Salles jaunes (zone close de 112 m), papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent, sautent lors des coupures et **rougissent près de la Bacteria**. Placards et trous dans le mur pour se cacher | Bacteria (fait des rondes), Smilers (dans le noir et à chaque coupure) | Zone close de 112 m. Mur qui glitche → 1, échelle vers une trappe du plafond → 37 (on noclippe en montant). **Objectifs requis** : 6 cassettes VHS + filmer une coupure |
 | **1** | *Habitable Zone* | Entrepôt de béton brumeux, piliers, flaques, caisses | Smilers, Facelings, Hounds | Porte de secours → 2, ascenseur → 4 |
 | **2** | *Abandoned Utility Halls* (« Pipe Dreams ») | Labyrinthe de couloirs étroits, tuyaux, ampoules orange | Wretches, Hounds, Clump, Smilers | Porte → 3, échelle → 1 |
 | **3** | *Electrical Station* | Briques, grilles métalliques, armoires électriques, vacarme de machines | Hounds, Skin-Stealers, Smilers, Deathmoths, Wretches | Ascenseur → 4, porte → 2 |
@@ -476,7 +503,7 @@ L'image garde un léger grain et un effet VHS (désactivables), sans cadre de ca
 | **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour | Facelings (paisibles) | Porte d'immeuble → niveau aléatoire |
 | **37** | *Sublimity* (« Poolrooms ») | Couloirs en carrelage vert d'eau bordés de canaux et de trottoirs, arches en plein cintre, corniches sous un plafond en plâtre, grandes salles inondées à colonnades, plafonniers ovales et grandes verrières inclinées. Eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
 
-Chaque niveau est une grille **infinie** générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
+Chaque niveau est une grille **infinie** (sauf le Niveau 0, une zone close de 112 m depuis la v4.3) générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
 quartier pavillonnaire (9), espace ouvert (10), îlots urbains (11).
 
@@ -585,7 +612,9 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
   automatiquement au mode logiciel. L'option « Reflets ray tracés haute qualité » active le *hit lighting* (très coûteux).
   *Le changement de `r.RayTracing` demande un redémarrage de l'éditeur (recompilation des shaders, plusieurs minutes la première fois).*
 - **Murs** : projection triplanaire dans l'espace monde (aucune texture étirée), **normal maps** (relief du papier peint,
-  de la moquette, des joints), saleté à grande échelle, saleté au pied des murs, rugosité variable.
+  de la moquette, des joints), saleté à grande échelle, saleté au pied des murs, rugosité variable. Sur les sols qui le
+  demandent (`AntiTile`, `Stains`), un 2e échantillon tourné casse la répétition et des taches d'humidité sont dessinées
+  à l'échelle du monde.
 - **Néons** : lumières **surfaciques** (rect lights) pour des ombres douces ; seule une partie projette des ombres (`ShadowChance`).
 - **Eau** (Poolrooms) : matériau translucide `M_BR_WaterSurface`. Il lit l'image et la profondeur de la scène derrière
   l'eau (`SceneColor`, `SceneDepth`), les décale selon la pente de la surface (réfraction) et les atténue selon

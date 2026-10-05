@@ -111,6 +111,20 @@ protected:
 	/** Placards et trous dans le mur ou se cacher (Niveau 0) */
 	void BuildHidingSpots();
 	void BuildPickupsAndExits();
+	/** Sortie decidee avant la construction du plafond (une echelle le perce d'une trappe) */
+	struct FPlannedExit
+	{
+		FVector Pos = FVector::ZeroVector;
+		float Yaw = 0.f;
+		int32 Target = 0;
+		EBRExitStyle Style = EBRExitStyle::Door;
+		/** Echelle : hauteur du conduit au-dessus de la trappe (0 : pas de trappe) */
+		float Shaft = 0.f;
+	};
+	/** Choisit les sorties de ce chunk (tirage par chunk, ou nombre garanti dans un niveau fini) */
+	void PlanExits();
+	/** Plafond du chunk, perce d'une trappe au-dessus d'une echelle, et le conduit sombre qui monte au-dessus */
+	void BuildCeiling();
 	void FinishBatches();
 
 	FBatch& GetBatch(const FString& Key, UStaticMesh* Mesh, UMaterialInterface* Mat, bool bCollision, bool bShadow, float Cull);
@@ -143,6 +157,15 @@ protected:
 	};
 	TArray<FHidingSpot> HidingSpots;
 	TSet<FIntPoint> HidingCells;
+
+	TArray<FPlannedExit> PlannedExits;
+	/** Cellules devant une sortie : on n'y pose pas d'accessoires */
+	TSet<FIntPoint> ExitCells;
+	/** Trappe au plafond (une par chunk au plus) : rectangle XY et hauteur du conduit */
+	bool bShaftHole = false;
+	FVector2D ShaftMin = FVector2D::ZeroVector;
+	FVector2D ShaftMax = FVector2D::ZeroVector;
+	float ShaftHeight = 0.f;
 
 	float Power = 1.f;
 

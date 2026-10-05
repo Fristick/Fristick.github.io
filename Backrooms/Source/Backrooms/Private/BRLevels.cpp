@@ -33,15 +33,17 @@ namespace
 		D.Number = 0;
 		D.Title = TEXT("Threshold");
 		D.Nickname = TEXT("Le Seuil - \"Yellow Hell\"");
-		D.Description = TEXT("Un labyrinthe infini de salles de bureau vides : papier peint jaune moisi, moquette humide, ")
-			TEXT("n\u00e9ons qui bourdonnent sans fin. Les salles se ressemblent toutes. Certains murs semblent... faux.");
+		D.Description = TEXT("Un labyrinthe clos de salles de bureau vides : papier peint jaune moisi, moquette humide, ")
+			TEXT("n\u00e9ons qui bourdonnent sans fin. Les salles se ressemblent toutes. Quelque part, une \u00e9chelle monte dans le plafond.");
 		D.SurvivalClass = 1;
 		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Entit\u00e9s quasi absentes");
 		D.Layout = EBRLayout::Rooms;
-		D.CellSize = 350.f; D.WallHeight = 290.f; D.WallThickness = 20.f;
+		D.CellSize = 350.f; D.WallHeight = 290.f; D.WallThickness = 60.f;
 		D.WallLineChance = 0.55f; D.SegmentLength = 4; D.DoorChance = 0.3f; D.DoorWidth = 150.f;
 		D.PillarChance = 0.04f; D.PillarSize = 45.f; D.OpenZoneChance = 0.15f;
 		D.Floor = S(TEXT("T_L0_Carpet"), C(1, 1, 1), 220.f, 0.95f, 0.3f);
+		// v4.3 : moquette sans repetition visible (2e echantillon tourne, teinte variable, taches d'humidite)
+		D.Floor.AntiTile = 1.f; D.Floor.Stains = 0.65f;
 		D.Wall = S(TEXT("T_L0_Wallpaper"), C(1, 1, 1), 120.f, 0.8f, 0.3f);
 		D.Ceiling = S(TEXT("T_L0_Ceiling"), C(1, 1, 1), 120.f, 0.9f, 0.15f);
 		D.Trim = S(TEXT("T_L0_Wallpaper"), C(0.55f, 0.48f, 0.32f), 100.f, 0.6f, 0.2f);
@@ -68,7 +70,10 @@ namespace
 		D.HidingSpotChance = 0.85f;
 		D.AlmondWaterChance = 0.3f; D.BatteryChance = 0.15f; D.NoteChance = 0.25f;
 		D.BandageChance = 0.12f; D.EnergyBarChance = 0.08f; D.GearChance = 0.03f;
-		D.Exits = { X(1, EBRExitStyle::NoclipWall, 0.18f), X(37, EBRExitStyle::NoclipFloor, 0.04f) };
+		// v4.3 : une zone finie de 4 x 4 chunks (112 m de cote) ; a la place du sol qui glitchait, deux echelles a trouver :
+		// on y grimpe, et dans le conduit au-dessus de la trappe, on noclippe (vers les Poolrooms). Deux murs glitches (Niveau 1)
+		D.BoundsChunks = 2;
+		D.Exits = { X(1, EBRExitStyle::NoclipWall, 0.17f), X(37, EBRExitStyle::Ladder, 0.17f) };
 		// Comme dans Escape Together : cassettes VHS + enregistrement pendant une coupure pour stabiliser la sortie
 		D.bRequireObjectives = true; D.VHSRequired = 6; D.VHSChance = 0.22f;
 		D.bBlackouts = true; D.BlackoutFirst = 75.f; D.BlackoutMinInterval = 120.f; D.BlackoutMaxInterval = 220.f;
@@ -83,6 +88,7 @@ namespace
 			TEXT("L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. {Drink} pour boire."),
 			TEXT("Si les lumi\u00e8res sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir."),
 			TEXT("Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement."),
+			TEXT("Il y a une \u00e9chelle contre un mur, elle monte dans une trappe du plafond. Une lueur violette l\u00e0-haut. Monte, et ne regarde pas en bas."),
 			TEXT("Les sorties ne tiennent pas. Il faut r\u00e9cup\u00e9rer les six cassettes et filmer le noir pendant une coupure. Apr\u00e8s, les murs c\u00e8dent."),
 			TEXT("Quand les n\u00e9ons s'\u00e9teignent, allume la vision nocturne du cam\u00e9scope ({NightVision}). La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.")
 		};
@@ -101,7 +107,7 @@ namespace
 		D.SurvivalClass = 1;
 		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Peu d'entit\u00e9s");
 		D.Layout = EBRLayout::Rooms;
-		D.CellSize = 600.f; D.WallHeight = 360.f; D.WallThickness = 40.f;
+		D.CellSize = 600.f; D.WallHeight = 360.f; D.WallThickness = 120.f;
 		D.WallLineChance = 0.28f; D.SegmentLength = 6; D.DoorChance = 0.45f; D.DoorWidth = 260.f;
 		D.PillarChance = 0.55f; D.PillarSize = 80.f; D.OpenZoneChance = 0.3f;
 		D.bTrim = false; D.bLintels = true;
@@ -152,7 +158,7 @@ namespace
 		D.SurvivalClass = 2;
 		D.ClassText = TEXT("Classe 2 : Instable - Entit\u00e9s pr\u00e9sentes");
 		D.Layout = EBRLayout::Maze;
-		D.CellSize = 260.f; D.WallHeight = 280.f; D.WallThickness = 30.f;
+		D.CellSize = 260.f; D.WallHeight = 280.f; D.WallThickness = 90.f;
 		D.LoopChance = 0.15f; D.OpenZoneChance = 0.06f;
 		D.bTrim = false; D.bLintels = false;
 		D.Floor = S(TEXT("T_ConcreteFloor"), C(0.8f, 0.76f, 0.7f), 250.f, 0.7f, 0.5f);
@@ -199,7 +205,7 @@ namespace
 		D.SurvivalClass = 4;
 		D.ClassText = TEXT("Classe 4 : Dangereux - Infest\u00e9 d'entit\u00e9s");
 		D.Layout = EBRLayout::Maze;
-		D.CellSize = 300.f; D.WallHeight = 320.f; D.WallThickness = 30.f;
+		D.CellSize = 300.f; D.WallHeight = 320.f; D.WallThickness = 90.f;
 		D.LoopChance = 0.2f; D.OpenZoneChance = 0.1f;
 		D.bTrim = false; D.bLintels = false;
 		D.Floor = S(TEXT("T_MetalPanel"), C(0.6f, 0.6f, 0.6f), 200.f, 0.6f, 0.5f);
@@ -250,7 +256,7 @@ namespace
 		D.Layout = EBRLayout::Rooms;
 		// D'apres la scene fournie : rangees de petits bureaux cloisonnes jusqu'au plafond (un poste de travail beige
 		// des annees 90 dans chacun), allees, moquette bleu marine, murs blancs, faux plafond a dalles blanches
-		D.CellSize = 360.f; D.WallHeight = 280.f; D.WallThickness = 12.f;
+		D.CellSize = 360.f; D.WallHeight = 280.f; D.WallThickness = 36.f;
 		D.WallLineChance = 0.45f; D.SegmentLength = 3; D.DoorChance = 0.35f; D.DoorWidth = 110.f;
 		D.PillarChance = 0.02f; D.OpenZoneChance = 0.3f;
 		D.CubicleZoneChance = 0.6f;
@@ -547,7 +553,7 @@ namespace
 		D.SurvivalClass = 1;
 		D.ClassText = TEXT("Classe 1 : S\u00fbr - Stable - Aucune entit\u00e9");
 		D.Layout = EBRLayout::Rooms;
-		D.CellSize = 500.f; D.WallHeight = 450.f; D.WallThickness = 40.f;
+		D.CellSize = 500.f; D.WallHeight = 450.f; D.WallThickness = 120.f;
 		// D'apres la scene fournie (carte "gm_poolrooms") : longs couloirs bordes de canaux, trottoirs carreles au ras
 		// de l'eau, rangees d'arches en plein cintre, corniches a 45 degres sous un plafond en platre, grandes salles
 		// inondees a colonnades. Carrelage vert d'eau a joints gris, repris de la scene.

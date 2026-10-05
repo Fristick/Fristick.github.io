@@ -626,6 +626,11 @@ void ABRCharacter::InputMove(const FVector2D& Value)
 	{
 		return;
 	}
+	if (bClimbing)
+	{
+		ClimbInput = FMath::Clamp(static_cast<float>(Value.Y), -1.f, 1.f);
+		return;
+	}
 	if (bSwimming)
 	{
 		// Nage : on avance dans la direction du regard (regarder vers le bas = plonger)
@@ -674,6 +679,14 @@ void ABRCharacter::InputJump(bool bPressed)
 	{
 		return;
 	}
+	if (bClimbing)
+	{
+		if (bPressed)
+		{
+			StopClimb(); // lacher l'echelle
+		}
+		return;
+	}
 	if (bSwimming)
 	{
 		// Remonter a la surface, ou se hisser hors du bassin
@@ -713,7 +726,7 @@ void ABRCharacter::SetSprinting(bool bInSprint)
 
 void ABRCharacter::ToggleCrouch()
 {
-	if (bInputLocked || bDead)
+	if (bInputLocked || bDead || bClimbing)
 	{
 		return;
 	}
@@ -787,6 +800,11 @@ void ABRCharacter::Interact()
 	}
 	if (bInputLocked)
 	{
+		return;
+	}
+	if (bClimbing)
+	{
+		StopClimb(); // lacher l'echelle
 		return;
 	}
 	AActor* Target = FocusActor.Get();
@@ -913,6 +931,7 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	{
 		return;
 	}
+	StopClimb();
 	bDead = true;
 	Health = 0.f;
 	DeathTime = 0.f;
@@ -1246,6 +1265,8 @@ bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
 
 void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 {
+	StopClimb();
+	ClimbGlitch = 0.f;
 	StepType = Def.Step;
 	ChaseLevel = ChaseTarget = 0.f;
 	bReadingNote = false;
@@ -1323,6 +1344,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 
 	UpdateEntityEffects();
 	UpdateStats(Dt);
+	UpdateClimb(Dt);
 	UpdateWater(Dt);
 	UpdateHiding();
 	UpdateCamera(Dt);
@@ -1767,6 +1789,11 @@ void ABRCharacter::UpdateFocus()
 	{
 		return;
 	}
+	if (bClimbing)
+	{
+		FocusPrompt = BRKeys::Expand(TEXT("{MoveForward} monter  -  {MoveBackward} descendre  -  {Jump} l\u00e2cher l'\u00e9chelle"));
+		return;
+	}
 	// 0) Coequipier a terre : le relever (multijoueur)
 	if (ABRCharacter* Mate = FindDownedTeammate())
 	{
@@ -2003,7 +2030,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	// Effet camescope desactive : ni aberration de l'objectif, ni grain, ni salete, vignettage leger
 	const bool bVHS = Set.bVHSEffect;
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f;
+	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f + ClimbGlitch * 6.f;
 
 	S.bOverride_FilmGrainIntensity = true;
 	S.FilmGrainIntensity = ((Set.bFilmGrain && bVHS) ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
@@ -2278,10 +2305,113 @@ void ABRCharacter::AnimateBody(float Dt)
 // Eau : marche ralentie, nage, plongee, apnee
 // =====================================================================================================================
 
+void ABRCharacter::StartClimb(ABRExit* Ladder)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (!Ladder || !Move || bDead || bSwimming || bClimbing)
+	{
+		return;
+	}
+	if (bIsCrouched)
+	{
+		UnCrouch();
+	}
+	bClimbing = true;
+	ClimbLadder = Ladder;
+	ClimbInput = 0.f;
+	ClimbStepAcc = 0.f;
+	Move->StopMovementImmediately();
+	Move->SetMovementMode(MOVE_Flying);
+	// Face a l'echelle (le dos a la piece)
+	if (Controller)
+	{
+		FRotator R = Controller->GetControlRotation();
+		R.Yaw = Ladder->GetActorRotation().Yaw + 180.f;
+		R.Pitch = FMath::Clamp(static_cast<float>(FRotator::NormalizeAxis(R.Pitch)), -10.f, 40.f);
+		Controller->SetControlRotation(R);
+	}
+	PlaySound2D(TEXT("S_Step_Hard_1"), 0.5f);
+}
+
+void ABRCharacter::StopClimb()
+{
+	if (!bClimbing)
+	{
+		return;
+	}
+	bClimbing = false;
+	ClimbLadder.Reset();
+	ClimbInput = 0.f;
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		if (!bSwimming)
+		{
+			Move->SetMovementMode(MOVE_Falling);
+		}
+	}
+}
+
+void ABRCharacter::UpdateClimb(float Dt)
+{
+	ClimbGlitch = FMath::FInterpTo(ClimbGlitch, 0.f, Dt, 1.5f);
+	if (!bClimbing)
+	{
+		return;
+	}
+	ABRExit* L = ClimbLadder.Get();
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!L || !W || bDead)
+	{
+		StopClimb();
+		return;
+	}
+	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+	const FVector Pos = GetActorLocation();
+	const float TopZ = L->GetClimbTopZ();
+	// Dans le conduit, la realite se dechire de plus en plus jusqu'au noclip
+	ClimbGlitch = FMath::Max(ClimbGlitch, FMath::Clamp(static_cast<float>(Pos.Z - (TopZ - 220.f)) / 220.f, 0.f, 1.f));
+	float Up = ClimbInput;
+	ClimbInput = 0.f;
+	if (W->IsTransitioning())
+	{
+		Up = 0.5f; // on continue de monter pendant le noclip
+	}
+	else if (bInputLocked)
+	{
+		Up = 0.f;
+	}
+	if (Up < 0.f && Pos.Z - Half <= L->GetActorLocation().Z + 4.f)
+	{
+		StopClimb(); // les pieds touchent le sol
+		return;
+	}
+	// Colle a l'echelle, monte et descend a 1,4 m/s
+	const FVector Anchor = L->GetClimbAnchor();
+	const float Pull = FMath::Min(1.f, Dt * 10.f);
+	const FVector Delta((Anchor.X - Pos.X) * Pull, (Anchor.Y - Pos.Y) * Pull, Up * 140.f * Dt);
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->Velocity = FVector::ZeroVector;
+	}
+	SetActorLocation(Pos + Delta, true);
+	// Les barreaux sous les mains et les pieds
+	ClimbStepAcc += FMath::Abs(Up) * 140.f * Dt;
+	if (ClimbStepAcc > 30.f)
+	{
+		ClimbStepAcc = 0.f;
+		static const TCHAR* const Rungs[] = { TEXT("S_Step_Hard_1"), TEXT("S_Step_Hard_2"), TEXT("S_Step_Hard_3"), TEXT("S_Step_Hard_4") };
+		PlaySound2D(Rungs[FMath::RandRange(0, 3)], 0.35f);
+	}
+	if (GetActorLocation().Z >= TopZ && !W->IsTransitioning())
+	{
+		L->FinishClimb(this);
+	}
+}
+
 void ABRCharacter::StartSwimming()
 {
 	UCharacterMovementComponent* Move = GetCharacterMovement();
-	if (bSwimming || !Move || bDead)
+	if (bSwimming || !Move || bDead || bClimbing)
 	{
 		return;
 	}

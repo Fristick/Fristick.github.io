@@ -300,15 +300,45 @@ namespace
 		const FPin Wy = G.Mask(Wn, TEXT("g"));
 		const FPin Wz = G.Mask(Wn, TEXT("b"));
 
+		// v4.3 : anti-repetition des sols et plafonds (AntiTile) : un 2e echantillon, tourne de 37 degres et a une autre
+		// echelle, se melange au premier selon un bruit a grande echelle (13 m) ; les motifs ne s'alignent plus
+		UTexture* NoiseLF = LoadTexture(TEXT("T_NoiseLF"));
+		if (!NoiseLF)
+		{
+			NoiseLF = Grime;
+		}
+		const FPin AntiTile = G.Scalar(TEXT("AntiTile"), 0.f);
+		const FPin UvZ2 = G.Add(G.Mul(G.Append(G.Dot(UvZ, G.C2(0.8f, -0.6f)), G.Dot(UvZ, G.C2(0.6f, 0.8f))), G.Const(0.77f)), G.C2(0.37f, 0.61f));
+		const FPin XY = G.Mask(WP, TEXT("rg"));
+		const FPin MixNoise = G.Tex(TEXT("NoiseTex"), NoiseLF, false, G.Div(XY, G.Const(1300.f)), 3);
+		const FPin MixZ = G.Mul(G.Sat(G.Div(G.Sub(MixNoise, G.Const(0.45f)), G.Const(0.1f))), AntiTile);
+
 		auto Tri = [&](const TCHAR* Name, UTexture* Tex, bool bNormal)
 		{
 			const FPin Sx = G.Tex(Name, Tex, bNormal, UvX);
 			const FPin Sy = G.Tex(Name, Tex, bNormal, UvY);
-			const FPin Sz = G.Tex(Name, Tex, bNormal, UvZ);
+			const FPin Sz1 = G.Tex(Name, Tex, bNormal, UvZ);
+			FPin Sz2 = G.Tex(Name, Tex, bNormal, UvZ2);
+			if (bNormal)
+			{
+				// Pente du 2e echantillon ramenee dans le repere des UV d'origine (rotation inverse)
+				const FPin Nxy = G.Mask(Sz2, TEXT("rg"));
+				Sz2 = G.Append(G.Append(G.Dot(Nxy, G.C2(0.8f, 0.6f)), G.Dot(Nxy, G.C2(-0.6f, 0.8f))), G.Mask(Sz2, TEXT("b")));
+			}
+			const FPin Sz = G.Lerp(Sz1, Sz2, MixZ);
 			return G.Add(G.Add(G.Mul(Sx, Wx), G.Mul(Sy, Wy)), G.Mul(Sz, Wz));
 		};
 
 		FPin Col = Tri(TEXT("BaseTex"), BaseDefault, false);
+
+		// v4.3 : variation de teinte a grande echelle (sols), et taches d'humidite dessinees a l'echelle du monde (Stains)
+		const FPin MacroUv = G.Div(G.Append(G.Dot(XY, G.C2(0.6f, 0.8f)), G.Dot(XY, G.C2(-0.8f, 0.6f))), G.Const(2300.f));
+		const FPin Macro = G.Tex(TEXT("NoiseTex"), NoiseLF, false, MacroUv, 2);
+		Col = G.Mul(Col, G.Add(G.Const(1.f), G.Mul(G.Mul(G.Sub(Macro, G.Const(0.5f)), G.Const(0.45f)), G.Mul(AntiTile, Wz))));
+		const FPin StainUv = G.Add(G.Div(G.Append(G.Dot(XY, G.C2(0.92f, -0.39f)), G.Dot(XY, G.C2(0.39f, 0.92f))), G.Scalar(TEXT("StainScale"), 1600.f)), G.C2(0.21f, 0.53f));
+		const FPin StainNoise = G.Tex(TEXT("NoiseTex"), NoiseLF, false, StainUv, 1);
+		const FPin Stain = G.Mul(G.Sat(G.Div(G.Sub(StainNoise, G.Const(0.7f)), G.Const(0.12f))), G.Mul(G.Scalar(TEXT("Stains"), 0.f), Wz));
+		Col = G.Mul(Col, G.Lerp(G.C3(1.f, 1.f, 1.f), G.C3(0.7f, 0.7f, 0.56f), Stain));
 
 		// Salete a grande echelle
 		const FPin GUv = G.Div(G.Append(G.Dot(WP, G.C3(0.7f, 0.3f, 0.f)), G.Dot(WP, G.C3(0.f, 0.5f, 1.f))), G.Scalar(TEXT("GrimeScale"), 900.f));
@@ -542,8 +572,9 @@ namespace BRMaterialBuilder
 			"if (Amount <= 0.0 && Wet <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
 			"float up = saturate((N.z - 0.6) * 4.0);\n"
 			"float2 p = WP.xy;\n"
-			"float n1 = Texture2DSample(Tex, TexSampler, p / 1150.0).r;\n"
-			"float n2 = Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g;\n"
+			"// T_Grime est importee en sRGB : on revient aux valeurs du fichier (seuils calibres dessus)\n"
+			"float n1 = pow(Texture2DSample(Tex, TexSampler, p / 1150.0).r, 0.4545);\n"
+			"float n2 = pow(Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g, 0.4545);\n"
 			"float n = n1 * 0.82 + n2 * 0.18;\n"
 			"// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~26 %, 1 -> ~57 % (bruit de T_Grime)\n"
 			"float th = lerp(0.94, 0.76, saturate(Amount));\n"

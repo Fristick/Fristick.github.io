@@ -1100,7 +1100,7 @@ void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
 	const float U = Ui();
 	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	TextF(TEXT("v4.2   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
+	TextF(TEXT("v4.3   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS"), W - 100.f * U, H - 34.f * U,
 		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
 	// Message de connexion / d'erreur reseau : pastille en haut au centre
 	if (!PC->GetMenuStatus().IsEmpty())

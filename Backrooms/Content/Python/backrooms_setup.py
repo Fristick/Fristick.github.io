@@ -22,8 +22,11 @@ import os
 import unreal
 
 VERSION = 10
-# Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques)
-MATERIAL_VERSION = 2
+# Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
+# v4.3 : anti-repetition des sols)
+MATERIAL_VERSION = 3
+# Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
+RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"]}
 
 ROOT = "/Game/Backrooms"
 TEX = ROOT + "/Textures"
@@ -171,6 +174,9 @@ def import_textures(files, dest=TEX, ui=False):
             safe_set(tex, "srgb", False)
             safe_set(tex, "compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
             safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD_NORMAL_MAP)
+        elif name == "T_NoiseLF":
+            # Texture de donnees (bruits du materiau du monde) : valeurs lineaires
+            safe_set(tex, "srgb", False)
         elif name == "T_LensDirt":
             safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_EFFECTS)
         EAL.save_asset(path, only_if_is_dirty=False)
@@ -560,16 +566,41 @@ def build_world_material():
     wn = g.div(w4, g.dot(w4, g.c3(1.0, 1.0, 1.0)))
     wx, wy, wz = g.mask(wn, "r"), g.mask(wn, "g"), g.mask(wn, "b")
 
+    # v4.3 : anti-repetition des sols et plafonds (AntiTile) : un 2e echantillon, tourne de 37 degres et a une autre
+    # echelle, se melange au premier selon un bruit a grande echelle (13 m) ; les motifs ne s'alignent plus
+    grime_tex = load_tex("T_Grime")
+    noise_tex = load_tex("T_NoiseLF") or grime_tex
+    anti = g.scalar("AntiTile", 0.0)
+    uvz2 = g.add(g.mul(g.append(g.dot(uvz, g.c2(0.8, -0.6)), g.dot(uvz, g.c2(0.6, 0.8))), g.const(0.77)), g.c2(0.37, 0.61))
+    xy = g.mask(wp, "rg")
+    mix_noise = g.tex("NoiseTex", noise_tex, g.div(xy, g.const(1300.0)), out="B")
+    mixz = g.mul(g.sat(g.div(g.sub(mix_noise, g.const(0.45)), g.const(0.1))), anti)
+
     def tri(name, texture, normal=False):
         sx = g.tex(name, texture, uvx, normal)
         sy = g.tex(name, texture, uvy, normal)
-        sz = g.tex(name, texture, uvz, normal)
+        sz1 = g.tex(name, texture, uvz, normal)
+        sz2 = g.tex(name, texture, uvz2, normal)
+        if normal:
+            # Pente du 2e echantillon ramenee dans le repere des UV d'origine (rotation inverse)
+            nxy = g.mask(sz2, "rg")
+            sz2 = g.append(g.append(g.dot(nxy, g.c2(0.8, 0.6)), g.dot(nxy, g.c2(-0.6, 0.8))), g.mask(sz2, "b"))
+        sz = g.lerp(sz1, sz2, mixz)
         return g.add(g.add(g.mul(sx, wx), g.mul(sy, wy)), g.mul(sz, wz))
 
     col = tri("BaseTex", load_tex("T_L0_Wallpaper"))
 
+    # v4.3 : variation de teinte a grande echelle (sols), et taches d'humidite dessinees a l'echelle du monde (Stains)
+    macro_uv = g.div(g.append(g.dot(xy, g.c2(0.6, 0.8)), g.dot(xy, g.c2(-0.8, 0.6))), g.const(2300.0))
+    macro = g.tex("NoiseTex", noise_tex, macro_uv, out="G")
+    col = g.mul(col, g.add(g.const(1.0), g.mul(g.mul(g.sub(macro, g.const(0.5)), g.const(0.45)), g.mul(anti, wz))))
+    stain_uv = g.add(g.div(g.append(g.dot(xy, g.c2(0.92, -0.39)), g.dot(xy, g.c2(0.39, 0.92))), g.scalar("StainScale", 1600.0)),
+                     g.c2(0.21, 0.53))
+    stain_noise = g.tex("NoiseTex", noise_tex, stain_uv, out="R")
+    stain = g.mul(g.sat(g.div(g.sub(stain_noise, g.const(0.7)), g.const(0.12))), g.mul(g.scalar("Stains", 0.0), wz))
+    col = g.mul(col, g.lerp(g.c3(1.0, 1.0, 1.0), g.c3(0.7, 0.7, 0.56), stain))
+
     # Salete a grande echelle (casse la repetition)
-    grime_tex = load_tex("T_Grime")
     guv = g.div(g.append(g.dot(wp, g.c3(0.7, 0.3, 0.0)), g.dot(wp, g.c3(0.0, 0.5, 1.0))), g.scalar("GrimeScale", 900.0))
     gs = g.tex("GrimeTex", grime_tex, guv, out="R")
     col = g.mul(col, g.lerp(g.const(1.0), gs, g.scalar("Grime", 0.35)))
@@ -733,8 +764,9 @@ BR_PUDDLES_HLSL = (
     "if (Amount <= 0.0 && Wet <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
     "float up = saturate((N.z - 0.6) * 4.0);\n"
     "float2 p = WP.xy;\n"
-    "float n1 = Texture2DSample(Tex, TexSampler, p / 1150.0).r;\n"
-    "float n2 = Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g;\n"
+    "// T_Grime est importee en sRGB : on revient aux valeurs du fichier (seuils calibres dessus)\n"
+    "float n1 = pow(Texture2DSample(Tex, TexSampler, p / 1150.0).r, 0.4545);\n"
+    "float n2 = pow(Texture2DSample(Tex, TexSampler, p / 460.0 + 0.37).g, 0.4545);\n"
     "float n = n1 * 0.82 + n2 * 0.18;\n"
     "// Plus Amount est grand, plus le seuil baisse : 0,2 -> ~8 % du sol, 0,55 -> ~26 %, 1 -> ~57 % (bruit de T_Grime)\n"
     "float th = lerp(0.94, 0.76, saturate(Amount));\n"
@@ -892,6 +924,10 @@ def run(force=False):
     if installed_version() < VERSION:
         force = True
     tex = list_raw("Textures", IMG_EXT) if force else missing_in("Textures", TEX, IMG_EXT)
+    if not force:
+        for mv, files in sorted(RETEXTURED.items()):
+            if installed_material_version() < mv:
+                tex += [f for f in files if f not in tex and os.path.isfile(raw("Textures", f))]
     ico = list_raw("Icons", (".png",)) if force else missing_in("Icons", UI, (".png",))
     snd = list_raw("Sounds", (".wav",)) if force else missing_in("Sounds", SND, (".wav",))
     msh = list_raw("Meshes", (".fbx",)) if force else missing_in("Meshes", MESH, (".fbx",))

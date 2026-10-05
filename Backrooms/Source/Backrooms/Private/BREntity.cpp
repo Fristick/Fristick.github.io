@@ -1187,6 +1187,11 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 			FollowPathTo(PL, I.WalkSpeed, Dt);
 		}
 	}
+	else if (W->IsBlackout() && !S.bLOS && S.Dist > 500.f)
+	{
+		// v4.3 : pendant une coupure, ils rodent vers le joueur dans le noir et finissent par surgir a l'angle d'une porte
+		FollowPathTo(PL, I.WalkSpeed, Dt);
+	}
 	else
 	{
 		MoveTowards(GetActorLocation(), 0.f);

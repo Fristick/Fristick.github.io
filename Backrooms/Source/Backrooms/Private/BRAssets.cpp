@@ -384,7 +384,8 @@ UTexture* UBRAssets::Texture(FName Name)
 		return nullptr;
 	}
 	const FString N = Name.ToString();
-	const bool bLinear = N.EndsWith(TEXT("_N")) || N.Contains(TEXT("Normal"));
+	// Normal maps et textures de donnees (bruits du materiau du monde) : valeurs lineaires
+	const bool bLinear = N.EndsWith(TEXT("_N")) || N.Contains(TEXT("Normal")) || N == TEXT("T_NoiseLF");
 	UTexture2D* Raw = LoadRawTexture(TEXT("Textures"), Name, bLinear, true);
 	if (Raw)
 	{
@@ -495,8 +496,8 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 
 	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
-	// (murs et sols : "Puddles", les flaques de la v4.1)
-	const TCHAR* V2Params[] = { TEXT("Puddles"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
+	// (murs et sols : "AntiTile", l'anti-repetition des sols de la v4.3)
+	const TCHAR* V2Params[] = { TEXT("AntiTile"), TEXT("SelfIllum"), TEXT("Subsurface"), TEXT("WaterSim") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -679,6 +680,8 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 		MID->SetScalarParameterValue(TEXT("FloorGrime"), S.FloorGrime);
 		MID->SetScalarParameterValue(TEXT("Puddles"), S.Puddles);
 		MID->SetScalarParameterValue(TEXT("Wetness"), S.Wetness);
+		MID->SetScalarParameterValue(TEXT("AntiTile"), S.AntiTile);
+		MID->SetScalarParameterValue(TEXT("Stains"), S.Stains);
 	}
 	else
 	{

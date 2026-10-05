@@ -195,6 +195,18 @@ def t_l0_wallpaper():
     save_normal("T_L0_Wallpaper", height, 6.0, 1024)
 
 
+def t_noise_lf():
+    """v4.3 : bruits doux et independants pour le materiau du monde (taches d'humidite, variation de teinte,
+    melange anti-repetition). R : taches (blocs de 2 a 4 m a 16 m l'image), G : variation lente, B : masque de melange."""
+    S = 512
+    r = noise(S, beta=3.0, seed=301, fmin=4) * 0.9 + noise(S, beta=2.4, seed=302, fmin=10) * 0.22
+    g = noise(S, beta=3.4, seed=303, fmin=1.5)
+    b = noise(S, beta=3.0, seed=304, fmin=2)
+    img = np.stack([n01(r / r.std()), n01(g), n01(b)], -1)
+    Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(os.path.join(OUT, "T_NoiseLF.png"), optimize=True)
+    print("  ->", os.path.relpath(os.path.join(OUT, "T_NoiseLF.png")))
+
+
 def t_l0_carpet():
     S = 2048
     base = np.array([0.56, 0.47, 0.27])
@@ -203,13 +215,11 @@ def t_l0_carpet():
     loops = noise(S, beta=1.0, seed=22, fmin=120)
     g = 1 + 0.10 * fib + 0.06 * loops
     img = rgb_from(g, base)
-    # zones humides (plus sombres et verdatres)
-    damp = noise(S, beta=3.2, seed=23)
-    m = smoothstep(0.6, 2.2, damp)
-    img = mix(img, img * np.array([0.74, 0.74, 0.62]), m * 0.7)
-    # salissures
-    dirt = noise(S, beta=2.0, seed=24)
-    img *= (1 - 0.08 * n01(dirt))[..., None]
+    # v4.3 : plus de grande tache humide dans la texture (elle se repetait tous les 2,2 m) ; les taches sont
+    # maintenant dessinees par le materiau a l'echelle du monde (parametre Stains). Salissures sans basses frequences :
+    # aucun motif ne domine la repetition
+    dirt = noise(S, beta=2.0, seed=24, fmin=6)
+    img *= (1 - 0.07 * n01(dirt))[..., None]
     save("T_L0_Carpet", img)
 
 
@@ -643,6 +653,7 @@ if __name__ == "__main__":
     print("Generation des textures dans", os.path.abspath(OUT))
     t_l0_wallpaper()
     t_l0_carpet()
+    t_noise_lf()
     t_l0_ceiling()
     t_grime()
     t_concrete("T_Concrete", 50, (0.52, 0.51, 0.49))

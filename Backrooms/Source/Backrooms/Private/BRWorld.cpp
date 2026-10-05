@@ -1002,7 +1002,7 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 			for (int32 DY = -R; DY <= R; ++DY)
 			{
 				const FIntPoint C(PC.X + DX, PC.Y + DY);
-				if (!Chunks.Contains(C) && !Wanted.Contains(C) && ChunkDist(C) <= D.ViewDistance + ChunkWorld * 0.75f)
+				if (!Chunks.Contains(C) && !Wanted.Contains(C) && IsChunkInBounds(C) && ChunkDist(C) <= D.ViewDistance + ChunkWorld * 0.75f)
 				{
 					Wanted.Add(C);
 				}
@@ -1391,6 +1391,27 @@ void ABRWorld::UpdateBlackout(float Dt)
 		{
 			EnterBlackoutPhase(static_cast<uint8>(EBlackout::Restoring));
 		}
+		else if (bAuth && D.BlackoutSmilers > 0)
+		{
+			// Tant que dure le noir, d'autres Smilers surgissent (parfois sous les yeux du joueur)
+			BlackoutSpawnTimer -= Dt;
+			if (BlackoutSpawnTimer <= 0.f)
+			{
+				BlackoutSpawnTimer = FMath::FRandRange(6.f, 9.f);
+				int32 Alive = 0;
+				for (const TWeakObjectPtr<ABREntity>& Weak : BlackoutEntities)
+				{
+					Alive += Weak.IsValid() ? 1 : 0;
+				}
+				if (Alive < D.BlackoutSmilers + 3)
+				{
+					if (const ABRCharacter* P = RandomLivingPlayer())
+					{
+						SpawnBlackoutSmiler(P, FMath::FRand() < 0.5f);
+					}
+				}
+			}
+		}
 		break;
 	}
 	ApplyPower(false);
@@ -1712,6 +1733,71 @@ bool ABRWorld::IsSpawnArea(int32 X, int32 Y) const
 	return FMath::Abs(X) <= 1 && FMath::Abs(Y) <= 1;
 }
 
+bool ABRWorld::IsChunkInBounds(const FIntPoint& Chunk) const
+{
+	const int32 B = Def().BoundsChunks;
+	return B <= 0 || (Chunk.X >= -B && Chunk.X < B && Chunk.Y >= -B && Chunk.Y < B);
+}
+
+bool ABRWorld::IsCellInBounds(int32 X, int32 Y) const
+{
+	return Def().BoundsChunks <= 0 || IsChunkInBounds(CellToChunk(FIntPoint(X, Y)));
+}
+
+namespace
+{
+	/** Chunks du point de depart (cellules -1..1) : ni sortie, ni cassette garantie */
+	bool IsSpawnChunk(const ABRWorld* W, const FIntPoint& Chunk)
+	{
+		const FIntPoint Lo = W->CellToChunk(FIntPoint(-1, -1));
+		const FIntPoint Hi = W->CellToChunk(FIntPoint(1, 1));
+		return Chunk.X >= Lo.X && Chunk.X <= Hi.X && Chunk.Y >= Lo.Y && Chunk.Y <= Hi.Y;
+	}
+}
+
+int32 ABRWorld::BoundedChunkCount(bool bAvoidSpawn) const
+{
+	const int32 B = Def().BoundsChunks;
+	int32 Count = 0;
+	for (int32 X = -B; X < B; ++X)
+	{
+		for (int32 Y = -B; Y < B; ++Y)
+		{
+			Count += (bAvoidSpawn && IsSpawnChunk(this, FIntPoint(X, Y))) ? 0 : 1;
+		}
+	}
+	return Count;
+}
+
+bool ABRWorld::IsChunkPicked(const FIntPoint& Chunk, int32 Salt, int32 Count, bool bAvoidSpawn) const
+{
+	const int32 B = Def().BoundsChunks;
+	if (B <= 0 || Count <= 0 || !IsChunkInBounds(Chunk) || (bAvoidSpawn && IsSpawnChunk(this, Chunk)))
+	{
+		return false;
+	}
+	// Rang du chunk parmi ceux de l'enceinte, trie par hachage : les Count premiers sont tires
+	const uint32 Mine = BRHash::Hash(Chunk.X, Chunk.Y, Salt, Seed);
+	int32 Before = 0;
+	for (int32 X = -B; X < B; ++X)
+	{
+		for (int32 Y = -B; Y < B; ++Y)
+		{
+			const FIntPoint C(X, Y);
+			if (C == Chunk || (bAvoidSpawn && IsSpawnChunk(this, C)))
+			{
+				continue;
+			}
+			const uint32 K = BRHash::Hash(X, Y, Salt, Seed);
+			if (K < Mine || (K == Mine && (X < Chunk.X || (X == Chunk.X && Y < Chunk.Y))))
+			{
+				++Before;
+			}
+		}
+	}
+	return Before < Count;
+}
+
 bool ABRWorld::IsPoolCell(int32 X, int32 Y) const
 {
 	const FBRLevelDef& D = Def();
@@ -1900,19 +1986,66 @@ void ABRWorld::SpawnBlackoutEntities()
 	{
 		return;
 	}
-	// Dans le noir, a portee de vue : on distingue leurs yeux et leur sourire (reparti entre les joueurs)
+	// v4.3 : le premier de chaque joueur surgit dans son champ de vision (ses yeux et son sourire s'allument dans le noir),
+	// les autres tout autour, puis d'autres arrivent tant que dure la coupure (UpdateBlackout)
 	const int32 Count = D.BlackoutSmilers + FMath::Min(Players.Num() - 1, 2);
 	for (int32 i = 0; i < Count; ++i)
 	{
-		FVector Loc;
-		if (FindSpawnSpot(EBREntityKind::Smiler, Players[i % Players.Num()], 900.f, 1900.f, false, Loc))
-		{
-			if (ABREntity* E = SpawnEntity(EBREntityKind::Smiler, Loc))
-			{
-				BlackoutEntities.Add(E);
-			}
-		}
+		SpawnBlackoutSmiler(Players[i % Players.Num()], i < Players.Num());
 	}
+	BlackoutSpawnTimer = FMath::FRandRange(6.f, 9.f);
+}
+
+bool ABRWorld::SpawnBlackoutSmiler(const ABRCharacter* P, bool bInView)
+{
+	FVector Loc;
+	const bool bFound = (bInView && FindBlackoutSpot(P, Loc)) || FindSpawnSpot(EBREntityKind::Smiler, P, 700.f, 1700.f, false, Loc);
+	if (!bFound)
+	{
+		return false;
+	}
+	ABREntity* E = SpawnEntity(EBREntityKind::Smiler, Loc);
+	if (E)
+	{
+		BlackoutEntities.Add(E);
+	}
+	return E != nullptr;
+}
+
+bool ABRWorld::FindBlackoutSpot(const ABRCharacter* P, FVector& Out) const
+{
+	if (!P || !GetWorld())
+	{
+		return false;
+	}
+	const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Smiler);
+	const FVector Eye = P->GetEyeLocation();
+	const FVector View = P->GetViewDirection().GetSafeNormal2D();
+	const float ViewYaw = FMath::Atan2(static_cast<float>(View.Y), static_cast<float>(View.X));
+	for (int32 Attempt = 0; Attempt < 48; ++Attempt)
+	{
+		const float Ang = ViewYaw + FMath::FRandRange(-0.9f, 0.9f);
+		const float Dist = FMath::FRandRange(500.f, 1400.f);
+		const FIntPoint Cell = WorldToCell(P->GetActorLocation() + FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * Dist);
+		if (!IsWalkable(Cell) || IsSpawnArea(Cell.X, Cell.Y) || IsPoolCell(Cell.X, Cell.Y) || !IsChunkLoaded(CellToChunk(Cell)))
+		{
+			continue;
+		}
+		const FVector Loc = CellCenter(Cell, Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
+		if (FVector::Dist2D(Loc, Eye) < 450.f)
+		{
+			continue;
+		}
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRBlackoutSpot), false, P);
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Loc, ECC_Visibility, Q))
+		{
+			continue; // un mur cache ce point
+		}
+		Out = Loc;
+		return true;
+	}
+	return false;
 }
 
 void ABRWorld::DismissBlackoutEntities()
@@ -2216,6 +2349,19 @@ bool ABRWorld::IsSolid(int32 X, int32 Y) const
 EBREdge ABRWorld::EdgeE(int32 X, int32 Y) const
 {
 	const FBRLevelDef& D = Def();
+	if (D.BoundsChunks > 0)
+	{
+		// Niveau fini : mur d'enceinte entre l'interieur et l'exterieur, rien au-dela
+		const bool bIn = IsCellInBounds(X, Y);
+		if (bIn != IsCellInBounds(X + 1, Y))
+		{
+			return EBREdge::Wall;
+		}
+		if (!bIn)
+		{
+			return EBREdge::Open;
+		}
+	}
 	if (IsSpawnArea(X, Y) && IsSpawnArea(X + 1, Y))
 	{
 		return EBREdge::Open;
@@ -2247,6 +2393,18 @@ EBREdge ABRWorld::EdgeE(int32 X, int32 Y) const
 EBREdge ABRWorld::EdgeN(int32 X, int32 Y) const
 {
 	const FBRLevelDef& D = Def();
+	if (D.BoundsChunks > 0)
+	{
+		const bool bIn = IsCellInBounds(X, Y);
+		if (bIn != IsCellInBounds(X, Y + 1))
+		{
+			return EBREdge::Wall;
+		}
+		if (!bIn)
+		{
+			return EBREdge::Open;
+		}
+	}
 	if (IsSpawnArea(X, Y) && IsSpawnArea(X, Y + 1))
 	{
 		return EBREdge::Open;

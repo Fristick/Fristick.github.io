@@ -407,7 +407,7 @@ FString ABRExit::GetPrompt() const
 	case EBRExitStyle::Elevator:
 		return FString::Printf(TEXT("%s Prendre l'ascenseur  (%s)"), *Key, *Dest);
 	case EBRExitStyle::Ladder:
-		return FString::Printf(TEXT("%s Emprunter l'\u00e9chelle  (%s)"), *Key, *Dest);
+		return FString::Printf(TEXT("%s Monter \u00e0 l'\u00e9chelle  (%s)"), *Key, *Dest);
 	case EBRExitStyle::Barn:
 		return FString::Printf(TEXT("%s Entrer dans la grange  (%s)"), *Key, *Dest);
 	case EBRExitStyle::HouseDoor:
@@ -454,7 +454,15 @@ void ABRExit::Use(ABRCharacter* By)
 		}
 		return;
 	}
-	bUsed = true;
+	if (IsClimbable())
+	{
+		// Echelle : on y grimpe (chez le joueur qui la prend) ; le noclip a lieu en haut (FinishClimb)
+		if (By->IsLocallyControlled() && !By->IsClimbing())
+		{
+			By->StartClimb(this);
+		}
+		return;
+	}
 	if (IsInteractable())
 	{
 		if (UBRAssets* A = UBRAssets::Get(this))
@@ -465,5 +473,110 @@ void ABRExit::Use(ABRCharacter* By)
 			}
 		}
 	}
-	W->RequestTransition(Target);
+	Leave();
+}
+
+void ABRExit::Leave()
+{
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		bUsed = true;
+		W->RequestTransition(Target);
+	}
+}
+
+void ABRExit::FinishClimb(ABRCharacter* By)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (bUsed || !By || !W || W->IsTransitioning())
+	{
+		return;
+	}
+	FString Reason;
+	if (!W->CanLeaveLevel(Reason))
+	{
+		ABRHUD::Notify(this, Reason, 4.f, FLinearColor(1.f, 0.55f, 0.35f));
+		By->StopClimb();
+		return;
+	}
+	Leave();
+}
+
+FVector ABRExit::GetClimbAnchor() const
+{
+	// Montants a 14 cm du mur, capsule de 34 cm de rayon
+	return GetActorLocation() + GetActorForwardVector() * 52.f;
+}
+
+void ABRExit::InitLadder(float CeilingZ, float ShaftHeight)
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!A || !Mesh)
+	{
+		return;
+	}
+	// Echelle jusqu'en haut du conduit : segments de 3,2 m legerement resserres
+	const float Total = CeilingZ + FMath::Max(0.f, ShaftHeight);
+	const int32 Count = FMath::Max(1, FMath::CeilToInt(Total / 320.f - 0.05f));
+	const float Seg = Total / Count;
+	const bool bModel = A->Mesh(TEXT("SM_Ladder")) != nullptr;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		UStaticMeshComponent* Part = Mesh;
+		if (i > 0)
+		{
+			Part = NewObject<UStaticMeshComponent>(this);
+			Part->SetupAttachment(Root);
+			Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Part->SetStaticMesh(Mesh->GetStaticMesh());
+			for (int32 m = 0; m < Mesh->GetNumMaterials(); ++m)
+			{
+				Part->SetMaterial(m, Mesh->GetMaterial(m));
+			}
+			Part->RegisterComponent();
+			LadderParts.Add(Part);
+		}
+		if (bModel)
+		{
+			Part->SetRelativeLocation(FVector(0.f, 0.f, i * Seg));
+			Part->SetRelativeScale3D(FVector(1.f, 1.f, Seg / 320.f));
+		}
+		else
+		{
+			Part->SetRelativeLocation(FVector(5.f, 0.f, i * Seg + Seg * 0.5f));
+			Part->SetRelativeScale3D(FVector(0.1f, 0.45f, Seg / 100.f));
+		}
+	}
+	// Noclip au milieu du conduit ; sans conduit, quand la tete touche le plafond
+	constexpr float CapsuleHalf = 88.f;
+	ClimbTopZ = static_cast<float>(GetActorLocation().Z) + (ShaftHeight > 0.f ? CeilingZ + ShaftHeight * 0.5f : CeilingZ - CapsuleHalf - 6.f);
+	// On attrape l'echelle a n'importe quelle hauteur de la piece
+	Box->SetRelativeLocation(FVector(20.f, 0.f, CeilingZ * 0.5f));
+	Box->SetBoxExtent(FVector(22.f, 32.f, CeilingZ * 0.5f));
+	if (ShaftHeight <= 0.f || !A->Cube())
+	{
+		return;
+	}
+	// En haut du conduit, la realite se dechire : une plaque qui "glitche" et sa lueur violette, visible par la trappe
+	UStaticMeshComponent* Tear = NewObject<UStaticMeshComponent>(this);
+	Tear->SetupAttachment(Root);
+	Tear->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Tear->SetStaticMesh(A->Cube());
+	Tear->SetRelativeLocation(FVector(55.f, 0.f, CeilingZ + ShaftHeight - 8.f));
+	Tear->SetRelativeScale3D(FVector(1.f, 1.15f, 0.02f));
+	FBRSurface G(TEXT("T_Glitch"), FLinearColor(0.9f, 0.9f, 0.9f), 60.f, 0.5f, 0.f);
+	G.Emissive = FLinearColor(0.6f, 0.5f, 0.8f);
+	GlitchMID = A->NewSurface(G, this);
+	Tear->SetMaterial(0, GlitchMID);
+	Tear->RegisterComponent();
+	LadderParts.Add(Tear);
+	Light = NewObject<UPointLightComponent>(this);
+	Light->SetupAttachment(Root);
+	Light->SetRelativeLocation(FVector(55.f, 0.f, CeilingZ + ShaftHeight - 40.f));
+	Light->SetIntensityUnits(ELightUnits::Lumens);
+	Light->SetIntensity(260.f);
+	Light->SetLightColor(FLinearColor(0.55f, 0.45f, 1.f));
+	Light->SetAttenuationRadius(ShaftHeight + 260.f);
+	Light->RegisterComponent();
+	SetActorTickEnabled(true);
 }

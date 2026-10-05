@@ -95,6 +95,8 @@ struct FBRSurface
 	float FloorGrime = 0.f;   // salete au pied des murs
 	float Puddles = 0.f;      // v4.1 : part du sol couverte de flaques (reflets ray traces), 0..1
 	float Wetness = 0.f;      // v4.1 : sol mouille (plus sombre, plus brillant), 0..1
+	float AntiTile = 0.f;     // v4.3 : sols/plafonds, 2e echantillon tourne melange a grande echelle (casse la repetition)
+	float Stains = 0.f;       // v4.3 : taches d'humidite a l'echelle du monde (sols), 0..1
 
 	FBRSurface() {}
 	FBRSurface(FName InTex, const FLinearColor& InTint, float InScale, float InRough = 0.85f, float InGrime = 0.35f)
@@ -102,8 +104,9 @@ struct FBRSurface
 
 	FString Key() const
 	{
-		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f"), *Texture.ToString(),
-			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime, Puddles, Wetness);
+		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f"), *Texture.ToString(),
+			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime, Puddles, Wetness,
+			AntiTile, Stains);
 	}
 };
 
@@ -134,7 +137,8 @@ struct FBRLevelDef
 	EBRLayout Layout = EBRLayout::Rooms;
 	float CellSize = 350.f;
 	float WallHeight = 290.f;
-	float WallThickness = 20.f;
+	/** Epaisseur des murs (v4.3 : trois fois plus epais qu'avant dans tous les niveaux) */
+	float WallThickness = 60.f;
 	int32 ChunkCells = 8;
 	float ViewDistance = 5000.f;
 	float WallLineChance = 0.55f;
@@ -249,6 +253,11 @@ struct FBRLevelDef
 	bool bGarage = false;
 	/** Couleur de la bande peinte le long des murs du parking */
 	FLinearColor GarageStripe = FLinearColor(0.12f, 0.42f, 0.55f);
+
+	// --- v4.3 : Niveau 0 plus petit ---
+	/** > 0 : niveau fini de 2 x BoundsChunks chunks de cote autour du point de depart, ferme par des murs d'enceinte.
+	 *  Les cassettes VHS et les sorties y sont tirees parmi les chunks (nombre garanti) au lieu d'un tirage par chunk */
+	int32 BoundsChunks = 0;
 
 	// --- v3.2 : Niveau 0 ---
 	/** Une entite fait des rondes autour du joueur (elle passe regulierement dans son champ de vision) */

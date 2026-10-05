@@ -733,10 +733,6 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 	{
 		BuildDecks();
 	}
-	if (D.bCeiling)
-	{
-		AddBox(D.Ceiling, FVector(Mid.X, Mid.Y, H + 10.f), FVector(ChunkW, ChunkW, 20.f));
-	}
 	if (D.bWater)
 	{
 		AddWaterPlane(FVector(Mid.X, Mid.Y, D.WaterHeight), FVector2D(ChunkW, ChunkW));
@@ -800,6 +796,18 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 				{
 					AddDoorway(false, Fixed, (X + 0.5f) * S);
 				}
+			}
+		}
+		// Niveau fini (v4.3) : murs d'enceinte a l'ouest et au sud (a l'est et au nord, ce sont des aretes de la grille)
+		if (D.BoundsChunks > 0)
+		{
+			if (Coord.X == -D.BoundsChunks)
+			{
+				AddWallSegment(true, X0 * S, Y0 * S - T * 0.5f, (Y0 + N) * S + T * 0.5f, 0.f, H, true, false);
+			}
+			if (Coord.Y == -D.BoundsChunks)
+			{
+				AddWallSegment(false, Y0 * S, X0 * S - T * 0.5f, (X0 + N) * S + T * 0.5f, 0.f, H, true, false);
 			}
 		}
 		// Piliers aux coins
@@ -934,17 +942,27 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 		BuildHidingSpots();
 	}
 
+	// ---- Sorties (decidees avant le plafond : une echelle le perce d'une trappe) et plafond ----
+	PlanExits();
+	if (D.bCeiling)
+	{
+		BuildCeiling();
+	}
+
 	// ---- Lumieres & accessoires par cellule ----
 	for (int32 X = X0; X < X0 + N; ++X)
 	{
 		for (int32 Y = Y0; Y < Y0 + N; ++Y)
 		{
 			const FBRLightInfo L = InWorld->CellLight(X, Y);
-			if (L.bHas)
+			const FVector LightPos = InWorld->CellCenter(FIntPoint(X, Y)) + L.Offset;
+			const bool bOverHatch = bShaftHole && LightPos.X > ShaftMin.X - 70.f && LightPos.X < ShaftMax.X + 70.f
+				&& LightPos.Y > ShaftMin.Y - 70.f && LightPos.Y < ShaftMax.Y + 70.f;
+			if (L.bHas && !bOverHatch)
 			{
 				AddLight(X, Y, L);
 			}
-			if (InWorld->IsWalkable(FIntPoint(X, Y)) && !HidingCells.Contains(FIntPoint(X, Y)))
+			if (InWorld->IsWalkable(FIntPoint(X, Y)) && !HidingCells.Contains(FIntPoint(X, Y)) && !ExitCells.Contains(FIntPoint(X, Y)))
 			{
 				BuildCellProps(X, Y);
 			}
@@ -1504,9 +1522,16 @@ void ABRChunk::BuildPickupsAndExits()
 		{ EBRItem::Headlamp, D.GearChance, 1011 },
 		{ EBRItem::Vest, D.GearChance * 0.7f, 1012 },
 	};
+	const bool bBounded = D.BoundsChunks > 0;
 	for (const FPickupRoll& Roll : Rolls)
 	{
-		if (Roll.Chance <= 0.f || BRHash::Rand(Coord.X, Coord.Y, Roll.Salt, Seed) >= Roll.Chance)
+		bool bRoll = Roll.Chance > 0.f && BRHash::Rand(Coord.X, Coord.Y, Roll.Salt, Seed) < Roll.Chance;
+		if (bBounded && Roll.Item == EBRItem::VHSTape)
+		{
+			// Niveau fini : deux cassettes de plus que necessaire, une par chunk tire (loin du point de depart)
+			bRoll = VHS > 0.f && Roll.Salt == 1008 && W->IsChunkPicked(Coord, 1008, D.VHSRequired + 2, true);
+		}
+		if (!bRoll)
 		{
 			continue;
 		}
@@ -1547,15 +1572,65 @@ void ABRChunk::BuildPickupsAndExits()
 		}
 	}
 
-	// ---- Sorties vers d'autres niveaux ----
-	if (Coord == FIntPoint(0, 0))
+	// ---- Sorties vers d'autres niveaux (decidees par PlanExits avant le plafond) ----
+	for (const FPlannedExit& P : PlannedExits)
+	{
+		ABRExit* Exit = GetWorld()->SpawnActor<ABRExit>(ABRExit::StaticClass(), FTransform(FRotator(0.f, P.Yaw, 0.f), P.Pos), Params);
+		if (Exit)
+		{
+			Exit->Init(P.Target, P.Style);
+			if (P.Style == EBRExitStyle::Ladder)
+			{
+				Exit->InitLadder(D.WallHeight, P.Shaft);
+			}
+			Spawned.Add(Exit);
+		}
+	}
+}
+
+void ABRChunk::PlanExits()
+{
+	PlannedExits.Reset();
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const uint32 Seed = W->GetSeed();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const int32 X0 = Coord.X * N;
+	const int32 Y0 = Coord.Y * N;
+
+	auto PickCell = [&](int32 Salt, FIntPoint& Out) -> bool
+	{
+		for (int32 Try = 0; Try < 8; ++Try)
+		{
+			const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, Salt * 31 + Try, Seed);
+			const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
+			if (W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y) && !HidingCells.Contains(Cell))
+			{
+				Out = Cell;
+				return true;
+			}
+		}
+		return false;
+	};
+
+	const bool bBounded = D.BoundsChunks > 0;
+	if (!bBounded && Coord == FIntPoint(0, 0))
 	{
 		return; // jamais de sortie juste a cote du point d'apparition
 	}
 	for (int32 i = 0; i < D.Exits.Num(); ++i)
 	{
 		const FBRExitDef& Ex = D.Exits[i];
-		if (BRHash::Rand(Coord.X, Coord.Y, 1100 + i, Seed) >= Ex.ChancePerChunk)
+		// Niveau fini : un nombre garanti de sorties de chaque sorte, tirees parmi les chunks (hors point de depart)
+		const bool bPicked = bBounded
+			? W->IsChunkPicked(Coord, 1100 + i, FMath::Max(1, FMath::RoundToInt(Ex.ChancePerChunk * W->BoundedChunkCount(true))), true)
+			: BRHash::Rand(Coord.X, Coord.Y, 1100 + i, Seed) < Ex.ChancePerChunk;
+		if (!bPicked)
 		{
 			continue;
 		}
@@ -1676,13 +1751,80 @@ void ABRChunk::BuildPickupsAndExits()
 		{
 			continue;
 		}
-		ABRExit* Exit = GetWorld()->SpawnActor<ABRExit>(ABRExit::StaticClass(), FTransform(FRotator(0.f, Yaw, 0.f), Pos), Params);
-		if (Exit)
+		FPlannedExit Plan;
+		Plan.Pos = Pos;
+		Plan.Yaw = Yaw;
+		Plan.Target = Ex.Target;
+		Plan.Style = Ex.Style;
+		ExitCells.Add(W->WorldToCell(Pos + FRotator(0.f, Yaw, 0.f).Vector() * 30.f)); // rien n'encombre la sortie
+		if (Ex.Style == EBRExitStyle::Ladder && D.bCeiling && !bShaftHole)
 		{
-			Exit->Init(Ex.Target, Ex.Style);
-			Spawned.Add(Exit);
+			// L'echelle monte par une trappe dans un conduit sombre : on y noclippe en grimpant
+			const FVector Fwd = FRotator(0.f, Yaw, 0.f).Vector();
+			const FVector Side(-Fwd.Y, Fwd.X, 0.f);
+			const FVector C0 = Pos + Side * 62.f - Fwd * 2.f;
+			const FVector C1 = Pos - Side * 62.f + Fwd * 112.f;
+			ShaftMin = FVector2D(FMath::Min(C0.X, C1.X), FMath::Min(C0.Y, C1.Y));
+			ShaftMax = FVector2D(FMath::Max(C0.X, C1.X), FMath::Max(C0.Y, C1.Y));
+			ShaftHeight = 300.f;
+			bShaftHole = true;
+			Plan.Shaft = ShaftHeight;
 		}
+		PlannedExits.Add(Plan);
 	}
+}
+
+void ABRChunk::BuildCeiling()
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float ChunkW = D.ChunkCells * D.CellSize;
+	const float X0 = Coord.X * ChunkW;
+	const float Y0 = Coord.Y * ChunkW;
+	const float X1 = X0 + ChunkW;
+	const float Y1 = Y0 + ChunkW;
+	const float H = D.WallHeight;
+	auto Slab = [&](float AX, float AY, float BX, float BY)
+	{
+		if (BX - AX > 0.5f && BY - AY > 0.5f)
+		{
+			AddBox(D.Ceiling, FVector((AX + BX) * 0.5f, (AY + BY) * 0.5f, H + 10.f), FVector(BX - AX, BY - AY, 20.f));
+		}
+	};
+	if (!bShaftHole)
+	{
+		Slab(X0, Y0, X1, Y1);
+		return;
+	}
+	// Plafond autour de la trappe
+	const FVector2D A = ShaftMin;
+	const FVector2D B = ShaftMax;
+	Slab(X0, Y0, X1, A.Y);
+	Slab(X0, B.Y, X1, Y1);
+	Slab(X0, A.Y, A.X, B.Y);
+	Slab(B.X, A.Y, X1, B.Y);
+	// Conduit au-dessus : quatre parois de beton sale et un fond, sans lumiere (seule la lueur du noclip, en haut)
+	const FBRSurface Shaft(TEXT("T_Concrete"), FLinearColor(0.42f, 0.4f, 0.34f), 200.f, 0.9f, 0.6f);
+	const float Th = 15.f;
+	const float SH = ShaftHeight;
+	const float Zc = H + SH * 0.5f;
+	const float CX = (A.X + B.X) * 0.5f;
+	const float CY = (A.Y + B.Y) * 0.5f;
+	AddBox(Shaft, FVector(CX, A.Y - Th * 0.5f, Zc), FVector(B.X - A.X + 2.f * Th, Th, SH));
+	AddBox(Shaft, FVector(CX, B.Y + Th * 0.5f, Zc), FVector(B.X - A.X + 2.f * Th, Th, SH));
+	AddBox(Shaft, FVector(A.X - Th * 0.5f, CY, Zc), FVector(Th, B.Y - A.Y, SH));
+	AddBox(Shaft, FVector(B.X + Th * 0.5f, CY, Zc), FVector(Th, B.Y - A.Y, SH));
+	AddBox(Shaft, FVector(CX, CY, H + SH + Th * 0.5f), FVector(B.X - A.X + 2.f * Th, B.Y - A.Y + 2.f * Th, Th));
+	// Cadre metallique de la trappe
+	const FBRSurface Frame(TEXT("T_MetalPanel"), FLinearColor(0.35f, 0.35f, 0.33f), 100.f, 0.5f, 0.4f);
+	AddBox(Frame, FVector(CX, A.Y + 2.5f, H - 1.f), FVector(B.X - A.X, 5.f, 4.f), false);
+	AddBox(Frame, FVector(CX, B.Y - 2.5f, H - 1.f), FVector(B.X - A.X, 5.f, 4.f), false);
+	AddBox(Frame, FVector(A.X + 2.5f, CY, H - 1.f), FVector(5.f, B.Y - A.Y, 4.f), false);
+	AddBox(Frame, FVector(B.X - 2.5f, CY, H - 1.f), FVector(5.f, B.Y - A.Y, 4.f), false);
 }
 
 void ABRChunk::FinishBatches()
