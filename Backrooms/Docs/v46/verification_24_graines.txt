@@ -1,0 +1,55 @@
+Verification hors moteur des salles de fosses du Niveau 0 (simulation Python de la generation C++)
+Parametres lus dans BRLevels.cpp : PitRoomChance=0.080 PitRoomsMin=1 PitRoomCells=5 PitHoleSize=200 PitPassage=150 PitHoleChance=0.88 PitDepth=1400 PitKillDepth=450 BoundsChunks=2
+BRSeed   graine niv. salles salle (cellules)           fosses portes VHS    sorties   accessibles percees resultat
+1        566053487   1      -7,-15->-3,-11             15     4     8      4          999/1024   69      OK
+         navigation : 40 chemins (881 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+2        448475025   1      9,2->13,6                  14     4     8      4          999/1024   69      OK
+         navigation : 40 chemins (328 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+3        162258264   1      1,-15->5,-11               16     4     8      4          999/1024   55      OK
+         navigation : 40 chemins (510 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+4        1230861936  1      -14,-7->-10,-3             16     4     8      4          999/1024   36      OK
+         navigation : 40 chemins (451 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+5        603980268   1      2,-14->6,-10               13     4     8      4          999/1024   55      OK
+         navigation : 40 chemins (385 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+6        719047363   1      10,-6->14,-2               14     4     8      4          999/1024   78      OK
+         navigation : 40 chemins (497 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+7        2361273999  1      9,10->13,14                13     4     8      4          999/1024   42      OK
+         navigation : 40 chemins (336 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+8        72259753    1      -15,9->-11,13              14     4     8      4          999/1024   70      OK
+         navigation : 40 chemins (503 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+9        1896875771  1      -14,-7->-10,-3             16     4     8      4          999/1024   84      OK (demo)
+         navigation : 40 chemins (418 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+10       935070154   1      -7,-15->-3,-11             13     4     8      4          999/1024   52      OK
+         navigation : 40 chemins (399 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+11       2071961571  1      9,1->13,5                  16     4     8      4          999/1024   81      OK
+         navigation : 40 chemins (460 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+12       2255018105  1      -14,9->-10,13              14     4     8      4          999/1024   40      OK
+         navigation : 40 chemins (330 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+13       2455526153  1      -7,9->-3,13                12     4     8      4          999/1024   63      OK
+         navigation : 40 chemins (526 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+14       1107441205  1      -15,2->-11,6               11     4     8      4          999/1024   68      OK
+         navigation : 40 chemins (433 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+15       4092422287  1      -7,9->-3,13                15     4     8      4          999/1024   44      OK
+         navigation : 40 chemins (394 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+16       1753845952  1      1,-14->5,-10               12     4     8      4          999/1024   51      OK
+         navigation : 40 chemins (480 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+17       1           1      -15,2->-11,6               16     4     8      4          999/1024   58      OK
+         navigation : 40 chemins (432 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+18       1408362973  1      -15,-6->-11,-2             13     4     8      4          999/1024   53      OK
+         navigation : 40 chemins (385 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+19       3507691905  1      -14,10->-10,14             14     4     8      4          999/1024   56      OK
+         navigation : 40 chemins (449 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+20       1548080446  1      9,9->13,13                 14     4     8      4          999/1024   43      OK
+         navigation : 40 chemins (301 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+21       3648937681  1      -6,-15->-2,-11             15     4     8      4          999/1024   62      OK
+         navigation : 40 chemins (439 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+22       2492178918  1      9,-7->13,-3                12     4     8      4          999/1024   43      OK
+         navigation : 40 chemins (366 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+23       2816725947  1      -7,9->-3,13                14     4     8      4          999/1024   64      OK
+         navigation : 40 chemins (446 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+24       1117771179  1      -14,9->-10,13              15     4     8      4          999/1024   47      OK
+         navigation : 40 chemins (368 segments), 0 au-dessus du vide, 0 traversees de salle sur 14 trajets autour ; marge 15 cm (passage - rayon du Clump)
+
+24 graine(s) verifiee(s), 0 avec probleme(s).
+Verifie pour chaque graine : au moins 1 salle(s), hors des chunks du depart ; fosses presentes ; portes ; galerie qui contourne la salle ; salle accessible ; aucun pilier ni neon au-dessus du vide ; sol du chunk = chunk moins les ouvertures (surface exacte, aucun recouvrement, aucune dalle au-dessus d'une fosse, bords du chunk entierement couverts) ; points d'apparition hors des fosses ; cachettes, cassettes et sorties hors des salles et atteignables depuis le depart SANS traverser de salle ; nombre de cassettes >= exige ; chaque sorte de sortie presente.
+Cartes : Docs/v46/cartes_24_graines.png

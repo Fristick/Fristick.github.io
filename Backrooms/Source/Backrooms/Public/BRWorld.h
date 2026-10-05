@@ -106,8 +106,9 @@ public:
 	void DebugCompleteObjectives();
 
 	// ------------------------------------------------------------ Niveaux
-	/** Lance une transition (fondu + effet "noclip") vers un niveau. -1 = niveau aleatoire */
-	void RequestTransition(int32 TargetLevel, bool bFromDeath = false);
+	/** Lance une transition (fondu + effet "noclip") vers un niveau. -1 = niveau aleatoire.
+	 *  InSeed (serveur) : graine imposee au niveau (0 : nouvelle graine, ou celle de -BRSeed) */
+	void RequestTransition(int32 TargetLevel, bool bFromDeath = false, uint32 InSeed = 0);
 	/** Charge immediatement un niveau (sans fondu). Graine 0 = nouvelle graine aleatoire */
 	void LoadLevelNow(int32 LevelNumber, uint32 InSeed = 0);
 	const FBRLevelDef& Def() const;
@@ -121,8 +122,8 @@ public:
 	float GetTitleTime() const { return TitleTime; }
 	void ReplayTitle() { TitleTime = 7.f; }
 	float GetLevelTime() const { return LevelTime; }
-	/** Appele par le personnage a sa mort */
-	void HandlePlayerDeath();
+	/** Appele par le personnage a sa mort. bNoRevive (chute dans une fosse) : personne ne peut le relever */
+	void HandlePlayerDeath(bool bNoRevive = false);
 
 	// ------------------------------------------------------------ Grille
 	float CellSize() const;
@@ -179,8 +180,38 @@ public:
 	UBRWaterSim* GetWaterSim() const { return WaterSim; }
 	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire) */
 	float LightLevelAt(const FVector& P) const;
-	/** A* sur la grille */
+	/** A* sur la grille (v4.6 : les cellules d'une salle de fosses coutent plus cher : on passe par la galerie si possible) */
 	bool FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes = 1500) const;
+
+	// ------------------------------------------------------------ v4.6 : salles de fosses ("Hole Variation")
+	/** Le niveau a des salles de fosses */
+	bool HasPits() const;
+	/** Salle de fosses de ce chunk : rectangle de cellules [Min, Max[ ; false si le chunk n'en a pas.
+	 *  Ne depend que de la graine et des coordonnees du chunk : la meme chez tous les joueurs, quel que soit l'ordre de chargement */
+	bool GetPitRoom(const FIntPoint& Chunk, FIntRect& OutRoom) const;
+	/** Cellule d'une salle de fosses : reservee (pas de murs interieurs, d'objets, de cachettes ni de sorties) */
+	bool IsPitRoomCell(int32 X, int32 Y) const;
+	/** Fosse percee au coin (+X, +Y) de la cellule (X, Y) */
+	bool HasPitAtCorner(int32 X, int32 Y) const;
+	/** Cote reel d'une fosse (cm) : PitHoleSize, reduit pour garder des passages d'au moins PitPassage (et 120 cm) */
+	float GetPitHoleSize() const;
+	/** Le point (XY) est au-dessus du vide d'une fosse ; Margin > 0 elargit la fosse (marge de securite des entites) */
+	bool IsOverPit(const FVector& P, float Margin = 0.f) const;
+	/** Le segment A-B (XY) passe au-dessus d'une fosse, pour un corps qui garde Margin cm du bord */
+	bool SegmentCrossesPit(const FVector& A, const FVector& B, float Margin) const;
+	/** Salles de fosses des chunks a moins de Radius chunks de AroundChunk (niveau fini : toutes) */
+	void GetPitRooms(TArray<FIntRect>& Out, const FIntPoint& AroundChunk, int32 Radius) const;
+	/** Point de vue sur la salle de fosses la plus proche (coin de la salle, regard en diagonale sur la grille de fosses) */
+	bool FindPitRoomView(const FVector& From, FVector& OutLoc, FRotator& OutRot) const;
+	/** Niveau fini : la cellule est atteignable depuis le depart sans entrer dans une salle de fosses (les objectifs et
+	 *  les sorties n'y sont places que la : il y a toujours un chemin de contournement). Toujours vrai dans un niveau infini */
+	bool IsSafelyReachable(const FIntPoint& C) const;
+	/** Niveau fini : la cellule est atteignable depuis le depart, en passant au besoin par les passages entre les fosses */
+	bool IsReachable(const FIntPoint& C) const;
+	/** Graine d'un niveau a partir d'un nombre choisi par l'utilisateur (-BRSeed=<n>, commande BRSeed <n>) */
+	static uint32 SeedFromUser(uint32 N, int32 Level);
+	/** Graine de demonstration de la v4.6 (-BRSeed=9) : au Niveau 0, salle de 16 fosses a 14 cellules du depart */
+	static constexpr uint32 DemoSeed = 9;
 	bool IsChunkLoaded(const FIntPoint& Chunk) const { return Chunks.Contains(Chunk); }
 	int32 GetChunkCount() const { return Chunks.Num(); }
 	/** v4.5 : temps de construction des chunks (ms), pour le rapport du test automatique */
@@ -336,6 +367,23 @@ private:
 	/** Arete dans une zone de bureaux (bOut = false : la regle ordinaire s'applique) */
 	EBREdge CubicleEdge(int32 X, int32 Y, bool bEast, bool& bOut) const;
 	bool MazeOpen(int32 X, int32 Y, bool bEast) const;
+	/** v4.6 : salle de fosses de ce chunk, d'apres la graine seule (GetPitRoom lit le cache d'un niveau fini) */
+	bool ComputePitRoom(const FIntPoint& Chunk, FIntRect& OutRoom) const;
+	/** v4.6 : arete dans un chunk a salle de fosses : ouverte dans la salle et dans la galerie qui l'entoure, mur perce
+	 *  de PitDoorsPerSide portes sur son pourtour (bOut = false : la regle ordinaire s'applique) */
+	EBREdge PitEdge(int32 X, int32 Y, bool bEast, bool& bOut) const;
+	/** v4.6 : niveau fini : salles de fosses et cellules atteignables (calcules au chargement, les memes chez tous) */
+	void PrepareLevelLayout();
+	/** v4.6 : serveur : un joueur passe sous le bord d'une fosse -> mort par le systeme existant (chez lui, via RPC) */
+	void UpdatePitFalls();
+	TMap<FIntPoint, FIntRect> BoundedPitRooms;
+	TSet<FIntPoint> SafeReach;
+	TSet<FIntPoint> FullReach;
+	/** v4.6 : niveau fini : murs perces d'une porte pour relier au depart les zones que les murs tires enfermaient
+	 *  (cle : (X * 2 + 1 pour une arete Est, Y)) */
+	TSet<FIntPoint> ForcedDoors;
+	/** Serveur : graine imposee a la prochaine transition (console BRSeed, mode developpeur) */
+	uint32 PendingSeed = 0;
 	void UpdateBlackout(float Dt);
 	void ApplyPower(bool bForce);
 	void CompleteTask(const FString& Text);

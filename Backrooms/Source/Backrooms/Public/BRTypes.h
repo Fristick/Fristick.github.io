@@ -242,6 +242,8 @@ struct FBRLevelDef
 	/** Portes en arche (plein cintre) au lieu d'un linteau droit ; sommet de l'arche en cm (0 : 60 cm sous le plafond) */
 	bool bArches = false;
 	float ArchApex = 0.f;
+	/** v4.6 : chambranles (jambages et traverse en saillie, surface Trim) autour des portes a linteau droit */
+	bool bDoorCasings = false;
 	/** Corniche a 45 degres entre les murs et le plafond (cote en cm, 0 = aucune) */
 	float CoveSize = 0.f;
 	/** Piliers alignes en grille reguliere dans les grandes salles ouvertes */
@@ -254,6 +256,27 @@ struct FBRLevelDef
 	bool bGarage = false;
 	/** Couleur de la bande peinte le long des murs du parking */
 	FLinearColor GarageStripe = FLinearColor(0.12f, 0.42f, 0.55f);
+
+	// --- v4.6 : salles de fosses ("Hole Variation" du Niveau 0) ---
+	/** Salle carree de PitRoomCells x PitRoomCells cellules, inscrite dans un chunk (une galerie d'au moins une cellule tout
+	 *  autour la contourne), percee d'une grille de fosses carrees aux coins interieurs des cellules : les passages passent
+	 *  par le centre des cellules, la ou la grille A* fait marcher les entites. 0 : aucune salle.
+	 *  Niveau fini : nombre garanti = max(PitRoomsMin, arrondi(PitRoomChance x chunks hors depart)) ; infini : tirage par chunk */
+	float PitRoomChance = 0.f;
+	int32 PitRoomsMin = 1;
+	int32 PitRoomCells = 5;
+	/** Cote d'une fosse (cm) et largeur minimale des passages entre deux fosses : le cote est reduit si
+	 *  PitHoleSize + PitPassage depasse la taille d'une cellule (les passages gardent au moins 120 cm) */
+	float PitHoleSize = 200.f;
+	float PitPassage = 150.f;
+	/** Part des coins interieurs perces (les autres restent pleins : la grille garde des "trous" manquants) */
+	float PitHoleChance = 1.f;
+	/** Profondeur du puits jusqu'au fond (cm) ; chute mortelle sous PitKillDepth (centre du joueur) ; epaisseur de la dalle */
+	float PitDepth = 1400.f;
+	float PitKillDepth = 450.f;
+	float PitLipThickness = 30.f;
+	/** Ouvertures dans les murs de la salle, par cote */
+	int32 PitDoorsPerSide = 1;
 
 	// --- v4.3 : Niveau 0 plus petit ---
 	/** > 0 : niveau fini de 2 x BoundsChunks chunks de cote autour du point de depart, ferme par des murs d'enceinte.

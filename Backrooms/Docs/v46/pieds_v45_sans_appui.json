@@ -1,0 +1,27 @@
+{
+ "SK_Faceling": {
+  "marche (ecart max)": 0.38,
+  "poursuite (ecart max)": 2.67,
+  "armee/frappe": -0.72
+ },
+ "SK_Partygoer": {
+  "marche (ecart max)": 1.96,
+  "poursuite (ecart max)": 1.54,
+  "armee/frappe": 4.29
+ },
+ "SK_SkinStealer": {
+  "marche (ecart max)": -0.14,
+  "poursuite (ecart max)": 3.91,
+  "armee/frappe": -1.64
+ },
+ "SK_Wretch": {
+  "marche (ecart max)": 2.26,
+  "poursuite (ecart max)": 7.86,
+  "armee/frappe": 2.56
+ },
+ "SK_Hound": {
+  "marche (ecart max)": -3.07,
+  "poursuite (ecart max)": -1.22,
+  "armee/frappe": 0.0
+ }
+}

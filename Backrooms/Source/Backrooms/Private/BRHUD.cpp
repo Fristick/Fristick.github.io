@@ -2360,6 +2360,7 @@ void ABRHUD::DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* 
 		{ TEXT("F10"), TEXT("jumpscare suivant (chaque entit\u00e9)") },
 		{ TEXT("FIN"), TEXT("objectifs remplis") },
 		{ TEXT("INSER"), TEXT("coupure de courant") },
+		{ TEXT("SUPPR"), TEXT("salle de fosses (Niveau 0)") },
 	};
 	const int32 N = UE_ARRAY_COUNT(Keys);
 	const float RowH = 24.f * U;

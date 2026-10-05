@@ -182,13 +182,24 @@ public:
 	UFUNCTION(Exec)
 	void BRObjectives();
 
+	/** v4.6 : se placer au bord de la salle de fosses la plus proche ; sans salle dans ce niveau, charge le Niveau 0
+	 *  avec la graine de demonstration puis s'y place (touche Suppr en mode developpeur) */
+	UFUNCTION(Exec)
+	void BRPits();
+
+	/** v4.6 : recharge le niveau avec une graine choisie (meme calcul que -BRSeed=<n>) : BRSeed 4605 (hote seulement) */
+	UFUNCTION(Exec)
+	void BRSeed(int32 Number);
+
 private:
-	/** Mode developpeur : raccourcis en jeu (Page prec./suiv., Debut, Fin, Inser, F6, F7, F10) */
+	/** Mode developpeur : raccourcis en jeu (Page prec./suiv., Debut, Fin, Inser, Suppr, F6, F7, F10) */
 	void UpdateDevKeys();
 	/** Niveau precedent / suivant dans l'ordre du wiki */
 	void DevJumpLevel(int32 Delta);
 	/** Les niveaux visites en mode developpeur (sans les avoir explores) ne sont pas ajoutes a la partie */
 	bool bDevSession = false;
+	/** v4.6 : BRPits a charge le Niveau 0 : placement au bord des fosses des que le niveau est pret */
+	bool bPendingPitTeleport = false;
 	float DevHelpTime = 0.f;
 	int32 DevScareKind = 0;
 

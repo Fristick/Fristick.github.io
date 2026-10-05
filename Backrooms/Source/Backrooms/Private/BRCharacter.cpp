@@ -74,6 +74,9 @@ ABRCharacter::ABRCharacter()
 	Move->BrakingDecelerationWalking = 1800.f;
 	Move->GroundFriction = 7.f;
 	Move->MaxStepHeight = 35.f;
+	// v4.6 : au bord d'une fosse, on tombe des que le centre du corps depasse le bord de ~18 cm (par defaut, la capsule
+	// tenait en equilibre sur l'arete jusqu'a presque tout son rayon)
+	Move->PerchRadiusThreshold = 16.f;
 	Move->GetNavAgentPropertiesRef().bCanCrouch = true;
 	Move->bCanWalkOffLedgesWhenCrouching = true;
 	// Multijoueur : chaque joueur simule ses propres deplacements (nage, mantle, vitesse variable dans l'eau)
@@ -988,7 +991,11 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	bDiving = false;
 	bMantling = false;
 	UpdateViewMode();
-	GetCharacterMovement()->DisableMovement();
+	if (!bFallDeath)
+	{
+		GetCharacterMovement()->DisableMovement();
+	}
+	// (v4.6 : chute dans une fosse : le corps continue de tomber dans le noir jusqu'au fond)
 	PlaySound2D(TEXT("S_Death"), 1.f);
 	if (ABRPlayerController* OwnerPC = Cast<ABRPlayerController>(Controller))
 	{
@@ -1000,8 +1007,56 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	}
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
-		W->HandlePlayerDeath();
+		W->HandlePlayerDeath(bFallDeath);
 	}
+}
+
+void ABRCharacter::NotifyFellIntoPit()
+{
+	// Serveur : appele par ABRWorld::UpdatePitFalls quand la position du joueur est sous le bord d'une fosse
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (!HasAuthority() || bDead || Now - LastFallNotify < 2.f)
+	{
+		return;
+	}
+	LastFallNotify = Now;
+	UE_LOG(LogBackrooms, Log, TEXT("Chute dans une fosse : %s a %s"), *GetName(), *GetActorLocation().ToString());
+	if (IsLocallyControlled())
+	{
+		FallDeath();
+	}
+	else
+	{
+		ClientFellIntoPit();
+	}
+}
+
+void ABRCharacter::ClientFellIntoPit_Implementation()
+{
+	FallDeath();
+}
+
+void ABRCharacter::FallDeath()
+{
+	if (bDead)
+	{
+		return;
+	}
+	if (bGodMode)
+	{
+		// Mode developpeur invincible : on remonte sur le croisement de passages le plus proche (centre de la cellule)
+		if (const ABRWorld* W = ABRWorld::Get(this))
+		{
+			const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+			SetActorLocation(W->CellCenter(W->WorldToCell(GetActorLocation()), Half + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
+			GetCharacterMovement()->StopMovementImmediately();
+		}
+		ABRHUD::Notify(this, TEXT("MODE D\u00c9V : chute annul\u00e9e (invincible)"), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+		return;
+	}
+	bFallDeath = true;
+	Health = 0.f;
+	Die(TEXT("une chute dans une fosse"), nullptr);
 }
 
 ABRCharacter* ABRCharacter::FindDownedTeammate() const
@@ -1019,9 +1074,9 @@ ABRCharacter* ABRCharacter::FindDownedTeammate() const
 	float BestDot = 0.72f;
 	for (ABRCharacter* Mate : Players)
 	{
-		if (Mate == this || !Mate->IsDead())
+		if (Mate == this || !Mate->IsDead() || Mate->GetActorLocation().Z < -100.f)
 		{
-			continue;
+			continue; // (v4.6 : au fond d'une fosse, hors d'atteinte)
 		}
 		const FVector BodyPos = Mate->GetActorLocation() - FVector(0.f, 0.f, 50.f); // etendu au sol
 		if (FVector::Dist(BodyPos, GetActorLocation()) > 260.f)
@@ -1075,7 +1130,8 @@ void ABRCharacter::UpdateRevive(float Dt)
 
 void ABRCharacter::ServerRevive_Implementation(ABRCharacter* Mate)
 {
-	if (Mate && Mate != this && Mate->IsDead() && !bDead && FVector::Dist(Mate->GetActorLocation(), GetActorLocation()) < 500.f)
+	if (Mate && Mate != this && Mate->IsDead() && !bDead && FVector::Dist(Mate->GetActorLocation(), GetActorLocation()) < 500.f
+		&& Mate->GetActorLocation().Z > -100.f)
 	{
 		Mate->ReviveBy(this);
 	}
@@ -1102,7 +1158,7 @@ void ABRCharacter::ClientRevived_Implementation(const FString& ByName)
 
 void ABRCharacter::Revived(const FString& ByName)
 {
-	if (!bDead)
+	if (!bDead || bFallDeath)
 	{
 		return;
 	}
@@ -1166,7 +1222,10 @@ void ABRCharacter::OnRep_Dead()
 		}
 	}
 	const APlayerState* PS = GetPlayerState();
-	ABRHUD::Notify(this, FString::Printf(TEXT("%s est \u00e0 terre."), PS ? *PS->GetPlayerName() : TEXT("Un explorateur")), 4.f,
+	// v4.6 : tombe dans une fosse (sous le bord) : personne ne pourra le relever
+	const bool bInPit = GetActorLocation().Z < -100.f;
+	const FString Name = PS ? PS->GetPlayerName() : FString(TEXT("Un explorateur"));
+	ABRHUD::Notify(this, Name + (bInPit ? TEXT(" est tomb\u00e9 dans une fosse.") : TEXT(" est \u00e0 terre.")), 4.f,
 		FLinearColor(1.f, 0.45f, 0.4f));
 }
 
@@ -1188,6 +1247,7 @@ void ABRCharacter::ResetStats()
 	DeathBlend = 0.f;
 	KilledBy.Empty();
 	KillerActor.Reset();
+	bFallDeath = false;
 	ResetInventory();
 	OnEquipmentChanged();
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);

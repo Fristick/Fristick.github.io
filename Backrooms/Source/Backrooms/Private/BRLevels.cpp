@@ -82,6 +82,13 @@ namespace
 		D.Wall.FloorGrime = 0.6f;
 		D.Pillar.FloorGrime = 0.6f;
 		D.bPhenomena = true;
+		// v4.6 : "Hole Variation" : salles jaunes percees d'une grille de fosses profondes. Rares (1 salle garantie sur les
+		// 12 chunks hors depart, 2 avec PitRoomChance >= 0.125) ; jamais au depart ; une galerie les contourne
+		D.PitRoomChance = 0.08f; D.PitRoomsMin = 1; D.PitRoomCells = 5;
+		D.PitHoleSize = 200.f; D.PitPassage = 150.f; D.PitHoleChance = 0.88f;
+		D.PitDepth = 1400.f; D.PitKillDepth = 450.f; D.PitLipThickness = 30.f; D.PitDoorsPerSide = 1;
+		// v4.6 : chambranles autour des portes (bureaux)
+		D.bDoorCasings = true;
 		D.Notes = {
 			TEXT("Si tu lis ceci, tu as \"noclipp\u00e9\" hors de la r\u00e9alit\u00e9. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds."),
 			TEXT("Le bourdonnement ne s'arr\u00eate jamais. J'ai compte plus de six cents salles. Toujours la m\u00eame moquette humide. Toujours la m\u00eame odeur."),

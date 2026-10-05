@@ -110,6 +110,15 @@ protected:
 	void BuildSkylight();
 	/** Placards et trous dans le mur ou se cacher (Niveau 0) */
 	void BuildHidingSpots();
+	/** v4.6 : sol du chunk perce par la salle de fosses (dalle epaisse decoupee en rectangles autour des ouvertures),
+	 *  parois des puits par bandes de plus en plus sombres, fond qui arrete la chute */
+	void BuildPitRoom(const FIntRect& Room);
+	/** v4.6 : cellule libre tiree dans le chunk (ni cachette, ni bassin, ni salle de fosses ; niveau fini : atteignable
+	 *  depuis le depart sans passer par une salle de fosses). Essais tires, puis balayage de tout le chunk dans un ordre tire */
+	bool PickFreeCell(int32 Salt, FIntPoint& Out, bool bFullScan) const;
+	/** v4.6 : la salle de fosses de ce chunk (bHasPitRoom) */
+	bool bHasPitRoom = false;
+	FIntRect PitRoom;
 	void BuildPickupsAndExits();
 	/** Sortie decidee avant la construction du plafond (une echelle le perce d'une trappe) */
 	struct FPlannedExit

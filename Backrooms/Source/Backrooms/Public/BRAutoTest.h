@@ -3,6 +3,8 @@
 // de courant, la lampe, la vision nocturne, la nage, l'inventaire, la 3e personne, la mort et le reveil, prend des
 // captures (Saved/AutoTest/*.png) et ecrit un rapport (Saved/AutoTest/Rapport.txt) avec les avertissements et
 // erreurs du journal. Le jeu se ferme a la fin.
+// v4.6 : salle de fosses du Niveau 0 (point de vue, mesures par profil, Lumen logiciel, lampe, IA, chute et reveil) :
+// incluse quand le Niveau 0 est teste ; -BRAutoTestPits : ce scenario seul. Graine : -BRSeed=<n>, sinon celle de demonstration.
 // Test multijoueur : -BRNetTest sur un hote (carte ouverte avec "?listen") et sur un client qui le rejoint
 // (rapports dans Saved/NetTest_Hote et Saved/NetTest_Client).
 #pragma once
@@ -69,6 +71,8 @@ private:
 		float TexMB = 0.f;
 		float ChunkMaxMs = 0.f;
 		float ChunkAvgMs = 0.f;
+		/** v4.6 : scene mesuree dans le niveau ("vue" : point de depart ; "fosses_Qualite"... : salle de fosses par profil) */
+		FString Scene = TEXT("vue");
 		TArray<FString> Notes;
 		int32 FirstLogLine = 0;
 		int32 LastLogLine = 0;
@@ -81,6 +85,11 @@ private:
 	void Add(const FString& Name, float Wait, TFunction<bool()> Action);
 	void AddLevelSteps(int32 Level);
 	void AddEntityShot(int32 Level, EBREntityKind Kind);
+	/** v4.6 : scenario de la salle de fosses */
+	void AddPitSteps();
+	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */
+	void StartMeasure();
+	void EndMeasure(FLevelReport& R);
 	/** Charge un niveau et attend qu'il soit pret (titre efface, exposition stabilisee) */
 	void AddLoad(int32 Level, float Settle, const FString& Title = FString());
 
@@ -128,4 +137,18 @@ private:
 	FString OutDir;
 	double StartTime = 0.0;
 	TSharedPtr<FBRLogCapture> Capture;
+
+	// v4.6 : salle de fosses
+	/** Reglages du joueur avant le scenario (les profils sont essayes puis on revient a ceux-ci) */
+	FBRSettings SavedSettings;
+	bool bSettingsSaved = false;
+	/** Entite qui traverse la salle : point le plus bas, images passees au-dessus d'une fosse, plus courte distance au joueur */
+	TWeakObjectPtr<ABREntity> PitEntity;
+	bool bPitTrack = false;
+	float PitMinZ = 0.f;
+	int32 PitOverFrames = 0;
+	float PitMinDist = 0.f;
+	float PitStartDist = 0.f;
+	/** Chute : instant ou le joueur commence a marcher vers la fosse */
+	double FallStart = 0.0;
 };

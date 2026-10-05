@@ -683,5 +683,73 @@
       "StealerEye",
       "StealerClaw"
     ]
+  },
+  "SK_HoundLite": {
+    "Vertices": 89381,
+    "Triangles": 164524,
+    "BoneCount": 35,
+    "Bones": {
+      "Head": [
+        45.1,
+        0.17,
+        78.14
+      ],
+      "FrontUpperL": [
+        36.72,
+        -17.87,
+        67.15
+      ],
+      "FrontLowerL": [
+        28.29,
+        -20.81,
+        43.08
+      ],
+      "FrontUpperR": [
+        36.72,
+        18.75,
+        67.15
+      ],
+      "FrontLowerR": [
+        28.29,
+        21.69,
+        43.08
+      ],
+      "BackUpperL": [
+        -36.62,
+        -10.8,
+        58.53
+      ],
+      "BackLowerL": [
+        -35.41,
+        -12.25,
+        39.0
+      ],
+      "BackUpperR": [
+        -36.83,
+        9.92,
+        59.26
+      ],
+      "BackLowerR": [
+        -35.34,
+        12.66,
+        39.0
+      ],
+      "Body": [
+        42.26,
+        0.17,
+        71.49
+      ]
+    },
+    "Materials": [
+      "HoundSkin",
+      "HoundMouth",
+      "HoundTeeth",
+      "HoundHair",
+      "HoundFace",
+      "GlowAmberEye",
+      "EyeDark",
+      "HoundTongue"
+    ],
+    "Note": "derive de SK_Hound (build_hound_lite.py) : 45 % des meches de cheveux, elargies x2 ; corps, squelette, poids et materiaux identiques"
   }
 }

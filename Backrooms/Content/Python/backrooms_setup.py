@@ -247,7 +247,8 @@ def fbx_skeletal_options():
 
 # v4.5 : niveaux de detail generes a l'import pour les maillages a squelette denses (le Hound garde son pelage
 # d'origine, 175 000 sommets, au plus pres ; ses LOD le remplacent au loin)
-SKELETAL_LODS = {"SK_Hound": 4, "SK_SkinStealer": 3, "SK_Hazmat": 3, "SK_Wretch": 3, "SK_Clump": 3}
+# v4.6 : SK_HoundLite (45 % des meches de cheveux, -49 % de sommets) est celui des profils Performance et Qualite
+SKELETAL_LODS = {"SK_Hound": 4, "SK_HoundLite": 3, "SK_SkinStealer": 3, "SK_Hazmat": 3, "SK_Wretch": 3, "SK_Clump": 3}
 
 
 def generate_skeletal_lods(name, count):

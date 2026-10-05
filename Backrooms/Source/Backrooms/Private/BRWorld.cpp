@@ -212,7 +212,7 @@ void ABRWorld::RegisterEntity(ABREntity* Entity)
 // Niveaux & transitions
 // =====================================================================================
 
-void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath)
+void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath, uint32 InSeed)
 {
 	if (!HasAuthority())
 	{
@@ -244,6 +244,7 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath)
 	{
 		TargetLevel = 0;
 	}
+	PendingSeed = InSeed;
 	MulticastTransition(TargetLevel, bFromDeath);
 }
 
@@ -277,11 +278,12 @@ void ABRWorld::BeginTransition(int32 TargetLevel, bool bFromDeath)
 	}
 }
 
-void ABRWorld::HandlePlayerDeath()
+void ABRWorld::HandlePlayerDeath(bool bNoRevive)
 {
 	// Seul : retour au Niveau 0. En equipe : a terre, un coequipier a 30 s pour nous relever,
-	// sinon on se reveille au point de depart du niveau en cours
-	DeathTimer = IsNetGame() ? (HasLivingTeammate() ? 30.f : 6.f) : 4.5f;
+	// sinon on se reveille au point de depart du niveau en cours.
+	// v4.6 : au fond d'une fosse, personne ne peut nous relever : reveil au point de depart apres le fondu
+	DeathTimer = IsNetGame() ? ((HasLivingTeammate() && !bNoRevive) ? 30.f : 6.f) : 4.5f;
 }
 
 bool ABRWorld::HasLivingTeammate() const
@@ -364,9 +366,11 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	uint32 FixedSeed = 0;
 	if (InSeed == 0 && FParse::Value(FCommandLine::Get(), TEXT("BRSeed="), FixedSeed) && FixedSeed != 0)
 	{
-		Seed = BRHash::Mix(FixedSeed ^ static_cast<uint32>(LevelNumber * 7919 + 17));
+		Seed = SeedFromUser(FixedSeed, LevelNumber);
 	}
 	Seed = Seed != 0 ? Seed : 1u;
+	// v4.6 : salles de fosses et cellules atteignables du niveau fini (avant la construction des chunks)
+	PrepareLevelLayout();
 	bLevelReady = true;
 	Collected.Empty();
 	LevelTime = 0.f;
@@ -748,6 +752,12 @@ FVector ABRWorld::SpawnSpot(int32 Slot, float Half) const
 		const float Ang = FMath::DegreesToRadians(90.f + 60.f * static_cast<float>(Slot - 1));
 		Loc += FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * FMath::Min(85.f, CellSize() * 0.3f);
 	}
+	if (IsOverPit(Loc, 60.f))
+	{
+		// v4.6 : ne peut pas arriver (pas de salle de fosses dans les chunks du depart) : garde-fou
+		UE_LOG(LogBackrooms, Error, TEXT("Point d'apparition au-dessus d'une fosse (%s) : repli au centre du depart"), *Loc.ToString());
+		Loc = CellCenter(FIntPoint(0, 0), Half + 5.f);
+	}
 	Loc.Z += FloorZAt(Loc); // estrade du point de depart (Niveau 37)
 	return Loc;
 }
@@ -861,7 +871,9 @@ void ABRWorld::Tick(float DeltaSeconds)
 		{
 			if (HasAuthority())
 			{
-				LoadLevelNow(PendingLevel);
+				const uint32 ForcedSeed = PendingSeed;
+				PendingSeed = 0;
+				LoadLevelNow(PendingLevel, ForcedSeed);
 			}
 			else if (NetLevel.Serial != LoadedSerial)
 			{
@@ -947,6 +959,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 		if (HasAuthority())
 		{
 			UpdatePopulation(Dt);
+			UpdatePitFalls();
 		}
 		UpdatePatrol(Dt);
 		UpdatePhenomena(Dt);
@@ -1813,6 +1826,435 @@ bool ABRWorld::IsChunkPicked(const FIntPoint& Chunk, int32 Salt, int32 Count, bo
 	return Before < Count;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// v4.6 : salles de fosses ("Hole Variation" du Niveau 0)
+//
+// Une salle carree de K x K cellules, inscrite dans un chunk avec une galerie d'au moins une cellule tout autour, percee
+// d'une fosse carree a chaque coin interieur de cellule (sauf quelques-uns, tires) : les fosses forment une grille
+// (K-1) x (K-1) et les passages qui les separent passent par le centre des cellules, la ou la grille A* fait marcher les
+// entites. Tout se deduit de la graine et des coordonnees : chaque joueur construit les memes fosses, quel que soit
+// l'ordre dans lequel ses chunks se chargent.
+// ---------------------------------------------------------------------------------------------------------------------
+
+uint32 ABRWorld::SeedFromUser(uint32 N, int32 Level)
+{
+	return BRHash::Mix(N ^ static_cast<uint32>(Level * 7919 + 17));
+}
+
+bool ABRWorld::HasPits() const
+{
+	const FBRLevelDef& D = Def();
+	return D.PitRoomChance > 0.f && D.PoolChance <= 0.f && (D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze);
+}
+
+bool ABRWorld::ComputePitRoom(const FIntPoint& Chunk, FIntRect& OutRoom) const
+{
+	const FBRLevelDef& D = Def();
+	if (!HasPits() || !IsChunkInBounds(Chunk) || IsSpawnChunk(this, Chunk))
+	{
+		return false;
+	}
+	bool bPicked = false;
+	if (D.BoundsChunks > 0)
+	{
+		const int32 Count = FMath::Max(D.PitRoomsMin, FMath::RoundToInt(D.PitRoomChance * static_cast<float>(BoundedChunkCount(true))));
+		bPicked = IsChunkPicked(Chunk, 1950, Count, true);
+	}
+	else
+	{
+		bPicked = BRHash::Rand(Chunk.X, Chunk.Y, 1950, Seed) < D.PitRoomChance;
+	}
+	if (!bPicked)
+	{
+		return false;
+	}
+	const int32 N = D.ChunkCells;
+	const int32 K = FMath::Clamp(D.PitRoomCells, 3, N - 2);
+	// Marge de chaque cote : une cellule au moins (la galerie), le reste tire
+	const int32 Free = N - K - 2;
+	const int32 OX = 1 + (Free > 0 ? static_cast<int32>(BRHash::Hash(Chunk.X, Chunk.Y, 1951, Seed) % static_cast<uint32>(Free + 1)) : 0);
+	const int32 OY = 1 + (Free > 0 ? static_cast<int32>(BRHash::Hash(Chunk.X, Chunk.Y, 1952, Seed) % static_cast<uint32>(Free + 1)) : 0);
+	OutRoom.Min = FIntPoint(Chunk.X * N + OX, Chunk.Y * N + OY);
+	OutRoom.Max = OutRoom.Min + FIntPoint(K, K);
+	return true;
+}
+
+bool ABRWorld::GetPitRoom(const FIntPoint& Chunk, FIntRect& OutRoom) const
+{
+	if (!Current || !HasPits())
+	{
+		return false;
+	}
+	if (Def().BoundsChunks > 0)
+	{
+		// Niveau fini : liste calculee au chargement (le tirage parmi tous les chunks coute trop cher pour chaque arete)
+		if (const FIntRect* R = BoundedPitRooms.Find(Chunk))
+		{
+			OutRoom = *R;
+			return true;
+		}
+		return false;
+	}
+	return ComputePitRoom(Chunk, OutRoom);
+}
+
+bool ABRWorld::IsPitRoomCell(int32 X, int32 Y) const
+{
+	FIntRect R;
+	return GetPitRoom(CellToChunk(FIntPoint(X, Y)), R) && X >= R.Min.X && X < R.Max.X && Y >= R.Min.Y && Y < R.Max.Y;
+}
+
+bool ABRWorld::HasPitAtCorner(int32 X, int32 Y) const
+{
+	FIntRect R;
+	// Coin interieur : les quatre cellules qui le touchent sont dans la salle
+	if (!GetPitRoom(CellToChunk(FIntPoint(X, Y)), R) || X < R.Min.X || X + 1 >= R.Max.X || Y < R.Min.Y || Y + 1 >= R.Max.Y)
+	{
+		return false;
+	}
+	return BRHash::Rand(X, Y, 1953, Seed) < Def().PitHoleChance;
+}
+
+float ABRWorld::GetPitHoleSize() const
+{
+	const FBRLevelDef& D = Def();
+	const float Passage = FMath::Max(120.f, D.PitPassage);
+	return FMath::Clamp(D.PitHoleSize, 40.f, D.CellSize - Passage);
+}
+
+bool ABRWorld::IsOverPit(const FVector& P, float Margin) const
+{
+	if (!Current || !HasPits())
+	{
+		return false;
+	}
+	const float S = CellSize();
+	const float Half = GetPitHoleSize() * 0.5f;
+	// Coin de la grille le plus proche (les fosses sont centrees sur les coins ; la marge reste sous la demi-cellule)
+	const int32 GX = FMath::RoundToInt(static_cast<float>(P.X) / S);
+	const int32 GY = FMath::RoundToInt(static_cast<float>(P.Y) / S);
+	const float R = FMath::Min(Half + FMath::Max(0.f, Margin), S * 0.5f);
+	if (FMath::Abs(static_cast<float>(P.X) - GX * S) >= R || FMath::Abs(static_cast<float>(P.Y) - GY * S) >= R)
+	{
+		return false;
+	}
+	return HasPitAtCorner(GX - 1, GY - 1);
+}
+
+bool ABRWorld::SegmentCrossesPit(const FVector& A, const FVector& B, float Margin) const
+{
+	if (!Current || !HasPits())
+	{
+		return false;
+	}
+	const float S = CellSize();
+	const float R = FMath::Min(GetPitHoleSize() * 0.5f + FMath::Max(0.f, Margin), S * 0.5f);
+	const FVector2D P0(A.X, A.Y);
+	const FVector2D D(B.X - A.X, B.Y - A.Y);
+	// Coins dont la fosse elargie peut toucher la boite englobante du segment
+	const int32 GX0 = FMath::FloorToInt((FMath::Min(A.X, B.X) - R) / S);
+	const int32 GX1 = FMath::CeilToInt((FMath::Max(A.X, B.X) + R) / S);
+	const int32 GY0 = FMath::FloorToInt((FMath::Min(A.Y, B.Y) - R) / S);
+	const int32 GY1 = FMath::CeilToInt((FMath::Max(A.Y, B.Y) + R) / S);
+	for (int32 GX = GX0; GX <= GX1; ++GX)
+	{
+		for (int32 GY = GY0; GY <= GY1; ++GY)
+		{
+			if (!HasPitAtCorner(GX - 1, GY - 1))
+			{
+				continue;
+			}
+			// Segment contre carre (methode des dalles)
+			const FVector2D Lo(GX * S - R, GY * S - R);
+			const FVector2D Hi(GX * S + R, GY * S + R);
+			float T0 = 0.f;
+			float T1 = 1.f;
+			bool bHit = true;
+			for (int32 Axis = 0; Axis < 2 && bHit; ++Axis)
+			{
+				const float O = Axis == 0 ? static_cast<float>(P0.X) : static_cast<float>(P0.Y);
+				const float Dir = Axis == 0 ? static_cast<float>(D.X) : static_cast<float>(D.Y);
+				const float L = Axis == 0 ? static_cast<float>(Lo.X) : static_cast<float>(Lo.Y);
+				const float H = Axis == 0 ? static_cast<float>(Hi.X) : static_cast<float>(Hi.Y);
+				if (FMath::Abs(Dir) < 1e-4f)
+				{
+					bHit = O > L && O < H;
+					continue;
+				}
+				float TA = (L - O) / Dir;
+				float TB = (H - O) / Dir;
+				if (TA > TB)
+				{
+					Swap(TA, TB);
+				}
+				T0 = FMath::Max(T0, TA);
+				T1 = FMath::Min(T1, TB);
+				bHit = T0 < T1;
+			}
+			if (bHit)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+EBREdge ABRWorld::PitEdge(int32 X, int32 Y, bool bEast, bool& bOut) const
+{
+	bOut = false;
+	if (!Current || !HasPits())
+	{
+		return EBREdge::Open;
+	}
+	const FIntPoint A(X, Y);
+	const FIntPoint B = bEast ? FIntPoint(X + 1, Y) : FIntPoint(X, Y + 1);
+	const FIntPoint Chunk = CellToChunk(A);
+	FIntRect R;
+	if (Chunk != CellToChunk(B) || !GetPitRoom(Chunk, R))
+	{
+		return EBREdge::Open; // bord du chunk : regle ordinaire
+	}
+	bOut = true;
+	auto In = [&R](const FIntPoint& C) { return C.X >= R.Min.X && C.X < R.Max.X && C.Y >= R.Min.Y && C.Y < R.Max.Y; };
+	const bool bInA = In(A);
+	const bool bInB = In(B);
+	if (bInA == bInB)
+	{
+		return EBREdge::Open; // dans la salle, ou dans la galerie qui la contourne
+	}
+	// Pourtour de la salle : un mur, perce de PitDoorsPerSide portes par cote (positions tirees)
+	const int32 K = R.Max.X - R.Min.X;
+	int32 Side = 0;
+	int32 Along = 0;
+	if (bEast)
+	{
+		Side = bInA ? 0 : 1; // 0 : cote +X, 1 : cote -X
+		Along = Y - R.Min.Y;
+	}
+	else
+	{
+		Side = bInA ? 2 : 3; // 2 : cote +Y, 3 : cote -Y
+		Along = X - R.Min.X;
+	}
+	for (int32 d = 0; d < FMath::Max(1, Def().PitDoorsPerSide); ++d)
+	{
+		const int32 Pos = static_cast<int32>(BRHash::Hash(R.Min.X, R.Min.Y, 1960 + Side * 8 + d, Seed) % static_cast<uint32>(FMath::Max(1, K)));
+		if (Pos == Along)
+		{
+			return EBREdge::Door;
+		}
+	}
+	return EBREdge::Wall;
+}
+
+void ABRWorld::GetPitRooms(TArray<FIntRect>& Out, const FIntPoint& AroundChunk, int32 Radius) const
+{
+	Out.Reset();
+	if (!Current || !HasPits())
+	{
+		return;
+	}
+	if (Def().BoundsChunks > 0)
+	{
+		BoundedPitRooms.GenerateValueArray(Out);
+		return;
+	}
+	for (int32 DX = -Radius; DX <= Radius; ++DX)
+	{
+		for (int32 DY = -Radius; DY <= Radius; ++DY)
+		{
+			FIntRect R;
+			if (ComputePitRoom(AroundChunk + FIntPoint(DX, DY), R))
+			{
+				Out.Add(R);
+			}
+		}
+	}
+}
+
+bool ABRWorld::FindPitRoomView(const FVector& From, FVector& OutLoc, FRotator& OutRot) const
+{
+	TArray<FIntRect> Rooms;
+	GetPitRooms(Rooms, CellToChunk(WorldToCell(From)), 6);
+	const float S = CellSize();
+	float Best = TNumericLimits<float>::Max();
+	for (const FIntRect& R : Rooms)
+	{
+		// Les quatre coins de la salle : on se place au fond de la cellule d'angle, regard en diagonale sur les fosses
+		for (int32 c = 0; c < 4; ++c)
+		{
+			const bool bHiX = (c & 1) != 0;
+			const bool bHiY = (c & 2) != 0;
+			const FIntPoint Cell(bHiX ? R.Max.X - 1 : R.Min.X, bHiY ? R.Max.Y - 1 : R.Min.Y);
+			const FVector Out(bHiX ? 1.f : -1.f, bHiY ? 1.f : -1.f, 0.f);
+			const FVector Loc = CellCenter(Cell, 0.f) + Out * (S * 0.5f - 95.f);
+			const float Dist = static_cast<float>(FVector::DistSquared2D(Loc, From));
+			if (Dist < Best)
+			{
+				Best = Dist;
+				OutLoc = Loc;
+				OutRot = FRotator(-24.f, FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(-Out.Y), static_cast<float>(-Out.X))), 0.f);
+			}
+		}
+	}
+	return Best < TNumericLimits<float>::Max();
+}
+
+bool ABRWorld::IsSafelyReachable(const FIntPoint& C) const
+{
+	return Def().BoundsChunks <= 0 || SafeReach.Num() == 0 || SafeReach.Contains(C);
+}
+
+bool ABRWorld::IsReachable(const FIntPoint& C) const
+{
+	return Def().BoundsChunks <= 0 || FullReach.Num() == 0 || FullReach.Contains(C);
+}
+
+void ABRWorld::PrepareLevelLayout()
+{
+	BoundedPitRooms.Reset();
+	SafeReach.Reset();
+	FullReach.Reset();
+	ForcedDoors.Reset();
+	const FBRLevelDef& D = Def();
+	if (D.BoundsChunks <= 0)
+	{
+		return;
+	}
+	// 1. Salles de fosses du niveau fini (tirage global, le meme chez tous les joueurs)
+	if (HasPits())
+	{
+		for (int32 X = -D.BoundsChunks; X < D.BoundsChunks; ++X)
+		{
+			for (int32 Y = -D.BoundsChunks; Y < D.BoundsChunks; ++Y)
+			{
+				FIntRect R;
+				if (ComputePitRoom(FIntPoint(X, Y), R))
+				{
+					BoundedPitRooms.Add(FIntPoint(X, Y), R);
+				}
+			}
+		}
+	}
+	// 2. Toute cellule hors des salles de fosses doit etre atteignable depuis le depart SANS les traverser (objectifs et
+	//    sorties n'iront que la : il y a toujours un chemin de contournement). Les murs tires au hasard enfermaient
+	//    parfois le depart (21 cellules sur 1024 avec -BRSeed=1 en v4.5) : tant qu'une zone reste isolee, on perce une porte
+	//    dans le mur qui la separe de la zone atteinte (le mur candidat de plus petit hachage : le meme chez tous)
+	const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+	TArray<FIntPoint> Queue;
+	auto Grow = [&](bool bAvoidPits, TSet<FIntPoint>& Out)
+	{
+		for (int32 Head = 0; Head < Queue.Num(); ++Head)
+		{
+			const FIntPoint Cur = Queue[Head];
+			for (const FIntPoint& Dir : Dirs)
+			{
+				const FIntPoint N = Cur + Dir;
+				if (Out.Contains(N) || !IsCellInBounds(N.X, N.Y) || !CanStep(Cur, N) || (bAvoidPits && IsPitRoomCell(N.X, N.Y)))
+				{
+					continue;
+				}
+				Out.Add(N);
+				Queue.Add(N);
+			}
+		}
+		Queue.Reset();
+	};
+	SafeReach.Add(FIntPoint(0, 0));
+	Queue.Add(FIntPoint(0, 0));
+	Grow(true, SafeReach);
+	for (int32 Guard = 0; Guard < 512; ++Guard)
+	{
+		bool bFound = false;
+		uint32 BestH = 0;
+		FIntPoint BestKey(0, 0);
+		FIntPoint BestCell(0, 0);
+		for (const FIntPoint& C : SafeReach)
+		{
+			for (const FIntPoint& Dir : Dirs)
+			{
+				const FIntPoint N = C + Dir;
+				if (!IsCellInBounds(N.X, N.Y) || SafeReach.Contains(N) || IsPitRoomCell(N.X, N.Y))
+				{
+					continue;
+				}
+				const bool bEast = Dir.Y == 0;
+				const FIntPoint A = (Dir.X > 0 || Dir.Y > 0) ? C : N;
+				const FIntPoint Key(A.X * 2 + (bEast ? 1 : 0), A.Y);
+				const uint32 H = BRHash::Hash(Key.X, Key.Y, 1990, Seed);
+				if (!bFound || H < BestH || (H == BestH && (Key.X < BestKey.X || (Key.X == BestKey.X && Key.Y < BestKey.Y))))
+				{
+					bFound = true;
+					BestH = H;
+					BestKey = Key;
+					BestCell = N;
+				}
+			}
+		}
+		if (!bFound)
+		{
+			break;
+		}
+		ForcedDoors.Add(BestKey);
+		SafeReach.Add(BestCell);
+		Queue.Add(BestCell);
+		Grow(true, SafeReach);
+	}
+	// Puis en passant par les passages entre les fosses : les salles elles-memes doivent etre accessibles
+	FullReach.Add(FIntPoint(0, 0));
+	Queue.Add(FIntPoint(0, 0));
+	Grow(false, FullReach);
+	int32 Total = 0;
+	for (int32 X = -D.BoundsChunks * D.ChunkCells; X < D.BoundsChunks * D.ChunkCells; ++X)
+	{
+		for (int32 Y = -D.BoundsChunks * D.ChunkCells; Y < D.BoundsChunks * D.ChunkCells; ++Y)
+		{
+			Total += IsWalkable(FIntPoint(X, Y)) ? 1 : 0;
+		}
+	}
+	FString Rooms;
+	for (const TPair<FIntPoint, FIntRect>& P : BoundedPitRooms)
+	{
+		const bool bOk = FullReach.Contains(P.Value.Min);
+		Rooms += FString::Printf(TEXT(" [cellules %d,%d a %d,%d%s]"), P.Value.Min.X, P.Value.Min.Y, P.Value.Max.X - 1, P.Value.Max.Y - 1,
+			bOk ? TEXT("") : TEXT(" INACCESSIBLE"));
+		if (!bOk)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("Salle de fosses inaccessible depuis le depart (chunk %d,%d)"), P.Key.X, P.Key.Y);
+		}
+	}
+	UE_LOG(LogBackrooms, Log, TEXT("Disposition : %d cellules, %d atteignables sans les fosses, %d avec ; %d porte(s) percee(s) pour relier les zones isolees ; %d salle(s) de fosses%s"),
+		Total, SafeReach.Num(), FullReach.Num(), ForcedDoors.Num(), BoundedPitRooms.Num(), *Rooms);
+}
+
+void ABRWorld::UpdatePitFalls()
+{
+	if (!HasAuthority() || !Current || !HasPits() || !bLevelReady)
+	{
+		return;
+	}
+	const FBRLevelDef& D = Def();
+	TArray<ABRCharacter*> Players;
+	GetPlayers(Players);
+	for (ABRCharacter* P : Players)
+	{
+		if (!IsValid(P) || P->IsDead() || P->IsDevFlying())
+		{
+			continue;
+		}
+		// Position telle que le serveur la connait (celle que le client lui envoie) : sous le bord d'une fosse, ou plus bas
+		// que tout fond possible
+		const FVector L = P->GetActorLocation();
+		const bool bInPit = L.Z < -D.PitKillDepth && IsOverPit(L, 60.f);
+		const bool bLost = L.Z < -(D.PitDepth + 600.f);
+		if (bInPit || bLost)
+		{
+			P->NotifyFellIntoPit();
+		}
+	}
+}
+
 bool ABRWorld::IsPoolCell(int32 X, int32 Y) const
 {
 	const FBRLevelDef& D = Def();
@@ -1830,6 +2272,10 @@ float ABRWorld::FloorZAt(const FVector& P) const
 	if (IsPoolCell(C.X, C.Y))
 	{
 		return -Def().PoolDepth;
+	}
+	if (IsOverPit(P))
+	{
+		return -Def().PitDepth; // v4.6 : fond de la fosse
 	}
 	return Def().DeckHeight > 0.f ? DeckZAt(P) : 0.f;
 }
@@ -1923,6 +2369,10 @@ bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, const ABRCharacter* Anchor, flo
 		if (!IsWalkable(Cell) || IsSpawnArea(Cell.X, Cell.Y) || IsPoolCell(Cell.X, Cell.Y) || !IsChunkLoaded(CellToChunk(Cell)))
 		{
 			continue;
+		}
+		if (!Info.bFlying && IsPitRoomCell(Cell.X, Cell.Y))
+		{
+			continue; // v4.6 : une entite terrestre n'apparait pas entre les fosses
 		}
 		const FVector Loc = CellCenter(Cell, Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
 		if (Info.bNeedsDark && LightLevelAt(Loc) > 0.12f)
@@ -2381,6 +2831,16 @@ EBREdge ABRWorld::EdgeE(int32 X, int32 Y) const
 	{
 		return EBREdge::Open;
 	}
+	bool bPit = false;
+	const EBREdge PE = PitEdge(X, Y, true, bPit);
+	if (bPit)
+	{
+		return PE;
+	}
+	if (ForcedDoors.Num() > 0 && ForcedDoors.Contains(FIntPoint(X * 2 + 1, Y)))
+	{
+		return EBREdge::Door; // v4.6 : zone isolee reliee au depart
+	}
 	if (D.Layout == EBRLayout::Rooms)
 	{
 		bool bCubicles = false;
@@ -2423,6 +2883,16 @@ EBREdge ABRWorld::EdgeN(int32 X, int32 Y) const
 	if (IsSpawnArea(X, Y) && IsSpawnArea(X, Y + 1))
 	{
 		return EBREdge::Open;
+	}
+	bool bPit = false;
+	const EBREdge PE = PitEdge(X, Y, false, bPit);
+	if (bPit)
+	{
+		return PE;
+	}
+	if (ForcedDoors.Num() > 0 && ForcedDoors.Contains(FIntPoint(X * 2, Y)))
+	{
+		return EBREdge::Door; // v4.6 : zone isolee reliee au depart
 	}
 	if (D.Layout == EBRLayout::Rooms)
 	{
@@ -2481,6 +2951,14 @@ bool ABRWorld::HasPillar(int32 X, int32 Y) const
 	if (D.Layout != EBRLayout::Rooms || D.PillarChance <= 0.f)
 	{
 		return false;
+	}
+	if (HasPits())
+	{
+		// v4.6 : pas de pilier dans une salle de fosses ni sur son pourtour (le coin (+X,+Y) touche une cellule de la salle)
+		if (IsPitRoomCell(X, Y) || IsPitRoomCell(X + 1, Y) || IsPitRoomCell(X, Y + 1) || IsPitRoomCell(X + 1, Y + 1))
+		{
+			return false;
+		}
 	}
 	const bool bOpenZone = ZoneDensity(X, Y) < 0.5f;
 	if (D.bPillarGrid && bOpenZone)
@@ -2575,6 +3053,24 @@ FBRLightInfo ABRWorld::CellLight(int32 X, int32 Y) const
 		return L;
 	default:
 	{
+		FIntRect Room;
+		if (HasPits() && GetPitRoom(CellToChunk(FIntPoint(X, Y)), Room) && X >= Room.Min.X && X < Room.Max.X && Y >= Room.Min.Y && Y < Room.Max.Y)
+		{
+			// v4.6 : salle de fosses : neons reguliers une cellule sur deux, au-dessus des croisements des passages (centres
+			// des cellules), jamais au-dessus du vide ; ombres portees pour que les bords des fosses decoupent la lumiere et
+			// qu'elle n'eclaire pas les parois a travers la dalle
+			if (BRHash::PosMod(X - Room.Min.X, 2) != 0 || BRHash::PosMod(Y - Room.Min.Y, 2) != 0)
+			{
+				return L;
+			}
+			L.bHas = true;
+			L.bBroken = BRHash::Rand(X, Y, 1955, Seed) < 0.12f;
+			L.bFlicker = !L.bBroken && BRHash::Rand(X, Y, 1956, Seed) < 0.18f;
+			L.bShadow = true;
+			L.Offset = FVector::ZeroVector;
+			L.Yaw = BRHash::PosMod(X + Y, 4) == 0 ? 90.f : 0.f;
+			return L;
+		}
 		if (!bSpawn && IsDarkZone(X, Y))
 		{
 			return L;
@@ -2654,6 +3150,7 @@ bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntP
 	G.Add(From, 0.f);
 
 	const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+	const bool bPits = HasPits();
 	int32 Expanded = 0;
 	while (Open.Num() > 0 && Expanded < MaxNodes)
 	{
@@ -2680,7 +3177,9 @@ bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntP
 			{
 				continue;
 			}
-			const float NG = CurG + 1.f;
+			// v4.6 : traverser une salle de fosses coute plus cher : les entites prennent la galerie quand elle n'est pas
+			// beaucoup plus longue (dans la salle, elles suivent les passages, au centre des cellules)
+			const float NG = CurG + ((bPits && IsPitRoomCell(N.X, N.Y)) ? 3.f : 1.f);
 			if (const float* Old = G.Find(N))
 			{
 				if (*Old <= NG)

@@ -239,6 +239,11 @@ void ABREntity::BeginPlay()
 		M->GravityScale = 0.f;
 		M->SetMovementMode(MOVE_Flying);
 	}
+	else if (const ABRWorld* PW = World.Get())
+	{
+		// v4.6 : niveau a fosses : le deplacement refuse de quitter le sol (dernier garde-fou apres le chemin et le pilotage)
+		M->bCanWalkOffLedges = !PW->HasPits();
+	}
 
 	bHostileVariant = (Kind != EBREntityKind::Faceling) || FMath::FRand() < 0.15f;
 	VoiceTimer = FMath::FRandRange(2.f, 6.f);
@@ -503,10 +508,18 @@ void ABREntity::BuildHound(const TMap<FString, FLinearColor>* Tints)
 
 bool ABREntity::BuildHoundModel()
 {
-	// v4.5 : Hound fourni d'un seul tenant (SK_Hound : geometrie, pelage et poids d'origine), memes pattes que ci-dessous
+	// v4.5 : Hound fourni d'un seul tenant (SK_Hound : geometrie, pelage et poids d'origine), memes pattes que ci-dessous.
+	// v4.6 : hors profil Cinematique, derive allege SK_HoundLite (meme corps, meme squelette ; 45 % des meches de
+	// cheveux, deux fois plus larges : 88 % des triangles de l'original etaient des cheveux ; 89 000 sommets au lieu de
+	// 175 000) ; repli sur l'original s'il manque
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
-		if (USkeletalMesh* SkinMesh = A->SkeletalMesh(TEXT("SK_Hound")))
+		USkeletalMesh* SkinMesh = FBRSettings::Get().GraphicsProfile != 2 ? A->SkeletalMesh(TEXT("SK_HoundLite")) : nullptr;
+		if (!SkinMesh)
+		{
+			SkinMesh = A->SkeletalMesh(TEXT("SK_Hound"));
+		}
+		if (SkinMesh)
 		{
 			FBRSkinDriver Driver;
 			Driver.Skin = BRRig::AddSkin(this, Visual, SkinMesh, nullptr, PartComponents, true);
@@ -701,6 +714,11 @@ void ABREntity::AnimateClumpSkin(float Dt)
 				if (GetWorld()->LineTraceSingleByChannel(Hit, P + FVector(0.f, 0.f, 60.f), P - FVector(0.f, 0.f, 90.f), ECC_Visibility, Q))
 				{
 					P.Z = Hit.ImpactPoint.Z + 4.f;
+				}
+				else
+				{
+					// v4.6 : rien sous la main (bord d'une fosse) : elle reste en l'air, au niveau du corps, sans s'y poser
+					P.Z = GetActorLocation().Z - MyInfo().HalfHeight + 30.f;
 				}
 				return P;
 			};
@@ -1018,6 +1036,16 @@ void ABREntity::Tick(float DeltaSeconds)
 	bWantsMove = false;
 	if (HasAuthority())
 	{
+		// v4.6 : garde-fou : une entite tombee dans une fosse (ou sous le monde) disparait
+		if (const ABRWorld* PW = World.Get())
+		{
+			if (PW->HasPits() && GetActorLocation().Z < -PW->Def().PitKillDepth)
+			{
+				UE_LOG(LogBackrooms, Warning, TEXT("%s est tombee dans une fosse (%s) : retiree"), *MyInfo().Name, *GetActorLocation().ToString());
+				Destroy();
+				return;
+			}
+		}
 		Think(Dt);
 	}
 	else
@@ -1280,6 +1308,12 @@ bool ABREntity::IsDirectPathClear(const FVector& Goal) const
 	FVector End = Goal;
 	End.Z = Start.Z;
 	const float R = MyInfo().Radius * 0.8f;
+	// v4.6 : le vide d'une fosse n'arrete pas un balayage : une ligne droite au-dessus d'une fosse n'est pas un chemin
+	const ABRWorld* W = World.Get();
+	if (W && !MyInfo().bFlying && W->SegmentCrossesPit(Start, End, MyInfo().Radius + 10.f))
+	{
+		return false;
+	}
 	return !GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(R), Q);
 }
 
@@ -1302,8 +1336,39 @@ void ABREntity::MoveTowards(const FVector& Dest, float Speed)
 	{
 		return;
 	}
+	Dir = Dir.GetSafeNormal();
+	const ABRWorld* W = World.Get();
+	if (!I.bFlying && W && W->HasPits())
+	{
+		// v4.6 : navigation locale au bord des fosses : si le pas suivant mene au-dessus du vide, on glisse le long du bord
+		// (composante X ou Y qui reste sur le passage), sinon on s'arrete en attendant le prochain chemin
+		const FVector Loc = GetActorLocation();
+		const float Look = I.Radius + 35.f;
+		const float Keep = I.Radius * 0.6f;
+		if (W->IsOverPit(Loc + Dir * Look, Keep))
+		{
+			FVector Best = FVector::ZeroVector;
+			float BestDot = 0.f;
+			const FVector Alts[2] = { FVector(Dir.X, 0.f, 0.f), FVector(0.f, Dir.Y, 0.f) };
+			for (const FVector& Alt : Alts)
+			{
+				const FVector A = Alt.GetSafeNormal();
+				const float Dot = static_cast<float>(FVector::DotProduct(A, Dir));
+				if (!A.IsNearlyZero() && Dot > BestDot && !W->IsOverPit(Loc + A * Look, Keep))
+				{
+					Best = A;
+					BestDot = Dot;
+				}
+			}
+			if (Best.IsNearlyZero())
+			{
+				return;
+			}
+			Dir = Best;
+		}
+	}
 	bWantsMove = true;
-	AddMovementInput(Dir.GetSafeNormal(), 1.f);
+	AddMovementInput(Dir, 1.f);
 }
 
 void ABREntity::FollowPathTo(const FVector& Goal, float Speed, float Dt)
@@ -1317,9 +1382,18 @@ void ABREntity::FollowPathTo(const FVector& Goal, float Speed, float Dt)
 	const FIntPoint MyCell = W->WorldToCell(GetActorLocation());
 	const FIntPoint GoalCell = W->WorldToCell(Goal);
 	const float Dist = static_cast<float>(FVector::Dist2D(Goal, GetActorLocation()));
+	// v4.6 : dans une salle de fosses, on suit les passages (centres des cellules) et on ne coupe jamais au-dessus du vide
+	const bool bPitZone = !MyInfo().bFlying && (W->IsPitRoomCell(MyCell.X, MyCell.Y) || W->IsPitRoomCell(GoalCell.X, GoalCell.Y));
+	const float Accept = bPitZone ? 28.f : 70.f;
 	if (MyCell == GoalCell || (Dist < W->CellSize() * 2.5f && IsDirectPathClear(Goal)))
 	{
 		Path.Reset();
+		if (bPitZone && W->SegmentCrossesPit(GetActorLocation(), Goal, MyInfo().Radius + 10.f))
+		{
+			// Meme cellule mais d'un bras du passage a l'autre : par le croisement (centre de la cellule)
+			MoveTowards(W->CellCenter(MyCell, GetActorLocation().Z), Speed);
+			return;
+		}
 		MoveTowards(Goal, Speed);
 		return;
 	}
@@ -1339,7 +1413,7 @@ void ABREntity::FollowPathTo(const FVector& Goal, float Speed, float Dt)
 	if (Path.IsValidIndex(PathIndex))
 	{
 		const FVector Wp = W->CellCenter(Path[PathIndex], GetActorLocation().Z);
-		if (FVector::Dist2D(Wp, GetActorLocation()) < 70.f)
+		if (FVector::Dist2D(Wp, GetActorLocation()) < Accept)
 		{
 			++PathIndex;
 		}
@@ -1391,7 +1465,9 @@ void ABREntity::Wander(float Speed, float Dt)
 		}
 	}
 	const FVector Wp = W->CellCenter(Path[PathIndex], GetActorLocation().Z);
-	if (FVector::Dist2D(Wp, GetActorLocation()) < 60.f)
+	const FIntPoint Here = W->WorldToCell(GetActorLocation());
+	const bool bPitZone = !MyInfo().bFlying && W->IsPitRoomCell(Here.X, Here.Y);
+	if (FVector::Dist2D(Wp, GetActorLocation()) < (bPitZone ? 28.f : 60.f))
 	{
 		++PathIndex;
 	}
@@ -2048,10 +2124,58 @@ void ABREntity::PickPatrolGoal(ABRWorld* W, const ABRCharacter* P)
 // Animation procedurale
 // =====================================================================================================================
 
+bool ABREntity::MeasureFeet()
+{
+	bFeetMeasured = true;
+	const FBREntityInfo& I = MyInfo();
+	const FTransform AT = GetActorTransform();
+	bool bAny = false;
+	for (FLimb& L : Limbs)
+	{
+		USceneComponent* C = L.Pivot.Get();
+		if (!C || (L.Type != ELimb::Shin && L.Type != ELimb::HoundLower))
+		{
+			continue;
+		}
+		// Au repos, le pied est a l'aplomb du genou, au niveau du sol (bas de la capsule)
+		const FVector Knee = AT.InverseTransformPosition(C->GetComponentLocation());
+		const FVector FootWorld = AT.TransformPosition(FVector(Knee.X, Knee.Y, -I.HalfHeight));
+		L.FootOffset = C->GetComponentTransform().InverseTransformPosition(FootWorld);
+		bAny = true;
+	}
+	return bAny;
+}
+
+bool ABREntity::LowestFootHeight(float& OutHeight) const
+{
+	const FTransform AT = GetActorTransform();
+	float MinZ = TNumericLimits<float>::Max();
+	for (const FLimb& L : Limbs)
+	{
+		const USceneComponent* C = L.Pivot.Get();
+		if (!C || (L.Type != ELimb::Shin && L.Type != ELimb::HoundLower))
+		{
+			continue;
+		}
+		const FVector Foot = AT.InverseTransformPosition(C->GetComponentTransform().TransformPosition(L.FootOffset));
+		MinZ = FMath::Min(MinZ, static_cast<float>(Foot.Z));
+	}
+	if (MinZ == TNumericLimits<float>::Max())
+	{
+		return false;
+	}
+	OutHeight = MinZ + MyInfo().HalfHeight - AppliedGroundZ;
+	return true;
+}
+
 void ABREntity::Animate(float Dt)
 {
 	const float Speed = static_cast<float>(GetVelocity().Size2D());
 	const bool bFrozen = State == EState::Frozen;
+	if (!bFeetMeasured)
+	{
+		MeasureFeet(); // avant la premiere pose : les pivots sont encore au repos
+	}
 	// v4.5 : amplitude du pas selon la vitesse (jusqu'a 1,5 x en poursuite), cadence deduite de la distance parcourue :
 	// pendant l'appui, le pied recule exactement de ce dont le corps avance (2 L sin A par demi-cycle) : pas de glissement
 	const float Gait = FMath::Clamp(Speed / 220.f, 0.f, 1.5f);
@@ -2121,12 +2245,23 @@ void ABREntity::Animate(float Dt)
 		AnimateLimbs(Dt, Gait);
 	}
 
-	// Rebond de la marche, accroupissement (Faceling), palpitation de la masse (Skin-Stealer)
+	// Accroupissement (Faceling), palpitation de la masse (Skin-Stealer)
 	// v4.5 : armee (le corps se tasse), frappe (fente vers l'avant), sursaut de la detection
+	// v4.6 : appui au sol : le corps descend ou remonte pour que le pied le plus bas (jambe d'appui, genou tendu) touche
+	// le sol a chaque instant du pas : plus de pieds qui flottent quand les jambes sont ecartees, ni de pied sous le sol
+	// quand les genoux se plient pour l'armee (remplace le rebond et le tassement fixes de la v4.5)
 	const float Strike = StrikeCurve();
-	const float Bob = FMath::Abs(FMath::Sin(AnimTime)) * 3.f * FMath::Min(Gait, 1.f);
-	const float Crouch = WindupAnim * 7.f + AlertAnim * 3.f;
-	Visual->SetRelativeLocation(VisualBase + FVector(Strike * 16.f - WindupAnim * 4.f, 0.f, Bob - HideCrouch * 70.f - Crouch));
+	float FootH = 0.f;
+	float Crouch = WindupAnim * 7.f + AlertAnim * 3.f;
+	float Bob = FMath::Abs(FMath::Sin(AnimTime)) * 3.f * FMath::Min(Gait, 1.f);
+	if (LowestFootHeight(FootH))
+	{
+		GroundAdjust = FMath::FInterpTo(GroundAdjust, FMath::Clamp(-FootH, -30.f, 30.f), Dt, 20.f);
+		Crouch = AlertAnim * 3.f;
+		Bob = GroundAdjust;
+	}
+	AppliedGroundZ = Bob - HideCrouch * 70.f - Crouch;
+	Visual->SetRelativeLocation(VisualBase + FVector(Strike * 16.f - WindupAnim * 4.f, 0.f, AppliedGroundZ));
 	if (Kind == EBREntityKind::Faceling)
 	{
 		Visual->SetRelativeRotation(FRotator(-HideCrouch * 25.f, 0.f, 0.f));

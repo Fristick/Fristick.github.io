@@ -7,6 +7,53 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Nouveautés de la version 4.6** (fosses du Niveau 0) : état des lieux dans [`Docs/AUDIT_v4.6.md`](Docs/AUDIT_v4.6.md),
+rapport, vérifications et commandes dans [`Docs/RAPPORT_v4.6.md`](Docs/RAPPORT_v4.6.md).
+> **Toujours rien de compilé ni de lancé dans Unreal** (conteneur sans GPU ni moteur). La génération a été rejouée en
+> Python sur 300 graines, la géométrie rendue dans Blender : ce sont des contrôles hors moteur, **pas une validation du
+> jeu**. Le rapport donne les commandes à lancer pour la valider.
+
+- **Salles de fosses** (« Hole Variation » du wiki), au Niveau 0 :
+  - une salle jaune de 17,5 m (5 × 5 cellules), même papier peint, moquette, plafond et néons, percée d'une **grille de
+    fosses carrées** de 2 m (jusqu'à 16) ;
+  - entre les fosses, des **passages** de 1,5 m ; une **galerie** fait le tour de la salle, et chaque côté a une porte ;
+  - **bords épais** : tranche de moquette, puis dalle de 30 cm ;
+  - **parois** de béton de plus en plus sombres jusqu'à un fond noir à 14 m : la profondeur se perd dans l'obscurité,
+    sans grain ni effet VHS ;
+  - la lampe accroche les parois proches ;
+  - néons alignés au-dessus des passages, **avec ombres** ;
+  - au moins une salle par partie, jamais près du départ (paramètres `Pit*` dans `BRLevels.cpp`).
+- **Vraie génération** :
+  - la dalle du chunk est découpée autour des ouvertures (aucune collision au-dessus du vide) ;
+  - la salle est réservée avant les murs, les cachettes, les objets et les sorties ;
+  - mêmes fosses chez tous les joueurs, quel que soit l'ordre de chargement des chunks.
+- **Défaut corrigé** : en v4.5, les murs tirés au hasard enfermaient des zones entières du Niveau 0 (avec
+  `-BRSeed=1`, le départ ne donnait accès qu'à 21 cellules sur 1 024). Des portes sont maintenant percées au chargement
+  pour tout relier au départ. Cassettes et sorties sont toujours atteignables **sans traverser de salle de fosses**.
+- **Chute** :
+  - on tombe vraiment en quittant un passage ;
+  - sous 4,50 m, le **serveur** constate la chute, et c'est la mort par le système existant ;
+  - le corps finit au fond (pas de chute infinie) et personne ne peut le relever ;
+  - réveil au point de départ.
+
+  Ce n'est pas une sortie : seul, on recommence un Niveau 0 neuf.
+- **IA** :
+  - les entités terrestres contournent les fosses : galerie préférée par l'A*, passages suivis au centre des cellules ;
+  - pas de raccourci au-dessus du vide ;
+  - au bord, elles glissent le long du passage ;
+  - un dernier garde-fou les empêche de quitter le sol.
+- **Mode développeur** :
+  - **Suppr** (ou la console `BRPits`) place le joueur au bord de la salle ;
+  - **graine de démonstration 9** : `-BRSeed=9`, ou `BRSeed 9` en console.
+- **Entités** :
+  - les rigs v4.5 ont été vérifiés en mouvement (`Docs/v46/blender_rigs_en_mouvement.jpg`) ;
+  - **appuis au sol** : la jambe d'appui touche le sol à chaque instant du pas (avant, les pieds flottaient jusqu'à
+    7,9 % de la taille du Wretch en poursuite) ;
+  - **Hound allégé** `SK_HoundLite` (−49 % de sommets, mêmes corps et squelette ; l'original reste en Cinématique).
+- **Détail** : chambranles autour des portes du Niveau 0.
+- **Test automatique** : `-BRAutoTestPits` (vue, mesures dans chaque profil, Lumen logiciel, lampe, IA, chute,
+  réveil).
+
 **Nouveautés de la version 4.5** (qualité visuelle, entités, ray tracing, preuves) : audit dans
 [`Docs/AUDIT_v4.5.md`](Docs/AUDIT_v4.5.md), rapport et limites dans [`Docs/RAPPORT_v4.5.md`](Docs/RAPPORT_v4.5.md).
 > **Rien n'a encore été compilé ni lancé dans Unreal** : le travail a été fait sans le moteur (conteneur Linux sans GPU).
@@ -85,6 +132,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
     | **F10** | jumpscare suivant (une entité à chaque appui) |
     | **Fin** | objectifs remplis (sorties ouvertes) |
     | **Inser** | coupure de courant |
+    | **Suppr** | v4.6 : bord de la salle de fosses (Niveau 0, graine 9 si besoin) |
 - **Corps du joueur animé** (3e personne et coéquipiers) : la combinaison hazmat est maintenant un **maillage à
   squelette** (`SK_Hazmat`, 79 os) dont la peau se plie aux genoux, aux coudes et aux épaules, sans coutures. Le C++ le
   pose **os par os** (marche, course, accroupi, nage, échelle, mort) ; l'objet tenu suit la main droite. Sans ce
@@ -409,7 +457,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
    *(Si la compilation échoue : clic droit sur le `.uproject` → « Generate Visual Studio project files »,
    ouvrez `Backrooms.sln` et compilez la configuration `Development Editor`.)*
 3. Au **premier** lancement de l'éditeur, le script `Content/Python/init_unreal.py` importe **automatiquement**
-   toutes les ressources : 73 textures (dont 28 normal maps), 33 icônes et images d'interface, 80 sons, 127 modèles (FBX) et 7 maillages à squelette. Il crée aussi
+   toutes les ressources : 73 textures (dont 28 normal maps), 33 icônes et images d'interface, 80 sons, 127 modèles (FBX) et 8 maillages à squelette. Il crée aussi
    les matériaux (`M_BR_World`, `M_BR_Mesh`, `M_BR_Skin`, `M_BR_WaterSurface`) et la carte `/Game/Backrooms/Maps/L_Backrooms`.
    Une barre de progression s'affiche, puis un message « Import terminé ».
    **Si vous aviez déjà importé une version précédente**, le script le détecte (`Saved/BackroomsSetup.txt`) et réimporte tout automatiquement.
@@ -462,12 +510,13 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 **Commandes console** (touche `²` ou `` ` ``) :
 `BRLevel 37` (aller à un niveau) · `BRGod` (invincible) · `BRSpawn 0..8` (faire apparaître une entité ; 8 = Bacteria) ·
 `BRGiveAll` (remplit l'inventaire) · `BRBlackout` (coupure de courant) · `BRObjectives` (valide les objectifs) ·
-`BRSensitivity 1.5` · `BRInvertY`.
-Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau.
+`BRSensitivity 1.5` · `BRInvertY` · v4.6 : `BRPits` (bord de la salle de fosses) · `BRSeed 9` (recharge le niveau avec
+cette graine, hôte seulement).
+Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau ; `-BRSeed=9` pour une disposition fixe.
 
 **Mode développeur** (voir les nouveautés de la 4.4) : **Page préc. / Page suiv.** (niveau suivant / précédent),
 **Début** (nouvelle disposition), **F6** (vol libre), **F7** (invincible), **F10** (jumpscare suivant), **Fin**
-(objectifs remplis), **Inser** (coupure de courant).
+(objectifs remplis), **Inser** (coupure de courant), **Suppr** (salle de fosses).
 
 ---
 
@@ -590,6 +639,8 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
   elles vous ont vu y entrer juste devant elles). Idéal pendant les coupures, quand les Smilers rôdent.
 - **Mort** : vous vous réveillez au Niveau 0 avec l'équipement de départ (caméscope dans le sac, lampe, eau, bandage,
   piles).
+- **Fosses** (Niveau 0, v4.6) : restez sur les passages. Une chute est mortelle et personne ne peut vous relever. La
+  galerie qui fait le tour de la salle permet de l'éviter : cassettes et sorties ne sont jamais dedans.
 
 L'image garde un léger grain et un effet VHS (désactivables), sans cadre de caméscope depuis la 4.2.
 
@@ -682,6 +733,10 @@ Backrooms/
 │   ├── Blender/build_creatures.py    v4.5 : Wretch et Clump reconstruits (squelettes, peau cuite)
 │   ├── Blender/render_compare.py     v4.5 : rendus Blender avant / après (Docs/v45)
 │   ├── protect_assets.py             v4.5 : protection des modèles fournis (check / update / list)
+│   ├── verify_pitfalls.py            v4.6 : génération du Niveau 0 rejouée en Python (fosses, accès, raccords, IA)
+│   ├── Blender/render_pitroom.py     v4.6 : rendu Blender de la salle de fosses générée (Docs/v46)
+│   ├── Blender/check_rig_motion.py   v4.6 : maillages à squelette livrés, posés en mouvement et mesurés
+│   ├── Blender/build_hound_lite.py   v4.6 : SK_HoundLite (Hound allégé, même corps et même squelette)
 │   ├── Blender/import_user_models.py Découpe des modèles fournis en pièces articulées (hazmat, Bacteria, Deathmoth,
 │   │                                 Skin-Stealer, Faceling, Partygoer, Hound) + Smiler et Clump d'après les images,
 │   │                                 meubles et textures des scènes fournies (Niveau 4, Poolrooms)
@@ -712,6 +767,11 @@ blender -b -P Tools/Blender/build_hazmat_skeletal.py -- Tools/SourceModels   # c
 python Tools/Blender/build_entity_skeletal.py -- faceling partygoer skinstealer hound --preview   # SK_* des modèles fournis
 python Tools/Blender/build_creatures.py -- wretch clump --preview                                 # Wretch, Clump
 python Tools/protect_assets.py check        # empreintes : dérivés protégés et originaux inchangés ?
+# v4.6
+python Tools/verify_pitfalls.py --seeds 1-24 --maps Docs/v46/cartes_24_graines.png   # fosses, accès, raccords, IA
+python Tools/verify_pitfalls.py --seed 9 --json pit.json && python Tools/Blender/render_pitroom.py -- pit.json Docs/v46/blender_fosses
+python Tools/Blender/check_rig_motion.py -- Docs/v46/blender_rigs_en_mouvement.jpg
+python Tools/Blender/build_hound_lite.py -- --preview Docs/v46/blender_hound_original_vs_lite.jpg   # (--force pour refaire)
 ```
 Les fichiers tirés des modèles fournis sont **protégés** : un script relancé ne les remplace pas (« PROTEGE, non
 remplacé »). Pour les régénérer volontairement, ajoutez `--force` : l'ancienne version est d'abord copiée dans
@@ -841,6 +901,15 @@ Le jeu contient deux tests qui se pilotent seuls et se ferment à la fin. Lancez
   la médiane, les 95e et 99e centiles des temps d'image, le 1 % le plus lent, les temps GPU, jeu et rendu, la mémoire
   et le temps de construction des chunks. Exemple :
   `UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestLevels=0,1,37 -BRSeed=4242`
+  **v4.6** : quand le Niveau 0 est testé, le scénario de la **salle de fosses** suit (avec `-BRSeed`, sinon la graine 9) :
+  - point de vue et salles notées (à comparer à `python Tools/verify_pitfalls.py --seed <n>`) ;
+  - mesures dans chaque profil (lignes `fosses_*` de `Mesures.csv`) et capture en Lumen logiciel ;
+  - lampe dans une fosse ;
+  - une Bacteria qui traverse la salle (jamais au-dessus du vide) ;
+  - chute du joueur (mort constatée par le serveur), corps au fond, réveil hors des fosses.
+
+  `-BRAutoTestPits` lance ce scénario seul :
+  `UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestPits -BRSeed=9`
   *Fermez les autres jeux pendant la mesure : ils partagent la carte graphique et faussent les images par seconde.*
 - **`-BRNetTest`** (deux joueurs sur le même PC) : lancez d'abord l'hôte, puis le client :
 

@@ -256,6 +256,10 @@
    "note": "derive de Tools/SourceModels (build_entity_skeletal.py)",
    "sha256": "b6b8cea4b21ddff11c72024f52286436c9ee54a8b9412f9191c1278479d24b7f"
   },
+  "RawAssets/Skeletal/SK_HoundLite.fbx": {
+   "note": "derive allege de SK_Hound (build_hound_lite.py)",
+   "sha256": "c471a11b6943f917007cc2f2307dde2ee24b53fda436a4665b1bd86fe83f731c"
+  },
   "RawAssets/Skeletal/SK_Partygoer.fbx": {
    "note": "derive de Tools/SourceModels (build_entity_skeletal.py)",
    "sha256": "18afc4c8287dbb3d5298888160fef5a8a053c0d543a5de397adce32bebce975c"

@@ -46,6 +46,7 @@ PROTECTED_PATTERNS = [
     "RawAssets/Skeletal/SK_Partygoer.fbx",
     "RawAssets/Skeletal/SK_SkinStealer.fbx",
     "RawAssets/Skeletal/SK_Hound.fbx",
+    "RawAssets/Skeletal/SK_HoundLite.fbx",
     "RawAssets/Textures/T_Hazmat_*.jpg",
     "RawAssets/Textures/T_Deathmoth.jpg",
     "RawAssets/Textures/T_SkinStealer_*.jpg",

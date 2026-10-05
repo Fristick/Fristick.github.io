@@ -28,6 +28,8 @@
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "DynamicRHI.h"
 #include "Engine/GameViewportClient.h"
 #include "HAL/IConsoleManager.h"
@@ -492,6 +494,16 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	if (IsDevMode() && IsLocalController() && !bInMenu)
 	{
 		UpdateDevKeys();
+	}
+	if (bPendingPitTeleport && IsLocalController())
+	{
+		// v4.6 : BRPits a lance le Niveau 0 (graine de demonstration) : placement des que le niveau est construit
+		const ABRWorld* PW = ABRWorld::Get(this);
+		if (PW && PW->IsLevelReady() && !PW->IsTransitioning() && PW->GetLevelNumber() == 0 && PW->GetLevelTime() > 0.3f)
+		{
+			bPendingPitTeleport = false;
+			BRPits();
+		}
 	}
 
 	if (bPendingNewSave)
@@ -1218,6 +1230,10 @@ void ABRPlayerController::UpdateDevKeys()
 	else if (WasInputKeyJustPressed(EKeys::Insert))
 	{
 		BRBlackout();
+	}
+	else if (WasInputKeyJustPressed(EKeys::Delete))
+	{
+		BRPits();
 	}
 	else if (WasInputKeyJustPressed(EKeys::F6) && C)
 	{
@@ -1984,6 +2000,62 @@ void ABRPlayerController::BRLevel(int32 Number)
 		UpdateInputMode();
 		W->RequestTransition(Number);
 	}
+}
+
+void ABRPlayerController::BRPits()
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	ABRCharacter* C = GetBRCharacter();
+	if (!W || !C)
+	{
+		return;
+	}
+	FVector Loc;
+	FRotator Rot;
+	if (W->IsLevelReady() && !W->IsTransitioning() && W->FindPitRoomView(C->GetActorLocation(), Loc, Rot))
+	{
+		const float Half = C->GetCapsuleComponent() ? C->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+		Loc.Z = Half + 5.f;
+		C->SetActorLocation(Loc, false, nullptr, ETeleportType::TeleportPhysics);
+		C->GetCharacterMovement()->StopMovementImmediately();
+		SetControlRotation(Rot);
+		bDevSession = true;
+		ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9V : salle de fosses (Niveau %d, graine %u). Attention au bord."), W->GetLevelNumber(),
+			W->GetSeed()), 4.f, FLinearColor(0.6f, 0.9f, 1.f));
+		return;
+	}
+	if (!HasAuthority())
+	{
+		ABRHUD::Notify(this, TEXT("Pas de salle de fosses dans ce niveau (l'h\u00f4te peut charger le Niveau 0 : BRPits)."), 4.f);
+		return;
+	}
+	// Pas de salle ici : Niveau 0 avec la graine de demonstration, puis placement au bord des fosses
+	bDevSession = true;
+	bInMenu = false;
+	ShowAddressBox(false);
+	UpdateInputMode();
+	bPendingPitTeleport = true;
+	ABRHUD::Notify(this, FString::Printf(TEXT("MODE D\u00c9V : Niveau 0, graine de d\u00e9monstration %u"), ABRWorld::DemoSeed), 3.f,
+		FLinearColor(0.6f, 0.9f, 1.f));
+	W->RequestTransition(0, false, ABRWorld::SeedFromUser(ABRWorld::DemoSeed, 0));
+}
+
+void ABRPlayerController::BRSeed(int32 Number)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!W)
+	{
+		return;
+	}
+	if (!HasAuthority())
+	{
+		ABRHUD::Notify(this, TEXT("BRSeed : r\u00e9serv\u00e9 \u00e0 l'h\u00f4te de la partie."), 3.f);
+		return;
+	}
+	bDevSession = true;
+	const int32 Level = W->GetLevelNumber();
+	ABRHUD::Notify(this, FString::Printf(TEXT("Niveau %d, graine %d"), Level, Number), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
+	W->RequestTransition(Level, false, ABRWorld::SeedFromUser(static_cast<uint32>(Number), Level));
 }
 
 void ABRPlayerController::BRGod()

@@ -1,0 +1,150 @@
+{
+ "SK_Faceling": {
+  "marche 0": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 90": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.61
+  },
+  "marche 180": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 270": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.305
+  },
+  "poursuite": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.915
+  },
+  "frappe": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.61
+  }
+ },
+ "SK_Partygoer": {
+  "marche 0": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 90": {
+   "aretes_hors_bornes_pct": 0.071,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 180": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 270": {
+   "aretes_hors_bornes_pct": 0.071,
+   "triangles_effondres_pct": 0.0
+  },
+  "poursuite": {
+   "aretes_hors_bornes_pct": 0.157,
+   "triangles_effondres_pct": 0.03
+  },
+  "frappe": {
+   "aretes_hors_bornes_pct": 1.069,
+   "triangles_effondres_pct": 0.163
+  }
+ },
+ "SK_SkinStealer": {
+  "marche 0": {
+   "aretes_hors_bornes_pct": 0.008,
+   "triangles_effondres_pct": 0.003
+  },
+  "marche 90": {
+   "aretes_hors_bornes_pct": 0.157,
+   "triangles_effondres_pct": 0.008
+  },
+  "marche 180": {
+   "aretes_hors_bornes_pct": 0.018,
+   "triangles_effondres_pct": 0.001
+  },
+  "marche 270": {
+   "aretes_hors_bornes_pct": 0.153,
+   "triangles_effondres_pct": 0.007
+  },
+  "poursuite": {
+   "aretes_hors_bornes_pct": 0.333,
+   "triangles_effondres_pct": 0.012
+  },
+  "frappe": {
+   "aretes_hors_bornes_pct": 0.369,
+   "triangles_effondres_pct": 0.02
+  }
+ },
+ "SK_Hound": {
+  "marche 0": {
+   "aretes_hors_bornes_pct": 0.005,
+   "triangles_effondres_pct": 0.001
+  },
+  "marche 90": {
+   "aretes_hors_bornes_pct": 0.04,
+   "triangles_effondres_pct": 0.002
+  },
+  "marche 180": {
+   "aretes_hors_bornes_pct": 0.008,
+   "triangles_effondres_pct": 0.001
+  },
+  "marche 270": {
+   "aretes_hors_bornes_pct": 0.04,
+   "triangles_effondres_pct": 0.002
+  },
+  "poursuite": {
+   "aretes_hors_bornes_pct": 0.057,
+   "triangles_effondres_pct": 0.005
+  },
+  "frappe": {
+   "aretes_hors_bornes_pct": 0.034,
+   "triangles_effondres_pct": 0.001
+  }
+ },
+ "SK_Wretch": {
+  "marche 0": {
+   "aretes_hors_bornes_pct": 0.005,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 90": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 180": {
+   "aretes_hors_bornes_pct": 0.008,
+   "triangles_effondres_pct": 0.0
+  },
+  "marche 270": {
+   "aretes_hors_bornes_pct": 0.0,
+   "triangles_effondres_pct": 0.0
+  },
+  "poursuite": {
+   "aretes_hors_bornes_pct": 0.003,
+   "triangles_effondres_pct": 0.0
+  },
+  "frappe": {
+   "aretes_hors_bornes_pct": 0.226,
+   "triangles_effondres_pct": 0.049
+  }
+ },
+ "SK_Clump": {
+  "marche 0": {
+   "aretes_hors_bornes_pct": 0.245,
+   "triangles_effondres_pct": 0.016
+  },
+  "marche 90": {
+   "aretes_hors_bornes_pct": 0.464,
+   "triangles_effondres_pct": 0.042
+  },
+  "marche 180": {
+   "aretes_hors_bornes_pct": 0.288,
+   "triangles_effondres_pct": 0.012
+  },
+  "marche 270": {
+   "aretes_hors_bornes_pct": 0.406,
+   "triangles_effondres_pct": 0.042
+  }
+ }
+}

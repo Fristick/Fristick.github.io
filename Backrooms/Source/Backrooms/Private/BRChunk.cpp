@@ -320,6 +320,222 @@ void ABRChunk::BuildDecks()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// v4.6 : salle de fosses
+// ---------------------------------------------------------------------------------------------------------------------
+
+void ABRChunk::BuildPitRoom(const FIntRect& Room)
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float WX0 = Coord.X * N * S;
+	const float WY0 = Coord.Y * N * S;
+	const float WX1 = WX0 + N * S;
+	const float WY1 = WY0 + N * S;
+	const float Half = W->GetPitHoleSize() * 0.5f;
+	const float Lip = FMath::Max(10.f, D.PitLipThickness);
+	const float Depth = FMath::Max(D.PitDepth, D.PitKillDepth + 300.f);
+	constexpr float Wall = 30.f;  // parois du puits : assez epaisses pour les champs de distance de Lumen logiciel
+	constexpr float Cut = 1.f;    // la dalle s'arrete 1 cm derriere les parois : aucune face confondue (scintillement)
+
+	// Fosses aux coins interieurs des cellules de la salle
+	TArray<FVector2D> Holes;
+	for (int32 X = Room.Min.X; X < Room.Max.X - 1; ++X)
+	{
+		for (int32 Y = Room.Min.Y; Y < Room.Max.Y - 1; ++Y)
+		{
+			if (W->HasPitAtCorner(X, Y))
+			{
+				Holes.Add(FVector2D((X + 1) * S, (Y + 1) * S));
+			}
+		}
+	}
+
+	// ---- Dalle du chunk, epaisse (le bord des fosses montre son epaisseur), sans aucune collision au-dessus du vide :
+	// grille des bords des ouvertures, cases pleines fusionnees en grands rectangles (bandes, puis bandes empilees)
+	TArray<float> XS = { WX0, WX1 };
+	TArray<float> YS = { WY0, WY1 };
+	for (const FVector2D& H : Holes)
+	{
+		XS.Add(static_cast<float>(H.X) - Half - Cut);
+		XS.Add(static_cast<float>(H.X) + Half + Cut);
+		YS.Add(static_cast<float>(H.Y) - Half - Cut);
+		YS.Add(static_cast<float>(H.Y) + Half + Cut);
+	}
+	auto SortUnique = [](TArray<float>& V)
+	{
+		V.Sort();
+		TArray<float> Out;
+		for (const float F : V)
+		{
+			if (Out.Num() == 0 || F - Out.Last() > 0.01f)
+			{
+				Out.Add(F);
+			}
+		}
+		V = MoveTemp(Out);
+	};
+	SortUnique(XS);
+	SortUnique(YS);
+	const int32 NX = XS.Num() - 1;
+	const int32 NY = YS.Num() - 1;
+	TArray<uint8> Solid;
+	Solid.SetNumZeroed(NX * NY);
+	for (int32 j = 0; j < NY; ++j)
+	{
+		for (int32 i = 0; i < NX; ++i)
+		{
+			const float CX = (XS[i] + XS[i + 1]) * 0.5f;
+			const float CY = (YS[j] + YS[j + 1]) * 0.5f;
+			bool bHole = false;
+			for (const FVector2D& H : Holes)
+			{
+				bHole |= FMath::Abs(CX - static_cast<float>(H.X)) < Half + Cut && FMath::Abs(CY - static_cast<float>(H.Y)) < Half + Cut;
+			}
+			Solid[j * NX + i] = bHole ? 0 : 1;
+		}
+	}
+	TArray<uint8> Used;
+	Used.SetNumZeroed(NX * NY);
+	auto Free = [&](int32 i, int32 j) { return Solid[j * NX + i] != 0 && Used[j * NX + i] == 0; };
+	for (int32 j = 0; j < NY; ++j)
+	{
+		for (int32 i = 0; i < NX; ++i)
+		{
+			if (!Free(i, j))
+			{
+				continue;
+			}
+			int32 I1 = i;
+			while (I1 + 1 < NX && Free(I1 + 1, j))
+			{
+				++I1;
+			}
+			int32 J1 = j;
+			bool bGrow = true;
+			while (bGrow && J1 + 1 < NY)
+			{
+				for (int32 k = i; k <= I1 && bGrow; ++k)
+				{
+					bGrow = Free(k, J1 + 1);
+				}
+				J1 += bGrow ? 1 : 0;
+			}
+			for (int32 jj = j; jj <= J1; ++jj)
+			{
+				for (int32 ii = i; ii <= I1; ++ii)
+				{
+					Used[jj * NX + ii] = 1;
+				}
+			}
+			const float AX = XS[i];
+			const float BX = XS[I1 + 1];
+			const float AY = YS[j];
+			const float BY = YS[J1 + 1];
+			AddBox(D.Floor, FVector((AX + BX) * 0.5f, (AY + BY) * 0.5f, -Lip * 0.5f), FVector(BX - AX, BY - AY, Lip));
+		}
+	}
+
+	// ---- Parois des puits : moquette coupee, tranche de la dalle, puis beton de plus en plus sombre (la lumiere des
+	// neons et de la lampe s'y accroche en haut, la profondeur se perd dans le noir), et un fond qui arrete la chute
+	FBRSurface Fiber = D.Floor;
+	Fiber.Tint = D.Floor.Tint * 0.42f;
+	Fiber.Roughness = 1.f;
+	Fiber.Stains = 0.f;
+	Fiber.AntiTile = 0.f;
+	const FBRSurface SlabEdge(TEXT("T_Concrete"), FLinearColor(0.58f, 0.56f, 0.5f), 120.f, 0.92f, 0.45f);
+	const FBRSurface Upper(TEXT("T_Concrete"), FLinearColor(0.34f, 0.32f, 0.27f), 200.f, 0.9f, 0.7f);
+	const FBRSurface MidS(TEXT("T_Concrete"), FLinearColor(0.15f, 0.14f, 0.12f), 260.f, 0.92f, 0.8f);
+	const FBRSurface Deep(TEXT("T_Concrete"), FLinearColor(0.045f, 0.042f, 0.038f), 300.f, 0.95f, 0.8f);
+	const FBRSurface Bottom(TEXT("T_Grime"), FLinearColor(0.012f, 0.011f, 0.01f), 200.f, 1.f, 0.f);
+	struct FBand
+	{
+		float Top;
+		float Bot;
+		const FBRSurface* Surf;
+	};
+	const float Z1 = -Lip - 150.f;
+	const float Z2 = FMath::Max(-650.f, -Depth * 0.5f);
+	const FBand Bands[] = {
+		{ -0.4f, -4.f, &Fiber },
+		{ -4.f, -Lip, &SlabEdge },
+		{ -Lip, Z1, &Upper },
+		{ Z1, Z2, &MidS },
+		{ Z2, -Depth, &Deep },
+	};
+	for (const FVector2D& H : Holes)
+	{
+		const float HX = static_cast<float>(H.X);
+		const float HY = static_cast<float>(H.Y);
+		for (const FBand& B : Bands)
+		{
+			if (B.Top - B.Bot < 0.5f)
+			{
+				continue;
+			}
+			const float ZC = (B.Top + B.Bot) * 0.5f;
+			const float ZS = B.Top - B.Bot;
+			// Parois +Y / -Y sur toute la largeur (elles couvrent les angles), +X / -X entre elles
+			AddBox(*B.Surf, FVector(HX, HY + Half + Wall * 0.5f, ZC), FVector(2.f * (Half + Wall), Wall, ZS));
+			AddBox(*B.Surf, FVector(HX, HY - Half - Wall * 0.5f, ZC), FVector(2.f * (Half + Wall), Wall, ZS));
+			AddBox(*B.Surf, FVector(HX + Half + Wall * 0.5f, HY, ZC), FVector(Wall, 2.f * Half, ZS));
+			AddBox(*B.Surf, FVector(HX - Half - Wall * 0.5f, HY, ZC), FVector(Wall, 2.f * Half, ZS));
+		}
+		AddBox(Bottom, FVector(HX, HY, -Depth - 10.f), FVector(2.f * (Half + Wall), 2.f * (Half + Wall), 20.f));
+	}
+}
+
+bool ABRChunk::PickFreeCell(int32 Salt, FIntPoint& Out, bool bFullScan) const
+{
+	const ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return false;
+	}
+	const int32 N = W->Def().ChunkCells;
+	const uint32 Seed = W->GetSeed();
+	const int32 X0 = Coord.X * N;
+	const int32 Y0 = Coord.Y * N;
+	auto IsFree = [&](const FIntPoint& Cell)
+	{
+		return W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y) && !HidingCells.Contains(Cell) && !W->IsPitRoomCell(Cell.X, Cell.Y)
+			&& W->IsSafelyReachable(Cell);
+	};
+	for (int32 Try = 0; Try < 8; ++Try)
+	{
+		const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, Salt * 31 + Try, Seed);
+		const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
+		if (IsFree(Cell))
+		{
+			Out = Cell;
+			return true;
+		}
+	}
+	if (!bFullScan)
+	{
+		return false;
+	}
+	const int32 Count = N * N;
+	const int32 Start = static_cast<int32>(BRHash::Hash(Coord.X, Coord.Y, Salt * 31 + 97, Seed) % static_cast<uint32>(Count));
+	for (int32 k = 0; k < Count; ++k)
+	{
+		const int32 Idx = (Start + k) % Count;
+		const FIntPoint Cell(X0 + Idx % N, Y0 + Idx / N);
+		if (IsFree(Cell))
+		{
+			Out = Cell;
+			return true;
+		}
+	}
+	return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Murs
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -471,6 +687,24 @@ void ABRChunk::AddDoorway(bool bAlongY, float Fixed, float Mid)
 		if (H - DoorTop >= 15.f)
 		{
 			AddWallSegment(bAlongY, Fixed, Mid - DW * 0.5f, Mid + DW * 0.5f, DoorTop, H, false, false);
+		}
+		if (D.bDoorCasings)
+		{
+			// v4.6 : chambranle sur les deux faces : deux jambages et une traverse en legere saillie (sans collision)
+			constexpr float CW = 9.f;
+			constexpr float CD = 2.5f;
+			for (int32 Side = -1; Side <= 1; Side += 2)
+			{
+				const float Face = Fixed + Side * (T * 0.5f + CD * 0.5f);
+				for (int32 J = -1; J <= 1; J += 2)
+				{
+					const float Along = Mid + J * (DW * 0.5f + CW * 0.5f);
+					AddBox(D.Trim, bAlongY ? FVector(Face, Along, DoorTop * 0.5f) : FVector(Along, Face, DoorTop * 0.5f),
+						bAlongY ? FVector(CD, CW, DoorTop) : FVector(CW, CD, DoorTop), false);
+				}
+				AddBox(D.Trim, bAlongY ? FVector(Face, Mid, DoorTop + CW * 0.5f) : FVector(Mid, Face, DoorTop + CW * 0.5f),
+					bAlongY ? FVector(CD, DW + 2.f * CW, CW) : FVector(DW + 2.f * CW, CD, CW), false);
+			}
 		}
 	}
 }
@@ -732,10 +966,17 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 	const FVector Mid(WX0 + ChunkW * 0.5f, WY0 + ChunkW * 0.5f, 0.f);
 	const uint32 Seed = InWorld->GetSeed();
 
+	// v4.6 : salle de fosses reservee avant tout le reste (murs, cachettes, sorties, objets et accessoires l'evitent)
+	bHasPitRoom = InWorld->GetPitRoom(Coord, PitRoom);
+
 	// ---- Sol & plafond ----
 	if (D.PoolChance > 0.f)
 	{
 		BuildPools();
+	}
+	else if (bHasPitRoom)
+	{
+		BuildPitRoom(PitRoom);
 	}
 	else
 	{
@@ -974,7 +1215,8 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 			{
 				AddLight(X, Y, L);
 			}
-			if (InWorld->IsWalkable(FIntPoint(X, Y)) && !HidingCells.Contains(FIntPoint(X, Y)) && !ExitCells.Contains(FIntPoint(X, Y)))
+			if (InWorld->IsWalkable(FIntPoint(X, Y)) && !HidingCells.Contains(FIntPoint(X, Y)) && !ExitCells.Contains(FIntPoint(X, Y))
+				&& !InWorld->IsPitRoomCell(X, Y))
 			{
 				BuildCellProps(X, Y);
 			}
@@ -1014,7 +1256,8 @@ void ABRChunk::BuildHidingSpots()
 			const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, 1742 + k * 37 + Try, Seed);
 			const FIntPoint Cell(Coord.X * N + static_cast<int32>(Hh % static_cast<uint32>(N)), Coord.Y * N + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
 			const FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
-			if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell))
+			if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell)
+				|| W->IsPitRoomCell(Cell.X, Cell.Y))
 			{
 				continue;
 			}
@@ -1489,29 +1732,11 @@ void ABRChunk::BuildPickupsAndExits()
 	}
 	const FBRLevelDef& D = W->Def();
 	const uint32 Seed = W->GetSeed();
-	const int32 N = D.ChunkCells;
 	const float S = D.CellSize;
-	const int32 X0 = Coord.X * N;
-	const int32 Y0 = Coord.Y * N;
 
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	auto PickCell = [&](int32 Salt, FIntPoint& Out) -> bool
-	{
-		for (int32 Try = 0; Try < 8; ++Try)
-		{
-			const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, Salt * 31 + Try, Seed);
-			const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-			if (W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y) && !HidingCells.Contains(Cell))
-			{
-				Out = Cell;
-				return true;
-			}
-		}
-		return false;
-	};
 
 	// ---- Objets a ramasser ----
 	struct FPickupRoll
@@ -1548,7 +1773,8 @@ void ABRChunk::BuildPickupsAndExits()
 			continue;
 		}
 		FIntPoint Cell(0, 0);
-		if (!PickCell(Roll.Salt, Cell))
+		// v4.6 : niveau fini, cassette garantie : on balaie tout le chunk si les essais tires tombent mal
+		if (!PickFreeCell(Roll.Salt, Cell, bBounded && Roll.Item == EBRItem::VHSTape))
 		{
 			continue;
 		}
@@ -1615,20 +1841,6 @@ void ABRChunk::PlanExits()
 	const int32 X0 = Coord.X * N;
 	const int32 Y0 = Coord.Y * N;
 
-	auto PickCell = [&](int32 Salt, FIntPoint& Out) -> bool
-	{
-		for (int32 Try = 0; Try < 8; ++Try)
-		{
-			const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, Salt * 31 + Try, Seed);
-			const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-			if (W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y) && !HidingCells.Contains(Cell))
-			{
-				Out = Cell;
-				return true;
-			}
-		}
-		return false;
-	};
 
 	const bool bBounded = D.BoundsChunks > 0;
 	if (!bBounded && Coord == FIntPoint(0, 0))
@@ -1657,7 +1869,7 @@ void ABRChunk::PlanExits()
 		case EBRExitStyle::Barn:
 		{
 			FIntPoint Cell(0, 0);
-			if (PickCell(1200 + i, Cell) && !W->IsSpawnArea(Cell.X, Cell.Y))
+			if (PickFreeCell(1200 + i, Cell, bBounded) && !W->IsSpawnArea(Cell.X, Cell.Y))
 			{
 				Pos = W->CellCenter(Cell, 0.f);
 				Yaw = 90.f * FMath::FloorToFloat(BRHash::Rand(Cell.X, Cell.Y, 1201, Seed) * 4.f);
@@ -1713,16 +1925,26 @@ void ABRChunk::PlanExits()
 		}
 		default:
 		{
-			// Sur une face de mur (mur fin ou cellule pleine)
-			for (int32 Try = 0; Try < 24 && !bFound; ++Try)
+			// Sur une face de mur (mur fin ou cellule pleine). v4.6 : niveau fini (nombre de sorties garanti) : apres les 24
+			// essais tires, on balaie toutes les cellules et directions du chunk dans un ordre tire
+			const int32 Tries = bBounded ? 24 + N * N * 4 : 24;
+			const int32 ScanStart = static_cast<int32>(BRHash::Hash(Coord.X, Coord.Y, 1500 + i * 64 + 63, Seed) % static_cast<uint32>(N * N * 4));
+			for (int32 Try = 0; Try < Tries && !bFound; ++Try)
 			{
 				const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, 1500 + i * 64 + Try, Seed);
-				const FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell))
+				FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
+				FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
+				if (Try >= 24)
 				{
-					continue;
+					const int32 Idx = (ScanStart + Try - 24) % (N * N * 4);
+					Cell = FIntPoint(X0 + (Idx / 4) % N, Y0 + (Idx / 4) / N);
+					Dir = GDirs[Idx % 4];
 				}
-				const FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
+				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell)
+					|| W->IsPitRoomCell(Cell.X, Cell.Y) || !W->IsSafelyReachable(Cell))
+				{
+					continue; // v4.6 : jamais dans une salle de fosses ; niveau fini : atteignable sans la traverser
+				}
 				const FIntPoint Next(Cell.X + Dir.X, Cell.Y + Dir.Y);
 				bool bFace = false;
 				if (W->IsSolid(Next.X, Next.Y))

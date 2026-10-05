@@ -79,6 +79,12 @@ public:
 	float GetScareDuration() const { return ScareDur; }
 	float GetScareImpact() const { return ScareImpact; }
 
+	/** v4.6, serveur : ce joueur est passe sous le bord d'une fosse (position validee par le serveur) : il meurt par le
+	 *  systeme existant, chez lui (RPC), sans reanimation possible. Mode developpeur invincible : il remonte au bord */
+	void NotifyFellIntoPit();
+	/** v4.6 : mort par chute dans une fosse (personne ne peut relever le corps) */
+	bool DiedInPit() const { return bDead && bFallDeath; }
+
 	/** v4.4, mode developpeur : vol libre a travers les murs (regard pour diriger, Saut pour monter, Course pour accelerer) */
 	void SetDevFly(bool bFly);
 	bool IsDevFlying() const { return bDevFly; }
@@ -249,6 +255,10 @@ protected:
 	UFUNCTION(Client, Reliable)
 	void ClientRevived(const FString& ByName);
 
+	/** v4.6 : le serveur a constate la chute dans une fosse */
+	UFUNCTION(Client, Reliable)
+	void ClientFellIntoPit();
+
 private:
 	/** Pion d'un autre joueur : corps, lampe, pas, remous */
 	void TickRemote(float Dt);
@@ -291,6 +301,12 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Dead)
 	bool bDead = false;
+
+	/** v4.6 : chute dans une fosse : le corps continue de tomber, pas de reanimation */
+	void FallDeath();
+	bool bFallDeath = false;
+	/** Serveur : derniere chute signalee (une seule RPC par chute) */
+	float LastFallNotify = -100.f;
 
 	bool bInputLocked = true;
 	/** Echelle en cours d'ascension */

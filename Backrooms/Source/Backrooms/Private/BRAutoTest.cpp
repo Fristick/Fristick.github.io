@@ -145,6 +145,18 @@ void ABRAutoTest::BeginPlay()
 			Levels.Add(D.Number);
 		}
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestPits")))
+	{
+		// v4.6 : la salle de fosses seule
+		AddPitSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Salle de fosses : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	BuildPlan(Levels);
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Debut : %d etapes, %d niveaux. Captures et rapport : %s"), Plan.Num(), Levels.Num(), *OutDir);
 }
@@ -257,6 +269,10 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 	for (const int32 Level : Levels)
 	{
 		AddLevelSteps(Level);
+	}
+	if (Levels.Contains(0))
+	{
+		AddPitSteps(); // v4.6
 	}
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
@@ -392,6 +408,26 @@ void ABRAutoTest::NoteNetState(const TCHAR* When)
 	if (C->GetActorLocation().Z < -500.f)
 	{
 		Note(TEXT("le personnage est tombe sous le sol"), true);
+	}
+	if (W->HasPits())
+	{
+		// v4.6 : salles de fosses vues par cette machine (l'hote et le client doivent avoir exactement les memes)
+		TArray<FIntRect> Rooms;
+		W->GetPitRooms(Rooms, FIntPoint(0, 0), 4);
+		FString List;
+		for (const FIntRect& R : Rooms)
+		{
+			int32 H = 0;
+			for (int32 X = R.Min.X; X < R.Max.X - 1; ++X)
+			{
+				for (int32 Y = R.Min.Y; Y < R.Max.Y - 1; ++Y)
+				{
+					H = H * 2 + (W->HasPitAtCorner(X, Y) ? 1 : 0);
+				}
+			}
+			List += FString::Printf(TEXT(" %d,%d->%d,%d motif %d"), R.Min.X, R.Min.Y, R.Max.X - 1, R.Max.Y - 1, H);
+		}
+		Note(FString::Printf(TEXT("  salles de fosses :%s"), *List));
 	}
 	if (W->Def().bWater)
 	{
@@ -542,83 +578,93 @@ void ABRAutoTest::BuildNetPlan()
 	});
 }
 
+void ABRAutoTest::StartMeasure()
+{
+	bMeasuring = true;
+	Frames = 0;
+	MeasureTime = 0.f;
+	Worst = 0.f;
+	GpuMs = GameMs = RenderMs = 0.0;
+	FrameMs.Reset();
+}
+
+void ABRAutoTest::EndMeasure(FLevelReport& R)
+{
+	bMeasuring = false;
+	R.AvgFPS = MeasureTime > 0.f ? Frames / MeasureTime : 0.f;
+	R.WorstMs = Worst * 1000.f;
+	CollectStats(R);
+	if (R.AvgFPS > 0.f && R.AvgFPS < 30.f)
+	{
+		Note(FString::Printf(TEXT("images par seconde faibles : %.0f"), R.AvgFPS), true);
+	}
+	if (Frames > 0)
+	{
+		Note(FString::Printf(TEXT("temps par image : GPU %.1f ms, jeu %.1f ms, rendu %.1f ms"), GpuMs / Frames, GameMs / Frames, RenderMs / Frames));
+		R.GpuMs = static_cast<float>(GpuMs / Frames);
+		R.GameMs = static_cast<float>(GameMs / Frames);
+		R.RenderMs = static_cast<float>(RenderMs / Frames);
+	}
+	// v4.5 : fluidite (percentiles), 1 % le plus lent, memoire, construction des chunks, mode de rendu reel
+	if (FrameMs.Num() > 0)
+	{
+		TArray<float> Sorted = FrameMs;
+		Sorted.Sort();
+		auto Pct = [&Sorted](float P) { return Sorted[FMath::Clamp(FMath::FloorToInt(P * (Sorted.Num() - 1)), 0, Sorted.Num() - 1)]; };
+		R.P50Ms = Pct(0.5f);
+		R.P95Ms = Pct(0.95f);
+		R.P99Ms = Pct(0.99f);
+		const int32 NLow = FMath::Max(1, Sorted.Num() / 100);
+		float SumLow = 0.f;
+		for (int32 i = Sorted.Num() - NLow; i < Sorted.Num(); ++i)
+		{
+			SumLow += Sorted[i];
+		}
+		R.Low1FPS = SumLow > 0.f ? 1000.f / (SumLow / NLow) : 0.f;
+		Note(FString::Printf(TEXT("fluidite : mediane %.1f ms, 95 %% %.1f ms, 99 %% %.1f ms, 1 %% le plus lent %.0f img/s"), R.P50Ms, R.P95Ms, R.P99Ms,
+			R.Low1FPS));
+	}
+	R.RamMB = static_cast<float>(FPlatformMemory::GetStats().UsedPhysical / (1024.0 * 1024.0));
+	FTextureMemoryStats TexStats;
+	RHIGetTextureMemoryStats(TexStats);
+	R.TexMB = static_cast<float>((TexStats.StreamingMemorySize + TexStats.NonStreamingMemorySize) / (1024.0 * 1024.0));
+	Note(FString::Printf(TEXT("memoire : processus %.0f Mo, textures %.0f Mo (memoire video dediee %.0f Mo)"), R.RamMB, R.TexMB,
+		TexStats.DedicatedVideoMemory / (1024.0 * 1024.0)));
+	if (ABRWorld* W = GetBRWorld())
+	{
+		R.ChunkMaxMs = W->MaxChunkBuildMs;
+		R.ChunkAvgMs = W->ChunksBuilt > 0 ? W->ChunkBuildMsTotal / W->ChunksBuilt : 0.f;
+		Note(FString::Printf(TEXT("construction des chunks : %d, moyenne %.1f ms, pire %.1f ms"), W->ChunksBuilt, R.ChunkAvgMs, R.ChunkMaxMs));
+		W->ResetChunkStats();
+	}
+	if (ABRPlayerController* PC = GetPC())
+	{
+		Note(PC->GetRenderModeText());
+	}
+	// -BRAutoTestGPU : detail du temps passe par le processeur graphique (dans Saved/Logs/Backrooms.log)
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestGPU")) && GEngine)
+	{
+		GEngine->Exec(GetWorld(), TEXT("ProfileGPU"));
+		GEngine->Exec(GetWorld(), TEXT("stat dumpframe -ms=0.4"));
+	}
+}
+
 void ABRAutoTest::AddLevelSteps(int32 Level)
 {
 	const FBRLevelDef& D = BRLevels::Get(Level);
 	AddLoad(Level, 8.f);
 	Add(FString::Printf(TEXT("Niveau %d : mesure"), Level), 4.f, [this]()
 	{
-		bMeasuring = true;
-		Frames = 0;
-		MeasureTime = 0.f;
-		Worst = 0.f;
-		GpuMs = GameMs = RenderMs = 0.0;
-		FrameMs.Reset();
+		StartMeasure();
 		return true;
 	});
 	Add(FString::Printf(TEXT("Niveau %d : capture"), Level), 1.f, [this, Level]()
 	{
-		bMeasuring = false;
 		FLevelReport& R = Report();
-		R.AvgFPS = MeasureTime > 0.f ? Frames / MeasureTime : 0.f;
-		R.WorstMs = Worst * 1000.f;
-		CollectStats(R);
+		EndMeasure(R);
 		if (R.Chunks == 0)
 		{
 			Note(TEXT("aucune salle chargee"), true);
-		}
-		if (R.AvgFPS > 0.f && R.AvgFPS < 30.f)
-		{
-			Note(FString::Printf(TEXT("images par seconde faibles : %.0f"), R.AvgFPS), true);
-		}
-		if (Frames > 0)
-		{
-			Note(FString::Printf(TEXT("temps par image : GPU %.1f ms, jeu %.1f ms, rendu %.1f ms"), GpuMs / Frames, GameMs / Frames, RenderMs / Frames));
-			R.GpuMs = static_cast<float>(GpuMs / Frames);
-			R.GameMs = static_cast<float>(GameMs / Frames);
-			R.RenderMs = static_cast<float>(RenderMs / Frames);
-		}
-		// v4.5 : fluidite (percentiles), 1 % le plus lent, memoire, construction des chunks, mode de rendu reel
-		if (FrameMs.Num() > 0)
-		{
-			TArray<float> Sorted = FrameMs;
-			Sorted.Sort();
-			auto Pct = [&Sorted](float P) { return Sorted[FMath::Clamp(FMath::FloorToInt(P * (Sorted.Num() - 1)), 0, Sorted.Num() - 1)]; };
-			R.P50Ms = Pct(0.5f);
-			R.P95Ms = Pct(0.95f);
-			R.P99Ms = Pct(0.99f);
-			const int32 NLow = FMath::Max(1, Sorted.Num() / 100);
-			float SumLow = 0.f;
-			for (int32 i = Sorted.Num() - NLow; i < Sorted.Num(); ++i)
-			{
-				SumLow += Sorted[i];
-			}
-			R.Low1FPS = SumLow > 0.f ? 1000.f / (SumLow / NLow) : 0.f;
-			Note(FString::Printf(TEXT("fluidite : mediane %.1f ms, 95 %% %.1f ms, 99 %% %.1f ms, 1 %% le plus lent %.0f img/s"), R.P50Ms, R.P95Ms, R.P99Ms,
-				R.Low1FPS));
-		}
-		R.RamMB = static_cast<float>(FPlatformMemory::GetStats().UsedPhysical / (1024.0 * 1024.0));
-		FTextureMemoryStats TexStats;
-		RHIGetTextureMemoryStats(TexStats);
-		R.TexMB = static_cast<float>((TexStats.StreamingMemorySize + TexStats.NonStreamingMemorySize) / (1024.0 * 1024.0));
-		Note(FString::Printf(TEXT("memoire : processus %.0f Mo, textures %.0f Mo (memoire video dediee %.0f Mo)"), R.RamMB, R.TexMB,
-			TexStats.DedicatedVideoMemory / (1024.0 * 1024.0)));
-		if (ABRWorld* W = GetBRWorld())
-		{
-			R.ChunkMaxMs = W->MaxChunkBuildMs;
-			R.ChunkAvgMs = W->ChunksBuilt > 0 ? W->ChunkBuildMsTotal / W->ChunksBuilt : 0.f;
-			Note(FString::Printf(TEXT("construction des chunks : %d, moyenne %.1f ms, pire %.1f ms"), W->ChunksBuilt, R.ChunkAvgMs, R.ChunkMaxMs));
-			W->ResetChunkStats();
-		}
-		if (ABRPlayerController* PC = GetPC())
-		{
-			Note(PC->GetRenderModeText());
-		}
-		// -BRAutoTestGPU : detail du temps passe par le processeur graphique (dans Saved/Logs/Backrooms.log)
-		if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestGPU")) && GEngine)
-		{
-			GEngine->Exec(GetWorld(), TEXT("ProfileGPU"));
-			GEngine->Exec(GetWorld(), TEXT("stat dumpframe -ms=0.4"));
 		}
 		Shot(FString::Printf(TEXT("L%02d_vue"), Level));
 		return true;
@@ -879,6 +925,393 @@ void ABRAutoTest::AddLevelSteps(int32 Level)
 	}
 }
 
+// =====================================================================================================================
+// v4.6 : salle de fosses du Niveau 0
+// =====================================================================================================================
+
+void ABRAutoTest::AddPitSteps()
+{
+	uint32 UserSeed = 0;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("BRSeed="), UserSeed) || UserSeed == 0)
+	{
+		UserSeed = ABRWorld::DemoSeed;
+	}
+	const uint32 LevelSeed = ABRWorld::SeedFromUser(UserSeed, 0);
+	static const TCHAR* const ProfileNames[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique") };
+
+	Add(TEXT("Fosses : chargement"), 0.f, [this, LevelSeed, UserSeed]()
+	{
+		ABRPlayerController* PC = GetPC();
+		ABRWorld* W = GetBRWorld();
+		if (!PC || !W || !GetPlayer() || W->IsTransitioning())
+		{
+			return false;
+		}
+		FLevelReport R;
+		R.Level = 0;
+		R.Title = FString::Printf(TEXT("Salle de fosses (BRSeed=%u)"), UserSeed);
+		R.Scene = TEXT("fosses");
+		R.FirstLogLine = Capture.IsValid() ? Capture->Num() : 0;
+		Reports.Add(R);
+		if (!bSettingsSaved)
+		{
+			SavedSettings = FBRSettings::Get();
+			bSettingsSaved = true;
+		}
+		// La transition avec la graine d'abord (une seconde demande pendant le fondu est ignoree), puis BRLevel pour fermer
+		// le menu principal s'il est ouvert
+		W->RequestTransition(0, false, LevelSeed);
+		PC->BRLevel(0);
+		return true;
+	});
+	Add(TEXT("Fosses : attente"), 6.f, [this, LevelSeed]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 0 || W->GetSeed() != LevelSeed)
+		{
+			return false;
+		}
+		C->bGodMode = true;
+		C->Sanity = 100.f;
+		C->Health = 100.f;
+		return true;
+	});
+	Add(TEXT("Fosses : disposition"), 0.2f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C)
+		{
+			return false;
+		}
+		TArray<FIntRect> Rooms;
+		W->GetPitRooms(Rooms, FIntPoint(0, 0), 4);
+		// Meme presentation que Tools/verify_pitfalls.py : les deux doivent donner les memes salles pour la meme graine
+		FString List;
+		int32 Holes = 0;
+		for (const FIntRect& R : Rooms)
+		{
+			int32 H = 0;
+			for (int32 X = R.Min.X; X < R.Max.X - 1; ++X)
+			{
+				for (int32 Y = R.Min.Y; Y < R.Max.Y - 1; ++Y)
+				{
+					H += W->HasPitAtCorner(X, Y) ? 1 : 0;
+				}
+			}
+			Holes += H;
+			List += FString::Printf(TEXT(" %d,%d->%d,%d (%d fosses)"), R.Min.X, R.Min.Y, R.Max.X - 1, R.Max.Y - 1, H);
+		}
+		Note(FString::Printf(TEXT("graine du niveau %u : %d salle(s) de fosses :%s"), W->GetSeed(), Rooms.Num(), *List), Rooms.Num() == 0 || Holes == 0);
+		const float Half = C->GetSimpleCollisionHalfHeight();
+		for (int32 Slot = 0; Slot < 4; ++Slot)
+		{
+			const FVector Spot = W->SpawnSpot(Slot, Half);
+			if (W->IsOverPit(Spot, 60.f))
+			{
+				Note(FString::Printf(TEXT("point d'apparition %d au-dessus d'une fosse"), Slot), true);
+			}
+		}
+		return true;
+	});
+	Add(TEXT("Fosses : point de vue"), 3.f, [this]()
+	{
+		if (ABRPlayerController* PC = GetPC())
+		{
+			PC->BRPits();
+		}
+		return true;
+	});
+	Add(TEXT("Fosses : capture"), 0.3f, [this]()
+	{
+		Shot(TEXT("L00_fosses_vue"));
+		return true;
+	});
+
+	// Cout de la salle dans chaque profil (meme point de vue, meme graine)
+	for (int32 P = 0; P < 3; ++P)
+	{
+		const FString Name = ProfileNames[P];
+		Add(FString::Printf(TEXT("Fosses : profil %s"), *Name), 3.f, [this, P, Name, UserSeed]()
+		{
+			ABRPlayerController::ApplyGraphicsProfile(P);
+			if (ABRPlayerController* PC = GetPC())
+			{
+				PC->ApplySettings();
+			}
+			FLevelReport R;
+			R.Level = 0;
+			R.Title = FString::Printf(TEXT("Fosses - %s (BRSeed=%u)"), *Name, UserSeed);
+			R.Scene = TEXT("fosses_") + Name;
+			R.FirstLogLine = Capture.IsValid() ? Capture->Num() : 0;
+			Reports.Add(R);
+			return true;
+		});
+		Add(FString::Printf(TEXT("Fosses : mesure %s"), *Name), 4.f, [this]()
+		{
+			StartMeasure();
+			return true;
+		});
+		Add(FString::Printf(TEXT("Fosses : capture %s"), *Name), 0.5f, [this, Name]()
+		{
+			EndMeasure(Report());
+			Shot(TEXT("L00_fosses_") + Name);
+			return true;
+		});
+	}
+	// Lumen logiciel (profil Qualite sans ray tracing materiel) : ombres, exposition, fuites de lumiere dans les puits
+	Add(TEXT("Fosses : Lumen logiciel"), 3.f, [this]()
+	{
+		ABRPlayerController::ApplyGraphicsProfile(1);
+		FBRSettings::Get().bHardwareRT = false;
+		FBRSettings::Get().GraphicsProfile = 3;
+		if (ABRPlayerController* PC = GetPC())
+		{
+			PC->ApplySettings();
+			Note(TEXT("Lumen logiciel : ") + PC->GetRenderModeText(true));
+		}
+		return true;
+	});
+	Add(TEXT("Fosses : capture Lumen logiciel"), 0.3f, [this]()
+	{
+		Shot(TEXT("L00_fosses_Lumen_logiciel"));
+		ABRPlayerController::ApplyGraphicsProfile(1);
+		if (ABRPlayerController* PC = GetPC())
+		{
+			PC->ApplySettings();
+		}
+		return true;
+	});
+
+	// Lampe torche plongee dans la fosse la plus proche (les parois doivent s'eclairer, le fond rester noir)
+	Add(TEXT("Fosses : lampe"), 1.2f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		ABRPlayerController* PC = GetPC();
+		if (!W || !C || !PC)
+		{
+			return false;
+		}
+		const float S = W->CellSize();
+		const FIntPoint Here = W->WorldToCell(C->GetActorLocation());
+		float Best = TNumericLimits<float>::Max();
+		FVector Hole = FVector::ZeroVector;
+		for (int32 DX = -3; DX <= 3; ++DX)
+		{
+			for (int32 DY = -3; DY <= 3; ++DY)
+			{
+				if (W->HasPitAtCorner(Here.X + DX, Here.Y + DY))
+				{
+					const FVector P((Here.X + DX + 1) * S, (Here.Y + DY + 1) * S, 0.f);
+					const float D = static_cast<float>(FVector::Dist2D(P, C->GetActorLocation()));
+					if (D < Best)
+					{
+						Best = D;
+						Hole = P;
+					}
+				}
+			}
+		}
+		if (Best == TNumericLimits<float>::Max())
+		{
+			Note(TEXT("aucune fosse pres du point de vue"), true);
+			return true;
+		}
+		// Au croisement de passages le plus proche de cette fosse, regard plonge vers son centre
+		const FVector Stand = W->CellCenter(W->WorldToCell(Hole - FVector(S * 0.5f, S * 0.5f, 0.f)), C->GetSimpleCollisionHalfHeight() + 5.f);
+		C->SetActorLocation(Stand, false, nullptr, ETeleportType::TeleportPhysics);
+		PC->SetControlRotation((Hole - FVector(0.f, 0.f, 350.f) - C->GetEyeLocation()).Rotation());
+		if (!C->IsFlashlightOn())
+		{
+			C->ToggleFlashlight();
+		}
+		return true;
+	});
+	Add(TEXT("Fosses : capture lampe"), 0.3f, [this]()
+	{
+		Shot(TEXT("L00_fosses_lampe"));
+		if (ABRCharacter* C = GetPlayer())
+		{
+			if (C->IsFlashlightOn())
+			{
+				C->ToggleFlashlight();
+			}
+		}
+		return true;
+	});
+
+	// IA : une Bacteria (entite terrestre) apparait a un coin de la salle et poursuit le joueur place au coin oppose
+	Add(TEXT("Fosses : IA"), 0.2f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C)
+		{
+			return false;
+		}
+		TArray<FIntRect> Rooms;
+		W->GetPitRooms(Rooms, W->CellToChunk(W->WorldToCell(C->GetActorLocation())), 4);
+		if (Rooms.Num() == 0)
+		{
+			Note(TEXT("IA : pas de salle de fosses"), true);
+			return true;
+		}
+		const FIntRect R = Rooms[0];
+		const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Bacteria);
+		C->bGodMode = true;
+		C->SetActorLocation(W->CellCenter(FIntPoint(R.Max.X - 1, R.Max.Y - 1), C->GetSimpleCollisionHalfHeight() + 5.f), false, nullptr,
+			ETeleportType::TeleportPhysics);
+		ABREntity* E = W->SpawnEntity(EBREntityKind::Bacteria, W->CellCenter(R.Min, Info.HalfHeight + 5.f));
+		if (!E)
+		{
+			Note(TEXT("IA : echec de l'apparition de la Bacteria"), true);
+			return true;
+		}
+		if (ABRPlayerController* PC = GetPC())
+		{
+			PC->SetControlRotation((E->GetActorLocation() - C->GetEyeLocation()).Rotation());
+		}
+		PitEntity = E;
+		bPitTrack = true;
+		PitMinZ = static_cast<float>(E->GetActorLocation().Z);
+		PitOverFrames = 0;
+		PitStartDist = static_cast<float>(FVector::Dist2D(E->GetActorLocation(), C->GetActorLocation()));
+		PitMinDist = PitStartDist;
+		return true;
+	});
+	Add(TEXT("Fosses : poursuite"), 14.f, []()
+	{
+		return true; // (suivi image par image dans Tick)
+	});
+	Add(TEXT("Fosses : bilan IA"), 0.2f, [this]()
+	{
+		bPitTrack = false;
+		ABREntity* E = PitEntity.Get();
+		Note(FString::Printf(TEXT("IA : Bacteria %s, point le plus bas Z = %.0f cm, %d image(s) au-dessus d'une fosse, distance au joueur %.0f -> %.0f cm"),
+			E ? TEXT("toujours la") : TEXT("DISPARUE"), PitMinZ, PitOverFrames, PitStartDist, PitMinDist), !E || PitMinZ < -30.f || PitOverFrames > 0);
+		if (PitMinDist > PitStartDist * 0.6f)
+		{
+			Note(TEXT("IA : la Bacteria s'est peu rapprochee (ne voit pas le joueur, ou bloquee au bord ?) : a regarder sur la capture"));
+		}
+		Shot(TEXT("L00_fosses_IA"));
+		if (E)
+		{
+			E->Destroy();
+		}
+		PitEntity.Reset();
+		return true;
+	});
+
+	// Chute : le joueur marche d'un croisement de passages vers le centre d'une fosse (en diagonale) ; le serveur constate
+	// la chute sous le bord et le tue par le systeme existant ; le corps s'arrete au fond ; reveil hors des fosses
+	Add(TEXT("Fosses : chute"), 0.1f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		ABRPlayerController* PC = GetPC();
+		if (!W || !C || !PC)
+		{
+			return false;
+		}
+		const FIntPoint Here = W->WorldToCell(C->GetActorLocation());
+		const float S = W->CellSize();
+		for (int32 k = 0; k < 4; ++k)
+		{
+			const int32 DX = (k & 1) ? 0 : -1;
+			const int32 DY = (k & 2) ? 0 : -1;
+			if (W->HasPitAtCorner(Here.X + DX, Here.Y + DY))
+			{
+				const FVector Hole((Here.X + DX + 1) * S, (Here.Y + DY + 1) * S, 0.f);
+				C->bGodMode = false;
+				C->SetActorLocation(W->CellCenter(Here, C->GetSimpleCollisionHalfHeight() + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
+				const FVector To = Hole - C->GetActorLocation();
+				WalkYaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(To.Y), static_cast<float>(To.X)));
+				PC->SetControlRotation(FRotator(-35.f, WalkYaw, 0.f));
+				WalkTime = 4.f;
+				FallStart = FPlatformTime::Seconds();
+				return true;
+			}
+		}
+		Note(TEXT("chute : aucune fosse au coin de la cellule du joueur"), true);
+		return true;
+	});
+	Add(TEXT("Fosses : attente de la chute"), 0.f, [this]()
+	{
+		ABRCharacter* C = GetPlayer();
+		const ABRWorld* W = GetBRWorld();
+		if (!C || !W)
+		{
+			return false;
+		}
+		if (C->IsDead())
+		{
+			WalkTime = 0.f;
+			Note(FString::Printf(TEXT("chute : mort %.1f s apres le premier pas, a Z = %.0f cm, cause : %s"), FPlatformTime::Seconds() - FallStart,
+				C->GetActorLocation().Z, *C->GetKilledBy()), !C->DiedInPit());
+			return true;
+		}
+		if (StepTime > 7.f)
+		{
+			WalkTime = 0.f;
+			Note(FString::Printf(TEXT("chute : toujours vivant apres 7 s (Z = %.0f cm)"), C->GetActorLocation().Z), true);
+			return true;
+		}
+		return false;
+	});
+	Add(TEXT("Fosses : capture chute"), 1.5f, [this]()
+	{
+		Shot(TEXT("L00_fosses_chute"));
+		return true;
+	});
+	Add(TEXT("Fosses : fond"), 0.f, [this]()
+	{
+		const ABRCharacter* C = GetPlayer();
+		const ABRWorld* W = GetBRWorld();
+		if (!C || !W)
+		{
+			return false;
+		}
+		const float Z = static_cast<float>(C->GetActorLocation().Z);
+		Note(FString::Printf(TEXT("chute : corps a Z = %.0f cm (fond a %.0f cm)"), Z, -W->Def().PitDepth), Z < -(W->Def().PitDepth + 200.f));
+		return true;
+	});
+	Add(TEXT("Fosses : reveil"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C)
+		{
+			return false;
+		}
+		if (StepTime > 25.f)
+		{
+			Note(TEXT("pas de reveil apres la chute (25 s)"), true);
+			return true;
+		}
+		if (W->IsTransitioning() || C->IsDead() || !W->IsLevelReady())
+		{
+			return false;
+		}
+		const FVector L = C->GetActorLocation();
+		Note(FString::Printf(TEXT("reveil au Niveau %d apres %.1f s, a (%.0f, %.0f, %.0f)"), W->GetLevelNumber(), StepTime, L.X, L.Y, L.Z),
+			W->IsOverPit(L, 60.f) || L.Z < 0.f);
+		// Reglages du joueur retablis
+		if (bSettingsSaved)
+		{
+			FBRSettings::Get() = SavedSettings;
+			bSettingsSaved = false;
+			if (ABRPlayerController* PC = GetPC())
+			{
+				PC->ApplySettings();
+			}
+		}
+		C->bGodMode = true;
+		return true;
+	});
+}
+
 void ABRAutoTest::AddEntityShot(int32 Level, EBREntityKind Kind)
 {
 	const FString Name = ABREntity::Info(Kind).Name.Replace(TEXT("-"), TEXT(""));
@@ -980,6 +1413,20 @@ void ABRAutoTest::Tick(float DeltaSeconds)
 	{
 		Finish();
 		return;
+	}
+	if (bPitTrack)
+	{
+		// v4.6 : l'entite qui traverse la salle de fosses ne doit jamais passer au-dessus du vide
+		const ABREntity* E = PitEntity.Get();
+		const ABRWorld* W = GetBRWorld();
+		const ABRCharacter* C = GetPlayer();
+		if (E && W && C)
+		{
+			const FVector EL = E->GetActorLocation();
+			PitMinZ = FMath::Min(PitMinZ, static_cast<float>(EL.Z));
+			PitOverFrames += W->IsOverPit(EL) ? 1 : 0;
+			PitMinDist = FMath::Min(PitMinDist, static_cast<float>(FVector::Dist2D(EL, C->GetActorLocation())));
+		}
 	}
 	if (WalkTime > 0.f)
 	{
@@ -1126,16 +1573,16 @@ void ABRAutoTest::WriteReport()
 	// Tableur : Saved/AutoTest/Mesures.csv (une ligne par niveau)
 	{
 		TArray<FString> Csv;
-		Csv.Add(TEXT("niveau;img_s;bas_1pct;mediane_ms;p95_ms;p99_ms;pire_ms;gpu_ms;jeu_ms;rendu_ms;chunks;chunk_max_ms;chunk_moy_ms;lumieres;ombres;entites;ram_mo;tex_mo"));
+		Csv.Add(TEXT("niveau;img_s;bas_1pct;mediane_ms;p95_ms;p99_ms;pire_ms;gpu_ms;jeu_ms;rendu_ms;chunks;chunk_max_ms;chunk_moy_ms;lumieres;ombres;entites;ram_mo;tex_mo;scene"));
 		for (const FLevelReport& R : Reports)
 		{
 			if (R.Chunks == 0 && R.AvgFPS <= 0.f)
 			{
 				continue;
 			}
-			Csv.Add(FString::Printf(TEXT("%d;%.1f;%.1f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%d;%.2f;%.2f;%d;%d;%d;%.0f;%.0f"), R.Level, R.AvgFPS, R.Low1FPS, R.P50Ms,
+			Csv.Add(FString::Printf(TEXT("%d;%.1f;%.1f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%d;%.2f;%.2f;%d;%d;%d;%.0f;%.0f;%s"), R.Level, R.AvgFPS, R.Low1FPS, R.P50Ms,
 				R.P95Ms, R.P99Ms, R.WorstMs, R.GpuMs, R.GameMs, R.RenderMs, R.Chunks, R.ChunkMaxMs, R.ChunkAvgMs, R.Lights, R.ShadowLights, R.Entities, R.RamMB,
-				R.TexMB));
+				R.TexMB, *R.Scene));
 		}
 		FFileHelper::SaveStringArrayToFile(Csv, *FPaths::Combine(OutDir, TEXT("Mesures.csv")), FFileHelper::EEncodingOptions::ForceUTF8);
 	}

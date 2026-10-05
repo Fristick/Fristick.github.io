@@ -167,6 +167,8 @@ private:
 		float Amp = 30.f;
 		float Sign = 1.f;
 		FRotator Base = FRotator::ZeroRotator;
+		/** v4.6 : tibia / bas de patte : point d'appui au sol (pied), dans le repere du pivot, mesure au repos */
+		FVector FootOffset = FVector::ZeroVector;
 	};
 
 	/** Ce que l'entite percoit du joueur cette image */
@@ -259,6 +261,15 @@ private:
 	float MorphTarget = 1.f;
 	float Reach = 0.f;          // bras tendus vers le joueur
 	float HideCrouch = 0.f;         // Faceling cache dans les bles
+	/** v4.6 : appui au sol : decalage vertical du corps pour que le pied le plus bas touche le sol (jambe d'appui),
+	 *  et celui applique a l'image precedente (les pivots en tiennent compte) */
+	float GroundAdjust = 0.f;
+	float AppliedGroundZ = 0.f;
+	bool bFeetMeasured = false;
+	/** Mesure les points d'appui des pieds au repos (avant la premiere pose) ; false si l'entite n'a pas de jambes */
+	bool MeasureFeet();
+	/** Hauteur du pied le plus bas au-dessus du sol (cm, sans le decalage deja applique) ; false sans jambes */
+	bool LowestFootHeight(float& OutHeight) const;
 	float TwitchTimer = 0.f;
 	FRotator Twitch = FRotator::ZeroRotator;
 	FRotator HeadRot = FRotator::ZeroRotator;
