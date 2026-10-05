@@ -22,6 +22,36 @@ class ABRExit;
 class UPoseableMeshComponent;
 class ABREntity;
 
+/** v4.7 : etat de mort d'un joueur, tenu par le serveur et replique a toutes les machines (le proprietaire compris) */
+USTRUCT()
+struct FBRDeathState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	bool bDead = false;
+
+	/** EBRDeathCause */
+	UPROPERTY()
+	uint8 Cause = 0;
+
+	/** Un coequipier peut le relever (decide par le serveur d'apres la cause) */
+	UPROPERTY()
+	bool bRevivable = false;
+
+	/** Dernier evenement : 0 aucun, 1 mort, 2 releve, 3 reveille au point de depart */
+	UPROPERTY()
+	uint8 Event = 0;
+
+	/** Incremente a chaque evenement : chaque machine traite un evenement une seule fois */
+	UPROPERTY()
+	uint8 Serial = 0;
+
+	/** Nom du coequipier qui l'a releve */
+	UPROPERTY()
+	FString By;
+};
+
 UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
 {
@@ -83,7 +113,15 @@ public:
 	 *  systeme existant, chez lui (RPC), sans reanimation possible. Mode developpeur invincible : il remonte au bord */
 	void NotifyFellIntoPit();
 	/** v4.6 : mort par chute dans une fosse (personne ne peut relever le corps) */
-	bool DiedInPit() const { return bDead && bFallDeath; }
+	bool DiedInPit() const { return bDead && GetDeathCause() == EBRDeathCause::Fall; }
+	/** v4.7 : cause de la mort en cours (None si vivant) : celle du serveur pour un autre joueur, la sienne sinon */
+	EBRDeathCause GetDeathCause() const { return bDead ? (IsLocallyControlled() ? LocalCause : static_cast<EBRDeathCause>(DeathState.Cause)) : EBRDeathCause::None; }
+	/** v4.7 : un coequipier peut relever ce joueur (etat replique par le serveur) */
+	bool CanBeRevived() const { return DeathState.bDead && DeathState.bRevivable; }
+	/** Etat de mort tenu par le serveur (replique a toutes les machines) */
+	const FBRDeathState& GetDeathState() const { return DeathState; }
+	/** v4.7, serveur : fixe l'etat de mort (valide) et le replique ; Event : 1 mort, 2 releve, 3 reveille */
+	void ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint8 Event, const FString& By = FString());
 
 	/** v4.4, mode developpeur : vol libre a travers les murs (regard pour diriger, Saut pour monter, Course pour accelerer) */
 	void SetDevFly(bool bFly);
@@ -238,22 +276,24 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetState(uint8 Flags, uint8 Hand, uint8 Lamp);
 
+	/** v4.7 : le proprietaire signale sa mort et sa cause ; le serveur la verifie (position, eau, fosse) puis la replique */
 	UFUNCTION(Server, Reliable)
-	void ServerSetDead(bool bInDead);
+	void ServerReportDeath(uint8 Cause);
+
+	/** v4.7 : le proprietaire s'est reveille au point de depart (apres le delai) ; le serveur le note vivant */
+	UFUNCTION(Server, Reliable)
+	void ServerReportRespawn();
 
 	/** Une entite (simulee par le serveur) frappe ce joueur : les degats sont appliques chez lui */
 	UFUNCTION(Client, Reliable)
 	void ClientReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName);
 
 	UFUNCTION()
-	void OnRep_Dead();
+	void OnRep_DeathState();
 
 	/** Relever un coequipier a terre (verifie par le serveur) */
 	UFUNCTION(Server, Reliable)
 	void ServerRevive(ABRCharacter* Mate);
-
-	UFUNCTION(Client, Reliable)
-	void ClientRevived(const FString& ByName);
 
 	/** v4.6 : le serveur a constate la chute dans une fosse */
 	UFUNCTION(Client, Reliable)
@@ -283,7 +323,6 @@ private:
 	void UpdatePostProcess(float Dt);
 	void PlayFootstep();
 	void PlaySound2D(FName Sound, float Volume = 1.f);
-	void Die(const FString& By, AActor* Killer);
 	void SetupLoopAudio(UAudioComponent* Comp, FName Sound);
 	void OnEquipmentChanged();
 	void BuildBody();
@@ -299,12 +338,24 @@ private:
 	bool UseItemEffect(EBRItem Item);
 	bool StoreItem(EBRItem Item);
 
-	UPROPERTY(ReplicatedUsing = OnRep_Dead)
+	/** Mort, vu de cette machine : immediat pour le proprietaire, suit DeathState pour les autres */
 	bool bDead = false;
+	/** v4.7 : cause de la mort locale (proprietaire) */
+	EBRDeathCause LocalCause = EBRDeathCause::None;
+	/** v4.7 : etat de mort officiel (serveur), replique a tous */
+	UPROPERTY(ReplicatedUsing = OnRep_DeathState)
+	FBRDeathState DeathState;
+	/** Dernier evenement de DeathState deja traite sur cette machine */
+	uint8 HandledDeathSerial = 0;
+	/** Serveur : instant de la mort officielle (un reveil n'est accepte qu'apres quelques secondes) et de la derniere
+	 *  frappe d'entite recue (une mort par blessure sans frappe recente est notee dans le journal) */
+	float ServerDeathTime = -100.f;
+	float ServerLastHitTime = -100.f;
+	/** Mort avec sa cause (v4.7) : chaque appelant dit pourquoi */
+	void DieOf(EBRDeathCause Cause, const FString& By, AActor* Killer);
 
 	/** v4.6 : chute dans une fosse : le corps continue de tomber, pas de reanimation */
 	void FallDeath();
-	bool bFallDeath = false;
 	/** Serveur : derniere chute signalee (une seule RPC par chute) */
 	float LastFallNotify = -100.f;
 

@@ -177,7 +177,9 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME_CONDITION(ABRCharacter, NetFlags, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(ABRCharacter, NetHand, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(ABRCharacter, NetLamp, COND_SkipOwner);
-	DOREPLIFETIME_CONDITION(ABRCharacter, bDead, COND_SkipOwner);
+	// v4.7 : l'etat de mort officiel va a toutes les machines, proprietaire compris (mort constatee par le serveur,
+	// reanimation par un coequipier)
+	DOREPLIFETIME(ABRCharacter, DeathState);
 }
 
 void ABRCharacter::SetupLoopAudio(UAudioComponent* Comp, FName SoundName)
@@ -925,6 +927,10 @@ FRotator ABRCharacter::GetAimRotation() const
 
 void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Source, const FString& SourceName)
 {
+	if (HasAuthority() && GetWorld())
+	{
+		ServerLastHitTime = GetWorld()->GetTimeSeconds(); // v4.7 : une mort par blessure suit une frappe
+	}
 	if (!IsLocallyControlled())
 	{
 		// Les entites vivent sur le serveur : le coup est transmis au joueur concerne
@@ -967,12 +973,12 @@ void ABRCharacter::ReceiveAttack(float Damage, float SanityDamage, AActor* Sourc
 		}
 		else
 		{
-			Die(SourceName, Source);
+			DieOf(EBRDeathCause::Injury, SourceName, Source);
 		}
 	}
 }
 
-void ABRCharacter::Die(const FString& By, AActor* Killer)
+void ABRCharacter::DieOf(EBRDeathCause Cause, const FString& By, AActor* Killer)
 {
 	if (bDead)
 	{
@@ -981,6 +987,7 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	StopClimb();
 	SetDevFly(false);
 	bDead = true;
+	LocalCause = Cause;
 	Health = 0.f;
 	DeathTime = 0.f;
 	KilledBy = By;
@@ -991,7 +998,16 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	bDiving = false;
 	bMantling = false;
 	UpdateViewMode();
-	if (!bFallDeath)
+	ABRWorld* W = ABRWorld::Get(this);
+	if (Cause == EBRDeathCause::Drowning && W && W->Def().bWater)
+	{
+		// v4.7 : le corps d'un noye remonte et flotte a la surface : un coequipier peut l'atteindre et le relever
+		FVector L = GetActorLocation();
+		const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+		L.Z = FMath::Max(static_cast<float>(L.Z), W->Def().WaterHeight - Half * 0.6f);
+		SetActorLocation(L, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	if (Cause != EBRDeathCause::Fall)
 	{
 		GetCharacterMovement()->DisableMovement();
 	}
@@ -1001,13 +1017,158 @@ void ABRCharacter::Die(const FString& By, AActor* Killer)
 	{
 		OwnerPC->NotifyPlayerDeath();
 	}
+	// v4.7 : l'etat officiel est celui du serveur (hote ou solo : tout de suite ; client : apres verification)
+	if (HasAuthority())
+	{
+		ServerApplyDeathState(true, Cause, 1);
+	}
+	else
+	{
+		ServerReportDeath(static_cast<uint8>(Cause));
+	}
+	if (W)
+	{
+		W->HandlePlayerDeath(Cause);
+	}
+}
+
+void ABRCharacter::ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint8 Event, const FString& By)
+{
 	if (!HasAuthority())
 	{
-		ServerSetDead(true);
+		return;
 	}
-	if (ABRWorld* W = ABRWorld::Get(this))
+	DeathState.bDead = bInDead;
+	DeathState.Cause = bInDead ? static_cast<uint8>(Cause) : 0;
+	DeathState.bRevivable = bInDead && BRDeath::CanRevive(Cause);
+	DeathState.Event = Event;
+	DeathState.By = By;
+	DeathState.Serial = static_cast<uint8>(DeathState.Serial + 1);
+	if (bInDead && GetWorld())
 	{
-		W->HandlePlayerDeath(bFallDeath);
+		ServerDeathTime = GetWorld()->GetTimeSeconds();
+	}
+	UE_LOG(LogBackrooms, Log, TEXT("Etat de mort (serveur) : %s %s, cause %d, evenement %d"), *GetName(), bInDead ? TEXT("mort") : TEXT("vivant"),
+		static_cast<int32>(Cause), static_cast<int32>(Event));
+	OnRep_DeathState(); // l'hote applique aussi (pions de ses invites, et le sien)
+	ForceNetUpdate();
+}
+
+void ABRCharacter::ServerReportDeath_Implementation(uint8 InCause)
+{
+	if (DeathState.bDead)
+	{
+		return; // deja mort pour le serveur (chute constatee par lui, double envoi)
+	}
+	EBRDeathCause Cause = InCause <= static_cast<uint8>(EBRDeathCause::Madness) ? static_cast<EBRDeathCause>(InCause) : EBRDeathCause::Injury;
+	const ABRWorld* W = ABRWorld::Get(this);
+	const FVector L = GetActorLocation();
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	// Verifications du serveur : une cause invraisemblable redevient une blessure (relevable)
+	switch (Cause)
+	{
+	case EBRDeathCause::Fall:
+		if (!W || !W->HasPits() || L.Z > -W->Def().PitKillDepth * 0.5f || !W->IsOverPit(L, 80.f))
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("%s : chute annoncee hors d'une fosse (%s) : notee comme blessure"), *GetName(), *L.ToString());
+			Cause = EBRDeathCause::Injury;
+		}
+		break;
+	case EBRDeathCause::Drowning:
+		if (!W || !W->Def().bWater || L.Z > W->Def().WaterHeight + 60.f)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("%s : noyade annoncee hors de l'eau (%s) : notee comme blessure"), *GetName(), *L.ToString());
+			Cause = EBRDeathCause::Injury;
+		}
+		break;
+	case EBRDeathCause::Injury:
+		if (Now - ServerLastHitTime > 6.f)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("%s : mort par blessure sans frappe recente vue par le serveur"), *GetName());
+		}
+		break;
+	case EBRDeathCause::Madness:
+		break;
+	default:
+		Cause = EBRDeathCause::Injury;
+		break;
+	}
+	ServerApplyDeathState(true, Cause, 1);
+}
+
+void ABRCharacter::ServerReportRespawn_Implementation()
+{
+	if (!DeathState.bDead)
+	{
+		return;
+	}
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (Now - ServerDeathTime < 2.f)
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("%s : reveil demande %.1f s apres la mort (minimum 2 s)"), *GetName(), Now - ServerDeathTime);
+	}
+	ServerApplyDeathState(false, EBRDeathCause::None, 3);
+}
+
+void ABRCharacter::OnRep_DeathState()
+{
+	if (DeathState.Serial == HandledDeathSerial)
+	{
+		return;
+	}
+	HandledDeathSerial = DeathState.Serial;
+	const EBRDeathCause Cause = static_cast<EBRDeathCause>(DeathState.Cause);
+	if (IsLocallyControlled())
+	{
+		// Proprietaire : seuls les evenements decides ailleurs comptent (sa propre mort et son reveil sont deja faits)
+		if (DeathState.Event == 1 && DeathState.bDead && !bDead)
+		{
+			if (Cause == EBRDeathCause::Fall)
+			{
+				FallDeath(); // chute constatee par le serveur, arrivee avant (ou sans) la RPC
+			}
+			else
+			{
+				DieOf(Cause, FString(), nullptr);
+			}
+		}
+		else if (DeathState.Event == 1 && DeathState.bDead && bDead && Cause != LocalCause)
+		{
+			// Le serveur n'a pas retenu la cause annoncee (chute hors fosse, noyade hors de l'eau) : on suit son verdict
+			LocalCause = Cause;
+			if (ABRWorld* W = ABRWorld::Get(this))
+			{
+				W->HandlePlayerDeath(Cause);
+			}
+		}
+		else if (DeathState.Event == 2 && !DeathState.bDead && bDead)
+		{
+			Revived(DeathState.By);
+		}
+		return;
+	}
+	// Autres machines : le corps d'un coequipier tombe, se releve ou se reveille ailleurs
+	const bool bWas = bDead;
+	bDead = DeathState.bDead;
+	LocalCause = bDead ? Cause : EBRDeathCause::None;
+	if (bDead && !bWas)
+	{
+		if (UBRAssets* A = UBRAssets::Get(this))
+		{
+			if (USoundBase* S = A->Sound(TEXT("S_Death")))
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation(), 0.8f, 1.f, 0.f, A->Attenuation(3500.f));
+			}
+		}
+		const APlayerState* PS = GetPlayerState();
+		const FString Name = PS ? PS->GetPlayerName() : FString(TEXT("Un explorateur"));
+		ABRHUD::Notify(this, Name + BRDeath::TeammateMessage(Cause), 4.f, FLinearColor(1.f, 0.45f, 0.4f));
+	}
+	else if (!bDead && bWas && DeathState.Event == 2)
+	{
+		const APlayerState* PS = GetPlayerState();
+		ABRHUD::Notify(this, FString::Printf(TEXT("%s a \u00e9t\u00e9 relev\u00e9 par %s."), PS ? *PS->GetPlayerName() : TEXT("Un explorateur"), *DeathState.By), 3.f,
+			FLinearColor(0.6f, 1.f, 0.6f));
 	}
 }
 
@@ -1021,6 +1182,13 @@ void ABRCharacter::NotifyFellIntoPit()
 	}
 	LastFallNotify = Now;
 	UE_LOG(LogBackrooms, Log, TEXT("Chute dans une fosse : %s a %s"), *GetName(), *GetActorLocation().ToString());
+	// v4.7 : le serveur decide : etat de mort officiel tout de suite (replique a tous), puis la RPC donne au joueur
+	// l'effet immediat. Mode developpeur invincible (autorise par l'hote) : seulement la remontee au bord
+	const bool bGod = (IsLocallyControlled() ? bGodMode : (NetFlags & 16) != 0) && ABRPlayerController::AreCheatsAllowed();
+	if (!bGod)
+	{
+		ServerApplyDeathState(true, EBRDeathCause::Fall, 1);
+	}
 	if (IsLocallyControlled())
 	{
 		FallDeath();
@@ -1054,9 +1222,8 @@ void ABRCharacter::FallDeath()
 		ABRHUD::Notify(this, TEXT("MODE D\u00c9V : chute annul\u00e9e (invincible)"), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
 		return;
 	}
-	bFallDeath = true;
 	Health = 0.f;
-	Die(TEXT("une chute dans une fosse"), nullptr);
+	DieOf(EBRDeathCause::Fall, TEXT("une chute dans une fosse"), nullptr);
 }
 
 ABRCharacter* ABRCharacter::FindDownedTeammate() const
@@ -1074,9 +1241,9 @@ ABRCharacter* ABRCharacter::FindDownedTeammate() const
 	float BestDot = 0.72f;
 	for (ABRCharacter* Mate : Players)
 	{
-		if (Mate == this || !Mate->IsDead() || Mate->GetActorLocation().Z < -100.f)
+		if (Mate == this || !Mate->CanBeRevived())
 		{
-			continue; // (v4.6 : au fond d'une fosse, hors d'atteinte)
+			continue; // (v4.7 : etat du serveur : une chute dans une fosse ne se releve pas, une noyade si)
 		}
 		const FVector BodyPos = Mate->GetActorLocation() - FVector(0.f, 0.f, 50.f); // etendu au sol
 		if (FVector::Dist(BodyPos, GetActorLocation()) > 260.f)
@@ -1130,35 +1297,32 @@ void ABRCharacter::UpdateRevive(float Dt)
 
 void ABRCharacter::ServerRevive_Implementation(ABRCharacter* Mate)
 {
-	if (Mate && Mate != this && Mate->IsDead() && !bDead && FVector::Dist(Mate->GetActorLocation(), GetActorLocation()) < 500.f
-		&& Mate->GetActorLocation().Z > -100.f)
+	// v4.7 : verifie par le serveur : coequipier mort d'une cause relevable, sauveteur vivant et a portee
+	if (Mate && Mate != this && Mate->CanBeRevived() && !DeathState.bDead && FVector::Dist(Mate->GetActorLocation(), GetActorLocation()) < 450.f)
 	{
 		Mate->ReviveBy(this);
+	}
+	else
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Reanimation refusee par le serveur (%s)"), Mate ? *Mate->GetName() : TEXT("personne"));
 	}
 }
 
 void ABRCharacter::ReviveBy(ABRCharacter* By)
 {
+	if (!HasAuthority() || !CanBeRevived())
+	{
+		return;
+	}
 	const APlayerState* PS = By ? By->GetPlayerState() : nullptr;
 	const FString Name = PS ? PS->GetPlayerName() : FString(TEXT("un co\u00e9quipier"));
-	if (IsLocallyControlled())
-	{
-		Revived(Name);
-	}
-	else
-	{
-		ClientRevived(Name);
-	}
-}
-
-void ABRCharacter::ClientRevived_Implementation(const FString& ByName)
-{
-	Revived(ByName);
+	// v4.7 : etat officiel (replique) ; le proprietaire se releve en le recevant (OnRep_DeathState)
+	ServerApplyDeathState(false, EBRDeathCause::None, 2, Name);
 }
 
 void ABRCharacter::Revived(const FString& ByName)
 {
-	if (!bDead || bFallDeath)
+	if (!bDead || LocalCause == EBRDeathCause::Fall)
 	{
 		return;
 	}
@@ -1172,11 +1336,8 @@ void ABRCharacter::Revived(const FString& ByName)
 	LastDamageTime = TimeAlive;
 	KilledBy.Empty();
 	KillerActor.Reset();
+	LocalCause = EBRDeathCause::None;
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
-	if (!HasAuthority())
-	{
-		ServerSetDead(false);
-	}
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		W->CancelPlayerDeath();
@@ -1197,40 +1358,9 @@ void ABRCharacter::ServerSetState_Implementation(uint8 Flags, uint8 Hand, uint8 
 	NetLamp = Lamp;
 }
 
-void ABRCharacter::ServerSetDead_Implementation(bool bInDead)
-{
-	const bool bWas = bDead;
-	bDead = bInDead;
-	if (bDead != bWas)
-	{
-		OnRep_Dead();
-	}
-}
-
-void ABRCharacter::OnRep_Dead()
-{
-	if (IsLocallyControlled() || !bDead)
-	{
-		return;
-	}
-	// Un coequipier tombe : cri a sa position et message
-	if (UBRAssets* A = UBRAssets::Get(this))
-	{
-		if (USoundBase* S = A->Sound(TEXT("S_Death")))
-		{
-			UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation(), 0.8f, 1.f, 0.f, A->Attenuation(3500.f));
-		}
-	}
-	const APlayerState* PS = GetPlayerState();
-	// v4.6 : tombe dans une fosse (sous le bord) : personne ne pourra le relever
-	const bool bInPit = GetActorLocation().Z < -100.f;
-	const FString Name = PS ? PS->GetPlayerName() : FString(TEXT("Un explorateur"));
-	ABRHUD::Notify(this, Name + (bInPit ? TEXT(" est tomb\u00e9 dans une fosse.") : TEXT(" est \u00e0 terre.")), 4.f,
-		FLinearColor(1.f, 0.45f, 0.4f));
-}
-
 void ABRCharacter::ResetStats()
 {
+	const bool bWasDead = bDead || DeathState.bDead;
 	Health = 100.f;
 	Sanity = 100.f;
 	Stamina = 100.f;
@@ -1247,7 +1377,7 @@ void ABRCharacter::ResetStats()
 	DeathBlend = 0.f;
 	KilledBy.Empty();
 	KillerActor.Reset();
-	bFallDeath = false;
+	LocalCause = EBRDeathCause::None;
 	ResetInventory();
 	OnEquipmentChanged();
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
@@ -1255,9 +1385,20 @@ void ABRCharacter::ResetStats()
 	{
 		UnCrouch();
 	}
-	if (!HasAuthority())
+	// v4.7 : reveil (au point de depart, ou nouveau niveau) : le serveur le note vivant
+	if (bWasDead)
 	{
-		ServerSetDead(false);
+		if (HasAuthority())
+		{
+			if (DeathState.bDead)
+			{
+				ServerApplyDeathState(false, EBRDeathCause::None, 3);
+			}
+		}
+		else
+		{
+			ServerReportRespawn();
+		}
 	}
 }
 
@@ -1510,7 +1651,7 @@ void ABRCharacter::SyncNetState()
 	{
 		return;
 	}
-	const uint8 Flags = (IsFlashlightOn() ? 1 : 0) | (IsSprinting() ? 2 : 0) | (bSwimming ? 4 : 0) | (bClimbing ? 8 : 0);
+	const uint8 Flags = (IsFlashlightOn() ? 1 : 0) | (IsSprinting() ? 2 : 0) | (bSwimming ? 4 : 0) | (bClimbing ? 8 : 0) | (bGodMode ? 16 : 0);
 	const uint8 Hand = static_cast<uint8>(GetEquipped(EBREquipSlot::Hand));
 	const uint8 Lamp = LampSlot();
 	if (Flags == NetFlags && Hand == NetHand && Lamp == NetLamp)
@@ -1736,7 +1877,7 @@ void ABRCharacter::UpdateStats(float Dt)
 		Health -= 1.5f * Dt;
 		if (Health <= 0.f)
 		{
-			Die(TEXT("la folie"), nullptr);
+			DieOf(EBRDeathCause::Madness, TEXT("la folie"), nullptr);
 			return;
 		}
 	}
@@ -2832,7 +2973,7 @@ void ABRCharacter::UpdateWater(float Dt)
 			LastDamageTime = TimeAlive;
 			if (Health <= 0.f)
 			{
-				Die(TEXT("la noyade"), nullptr);
+				DieOf(EBRDeathCause::Drowning, TEXT("la noyade"), nullptr);
 				return;
 			}
 		}

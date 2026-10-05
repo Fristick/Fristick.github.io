@@ -278,12 +278,14 @@ void ABRWorld::BeginTransition(int32 TargetLevel, bool bFromDeath)
 	}
 }
 
-void ABRWorld::HandlePlayerDeath(bool bNoRevive)
+void ABRWorld::HandlePlayerDeath(EBRDeathCause Cause)
 {
-	// Seul : retour au Niveau 0. En equipe : a terre, un coequipier a 30 s pour nous relever,
-	// sinon on se reveille au point de depart du niveau en cours.
-	// v4.6 : au fond d'une fosse, personne ne peut nous relever : reveil au point de depart apres le fondu
-	DeathTimer = IsNetGame() ? ((HasLivingTeammate() && !bNoRevive) ? 30.f : 6.f) : 4.5f;
+	// Seul : retour au Niveau 0. En equipe : a terre, un coequipier peut nous relever pendant un delai
+	// propre a la cause (blessure 30 s, noyade 20 s), sinon on se reveille au point de depart du niveau.
+	// v4.7 : la cause est explicite. Au fond d'une fosse, personne ne peut nous relever.
+	DeathTimer = IsNetGame()
+		? ((HasLivingTeammate() && BRDeath::CanRevive(Cause)) ? BRDeath::ReviveWindow(Cause) : 6.f)
+		: 4.5f;
 }
 
 bool ABRWorld::HasLivingTeammate() const
@@ -396,6 +398,16 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		VHSFound = 0;
 		bBlackoutRecorded = false;
 		bEntityRecorded = false;
+		// v4.7 : nouveau niveau, tout le groupe repart debout (etat tenu par le serveur, chaque machine suit)
+		TArray<ABRCharacter*> All;
+		GetPlayers(All);
+		for (ABRCharacter* C : All)
+		{
+			if (C && C->GetDeathState().bDead)
+			{
+				C->ServerApplyDeathState(false, EBRDeathCause::None, 3);
+			}
+		}
 	}
 	PrevVHSFound = VHSFound;
 	bPrevBlackoutRecorded = bBlackoutRecorded;

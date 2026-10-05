@@ -2754,37 +2754,64 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 	}
 	const float A = FMath::Clamp((T - 0.8f) / 1.f, 0.f, 1.f);
 	const ABRPlayerController* OwnerPC = Cast<ABRPlayerController>(PlayerOwner);
-	if (OwnerPC && OwnerPC->IsNetGame())
+	// v4.7 : textes selon la cause explicite de la mort (plus de deduction par la hauteur)
+	const EBRDeathCause Cause = C->GetDeathCause();
+	FString Detail;
+	switch (Cause)
 	{
-		// Cooperation : a terre, un coequipier peut nous relever
-		const ABRWorld* W = ABRWorld::Get(this);
-		const float Left = W ? FMath::Max(0.f, W->GetDeathTimer()) : 0.f;
-		const bool bHelp = W && W->HasLivingTeammate();
-		Txt(TEXT("\u00c0 TERRE"), CX, H * 0.34f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
+	case EBRDeathCause::Drowning:
+		Detail = TEXT("Vous avez manqu\u00e9 d'air.");
+		break;
+	case EBRDeathCause::Fall:
+		Detail = TEXT("Vous \u00eates tomb\u00e9 au fond d'une fosse.");
+		break;
+	case EBRDeathCause::Madness:
+		Detail = TEXT("Votre esprit a l\u00e2ch\u00e9.");
+		break;
+	default:
 		if (!C->GetKilledBy().IsEmpty())
 		{
-			Txt(TEXT("Abattu par : ") + C->GetKilledBy(), CX, H * 0.44f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U, GEngine->GetMediumFont(), true);
+			Detail = TEXT("Abattu par : ") + C->GetKilledBy();
+		}
+		break;
+	}
+	if (OwnerPC && OwnerPC->IsNetGame())
+	{
+		// Cooperation : a terre, un coequipier peut nous relever (sauf au fond d'une fosse)
+		const ABRWorld* W = ABRWorld::Get(this);
+		const float Left = W ? FMath::Max(0.f, W->GetDeathTimer()) : 0.f;
+		const bool bHelp = W && W->HasLivingTeammate() && BRDeath::CanRevive(Cause);
+		const TCHAR* Title = Cause == EBRDeathCause::Drowning ? TEXT("NOY\u00c9") : (Cause == EBRDeathCause::Fall ? TEXT("CHUTE") : TEXT("\u00c0 TERRE"));
+		Txt(Title, CX, H * 0.34f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
+		if (!Detail.IsEmpty())
+		{
+			Txt(Detail, CX, H * 0.44f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U, GEngine->GetMediumFont(), true);
 		}
 		if (bHelp)
 		{
-			Txt(FString::Printf(TEXT("Un co\u00e9quipier peut vous relever : il doit maintenir %s pr\u00e8s de vous."), *BRKeys::Tag(EBRAction::Interact)),
-				CX, H * 0.52f, FLinearColor(0.75f, 1.f, 0.75f, A), 1.f * U, GEngine->GetMediumFont(), true);
+			const FString Hint = Cause == EBRDeathCause::Drowning
+				? FString::Printf(TEXT("Un co\u00e9quipier doit vous sortir de l'eau : il maintient %s pr\u00e8s de vous."), *BRKeys::Tag(EBRAction::Interact))
+				: FString::Printf(TEXT("Un co\u00e9quipier peut vous relever : il doit maintenir %s pr\u00e8s de vous."), *BRKeys::Tag(EBRAction::Interact));
+			Txt(Hint, CX, H * 0.52f, FLinearColor(0.75f, 1.f, 0.75f, A), 1.f * U, GEngine->GetMediumFont(), true);
+		}
+		else if (Cause == EBRDeathCause::Fall)
+		{
+			Txt(TEXT("Personne ne peut vous atteindre l\u00e0 o\u00f9 vous \u00eates."), CX, H * 0.52f, FLinearColor(0.85f, 0.85f, 0.85f, A), 1.f * U,
+				GEngine->GetMediumFont(), true);
 		}
 		Txt(FString::Printf(TEXT("R\u00e9veil au point de d\u00e9part du niveau dans %d s      %s  abandonner"), FMath::CeilToInt(Left),
 			*BRKeys::Tag(EBRAction::Jump)), CX, H * 0.58f, FLinearColor(0.9f, 0.85f, 0.6f, A), 1.f * U, GEngine->GetMediumFont(), true);
 		return;
 	}
 	Txt(TEXT("VOUS \u00caTES MORT"), CX, H * 0.38f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);
-	if (!C->GetKilledBy().IsEmpty())
+	if (!Detail.IsEmpty())
 	{
-		Txt(TEXT("Tu\u00e9 par : ") + C->GetKilledBy(), CX, H * 0.48f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U, GEngine->GetMediumFont(), true);
+		Txt(Cause == EBRDeathCause::Injury ? TEXT("Tu\u00e9 par : ") + C->GetKilledBy() : Detail, CX, H * 0.48f, FLinearColor(1.f, 0.8f, 0.8f, A), 1.1f * U,
+			GEngine->GetMediumFont(), true);
 	}
 	const float A2 = FMath::Clamp((T - 2.2f) / 1.f, 0.f, 1.f);
-	const ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
-	const bool bNet = PC && PC->IsNetGame();
-	Txt(bNet ? TEXT("Vous allez vous r\u00e9veiller au point de d\u00e9part du niveau... vos co\u00e9quipiers continuent sans vous.")
-			 : TEXT("Vous vous r\u00e9veillez... sur une moquette humide. Encore."),
-		CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U, GEngine->GetMediumFont(), true);
+	Txt(TEXT("Vous vous r\u00e9veillez... sur une moquette humide. Encore."), CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U,
+		GEngine->GetMediumFont(), true);
 }
 
 void ABRHUD::DrawPause(ABRPlayerController* PC)
@@ -3863,7 +3890,10 @@ void ABRHUD::DrawTeammates(ABRCharacter* C)
 		const float A = FMath::Clamp(1.2f - Dist / 5000.f, 0.35f, 1.f);
 		if (Other->IsDead())
 		{
-			Name += TEXT("  (\u00e0 terre)");
+			// v4.7 : etat tenu par le serveur ; au fond d'une fosse, inutile d'aller le chercher
+			Name += Other->CanBeRevived()
+				? (Other->GetDeathCause() == EBRDeathCause::Drowning ? TEXT("  (noy\u00e9 : sortez-le)") : TEXT("  (\u00e0 terre)"))
+				: TEXT("  (hors d'atteinte)");
 		}
 		const FLinearColor Col = Other->IsDead() ? FLinearColor(1.f, 0.45f, 0.4f, A) : FLinearColor(0.8f, 1.f, 0.8f, A);
 		Txt(Name, static_cast<float>(Screen.X), static_cast<float>(Screen.Y) - 22.f * U, Col, 0.8f * U, Medium, true);

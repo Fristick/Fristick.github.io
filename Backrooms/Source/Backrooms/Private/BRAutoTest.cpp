@@ -1350,7 +1350,7 @@ void ABRAutoTest::AddEntityShot(int32 Level, EBREntityKind Kind)
 		LastEntity = E;
 		return true;
 	});
-	Add(FString::Printf(TEXT("Niveau %d : capture %s"), Level, *Name), 0.4f, [this, Level, Name, Kind]()
+	Add(FString::Printf(TEXT("Niveau %d : capture %s"), Level, *Name), 0.4f, [this, Name, Kind]()
 	{
 		ABREntity* E = LastEntity.Get();
 		ABRCharacter* C = GetPlayer();

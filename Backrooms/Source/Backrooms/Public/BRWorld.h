@@ -123,7 +123,7 @@ public:
 	void ReplayTitle() { TitleTime = 7.f; }
 	float GetLevelTime() const { return LevelTime; }
 	/** Appele par le personnage a sa mort. bNoRevive (chute dans une fosse) : personne ne peut le relever */
-	void HandlePlayerDeath(bool bNoRevive = false);
+	void HandlePlayerDeath(EBRDeathCause Cause);
 
 	// ------------------------------------------------------------ Grille
 	float CellSize() const;

@@ -80,6 +80,55 @@ enum class EBRExitStyle : uint8
 	BuildingDoor
 };
 
+/** v4.7 : cause de la mort d'un joueur : decide si un coequipier peut le relever, le delai avant le reveil et les messages.
+ *  Fixee explicitement par le code qui tue (jamais deduite de la position) et repliquee par le serveur */
+enum class EBRDeathCause : uint8
+{
+	None,
+	Injury,     // frappe d'une entite (ou jumpscare mortel)
+	Drowning,   // apnee epuisee
+	Fall,       // chute dans une fosse (Niveau 0)
+	Madness     // sante mentale a zero
+};
+
+namespace BRDeath
+{
+	/** Un coequipier peut relever un joueur mort de cette cause (le corps est atteignable) */
+	FORCEINLINE bool CanRevive(EBRDeathCause C)
+	{
+		return C == EBRDeathCause::Injury || C == EBRDeathCause::Drowning || C == EBRDeathCause::Madness;
+	}
+	/** Cooperation : temps laisse aux coequipiers pour relever le joueur (s) ; 0 : reveil rapide au point de depart */
+	FORCEINLINE float ReviveWindow(EBRDeathCause C)
+	{
+		switch (C)
+		{
+		case EBRDeathCause::Injury:
+		case EBRDeathCause::Madness:
+			return 30.f;
+		case EBRDeathCause::Drowning:
+			return 20.f; // il faut le sortir de l'eau vite
+		default:
+			return 0.f;
+		}
+	}
+	/** Message vu par les coequipiers ("<nom> est a terre.") */
+	FORCEINLINE const TCHAR* TeammateMessage(EBRDeathCause C)
+	{
+		switch (C)
+		{
+		case EBRDeathCause::Drowning:
+			return TEXT(" se noie : remontez-le !");
+		case EBRDeathCause::Fall:
+			return TEXT(" est tomb\u00e9 dans une fosse.");
+		case EBRDeathCause::Madness:
+			return TEXT(" a perdu la raison : il est \u00e0 terre.");
+		default:
+			return TEXT(" est \u00e0 terre.");
+		}
+	}
+}
+
 /** Apparence d'une surface (texture projetee dans l'espace monde) */
 struct FBRSurface
 {

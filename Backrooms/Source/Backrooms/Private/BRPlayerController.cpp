@@ -9,6 +9,7 @@
 #include "BRConfig.h"
 #include "BRAutoTest.h"
 #include "BRSave.h"
+#include "BRInteractables.h"
 #include "EngineUtils.h"
 
 #include "EnhancedInputComponent.h"
@@ -1176,7 +1177,31 @@ bool ABRPlayerController::IsLevelUnlocked(int32 LevelNumber) const
 
 bool ABRPlayerController::IsDevMode() const
 {
+#if UE_BUILD_SHIPPING
+	return false; // v4.7 : le reglage DevMode du fichier ini n'ouvre rien dans une version publiee
+#else
 	return FBRSettings::Get().bDevMode;
+#endif
+}
+
+bool ABRPlayerController::AreCheatsAllowed()
+{
+#if UE_BUILD_SHIPPING
+	return false;
+#else
+	return FBRSettings::Get().bDevMode || ABRAutoTest::IsRequested();
+#endif
+}
+
+bool ABRPlayerController::CheatGate()
+{
+	// v4.7 : commandes de test de la console. Le serveur verifie de son cote (ServerCheat, ServerRequestTransition).
+	if (AreCheatsAllowed())
+	{
+		return true;
+	}
+	ABRHUD::Notify(this, TEXT("Commande de test d\u00e9sactiv\u00e9e (mode d\u00e9veloppeur requis, absent des versions publi\u00e9es)."), 3.f);
+	return false;
 }
 
 void ABRPlayerController::DevJumpLevel(int32 Delta)
@@ -1906,10 +1931,37 @@ void ABRPlayerController::ShowNameBox(bool bShow)
 
 void ABRPlayerController::ServerRequestTransition_Implementation(int32 TargetLevel)
 {
-	if (ABRWorld* W = ABRWorld::Get(this))
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!W)
 	{
-		W->RequestTransition(TargetLevel);
+		return;
 	}
+	// v4.7 : un client ne fait changer le groupe de niveau qu'en prenant une vraie sortie, ouverte, a cote de lui.
+	// Le saut de niveau du mode developpeur passe seulement si l'hote autorise les commandes de test.
+	if (!AreCheatsAllowed())
+	{
+		const ABRCharacter* C = Cast<ABRCharacter>(GetPawn());
+		FString Reason;
+		bool bNearExit = false;
+		if (C && !C->IsDead() && W->CanLeaveLevel(Reason))
+		{
+			for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
+			{
+				if (It->Target == TargetLevel && FVector::DistSquared2D(It->GetActorLocation(), C->GetActorLocation()) < FMath::Square(600.f))
+				{
+					bNearExit = true;
+					break;
+				}
+			}
+		}
+		if (!bNearExit)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("Changement de niveau refuse pour %s (cible %d) : aucune sortie ouverte a proximite"),
+				*GetNameSafe(PlayerState), TargetLevel);
+			return;
+		}
+	}
+	W->RequestTransition(TargetLevel);
 }
 
 void ABRPlayerController::ServerMarkCollected_Implementation(uint64 Id)
@@ -1941,6 +1993,12 @@ void ABRPlayerController::ServerCheat_Implementation(uint8 Command, int32 Value)
 	ABRWorld* W = ABRWorld::Get(this);
 	if (!W)
 	{
+		return;
+	}
+	// v4.7 : decide par le serveur (jamais en Shipping), pas par le client qui envoie la commande
+	if (!AreCheatsAllowed())
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Commande de test %d refusee pour %s"), Command, *GetNameSafe(PlayerState));
 		return;
 	}
 	switch (Command)
@@ -1992,6 +2050,10 @@ void ABRPlayerController::StartSolo()
 
 void ABRPlayerController::BRLevel(int32 Number)
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		bDevSession = true;
@@ -2004,6 +2066,10 @@ void ABRPlayerController::BRLevel(int32 Number)
 
 void ABRPlayerController::BRPits()
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	ABRWorld* W = ABRWorld::Get(this);
 	ABRCharacter* C = GetBRCharacter();
 	if (!W || !C)
@@ -2042,6 +2108,10 @@ void ABRPlayerController::BRPits()
 
 void ABRPlayerController::BRSeed(int32 Number)
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	ABRWorld* W = ABRWorld::Get(this);
 	if (!W)
 	{
@@ -2060,6 +2130,10 @@ void ABRPlayerController::BRSeed(int32 Number)
 
 void ABRPlayerController::BRGod()
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	if (ABRCharacter* C = GetBRCharacter())
 	{
 		C->bGodMode = !C->bGodMode;
@@ -2069,6 +2143,10 @@ void ABRPlayerController::BRGod()
 
 void ABRPlayerController::BRSpawn(int32 Kind)
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	if (!HasAuthority())
 	{
 		ServerCheat(3, Kind);
@@ -2108,6 +2186,10 @@ void ABRPlayerController::BRInvertY()
 
 void ABRPlayerController::BRGiveAll()
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	if (ABRCharacter* C = GetBRCharacter())
 	{
 		C->AddItem(EBRItem::AlmondWater, 4);
@@ -2124,6 +2206,10 @@ void ABRPlayerController::BRGiveAll()
 
 void ABRPlayerController::BRBlackout()
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	if (!HasAuthority())
 	{
 		ServerCheat(1, 0);
@@ -2136,6 +2222,10 @@ void ABRPlayerController::BRBlackout()
 
 void ABRPlayerController::BRObjectives()
 {
+	if (!CheatGate())
+	{
+		return;
+	}
 	if (!HasAuthority())
 	{
 		ServerCheat(2, 0);

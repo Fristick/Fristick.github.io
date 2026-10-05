@@ -65,8 +65,11 @@ public:
 	const TArray<int32>& GetSaveOrder() const { return SaveOrder; }
 	/** Seuls les niveaux deja explores dans la partie choisie peuvent etre choisis */
 	bool IsLevelUnlocked(int32 LevelNumber) const;
-	/** v4.4 : mode developpeur actif */
+	/** v4.4 : mode developpeur actif (v4.7 : toujours faux dans une version Shipping) */
 	bool IsDevMode() const;
+	/** v4.7 : les commandes de test sont permises sur cette machine (jamais en Shipping ; sinon mode developpeur de
+	 *  l'hote ou test automatique). Sur le serveur, c'est le reglage de l'hote qui decide pour tous les clients. */
+	static bool AreCheatsAllowed();
 	/** Secondes restantes d'affichage de l'aide du mode developpeur */
 	float GetDevHelpTime() const { return DevHelpTime; }
 	/** Niveau visite en mode developpeur, pas ajoute a la partie */
@@ -107,7 +110,8 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerCompleteObjective(uint8 Which);
 
-	/** Commandes console d'un client executees par l'hote (1 coupure, 2 objectifs, 3 entite) */
+	/** Commandes console d'un client executees par l'hote (1 coupure, 2 objectifs, 3 entite).
+	 *  v4.7 : refusees par le serveur si AreCheatsAllowed() est faux chez lui. */
 	UFUNCTION(Server, Reliable)
 	void ServerCheat(uint8 Command, int32 Value);
 
@@ -192,6 +196,9 @@ public:
 	void BRSeed(int32 Number);
 
 private:
+	/** v4.7 : vrai si les commandes de test sont permises ici, sinon message et faux */
+	bool CheatGate();
+
 	/** Mode developpeur : raccourcis en jeu (Page prec./suiv., Debut, Fin, Inser, Suppr, F6, F7, F10) */
 	void UpdateDevKeys();
 	/** Niveau precedent / suivant dans l'ordre du wiki */
