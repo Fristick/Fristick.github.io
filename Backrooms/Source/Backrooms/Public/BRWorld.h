@@ -232,6 +232,18 @@ public:
 	const TArray<int32>& GetVisitedLevels() const { return Visited; }
 	/** Sauvegardes : entites deja rencontrees */
 	TArray<int32> GetDiscoveredList() const { return Discovered.Array(); }
+	/** v4.7 : objets deja ramasses dans ce niveau (session sauvegardee) */
+	TArray<uint64> GetCollectedList() const;
+	/** v4.7 : ce niveau reprend une session sauvegardee (meme graine, objectifs et objets ramasses restaures) */
+	bool IsResumedSession() const { return bResumed; }
+	/** v4.7 : objectifs du niveau (sauvegarde de la session) */
+	bool IsBlackoutRecorded() const { return bBlackoutRecorded; }
+	bool IsEntityRecorded() const { return bEntityRecorded; }
+	/** v4.7 : un point ou poser le joueur a la reprise : cellule libre, atteignable, pas au-dessus d'une fosse, sol touche
+	 *  par un rayon (les chunks autour doivent etre construits) et capsule degagee. Out : centre de la capsule */
+	bool FindSafeResumeSpot(const FVector& Wanted, float Half, float Radius, FVector& Out) const;
+	/** v4.7 : point ou le joueur peut etre sauvegarde (au sol, pas au-dessus d'une fosse, pas dans l'eau profonde) */
+	bool IsSafeSaveSpot(const ABRCharacter* P) const;
 	/** Sauvegardes : reprend le journal d'une partie (entites rencontrees, niveaux visites), sans annonce */
 	void RestoreJournal(const TArray<int32>& InDiscovered, const TArray<int32>& InVisited);
 	const TArray<TObjectPtr<ABREntity>>& GetEntities() const { return Entities; }
@@ -423,6 +435,11 @@ private:
 	float SpawnTimer = 20.f;
 	float PhenomenaTimer = 40.f;
 	float DeathTimer = -1.f;
+	/** v4.7 : reprise d'une session (point de reprise a appliquer au placement du joueur de l'hote) */
+	bool bResumed = false;
+	bool bHasResumeSpot = false;
+	FVector ResumeSpot = FVector::ZeroVector;
+	float ResumeYaw = 0.f;
 	bool bPlayerPlaced = false;
 	bool bLevelReady = false;
 	int32 LoadedSerial = 0;

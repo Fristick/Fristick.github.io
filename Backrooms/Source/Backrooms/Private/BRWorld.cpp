@@ -1,4 +1,5 @@
 #include "BRWorld.h"
+#include "BRSave.h"
 #include "Backrooms.h"
 #include "BRLevels.h"
 #include "BRAssets.h"
@@ -119,7 +120,9 @@ void ABRWorld::BeginPlay()
 		StartLevel = CmdLevel;
 	}
 
-	LoadLevelNow(StartLevel);
+	// v4.7 : l'hote reprend une partie en ligne : la carte vient d'etre rechargee, la session attend son niveau
+	const FBRSessionState& Resume = BRSaves::PendingResume();
+	LoadLevelNow(StartLevel, (Resume.bValid && Resume.Level == StartLevel) ? Resume.Seed : 0u);
 	TransState = ETrans::FadingIn;
 	TransTimer = 0.f;
 	Fade = 1.f;
@@ -362,6 +365,9 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	// Premier niveau d'un client qui rejoint : le serveur a deja fait apparaitre son personnage a sa place
 	const bool bFirstClientLoad = !HasAuthority() && !bLevelReady;
 	ClearLevel();
+	// v4.7 : le joueur n'est pas encore place dans ce niveau. Sans cela, la construction synchrone ci-dessous se faisait
+	// autour de sa position dans le niveau precedent, et le sol du point d'arrivee venait quelques images plus tard.
+	bPlayerPlaced = false;
 	Current = &BRLevels::Get(LevelNumber);
 	Seed = InSeed != 0 ? InSeed : (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17));
 	// v4.5 : -BRSeed=<n> : meme disposition a chaque lancement (captures avant / apres comparables, tests automatiques)
@@ -398,6 +404,38 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		VHSFound = 0;
 		bBlackoutRecorded = false;
 		bEntityRecorded = false;
+		// v4.7 : reprise d'une partie : meme graine, donc meme disposition. Objectifs et objets ramasses sont remis
+		// avant la construction des chunks : un objet deja ramasse n'est jamais cree. Le point de reprise est applique
+		// au placement du joueur, une fois le sol et les collisions construits.
+		bResumed = false;
+		bHasResumeSpot = false;
+		FBRSessionState& Resume = BRSaves::PendingResume();
+		if (Resume.bValid)
+		{
+			if (Resume.Level == Current->Number && Resume.Seed == Seed)
+			{
+				VHSFound = Resume.VHSFound;
+				bBlackoutRecorded = Resume.bBlackoutRecorded;
+				bEntityRecorded = Resume.bEntityRecorded;
+				for (const uint64 Id : Resume.Collected)
+				{
+					Collected.Add(Id);
+					NetCollected.AddUnique(Id);
+				}
+				bHasResumeSpot = Resume.bHasSpot;
+				ResumeSpot = Resume.Spot;
+				ResumeYaw = Resume.Yaw;
+				bResumed = true;
+				UE_LOG(LogBackrooms, Log, TEXT("Reprise : Niveau %d, graine %u, %d cassette(s), %d objet(s) deja ramasse(s), point de reprise %s"),
+					Current->Number, Seed, VHSFound, Resume.Collected.Num(), bHasResumeSpot ? *ResumeSpot.ToString() : TEXT("aucun"));
+			}
+			else
+			{
+				UE_LOG(LogBackrooms, Warning, TEXT("Reprise ignoree : session du Niveau %d (graine %u), niveau charge %d (graine %u)"), Resume.Level,
+					Resume.Seed, Current->Number, Seed);
+			}
+			Resume = FBRSessionState();
+		}
 		// v4.7 : nouveau niveau, tout le groupe repart debout (etat tenu par le serveur, chaque machine suit)
 		TArray<ABRCharacter*> All;
 		GetPlayers(All);
@@ -801,7 +839,26 @@ void ABRWorld::PlacePlayer(bool bKeepServerSpot)
 	// (a l'arrivee d'un client, l'etat des autres joueurs n'est pas toujours encore recu : sa place calculee ici
 	// serait fausse, alors que le serveur l'a deja fait apparaitre a la bonne)
 	const bool bServerPlaced = bKeepServerSpot && FVector::Dist2D(P->GetActorLocation(), CellCenter(FIntPoint(0, 0))) < CellSize();
-	if (!bServerPlaced)
+	// v4.7 : reprise d'une partie (joueur de l'hote) : au point sauvegarde s'il est encore sur, sinon au depart
+	bool bResumePlaced = false;
+	if (bHasResumeSpot && HasAuthority() && P->IsLocallyControlled())
+	{
+		bHasResumeSpot = false;
+		const float Radius = P->GetCapsuleComponent() ? P->GetCapsuleComponent()->GetScaledCapsuleRadius() : 34.f;
+		FVector Safe;
+		if (FindSafeResumeSpot(ResumeSpot, Half, Radius, Safe))
+		{
+			P->SetActorLocation(Safe, false, nullptr, ETeleportType::TeleportPhysics);
+			Yaw = ResumeYaw;
+			bResumePlaced = true;
+			UE_LOG(LogBackrooms, Log, TEXT("Reprise : joueur replace en %s"), *Safe.ToString());
+		}
+		else
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("Reprise : point %s invalide (mur, fosse, sol absent) : point de depart"), *ResumeSpot.ToString());
+		}
+	}
+	if (!bServerPlaced && !bResumePlaced)
 	{
 		const int32 Slot = IsNetGame() ? PlayerSlot(P->GetPlayerState()) : 0;
 		const FVector Loc = SpawnSpot(Slot, Half);
@@ -836,6 +893,71 @@ void ABRWorld::RestoreJournal(const TArray<int32>& InDiscovered, const TArray<in
 	{
 		Visited.AddUnique(L);
 	}
+}
+
+TArray<uint64> ABRWorld::GetCollectedList() const
+{
+	TArray<uint64> Out = Collected.Array();
+	for (const uint64 Id : NetCollected)
+	{
+		Out.AddUnique(Id);
+	}
+	return Out;
+}
+
+bool ABRWorld::IsSafeSaveSpot(const ABRCharacter* P) const
+{
+	if (!P || P->IsDead() || !bLevelReady || IsTransitioning() || P->IsClimbing() || P->IsSwimming())
+	{
+		return false;
+	}
+	const UCharacterMovementComponent* Move = P->GetCharacterMovement();
+	if (!Move || !Move->IsMovingOnGround())
+	{
+		return false;
+	}
+	const FVector L = P->GetActorLocation();
+	if (HasPits() && IsOverPit(L, 90.f))
+	{
+		return false;
+	}
+	const FIntPoint Cell = WorldToCell(L);
+	return IsCellInBounds(Cell.X, Cell.Y) && IsWalkable(Cell) && (!HasPits() || IsReachable(Cell));
+}
+
+bool ABRWorld::FindSafeResumeSpot(const FVector& Wanted, float Half, float Radius, FVector& Out) const
+{
+	UWorld* World = GetWorld();
+	const FIntPoint Cell = WorldToCell(Wanted);
+	if (!World || !IsCellInBounds(Cell.X, Cell.Y) || !IsWalkable(Cell) || !IsChunkLoaded(CellToChunk(Cell)))
+	{
+		return false;
+	}
+	if (HasPits() && (IsOverPit(Wanted, Radius + 40.f) || !IsReachable(Cell)))
+	{
+		return false;
+	}
+	// Le sol doit exister vraiment (chunk construit, collisions comprises) juste sous le point
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRResumeSpot), false);
+	if (const ABRCharacter* P = GetPlayer())
+	{
+		Q.AddIgnoredActor(P);
+	}
+	FHitResult Hit;
+	const FVector From(Wanted.X, Wanted.Y, Wanted.Z + 60.f);
+	const FVector To(Wanted.X, Wanted.Y, Wanted.Z - Half - 250.f);
+	if (!World->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Q) || Hit.ImpactNormal.Z < 0.7f)
+	{
+		return false;
+	}
+	const FVector Loc = Hit.ImpactPoint + FVector(0.f, 0.f, Half + 3.f);
+	// Capsule degagee (pas dans un mur ni un meuble apparu depuis)
+	if (World->OverlapBlockingTestByChannel(Loc, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(Radius, Half), Q))
+	{
+		return false;
+	}
+	Out = Loc;
+	return true;
 }
 
 void ABRWorld::Discover(EBREntityKind Kind)
@@ -1000,7 +1122,8 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 
 	// Le serveur garde le sol sous les pieds de chaque joueur (collisions, IA des entites)
 	TArray<FVector> Centers;
-	Centers.Add((P && bPlayerPlaced) ? P->GetActorLocation() : CellCenter(FIntPoint(0, 0)));
+	// v4.7 : reprise : le sol autour du point de reprise est construit avant d'y poser le joueur
+	Centers.Add((P && bPlayerPlaced) ? P->GetActorLocation() : (bHasResumeSpot ? ResumeSpot : CellCenter(FIntPoint(0, 0))));
 	if (HasAuthority() && IsNetGame())
 	{
 		TArray<ABRCharacter*> All;

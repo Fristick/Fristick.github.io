@@ -179,6 +179,7 @@ void ABRPlayerController::BeginPlay()
 	else if (HasAuthority() && BRSaves::ActiveSlot() != INDEX_NONE)
 	{
 		ActiveSave = BRSaves::Load(BRSaves::ActiveSlot());
+		ResolvePendingDeath(ActiveSave);
 		bApplySaveOnSpawn = ActiveSave != nullptr;
 		if (!ActiveSave)
 		{
@@ -205,7 +206,7 @@ void ABRPlayerController::BeginPlay()
 
 void ABRPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	WriteActiveSave(); // fermeture du jeu ou de l'editeur en pleine partie
+	WriteActiveSave(true); // fermeture du jeu ou de l'editeur en pleine partie : on attend la fin de l'ecriture
 	ShowAddressBox(false);
 	ShowNameBox(false);
 	if (bTransmitting)
@@ -529,6 +530,30 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 			if (!(bPauseMenu && !IsNetGame()))
 			{
 				ActiveSave->PlayTime += DeltaTime;
+			}
+			// v4.7 : point de reprise : le dernier endroit sur ou l'on se tenait (au sol, loin du vide et de l'eau profonde)
+			SafeSpotTimer -= DeltaTime;
+			if (SafeSpotTimer <= 0.f)
+			{
+				SafeSpotTimer = 0.5f;
+				const ABRCharacter* SpotC = GetBRCharacter();
+				if (SaveWorld && SaveWorld->IsSafeSaveSpot(SpotC))
+				{
+					bHasSafeSpot = true;
+					SafeSpot = SpotC->GetActorLocation();
+					SafeYaw = static_cast<float>(GetControlRotation().Yaw);
+				}
+			}
+			// v4.7 : une ecriture de fond a echoue (disque plein, droits) : on le dit une fois
+			if (!BRSaves::LastWriteSucceeded() && !bSaveFailShown)
+			{
+				bSaveFailShown = true;
+				ABRHUD::Notify(this, TEXT("\u00c9chec de la sauvegarde (disque plein ou dossier prot\u00e9g\u00e9 ?). La partie continue ; nouvel essai \u00e0 la prochaine sauvegarde."),
+					8.f, FLinearColor(1.f, 0.5f, 0.4f));
+			}
+			else if (BRSaves::LastWriteSucceeded())
+			{
+				bSaveFailShown = false;
 			}
 			if (PendingSaveDelay > 0.f)
 			{
@@ -968,7 +993,7 @@ void ABRPlayerController::TogglePause()
 
 void ABRPlayerController::QuitToDesktop()
 {
-	WriteActiveSave();
+	WriteActiveSave(true);
 	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }
 
@@ -1633,6 +1658,35 @@ void ABRPlayerController::RefreshSaves()
 		}
 	}
 	SaveOrder.Sort([this](int32 L, int32 R) { return SaveSlots[L]->LastPlayed > SaveSlots[R]->LastPlayed; });
+	ShowSaveLoadMessages();
+}
+
+void ABRPlayerController::ShowSaveLoadMessages()
+{
+	for (const FString& Msg : BRSaves::TakeLoadMessages())
+	{
+		ABRHUD::Notify(this, Msg, 10.f, FLinearColor(1.f, 0.75f, 0.45f));
+	}
+}
+
+void ABRPlayerController::ResolvePendingDeath(UBRSaveGame* Save)
+{
+	if (!Save || !Save->bPendingDeath)
+	{
+		return;
+	}
+	// Le jeu a ete ferme pendant une mort (a terre, ou pendant le fondu) : elle va a son terme, comme en jeu.
+	// L'equipement est perdu, le niveau sera neuf ; le journal, les niveaux explores et le temps de jeu restent.
+	Save->bPendingDeath = false;
+	Save->bHasPlayer = false;
+	Save->Items.Reset();
+	Save->Health = 100.f;
+	Save->Sanity = 100.f;
+	Save->Battery = 100.f;
+	Save->Session = FBRSessionState();
+	Save->CurrentLevel = Save->IsExplored(Save->PendingDeathLevel) ? Save->PendingDeathLevel : 0;
+	ABRHUD::Notify(this, TEXT("La derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort : vous repartez avec l'\u00e9quipement de d\u00e9part."), 7.f,
+		FLinearColor(1.f, 0.7f, 0.5f));
 }
 
 void ABRPlayerController::SelectSave(int32 Slot)
@@ -1644,6 +1698,7 @@ void ABRPlayerController::SelectSave(int32 Slot)
 	}
 	ActiveSave = S;
 	BRSaves::ActiveSlot() = Slot;
+	ResolvePendingDeath(S);
 	// On reprend la ou on s'etait arrete
 	const int32 Level = S->IsExplored(S->CurrentLevel) ? S->CurrentLevel : 0;
 	SetMenuPage(EBRMenuPage::Solo);
@@ -1690,6 +1745,7 @@ void ABRPlayerController::StartNewSave()
 
 void ABRPlayerController::ApplyActiveSave()
 {
+	ResolvePendingDeath(ActiveSave);
 	if (ABRCharacter* C = GetBRCharacter())
 	{
 		C->ReadFromSave(ActiveSave);
@@ -1703,6 +1759,9 @@ void ABRPlayerController::ApplyActiveSave()
 
 void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 {
+	// v4.7 : le point de reprise appartient au niveau : il sera releve des que le joueur se tient au sol
+	bHasSafeSpot = false;
+	SafeSpotTimer = 0.f;
 	if (IsDevMode() && !bInMenu)
 	{
 		DevHelpTime = 10.f;
@@ -1734,30 +1793,63 @@ void ABRPlayerController::NotifyPlayerDeath()
 	if (ActiveSave && IsLocalController())
 	{
 		++ActiveSave->Deaths;
+		// v4.7 : ecrit tout de suite : fermer le jeu a terre ne doit pas annuler la mort
+		WriteActiveSave();
 	}
 }
 
-void ABRPlayerController::WriteActiveSave()
+void ABRPlayerController::WriteActiveSave(bool bBlocking)
 {
 	if (!ActiveSave || BRSaves::ActiveSlot() == INDEX_NONE || bInMenu || !IsLocalController() || GetNetMode() == NM_Client)
 	{
+		if (bBlocking)
+		{
+			BRSaves::Flush();
+		}
 		return;
 	}
 	const ABRCharacter* C = GetBRCharacter();
-	if (C && !C->IsDead())
+	const ABRWorld* W = ABRWorld::Get(this);
+	const bool bDeadNow = C && C->IsDead();
+	if (bDeadNow)
+	{
+		// v4.7 : mort en cours : l'inventaire d'avant la mort n'est pas reecrit, et la mort est notee pour le prochain
+		// chargement (seul : retour au Niveau 0 ; en equipe : reveil dans le niveau en cours)
+		ActiveSave->bPendingDeath = true;
+		ActiveSave->PendingDeathLevel = (W && IsNetGame()) ? W->GetLevelNumber() : 0;
+		ActiveSave->Session.bValid = false;
+	}
+	else if (C)
 	{
 		C->WriteToSave(ActiveSave);
+		ActiveSave->bPendingDeath = false;
 	}
-	if (const ABRWorld* W = ABRWorld::Get(this))
+	if (W)
 	{
 		ActiveSave->Discovered = W->GetDiscoveredList();
 		if (W->IsLevelReady() && !W->IsTransitioning() && (!bDevSession || ActiveSave->IsExplored(W->GetLevelNumber())))
 		{
 			ActiveSave->CurrentLevel = W->GetLevelNumber();
 			ActiveSave->MarkExplored(W->GetLevelNumber());
+			// v4.7 : session a reprendre : meme disposition, objectifs, objets ramasses, dernier point sur
+			if (!bDeadNow && !bDevSession && C)
+			{
+				FBRSessionState& Session = ActiveSave->Session;
+				Session.bValid = true;
+				Session.Level = W->GetLevelNumber();
+				Session.Seed = W->GetSeed();
+				Session.VHSFound = W->GetVHSFound();
+				Session.bBlackoutRecorded = W->IsBlackoutRecorded();
+				Session.bEntityRecorded = W->IsEntityRecorded();
+				Session.Collected = W->GetCollectedList();
+				Session.bHasSpot = bHasSafeSpot;
+				Session.Spot = SafeSpot;
+				Session.Yaw = SafeYaw;
+			}
 		}
 	}
-	if (BRSaves::Write(BRSaves::ActiveSlot(), ActiveSave))
+	const bool bQueued = bBlocking ? BRSaves::Write(BRSaves::ActiveSlot(), ActiveSave) : BRSaves::WriteAsync(BRSaves::ActiveSlot(), ActiveSave);
+	if (bQueued)
 	{
 		TimeSinceSave = 0.f;
 	}
@@ -1780,6 +1872,13 @@ void ABRPlayerController::HostGame()
 	// La carte est rechargee en serveur "listen" : les amis peuvent rejoindre sur le port 7777
 	const int32 Level = BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number;
 	MenuStatus = TEXT("Cr\u00e9ation de la partie...");
+	// v4.7 : l'hote reprend sa session (la carte est rechargee : le monde la retrouve dans BRSaves::PendingResume)
+	BRSaves::PendingResume() = FBRSessionState();
+	if (ActiveSave && ActiveSave->Session.bValid && ActiveSave->Session.Level == Level && ActiveSave->Session.Seed != 0)
+	{
+		BRSaves::PendingResume() = ActiveSave->Session;
+	}
+	BRSaves::Flush();
 	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);
 	UGameplayStatics::OpenLevel(this, FName(*Map), true, FString::Printf(TEXT("listen?BRLevel=%d"), Level));
 }
@@ -1803,7 +1902,7 @@ void ABRPlayerController::JoinGame()
 
 void ABRPlayerController::ReturnToMainMenu()
 {
-	WriteActiveSave();
+	WriteActiveSave(true);
 	// Recharger la carte hors ligne : on quitte la session (l'hote ferme la partie pour tout le monde)
 	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);
 	UGameplayStatics::OpenLevel(this, FName(*Map), true);
@@ -2033,7 +2132,17 @@ void ABRPlayerController::StartSolo()
 	const int32 Target = BRLevels::All()[MenuIndex].Number;
 	// Mode developpeur : un niveau pas encore explore se visite sans etre ajoute a la partie
 	bDevSession = ActiveSave && !ActiveSave->IsExplored(Target);
-	if (Target != W->GetLevelNumber())
+	// v4.7 : reprise apres fermeture du jeu : meme graine, objectifs, objets ramasses et point de reprise.
+	// (Apres une mort, la session a ete invalidee : le niveau sera neuf, comme le veut la regle.)
+	const FBRSessionState* Session = ActiveSave ? &ActiveSave->Session : nullptr;
+	if (Session && Session->bValid && Session->Level == Target && Session->Seed != 0 && !bDevSession)
+	{
+		BRSaves::PendingResume() = *Session;
+		ABRHUD::Notify(this, FString::Printf(TEXT("Reprise de la partie \u00ab %s \u00bb : Niveau %d, l\u00e0 o\u00f9 vous l'aviez laiss\u00e9."),
+			*ActiveSave->SaveName, Target), 5.f, FLinearColor(0.75f, 0.95f, 1.f));
+		W->RequestTransition(Target, false, Session->Seed);
+	}
+	else if (Target != W->GetLevelNumber())
 	{
 		W->RequestTransition(Target);
 	}

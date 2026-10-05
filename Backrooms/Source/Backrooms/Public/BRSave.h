@@ -1,6 +1,8 @@
 // Sauvegardes (v4.1) : une partie = un emplacement (Saved/SaveGames/BR_Partie_<n>.sav).
 // On y garde les niveaux deja explores (les seuls que l'on peut choisir ensuite), le dernier niveau atteint,
 // l'inventaire et l'etat du joueur, le journal (entites rencontrees, notes lues), le temps de jeu.
+// v4.7 (format 2) : etat de la session pour une vraie reprise (graine, objectifs, objets ramasses, point de reprise),
+// mort en attente (fermer le jeu a terre ne l'annule pas), copie de secours, ecritures ordonnees sur un thread de fond.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -28,12 +30,59 @@ struct FBRSavedItem
 	int32 Count = 0;
 };
 
+/** v4.7 : ce qu'il faut pour reprendre un niveau tel qu'on l'a laisse (meme disposition, objectifs, objets ramasses) */
+USTRUCT()
+struct FBRSessionState
+{
+	GENERATED_BODY()
+
+	/** Une session peut etre reprise (faux : niveau neuf, par exemple apres une mort) */
+	UPROPERTY(SaveGame)
+	bool bValid = false;
+
+	UPROPERTY(SaveGame)
+	int32 Level = 0;
+
+	/** Graine de generation du niveau */
+	UPROPERTY(SaveGame)
+	uint32 Seed = 0;
+
+	UPROPERTY(SaveGame)
+	int32 VHSFound = 0;
+
+	UPROPERTY(SaveGame)
+	bool bBlackoutRecorded = false;
+
+	UPROPERTY(SaveGame)
+	bool bEntityRecorded = false;
+
+	/** Objets deja ramasses dans ce niveau (identifiants stables de ABRPickup) : ils ne reapparaissent pas */
+	UPROPERTY(SaveGame)
+	TArray<uint64> Collected;
+
+	/** Dernier point sur et au sol du joueur (pas au-dessus d'une fosse, pas dans l'eau profonde) */
+	UPROPERTY(SaveGame)
+	bool bHasSpot = false;
+
+	UPROPERTY(SaveGame)
+	FVector Spot = FVector::ZeroVector;
+
+	UPROPERTY(SaveGame)
+	float Yaw = 0.f;
+};
+
 UCLASS()
 class BACKROOMS_API UBRSaveGame : public USaveGame
 {
 	GENERATED_BODY()
 
 public:
+	/** Format du fichier (1 : v4.1 a v4.6 ; 2 : v4.7, session reprise) */
+	static constexpr int32 CurrentVersion = 2;
+
+	/** Format du fichier. La valeur par defaut reste 1 : les proprietes egales a celles de l'objet par defaut ne sont
+	 *  pas ecrites, et un fichier v4.1-v4.6 (Version = 1, donc absente du fichier) doit etre reconnu comme tel.
+	 *  BRSaves::Write et WriteAsync y mettent CurrentVersion avant d'ecrire. */
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
 
@@ -85,6 +134,24 @@ public:
 	UPROPERTY(SaveGame)
 	int32 Deaths = 0;
 
+	/** v4.7 : session en cours (reprise fidele apres fermeture du jeu) */
+	UPROPERTY(SaveGame)
+	FBRSessionState Session;
+
+	/** v4.7 : mort pas encore resolue au moment de l'ecriture (jeu ferme a terre ou pendant le fondu).
+	 *  Au chargement : equipement de depart et niveau neuf, comme si la mort etait allee a son terme. */
+	UPROPERTY(SaveGame)
+	bool bPendingDeath = false;
+
+	/** Niveau ou l'on se reveille apres cette mort (seul : Niveau 0 ; en equipe : le niveau en cours) */
+	UPROPERTY(SaveGame)
+	int32 PendingDeathLevel = 0;
+
+	/** Charge depuis la copie de secours (le fichier principal etait illisible) ; non enregistre */
+	bool bRecovered = false;
+	/** Format lu sur le disque avant migration ; non enregistre */
+	int32 LoadedVersion = CurrentVersion;
+
 	bool IsExplored(int32 Level) const { return Explored.Contains(Level); }
 	void MarkExplored(int32 Level) { Explored.AddUnique(Level); }
 };
@@ -95,14 +162,35 @@ namespace BRSaves
 	constexpr int32 MaxSlots = 6;
 
 	BACKROOMS_API FString SlotName(int32 Slot);
-	/** nullptr si l'emplacement est vide ou illisible */
+	/** v4.7 : copie de secours (meme contenu, ecrite juste apres le fichier principal) */
+	BACKROOMS_API FString BackupSlotName(int32 Slot);
+	/** v4.7 : fichier illisible mis de cote (l'emplacement redevient libre) */
+	BACKROOMS_API FString UnreadableSlotName(int32 Slot);
+	/** v4.7 : copie intacte d'une sauvegarde d'un ancien format, faite avant sa premiere reecriture */
+	BACKROOMS_API FString LegacySlotName(int32 Slot, int32 Version);
+	/** nullptr si l'emplacement est vide ou illisible. v4.7 : principal illisible -> copie de secours ; les deux
+	 *  illisibles -> le fichier est mis de cote (UnreadableSlotName) et signale par TakeLoadMessages ; ancien format ->
+	 *  migre en memoire (une copie intacte est gardee sous LegacySlotName) */
 	BACKROOMS_API UBRSaveGame* Load(int32 Slot);
+	/** Ecriture immediate (attend aussi les ecritures en cours) */
 	BACKROOMS_API bool Write(int32 Slot, UBRSaveGame* Save);
+	/** v4.7 : instantane serialise tout de suite (thread du jeu), fichier ecrit sur un thread de fond.
+	 *  Les ecritures se font dans l'ordre des appels. false si l'instantane n'a pas pu etre fait */
+	BACKROOMS_API bool WriteAsync(int32 Slot, UBRSaveGame* Save);
+	/** v4.7 : attend la fin de toutes les ecritures en cours (fermeture du jeu, retour au menu) */
+	BACKROOMS_API void Flush();
+	/** v4.7 : resultat de la derniere ecriture terminee (false : echec signale au joueur) */
+	BACKROOMS_API bool LastWriteSucceeded();
+	/** v4.7 : messages pour le joueur depuis le dernier appel (sauvegarde restauree, fichier illisible mis de cote) */
+	BACKROOMS_API TArray<FString> TakeLoadMessages();
 	BACKROOMS_API void Delete(int32 Slot);
 	/** Premier emplacement libre (INDEX_NONE si tout est pris) */
 	BACKROOMS_API int32 FreeSlot();
 	/** Partie en cours : survit au rechargement de la carte (heberger une partie, revenir au menu). INDEX_NONE : aucune */
 	BACKROOMS_API int32& ActiveSlot();
+	/** v4.7 : session a reprendre au prochain chargement de son niveau (survit au rechargement de la carte quand
+	 *  l'hote ouvre une partie en ligne). Consommee par ABRWorld::LoadLevelNow si le niveau et la graine concordent */
+	BACKROOMS_API FBRSessionState& PendingResume();
 	/** "2 h 05", "14 min" */
 	BACKROOMS_API FString FormatPlayTime(float Seconds);
 	/** "04/10/2026 22:54" */

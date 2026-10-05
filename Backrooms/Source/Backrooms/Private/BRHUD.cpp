@@ -2008,8 +2008,17 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		RoundRect(PX, PY, PW, BoxH, 16.f * U, FLinearColor(1.f, 0.88f, 0.5f, 0.12f * A), true);
 		TextF(Ellipsize(Shown->SaveName, PW - 44.f * U, 24.f, EUiWeight::Black), PX + 22.f * U, PY + 16.f * U, WithAlpha(Ink, A), 24.f, EUiWeight::Black);
 		float LY = PY + 62.f * U;
+		// v4.7 : ce que donnera "Reprendre" (meme disposition et objectifs, ou niveau neuf)
+		const FBRSessionState& Ses = Shown->Session;
+		const FString Resume = Shown->bPendingDeath
+			? FString(TEXT("Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, niveau neuf)"))
+			: (Ses.bValid && Ses.Level == D.Number
+				? FString::Printf(TEXT("Reprise \u00e0 l'identique : m\u00eame disposition, %d cassette(s), %d objet(s) ramass\u00e9(s)%s"), Ses.VHSFound,
+					Ses.Collected.Num(), Ses.bHasSpot ? TEXT(", derni\u00e8re position") : TEXT(", point de d\u00e9part"))
+				: FString(TEXT("Reprise : nouvelle disposition du niveau (partie d'une version ant\u00e9rieure ou apr\u00e8s une mort)")));
 		const FString Lines[] = {
 			FString::Printf(TEXT("Derni\u00e8re position : Niveau %d  \u00b7  %s"), D.Number, *D.Title),
+			Resume,
 			FString::Printf(TEXT("Temps de jeu : %s  \u00b7  morts : %d  \u00b7  entit\u00e9s rencontr\u00e9es : %d / %d"), *BRSaves::FormatPlayTime(Shown->PlayTime),
 				Shown->Deaths, Shown->Discovered.Num(), static_cast<int32>(EBREntityKind::Count)),
 			FString::Printf(TEXT("Cr\u00e9\u00e9e le %s  \u00b7  jou\u00e9e le %s"), *BRSaves::FormatDate(Shown->Created).Left(10), *BRSaves::FormatDate(Shown->LastPlayed)),

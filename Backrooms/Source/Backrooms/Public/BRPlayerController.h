@@ -87,8 +87,9 @@ public:
 	void OnLevelLoaded(int32 LevelNumber);
 	/** Le personnage local vient de mourir (compteur de la sauvegarde) */
 	void NotifyPlayerDeath();
-	/** Ecrit la partie en cours (etat du joueur, niveau, journal) */
-	void WriteActiveSave();
+	/** Ecrit la partie en cours (etat du joueur, niveau, journal ; v4.7 : session a reprendre).
+	 *  v4.7 : ecriture sur un thread de fond ; bBlocking attend la fin (fermeture du jeu, retour au menu) */
+	void WriteActiveSave(bool bBlocking = false);
 	bool IsNetGame() const;
 
 	// ---- Chat vocal de proximite
@@ -327,6 +328,10 @@ private:
 	void StartNewSave();
 	/** Applique la partie choisie au personnage et au journal (debut de partie) */
 	void ApplyActiveSave();
+	/** v4.7 : partie fermee pendant une mort : la mort va a son terme (equipement de depart, niveau neuf) */
+	void ResolvePendingDeath(UBRSaveGame* Save);
+	/** v4.7 : messages du chargement des sauvegardes (copie de secours, fichier illisible) */
+	void ShowSaveLoadMessages();
 	/** Champ du nom d'une nouvelle partie (Slate, comme le champ de l'adresse IP) */
 	void ShowNameBox(bool bShow);
 	void OnMenuDelete(const FInputActionValue& Value);
@@ -371,6 +376,13 @@ private:
 	float AutoSaveTimer = 60.f;
 	float PendingSaveDelay = -1.f;
 	float TimeSinceSave = 100.f;
+	/** v4.7 : dernier point sur ou le joueur se tenait (point de reprise de la session) */
+	bool bHasSafeSpot = false;
+	FVector SafeSpot = FVector::ZeroVector;
+	float SafeYaw = 0.f;
+	float SafeSpotTimer = 0.f;
+	/** v4.7 : un echec d'ecriture a deja ete signale */
+	bool bSaveFailShown = false;
 
 	float MenuBlur = 0.f;
 	float MenuDrift = 0.f;
