@@ -2996,15 +2996,26 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		S.GraphicsProfile = 3;
 		break;
 	case Row_HardwareRT:
-		S.bHardwareRT = !S.bHardwareRT;
-		S.GraphicsProfile = 3;
-		break;
 	case Row_RTHitLighting:
-		S.bRTHitLighting = !S.bRTHitLighting;
-		S.GraphicsProfile = 3;
-		break;
 	case Row_RTShadows:
-		S.bRTShadows = !S.bRTShadows;
+		if (!IsHardwareRayTracingAvailable())
+		{
+			// v4.9 : option indisponible sur cette machine (plateforme, RHI, carte) : expliquee, pas basculee pour rien
+			ABRHUD::Notify(this, RayTracingUnavailableReason(), 5.f, FLinearColor(1.f, 0.85f, 0.5f));
+			return;
+		}
+		if (Index == Row_HardwareRT)
+		{
+			S.bHardwareRT = !S.bHardwareRT;
+		}
+		else if (Index == Row_RTHitLighting)
+		{
+			S.bRTHitLighting = !S.bRTHitLighting;
+		}
+		else
+		{
+			S.bRTShadows = !S.bRTShadows;
+		}
 		S.GraphicsProfile = 3;
 		break;
 	case Row_AreaLights:

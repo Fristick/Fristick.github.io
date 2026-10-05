@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- v4.9 : droits du Hardened Runtime pour la version Steam (pas de bac a sable : incompatible avec Steam).
+     audio-input : chat vocal (avec NSMicrophoneUsageDescription dans Info.plist, ajoutee par build_mac.sh).
+     allow-dyld-environment-variables : injection de la bibliotheque de l'Overlay Steam (documentation Steamworks).
+     disable-library-validation : chargement de cette bibliotheque, signee par Valve et non par l'editeur du jeu
+     (a confirmer avec la page "Platforms" de Steamworks et un essai de l'Overlay sur le paquet notarise). -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

@@ -3,7 +3,7 @@ Binaries/
 Intermediate/
 Saved/
 DerivedDataCache/
-Build/
+/Build/
 .vs/
 .vscode/
 .idea/
