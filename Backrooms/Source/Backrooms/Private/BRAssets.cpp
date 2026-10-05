@@ -2,6 +2,9 @@
 #include "Backrooms.h"
 #include "BRMaterialBuilder.h"
 #include "BRLoc.h"
+#include "BRLevels.h"
+#include "RHI.h"
+#include "HAL/PlatformMemory.h"
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -208,6 +211,22 @@ TArray<FString> UBRAssets::SyncLoadNames;
 bool UBRAssets::bCountSyncLoads = false;
 int32 UBRAssets::RawTextureLoads = 0;
 
+namespace BRPreload
+{
+	/** v4.9 : un ensemble precharge : ses ressources restent en memoire tant que son handle est garde */
+	struct FPreloadSet
+	{
+		TSharedPtr<FStreamableHandle> Handle;
+		int32 Count = 0;
+		double Start = 0.0;
+		float Seconds = -1.f;
+		uint64 RamBefore = 0;
+		uint64 TexBefore = 0;
+		float RamMB = 0.f;
+		float TexMB = 0.f;
+	};
+}
+
 namespace
 {
 	FStreamableManager& Streamable()
@@ -215,13 +234,157 @@ namespace
 		static FStreamableManager Manager;
 		return Manager;
 	}
-	/** Garde les ressources prechargees en memoire pour toute la session (y compris apres un rechargement de la carte) */
-	TSharedPtr<FStreamableHandle>& PreloadHandle()
+	using BRPreload::FPreloadSet;
+	TMap<FString, FPreloadSet>& PreloadSets()
 	{
-		static TSharedPtr<FStreamableHandle> Handle;
-		return Handle;
+		static TMap<FString, FPreloadSet> Sets;
+		return Sets;
 	}
 	bool GPreloadStarted = false;
+	/** Ensembles liberes depuis le lancement (rapport) */
+	int32 GPreloadReleased = 0;
+
+	/** Ressources de /Game/Backrooms classees par ensemble : "common", "entity:<n>" (nom de la creature dans le nom de la
+	 *  ressource : modeles, textures, sons, jumpscare), "tex:<T_...>" (texture de surface d'un niveau et ses cartes _N, _R) */
+	TMap<FString, TArray<FSoftObjectPath>>& Catalog()
+	{
+		static TMap<FString, TArray<FSoftObjectPath>> Groups;
+		return Groups;
+	}
+	bool GCatalogBuilt = false;
+	/** Index = EBREntityKind */
+	const TCHAR* const EntityTokens[] = { TEXT("Smiler"), TEXT("Hound"), TEXT("Faceling"), TEXT("SkinStealer"), TEXT("Deathmoth"), TEXT("Wretch"),
+		TEXT("Partygoer"), TEXT("Clump"), TEXT("Bacteria") };
+
+	TArray<FName> LevelSurfaceTextures(const FBRLevelDef& D)
+	{
+		TArray<FName> Out;
+		for (const FBRSurface* S : { &D.Floor, &D.Wall, &D.Ceiling, &D.Trim, &D.Pillar, &D.Solid, &D.Road, &D.Water })
+		{
+			if (!S->Texture.IsNone())
+			{
+				Out.AddUnique(S->Texture);
+			}
+		}
+		return Out;
+	}
+
+	void BuildCatalog()
+	{
+		if (GCatalogBuilt)
+		{
+			return;
+		}
+		GCatalogBuilt = true;
+		TSet<FString> SurfaceTex;
+		for (const FBRLevelDef& D : BRLevels::All())
+		{
+			for (const FName& T : LevelSurfaceTextures(D))
+			{
+				SurfaceTex.Add(T.ToString());
+			}
+		}
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TArray<FAssetData> Assets;
+		Registry.GetAssetsByPath(FName(TEXT("/Game/Backrooms")), Assets, true);
+		static const FName Classes[] = { FName(TEXT("StaticMesh")), FName(TEXT("SkeletalMesh")), FName(TEXT("Texture2D")), FName(TEXT("SoundWave")),
+			FName(TEXT("Material")) };
+		for (const FAssetData& Data : Assets)
+		{
+			const FName Class = Data.AssetClassPath.GetAssetName();
+			bool bWanted = false;
+			for (const FName& C : Classes)
+			{
+				bWanted |= Class == C;
+			}
+			if (!bWanted)
+			{
+				continue;
+			}
+			const FString Name = Data.AssetName.ToString();
+			FString Group = TEXT("common");
+			for (int32 k = 0; k < UE_ARRAY_COUNT(EntityTokens); ++k)
+			{
+				if (Name.Contains(EntityTokens[k], ESearchCase::CaseSensitive))
+				{
+					Group = FString::Printf(TEXT("entity:%d"), k);
+					break;
+				}
+			}
+			if (Group == TEXT("common") && Class == FName(TEXT("Texture2D")))
+			{
+				for (const FString& T : SurfaceTex)
+				{
+					if (Name == T || Name.StartsWith(T + TEXT("_"), ESearchCase::CaseSensitive))
+					{
+						Group = TEXT("tex:") + T;
+						break;
+					}
+				}
+			}
+			Catalog().FindOrAdd(Group).Add(Data.GetSoftObjectPath());
+		}
+	}
+
+	/** Ensembles d'un niveau : textures de ses surfaces, creatures qu'il peut faire apparaitre */
+	void GroupsForLevel(int32 Level, TArray<FString>& Out)
+	{
+		if (!BRLevels::Exists(Level))
+		{
+			return;
+		}
+		const FBRLevelDef& D = BRLevels::Get(Level);
+		for (const FName& T : LevelSurfaceTextures(D))
+		{
+			Out.AddUnique(TEXT("tex:") + T.ToString());
+		}
+		for (const FBREntitySpawn& E : D.Entities)
+		{
+			Out.AddUnique(FString::Printf(TEXT("entity:%d"), static_cast<int32>(E.Kind)));
+		}
+		if (Level == 0)
+		{
+			// Smilers des coupures de courant du Niveau 0 (hors de la liste des apparitions)
+			Out.AddUnique(FString::Printf(TEXT("entity:%d"), static_cast<int32>(EBREntityKind::Smiler)));
+		}
+	}
+
+	void RequestSet(const FString& Key)
+	{
+		const TArray<FSoftObjectPath>* Paths = Catalog().Find(Key);
+		if (!Paths || Paths->Num() == 0 || PreloadSets().Contains(Key))
+		{
+			return;
+		}
+		FPreloadSet Set;
+		Set.Count = Paths->Num();
+		Set.Start = FPlatformTime::Seconds();
+		Set.RamBefore = FPlatformMemory::GetStats().UsedPhysical;
+		FTextureMemoryStats Tex;
+		RHIGetTextureMemoryStats(Tex);
+		Set.TexBefore = static_cast<uint64>(FMath::Max<int64>(0, Tex.StreamingMemorySize + Tex.NonStreamingMemorySize));
+		Set.Handle = Streamable().RequestAsyncLoad(*Paths, FStreamableDelegate(), FStreamableManager::DefaultAsyncLoadPriority);
+		PreloadSets().Add(Key, Set);
+		UE_LOG(LogBackrooms, Log, TEXT("Prechargement : ensemble %s (%d ressources)"), *Key, Set.Count);
+	}
+
+	/** Duree et memoire de chaque ensemble, notees a la fin de son chargement */
+	void UpdatePreloadStats()
+	{
+		for (TPair<FString, FPreloadSet>& Pair : PreloadSets())
+		{
+			FPreloadSet& Set = Pair.Value;
+			if (Set.Seconds < 0.f && (!Set.Handle.IsValid() || Set.Handle->HasLoadCompleted()))
+			{
+				Set.Seconds = static_cast<float>(FPlatformTime::Seconds() - Set.Start);
+				FTextureMemoryStats Tex;
+				RHIGetTextureMemoryStats(Tex);
+				const int64 TexNow = Tex.StreamingMemorySize + Tex.NonStreamingMemorySize;
+				Set.RamMB = static_cast<float>((static_cast<double>(FPlatformMemory::GetStats().UsedPhysical) - static_cast<double>(Set.RamBefore)) / (1024.0 * 1024.0));
+				Set.TexMB = static_cast<float>((static_cast<double>(TexNow) - static_cast<double>(Set.TexBefore)) / (1024.0 * 1024.0));
+			}
+		}
+	}
 }
 
 void UBRAssets::StartPreload()
@@ -231,37 +394,103 @@ void UBRAssets::StartPreload()
 		return;
 	}
 	GPreloadStarted = true;
-	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	TArray<FAssetData> Assets;
-	Registry.GetAssetsByPath(FName(TEXT("/Game/Backrooms")), Assets, true);
-	TArray<FSoftObjectPath> Paths;
-	static const FName Classes[] = { FName(TEXT("StaticMesh")), FName(TEXT("SkeletalMesh")), FName(TEXT("Texture2D")), FName(TEXT("SoundWave")),
-		FName(TEXT("Material")) };
-	for (const FAssetData& D : Assets)
-	{
-		const FName Class = D.AssetClassPath.GetAssetName();
-		for (const FName& C : Classes)
-		{
-			if (Class == C)
-			{
-				Paths.Add(D.GetSoftObjectPath());
-				break;
-			}
-		}
-	}
-	if (Paths.Num() == 0)
+	// v4.9 : au menu, l'ensemble commun seulement (materiaux, interface, sons communs, joueur et combinaison, accessoires) ;
+	// les textures des niveaux et les creatures suivent le niveau (PreloadForLevel). Avant : tout /Game/Backrooms, garde
+	// toute la session. -BRPreloadAll retablit l'ancien comportement (comparaison des mesures).
+	BuildCatalog();
+	if (Catalog().Num() == 0)
 	{
 		UE_LOG(LogBackrooms, Log, TEXT("Prechargement : aucune ressource importee (secours de l'editeur)"));
 		return;
 	}
-	PreloadHandle() = Streamable().RequestAsyncLoad(Paths, FStreamableDelegate(), FStreamableManager::DefaultAsyncLoadPriority);
-	UE_LOG(LogBackrooms, Log, TEXT("Prechargement asynchrone de %d ressources (/Game/Backrooms)"), Paths.Num());
+	RequestSet(TEXT("common"));
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRPreloadAll")))
+	{
+		TArray<FString> Keys;
+		Catalog().GetKeys(Keys);
+		for (const FString& K : Keys)
+		{
+			RequestSet(K);
+		}
+	}
+}
+
+void UBRAssets::PreloadForLevel(int32 Level)
+{
+	if (!GPreloadStarted)
+	{
+		StartPreload();
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRPreloadAll")))
+	{
+		return;
+	}
+	// Le niveau courant et ceux ou menent ses sorties (une sortie au hasard n'est pas anticipee : chargement pendant le fondu)
+	TArray<FString> Wanted;
+	Wanted.Add(TEXT("common"));
+	GroupsForLevel(Level, Wanted);
+	if (BRLevels::Exists(Level))
+	{
+		for (const FBRExitDef& Exit : BRLevels::Get(Level).Exits)
+		{
+			if (Exit.Target >= 0)
+			{
+				GroupsForLevel(Exit.Target, Wanted);
+			}
+		}
+	}
+	for (const FString& K : Wanted)
+	{
+		RequestSet(K);
+	}
+	// Ensembles devenus inutiles : relaches (les ressources encore utilisees par un objet du monde restent chargees)
+	TArray<FString> InMemory;
+	PreloadSets().GetKeys(InMemory);
+	for (const FString& K : InMemory)
+	{
+		if (!Wanted.Contains(K))
+		{
+			if (const TSharedPtr<FStreamableHandle>& H = PreloadSets()[K].Handle; H.IsValid())
+			{
+				H->ReleaseHandle();
+			}
+			PreloadSets().Remove(K);
+			++GPreloadReleased;
+			UE_LOG(LogBackrooms, Log, TEXT("Prechargement : ensemble %s libere (Niveau %d)"), *K, Level);
+		}
+	}
 }
 
 bool UBRAssets::IsPreloadDone()
 {
-	const TSharedPtr<FStreamableHandle>& H = PreloadHandle();
-	return !H.IsValid() || H->HasLoadCompleted();
+	UpdatePreloadStats();
+	for (const TPair<FString, FPreloadSet>& Pair : PreloadSets())
+	{
+		if (Pair.Value.Handle.IsValid() && !Pair.Value.Handle->HasLoadCompleted())
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+TArray<FString> UBRAssets::PreloadReport()
+{
+	UpdatePreloadStats();
+	TArray<FString> Lines;
+	int32 Total = 0;
+	for (const TPair<FString, FPreloadSet>& Pair : PreloadSets())
+	{
+		const FPreloadSet& Set = Pair.Value;
+		Total += Set.Count;
+		Lines.Add(Set.Seconds < 0.f ? FString::Printf(TEXT("%s : %d ressources, en cours"), *Pair.Key, Set.Count)
+			: FString::Printf(TEXT("%s : %d ressources en %.1f s, RAM %+.0f Mo, textures %+.0f Mo (ecart pendant le chargement)"), *Pair.Key, Set.Count, Set.Seconds,
+				Set.RamMB, Set.TexMB));
+	}
+	Lines.Sort();
+	Lines.Insert(FString::Printf(TEXT("prechargement : %d ensemble(s) en memoire, %d ressources, %d ensemble(s) libere(s) depuis le lancement%s"), PreloadSets().Num(), Total,
+		GPreloadReleased, FParse::Param(FCommandLine::Get(), TEXT("BRPreloadAll")) ? TEXT(" (-BRPreloadAll : tout precharge)") : TEXT("")), 0);
+	return Lines;
 }
 
 UObject* UBRAssets::LoadAsset(const TCHAR* Folder, FName Name, UClass* Class)

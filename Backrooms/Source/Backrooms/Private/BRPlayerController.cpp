@@ -41,6 +41,7 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Net/VoiceConfig.h"
 #include "BRAssets.h"
+#include "BRDisplay.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 #include "SocketSubsystem.h"
@@ -67,6 +68,7 @@ namespace
 		Row_Voice,
 		Row_Brightness,
 		Row_WindowMode,
+		Row_Resolution,     // v4.9 : resolution de la fenetre ou de la sortie (separee de l'echelle de rendu)
 		Row_RenderScale,
 		Row_VSync,
 		Row_MaxFPS,
@@ -74,12 +76,19 @@ namespace
 		Row_Quality,
 		Row_HardwareRT,
 		Row_RTHitLighting,
+		Row_CreatureReflections, // v4.9 : creatures dans les reflets ray traces
 		Row_RTShadows,
 		Row_AreaLights,
 		Row_FullCreatures,
 		Row_VolumetricFog,
 		Row_FilmGrain,
 		Row_VHSEffect,
+		// v4.9 : interface d'exploration
+		Row_UiScale,
+		Row_HudOpacity,
+		Row_Crosshair,
+		Row_QuickBar,
+		Row_Objectives,
 		Row_DevMode,
 		Row_Count
 	};
@@ -105,6 +114,24 @@ namespace
 	{
 		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.PleinEcran", "PLEIN \u00c9CRAN")), BR_STR(NSLOCTEXT("BR", "Menu.FenetreSansBordure", "FEN\u00caTR\u00c9 SANS BORDURE")), BR_STR(NSLOCTEXT("BR", "Menu.Fenetre", "FEN\u00caTR\u00c9")) };
 		return Items[FMath::Clamp(Index, 0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	}
+	/** v4.9 : trois choix : contextuel (bref), toujours, masque */
+	FString ShowNames(int32 Index)
+	{
+		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.ShowContextual", "BRI\u00c8VEMENT")), BR_STR(NSLOCTEXT("BR", "Menu.ShowAlways", "TOUJOURS")), BR_STR(NSLOCTEXT("BR", "Menu.ShowHidden", "MASQU\u00c9S")) };
+		return Items[FMath::Clamp(Index, 0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	}
+	FString CrosshairNames(int32 Index)
+	{
+		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.CrosshairDot", "POINT")), BR_STR(NSLOCTEXT("BR", "Menu.CrosshairFocus", "SUR LES OBJETS")), BR_STR(NSLOCTEXT("BR", "Menu.Aucun", "AUCUN")) };
+		return Items[FMath::Clamp(Index, 0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	}
+	/** v4.9 : relance en hit lighting des impacts sans cache de surfaces : variable propre a certaines versions du moteur,
+	 *  verifiee a l'execution (aucune supposition sur la version installee) */
+	const TCHAR* const RetraceHitLightingCVar = TEXT("r.Lumen.Reflections.HardwareRayTracing.Retrace.HitLighting");
+	bool RetraceSupported()
+	{
+		return IConsoleManager::Get().FindConsoleVariable(RetraceHitLightingCVar) != nullptr;
 	}
 	const int32 FPSSteps[] = { 0, 30, 60, 90, 120, 144, 165, 240 };
 	const int32 NumFPSSteps = UE_ARRAY_COUNT(FPSSteps);
@@ -187,7 +214,13 @@ void ABRPlayerController::BeginPlay()
 	UpdateInputMode();
 
 	LoadSettings();
+	// v4.9 : affichage : UGameUserSettings seule source, retour a la configuration confirmee si le jeu s'est arrete avant
+	BRDisplay::Startup();
 	ApplySettings();
+	if (BRDisplay::TakeRestoredAtStartup())
+	{
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Display.RestoredAtStartup", "Affichage r\u00e9tabli : le changement pr\u00e9c\u00e9dent n'avait pas \u00e9t\u00e9 confirm\u00e9.")), 5.f, FLinearColor(1.f, 0.85f, 0.5f));
+	}
 
 	if (const ABRWorld* W = ABRWorld::Get(this))
 	{
@@ -514,6 +547,11 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 		RebuildMappings();
 	}
 	PollKeyCapture();
+	// v4.9 : confirmation de l'affichage (retour automatique a l'expiration) et changements faits hors du jeu
+	if (IsLocalController() && BRDisplay::Tick())
+	{
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Display.Reverted", "Affichage r\u00e9tabli (pas de confirmation).")), 4.f, FLinearColor(1.f, 0.85f, 0.5f));
+	}
 	UpdateVoice(DeltaTime);
 	UpdateMenuAmbience(DeltaTime);
 	DevHelpTime = FMath::Max(0.f, DevHelpTime - DeltaTime);
@@ -975,6 +1013,9 @@ void ABRPlayerController::SetInventoryOpen(bool bOpen, int32 Tab)
 	}
 	bInventory = bOpen;
 	CancelKeyCapture();
+	// v4.9 : touches purgees a l'ouverture et a la fermeture : une touche restee enfoncee (sprint, deplacement, action)
+	// ne reprend pas son effet toute seule ; il faut l'appuyer de nouveau
+	FlushPressedKeys();
 	if (bInMenu)
 	{
 		ShowAddressBox(!bOpen && MenuPage == EBRMenuPage::Join); // le champ IP ne doit pas recouvrir les parametres
@@ -1051,7 +1092,9 @@ void ABRPlayerController::OnInventory(const FInputActionValue& Value)
 			C->CloseNote();
 		}
 	}
-	SetInventoryOpen(!bInventory);
+	// v4.9 : en partie, l'inventaire s'ouvre toujours sur l'onglet Personnage (objets et les deux jauges), pas sur
+	// l'onglet de la visite precedente
+	SetInventoryOpen(!bInventory, bInventory ? INDEX_NONE : 0);
 }
 
 void ABRPlayerController::OnNightVision(const FInputActionValue& Value)
@@ -1112,6 +1155,11 @@ void ABRPlayerController::OnPause(const FInputActionValue& Value)
 	if (CaptureAction != INDEX_NONE)
 	{
 		return; // capture en cours : la touche est pour la reaffectation (Echap l'annule dans PollKeyCapture)
+	}
+	if (BRDisplay::IsPending())
+	{
+		BRDisplay::Revert(); // v4.9 : Echap pendant la confirmation de l'affichage : retour immediat
+		return;
 	}
 	if (bInventory)
 	{
@@ -1192,6 +1240,11 @@ void ABRPlayerController::OnMenuDown(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 {
+	if (BRDisplay::IsPending())
+	{
+		BRDisplay::Confirm(); // v4.9 : Entree pendant la confirmation de l'affichage : conserver
+		return;
+	}
 	if (bInMenu && !bInventory)
 	{
 		MenuActivate(MenuCursor);
@@ -2493,6 +2546,60 @@ int32 ABRPlayerController::GetSettingsCount() const
 	return Row_Count;
 }
 
+FString ABRPlayerController::GetDisplaySummary() const
+{
+	// v4.9 : mode et resolution a l'essai (confirmation de l'affichage)
+	const BRDisplay::FMode M = BRDisplay::Current();
+	return FString::Printf(TEXT("%s  \u00b7  %d \u00d7 %d"), *WindowNames(M.Window), M.Resolution.X, M.Resolution.Y);
+}
+
+int32 ABRPlayerController::GetSettingCategory(int32 Index) const
+{
+	switch (Index)
+	{
+	case Row_WindowMode:
+	case Row_Resolution:
+	case Row_RenderScale:
+	case Row_VSync:
+	case Row_MaxFPS:
+	case Row_Brightness:
+		return 1; // VIDEO
+	case Row_UiScale:
+	case Row_HudOpacity:
+	case Row_Crosshair:
+	case Row_QuickBar:
+	case Row_Objectives:
+		return 2; // INTERFACE
+	case Row_Profile:
+	case Row_Quality:
+	case Row_HardwareRT:
+	case Row_RTHitLighting:
+	case Row_CreatureReflections:
+	case Row_RTShadows:
+	case Row_AreaLights:
+	case Row_FullCreatures:
+	case Row_VolumetricFog:
+	case Row_FilmGrain:
+	case Row_VHSEffect:
+		return 3; // GRAPHISMES
+	default:
+		return 0; // JEU
+	}
+}
+
+FString ABRPlayerController::RayTracingUnavailableReason()
+{
+	// v4.9 : selon la plateforme et les capacites reelles (RHI demarre), pas un nom de carte
+	const FString RHIName = GDynamicRHI ? FString(GDynamicRHI->GetName()) : FString(TEXT("?"));
+#if PLATFORM_MAC
+	return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.RtUnavailableMac", "Indisponible sur macOS dans cette version ({RHI}) : Lumen logiciel est utilis\u00e9. Le ray tracing mat\u00e9riel Metal d'Unreal est exp\u00e9rimental, limit\u00e9 \u00e0 certains Mac Apple Silicon, et n'est pas valid\u00e9 pour ce jeu."), { { TEXT("RHI"), BRLoc::Arg(RHIName) } });
+#elif PLATFORM_LINUX
+	return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.RtUnavailableLinux", "Indisponible sur Linux dans cette version ({RHI}) : Lumen logiciel est utilis\u00e9. Le ray tracing Vulkan d'Unreal d\u00e9pend du pilote et n'est pas valid\u00e9 pour ce jeu."), { { TEXT("RHI"), BRLoc::Arg(RHIName) } });
+#else
+	return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.RtUnavailableWindows", "Indisponible : le jeu a d\u00e9marr\u00e9 sans ray tracing mat\u00e9riel ({RHI}). Il faut DirectX 12 et une carte qui le prend en charge. Lumen logiciel est utilis\u00e9 ; un changement de carte ou de RHI demande un red\u00e9marrage."), { { TEXT("RHI"), BRLoc::Arg(RHIName) } });
+#endif
+}
+
 FString ABRPlayerController::GetSettingLabel(int32 Index) const
 {
 	switch (Index)
@@ -2521,6 +2628,20 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.Luminosite", "LUMINOSIT\u00c9"));
 	case Row_WindowMode:
 		return BR_STR(NSLOCTEXT("BR", "Menu.ModeAffichage", "MODE D'AFFICHAGE"));
+	case Row_Resolution:
+		return BR_STR(NSLOCTEXT("BR", "Menu.ResolutionFenetre", "R\u00c9SOLUTION"));
+	case Row_CreatureReflections:
+		return BR_STR(NSLOCTEXT("BR", "Menu.CreatureReflections", "CR\u00c9ATURES DANS LES REFLETS"));
+	case Row_UiScale:
+		return BR_STR(NSLOCTEXT("BR", "Menu.UiScale", "TAILLE DE L'INTERFACE"));
+	case Row_HudOpacity:
+		return BR_STR(NSLOCTEXT("BR", "Menu.HudOpacity", "OPACIT\u00c9 DE L'INTERFACE"));
+	case Row_Crosshair:
+		return BR_STR(NSLOCTEXT("BR", "Menu.Crosshair", "R\u00c9TICULE"));
+	case Row_QuickBar:
+		return BR_STR(NSLOCTEXT("BR", "Menu.QuickBarRow", "OBJETS RAPIDES"));
+	case Row_Objectives:
+		return BR_STR(NSLOCTEXT("BR", "Menu.ObjectivesRow", "OBJECTIFS \u00c0 L'\u00c9CRAN"));
 	case Row_RenderScale:
 		return BR_STR(NSLOCTEXT("BR", "Menu.ResolutionRendu", "R\u00c9SOLUTION DE RENDU"));
 	case Row_VSync:
@@ -2582,7 +2703,45 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 	case Row_Brightness:
 		return FString::Printf(TEXT("%+.1f"), S.Brightness);
 	case Row_WindowMode:
-		return WindowNames(FMath::Clamp(S.WindowMode, 0, 2));
+	{
+		// v4.9 : mode demande ; s'il differe du mode reellement obtenu (systeme sans plein ecran exclusif), on le dit
+		const BRDisplay::FMode Want = BRDisplay::Current();
+		const BRDisplay::FMode Got = BRDisplay::Effective();
+		return Got.Window != Want.Window ? BRLoc::Fmt(NSLOCTEXT("BR", "Menu.WindowModeEffective", "{Want} \u2192 {Got}"), { { TEXT("Want"), BRLoc::Arg(WindowNames(Want.Window)) }, { TEXT("Got"), BRLoc::Arg(WindowNames(Got.Window)) } })
+			: WindowNames(Want.Window);
+	}
+	case Row_Resolution:
+	{
+		const BRDisplay::FMode M = BRDisplay::Current();
+		const FString Res = FString::Printf(TEXT("%d \u00d7 %d"), M.Resolution.X, M.Resolution.Y);
+		return M.Window == 1 ? BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ResolutionScreen", "{Res} (\u00e9cran)"), { { TEXT("Res"), BRLoc::Arg(Res) } }) : Res;
+	}
+	case Row_CreatureReflections:
+	{
+		if (!IsHardwareRayTracingAvailable() || !S.bHardwareRT)
+		{
+			return BR_STR(NSLOCTEXT("BR", "Menu.ReflectScreenOnly", "\u00c9CRAN SEULEMENT"));
+		}
+		if (S.bRTHitLighting)
+		{
+			return BR_STR(NSLOCTEXT("BR", "Menu.ReflectFullHit", "COMPLETS (RAYONS)"));
+		}
+		if (S.CreatureReflections == 1 && !RetraceSupported())
+		{
+			return BR_STR(NSLOCTEXT("BR", "Menu.ReflectNotInEngine", "\u00c9CRAN (MOTEUR)"));
+		}
+		return S.CreatureReflections == 1 ? FString(BR_STR(NSLOCTEXT("BR", "Menu.ReflectRetrace", "RAYONS"))) : FString(BR_STR(NSLOCTEXT("BR", "Menu.ReflectScreenOnly", "\u00c9CRAN SEULEMENT")));
+	}
+	case Row_UiScale:
+		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.UiScale * 100.f));
+	case Row_HudOpacity:
+		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.HudOpacity * 100.f));
+	case Row_Crosshair:
+		return CrosshairNames(S.CrosshairMode);
+	case Row_QuickBar:
+		return ShowNames(S.QuickBarMode);
+	case Row_Objectives:
+		return ShowNames(S.ObjectivesMode);
 	case Row_RenderScale:
 	{
 		// v4.8 : resolution interne reelle (celle que TSR agrandit), pas seulement le pourcentage
@@ -2641,7 +2800,29 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_Brightness:
 		return BR_STR(NSLOCTEXT("BR", "Menu.RendImageClaireSombreZones", "Rend l'image plus claire ou plus sombre (les zones sans lumi\u00e8re restent noires)."));
 	case Row_WindowMode:
-		return BR_STR(NSLOCTEXT("BR", "Menu.PleinEcranExclusifPleinEcran", "Plein \u00e9cran exclusif, plein \u00e9cran fen\u00eatr\u00e9 (Alt+Tab instantan\u00e9) ou fen\u00eatre. Sans effet dans l'\u00e9diteur."));
+	{
+		// v4.9 : confirmation, retour automatique, et mode reellement obtenu selon la plateforme
+		FString Hint = BR_STR(NSLOCTEXT("BR", "Menu.WindowModeHint", "Plein \u00e9cran, plein \u00e9cran fen\u00eatr\u00e9 (sans bordures, \u00e0 la taille de l'\u00e9cran, Alt+Tab instantan\u00e9) ou fen\u00eatre. Chaque changement est \u00e0 confirmer dans les 15 secondes, sinon l'affichage pr\u00e9c\u00e9dent revient. Sans effet dans l'\u00e9diteur."));
+		if (!BRDisplay::PlatformHasExclusiveFullscreen())
+		{
+			Hint += TEXT(" ") + BR_STR(NSLOCTEXT("BR", "Menu.NoExclusiveFullscreen", "Sur ce syst\u00e8me, le plein \u00e9cran est une fen\u00eatre sans bordures \u00e0 la taille de l'\u00e9cran : le mode r\u00e9ellement obtenu est indiqu\u00e9 apr\u00e8s la fl\u00e8che."));
+		}
+		return Hint;
+	}
+	case Row_Resolution:
+		return BR_STR(NSLOCTEXT("BR", "Menu.ResolutionHint", "Taille de la fen\u00eatre, ou d\u00e9finition de l'\u00e9cran en plein \u00e9cran. Le plein \u00e9cran fen\u00eatr\u00e9 prend toujours celle de l'\u00e9cran. \u00c0 confirmer dans les 15 secondes. L'\u00e9chelle de rendu (R\u00c9SOLUTION DE RENDU) est un r\u00e9glage \u00e0 part."));
+	case Row_CreatureReflections:
+		return BR_STR(NSLOCTEXT("BR", "Menu.CreatureReflectionsHint", "\u00c9CRAN SEULEMENT : les reflets montrent une cr\u00e9ature seulement si elle est \u00e0 l'\u00e9cran ; hors champ, elle n'y appara\u00eet pas. RAYONS : les cr\u00e9atures sont dans la sc\u00e8ne ray trac\u00e9e et \u00e9clair\u00e9es par les rayons l\u00e0 o\u00f9 le cache de surfaces de Lumen ne les couvre pas, y compris hors champ ; plus co\u00fbteux. Demande le ray tracing mat\u00e9riel et une version du moteur qui le permet (sinon : \u00c9CRAN (MOTEUR)). Les reflets HAUTE QUALIT\u00c9 les montrent toujours."));
+	case Row_UiScale:
+		return BR_STR(NSLOCTEXT("BR", "Menu.UiScaleHint", "Taille des textes et des panneaux, pour tous les \u00e9crans (de 1280\u00d7720 \u00e0 l'ultra large et aux \u00e9crans Retina)."));
+	case Row_HudOpacity:
+		return BR_STR(NSLOCTEXT("BR", "Menu.HudOpacityHint", "Opacit\u00e9 des informations affich\u00e9es pendant l'exploration (objets rapides, objectifs, r\u00e9ticule). Les messages importants restent lisibles."));
+	case Row_Crosshair:
+		return BR_STR(NSLOCTEXT("BR", "Menu.CrosshairHint", "Point au centre de l'\u00e9cran : toujours, seulement sur un objet utilisable, ou jamais. Les consignes d'interaction et la r\u00e9animation restent affich\u00e9es."));
+	case Row_QuickBar:
+		return BR_STR(NSLOCTEXT("BR", "Menu.QuickBarHint", "Poches 1 \u00e0 4 en bas de l'\u00e9cran : bri\u00e8vement apr\u00e8s un changement (ramassage, utilisation), toujours, ou masqu\u00e9es. Elles restent dans l'inventaire."));
+	case Row_Objectives:
+		return BR_STR(NSLOCTEXT("BR", "Menu.ObjectivesHint", "Objectifs en haut \u00e0 droite : bri\u00e8vement \u00e0 l'arriv\u00e9e et \u00e0 chaque progr\u00e8s, toujours, ou masqu\u00e9s. Ils restent dans l'inventaire (onglet Personnage)."));
 	case Row_RenderScale:
 		return BR_STR(NSLOCTEXT("BR", "Menu.Dessous100ImageCalculeePetite", "En dessous de 100 %, l'image est calcul\u00e9e plus petite puis agrandie par TSR : beaucoup plus fluide, l\u00e9g\u00e8rement plus floue."));
 	case Row_VSync:
@@ -2655,7 +2836,7 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_HardwareRT:
 		return IsHardwareRayTracingAvailable()
 			? FString(BR_STR(NSLOCTEXT("BR", "Menu.LumenRayTracingMaterielReflets", "Lumen en ray tracing mat\u00e9riel : reflets et lumi\u00e8re indirecte bien plus pr\u00e9cis (carte RTX / RX 6000+). S'applique tout de suite.")))
-			: FString(BR_STR(NSLOCTEXT("BR", "Menu.IndisponibleJeuDemarreSansRay", "Indisponible : le jeu a d\u00e9marr\u00e9 sans ray tracing (DirectX 12 et carte compatible requis, r.RayTracing=True). Lumen logiciel est utilis\u00e9. Changer de carte ou de RHI demande un red\u00e9marrage.")));
+			: RayTracingUnavailableReason();
 	case Row_RTHitLighting:
 		return BR_STR(NSLOCTEXT("BR", "Menu.RefletsEclairesRayonsEuxMemes", "Reflets \u00e9clair\u00e9s par les rayons eux-m\u00eames (eau, flaques, carrelage, m\u00e9tal) au lieu du cache de surfaces de Lumen. Le plus co\u00fbteux des r\u00e9glages : seul le profil CIN\u00c9MATIQUE l'active."));
 	case Row_RTShadows:
@@ -2718,7 +2899,67 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		S.Brightness = FMath::Clamp(FMath::RoundToFloat((S.Brightness + Dir * 0.1f) * 10.f) / 10.f, -1.5f, 1.5f);
 		break;
 	case Row_WindowMode:
-		S.WindowMode = (S.WindowMode + Dir + 3) % 3;
+	{
+		// v4.9 : applique tout de suite, a confirmer dans les 15 s (sinon retour) ; rien d'autre n'est reapplique
+		const int32 Mode = (BRDisplay::Current().Window + Dir + 3) % 3;
+		if (!BRDisplay::Request(Mode, FIntPoint::ZeroValue))
+		{
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Display.EditorOnly", "Mode d'affichage : sans effet dans l'\u00e9diteur (lancez le jeu seul).")), 3.f);
+		}
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->PlayUISound(TEXT("S_UIClick"));
+		}
+		return;
+	}
+	case Row_Resolution:
+	{
+		const BRDisplay::FMode M = BRDisplay::Current();
+		const TArray<FIntPoint> List = BRDisplay::ResolutionsFor(M.Window);
+		if (M.Window == 1 || List.Num() < 2)
+		{
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Display.BorderlessFollowsScreen", "Le plein \u00e9cran fen\u00eatr\u00e9 prend la d\u00e9finition de l'\u00e9cran. Changez le mode pour choisir une r\u00e9solution.")), 3.f);
+			return;
+		}
+		int32 Idx = List.IndexOfByKey(M.Resolution);
+		if (Idx == INDEX_NONE)
+		{
+			// Resolution hors de la liste (fenetre redimensionnee) : on repart de la plus proche
+			Idx = 0;
+			for (int32 k = 0; k < List.Num(); ++k)
+			{
+				Idx = List[k].X * List[k].Y <= M.Resolution.X * M.Resolution.Y ? k : Idx;
+			}
+		}
+		BRDisplay::Request(M.Window, List[(Idx + Dir + List.Num()) % List.Num()]);
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->PlayUISound(TEXT("S_UIClick"));
+		}
+		return;
+	}
+	case Row_CreatureReflections:
+		if (!IsHardwareRayTracingAvailable() || S.bRTHitLighting)
+		{
+			return; // sans ray tracing : ecran seulement ; avec les reflets haute qualite : toujours complets
+		}
+		S.CreatureReflections = S.CreatureReflections == 1 ? 0 : 1;
+		S.GraphicsProfile = 3;
+		break;
+	case Row_UiScale:
+		S.UiScale = FMath::Clamp(FMath::RoundToFloat((S.UiScale + Dir * 0.05f) * 20.f) / 20.f, 0.8f, 1.25f);
+		break;
+	case Row_HudOpacity:
+		S.HudOpacity = FMath::Clamp(FMath::RoundToFloat((S.HudOpacity + Dir * 0.1f) * 10.f) / 10.f, 0.4f, 1.f);
+		break;
+	case Row_Crosshair:
+		S.CrosshairMode = (S.CrosshairMode + Dir + 3) % 3;
+		break;
+	case Row_QuickBar:
+		S.QuickBarMode = (S.QuickBarMode + Dir + 3) % 3;
+		break;
+	case Row_Objectives:
+		S.ObjectivesMode = (S.ObjectivesMode + Dir + 3) % 3;
 		break;
 	case Row_RenderScale:
 		S.RenderScale = FMath::Clamp(S.RenderScale + Dir * 5, 50, 100);
@@ -2823,7 +3064,13 @@ void ABRPlayerController::LoadSettings()
 	Cfg.GetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
 	Cfg.GetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
 	Cfg.GetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);
-	Cfg.GetInt(SettingsSection, TEXT("WindowMode"), S.WindowMode);
+	// v4.9 : WindowMode n'est plus lu ici : UGameUserSettings fait foi (BRDisplay::Startup reprend l'ancienne valeur)
+	Cfg.GetFloat(SettingsSection, TEXT("UiScale"), S.UiScale);
+	Cfg.GetFloat(SettingsSection, TEXT("HudOpacity"), S.HudOpacity);
+	Cfg.GetInt(SettingsSection, TEXT("Crosshair"), S.CrosshairMode);
+	Cfg.GetInt(SettingsSection, TEXT("QuickBar"), S.QuickBarMode);
+	Cfg.GetInt(SettingsSection, TEXT("Objectives"), S.ObjectivesMode);
+	Cfg.GetInt(SettingsSection, TEXT("CreatureReflections"), S.CreatureReflections);
 	Cfg.GetInt(SettingsSection, TEXT("RenderScale"), S.RenderScale);
 	Cfg.GetBool(SettingsSection, TEXT("VSync"), S.bVSync);
 	Cfg.GetInt(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
@@ -2836,7 +3083,12 @@ void ABRPlayerController::LoadSettings()
 	S.MasterVolume = FMath::Clamp(S.MasterVolume, 0.f, 1.f);
 	S.VoiceMode = FMath::Clamp(S.VoiceMode, 0, 2);
 	S.Brightness = FMath::Clamp(S.Brightness, -1.5f, 1.5f);
-	S.WindowMode = FMath::Clamp(S.WindowMode, 0, 2);
+	S.UiScale = FMath::Clamp(S.UiScale, 0.8f, 1.25f);
+	S.HudOpacity = FMath::Clamp(S.HudOpacity, 0.4f, 1.f);
+	S.CrosshairMode = FMath::Clamp(S.CrosshairMode, 0, 2);
+	S.QuickBarMode = FMath::Clamp(S.QuickBarMode, 0, 2);
+	S.ObjectivesMode = FMath::Clamp(S.ObjectivesMode, 0, 2);
+	S.CreatureReflections = FMath::Clamp(S.CreatureReflections, 0, 1);
 	S.RenderScale = FMath::Clamp(S.RenderScale, 50, 100);
 	S.MaxFPS = FMath::Clamp(S.MaxFPS, 0, 1000);
 	S.Sensitivity = FMath::Clamp(S.Sensitivity, 0.1f, 5.f);
@@ -2858,20 +3110,20 @@ void ABRPlayerController::ApplyGraphicsProfile(int32 Profile)
 	{
 	case 0: // Performance
 		S.Quality = 2; S.bHardwareRT = false; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 67; S.bAreaLights = false;
-		S.bVolumetricFog = true; S.bFullCreatures = false;
+		S.bVolumetricFog = true; S.bFullCreatures = false; S.CreatureReflections = 0;
 		break;
 	case 2: // Cinematique
 		S.Quality = 4; S.bHardwareRT = true; S.bRTHitLighting = true; S.bRTShadows = true; S.RenderScale = 100; S.bAreaLights = true;
-		S.bVolumetricFog = true; S.bFullCreatures = true;
+		S.bVolumetricFog = true; S.bFullCreatures = true; S.CreatureReflections = 1;
 		break;
 	case 4: // v4.8 : RTX fluide : ray tracing materiel sans les deux reglages les plus chers (hit lighting, ombres RT de la
 		// lampe), TSR depuis 67 % (1440p -> 2160p : 1707x960 en 1440p), ombres des neons jusqu'a 25 m, Hound allege
 		S.Quality = 3; S.bHardwareRT = true; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 67; S.bAreaLights = true;
-		S.bVolumetricFog = true; S.bFullCreatures = false;
+		S.bVolumetricFog = true; S.bFullCreatures = false; S.CreatureReflections = 1;
 		break;
 	default: // Qualite
 		S.Quality = 3; S.bHardwareRT = true; S.bRTHitLighting = false; S.bRTShadows = false; S.RenderScale = 80; S.bAreaLights = true;
-		S.bVolumetricFog = true; S.bFullCreatures = false;
+		S.bVolumetricFog = true; S.bFullCreatures = false; S.CreatureReflections = 1;
 		break;
 	}
 	S.GraphicsProfile = (Profile == 4 || (Profile >= 0 && Profile <= 2)) ? Profile : 1;
@@ -2879,7 +3131,8 @@ void ABRPlayerController::ApplyGraphicsProfile(int32 Profile)
 
 bool ABRPlayerController::IsHardwareRayTracingAvailable()
 {
-	// Le ray tracing ne s'active qu'au demarrage (RHI DirectX 12, carte compatible, r.RayTracing=True dans la config)
+	// Le ray tracing ne s'active qu'au demarrage, selon les capacites reelles : RHI (DirectX 12, Vulkan, Metal), carte et
+	// pilote, r.RayTracing de la configuration de la plateforme (Config/Linux, Config/Mac : desactive dans le profil de base)
 	return IsRayTracingEnabled();
 }
 
@@ -2936,7 +3189,13 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
 	Cfg.SetInt64(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
 	Cfg.SetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);
-	Cfg.SetInt64(SettingsSection, TEXT("WindowMode"), S.WindowMode);
+	// v4.9 : WindowMode n'est plus ecrit ici (UGameUserSettings, GameUserSettings.ini)
+	Cfg.SetFloat(SettingsSection, TEXT("UiScale"), S.UiScale);
+	Cfg.SetFloat(SettingsSection, TEXT("HudOpacity"), S.HudOpacity);
+	Cfg.SetInt64(SettingsSection, TEXT("Crosshair"), S.CrosshairMode);
+	Cfg.SetInt64(SettingsSection, TEXT("QuickBar"), S.QuickBarMode);
+	Cfg.SetInt64(SettingsSection, TEXT("Objectives"), S.ObjectivesMode);
+	Cfg.SetInt64(SettingsSection, TEXT("CreatureReflections"), S.CreatureReflections);
 	Cfg.SetInt64(SettingsSection, TEXT("RenderScale"), S.RenderScale);
 	Cfg.SetBool(SettingsSection, TEXT("VSync"), S.bVSync);
 	Cfg.SetInt64(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
@@ -2960,11 +3219,13 @@ void ABRPlayerController::ApplySettings()
 		GEngine->Exec(W, *Line);
 	};
 	Cmd(FString::Printf(TEXT("scalability %d"), FMath::Clamp(S.Quality, 0, 4)));
-	// Le ray tracing materiel n'est utilise que si la carte le supporte (r.RayTracing=True dans DefaultEngine.ini)
-	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing %d"), S.bHardwareRT ? 1 : 0));
+	// Le ray tracing materiel n'est utilise que si le jeu a demarre avec (RHI, carte, r.RayTracing). v4.9 : une preference
+	// RT venue d'un autre ordinateur (BackroomsPlayer.ini copie) est gardee mais sans effet ici : Lumen logiciel
+	const bool bRT = S.bHardwareRT && IsHardwareRayTracingAvailable();
+	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing %d"), bRT ? 1 : 0));
 	// v4.5 : reflets eclaires par les rayons (hit lighting) seulement si demandes (profil Cinematique) : c'est le reglage le
 	// plus couteux ; sinon le cache de surfaces de Lumen eclaire les reflets
-	const bool bHitLighting = S.bHardwareRT && S.bRTHitLighting;
+	const bool bHitLighting = bRT && S.bRTHitLighting;
 	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing.LightingMode %d"), bHitLighting ? 1 : 0));
 	// Reflets de premier plan de l'eau translucide (Poolrooms) a partir de la qualite Epique
 	Cmd(FString::Printf(TEXT("r.Lumen.TranslucencyReflections.FrontLayer.Enable %d"), S.Quality >= 3 ? 1 : 0));
@@ -2976,7 +3237,7 @@ void ABRPlayerController::ApplySettings()
 	}
 	// Les flaques mouillees (rugosite 0,1 a 0,3) restent tracees, pas seulement les miroirs
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.MaxRoughnessToTrace %.2f"), S.Quality >= 3 ? 0.5f : 0.4f));
-	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), S.bHardwareRT ? 1 : 0));
+	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), bRT ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.VolumetricFog %d"), S.bVolumetricFog ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.ScreenPercentage %d"), FMath::Clamp(S.RenderScale, 50, 100)));
 	// Image plus nette (filtre de nettete du tonemapper) a partir de la qualite Elevee
@@ -2985,7 +3246,16 @@ void ABRPlayerController::ApplySettings()
 	// ray traces, les entites et la combinaison devenaient noires. Ils ne sont dans la scene ray tracee que si les
 	// reflets sont eclaires par les rayons, ou pour les ombres ray tracees de la lampe ; sinon les reflets les prennent a
 	// l'ecran (traces d'ecran de Lumen)
-	Cmd(FString::Printf(TEXT("r.RayTracing.Geometry.SkeletalMeshes %d"), (bHitLighting || S.bRTShadows) ? 1 : 0));
+	// v4.9 : CREATURES DANS LES REFLETS = RAYONS : maillages a squelette gardes dans la scene ray tracee, et les impacts
+	// sans cache de surfaces (ces maillages) relances en hit lighting, si la version du moteur a cette variable. Sans elle,
+	// ou sur ECRAN SEULEMENT, le compromis v4.8 reste : traces d'ecran (une creature hors champ n'est pas dans le reflet)
+	IConsoleVariable* Retrace = IConsoleManager::Get().FindConsoleVariable(RetraceHitLightingCVar);
+	const bool bRetrace = bRT && !bHitLighting && S.CreatureReflections == 1 && Retrace != nullptr;
+	if (Retrace)
+	{
+		Retrace->Set(bRetrace ? 1 : 0, ECVF_SetByGameSetting);
+	}
+	Cmd(FString::Printf(TEXT("r.RayTracing.Geometry.SkeletalMeshes %d"), (bHitLighting || (S.bRTShadows && bRT) || bRetrace) ? 1 : 0));
 	// v4.8 : TSR : historique a 100 % (au lieu de 200 % en qualite Cinematique) hors profil Cinematique : a 1440p et
 	// au-dela, c'est l'un des postes les plus chers du TSR, pour un gain de nettete faible
 	Cmd(FString::Printf(TEXT("r.TSR.History.ScreenPercentage %d"), S.GraphicsProfile == 2 ? 200 : 100));
@@ -2997,28 +3267,18 @@ void ABRPlayerController::ApplySettings()
 		Audio->SetTransientPrimaryVolume(FMath::Clamp(S.MasterVolume, 0.f, 1.f));
 	}
 
-	// Fenetre, synchro verticale, limite d'images : pas dans l'editeur (ils agiraient sur la fenetre de l'editeur)
+	// Synchro verticale, limite d'images : pas dans l'editeur (ils agiraient sur la fenetre de l'editeur).
+	// v4.9 : le mode et la resolution ne sont plus appliques ici (un profil graphique ne change jamais la fenetre) : seulement
+	// par BRDisplay, sur demande, avec confirmation
 	UGameUserSettings* Display = GEngine->GetGameUserSettings();
 	if (Display && !GIsEditor)
 	{
-		const EWindowMode::Type Mode = S.WindowMode == 0 ? EWindowMode::Fullscreen : (S.WindowMode == 1 ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
-		bool bResolution = false;
-		if (Display->GetFullscreenMode() != Mode)
-		{
-			Display->SetFullscreenMode(Mode);
-			if (Mode != EWindowMode::Windowed)
-			{
-				Display->SetScreenResolution(Display->GetDesktopResolution());
-			}
-			bResolution = true;
-		}
 		Display->SetVSyncEnabled(S.bVSync);
 		Display->SetFrameRateLimit(static_cast<float>(FMath::Max(0, S.MaxFPS)));
-		if (bResolution)
+		if (!BRDisplay::IsPending())
 		{
-			Display->ApplyResolutionSettings(false);
+			Display->SaveSettings(); // pendant une confirmation, rien n'est ecrit (le mode a l'essai ne doit pas survivre a un arret)
 		}
-		Display->SaveSettings();
 		Cmd(FString::Printf(TEXT("r.VSync %d"), S.bVSync ? 1 : 0));
 		Cmd(FString::Printf(TEXT("t.MaxFPS %d"), FMath::Max(0, S.MaxFPS)));
 	}

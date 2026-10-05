@@ -463,6 +463,8 @@ private:
 	float ChaseLevel = 0.f;
 	float ChaseTarget = 0.f;
 	float FlashFlicker = 1.f;
+	/** v4.9 : avertissement "piles faibles" deja donne (plus de jauge PILES a l'ecran) ; reinitialise au-dessus de 25 % */
+	bool bLowBatteryWarned = false;
 	float SprintTime = 0.f;
 	float TimeAlive = 0.f;
 	float EnergyBoost = 0.f;

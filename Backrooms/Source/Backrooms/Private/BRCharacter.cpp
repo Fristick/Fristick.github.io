@@ -2220,6 +2220,18 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 	{
 		Battery = FMath::Max(0.f, Battery - BatteryDrain * Dt);
 		float Mult = FMath::Lerp(0.35f, 1.f, FMath::Clamp(Battery / 40.f, 0.f, 1.f));
+		if (Battery < 15.f && !bLowBatteryWarned && IsLocallyControlled())
+		{
+			// v4.9 : la charge n'est plus une jauge : un seul avertissement quand elle devient faible (et l'inspection de la
+			// lampe donne la charge exacte)
+			bLowBatteryWarned = true;
+			ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.LowBattery", "Piles faibles : la lampe va s'\u00e9teindre. {Battery} changer les piles"))), 3.5f,
+				FLinearColor(1.f, 0.82f, 0.45f));
+		}
+		if (Battery > 25.f)
+		{
+			bLowBatteryWarned = false;
+		}
 		if (Battery < 15.f)
 		{
 			// Piles faibles : la lampe vacille
@@ -2497,6 +2509,9 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 		FogWorld->SetUnderwater(UnderBlend);
 	}
 	const float Choke = (!bDead && Breath < 35.f) ? (35.f - Breath) / 35.f : 0.f;
+	// v4.9 : plus de barre de vie : une blessure grave se voit a un leger voile (bords assombris, couleurs ternies), sans
+	// effet plein ecran permanent ; le coeur s'entend deja (UpdateAudio). Attenue avec les flashs reduits (confort)
+	const float Wound = (!bDead && Health < 35.f) ? (35.f - Health) / 35.f * FMath::Lerp(0.6f, 1.f, Set.FlashScale()) : 0.f;
 
 	FPostProcessSettings& S = Camera->PostProcessSettings;
 	Camera->PostProcessBlendWeight = 1.f;
@@ -2511,9 +2526,9 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 
 	S.bOverride_VignetteIntensity = true;
 	S.VignetteIntensity = (D ? D->Vignette : 0.45f) * (bVHS ? 1.f : 0.4f) + (bHidden ? 0.45f : 0.f) + Insanity * 0.5f + DamageFlash * 0.6f + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
-		+ Choke * 0.9f + ScareFringe * 0.25f;
+		+ Choke * 0.9f + ScareFringe * 0.25f + Wound * 0.3f;
 
-	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max3(Insanity * Insanity, Dead, Choke * 0.6f));
+	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max(FMath::Max3(Insanity * Insanity, Dead, Choke * 0.6f), Wound * 0.35f));
 	if (bNV)
 	{
 		Sat = 0.f;

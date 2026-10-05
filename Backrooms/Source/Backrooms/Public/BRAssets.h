@@ -103,10 +103,15 @@ public:
 	/** v4.5 : un modele fourni (ou son derive) manque et une forme de secours le remplace. Signale une fois dans le
 	 *  journal (avertissement) et liste en mode developpeur : un modele fourni n'est jamais remplace en silence. */
 	static void ReportFallback(const FString& Model);
-	/** v4.8 : prechargement asynchrone de toutes les ressources du jeu (/Game/Backrooms : modeles, textures, sons),
-	 *  lance des le menu : en jeu, les modeles des entites et leurs textures sont deja en memoire (plus de chargement
-	 *  synchrone au premier besoin). Une fois par session. */
+	/** v4.8 : prechargement asynchrone lance des le menu (plus de chargement synchrone au premier besoin). v4.9 : par
+	 *  ensembles (commun au menu, puis niveau et voisins : PreloadForLevel) au lieu de tout /Game/Backrooms ; -BRPreloadAll
+	 *  pour l'ancien comportement. */
 	static void StartPreload();
+	/** v4.9 : ensembles du niveau Level (textures de ses surfaces, creatures qu'il peut faire apparaitre) et des niveaux
+	 *  ou menent ses sorties ; les ensembles devenus inutiles sont relaches. L'ensemble commun reste. */
+	static void PreloadForLevel(int32 Level);
+	/** v4.9 : ensembles en memoire, nombre de ressources, duree et memoire de chaque chargement (rapport du test) */
+	static TArray<FString> PreloadReport();
 	/** Prechargement termine (ou impossible) */
 	static bool IsPreloadDone();
 	/** v4.8 : chargements synchrones survenus en jeu (nombre, pire duree, premiers noms) : rapport et mode developpeur */

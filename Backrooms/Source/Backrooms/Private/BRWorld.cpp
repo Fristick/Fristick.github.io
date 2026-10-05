@@ -400,6 +400,8 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	// autour de sa position dans le niveau precedent, et le sol du point d'arrivee venait quelques images plus tard.
 	bPlayerPlaced = false;
 	Current = &BRLevels::Get(LevelNumber);
+	// v4.9 : ressources du niveau et de ses voisins prechargees, celles des autres niveaux relachees
+	UBRAssets::PreloadForLevel(LevelNumber);
 	Seed = InSeed != 0 ? InSeed : (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17));
 	// v4.5 : -BRSeed=<n> : meme disposition a chaque lancement (captures avant / apres comparables, tests automatiques)
 	uint32 FixedSeed = 0;
@@ -1587,16 +1589,26 @@ bool ABRWorld::ShouldCastLocalShadow(const FVector& LightPos) const
 void ABRWorld::UpdateLightLOD(float Dt)
 {
 	const double Start = FPlatformTime::Seconds();
-	// Lumieres qui changent de type (reglage NEONS EN LUMIERES SURFACIQUES) : un chunk par image
+	// Lumieres qui changent de type (reglage NEONS EN LUMIERES SURFACIQUES). v4.9 : dans un quart du budget de
+	// generation de l'image (au moins une lumiere), le chunk restant en tete de file tant que toutes ses lumieres ne sont
+	// pas du bon type (avant : toutes les lumieres d'un chunk dans la meme image)
+	const bool bArea = FBRSettings::Get().bAreaLights;
 	while (LightRefreshQueue.Num() > 0)
 	{
 		ABRChunk* C = LightRefreshQueue[0].Get();
-		LightRefreshQueue.RemoveAt(0);
-		if (IsValid(C) && !C->IsTearingDown())
+		if (!IsValid(C) || C->IsTearingDown() || C->LightTypesMatch(bArea))
 		{
-			C->RefreshLightTypes(FBRSettings::Get().bAreaLights);
-			break;
+			LightRefreshQueue.RemoveAt(0);
+			continue;
 		}
+		const double LightStart = FPlatformTime::Seconds();
+		LightsRecreated += C->RefreshLightTypes(bArea, FMath::Max(0.25, FrameBudgetMs * 0.25));
+		MaxLightRefreshMs = FMath::Max(MaxLightRefreshMs, static_cast<float>((FPlatformTime::Seconds() - LightStart) * 1000.0));
+		if (C->LightTypesMatch(bArea))
+		{
+			LightRefreshQueue.RemoveAt(0);
+		}
+		break;
 	}
 	// Ombres selon la distance au joueur local
 	ShadowLODTimer -= Dt;

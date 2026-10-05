@@ -75,8 +75,9 @@ public:
 	void CancelTeardown() { bTearingDown = false; SetActorTickEnabled(Flickers.Num() > 0); }
 
 	/** v4.8 : le type des lumieres (neons en lumieres surfaciques ou ponctuelles) suit le reglage courant : recree les
-	 *  lumieres dont le type a change. Retourne le nombre de lumieres recreees. */
-	int32 RefreshLightTypes(bool bArea);
+	 *  lumieres dont le type a change. Retourne le nombre de lumieres recreees.
+	 *  v4.9 : au plus BudgetMs (ms) par appel, au moins une lumiere : a rappeler tant que LightTypesMatch est faux */
+	int32 RefreshLightTypes(bool bArea, double BudgetMs = 1.0e9);
 	/** Toutes les lumieres de ce chunk sont-elles deja du type demande ? */
 	bool LightTypesMatch(bool bArea) const;
 	/** v4.8 : ombres des lumieres selon la distance aux joueurs locaux (au-dela de ShadowDistance, plus d'ombre ; marge de

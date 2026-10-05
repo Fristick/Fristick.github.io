@@ -231,6 +231,8 @@ public:
 	/** v4.8 : modele complet ou allege (Hound) selon le reglage effectif FBRSettings::bFullCreatures, applique tout de
 	 *  suite a une entite deja presente (meme squelette : on change le maillage, les os suivent) */
 	void RefreshModelDetail();
+	/** v4.9 (tests) : intervalle de mise a jour de la pose a la derniere image (0 : chaque image) */
+	float GetSkinPeriod() const { return LastSkinPeriod; }
 private:
 	bool BuildClumpModel();
 	bool BuildBacteriaModel();
@@ -393,6 +395,7 @@ private:
 	TArray<FClumpArm> ClumpArms;
 	/** Animation des os espacee quand l'entite est loin ou hors de vue */
 	float SkinAccum = 0.f;
+	float LastSkinPeriod = 0.f;
 	void ApplySkins(float Dt);
 	/** v4.7 : ombres des entites lointaines coupees (au-dela de 30 m : une silhouette dans le brouillard, pas d'ombre
 	 *  lisible, mais un rendu d'ombre a chaque image) ; de pres, rien ne change. Etat d'origine de chaque piece garde */

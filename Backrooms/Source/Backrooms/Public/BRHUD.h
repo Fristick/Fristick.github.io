@@ -110,7 +110,8 @@ private:
 	void DrawDevOverlay(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W);
 	/** v4.4 : decor a l'ecran du jumpscare en cours (griffures, neige, essaim, confettis...), propre a chaque entite */
 	void DrawJumpscare(ABRCharacter* C);
-	void DrawStats(ABRCharacter* C);
+	/** v4.9 : plus aucune jauge en exploration ; signes contextuels seulement (manque d'air sous l'eau) */
+	void DrawContextCues(ABRCharacter* C);
 	void DrawQuickBar(ABRCharacter* C);
 	void DrawObjectiveTracker(ABRWorld* W);
 	void DrawCrosshair(ABRCharacter* C);
@@ -127,6 +128,17 @@ private:
 	void DrawCharacterTab(ABRCharacter* C, ABRWorld* W);
 	void DrawJournalTab(ABRCharacter* C, ABRWorld* W);
 	void DrawSettingsTab(ABRPlayerController* PC);
+	/** v4.9 : panneau ETAT de l'onglet Personnage : exactement deux jauges, ENDURANCE et SANTE MENTALE (libelle, forme,
+	 *  icone et valeur : jamais la couleur seule) */
+	void DrawStatusPanel(ABRCharacter* C, float X, float Y, float W, float H);
+	/** Une jauge du panneau ETAT ; Kind 0 endurance (10 segments, chevrons), 1 sante mentale (barre continue, oeil) */
+	void DrawStatusGauge(int32 Kind, const FString& Label, const FString& State, float Value, float Trend, float X, float Y, float W);
+	/** v4.9 : confirmation d'un changement d'affichage (15 s, puis retour a la derniere configuration confirmee) */
+	void DrawVideoConfirm(ABRPlayerController* PC);
+	/** v4.9 : opacite choisie des informations d'exploration */
+	float HudAlpha() const;
+	/** v4.9 : defilement a la molette d'une zone (Scroll : position, en pixels a 1080p) ; renvoie le decalage a appliquer */
+	float ScrollArea(float& Scroll, float X, float Y, float W, float H, float ContentH);
 	void DrawKeysTab(ABRPlayerController* PC);
 	void HandlePauseMouse(ABRPlayerController* PC);
 	FString ControlsLine(int32 Line) const;
@@ -220,6 +232,23 @@ private:
 	bool bWasInMenu = false;
 	bool bWasPaused = false;
 	bool bWasInventoryOpen = false;
+
+	// v4.9 : informations d'exploration contextuelles
+	/** Objets rapides : contenu des poches a la derniere image, instant du dernier changement */
+	uint32 QuickBarSig = 0;
+	float QuickBarShown = -100.f;
+	/** Objectifs : progres a la derniere image, niveau et graine, instant du dernier changement */
+	uint32 ObjectiveSig = 0;
+	uint32 ObjectiveLevelKey = 0;
+	float ObjectiveShown = -100.f;
+	/** v4.9 (tests) : jauges de statut dessinees pendant l'image (0 en exploration, 2 dans l'onglet Personnage) */
+	int32 StatusGaugesDrawn = 0;
+	int32 LastFrameStatusGauges = 0;
+	/** v4.9 : categorie de l'onglet Parametres (0 jeu, 1 video, 2 interface, 3 graphismes) */
+	int32 SettingsCategory = 0;
+	/** v4.9 : defilement des objectifs et des deux colonnes du journal */
+	float ObjectiveScroll = 0.f;
+	float JournalScroll[2] = { 0.f, 0.f };
 
 	// Zone de l'inventaire (calculee a chaque image)
 	float IX = 0.f, IY = 0.f, IW = 0.f, IH = 0.f;

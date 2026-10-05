@@ -422,7 +422,9 @@ struct FBRSettings
 	int32 VoiceMode = 1;
 	/** Luminosite : decalage d'exposition (IL) */
 	float Brightness = 0.f;
-	/** Affichage : 0 plein ecran, 1 plein ecran fenetre, 2 fenetre */
+	/** Affichage : 0 plein ecran, 1 plein ecran fenetre, 2 fenetre.
+	 *  v4.9 : copie de UGameUserSettings (seule source du mode et de la resolution, GameUserSettings.ini) : n'est plus
+	 *  enregistre dans BackroomsPlayer.ini ; une ancienne valeur y est reprise une fois (migration) */
 	int32 WindowMode = 1;
 	/** Resolution de rendu (%), completee par l'upscaling TSR */
 	int32 RenderScale = 100;
@@ -437,6 +439,21 @@ struct FBRSettings
 	int32 Flashes = 0;
 	/** v4.7 : flou de mouvement (desactive par defaut) */
 	bool bMotionBlur = false;
+	// ---- v4.9 : interface d'exploration (aucune jauge de statut hors de l'inventaire, quel que soit le reglage)
+	/** Taille de l'interface (0,8 a 1,3 ; 1 = taille de reference en 1080p) */
+	float UiScale = 1.f;
+	/** Opacite des informations d'exploration (objets rapides, objectifs, reticule, consignes) : 0,4 a 1 */
+	float HudOpacity = 1.f;
+	/** Reticule : 0 point, 1 seulement sur un objet utilisable, 2 aucun (les consignes d'interaction restent) */
+	int32 CrosshairMode = 0;
+	/** Objets rapides : 0 brievement apres un changement, 1 toujours, 2 masques (toujours dans l'inventaire) */
+	int32 QuickBarMode = 0;
+	/** Objectifs : 0 brievement (arrivee, progres), 1 toujours, 2 masques (toujours dans l'inventaire, onglet Personnage) */
+	int32 ObjectivesMode = 0;
+	/** v4.9 : creatures dans les reflets ray traces sans hit lighting : 0 traces d'ecran seules (une creature hors champ
+	 *  disparait du reflet), 1 relance en hit lighting des seuls impacts sans cache de surfaces (maillages a squelette),
+	 *  si le moteur le permet (variable verifiee a l'execution) */
+	int32 CreatureReflections = 1;
 	/** Facteur des flashs et clignotements (1, 0,35 ou 0) ; les mecaniques ne changent pas */
 	float FlashScale() const { return Flashes <= 0 ? 1.f : (Flashes == 1 ? 0.35f : 0.f); }
 	/** v4.4 : mode developpeur (actif par defaut hors version finale) : tous les niveaux jouables depuis le choix des

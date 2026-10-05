@@ -1269,13 +1269,17 @@ void ABREntity::ApplySkins(float Dt)
 	{
 		return;
 	}
-	// LOD d'animation : chaque image si l'entite est proche et a l'ecran, 20 fois par seconde au-dela de 25 m,
-	// 5 fois par seconde hors de vue (ses os restent a jour pour l'ombre et les reflets ray traces)
+	// LOD d'animation : chaque image si l'entite est proche et a l'ecran, 20 fois par seconde au-dela de 25 m.
+	// v4.9 : hors de la vue principale, une creature proche peut rester visible dans un reflet ou par son ombre
+	// (WasRecentlyRendered ne compte que la vue) : pleine cadence a moins de 15 m, 30 fois par seconde jusqu'a 30 m, puis
+	// 5 fois par seconde (avant : 5 fois par seconde des qu'elle sortait de l'ecran, saccadee dans les reflets proches).
+	// Seule la pose affichee est concernee : les decisions (poursuite, attaques) restent prises a chaque image dans Tick.
 	const APawn* Local = UGameplayStatics::GetPlayerPawn(this, 0);
 	const float Dist = Local ? static_cast<float>(FVector::Dist(Local->GetActorLocation(), GetActorLocation())) : 0.f;
 	const UPrimitiveComponent* First = SkinDrivers[0].Skin.Get();
 	const bool bSeen = !First || First->WasRecentlyRendered(0.25f);
-	const float Period = !bSeen ? 0.2f : (Dist > 2500.f ? 0.05f : 0.f);
+	const float Period = bSeen ? (Dist > 2500.f ? 0.05f : 0.f) : (Dist < 1500.f ? 0.f : (Dist < 3000.f ? 1.f / 30.f : 0.2f));
+	LastSkinPeriod = Period;
 	SkinAccum += Dt;
 	if (SkinAccum < Period)
 	{

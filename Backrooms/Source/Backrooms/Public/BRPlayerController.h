@@ -147,6 +147,12 @@ public:
 
 	// ---- Parametres (onglet PARAMETRES de l'inventaire) ----
 	int32 GetSettingsCount() const;
+	/** v4.9 : categorie d'une ligne des parametres : 0 jeu, 1 video, 2 interface, 3 graphismes */
+	int32 GetSettingCategory(int32 Index) const;
+	/** v4.9 : pourquoi le ray tracing materiel est indisponible, selon la plateforme et le RHI demarre (texte localise) */
+	static FString RayTracingUnavailableReason();
+	/** v4.9 : mode d'affichage et resolution en vigueur (texte de la confirmation) */
+	FString GetDisplaySummary() const;
 	FString GetSettingLabel(int32 Index) const;
 	FString GetSettingValue(int32 Index) const;
 	FString GetSettingHint(int32 Index) const;

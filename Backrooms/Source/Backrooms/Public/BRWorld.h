@@ -238,8 +238,12 @@ public:
 	int32 ChunksTornDown = 0;
 	int32 PredictedCollisionBuilds = 0;
 	float MaxTeardownMs = 0.f;
+	/** v4.9 : changement de type des lumieres : lumieres recreees, pire temps par image (ms) */
+	int32 LightsRecreated = 0;
+	float MaxLightRefreshMs = 0.f;
 	void ResetChunkStats()
 	{
+		LightsRecreated = 0; MaxLightRefreshMs = 0.f;
 		MaxChunkBuildMs = 0.f; ChunkBuildMsTotal = 0.f; ChunksBuilt = 0; ChunkPlanMsTotal = 0.f; ChunkCollisionMsTotal = 0.f;
 		ChunkVisualMsTotal = 0.f; ChunkLightMsTotal = 0.f; ChunkActorMsTotal = 0.f; MaxChunkPlanMs = 0.f; ForcedChunkBuilds = 0;
 		FramesOverBudget = 0; ChunksTornDown = 0; PredictedCollisionBuilds = 0; MaxTeardownMs = 0.f;

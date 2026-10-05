@@ -1003,14 +1003,21 @@ bool ABRChunk::LightTypesMatch(bool bArea) const
 	return true;
 }
 
-int32 ABRChunk::RefreshLightTypes(bool bArea)
+int32 ABRChunk::RefreshLightTypes(bool bArea, double BudgetMs)
 {
+	// v4.9 : etale : les lumieres deja du bon type sont sautees (curseur implicite), et l'appel s'arrete quand le budget
+	// est depense (au moins une lumiere par appel) ; le chunk reste dans la file tant que LightTypesMatch est faux
+	const double Start = FPlatformTime::Seconds();
 	int32 Count = 0;
 	for (FLightRecord& R : LightRecords)
 	{
 		if (!IsAreaFixture(R.Fixture) || R.bArea == bArea)
 		{
 			continue;
+		}
+		if (Count > 0 && (FPlatformTime::Seconds() - Start) * 1000.0 >= BudgetMs)
+		{
+			break;
 		}
 		ULocalLightComponent* Old = R.Comp.Get();
 		ULocalLightComponent* New = CreateLightComponent(R, bArea);
