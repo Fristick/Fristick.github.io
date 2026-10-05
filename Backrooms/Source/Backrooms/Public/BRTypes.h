@@ -162,6 +162,17 @@ struct FBRSurface
 	}
 };
 
+/** Lumiere d'une cellule (v4.7 : ici pour la construction etalee des chunks, qui les met en attente) */
+struct FBRLightInfo
+{
+	bool bHas = false;
+	bool bBroken = false;
+	bool bFlicker = false;
+	bool bShadow = false;
+	FVector Offset = FVector::ZeroVector; // decalage dans la cellule (local au centre)
+	float Yaw = 0.f;
+};
+
 struct FBREntitySpawn
 {
 	EBREntityKind Kind = EBREntityKind::Smiler;

@@ -1,4 +1,5 @@
 #include "BRChunk.h"
+#include "HAL/PlatformTime.h"
 #include "Backrooms.h"
 #include "BRWorld.h"
 #include "BRAssets.h"
@@ -735,6 +736,16 @@ void ABRChunk::AddFaceProp(int32 X, int32 Y, const FIntPoint& Dir, FName Mesh, f
 
 void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 {
+	if (bDeferLights)
+	{
+		// v4.7 : construction etalee : la lumiere (et son luminaire) sera creee a l'etape des lumieres
+		FPendingLight P;
+		P.X = X;
+		P.Y = Y;
+		P.L = L;
+		PendingLights.Add(P);
+		return;
+	}
 	ABRWorld* W = World.Get();
 	UBRAssets* A = UBRAssets::Get(this);
 	if (!W || !A)
@@ -950,12 +961,25 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 
 void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 {
+	BeginBuild(InWorld, InCoord);
+	StepBuild(1.0e9);
+}
+
+void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
+{
+	const double PlanStart = FPlatformTime::Seconds();
 	World = InWorld;
 	Coord = InCoord;
+	bReady = false;
+	bCollisionReady = false;
+	BuildPhase = 0;
+	Stats = FBuildStats();
 	if (!InWorld)
 	{
+		bReady = bCollisionReady = true;
 		return;
 	}
+	bDeferLights = true;
 	const FBRLevelDef& D = InWorld->Def();
 	const int32 N = D.ChunkCells;
 	const float S = D.CellSize;
@@ -1232,9 +1256,113 @@ void ABRChunk::Build(ABRWorld* InWorld, const FIntPoint& InCoord)
 		BuildSkylight();
 	}
 
-	FinishBatches();
-	BuildPickupsAndExits();
-	SetActorTickEnabled(Flickers.Num() > 0);
+	// v4.7 : rien n'est encore cree (sauf les quelques lumieres des bassins et verrieres des Poolrooms) : StepBuild s'en charge
+	bDeferLights = false;
+	Stats.PlanMs = static_cast<float>((FPlatformTime::Seconds() - PlanStart) * 1000.0);
+}
+
+FString ABRChunk::NextBatchKey(bool bCollision) const
+{
+	for (const TPair<FString, FBatch>& Pair : Batches)
+	{
+		if (Pair.Value.bCollision == bCollision)
+		{
+			return Pair.Key;
+		}
+	}
+	return FString();
+}
+
+bool ABRChunk::StepBuild(double BudgetMs)
+{
+	if (bReady)
+	{
+		return true;
+	}
+	const double Start = FPlatformTime::Seconds();
+	auto Elapsed = [Start]() { return (FPlatformTime::Seconds() - Start) * 1000.0; };
+	++Stats.Steps;
+	bool bDidWork = false;
+	auto Spent = [&]() { return bDidWork && Elapsed() > BudgetMs; };
+	while (!bReady && !Spent())
+	{
+		const double T0 = FPlatformTime::Seconds();
+		float* Bucket = nullptr;
+		switch (BuildPhase)
+		{
+		case 0:
+		{
+			// Collisions d'abord : sol, murs, boites de collision des meubles (on peut y marcher des la fin de l'etape)
+			const FString Key = NextBatchKey(true);
+			if (Key.IsEmpty())
+			{
+				bCollisionReady = true;
+				BuildPhase = 1;
+				break;
+			}
+			CreateBatch(Key);
+			Bucket = &Stats.CollisionMs;
+			break;
+		}
+		case 1:
+		{
+			// Visuels sans collision : details, accessoires, eau, luminaires groupes
+			const FString Key = NextBatchKey(false);
+			if (Key.IsEmpty())
+			{
+				BuildPhase = 2;
+				break;
+			}
+			CreateBatch(Key);
+			Bucket = &Stats.VisualMs;
+			break;
+		}
+		case 2:
+			// Lumieres, une a une (une lumiere et son luminaire)
+			if (PendingLights.Num() == 0)
+			{
+				BuildPhase = 3;
+				break;
+			}
+			{
+				const FPendingLight P = PendingLights[0];
+				PendingLights.RemoveAt(0);
+				AddLight(P.X, P.Y, P.L);
+			}
+			Bucket = &Stats.LightMs;
+			break;
+		case 3:
+		{
+			// Luminaires groupes ajoutes par les lumieres
+			FString Key = NextBatchKey(false);
+			if (Key.IsEmpty())
+			{
+				Key = NextBatchKey(true);
+			}
+			if (Key.IsEmpty())
+			{
+				BuildPhase = 4;
+				break;
+			}
+			CreateBatch(Key);
+			Bucket = &Stats.LightMs;
+			break;
+		}
+		default:
+			// Objets : ramassables (sauf ceux deja pris) et sorties, puis animation des neons qui clignotent
+			BuildPickupsAndExits();
+			SetActorTickEnabled(Flickers.Num() > 0);
+			Bucket = &Stats.ActorMs;
+			bReady = true;
+			break;
+		}
+		if (Bucket)
+		{
+			*Bucket += static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+			bDidWork = true;
+		}
+	}
+	return bReady;
 }
 
 void ABRChunk::BuildHidingSpots()
@@ -2067,19 +2195,24 @@ void ABRChunk::BuildCeiling()
 	AddBox(Frame, FVector(B.X - 2.5f, CY, H - 1.f), FVector(5.f, B.Y - A.Y, 4.f), false);
 }
 
-void ABRChunk::FinishBatches()
+void ABRChunk::CreateBatch(const FString& Key)
 {
 	UBRAssets* A = UBRAssets::Get(this);
+	FBatch Taken;
+	if (const FBatch* Found = Batches.Find(Key))
+	{
+		Taken = *Found;
+	}
+	Batches.Remove(Key);
 	if (!A)
 	{
 		return;
 	}
-	for (TPair<FString, FBatch>& Pair : Batches)
 	{
-		FBatch& B = Pair.Value;
+		FBatch& B = Taken;
 		if (!B.Mesh || B.Transforms.Num() == 0)
 		{
-			continue;
+			return;
 		}
 		UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
 		ISM->SetupAttachment(Root);
@@ -2122,7 +2255,6 @@ void ABRChunk::FinishBatches()
 		ISM->RegisterComponent();
 		Instances.Add(ISM);
 	}
-	Batches.Empty();
 }
 
 void ABRChunk::Tick(float DeltaSeconds)

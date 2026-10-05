@@ -634,7 +634,16 @@ void ABRAutoTest::EndMeasure(FLevelReport& R)
 	{
 		R.ChunkMaxMs = W->MaxChunkBuildMs;
 		R.ChunkAvgMs = W->ChunksBuilt > 0 ? W->ChunkBuildMsTotal / W->ChunksBuilt : 0.f;
-		Note(FString::Printf(TEXT("construction des chunks : %d, moyenne %.1f ms, pire %.1f ms"), W->ChunksBuilt, R.ChunkAvgMs, R.ChunkMaxMs));
+		Note(FString::Printf(TEXT("construction des chunks : %d termines, travail moyen %.1f ms par chunk, pire image %.1f ms (budget %.1f ms)"),
+			W->ChunksBuilt, R.ChunkAvgMs, R.ChunkMaxMs, W->ChunkStepBudgetMs));
+		if (W->ChunksBuilt > 0)
+		{
+			// v4.7 : temps par etape (moyenne par chunk) et constructions forcees sous un joueur
+			const float N = static_cast<float>(W->ChunksBuilt);
+			Note(FString::Printf(TEXT("  etapes : planification %.2f ms (pire %.1f), collisions %.2f, visuels %.2f, lumieres %.2f, objets %.2f ; forcees : %d"),
+				W->ChunkPlanMsTotal / N, W->MaxChunkPlanMs, W->ChunkCollisionMsTotal / N, W->ChunkVisualMsTotal / N, W->ChunkLightMsTotal / N,
+				W->ChunkActorMsTotal / N, W->ForcedChunkBuilds));
+		}
 		W->ResetChunkStats();
 	}
 	if (ABRPlayerController* PC = GetPC())

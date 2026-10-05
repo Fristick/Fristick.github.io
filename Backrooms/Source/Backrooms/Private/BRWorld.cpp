@@ -105,6 +105,12 @@ void ABRWorld::BeginPlay()
 {
 	Super::BeginPlay();
 	GWorldInstance = this;
+	// v4.7 : budget de construction des chunks par image (ms), reglable pour les mesures : -BRChunkBudget=2.5
+	float Budget = 0.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("BRChunkBudget="), Budget) && Budget > 0.f)
+	{
+		ChunkStepBudgetMs = FMath::Clamp(Budget, 0.5f, 50.f);
+	}
 
 	if (!HasAuthority())
 	{
@@ -1093,6 +1099,14 @@ void ABRWorld::Tick(float DeltaSeconds)
 		StreamTimer = 0.1f;
 		UpdateStreaming(false);
 	}
+	// v4.7 : construction etalee des chunks, a chaque image, dans un budget (pire image mesuree pour le rapport)
+	StepChunkBuilds();
+	MaxChunkBuildMs = FMath::Max(MaxChunkBuildMs, FrameChunkMs);
+	if (FrameChunkMs > 0.f)
+	{
+		LastChunkBuildMs = FrameChunkMs;
+	}
+	FrameChunkMs = 0.f;
 	UpdateWaterSim(Dt);
 
 	// Le menu titre s'affiche par-dessus le niveau : pas de coupure ni d'annonce tant qu'on n'a pas commence
@@ -1187,22 +1201,23 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 	}
 	Wanted.Sort([&](const FIntPoint& A, const FIntPoint& B) { return ChunkDist(A) < ChunkDist(B); });
 
-	// v4.5 : au plus 2 chunks par image, et pas de second chunk si le premier a deja pris plus de 5 ms (saccades)
+	// v4.5 : au plus 2 chunks par image, et pas de second chunk si le premier a deja pris plus de 5 ms (saccades).
+	// v4.7 : ici, seulement la planification ; les composants sont crees par StepChunkBuilds, sur plusieurs images.
+	// Chargement d'un niveau (bSynchronous) : tout est construit tout de suite, avant de placer les joueurs.
 	int32 Budget = bSynchronous ? MAX_int32 : 2;
 	const double BuildStart = FPlatformTime::Seconds();
 	for (const FIntPoint& C : Wanted)
 	{
-		if (Budget-- <= 0 || (!bSynchronous && (FPlatformTime::Seconds() - BuildStart) * 1000.0 > 5.0))
+		if (Budget-- <= 0 || (!bSynchronous && (FPlatformTime::Seconds() - BuildStart) * 1000.0 > 3.0))
 		{
 			break;
 		}
 		const double T0 = FPlatformTime::Seconds();
-		SpawnChunk(C);
-		const float Ms = static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
-		LastChunkBuildMs = Ms;
-		MaxChunkBuildMs = FMath::Max(MaxChunkBuildMs, Ms);
-		++ChunksBuilt;
-		ChunkBuildMsTotal += Ms;
+		SpawnChunk(C, bSynchronous);
+		if (!bSynchronous)
+		{
+			FrameChunkMs += static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+		}
 	}
 
 	TArray<FIntPoint> ToRemove;
@@ -1223,7 +1238,124 @@ void ABRWorld::UpdateStreaming(bool bSynchronous)
 	}
 }
 
-void ABRWorld::SpawnChunk(const FIntPoint& Coord)
+bool ABRWorld::IsChunkLoaded(const FIntPoint& Chunk) const
+{
+	const TObjectPtr<ABRChunk>* Found = Chunks.Find(Chunk);
+	return Found && *Found && (*Found)->IsReady();
+}
+
+bool ABRWorld::HasChunkFloor(const FIntPoint& Chunk) const
+{
+	const TObjectPtr<ABRChunk>* Found = Chunks.Find(Chunk);
+	return Found && *Found && (*Found)->HasCollision();
+}
+
+int32 ABRWorld::GetPreparingChunkCount() const
+{
+	int32 Count = 0;
+	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		Count += (Pair.Value && !Pair.Value->IsReady()) ? 1 : 0;
+	}
+	return Count;
+}
+
+void ABRWorld::OnChunkReady(const ABRChunk* Chunk)
+{
+	if (!Chunk)
+	{
+		return;
+	}
+	const ABRChunk::FBuildStats& S = Chunk->GetBuildStats();
+	++ChunksBuilt;
+	ChunkBuildMsTotal += S.PlanMs + S.CollisionMs + S.VisualMs + S.LightMs + S.ActorMs;
+	ChunkPlanMsTotal += S.PlanMs;
+	ChunkCollisionMsTotal += S.CollisionMs;
+	ChunkVisualMsTotal += S.VisualMs;
+	ChunkLightMsTotal += S.LightMs;
+	ChunkActorMsTotal += S.ActorMs;
+	MaxChunkPlanMs = FMath::Max(MaxChunkPlanMs, S.PlanMs);
+}
+
+void ABRWorld::StepChunkBuilds()
+{
+	const double Start = FPlatformTime::Seconds();
+	// 1) Sous chaque joueur (et autour), le sol doit exister : collisions terminees tout de suite si besoin (rare : les
+	//    chunks se preparent a la distance de vue). Le serveur s'en occupe pour tous les joueurs (IA, chutes).
+	TArray<FVector> Centers;
+	if (const ABRCharacter* P = GetPlayer())
+	{
+		Centers.Add(P->GetActorLocation());
+	}
+	if (HasAuthority() && IsNetGame())
+	{
+		TArray<ABRCharacter*> All;
+		GetPlayers(All);
+		for (const ABRCharacter* C : All)
+		{
+			Centers.AddUnique(C->GetActorLocation());
+		}
+	}
+	for (const FVector& Center : Centers)
+	{
+		const FIntPoint Mine = CellToChunk(WorldToCell(Center));
+		for (int32 DX = -1; DX <= 1; ++DX)
+		{
+			for (int32 DY = -1; DY <= 1; ++DY)
+			{
+				ABRChunk* C = Chunks.FindRef(FIntPoint(Mine.X + DX, Mine.Y + DY));
+				if (C && !C->HasCollision())
+				{
+					++ForcedChunkBuilds;
+					while (!C->HasCollision() && !C->IsReady())
+					{
+						C->StepBuild(0.0);
+					}
+					if (C->IsReady())
+					{
+						OnChunkReady(C);
+					}
+				}
+			}
+		}
+	}
+	// 2) Le reste avance dans le budget de l'image, les plus proches d'abord
+	TArray<ABRChunk*> Pending;
+	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		if (Pair.Value && !Pair.Value->IsReady())
+		{
+			Pending.Add(Pair.Value);
+		}
+	}
+	if (Pending.Num() > 0)
+	{
+		const FVector Ref = Centers.Num() > 0 ? Centers[0] : CellCenter(FIntPoint(0, 0));
+		const float ChunkWorld = Def().ChunkCells * Def().CellSize;
+		Pending.Sort([&](const ABRChunk& A, const ABRChunk& B)
+		{
+			const FVector CA((A.Coord.X + 0.5f) * ChunkWorld, (A.Coord.Y + 0.5f) * ChunkWorld, Ref.Z);
+			const FVector CB((B.Coord.X + 0.5f) * ChunkWorld, (B.Coord.Y + 0.5f) * ChunkWorld, Ref.Z);
+			return FVector::DistSquared2D(CA, Ref) < FVector::DistSquared2D(CB, Ref);
+		});
+		for (ABRChunk* C : Pending)
+		{
+			const double Left = ChunkStepBudgetMs - (FPlatformTime::Seconds() - Start) * 1000.0;
+			if (Left <= 0.0)
+			{
+				break;
+			}
+			if (C->StepBuild(Left))
+			{
+				OnChunkReady(C);
+			}
+		}
+	}
+	// Chunks termines par la construction forcee
+	FrameChunkMs += static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+}
+
+void ABRWorld::SpawnChunk(const FIntPoint& Coord, bool bNow)
 {
 	const FBRLevelDef& D = Def();
 	const float ChunkWorld = D.ChunkCells * D.CellSize;
@@ -1234,7 +1366,12 @@ void ABRWorld::SpawnChunk(const FIntPoint& Coord)
 	ABRChunk* Chunk = GetWorld()->SpawnActor<ABRChunk>(ABRChunk::StaticClass(), T, Params);
 	if (Chunk)
 	{
-		Chunk->Build(this, Coord);
+		Chunk->BeginBuild(this, Coord);
+		MaxChunkPlanMs = FMath::Max(MaxChunkPlanMs, Chunk->GetBuildStats().PlanMs);
+		if (bNow && Chunk->StepBuild(1.0e9))
+		{
+			OnChunkReady(Chunk);
+		}
 		Chunks.Add(Coord, Chunk);
 		if (Power < 0.999f)
 		{
@@ -1293,7 +1430,7 @@ void ABRWorld::UpdatePopulation(float Dt)
 		{
 			bFar = bFar && FVector::Dist2D(E->GetActorLocation(), C->GetActorLocation()) > D.ViewDistance * 0.95f;
 		}
-		const bool bNoFloor = !IsChunkLoaded(CellToChunk(WorldToCell(E->GetActorLocation())));
+		const bool bNoFloor = !HasChunkFloor(CellToChunk(WorldToCell(E->GetActorLocation())));
 		if (bFar || bNoFloor)
 		{
 			Entities.RemoveAt(i);
@@ -3222,7 +3359,16 @@ FBRLightInfo ABRWorld::CellLight(int32 X, int32 Y) const
 			L.bHas = true;
 			L.bBroken = BRHash::Rand(X, Y, 1955, Seed) < 0.12f;
 			L.bFlicker = !L.bBroken && BRHash::Rand(X, Y, 1956, Seed) < 0.18f;
-			L.bShadow = true;
+			// v4.7 : mesure du cout des ombres (jusqu'a 9 neons a ombres par salle) : -BRPitShadows=half garde les coins et
+			// le centre (5 sur 9), -BRPitShadows=none aucune ; par defaut, toutes (la lumiere ne traverse pas la dalle)
+			static const int32 PitShadowMode = []()
+			{
+				FString Mode;
+				FParse::Value(FCommandLine::Get(), TEXT("BRPitShadows="), Mode);
+				return Mode == TEXT("none") ? 2 : (Mode == TEXT("half") ? 1 : 0);
+			}();
+			const int32 Diag = (BRHash::PosMod(X - Room.Min.X, 64) + BRHash::PosMod(Y - Room.Min.Y, 64)) / 2;
+			L.bShadow = PitShadowMode == 0 || (PitShadowMode == 1 && Diag % 2 == 0);
 			L.Offset = FVector::ZeroVector;
 			L.Yaw = BRHash::PosMod(X + Y, 4) == 0 ? 90.f : 0.f;
 			return L;

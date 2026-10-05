@@ -39,17 +39,6 @@ struct FBRNetLevel
 	int32 Serial = 0;
 };
 
-/** Lumiere d'une cellule */
-struct FBRLightInfo
-{
-	bool bHas = false;
-	bool bBroken = false;
-	bool bFlicker = false;
-	bool bShadow = false;
-	FVector Offset = FVector::ZeroVector; // decalage dans la cellule (local au centre)
-	float Yaw = 0.f;
-};
-
 /** Objectif affiche dans l'inventaire (colonne OBJECTIFS) et dans le coin de l'ecran */
 struct FBRObjective
 {
@@ -212,14 +201,35 @@ public:
 	static uint32 SeedFromUser(uint32 N, int32 Level);
 	/** Graine de demonstration de la v4.6 (-BRSeed=9) : au Niveau 0, salle de 16 fosses a 14 cellules du depart */
 	static constexpr uint32 DemoSeed = 9;
-	bool IsChunkLoaded(const FIntPoint& Chunk) const { return Chunks.Contains(Chunk); }
+	/** v4.7 : chunk entierement construit (sol, murs, objets). Un chunk encore en preparation ne compte pas : les
+	 *  entites n'y vont pas, rien n'y apparait */
+	bool IsChunkLoaded(const FIntPoint& Chunk) const;
+	/** v4.7 : le sol et les murs du chunk existent (collisions creees), meme si ses details sont encore en preparation */
+	bool HasChunkFloor(const FIntPoint& Chunk) const;
 	int32 GetChunkCount() const { return Chunks.Num(); }
-	/** v4.5 : temps de construction des chunks (ms), pour le rapport du test automatique */
+	/** v4.7 : chunks en cours de construction (etalee sur plusieurs images) */
+	int32 GetPreparingChunkCount() const;
+	/** v4.5 : temps de construction des chunks (ms), pour le rapport du test automatique.
+	 *  v4.7 : MaxChunkBuildMs = pire temps passe a construire des chunks pendant UNE image (saccade) ; ChunkBuildMsTotal
+	 *  et ChunksBuilt : chunks termines ; temps par etape ; constructions forcees (chunk pas pret sous un joueur) */
 	float LastChunkBuildMs = 0.f;
 	float MaxChunkBuildMs = 0.f;
 	float ChunkBuildMsTotal = 0.f;
 	int32 ChunksBuilt = 0;
-	void ResetChunkStats() { MaxChunkBuildMs = 0.f; ChunkBuildMsTotal = 0.f; ChunksBuilt = 0; }
+	float ChunkPlanMsTotal = 0.f;
+	float ChunkCollisionMsTotal = 0.f;
+	float ChunkVisualMsTotal = 0.f;
+	float ChunkLightMsTotal = 0.f;
+	float ChunkActorMsTotal = 0.f;
+	float MaxChunkPlanMs = 0.f;
+	int32 ForcedChunkBuilds = 0;
+	/** Budget de construction des chunks par image (ms) ; -BRChunkBudget=<ms> */
+	float ChunkStepBudgetMs = 4.f;
+	void ResetChunkStats()
+	{
+		MaxChunkBuildMs = 0.f; ChunkBuildMsTotal = 0.f; ChunksBuilt = 0; ChunkPlanMsTotal = 0.f; ChunkCollisionMsTotal = 0.f;
+		ChunkVisualMsTotal = 0.f; ChunkLightMsTotal = 0.f; ChunkActorMsTotal = 0.f; MaxChunkPlanMs = 0.f; ForcedChunkBuilds = 0;
+	}
 	uint32 GetSeed() const { return Seed; }
 
 	// ------------------------------------------------------------ Etat
@@ -355,6 +365,13 @@ private:
 	enum class EBlackout : uint8 { None, Failing, Dark, Restoring };
 
 	void ClearLevel();
+	/** v4.7 : fait avancer les chunks en preparation (budget par image), et termine sans attendre les collisions des
+	 *  chunks sous les joueurs */
+	void StepChunkBuilds();
+	/** Un chunk vient d'etre termine : statistiques */
+	void OnChunkReady(const ABRChunk* Chunk);
+	/** Temps passe a construire des chunks pendant l'image en cours (ms) */
+	float FrameChunkMs = 0.f;
 	void BeginTransition(int32 TargetLevel, bool bFromDeath);
 	/** Client : suit le niveau du serveur. false tant qu'aucun niveau n'est construit */
 	bool SyncNetLevel();
@@ -368,7 +385,8 @@ private:
 	ABRCharacter* RandomLivingPlayer() const;
 	void ApplyEnvironment();
 	void UpdateStreaming(bool bSynchronous);
-	void SpawnChunk(const FIntPoint& Coord);
+	/** bNow : construction complete tout de suite (chargement d'un niveau) ; sinon etalee (StepChunkBuilds) */
+	void SpawnChunk(const FIntPoint& Coord, bool bNow = false);
 	/** Place le joueur local au point de depart. bKeepServerSpot : garde la place deja donnee par le serveur */
 	void PlacePlayer(bool bKeepServerSpot = false);
 	void UpdatePopulation(float Dt);

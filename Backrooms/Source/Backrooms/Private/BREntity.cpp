@@ -1106,6 +1106,7 @@ void ABREntity::Tick(float DeltaSeconds)
 	UpdateHead(Dt);
 	UpdateMorph(Dt);
 	ApplySkins(Dt);
+	UpdateDistanceLOD(Dt);
 
 	// Detection de blocage
 	const float Speed = static_cast<float>(GetVelocity().Size());
@@ -1137,6 +1138,45 @@ void ABREntity::Tick(float DeltaSeconds)
 			{
 				PlayVoice();
 			}
+		}
+	}
+}
+
+void ABREntity::UpdateDistanceLOD(float Dt)
+{
+	LodTimer -= Dt;
+	if (LodTimer > 0.f)
+	{
+		return;
+	}
+	LodTimer = 0.5f;
+	if (ShadowCasters.Num() == 0)
+	{
+		TArray<UPrimitiveComponent*> Prims;
+		GetComponents<UPrimitiveComponent>(Prims);
+		for (UPrimitiveComponent* P : Prims)
+		{
+			if (P && P != GetCapsuleComponent())
+			{
+				ShadowCasters.Add(TPair<TWeakObjectPtr<UPrimitiveComponent>, bool>(P, P->CastShadow != 0));
+			}
+		}
+	}
+	const APawn* Local = UGameplayStatics::GetPlayerPawn(this, 0);
+	const float Dist = Local ? static_cast<float>(FVector::Dist(Local->GetActorLocation(), GetActorLocation())) : 0.f;
+	// Hysteresis : coupe au-dela de 30 m, retablit en deca de 26 m (pas de clignotement a la limite) ; jamais pendant
+	// un jumpscare
+	const bool bWantOff = !bScareOverride && (bFarShadowsOff ? Dist > 2600.f : Dist > 3000.f);
+	if (bWantOff == bFarShadowsOff)
+	{
+		return;
+	}
+	bFarShadowsOff = bWantOff;
+	for (const TPair<TWeakObjectPtr<UPrimitiveComponent>, bool>& Pair : ShadowCasters)
+	{
+		if (UPrimitiveComponent* P = Pair.Key.Get())
+		{
+			P->SetCastShadow(Pair.Value && !bFarShadowsOff);
 		}
 	}
 }

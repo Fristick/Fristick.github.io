@@ -15,7 +15,6 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class UAudioComponent;
-struct FBRLightInfo;
 
 /** Lampe animee par le chunk : clignotement, et virage au rouge pres de l'entite du Niveau 0 */
 USTRUCT()
@@ -50,7 +49,31 @@ class BACKROOMS_API ABRChunk : public AActor
 public:
 	ABRChunk();
 
+	/** Construction complete, tout de suite (chargement d'un niveau, point de depart, tests) */
 	void Build(ABRWorld* InWorld, const FIntPoint& InCoord);
+
+	/** v4.7 : construction etalee sur plusieurs images. BeginBuild planifie tout (grille, lots d'instances, lumieres a
+	 *  creer) sans creer de composant ; StepBuild cree ensuite les composants dans l'ordre : collisions (sol, murs),
+	 *  visuels, lumieres, objets (ramassables, sorties), jusqu'a epuiser BudgetMs. true quand le chunk est pret.
+	 *  Chaque appel fait au moins un pas : la construction avance toujours. */
+	void BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord);
+	bool StepBuild(double BudgetMs);
+	/** Tous les composants et objets sont crees */
+	bool IsReady() const { return bReady; }
+	/** Sol et murs (collisions) crees : on peut marcher dessus */
+	bool HasCollision() const { return bCollisionReady; }
+
+	/** v4.7 : temps passe dans chaque etape (ms) et nombre de pas */
+	struct FBuildStats
+	{
+		float PlanMs = 0.f;
+		float CollisionMs = 0.f;
+		float VisualMs = 0.f;
+		float LightMs = 0.f;
+		float ActorMs = 0.f;
+		int32 Steps = 0;
+	};
+	const FBuildStats& GetBuildStats() const { return Stats; }
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -134,7 +157,6 @@ protected:
 	void PlanExits();
 	/** Plafond du chunk, perce d'une trappe au-dessus d'une echelle, et le conduit sombre qui monte au-dessus */
 	void BuildCeiling();
-	void FinishBatches();
 
 	FBatch& GetBatch(const FString& Key, UStaticMesh* Mesh, UMaterialInterface* Mat, bool bCollision, bool bShadow, float Cull);
 
@@ -179,6 +201,23 @@ protected:
 	float Power = 1.f;
 
 	TMap<FString, FBatch> Batches;
+	/** v4.7 : construction etalee */
+	struct FPendingLight
+	{
+		int32 X = 0;
+		int32 Y = 0;
+		FBRLightInfo L;
+	};
+	TArray<FPendingLight> PendingLights;
+	bool bDeferLights = false;
+	int32 BuildPhase = 0;
+	bool bReady = false;
+	bool bCollisionReady = false;
+	FBuildStats Stats;
+	/** Cree le composant d'instances d'un lot (et le retire de Batches) */
+	void CreateBatch(const FString& Key);
+	/** Prochain lot a creer : avec collision d'abord si bCollisionFirst ; vide s'il n'y en a plus de ce type */
+	FString NextBatchKey(bool bCollision) const;
 	TWeakObjectPtr<ABRWorld> World;
 	int32 LightCount = 0;
 };
