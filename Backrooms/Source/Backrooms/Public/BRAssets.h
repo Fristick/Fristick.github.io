@@ -107,6 +107,8 @@ public:
 	 *  ensembles (commun au menu, puis niveau et voisins : PreloadForLevel) au lieu de tout /Game/Backrooms ; -BRPreloadAll
 	 *  pour l'ancien comportement. */
 	static void StartPreload();
+	/** v4.11 : volume des effets et ambiances (multiplie le volume d'origine de chaque son charge par UBRAssets::Sound) */
+	static void SetEffectsGain(float Gain);
 	/** v4.9 : ensembles du niveau Level (textures de ses surfaces, creatures qu'il peut faire apparaitre) et des niveaux
 	 *  ou menent ses sorties ; les ensembles devenus inutiles sont relaches. L'ensemble commun reste. */
 	static void PreloadForLevel(int32 Level);

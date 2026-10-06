@@ -302,6 +302,10 @@ struct FBRLevelDef
 	float SunLux = 6.f;
 	FLinearColor SunColor = FLinearColor(1.f, 0.97f, 0.92f);
 	float SunPitch = -50.f;
+	/** v4.11 : intensite de la lumiere du ciel (1 = defaut) ; nuages volumetriques (ciel non uniforme, profils Qualite et
+	 *  Cinematique) */
+	float SkyLightScale = 1.f;
+	bool bClouds = false;
 	FLinearColor SceneTint = FLinearColor::White;
 	float Saturation = 1.f;
 	float Contrast = 1.f;
@@ -453,6 +457,12 @@ struct FBRSettings
 	bool bVHSEffect = true;
 	/** Volume general (0..1) */
 	float MasterVolume = 1.f;
+	/** v4.11 : volume des effets et ambiances (entites, mecanismes, pas, interface), 0..1 */
+	float EffectsVolume = 1.f;
+	/** v4.11 : volume des voix des coequipiers, 0,25..1 (le chat vocal se coupe dans CHAT VOCAL) */
+	float VoiceVolume = 1.f;
+	/** v4.11 : sous-titres des sons utiles (entites proches, mecanismes, coupures) */
+	bool bSubtitles = true;
 	/** Chat vocal de proximite : 0 voix ouverte, 1 appuyer pour parler, 2 desactive */
 	int32 VoiceMode = 1;
 	/** Luminosite : decalage d'exposition (IL) */

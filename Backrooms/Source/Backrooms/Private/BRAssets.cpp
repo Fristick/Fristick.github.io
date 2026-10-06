@@ -1,4 +1,5 @@
 #include "BRAssets.h"
+#include "Sound/SoundWave.h"
 #include "Backrooms.h"
 #include "BRMaterialBuilder.h"
 #include "BRLoc.h"
@@ -1125,9 +1126,48 @@ UTexture* UBRAssets::Icon(FName Name)
 	return Raw;
 }
 
+namespace
+{
+	/** v4.11 : volume des effets (relatif a celui des voix) et volume d'origine de chaque son deja charge */
+	float GEffectsGain = 1.f;
+	TMap<TWeakObjectPtr<USoundWave>, float>& OriginalVolumes()
+	{
+		static TMap<TWeakObjectPtr<USoundWave>, float> Map;
+		return Map;
+	}
+}
+
 USoundBase* UBRAssets::Sound(FName Name)
 {
-	return Cast<USoundBase>(LoadAsset(SoundFolder, Name, USoundBase::StaticClass()));
+	USoundBase* S = Cast<USoundBase>(LoadAsset(SoundFolder, Name, USoundBase::StaticClass()));
+	// v4.11 : volume des effets applique a chaque son du jeu (le chat vocal n'en fait pas partie)
+	if (USoundWave* Wave = Cast<USoundWave>(S))
+	{
+		const float* Orig = OriginalVolumes().Find(Wave);
+		const float Base = Orig ? *Orig : Wave->Volume;
+		if (!Orig)
+		{
+			OriginalVolumes().Add(Wave, Base);
+		}
+		Wave->Volume = Base * GEffectsGain;
+	}
+	return S;
+}
+
+void UBRAssets::SetEffectsGain(float Gain)
+{
+	GEffectsGain = FMath::Clamp(Gain, 0.f, 4.f);
+	for (auto It = OriginalVolumes().CreateIterator(); It; ++It)
+	{
+		if (USoundWave* Wave = It.Key().Get())
+		{
+			Wave->Volume = It.Value() * GEffectsGain;
+		}
+		else
+		{
+			It.RemoveCurrent();
+		}
+	}
 }
 
 USoundAttenuation* UBRAssets::VoiceAttenuation()

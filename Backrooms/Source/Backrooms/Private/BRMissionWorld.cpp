@@ -1028,6 +1028,7 @@ void ABRWorld::OnMissionStateChanged(int32 Device, uint8 Feedback, bool bAnimate
 			{
 				if (UBRAssets* A = UBRAssets::Get(this))
 				{
+					ABRHUD::Caption(this, BR_STR(NSLOCTEXT("BR", "Caption.Gate", "[Une porte lourde se d\u00e9place]")), D->GetActorLocation(), 4.f);
 					if (USoundBase* S = A->Sound(TEXT("S_M_Gate")))
 					{
 						UGameplayStatics::PlaySoundAtLocation(this, S, D->GetActorLocation(), 1.f, 1.f, 0.f, A->Attenuation(2600.f, false));

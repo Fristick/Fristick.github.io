@@ -66,6 +66,9 @@ namespace
 		Row_Flashes,
 		Row_MotionBlur,
 		Row_Volume,
+		Row_EffectsVolume,  // v4.11 : effets et ambiances
+		Row_VoiceVolume,    // v4.11 : voix des coequipiers
+		Row_Subtitles,      // v4.11 : sous-titres des sons utiles
 		Row_Voice,
 		Row_Brightness,
 		Row_WindowMode,
@@ -2602,7 +2605,8 @@ int32 ABRPlayerController::FindSettingRow(const FString& Name)
 		{ TEXT("Profile"), Row_Profile }, { TEXT("HardwareRT"), Row_HardwareRT }, { TEXT("RTHitLighting"), Row_RTHitLighting },
 		{ TEXT("CreatureReflections"), Row_CreatureReflections }, { TEXT("RTShadows"), Row_RTShadows }, { TEXT("AreaLights"), Row_AreaLights },
 		{ TEXT("UiScale"), Row_UiScale }, { TEXT("HudOpacity"), Row_HudOpacity }, { TEXT("Crosshair"), Row_Crosshair }, { TEXT("QuickBar"), Row_QuickBar },
-		{ TEXT("Objectives"), Row_Objectives } };
+		{ TEXT("Objectives"), Row_Objectives }, { TEXT("EffectsVolume"), Row_EffectsVolume }, { TEXT("VoiceVolume"), Row_VoiceVolume },
+		{ TEXT("Subtitles"), Row_Subtitles } };
 	for (const FNamedRow& R : Rows)
 	{
 		if (Name == R.Name)
@@ -2682,6 +2686,12 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.FlouMouvement", "FLOU DE MOUVEMENT"));
 	case Row_Volume:
 		return BR_STR(NSLOCTEXT("BR", "Menu.VolumeGeneral", "VOLUME G\u00c9N\u00c9RAL"));
+	case Row_EffectsVolume:
+		return BR_STR(NSLOCTEXT("BR", "Menu.EffectsVolume", "VOLUME DES EFFETS ET AMBIANCES"));
+	case Row_VoiceVolume:
+		return BR_STR(NSLOCTEXT("BR", "Menu.VoiceVolume", "VOLUME DES VOIX"));
+	case Row_Subtitles:
+		return BR_STR(NSLOCTEXT("BR", "Menu.Subtitles", "SOUS-TITRES DES SONS"));
 	case Row_Voice:
 		return BR_STR(NSLOCTEXT("BR", "Menu.ChatVocalProximite", "CHAT VOCAL (PROXIMIT\u00c9)"));
 	case Row_Brightness:
@@ -2758,6 +2768,12 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return OnOff(S.bMotionBlur);
 	case Row_Volume:
 		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.MasterVolume * 100.f));
+	case Row_EffectsVolume:
+		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.EffectsVolume * 100.f));
+	case Row_VoiceVolume:
+		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(S.VoiceVolume * 100.f));
+	case Row_Subtitles:
+		return OnOff(S.bSubtitles);
 	case Row_Voice:
 		return VoiceNames(FMath::Clamp(S.VoiceMode, 0, 2));
 	case Row_Brightness:
@@ -2855,6 +2871,12 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.FlouMouvementsRapidesCameraDesactive", "Flou des mouvements rapides de la cam\u00e9ra. D\u00e9sactiv\u00e9 par d\u00e9faut."));
 	case Row_Volume:
 		return BR_STR(NSLOCTEXT("BR", "Menu.VolumeToutJeuAmbianceEntites", "Volume de tout le jeu (ambiance, entit\u00e9s, voix des co\u00e9quipiers)."));
+	case Row_EffectsVolume:
+		return BR_STR(NSLOCTEXT("BR", "Menu.EffectsVolumeHint", "Entit\u00e9s, m\u00e9canismes, pas, ambiances et interface, sans changer les voix. Chaque son utile a aussi un signe visible ou un sous-titre."));
+	case Row_VoiceVolume:
+		return BR_STR(NSLOCTEXT("BR", "Menu.VoiceVolumeHint", "Voix des co\u00e9quipiers, sans changer les effets. Pour ne plus les entendre du tout : CHAT VOCAL. Aucune \u00e9nigme ne demande le micro."));
+	case Row_Subtitles:
+		return BR_STR(NSLOCTEXT("BR", "Menu.SubtitlesHint", "\u00c9crit en bas de l'\u00e9cran ce que l'on entend d'utile : entit\u00e9 proche et sa direction, m\u00e9canisme qui r\u00e9agit, coupure de courant."));
 	case Row_Voice:
 		return BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Menu.EntendAutresJoueursPresLeur", "On entend les autres joueurs pr\u00e8s de leur personnage, \u00e9touff\u00e9s par les murs. Appuyer pour parler : touche {PushToTalk}. Voix ouverte : le micro transmet en permanence. Micro coup\u00e9 : vous entendez toujours les autres.")));
 	case Row_Brightness:
@@ -2951,6 +2973,15 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		break;
 	case Row_Volume:
 		S.MasterVolume = FMath::Clamp(FMath::RoundToFloat((S.MasterVolume + Dir * 0.05f) * 20.f) / 20.f, 0.f, 1.f);
+		break;
+	case Row_EffectsVolume:
+		S.EffectsVolume = FMath::Clamp(FMath::RoundToFloat((S.EffectsVolume + Dir * 0.05f) * 20.f) / 20.f, 0.f, 1.f);
+		break;
+	case Row_VoiceVolume:
+		S.VoiceVolume = FMath::Clamp(FMath::RoundToFloat((S.VoiceVolume + Dir * 0.05f) * 20.f) / 20.f, 0.25f, 1.f);
+		break;
+	case Row_Subtitles:
+		S.bSubtitles = !S.bSubtitles;
 		break;
 	case Row_Voice:
 		S.VoiceMode = (S.VoiceMode + Dir + 3) % 3;
@@ -3133,6 +3164,9 @@ void ABRPlayerController::LoadSettings()
 	Cfg.GetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
 	Cfg.GetBool(SettingsSection, TEXT("DevMode"), S.bDevMode);
 	Cfg.GetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
+	Cfg.GetFloat(SettingsSection, TEXT("EffectsVolume"), S.EffectsVolume);
+	Cfg.GetFloat(SettingsSection, TEXT("VoiceVolume"), S.VoiceVolume);
+	Cfg.GetBool(SettingsSection, TEXT("Subtitles"), S.bSubtitles);
 	Cfg.GetInt(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
 	Cfg.GetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);
 	// v4.9 : WindowMode n'est plus lu ici : UGameUserSettings fait foi (BRDisplay::Startup reprend l'ancienne valeur)
@@ -3152,6 +3186,8 @@ void ABRPlayerController::LoadSettings()
 	S.CameraShake = FMath::Clamp(S.CameraShake, 0.f, 1.f);
 	S.Flashes = FMath::Clamp(S.Flashes, 0, 2);
 	S.MasterVolume = FMath::Clamp(S.MasterVolume, 0.f, 1.f);
+	S.EffectsVolume = FMath::Clamp(S.EffectsVolume, 0.f, 1.f);
+	S.VoiceVolume = FMath::Clamp(S.VoiceVolume, 0.25f, 1.f);
 	S.VoiceMode = FMath::Clamp(S.VoiceMode, 0, 2);
 	S.Brightness = FMath::Clamp(S.Brightness, -1.5f, 1.5f);
 	S.UiScale = FMath::Clamp(S.UiScale, 0.8f, 1.25f);
@@ -3272,6 +3308,9 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
 	Cfg.SetBool(SettingsSection, TEXT("DevMode"), S.bDevMode);
 	Cfg.SetFloat(SettingsSection, TEXT("MasterVolume"), S.MasterVolume);
+	Cfg.SetFloat(SettingsSection, TEXT("EffectsVolume"), S.EffectsVolume);
+	Cfg.SetFloat(SettingsSection, TEXT("VoiceVolume"), S.VoiceVolume);
+	Cfg.SetBool(SettingsSection, TEXT("Subtitles"), S.bSubtitles);
 	Cfg.SetInt64(SettingsSection, TEXT("VoiceMode"), S.VoiceMode);
 	Cfg.SetFloat(SettingsSection, TEXT("Brightness"), S.Brightness);
 	// v4.9 : WindowMode n'est plus ecrit ici (UGameUserSettings, GameUserSettings.ini)
@@ -3345,12 +3384,16 @@ void ABRPlayerController::ApplySettings()
 	// au-dela, c'est l'un des postes les plus chers du TSR, pour un gain de nettete faible
 	Cmd(FString::Printf(TEXT("r.TSR.History.ScreenPercentage %d"), S.GraphicsProfile == 2 ? 200 : 100));
 
-	// Volume general
+	// Volume general. v4.11 : effets et voix separes. Le volume principal de l'appareil porte general x voix (il agit aussi
+	// sur le chat vocal) ; les sons du jeu sont multiplies par effets / voix (au plus 4, voix au moins 25 %) : chacun obtient
+	// exactement general x son propre volume
+	const float VoiceGain = FMath::Clamp(S.VoiceVolume, 0.25f, 1.f);
 	FAudioDeviceHandle Audio = W->GetAudioDevice();
 	if (Audio.IsValid())
 	{
-		Audio->SetTransientPrimaryVolume(FMath::Clamp(S.MasterVolume, 0.f, 1.f));
+		Audio->SetTransientPrimaryVolume(FMath::Clamp(S.MasterVolume, 0.f, 1.f) * VoiceGain);
 	}
+	UBRAssets::SetEffectsGain(FMath::Clamp(S.EffectsVolume, 0.f, 1.f) / VoiceGain);
 
 	// Synchro verticale, limite d'images : pas dans l'editeur (ils agiraient sur la fenetre de l'editeur).
 	// v4.9 : le mode et la resolution ne sont plus appliques ici (un profil graphique ne change jamais la fenetre) : seulement

@@ -543,6 +543,91 @@ void ABRHUD::Notify(const UObject* WorldContext, const FString& Text, float Dura
 	}
 }
 
+FString ABRHUD::DirectionWord(const UObject* WorldContext, const FVector& Source)
+{
+	const APlayerController* PC = UGameplayStatics::GetPlayerController(WorldContext, 0);
+	const APawn* P = PC ? PC->GetPawn() : nullptr;
+	if (!P || Source.IsNearlyZero())
+	{
+		return FString();
+	}
+	const FVector To = (Source - P->GetActorLocation()).GetSafeNormal2D();
+	const FVector Fwd = PC->GetControlRotation().Vector().GetSafeNormal2D();
+	const FVector Right(-Fwd.Y, Fwd.X, 0.f);
+	const float F = static_cast<float>(FVector::DotProduct(To, Fwd));
+	const float R = static_cast<float>(FVector::DotProduct(To, Right));
+	if (F > 0.7f)
+	{
+		return BR_STR(NSLOCTEXT("BR", "Caption.Ahead", "devant"));
+	}
+	if (F < -0.7f)
+	{
+		return BR_STR(NSLOCTEXT("BR", "Caption.Behind", "derri\u00e8re"));
+	}
+	return R > 0.f ? BR_STR(NSLOCTEXT("BR", "Caption.Right", "\u00e0 droite")) : BR_STR(NSLOCTEXT("BR", "Caption.Left", "\u00e0 gauche"));
+}
+
+void ABRHUD::Caption(const UObject* WorldContext, const FString& Text, const FVector& Source, float Duration)
+{
+	if (!FBRSettings::Get().bSubtitles || Text.IsEmpty())
+	{
+		return;
+	}
+	APlayerController* PC = UGameplayStatics::GetPlayerController(WorldContext, 0);
+	ABRHUD* H = PC ? Cast<ABRHUD>(PC->GetHUD()) : nullptr;
+	if (!H)
+	{
+		return;
+	}
+	const FString Dir = DirectionWord(WorldContext, Source);
+	const FString Line = Dir.IsEmpty() ? Text : BRLoc::Fmt(NSLOCTEXT("BR", "Caption.WithDirection", "{Sound} ({Direction})"), { { TEXT("Sound"), BRLoc::Arg(Text) }, { TEXT("Direction"), BRLoc::Arg(Dir) } });
+	for (FCaption& C : H->Captions)
+	{
+		if (C.Text == Line)
+		{
+			C.Age = 0.f;
+			return;
+		}
+	}
+	FCaption C;
+	C.Text = Line;
+	C.Duration = Duration;
+	H->Captions.Add(C);
+	if (H->Captions.Num() > 3)
+	{
+		H->Captions.RemoveAt(0);
+	}
+}
+
+void ABRHUD::DrawCaptions(float Dt)
+{
+	LastFrameCaptions = 0;
+	if (!FBRSettings::Get().bSubtitles)
+	{
+		Captions.Reset();
+		return;
+	}
+	const float U = Ui();
+	const float CX = Canvas->ClipX * 0.5f;
+	float Y = Canvas->ClipY - 190.f * U;
+	for (int32 I = Captions.Num() - 1; I >= 0; --I)
+	{
+		FCaption& C = Captions[I];
+		C.Age += Dt;
+		if (C.Age > C.Duration)
+		{
+			Captions.RemoveAt(I);
+			continue;
+		}
+		const float A = FMath::Clamp((C.Duration - C.Age) / 0.4f, 0.f, 1.f);
+		const FVector2f TS = TextSize(C.Text, 12.f, EUiWeight::Regular);
+		RoundRect(CX - TS.X * 0.5f - 12.f * U, Y - 3.f * U, TS.X + 24.f * U, TS.Y + 6.f * U, 6.f * U, FLinearColor(0.f, 0.f, 0.f, 0.6f * A));
+		TextF(C.Text, CX, Y, FLinearColor(0.95f, 0.94f, 0.88f, A), 12.f, EUiWeight::Regular, EUiAlign::Center, false);
+		Y -= TS.Y + 12.f * U;
+		++LastFrameCaptions;
+	}
+}
+
 void ABRHUD::AddMessage(const FString& Text, float Duration, const FLinearColor& Color)
 {
 	for (FMsg& M : Messages)
@@ -1254,6 +1339,10 @@ void ABRHUD::DrawHUD()
 		DrawInventory(PC, C, W);
 	}
 	DrawMessages(Dt, bInv);
+	if (!bInv)
+	{
+		DrawCaptions(Dt);
+	}
 	if (PC && PC->GetActiveSave() && PC->GetTimeSinceSave() < 3.f && !bInv)
 	{
 		DrawSaveIndicator(PC->GetTimeSinceSave());

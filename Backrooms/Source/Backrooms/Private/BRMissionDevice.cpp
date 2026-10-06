@@ -2,6 +2,7 @@
 // d'etat) construit a partir des formes de base et des modeles existants ; aucune lumiere dynamique par mecanisme sauf
 // les balises du Niveau 6 (seul repere dans le noir). L'etat affiche vient de l'etat replique par l'hote.
 #include "BRMission.h"
+#include "BRHUD.h"
 #include "BRAssets.h"
 #include "BRWorld.h"
 #include "BRCharacter.h"
@@ -799,6 +800,26 @@ void ABRMissionDevice::PlayFeedback(uint8 Feedback)
 	}
 	if (Name)
 	{
+		// v4.11 : equivalent ecrit du son (sous-titres), si le mecanisme est proche du joueur local
+		const APawn* Local = UGameplayStatics::GetPlayerPawn(this, 0);
+		if (Local && FVector::DistSquared(Local->GetActorLocation(), GetActorLocation()) < FMath::Square(2000.f))
+		{
+			const FString N(Name);
+			FString Text;
+			if (N == TEXT("S_M_Switch")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Switch", "[D\u00e9clic d'un levier]"));
+			else if (N == TEXT("S_M_Dial")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Dial", "[Crans d'un cadran]"));
+			else if (N == TEXT("S_M_Valve")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Valve", "[Grincement d'une vanne]"));
+			else if (N == TEXT("S_M_Crank")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Crank", "[Cliquetis d'une manivelle]"));
+			else if (N == TEXT("S_M_Steam")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Steam", "[Sifflement de vapeur]"));
+			else if (N == TEXT("S_M_Relay")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Relay", "[Claquement d'un relais]"));
+			else if (N == TEXT("S_M_Trip")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Trip", "[Disjonction, arc \u00e9lectrique]"));
+			else if (N == TEXT("S_M_Lock")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Lock", "[Une serrure c\u00e8de]"));
+			else if (N == TEXT("S_M_Beacon")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Beacon", "[Timbre d'une balise]"));
+			else if (N == TEXT("S_M_Mill")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Mill", "[Grincement du moulin]"));
+			else if (N == TEXT("S_Splash")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Overflow", "[L'eau d\u00e9borde]"));
+			else if (N == TEXT("S_UIDeny")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Deny", "[Le m\u00e9canisme refuse]"));
+			ABRHUD::Caption(this, Text, GetActorLocation());
+		}
 		if (USoundBase* S = A->Sound(Name))
 		{
 			// Signal fiable : pas etouffe par les murs (le texte et la lampe disent la meme chose)

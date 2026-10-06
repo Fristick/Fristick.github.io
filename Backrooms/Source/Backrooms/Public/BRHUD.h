@@ -36,9 +36,27 @@ public:
 
 	/** Affiche un message temporaire en haut de l'ecran */
 	static void Notify(const UObject* WorldContext, const FString& Text, float Duration = 4.f, FLinearColor Color = FLinearColor::White);
+	/** v4.11 : sous-titre d'un son utile (entite proche, mecanisme, coupure), en bas de l'ecran, si l'option est active.
+	 *  Source : position du son (la direction est ajoutee : devant, derriere, a gauche, a droite) ; ZeroVector : sans direction */
+	static void Caption(const UObject* WorldContext, const FString& Text, const FVector& Source = FVector::ZeroVector, float Duration = 3.f);
+	/** Direction d'une position par rapport au regard du joueur local (texte localise) */
+	static FString DirectionWord(const UObject* WorldContext, const FVector& Source);
 	void AddMessage(const FString& Text, float Duration, const FLinearColor& Color);
 
 private:
+	struct FCaption
+	{
+		FString Text;
+		float Age = 0.f;
+		float Duration = 3.f;
+	};
+	TArray<FCaption> Captions;
+public:
+	/** v4.11 (tests) : sous-titres affiches a la derniere image */
+	int32 LastFrameCaptions = 0;
+private:
+	void DrawCaptions(float Dt);
+
 	struct FMsg
 	{
 		FString Text;

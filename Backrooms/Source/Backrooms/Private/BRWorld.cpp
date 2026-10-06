@@ -27,6 +27,7 @@
 #include "Components/PostProcessComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "Components/VolumetricCloudComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -78,6 +79,11 @@ ABRWorld::ABRWorld()
 	SkyLight->SetMobility(EComponentMobility::Movable);
 	SkyLight->bRealTimeCapture = true;
 	SkyLight->SourceType = ESkyLightSourceType::SLS_CapturedScene;
+
+	// v4.11 : nuages volumetriques (materiau par defaut du moteur), visibles seulement dans les niveaux qui les demandent
+	Clouds = CreateDefaultSubobject<UVolumetricCloudComponent>(TEXT("Clouds"));
+	Clouds->SetupAttachment(Root);
+	Clouds->SetVisibility(false);
 
 	PostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("PostProcess"));
 	PostProcess->SetupAttachment(Root);
@@ -942,8 +948,15 @@ void ABRWorld::ApplyEnvironment()
 		Sun->SetAtmosphereSunLight(true);
 		Sun->SetCastShadows(true);
 		Sun->SetWorldRotation(FRotator(D.SunPitch, 35.f, 0.f));
-		SkyLight->SetIntensity(D.Sky == EBRSky::Night ? 0.6f : 1.f);
+		SkyLight->SetIntensity((D.Sky == EBRSky::Night ? 0.6f : 1.f) * D.SkyLightScale);
 		SkyLight->RecaptureSky();
+		// v4.11 : halo du soleil dans la brume (le ciel n'est plus un aplat) ; nuages en Qualite et Cinematique
+		Fog->SetDirectionalInscatteringExponent(8.f);
+	}
+	const bool bClouds = bSky && D.bClouds && Clouds && Clouds->GetMaterial() != nullptr && FBRSettings::Get().GraphicsProfile >= 1;
+	if (Clouds)
+	{
+		Clouds->SetVisibility(bClouds);
 	}
 
 	// --- Post-process du niveau ---
@@ -2548,6 +2561,7 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 	case EBlackout::Failing:
 		BlackoutTimer = 1.8f;
 		Play(TEXT("S_Blackout"), 1.f);
+		ABRHUD::Caption(this, BR_STR(NSLOCTEXT("BR", "Caption.Blackout", "[Les n\u00e9ons gr\u00e9sillent : coupure de courant]")), FVector::ZeroVector, 4.f);
 		break;
 	case EBlackout::Dark:
 		BlackoutTimer = bAuth ? FMath::FRandRange(24.f, 40.f) : 0.f;

@@ -1,4 +1,6 @@
 #include "BREntity.h"
+#include "BRHUD.h"
+#include "BRLoc.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
 #include "BRCharacter.h"
@@ -1461,6 +1463,26 @@ void ABREntity::PlayVoice(float Volume)
 		Voice->SetVolumeMultiplier(Volume);
 		Voice->SetPitchMultiplier(FMath::FRandRange(0.9f, 1.1f));
 		Voice->Play();
+		// v4.11 : equivalent ecrit, avec la direction, si l'entite est assez proche pour compter
+		const APawn* Local = UGameplayStatics::GetPlayerPawn(this, 0);
+		if (Local && FVector::DistSquared(Local->GetActorLocation(), GetActorLocation()) < FMath::Square(2500.f))
+		{
+			FString Text;
+			switch (Kind)
+			{
+			case EBREntityKind::Bacteria: Text = BR_STR(NSLOCTEXT("BR", "Caption.Bacteria", "[Cri strident de la Bacteria]")); break;
+			case EBREntityKind::Smiler: Text = BR_STR(NSLOCTEXT("BR", "Caption.Smiler", "[Sifflement d'un Smiler]")); break;
+			case EBREntityKind::Hound: Text = BR_STR(NSLOCTEXT("BR", "Caption.Hound", "[Grondement d'un Hound]")); break;
+			case EBREntityKind::SkinStealer: Text = BR_STR(NSLOCTEXT("BR", "Caption.SkinStealer", "[Voix humaine, beaucoup trop calme]")); break;
+			case EBREntityKind::Faceling: Text = BR_STR(NSLOCTEXT("BR", "Caption.Faceling", "[Cri d'un Faceling]")); break;
+			case EBREntityKind::Partygoer: Text = BR_STR(NSLOCTEXT("BR", "Caption.Partygoer", "[Rire d'un Partygoer]")); break;
+			case EBREntityKind::Deathmoth: Text = BR_STR(NSLOCTEXT("BR", "Caption.Deathmoth", "[Bourdonnement d'ailes]")); break;
+			case EBREntityKind::Wretch: Text = BR_STR(NSLOCTEXT("BR", "Caption.Wretch", "[Hal\u00e8tement d'un Wretch]")); break;
+			case EBREntityKind::Clump: Text = BR_STR(NSLOCTEXT("BR", "Caption.Clump", "[Craquements du Clump]")); break;
+			default: break;
+			}
+			ABRHUD::Caption(this, Text, GetActorLocation());
+		}
 	}
 }
 

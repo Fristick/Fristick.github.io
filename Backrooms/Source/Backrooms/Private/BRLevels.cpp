@@ -484,8 +484,11 @@ namespace
 		D.bCeiling = false; D.bTrim = false; D.bOutdoor = true;
 		D.Floor = S(TEXT("T_Dirt"), C(1, 1, 1), 300.f, 0.95f, 0.3f);
 		D.Fixture = EBRFixture::None;
-		D.Sky = EBRSky::Overcast; D.SunLux = 4.f; D.SunColor = C(0.95f, 0.95f, 1.f); D.SunPitch = -40.f;
-		D.FogDensity = 0.035f; D.FogColor = C(0.55f, 0.58f, 0.62f);
+		// v4.11 : ciel moins uniforme : soleil bas de fin d'apres-midi entre des nuages volumetriques, ombres longues des
+		// granges et du moulin (reperes d'orientation), brume plus legere qui laisse lire les silhouettes au loin
+		D.Sky = EBRSky::Overcast; D.SunLux = 9.f; D.SunColor = C(1.f, 0.86f, 0.68f); D.SunPitch = -16.f;
+		D.FogDensity = 0.022f; D.FogColor = C(0.72f, 0.68f, 0.6f);
+		D.bClouds = true; D.SkyLightScale = 1.15f;
 		D.ShadowTint = C(0.97f, 0.99f, 1.03f); D.HighlightTint = C(1.02f, 1.01f, 0.97f); D.VolumetricScatter = 0.4f;
 		D.Saturation = 0.9f;
 		D.MinEV = 1.f; D.MaxEV = 12.f;
@@ -523,10 +526,13 @@ namespace
 		D.Solid = S(TEXT("T_Facade"), C(1, 1, 1), 800.f, 0.6f, 0.2f);
 		D.Wall = D.Solid;
 		D.Fixture = EBRFixture::StreetLamp;
-		D.LightChance = 0.3f; D.LightLumens = 3000.f; D.LightColor = C(1.f, 0.85f, 0.6f); D.LightRadius = 1200.f;
+		// v4.11 : rues trop sombres en v4.10 : plus de lampadaires et plus forts, ciel plus lumineux dans les avenues entre
+		// les tours, brume plus fine (obstacles et indices lisibles), exposition un peu relevee
+		D.LightChance = 0.5f; D.LightLumens = 5200.f; D.LightColor = C(1.f, 0.85f, 0.6f); D.LightRadius = 1500.f;
 		D.ShadowChance = 0.f;
-		D.Sky = EBRSky::Day; D.SunLux = 8.f; D.SunPitch = -55.f;
-		D.FogDensity = 0.025f; D.FogColor = C(0.55f, 0.6f, 0.7f);
+		D.Sky = EBRSky::Day; D.SunLux = 12.f; D.SunPitch = -48.f;
+		D.FogDensity = 0.016f; D.FogColor = C(0.62f, 0.68f, 0.78f);
+		D.SkyLightScale = 1.6f; D.ExposureBias = 0.4f;
 		D.ShadowTint = C(0.95f, 0.98f, 1.04f); D.HighlightTint = C(1.04f, 1.f, 0.95f); D.VolumetricScatter = 0.4f;
 		D.MinEV = 1.f; D.MaxEV = 12.f;
 		D.AmbientSound = TEXT("S_Amb_City"); D.AmbientVolume = 0.6f;

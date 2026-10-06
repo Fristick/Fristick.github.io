@@ -550,6 +550,10 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USkyLightComponent> SkyLight;
 
+	/** v4.11 : nuages volumetriques (Niveau 10) */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<class UVolumetricCloudComponent> Clouds;
+
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UPostProcessComponent> PostProcess;
 
