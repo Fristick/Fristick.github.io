@@ -16,6 +16,9 @@ public:
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	virtual void StartPlay() override;
+	/** v4.12 : un joueur ne rejoint que s'il a la meme version (protocole) et le meme contenu (niveaux disponibles) que
+	 *  l'hote ; sinon il recoit un refus explicite (BRLevels::CheckJoinOptions), affiche dans sa langue */
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	/** La carte n'a pas de PlayerStart : chaque joueur apparait autour du point de depart du niveau */
 	virtual APawn* SpawnDefaultPawnAtTransform_Implementation(AController* NewPlayer, const FTransform& SpawnTransform) override;
 

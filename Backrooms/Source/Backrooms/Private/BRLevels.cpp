@@ -1,4 +1,12 @@
 #include "BRLevels.h"
+#include "BRMissionLogic.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Kismet/GameplayStatics.h"
+
+#ifndef BR_CONTENT_CHANNEL
+#define BR_CONTENT_CHANNEL 0
+#endif
 #include "Internationalization/Text.h"
 
 namespace
@@ -624,10 +632,68 @@ namespace
 
 namespace BRLevels
 {
-	const TArray<FBRLevelDef>& All()
+	const TArray<FBRLevelDef>& Defined()
 	{
 		static const TArray<FBRLevelDef> Levels = BuildAll();
 		return Levels;
+	}
+
+	namespace
+	{
+		int32 GChannelOverride = -1;
+	}
+
+	BRContent::EChannel Channel()
+	{
+#if UE_BUILD_SHIPPING
+		// Version publiee : le canal est fixe a la compilation ; ni la ligne de commande ni un fichier de configuration ne
+		// l'ouvrent
+		return static_cast<BRContent::EChannel>(FMath::Clamp(BR_CONTENT_CHANNEL, 0, 2));
+#else
+		if (GChannelOverride >= 0)
+		{
+			return static_cast<BRContent::EChannel>(GChannelOverride);
+		}
+		static int32 Parsed = -1;
+		if (Parsed < 0)
+		{
+			Parsed = static_cast<int32>(BRContent::EChannel::All); // developpement : tout se teste
+			FString Value;
+			if (FParse::Value(FCommandLine::Get(), TEXT("BRContent="), Value))
+			{
+				Parsed = Value.Equals(TEXT("public"), ESearchCase::IgnoreCase) ? 0 : (Value.Equals(TEXT("internal"), ESearchCase::IgnoreCase) ? 1 : 2);
+			}
+		}
+		return static_cast<BRContent::EChannel>(Parsed);
+#endif
+	}
+
+	void SetChannelOverride(int32 InChannel)
+	{
+#if !UE_BUILD_SHIPPING
+		GChannelOverride = FMath::Clamp(InChannel, -1, 2);
+#endif
+	}
+
+	const TArray<FBRLevelDef>& All()
+	{
+		// v4.12 : les niveaux disponibles dans le canal courant (meme ordre que Defined) ; refaite si le canal change
+		static TArray<FBRLevelDef> Available;
+		static int32 BuiltFor = -1;
+		const int32 Ch = static_cast<int32>(Channel());
+		if (BuiltFor != Ch)
+		{
+			Available.Reset();
+			for (const FBRLevelDef& D : Defined())
+			{
+				if (BRContent::IsAvailable(D.Number, Channel()))
+				{
+					Available.Add(D);
+				}
+			}
+			BuiltFor = Ch;
+		}
+		return Available;
 	}
 
 	int32 IndexOf(int32 Number)
@@ -645,7 +711,12 @@ namespace BRLevels
 
 	bool Exists(int32 Number)
 	{
-		for (const FBRLevelDef& D : All())
+		return IsDefined(Number) && BRContent::IsAvailable(Number, Channel());
+	}
+
+	bool IsDefined(int32 Number)
+	{
+		for (const FBRLevelDef& D : Defined())
 		{
 			if (D.Number == Number)
 			{
@@ -657,7 +728,135 @@ namespace BRLevels
 
 	const FBRLevelDef& Get(int32 Number)
 	{
-		return All()[IndexOf(Number)];
+		// Reference stable (Defined ne change jamais), disponible ou non : une sauvegarde peut nommer un niveau reserve
+		const TArray<FBRLevelDef>& L = Defined();
+		for (const FBRLevelDef& D : L)
+		{
+			if (D.Number == Number)
+			{
+				return D;
+			}
+		}
+		return L[0];
+	}
+
+	namespace
+	{
+		BRContent::FExitList ExitListOf(int32 From)
+		{
+			BRContent::FExitList List;
+			for (const FBRExitDef& Ex : Get(From).Exits)
+			{
+				List.Add(Ex.Target, BRMission::IsExitGuarded(From, Ex.Target));
+			}
+			if (From == 11)
+			{
+				List.Add(BRMission::EndingTarget, true);
+			}
+			return List;
+		}
+	}
+
+	BRContent::FExitResolution ResolveExit(int32 From, int32 Target)
+	{
+		return BRContent::ResolveExit(From, Target, BRMission::IsExitGuarded(From, Target) || Target == BRMission::EndingTarget, ExitListOf(From), Channel());
+	}
+
+	int32 AdaptedForward(int32 From, int32 BaseForward)
+	{
+		return BRContent::AdaptedForward(From, BaseForward, ExitListOf(From), Channel());
+	}
+
+	uint32 ContentSignature()
+	{
+		return BRContent::Signature(Channel());
+	}
+
+	FString JoinOptions()
+	{
+		return FString::Printf(TEXT("?BRNet=%d?BRContent=%u"), BRContent::NetVersion, ContentSignature());
+	}
+
+	FString CheckJoinOptions(const FString& Options)
+	{
+		// Options d'URL "?Cle=Valeur" (FParse::Value ne s'arrete pas au '?' suivant)
+		const bool bHasNet = UGameplayStatics::HasOption(Options, TEXT("BRNet"));
+		const bool bHasSig = UGameplayStatics::HasOption(Options, TEXT("BRContent"));
+		const FString NetValue = UGameplayStatics::ParseOption(Options, TEXT("BRNet"));
+		const FString SigValue = UGameplayStatics::ParseOption(Options, TEXT("BRContent"));
+		const int32 ClientNet = bHasNet && NetValue.IsNumeric() ? FCString::Atoi(*NetValue) : -1;
+		const uint32 ClientSig = bHasSig ? static_cast<uint32>(FCString::Strtoui64(*SigValue, nullptr, 10)) : 0u;
+		const BRContent::EChannel Host = Channel();
+		const BRContent::EJoin Join = BRContent::CheckJoin(ClientNet, bHasSig && SigValue.IsNumeric(), ClientSig, Host);
+		if (Join == BRContent::EJoin::Ok)
+		{
+			return FString();
+		}
+		// Le client affiche la raison dans sa langue (ABRPlayerController, erreur de connexion) : version et contenu de l'hote
+		return FString::Printf(TEXT("%s%s:%d:%d:%d"), JoinRefusalPrefix, Join == BRContent::EJoin::Version ? TEXT("version") : TEXT("content"),
+			BRContent::NetVersion, static_cast<int32>(Host), BRContent::CurrentLot(Host));
+	}
+
+	bool ParseJoinRefusal(const FString& Error, bool& bOutVersion, int32& OutHostNet, int32& OutHostChannel, int32& OutHostLot)
+	{
+		const int32 At = Error.Find(JoinRefusalPrefix);
+		if (At == INDEX_NONE)
+		{
+			return false;
+		}
+		TArray<FString> Parts;
+		Error.Mid(At + FCString::Strlen(JoinRefusalPrefix)).ParseIntoArray(Parts, TEXT(":"), false);
+		if (Parts.Num() < 4)
+		{
+			return false;
+		}
+		bOutVersion = Parts[0].StartsWith(TEXT("version"));
+		OutHostNet = FCString::Atoi(*Parts[1]);
+		OutHostChannel = FMath::Clamp(FCString::Atoi(*Parts[2]), 0, 2);
+		OutHostLot = FCString::Atoi(*Parts[3]);
+		return true;
+	}
+
+	FString VersionLabel(int32 NetVersion)
+	{
+		return FString::Printf(TEXT("%d.%d"), NetVersion / 100, NetVersion % 100);
+	}
+
+	FText ChannelName(BRContent::EChannel InChannel)
+	{
+		switch (InChannel)
+		{
+		case BRContent::EChannel::Public: return NSLOCTEXT("BR", "Content.ChannelPublic", "version publi\u00e9e");
+		case BRContent::EChannel::Internal: return NSLOCTEXT("BR", "Content.ChannelInternal", "version de test interne");
+		default: return NSLOCTEXT("BR", "Content.ChannelAll", "version de d\u00e9veloppement");
+		}
+	}
+
+	int32 ResumeLevel(int32 Current, const TArray<int32>& Explored, bool* bOutMoved)
+	{
+		return BRContent::ResumeLevel(Current, Explored.GetData(), Explored.Num(), Channel(), bOutMoved);
+	}
+
+	int32 CountAvailable(const TArray<int32>& Explored)
+	{
+		int32 N = 0;
+		for (const int32 L : Explored)
+		{
+			N += Exists(L) ? 1 : 0;
+		}
+		return N;
+	}
+
+	FText LotName(int32 Lot)
+	{
+		switch (Lot)
+		{
+		case 1: return NSLOCTEXT("BR", "Content.Lot1", "Le Seuil");
+		case 2: return NSLOCTEXT("BR", "Content.Lot2", "La Station et les Bureaux");
+		case 3: return NSLOCTEXT("BR", "Content.Lot3", "L'H\u00f4tel et le Noir");
+		case 4: return NSLOCTEXT("BR", "Content.Lot4", "Les Grottes, la Banlieue et le Champ");
+		default: return NSLOCTEXT("BR", "Content.Lot5", "La Ville");
+		}
 	}
 
 	const TArray<FBRNote>& CommonNotes()
@@ -678,7 +877,7 @@ namespace BRLevels
 		{
 			return nullptr;
 		}
-		for (const FBRLevelDef& D : All())
+		for (const FBRLevelDef& D : Defined())
 		{
 			for (const FBRNote& N : D.Notes)
 			{
@@ -706,7 +905,7 @@ namespace BRLevels
 			const FString* Source = FTextInspector::GetSourceString(N.Text);
 			return Source && Source->Equals(FrenchText, ESearchCase::CaseSensitive);
 		};
-		for (const FBRLevelDef& D : All())
+		for (const FBRLevelDef& D : Defined())
 		{
 			for (const FBRNote& N : D.Notes)
 			{

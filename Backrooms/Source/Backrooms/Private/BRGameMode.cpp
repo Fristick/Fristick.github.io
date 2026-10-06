@@ -32,6 +32,20 @@ void ABRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	}
 }
 
+void ABRGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+	if (!ErrorMessage.IsEmpty())
+	{
+		return; // partie complete (4 joueurs) ou refus du moteur
+	}
+	ErrorMessage = BRLevels::CheckJoinOptions(Options);
+	if (!ErrorMessage.IsEmpty())
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Connexion refusee (%s) : %s"), *Address, *ErrorMessage);
+	}
+}
+
 APawn* ABRGameMode::SpawnDefaultPawnAtTransform_Implementation(AController* NewPlayer, const FTransform& SpawnTransform)
 {
 	// Sans PlayerStart, le moteur faisait apparaitre tout le monde a l'origine : le premier joueur l'occupait, et le

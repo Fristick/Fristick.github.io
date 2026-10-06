@@ -1,0 +1,93 @@
+# Banc de contenu v4.12 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Content/test_content.cpp \
+#       Source/Backrooms/Private/BRContentLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_content && ./test_content
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-06T16:50:10Z
+
+Banc de contenu v4.12 (sources lues dans Source/Backrooms/Private)
+  BRLevels.cpp : niveaux et sorties lus                                                            OK
+  BRMissionWorld.cpp : sorties de progression de la base lues                                      OK
+
+A. Configuration centrale
+  12 niveaux definis dans le projet (12)                                                           OK
+  la table couvre exactement les niveaux definis                                                   OK
+  chaque niveau a un lot (1 a 5)                                                                   OK
+  lot 1 publie : Niveaux 0, 1, 2, 37                                                               OK
+  Niveaux 3 et 4 en test interne (lot 2)                                                           OK
+  lots courants : publiee 1, test interne 2, developpement 5                                       OK
+  Niveau 7 (inexistant) et 1001/1002 (reserves) inconnus et indisponibles                          OK
+  sortie gardee indisponible, autre sortie gardee disponible : condamnee                           OK
+  ... et la mission garde l'autre sortie                                                           OK
+  seule sortie gardee indisponible : fin du contenu disponible                                     OK
+  sortie libre (non gardee) indisponible : condamnee                                               OK
+  sortie vers un niveau disponible : inchangee                                                     OK
+  redirection seulement depuis le niveau prevu (Niveau 3 -> 4 : pas redirigee)                     OK
+  destination au hasard : jamais condamnee                                                         OK
+  dernier quai demande hors du Niveau 11 : fin du contenu                                          OK
+
+B. Version publiee
+  atteignables par les sorties : 0, 1, 2, 37                                                       OK
+  tous les niveaux disponibles sont atteignables (4)                                               OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du Niveau 0 par le Niveau 1 : 0 -> 1 -> 2 (redirection) -> fin du contenu                  OK
+  route du Niveau 0 par le Niveau 37 : 0 -> 37 -> 1 (redirection) -> 2 (redirection) -> fin du contenu OK
+  Poolrooms -> echelle : Niveau 1 (redirigee)                                                      OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 2 (redirigee)                      OK
+  la mission du Niveau 1 garde toujours l'ascenseur                                                OK
+  lot 1 : aucun passage condamne                                                                   OK
+  dernier quai (Niveau 11) : hors de cette version                                                 OK
+  tirages au hasard : 4 niveaux, tous disponibles                                                  OK
+
+B. Version test interne
+  atteignables par les sorties : 0, 1, 2, 3, 4, 37                                                 OK
+  tous les niveaux disponibles sont atteignables (6)                                               OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du Niveau 0 par le Niveau 1 : 0 -> 1 -> 4 -> fin du contenu                                OK
+  route du Niveau 0 par le Niveau 37 : 0 -> 37 -> 4 -> fin du contenu                              OK
+  Poolrooms -> echelle : Niveau 4                                                                  OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 4                                  OK
+  la mission du Niveau 1 garde toujours l'ascenseur                                                OK
+  dernier quai (Niveau 11) : hors de cette version                                                 OK
+  tirages au hasard : 6 niveaux, tous disponibles                                                  OK
+
+B. Version developpement
+  atteignables par les sorties : 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37                             OK
+  tous les niveaux disponibles sont atteignables (12)                                              OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du Niveau 0 par le Niveau 1 : 0 -> 1 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai  OK
+  route du Niveau 0 par le Niveau 37 : 0 -> 37 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai OK
+  Poolrooms -> echelle : Niveau 4                                                                  OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 4                                  OK
+  la mission du Niveau 1 garde toujours l'ascenseur                                                OK
+  dernier quai (Niveau 11) : fin de la campagne                                                    OK
+  tirages au hasard : 12 niveaux, tous disponibles                                                 OK
+
+C. Reprise des sauvegardes (BRContent::ResumeLevel, utilise par le menu et les cartes de sauvegarde)
+  partie v4.11 au Niveau 5 (0, 1, 4, 5 explores), version publiee : Niveau 1                       OK
+  partie v4.11 au Niveau 5, version de test interne : Niveau 4                                     OK
+  partie v4.11 au Niveau 5, version de developpement : Niveau 5                                    OK
+  partie au Niveau 2, version publiee : Niveau 2 (inchangee)                                       OK
+  partie de test au Niveau 4 (route des Poolrooms), version publiee : Niveau 2                     OK
+  dernier niveau non explore (format 1) : Niveau 0, comme avant                                    OK
+  aucun niveau disponible explore : Niveau 0                                                       OK
+  la liste des niveaux explores n'est pas modifiee (Niveau 4 de nouveau disponible au lot 2)       OK
+
+D. Compatibilite reseau
+  signatures distinctes par canal                                                                  OK
+  signature stable (deux calculs identiques)                                                       OK
+  meme version, meme contenu : accepte                                                             OK
+  autre version (v4.11 : 411) : refus version                                                      OK
+  client sans controle (avant v4.12) : refus version                                               OK
+  version de test contre version publiee : refus contenu                                           OK
+  version publiee contre hote de developpement : refus contenu                                     OK
+  signature absente : refus contenu                                                                OK
+
+RESULTAT : OK (67 verifications, 0 echec(s))
+# code de sortie : 0

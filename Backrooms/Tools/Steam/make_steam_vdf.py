@@ -11,7 +11,11 @@ Refus (code 1, aucun fichier ecrit ni remplace) :
 - un paquet construit depuis un autre commit que l'arbre courant (build_manifest.txt), ou sans manifeste, ou avec des
   modifications non validees (« arbre : modifie » ; --allow-dirty pour un essai local) ;
 - des residus d'une construction precedente dans le dossier archive (fichiers absents des listes de BuildCookRun,
-  conteneurs plus anciens que les autres).
+  conteneurs plus anciens que les autres) ;
+- v4.12 : un paquet dont le canal de contenu (build_manifest.txt : « contenu : public|internal ») n'est pas celui
+  demande (--content, public par defaut), ou inconnu (scripts anterieurs a la v4.12). Une version de test interne
+  (Build/<Systeme>/<Config>-internal) n'est preparee qu'avec --content internal : elle ne peut pas partir par erreur
+  avec les fichiers de la version publiee.
 Un seul paquet refuse suffit : aucun fichier n'est ecrit pour les autres (pas de livraison partielle).
 
 Les fichiers sont d'abord ecrits dans un dossier temporaire, puis mis en place d'un bloc : un echec en cours de route
@@ -194,6 +198,8 @@ def main(argv=None):
     ap.add_argument("--project", default=ROOT)
     ap.add_argument("--commit", default=None, help="commit attendu dans build_manifest.txt (defaut : HEAD du projet)")
     ap.add_argument("--check-tool", default=CHECK)
+    ap.add_argument("--content", default="public", choices=["public", "internal"],
+                    help="canal de contenu du paquet (v4.12, Docs/PLAN_PUBLICATION.md) : public, ou internal (version de test)")
     ap.add_argument("--allow-dirty", action="store_true", help="accepter un paquet construit avec des modifications non validees (essai local seulement)")
     ap.add_argument("--check-timeout", type=int, default=3600)
     a = ap.parse_args(argv)
@@ -235,7 +241,7 @@ def main(argv=None):
     work = tempfile.mkdtemp(prefix="br_steampipe_")
     try:
         for plat in plats:
-            archive = os.path.join(a.build_root, plat, a.config)
+            archive = os.path.join(a.build_root, plat, a.config + ("-internal" if a.content == "internal" else ""))
             # Unreal 5.8 archive le jeu directement dans le dossier demande ; d'autres versions ajoutent <Plateforme>/
             content = os.path.join(archive, PLATFORMS[plat]["dir"])
             if not os.path.isdir(content) and os.path.isdir(archive):
@@ -256,6 +262,10 @@ def main(argv=None):
                     raise Refused("%s : paquet construit depuis %s, arbre courant %s : reconstruire" % (plat, manifest.get("commit") or "(inconnu)", expected_commit))
                 if manifest.get("configuration") not in (None, a.config):
                     raise Refused("%s : manifeste en %s, %s demande" % (plat, manifest.get("configuration"), a.config))
+                if manifest.get("contenu") is None:
+                    raise Refused("%s : canal de contenu inconnu (build_manifest.txt sans ligne contenu : scripts anterieurs a la v4.12) : reconstruire" % plat)
+                if manifest.get("contenu") != a.content:
+                    raise Refused("%s : paquet de contenu %s, %s demande (--content)" % (plat, manifest.get("contenu"), a.content))
                 left = residues(archive, content)
                 if left:
                     raise Refused("%s : residus d'une construction precedente : %s" % (plat, "; ".join(left[:5])))
@@ -295,8 +305,8 @@ def main(argv=None):
             shutil.rmtree(old, ignore_errors=True)
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    print("SteamPipe : %s (%s) ; %s ; SetLive vide ; aucun envoi (upload_steam.sh, manuel)" % (
-        os.path.join(out, "app_build.vdf"), ", ".join(n for _, n in names), "apercu (Preview 1)" if not a.no_preview else "Preview 0"))
+    print("SteamPipe : %s (%s) ; contenu %s ; %s ; SetLive vide ; aucun envoi (upload_steam.sh, manuel)" % (
+        os.path.join(out, "app_build.vdf"), ", ".join(n for _, n in names), a.content, "apercu (Preview 1)" if not a.no_preview else "Preview 0"))
     return 0
 
 

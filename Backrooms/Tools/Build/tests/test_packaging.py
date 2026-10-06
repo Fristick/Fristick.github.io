@@ -98,12 +98,12 @@ class Fixture(object):
         write(self.tool, FAKE_TOOL)
         os.environ["BR_FAKE_LISTS"] = self.lists
 
-    def archive(self, platform, config="Shipping"):
-        return os.path.join(self.build, platform, config)
+    def archive(self, platform, config="Shipping", content="public"):
+        return os.path.join(self.build, platform, config + ("-internal" if content == "internal" else ""))
 
     def make(self, platform="Windows", config="Shipping", commit="c0ffee", skip_files=(), pak_entries=None, packages=None, tree="propre",
-             exec_bits=True):
-        archive = self.archive(platform, config)
+             exec_bits=True, content="public"):
+        archive = self.archive(platform, config, content)
         game = os.path.join(archive, platform)
         staged = []
 
@@ -136,7 +136,9 @@ class Fixture(object):
         write(os.path.join(self.lists, "pakchunk0-%s.pak.list" % platform), "\n".join(pak_entries))
         write(os.path.join(self.lists, "pakchunk0-%s.utoc.list" % platform), "\n".join(packages))
         write(os.path.join(game, "Manifest_NonUFSFiles_%s.txt" % sub), "".join("%s\t2026-10-06T00:00:00\n" % s for s in staged))
-        write(os.path.join(archive, "build_manifest.txt"), "projet : Backrooms\ncommit : %s\narbre : %s\nconfiguration : %s\n" % (commit, tree, config))
+        # v4.12 : canal de contenu (None : manifeste ecrit par des scripts anterieurs a la v4.12)
+        write(os.path.join(archive, "build_manifest.txt"), "projet : Backrooms\ncommit : %s\narbre : %s\nconfiguration : %s\n%s" % (
+            commit, tree, config, "" if content is None else "contenu : %s\n" % ("internal" if content == "internal" else content)))
         # v4.11 : sur POSIX, BuildCookRun livre le lanceur et le binaire executables ; la fixture fait de meme (sans quoi le
         # controleur refuse a juste titre le paquet). exec_bits=False fabrique le paquet fautif.
         if platform != "Windows" and os.name != "nt":
@@ -507,6 +509,31 @@ class SteamVdfTests(unittest.TestCase):
         os.remove(os.path.join(archive, "build_manifest.txt"))
         code, out = self.vdf()
         self.assertEqual(code, 1, out)
+
+    def test_contenu_interne_isole(self):
+        # v4.12 : une version de test interne n'est jamais preparee comme version publiee, et inversement
+        self.f.make(content="internal")
+        code, out = self.vdf()
+        self.assertEqual(code, 1, out)  # rien dans Build/Windows/Shipping
+        self.assertFalse(os.path.exists(self.out))
+        code, out = self.vdf("--content", "internal")
+        self.assertEqual(code, 0, out)
+        self.assertIn("contenu internal", out)
+
+    def test_contenu_different_refuse(self):
+        # Paquet interne copie a la place du paquet public : le manifeste le trahit
+        self.f.make(content="internal")
+        os.makedirs(os.path.join(self.f.build, "Windows"), exist_ok=True)
+        shutil.copytree(self.f.archive("Windows", content="internal"), self.f.archive("Windows"))
+        code, out = self.vdf()
+        self.assertEqual(code, 1, out)
+        self.assertIn("contenu internal", out)
+
+    def test_contenu_inconnu_refuse(self):
+        self.f.make(content=None)
+        code, out = self.vdf()
+        self.assertEqual(code, 1, out)
+        self.assertIn("canal de contenu inconnu", out)
 
     def test_aucun_envoi(self):
         # Le script ne lance jamais steamcmd (ni aucun programme autre que python et git)

@@ -1,22 +1,25 @@
 #!/usr/bin/env bash
 # v4.9 : construction, cuisson et paquet macOS natif (Metal), binaire universel arm64 + x86_64.
 #   UE_ROOT="/Users/Shared/Epic Games/UE_5.8" Tools/Build/build_mac.sh [Shipping|Development]
+#   BR_CONTENT_CHANNEL=internal ...  version de test interne (v4.12 ; public par defaut) : Build/Mac/<Config>-internal/
 # Sur un Mac, avec Xcode compatible avec UE 5.8. Ensuite, si MAC_SIGN_IDENTITY est defini : signature avec le
 # Hardened Runtime et les droits de mac/Backrooms.entitlements ; si NOTARY_PROFILE est defini (profil cree par
 # "xcrun notarytool store-credentials") : notarisation Apple puis agrafage. Identifiants et certificats restent hors du
 # depot (variables d'environnement, trousseau).
-# Resultat : Build/Mac/<Config>/Mac/Backrooms.app et build_manifest.txt.
+# Resultat : Build/Mac/<Config>[-internal]/Mac/Backrooms.app et build_manifest.txt.
 source "$(dirname "$0")/common.sh"
 CONFIG="${1:-Shipping}"
 br_check_engine
+br_content_channel
 XCODE="$(xcodebuild -version 2>/dev/null | tr '\n' ' ' || echo 'Xcode introuvable')"
 if [ -n "${XCODE_VERSION:-}" ] && ! echo "$XCODE" | grep -q "Xcode $XCODE_VERSION"; then
 	echo "Attention : $XCODE, Xcode $XCODE_VERSION attendu (Tools/Build/versions.env)" >&2
 fi
-OUT="$BR_PROJECT_DIR/Build/Mac/$CONFIG"
+OUT="$BR_PROJECT_DIR/Build/Mac/$CONFIG$BR_OUT_SUFFIX"
 "$UE_ROOT/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun -project="$BR_PROJECT" -noP4 -utf8output \
 	-platform=Mac -clientconfig="$CONFIG" -specifiedarchitecture=arm64+x86_64 \
-	-build -cook -stage -pak -archive -archivedirectory="$OUT"
+	-build -cook -stage -pak -archive -archivedirectory="$OUT" $BR_CLEAN_FLAG
+br_content_stamp
 br_write_manifest "$OUT" "macOS (Metal, arm64+x86_64)" "$CONFIG" "$XCODE"
 
 APP="$(find "$OUT" -maxdepth 3 -name '*.app' -type d | head -1)"

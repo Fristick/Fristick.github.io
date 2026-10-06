@@ -328,6 +328,11 @@ public:
 	/** Fin de campagne affichee (Niveau 11) et sa variante */
 	bool IsEndingShown() const { return bEndingShown; }
 	bool IsEndingVariant() const { return bEndingVariant; }
+	/** v4.12 : fin du contenu disponible (lot) plutot que fin de la campagne */
+	bool IsChapterEnd() const { return bChapterEnd; }
+	int32 GetChapterEndLot() const { return ChapterEndLot; }
+	/** v4.12 : nom de la destination d'une sortie de ce niveau dans cette version (bandeau de depart, annonces) */
+	FString DestinationLabel(int32 Target) const;
 	/** Fin : continuer l'exploration (l'hote emmene le groupe vers un niveau au hasard) ou revenir au menu */
 	void CloseEnding(bool bContinue);
 
@@ -419,7 +424,7 @@ public:
 	float LightLevelAt(const FVector& P) const;
 	/** v4.12 : source de lumiere de gameplay (mecanisme de mission allume) : enregistree ou retiree, sur chaque machine,
 	 *  d'apres l'etat replique ; autonome (une coupure des neons ne l'eteint pas). Slot : plusieurs sources par acteur */
-	void SetGameplayLight(const AActor* Owner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn);
+	void SetGameplayLight(const AActor* LightOwner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn);
 	/** v4.12 (tests) : sources de gameplay actives */
 	int32 NumGameplayLights() const { return GameplayLights.Num(); }
 	/** A* sur la grille (v4.6 : les cellules d'une salle de fosses coutent plus cher : on passe par la galerie si possible) */
@@ -708,6 +713,10 @@ protected:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastEnding(bool bVariant);
 
+	/** v4.12 : fin du contenu disponible dans cette version (lot atteint) : ecran annonce chez tous */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastChapterEnd(int32 Lot);
+
 	UPROPERTY()
 	TArray<TObjectPtr<ABRMissionDevice>> MissionDevices;
 
@@ -781,6 +790,9 @@ private:
 	void LeaveForTarget(int32 Target);
 	bool bEndingShown = false;
 	bool bEndingVariant = false;
+	/** v4.12 : l'ecran de fin est celui de la fin du contenu disponible (lot), et non la fin de la campagne */
+	bool bChapterEnd = false;
+	int32 ChapterEndLot = 0;
 	/** La campagne de la sauvegarde de l'hote a ete lue (une fois par carte) */
 	bool bCampaignLoaded = false;
 	float DepartureReadyTime = 0.f;

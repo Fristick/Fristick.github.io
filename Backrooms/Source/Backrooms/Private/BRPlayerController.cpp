@@ -149,11 +149,49 @@ namespace
 	FString GNetMessage;
 	bool GNetHooks = false;
 
+	// v4.12 : refus explicite de l'hote (version ou contenu different), lu dans la langue de ce joueur
+	FString DescribeJoinRefusal(const FString& Error)
+	{
+		bool bVersion = false;
+		int32 HostNet = 0, HostChannel = 0, HostLot = 0;
+		if (!BRLevels::ParseJoinRefusal(Error, bVersion, HostNet, HostChannel, HostLot))
+		{
+			return FString();
+		}
+		if (bVersion)
+		{
+			return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.JoinRefusedVersion", "Impossible de rejoindre : l'h\u00f4te a la version {Host} du jeu, vous avez la version {Local}. Installez la m\u00eame version des deux c\u00f4t\u00e9s."),
+				{ { TEXT("Host"), BRLoc::Arg(BRLevels::VersionLabel(HostNet)) }, { TEXT("Local"), BRLoc::Arg(BRLevels::VersionLabel(BRContent::NetVersion)) } });
+		}
+		const BRContent::EChannel Local = BRLevels::Channel();
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.JoinRefusedContent", "Impossible de rejoindre : l'h\u00f4te joue avec la {HostChannel} (contenu jusqu'au lot {HostLot}), vous avez la {LocalChannel} (lot {LocalLot}). Les deux joueurs doivent avoir le m\u00eame contenu."),
+			{ { TEXT("HostChannel"), BRLoc::Arg(BRLevels::ChannelName(static_cast<BRContent::EChannel>(HostChannel)).ToString()) }, { TEXT("HostLot"), BRLoc::Int(HostLot) },
+				{ TEXT("LocalChannel"), BRLoc::Arg(BRLevels::ChannelName(Local).ToString()) }, { TEXT("LocalLot"), BRLoc::Int(BRContent::CurrentLot(Local)) } });
+	}
+
 	void HandleNetworkFailure(UWorld* World, UNetDriver* Driver, ENetworkFailure::Type Type, const FString& Error)
 	{
+		const FString Refusal = DescribeJoinRefusal(Error);
+		if (!Refusal.IsEmpty())
+		{
+			GNetMessage = Refusal;
+			return;
+		}
 		switch (Type)
 		{
+		case ENetworkFailure::OutdatedClient:
+		case ENetworkFailure::OutdatedServer:
+			// v4.12 : le moteur compare la version du projet (ProjectVersion) avant meme la demande d'entree ; il ne dit pas
+			// laquelle des deux est la plus recente
+			GNetMessage = BRLoc::Fmt(NSLOCTEXT("BR", "Menu.JoinOtherVersion", "Impossible de rejoindre : l'h\u00f4te a une autre version du jeu (vous avez la version {Local}). Installez la m\u00eame version des deux c\u00f4t\u00e9s."),
+				{ { TEXT("Local"), BRLoc::Arg(BRLevels::VersionLabel(BRContent::NetVersion)) } });
+			break;
 		case ENetworkFailure::PendingConnectionFailure:
+			if (Error.Contains(TEXT("Server full")))
+			{
+				GNetMessage = BR_STR(NSLOCTEXT("BR", "Menu.JoinServerFull", "Impossible de rejoindre : la partie est compl\u00e8te (4 joueurs)."));
+				break;
+			}
 			GNetMessage = BR_STR(NSLOCTEXT("BR", "Menu.ImpossibleRejoindrePartieVerifiezAdresse", "Impossible de rejoindre la partie : v\u00e9rifiez l'adresse, le port 7777 (UDP) et le pare-feu de l'h\u00f4te."));
 			break;
 		case ENetworkFailure::ConnectionLost:
@@ -1955,7 +1993,20 @@ void ABRPlayerController::SelectSave(int32 Slot)
 	BRSaves::ActiveSlot() = Slot;
 	ResolvePendingDeath(S);
 	// On reprend la ou on s'etait arrete
-	const int32 Level = S->IsExplored(S->CurrentLevel) ? S->CurrentLevel : 0;
+	bool bMoved = false;
+	const int32 Level = BRLevels::ResumeLevel(S->CurrentLevel, S->Explored, &bMoved);
+	if (bMoved)
+	{
+		// v4.12 : partie d'une version de test (niveau pas encore publie ici) : le fichier est copie tel quel avant toute
+		// ecriture, la partie garde ses niveaux, decouvertes et fins, et reprend au dernier niveau disponible explore
+		const bool bCopied = BRSaves::PreserveBeforeRecovery(Slot);
+		const FText Msg = bCopied
+			? NSLOCTEXT("BR", "Menu.SaveLevelNotAvailableCopy", "Le Niveau {Level} de cette partie n'est pas encore disponible dans cette version : reprise au Niveau {Resume}. Vos niveaux, d\u00e9couvertes et fins sont conserv\u00e9s, et une copie de la partie est gard\u00e9e.")
+			: NSLOCTEXT("BR", "Menu.SaveLevelNotAvailable", "Le Niveau {Level} de cette partie n'est pas encore disponible dans cette version : reprise au Niveau {Resume}. Vos niveaux, d\u00e9couvertes et fins sont conserv\u00e9s.");
+		ABRHUD::Notify(this, BRLoc::Fmt(Msg, { { TEXT("Level"), BRLoc::Int(S->CurrentLevel) }, { TEXT("Resume"), BRLoc::Int(Level) } }), 8.f, FLinearColor(1.f, 0.82f, 0.5f));
+		UE_LOG(LogBackrooms, Log, TEXT("[Content] Partie %d : niveau %d indisponible (canal %d), reprise au niveau %d, copie %s"), Slot, S->CurrentLevel,
+			static_cast<int32>(BRLevels::Channel()), Level, bCopied ? TEXT("oui") : TEXT("non"));
+	}
 	SetMenuPage(EBRMenuPage::Solo);
 	MenuIndex = FMath::Max(0, BRLevels::IndexOf(Level));
 }
@@ -2039,7 +2090,7 @@ void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 	PendingSaveDelay = 2.f;
 	if (bNew)
 	{
-		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.NiveauLevelnumberAjouteVosNiveaux", "Niveau {LevelNumber} ajout\u00e9 \u00e0 vos niveaux explor\u00e9s ({Explored} / {All}) : vous pourrez y revenir depuis le menu."), { { TEXT("LevelNumber"), BRLoc::Int(LevelNumber) }, { TEXT("Explored"), BRLoc::Int(ActiveSave->Explored.Num()) }, { TEXT("All"), BRLoc::Int(BRLevels::All().Num()) } }), 7.f, FLinearColor(0.75f, 1.f, 0.75f));
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.NiveauLevelnumberAjouteVosNiveaux", "Niveau {LevelNumber} ajout\u00e9 \u00e0 vos niveaux explor\u00e9s ({Explored} / {All}) : vous pourrez y revenir depuis le menu."), { { TEXT("LevelNumber"), BRLoc::Int(LevelNumber) }, { TEXT("Explored"), BRLoc::Int(BRLevels::CountAvailable(ActiveSave->Explored)) }, { TEXT("All"), BRLoc::Int(BRLevels::All().Num()) } }), 7.f, FLinearColor(0.75f, 1.f, 0.75f));
 	}
 }
 
@@ -2171,7 +2222,8 @@ void ABRPlayerController::JoinGame()
 	BRConfig::Get().SetString(SettingsSection, TEXT("LastAddress"), *Address);
 	BRConfig::Save();
 	MenuStatus = BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ConnexionAddress", "Connexion \u00e0 {Address}..."), { { TEXT("Address"), BRLoc::Arg(Address) } });
-	ClientTravel(Address, TRAVEL_Absolute);
+	// v4.12 : version et contenu de ce jeu, verifies par l'hote avant d'entrer dans la partie
+	ClientTravel(Address + BRLevels::JoinOptions(), TRAVEL_Absolute);
 }
 
 void ABRPlayerController::ReturnToMainMenu()

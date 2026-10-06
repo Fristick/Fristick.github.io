@@ -361,6 +361,32 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 		Light->RegisterComponent();
 	}
 
+	// v4.12 : passage condamne dans cette version : planches en croix et lueur rouge (la porte reste un repere du decor)
+	if (IsSealed() && IsInteractable() && Style != EBRExitStyle::Barn)
+	{
+		const FBRSurface Plank(TEXT("T_Concrete"), FLinearColor(0.32f, 0.22f, 0.12f), 120.f, 0.9f, 0.6f);
+		UMaterialInterface* PlankMat = A->NewSurface(Plank, this);
+		const float H = Style == EBRExitStyle::Ladder ? 180.f : 110.f;
+		for (int32 I = 0; I < 2; ++I)
+		{
+			UStaticMeshComponent* P = NewObject<UStaticMeshComponent>(this);
+			P->SetupAttachment(Root);
+			P->SetStaticMesh(A->Cube());
+			P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			P->SetRelativeLocation(FVector(14.f, 0.f, H));
+			P->SetRelativeRotation(FRotator(0.f, 0.f, I == 0 ? 35.f : -35.f));
+			P->SetRelativeScale3D(FVector(0.05f, 1.3f, 0.12f));
+			P->SetMaterial(0, PlankMat);
+			P->RegisterComponent();
+			LadderParts.Add(P);
+		}
+		if (Light)
+		{
+			Light->SetLightColor(FLinearColor(1.f, 0.25f, 0.15f));
+			Light->SetIntensity(90.f);
+		}
+	}
+
 	// Un bourdonnement discret aide a trouver les sorties a l'oreille
 	if (USoundBase* Hum = A->Sound(TEXT("S_ExitHum")))
 	{
@@ -394,7 +420,7 @@ void ABRExit::Tick(float DeltaSeconds)
 void ABRExit::NotifyActorBeginOverlap(AActor* OtherActor)
 {
 	Super::NotifyActorBeginOverlap(OtherActor);
-	if (!IsInteractable())
+	if (!IsInteractable() && !IsSealed())
 	{
 		if (ABRCharacter* C = Cast<ABRCharacter>(OtherActor))
 		{
@@ -403,11 +429,38 @@ void ABRExit::NotifyActorBeginOverlap(AActor* OtherActor)
 	}
 }
 
+bool ABRExit::IsSealed() const
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	return W && BRLevels::ResolveExit(W->GetLevelNumber(), Target).Kind == BRContent::EExit::Sealed;
+}
+
+FString ABRExit::DestinationLabel() const
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	const BRContent::FExitResolution R = BRLevels::ResolveExit(W ? W->GetLevelNumber() : 0, Target);
+	switch (R.Kind)
+	{
+	case BRContent::EExit::Ending:
+		return BR_STR(NSLOCTEXT("BR", "Interact.LastPlatform", "dernier quai"));
+	case BRContent::EExit::ChapterEnd:
+		return BR_STR(NSLOCTEXT("BR", "Interact.ChapterEnd", "fin du contenu disponible"));
+	case BRContent::EExit::Go:
+		return R.Target >= 0 ? BRLoc::Fmt(NSLOCTEXT("BR", "Interact.NiveauTarget", "Niveau {Target} ?"), { { TEXT("Target"), BRLoc::Int(R.Target) } }) : FString(TEXT("???"));
+	default:
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.NiveauTarget", "Niveau {Target} ?"), { { TEXT("Target"), BRLoc::Int(Target) } });
+	}
+}
+
 FString ABRExit::GetPrompt() const
 {
-	const FString Dest = (Target >= 0 && BRLevels::Exists(Target)) ? BRLoc::Fmt(NSLOCTEXT("BR", "Interact.NiveauTarget", "Niveau {Target} ?"), { { TEXT("Target"), BRLoc::Int(Target) } })
-		: (Target == BRMission::EndingTarget ? BR_STR(NSLOCTEXT("BR", "Interact.LastPlatform", "dernier quai")) : FString(TEXT("???")));
+	// v4.12 : la destination suit la disponibilite des niveaux de cette version (redirection, fin du contenu disponible)
+	const FString Dest = DestinationLabel();
 	const FString Key = BRKeys::Tag(EBRAction::Interact);
+	if (IsSealed())
+	{
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.ExitSealed", "Passage condamn\u00e9 ({Dest}) : pas encore accessible dans cette version"), { { TEXT("Dest"), BRLoc::Arg(Dest) } });
+	}
 	// v4.11 : sortie gardee par la mission : on le dit dans l'invite
 	if (const ABRWorld* W = ABRWorld::Get(this))
 	{
@@ -451,6 +504,21 @@ void ABRExit::Use(ABRCharacter* By)
 		return;
 	}
 	FString Reason;
+	// v4.12 : passage condamne (niveau pas encore disponible) : annonce, rien d'autre
+	if (IsSealed())
+	{
+		if (By->IsLocallyControlled())
+		{
+			const float NowS = GetWorld() ? static_cast<float>(GetWorld()->GetTimeSeconds()) : 0.f;
+			if (NowS - LastDenied > 2.f)
+			{
+				LastDenied = NowS;
+				ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Interact.ExitSealedUse", "Ce passage ne m\u00e8ne nulle part pour l'instant : le niveau suivant arrivera dans une prochaine mise \u00e0 jour.")), 4.f,
+					FLinearColor(1.f, 0.75f, 0.45f));
+			}
+		}
+		return;
+	}
 	// v4.11 : la sortie suit la mission du niveau (sorties de retour toujours ouvertes)
 	if (!W->CanUseExit(Target, Reason))
 	{

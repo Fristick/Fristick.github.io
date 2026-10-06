@@ -80,6 +80,11 @@ public:
 	float GetClimbTopZ() const { return ClimbTopZ; }
 	/** Sommet atteint : noclip vers le niveau cible */
 	void FinishClimb(ABRCharacter* By);
+	/** v4.12 : passage condamne dans cette version (niveau pas encore disponible, sans redirection) : visible, annonce,
+	 *  il ne mene nulle part */
+	bool IsSealed() const;
+	/** v4.12 : nom de la destination dans cette version ("Niveau 1", "fin du contenu disponible", "dernier quai") */
+	FString DestinationLabel() const;
 
 	int32 Target = 1;
 	EBRExitStyle Style = EBRExitStyle::Door;

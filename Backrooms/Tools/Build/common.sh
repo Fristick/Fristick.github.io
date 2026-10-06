@@ -9,7 +9,7 @@ BR_PROJECT="$BR_PROJECT_DIR/Backrooms.uproject"
 source "$BR_TOOLS/versions.env"
 
 br_usage_engine() {
-	echo "Chemin du moteur manquant : UE_ROOT=/chemin/vers/UE_5.8 $0 [Shipping|Development]" >&2
+	echo "Chemin du moteur manquant : [BR_CONTENT_CHANNEL=public|internal] UE_ROOT=/chemin/vers/UE_5.8 $0 [Shipping|Development]" >&2
 	exit 2
 }
 
@@ -24,6 +24,31 @@ br_check_engine() {
 		exit 3
 	fi
 	echo "Moteur : $BR_UE_FOUND ($UE_ROOT)"
+}
+
+# v4.12 : canal de contenu de la version (Docs/PLAN_PUBLICATION.md) : public (niveaux publies, par defaut) ou internal
+# (publies + test interne). Lu par Backrooms.Build.cs a la compilation (BR_CONTENT_CHANNEL) : une version publiee ne
+# l'ouvre jamais au lancement. Le paquet va dans Build/<Plateforme>/<Config> (public) ou <Config>-internal, et un
+# changement de canal depuis la construction precedente force une compilation propre (UBT ne suit pas l'environnement).
+br_content_channel() {
+	BR_CONTENT_CHANNEL="${BR_CONTENT_CHANNEL:-public}"
+	case "$BR_CONTENT_CHANNEL" in
+		public) BR_OUT_SUFFIX="" ;;
+		internal) BR_OUT_SUFFIX="-internal" ;;
+		*) echo "BR_CONTENT_CHANNEL=$BR_CONTENT_CHANNEL : public ou internal attendu" >&2; exit 2 ;;
+	esac
+	export BR_CONTENT_CHANNEL
+	local stamp="$BR_PROJECT_DIR/Intermediate/BRContentChannel.txt"
+	BR_CLEAN_FLAG=""
+	if [ ! -f "$stamp" ] || [ "$(cat "$stamp")" != "$BR_CONTENT_CHANNEL" ]; then
+		BR_CLEAN_FLAG="-clean"
+	fi
+	mkdir -p "$(dirname "$stamp")"
+	echo "Contenu : $BR_CONTENT_CHANNEL${BR_CLEAN_FLAG:+ (canal change : compilation propre)}"
+}
+
+br_content_stamp() {
+	printf '%s' "$BR_CONTENT_CHANNEL" > "$BR_PROJECT_DIR/Intermediate/BRContentChannel.txt"
 }
 
 # Manifeste de la construction : versions, commit, date, plateforme (reproductibilite)
@@ -42,6 +67,7 @@ br_write_manifest() {
 		echo "date : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 		echo "plateforme : $platform"
 		echo "configuration : $config"
+		echo "contenu : ${BR_CONTENT_CHANNEL:-public}"
 		echo "moteur : $BR_UE_FOUND"
 		echo "chaine de compilation : $toolchain"
 		echo "hote : $(uname -srm)"

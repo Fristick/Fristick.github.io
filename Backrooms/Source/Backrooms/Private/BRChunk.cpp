@@ -2285,6 +2285,14 @@ void ABRChunk::PlanExits()
 		{
 			continue;
 		}
+		// v4.12 : vers un niveau pas encore disponible (sans redirection), un passage par noclip n'existe pas dans cette
+		// version ; une porte, un ascenseur ou une echelle reste visible et condamne (ABRExit::IsSealed). Chaque sortie a
+		// ses propres tirages : les autres ne changent pas
+		if ((Ex.Style == EBRExitStyle::NoclipWall || Ex.Style == EBRExitStyle::NoclipFloor)
+			&& BRLevels::ResolveExit(D.Number, Ex.Target).Kind == BRContent::EExit::Sealed)
+		{
+			continue;
+		}
 
 		FVector Pos = FVector::ZeroVector;
 		float Yaw = 0.f;

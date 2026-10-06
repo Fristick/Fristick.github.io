@@ -1766,7 +1766,7 @@ void ABRHUD::DrawMenuMain(ABRPlayerController* PC, bool bInteractive)
 	{
 		if (const UBRSaveGame* Last = PC->GetSaveInSlot(PC->GetSaveOrder()[0]))
 		{
-			SoloSub = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ReprendreSavenameNiveauCurrentlevelNouve", "Reprendre \u00ab {SaveName} \u00bb (Niveau {CurrentLevel}) ou nouvelle partie"), { { TEXT("SaveName"), BRLoc::Arg(Last->SaveName) }, { TEXT("CurrentLevel"), BRLoc::Int(Last->CurrentLevel) } });
+			SoloSub = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ReprendreSavenameNiveauCurrentlevelNouve", "Reprendre \u00ab {SaveName} \u00bb (Niveau {CurrentLevel}) ou nouvelle partie"), { { TEXT("SaveName"), BRLoc::Arg(Last->SaveName) }, { TEXT("CurrentLevel"), BRLoc::Int(BRLevels::ResumeLevel(Last->CurrentLevel, Last->Explored)) } });
 		}
 	}
 	// Sous-titre de LANGUE : la langue courante, dans sa propre ecriture
@@ -2574,8 +2574,12 @@ void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y,
 	const float CX0 = X - (1.f - Ap) * 40.f * U + S * 14.f * U;
 	const float R = 14.f * U;
 	const TArray<FBRLevelDef>& All = BRLevels::All();
-	const int32 LevelIdx = FMath::Max(0, BRLevels::IndexOf(Save->CurrentLevel));
+	// v4.12 : niveau de reprise (le dernier niveau d'une partie de version de test peut ne pas etre disponible ici)
+	bool bMovedLevel = false;
+	const int32 ResumeNum = BRLevels::ResumeLevel(Save->CurrentLevel, Save->Explored, &bMovedLevel);
+	const int32 LevelIdx = FMath::Max(0, BRLevels::IndexOf(ResumeNum));
 	const FBRLevelDef& D = All[FMath::Clamp(LevelIdx, 0, All.Num() - 1)];
+	const int32 ExploredHere = BRLevels::CountAvailable(Save->Explored);
 
 	Glow(CX0 + W * 0.42f, Y + H * 0.5f, W * 0.75f, H * 1.5f, WithAlpha(Yellow, 0.16f * S * Ap));
 	RoundRect(CX0, Y + 4.f * U, W, H, R, FLinearColor(0.f, 0.f, 0.f, 0.3f * Ap));
@@ -2588,7 +2592,7 @@ void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y,
 	const float DX = CX0 + 16.f * U;
 	const float DY = Y + (H - DD) * 0.5f - 2.f * U;
 	RoundRect(DX, DY, DD, DD, DD * 0.5f, WithAlpha(Mix(FLinearColor(1.f, 0.82f, 0.22f, 0.13f), FLinearColor(0.07f, 0.055f, 0.02f, 0.92f), S), Ap));
-	const FString Num = FString::FromInt(Save->CurrentLevel);
+	const FString Num = FString::FromInt(D.Number);
 	const FVector2f NS = TextSize(Num, 17.f, EUiWeight::Black);
 	TextF(Num, DX + DD * 0.5f, DY + (DD - NS.Y) * 0.5f, WithAlpha(Yellow, Ap), 17.f, EUiWeight::Black, EUiAlign::Center, false);
 
@@ -2601,10 +2605,13 @@ void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y,
 	const float RightW = 170.f * U;
 	TextF(Ellipsize(Save->SaveName, W - (TX - CX0) - RightW - 20.f * U, 18.f, EUiWeight::Bold), TX, TY, WithAlpha(LabelC, Ap), 18.f, EUiWeight::Bold,
 		EUiAlign::Left, S < 0.5f);
-	TextF(Ellipsize(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauNumberTitle", "Niveau {Number}  \u00b7  {Title}"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } }), W - (TX - CX0) - RightW - 20.f * U, 11.5f, EUiWeight::Regular), TX,
+	const FString CardSub = bMovedLevel
+		? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.SaveCardMovedLevel", "Niveau {Number}  \u00b7  {Title}  \u00b7  (Niveau {Saved} pas encore disponible)"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) }, { TEXT("Saved"), BRLoc::Int(Save->CurrentLevel) } })
+		: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauNumberTitle", "Niveau {Number}  \u00b7  {Title}"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } });
+	TextF(Ellipsize(CardSub, W - (TX - CX0) - RightW - 20.f * U, 11.5f, EUiWeight::Regular), TX,
 		TY + LS.Y - 3.f * U, WithAlpha(SubC, Ap), 11.5f, EUiWeight::Regular, EUiAlign::Left, false);
 	const float RX = CX0 + W - 22.f * U;
-	TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ExploredAllNiveaux", "{Explored} / {All} niveaux"), { { TEXT("Explored"), BRLoc::Int(Save->Explored.Num()) }, { TEXT("All"), BRLoc::Int(All.Num()) } }), RX, TY + 2.f * U, WithAlpha(Mix(Yellow, DarkInk, S), Ap), 11.f,
+	TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ExploredAllNiveaux", "{Explored} / {All} niveaux"), { { TEXT("Explored"), BRLoc::Int(ExploredHere) }, { TEXT("All"), BRLoc::Int(All.Num()) } }), RX, TY + 2.f * U, WithAlpha(Mix(Yellow, DarkInk, S), Ap), 11.f,
 		EUiWeight::Bold, EUiAlign::Right, false);
 	TextF(BRSaves::FormatPlayTime(Save->PlayTime) + TEXT("  \u00b7  ") + BRSaves::FormatDate(Save->LastPlayed), RX, TY + LS.Y - 3.f * U, WithAlpha(SubC, Ap),
 		10.f, EUiWeight::Regular, EUiAlign::Right, false);
@@ -2614,7 +2621,7 @@ void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y,
 	const float BarW = W - 2.f * R;
 	const float BarY = Y + H - 9.f * U;
 	RoundRect(BarX, BarY, BarW, 3.f * U, 1.5f * U, FLinearColor(S > 0.5f ? 0.f : 1.f, S > 0.5f ? 0.f : 1.f, S > 0.5f ? 0.f : 1.f, 0.12f * Ap));
-	RoundRect(BarX, BarY, FMath::Max(3.f * U, BarW * Save->Explored.Num() / FMath::Max(1, All.Num())), 3.f * U, 1.5f * U,
+	RoundRect(BarX, BarY, FMath::Max(3.f * U, BarW * ExploredHere / FMath::Max(1, All.Num())), 3.f * U, 1.5f * U,
 		WithAlpha(Mix(Yellow, DarkInk, S), 0.9f * Ap));
 	if (bInteractive && Ap > 0.5f)
 	{
@@ -2729,7 +2736,9 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 	if (Shown)
 	{
 		const TArray<FBRLevelDef>& All = BRLevels::All();
-		const FBRLevelDef& D = All[FMath::Clamp(BRLevels::IndexOf(Shown->CurrentLevel), 0, All.Num() - 1)];
+		bool bMovedLevel = false;
+		const int32 ResumeNum = BRLevels::ResumeLevel(Shown->CurrentLevel, Shown->Explored, &bMovedLevel);
+		const FBRLevelDef& D = All[FMath::Clamp(BRLevels::IndexOf(ResumeNum), 0, All.Num() - 1)];
 		const float TileW = (PW - 44.f * U - 30.f * U) / 4.f;
 		const float GridH = 3.f * TileW * 0.62f + 20.f * U;
 		const float BoxH = 200.f * U + GridH;
@@ -2741,6 +2750,8 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		const FBRSessionState& Ses = Shown->Session;
 		const FString Resume = Shown->bFutureFormat
 			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.VersionRecenteJeuFormatLoadedversion", "Version plus r\u00e9cente du jeu (format {LoadedVersion}) : partie conserv\u00e9e intacte, lecture seule"), { { TEXT("LoadedVersion"), BRLoc::Int(Shown->LoadedVersion) } })
+			: bMovedLevel
+			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.SaveMovedResume", "Le Niveau {Saved} n'est pas encore disponible dans cette version : reprise au Niveau {Number} (la partie est copi\u00e9e avant la reprise, sa progression est conserv\u00e9e)"), { { TEXT("Saved"), BRLoc::Int(Shown->CurrentLevel) }, { TEXT("Number"), BRLoc::Int(D.Number) } })
 			: Shown->bPendingDeath
 			? FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseDerniereSessionArreteePendant", "Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, niveau neuf)")))
 			: (Ses.bValid && Ses.Level == D.Number
@@ -2758,7 +2769,7 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 			LY += 21.f * U;
 		}
 		LY += 14.f * U;
-		TextSpaced(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauxExploresExploredAll", "NIVEAUX EXPLOR\u00c9S  {Explored} / {All}"), { { TEXT("Explored"), BRLoc::Int(Shown->Explored.Num()) }, { TEXT("All"), BRLoc::Int(All.Num()) } }), PX + 22.f * U, LY, WithAlpha(Yellow, A), 10.5f,
+		TextSpaced(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauxExploresExploredAll", "NIVEAUX EXPLOR\u00c9S  {Explored} / {All}"), { { TEXT("Explored"), BRLoc::Int(BRLevels::CountAvailable(Shown->Explored)) }, { TEXT("All"), BRLoc::Int(All.Num()) } }), PX + 22.f * U, LY, WithAlpha(Yellow, A), 10.5f,
 			EUiWeight::Bold, 2.5f * U);
 		DrawLevelGrid(Shown, PX + 22.f * U, LY + 26.f * U, PW - 44.f * U, A);
 	}
@@ -5640,8 +5651,7 @@ void ABRHUD::DrawDeparture(ABRWorld* W)
 		}
 		return;
 	}
-	const FString Dest = D.Target == BRMission::EndingTarget ? BR_STR(NSLOCTEXT("BR", "Mission.Depart.Ending", "le dernier quai"))
-		: BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Depart.Level", "Niveau {N}"), { { TEXT("N"), BRLoc::Int(D.Target) } });
+	const FString Dest = W->DestinationLabel(D.Target);
 	const FString Line1 = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DepartureBanner", "D\u00c9PART VERS {Dest}  \u00b7  {Ready}/{Needed} rassembl\u00e9s  \u00b7  {Secs} s"),
 		{ { TEXT("Dest"), BRLoc::Arg(Dest.ToUpper()) }, { TEXT("Ready"), BRLoc::Int(D.Ready) }, { TEXT("Needed"), BRLoc::Int(D.Needed) },
 			{ TEXT("Secs"), BRLoc::Int(FMath::CeilToInt(W->GetDepartureRemaining())) } });
@@ -5675,13 +5685,22 @@ void ABRHUD::DrawEnding(ABRPlayerController* PC, ABRWorld* W)
 	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.86f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
 	Buttons.Reset();
 	const bool bVariant = W->IsEndingVariant();
-	const FString Title = bVariant ? BR_STR(NSLOCTEXT("BR", "Ending.TitleVariant", "FIN : CE QUE LES AUTRES ONT LAISS\u00c9"))
+	FString Title = bVariant ? BR_STR(NSLOCTEXT("BR", "Ending.TitleVariant", "FIN : CE QUE LES AUTRES ONT LAISS\u00c9"))
 		: BR_STR(NSLOCTEXT("BR", "Ending.Title", "FIN : LE DERNIER QUAI"));
-	const FString Body = bVariant
+	FString Body = bVariant
 		? BR_STR(NSLOCTEXT("BR", "Ending.BodyVariant", "Les carnets, les cassettes et les notes que vous avez gard\u00e9s racontent la m\u00eame histoire : d'autres sont pass\u00e9s avant vous et ont laiss\u00e9 des rep\u00e8res pour ceux qui suivraient. Avant de monter dans le train, vous ajoutez les v\u00f4tres au mur du quai. Quelqu'un, un jour, saura o\u00f9 aller."))
 		: BR_STR(NSLOCTEXT("BR", "Ending.Body", "Le train de la station sans nom d\u00e9marre sans un bruit. Derri\u00e8re les vitres, les couloirs jaunes d\u00e9filent puis s'effacent. Quand les portes s'ouvrent, il fait jour et l'air sent la pluie. Vous ne savez pas si c'est la sortie ou un niveau qui imite tr\u00e8s bien le monde. Mais pour la premi\u00e8re fois, rien ne bourdonne."));
-	const FString Note = bVariant ? BR_STR(NSLOCTEXT("BR", "Ending.NoteVariant", "Variante obtenue gr\u00e2ce \u00e0 au moins trois objectifs facultatifs remplis pendant la campagne."))
+	FString Note = bVariant ? BR_STR(NSLOCTEXT("BR", "Ending.NoteVariant", "Variante obtenue gr\u00e2ce \u00e0 au moins trois objectifs facultatifs remplis pendant la campagne."))
 		: BR_STR(NSLOCTEXT("BR", "Ending.Note", "Une autre fin existe : remplissez au moins trois objectifs facultatifs pendant la campagne."));
+	if (W->IsChapterEnd())
+	{
+		// v4.12 : fin du contenu disponible dans cette version (lot atteint), annoncee clairement
+		const int32 Lot = W->GetChapterEndLot();
+		Title = BRLoc::Fmt(NSLOCTEXT("BR", "Ending.ChapterTitle", "FIN DU CHAPITRE {Lot} : {Name}"), { { TEXT("Lot"), BRLoc::Int(Lot) }, { TEXT("Name"), BRLoc::Arg(BRLevels::LotName(Lot).ToString().ToUpper()) } });
+		Body = BRLoc::Fmt(NSLOCTEXT("BR", "Ending.ChapterBody", "Le passage s'ouvre sur un couloir qui ne m\u00e8ne encore nulle part : vous avez atteint la fin du contenu disponible dans cette version. La suite, \u00ab {Next} \u00bb, arrivera dans une prochaine mise \u00e0 jour de contenu. Votre partie, vos d\u00e9couvertes et vos fins sont conserv\u00e9es : ce passage s'ouvrira avec la suite."),
+			{ { TEXT("Next"), BRLoc::Arg(BRLevels::LotName(Lot + 1).ToString()) } });
+		Note = BR_STR(NSLOCTEXT("BR", "Ending.ChapterNote", "En attendant, les niveaux d\u00e9j\u00e0 disponibles restent \u00e0 explorer : objectifs facultatifs, documents, autres routes."));
+	}
 	const float W0 = FMath::Min(Canvas->ClipX - 120.f * U, 980.f * U);
 	float Y = Canvas->ClipY * 0.2f;
 	TextF(Title, CX, Y, Yellow, 26.f, EUiWeight::Black, EUiAlign::Center);
@@ -5692,7 +5711,8 @@ void ABRHUD::DrawEnding(ABRPlayerController* PC, ABRWorld* W)
 	TextF(Note, CX, Y, InkDim, 11.f, EUiWeight::Regular, EUiAlign::Center);
 	Y += 70.f * U;
 	const bool bHost = !W->IsNetGame() || W->HasAuthority();
-	const FString Cont = bHost ? BR_STR(NSLOCTEXT("BR", "Ending.Continue", "Continuer l'exploration (niveau au hasard)"))
+	const FString Cont = bHost ? (W->IsChapterEnd() ? BR_STR(NSLOCTEXT("BR", "Ending.ContinueAvailable", "Continuer l'exploration (niveau disponible au hasard)"))
+		: BR_STR(NSLOCTEXT("BR", "Ending.Continue", "Continuer l'exploration (niveau au hasard)")))
 		: BR_STR(NSLOCTEXT("BR", "Ending.Close", "Fermer (l'h\u00f4te d\u00e9cide de la suite)"));
 	const FString Menu = BR_STR(NSLOCTEXT("BR", "Ending.Menu", "Menu principal"));
 	const float BW = 420.f * U;

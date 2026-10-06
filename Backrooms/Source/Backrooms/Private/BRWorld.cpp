@@ -267,6 +267,7 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath, uint32 InSe
 	}
 	if (TargetLevel < 0)
 	{
+		// v4.12 : tirage parmi les niveaux disponibles dans cette version (BRLevels::All), jamais un niveau reserve
 		const TArray<FBRLevelDef>& All = BRLevels::All();
 		TArray<int32> Choices;
 		for (const FBRLevelDef& L : All)
@@ -280,7 +281,14 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath, uint32 InSe
 	}
 	if (!BRLevels::Exists(TargetLevel))
 	{
-		TargetLevel = 0;
+		// v4.12 : l'hote valide la destination : un niveau absent de cette version n'est jamais charge (avant : Niveau 0 a
+		// la place, sans rien dire). Une demande d'un client (console de test) ou une sortie mal resolue est refusee
+		UE_LOG(LogBackrooms, Warning, TEXT("Transition refusee : Niveau %d indisponible dans cette version"), TargetLevel);
+		if (!bFromDeath)
+		{
+			return;
+		}
+		TargetLevel = GetLevelNumber(); // reveil apres une mort : on reste dans le niveau courant
 	}
 	PendingSeed = InSeed;
 	MulticastTransition(TargetLevel, bFromDeath);
@@ -4405,13 +4413,13 @@ float ABRWorld::LightLevelAt(const FVector& P) const
 	return FMath::Clamp(Acc, 0.f, 1.5f);
 }
 
-void ABRWorld::SetGameplayLight(const AActor* Owner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn)
+void ABRWorld::SetGameplayLight(const AActor* LightOwner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn)
 {
-	if (!Owner)
+	if (!LightOwner)
 	{
 		return;
 	}
-	const uint64 Key = (static_cast<uint64>(Owner->GetUniqueID()) << 8) | Slot;
+	const uint64 Key = (static_cast<uint64>(LightOwner->GetUniqueID()) << 8) | Slot;
 	if (!bOn)
 	{
 		GameplayLights.Remove(Key);
@@ -4421,7 +4429,7 @@ void ABRWorld::SetGameplayLight(const AActor* Owner, uint8 Slot, const FVector& 
 	L.Pos = Where;
 	L.Radius = Radius;
 	L.Intensity = Intensity;
-	L.Owner = Owner;
+	L.Owner = LightOwner;
 }
 
 bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes) const

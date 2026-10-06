@@ -35,5 +35,13 @@ public class Backrooms : ModuleRules
 			"SlateCore",
 			"Sockets"
 		});
+
+		// v4.12 : canal de contenu d'une version publiee (0 : niveaux publies ; 1 : test interne), fixe a la compilation
+		// et jamais ouvert par un reglage ou la ligne de commande. Variable d'environnement au moment de la construction :
+		// BR_CONTENT_CHANNEL=public (par defaut) ou internal. Les versions de developpement choisissent au lancement
+		// (-BRContent=public|internal|all, tout par defaut) : voir BRLevels::Channel
+		string Channel = System.Environment.GetEnvironmentVariable("BR_CONTENT_CHANNEL") ?? "public";
+		int ChannelValue = Channel.Trim().ToLowerInvariant() == "internal" ? 1 : 0;
+		PublicDefinitions.Add("BR_CONTENT_CHANNEL=" + ChannelValue);
 	}
 }

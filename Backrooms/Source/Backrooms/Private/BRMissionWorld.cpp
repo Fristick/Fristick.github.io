@@ -45,8 +45,8 @@ namespace
 		}
 	}
 
-	/** Sortie que la porte de la mission garde (la porte est posee devant) */
-	int32 ForwardTarget(int32 Level)
+	/** Sortie de progression de la base (v4.11) */
+	int32 BaseForwardTarget(int32 Level)
 	{
 		switch (Level)
 		{
@@ -63,6 +63,13 @@ namespace
 		case 37: return 4;
 		default: return -1;
 		}
+	}
+
+	/** Sortie que la porte de la mission garde (la porte est posee devant). v4.12 : adaptee a cette version : si la
+	 *  sortie de la base est condamnee (niveau pas encore disponible), la mission garde une autre sortie disponible */
+	int32 ForwardTarget(int32 Level)
+	{
+		return BRLevels::AdaptedForward(Level, BaseForwardTarget(Level));
 	}
 
 	BRGather::FVec ToGather(const FVector& V)
@@ -168,7 +175,7 @@ void ABRWorld::SetCampaign(uint8 RouteBits, uint16 OptionalFound, uint8 Endings)
 	}
 	NetCampaign.RouteBits = RouteBits & 7;
 	NetCampaign.OptionalFound = OptionalFound;
-	NetCampaign.Endings = Endings & 3;
+	NetCampaign.Endings = Endings; // v4.12 : bit 1 fin, bit 2 variante, bits suivants : fins du contenu disponible (lots)
 	ForceNetUpdate();
 }
 
@@ -1398,6 +1405,12 @@ void ABRWorld::DebugCompleteMission()
 
 bool ABRWorld::CanUseExit(int32 Target, FString& OutReason) const
 {
+	// v4.12 : un passage condamne (niveau pas encore disponible dans cette version) ne s'utilise jamais
+	if (BRLevels::ResolveExit(GetLevelNumber(), Target).Kind == BRContent::EExit::Sealed)
+	{
+		OutReason = BR_STR(NSLOCTEXT("BR", "Interact.ExitSealedUse", "Ce passage ne m\u00e8ne nulle part pour l'instant : le niveau suivant arrivera dans une prochaine mise \u00e0 jour."));
+		return false;
+	}
 	if (IsLegacyObjectives())
 	{
 		return CanLeaveLevel(OutReason);
@@ -1680,8 +1693,7 @@ void ABRWorld::OnRep_Departure()
 	}
 	SeenDepartureId = NetDeparture.Id;
 	SeenDeparturePhase = NetDeparture.Phase;
-	const FString Dest = NetDeparture.Target == BRM::EndingTarget ? BR_STR(NSLOCTEXT("BR", "Mission.Depart.Ending", "le dernier quai"))
-		: BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Depart.Level", "Niveau {N}"), { { TEXT("N"), BRLoc::Int(NetDeparture.Target) } });
+	const FString Dest = DestinationLabel(NetDeparture.Target);
 	switch (NetDeparture.Phase)
 	{
 	case 1:
@@ -1713,8 +1725,45 @@ void ABRWorld::OnRep_Departure()
 	}
 }
 
+FString ABRWorld::DestinationLabel(int32 Target) const
+{
+	const BRContent::FExitResolution R = BRLevels::ResolveExit(GetLevelNumber(), Target);
+	if (R.Kind == BRContent::EExit::Ending || Target == BRM::EndingTarget)
+	{
+		return BR_STR(NSLOCTEXT("BR", "Mission.Depart.Ending", "le dernier quai"));
+	}
+	if (R.Kind == BRContent::EExit::ChapterEnd)
+	{
+		return BR_STR(NSLOCTEXT("BR", "Mission.Depart.ChapterEnd", "la fin du contenu disponible"));
+	}
+	return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Depart.Level", "Niveau {N}"), { { TEXT("N"), BRLoc::Int(R.Kind == BRContent::EExit::Go && R.Target >= 0 ? R.Target : Target) } });
+}
+
 void ABRWorld::LeaveForTarget(int32 Target)
 {
+	// v4.12 : la destination suit la disponibilite des niveaux de cette version (meme regle que l'invite et l'hote)
+	const BRContent::FExitResolution Res = BRLevels::ResolveExit(GetLevelNumber(), Target);
+	if (Res.Kind == BRContent::EExit::ChapterEnd)
+	{
+		if (HasAuthority())
+		{
+			const int32 Lot = BRContent::CurrentLot(BRLevels::Channel());
+			NetCampaign.Endings |= static_cast<uint8>(FMath::Clamp(1 << (1 + Lot), 0, 0x80));
+			ForceNetUpdate();
+			MulticastChapterEnd(Lot);
+		}
+		return;
+	}
+	if (Res.Kind == BRContent::EExit::Sealed)
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Sortie vers %d condamnee dans cette version : aucun depart"), Target);
+		return;
+	}
+	if (Res.Kind == BRContent::EExit::Go && Target != BRM::EndingTarget)
+	{
+		RequestTransition(Res.Target);
+		return;
+	}
 	if (Target == BRM::EndingTarget)
 	{
 		if (HasAuthority())
@@ -1729,10 +1778,30 @@ void ABRWorld::LeaveForTarget(int32 Target)
 	RequestTransition(Target);
 }
 
+void ABRWorld::MulticastChapterEnd_Implementation(int32 Lot)
+{
+	bEndingShown = true;
+	bEndingVariant = false;
+	bChapterEnd = true;
+	ChapterEndLot = Lot;
+	if (ABRPlayerController* PC = LocalPC())
+	{
+		PC->OnEndingShown();
+	}
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		if (USoundBase* S = A->Sound(TEXT("S_Objective")))
+		{
+			UGameplayStatics::PlaySound2D(this, S, 0.9f);
+		}
+	}
+}
+
 void ABRWorld::MulticastEnding_Implementation(bool bVariant)
 {
 	bEndingShown = true;
 	bEndingVariant = bVariant;
+	bChapterEnd = false;
 	if (ABRPlayerController* PC = LocalPC())
 	{
 		PC->OnEndingShown();
@@ -1749,6 +1818,7 @@ void ABRWorld::MulticastEnding_Implementation(bool bVariant)
 void ABRWorld::CloseEnding(bool bContinue)
 {
 	bEndingShown = false;
+	bChapterEnd = false;
 	NetDeparture = FBRNetDeparture();
 	if (bContinue && HasAuthority())
 	{

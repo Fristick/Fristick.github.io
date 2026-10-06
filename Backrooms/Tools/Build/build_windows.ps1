@@ -3,12 +3,14 @@
 #   ... -Config Development         configuration (Shipping par defaut)
 #   ... -Platform Linux             construction croisee Linux (LINUX_MULTIARCH_ROOT : chaine clang d'Epic pour UE 5.8)
 #   ... -NoUnityCheck               compile d'abord l'editeur sans build unity (inclusions manquantes revelees)
-# Resultat : Build\<Plateforme>\<Config>\ (paquet) et build_manifest.txt ; controle par check_package.py.
+#   ... -Content internal           v4.12 : version de test interne (niveaux en test inclus ; public par defaut)
+# Resultat : Build\<Plateforme>\<Config>[-internal]\ (paquet) et build_manifest.txt ; controle par check_package.py.
 param(
 	[Parameter(Mandatory = $true)][string]$UERoot,
 	[ValidateSet("Shipping", "Development")][string]$Config = "Shipping",
 	[ValidateSet("Win64", "Linux")][string]$Platform = "Win64",
-	[switch]$NoUnityCheck
+	[switch]$NoUnityCheck,
+	[ValidateSet("public", "internal")][string]$Content = "public"
 )
 $ErrorActionPreference = "Stop"
 $Tools = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -31,15 +33,26 @@ if ($NoUnityCheck) {
 	if ($LASTEXITCODE -ne 0) { throw "Echec de la compilation sans unity" }
 }
 
+# v4.12 : canal de contenu fixe a la compilation (Backrooms.Build.cs lit BR_CONTENT_CHANNEL) ; un changement de canal
+# depuis la construction precedente force une compilation propre (UBT ne suit pas l'environnement)
+$env:BR_CONTENT_CHANNEL = $Content
+$Stamp = Join-Path $ProjectDir "Intermediate\BRContentChannel.txt"
+$CleanFlag = @()
+if (-not (Test-Path $Stamp) -or (Get-Content $Stamp -Raw).Trim() -ne $Content) { $CleanFlag = @("-clean") }
+Write-Host "Contenu : $Content$(if ($CleanFlag) { ' (canal change : compilation propre)' })"
+$Suffix = if ($Content -eq "internal") { "-internal" } else { "" }
+
 $PlatformDir = if ($Platform -eq "Win64") { "Windows" } else { "Linux" }
-$Out = Join-Path $ProjectDir "Build\$PlatformDir\$Config"
+$Out = Join-Path $ProjectDir "Build\$PlatformDir\$Config$Suffix"
 $Toolchain = if ($Platform -eq "Linux") { "LINUX_MULTIARCH_ROOT=$env:LINUX_MULTIARCH_ROOT" } else { "MSVC (voir le journal UBT)" }
 if ($Platform -eq "Linux" -and -not $env:LINUX_MULTIARCH_ROOT) {
 	throw "LINUX_MULTIARCH_ROOT non defini : installer la chaine clang d'Epic correspondant a UE 5.8"
 }
 & (Join-Path $UERoot "Engine\Build\BatchFiles\RunUAT.bat") BuildCookRun "-project=$Project" -noP4 -utf8output `
-	"-platform=$Platform" "-clientconfig=$Config" -build -cook -stage -pak -archive "-archivedirectory=$Out"
+	"-platform=$Platform" "-clientconfig=$Config" -build -cook -stage -pak -archive "-archivedirectory=$Out" @CleanFlag
 if ($LASTEXITCODE -ne 0) { throw "Echec de BuildCookRun ($Platform $Config)" }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Stamp) | Out-Null
+Set-Content -NoNewline -Encoding ASCII -Path $Stamp -Value $Content
 
 $Commit = (git -C $ProjectDir rev-parse HEAD) 2>$null
 # v4.10 : un paquet construit avec des modifications non validees ne correspond pas a son commit (make_steam_vdf.py le refuse)
@@ -52,6 +65,7 @@ $Tree = if ($Dirty) { "modifie" } else { "propre" }
 	"date : $((Get-Date).ToUniversalTime().ToString('s'))Z",
 	"plateforme : $Platform",
 	"configuration : $Config",
+	"contenu : $Content",
 	"moteur : $Found",
 	"chaine de compilation : $Toolchain",
 	"hote : Windows $([Environment]::OSVersion.VersionString)"
