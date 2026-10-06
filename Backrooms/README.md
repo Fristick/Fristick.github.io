@@ -7,6 +7,51 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
+**Version 4.10** (fiabilité, fluidité, finition) : d'abord des corrections, aucune fonction nouvelle.
+
+- **Où lire** : chaque défaut, sa catégorie, sa correction, son test et son résultat, les mesures avant / après et ce
+  qui reste à vérifier, dans [`Docs/RAPPORT_v4.10.md`](Docs/RAPPORT_v4.10.md).
+
+> **Compilé et testé sous Windows** (Unreal 5.8.3, `BackroomsEditor Win64 Development`, jeu lancé seul avec `-game`,
+> RTX 4080). Linux, macOS, la signature Apple et l'envoi Steam restent **préparés, non exécutés** : pas de machine Linux
+> ni de Mac, et aucun envoi Steam (même en test). Le rendu Vulkan, celui de Linux, est essayé sous Windows (`-vulkan`).
+
+- **Paquet** : le jeu ne pouvait pas être empaqueté. Une fonction de traduction n'existe que dans l'éditeur, et la
+  cible Shipping ne compilait pas. C'est corrigé : le paquet Windows Shipping est construit, contrôlé par
+  `check_package.py` et lancé (« PAQUET VÉRIFIÉ ET LANCÉ »).
+- **Texte lisible** : en jeu lancé seul, tout le texte s'affichait en carrés. La police de l'interface était une copie
+  vide de celle du moteur. Les espaces fines des nombres français (« 1 920 ») passent aussi.
+- **Sauvegardes** : un fichier abîmé arrêtait le jeu. Il est maintenant refusé, puis mis de côté. Chaque sauvegarde
+  porte un contrôle d'intégrité, et les fichiers v4.9 restent lisibles.
+- **Changement de niveau** : les ressources du niveau suivant se chargent pendant le fondu au noir. Si c'est long, un
+  écran sobre montre l'avancement ; après 10 s, **Échap** ramène au menu ; après 25 s, le niveau s'ouvre quand même.
+  Les ressources des niveaux quittés ne restent plus en mémoire.
+- **Confirmation de l'affichage** : rien ne passe plus sous le dialogue (Tab, déplacements, menus). Le curseur
+  apparaît, et l'état d'avant revient à sa fermeture.
+- **Soins en coopération** : le serveur accepte ou refuse chaque soin, et l'objet n'est consommé qu'une fois le soin
+  accepté. Deux appuis rapides ne consomment qu'un bandage, et un soin au milieu d'une série de coups reste juste.
+- **Plusieurs écrans** : le mode sans bordures et les tailles de fenêtre suivent l'écran où se trouve le jeu, et sa
+  zone utile (barre des tâches exclue). Un changement d'affichage ne renvoie plus la fenêtre sur l'écran principal, et
+  l'écran est retenu pour le lancement suivant.
+- **Interface** :
+  - une seule notification sur l'inventaire, dans la bande du haut, au lieu d'une pile qui couvrait les panneaux ;
+  - aide des paramètres dans une zone fixe, qui défile si le texte est long ;
+  - alerte d'air sans clignotement quand les flashs sont réduits ;
+  - effets de blessure, de folie et d'asphyxie atténués avec ce même réglage.
+- **Outils de livraison** :
+  - `check_package.py` lit les formats au lieu de se fier aux extensions. Il sépare cinq vérifications (structure,
+    contenu, architecture, dépendances, lancement) et répond OK, ÉCHEC ou NON VÉRIFIÉ ; un contrôle incomplet n'est
+    jamais un succès ;
+  - `make_steam_vdf.py` refuse un paquet vide, invalide, incomplet, construit depuis un autre commit, ou qui contient
+    des restes d'une construction précédente. Aucun fichier n'est écrit dans ce cas. Il reste en aperçu, avec SetLive
+    vide, et n'envoie jamais rien.
+- **Tests** :
+  - `-BRAutoTestV410` ; `-BRSmokeTest` (lancement d'un paquet) ; `-BRAutoTestSoak=<minutes>` (session longue) ;
+  - le code de sortie dit enfin le résultat : 0 réussi, 1 problème, 2 vérifications non faites avec
+    `-BRAutoTestStrict` ;
+  - tests unitaires des outils : `python -m unittest discover -s Tools/Build/tests`.
+- **Traductions** : 8 nouveaux textes dans les 22 langues, produits automatiquement et **non relus**.
+
 **Nouveautés de la version 4.9** (HUD sans vie, affichage confirmé, Linux et macOS, Steam) :
 
 - **Où lire** : état des lieux dans [`Docs/AUDIT_v4.9.md`](Docs/AUDIT_v4.9.md) ; corrections (problème, modification,
@@ -1201,6 +1246,37 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 
   **`-BRNetTest`, v4.9** : l'hôte se place à 3 m du client (nom affiché), puis derrière un mur (nom caché).
   `-BRPreloadAll` rétablit le préchargement complet de la v4.8, pour comparer les mesures.
+- **`-BRAutoTestV410`** (v4.10, avec `-BRAutoTest`) lance seules les vérifications v4.10 ; elles sont aussi dans
+  `-BRAutoTest`. Lancez le **jeu seul** (`-game`), pas l'éditeur en PIE :
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV410 -BRSeed=4242
+  ```
+  - **polices** : chaque écriture (latin, cyrillique, arabe, chinois, japonais, coréen), plus les nombres et les heures
+    de la langue courante, sans police de dernier recours ;
+  - **sauvegardes** : contrôle d'intégrité, fichier v4.9, octet changé, fichier coupé, octets au hasard, données
+    forgées ; le jeu reste en marche ;
+  - **préchargement** : catalogue non vide, clé du Smiler, demande remplacée jamais finalisée, transitions 0 → 37 → 0
+    sans chargement synchrone pendant la construction ;
+  - **mémoire** : aller-retour vers le niveau qui a le plus de ressources propres, puis plus rien de ces ressources en
+    mémoire après le ramasse-miettes ;
+  - **préparation lente** (simulée) : écran tenu, retour au menu proposé après 10 s, entrée au plus tard vers 25 s ;
+  - **affichage** : dialogue sur l'inventaire (Tab ignoré, personnage immobile, curseur), coup reçu pendant le
+    dialogue, expiration, écran de la fenêtre et zone utile ;
+  - **interface** : notifications sur l'inventaire, aide la plus longue (allemand), alerte d'air avec et sans flashs.
+
+  **`-BRNetTest`, v4.10** : deux soins dans la même image, puis un soin au milieu d'une série de coups (objet consommé
+  = soin accepté par le serveur) ; le client est signalé « en préparation » au serveur pendant un changement de niveau.
+  L'hôte se cale sur l'état réel du client (invincibilité de test retirée, niveau prêt) au lieu d'un délai fixe.
+- **`-BRSmokeTest`** (v4.10, avec `-BRAutoTest`) : test de lancement d'un paquet (carte, chunks, polices, 22 langues,
+  catalogue, sol sous le joueur). `-BRSmokeOut=<fichier>` écrit le résultat en JSON (lu par
+  `check_package.py --launch`).
+- **`-BRAutoTestSoak=<minutes>`** (v4.10, avec `-BRAutoTest`) : allers-retours entre le Niveau 0 et les 11 autres
+  niveaux pendant la durée donnée, avec une promenade à chaque arrivée. Le test relève la mémoire, les objets, les
+  caches et les images par seconde dans `Saved/AutoTest/SessionLongue.csv`. C'est un problème si la mémoire au
+  Niveau 0 grandit de plus de 15 % après le 4e tour.
+- **Codes de sortie** (v4.10) : 0 aucun problème ; 1 au moins un problème ; avec `-BRAutoTestStrict`, 2 si une
+  vérification n'a pas pu être faite. `Saved/AutoTest/Rapport.json` reprend le résultat, les problèmes et les
+  vérifications « NON VÉRIFIÉ ». Avant la v4.10, le code valait toujours 0.
 
 ---
 
@@ -1213,8 +1289,22 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 | macOS | Metal, binaire universel arm64 + x86_64, Lumen logiciel | sur un Mac : `UE_ROOT=<moteur> Tools/Build/build_mac.sh` | préparé, non exécuté |
 
 - `Tools/Build/versions.env` fixe la version du moteur (5.8.3) ; un script s'arrête devant une autre version. Chaque
-  paquet va dans `Build/<Plateforme>/<Config>/`, avec un manifeste (commit, outils). `check_package.py` vérifie
-  l'exécutable, les paquets, les polices, les 22 langues et la carte, et qu'aucune source d'import n'est livrée.
+  paquet va dans `Build/<Plateforme>/<Config>/`, avec un manifeste (commit, outils).
+- **`check_package.py`** (v4.10) mène cinq vérifications ; chacune répond OK, ÉCHEC ou NON VÉRIFIÉ :
+  - structure : lanceur et binaire lus comme PE, ELF ou Mach-O, en-têtes `.pak` et `.utoc`, `.ucas` associés,
+    IoStore attendu selon `DefaultGame.ini`, aucune source livrée ;
+  - contenu : liste des conteneurs par UnrealPak (`--ue <moteur>` ou `--unrealpak <outil>`), dont le code de sortie
+    est vérifié. Il cherche les polices, les 22 langues, la carte et `Tools/Build/essential_packages.txt` ;
+  - architecture : x86_64 ; sur Mac, arm64 et x86_64 pour chaque binaire du bundle ;
+  - dépendances : bibliothèques importées présentes dans le paquet ou fournies par le système ;
+  - lancement : `--launch`, sur un hôte du même système. Le paquet est lancé avec `-BRAutoTest -BRSmokeTest`.
+
+  `--mode release` (par défaut) exige les quatre premières vérifications. `--mode structure` ne vérifie que la
+  structure et le dit (« CONTRÔLE STRUCTUREL SEULEMENT »). Codes : 0 complet, 1 problème, 2 inspection incomplète,
+  3 erreur d'utilisation. `--json <fichier>` écrit le détail.
+  ```bash
+  python Tools/Build/check_package.py --platform Windows --dir Build/Windows/Shipping --ue "C:/Program Files/Epic Games/UE_5.8" --launch
+  ```
 - **macOS** : `build_mac.sh` contrôle les deux architectures et ajoute la description d'usage du micro (le chat
   vocal reste facultatif). Il signe si `MAC_SIGN_IDENTITY` est défini, puis notarise et agrafe si `NOTARY_PROFILE` est
   défini. Certificats et identifiants restent hors du dépôt.
@@ -1225,11 +1315,22 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
     python Tools/Steam/make_steam_vdf.py --app <AppID> --depot-windows <id> --depot-linux <id> --depot-mac <id>
     ```
     Ils sont écrits dans `Build/SteamPipe/`, avec un depot par système. Ils sont en aperçu par défaut : rien n'est
-    envoyé, et aucune branche n'est publiée ;
+    envoyé, et aucune branche n'est publiée (SetLive vide). **v4.10** :
+    - chaque paquet doit passer `check_package.py --mode release` (code 0 ; `--ue` ou `--unrealpak` est donc
+      nécessaire) ;
+    - il doit venir du commit courant (`build_manifest.txt`) et ne contenir aucun reste d'une construction précédente ;
+    - un seul paquet refusé suffit pour que rien ne soit écrit. Les fichiers sont écrits à part, puis mis en place
+      d'un bloc ;
+    - `--platforms` vaut `Windows` par défaut ; un système inconnu, un AppID ou un DepotID invalide ou répété
+      arrêtent le script (code 3) ;
   - envoyer : `STEAM_BUILD_USER=<compte> Tools/Steam/upload_steam.sh` ;
   - options de lancement à déclarer dans Steamworks : `Backrooms.exe`, `Backrooms.sh`, `Backrooms.app` ;
   - Steamworks (`OnlineSubsystemSteam`) **n'est pas activé** : la coop passe par l'adresse IP et le chat vocal par le
     moteur. N'annoncer Linux et macOS sur Steam qu'après un paquet natif installé et testé.
+  - *Correction v4.10* : la v4.9 écrivait qu'activer Steamworks romprait la connexion directe. **Ce n'est pas forcé.**
+    Cela dépend des pilotes réseau déclarés : le pilote IP peut rester celui des adresses IP, le pilote Steam servant
+    aux invitations. Cela dépend aussi du chat vocal choisi. Rien de cela n'est vérifié ici, et aucune fonction
+    Steam (succès, salons, invitations) n'est annoncée.
 
 ---
 

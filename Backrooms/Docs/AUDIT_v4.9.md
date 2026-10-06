@@ -46,8 +46,11 @@ Audit fait le 5 octobre 2026 sur la branche `backrooms`, commit `d37782e` (v4.8,
   Seul l'affichage disparaît.
 - **Steamworks n'est pas activé.** Vendre sur Steam ne l'exige pas. Le jeu n'a ni succès, ni lobby, ni invitation :
   la coopération passe par une adresse IP. L'Overlay est injecté par le client Steam sans SDK, ce qui reste à vérifier
-  sur chaque OS. Activer `OnlineSubsystemSteam` changerait le transport réseau et le chat vocal, et romprait la
-  connexion directe ; c'est noté comme évolution possible, pas comme besoin.
+  sur chaque OS. ~~Activer `OnlineSubsystemSteam` changerait le transport réseau et le chat vocal, et romprait la
+  connexion directe~~ **(erreur corrigée en v4.10, voir `RAPPORT_v4.10.md` § Steam)** : activer Steamworks ne rompt
+  pas forcément la connexion directe. Cela dépend des pilotes réseau déclarés (le pilote IP peut rester celui des
+  adresses IP, le pilote Steam servant aux invitations) et du choix du chat vocal. Rien de cela n'est vérifié ici.
+  C'est noté comme évolution possible, pas comme besoin.
 - **RT matériel sur Linux et Mac** : désactivé dans le profil de base (Vulkan et Metal : support expérimental selon la
   documentation citée par le prompt, non vérifiable ici). Il peut être réactivé par la configuration de la plateforme,
   après validation sur une machine.
