@@ -1,21 +1,24 @@
 // v4.11 : banc d'essai hors moteur de la logique des missions (Source/Backrooms/Private/BRMissionLogic.cpp).
 //
 // Compilation et lancement (depuis Backrooms/) :
-//   g++ -std=c++17 -O2 -Wall -Wextra -Werror -I Source/Backrooms/Public
-//       Tools/Missions/test_mission_logic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o /tmp/test_missions
+//   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Missions/test_mission_logic.cpp
+//       Source/Backrooms/Private/BRMissionLogic.cpp Source/Backrooms/Private/BRMissionSolver.cpp -o /tmp/test_missions
 //   /tmp/test_missions [graines par niveau, 3000 par defaut]
 //
 // Pour chaque niveau et chaque graine :
 //   - plan deterministe, appareils et zones valides, aucun objet requis dans la salle qu'il ouvre ;
 //   - un solveur qui n'utilise QUE ce que le joueur voit (inscriptions, indices lus, observations, jauges, retours)
-//     resout la mission par de vraies actions et ouvre la sortie ;
+//     resout la mission par de vraies actions et ouvre la sortie ; en mode joueur (appuis du jeu seulement), ses
+//     actions enregistrees se rejouent a l'identique sur un etat neuf (le test du jeu les rejoue par interactions) ;
 //   - apres une suite d'actions au hasard (erreurs comprises), l'etat reste valide, se serialise a l'identique, et le
 //     solveur resout encore la mission : aucune impasse ;
 //   - les erreurs typiques donnent un retour comprehensible et se corrigent ;
 //   - la variante de secours est valide ; un blob d'une autre graine ou tronque est refuse.
 // Code de sortie 0 si tout passe, 1 sinon. La sortie sert de journal (Docs/logs).
 #include "BRMissionLogic.h"
+#include "BRMissionSolver.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -39,16 +42,8 @@ static void Fail(int Level, uint32_t Seed, const std::string& Why)
 	}
 }
 
-struct FCtx
-{
-	FCtx(const FPlan& InP, FState& InS, const FCampaign& InC) : P(InP), S(InS), C(InC) {}
-	const FPlan& P;
-	FState& S;
-	FCampaign C;
-	int Actions = 0;
-	bool bBad = false;
-	std::string Why;
-};
+/** Solveur partage avec le test du jeu (Source/Backrooms/Private/BRMissionSolver.cpp) */
+using FCtx = FSolver;
 
 static bool SameState(const FState& A, const FState& B)
 {
@@ -57,27 +52,7 @@ static bool SameState(const FState& A, const FState& B)
 
 static FResult Do(FCtx& X, int Dev, EAction A, int V)
 {
-	++X.Actions;
-	const FState Before = X.S;
-	const FResult R = Act(X.P, X.S, X.C, Dev, A, V);
-	// Un refus ne change rien (sauf le compteur d'erreurs)
-	if (!R.bChanged)
-	{
-		FState Cmp = X.S;
-		Cmp.Mistakes = Before.Mistakes;
-		if (!SameState(Cmp, Before))
-		{
-			X.bBad = true;
-			X.Why = "etat modifie sans bChanged";
-		}
-	}
-	// Une mission resolue le reste
-	if ((Before.Solved & 1) && !(X.S.Solved & 1))
-	{
-		X.bBad = true;
-		X.Why = "mission deresolue";
-	}
-	return R;
+	return X.Do(Dev, A, V);
 }
 
 static std::vector<int> FindRole(const FPlan& P, int Role)
@@ -93,302 +68,19 @@ static std::vector<int> FindRole(const FPlan& P, int Role)
 	return Out;
 }
 
-static int FindRoleLabel(const FPlan& P, int Role, int Label)
-{
-	for (int D = 0; D < P.NumDevices; ++D)
-	{
-		if (P.Devices[D].Role == Role && P.Devices[D].Label == Label)
-		{
-			return D;
-		}
-	}
-	return -1;
-}
-
 static bool ReadDev(FCtx& X, int D, FClue& C)
 {
-	const FResult R = Do(X, D, EAction::Use, 0);
-	if (R.Feedback != EFeedback::Done && R.Feedback != EFeedback::AlreadyDone)
-	{
-		return false;
-	}
-	return GetClue(X.P, X.S, D, C);
+	return X.Read(D, C);
 }
 
 static bool HoldUntilDone(FCtx& X, int D)
 {
-	for (int I = 0; I < 40; ++I)
-	{
-		const FResult R = Do(X, D, EAction::Hold, 1);
-		if (R.Feedback == EFeedback::Done || R.Feedback == EFeedback::AlreadyDone)
-		{
-			return true;
-		}
-		if (R.Feedback != EFeedback::Progress)
-		{
-			return false;
-		}
-	}
-	return false;
+	return X.HoldUntilDone(D);
 }
 
-static bool SetSwitch(FCtx& X, int D, int V)
-{
-	const FResult R = Do(X, D, EAction::Set, V);
-	return R.bChanged || R.Feedback == EFeedback::AlreadyDone;
-}
-
-/** Solveur : seules les informations visibles du joueur sont utilisees (jamais Params ni Info) */
 static bool Solve(FCtx& X, int Route)
 {
-	const FPlan& P = X.P;
-	FClue C;
-	switch (P.Level)
-	{
-	case 0:
-	{
-		int Blinks[NumSymbols];
-		for (int I = 0; I < NumSymbols; ++I) Blinks[I] = -1;
-		for (int D : FindRole(P, R_Anomaly))
-		{
-			if (!HoldUntilDone(X, D) || !GetClue(P, X.S, D, C) || C.Kind != EClue::AnomalyBlinks) return false;
-			Blinks[C.A[0]] = C.B[0];
-		}
-		ReadDev(X, FindRole(P, R_MaintNote)[0], C);
-		for (int D : FindRole(P, R_Dial))
-		{
-			if (Blinks[P.Devices[D].Label] < 0 || !SetSwitch(X, D, Blinks[P.Devices[D].Label])) return false;
-		}
-		const FResult R = Do(X, FindRole(P, R_Stabilize)[0], EAction::Use, 0);
-		if (R.Feedback != EFeedback::Done && R.Feedback != EFeedback::AlreadyDone) return false;
-		SetSwitch(X, FindRole(P, R_RouteLever)[0], Route);
-		return true;
-	}
-	case 1:
-	{
-		if (!ReadDev(X, FindRole(P, R_Schematic)[0], C)) return false;
-		const int E1 = C.A[0], E2 = C.A[1];
-		for (int D : FindRole(P, R_Fuse))
-		{
-			Do(X, D, EAction::Use, 0);
-		}
-		for (int L : { E1, E2 })
-		{
-			const FResult R = Do(X, FindRoleLabel(P, R_FuseSocket, L), EAction::Use, 0);
-			if (R.Feedback != EFeedback::Done && R.Feedback != EFeedback::AlreadyDone) return false;
-		}
-		for (int D : FindRole(P, R_Breaker))
-		{
-			SetSwitch(X, D, 0);
-		}
-		if (!SetSwitch(X, FindRoleLabel(P, R_Breaker, E1), 1) || !SetSwitch(X, FindRoleLabel(P, R_Breaker, E2), 1)) return false;
-		const FResult R = Do(X, FindRole(P, R_ElevatorCall)[0], EAction::Use, 0);
-		return R.Feedback == EFeedback::Done || R.Feedback == EFeedback::AlreadyDone;
-	}
-	case 2:
-	{
-		if (!ReadDev(X, FindRole(P, R_PressurePlate)[0], C)) return false;
-		int Target[3];
-		for (int G = 0; G < 3; ++G) Target[C.A[G]] = C.B[G];
-		for (int D : FindRole(P, R_Gauge))
-		{
-			FClue G;
-			if (!HoldUntilDone(X, D) || !GetClue(P, X.S, D, G)) return false;
-			if (!SetSwitch(X, FindRoleLabel(P, R_Valve, G.B[0]), Target[G.A[0]])) return false;
-			// Le manometre affiche la pression voulue
-			if (GaugeReading(P, X.S, D) != Target[G.A[0]]) return false;
-		}
-		return true;
-	}
-	case 3:
-	{
-		FClue Board;
-		if (!ReadDev(X, FindRole(P, R_LoadBoard)[0], Board)) return false;
-		int Faulty = -1;
-		for (int D : FindRole(P, R_JunctionBox))
-		{
-			if (!HoldUntilDone(X, D) || !GetClue(P, X.S, D, C)) return false;
-			if (C.B[0]) Faulty = C.A[0];
-		}
-		if (Faulty < 0) return false;
-		// Relais dont le secteur (tableau de charge) n'est pas en defaut
-		for (int I = 0; I < Board.N; ++I)
-		{
-			if (Board.B[I] != Faulty && !SetSwitch(X, FindRoleLabel(P, R_Relay, Board.A[I]), 1)) return false;
-		}
-		const FResult R = Do(X, FindRole(P, R_ElevatorPower)[0], EAction::Use, 0);
-		return R.Feedback == EFeedback::Done || R.Feedback == EFeedback::AlreadyDone;
-	}
-	case 4:
-	{
-		FClue Plan, Dir;
-		if (!ReadDev(X, FindRole(P, R_Planning)[0], Plan) || !ReadDev(X, FindRole(P, R_Directory)[0], Dir)) return false;
-		int Office[NumSymbols];
-		for (int I = 0; I < Dir.N; ++I) Office[Dir.A[I]] = Dir.B[I];
-		for (int I = 0; I < 3; ++I)
-		{
-			if (!SetSwitch(X, FindRoleLabel(P, R_CodeDial, I), Office[Plan.A[I]])) return false;
-		}
-		const FResult R = Do(X, FindRole(P, R_CodeEnter)[0], EAction::Use, 0);
-		return R.Feedback == EFeedback::Done || R.Feedback == EFeedback::AlreadyDone;
-	}
-	case 5:
-	{
-		FClue Reg, Boil;
-		if (!ReadDev(X, FindRole(P, R_Register)[0], Reg)) return false;
-		const std::vector<int> Keys = FindRole(P, R_Key);
-		const std::vector<int> Locks = FindRole(P, R_Lock);
-		// Chambres encore utiles : celles des serrures fermees (symbole de la serrure -> chambre du registre)
-		std::set<int> Wanted;
-		for (int L : Locks)
-		{
-			if (X.S.Dev[L]) continue;
-			for (int I = 0; I < Reg.N; ++I)
-			{
-				if (Reg.A[I] == P.Devices[L].Label) Wanted.insert(Reg.B[I]);
-			}
-		}
-		// Rendre les cles inutiles du trousseau, prendre les bonnes
-		for (int K : Keys)
-		{
-			GetClue(P, X.S, K, C);
-			if (X.S.Dev[K] && Held(P, X.S, P.Devices[K].Need) > 0 && !Wanted.count(C.A[0]))
-			{
-				if (Do(X, K, EAction::Use, 0).Feedback != EFeedback::Returned) return false;
-			}
-		}
-		for (int K : Keys)
-		{
-			GetClue(P, X.S, K, C);
-			if (!X.S.Dev[K] && Wanted.count(C.A[0]))
-			{
-				if (Do(X, K, EAction::Use, 0).Feedback != EFeedback::Done) return false;
-			}
-		}
-		for (int L : Locks)
-		{
-			const FResult R = Do(X, L, EAction::Use, 0);
-			if (R.Feedback != EFeedback::Done && R.Feedback != EFeedback::AlreadyDone) return false;
-		}
-		if (!ReadDev(X, FindRole(P, R_BoilerNote)[0], Boil)) return false;
-		return SetSwitch(X, FindRole(P, R_BoilerDial)[0], Boil.A[0]);
-	}
-	case 6:
-	{
-		if (!ReadDev(X, FindRole(P, R_StartPlate)[0], C)) return false;
-		int Sym = C.A[0];
-		for (int Step = 0; Step < 4; ++Step)
-		{
-			const int B = FindRoleLabel(P, R_Beacon, Sym);
-			if (B < 0 || !HoldUntilDone(X, B) || !GetClue(P, X.S, B, C)) return false;
-			if (C.B[0] == 254) break;
-			if (C.B[0] == 255) return false;
-			Sym = C.B[0];
-		}
-		const FResult R = Do(X, FindRole(P, R_EmergencyPower)[0], EAction::Use, 0);
-		return R.Feedback == EFeedback::Done || R.Feedback == EFeedback::AlreadyDone;
-	}
-	case 8:
-	{
-		if (!ReadDev(X, FindRole(P, R_PassageMarks)[0], C)) return false;
-		for (int I = 0; I < 3; ++I)
-		{
-			if (!HoldUntilDone(X, FindRoleLabel(P, R_Winch, C.A[I]))) return false;
-		}
-		return true;
-	}
-	case 9:
-	{
-		int Circuit = -1, Porch = -1, Windows = -1;
-		for (int D : FindRole(P, R_HousePlan))
-		{
-			if (!ReadDev(X, D, C)) return false;
-			if (C.Kind == EClue::CircuitPlan) Circuit = C.A[0];
-			if (C.Kind == EClue::PorchPlan) Porch = C.A[0];
-			if (C.Kind == EClue::WindowsPlan) Windows = C.A[0];
-		}
-		if (Circuit < 0 || Porch < 0 || Windows < 0 || !SetSwitch(X, FindRole(P, R_StreetBox)[0], Circuit)) return false;
-		int Found = 0;
-		for (int D : FindRole(P, R_HouseMarker))
-		{
-			GetClue(P, X.S, D, C);
-			if (C.A[0] == Porch && C.B[0] == Windows)
-			{
-				++Found;
-				const FResult R = Do(X, D, EAction::Use, 0);
-				if (R.Feedback != EFeedback::Done && R.Feedback != EFeedback::AlreadyDone) return false;
-			}
-		}
-		return Found == 1;
-	}
-	case 10:
-	{
-		FClue Fence, Board;
-		const int F = FindRole(P, R_FenceMark)[0];
-		if (!HoldUntilDone(X, F) || !GetClue(P, X.S, F, Fence) || !ReadDev(X, FindRole(P, R_BarnBoard)[0], Board)) return false;
-		for (int I = 0; I < Board.N; ++I)
-		{
-			if (Board.A[I] == Fence.A[0])
-			{
-				if (!SetSwitch(X, FindRole(P, R_MillDial)[0], Board.B[I])) return false;
-				const FResult R = Do(X, FindRole(P, R_MillBrake)[0], EAction::Use, 0);
-				return R.Feedback == EFeedback::Done || R.Feedback == EFeedback::AlreadyDone;
-			}
-		}
-		return false;
-	}
-	case 11:
-	{
-		if (!HoldUntilDone(X, FindRole(P, R_Generator)[0])) return false;
-		for (int I = 0; I < 3; ++I)
-		{
-			int Digit = KnownDigit(P, X.S, X.C, I);
-			if (Digit < 0)
-			{
-				if (!ReadDev(X, FindRoleLabel(P, R_CityBoard, I), C)) return false;
-				Digit = C.B[0];
-			}
-			if (!SetSwitch(X, FindRoleLabel(P, R_DestDial, I), Digit)) return false;
-		}
-		const FResult R = Do(X, FindRole(P, R_DestConfirm)[0], EAction::Use, 0);
-		return R.Feedback == EFeedback::Done || R.Feedback == EFeedback::AlreadyDone;
-	}
-	case 37:
-	{
-		FClue Marks;
-		if (!ReadDev(X, FindRole(P, R_LevelMarks)[0], Marks) || !HoldUntilDone(X, FindRole(P, R_Current)[0])) return false;
-		// Regle du courant : A se deverse dans B (vanne A), B se vide (vanne B). Vannes fermees, on lit le depart de B.
-		const std::vector<int> Sl = FindRole(P, R_Sluice);
-		if (!SetSwitch(X, Sl[0], 0) || !SetSwitch(X, Sl[1], 0)) return false;
-		int A = 0, B0 = 0;
-		PoolLevels(P, X.S, A, B0);
-		const int X0 = A - Marks.B[0];
-		const int Y0 = B0 + X0 - Marks.B[1];
-		return SetSwitch(X, Sl[0], X0) && SetSwitch(X, Sl[1], Y0);
-	}
-	default:
-		return false;
-	}
-}
-
-static int ForwardTarget(int Level, int Route)
-{
-	switch (Level)
-	{
-	case 0: return Route == 0 ? 1 : 37;
-	case 1: return 4;
-	case 2: return 3;
-	case 3: return 4;
-	case 4: return 5;
-	case 5: return 6;
-	case 6: return 8;
-	case 8: return 9;
-	case 9: return 10;
-	case 10: return 11;
-	case 11: return EndingTarget;
-	case 37: return 4;
-	default: return -1;
-	}
+	return X.Solve(Route);
 }
 
 static bool StateValid(const FPlan& P, const FState& S, std::string& Why)
@@ -621,8 +313,8 @@ int main(int argc, char** argv)
 	long TotalActions = 0, TotalFuzz = 0;
 	for (int Level : Levels)
 	{
-		int Solved = 0, Fallbacks = 0, Mistakes = 0, FuzzSolved = 0, Checked = 0;
-		long Actions = 0;
+		int Solved = 0, Fallbacks = 0, Mistakes = 0, FuzzSolved = 0, Checked = 0, PlayerSolved = 0, MaxPlayerActions = 0;
+		long Actions = 0, PlayerActions = 0;
 		std::set<std::vector<uint8_t>> Variants;
 		for (int I = 0; I < Seeds; ++I)
 		{
@@ -671,6 +363,40 @@ int main(int argc, char** argv)
 				if (!StateValid(P, S, Why)) Fail(Level, Seed, Why);
 				Actions += X.Actions;
 				if (Route == 0) ++Solved;
+
+				// 1 bis. Memes informations, actions du jeu seulement (un appui passe a la position suivante) : enregistrees,
+				// puis rejouees sur un etat neuf (ce que fait le test du jeu par de vraies interactions)
+				{
+					FState S2;
+					InitState(P, S2);
+					FCtx Y{ P, S2, FCampaign() };
+					Y.bPlayerActions = true;
+					Y.bRecord = true;
+					if (!Solve(Y, Route) || Y.bBad || Y.bOverflow || !(S2.Solved & 1))
+					{
+						Fail(Level, Seed, Y.bOverflow ? std::string("mode joueur : trop d'actions") : (Y.bBad ? std::string("mode joueur : ") + Y.Why : std::string("mode joueur : solveur bloque")));
+					}
+					else
+					{
+						FState S3;
+						InitState(P, S3);
+						if (!Replay(P, S3, FCampaign(), Y.Steps, Y.NumSteps) || !SameState(S3, S2) || !IsExitOpen(P, S3, Target))
+						{
+							Fail(Level, Seed, "mode joueur : rejeu different");
+						}
+						for (int K = 0; K < Y.NumSteps; ++K)
+						{
+							if (Y.Steps[K].Action == static_cast<uint8_t>(EAction::Set))
+							{
+								Fail(Level, Seed, "mode joueur : action Set");
+								break;
+							}
+						}
+						PlayerActions += Y.NumSteps;
+						MaxPlayerActions = std::max(MaxPlayerActions, Y.NumSteps);
+						if (Route == 0) ++PlayerSolved;
+					}
+				}
 			}
 
 			// 2. Actions au hasard (erreurs, retours, ordre quelconque), puis resolution : aucune impasse
@@ -695,13 +421,13 @@ int main(int argc, char** argv)
 				FCtx Y{ P, S, FCampaign() };
 				if (!Solve(Y, 0) || Y.bBad || !(S.Solved & 1))
 				{
-					Fail(Level, Seed, Y.bBad ? "apres aleatoire : " + Y.Why : "impasse apres actions au hasard");
+					Fail(Level, Seed, Y.bBad ? std::string("apres aleatoire : ") + Y.Why : "impasse apres actions au hasard");
 				}
 				else
 				{
 					++FuzzSolved;
 				}
-				if (X.bBad) Fail(Level, Seed, "aleatoire : " + X.Why);
+				if (X.bBad) Fail(Level, Seed, std::string("aleatoire : ") + X.Why);
 				TotalFuzz += Steps;
 			}
 
@@ -763,6 +489,8 @@ int main(int argc, char** argv)
 			"%d variantes de secours, %.1f actions en moyenne, %d erreurs commises au hasard, %d erreurs typiques verifiees\n",
 			Level, Solved, Seeds, FuzzSolved, Seeds, Variants.size(), Fallbacks, Seeds ? (double)Actions / Seeds : 0.0,
 			Mistakes, Checked);
+		std::printf("           mode joueur (appuis du jeu, rejoues a l'identique) : %d/%d resolues, %.1f actions en moyenne, %d au plus\n",
+			PlayerSolved, Seeds, Seeds ? (double)PlayerActions / (Seeds * (Level == 0 ? 2 : 1)) : 0.0, MaxPlayerActions);
 		TotalActions += Actions;
 	}
 	// Une prise a un seul gagnant : deux demandes successives du meme fusible

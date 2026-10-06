@@ -1,0 +1,39 @@
+# Localisation, le 2026-10-06T12:43Z
+# python3 Tools/Localization/loc_build.py --check
+fr       traduits 1069/1069  relus 1069  manquants    0  refuses   0  a revoir   0
+en       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+de       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+es-ES    traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+pt-BR    traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+ru       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+it       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+tr       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+es-419   traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+pl       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hans  traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+uk       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+ar       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+ko       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+fa       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+ja       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+hu       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+cs       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+pt-PT    traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+sv       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hant  traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+id       traduits 1069/1069  relus    0  manquants    0  refuses   0  a revoir   0
+# code de sortie : 0
+
+# Glyphes des polices CJK et arabe (Content/Fonts) pour tous les textes traduits (fontTools)
+zh-Hans  NotoSansSC-Regular  1089 caracteres de l'ecriture, 0 sans glyphe 
+zh-Hans  NotoSansSC-Bold  1089 caracteres de l'ecriture, 0 sans glyphe 
+zh-Hant  NotoSansTC-Regular  1103 caracteres de l'ecriture, 0 sans glyphe 
+zh-Hant  NotoSansTC-Bold  1103 caracteres de l'ecriture, 0 sans glyphe 
+ja       NotoSansJP-Regular   834 caracteres de l'ecriture, 0 sans glyphe 
+ja       NotoSansJP-Bold   834 caracteres de l'ecriture, 0 sans glyphe 
+ko       NotoSansKR-Regular   670 caracteres de l'ecriture, 0 sans glyphe 
+ko       NotoSansKR-Bold   670 caracteres de l'ecriture, 0 sans glyphe 
+ar       NotoSansArabic-Regular    48 caracteres de l'ecriture, 0 sans glyphe 
+ar       NotoSansArabic-Bold    48 caracteres de l'ecriture, 0 sans glyphe 
+fa       NotoSansArabic-Regular    56 caracteres de l'ecriture, 0 sans glyphe 
+fa       NotoSansArabic-Bold    56 caracteres de l'ecriture, 0 sans glyphe 

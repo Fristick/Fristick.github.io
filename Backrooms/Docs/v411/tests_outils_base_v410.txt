@@ -1,0 +1,6 @@
+# Base v4.10 (3e1f55b) : ses propres tests, sous Linux, le 2026-10-06T12:40Z (constat 2.3 : la fixture ne pose pas les droits d'execution)
+# Commande : python3 -m unittest discover -s Tools/Build/tests
+FAIL: test_paquet_linux_complet (test_packaging.CheckPackageTests.test_paquet_linux_complet)
+AssertionError: 1 != 0 : Paquet Linux : /tmp/br_pkgtest_zj2qa9wp/Build/Linux/Shipping
+Ran 28 tests in 0.960s
+FAILED (failures=1, skipped=1)

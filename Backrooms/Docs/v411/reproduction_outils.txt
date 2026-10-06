@@ -1,0 +1,13 @@
+# Reproduction des constats 2.4 et 2.5 (check_package.py), executee le 2026-10-06T12:40Z
+# Base v4.10 (3e1f55b) :
+2.5 pe_info(68 octets) -> exception error: unpack_from requires a buffer of at least 72 bytes for unpacking 4 bytes at offset 68 (actual buffer size is 68)
+2.4 --launch, code 1, etat echec -> code 0 | lancement    ECHEC (facultatif) / lancement : code 1, / RESULTAT : PAQUET VERIFIE
+2.4 --require-launch, code 0, etat incomplet -> code 0 | lancement    OK / lancement : code 0, / RESULTAT : PAQUET VERIFIE ET LANCE
+2.4 --require-launch, code 0, rapport {} -> code 0 | lancement    OK / lancement : code 0, / RESULTAT : PAQUET VERIFIE ET LANCE
+
+# v4.11 (branche backrooms) :
+2.5 pe_info(68 octets) -> exception BadFormat: PE x.exe : lecture hors du fichier (offset 64, 24 octets, taille 68)
+2.5 binary_info(pe_info, 68 octets) -> (None, 'PE x.exe : lecture hors du fichier (offset 64, 24 octets, taille 68)')
+2.4 --launch, code 1, etat echec -> code 1 | lancement    ECHEC / lancement : code 1, etat echec, 1 probleme(s), 0 verification(s) non faite(s) / RESULTAT : ECHEC
+2.4 --require-launch, code 0, etat incomplet -> code 2 | lancement    INCOMPLET : le jeu a demarre mais 1 verification(s) n'ont pas ete faites / lancement : code 0, etat incomplet, 0 probleme(s), 1 verification(s) non faite(s) / RESULTAT : INSPECTION INCOMPLETE (lancement incomplet)
+2.4 --require-launch, code 0, rapport {} -> code 1 | lancement    ECHEC / RESULTAT : ECHEC

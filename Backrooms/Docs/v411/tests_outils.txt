@@ -1,0 +1,66 @@
+# Tests unitaires des outils de livraison, executes le 2026-10-06T12:40Z sous Linux (python 3.11.15)
+# Commande : python3 -m unittest discover -s Tools/Build/tests -v
+test_elf_dynamique_hors_limites (test_packaging.BinaryFormatTests.test_elf_dynamique_hors_limites) ... ok
+test_elf_table_programme_hors_limites (test_packaging.BinaryFormatTests.test_elf_table_programme_hors_limites) ... ok
+test_elf_tronques (test_packaging.BinaryFormatTests.test_elf_tronques) ... ok
+test_elf_valide (test_packaging.BinaryFormatTests.test_elf_valide) ... ok
+test_macho_commandes_hors_limites (test_packaging.BinaryFormatTests.test_macho_commandes_hors_limites) ... ok
+test_macho_nom_hors_commande (test_packaging.BinaryFormatTests.test_macho_nom_hors_commande) ... ok
+test_macho_taille_de_commande_nulle (test_packaging.BinaryFormatTests.test_macho_taille_de_commande_nulle) ... ok
+test_macho_tronque (test_packaging.BinaryFormatTests.test_macho_tronque) ... ok
+test_macho_universel_tranche_hors_limites (test_packaging.BinaryFormatTests.test_macho_universel_tranche_hors_limites) ... ok
+test_macho_valide (test_packaging.BinaryFormatTests.test_macho_valide) ... ok
+test_paquet_avec_binaire_tronque (test_packaging.BinaryFormatTests.test_paquet_avec_binaire_tronque) ... ok
+test_pe_68_octets (test_packaging.BinaryFormatTests.test_pe_68_octets) ... ok
+test_pe_offset_hors_limites (test_packaging.BinaryFormatTests.test_pe_offset_hors_limites) ... ok
+test_pe_sections_hors_limites (test_packaging.BinaryFormatTests.test_pe_sections_hors_limites) ... ok
+test_pe_tronques (test_packaging.BinaryFormatTests.test_pe_tronques) ... ok
+test_pe_valide (test_packaging.BinaryFormatTests.test_pe_valide) ... ok
+test_carte_absente (test_packaging.CheckPackageTests.test_carte_absente) ... ok
+test_dossier_absent (test_packaging.CheckPackageTests.test_dossier_absent) ... ok
+test_dossier_vide (test_packaging.CheckPackageTests.test_dossier_vide) ... ok
+test_extension_sans_format (test_packaging.CheckPackageTests.test_extension_sans_format) ... ok
+test_lancement_code_non_nul_avec_rapport_reussi (test_packaging.CheckPackageTests.test_lancement_code_non_nul_avec_rapport_reussi) ... ok
+test_lancement_demande_echoue_fait_echouer (test_packaging.CheckPackageTests.test_lancement_demande_echoue_fait_echouer) ... ok
+test_lancement_demande_incomplet (test_packaging.CheckPackageTests.test_lancement_demande_incomplet) ... ok
+test_lancement_etat_inconnu (test_packaging.CheckPackageTests.test_lancement_etat_inconnu) ... ok
+test_lancement_exige_hors_hote (test_packaging.CheckPackageTests.test_lancement_exige_hors_hote) ... skipped 'hote Linux'
+test_lancement_incomplet_code_2 (test_packaging.CheckPackageTests.test_lancement_incomplet_code_2) ... ok
+test_lancement_json_illisible (test_packaging.CheckPackageTests.test_lancement_json_illisible) ... ok
+test_lancement_json_vide (test_packaging.CheckPackageTests.test_lancement_json_vide) ... ok
+test_lancement_obligatoire_incomplet (test_packaging.CheckPackageTests.test_lancement_obligatoire_incomplet) ... ok
+test_lancement_rapport_d_un_autre_essai (test_packaging.CheckPackageTests.test_lancement_rapport_d_un_autre_essai) ... ok
+test_lancement_rapport_incoherent (test_packaging.CheckPackageTests.test_lancement_rapport_incoherent) ... ok
+test_lancement_reussi (test_packaging.CheckPackageTests.test_lancement_reussi) ... ok
+test_lancement_sans_rapport (test_packaging.CheckPackageTests.test_lancement_sans_rapport) ... ok
+test_lancement_windows_simule (test_packaging.CheckPackageTests.test_lancement_windows_simule) ... ok
+test_langue_absente (test_packaging.CheckPackageTests.test_langue_absente) ... ok
+test_mode_structure_le_dit (test_packaging.CheckPackageTests.test_mode_structure_le_dit) ... ok
+test_outil_absent (test_packaging.CheckPackageTests.test_outil_absent) ... ok
+test_outil_en_echec (test_packaging.CheckPackageTests.test_outil_en_echec) ... ok
+test_pak_sans_signature (test_packaging.CheckPackageTests.test_pak_sans_signature) ... ok
+test_paquet_complet (test_packaging.CheckPackageTests.test_paquet_complet) ... ok
+test_paquet_linux_complet (test_packaging.CheckPackageTests.test_paquet_linux_complet) ... ok
+test_paquet_linux_sans_droits (test_packaging.CheckPackageTests.test_paquet_linux_sans_droits) ... ok
+test_ressource_essentielle_absente (test_packaging.CheckPackageTests.test_ressource_essentielle_absente) ... ok
+test_systeme_inconnu (test_packaging.CheckPackageTests.test_systeme_inconnu) ... ok
+test_ucas_absent (test_packaging.CheckPackageTests.test_ucas_absent) ... ok
+test_ordre_interieur_vers_exterieur (test_packaging.MacSignOrderTests.test_ordre_interieur_vers_exterieur) ... ok
+test_arbre_modifie_refuse (test_packaging.SteamVdfTests.test_arbre_modifie_refuse) ... ok
+test_aucun_envoi (test_packaging.SteamVdfTests.test_aucun_envoi) ... ok
+test_autre_commit_refuse (test_packaging.SteamVdfTests.test_autre_commit_refuse) ... ok
+test_conteneur_ancien_refuse (test_packaging.SteamVdfTests.test_conteneur_ancien_refuse) ... ok
+test_contenu_non_verifie_refuse (test_packaging.SteamVdfTests.test_contenu_non_verifie_refuse) ... ok
+test_dossier_vide_refuse (test_packaging.SteamVdfTests.test_dossier_vide_refuse) ... ok
+test_ecrit_apercu_sans_publication (test_packaging.SteamVdfTests.test_ecrit_apercu_sans_publication) ... ok
+test_identifiants_invalides (test_packaging.SteamVdfTests.test_identifiants_invalides) ... ok
+test_manifeste_absent_refuse (test_packaging.SteamVdfTests.test_manifeste_absent_refuse) ... ok
+test_paquet_absent_refuse (test_packaging.SteamVdfTests.test_paquet_absent_refuse) ... ok
+test_residu_refuse (test_packaging.SteamVdfTests.test_residu_refuse) ... ok
+test_systeme_inconnu (test_packaging.SteamVdfTests.test_systeme_inconnu) ... ok
+test_un_paquet_invalide_parmi_deux (test_packaging.SteamVdfTests.test_un_paquet_invalide_parmi_deux) ... ok
+
+----------------------------------------------------------------------
+Ran 59 tests in 2.164s
+
+OK (skipped=1)

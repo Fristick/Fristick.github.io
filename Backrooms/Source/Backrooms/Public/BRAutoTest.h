@@ -16,6 +16,10 @@
 // rapides, objectifs), lignes des parametres, ray tracing indisponible, modes d'affichage (essai, retour, confirmation,
 // expiration ; jeu lance seul), cadence des creatures, lumieres changees sur plusieurs images, prechargement par
 // ensembles. Inclus dans -BRAutoTest ; -BRNetTest y ajoute le nom du coequipier cache par un mur.
+// v4.11 : -BRAutoTestV411 : missions des douze niveaux par de vraies interactions, sorties, depart, fin, ancienne partie,
+// ramassages, creatures (choix de cible, budget de menace, bruit), carnet, sous-titres, volumes. Inclus dans -BRAutoTest ;
+// -BRNetTest y ajoute l'etat de mission a la connexion, l'action d'un client, le ramassage dispute, le soin perime et le
+// depart de groupe.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -29,6 +33,7 @@ class ABRCharacter;
 class ABRPlayerController;
 class ABREntity;
 class FBRLogCapture;
+class UBRSaveGame;
 
 UCLASS()
 class BACKROOMS_API ABRAutoTest : public AActor
@@ -128,6 +133,17 @@ private:
 	void AddSoakSteps(float Minutes);
 	/** v4.9 : multijoueur : nom du coequipier a vue, puis cache par un mur (repere seulement s'il est a terre) */
 	void AddNetV49Steps(bool bClient);
+	/** v4.11 : missions des douze niveaux resolues par de vraies interactions, sorties verrouillees puis ouvertes, depart,
+	 *  fin, ancienne partie (format 3) reprise en ancien mode, transactions de ramassage, choix de cible des creatures,
+	 *  budget de menace, bruit, carnet et aide progressive, sous-titres, volumes separes (BRAutoTestV411.cpp) */
+	void AddV411Steps();
+	/** v4.11 : une mission : chargement (graine fixe), sortie verrouillee, solution par le solveur aux seules informations
+	 *  visibles (BRMissionSolver), rejouee action par action (placement devant le mecanisme, validation de l'hote), sortie
+	 *  ouverte ; bDepart : quitte ensuite le niveau par la sortie ouverte */
+	void AddMissionSteps(int32 Level, uint32 UserSeed, bool bDepart);
+	/** v4.11 : multijoueur : etat de mission a la connexion, action d'un client validee par l'hote, ramassage dispute (un
+	 *  seul gagnant), soin perime refuse sans rien consommer, depart de groupe (attente, rassemblement, depart commun) */
+	void AddNetV411Steps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
 	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */
@@ -204,6 +220,31 @@ private:
 	FBRItemSlot TestPocket;
 	/** Reseau : une place derriere un mur a ete trouvee pres du coequipier */
 	bool bMateBehindWall = false;
+
+	// v4.11 : etat des etapes v4.11
+	/** Solution enregistree (triplets mecanisme, action, retour attendu) et avancement du rejeu */
+	TArray<uint8> TestMission;
+	int32 TestMissionStep = 0;
+	int32 TestMissionPhase = 0;
+	int32 TestMissionDevice = -1;
+	double TestMissionClock = 0.0;
+	double TestMissionLastHold = 0.0;
+	int32 TestMissionRetries = 0;
+	/** Resultat par niveau (rapport) */
+	TArray<FString> TestMissionLines;
+	/** Entites creees par un test (detruites a la fin du test) */
+	TArray<TWeakObjectPtr<ABREntity>> TestSpawned;
+	/** Compteurs avant une etape (ramassages, soins, retours) */
+	int32 TestCountA = 0;
+	int32 TestCountB = 0;
+	int32 TestCountC = 0;
+	uint64 TestPickup = 0;
+	FVector TestExitSpot = FVector::ZeroVector;
+	/** Partie active et mode de session avant le test de l'ancienne partie (retablis ensuite) */
+	int32 TestOrigSlot = INDEX_NONE;
+	bool bTestDevSession = true;
+	UPROPERTY()
+	TObjectPtr<UBRSaveGame> TestOrigSave = nullptr;
 
 	TArray<FStep> Plan;
 	int32 StepIndex = 0;

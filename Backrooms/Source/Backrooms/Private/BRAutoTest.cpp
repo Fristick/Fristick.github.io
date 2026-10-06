@@ -175,6 +175,17 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Session longue de %.0f min : %d etapes. Rapport : %s"), SoakMinutes, Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV411")))
+	{
+		AddV411Steps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.11 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV410")))
 	{
 		AddV410Steps();
@@ -395,6 +406,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 	AddV48Steps(); // v4.8
 	AddV49Steps(); // v4.9
 	AddV410Steps(); // v4.10
+	AddV411Steps(); // v4.11
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
 	AddLoad(4, 8.f, TEXT("Galerie des entites"));
@@ -685,6 +697,8 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetV49Steps(bClient);
 	// v4.10 : soins (transaction confirmee par le serveur), preparation d'un client pendant un changement de niveau
 	AddNetV410Steps(bClient);
+	// v4.11 : mission a la connexion, action d'un client, ramassage dispute, soin perime, depart de groupe
+	AddNetV411Steps(bClient);
 
 	// L'hote emmene le groupe au Niveau 37 : le client doit suivre avec la meme graine
 	Add(TEXT("Changement de niveau"), 0.f, [this, bClient]()
