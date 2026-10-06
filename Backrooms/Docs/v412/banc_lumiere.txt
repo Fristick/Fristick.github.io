@@ -1,0 +1,20 @@
+# Banc de la lumiere de gameplay v4.12 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Light/test_light.cpp -o test_light && ./test_light
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-06T17:51:50Z
+
+# Banc de la lumiere de gameplay v4.12 (BRLightLogic.h)
+
+  balise : Smiler hors poursuite dissipe a moins de 4.5 m ; aucune entite de l'ombre a moins de 6.8 m
+  sortie de secours eclairee / porche : Smiler dissipe a moins de 3.1 m
+  formule de l'indice (R x (1 - racine(seuil / I))) = recherche avec la loi du jeu OK
+  indice du carnet : "a moins de 4 m" ; a 4 m l'effet a toujours lieu (apport 0.62 > 0.50) OK
+  au-dela de la portee visuelle (9 m), aucun apport                                OK
+  apport decroissant avec la distance                                              OK
+  deux balises a 8 m : milieu a 1.23 (somme des apports)                           OK
+  coupure noire : la balise eclaire toujours (source autonome)                     OK
+
+Verifications : 6, echecs : 0
+RESULTAT : OK
+# Code de sortie : 0

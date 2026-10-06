@@ -89,6 +89,8 @@ public:
 	 *  l'ascenseur alimente (Niveau 1) allume son voyant d'appel et sonne a son arrivee. Meme etat que la validation de
 	 *  la sortie */
 	void SetMissionOpen(bool bOpen, bool bAnimate);
+	/** v4.12 : voyant affiche (-1 : sortie libre, 0 : rouge, 1 : vert) */
+	int8 GetMissionOpen() const { return MissionOpen; }
 
 	int32 Target = 1;
 	EBRExitStyle Style = EBRExitStyle::Door;

@@ -55,6 +55,10 @@ public:
 	 *  reapparition, il reprend la bonne position sans rejouer d'animation */
 	void SetShown(bool bShow);
 	bool IsShown() const { return bShown; }
+	/** v4.12 : module physique (BRMech::Module), son repere et la progression affichee (passerelle : 0 levee .. 1 posee) */
+	uint8 GetModule() const { return Module; }
+	BRMech::FFrame GetModuleFrame() const { return ModuleFrame(); }
+	float GetModuleProgress() const { return ModuleProgress; }
 	/** v4.12 (mesures) : Ticks des mecanismes et temps passe (secondes) depuis la derniere remise a zero */
 	static int64 TickCount;
 	static double TickSeconds;

@@ -1,0 +1,45 @@
+# Banc du depart de groupe v4.12 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Departure/test_departure.cpp Source/Backrooms/Private/BRGatherLogic.cpp -o test_departure && ./test_departure
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-06T17:51:49Z
+
+# Banc du depart de groupe v4.12 (BRGatherLogic.cpp)
+
+1. Rassemblement autour de l'echelle choisie
+  Niveau  0, plafond 290, conduit 300 : grimpeur a 440 cm compte (base : non compte) OK
+  Niveau  2, plafond 280, conduit 300 : grimpeur a 430 cm compte (base : non compte) OK
+  Niveau  6, plafond 290, conduit 300 : grimpeur a 440 cm compte (base : non compte) OK
+  Niveau  8, plafond 450, conduit 300 : grimpeur a 600 cm compte (base : non compte) OK
+  Niveau 37, plafond 450, conduit 300 : grimpeur a 600 cm compte (base : non compte) OK
+  Niveau  6, plafond 290, conduit   0 : grimpeur a 196 cm compte (base : compte) OK
+  Niveau  8, plafond 450, conduit   0 : grimpeur a 356 cm compte (base : compte) OK
+  Niveau 37, plafond 450, conduit   0 : grimpeur a 356 cm compte (base : compte) OK
+  Niveau 0 -> 37, 2 joueurs : un au sommet, un au pied : 2/2                     OK
+  Niveau 0 -> 37, 4 joueurs : sommet, pied, 5 m, a mi-hauteur : 4/4              OK
+  grimpeur compte a toute hauteur de la montee (88 a 440 cm)                     OK
+  joueur a l'etage au-dessus (derriere le plafond) : non compte                  OK
+  joueur a l'etage en dessous : non compte                                       OK
+  joueur reparti a 9 m : non compte                                              OK
+  joueur a cote du conduit, a la hauteur du sommet : non compte                  OK
+  demande depuis le sommet : acceptee sans ligne de vue (conduit ferme)          OK
+  demande depuis un autre etage : refusee                                        OK
+  meme point de vue pour la demande et le rassemblement (1 m devant, 90 cm)      OK
+  porte : demande a 3 m, refus a 4 m                                             OK
+  grange : rassemblement devant l'entree (5,2 m)                                 OK
+2. Attente au sommet de l'echelle
+  10 s au sommet en tenant la touche : 1 demande, attente stable, pas plus haut  OK
+  l'initiateur redescend : une annulation, demande rearmee apres 1 m             OK
+  remonte au sommet : une nouvelle demande (2 en tout)                           OK
+  un coequipier redescend : aucune annulation                                    OK
+  refus de l'hote : une demande, puis arret au sommet (aucune demande par image) OK
+  aucune reponse : arret apres 3 s, 1 demande                                    OK
+  depart vers une autre destination : ignore (arret apres 3 s)                   OK
+  depart du groupe : etat Leaving, sommet plus bloque                            OK
+3. Depart du groupe (hote)
+  2 joueurs : le groupe part ensemble (7.8 s), le grimpeur reste au sommet       OK
+  4 joueurs : le groupe part ensemble (9.1 s), le grimpeur reste au sommet       OK
+
+Verifications : 30, echecs : 0
+RESULTAT : OK
+# Code de sortie : 0

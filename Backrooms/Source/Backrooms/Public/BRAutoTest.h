@@ -20,6 +20,11 @@
 // ramassages, creatures (choix de cible, budget de menace, bruit), carnet, sous-titres, volumes. Inclus dans -BRAutoTest ;
 // -BRNetTest y ajoute l'etat de mission a la connexion, l'action d'un client, le ramassage dispute, le soin perime et le
 // depart de groupe.
+// v4.12 : -BRAutoTestV412 : contenu de la version publiee (lot 1), acces par deplacement reel (missions resolues en marchant,
+// sorties prises a pied, sans deplacement direct du personnage), bassins et sas des Poolrooms, passerelle du Niveau 8,
+// balises (lumiere de gameplay), mecanismes masques sans Tick, regle de place unique, objets mis de cote, sante perimee,
+// reprise d'un etat ou d'un placement d'une autre version, carnet. Inclus dans -BRAutoTest ; -BRNetTest y ajoute la
+// compatibilite, l'etat "en attente / accepte / refuse" d'une demande et le depart de groupe par une echelle.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -144,6 +149,17 @@ private:
 	/** v4.11 : multijoueur : etat de mission a la connexion, action d'un client validee par l'hote, ramassage dispute (un
 	 *  seul gagnant), soin perime refuse sans rien consommer, depart de groupe (attente, rassemblement, depart commun) */
 	void AddNetV411Steps(bool bClient);
+	/** v4.12 : contenu publie, acces par deplacement reel, effets physiques, lumiere, Tick masque, inventaire, sante,
+	 *  reprise, carnet (BRAutoTestV412.cpp) */
+	void AddV412Steps();
+	/** v4.12 : mission resolue EN MARCHANT : chemin de grille (A* du monde) suivi avec les seules entrees du joueur, chaque
+	 *  mecanisme vise par le trace d'interaction depuis la place atteinte ; bLoad : charge d'abord le niveau (graine fixe) */
+	void AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad = true);
+	/** v4.12 : sortie ouverte atteinte a pied, prise par la touche d'interaction (echelle : on grimpe), arrivee verifiee */
+	void AddWalkExitSteps(int32 Level);
+	/** v4.12 : multijoueur : compatibilite, etat d'une demande d'un client (en attente, accepte, refuse), depart de groupe
+	 *  par une echelle (une seule demande au sommet, grimpeur rassemble, coequipier qui arrive a pied) */
+	void AddNetV412Steps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
 	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */

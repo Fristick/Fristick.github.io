@@ -1,0 +1,34 @@
+# Banc des missions (logique, solveur, 3000 graines par niveau) v4.12 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Missions/test_mission_logic.cpp Source/Backrooms/Private/BRMissionLogic.cpp Source/Backrooms/Private/BRMissionSolver.cpp -o test_missions && ./test_missions
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-06T17:51:57Z
+
+Banc d'essai des missions v4.11 : 3000 graines par niveau, generation 2
+Niveau  0 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 1359 variantes distinctes, 0 variantes de secours, 36.0 actions en moyenne, 506 erreurs commises au hasard, 400 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 26.5 actions en moyenne, 35 au plus
+Niveau  1 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 120 variantes distinctes, 0 variantes de secours, 14.0 actions en moyenne, 6667 erreurs commises au hasard, 800 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 9.0 actions en moyenne, 9 au plus
+Niveau  2 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 384 variantes distinctes, 0 variantes de secours, 10.0 actions en moyenne, 0 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 14.5 actions en moyenne, 19 au plus
+Niveau  3 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 96 variantes distinctes, 0 variantes de secours, 13.0 actions en moyenne, 20352 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 13.0 actions en moyenne, 13 au plus
+Niveau  4 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 3000 variantes distinctes, 0 variantes de secours, 6.0 actions en moyenne, 10670 erreurs commises au hasard, 400 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 16.5 actions en moyenne, 30 au plus
+Niveau  5 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 3000 variantes distinctes, 0 variantes de secours, 9.0 actions en moyenne, 0 erreurs commises au hasard, 800 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 11.0 actions en moyenne, 13 au plus
+Niveau  6 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 2536 variantes distinctes, 0 variantes de secours, 11.0 actions en moyenne, 16284 erreurs commises au hasard, 400 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 11.0 actions en moyenne, 11 au plus
+Niveau  8 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 120 variantes distinctes, 0 variantes de secours, 13.0 actions en moyenne, 0 erreurs commises au hasard, 600 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 13.0 actions en moyenne, 13 au plus
+Niveau  9 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 288 variantes distinctes, 0 variantes de secours, 5.0 actions en moyenne, 2375 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 6.5 actions en moyenne, 8 au plus
+Niveau 10 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 2969 variantes distinctes, 0 variantes de secours, 6.0 actions en moyenne, 15761 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 9.0 actions en moyenne, 12 au plus
+Niveau 11 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 952 variantes distinctes, 0 variantes de secours, 15.0 actions en moyenne, 862 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 25.3 actions en moyenne, 39 au plus
+Niveau 37 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 40 variantes distinctes, 0 variantes de secours, 8.0 actions en moyenne, 0 erreurs commises au hasard, 135 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 8.8 actions en moyenne, 13 au plus
+Actions jouees : 438000 (solveur) + 1415847 (au hasard)
+RESULTAT : OK
+# Code de sortie : 0

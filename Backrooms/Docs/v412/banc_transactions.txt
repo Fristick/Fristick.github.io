@@ -1,0 +1,50 @@
+# Banc des transactions v4.12 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Transactions/test_transactions.cpp Source/Backrooms/Private/BRTxnLogic.cpp -o test_transactions && ./test_transactions
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-06T17:51:47Z
+
+# Banc des transactions v4.12 (BRTxnLogic.cpp)
+
+A. Regles de l'inventaire
+  ajout identique a celui de la base : 180000/180000
+  place annoncee = exemplaires reellement ranges : 36000/36000
+  faux "inventaire plein" (place 0, ajout possible) : base 33, v4.12 0
+  sacs pleins, lampe a la ceinture, main libre : lampe       place   1 (attendu   1) OK
+  sacs pleins, lampe en main, ceinture libre : lampe         place   1 (attendu   1) OK
+  sacs pleins, main et ceinture prises : lampe               place   0 (attendu   0) OK
+  sacs pleins, tete libre : frontale                         place   1 (attendu   1) OK
+  sacs pleins, torse pris : gilet                            place   0 (attendu   0) OK
+  sacs pleins, pile de 2 bandages : bandage                  place   2 (attendu   2) OK
+  sacs pleins de cassettes (12/12) : piles                   place   0 (attendu   0) OK
+  inventaire vide : bandage (24 cases x 4)                   place  96 (attendu  96) OK
+  inventaire vide : lampe (2 emplacements + 24 cases)        place  26 (attendu  26) OK
+B. Place reservee pendant l'attente de l'hote
+  16960 demandes, deplacements au hasard pendant l'attente : 49747 faits, 797 refuses (place reservee)
+  objet accepte sans place a la reponse : sans reserve 548, avec reserve 0
+  constat 4.2 : place du bandage 4, lampe rangee dans la derniere case -> deplacement refuse
+C. Reserve "mis de cote"
+  bandage sans place : mis de cote 1, range apres une case liberee : 1, reste 0
+D. Decisions sur les reponses de l'hote
+  constat 4.6 : sante 100 apres un reveil, soin d'avant (35) -> sante 100, objet retire : non
+  decisions : OK
+E. Hote et joueurs (modele de bout en bout)
+  E1 2 joueurs sur le meme bandage : une attribution, objet retire, stocks   OK
+  E1 4 joueurs sur le meme bandage : une attribution, objet retire, stocks   OK
+  E2 inventaire plein des la demande : aucune demande, objet en place        OK
+  E3 derniere case prise pendant l'attente : refus, bandage range            OK
+  E3b place perdue malgre tout : mis de cote, puis range (jamais perdu)      OK
+  E4 mort apres acceptation : parti avec l'ancien inventaire, stocks egaux, accuse OK
+  E5 reponse apres changement de niveau : rangee, aucun effet rejoue, stock  OK
+  E6 reponse repetee et demande renvoyee : un seul bandage, stock            OK
+  E7 deconnexion avant reponse : rendu au monde, decompte, repris par un autre OK
+  E8 soin et changement de niveau : bandage retire une fois, sante 75, sans effet OK
+  E9 soin puis mort et reveil : bandage neuf garde, sante 100, stock         OK
+  E10 soin et coup rapproches (dans l'ordre, et inverses) : sante de l'hote  OK
+  E11 demande de soin renvoyee : un soin, un bandage                         OK
+  E12 reveil sans confirmation (deja vivant) : epoque retablie, ramassage servi OK
+  E13 600 parties au hasard (4 joueurs) : aucun objet perdu ni double, stocks OK
+
+Verifications : 51, echecs : 0
+RESULTAT : OK
+# Code de sortie : 0
