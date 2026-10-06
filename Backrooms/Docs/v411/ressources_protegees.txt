@@ -1,0 +1,7 @@
+# Modeles et ressources proteges, le 2026-10-06T12:50Z
+# python3 Tools/protect_assets.py check   (empreintes SHA-256 du manifeste RawAssets/protected_assets.json)
+OK
+# code de sortie : 0
+# git diff --stat 3e1f55b -- RawAssets/protected_assets.json : 0 ligne(s) (manifeste inchange)
+# Fichiers de RawAssets modifies ou supprimes depuis 3e1f55b (ajouts exclus) :
+aucun

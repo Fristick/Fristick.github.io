@@ -44,6 +44,8 @@ namespace BRTestV411
 {
 	const TCHAR* const SavePrefix = TEXT("BR_AutoTestV411_");
 	constexpr int32 LegacySlot = 0;
+	/** Reglage des sous-titres du joueur, retabli a la fin des etapes de sous-titres */
+	bool bPlayerSubtitles = true;
 
 	const TCHAR* YesNo(bool b)
 	{
@@ -829,6 +831,7 @@ void ABRAutoTest::AddV411Steps()
 		{
 			return false;
 		}
+		BRTestV411::bPlayerSubtitles = FBRSettings::Get().bSubtitles;
 		FBRSettings::Get().bSubtitles = true;
 		const FVector Right = C->GetActorLocation() + PC->GetControlRotation().RotateVector(FVector(0.f, 400.f, 0.f));
 		const FString Dir = ABRHUD::DirectionWord(this, Right);
@@ -862,7 +865,7 @@ void ABRAutoTest::AddV411Steps()
 		ABRHUD::Caption(this, TEXT("[test]"), FVector::ZeroVector, 3.f);
 		const int32 Shown = H->LastFrameCaptions;
 		Note(FString::Printf(TEXT("sous-titres desactives : %d ligne(s) dessinee(s) (attendu 0)"), Shown), Shown != 0);
-		FBRSettings::Get().bSubtitles = true;
+		FBRSettings::Get().bSubtitles = BRTestV411::bPlayerSubtitles;
 		return true;
 	});
 
@@ -1147,8 +1150,8 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		}
 		if (C->CountItem(EBRItem::Bandage) < 1)
 		{
+			// Le refus d'une demande perimee passe avant le controle du stock connu de l'hote
 			C->AddItem(EBRItem::Bandage, 1);
-			C->OnEnteredLevel(W->Def()); // objets de soin declares a l'hote
 		}
 		TestCountA = C->CountItem(EBRItem::Bandage);
 		// La demande porte le numero du niveau precedent : comme un soin parti juste avant un changement de niveau

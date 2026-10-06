@@ -991,6 +991,10 @@ void ABRAutoTest::AddNetV410Steps(bool bClient)
 			// la nouvelle sante part au client avec l'effet du coup
 			Mate->Health = 100.f;
 			Mate->ReceiveAttack(45.f, 0.f, nullptr);
+			// v4.11 : le stock de soin connu de l'hote ne se redeclare plus (une seule declaration par session : correction du
+			// constat 2.1). Les bandages que le client se donne pour ce test (trois au plus : deux soins rapproches, puis un
+			// pendant la serie de coups) sont credites ici par l'hote, comme des ramassages acceptes
+			Mate->CreditHealItem(EBRItem::Bandage, 3);
 			Note(FString::Printf(TEXT("soins : coup de 45 au client (sante vue par le serveur : %.0f)"), Mate->Health));
 		}
 		return true;
@@ -1013,7 +1017,6 @@ void ABRAutoTest::AddNetV410Steps(bool bClient)
 		if (C->CountItem(EBRItem::Bandage) < 2)
 		{
 			C->AddItem(EBRItem::Bandage, 2 - C->CountItem(EBRItem::Bandage));
-			C->OnEnteredLevel(GetBRWorld()->Def()); // objets de soin declares au serveur
 		}
 		TestBandages = C->CountItem(EBRItem::Bandage);
 		TestHealth = C->Health;
@@ -1052,7 +1055,6 @@ void ABRAutoTest::AddNetV410Steps(bool bClient)
 			if (TestBandages < 1)
 			{
 				C->AddItem(EBRItem::Bandage, 1);
-				C->OnEnteredLevel(GetBRWorld()->Def());
 				TestBandages = C->CountItem(EBRItem::Bandage);
 			}
 			TestHealth = C->Health;

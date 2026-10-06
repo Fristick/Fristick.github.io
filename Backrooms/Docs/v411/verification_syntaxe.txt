@@ -52,3 +52,12 @@ Verification ciblee : copie sans ces en-tetes, erreurs restantes comparees aux l
 (git diff -U0 3e1f55b). BRAutoTest.cpp : lignes 178-188, 409, 700-701 (branchement des etapes v4.11) : aucune erreur.
 BRSave.cpp : lignes 426-437 (migration du format 3 vers 4) : aucune erreur. Toutes les erreurs restantes portent sur du
 code de la base (FArchive, FJsonObject, FString::Find... non decrits par les stubs).
+
+## BRAutoTestV410.cpp (en echec sur la base comme ici : en-tetes Slate et GenericApplication absents des stubs)
+Verification ciblee, relancee le 2026-10-06 apres l'adaptation du test reseau v4.10 : copie sans les en-tetes absents
+(GenericPlatform/GenericApplication.h, Rendering/SlateRenderer.h, UObject/UObjectArray.h), erreurs restantes comparees
+aux lignes changees (git diff -U0 3e1f55b : ajout 994-997, deux lignes retirees). Lignes en erreur : 76-112, 237, 381,
+489, 584, 676-797, 1190, 1297 (Slate, FMemory::Memcmp, ForceGarbageCollection, GetMapName, GUObjectArray : code de la
+base). Lignes 994-997 (CreditHealItem) : aucune erreur.
+Verification complete relancee ensuite : memes dix fichiers en echec, tous les autres OK, BRAutoTestV411.cpp OK,
+variables masquees 0, build unity : seul l'avertissement de la base (BRAssets 'Done').
