@@ -33,6 +33,12 @@ br_write_manifest() {
 	{
 		echo "projet : Backrooms"
 		echo "commit : $(git -C "$BR_PROJECT_DIR" rev-parse HEAD 2>/dev/null || echo inconnu)"
+		# v4.10 : modifications non validees (le paquet ne correspond pas a son commit ; make_steam_vdf.py le refuse)
+		if [ -n "$(git -C "$BR_PROJECT_DIR" status --porcelain --untracked-files=no -- Source Config Content Tools ./*.uproject 2>/dev/null)" ]; then
+			echo "arbre : modifie"
+		else
+			echo "arbre : propre"
+		fi
 		echo "date : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 		echo "plateforme : $platform"
 		echo "configuration : $config"

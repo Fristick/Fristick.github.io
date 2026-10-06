@@ -1,0 +1,47 @@
+# v4.10 : ressources sans lesquelles le jeu empaquete ne fonctionne pas (lues par check_package.py, verification "contenu").
+# Le jeu les charge par leur nom (catalogue de l'Asset Registry), pas par une reference de la carte : un oubli de cuisson
+# ne se voit qu'au lancement. Une ligne par paquet (/Game/...). Les polices et les langues sont verifiees a part.
+
+# Carte et materiaux de base (murs, objets, peau des creatures, eau des Poolrooms, ombre des fosses)
+/Game/Backrooms/Maps/L_Backrooms
+/Game/Backrooms/Materials/M_BR_World
+/Game/Backrooms/Materials/M_BR_Mesh
+/Game/Backrooms/Materials/M_BR_Skin
+/Game/Backrooms/Materials/M_BR_WaterSurface
+/Game/Backrooms/Materials/M_BR_PitShade
+
+# Joueur : combinaison hazmat, camescope, lampe
+/Game/Backrooms/Meshes/SK_Hazmat
+/Game/Backrooms/Meshes/SM_Camcorder
+/Game/Backrooms/Meshes/SM_Camcorder_FP
+/Game/Backrooms/Meshes/SM_Flashlight_FP
+
+# Entites (modeles proteges : Bacteria, Hound, Skin-Stealer, Faceling, Partygoer, Deathmoth, Smiler, Clump, Wretch)
+/Game/Backrooms/Meshes/SM_Bacteria_Torso
+/Game/Backrooms/Meshes/SK_Hound
+/Game/Backrooms/Meshes/SK_HoundLite
+/Game/Backrooms/Meshes/SK_SkinStealer
+/Game/Backrooms/Meshes/SK_Faceling
+/Game/Backrooms/Meshes/SK_Partygoer
+/Game/Backrooms/Meshes/SM_PartygoerET_Balloon
+/Game/Backrooms/Meshes/SM_Deathmoth_Body
+/Game/Backrooms/Meshes/SM_SmilerET
+/Game/Backrooms/Meshes/SK_Clump
+/Game/Backrooms/Meshes/SK_Wretch
+
+# Objets ramassables
+/Game/Backrooms/Meshes/SM_AlmondWater
+/Game/Backrooms/Meshes/SM_Bandage
+/Game/Backrooms/Meshes/SM_Battery
+/Game/Backrooms/Meshes/SM_VHSTape
+
+# Decor du Niveau 0 et des Poolrooms
+/Game/Backrooms/Meshes/SM_LightPanel
+/Game/Backrooms/Meshes/SM_PoolSkylight
+/Game/Backrooms/Textures/T_Caustics
+
+# Sons et icones de l'interface
+/Game/Backrooms/Sounds/S_Amb_L0
+/Game/Backrooms/Sounds/S_Amb_Pool
+/Game/Backrooms/UI/I_AlmondWater
+/Game/Backrooms/UI/I_Camcorder

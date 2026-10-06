@@ -42,9 +42,13 @@ if ($Platform -eq "Linux" -and -not $env:LINUX_MULTIARCH_ROOT) {
 if ($LASTEXITCODE -ne 0) { throw "Echec de BuildCookRun ($Platform $Config)" }
 
 $Commit = (git -C $ProjectDir rev-parse HEAD) 2>$null
+# v4.10 : un paquet construit avec des modifications non validees ne correspond pas a son commit (make_steam_vdf.py le refuse)
+$Dirty = (git -C $ProjectDir status --porcelain --untracked-files=no -- Source Config Content Tools *.uproject) 2>$null
+$Tree = if ($Dirty) { "modifie" } else { "propre" }
 @(
 	"projet : Backrooms",
 	"commit : $Commit",
+	"arbre : $Tree",
 	"date : $((Get-Date).ToUniversalTime().ToString('s'))Z",
 	"plateforme : $Platform",
 	"configuration : $Config",
