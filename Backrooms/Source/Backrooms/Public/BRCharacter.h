@@ -93,6 +93,11 @@ public:
 	/** Utilise le premier objet de ce type (touches B = eau, R = piles) */
 	void QuickUse(EBRItem Item);
 	void SetInputLocked(bool bLocked) { bInputLocked = bLocked; }
+	/** v4.10 : ce joueur charge un niveau (preparation, construction, arrivee) : les entites l'ignorent. Le joueur local le
+	 *  dit au serveur ; un joueur qui rejoint la partie l'est des son apparition. Sans nouvelle apres 90 s, le serveur
+	 *  ne l'ignore plus. */
+	void SetLevelLoading(bool bLoading);
+	bool IsLevelLoading() const;
 	/** Touche Interagir maintenue (relever un coequipier a terre) */
 	void SetInteractHeld(bool bHeld) { bInteractHeld = bHeld; }
 	/** Reanimation d'un coequipier en cours (0..1) */
@@ -153,6 +158,20 @@ public:
 
 	FBRItemSlot* GetSlot(EBRSlotGroup Group, int32 Index);
 	int32 CountItem(EBRItem Item) const;
+	/** v4.10 : retire Count exemplaires (poches, sac, equipement) ; retourne le nombre retire */
+	int32 RemoveItem(EBRItem Item, int32 Count = 1);
+	/** v4.10 : soins. Delai minimal entre deux soins par objet, le meme pour le joueur et le serveur (le serveur accepte
+	 *  HealServerTolerance de moins, pour la gigue du reseau) */
+	static constexpr float HealCooldown = 0.8f;
+	static constexpr float HealServerTolerance = 0.25f;
+	/** v4.10 (tests) : demande de soin en attente de la reponse du serveur ; soins acceptes et refuses (serveur) */
+	bool IsHealPending() const { return PendingHealRequest != 0; }
+	int32 ServerHealsAccepted = 0;
+	int32 ServerHealsRefused = 0;
+	/** v4.10 (tests) : objets de soin connus du serveur pour ce joueur (-1 : pas encore declares) */
+	int32 GetServerHealStock(EBRItem Item) const;
+	/** v4.10 : serveur : objet de soin ramasse par ce joueur (pickup confirme) */
+	void CreditHealItem(EBRItem Item, int32 Count);
 	/** Ajoute un objet (poches puis sac). Retourne le nombre NON ajoute (0 = tout est rentre). */
 	int32 AddItem(EBRItem Item, int32 Count = 1);
 	/** Deplace / empile / echange le contenu de deux cases (glisser-deposer) */
@@ -288,6 +307,13 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetState(uint8 Flags, uint8 Hand, uint8 Lamp);
 
+	/** v4.10 : chargement d'un niveau (voir SetLevelLoading) */
+	UPROPERTY(Replicated)
+	bool bLevelLoading = false;
+	float LevelLoadingSince = 0.f;
+	UFUNCTION(Server, Reliable)
+	void ServerSetLevelLoading(bool bLoading);
+
 	/** v4.7 : le proprietaire signale sa mort et sa cause ; le serveur la verifie (position, eau, fosse) puis la replique */
 	UFUNCTION(Server, Reliable)
 	void ServerReportDeath(uint8 Cause);
@@ -301,15 +327,23 @@ protected:
 	UFUNCTION(Client, Reliable)
 	void ClientHitFeedback(float Damage, float SanityDamage, AActor* Source, int8 SourceKind, float NewHealth, uint16 Serial, bool bLethal);
 
-	/** v4.8 : le proprietaire envoie sa sante (soins, noyade, folie, recuperation) au serveur, avec le dernier coup recu ;
-	 *  un envoi anterieur au dernier coup est ignore (il effacerait ce coup), une hausse est plafonnee */
+	/** v4.8 : le proprietaire envoie sa sante (noyade, folie, recuperation) au serveur, avec le dernier coup et (v4.10) le
+	 *  dernier soin recus ; un envoi anterieur au dernier coup ou au dernier soin est ignore (il l'effacerait), une hausse est
+	 *  plafonnee */
 	UFUNCTION(Server, Unreliable, WithValidation)
-	void ServerSyncVitals(float InHealth, uint16 AckSerial);
+	void ServerSyncVitals(float InHealth, uint16 AckSerial, uint16 AckHeal);
 
-	/** v4.8 : soin par un objet (eau d'amande, bandage) : le serveur ajoute le soin connu de l'objet, au plus une fois par
-	 *  seconde */
+	/** v4.10 : soin par un objet (eau d'amande, bandage) : demande numerotee. Le serveur verifie l'etat (vivant, pas en
+	 *  train de mourir), le delai entre deux soins et la possession (objets de soin declares a l'arrivee, plus ceux ramasses
+	 *  depuis), puis applique le soin a la sante officielle et repond. L'objet n'est consomme qu'a l'acceptation. */
 	UFUNCTION(Server, Reliable, WithValidation)
-	void ServerUseHeal(uint8 Item);
+	void ServerRequestHeal(uint8 Item, uint16 RequestId);
+	/** v4.10 : reponse du serveur : acceptee (sante officielle et numero du soin) ou refusee (raison : EBRHealRefusal) */
+	UFUNCTION(Client, Reliable)
+	void ClientHealResult(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Serial, uint8 Reason);
+	/** v4.10 : le proprietaire declare ses objets de soin au serveur (arrivee dans un niveau) */
+	UFUNCTION(Server, Reliable)
+	void ServerDeclareHealStock(uint8 Water, uint8 Bandages);
 
 	/** v4.8 : reveil refuse par le serveur (trop tot pour cette cause) : le joueur reste a terre le temps restant */
 	UFUNCTION(Client, Reliable)
@@ -392,6 +426,26 @@ private:
 	/** Serveur : dernier envoi de sante accepte et dernier soin par objet */
 	float ServerLastVitalsTime = -100.f;
 	float ServerLastHealTime = -100.f;
+	/** v4.10 : soins. Serveur : numero du dernier soin applique, objets de soin connus (declares + ramasses - utilises),
+	 *  derniere demande traitee (une demande renvoyee n'est jamais appliquee deux fois). Proprietaire : dernier soin recu,
+	 *  demande en attente de reponse, dernier soin local (meme delai que le serveur). */
+	uint16 HealSerial = 0;
+	uint16 AckHealSerial = 0;
+	/** v4.10 : derniere sante officielle recue du serveur (coup ou soin) : tests de coherence */
+	float LastServerHealth = -1.f;
+	TMap<uint8, int32> ServerHealStock;
+	bool bServerHealStockKnown = false;
+	uint16 ServerLastHealRequest = 0;
+	bool bServerLastHealAccepted = false;
+	uint8 ServerLastHealReason = 0;
+	uint16 NextHealRequest = 0;
+	uint16 PendingHealRequest = 0;
+	float PendingHealSince = 0.f;
+	float LocalLastHealTime = -100.f;
+	/** Soin accepte : objet consomme, sante officielle, effets */
+	void ApplyHealAccepted(EBRItem Item, float NewHealth);
+	/** Message d'un soin refuse (rien n'est consomme) */
+	void NotifyHealRefused(uint8 Reason);
 	/** Proprietaire : envoi periodique de la sante */
 	float VitalsSyncTimer = 0.f;
 	float LastSentHealth = 100.f;

@@ -246,7 +246,7 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath, uint32 InSe
 		}
 		return;
 	}
-	if (TransState == ETrans::FadingOut)
+	if (TransState == ETrans::FadingOut || TransState == ETrans::Preparing)
 	{
 		return;
 	}
@@ -276,13 +276,38 @@ void ABRWorld::MulticastTransition_Implementation(int32 TargetLevel, bool bFromD
 	BeginTransition(TargetLevel, bFromDeath);
 }
 
+void ABRWorld::StartPreparing(int32 Level)
+{
+	PendingLevel = Level;
+	++PrepSerial;
+	PrepStart = FPlatformTime::Seconds();
+	PrepTime = 0.f;
+	PrepProgress = 0.f;
+	UBRAssets::PrepareLevel(Level, PrepSerial);
+	SetLocalLoading(true);
+}
+
+void ABRWorld::SetLocalLoading(bool bLoading)
+{
+	if (ABRCharacter* P = GetPlayer())
+	{
+		P->SetLevelLoading(bLoading);
+	}
+}
+
 void ABRWorld::BeginTransition(int32 TargetLevel, bool bFromDeath)
 {
-	if (TransState == ETrans::FadingOut)
+	if (TransState == ETrans::FadingOut || TransState == ETrans::Preparing)
 	{
+		// v4.10 : une destination differente remplace la demande en cours (elle ne sera jamais finalisee)
+		if (TargetLevel != PendingLevel && BRLevels::Exists(TargetLevel))
+		{
+			StartPreparing(TargetLevel);
+		}
 		return;
 	}
-	PendingLevel = TargetLevel;
+	// v4.10 : la destination est connue : ses ressources indispensables se chargent pendant le fondu au noir
+	StartPreparing(TargetLevel);
 	bPendingDeath = bFromDeath;
 	UBRAssets::bCountSyncLoads = false; // v4.8 : chargements de la transition, derriere l'ecran noir : pas comptes
 	TransState = ETrans::FadingOut;
@@ -300,6 +325,33 @@ void ABRWorld::BeginTransition(int32 TargetLevel, bool bFromDeath)
 	{
 		P->SetInputLocked(true);
 	}
+}
+
+bool ABRWorld::FinishFadeOut()
+{
+	if (HasAuthority())
+	{
+		const uint32 ForcedSeed = PendingSeed;
+		PendingSeed = 0;
+		LoadLevelNow(PendingLevel, ForcedSeed);
+	}
+	else if (NetLevel.Serial != LoadedSerial)
+	{
+		LoadNetLevel();
+	}
+	else if (TransTimer < 12.f)
+	{
+		return false; // le serveur n'a pas encore choisi le niveau : on reste dans le noir
+	}
+	ABRCharacter* P = GetPlayer();
+	if (P && (bPendingDeath || (IsNetGame() && P->IsDead())))
+	{
+		P->ResetStats();
+	}
+	bJoinPreparing = false; // une arrivee dans la partie peut aussi se terminer ici
+	TransState = ETrans::FadingIn;
+	TransTimer = 0.f;
+	return true;
 }
 
 void ABRWorld::HandlePlayerDeath(EBRDeathCause Cause)
@@ -402,6 +454,11 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	Current = &BRLevels::Get(LevelNumber);
 	// v4.9 : ressources du niveau et de ses voisins prechargees, celles des autres niveaux relachees
 	UBRAssets::PreloadForLevel(LevelNumber);
+	// v4.10 : les caches ne gardent plus les ressources des autres niveaux (le ramasse-miettes peut les liberer)
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		A->TrimCaches(LevelNumber);
+	}
 	Seed = InSeed != 0 ? InSeed : (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17));
 	// v4.5 : -BRSeed=<n> : meme disposition a chaque lancement (captures avant / apres comparables, tests automatiques)
 	uint32 FixedSeed = 0;
@@ -524,9 +581,12 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 
 	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title.ToString(), Seed);
 
+	// v4.10 : les chargements synchrones de la construction sont comptes (ressources non preparees pendant le fondu)
+	UBRAssets::bCountBuildLoads = true;
 	ApplyEnvironment();
 	UpdateStreaming(true);
 	PlacePlayer(bFirstClientLoad);
+	UBRAssets::bCountBuildLoads = false;
 	// Sauvegarde de la partie en cours : ce niveau est desormais explore
 	if (ABRPlayerController* PC = LocalPC())
 	{
@@ -551,14 +611,33 @@ bool ABRWorld::SyncNetLevel()
 	}
 	if (!bLevelReady)
 	{
-		// Arrivee dans la partie : on construit tout de suite le niveau du groupe
+		// Arrivee dans la partie. v4.10 : les ressources indispensables du niveau du groupe sont d'abord preparees (ecran
+		// sobre), puis le niveau est construit. La graine et le niveau restent ceux du serveur ; les autres joueurs ne
+		// l'attendent pas.
+		if (!bJoinPreparing || PendingLevel != NetLevel.Level)
+		{
+			bJoinPreparing = true;
+			StartPreparing(NetLevel.Level);
+		}
+		PrepTime = static_cast<float>(FPlatformTime::Seconds() - PrepStart);
+		const bool bReady = UBRAssets::IsLevelPrepared(PrepSerial, &PrepProgress);
+		if (!bReady && PrepTime < PrepareMaxSeconds)
+		{
+			TransState = ETrans::Preparing;
+			return false;
+		}
+		if (!bReady)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("Preparation du Niveau %d incomplete apres %.0f s : construction avec les ressources disponibles"), PendingLevel, PrepTime);
+		}
+		bJoinPreparing = false;
 		LoadNetLevel();
 		TransState = ETrans::FadingIn;
 		TransTimer = 0.f;
 		Fade = 1.f;
 		return true;
 	}
-	if (TransState != ETrans::FadingOut)
+	if (TransState != ETrans::FadingOut && TransState != ETrans::Preparing)
 	{
 		BeginTransition(NetLevel.Level, false); // l'annonce a ete manquee : on suit quand meme
 	}
@@ -1107,29 +1186,40 @@ void ABRWorld::Tick(float DeltaSeconds)
 		Glitch = Fade;
 		if (TransTimer >= 1.45f)
 		{
-			if (HasAuthority())
+			// v4.10 : ressources indispensables pas encore en memoire : ecran de preparation (plutot qu'un chargement
+			// bloquant au premier usage pendant la construction du niveau)
+			PrepTime = static_cast<float>(FPlatformTime::Seconds() - PrepStart);
+			if (!UBRAssets::IsLevelPrepared(PrepSerial, &PrepProgress))
 			{
-				const uint32 ForcedSeed = PendingSeed;
-				PendingSeed = 0;
-				LoadLevelNow(PendingLevel, ForcedSeed);
+				TransState = ETrans::Preparing;
+				Glitch = 0.f;
+				break;
 			}
-			else if (NetLevel.Serial != LoadedSerial)
-			{
-				LoadNetLevel();
-			}
-			else if (TransTimer < 12.f)
-			{
-				break; // le serveur n'a pas encore choisi le niveau : on reste dans le noir
-			}
-			ABRCharacter* P = GetPlayer();
-			if (P && (bPendingDeath || (IsNetGame() && P->IsDead())))
-			{
-				P->ResetStats();
-			}
-			TransState = ETrans::FadingIn;
-			TransTimer = 0.f;
+			FinishFadeOut();
 		}
 		break;
+	case ETrans::Preparing:
+	{
+		TransTimer += Dt;
+		Fade = 1.f;
+		Glitch = 0.f;
+		PrepTime = static_cast<float>(FPlatformTime::Seconds() - PrepStart);
+		const bool bReady = UBRAssets::IsLevelPrepared(PrepSerial, &PrepProgress);
+		if (bReady || PrepTime >= PrepareMaxSeconds)
+		{
+			if (!bReady)
+			{
+				// Jamais d'ecran noir indefini : on construit avec ce qui est pret (les ressources manquantes se chargeront au
+				// premier usage) et on le dit dans le journal
+				TArray<FString> Missing;
+				UBRAssets::IsLevelPrepared(PrepSerial, nullptr, &Missing);
+				UE_LOG(LogBackrooms, Warning, TEXT("Preparation du Niveau %d incomplete apres %.0f s (%s) : construction avec les ressources disponibles"),
+					PendingLevel, PrepTime, *FString::Join(Missing, TEXT(", ")));
+			}
+			FinishFadeOut();
+		}
+		break;
+	}
 	case ETrans::FadingIn:
 		if (TransTimer <= 0.f)
 		{
@@ -1161,6 +1251,8 @@ void ABRWorld::Tick(float DeltaSeconds)
 			{
 				P->SetInputLocked(false);
 			}
+			// v4.10 : sol, collisions et shaders prets : les entites peuvent de nouveau s'interesser a ce joueur
+			SetLocalLoading(false);
 		}
 		break;
 	default:
@@ -2204,7 +2296,9 @@ void ABRWorld::ForceBlackout()
 	{
 		BlackoutTimer = 0.f;
 		BlackoutPhase = EBlackout::None;
-		// Le prochain UpdateBlackout declenchera la coupure
+		// v4.10 : une coupure demandee n'est pas repoussee par la regle des poursuites (avant : repoussee de 8 s, la
+		// commande et le test de coupure echouaient juste apres l'apparition d'une entite)
+		bBlackoutForced = true;
 		UpdateBlackout(0.f);
 	}
 }
@@ -2230,12 +2324,13 @@ void ABRWorld::UpdateBlackout(float Dt)
 	{
 	case EBlackout::None:
 		// v4.7 : une coupure ne commence ni pendant une poursuite ni pendant le repit qui suit
-		if (bAuth && BlackoutTimer <= 0.f && (GetTension() == ETension::Chase || GetTension() == ETension::Recovery))
+		if (bAuth && BlackoutTimer <= 0.f && !bBlackoutForced && (GetTension() == ETension::Chase || GetTension() == ETension::Recovery))
 		{
 			BlackoutTimer = 8.f;
 		}
 		if (bAuth && BlackoutTimer <= 0.f)
 		{
+			bBlackoutForced = false;
 			EnterBlackoutPhase(static_cast<uint8>(EBlackout::Failing));
 		}
 		break;

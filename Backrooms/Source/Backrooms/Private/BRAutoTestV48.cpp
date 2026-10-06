@@ -451,8 +451,17 @@ void ABRAutoTest::AddV48Steps()
 			StartMeasure();
 		}
 		const float T = StepTime - SprintT0;
-		// Vitesse de sprint en ligne droite : la generation doit suivre sans a-coups
+		// Vitesse de sprint en ligne droite : la generation doit suivre sans a-coups. v4.10 : le Niveau 0 est fini depuis la
+		// v4.3 (BoundsChunks) : la course fait des allers-retours entre les murs d'enceinte. Avant, elle sortait du niveau au
+		// bout d'une dizaine de secondes et comptait comme "sans sol" toutes les images passees dehors (environ la moitie).
 		FVector P = TestStart + FVector(0.f, 470.f * T, 0.f);
+		if (W->Def().BoundsChunks > 0)
+		{
+			const float Half = W->Def().BoundsChunks * W->Def().ChunkCells * W->CellSize() - 2.f * W->CellSize();
+			const float Span = 2.f * Half;
+			const float U = FMath::Fmod(static_cast<float>(TestStart.Y) + Half + 470.f * T, 2.f * Span);
+			P.Y = -Half + (U <= Span ? U : 2.f * Span - U);
+		}
 		P.Z = C->GetSimpleCollisionHalfHeight() + 5.f;
 		C->SetActorLocation(P, false, nullptr, ETeleportType::TeleportPhysics);
 		++SprintFrames;

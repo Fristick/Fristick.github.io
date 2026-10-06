@@ -215,7 +215,16 @@ namespace BRLoc
 	bool HasTranslation(const TCHAR* Key)
 	{
 		// Une cle est traduite quand une ressource .locres de la langue courante l'a fournie
-		return !FTextLocalizationManager::Get().GetLocResID(FTextKey(TEXT("BR")), FTextKey(Key)).IsEmpty();
+#if WITH_EDITORONLY_DATA
+		// Unreal 5.8 : l'identifiant de la ressource est rendu par un parametre de sortie
+		FString LocResId;
+		return FTextLocalizationManager::Get().GetLocResID(FTextKey(TEXT("BR")), FTextKey(Key), LocResId) && !LocResId.IsEmpty();
+#else
+		// v4.10 : GetLocResID n'existe qu'avec les donnees de l'editeur : le jeu empaquete ne compilait pas (Shipping,
+		// Development jeu). Sans elles, la table ne garde pas l'origine d'un texte : une cle presente dans la table de la
+		// langue courante est comptee traduite
+		return FTextLocalizationManager::Get().FindDisplayString(FTextKey(TEXT("BR")), FTextKey(Key)).IsValid();
+#endif
 	}
 
 	int32 KeyCount()

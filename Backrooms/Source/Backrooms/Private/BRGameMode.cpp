@@ -52,7 +52,17 @@ APawn* ABRGameMode::SpawnDefaultPawnAtTransform_Implementation(AController* NewP
 	Params.Instigator = GetInstigator();
 	Params.ObjectFlags |= RF_Transient;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	return World->SpawnActor<APawn>(PawnClass, FTransform(SpawnTransform.Rotator(), Loc), Params);
+	APawn* Pawn = World->SpawnActor<APawn>(PawnClass, FTransform(SpawnTransform.Rotator(), Loc), Params);
+	// v4.10 : un joueur qui rejoint la partie prepare puis construit le niveau chez lui : les entites l'ignorent jusqu'a ce
+	// qu'il signale etre pret (ABRWorld::SetLocalLoading)
+	if (ABRCharacter* C = Cast<ABRCharacter>(Pawn))
+	{
+		if (NewPlayer && !NewPlayer->IsLocalController())
+		{
+			C->SetLevelLoading(true);
+		}
+	}
+	return Pawn;
 }
 
 void ABRGameMode::StartPlay()

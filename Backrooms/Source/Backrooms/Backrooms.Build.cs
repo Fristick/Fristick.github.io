@@ -21,10 +21,12 @@ public class Backrooms : ModuleRules
 		// RHI : envoi de la simulation de l'eau a sa texture (BRWaterSim) ; RenderCore : temps par image (test automatique)
 		// v4.9 : dependances directes declarees (et non obtenues par un autre module) : AssetRegistry (prechargement,
 		// BRAssets.cpp), ApplicationCore (modes de fenetre, BRDisplay.cpp)
+		// v4.10 : Json (rapport structure du test automatique, lu par un lanceur externe)
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"ApplicationCore",
 			"AssetRegistry",
+			"Json",
 			"ImageCore",
 			"ImageWrapper",
 			"RenderCore",

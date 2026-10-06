@@ -985,17 +985,31 @@ void ABRAutoTest::AddV49Steps()
 		{
 			return false;
 		}
+		// v4.10 : un prechargement inacheve en 30 s est un echec, pas une etape qu'on passe
+		if (!UBRAssets::IsPreloadDone())
+		{
+			Note(TEXT("prechargement du Niveau 0 non termine en 30 s"), true);
+		}
 		TestSets = UBRAssets::PreloadedSetNames();
 		const int32 Catalog = UBRAssets::PreloadCatalogCount();
 		if (Catalog == 0)
 		{
-			Note(TEXT("prechargement : aucune ressource importee (editeur sans import) : ensembles non verifies"));
+			// v4.10 : catalogue vide : jamais presente comme une reussite
+			Skip(TEXT("prechargement : catalogue vide (aucune ressource importee) : ensembles non verifies"));
 			return true;
 		}
 		const bool bAll = FParse::Param(FCommandLine::Get(), TEXT("BRPreloadAll"));
-		const bool bOk = TestSets.Contains(TEXT("common")) && TestSets.Contains(TEXT("entity:Smiler")) && (bAll || TestSets.Num() < Catalog);
-		Note(FString::Printf(TEXT("prechargement au Niveau 0 : %d ensemble(s) sur %d au catalogue (attendu : commun, Smiler, textures du niveau et des voisins) : %s"), TestSets.Num(), Catalog,
-			*FString::Join(TestSets, TEXT(", ")).Left(500)), !bOk);
+		// v4.10 : cle construite par la meme fonction que le catalogue (avant : "entity:Smiler" ici, "entity:0" dans le catalogue)
+		const FString SmilerKey = UBRAssets::EntitySetKey(EBREntityKind::Smiler);
+		const int32 SmilerSize = UBRAssets::CatalogSetSize(SmilerKey);
+		if (SmilerSize == 0)
+		{
+			Note(FString::Printf(TEXT("ensemble %s vide au catalogue : modeles du Smiler absents"), *SmilerKey), true);
+		}
+		const bool bOk = TestSets.Contains(TEXT("common")) && TestSets.Contains(SmilerKey) && (bAll || TestSets.Num() < Catalog)
+			&& UBRAssets::ResidentCount(SmilerKey) == SmilerSize;
+		Note(FString::Printf(TEXT("prechargement au Niveau 0 : %d ensemble(s) sur %d au catalogue (attendu : commun, Smiler, textures du niveau et des voisins), Smiler %d/%d en memoire : %s"),
+			TestSets.Num(), Catalog, UBRAssets::ResidentCount(SmilerKey), SmilerSize, *FString::Join(TestSets, TEXT(", ")).Left(500)), !bOk);
 		for (const FString& Line : UBRAssets::PreloadReport())
 		{
 			Note(TEXT("  ") + Line);
@@ -1022,8 +1036,17 @@ void ABRAutoTest::AddV49Steps()
 		{
 			Note(FString::Printf(TEXT("changement de niveau inventaire ouvert : inventaire ferme a l'arrivee %s"), YesNo(!PC->IsInventoryOpen())), PC->IsInventoryOpen());
 		}
+		if (!UBRAssets::IsPreloadDone())
+		{
+			Note(TEXT("prechargement du Niveau 37 non termine en 30 s"), true);
+		}
 		const TArray<FString> Sets = UBRAssets::PreloadedSetNames();
-		const bool bOk = UBRAssets::PreloadCatalogCount() == 0 || Sets.Contains(TEXT("common"));
+		if (UBRAssets::PreloadCatalogCount() == 0)
+		{
+			Skip(TEXT("prechargement au Niveau 37 : catalogue vide"));
+			return true;
+		}
+		const bool bOk = Sets.Contains(TEXT("common"));
 		Note(FString::Printf(TEXT("prechargement au Niveau 37 : %d ensemble(s) : %s"), Sets.Num(), *FString::Join(Sets, TEXT(", ")).Left(500)), !bOk);
 		for (const FString& Line : UBRAssets::PreloadReport())
 		{
@@ -1039,9 +1062,16 @@ void ABRAutoTest::AddV49Steps()
 			return false;
 		}
 		const TArray<FString> Sets = UBRAssets::PreloadedSetNames();
+		if (UBRAssets::PreloadCatalogCount() == 0)
+		{
+			Skip(TEXT("retour au Niveau 0 : catalogue vide"));
+			return true;
+		}
 		// Les ensembles du Niveau 37 sont relaches : memes ensembles qu'au premier passage (pas d'accumulation)
-		const bool bOk = UBRAssets::PreloadCatalogCount() == 0 || Sets == TestSets;
+		const bool bOk = Sets == TestSets;
 		Note(FString::Printf(TEXT("retour au Niveau 0 : %d ensemble(s) (premier passage : %d) : memes ensembles %s"), Sets.Num(), TestSets.Num(), YesNo(Sets == TestSets)), !bOk);
+		// Objets retenus apres le retour (pas seulement les handles) : test v4.10 (BRAutoTestV410.cpp), sur un niveau dont des
+		// ressources ne servent ni au Niveau 0 ni a ses voisins (celles du Niveau 37 y sont toutes prechargees)
 		return true;
 	});
 

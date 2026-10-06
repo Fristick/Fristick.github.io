@@ -209,6 +209,10 @@ int32 UBRAssets::SyncLoadsInGame = 0;
 float UBRAssets::MaxSyncLoadMs = 0.f;
 TArray<FString> UBRAssets::SyncLoadNames;
 bool UBRAssets::bCountSyncLoads = false;
+bool UBRAssets::bCountBuildLoads = false;
+int32 UBRAssets::SyncLoadsInBuild = 0;
+TArray<FString> UBRAssets::SyncLoadBuildNames;
+double UBRAssets::TestPrepareStallUntil = 0.0;
 int32 UBRAssets::RawTextureLoads = 0;
 
 namespace BRPreload
@@ -244,8 +248,10 @@ namespace
 	/** Ensembles liberes depuis le lancement (rapport) */
 	int32 GPreloadReleased = 0;
 
-	/** Ressources de /Game/Backrooms classees par ensemble : "common", "entity:<n>" (nom de la creature dans le nom de la
-	 *  ressource : modeles, textures, sons, jumpscare), "tex:<T_...>" (texture de surface d'un niveau et ses cartes _N, _R) */
+	/** Ressources de /Game/Backrooms classees par ensemble (cles : UBRAssets::EntitySetKey, SurfaceSetKey...) :
+	 *  "common", "entity:<Nom>" (nom de la creature dans le nom de la ressource : modeles, textures, sons, jumpscare),
+	 *  "tex:<T_...>" (texture de surface d'un niveau et ses cartes _N, _R), "props:<type>" et "fixture:<type>" (decors
+	 *  propres a certains niveaux, d'apres leurs usages dans ABRChunk et BRInteractables) */
 	TMap<FString, TArray<FSoftObjectPath>>& Catalog()
 	{
 		static TMap<FString, TArray<FSoftObjectPath>> Groups;
@@ -255,6 +261,78 @@ namespace
 	/** Index = EBREntityKind */
 	const TCHAR* const EntityTokens[] = { TEXT("Smiler"), TEXT("Hound"), TEXT("Faceling"), TEXT("SkinStealer"), TEXT("Deathmoth"), TEXT("Wretch"),
 		TEXT("Partygoer"), TEXT("Clump"), TEXT("Bacteria") };
+	static_assert(UE_ARRAY_COUNT(EntityTokens) == static_cast<int32>(EBREntityKind::Count), "Un nom par creature");
+
+	/** v4.10 : decors utilises seulement par certains niveaux (memes noms que dans ABRChunk et BRInteractables). Le reste
+	 *  (lampes, plinthes, objets, joueur, interface, sons communs) est utilise partout et reste dans "common". */
+	const TMap<FString, FString>& PropAssets()
+	{
+		static const TMap<FString, FString> Map = {
+			{ TEXT("SM_Crate"), TEXT("props:Warehouse") },
+			{ TEXT("SM_ElectricBox"), TEXT("props:Electrical") },
+			{ TEXT("SM_Desk"), TEXT("props:Office") },
+			{ TEXT("SM_OfficeChair"), TEXT("props:Office") },
+			{ TEXT("SM_OfficeChairET"), TEXT("props:Office") },
+			{ TEXT("SM_OfficeDeskET"), TEXT("props:Office") },
+			{ TEXT("SM_Partition"), TEXT("props:Office") },
+			{ TEXT("SM_WaterCooler"), TEXT("props:Office") },
+			{ TEXT("SM_WaterCoolerET"), TEXT("props:Office") },
+			{ TEXT("SM_HotelDoor"), TEXT("props:Hotel") },
+			{ TEXT("SM_Rock"), TEXT("props:Caves") },
+			{ TEXT("SM_Wheat"), TEXT("props:Field") },
+			{ TEXT("SM_PowerPole"), TEXT("props:Field") },
+			{ TEXT("SM_Barn"), TEXT("props:Field") },
+			{ TEXT("SM_House"), TEXT("props:Suburbs") },
+			{ TEXT("SM_PoolSkylight"), TEXT("props:Pool") },
+			{ TEXT("SM_StreetLamp"), TEXT("fixture:StreetLamp") },
+			{ TEXT("SM_Sconce"), TEXT("fixture:Sconce") },
+			{ TEXT("SM_SkyPanel"), TEXT("fixture:SkyPanel") },
+		};
+		return Map;
+	}
+
+	/** Decors propres au niveau D (meme choix que la construction des chunks) */
+	void PropSetsForLevel(const FBRLevelDef& D, TArray<FString>& Out)
+	{
+		switch (D.Props)
+		{
+		case EBRProps::Warehouse: Out.AddUnique(TEXT("props:Warehouse")); break;
+		case EBRProps::Electrical: Out.AddUnique(TEXT("props:Electrical")); break;
+		case EBRProps::Office: Out.AddUnique(TEXT("props:Office")); break;
+		case EBRProps::Hotel: Out.AddUnique(TEXT("props:Hotel")); break;
+		case EBRProps::Caves: Out.AddUnique(TEXT("props:Caves")); break;
+		case EBRProps::Field: Out.AddUnique(TEXT("props:Field")); break;
+		case EBRProps::Suburbs: Out.AddUnique(TEXT("props:Suburbs")); break;
+		default: break;
+		}
+		if (D.Layout == EBRLayout::Caves)
+		{
+			Out.AddUnique(TEXT("props:Caves")); // rochers des cellules pleines
+		}
+		if (D.PoolChance > 0.f)
+		{
+			Out.AddUnique(TEXT("props:Pool"));
+		}
+		switch (D.Fixture)
+		{
+		case EBRFixture::StreetLamp: Out.AddUnique(TEXT("fixture:StreetLamp")); break;
+		case EBRFixture::Sconce: Out.AddUnique(TEXT("fixture:Sconce")); break;
+		case EBRFixture::SkyPanel: Out.AddUnique(TEXT("fixture:SkyPanel")); break;
+		default: break;
+		}
+		// Sorties dont le modele est un decor d'un autre type de niveau (grange, porte d'hotel)
+		for (const FBRExitDef& Exit : D.Exits)
+		{
+			if (Exit.Style == EBRExitStyle::Barn)
+			{
+				Out.AddUnique(TEXT("props:Field"));
+			}
+			else if (Exit.Style == EBRExitStyle::HotelDoor)
+			{
+				Out.AddUnique(TEXT("props:Hotel"));
+			}
+		}
+	}
 
 	TArray<FName> LevelSurfaceTextures(const FBRLevelDef& D)
 	{
@@ -269,24 +347,39 @@ namespace
 		return Out;
 	}
 
+	TSet<FString>& SurfaceTextureNames()
+	{
+		static TSet<FString> Names;
+		if (Names.Num() == 0)
+		{
+			for (const FBRLevelDef& D : BRLevels::All())
+			{
+				for (const FName& T : LevelSurfaceTextures(D))
+				{
+					Names.Add(T.ToString());
+				}
+			}
+		}
+		return Names;
+	}
+
 	void BuildCatalog()
 	{
 		if (GCatalogBuilt)
 		{
 			return;
 		}
-		GCatalogBuilt = true;
-		TSet<FString> SurfaceTex;
-		for (const FBRLevelDef& D : BRLevels::All())
-		{
-			for (const FName& T : LevelSurfaceTextures(D))
-			{
-				SurfaceTex.Add(T.ToString());
-			}
-		}
 		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		if (!FPlatformProperties::RequiresCookedData())
+		{
+			// v4.10 : jeu lance depuis l'editeur (-game, PIE) : le registre n'est rempli qu'en arriere-plan, et il etait encore
+			// vide ici. Resultat en v4.9 : catalogue vide, aucun ensemble precharge, et un test qui le presentait comme reussi.
+			// Dans un paquet, le registre est lu au demarrage (AssetRegistry.bin).
+			Registry.ScanPathsSynchronous({ TEXT("/Game/Backrooms") }, false);
+		}
 		TArray<FAssetData> Assets;
 		Registry.GetAssetsByPath(FName(TEXT("/Game/Backrooms")), Assets, true);
+		GCatalogBuilt = true;
 		static const FName Classes[] = { FName(TEXT("StaticMesh")), FName(TEXT("SkeletalMesh")), FName(TEXT("Texture2D")), FName(TEXT("SoundWave")),
 			FName(TEXT("Material")) };
 		for (const FAssetData& Data : Assets)
@@ -301,52 +394,11 @@ namespace
 			{
 				continue;
 			}
-			const FString Name = Data.AssetName.ToString();
-			FString Group = TEXT("common");
-			for (int32 k = 0; k < UE_ARRAY_COUNT(EntityTokens); ++k)
-			{
-				if (Name.Contains(EntityTokens[k], ESearchCase::CaseSensitive))
-				{
-					Group = FString::Printf(TEXT("entity:%d"), k);
-					break;
-				}
-			}
-			if (Group == TEXT("common") && Class == FName(TEXT("Texture2D")))
-			{
-				for (const FString& T : SurfaceTex)
-				{
-					if (Name == T || Name.StartsWith(T + TEXT("_"), ESearchCase::CaseSensitive))
-					{
-						Group = TEXT("tex:") + T;
-						break;
-					}
-				}
-			}
+			const FString Group = UBRAssets::SetKeyForAsset(Data.AssetName.ToString(), Class == FName(TEXT("Texture2D")));
 			Catalog().FindOrAdd(Group).Add(Data.GetSoftObjectPath());
 		}
-	}
-
-	/** Ensembles d'un niveau : textures de ses surfaces, creatures qu'il peut faire apparaitre */
-	void GroupsForLevel(int32 Level, TArray<FString>& Out)
-	{
-		if (!BRLevels::Exists(Level))
-		{
-			return;
-		}
-		const FBRLevelDef& D = BRLevels::Get(Level);
-		for (const FName& T : LevelSurfaceTextures(D))
-		{
-			Out.AddUnique(TEXT("tex:") + T.ToString());
-		}
-		for (const FBREntitySpawn& E : D.Entities)
-		{
-			Out.AddUnique(FString::Printf(TEXT("entity:%d"), static_cast<int32>(E.Kind)));
-		}
-		if (Level == 0)
-		{
-			// Smilers des coupures de courant du Niveau 0 (hors de la liste des apparitions)
-			Out.AddUnique(FString::Printf(TEXT("entity:%d"), static_cast<int32>(EBREntityKind::Smiler)));
-		}
+		UE_LOG(LogBackrooms, Log, TEXT("Prechargement : catalogue de %d ensemble(s), %d ressource(s) (%s)"), Catalog().Num(), Assets.Num(),
+			FPlatformProperties::RequiresCookedData() ? TEXT("registre du paquet") : TEXT("registre parcouru"));
 	}
 
 	void RequestSet(const FString& Key)
@@ -368,6 +420,20 @@ namespace
 		UE_LOG(LogBackrooms, Log, TEXT("Prechargement : ensemble %s (%d ressources)"), *Key, Set.Count);
 	}
 
+	void ReleaseSet(const FString& Key, int32 Level)
+	{
+		if (FPreloadSet* Set = PreloadSets().Find(Key))
+		{
+			if (Set->Handle.IsValid())
+			{
+				Set->Handle->ReleaseHandle();
+			}
+			PreloadSets().Remove(Key);
+			++GPreloadReleased;
+			UE_LOG(LogBackrooms, Log, TEXT("Prechargement : ensemble %s libere (Niveau %d)"), *Key, Level);
+		}
+	}
+
 	/** Duree et memoire de chaque ensemble, notees a la fin de son chargement */
 	void UpdatePreloadStats()
 	{
@@ -385,6 +451,133 @@ namespace
 			}
 		}
 	}
+
+	/** v4.10 : preparation en cours (une seule demande a la fois ; la plus recente remplace les autres) */
+	uint32 GPrepSerial = 0;
+	TArray<FString> GPrepSets;
+}
+
+FString UBRAssets::EntitySetKey(EBREntityKind Kind)
+{
+	const int32 Index = static_cast<int32>(Kind);
+	return Index >= 0 && Index < UE_ARRAY_COUNT(EntityTokens) ? FString(TEXT("entity:")) + EntityTokens[Index] : FString(TEXT("entity:?"));
+}
+
+FString UBRAssets::SurfaceSetKey(FName Texture)
+{
+	return TEXT("tex:") + Texture.ToString();
+}
+
+FString UBRAssets::SetKeyForAsset(const FString& Name, bool bTexture)
+{
+	for (int32 k = 0; k < UE_ARRAY_COUNT(EntityTokens); ++k)
+	{
+		if (Name.Contains(EntityTokens[k], ESearchCase::CaseSensitive))
+		{
+			return EntitySetKey(static_cast<EBREntityKind>(k));
+		}
+	}
+	if (const FString* Prop = PropAssets().Find(Name))
+	{
+		return *Prop;
+	}
+	if (bTexture)
+	{
+		// v4.10 : texture d'un style de modele (Rust : T_MetalPanel, Wood : T_Wood...) : les modeles communs (tuyaux, grilles,
+		// cadres des trappes) l'utilisent dans tous les niveaux. Avant : rangee avec les surfaces d'un seul niveau, elle
+		// n'etait pas prechargee ailleurs et restait en memoire hors de son ensemble
+		for (const FSlotStyle& S : SlotStyles())
+		{
+			const FString Tex(S.Tex);
+			if (Name == Tex || Name.StartsWith(Tex + TEXT("_"), ESearchCase::CaseSensitive) || (S.Normal && Name == S.Normal))
+			{
+				return TEXT("common");
+			}
+		}
+		for (const FString& T : SurfaceTextureNames())
+		{
+			if (Name == T || Name.StartsWith(T + TEXT("_"), ESearchCase::CaseSensitive))
+			{
+				return TEXT("tex:") + T;
+			}
+		}
+	}
+	return TEXT("common");
+}
+
+int32 UBRAssets::ResidentCount(const FString& Key)
+{
+	BuildCatalog();
+	int32 N = 0;
+	if (const TArray<FSoftObjectPath>* Paths = Catalog().Find(Key))
+	{
+		for (const FSoftObjectPath& P : *Paths)
+		{
+			N += P.ResolveObject() != nullptr ? 1 : 0;
+		}
+	}
+	return N;
+}
+
+int32 UBRAssets::CatalogSetSize(const FString& Key)
+{
+	BuildCatalog();
+	const TArray<FSoftObjectPath>* Paths = Catalog().Find(Key);
+	return Paths ? Paths->Num() : 0;
+}
+
+TArray<FString> UBRAssets::EssentialSetsForLevel(int32 Level)
+{
+	TArray<FString> Out;
+	Out.Add(TEXT("common"));
+	if (!BRLevels::Exists(Level))
+	{
+		return Out;
+	}
+	const FBRLevelDef& D = BRLevels::Get(Level);
+	for (const FName& T : LevelSurfaceTextures(D))
+	{
+		Out.AddUnique(SurfaceSetKey(T));
+	}
+	for (const FBREntitySpawn& E : D.Entities)
+	{
+		Out.AddUnique(EntitySetKey(E.Kind));
+	}
+	if (D.bPatrolEntity)
+	{
+		Out.AddUnique(EntitySetKey(D.PatrolKind));
+	}
+	if (Level == 0)
+	{
+		// Smilers des coupures de courant du Niveau 0 (hors de la liste des apparitions)
+		Out.AddUnique(EntitySetKey(EBREntityKind::Smiler));
+	}
+	PropSetsForLevel(D, Out);
+	return Out;
+}
+
+TArray<FString> UBRAssets::NeighborSetsForLevel(int32 Level)
+{
+	TArray<FString> Out;
+	if (!BRLevels::Exists(Level))
+	{
+		return Out;
+	}
+	const TArray<FString> Own = EssentialSetsForLevel(Level);
+	for (const FBRExitDef& Exit : BRLevels::Get(Level).Exits)
+	{
+		if (Exit.Target >= 0)
+		{
+			for (const FString& K : EssentialSetsForLevel(Exit.Target))
+			{
+				if (!Own.Contains(K))
+				{
+					Out.AddUnique(K);
+				}
+			}
+		}
+	}
+	return Out;
 }
 
 void UBRAssets::StartPreload()
@@ -400,7 +593,7 @@ void UBRAssets::StartPreload()
 	BuildCatalog();
 	if (Catalog().Num() == 0)
 	{
-		UE_LOG(LogBackrooms, Log, TEXT("Prechargement : aucune ressource importee (secours de l'editeur)"));
+		UE_LOG(LogBackrooms, Warning, TEXT("Prechargement : aucune ressource importee dans /Game/Backrooms (secours de l'editeur) : rien a precharger"));
 		return;
 	}
 	RequestSet(TEXT("common"));
@@ -415,6 +608,66 @@ void UBRAssets::StartPreload()
 	}
 }
 
+void UBRAssets::PrepareLevel(int32 Level, uint32 Serial)
+{
+	if (!GPreloadStarted)
+	{
+		StartPreload();
+	}
+	GPrepSerial = Serial;
+	GPrepSets = EssentialSetsForLevel(Level);
+	for (const FString& K : GPrepSets)
+	{
+		RequestSet(K);
+	}
+	UE_LOG(LogBackrooms, Log, TEXT("Preparation du Niveau %d (demande %u) : %s"), Level, Serial, *FString::Join(GPrepSets, TEXT(", ")));
+}
+
+bool UBRAssets::IsLevelPrepared(uint32 Serial, float* OutProgress, TArray<FString>* OutMissing)
+{
+	if (OutProgress)
+	{
+		*OutProgress = 0.f;
+	}
+	if (Serial != GPrepSerial)
+	{
+		return false; // demande remplacee : jamais finalisee
+	}
+	UpdatePreloadStats();
+	const bool bStalled = FPlatformTime::Seconds() < TestPrepareStallUntil;
+	float Done = 0.f;
+	int32 Total = 0;
+	bool bReady = true;
+	for (const FString& K : GPrepSets)
+	{
+		const FPreloadSet* Set = PreloadSets().Find(K);
+		if (!Set || !Set->Handle.IsValid())
+		{
+			continue; // ensemble vide au catalogue (rien a charger) ou relache
+		}
+		Total += Set->Count;
+		const bool bSetDone = Set->Handle->HasLoadCompleted() || Set->Handle->WasCanceled();
+		Done += bSetDone ? Set->Count : Set->Count * Set->Handle->GetProgress();
+		if (!bSetDone)
+		{
+			bReady = false;
+			if (OutMissing)
+			{
+				OutMissing->Add(K);
+			}
+		}
+	}
+	if (OutProgress)
+	{
+		*OutProgress = (Total > 0 ? Done / Total : 1.f) * (bStalled ? 0.5f : 1.f);
+	}
+	if (bStalled && OutMissing)
+	{
+		OutMissing->Add(TEXT("(test : preparation bloquee)"));
+	}
+	return bReady && !bStalled;
+}
+
 void UBRAssets::PreloadForLevel(int32 Level)
 {
 	if (!GPreloadStarted)
@@ -425,19 +678,12 @@ void UBRAssets::PreloadForLevel(int32 Level)
 	{
 		return;
 	}
-	// Le niveau courant et ceux ou menent ses sorties (une sortie au hasard n'est pas anticipee : chargement pendant le fondu)
-	TArray<FString> Wanted;
-	Wanted.Add(TEXT("common"));
-	GroupsForLevel(Level, Wanted);
-	if (BRLevels::Exists(Level))
+	// Indispensables du niveau, puis anticipation des niveaux ou menent ses sorties (une sortie au hasard n'est pas
+	// anticipee : elle est preparee pendant le fondu)
+	TArray<FString> Wanted = EssentialSetsForLevel(Level);
+	for (const FString& K : NeighborSetsForLevel(Level))
 	{
-		for (const FBRExitDef& Exit : BRLevels::Get(Level).Exits)
-		{
-			if (Exit.Target >= 0)
-			{
-				GroupsForLevel(Exit.Target, Wanted);
-			}
-		}
+		Wanted.AddUnique(K);
 	}
 	for (const FString& K : Wanted)
 	{
@@ -450,15 +696,72 @@ void UBRAssets::PreloadForLevel(int32 Level)
 	{
 		if (!Wanted.Contains(K))
 		{
-			if (const TSharedPtr<FStreamableHandle>& H = PreloadSets()[K].Handle; H.IsValid())
-			{
-				H->ReleaseHandle();
-			}
-			PreloadSets().Remove(K);
-			++GPreloadReleased;
-			UE_LOG(LogBackrooms, Log, TEXT("Prechargement : ensemble %s libere (Niveau %d)"), *K, Level);
+			ReleaseSet(K, Level);
 		}
 	}
+}
+
+void UBRAssets::TrimCaches(int32 Level)
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRPreloadAll")))
+	{
+		return;
+	}
+	TArray<FString> Wanted = EssentialSetsForLevel(Level);
+	for (const FString& K : NeighborSetsForLevel(Level))
+	{
+		Wanted.AddUnique(K);
+	}
+	// Ressources : cle "<dossier>/<nom>" (ou "Raw/<nom>", lecture directe de RawAssets dans l'editeur)
+	int32 Removed = 0;
+	for (auto It = Loaded.CreateIterator(); It; ++It)
+	{
+		const FString Key = It.Key().ToString();
+		FString Name = Key;
+		Key.Split(TEXT("/"), nullptr, &Name, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		const bool bTexture = Key.Contains(TEXT("/Textures/")) || Key.StartsWith(TEXT("Raw/"));
+		if (!Wanted.Contains(SetKeyForAsset(Name, bTexture)))
+		{
+			It.RemoveCurrent();
+			++Removed;
+		}
+	}
+	// Materiaux de surface ("W|<texture>|...") et d'eau ("Water|a|b|c|d|<texture>|...") des textures inutiles
+	int32 RemovedMats = 0;
+	for (auto It = MatCache.CreateIterator(); It; ++It)
+	{
+		TArray<FString> Parts;
+		It.Key().ParseIntoArray(Parts, TEXT("|"), false);
+		FString Texture;
+		if (Parts.Num() > 1 && Parts[0] == TEXT("W"))
+		{
+			Texture = Parts[1];
+		}
+		else if (Parts.Num() > 5 && Parts[0] == TEXT("Water"))
+		{
+			Texture = Parts[5];
+		}
+		else if (Parts.Num() > 1 && Parts[0] == TEXT("S"))
+		{
+			// v4.10 : materiaux des modeles ("S|<slot>|<teinte>") : texture du style (et ses cartes _N, _R). Avant : jamais
+			// retires, ils gardaient en memoire les textures des creatures et des decors des niveaux quittes
+			if (const FSlotStyle* Style = FindSlotStyle(Parts[1]))
+			{
+				Texture = Style->Tex;
+				if (Style->Normal && !Wanted.Contains(SetKeyForAsset(Style->Normal, true)))
+				{
+					Texture = Style->Normal;
+				}
+			}
+		}
+		if (!Texture.IsEmpty() && Texture != TEXT("None") && !Wanted.Contains(SetKeyForAsset(Texture, true)))
+		{
+			It.RemoveCurrent();
+			++RemovedMats;
+		}
+	}
+	UE_LOG(LogBackrooms, Log, TEXT("Caches : %d ressource(s) et %d materiau(x) d'autres niveaux retires (Niveau %d) ; restent %d et %d"), Removed,
+		RemovedMats, Level, Loaded.Num(), MatCache.Num());
 }
 
 TArray<FString> UBRAssets::PreloadedSetNames()
@@ -535,6 +838,17 @@ UObject* UBRAssets::LoadAsset(const TCHAR* Folder, FName Name, UClass* Class)
 	{
 		const double T0 = FPlatformTime::Seconds();
 		Obj = StaticLoadObject(Class, nullptr, *ObjectPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (Obj && bCountBuildLoads)
+		{
+			// v4.10 : construction d'un niveau : la ressource aurait du etre preparee pendant le fondu
+			const float Ms = static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+			++SyncLoadsInBuild;
+			if (SyncLoadBuildNames.Num() < 16)
+			{
+				SyncLoadBuildNames.Add(FString::Printf(TEXT("%s (%.1f ms)"), *N, Ms));
+			}
+			UE_LOG(LogBackrooms, Log, TEXT("Chargement synchrone pendant la construction du niveau : %s (%.1f ms)"), *PackageName, Ms);
+		}
 		if (Obj && bCountSyncLoads)
 		{
 			// Chargement synchrone pendant le jeu : une saccade possible, comptee pour le rapport

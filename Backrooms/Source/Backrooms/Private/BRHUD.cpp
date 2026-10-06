@@ -28,6 +28,7 @@
 #include "HAL/PlatformTime.h"
 #include "InputCoreTypes.h"
 #include "Internationalization/BreakIterator.h"
+#include "Internationalization/Culture.h"
 #include "Internationalization/Internationalization.h"
 #include "Kismet/GameplayStatics.h"
 #include "Styling/CoreStyle.h"
@@ -742,10 +743,44 @@ UTexture* ABRHUD::ItemIcon(EBRItem Item)
 // Primitives v4 : texte net (polices Slate), formes arrondies, degrades, halos
 // =====================================================================================================================
 
+bool ABRHUD::HasNarrowSpace(const FString& S)
+{
+	for (const TCHAR Ch : S)
+	{
+		if (Ch == 0x202F || Ch == 0x2009 || Ch == 0x2007 || Ch == 0x200A || Ch == 0x2008)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+FString ABRHUD::FontSafe(const FString& S)
+{
+	if (!HasNarrowSpace(S))
+	{
+		return S;
+	}
+	FString Out = S;
+	for (TCHAR& Ch : Out)
+	{
+		if (Ch == 0x202F || Ch == 0x2009 || Ch == 0x2007 || Ch == 0x200A || Ch == 0x2008)
+		{
+			Ch = 0x00A0;
+		}
+	}
+	return Out;
+}
+
 void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, float Size, EUiWeight Weight, EUiAlign Align, bool bShadow)
 {
 	if (S.IsEmpty() || C.A <= 0.004f || !Canvas)
 	{
+		return;
+	}
+	if (HasNarrowSpace(S))
+	{
+		TextF(FontSafe(S), X, Y, C, Size, Weight, Align, bShadow);
 		return;
 	}
 	const FSlateFontInfo Font = UiFontInfo(Size, static_cast<int32>(Weight), Ui());
@@ -825,6 +860,10 @@ float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor&
 
 FVector2f ABRHUD::TextSize(const FString& S, float Size, EUiWeight Weight) const
 {
+	if (HasNarrowSpace(S))
+	{
+		return TextSize(FontSafe(S), Size, Weight);
+	}
 	const FSlateFontInfo Font = UiFontInfo(Size, static_cast<int32>(Weight), Ui());
 	// GetFontMeasure() renvoie un TSharedPtr depuis Unreal 5.8
 	const TSharedPtr<FSlateFontMeasure> Measure = FEngineFontServices::IsInitialized() ? FEngineFontServices::Get().GetFontMeasure() : nullptr;
@@ -1138,7 +1177,7 @@ void ABRHUD::DrawHUD()
 			// celui de la partie : ni ses objets, ni ses jauges)
 			DrawInventory(PC, nullptr, W);
 		}
-		DrawMessages(Dt);
+		DrawMessages(Dt, PC->IsInventoryOpen());
 		DrawVideoConfirm(PC);
 		return;
 	}
@@ -1201,7 +1240,7 @@ void ABRHUD::DrawHUD()
 	{
 		DrawInventory(PC, C, W);
 	}
-	DrawMessages(Dt);
+	DrawMessages(Dt, bInv);
 	if (PC && PC->GetActiveSave() && PC->GetTimeSinceSave() < 3.f && !bInv)
 	{
 		DrawSaveIndicator(PC->GetTimeSinceSave());
@@ -1215,6 +1254,11 @@ void ABRHUD::DrawHUD()
 		if (W->GetFade() > 0.001f)
 		{
 			DrawRect(FLinearColor(0.f, 0.f, 0.f, W->GetFade()), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+		}
+		// v4.10 : preparation du niveau suivant (ressources indispensables) : ecran sobre, avancement, puis issue proposee
+		if (W->IsPreparing())
+		{
+			DrawPreparing(W);
 		}
 		// v4.8 : ecran noir tenu le temps de preparer les shaders (une fois par modele et par session)
 		if (W->GetShaderHold() > 0.6f)
@@ -1234,6 +1278,40 @@ void ABRHUD::DrawHUD()
 // =====================================================================================================================
 // Menu titre (v4.0) : logo, cartes animees, carrousel des niveaux, astuces
 // =====================================================================================================================
+
+FSlateFontInfo ABRHUD::GetUiFont(float Size, int32 Weight)
+{
+	return UiFontInfo(Size, Weight, 1.f);
+}
+
+void ABRHUD::DrawPreparing(const ABRWorld* W)
+{
+	// Rien pendant la premiere demi-seconde : une preparation courte ne fait pas clignoter de texte
+	const float T = W->GetPrepareTime();
+	if (T < 0.5f)
+	{
+		return;
+	}
+	const float U = Ui();
+	const float A = FMath::Clamp((T - 0.5f) / 0.4f, 0.f, 1.f);
+	const float CX = Canvas->ClipX * 0.5f;
+	const float Y = Canvas->ClipY * 0.80f;
+	const float P = FMath::Clamp(W->GetPrepareProgress(), 0.f, 1.f);
+	TextF(BRLoc::Fmt(NSLOCTEXT("BR", "Loading.PrepareLevel", "Pr\u00e9paration du niveau\u2026 {Percent} %"), { { TEXT("Percent"), BRLoc::Int(FMath::FloorToInt(P * 100.f)) } }),
+		CX, Y, FLinearColor(0.9f, 0.85f, 0.6f, 0.8f * A), 13.f, EUiWeight::Regular, EUiAlign::Center);
+	const float BW = FMath::Min(360.f * U, Canvas->ClipX * 0.6f);
+	const float BH = FMath::Max(2.f, 3.f * U);
+	const float BX = CX - BW * 0.5f;
+	const float BY = Y + 26.f * U;
+	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.12f * A), BX, BY, BW, BH);
+	DrawRect(FLinearColor(0.9f, 0.85f, 0.6f, 0.75f * A), BX, BY, BW * P, BH);
+	if (T >= ABRWorld::PrepareMenuDelay)
+	{
+		TextF(BRLoc::Fmt(NSLOCTEXT("BR", "Loading.PrepareSlow", "Le chargement prend plus de temps que pr\u00e9vu. {Key} : retour au menu principal."),
+			{ { TEXT("Key"), BRLoc::Arg(BRKeys::Tag(EBRAction::Pause)) } }), CX, BY + 18.f * U, FLinearColor(0.85f, 0.82f, 0.75f, 0.7f * A), 11.5f,
+			EUiWeight::Regular, EUiAlign::Center);
+	}
+}
 
 void ABRHUD::DrawContentWarning(float Y)
 {
@@ -1476,7 +1554,8 @@ void ABRHUD::DrawMenuFooter(ABRPlayerController* PC, float A)
 	const float U = Ui();
 	const float W = Canvas->ClipX;
 	const float H = Canvas->ClipY;
-	TextF(BR_STR(NSLOCTEXT("BR", "HUD.V45InspireBackroomsWiki", "v4.5   \u00b7   Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS")), W - 100.f * U, H - 34.f * U,
+	// v4.10 : numero de version hors du texte traduit (il restait a "v4.5" dans les 22 langues)
+	TextF(FString(BR_GAME_VERSION) + TEXT("   \u00b7   ") + BR_STR(NSLOCTEXT("BR", "HUD.InspireBackroomsWiki", "Inspir\u00e9 du Backrooms Wiki (CC BY-SA 3.0)   \u00b7   \u00a9 1992 THRESHOLD SYSTEMS")), W - 100.f * U, H - 34.f * U,
 		WithAlpha(InkDim, 0.55f * A), 9.5f, EUiWeight::Light, EUiAlign::Right, false);
 	// Message de connexion / d'erreur reseau : pastille en haut au centre
 	if (!PC->GetMenuStatus().IsEmpty())
@@ -3144,13 +3223,18 @@ void ABRHUD::DrawContextCues(ABRCharacter* C)
 	// v4.9 : aucune jauge de statut pendant l'exploration (sante, endurance, sante mentale, oxygene, piles). La sante reste
 	// une mecanique (coups, soins, armure, mort, reanimation) ; ses signes sont le coeur, le souffle, la teinte des coups
 	// et la vignette. Seul le manque d'air sous l'eau a un message : il demande d'agir tout de suite (remonter).
-	if (!C->IsUnderwater() || C->GetBreath() >= 45.f)
+	// TestAirBreath (tests v4.10) : signal montre comme sous l'eau avec cette reserve d'air
+	const float Breath = TestAirBreath >= 0.f ? TestAirBreath : C->GetBreath();
+	if ((!C->IsUnderwater() && TestAirBreath < 0.f) || Breath >= 45.f)
 	{
 		return;
 	}
-	const float Urgent = FMath::Clamp((45.f - C->GetBreath()) / 45.f, 0.f, 1.f);
-	const float Pulse = 0.6f + 0.4f * FMath::Sin(Clock * (3.f + 5.f * Urgent));
-	const FString Msg = C->GetBreath() < 20.f ? BR_STR(NSLOCTEXT("BR", "HUD.AirCritical", "PLUS D'AIR : REMONTEZ !"))
+	const float Urgent = FMath::Clamp((45.f - Breath) / 45.f, 0.f, 1.f);
+	// v4.10 : flashs attenues : pulsation lente et faible ; aucun flash : message fixe (l'urgence reste dans le texte et la taille)
+	const float FS = FBRSettings::Get().FlashScale();
+	const float Pulse = FS <= 0.f ? 0.9f : 1.f - FS * 0.4f * (0.5f + 0.5f * FMath::Sin(Clock * (3.f + 5.f * Urgent) * (FS < 1.f ? 0.4f : 1.f)));
+	LastAirCuePulse = Pulse;
+	const FString Msg = Breath < 20.f ? BR_STR(NSLOCTEXT("BR", "HUD.AirCritical", "PLUS D'AIR : REMONTEZ !"))
 		: BR_STR(NSLOCTEXT("BR", "HUD.AirLow", "Manque d'air : remontez respirer"));
 	TextF(Msg, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.7f, FLinearColor(0.78f, 0.93f, 1.f, (0.5f + 0.45f * Urgent) * Pulse), 13.f + 3.f * Urgent,
 		EUiWeight::Bold, EUiAlign::Center);
@@ -3309,7 +3393,7 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 	}
 }
 
-void ABRHUD::DrawMessages(float Dt)
+void ABRHUD::DrawMessages(float Dt, bool bOverPanel)
 {
 	const float U = Ui();
 	for (int32 i = Messages.Num() - 1; i >= 0; --i)
@@ -3319,6 +3403,46 @@ void ABRHUD::DrawMessages(float Dt)
 		{
 			Messages.RemoveAt(i);
 		}
+	}
+	LastMsgTop = 0.f;
+	LastMsgBottom = 0.f;
+	if (bOverPanel)
+	{
+		// v4.10 : inventaire ou parametres : une seule pastille, sur une ligne, entre "MENU >" et le trait du haut (y 20 a 88) ;
+		// les autres notifications sont comptees. Rien ne recouvre plus les onglets ni les titres des panneaux.
+		if (Messages.Num() == 0)
+		{
+			return;
+		}
+		const FMsg& M = Messages.Last();
+		const float A = FMath::Clamp(M.Duration - M.Age, 0.f, 1.f) * FMath::Clamp(M.Age * 5.f, 0.f, 1.f);
+		const float Size = 12.5f;
+		const float MenuW = TextW(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), GEngine->GetLargeFont(), 1.25f * U);
+		const float Left = IX + MenuW + 40.f * U;
+		const float Right = IX + IW - 20.f * U;
+		const FString More = Messages.Num() > 1 ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MoreMessages", "+{Count}"), { { TEXT("Count"), BRLoc::Int(Messages.Num() - 1) } }) : FString();
+		const float MoreW = More.IsEmpty() ? 0.f : TextSize(More, Size, EUiWeight::Bold).X + 14.f * U;
+		const float MaxText = FMath::Max(80.f * U, Right - Left - 62.f * U - MoreW);
+		const float Fitted = FitSize(M.Text, MaxText, Size, EUiWeight::Regular);
+		const FString Line = Ellipsize(M.Text, MaxText, Fitted, EUiWeight::Regular);
+		const FVector2f TS = TextSize(Line, Fitted, EUiWeight::Regular);
+		const float PH = 36.f * U;
+		const float PW = TS.X + 62.f * U + MoreW;
+		const float PX = FMath::Clamp((Canvas->ClipX - PW) * 0.5f, Left, FMath::Max(Left, Right - PW));
+		const float PY = 30.f * U;
+		RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(0.04f, 0.035f, 0.02f, 0.9f * A));
+		RoundRect(PX, PY, PW, PH, PH * 0.5f, FLinearColor(M.Color.R, M.Color.G, M.Color.B, 0.3f * A), true);
+		const float Dot = 9.f * U;
+		RoundRect(PX + 20.f * U, PY + (PH - Dot) * 0.5f, Dot, Dot, Dot * 0.5f, FLinearColor(M.Color.R, M.Color.G, M.Color.B, A));
+		const FLinearColor TC = Mix(FLinearColor(M.Color.R, M.Color.G, M.Color.B, 1.f), FLinearColor::White, 0.35f);
+		TextF(Line, PX + 40.f * U, PY + (PH - TS.Y) * 0.5f, WithAlpha(TC, A), Fitted, EUiWeight::Regular, EUiAlign::Left, false);
+		if (!More.IsEmpty())
+		{
+			TextF(More, PX + PW - 18.f * U, PY + (PH - TS.Y) * 0.5f, WithAlpha(InkDim, A), Size, EUiWeight::Bold, EUiAlign::Right, false);
+		}
+		LastMsgTop = PY;
+		LastMsgBottom = PY + PH;
+		return;
 	}
 	// Notifications : pastilles sombres avec un point de la couleur du message
 	float Y = Canvas->ClipY * 0.1f;
@@ -3346,6 +3470,8 @@ void ABRHUD::DrawMessages(float Dt)
 		{
 			TextF(Lines[k], PX + 42.f * U, PY + 9.f * U + k * LH, WithAlpha(TC, A), 13.5f, EUiWeight::Regular, EUiAlign::Left, false);
 		}
+		LastMsgTop = LastMsgTop > 0.f ? LastMsgTop : PY;
+		LastMsgBottom = PY + PH;
 		Y += PH + 10.f * U;
 	}
 }
@@ -3680,6 +3806,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	// En-tete "MENU >" et onglets
 	Txt(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), IX, 44.f * U, Yellow, 1.25f * U, Large, false, false);
 	DrawRect(YellowDim, IX, 92.f * U, IW, 1.f * U);
+	LastTopLineY = 92.f * U; // tests v4.10 : les notifications restent au-dessus
 	if (PC)
 	{
 		const int32 Wanted = PC->ConsumeRequestedTab();
@@ -4475,7 +4602,8 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	const int32 PerColumn = Count <= 8 ? Count : (Count + 1) / 2;
 	const float ColGap = 30.f * U;
 	const float W = PerColumn == Count ? FMath::Min(PanelW, 1100.f * U) : (PanelW - ColGap) * 0.5f;
-	const float RowH = FMath::Min(56.f * U, (IH - 200.f * U) / FMath::Max(1, PerColumn));
+	// v4.10 : place gardee sous les lignes pour l'aide (3 lignes) et le mode de rendu (2 lignes)
+	const float RowH = FMath::Min(56.f * U, (IH - 220.f * U) / FMath::Max(1, PerColumn));
 	HoverSetting = INDEX_NONE;
 	const float Btn = 34.f * U;
 	const float ValueW = 250.f * U;
@@ -4511,21 +4639,75 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		AddButton(Btn_SettingBase + i * 2 + 1, PX, BY, Btn, Btn);
 		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.12f), X + 18.f * U, Y + RowH - 4.f * U, W - 36.f * U, 1.f * U);
 	}
+	LastRowsBottom = IY + 100.f * U + PerColumn * RowH;
 	const float X = PanelX;
 	const float W2 = PanelW;
 
-	// Aide de la ligne survolee
-	const FString Hint = HoverSetting != INDEX_NONE ? PC->GetSettingHint(HoverSetting) : FString();
-	float HY = IY + IH - 84.f * U;
-	for (const FString& L : Wrap(Hint.IsEmpty() ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ReglagesSontSauvegardesAutomatiquementBa", "Les r\u00e9glages sont sauvegard\u00e9s automatiquement (BackroomsPlayer.ini)."))) : Hint,
-		W2 - 56.f * U, Small, 0.75f * U))
+	// v4.10 : aide de la ligne survolee dans une zone de hauteur fixe (3 lignes) au-dessus du mode de rendu. Un texte plus
+	// long defile (molette au-dessus de la zone, sinon tout seul, ligne par ligne) au lieu de recouvrir le mode de rendu
+	// et le pied de page. L'aide reste celle de la derniere ligne survolee quand la souris descend sur la zone.
+	const float HelpLineH = 20.f * U;
+	const int32 HelpVisible = 3;
+	const float HelpH = HelpVisible * HelpLineH;
+	const float HelpX = X + 18.f * U;
+	const float HelpW = W2 - 36.f * U;
+	const float HelpY = IY + IH - 52.f * U - HelpH;
+	const bool bInHelp = Hover(HelpX, HelpY, HelpW, HelpH);
+	if (TestHintSetting != INDEX_NONE)
 	{
-		TxtLine(L, X + 28.f * U, HY, W2 - 56.f * U, InkDim, 0.75f * U, Small);
-		HY += 20.f * U;
+		HintSetting = TestHintSetting;
 	}
-	// v4.5 : le mode de rendu reellement actif (et non celui demande) ; RHI et support du ray tracing : au demarrage
-	Txt(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 40.f * U, WithAlpha(Yellow, 0.85f), 0.66f * U, Small, false, false);
-	Txt(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 22.f * U, WithAlpha(InkDim, 0.7f), 0.62f * U, Small, false, false);
+	else if (HoverSetting != INDEX_NONE)
+	{
+		HintSetting = HoverSetting;
+	}
+	else if (!bInHelp)
+	{
+		HintSetting = INDEX_NONE;
+	}
+	const FString Hint = HintSetting != INDEX_NONE ? PC->GetSettingHint(HintSetting) : FString();
+	const FString HelpText = Hint.IsEmpty() ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ReglagesSontSauvegardesAutomatiquementBa", "Les r\u00e9glages sont sauvegard\u00e9s automatiquement (BackroomsPlayer.ini)."))) : Hint;
+	const TArray<FString> HelpLines = Wrap(HelpText, HelpW - 40.f * U, Small, 0.75f * U);
+	if (HelpText != HintShown)
+	{
+		HintShown = HelpText;
+		HintScroll = 0.f;
+		HintClock = 0.f;
+	}
+	const float ContentH = HelpLines.Num() * HelpLineH;
+	const int32 Extra = FMath::Max(0, HelpLines.Num() - HelpVisible);
+	if (Extra > 0 && !bInHelp)
+	{
+		// Defilement automatique : 3 s de lecture, puis une ligne toutes les 2 s ; 3 s a la fin, puis retour au debut
+		HintClock += UiDt;
+		const float Cycle = 3.f + Extra * 2.f + 3.f;
+		const float T = FMath::Fmod(HintClock, Cycle);
+		HintScroll = FMath::Clamp(FMath::FloorToFloat((T - 3.f) / 2.f) + 1.f, 0.f, static_cast<float>(Extra)) * 20.f;
+		if (T < 3.f)
+		{
+			HintScroll = 0.f;
+		}
+	}
+	const float Offset = ScrollArea(HintScroll, HelpX, HelpY, HelpW, HelpH, ContentH);
+	LastHintBottom = 0.f; // mesure de cette image seulement (tests)
+	LastHintZoneTop = HelpY;
+	LastHintZoneBottom = HelpY + HelpH;
+	for (int32 k = 0; k < HelpLines.Num(); ++k)
+	{
+		const float LY = HelpY + k * HelpLineH + Offset;
+		if (LY < HelpY - 1.f || LY + HelpLineH > HelpY + HelpH + 1.f)
+		{
+			continue; // hors de la zone : jamais dessine par-dessus le reste
+		}
+		TxtLine(HelpLines[k], X + 28.f * U, LY, W2 - 76.f * U, InkDim, 0.75f * U, Small);
+		LastHintBottom = FMath::Max(LastHintBottom, LY + HelpLineH);
+	}
+	LastHintLines = HelpLines.Num();
+	LastHintVisible = FMath::Min(HelpLines.Num(), HelpVisible);
+	// v4.5 : le mode de rendu reellement actif (et non celui demande) ; RHI et support du ray tracing : au demarrage.
+	// v4.10 : reduits a la largeur du panneau (langues aux mots longs, petites fenetres)
+	TextFit(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 42.f * U, W2 - 56.f * U, WithAlpha(Yellow, 0.85f), LegacySize(Small, 0.66f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
+	TextFit(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 24.f * U, W2 - 56.f * U, WithAlpha(InkDim, 0.7f), LegacySize(Small, 0.62f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
 }
 
 void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)

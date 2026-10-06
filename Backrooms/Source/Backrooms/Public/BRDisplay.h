@@ -50,4 +50,25 @@ namespace BRDisplay
 	BACKROOMS_API bool CanChange();
 	/** Message a montrer une fois : configuration retablie au lancement */
 	BACKROOMS_API bool TakeRestoredAtStartup();
+
+	/** v4.10 : ecran qui contient la fenetre du jeu (centre de la fenetre ; ecran principal sans fenetre) : taille en pixels
+	 *  physiques, zone utile (sans la barre des taches), DPI, rang et nombre d'ecrans. Avant : toujours l'ecran principal
+	 *  (GetDesktopResolution), meme quand le jeu etait sur un autre ecran */
+	struct FMonitor
+	{
+		FIntPoint Size = FIntPoint::ZeroValue;
+		FIntPoint Origin = FIntPoint::ZeroValue;
+		FIntPoint WorkSize = FIntPoint::ZeroValue;
+		int32 DPI = 0;
+		int32 Index = 0;
+		int32 Count = 0;
+		/** Identifiant de l'ecran pour Unreal (UGameUserSettings::SetDisplayProperties) */
+		FString ID;
+		bool bPrimary = true;
+		/** Faux : informations des ecrans indisponibles (serveur, editeur sans Slate) ; valeurs de repli */
+		bool bKnown = false;
+	};
+	BACKROOMS_API FMonitor ActiveMonitor();
+	/** v4.10 (tests) : ecran qui contient ce point du bureau (pixels physiques) */
+	BACKROOMS_API FMonitor MonitorAt(const FIntPoint& Point);
 }

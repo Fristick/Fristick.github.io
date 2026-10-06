@@ -552,6 +552,19 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	{
 		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Display.Reverted", "Affichage r\u00e9tabli (pas de confirmation).")), 4.f, FLinearColor(1.f, 0.85f, 0.5f));
 	}
+	// v4.10 : ouverture et fermeture du dialogue (conserver, retablir, expiration) : curseur et focus suivent ; a la fermeture,
+	// l'etat d'avant revient (inventaire, menu ou jeu). Les touches tenues ne reprennent pas leur effet toutes seules.
+	if (IsLocalController() && IsModalDialogOpen() != bModalWasOpen)
+	{
+		bModalWasOpen = IsModalDialogOpen();
+		bTalkKeyHeld = false;
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->SetSprinting(false);
+		}
+		FlushPressedKeys();
+		UpdateInputMode();
+	}
 	UpdateVoice(DeltaTime);
 	UpdateMenuAmbience(DeltaTime);
 	DevHelpTime = FMath::Max(0.f, DevHelpTime - DeltaTime);
@@ -672,7 +685,7 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 
 void ABRPlayerController::OnTalkStarted(const FInputActionValue& Value)
 {
-	bTalkKeyHeld = CaptureAction == INDEX_NONE;
+	bTalkKeyHeld = CaptureAction == INDEX_NONE && !IsModalDialogOpen();
 }
 
 void ABRPlayerController::OnTalkCompleted(const FInputActionValue& Value)
@@ -833,15 +846,21 @@ ABRCharacter* ABRPlayerController::GetBRCharacter() const
 	return Cast<ABRCharacter>(GetPawn());
 }
 
+bool ABRPlayerController::IsModalDialogOpen() const
+{
+	return BRDisplay::IsPending();
+}
+
 bool ABRPlayerController::CanPlay() const
 {
-	return !bInMenu && !bPauseMenu && !bInventory && CaptureAction == INDEX_NONE;
+	// v4.10 : la confirmation de l'affichage bloque aussi les actions de jeu (avant : seulement ses propres touches)
+	return !bInMenu && !bPauseMenu && !bInventory && CaptureAction == INDEX_NONE && !IsModalDialogOpen();
 }
 
 void ABRPlayerController::UpdateInputMode()
 {
-	// Curseur visible dans le menu principal, l'inventaire et le menu pause (boutons cliquables)
-	const bool bCursor = bInventory || bPauseMenu || bInMenu;
+	// Curseur visible dans le menu principal, l'inventaire, le menu pause et les dialogues (boutons cliquables)
+	const bool bCursor = bInventory || bPauseMenu || bInMenu || IsModalDialogOpen();
 	bShowMouseCursor = bCursor;
 	if (bCursor)
 	{
@@ -1079,6 +1098,10 @@ void ABRPlayerController::OnInventory(const FInputActionValue& Value)
 	{
 		return; // la touche est en train d'etre reaffectee
 	}
+	if (IsModalDialogOpen())
+	{
+		return; // v4.10 : Tab ne ferme plus l'inventaire sous la confirmation de l'affichage
+	}
 	if (bInMenu || bPauseMenu)
 	{
 		// Depuis le menu titre ou la pause : acces direct aux parametres et aux touches
@@ -1161,6 +1184,15 @@ void ABRPlayerController::OnPause(const FInputActionValue& Value)
 		BRDisplay::Revert(); // v4.9 : Echap pendant la confirmation de l'affichage : retour immediat
 		return;
 	}
+	if (const ABRWorld* W = ABRWorld::Get(this); W && W->IsPreparing())
+	{
+		// v4.10 : preparation d'un niveau trop longue : retour au menu principal (jamais d'ecran noir sans issue)
+		if (W->GetPrepareTime() >= ABRWorld::PrepareMenuDelay)
+		{
+			ReturnToMainMenu();
+		}
+		return;
+	}
 	if (bInventory)
 	{
 		SetInventoryOpen(false); // Echap ferme d'abord l'inventaire
@@ -1187,7 +1219,7 @@ void ABRPlayerController::OnView(const FInputActionValue& Value)
 
 void ABRPlayerController::OnQuit(const FInputActionValue& Value)
 {
-	if ((bPauseMenu || bInMenu) && CaptureAction == INDEX_NONE)
+	if ((bPauseMenu || bInMenu) && CaptureAction == INDEX_NONE && !IsModalDialogOpen())
 	{
 		QuitToDesktop();
 	}
@@ -1195,7 +1227,7 @@ void ABRPlayerController::OnQuit(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 {
-	if (bInMenu && !bInventory)
+	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		if (MenuPage == EBRMenuPage::Language)
 		{
@@ -1210,7 +1242,7 @@ void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 {
-	if (bInMenu && !bInventory)
+	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		if (MenuPage == EBRMenuPage::Language)
 		{
@@ -1224,7 +1256,7 @@ void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuUp(const FInputActionValue& Value)
 {
-	if (bInMenu && !bInventory)
+	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		SetMenuCursor((MenuCursor + GetMenuItemCount() - 1) % FMath::Max(1, GetMenuItemCount()));
 	}
@@ -1232,7 +1264,7 @@ void ABRPlayerController::OnMenuUp(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuDown(const FInputActionValue& Value)
 {
-	if (bInMenu && !bInventory)
+	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		SetMenuCursor((MenuCursor + 1) % FMath::Max(1, GetMenuItemCount()));
 	}
@@ -1253,7 +1285,7 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuDelete(const FInputActionValue& Value)
 {
-	if (bInMenu && !bInventory && MenuPage == EBRMenuPage::Saves && !bConfirmDelete)
+	if (bInMenu && !bInventory && MenuPage == EBRMenuPage::Saves && !bConfirmDelete && !IsModalDialogOpen())
 	{
 		const int32 Slot = GetMenuSaveSlot(MenuCursor);
 		if (Slot >= 0)
@@ -2259,6 +2291,19 @@ void ABRPlayerController::ServerRequestTransition_Implementation(int32 TargetLev
 
 void ABRPlayerController::ServerMarkCollected_Implementation(uint64 Id)
 {
+	// v4.10 : objet de soin ramasse par ce joueur : ajoute a ceux que le serveur lui connait (possession verifiee aux soins).
+	// Le ramassage detruit l'objet : un message renvoye ne le compte pas deux fois.
+	if (ABRCharacter* C = GetBRCharacter(); C && GetWorld())
+	{
+		for (TActorIterator<ABRPickup> It(GetWorld()); It; ++It)
+		{
+			if (It->Id == Id && !It->IsActorBeingDestroyed())
+			{
+				C->CreditHealItem(It->Item, 1);
+				break;
+			}
+		}
+	}
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		W->ServerCollected(Id);
@@ -3171,10 +3216,24 @@ bool ABRPlayerController::IsHardwareRayTracingAvailable()
 
 FString ABRPlayerController::GetRenderModeText(bool bShort) const
 {
+	// v4.10 : variables cherchees une fois (avant : six recherches par image, signalees par le moteur)
+	struct FRenderCVars
+	{
+		TMap<FString, IConsoleVariable*> Found;
+		float Get(const TCHAR* Name, float Default)
+		{
+			IConsoleVariable** V = Found.Find(Name);
+			if (!V)
+			{
+				V = &Found.Add(Name, IConsoleManager::Get().FindConsoleVariable(Name));
+			}
+			return *V ? (*V)->GetFloat() : Default;
+		}
+	};
+	static FRenderCVars CVars;
 	auto CVarF = [](const TCHAR* Name, float Default)
 	{
-		IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(Name);
-		return V ? V->GetFloat() : Default;
+		return CVars.Get(Name, Default);
 	};
 	const FString RHIName = GDynamicRHI ? FString(GDynamicRHI->GetName()) : FString(TEXT("?"));
 	const bool bSM6 = GMaxRHIFeatureLevel >= ERHIFeatureLevel::SM6;

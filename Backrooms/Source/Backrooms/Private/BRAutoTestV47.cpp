@@ -624,9 +624,9 @@ void ABRAutoTest::AddNetDeathSteps(bool bClient)
 			}
 			return true;
 		}
-		if (StepTime < 3.f)
+		if (StepTime < 1.f)
 		{
-			return false; // le temps que le client ait quitte le mode invincible
+			return false;
 		}
 		ABRWorld* W = GetBRWorld();
 		TArray<ABRCharacter*> Players;
@@ -638,6 +638,12 @@ void ABRAutoTest::AddNetDeathSteps(bool bClient)
 		{
 			if (Other && !Other->IsLocallyControlled())
 			{
+				// v4.10 : l'hote attend que le client ait vraiment quitte le mode invincible (etat qu'il envoie : NetFlags) et
+				// fini de preparer son niveau. Avant : 3 s fixes, trop court quand le client arrive plus tard que l'hote
+				if (((Other->NetFlags & 16) != 0 || Other->IsLevelLoading()) && StepTime < 30.f)
+				{
+					return false;
+				}
 				Other->bGodMode = false;
 				Other->ReceiveAttack(500.f, 0.f, nullptr);
 				NetMate = Other;

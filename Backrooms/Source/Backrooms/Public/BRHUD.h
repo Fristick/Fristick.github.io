@@ -22,6 +22,16 @@ class BACKROOMS_API ABRHUD : public AHUD
 	friend class ABRAutoTest;
 
 public:
+	/** v4.10 (tests) : police de l'interface (taille en points a l'echelle 1, graisse 0 a 3) */
+	static FSlateFontInfo GetUiFont(float Size, int32 Weight);
+	/** v4.10 : espaces fines (separateur de milliers du francais, heure de l'anglais : U+202F, U+2009...) absentes de la
+	 *  police de l'interface : remplacees par l'espace insecable (sinon police de dernier recours, carre possible) */
+	static bool HasNarrowSpace(const FString& S);
+	static FString FontSafe(const FString& S);
+
+private:
+
+public:
 	virtual void DrawHUD() override;
 
 	/** Affiche un message temporaire en haut de l'ecran */
@@ -115,12 +125,16 @@ private:
 	void DrawQuickBar(ABRCharacter* C);
 	void DrawObjectiveTracker(ABRWorld* W);
 	void DrawCrosshair(ABRCharacter* C);
-	void DrawMessages(float Dt);
+	/** bOverPanel (v4.10) : inventaire ou parametres ouverts : la plus recente seulement, sur une ligne, dans la bande du
+	 *  haut (avant : pastilles empilees sur les titres des panneaux) */
+	void DrawMessages(float Dt, bool bOverPanel = false);
 	void DrawNote(ABRCharacter* C);
 	void DrawDeath(ABRCharacter* C);
 	void DrawPause(ABRPlayerController* PC);
 	void DrawGlitch(float Amount);
 	void DrawContentWarning(float Y);
+	/** v4.10 : ecran de preparation d'un niveau (avancement ; retour au menu propose apres ABRWorld::PrepareMenuDelay) */
+	void DrawPreparing(const ABRWorld* W);
 
 	// ---- Inventaire (TAB)
 	void DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W);
@@ -214,6 +228,29 @@ private:
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	int32 HoverSetting = INDEX_NONE;
+	/** v4.10 : aide des parametres : ligne dont l'aide est montree (gardee quand la souris passe sur la zone d'aide),
+	 *  texte montre, defilement (molette ou automatique), lignes du dernier texte et lignes visibles (tests) */
+	int32 HintSetting = INDEX_NONE;
+	FString HintShown;
+	float HintScroll = 0.f;
+	float HintClock = 0.f;
+	int32 LastHintLines = 0;
+	int32 LastHintVisible = 0;
+	float LastHintBottom = 0.f;
+	float LastRowsBottom = 0.f;
+	/** v4.10 (tests) : zone d'aide de la derniere image (pixels) */
+	float LastHintZoneTop = 0.f;
+	float LastHintZoneBottom = 0.f;
+	/** v4.10 (tests) : trait du haut de l'inventaire (pixels) */
+	float LastTopLineY = 0.f;
+	/** v4.10 (tests) : aide de cette ligne montree comme si elle etait survolee */
+	int32 TestHintSetting = INDEX_NONE;
+	/** v4.10 (tests) : position de la derniere notification dessinee (haut, bas) */
+	float LastMsgTop = 0.f;
+	float LastMsgBottom = 0.f;
+	/** v4.10 (tests) : intensite du signal d'air a la derniere image (constante sans flashs) */
+	float LastAirCuePulse = 0.f;
+	float TestAirBreath = -1.f;
 	float LastMenuMouseX = -1.f;
 	float LastMenuMouseY = -1.f;
 

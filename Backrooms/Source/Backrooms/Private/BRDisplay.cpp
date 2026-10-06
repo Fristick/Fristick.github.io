@@ -10,6 +10,8 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Widgets/SWindow.h"
+#include "Framework/Application/SlateApplication.h"
+#include "GenericPlatform/GenericApplication.h"
 
 namespace
 {
@@ -28,6 +30,8 @@ namespace
 		FIntPoint ResizeSeen = FIntPoint::ZeroValue;
 		double ResizeSince = 0.0;
 		bool bRestoredAtStartup = false;
+		/** v4.10 : taille verifiee une fois sur l'ecran reel de la fenetre (au lancement, la fenetre n'existe pas encore) */
+		bool bFitChecked = false;
 	};
 
 	FDisplayState& State()
@@ -51,32 +55,48 @@ namespace
 		return Mode == EWindowMode::Fullscreen ? 0 : (Mode == EWindowMode::WindowedFullscreen ? 1 : 2);
 	}
 
+	/** v4.10 : ecran de la fenetre du jeu (voir BRDisplay::ActiveMonitor), et non plus l'ecran principal */
 	FIntPoint Desktop()
 	{
+		const BRDisplay::FMonitor M = BRDisplay::ActiveMonitor();
+		if (M.Size.X > 0 && M.Size.Y > 0)
+		{
+			return M.Size;
+		}
 		const UGameUserSettings* G = Settings();
 		const FIntPoint D = G ? G->GetDesktopResolution() : FIntPoint::ZeroValue;
 		return (D.X > 0 && D.Y > 0) ? D : FIntPoint(1920, 1080);
 	}
 
+	/** Zone utile de cet ecran (sans la barre des taches) : limite d'une fenetre */
+	FIntPoint WorkArea()
+	{
+		const BRDisplay::FMonitor M = BRDisplay::ActiveMonitor();
+		return (M.WorkSize.X > 0 && M.WorkSize.Y > 0) ? M.WorkSize : Desktop();
+	}
+
 	bool FitsDesktop(const FIntPoint& Size)
 	{
-		const FIntPoint D = Desktop();
-		return Size.X >= 640 && Size.Y >= 360 && Size.X <= D.X && Size.Y <= D.Y;
+		// v4.10 : une fenetre doit tenir dans la zone utile de son ecran (barre des taches, barre de titre)
+		const FIntPoint Work = WorkArea();
+		return Size.X >= 640 && Size.Y >= 360 && Size.X <= Work.X - 16 && Size.Y <= Work.Y - 40;
 	}
 
 	/** Taille fenetree utilisable : celle demandee si elle tient sur le bureau, sinon la plus grande des tailles usuelles
 	 *  qui laisse de la place a la barre des taches et aux bordures (90 % du bureau) */
 	FIntPoint FitWindowed(const FIntPoint& Want)
 	{
-		const FIntPoint D = Desktop();
-		if (Want.X >= 640 && Want.Y >= 360 && Want.X <= D.X * 0.95f && Want.Y <= D.Y * 0.95f)
+		// v4.10 : zone utile de l'ecran de la fenetre, moins la barre de titre et les bordures
+		const FIntPoint Work = WorkArea();
+		const FIntPoint D(Work.X - 16, Work.Y - 40);
+		if (Want.X >= 640 && Want.Y >= 360 && Want.X <= D.X && Want.Y <= D.Y)
 		{
 			return Want;
 		}
 		static const FIntPoint Usual[] = { { 3200, 1800 }, { 2560, 1440 }, { 1920, 1080 }, { 1600, 900 }, { 1366, 768 }, { 1280, 720 }, { 1024, 576 } };
 		for (const FIntPoint& U : Usual)
 		{
-			if (U.X <= D.X * 0.9f && U.Y <= D.Y * 0.9f)
+			if (U.X <= D.X * 0.95f && U.Y <= D.Y * 0.95f)
 			{
 				return U;
 			}
@@ -125,6 +145,13 @@ namespace
 		{
 			return;
 		}
+		// v4.10 : l'ecran ou se trouve la fenetre est donne a Unreal. Sans lui, le moteur replacait la fenetre au centre de
+		// l'ecran principal a chaque changement (fenetre, sans bordures, plein ecran) et au lancement suivant
+		const BRDisplay::FMonitor Mon = BRDisplay::ActiveMonitor();
+		if (Mon.bKnown && Mon.Count > 0)
+		{
+			G->SetDisplayProperties(Mon.ID, Mon.Index);
+		}
 		G->SetFullscreenMode(ToEngine(M.Window));
 		G->SetScreenResolution(M.Resolution);
 		G->ApplyResolutionSettings(false);
@@ -156,6 +183,68 @@ namespace
 
 namespace BRDisplay
 {
+	FMonitor MonitorAt(const FIntPoint& Point)
+	{
+		FMonitor Out;
+		if (!FSlateApplication::IsInitialized())
+		{
+			return Out;
+		}
+		FDisplayMetrics Metrics;
+		FSlateApplication::Get().GetCachedDisplayMetrics(Metrics);
+		Out.Count = Metrics.MonitorInfo.Num();
+		int32 Found = INDEX_NONE;
+		int32 Primary = INDEX_NONE;
+		for (int32 i = 0; i < Metrics.MonitorInfo.Num(); ++i)
+		{
+			const FPlatformRect& R = Metrics.MonitorInfo[i].DisplayRect;
+			if (Metrics.MonitorInfo[i].bIsPrimary && Primary == INDEX_NONE)
+			{
+				Primary = i;
+			}
+			if (Found == INDEX_NONE && Point.X >= R.Left && Point.X < R.Right && Point.Y >= R.Top && Point.Y < R.Bottom)
+			{
+				Found = i;
+			}
+		}
+		const int32 Use = Found != INDEX_NONE ? Found : (Primary != INDEX_NONE ? Primary : (Metrics.MonitorInfo.Num() > 0 ? 0 : INDEX_NONE));
+		if (Use == INDEX_NONE)
+		{
+			// Aucune liste d'ecrans (certains systemes de fenetres) : ecran principal des mesures du bureau
+			Out.Size = FIntPoint(Metrics.PrimaryDisplayWidth, Metrics.PrimaryDisplayHeight);
+			Out.WorkSize = FIntPoint(Metrics.PrimaryDisplayWorkAreaRect.Right - Metrics.PrimaryDisplayWorkAreaRect.Left,
+				Metrics.PrimaryDisplayWorkAreaRect.Bottom - Metrics.PrimaryDisplayWorkAreaRect.Top);
+			Out.bKnown = Out.Size.X > 0;
+			return Out;
+		}
+		const FMonitorInfo& Info = Metrics.MonitorInfo[Use];
+		Out.Index = Use;
+		Out.ID = Info.ID;
+		Out.bPrimary = Info.bIsPrimary;
+		Out.DPI = Info.DPI;
+		Out.Origin = FIntPoint(Info.DisplayRect.Left, Info.DisplayRect.Top);
+		Out.Size = FIntPoint(Info.DisplayRect.Right - Info.DisplayRect.Left, Info.DisplayRect.Bottom - Info.DisplayRect.Top);
+		Out.WorkSize = FIntPoint(Info.WorkArea.Right - Info.WorkArea.Left, Info.WorkArea.Bottom - Info.WorkArea.Top);
+		Out.bKnown = Out.Size.X > 0 && Out.Size.Y > 0;
+		return Out;
+	}
+
+	FMonitor ActiveMonitor()
+	{
+		FIntPoint Center(INT32_MIN, INT32_MIN);
+		if (GEngine && GEngine->GameViewport)
+		{
+			const TSharedPtr<SWindow> Win = GEngine->GameViewport->GetWindow();
+			if (Win.IsValid())
+			{
+				const FVector2D Pos = Win->GetPositionInScreen();
+				const FVector2D Size = Win->GetSizeInScreen();
+				Center = FIntPoint(FMath::RoundToInt(Pos.X + Size.X * 0.5), FMath::RoundToInt(Pos.Y + Size.Y * 0.5));
+			}
+		}
+		return MonitorAt(Center);
+	}
+
 	bool CanChange()
 	{
 		// Dans l'editeur (PIE), la fenetre est celle de l'editeur : on n'y touche pas
@@ -393,6 +482,21 @@ namespace BRDisplay
 		// Changements faits hors du jeu : Alt+Entree, redimensionnement a la souris, mode impose par le systeme
 		const FMode Req = Current();
 		const FMode Eff = Effective();
+		// v4.10 : premiere verification sur l'ecran ou la fenetre s'est ouverte (ecran secondaire plus petit, barre des
+		// taches) : une fenetre plus grande que la zone utile est ramenee a une taille qui y tient, comme au lancement
+		if (!St.bFitChecked && GEngine && GEngine->GameViewport && GEngine->GameViewport->GetWindow().IsValid())
+		{
+			St.bFitChecked = true;
+			const FIntPoint Fixed = ResolutionFor(Req.Window, Req.Resolution);
+			if (Req.Window != 0 && Fixed != Req.Resolution)
+			{
+				ApplyToEngine({ Req.Window, Fixed });
+				Commit();
+				UE_LOG(LogBackrooms, Log, TEXT("Affichage : %dx%d ramene a %dx%d (ecran de la fenetre %dx%d)"), Req.Resolution.X, Req.Resolution.Y, Fixed.X, Fixed.Y,
+					Desktop().X, Desktop().Y);
+				return false;
+			}
+		}
 		if (Eff.Window != Req.Window)
 		{
 			// Plein ecran demande, sans bordures obtenu sur un systeme sans plein ecran exclusif : ce n'est pas un changement

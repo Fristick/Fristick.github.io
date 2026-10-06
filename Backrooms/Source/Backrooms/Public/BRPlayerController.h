@@ -297,6 +297,9 @@ private:
 	void PollKeyCapture();
 	ABRCharacter* GetBRCharacter() const;
 	bool CanPlay() const;
+	/** v4.10 : un dialogue modal est ouvert (confirmation de l'affichage) : actions de jeu, onglets et menus bloques ; le
+	 *  monde continue (ni pause, ni invulnerabilite) */
+	bool IsModalDialogOpen() const;
 
 	void OnMove(const FInputActionValue& Value);
 	void OnLook(const FInputActionValue& Value);
@@ -412,6 +415,8 @@ private:
 	bool bMenuDriftInit = false;
 
 	bool bTalkKeyHeld = false;
+	/** v4.10 : etat du dialogue modal a l'image precedente (curseur et focus a remettre a sa fermeture) */
+	bool bModalWasOpen = false;
 	bool bNetIntroShown = false;
 	bool bTransmitting = false;
 	float TalkerTimer = 0.f;

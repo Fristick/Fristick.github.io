@@ -183,6 +183,29 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	// v4.7 : l'etat de mort officiel va a toutes les machines, proprietaire compris (mort constatee par le serveur,
 	// reanimation par un coequipier)
 	DOREPLIFETIME(ABRCharacter, DeathState);
+	DOREPLIFETIME(ABRCharacter, bLevelLoading);
+}
+
+void ABRCharacter::SetLevelLoading(bool bLoading)
+{
+	// Toujours transmis par le joueur local : la valeur du serveur peut differer (joueur marque en chargement a son apparition)
+	bLevelLoading = bLoading;
+	LevelLoadingSince = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.f;
+	if (!HasAuthority() && IsLocallyControlled())
+	{
+		ServerSetLevelLoading(bLoading);
+	}
+}
+
+bool ABRCharacter::IsLevelLoading() const
+{
+	return bLevelLoading && (!GetWorld() || GetWorld()->GetRealTimeSeconds() - LevelLoadingSince < 90.f);
+}
+
+void ABRCharacter::ServerSetLevelLoading_Implementation(bool bLoading)
+{
+	bLevelLoading = bLoading;
+	LevelLoadingSince = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.f;
 }
 
 void ABRCharacter::SetupLoopAudio(UAudioComponent* Comp, FName SoundName)
@@ -274,6 +297,41 @@ int32 ABRCharacter::CountItem(EBRItem Item) const
 		N += (S.Item == Item) ? S.Count : 0;
 	}
 	return N;
+}
+
+int32 ABRCharacter::RemoveItem(EBRItem Item, int32 Count)
+{
+	int32 Removed = 0;
+	for (TArray<FBRItemSlot>* Arr : { &Pockets, &Storage, &Equipment })
+	{
+		for (FBRItemSlot& S : *Arr)
+		{
+			while (Removed < Count && S.Item == Item && S.Count > 0)
+			{
+				S.Count -= 1;
+				++Removed;
+				if (S.Count <= 0)
+				{
+					S.Clear();
+				}
+			}
+		}
+	}
+	return Removed;
+}
+
+int32 ABRCharacter::GetServerHealStock(EBRItem Item) const
+{
+	const int32* N = ServerHealStock.Find(static_cast<uint8>(Item));
+	return bServerHealStockKnown ? (N ? *N : 0) : -1;
+}
+
+void ABRCharacter::CreditHealItem(EBRItem Item, int32 Count)
+{
+	if (HasAuthority() && (Item == EBRItem::AlmondWater || Item == EBRItem::Bandage))
+	{
+		ServerHealStock.FindOrAdd(static_cast<uint8>(Item)) += Count;
+	}
 }
 
 int32 ABRCharacter::AddItem(EBRItem Item, int32 Count)
@@ -486,34 +544,54 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 	switch (Item)
 	{
 	case EBRItem::AlmondWater:
-		if (Sanity >= 99.f && Health >= 99.f)
+	case EBRItem::Bandage:
+	{
+		if (Item == EBRItem::AlmondWater && Sanity >= 99.f && Health >= 99.f)
 		{
 			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.AvezBesoinInstant", "Vous n'en avez pas besoin pour l'instant.")), 2.f);
 			return false;
 		}
-		Sanity = FMath::Min(100.f, Sanity + 40.f);
-		Health = FMath::Min(100.f, Health + 10.f);
-		if (!HasAuthority())
-		{
-			ServerUseHeal(static_cast<uint8>(EBRItem::AlmondWater)); // v4.8 : la sante officielle est celle du serveur
-		}
-		PlaySound2D(TEXT("S_Drink"), 0.9f);
-		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BuvezEauAmandeVotreEsprit", "Vous buvez de l'eau d'amande. Votre esprit s'\u00e9claircit.")), 3.f, FLinearColor(0.85f, 0.95f, 1.f));
-		return true;
-	case EBRItem::Bandage:
-		if (Health >= 99.f)
+		if (Item == EBRItem::Bandage && Health >= 99.f)
 		{
 			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.EtesBlesse", "Vous n'\u00eates pas bless\u00e9.")), 2.f);
 			return false;
 		}
-		Health = FMath::Min(100.f, Health + 35.f);
+		// v4.10 : meme delai que le serveur ; un refus ne consomme rien
+		const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		if (Now - LocalLastHealTime < HealCooldown)
+		{
+			NotifyHealRefused(1);
+			return false;
+		}
 		if (!HasAuthority())
 		{
-			ServerUseHeal(static_cast<uint8>(EBRItem::Bandage));
+			// v4.10 : partie en reseau : l'objet n'est consomme et la sante changee qu'a la reponse du serveur
+			// (ClientHealResult). Une seule demande a la fois : un second appui pendant l'attente ne part pas.
+			if (PendingHealRequest != 0 && Now - PendingHealSince < 3.f)
+			{
+				NotifyHealRefused(4);
+				return false;
+			}
+			NextHealRequest = static_cast<uint16>(NextHealRequest % 65535 + 1);
+			PendingHealRequest = NextHealRequest;
+			PendingHealSince = Now;
+			LocalLastHealTime = Now;
+			ServerRequestHeal(static_cast<uint8>(Item), PendingHealRequest);
+			return false; // consomme a l'acceptation
 		}
-		PlaySound2D(TEXT("S_Bandage"), 0.9f);
-		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BandezVosBlessures", "Vous bandez vos blessures.")), 2.5f, FLinearColor(0.9f, 0.95f, 0.9f));
-		return true;
+		// Hote ou partie solo : la sante officielle est la sienne
+		if (bDead || DeathState.bDead || bServerDying)
+		{
+			NotifyHealRefused(2);
+			return false;
+		}
+		LocalLastHealTime = Now;
+		ServerLastHealTime = Now;
+		++HealSerial;
+		AckHealSerial = HealSerial;
+		ApplyHealAccepted(Item, FMath::Min(100.f, Health + (Item == EBRItem::Bandage ? 35.f : 10.f)));
+		return true; // consomme par l'appelant
+	}
 	case EBRItem::Battery:
 		if (Battery > 90.f)
 		{
@@ -979,6 +1057,7 @@ void ABRCharacter::ClientHitFeedback_Implementation(float Damage, float SanityDa
 	bool bLethal)
 {
 	AckHitSerial = Serial;
+	LastServerHealth = NewHealth;
 	ApplyHitFeedback(Damage, SanityDamage, Source, SourceKind, NewHealth, bLethal);
 }
 
@@ -1060,53 +1139,152 @@ void ABRCharacter::TickServerVitals(float Dt)
 	}
 }
 
-bool ABRCharacter::ServerSyncVitals_Validate(float InHealth, uint16 AckSerial)
+bool ABRCharacter::ServerSyncVitals_Validate(float InHealth, uint16 AckSerial, uint16 AckHeal)
 {
 	return FMath::IsFinite(InHealth) && InHealth >= -1.f && InHealth <= 101.f;
 }
 
-void ABRCharacter::ServerSyncVitals_Implementation(float InHealth, uint16 AckSerial)
+void ABRCharacter::ServerSyncVitals_Implementation(float InHealth, uint16 AckSerial, uint16 AckHeal)
 {
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	const float Since = FMath::Clamp(Now - ServerLastVitalsTime, 0.f, 5.f);
 	ServerLastVitalsTime = Now;
-	// Un envoi parti avant le dernier coup l'effacerait : ignore (le suivant portera le bon numero)
-	if (AckSerial != HitSerial || DeathState.bDead || bServerDying)
+	// Un envoi parti avant le dernier coup ou (v4.10) le dernier soin l'effacerait : ignore (le suivant portera les bons
+	// numeros)
+	if (AckSerial != HitSerial || AckHeal != HealSerial || DeathState.bDead || bServerDying)
 	{
 		return;
 	}
 	const float Wanted = FMath::Clamp(InHealth, 0.f, 100.f);
 	// Baisse (noyade, folie) : acceptee. Hausse : recuperation lente seulement (1 point/s) ; les soins d'objets passent par
-	// ServerUseHeal
+	// ServerRequestHeal
 	Health = Wanted <= Health ? Wanted : FMath::Min(Wanted, Health + 1.2f * Since + 0.5f);
 }
 
-bool ABRCharacter::ServerUseHeal_Validate(uint8 Item)
+bool ABRCharacter::ServerRequestHeal_Validate(uint8 Item, uint16 RequestId)
 {
-	return Item < static_cast<uint8>(EBRItem::Count);
+	return Item < static_cast<uint8>(EBRItem::Count) && RequestId != 0;
 }
 
-void ABRCharacter::ServerUseHeal_Implementation(uint8 Item)
+void ABRCharacter::ServerRequestHeal_Implementation(uint8 Item, uint16 RequestId)
 {
-	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-	if (DeathState.bDead || bServerDying || Now - ServerLastHealTime < 0.8f)
+	// Demande deja traitee (renvoi) : meme reponse, rien n'est applique une seconde fois
+	if (RequestId == ServerLastHealRequest)
 	{
+		ClientHealResult(Item, RequestId, bServerLastHealAccepted, Health, HealSerial, ServerLastHealReason);
 		return;
 	}
-	float Amount = 0.f;
-	switch (static_cast<EBRItem>(Item))
+	ServerLastHealRequest = RequestId;
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	const EBRItem What = static_cast<EBRItem>(Item);
+	const float Amount = What == EBRItem::Bandage ? 35.f : (What == EBRItem::AlmondWater ? 10.f : 0.f);
+	uint8 Reason = 0;
+	if (Amount <= 0.f)
 	{
-	case EBRItem::AlmondWater:
-		Amount = 10.f;
-		break;
-	case EBRItem::Bandage:
-		Amount = 35.f;
-		break;
-	default:
+		Reason = 5; // pas un objet de soin
+	}
+	else if (DeathState.bDead || bServerDying)
+	{
+		Reason = 2; // a terre, ou coup mortel en cours
+	}
+	else if (Now - ServerLastHealTime < HealCooldown - HealServerTolerance)
+	{
+		Reason = 1; // trop tot apres le soin precedent
+	}
+	else if (bServerHealStockKnown && GetServerHealStock(What) <= 0)
+	{
+		Reason = 3; // objet que le serveur ne lui connait pas
+	}
+	if (Reason != 0)
+	{
+		bServerLastHealAccepted = false;
+		ServerLastHealReason = Reason;
+		++ServerHealsRefused;
+		ClientHealResult(Item, RequestId, false, Health, HealSerial, Reason);
 		return;
 	}
 	ServerLastHealTime = Now;
 	Health = FMath::Min(100.f, Health + Amount);
+	++HealSerial;
+	if (bServerHealStockKnown)
+	{
+		ServerHealStock.FindOrAdd(Item) -= 1;
+	}
+	bServerLastHealAccepted = true;
+	ServerLastHealReason = 0;
+	++ServerHealsAccepted;
+	ClientHealResult(Item, RequestId, true, Health, HealSerial, 0);
+}
+
+void ABRCharacter::ClientHealResult_Implementation(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Serial, uint8 Reason)
+{
+	if (RequestId == PendingHealRequest)
+	{
+		PendingHealRequest = 0;
+	}
+	if (!bAccepted)
+	{
+		NotifyHealRefused(Reason);
+		return;
+	}
+	AckHealSerial = Serial;
+	LastServerHealth = NewHealth;
+	const EBRItem What = static_cast<EBRItem>(Item);
+	if (RemoveItem(What, 1) == 0)
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Soin accepte par le serveur sans %s dans l'inventaire (demande %u)"), *BRItems::Get(What).Name.ToString(), RequestId);
+	}
+	ApplyHealAccepted(What, NewHealth);
+}
+
+void ABRCharacter::ApplyHealAccepted(EBRItem Item, float NewHealth)
+{
+	Health = FMath::Clamp(NewHealth, 0.f, 100.f);
+	LastSentHealth = Health;
+	if (Item == EBRItem::AlmondWater)
+	{
+		Sanity = FMath::Min(100.f, Sanity + 40.f); // la sante mentale reste tenue par le joueur
+		PlaySound2D(TEXT("S_Drink"), 0.9f);
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BuvezEauAmandeVotreEsprit", "Vous buvez de l'eau d'amande. Votre esprit s'\u00e9claircit.")), 3.f, FLinearColor(0.85f, 0.95f, 1.f));
+	}
+	else
+	{
+		PlaySound2D(TEXT("S_Bandage"), 0.9f);
+		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BandezVosBlessures", "Vous bandez vos blessures.")), 2.5f, FLinearColor(0.9f, 0.95f, 0.9f));
+	}
+}
+
+void ABRCharacter::NotifyHealRefused(uint8 Reason)
+{
+	FText Msg;
+	switch (Reason)
+	{
+	case 1:
+		Msg = NSLOCTEXT("BR", "Player.HealTooSoon", "Pas si vite : attendez un instant avant de vous soigner de nouveau.");
+		break;
+	case 2:
+		Msg = NSLOCTEXT("BR", "Player.HealDown", "Impossible de vous soigner maintenant.");
+		break;
+	case 3:
+		Msg = NSLOCTEXT("BR", "Player.HealNotOwned", "Soin refus\u00e9 par l'h\u00f4te : objet inconnu de la partie. Rien n'a \u00e9t\u00e9 utilis\u00e9.");
+		break;
+	case 4:
+		Msg = NSLOCTEXT("BR", "Player.HealPending", "Soin en cours\u2026");
+		break;
+	default:
+		Msg = NSLOCTEXT("BR", "Player.HealRefused", "Soin refus\u00e9. Rien n'a \u00e9t\u00e9 utilis\u00e9.");
+		break;
+	}
+	ABRHUD::Notify(this, Msg.ToString(), 2.f, FLinearColor(1.f, 0.75f, 0.55f));
+}
+
+void ABRCharacter::ServerDeclareHealStock_Implementation(uint8 Water, uint8 Bandages)
+{
+	// Declaration a l'arrivee dans un niveau (inventaire du joueur, tenu chez lui) : base des verifications de possession.
+	// Les ramassages confirmes par le serveur s'y ajoutent, les soins acceptes s'en retirent.
+	ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::AlmondWater)) = FMath::Min<int32>(Water, 40);
+	ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::Bandage)) = FMath::Min<int32>(Bandages, 40);
+	bServerHealStockKnown = true;
 }
 
 void ABRCharacter::DieOf(EBRDeathCause Cause, int8 InKiller, AActor* Killer)
@@ -1705,6 +1883,12 @@ bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
 
 void ABRCharacter::OnEnteredLevel(const FBRLevelDef& Def)
 {
+	// v4.10 : objets de soin declares au serveur (base de la verification de possession des soins)
+	if (!HasAuthority() && IsLocallyControlled())
+	{
+		ServerDeclareHealStock(static_cast<uint8>(FMath::Clamp(CountItem(EBRItem::AlmondWater), 0, 255)),
+			static_cast<uint8>(FMath::Clamp(CountItem(EBRItem::Bandage), 0, 255)));
+	}
 	ScaredKinds.Reset();
 	StopClimb();
 	ClimbGlitch = 0.f;
@@ -1793,7 +1977,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		{
 			VitalsSyncTimer = 0.5f;
 			LastSentHealth = Health;
-			ServerSyncVitals(Health, AckHitSerial);
+			ServerSyncVitals(Health, AckHitSerial, AckHealSerial);
 		}
 	}
 	if (bRemoteView)
@@ -2496,7 +2680,12 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	const ABRWorld* W = ABRWorld::Get(this);
 	const FBRLevelDef* D = W ? &W->Def() : nullptr;
 	const FBRSettings& Set = FBRSettings::Get();
-	const float Insanity = 1.f - Sanity / 100.f;
+	// v4.10 : flashs attenues ou aucun : aberration, grain, teinte rouge des coups, folie et asphyxie reduits (les
+	// mecaniques ne changent pas : seuls les effets a l'ecran)
+	const float Comfort = FMath::Lerp(0.35f, 1.f, Set.FlashScale());
+	const float Insanity = (1.f - Sanity / 100.f) * Comfort;
+	// Coup recu : sans flashs, l'ecran ne rougit plus d'un coup ; le bord s'assombrit seulement (vignette)
+	const float HitFlash = DamageFlash * Set.FlashScale();
 	const float Glitch = W ? W->GetGlitch() : 0.f;
 	const float Dead = bDead ? FMath::Min(DeathTime / 2.f, 1.f) : 0.f;
 	const bool bNV = bNightVision && !bDead;
@@ -2508,7 +2697,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	{
 		FogWorld->SetUnderwater(UnderBlend);
 	}
-	const float Choke = (!bDead && Breath < 35.f) ? (35.f - Breath) / 35.f : 0.f;
+	const float Choke = ((!bDead && Breath < 35.f) ? (35.f - Breath) / 35.f : 0.f) * FMath::Lerp(0.6f, 1.f, Set.FlashScale());
 	// v4.9 : plus de barre de vie : une blessure grave se voit a un leger voile (bords assombris, couleurs ternies), sans
 	// effet plein ecran permanent ; le coeur s'entend deja (UpdateAudio). Attenue avec les flashs reduits (confort)
 	const float Wound = (!bDead && Health < 35.f) ? (35.f - Health) / 35.f * FMath::Lerp(0.6f, 1.f, Set.FlashScale()) : 0.f;
@@ -2519,13 +2708,13 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	// Effet camescope desactive : ni aberration de l'objectif, ni grain, ni salete, vignettage leger
 	const bool bVHS = Set.bVHSEffect;
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f + DamageFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f + ClimbGlitch * 6.f + ScareFringe * 1.5f;
+	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f * Comfort + HitFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f * Comfort + ClimbGlitch * 6.f * Comfort + ScareFringe * 1.5f;
 
 	S.bOverride_FilmGrainIntensity = true;
 	S.FilmGrainIntensity = ((Set.bFilmGrain && bVHS) ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
 
 	S.bOverride_VignetteIntensity = true;
-	S.VignetteIntensity = (D ? D->Vignette : 0.45f) * (bVHS ? 1.f : 0.4f) + (bHidden ? 0.45f : 0.f) + Insanity * 0.5f + DamageFlash * 0.6f + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
+	S.VignetteIntensity = (D ? D->Vignette : 0.45f) * (bVHS ? 1.f : 0.4f) + (bHidden ? 0.45f : 0.f) + Insanity * 0.5f + DamageFlash * 0.6f * Comfort + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
 		+ Choke * 0.9f + ScareFringe * 0.25f + Wound * 0.3f;
 
 	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max(FMath::Max3(Insanity * Insanity, Dead, Choke * 0.6f), Wound * 0.35f));
@@ -2544,7 +2733,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.ColorGain = bNV ? FVector4(0.42f, 1.18f, 0.5f, 1.f) : FVector4(1.f, 1.f, 1.f, 1.f);
 	const FLinearColor Hurt(1.f, 0.35f, 0.3f);
 	S.bOverride_SceneColorTint = true;
-	S.SceneColorTint = FMath::Lerp(Tint, Hurt, FMath::Clamp(DamageFlash * 0.6f + Dead * 0.5f, 0.f, 1.f));
+	S.SceneColorTint = FMath::Lerp(Tint, Hurt, FMath::Clamp(HitFlash * 0.6f + Dead * 0.5f, 0.f, 1.f));
 	// Jumpscare : eclair de la couleur de l'entite a l'impact
 	S.SceneColorTint = FMath::Lerp(S.SceneColorTint, ScareTint * 1.3f, FMath::Clamp(ScareFlash * 0.35f, 0.f, 0.45f));
 

@@ -116,6 +116,16 @@ private:
 	void AddNetV48Steps(bool bClient);
 	/** v4.9 : interface, commandes, affichage, rendu et prechargement (BRAutoTestV49.cpp) */
 	void AddV49Steps();
+	/** v4.10 : polices, sauvegardes abimees, prechargement et preparation des niveaux, confirmation de l'affichage,
+	 *  confort, memoire (BRAutoTestV410.cpp) */
+	void AddV410Steps();
+	/** v4.10 : multijoueur : soins rapproches, soin au moment d'un coup, preparation du client pendant un changement de niveau */
+	void AddNetV410Steps(bool bClient);
+	/** v4.10 : test de lancement d'un paquet (-BRSmokeTest) : carte, polices, langues, niveau construit ; rapport JSON */
+	void AddSmokeSteps();
+	/** v4.10 : session longue (-BRAutoTestSoak=<minutes>) : allers-retours entre le Niveau 0 et les 11 autres niveaux,
+	 *  promenade a chaque arrivee ; memoire, objets, caches et images par seconde releves (SessionLongue.csv) */
+	void AddSoakSteps(float Minutes);
 	/** v4.9 : multijoueur : nom du coequipier a vue, puis cache par un mur (repere seulement s'il est a terre) */
 	void AddNetV49Steps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
@@ -131,11 +141,15 @@ private:
 	ABRPlayerController* GetPC() const;
 	FLevelReport& Report();
 	void Note(const FString& Text, bool bProblem = false);
+	/** v4.10 : verification qui n'a pas pu etre faite (ressource absente, plateforme) : jamais comptee comme une reussite */
+	void Skip(const FString& Text);
 	void Shot(const FString& Name);
 	/** Un point degage, visible, a Dist cm devant le joueur (ou autour s'il n'y a pas de place) */
 	bool FindSpotInFront(float Dist, float Z, FVector& Out) const;
 	void CollectStats(FLevelReport& R) const;
 	void WriteReport();
+	/** v4.10 : valeur d'une option de chemin (-Nom=...), espaces compris */
+	static bool ParsePathOption(const TCHAR* Name, FString& Out);
 	void Finish();
 
 	// v4.7 : etat des etapes de non-regression
@@ -213,6 +227,28 @@ private:
 
 	TArray<FLevelReport> Reports;
 	TArray<FString> Problems;
+	/** v4.10 : verifications non faites (rapport : "NON VERIFIE") */
+	TArray<FString> Skipped;
+	/** v4.10 : session longue : releves (minute, niveau, RAM, textures, objets, caches) */
+	TArray<FString> SoakLines;
+	double SoakEnd = 0.0;
+	int32 SoakRound = 0;
+	float SoakRamFirst = 0.f;
+	float SoakRamMax = 0.f;
+	/** v4.10 : ensembles du Niveau 37 absents du Niveau 0 (verifies apres le retour : plus en memoire) */
+	TArray<FString> TestOnlySets;
+	/** v4.10 : soin : objets et sante avant la demande */
+	int32 TestBandages = 0;
+	int32 TestHeals = 0;
+	/** v4.10 : chronometre d'une etape (transition, preparation bloquee, session longue) ; ecran de preparation vu ; niveau vise */
+	double TestTimer = 0.0;
+	bool bTestPrepShown = false;
+	int32 TestLevel = 0;
+	/** v4.10 : ecran de la fenetre au debut des verifications v4.10 */
+	int32 TestWindowMonitor = INDEX_NONE;
+	/** v4.10 : affichage avant le deplacement sur un autre ecran (retabli et confirme a la fin, sur l'ecran d'origine) */
+	int32 TestOrigWindow = 1;
+	FIntPoint TestOrigResolution = FIntPoint::ZeroValue;
 	TWeakObjectPtr<ABREntity> LastEntity;
 	/** Marche automatique (test du sillage dans l'eau) */
 	float WalkTime = 0.f;

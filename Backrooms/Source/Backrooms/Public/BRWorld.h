@@ -106,6 +106,17 @@ public:
 	const FBRLevelDef& Def() const;
 	int32 GetLevelNumber() const;
 	bool IsTransitioning() const { return TransState != ETrans::None; }
+	/** v4.10 : ecran de preparation : les ressources indispensables du niveau suivant finissent de se charger */
+	bool IsPreparing() const { return TransState == ETrans::Preparing; }
+	/** v4.10 : avancement (0..1) et duree de la preparation en cours ; niveau prepare */
+	float GetPrepareProgress() const { return PrepProgress; }
+	float GetPrepareTime() const { return PrepTime; }
+	int32 GetPreparingLevel() const { return PendingLevel; }
+	/** v4.10 : delai apres lequel le retour au menu est propose, et delai maximal (on entre alors avec ce qui est pret) */
+	static constexpr float PrepareMenuDelay = 10.f;
+	static constexpr float PrepareMaxSeconds = 25.f;
+	/** v4.10 (tests) : numero de la demande de preparation en cours */
+	uint32 GetPrepareSerial() const { return PrepSerial; }
 	/** Opacite du fondu au noir (0..1) */
 	float GetFade() const { return Fade; }
 	/** Intensite de l'effet glitch pendant une transition */
@@ -412,7 +423,21 @@ protected:
 	void MulticastTransition(int32 TargetLevel, bool bFromDeath);
 
 private:
-	enum class ETrans : uint8 { None, FadingOut, FadingIn };
+	/** v4.10 : Preparing : apres le fondu au noir, attente des ressources indispensables du niveau (ecran sobre, delai
+	 *  maximal, retour au menu possible) avant sa construction */
+	enum class ETrans : uint8 { None, FadingOut, Preparing, FadingIn };
+	/** v4.10 : fin du fondu au noir (ou de la preparation) : construction du niveau prepare, puis arrivee */
+	bool FinishFadeOut();
+	/** v4.10 : signale (au serveur) que le joueur local est en chargement : les entites l'ignorent */
+	void SetLocalLoading(bool bLoading);
+	uint32 PrepSerial = 0;
+	float PrepTime = 0.f;
+	float PrepProgress = 0.f;
+	double PrepStart = 0.0;
+	/** Client qui rejoint la partie : preparation du niveau du groupe avant sa premiere construction */
+	bool bJoinPreparing = false;
+	/** Demarre la preparation du niveau Level (nouvelle demande : les precedentes ne seront jamais finalisees) */
+	void StartPreparing(int32 Level);
 	enum class EBlackout : uint8 { None, Failing, Dark, Restoring };
 
 	void ClearLevel();
@@ -558,6 +583,8 @@ private:
 	// v2 : coupures
 	EBlackout BlackoutPhase = EBlackout::None;
 	float BlackoutTimer = 90.f;
+	/** v4.10 : coupure demandee (mode developpeur, tests) : commence meme pendant une poursuite ou le repit qui suit */
+	bool bBlackoutForced = false;
 	float PowerFlickerTimer = 0.f;
 	float Power = 1.f;
 	float AppliedPower = -1.f;

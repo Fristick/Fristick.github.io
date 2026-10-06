@@ -10,6 +10,9 @@
 #include "BRWorld.h"
 
 #include "Components/LocalLightComponent.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
@@ -32,6 +35,13 @@
 #include "RenderTimer.h"
 #include "UObject/UObjectIterator.h"
 #include "UnrealClient.h"
+#include "Widgets/SWindow.h"
+#include "Engine/GameViewportClient.h"
+#include "Misc/CoreDelegates.h"
+#include "Misc/ConfigCacheIni.h"
+#if PLATFORM_WINDOWS
+#include "Windows/WindowsHWrapper.h"
+#endif
 
 /** Recopie les avertissements et erreurs du journal pendant le test */
 class FBRLogCapture : public FOutputDevice
@@ -145,6 +155,36 @@ void ABRAutoTest::BeginPlay()
 		{
 			Levels.Add(D.Number);
 		}
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRSmokeTest")))
+	{
+		// v4.10 : lancement d'un paquet (Tools/Build/check_package.py --launch)
+		AddSmokeSteps();
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Test de lancement : %d etapes"), Plan.Num());
+		return;
+	}
+	float SoakMinutes = 0.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("BRAutoTestSoak="), SoakMinutes) && SoakMinutes > 0.f)
+	{
+		AddSoakSteps(SoakMinutes);
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Session longue de %.0f min : %d etapes. Rapport : %s"), SoakMinutes, Plan.Num(), *OutDir);
+		return;
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV410")))
+	{
+		AddV410Steps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.10 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
 	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV47")))
 	{
@@ -269,9 +309,28 @@ void ABRAutoTest::Note(const FString& Text, bool bProblem)
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] %s%s"), bProblem ? TEXT("PROBLEME : ") : TEXT(""), *Text);
 }
 
+void ABRAutoTest::Skip(const FString& Text)
+{
+	Report().Notes.Add(TEXT("NON VERIFIE : ") + Text);
+	Skipped.Add(FString::Printf(TEXT("Niveau %d : %s"), Report().Level, *Text));
+	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] NON VERIFIE : %s"), *Text);
+}
+
 void ABRAutoTest::Shot(const FString& Name)
 {
-	FScreenshotRequest::RequestScreenshot(FPaths::Combine(OutDir, Name + TEXT(".png")), true, false);
+	// v4.10 : une capture avec l'interface lit l'image de la fenetre a ses coordonnees d'ecran. Sur un ecran place a gauche
+	// ou au-dessus du principal (coordonnees negatives), Unreal 5.8 s'arrete (assertion D3D12, copie hors de l'image) :
+	// capture de la vue seule dans ce cas
+	bool bShowUI = true;
+	if (GEngine && GEngine->GameViewport)
+	{
+		if (const TSharedPtr<SWindow> Win = GEngine->GameViewport->GetWindow())
+		{
+			const FVector2D Pos = Win->GetPositionInScreen();
+			bShowUI = Pos.X >= 0.0 && Pos.Y >= 0.0;
+		}
+	}
+	FScreenshotRequest::RequestScreenshot(FPaths::Combine(OutDir, Name + TEXT(".png")), bShowUI, false);
 }
 
 void ABRAutoTest::Add(const FString& Name, float Wait, TFunction<bool()> Action)
@@ -335,6 +394,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 	AddRegressionSteps(); // v4.7
 	AddV48Steps(); // v4.8
 	AddV49Steps(); // v4.9
+	AddV410Steps(); // v4.10
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
 	AddLoad(4, 8.f, TEXT("Galerie des entites"));
@@ -623,10 +683,13 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetV48Steps(bClient);
 	// v4.9 : nom du coequipier affiche a vue, cache derriere un mur
 	AddNetV49Steps(bClient);
+	// v4.10 : soins (transaction confirmee par le serveur), preparation d'un client pendant un changement de niveau
+	AddNetV410Steps(bClient);
 
 	// L'hote emmene le groupe au Niveau 37 : le client doit suivre avec la meme graine
 	Add(TEXT("Changement de niveau"), 0.f, [this, bClient]()
 	{
+		bTestPrepShown = false;
 		if (!bClient)
 		{
 			if (ABRPlayerController* PC = GetPC())
@@ -636,9 +699,22 @@ void ABRAutoTest::BuildNetPlan()
 		}
 		return true;
 	});
-	Add(TEXT("Attente du Niveau 37"), 7.f, [this]()
+	Add(TEXT("Attente du Niveau 37"), 7.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
+		if (!bClient && W)
+		{
+			// v4.10 : pendant sa preparation, le client est ignore par les entites (signal tenu par le serveur)
+			TArray<ABRCharacter*> Players;
+			W->GetPlayers(Players);
+			for (const ABRCharacter* Other : Players)
+			{
+				if (Other && !Other->IsLocallyControlled() && Other->IsLevelLoading())
+				{
+					bTestPrepShown = true;
+				}
+			}
+		}
 		if (StepTime > 45.f)
 		{
 			Note(TEXT("le groupe n'est pas arrive au Niveau 37 en 45 s"), true);
@@ -646,9 +722,28 @@ void ABRAutoTest::BuildNetPlan()
 		}
 		return W && !W->IsTransitioning() && W->IsLevelReady() && W->GetLevelNumber() == 37;
 	});
-	Add(TEXT("Etat Niveau 37"), 0.5f, [this]()
+	Add(TEXT("Etat Niveau 37"), 0.5f, [this, bClient]()
 	{
 		NoteNetState(TEXT("Niveau 37"));
+		if (!bClient)
+		{
+			bool bStill = false;
+			TArray<ABRCharacter*> Players;
+			if (ABRWorld* W = GetBRWorld())
+			{
+				W->GetPlayers(Players);
+			}
+			for (const ABRCharacter* Other : Players)
+			{
+				bStill |= Other && !Other->IsLocallyControlled() && Other->IsLevelLoading();
+			}
+			Note(FString::Printf(TEXT("v4.10 changement de niveau : client signale en preparation au serveur %s, plus en preparation a l'arrivee %s"), bTestPrepShown ? TEXT("oui") : TEXT("NON"),
+				bStill ? TEXT("NON") : TEXT("oui")), bStill);
+			if (!bTestPrepShown)
+			{
+				Skip(TEXT("preparation du client non observee par le serveur (preparation plus courte qu'une image ?)"));
+			}
+		}
 		Shot(TEXT("Net_niveau37"));
 		return true;
 	});
@@ -1326,26 +1421,41 @@ void ABRAutoTest::AddPitSteps()
 		{
 			return false;
 		}
+		// v4.10 : fosse la plus proche (l'etape IA laisse le joueur dans un coin de la salle, sans fosse a ses quatre coins :
+		// le test ne trouvait plus de fosse depuis l'ajout de cette etape). Le joueur part de la cellule dont un coin est la
+		// fosse, comme avant.
 		const FIntPoint Here = W->WorldToCell(C->GetActorLocation());
 		const float S = W->CellSize();
-		for (int32 k = 0; k < 4; ++k)
+		float Best = TNumericLimits<float>::Max();
+		FIntPoint Corner(0, 0);
+		for (int32 DX = -5; DX <= 5; ++DX)
 		{
-			const int32 DX = (k & 1) ? 0 : -1;
-			const int32 DY = (k & 2) ? 0 : -1;
-			if (W->HasPitAtCorner(Here.X + DX, Here.Y + DY))
+			for (int32 DY = -5; DY <= 5; ++DY)
 			{
-				const FVector Hole((Here.X + DX + 1) * S, (Here.Y + DY + 1) * S, 0.f);
-				C->bGodMode = false;
-				C->SetActorLocation(W->CellCenter(Here, C->GetSimpleCollisionHalfHeight() + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
-				const FVector To = Hole - C->GetActorLocation();
-				WalkYaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(To.Y), static_cast<float>(To.X)));
-				PC->SetControlRotation(FRotator(-35.f, WalkYaw, 0.f));
-				WalkTime = 4.f;
-				FallStart = FPlatformTime::Seconds();
-				return true;
+				if (W->HasPitAtCorner(Here.X + DX, Here.Y + DY))
+				{
+					const float D = static_cast<float>(FVector::Dist2D(FVector((Here.X + DX + 1) * S, (Here.Y + DY + 1) * S, 0.f), C->GetActorLocation()));
+					if (D < Best)
+					{
+						Best = D;
+						Corner = FIntPoint(Here.X + DX, Here.Y + DY);
+					}
+				}
 			}
 		}
-		Note(TEXT("chute : aucune fosse au coin de la cellule du joueur"), true);
+		if (Best < TNumericLimits<float>::Max())
+		{
+			const FVector Hole((Corner.X + 1) * S, (Corner.Y + 1) * S, 0.f);
+			C->bGodMode = false;
+			C->SetActorLocation(W->CellCenter(Corner, C->GetSimpleCollisionHalfHeight() + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
+			const FVector To = Hole - C->GetActorLocation();
+			WalkYaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(To.Y), static_cast<float>(To.X)));
+			PC->SetControlRotation(FRotator(-35.f, WalkYaw, 0.f));
+			WalkTime = 4.f;
+			FallStart = FPlatformTime::Seconds();
+			return true;
+		}
+		Note(TEXT("chute : aucune fosse a moins de 5 cellules du joueur"), true);
 		return true;
 	});
 	Add(TEXT("Fosses : attente de la chute"), 0.f, [this]()
@@ -1650,7 +1760,7 @@ void ABRAutoTest::WriteReport()
 	TArray<FString> L;
 	L.Add(TEXT("THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE"));
 	L.Add(FString::Printf(TEXT("Date : %s   Duree : %.0f s"), *FDateTime::Now().ToString(), FPlatformTime::Seconds() - StartTime));
-	L.Add(FString::Printf(TEXT("Moteur : %s   RHI : %s"), FApp::GetBuildVersion(), *FApp::GetGraphicsRHI()));
+	L.Add(FString::Printf(TEXT("Jeu : %s   Moteur : %s   RHI : %s"), BR_GAME_VERSION, FApp::GetBuildVersion(), *FApp::GetGraphicsRHI()));
 	// v4.5 : machine, profil et mode de rendu reellement actif (a joindre a toute comparaison avant / apres)
 	L.Add(FString::Printf(TEXT("Processeur : %s   Carte graphique : %s   Memoire : %.0f Go"), *FPlatformMisc::GetCPUBrand().TrimStartAndEnd(),
 		*FPlatformMisc::GetPrimaryGPUBrand(), FPlatformMemory::GetConstants().TotalPhysical / (1024.0 * 1024.0 * 1024.0)));
@@ -1669,10 +1779,27 @@ void ABRAutoTest::WriteReport()
 		L.Add(PC->GetRenderModeText());
 	}
 	L.Add(TEXT(""));
-	L.Add(Problems.Num() == 0 ? FString(TEXT("RESULTAT : aucun probleme detecte.")) : FString::Printf(TEXT("RESULTAT : %d probleme(s)"), Problems.Num()));
+	// v4.10 : une verification non faite n'est jamais presentee comme reussie
+	if (Problems.Num() > 0)
+	{
+		L.Add(FString::Printf(TEXT("RESULTAT : %d probleme(s)%s"), Problems.Num(),
+			Skipped.Num() > 0 ? *FString::Printf(TEXT(", %d verification(s) NON VERIFIEE(S)"), Skipped.Num()) : TEXT("")));
+	}
+	else if (Skipped.Num() > 0)
+	{
+		L.Add(FString::Printf(TEXT("RESULTAT : aucun probleme detecte, mais %d verification(s) NON VERIFIEE(S) (voir ci-dessous)"), Skipped.Num()));
+	}
+	else
+	{
+		L.Add(TEXT("RESULTAT : aucun probleme detecte."));
+	}
 	for (const FString& P : Problems)
 	{
 		L.Add(TEXT("  - ") + P);
+	}
+	for (const FString& P : Skipped)
+	{
+		L.Add(TEXT("  - NON VERIFIE : ") + P);
 	}
 	L.Add(TEXT(""));
 	L.Add(TEXT("Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)"));
@@ -1725,7 +1852,89 @@ void ABRAutoTest::WriteReport()
 	}
 	const FString Path = FPaths::Combine(OutDir, TEXT("Rapport.txt"));
 	FFileHelper::SaveStringArrayToFile(L, *Path, FFileHelper::EEncodingOptions::ForceUTF8);
+	// v4.10 : rapport structure pour un lanceur externe (CI) : etat, problemes, verifications non faites, notes par scene
+	{
+		TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("etat"), Problems.Num() > 0 ? TEXT("echec") : (Skipped.Num() > 0 ? TEXT("incomplet") : TEXT("reussi")));
+		Root->SetNumberField(TEXT("duree_s"), FPlatformTime::Seconds() - StartTime);
+		Root->SetStringField(TEXT("jeu"), BR_GAME_VERSION);
+		Root->SetStringField(TEXT("moteur"), FApp::GetBuildVersion());
+		Root->SetStringField(TEXT("rhi"), FApp::GetGraphicsRHI());
+		Root->SetStringField(TEXT("ligne_de_commande"), FCommandLine::Get());
+		auto Strings = [](const TArray<FString>& In)
+		{
+			TArray<TSharedPtr<FJsonValue>> Out;
+			for (const FString& S : In)
+			{
+				Out.Add(MakeShared<FJsonValueString>(S));
+			}
+			return Out;
+		};
+		Root->SetArrayField(TEXT("problemes"), Strings(Problems));
+		Root->SetArrayField(TEXT("non_verifies"), Strings(Skipped));
+		TArray<TSharedPtr<FJsonValue>> Scenes;
+		for (const FLevelReport& R : Reports)
+		{
+			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetNumberField(TEXT("niveau"), R.Level);
+			O->SetStringField(TEXT("titre"), R.Title);
+			O->SetNumberField(TEXT("img_s"), R.AvgFPS);
+			O->SetNumberField(TEXT("p95_ms"), R.P95Ms);
+			O->SetNumberField(TEXT("p99_ms"), R.P99Ms);
+			O->SetNumberField(TEXT("gpu_ms"), R.GpuMs);
+			O->SetNumberField(TEXT("jeu_ms"), R.GameMs);
+			O->SetNumberField(TEXT("rendu_ms"), R.RenderMs);
+			O->SetNumberField(TEXT("ram_mo"), R.RamMB);
+			O->SetNumberField(TEXT("textures_mo"), R.TexMB);
+			O->SetArrayField(TEXT("notes"), Strings(R.Notes));
+			Scenes.Add(MakeShared<FJsonValueObject>(O));
+		}
+		Root->SetArrayField(TEXT("scenes"), Scenes);
+		FString Json;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
+		FJsonSerializer::Serialize(Root, Writer);
+		FFileHelper::SaveStringToFile(Json, *FPaths::Combine(OutDir, TEXT("Rapport.json")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM); // JSON : sans BOM (refuse par les lecteurs stricts)
+		// Test de lancement d'un paquet : copie a l'endroit demande par check_package.py
+		FString SmokeOut;
+		if (ParsePathOption(TEXT("BRSmokeOut="), SmokeOut))
+		{
+			Root->SetStringField(TEXT("resume"), FString::Printf(TEXT("%d probleme(s), %d non verifie(s)"), Problems.Num(), Skipped.Num()));
+			FString SmokeJson;
+			const TSharedRef<TJsonWriter<>> SmokeWriter = TJsonWriterFactory<>::Create(&SmokeJson);
+			FJsonSerializer::Serialize(Root, SmokeWriter);
+			FFileHelper::SaveStringToFile(SmokeJson, *SmokeOut, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM); // JSON : sans BOM (refuse par les lecteurs stricts)
+		}
+	}
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Rapport ecrit : %s (%d probleme(s))"), *Path, Problems.Num());
+}
+
+bool ABRAutoTest::ParsePathOption(const TCHAR* Name, FString& Out)
+{
+	// v4.10 : chemin qui peut contenir des espaces (dossier temporaire, "Nouveau dossier"). FParse::Value s'arretait au premier
+	// espace : le rapport du test de lancement partait ailleurs et check_package.py ne le trouvait pas. Formes acceptees :
+	// -Nom="C:\a b\x.json", "-Nom=C:\a b\x.json" (guillemets mis par le lanceur) et -Nom=C:\a b\x.json (jusqu'a l'option suivante)
+	const FString Line = FCommandLine::Get();
+	const int32 At = Line.Find(Name, ESearchCase::IgnoreCase);
+	if (At == INDEX_NONE)
+	{
+		return false;
+	}
+	const int32 Start = At + FCString::Strlen(Name);
+	FString Value;
+	if (Start < Line.Len() && Line[Start] == TEXT('"'))
+	{
+		const int32 End = Line.Find(TEXT("\""), ESearchCase::CaseSensitive, ESearchDir::FromStart, Start + 1);
+		Value = End == INDEX_NONE ? Line.Mid(Start + 1) : Line.Mid(Start + 1, End - Start - 1);
+	}
+	else
+	{
+		const int32 End = Line.Find(TEXT(" -"), ESearchCase::CaseSensitive, ESearchDir::FromStart, Start);
+		Value = End == INDEX_NONE ? Line.Mid(Start) : Line.Mid(Start, End - Start);
+		Value.TrimStartAndEndInline();
+		Value.RemoveFromEnd(TEXT("\""));
+	}
+	Out = Value.TrimStartAndEnd();
+	return !Out.IsEmpty();
 }
 
 void ABRAutoTest::Finish()
@@ -1742,6 +1951,27 @@ void ABRAutoTest::Finish()
 	WriteReport();
 	if (!FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestStay")))
 	{
-		FPlatformMisc::RequestExit(false, TEXT("BRAutoTest"));
+		// v4.10 : le code de sortie dit le resultat (avant : toujours 0, meme avec des problemes)
+		const uint8 Code = Problems.Num() > 0 ? 1 : ((Skipped.Num() > 0 && FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestStrict"))) ? 2 : 0);
+		FPlatformMisc::RequestExitWithStatus(false, Code, TEXT("BRAutoTest"));
+#if PLATFORM_WINDOWS
+		// Sous Windows, une sortie normale rend toujours 0 (le code passe par PostQuitMessage, que la boucle du moteur ignore) :
+		// une fois le moteur arrete (journal et reglages ecrits), le processus se termine avec le code du resultat
+		if (Code != 0)
+		{
+			FCoreDelegates::OnExit.AddLambda([Code]()
+			{
+				if (GConfig)
+				{
+					GConfig->Flush(false);
+				}
+				if (GLog)
+				{
+					GLog->Flush();
+				}
+				::TerminateProcess(::GetCurrentProcess(), Code);
+			});
+		}
+#endif
 	}
 }

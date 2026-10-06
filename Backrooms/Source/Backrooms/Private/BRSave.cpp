@@ -7,9 +7,15 @@
 #include "Async/Async.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "Misc/Crc.h"
+#include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
+#include "Serialization/CustomVersion.h"
+#include "Serialization/MemoryReader.h"
+#include "Serialization/ObjectAndNameAsStringProxyArchive.h"
+#include "UObject/ObjectVersion.h"
 
 // v4.7 : les fichiers sont lus et ecrits ici directement, au meme endroit que le systeme de sauvegarde generique
 // d'Unreal sur PC (Saved/SaveGames/<nom>.sav) : les parties v4.1-v4.6 sont retrouvees telles quelles.
@@ -152,6 +158,99 @@ namespace BRSaves
 			return bMain && bBackup;
 		}
 
+		// v4.10 : controle d'integrite ajoute apres la sauvegarde : "BRSV", taille des donnees, CRC32. Les versions precedentes
+		// du jeu l'ignorent (elles ne lisent que ce dont elles ont besoin) : un fichier v4.10 reste lisible par une v4.9.
+		constexpr uint32 TrailerMagic = 0x56535242; // "BRSV"
+		constexpr int32 TrailerSize = 12;
+		constexpr int32 SaveFileTag = 0x53415647; // "SAVG", en-tete des sauvegardes d'Unreal
+
+		void AppendTrailer(TArray<uint8>& Bytes)
+		{
+			const uint32 Words[3] = { TrailerMagic, static_cast<uint32>(Bytes.Num()), FCrc::MemCrc32(Bytes.GetData(), Bytes.Num()) };
+			Bytes.Append(reinterpret_cast<const uint8*>(Words), TrailerSize);
+		}
+
+		/** 1 : controle present et juste (OutSize : taille des donnees) ; 0 : absent (fichier d'avant la v4.10) ; -1 : faux */
+		int32 CheckTrailer(const TArray<uint8>& Bytes, int32& OutSize)
+		{
+			OutSize = Bytes.Num();
+			if (Bytes.Num() < TrailerSize)
+			{
+				return 0;
+			}
+			uint32 Words[3];
+			FMemory::Memcpy(Words, Bytes.GetData() + Bytes.Num() - TrailerSize, TrailerSize);
+			if (Words[0] != TrailerMagic)
+			{
+				return 0;
+			}
+			if (Words[1] != static_cast<uint32>(Bytes.Num() - TrailerSize) || FCrc::MemCrc32(Bytes.GetData(), Words[1]) != Words[2])
+			{
+				return -1;
+			}
+			OutSize = static_cast<int32>(Words[1]);
+			return 1;
+		}
+
+		/** Lecteur borne : aucune chaine ni aucun tableau plus long que le fichier (sinon erreur de lecture, pas d'allocation folle) */
+		struct FBoundedReader : public FMemoryReaderView
+		{
+			explicit FBoundedReader(TArrayView<const uint8> View) : FMemoryReaderView(View, true)
+			{
+				ArMaxSerializeSize = View.Num();
+			}
+		};
+
+		/** v4.10 : un nom ou un chemin d'objet plus long que ce qu'Unreal accepte (fichier abime) devient une erreur de lecture,
+		 *  au lieu d'arreter le jeu (assertion de FName, plantage reproduit par le test v4.7 "fichier illisible") */
+		struct FSafeSaveArchive : public FObjectAndNameAsStringProxyArchive
+		{
+			explicit FSafeSaveArchive(FArchive& Inner) : FObjectAndNameAsStringProxyArchive(Inner, false)
+			{
+			}
+
+			virtual FArchive& operator<<(FName& N) override
+			{
+				if (!IsLoading())
+				{
+					return FNameAsStringProxyArchive::operator<<(N);
+				}
+				FString S;
+				InnerArchive << S;
+				N = NAME_None;
+				if (InnerArchive.IsError() || S.Len() >= NAME_SIZE)
+				{
+					SetError();
+				}
+				else
+				{
+					N = FName(*S);
+				}
+				return *this;
+			}
+
+			virtual FArchive& operator<<(UObject*& Obj) override
+			{
+				if (!IsLoading())
+				{
+					return FObjectAndNameAsStringProxyArchive::operator<<(Obj);
+				}
+				FString S;
+				InnerArchive << S;
+				Obj = nullptr;
+				if (InnerArchive.IsError() || S.Len() >= NAME_SIZE)
+				{
+					SetError();
+				}
+				else if (!S.IsEmpty())
+				{
+					Obj = FindObject<UObject>(nullptr, *S); // une sauvegarde ne charge jamais d'objet
+				}
+				return *this;
+			}
+		};
+
+		/** Lecture d'une sauvegarde, sans jamais arreter le jeu sur un fichier abime : nullptr si illisible */
 		UBRSaveGame* FromBytes(const TArray<uint8>& Bytes)
 		{
 			// En-tete d'Unreal (quelques dizaines d'octets) + au moins le nom de la classe : en dessous, fichier tronque
@@ -159,7 +258,74 @@ namespace BRSaves
 			{
 				return nullptr;
 			}
-			return Cast<UBRSaveGame>(UGameplayStatics::LoadGameFromMemory(Bytes));
+			int32 Size = 0;
+			if (CheckTrailer(Bytes, Size) < 0)
+			{
+				UE_LOG(LogBackrooms, Warning, TEXT("Sauvegarde : controle d'integrite faux (fichier abime) : non lue"));
+				return nullptr;
+			}
+			FBoundedReader Reader(TArrayView<const uint8>(Bytes.GetData(), Size));
+			// En-tete (meme lecture que FSaveGameHeader::Read d'Unreal 5.8), en exigeant l'etiquette "SAVG" : sans elle,
+			// Unreal lirait le debut du fichier comme un nom de classe
+			int32 Tag = 0;
+			int32 FileVersion = 0;
+			Reader << Tag;
+			Reader << FileVersion;
+			if (Reader.IsError() || Tag != SaveFileTag || FileVersion < 1 || FileVersion > 3)
+			{
+				return nullptr;
+			}
+			FPackageFileVersion UEVersion;
+			if (FileVersion >= 3)
+			{
+				Reader << UEVersion;
+			}
+			else
+			{
+				int32 OldUE4Version = 0;
+				Reader << OldUE4Version;
+				UEVersion = FPackageFileVersion::CreateUE4Version(OldUE4Version);
+			}
+			FEngineVersion EngineVersion;
+			Reader << EngineVersion;
+			if (Reader.IsError())
+			{
+				return nullptr;
+			}
+			Reader.SetUEVer(UEVersion);
+			Reader.SetEngineVer(EngineVersion);
+			if (FileVersion >= 2)
+			{
+				int32 CustomFormat = 0;
+				Reader << CustomFormat;
+				if (Reader.IsError() || CustomFormat < static_cast<int32>(ECustomVersionSerializationFormat::Guids)
+					|| CustomFormat > static_cast<int32>(ECustomVersionSerializationFormat::Latest))
+				{
+					return nullptr;
+				}
+				FCustomVersionContainer Custom;
+				Custom.Serialize(Reader, static_cast<ECustomVersionSerializationFormat>(CustomFormat));
+				if (Reader.IsError())
+				{
+					return nullptr;
+				}
+				Reader.SetCustomVersions(Custom);
+			}
+			FString ClassName;
+			Reader << ClassName;
+			if (Reader.IsError() || ClassName != UBRSaveGame::StaticClass()->GetPathName())
+			{
+				return nullptr;
+			}
+			UBRSaveGame* Save = NewObject<UBRSaveGame>(GetTransientPackage());
+			FSafeSaveArchive Ar(Reader);
+			Save->Serialize(Ar);
+			if (Ar.IsError() || Reader.IsError())
+			{
+				UE_LOG(LogBackrooms, Warning, TEXT("Sauvegarde : donnees illisibles (fichier abime) : non lue"));
+				return nullptr;
+			}
+			return Save;
 		}
 
 		/** Instantane coherent, pris sur le thread du jeu. Jamais pour un fichier d'un format plus recent (refuse avant) */
@@ -168,7 +334,12 @@ namespace BRSaves
 			check(!Save->bFutureFormat);
 			Save->Version = UBRSaveGame::CurrentVersion;
 			Save->LastPlayed = FDateTime::Now();
-			return UGameplayStatics::SaveGameToMemory(Save, Out) && Out.Num() > 0;
+			if (!UGameplayStatics::SaveGameToMemory(Save, Out) || Out.Num() == 0)
+			{
+				return false;
+			}
+			AppendTrailer(Out);
+			return true;
 		}
 
 		void ProcessQueue()

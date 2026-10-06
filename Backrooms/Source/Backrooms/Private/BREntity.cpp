@@ -1359,7 +1359,8 @@ ABRCharacter* ABREntity::PickTarget(ABRWorld* W) const
 	float BestScore = 1e30f;
 	for (ABRCharacter* C : Players)
 	{
-		if (C->IsDead())
+		// v4.10 : un joueur qui charge encore le niveau (preparation, arrivee) n'est pas une proie
+		if (C->IsDead() || C->IsLevelLoading())
 		{
 			continue;
 		}

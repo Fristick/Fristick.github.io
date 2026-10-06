@@ -139,9 +139,20 @@ namespace BRFonts
 				return Existing;
 			}
 		}
+		// v4.10 : on copie la police *effective*. En 5.8, la police moyenne du moteur (DefaultRegularFont) est une coquille
+		// dont le contenu vient du style Slate (RuntimeFontSource = CoreStyleDefault) : son champ CompositeFont est vide.
+		// Copier ce champ donnait une police sans aucun caractere latin : tout le texte en carres (police de dernier recours).
+		const FCompositeFont* Source = Base->GetCompositeFont();
+		if (!Source || Source->DefaultTypeface.Fonts.Num() == 0)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("Police de l'interface : %s n'a pas de police par defaut ; sous-polices d'ecriture non ajoutees"), *Base->GetName());
+			return Base;
+		}
 		UFont* Font = NewObject<UFont>(GetTransientPackage(), NAME_None, RF_Transient);
 		Font->FontCacheType = EFontCacheType::Runtime;
-		Font->CompositeFont = Base->CompositeFont;
+		Font->RuntimeFontSource = ERuntimeFontSource::Asset;
+		FCompositeFont& Composite = Font->GetMutableInternalCompositeFont();
+		Composite = *Source;
 		Font->LegacyFontSize = Base->LegacyFontSize;
 		Font->LegacyFontName = Base->LegacyFontName;
 		int32 Added = 0;
@@ -159,7 +170,7 @@ namespace BRFonts
 			}
 			Sub.CharacterRanges = S.Ranges;
 			Sub.Cultures = S.Cultures;
-			Font->CompositeFont.SubTypefaces.Add(Sub);
+			Composite.SubTypefaces.Add(Sub);
 			++Added;
 		}
 		const TArray<FString> Missing = MissingFiles();

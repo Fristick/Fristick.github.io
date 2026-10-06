@@ -117,12 +117,45 @@ public:
 	static int32 PreloadCatalogCount();
 	/** Prechargement termine (ou impossible) */
 	static bool IsPreloadDone();
+	/** v4.10 : cles des ensembles. Seule convention : le catalogue, les niveaux et les tests les construisent ici
+	 *  ("entity:Smiler", "tex:T_PoolTile", "props:Office", "fixture:StreetLamp") */
+	static FString EntitySetKey(EBREntityKind Kind);
+	static FString SurfaceSetKey(FName Texture);
+	/** v4.10 : ensembles indispensables au niveau Level (commun, ses surfaces, ses creatures, ses decors propres) et
+	 *  anticipation facultative (niveaux ou menent ses sorties) */
+	static TArray<FString> EssentialSetsForLevel(int32 Level);
+	static TArray<FString> NeighborSetsForLevel(int32 Level);
+	/** v4.10 : ensemble auquel appartient une ressource (nom sans chemin), d'apres ses usages ("common" par defaut) */
+	static FString SetKeyForAsset(const FString& AssetName, bool bTexture);
+	/** v4.10 : ressources d'un ensemble au catalogue (tests : un ensemble vide n'est pas une reussite) */
+	static int32 CatalogSetSize(const FString& Key);
+	/** v4.10 : ressources de cet ensemble encore en memoire (objets retenus, et pas seulement handles) */
+	static int32 ResidentCount(const FString& Key);
+	/** v4.10 : prepare les ensembles indispensables du niveau Level en arriere-plan, avant leur premiere utilisation.
+	 *  Serial identifie la demande : une demande remplacee n'est jamais consideree comme prete. */
+	static void PrepareLevel(int32 Level, uint32 Serial);
+	/** v4.10 : la demande Serial est prete (ressources en memoire). OutProgress : 0..1 ; OutMissing : ensembles encore en
+	 *  cours. Faux pour une demande remplacee. */
+	static bool IsLevelPrepared(uint32 Serial, float* OutProgress = nullptr, TArray<FString>* OutMissing = nullptr);
+	/** v4.10 : retire des caches (Loaded, MatCache) les entrees des ensembles inutiles au niveau Level. Les objets encore
+	 *  utilises par un acteur restent en memoire tant qu'ils le sont ; les autres partent au ramasse-miettes suivant. */
+	void TrimCaches(int32 Level);
+	/** v4.10 : mesures : entrees des caches (ressources, materiaux) */
+	int32 GetLoadedCount() const { return Loaded.Num(); }
+	int32 GetMaterialCacheCount() const { return MatCache.Num(); }
 	/** v4.8 : chargements synchrones survenus en jeu (nombre, pire duree, premiers noms) : rapport et mode developpeur */
 	static int32 SyncLoadsInGame;
 	static float MaxSyncLoadMs;
 	static TArray<FString> SyncLoadNames;
 	/** Compter les chargements synchrones (en jeu, hors menus et transitions) */
 	static bool bCountSyncLoads;
+	/** v4.10 : chargements synchrones pendant la construction d'un niveau (premieres utilisations non preparees) */
+	static bool bCountBuildLoads;
+	static int32 SyncLoadsInBuild;
+	static TArray<FString> SyncLoadBuildNames;
+	/** v4.10 (tests) : preparation volontairement bloquee jusqu'a cette heure (FPlatformTime::Seconds) : ecran de
+	 *  preparation, retour au menu propose, delai maximal */
+	static double TestPrepareStallUntil;
 	/** v4.8 : textures lues dans RawAssets (secours de l'editeur ; jamais dans un jeu empaquete) */
 	static int32 RawTextureLoads;
 	/** v4.7 : post-traitement des salles de fosses (assombrit ce qui est sous le sol) ; nullptr si indisponible */
