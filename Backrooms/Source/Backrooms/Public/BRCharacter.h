@@ -68,6 +68,16 @@ struct FBRDeathState
 	uint8 WakeCount = 0;
 };
 
+/** v4.12 : retour visible d'une demande faite a l'hote (ramassage, mecanisme, soin, depart) */
+enum class EBRActionStatus : uint8
+{
+	None,
+	/** Envoyee, pas encore de reponse */
+	Pending,
+	Accepted,
+	Refused
+};
+
 UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
 {
@@ -422,6 +432,11 @@ public:
 	bool IsWakePending() const { return PendingWakeReports > 0; }
 	/** v4.12 (tests) : attributions de l'hote sans accuse de reception, dans ce niveau */
 	int32 CountUnackedPickups(int32 LevelSerial) const;
+	/** v4.12 : derniere demande a l'hote et son etat (en attente, acceptee, refusee + raison), affichee sous l'invite.
+	 *  OutAge : secondes depuis le dernier changement */
+	EBRActionStatus GetActionStatus(FString& OutDetail, float& OutAge) const;
+	/** v4.12 (tests) : demandes restees sans reponse au-dela du delai */
+	int32 ActionsTimedOut = 0;
 	/** v4.11 : declaration du stock de soin acceptee par l'hote (une fois par session) */
 	bool IsHealStockDeclared() const { return bServerHealStockKnown; }
 
@@ -618,6 +633,11 @@ private:
 	void UpdateMissionHold(float Dt);
 	/** Reponse a une action de mission, chez le joueur qui l'a faite */
 	void HandleMissionResult(int32 Device, uint8 Feedback, uint8 Related, uint8 Count);
+	/** v4.12 : etat de la derniere demande a l'hote (voir GetActionStatus) */
+	EBRActionStatus ActionStatus = EBRActionStatus::None;
+	FString ActionDetail;
+	double ActionStatusAt = 0.0;
+	void SetActionStatus(EBRActionStatus Status, const FString& Detail = FString());
 	/** Une reponse deja appliquee (repetition) */
 	static bool WasApplied(const uint16 (&Applied)[TxnHistory], uint16 RequestId);
 	static void RememberApplied(uint16 (&Applied)[TxnHistory], int32& Next, uint16 RequestId);

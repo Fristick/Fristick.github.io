@@ -3503,6 +3503,58 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 		RoundRect(CX - PW * 0.5f, CY + 26.f * U, PW, PH, PH * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.42f * PA));
 		TextF(P, CX, CY + 26.f * U + (PH - PS.Y) * 0.5f, FLinearColor(1.f, 1.f, 1.f, 0.95f * PA), 13.f, EUiWeight::Regular, EUiAlign::Center, false);
 	}
+	// v4.12 : reponse de l'hote a la derniere demande (ramassage, mecanisme, soin, depart) : en attente, acceptee,
+	// refusee (avec la raison). Discret, sous l'invite ; jamais une jauge de statut
+	{
+		FString Detail;
+		float Age = 0.f;
+		EBRActionStatus St = C->GetActionStatus(Detail, Age);
+		const ABRWorld* SW = ABRWorld::Get(this);
+		if (St == EBRActionStatus::Pending && SW && SW->GetDeparture().Phase >= 1 && SW->GetDeparture().Phase <= 2)
+		{
+			St = EBRActionStatus::Accepted; // depart annonce : la demande est acceptee
+		}
+		FString Line;
+		FLinearColor Col = FLinearColor::White;
+		float Alpha = 0.f;
+		switch (St)
+		{
+		case EBRActionStatus::Pending:
+		{
+			const int32 Dots = 1 + static_cast<int32>(Age * 3.f) % 3;
+			Line = Age < 5.f ? BR_STR(NSLOCTEXT("BR", "HUD.ActionPending", "En attente de l'h\u00f4te")) + FString::ChrN(Dots, TEXT('.'))
+				: BR_STR(NSLOCTEXT("BR", "HUD.ActionNoAnswer", "Toujours sans r\u00e9ponse de l'h\u00f4te (connexion lente ?)"));
+			Col = Age < 5.f ? FLinearColor(0.85f, 0.85f, 0.8f) : FLinearColor(1.f, 0.7f, 0.35f);
+			Alpha = Age < 12.f ? 1.f : 0.f;
+			break;
+		}
+		case EBRActionStatus::Accepted:
+			Line = Detail.IsEmpty() ? BR_STR(NSLOCTEXT("BR", "HUD.ActionAccepted", "Accept\u00e9"))
+				: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ActionAcceptedWhat", "Accept\u00e9 : {What}"), { { TEXT("What"), BRLoc::Arg(Detail) } });
+			Col = FLinearColor(0.55f, 1.f, 0.6f);
+			Alpha = FMath::Clamp(1.4f - Age, 0.f, 1.f);
+			break;
+		case EBRActionStatus::Refused:
+			Line = Detail.IsEmpty() ? BR_STR(NSLOCTEXT("BR", "HUD.ActionRefused", "Refus\u00e9 par l'h\u00f4te"))
+				: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ActionRefusedWhy", "Refus\u00e9 : {Why}"), { { TEXT("Why"), BRLoc::Arg(Detail) } });
+			Col = FLinearColor(1.f, 0.55f, 0.45f);
+			Alpha = FMath::Clamp(3.5f - Age, 0.f, 1.f);
+			break;
+		default:
+			break;
+		}
+		if (Alpha > 0.01f && !Line.IsEmpty())
+		{
+			const float MaxW = FMath::Min(Canvas->ClipX * 0.6f, 720.f * U);
+			const FString Shown = Ellipsize(Line, MaxW, 11.5f, EUiWeight::Regular);
+			const FVector2f SS = TextSize(Shown, 11.5f, EUiWeight::Regular);
+			const float SH = 24.f * U;
+			const float SWd = SS.X + 26.f * U;
+			const float SY = CY + (bFocus ? 64.f : 30.f) * U;
+			RoundRect(CX - SWd * 0.5f, SY, SWd, SH, SH * 0.5f, FLinearColor(0.f, 0.f, 0.f, 0.4f * Alpha * PA));
+			TextF(Shown, CX, SY + (SH - SS.Y) * 0.5f, WithAlpha(Col, 0.95f * Alpha * PA), 11.5f, EUiWeight::Regular, EUiAlign::Center, false);
+		}
+	}
 	if (C->GetReviveProgress() > 0.f)
 	{
 		// Progression d'un geste (relever un coequipier) : pas une jauge de statut
@@ -5332,6 +5384,43 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	BRMission::FEval E;
 	W->GetMissionEval(E);
 
+	// v4.12 : la colonne de gauche est une liste de lignes (etapes, objets, facultatif, aide) avec sa propre zone de
+	// defilement ; le bouton d'aide reste fixe en bas. Rien n'est coupe : tout indice reste consultable a la molette.
+	struct FNoteLine
+	{
+		FString Text;
+		FString Right;
+		FLinearColor Color = FLinearColor::White;
+		float Scale = 1.f;
+		UFont* Font = nullptr;
+		float Indent = 0.f;
+		float H = 0.f;
+		bool bBullet = false;
+	};
+	TArray<FNoteLine> Left;
+	float LeftH = 0.f;
+	auto Push = [&](const FString& Text, const FLinearColor& Col, float Scale, UFont* Font, float Indent, float H, bool bBullet = false, const FString& Right = FString())
+	{
+		FNoteLine N;
+		N.Text = Text;
+		N.Right = Right;
+		N.Color = Col;
+		N.Scale = Scale;
+		N.Font = Font;
+		N.Indent = Indent;
+		N.H = H;
+		N.bBullet = bBullet;
+		Left.Add(N);
+		LeftH += H;
+	};
+	auto Space = [&](float H)
+	{
+		FNoteLine N;
+		N.H = H;
+		Left.Add(N);
+		LeftH += H;
+	};
+
 	// ---- Etapes
 	int32 Current = -1;
 	for (int32 I = 0; I < E.NumSteps; ++I)
@@ -5342,35 +5431,30 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		{
 			Current = I;
 		}
-		const FString Title = bUnknown ? BR_STR(NSLOCTEXT("BR", "HUD.StepUnknown", "\u00c9tape encore inconnue")) : BRMissionText::StepTitle(Plan.Level, I);
+		const FString Title = bUnknown ? BR_STR(NSLOCTEXT("BR", "HUD.StepUnknown", "Étape encore inconnue")) : BRMissionText::StepTitle(Plan.Level, I);
 		const FLinearColor Col = bDone ? Done : (I == Current ? Yellow : (bUnknown ? WithAlpha(InkDim, 0.6f) : Ink));
 		const FString Count = (!bUnknown && E.Goal[I] > 1) ? FString::Printf(TEXT("%d/%d"), E.Progress[I], E.Goal[I]) : FString();
-		DrawRect(Col, X, Y + 7.f * U, 7.f * U, 7.f * U);
 		const TArray<FString> Lines = Wrap(Title, ColWidth - 80.f * U, Medium, 0.82f * U);
 		for (int32 K = 0; K < Lines.Num(); ++K)
 		{
-			TxtLine(Lines[K], X + 18.f * U, Y, ColWidth - 80.f * U, Col, 0.82f * U, Medium);
-			if (K == 0 && !Count.IsEmpty())
-			{
-				TxtRight(Count, X + ColWidth, Y, Col, 0.8f * U, Medium);
-			}
-			Y += 24.f * U;
+			Push(Lines[K], Col, 0.82f * U, Medium, 18.f * U, 24.f * U, K == 0, K == 0 ? Count : FString());
 		}
-		Y += 4.f * U;
+		Space(4.f * U);
 	}
 	if (E.bSolved)
 	{
 		for (const FString& L : Wrap(BRMissionText::SolvedLine(Plan.Level), ColWidth, Small, 0.74f * U))
 		{
-			TxtLine(L, X, Y, ColWidth, Done, 0.74f * U, Small);
-			Y += 19.f * U;
+			Push(L, Done, 0.74f * U, Small, 0.f, 19.f * U);
 		}
 		if (Plan.Level == 0 && E.Route != 255)
 		{
 			const FString Route = E.Route ? BR_STR(NSLOCTEXT("BR", "HUD.RoutePool", "Route ouverte : trappe vers les Poolrooms (Niveau 37)"))
 				: BR_STR(NSLOCTEXT("BR", "HUD.RouteL1", "Route ouverte : mur vers le Niveau 1"));
-			TxtLine(Route, X, Y, ColWidth, Yellow, 0.74f * U, Small);
-			Y += 19.f * U;
+			for (const FString& L : Wrap(Route, ColWidth, Small, 0.74f * U))
+			{
+				Push(L, Yellow, 0.74f * U, Small, 0.f, 19.f * U);
+			}
 		}
 	}
 	// ---- Objets de l'equipe (fusibles, cles) : partages, un depart ne les emporte pas
@@ -5385,23 +5469,21 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	}
 	if (!Items.IsEmpty())
 	{
-		Y += 6.f * U;
-		for (const FString& L : Wrap(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TeamItems", "Objets de l'\u00e9quipe : {Items}"), { { TEXT("Items"), BRLoc::Arg(Items) } }), ColWidth, Small, 0.74f * U))
+		Space(6.f * U);
+		for (const FString& L : Wrap(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TeamItems", "Objets de l'équipe : {Items}"), { { TEXT("Items"), BRLoc::Arg(Items) } }), ColWidth, Small, 0.74f * U))
 		{
-			TxtLine(L, X, Y, ColWidth, Ink, 0.74f * U, Small);
-			Y += 19.f * U;
+			Push(L, Ink, 0.74f * U, Small, 0.f, 19.f * U);
 		}
 	}
 	// ---- Facultatif
 	const FString Opt = BRMissionText::OptionalLine(Plan.Level);
 	if (!Opt.IsEmpty())
 	{
-		Y += 6.f * U;
+		Space(6.f * U);
 		const bool bOptDone = Plan.Level == 0 ? W->GetLoreFound() >= 3 : E.bOptionalDone;
 		for (const FString& L : Wrap(Opt, ColWidth, Small, 0.74f * U))
 		{
-			TxtLine(L, X, Y, ColWidth, bOptDone ? Done : InkDim, 0.74f * U, Small);
-			Y += 19.f * U;
+			Push(L, bOptDone ? Done : InkDim, 0.74f * U, Small, 0.f, 19.f * U);
 		}
 	}
 
@@ -5413,27 +5495,20 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		NotebookHint.Reset();
 	}
 	NotebookHintStep = Current >= 0 ? Plan.Level * 16 + Current : -1;
+	int32 HintLevel = 0;
+	float HintStart = -1.f;
 	if (Current >= 0)
 	{
-		const int32 HintLevel = NotebookHint.FindRef(NotebookHintStep);
+		HintLevel = NotebookHint.FindRef(NotebookHintStep);
 		LastNotebookHintLevel = HintLevel;
-		Y = FMath::Max(Y + 14.f * U, IY + IH * 0.55f);
-		const FString BtnLabel = HintLevel == 0 ? BR_STR(NSLOCTEXT("BR", "HUD.HintAsk", "AIDE : afficher un indice"))
-			: (HintLevel == 1 ? BR_STR(NSLOCTEXT("BR", "HUD.HintMore", "AIDE : rappeler les indices trouv\u00e9s")) : BR_STR(NSLOCTEXT("BR", "HUD.HintHide", "AIDE : masquer")));
-		const float BW = FMath::Min(ColWidth, TextW(BtnLabel, Medium, 0.78f * U) + 30.f * U);
-		const bool bHov = Hover(X, Y, BW, 30.f * U);
-		RoundRect(X, Y, BW, 30.f * U, 8.f * U, bHov ? FLinearColor(0.95f, 0.78f, 0.25f, 0.35f) : FLinearColor(0.95f, 0.78f, 0.25f, 0.15f));
-		TxtLine(BtnLabel, X + 15.f * U, Y + 4.f * U, BW - 30.f * U, Yellow, 0.78f * U, Medium);
-		AddButton(Btn_NotebookHint, X, Y, BW, 30.f * U);
-		Y += 40.f * U;
-		const float Bottom = IY + IH - 16.f * U;
 		if (HintLevel >= 1)
 		{
+			Space(12.f * U);
+			HintStart = LeftH;
+			Push(BR_STR(NSLOCTEXT("BR", "HUD.HintHeader", "AIDE  ·  étape en cours")), YellowDim, 0.7f * U, Small, 0.f, 20.f * U);
 			for (const FString& L : Wrap(BRKeys::Expand(BRMissionText::StepHint(Plan.Level, Current)), ColWidth, Small, 0.74f * U))
 			{
-				if (Y + 19.f * U > Bottom) break;
-				TxtLine(L, X, Y, ColWidth, Ink, 0.74f * U, Small);
-				Y += 19.f * U;
+				Push(L, Ink, 0.74f * U, Small, 0.f, 19.f * U);
 			}
 		}
 		if (HintLevel >= 2)
@@ -5463,19 +5538,56 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			}
 			if (Recall.Num() == 0)
 			{
-				Recall.Add(BR_STR(NSLOCTEXT("BR", "HUD.HintNothingYet", "Rien d'utile n'a encore \u00e9t\u00e9 trouv\u00e9 pour cette \u00e9tape.")));
+				Recall.Add(BR_STR(NSLOCTEXT("BR", "HUD.HintNothingYet", "Rien d'utile n'a encore été trouvé pour cette étape.")));
 			}
-			Y += 6.f * U;
+			Space(6.f * U);
 			for (const FString& R : Recall)
 			{
 				for (const FString& L : Wrap(R, ColWidth - 14.f * U, Small, 0.72f * U))
 				{
-					if (Y + 18.f * U > Bottom) break;
-					TxtLine(L, X + 14.f * U, Y, ColWidth - 14.f * U, Yellow, 0.72f * U, Small);
-					Y += 18.f * U;
+					Push(L, Yellow, 0.72f * U, Small, 14.f * U, 18.f * U);
 				}
 			}
 		}
+	}
+
+	// ---- Rendu de la colonne de gauche : zone defilante, puis bouton d'aide fixe au bas du panneau
+	const float BtnH = 30.f * U;
+	const float LTop = IY + 60.f * U;
+	const float LBottom = Current >= 0 ? IY + IH - 16.f * U - BtnH - 12.f * U : IY + IH - 16.f * U;
+	if (HintLevel != NotebookHintShown)
+	{
+		// L'aide demandee est toujours visible : la zone defile jusqu'a elle (ou revient en haut quand on la masque)
+		NotebookHintShown = HintLevel;
+		NotebookLeftScroll = HintStart >= 0.f ? FMath::Max(0.f, (HintStart - (LBottom - LTop) * 0.25f) / FMath::Max(U, 0.01f)) : 0.f;
+	}
+	float NY = LTop + ScrollArea(NotebookLeftScroll, X, LTop, ColWidth, LBottom - LTop, LeftH);
+	for (const FNoteLine& N : Left)
+	{
+		if (!N.Text.IsEmpty() && NY >= LTop - 1.f && NY + N.H <= LBottom + 1.f)
+		{
+			if (N.bBullet)
+			{
+				DrawRect(N.Color, X, NY + 7.f * U, 7.f * U, 7.f * U);
+			}
+			TxtLine(N.Text, X + N.Indent, NY, ColWidth - N.Indent - (N.Right.IsEmpty() ? 0.f : 62.f * U), N.Color, N.Scale, N.Font);
+			if (!N.Right.IsEmpty())
+			{
+				TxtRight(N.Right, X + ColWidth, NY, N.Color, 0.8f * U, Medium);
+			}
+		}
+		NY += N.H;
+	}
+	if (Current >= 0)
+	{
+		const FString BtnLabel = HintLevel == 0 ? BR_STR(NSLOCTEXT("BR", "HUD.HintAsk", "AIDE : afficher un indice"))
+			: (HintLevel == 1 ? BR_STR(NSLOCTEXT("BR", "HUD.HintMore", "AIDE : rappeler les indices trouvés")) : BR_STR(NSLOCTEXT("BR", "HUD.HintHide", "AIDE : masquer")));
+		const float BY = IY + IH - 16.f * U - BtnH;
+		const float BW = FMath::Min(ColWidth, TextW(BtnLabel, Medium, 0.78f * U) + 30.f * U);
+		const bool bHov = Hover(X, BY, BW, BtnH);
+		RoundRect(X, BY, BW, BtnH, 8.f * U, bHov ? FLinearColor(0.95f, 0.78f, 0.25f, 0.35f) : FLinearColor(0.95f, 0.78f, 0.25f, 0.15f));
+		TxtLine(BtnLabel, X + 15.f * U, BY + 4.f * U, BW - 30.f * U, Yellow, 0.78f * U, Medium);
+		AddButton(Btn_NotebookHint, X, BY, BW, BtnH);
 	}
 
 	// ---- Observations acquises (indices lus, observations, fragments de route de la campagne)
@@ -5530,10 +5642,12 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	const float Bottom = IY + IH - 16.f * U;
 	if (Lines.Num() == 0)
 	{
+		// v4.12 : le message part du haut de SA colonne (avant : de la hauteur atteinte par la colonne de gauche)
+		float EY = Top;
 		for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.NoObservation", "Rien pour l'instant : lisez les panneaux et examinez ce qui sort de l'ordinaire (maintenir la touche d'interaction).")), OW, Small, 0.74f * U))
 		{
-			TxtLine(L, OX, Y = (Y < Top ? Top : Y), OW, InkDim, 0.74f * U, Small);
-			Y += 19.f * U;
+			TxtLine(L, OX, EY, OW, InkDim, 0.74f * U, Small);
+			EY += 19.f * U;
 		}
 		return;
 	}

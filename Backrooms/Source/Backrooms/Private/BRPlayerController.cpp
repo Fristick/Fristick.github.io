@@ -164,7 +164,7 @@ namespace
 				{ { TEXT("Host"), BRLoc::Arg(BRLevels::VersionLabel(HostNet)) }, { TEXT("Local"), BRLoc::Arg(BRLevels::VersionLabel(BRContent::NetVersion)) } });
 		}
 		const BRContent::EChannel Local = BRLevels::Channel();
-		return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.JoinRefusedContent", "Impossible de rejoindre : l'h\u00f4te joue avec la {HostChannel} (contenu jusqu'au lot {HostLot}), vous avez la {LocalChannel} (lot {LocalLot}). Les deux joueurs doivent avoir le m\u00eame contenu."),
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.JoinRefusedContent", "Impossible de rejoindre : l'h\u00f4te joue avec la {HostChannel} (contenu jusqu'au chapitre {HostLot}), vous avez la {LocalChannel} (chapitre {LocalLot}). Les deux joueurs doivent avoir le m\u00eame contenu."),
 			{ { TEXT("HostChannel"), BRLoc::Arg(BRLevels::ChannelName(static_cast<BRContent::EChannel>(HostChannel)).ToString()) }, { TEXT("HostLot"), BRLoc::Int(HostLot) },
 				{ TEXT("LocalChannel"), BRLoc::Arg(BRLevels::ChannelName(Local).ToString()) }, { TEXT("LocalLot"), BRLoc::Int(BRContent::CurrentLot(Local)) } });
 	}

@@ -325,6 +325,9 @@ private:
 	float JournalScroll[2] = { 0.f, 0.f };
 	/** v4.11 : carnet : defilement des observations ; aide demandee par etape (cle : niveau * 16 + etape, graine) */
 	float NotebookScroll = 0.f;
+	/** v4.12 : defilement de la colonne de gauche du carnet (etapes, objets, aide) et niveau d'aide deja montre */
+	float NotebookLeftScroll = 0.f;
+	int32 NotebookHintShown = 0;
 	TMap<int32, int32> NotebookHint;
 	int32 NotebookHintStep = -1;
 	uint32 NotebookHintSeed = 0;

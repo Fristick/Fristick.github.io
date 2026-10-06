@@ -1,0 +1,3 @@
+Relecture ciblee des traductions (gauche/droite, identifiants, nombres, unites)
+verifications : cote 147, identifiants 2709, unites 231 ; nombres en toutes lettres relus a la main : 20
+problemes : 0

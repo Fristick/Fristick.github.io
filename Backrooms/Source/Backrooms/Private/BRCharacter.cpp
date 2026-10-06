@@ -617,6 +617,7 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 			LocalLastHealTime = Now;
 			const ABRWorld* HW = ABRWorld::Get(this);
 			PendingHealLevel = HW ? HW->GetLevelSerial() : 0;
+			SetActionStatus(EBRActionStatus::Pending, BRItems::Get(Item).Name.ToString());
 			ServerRequestHeal(static_cast<uint8>(Item), PendingHealRequest, PendingHealLevel, GetInvEpoch());
 			return false; // consomme a l'acceptation
 		}
@@ -1373,6 +1374,10 @@ void ABRCharacter::ClientHealResult_Implementation(uint8 Item, uint16 RequestId,
 		return;
 	}
 	const EBRItem What = static_cast<EBRItem>(Item);
+	if (ActionStatus == EBRActionStatus::Pending)
+	{
+		SetActionStatus(EBRActionStatus::Accepted, BRItems::Get(What).Name.ToString());
+	}
 	if (Out.bRemoveItem && RemoveItem(What, 1) == 0)
 	{
 		UE_LOG(LogBackrooms, Warning, TEXT("Soin accepte par l'hote sans %s dans l'inventaire (demande %u)"), *BRItems::Get(What).Name.ToString(), RequestId);
@@ -1454,6 +1459,10 @@ void ABRCharacter::NotifyHealRefused(uint8 Reason)
 		break;
 	}
 	ABRHUD::Notify(this, Msg.ToString(), 2.f, FLinearColor(1.f, 0.75f, 0.55f));
+	if (Reason != 4)
+	{
+		SetActionStatus(EBRActionStatus::Refused, Msg.ToString());
+	}
 }
 
 void ABRCharacter::ServerDeclareHealStock_Implementation(uint8 Water, uint8 Bandages)
@@ -1537,6 +1546,24 @@ void ABRCharacter::ServerAckPickup_Implementation(uint16 RequestId)
 	PickupLedger.Ack(RequestId);
 }
 
+void ABRCharacter::SetActionStatus(EBRActionStatus Status, const FString& Detail)
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+	ActionStatus = Status;
+	ActionDetail = Detail;
+	ActionStatusAt = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0;
+}
+
+EBRActionStatus ABRCharacter::GetActionStatus(FString& OutDetail, float& OutAge) const
+{
+	OutDetail = ActionDetail;
+	OutAge = GetWorld() ? static_cast<float>(GetWorld()->GetRealTimeSeconds() - ActionStatusAt) : 0.f;
+	return ActionStatus;
+}
+
 int32 ABRCharacter::CountUnackedPickups(int32 LevelSerial) const
 {
 	BRTxn::FLedgerEntry Out[BRTxn::FLedger::Size];
@@ -1615,6 +1642,7 @@ void ABRCharacter::RequestPickup(ABRPickup* Pickup)
 		return;
 	}
 	Pickup->SetPending(true);
+	SetActionStatus(EBRActionStatus::Pending, BRItems::Get(Pickup->Item).Name.ToString());
 	ServerRequestPickup(Pickup->Id, RequestId, Serial, static_cast<uint8>(Pickup->Item), static_cast<uint8>(FMath::Min(Room, 255)), Epoch);
 }
 
@@ -1669,6 +1697,10 @@ void ABRCharacter::HandlePickupResult(uint64 PickupId, uint16 RequestId, int32 L
 	if (!In.bAccepted)
 	{
 		return;
+	}
+	if (bMine && ActionStatus == EBRActionStatus::Pending)
+	{
+		SetActionStatus(EBRActionStatus::Accepted, BRItems::Get(Item).Name.ToString());
 	}
 	if (Out.bLostWithLife)
 	{
@@ -1776,6 +1808,7 @@ void ABRCharacter::NotifyPickupRefused(EBRPickupResult Result)
 		break;
 	}
 	ABRHUD::Notify(this, Msg.ToString(), 2.5f, FLinearColor(1.f, 0.7f, 0.5f));
+	SetActionStatus(EBRActionStatus::Refused, Msg.ToString());
 }
 
 void ABRCharacter::DieOf(EBRDeathCause Cause, int8 InKiller, AActor* Killer)
@@ -4152,6 +4185,11 @@ void ABRCharacter::RequestMissionAction(int32 Device, uint8 Action)
 		HandleMissionResult(Device, Fb, Related, Count);
 		return;
 	}
+	if (Action != static_cast<uint8>(BRMission::EAction::Hold))
+	{
+		// Une action maintenue a sa propre barre de progression ; les autres attendent la reponse de l'hote
+		SetActionStatus(EBRActionStatus::Pending);
+	}
 	ServerMissionInteract(static_cast<uint8>(Device), Action, NextMissionRequest, W->GetLevelSerial());
 }
 
@@ -4211,6 +4249,18 @@ void ABRCharacter::HandleMissionResult(int32 Device, uint8 Feedback, uint8 Relat
 	const BRMission::FDevice& D = Plan.Devices[Device];
 	const BRMission::EFeedback F = static_cast<BRMission::EFeedback>(Feedback);
 	const bool bDone = F == BRMission::EFeedback::Done || F == BRMission::EFeedback::AlreadyDone;
+	if (ActionStatus == EBRActionStatus::Pending)
+	{
+		// v4.12 : la reponse de l'hote, visible sous l'invite
+		if (bDone || F == BRMission::EFeedback::Progress || F == BRMission::EFeedback::None)
+		{
+			SetActionStatus(EBRActionStatus::Accepted);
+		}
+		else
+		{
+			SetActionStatus(EBRActionStatus::Refused, BRMissionText::Feedback(Plan, Device, Feedback, Related, Count));
+		}
+	}
 	// Fin d'une action maintenue (objectif atteint, refus, ordre non respecte)
 	if (HoldDevice.IsValid() && HoldDevice->GetIndex() == Device && F != BRMission::EFeedback::Progress)
 	{
@@ -4277,6 +4327,7 @@ void ABRCharacter::RequestDepartureFromServer(int32 Target)
 {
 	if (const ABRWorld* W = ABRWorld::Get(this))
 	{
+		SetActionStatus(EBRActionStatus::Pending, W->DestinationLabel(Target));
 		ServerRequestDeparture(Target, W->GetLevelSerial());
 	}
 }
@@ -4317,7 +4368,12 @@ void ABRCharacter::NotifyDepartureRefused(uint8 Reason)
 		Msg = BR_STR(NSLOCTEXT("BR", "Mission.Depart.RefusedOther", "Un autre d\u00e9part est d\u00e9j\u00e0 pr\u00e9vu : rejoignez le groupe."));
 		break;
 	default:
+		if (ActionStatus == EBRActionStatus::Pending)
+		{
+			SetActionStatus(EBRActionStatus::None);
+		}
 		return; // demande d'un niveau quitte, ou joueur a terre : rien a dire
 	}
 	ABRHUD::Notify(this, Msg, 3.5f, FLinearColor(1.f, 0.75f, 0.4f));
+	SetActionStatus(EBRActionStatus::Refused, Msg);
 }
