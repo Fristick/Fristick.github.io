@@ -489,6 +489,17 @@ public:
 	bool AllowsNewEncounter() const;
 	/** Phenomenes (bruits lointains, hallucinations) permis maintenant */
 	bool AllowsPhenomena() const;
+	/** v4.11 : budget de menace. Score : 1 par entite presente, +1 si elle poursuit, +2 pendant une coupure noire, +1 si un
+	 *  joueur est dans une salle de fosses. Au-dela du budget (4, 5 a plus de deux joueurs), aucune nouvelle rencontre :
+	 *  pas de coupure + Bacteria + plusieurs chasseurs + fosse au meme instant */
+	int32 ThreatScore() const;
+	int32 ThreatBudget() const;
+	/** v4.11 : bruit du monde (mecanisme actionne, disjonction, porte) : les entites qui l'entendent viennent voir */
+	void ReportNoise(const FVector& Location, float Radius);
+	/** Bruit recent (moins de 4 s) entendu depuis From ; false sinon */
+	bool FindRecentNoise(const FVector& From, FVector& OutLocation) const;
+	/** v4.11 : une machine alimentee (relais, disjoncteur en marche, generateur, treuil, balise) a moins de Radius */
+	bool IsNearActiveMachine(const FVector& Location, float Radius) const;
 
 	// ------------------------------------------------------------ v2 : coupures de courant
 	/** Coupure de courant en cours (les neons sont eteints ou en train de lacher) */
@@ -653,6 +664,13 @@ private:
 	TArray<FMissionExitSpot> MissionExitSpots;
 	/** Serveur : derniere unite maintenue acceptee (joueur, mecanisme) et rearmement apres une erreur */
 	TMap<uint64, double> MissionHoldTimes;
+	struct FNoiseEvent
+	{
+		FVector Location = FVector::ZeroVector;
+		float Radius = 0.f;
+		float Time = 0.f;
+	};
+	TArray<FNoiseEvent> Noises;
 	TMap<int32, double> MissionCooldowns;
 	float MissionDeviceTimer = 0.f;
 	bool bMissionSolvedSeen = false;

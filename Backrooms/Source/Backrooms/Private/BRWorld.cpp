@@ -2181,7 +2181,8 @@ bool ABRWorld::AllowsNewEncounter() const
 {
 	// Calme : apres 20 s seulement (on a le temps de decouvrir les lieux) ; malaise : oui ; le reste : non
 	const ETension T = GetTension();
-	return (T == ETension::Calm && TensionTime > 20.f) || T == ETension::Unease;
+	// v4.11 : budget de menace (coupure, entites presentes et en chasse, fosses) : au-dela, pas de nouvelle rencontre
+	return ((T == ETension::Calm && TensionTime > 20.f) || T == ETension::Unease) && ThreatScore() < ThreatBudget();
 }
 
 bool ABRWorld::AllowsPhenomena() const
@@ -2504,7 +2505,8 @@ void ABRWorld::UpdateBlackout(float Dt)
 				{
 					Alive += Weak.IsValid() ? 1 : 0;
 				}
-				if (Alive < D.BlackoutSmilers + 3)
+				// v4.11 : budget de menace : pas d'autre Smiler si la coupure s'ajoute deja a plusieurs chasseurs
+				if (Alive < D.BlackoutSmilers + 3 && ThreatScore() < ThreatBudget() + 3)
 				{
 					if (const ABRCharacter* P = RandomLivingPlayer())
 					{
@@ -3485,6 +3487,28 @@ bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, const ABRCharacter* Anchor, flo
 		}
 		const FVector Loc = CellCenter(Cell, Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
 		if (Info.bNeedsDark && LightLevelAt(Loc) > 0.12f)
+		{
+			continue;
+		}
+		// v4.11 : jamais devant le joueur (meme demi-espace que son regard, a moins de 25 m) ni sur la route d'une sortie
+		// ouverte toute proche (entre le joueur et elle) : une rencontre ne bloque pas une sortie gagnee
+		const FVector ToLoc = (Loc - PL).GetSafeNormal2D();
+		if (bAvoidSight && FVector::DotProduct(ToLoc, P->GetViewDirection().GetSafeNormal2D()) > 0.5f && Dist < 2500.f)
+		{
+			continue;
+		}
+		bool bOnExitRoute = false;
+		FString Unused;
+		for (TActorIterator<ABRExit> It(GetWorld()); It && !bOnExitRoute; ++It)
+		{
+			const FVector EL = It->GetActorLocation();
+			if (FVector::DistSquared2D(EL, PL) < FMath::Square(2500.f) && CanUseExit(It->Target, Unused))
+			{
+				const FVector ToExit = (EL - PL).GetSafeNormal2D();
+				bOnExitRoute = FVector::DotProduct(ToLoc, ToExit) > 0.7f && FVector::Dist2D(Loc, PL) < FVector::Dist2D(EL, PL) + 300.f;
+			}
+		}
+		if (bOnExitRoute)
 		{
 			continue;
 		}

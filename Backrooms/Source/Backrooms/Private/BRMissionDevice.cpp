@@ -592,6 +592,19 @@ bool ABRMissionDevice::IsInteractable() const
 	return bShown && Device.Kind != BRM::EKind::Gate;
 }
 
+bool ABRMissionDevice::IsRunning() const
+{
+	switch (Device.Kind)
+	{
+	case BRM::EKind::Switch:
+		return (Device.Role == BRM::R_Relay || Device.Role == BRM::R_Breaker) && StateValue != 0;
+	case BRM::EKind::Crank:
+		return StateValue >= Device.Positions;
+	default:
+		return false;
+	}
+}
+
 bool ABRMissionDevice::IsHoldAction() const
 {
 	return Device.Kind == BRM::EKind::Observe || Device.Kind == BRM::EKind::Crank;

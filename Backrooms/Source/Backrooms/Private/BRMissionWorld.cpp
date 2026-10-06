@@ -3,6 +3,7 @@
 #include "BRWorld.h"
 #include "BRMission.h"
 #include "BRCharacter.h"
+#include "BREntity.h"
 #include "BRInteractables.h"
 #include "BRPlayerController.h"
 #include "BRHUD.h"
@@ -889,6 +890,23 @@ uint8 ABRWorld::ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, i
 	const BRM::FResult R = BRM::Act(MissionPlan, MissionState, GetMissionCampaign(), Device, ActKind, Value);
 	OutRelated = R.Related;
 	OutCount = R.Count;
+	// Les mecanismes font du bruit : une balise qu'on remonte, un relais qui claque, une disjonction s'entendent de loin
+	if (R.bChanged || R.Feedback == BRM::EFeedback::Wrong)
+	{
+		float Radius = 500.f;
+		switch (D.Kind)
+		{
+		case BRM::EKind::Crank: Radius = D.Role == BRM::R_Beacon ? 1800.f : 1000.f; break;
+		case BRM::EKind::Switch: Radius = D.Role == BRM::R_Relay ? 1200.f : 600.f; break;
+		case BRM::EKind::Button: Radius = 800.f; break;
+		default: break;
+		}
+		if (R.Feedback == BRM::EFeedback::Tripped)
+		{
+			Radius = 1600.f;
+		}
+		ReportNoise(Dev->GetInteractPoint(), Radius);
+	}
 	if (R.Feedback == BRM::EFeedback::Wrong && D.Kind == BRM::EKind::Button)
 	{
 		// Une erreur se comprend et se corrige, mais le mecanisme se rearme (pas d'essais en rafale) ; le moulin tourne
@@ -1392,4 +1410,98 @@ void ABRWorld::CloseEnding(bool bContinue)
 		// Route annexe : l'exploration continue dans un niveau au hasard (la fin est enregistree)
 		RequestTransition(-1);
 	}
+}
+
+// =====================================================================================================================
+// v4.11 : bruits du monde, machines, budget de menace
+// =====================================================================================================================
+
+void ABRWorld::ReportNoise(const FVector& Location, float Radius)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	Noises.RemoveAll([this](const FNoiseEvent& E) { return LevelTime - E.Time > 4.f; });
+	if (Noises.Num() >= 8)
+	{
+		Noises.RemoveAt(0);
+	}
+	FNoiseEvent E;
+	E.Location = Location;
+	E.Radius = Radius;
+	E.Time = LevelTime;
+	Noises.Add(E);
+}
+
+bool ABRWorld::FindRecentNoise(const FVector& From, FVector& OutLocation) const
+{
+	float Best = TNumericLimits<float>::Max();
+	for (const FNoiseEvent& E : Noises)
+	{
+		if (LevelTime - E.Time > 4.f)
+		{
+			continue;
+		}
+		// Sans ligne de vue, les murs absorbent une partie du bruit
+		const float D = static_cast<float>(FVector::Dist(From, E.Location));
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRNoiseLos), false);
+		const bool bWall = GetWorld() && GetWorld()->LineTraceTestByChannel(From + FVector(0.f, 0.f, 80.f), E.Location, ECC_WorldStatic, Q);
+		if (D <= E.Radius * (bWall ? 0.55f : 1.f) && D < Best)
+		{
+			Best = D;
+			OutLocation = E.Location;
+		}
+	}
+	return Best < TNumericLimits<float>::Max();
+}
+
+bool ABRWorld::IsNearActiveMachine(const FVector& Location, float Radius) const
+{
+	for (const ABRMissionDevice* D : MissionDevices)
+	{
+		if (IsValid(D) && D->IsShown() && D->IsRunning() && FVector::DistSquared(D->GetActorLocation(), Location) < FMath::Square(Radius))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+int32 ABRWorld::ThreatScore() const
+{
+	int32 Score = 0;
+	for (const ABREntity* E : Entities)
+	{
+		if (IsValid(E))
+		{
+			Score += 1 + (E->GetChaseIntensity() > 0.3f ? 1 : 0);
+		}
+	}
+	if (BlackoutPhase == EBlackout::Dark)
+	{
+		Score += 2;
+	}
+	if (HasPits())
+	{
+		TArray<ABRCharacter*> All;
+		GetPlayers(All);
+		for (const ABRCharacter* C : All)
+		{
+			const FIntPoint Cell = WorldToCell(C->GetActorLocation());
+			if (C && IsPitRoomCell(Cell.X, Cell.Y))
+			{
+				++Score;
+				break;
+			}
+		}
+	}
+	return Score;
+}
+
+int32 ABRWorld::ThreatBudget() const
+{
+	TArray<ABRCharacter*> All;
+	GetPlayers(All);
+	return All.Num() > 2 ? 5 : 4;
 }

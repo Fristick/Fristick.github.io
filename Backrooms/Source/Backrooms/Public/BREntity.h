@@ -150,6 +150,10 @@ protected:
 	UPROPERTY(Replicated)
 	uint8 NetChase = 0;
 
+	/** v4.11 : avertissement visible (0..255) : grimace du Smiler, posture du Hound, Faceling fige */
+	UPROPERTY(Replicated)
+	uint8 NetWarn = 0;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Vanish)
 	bool bNetVanish = false;
 
@@ -185,6 +189,23 @@ public:
 	static int32 StatMisses;
 	/** Temps entre le debut de la preparation et le dernier coup porte (s) */
 	static float StatLastHitDelay;
+	/** v4.11 (tests) : changements de cible, et cible choisie par la derniere evaluation (perception d'abord) */
+	static int32 StatTargetSwitches;
+	/** v4.11 (tests) : choix de cible sur des perceptions donnees (vu, entendu, cache, distance), sans lancer de rayon */
+	struct FTargetCandidate
+	{
+		float Dist = 0.f;
+		bool bSeen = false;
+		bool bHeard = false;
+		bool bHidden = false;
+		bool bCurrent = false;
+		/** Secondes depuis que la cible actuelle a ete percue (memoire) */
+		float SincePerceived = 100.f;
+	};
+	/** Indice du candidat choisi ; CurrentHeld : depuis combien de temps la cible actuelle est gardee (hysteresis) */
+	static int32 ChooseTarget(const TArray<FTargetCandidate>& Candidates, float CurrentHeld);
+	/** v4.11 : avertissement en cours (Smiler qui se crispe, Hound qui gronde, Faceling qui se fige) : 0..1, replique */
+	float GetWarning() const { return NetWarn / 255.f; }
 
 protected:
 
@@ -242,8 +263,15 @@ private:
 
 	// IA
 	void Think(float Dt);
-	/** Serveur : le joueur vivant le plus proche (un joueur cache compte moins, la proie actuelle compte plus) */
-	ABRCharacter* PickTarget(ABRWorld* W) const;
+	/** Serveur. v4.11 : la perception passe avant la proximite (un joueur vu ou entendu avant un joueur proche mais
+	 *  cache ou derriere un mur), memoire de la derniere position percue, hysteresis (pas de changement incessant) */
+	ABRCharacter* PickTarget(ABRWorld* W);
+	/** v4.11 : un joueur est-il vu, entendu (bruit attenue par les murs), cache */
+	FTargetCandidate Perceive(const ABRCharacter* C) const;
+	/** v4.11 : Wretch : chasse nerveuse aux bruits, recherche courte, fatigue ; un bruit de machine peut le detourner */
+	void ThinkWretch(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt);
+	/** v4.11 : Clump : garde lourdement un passage autour de son poste, ne s'en eloigne pas, fuit les machines alimentees */
+	void ThinkClump(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt);
 	/** Client : pose deduite de l'etat replique (bras tendus, accroupi, forme du Skin-Stealer) */
 	void UpdateClientState(float Dt);
 	/** Sons d'entree dans un etat (alerte de poursuite), joues chez chacun */
@@ -358,6 +386,21 @@ private:
 	/** Le joueur est cache (placard, trou) : pas de ligne de vue, pas de bruit */
 	bool bTargetHidden = false;
 	bool bHostileVariant = true;
+	/** v4.11 : memoire de la cible (instant ou elle a ete choisie, derniere perception), bruit entendu (position
+	 *  approximative), fatigue du Wretch, poste du Clump, recherche, avertissement, arret au signal (Skin-Stealer) */
+	float TargetSince = 0.f;
+	float LastPerceived = -100.f;
+	FVector HeardAt = FVector::ZeroVector;
+	float HeardSample = -100.f;
+	float Fatigue = 0.f;
+	FVector Post = FVector::ZeroVector;
+	bool bHasPost = false;
+	FVector SearchAt = FVector::ZeroVector;
+	float SearchLeft = 0.f;
+	float WarnTime = 0.f;
+	float SignalFreeze = 0.f;
+	bool bLastTargetLight = false;
+	float ChaseHeld = 0.f;
 	float ChaseOut = 0.f;
 	bool bRegistered = false;
 	bool bWantsMove = false;

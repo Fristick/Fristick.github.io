@@ -48,6 +48,8 @@ public:
 	int32 GetIndex() const { return Index; }
 	/** Le mecanisme doit-il s'animer (neon qui clignote, balise, vapeur) quand un joueur est proche */
 	bool WantsTick() const { return bAnimated; }
+	/** v4.11 : machine alimentee en marche (relais, disjoncteur, generateur, treuil, balise) : le Clump s'en ecarte */
+	bool IsRunning() const;
 	/** Visible (son chunk est construit) */
 	void SetShown(bool bShow);
 	bool IsShown() const { return bShown; }

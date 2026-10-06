@@ -155,6 +155,7 @@ int32 ABREntity::StatWindups = 0;
 int32 ABREntity::StatHits = 0;
 int32 ABREntity::StatMisses = 0;
 float ABREntity::StatLastHitDelay = -1.f;
+int32 ABREntity::StatTargetSwitches = 0;
 
 FBRHumanoidSpec ABREntity::SpecFor(EBREntityKind InKind)
 {
@@ -216,6 +217,7 @@ void ABREntity::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(ABREntity, NetState);
 	DOREPLIFETIME(ABREntity, Target);
 	DOREPLIFETIME(ABREntity, NetChase);
+	DOREPLIFETIME(ABREntity, NetWarn);
 	DOREPLIFETIME(ABREntity, bNetVanish);
 }
 
@@ -1351,35 +1353,97 @@ void ABREntity::UpdateClientState(float Dt)
 	}
 }
 
-ABRCharacter* ABREntity::PickTarget(ABRWorld* W) const
+int32 ABREntity::ChooseTarget(const TArray<FTargetCandidate>& Candidates, float CurrentHeld)
 {
-	TArray<ABRCharacter*> Players;
-	W->GetPlayers(Players);
-	ABRCharacter* Best = nullptr;
-	float BestScore = 1e30f;
-	for (ABRCharacter* C : Players)
+	// v4.11 : ce qui est percu passe avant ce qui est proche. Un joueur vu compte pour sa distance, un joueur seulement
+	// entendu pour trois fois plus, un joueur ni vu ni entendu pour dix fois plus (il n'est choisi que faute de mieux) ;
+	// un joueur cache double encore. La cible actuelle, percue depuis peu, est gardee (memoire), et n'est quittee que pour
+	// une autre nettement mieux placee, apres au moins 2 s (hysteresis : pas de va-et-vient entre deux joueurs).
+	int32 Best = INDEX_NONE;
+	int32 Current = INDEX_NONE;
+	float BestScore = TNumericLimits<float>::Max();
+	float CurrentScore = TNumericLimits<float>::Max();
+	for (int32 I = 0; I < Candidates.Num(); ++I)
 	{
-		// v4.10 : un joueur qui charge encore le niveau (preparation, arrivee) n'est pas une proie
-		if (C->IsDead() || C->IsLevelLoading())
+		const FTargetCandidate& C = Candidates[I];
+		float Mult = C.bSeen ? 1.f : (C.bHeard ? 3.f : 10.f);
+		if (C.bHidden)
 		{
-			continue;
+			Mult *= 2.f;
 		}
-		float Score = static_cast<float>(FVector::DistSquared(C->GetActorLocation(), GetActorLocation()));
-		if (C->IsHidden())
+		if (C.bCurrent && C.SincePerceived < 6.f)
 		{
-			Score *= 4.f; // un joueur cache est delaisse pour un autre
+			Mult *= 0.5f;
 		}
-		if (C == Target.Get())
+		const float Score = FMath::Square(FMath::Max(C.Dist, 50.f)) * Mult;
+		if (C.bCurrent)
 		{
-			Score *= 0.6f; // garde sa proie tant qu'une autre n'est pas bien plus proche
+			Current = I;
+			CurrentScore = Score;
 		}
 		if (Score < BestScore)
 		{
 			BestScore = Score;
-			Best = C;
+			Best = I;
 		}
 	}
+	if (Current != INDEX_NONE && Best != Current && (CurrentHeld < 2.f || BestScore > CurrentScore * 0.5f))
+	{
+		return Current;
+	}
 	return Best;
+}
+
+ABREntity::FTargetCandidate ABREntity::Perceive(const ABRCharacter* C) const
+{
+	FTargetCandidate Out;
+	const FBREntityInfo& I = MyInfo();
+	Out.Dist = static_cast<float>(FVector::Dist(C->GetActorLocation(), GetActorLocation()));
+	Out.bHidden = C->IsHidden();
+	const bool bLOS = !Out.bHidden && Out.Dist < I.SightRange && HasLineOfSight(C);
+	Out.bSeen = bLOS;
+	// Bruit attenue par l'environnement : sans ligne de vue, les murs en absorbent pres de la moitie
+	const float Noise = C->GetNoiseRadius() * (bLOS ? 1.f : 0.55f);
+	Out.bHeard = !Out.bHidden && Noise >= Out.Dist;
+	return Out;
+}
+
+ABRCharacter* ABREntity::PickTarget(ABRWorld* W)
+{
+	TArray<ABRCharacter*> Players;
+	W->GetPlayers(Players);
+	TArray<ABRCharacter*> Valid;
+	TArray<FTargetCandidate> Candidates;
+	ABRCharacter* Current = Target.Get();
+	for (ABRCharacter* C : Players)
+	{
+		// v4.10 : un joueur qui charge encore le niveau (preparation, arrivee) n'est pas une proie
+		if (!C || C->IsDead() || C->IsLevelLoading())
+		{
+			continue;
+		}
+		FTargetCandidate Cand = Perceive(C);
+		Cand.bCurrent = C == Current;
+		Cand.SincePerceived = Cand.bCurrent ? Life - LastPerceived : 100.f;
+		Valid.Add(C);
+		Candidates.Add(Cand);
+	}
+	const int32 Pick = ChooseTarget(Candidates, Life - TargetSince);
+	ABRCharacter* Chosen = Valid.IsValidIndex(Pick) ? Valid[Pick] : nullptr;
+	if (Chosen != Current)
+	{
+		TargetSince = Life;
+		LastPerceived = -100.f;
+		if (Current && Chosen)
+		{
+			++StatTargetSwitches;
+		}
+	}
+	if (Chosen && (Candidates[Pick].bSeen || Candidates[Pick].bHeard))
+	{
+		LastPerceived = Life;
+	}
+	return Chosen;
 }
 
 void ABREntity::SetOrientToMovement(bool bOrient)
@@ -1885,11 +1949,32 @@ void ABREntity::Think(float Dt)
 	bTargetHidden = P->IsHidden() && !(State == EState::Chase && S.Dist < 300.f);
 	S.bLOS = S.Dist < I.SightRange && HasLineOfSight(P);
 	S.bLookedAt = S.bLOS && IsLookedAtBy(P, 0.82f);
-	S.bHeard = !bTargetHidden && P->GetNoiseRadius() >= S.Dist;
+	// v4.11 : un bruit est attenue par les murs (pres de la moitie sans ligne de vue) et localise approximativement :
+	// l'entite va vers un point voisin du joueur (erreur proportionnelle a la distance, retiree toutes les 1,5 s), pas
+	// vers sa position exacte. La voix des joueurs n'est pas entendue des entites (micro facultatif).
+	S.bHeard = !bTargetHidden && P->GetNoiseRadius() * (S.bLOS ? 1.f : 0.55f) >= S.Dist;
 	if (S.bLOS)
 	{
 		LastKnown = P->GetActorLocation();
 	}
+	else if (S.bHeard && Life - HeardSample > 1.5f)
+	{
+		HeardSample = Life;
+		const float Err = FMath::Min(300.f, S.Dist * 0.25f);
+		HeardAt = P->GetActorLocation() + FVector(FMath::FRandRange(-Err, Err), FMath::FRandRange(-Err, Err), 0.f);
+		LastKnown = HeardAt;
+	}
+	// v4.11 : avertissement visible (grimace, grondement, posture) : retombe tout seul
+	WarnTime = FMath::Max(0.f, WarnTime - Dt);
+	NetWarn = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(FMath::Min(WarnTime, 1.f) * 255.f), 0, 255));
+	// v4.11 : Skin-Stealer deguise : il s'arrete net quand on lui fait signe a la lampe (allumer/eteindre en le regardant)
+	const bool bLight = P->IsFlashlightOn();
+	if (Kind == EBREntityKind::SkinStealer && State == EState::Lure && bLight != bLastTargetLight && S.bLookedAt && S.Dist < 2200.f)
+	{
+		SignalFreeze = 1.6f;
+	}
+	bLastTargetLight = bLight;
+	SignalFreeze = FMath::Max(0.f, SignalFreeze - Dt);
 
 	// (journal, aura et musique de poursuite : calcules chez chaque joueur, voir ABRCharacter::UpdateEntityEffects)
 
@@ -1911,10 +1996,10 @@ void ABREntity::Think(float Dt)
 		ThinkDeathmoth(P, S, Dt);
 		break;
 	case EBREntityKind::Wretch:
-		ThinkSimpleHunter(P, S, Dt, 0.6f, 5.f);
+		ThinkWretch(W, P, S, Dt);
 		break;
 	case EBREntityKind::Clump:
-		ThinkSimpleHunter(P, S, Dt, 0.7f, 6.f);
+		ThinkClump(W, P, S, Dt);
 		break;
 	case EBREntityKind::Partygoer:
 		ThinkPartygoer(W, P, S, Dt);
@@ -1972,7 +2057,15 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 		return;
 	}
 
-	if (BeamTime > 0.35f || Agitation >= 1.f)
+	// v4.11 : un faisceau braque sur lui le fait d'abord se crisper (sourire et yeux qui s'embrasent, sifflement) :
+	// 0,9 s pour detourner la lampe et reculer avant la charge. Meme regle a chaque graine ; la lumiere ambiante, elle,
+	// le fait disparaitre (voir plus haut)
+	if (BeamTime > 0.25f && WarnTime <= 0.f && State != EState::Chase)
+	{
+		WarnTime = 1.2f;
+		MulticastVoiceCue(0.6f);
+	}
+	if (BeamTime > 1.15f || Agitation >= 1.f)
 	{
 		SetState(EState::Chase);
 	}
@@ -2019,7 +2112,12 @@ void ABREntity::ThinkHound(ABRCharacter* P, const FSense& S, float Dt)
 	{
 		NotifyChase(1.f);
 		FollowPathTo(PL, I.ChaseSpeed, Dt);
-		TryAttack(P, S.Dist);
+		// v4.11 : pas de morsure dans la premiere seconde et demie de poursuite : regarder le Hound sans courir a le
+		// temps de l'intimider avant tout contact
+		if (StateTime > 1.5f)
+		{
+			TryAttack(P, S.Dist);
+		}
 		if (bFacing && !P->IsSprinting() && S.Dist < 500.f)
 		{
 			Intimidation += Dt * 0.5f;
@@ -2037,6 +2135,12 @@ void ABREntity::ThinkHound(ABRCharacter* P, const FSense& S, float Dt)
 	}
 	case EState::Stalk:
 	{
+		// v4.11 : posture d'avertissement (tete basse, grondement) avant toute poursuite
+		if (StateTime < 0.1f)
+		{
+			WarnTime = 1.5f;
+			MulticastVoiceCue(0.5f);
+		}
 		if (S.Dist > 700.f)
 		{
 			SetOrientToMovement(true);
@@ -2123,14 +2227,30 @@ void ABREntity::ThinkFaceling(ABRCharacter* P, const FSense& S, float Dt)
 		break;
 	}
 	default:
+	{
+		// v4.11 : neutre tant qu'on ne le provoque pas (lampe braquee 2 s, course tout pres) ; la variante hostile
+		// previent d'abord (se fige, tete inclinee, cri) avant de charger, et seulement si l'on reste trop pres
+		const bool bBeamed = P->IsFlashlightOn() && S.bLOS && S.Dist < 1200.f && IsLookedAtBy(P, 0.96f);
+		BeamTime = bBeamed ? BeamTime + Dt : FMath::Max(0.f, BeamTime - Dt);
+		const bool bProvoked = BeamTime > 2.f || (P->IsSprinting() && S.Dist < 400.f);
 		if (S.bLOS && S.Dist < 350.f)
 		{
 			SetOrientToMovement(false);
 			FacePlayer(Dt);
-			if (bHostileVariant && S.Dist < 300.f)
+			if ((bHostileVariant && S.Dist < 300.f) || bProvoked)
 			{
-				SetOrientToMovement(true);
-				SetState(EState::Chase);
+				if (WarnTime <= 0.f && !bWarned)
+				{
+					bWarned = true;
+					WarnTime = 1.2f;
+					PlayVoice(0.8f);
+				}
+				else if (bWarned && WarnTime <= 0.f && S.Dist < 300.f)
+				{
+					bWarned = false;
+					SetOrientToMovement(true);
+					SetState(EState::Chase);
+				}
 			}
 			else if (S.Dist < 220.f)
 			{
@@ -2138,12 +2258,20 @@ void ABREntity::ThinkFaceling(ABRCharacter* P, const FSense& S, float Dt)
 				SetState(EState::Retreat);
 			}
 		}
+		else if (bProvoked && S.bLOS && WarnTime <= 0.f && !bWarned)
+		{
+			bWarned = true;
+			WarnTime = 1.2f;
+			PlayVoice(0.8f);
+		}
 		else
 		{
+			bWarned = S.Dist < 700.f && bWarned;
 			SetOrientToMovement(true);
 			Wander(I.WalkSpeed, Dt);
 		}
 		break;
+	}
 	}
 }
 
@@ -2171,6 +2299,13 @@ void ABREntity::ThinkSkinStealer(ABRCharacter* P, const FSense& S, float Dt)
 		if (Morph < 0.95f)
 		{
 			MoveTowards(GetActorLocation(), 0.f);
+			break;
+		}
+		if (SignalFreeze > 0.f)
+		{
+			// Signe a la lampe : un vrai explorateur repondrait ; lui s'arrete net, sans un geste (indice observable)
+			MoveTowards(GetActorLocation(), 0.f);
+			FacePlayer(Dt);
 			break;
 		}
 		FollowPathTo(PL, I.WalkSpeed * 0.8f, Dt);
@@ -2207,14 +2342,19 @@ void ABREntity::ThinkSkinStealer(ABRCharacter* P, const FSense& S, float Dt)
 void ABREntity::ThinkDeathmoth(ABRCharacter* P, const FSense& S, float Dt)
 {
 	const FBREntityInfo& I = MyInfo();
-	const bool bAttracted = P->IsFlashlightOn() && S.bLOS && S.Dist < 2000.f;
+	// v4.11 : la lampe l'attire, sauf dans un endroit deja eclaire : il y tourne autour des neons du decor (on peut s'en
+	// servir pour le detourner)
+	const ABRWorld* MW = World.Get();
+	const bool bLitHere = MW && MW->LightLevelAt(GetActorLocation()) > 0.55f;
+	const bool bLitThere = MW && MW->LightLevelAt(P->GetActorLocation()) > 0.55f;
+	const bool bAttracted = P->IsFlashlightOn() && S.bLOS && S.Dist < 2000.f && !bLitThere && !bLitHere;
 	if (State == EState::Chase)
 	{
 		NotifyChase(0.5f);
 		const FVector Wobble(FMath::Sin(Life * 2.1f) * 120.f, FMath::Cos(Life * 1.7f) * 120.f, 0.f);
 		FollowPathTo(P->GetActorLocation() + Wobble, I.ChaseSpeed, Dt);
 		TryAttack(P, S.Dist);
-		LostSight = P->IsFlashlightOn() ? 0.f : LostSight + Dt;
+		LostSight = (P->IsFlashlightOn() && !bLitThere) ? 0.f : LostSight + Dt;
 		if (LostSight > 2.5f)
 		{
 			SetState(EState::Wander);
@@ -2252,6 +2392,152 @@ void ABREntity::ThinkSimpleHunter(ABRCharacter* P, const FSense& S, float Dt, fl
 		{
 			SetState(EState::Chase);
 		}
+	}
+}
+
+// ------------------------------------------------------------------ Wretch (v4.11)
+void ABREntity::ThinkWretch(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	switch (State)
+	{
+	case EState::Chase:
+		// Chasse nerveuse : vite, mais s'epuise. Perd vite le fil sans ligne de vue
+		NotifyChase(0.6f);
+		Fatigue += Dt;
+		FollowPathTo(S.bLOS ? PL : LastKnown, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = S.bLOS ? 0.f : LostSight + Dt;
+		if (Fatigue > 9.f)
+		{
+			// Signe de fatigue : il s'arrete, haletant (titube, tete basse), et laisse une vraie chance de s'eloigner
+			WarnTime = 3.5f;
+			MulticastVoiceCue(0.4f);
+			SetState(EState::Frozen);
+		}
+		else if (LostSight > 3.f)
+		{
+			SearchAt = LastKnown;
+			SearchLeft = 4.f;
+			SetState(EState::Stalk);
+		}
+		break;
+	case EState::Frozen:
+		MoveTowards(GetActorLocation(), 0.f);
+		Fatigue = FMath::Max(0.f, Fatigue - Dt * 2.f);
+		if (StateTime > 3.5f)
+		{
+			Fatigue = 0.f;
+			SetState(S.bLOS && S.Dist < 900.f ? EState::Chase : EState::Wander);
+		}
+		break;
+	case EState::Stalk:
+	{
+		// Recherche courte autour du dernier bruit ou de la derniere position vue
+		Fatigue = FMath::Max(0.f, Fatigue - Dt * 0.5f);
+		FollowPathTo(SearchAt, I.ChaseSpeed * 0.75f, Dt);
+		if (FVector::Dist2D(GetActorLocation(), SearchAt) < 180.f)
+		{
+			SearchLeft -= Dt;
+		}
+		if (S.bLOS && S.Dist < I.SightRange * 0.8f)
+		{
+			SetState(EState::Chase);
+		}
+		else if (SearchLeft <= 0.f || StateTime > 12.f)
+		{
+			SetState(EState::Wander);
+		}
+		break;
+	}
+	default:
+	{
+		Fatigue = FMath::Max(0.f, Fatigue - Dt);
+		Wander(I.WalkSpeed, Dt);
+		FVector Noise;
+		if (S.bLOS && S.Dist < I.SightRange * 0.8f)
+		{
+			SetState(EState::Chase);
+		}
+		else if (S.bHeard)
+		{
+			SearchAt = HeardAt.IsNearlyZero() ? LastKnown : HeardAt;
+			SearchLeft = 2.5f;
+			SetState(EState::Stalk);
+		}
+		else if (W && W->FindRecentNoise(GetActorLocation(), Noise))
+		{
+			// Leurre : un mecanisme bruyant l'attire... mais il cherche aussi autour (aucune fuite garantie)
+			SearchAt = Noise;
+			SearchLeft = 3.f;
+			SetState(EState::Stalk);
+		}
+		break;
+	}
+	}
+}
+
+// ------------------------------------------------------------------ Clump (v4.11)
+void ABREntity::ThinkClump(ABRWorld* W, ABRCharacter* P, const FSense& S, float Dt)
+{
+	const FBREntityInfo& I = MyInfo();
+	const FVector PL = P->GetActorLocation();
+	if (!bHasPost)
+	{
+		Post = GetActorLocation();
+		bHasPost = true;
+	}
+	// Les machines alimentees (relais, generateurs, treuils en marche) le font reculer : son poste s'en ecarte
+	if (W && W->IsNearActiveMachine(Post, 500.f))
+	{
+		FVector Away = Post - PL;
+		Away.Z = 0.f;
+		Post += (Away.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Away.GetSafeNormal()) * 700.f;
+		if (State == EState::Chase)
+		{
+			SetState(EState::Retreat);
+		}
+	}
+	const float FromPost = static_cast<float>(FVector::Dist2D(GetActorLocation(), Post));
+	const float TargetFromPost = static_cast<float>(FVector::Dist2D(PL, Post));
+	switch (State)
+	{
+	case EState::Chase:
+		// Charge lourde et courte : il garde le passage, il ne poursuit pas au loin
+		NotifyChase(0.7f);
+		FollowPathTo(PL, I.ChaseSpeed, Dt);
+		TryAttack(P, S.Dist);
+		LostSight = S.bLOS ? 0.f : LostSight + Dt;
+		if (FromPost > 1100.f || TargetFromPost > 1400.f || LostSight > 2.5f || (W && W->IsNearActiveMachine(GetActorLocation(), 350.f)))
+		{
+			SetState(EState::Retreat);
+		}
+		break;
+	case EState::Retreat:
+		FollowPathTo(Post, I.WalkSpeed, Dt);
+		if (FromPost < 150.f || StateTime > 12.f)
+		{
+			SetState(EState::Idle);
+		}
+		break;
+	default:
+		// Garde : se balance sur place pres de son poste, barre le passage ; on peut faire un detour
+		if (FromPost > 300.f)
+		{
+			FollowPathTo(Post, I.WalkSpeed * 0.7f, Dt);
+		}
+		else
+		{
+			MoveTowards(GetActorLocation(), 0.f);
+			FacePlayer(Dt);
+		}
+		if (S.bLOS && S.Dist < 650.f && TargetFromPost < 900.f)
+		{
+			WarnTime = 0.8f;
+			SetState(EState::Chase);
+		}
+		break;
 	}
 }
 
@@ -2645,10 +2931,14 @@ void ABREntity::Animate(float Dt)
 	{
 	case EBREntityKind::Smiler:
 	{
-		Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, FMath::Sin(Life * 1.5f) * 6.f));
-		const bool bBlink = FMath::Fmod(Life + 0.37f * static_cast<float>(GetUniqueID() % 7), 5.3f) < 0.12f;
+		// v4.11 : avertissement replique (faisceau braque sur lui) : il tremble et son sourire s'embrase avant la charge,
+		// chez tous les joueurs (avant : seulement chez l'hote, qui seul connaissait le temps d'exposition)
+		const float Warn = GetWarning();
+		const FVector Shake = Warn > 0.f ? FVector(FMath::Sin(Life * 47.f), FMath::Sin(Life * 39.f), 0.f) * (2.5f * Warn) : FVector::ZeroVector;
+		Visual->SetRelativeLocation(VisualBase + FVector(0.f, 0.f, FMath::Sin(Life * 1.5f) * 6.f) + Shake);
+		const bool bBlink = Warn <= 0.f && FMath::Fmod(Life + 0.37f * static_cast<float>(GetUniqueID() % 7), 5.3f) < 0.12f;
 		// Le sourire s'illumine davantage quand il est sur le point de charger
-		const float Rage = (State == EState::Chase ? 1.6f : 1.f + FMath::Clamp(BeamTime * 2.f, 0.f, 0.6f)) + (WindupClock >= 0.f ? 0.35f : 0.f);
+		const float Rage = (State == EState::Chase ? 1.6f : 1.f + FMath::Clamp(BeamTime * 2.f, 0.f, 0.6f) + Warn * 0.7f) + (WindupClock >= 0.f ? 0.35f : 0.f);
 		// v4.7 : emission tenue : de pres (jumpscare, couloir), le visage ne doit pas devenir une tache blanche qui cache
 		// les yeux et les dents ; de loin, il reste deux points et un trait dans le noir
 		const APawn* Viewer = UGameplayStatics::GetPlayerPawn(this, 0);
@@ -2761,6 +3051,8 @@ void ABREntity::UpdateStatePose(float Dt)
 		AnimState = State;
 	}
 	AlertAnim = FMath::Max(0.f, AlertAnim - Dt / 0.8f);
+	// v4.11 : avertissement replique (Hound qui gronde tete basse, Faceling fige, Wretch haletant) : posture tenue, lisible
+	AlertAnim = FMath::Max(AlertAnim, GetWarning());
 	LeanAnim = FMath::FInterpTo(LeanAnim, State == EState::Chase ? 1.f : (State == EState::Stalk ? 0.4f : 0.f), Dt, 3.f);
 	// Armee : la proie est presque a portee pendant une poursuite (calcule chez chacun : aucun effet sur le jeu)
 	const ABRCharacter* P = Target.Get();
