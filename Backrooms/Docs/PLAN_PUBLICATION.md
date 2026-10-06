@@ -102,15 +102,20 @@ l'hôte. L'hôte refuse un niveau indisponible : demande d'un client, console de
 - Le client envoie `?BRNet=412?BRContent=<signature>` en rejoignant.
 - L'hôte (PreLogin) refuse un joueur d'une autre version ou d'un autre contenu, avec une raison lue dans la langue du
   joueur :
-  - « l'hôte a la version 4.12 du jeu, vous avez la version … » ;
-  - « l'hôte joue avec la version publiée (contenu jusqu'au lot 1), vous avez la version de test interne (lot 2) ».
+  - « Impossible de rejoindre : l'hôte a la version 4.12 du jeu, vous avez la version … » ;
+  - « Impossible de rejoindre : l'hôte joue avec la version publiée (contenu jusqu'au chapitre 1), vous avez la version
+    de test interne (chapitre 2). Les deux joueurs doivent avoir le même contenu. »
+
+  Le joueur lit « chapitre » : un lot de contenu est présenté comme un chapitre (« Le Seuil » pour le lot 1).
 - `ProjectVersion=4.12.0.0` (`Config/DefaultGame.ini`) : le moteur refuse déjà, avant la demande d'entrée, une version
   du projet différente (message « l'hôte a une autre version du jeu »).
 - Partie complète (4 joueurs) : message dédié.
 
 La signature dépend du protocole, du lot courant et des niveaux disponibles. Deux versions publiées du même lot jouent
-ensemble ; une version publiée et une version de test, non. Vérifié hors moteur (§ 6) ; l'essai réel en réseau est
-préparé, non exécuté (`-BRNetTest`, étape « client incompatible » du rapport).
+ensemble ; une version publiée et une version de test, non. Vérifié hors moteur (§ 6). Dans le jeu, `-BRAutoTestV412`
+vérifie la règle de l'hôte et la lecture du refus (étape « contenu : version publiée », préparé, non exécuté) et
+`-BRNetTest` compare protocole et signature entre l'hôte et le client (étape « compatibilité »). **L'essai d'un vrai
+client incompatible (deux paquets de canaux différents) n'est pas automatisé** : il reste à faire à la main.
 
 ## 5. Ajouter un lot (modules)
 
@@ -171,8 +176,17 @@ réelles des niveaux dans `BRLevels.cpp` et la progression de la base dans `BRMi
 Les tests des outils de paquet (`Tools/Build/tests`) vérifient en plus qu'une version interne n'est jamais préparée
 comme version publique pour Steam.
 
-**Préparé, non exécuté.** Constructions Shipping par canal, `-BRAutoTestV412` (étape « contenu » : menu, sorties
-condamnées ou redirigées, écran de fin du contenu, reprise d'une partie v4.11), `-BRNetTest` avec un client incompatible.
+**Préparé, non exécuté.**
+
+- Constructions Shipping par canal.
+- `-BRAutoTestV412`, dans la version publiée simulée (`BRLevels::SetChannelOverride`, hors Shipping) :
+  - liste du menu ;
+  - sorties redirigées ;
+  - règle de connexion ;
+  - reprise d'une partie v4.11 arrêtée au Niveau 5 ;
+  - missions des Niveaux 0, 1, 2 et 37 résolues en marchant, sorties prises à pied, arrivée ou écran de fin du contenu
+    au Niveau 2.
+- Essai à la main d'un client incompatible (voir § 4).
 
 ## 7. Steam (préparé, non exécuté)
 

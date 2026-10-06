@@ -1,0 +1,40 @@
+# Controle de syntaxe du code Unreal hors moteur — sortie reelle
+# clang++ -std=c++20 -fsyntax-only -Wall -Wshadow-all, avec des en-tetes Unreal simplifies (scratchpad, non versionnes)
+# Ce controle ne remplace PAS une compilation UHT/UBT : il releve les erreurs de C++ et les masquages de noms ;
+# les erreurs restantes viennent d'API absentes des en-tetes simplifies (memes fichiers a la base).
+# Compilateur : Ubuntu clang version 18.1.3 (1ubuntu1)
+# Date : 2026-10-06T17:58:09Z
+
+## Base v4.11 (d9c47f95)
+  BRAssets.cpp                 erreurs   8, avertissements   0
+  BRAutoTest.cpp               erreurs   1, avertissements   0
+  BRAutoTestV410.cpp           erreurs   1, avertissements   0
+  BRConfig.cpp                 erreurs   5, avertissements   0
+  BRDisplay.cpp                erreurs   1, avertissements   0
+  BRFonts.cpp                  erreurs   3, avertissements   0
+  BRGameMode.cpp               erreurs   6, avertissements   0
+  BRLoc.cpp                    erreurs   3, avertissements   0
+  BRSave.cpp                   erreurs   1, avertissements   0
+  BRWaterSim.cpp               erreurs  10, avertissements   0
+  fichiers sans remarque : 24 ; avec remarques : 10
+
+## v4.12 (arbre de travail, avant le commit 9/9)
+  BRAssets.cpp                 erreurs   8, avertissements   0
+  BRAutoTest.cpp               erreurs   1, avertissements   0
+  BRAutoTestV410.cpp           erreurs   1, avertissements   0
+  BRConfig.cpp                 erreurs   5, avertissements   0
+  BRDisplay.cpp                erreurs   1, avertissements   0
+  BRFonts.cpp                  erreurs   3, avertissements   0
+  BRGameMode.cpp               erreurs   6, avertissements   0
+  BRLoc.cpp                    erreurs   3, avertissements   0
+  BRSave.cpp                   erreurs   1, avertissements   0
+  BRWaterSim.cpp               erreurs  10, avertissements   0
+  fichiers sans remarque : 29 ; avec remarques : 10
+
+## Masquages de noms entre fichiers (shadowcheck.py, v4.12)
+problems: 0
+
+## Compilation regroupee (unity) : noms globaux en double entre fichiers (unitycheck.py, v4.12)
+BRAssets.cpp:639: 'Done' masquerait en build unity la declaration globale BRHUD.cpp:47
+unity problems: 1
+# (le seul cas, 'Done', existe a l'identique a la base v4.11)

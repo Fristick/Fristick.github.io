@@ -132,3 +132,9 @@ verifications : cote 147, identifiants 2709, unites 231 ; nombres en toutes lett
 problemes : 0
 
 # Code de sortie : 0
+
+## python3 Tools/protect_assets.py check
+# (manifeste : 83 fichiers derives et 41 originaux ; les originaux de Tools/SourceModels/ ne sont pas versionnes)
+# git diff --stat d9c47f95 -- RawAssets : aucune modification depuis la base
+OK
+# Code de sortie : 0

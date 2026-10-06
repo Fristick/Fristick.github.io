@@ -993,6 +993,8 @@ void ABRAutoTest::AddV412Steps()
 		const bool bLock = FMath::Abs(SL - P::ChannelFull(Slab)) < 0.5f && Q.bLocal && Q.bWater;
 		Note(FString::Printf(TEXT("avant : bassin A marque %d (surface %.1f, attendu %.1f), bassin B marque %d (%.1f, attendu %.1f) ; sas plein %s (surface %.1f, dallage %.1f, %.0f cm d'eau)"),
 			LA, SA, P::SurfaceA(LA, D.WaterHeight), LB, SB, P::SurfaceB(LB, D.WaterHeight), YesNo(bLock), SL, Slab, SL - Slab), !bTanks || !bLock);
+		// Toujours aucune entite dans les Poolrooms
+		Note(FString::Printf(TEXT("Poolrooms : %d entite(s) dans le niveau (attendu 0)"), W->GetEntities().Num()), W->GetEntities().Num() != 0);
 		Shot(TEXT("v412_poolrooms_avant"));
 		return true;
 	});

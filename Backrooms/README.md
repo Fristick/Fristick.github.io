@@ -7,7 +7,60 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.11** (missions des douze niveaux, transactions coop, créatures lisibles) :
+**Version 4.12** (stabilité, effets physiques des missions, publication progressive) :
+
+- **Où lire** :
+  - constats sur la base : [`Docs/AUDIT_v4.12.md`](Docs/AUDIT_v4.12.md) ;
+  - corrections, vérifications, commandes, résultats et limites : [`Docs/RAPPORT_v4.12.md`](Docs/RAPPORT_v4.12.md) ;
+  - règles finales et effets physiques : [`Docs/GAMEPLAY_v4.12.md`](Docs/GAMEPLAY_v4.12.md) ;
+  - chapitres et mises à jour de contenu : [`Docs/PLAN_PUBLICATION.md`](Docs/PLAN_PUBLICATION.md) ;
+  - journaux réels : [`Docs/v412/`](Docs/v412/).
+
+> **Rien de compilé ni de lancé dans Unreal pour la v4.12** : ni moteur ni GPU dans le conteneur de travail.
+>
+> **Préparé, non exécuté** : les tests du jeu (`-BRAutoTestV412`, `-BRNetTest`), les paquets, les captures et les
+> mesures.
+>
+> **Exécuté** :
+> - la reproduction de 4 défauts de la base ;
+> - cinq bancs hors moteur sur le code du jeu : transactions, départ de groupe, lumière, contenu, mécanismes ;
+> - le banc des missions ;
+> - les tests des outils de livraison et les contrôles de langues ;
+> - les empreintes des modèles protégés et un contrôle syntaxique du code.
+
+- **Publication progressive** : les douze niveaux restent dans le projet, mais la version publique n'ouvre que le
+  **chapitre 1, « Le Seuil »** (Niveaux 0, 1, 2 et 37).
+  - L'échelle des Poolrooms remonte au Niveau 1 et l'ascenseur du Niveau 1 descend au Niveau 2.
+  - Le Niveau 2 mène à la **fin du contenu disponible**.
+  - Une seule table décide de la disponibilité (`BRContentLogic.cpp`), pour toutes les entrées : menu, sorties, noclip,
+    hasard, réseau.
+  - Un joueur d'une autre version ou d'un autre contenu reçoit un refus clair.
+  - Une partie arrêtée à un niveau pas encore publié reprend au dernier niveau disponible, sans rien perdre.
+- **Coopération** :
+  - un objet accepté par l'hôte n'est jamais perdu : place réservée pendant l'attente, sinon « mis de côté » puis rangé ;
+    rendu au monde si le joueur part ;
+  - une seule règle de place (plus de faux « inventaire plein ») ;
+  - une réponse de soin ou de coup en retard n'écrase plus la santé ;
+  - sous l'invite, « en attente / accepté / refusé ».
+- **Départ par une échelle** : le grimpeur arrivé au sommet est compté comme rassemblé. Il fait une seule demande, attend
+  au sommet, et annule en redescendant.
+- **Effets physiques** :
+  - **Poolrooms** : deux vrais bassins (règles graduées, courant visible, débordement) et un sas qui se vide ; l'eau, la
+    nage et la caméra suivent la mission.
+  - **Niveau 8** : vraie interruption et passerelle portante, abaissée par les treuils.
+  - Les balises du Niveau 6 comptent enfin comme de la lumière pour les Smilers.
+  - Voyants rouge et vert des sorties ; ascenseur qui sonne ; vapeur translucide.
+- **Fiabilité** :
+  - une mission ne peut plus être abandonnée : module de secours près du départ ;
+  - une sauvegarde non restaurable est copiée et expliquée ;
+  - les mécanismes masqués ne tournent plus (Tick coupé) ;
+  - carnet à deux colonnes défilantes.
+- **Tests** :
+  - `-BRAutoTestV412` : missions du chapitre 1 et des Niveaux 6 et 8 **résolues en marchant**, sans téléportation,
+    sorties prises à pied ;
+  - bancs `Tools/Transactions`, `Tools/Departure`, `Tools/Light`, `Tools/Content`, `Tools/Mechanisms` (§ 9).
+
+**Nouveautés de la version 4.11** (missions des douze niveaux, transactions coop, créatures lisibles) :
 
 - **Où lire** : constats sur la base dans [`Docs/AUDIT_v4.11.md`](Docs/AUDIT_v4.11.md) ; corrections, vérifications,
   commandes, résultats et limites dans [`Docs/RAPPORT_v4.11.md`](Docs/RAPPORT_v4.11.md) ; règles de chaque niveau,
@@ -930,6 +983,11 @@ Chaque niveau est une grille **infinie** (sauf le Niveau 0, une zone close de 11
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
 quartier pavillonnaire (9), espace ouvert (10), îlots urbains (11).
 
+**v4.12** : la version publique n'ouvre que le chapitre 1 (Niveaux 0, 1, 2 et 37) ; les autres niveaux arrivent par
+mises à jour ([`Docs/PLAN_PUBLICATION.md`](Docs/PLAN_PUBLICATION.md)). Dans le chapitre 1, l'échelle des Poolrooms mène
+au Niveau 1 et l'ascenseur du Niveau 1 au Niveau 2 ; la porte des vannes du Niveau 2 mène à la fin du contenu
+disponible. Règles finales et effets physiques : [`Docs/GAMEPLAY_v4.12.md`](Docs/GAMEPLAY_v4.12.md).
+
 **v4.11** : chaque niveau a une **mission** tirée de sa graine. La sortie de progression reste fermée jusqu'à sa
 résolution ; les sorties de retour restent ouvertes. Les étapes, indices et objets d'équipe sont dans le **carnet**
 (onglet de l'inventaire), avec une aide progressive. Règles complètes, variantes et menaces :
@@ -1356,6 +1414,42 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   ./test_missions 3000
   ```
   Résultat et journaux : [`Docs/RAPPORT_v4.11.md`](Docs/RAPPORT_v4.11.md), [`Docs/v411/`](Docs/v411/).
+- **`-BRAutoTestV412`** (v4.12, avec `-BRAutoTest`) lance seules les vérifications v4.12 ; elles sont aussi dans
+  `-BRAutoTest`. **Préparé, non exécuté.** Les parties, l'inventaire, la langue et le canal de contenu du joueur sont
+  rétablis à la fin (sauvegardes du test : `BR_AutoTestV412_*`) :
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV412 -BRAutoTestStrict
+  ```
+  - **version publiée simulée** : niveaux du menu, sorties redirigées, fin du contenu, refus de connexion, reprise
+    d'une partie v4.11 ;
+  - **accès par déplacement réel** : missions des Niveaux 0, 1, 2, 37, 6 et 8 résolues **en marchant**. Le chemin vient
+    de l'A* de la grille et n'est suivi qu'avec les entrées du joueur ; chaque mécanisme doit être visé par
+    l'interaction ; la sortie est prise à pied et l'arrivée vérifiée ;
+  - **Poolrooms** : surfaces des bassins = graduations, sas plein puis vide, traversée sans nager, aucune entité ;
+  - **Niveau 8** : palier hors d'atteinte tablier levé, tablier posé par les treuils, traversée ;
+  - balises (lumière de gameplay, même en coupure), mécanismes masqués sans Tick, règle de place, objets mis de côté,
+    santé périmée, reprise d'un état ou d'un placement d'une autre version, carnet (allemand, arabe).
+
+  **`-BRNetTest`, v4.12** (Niveau 37) :
+  - compatibilité des deux machines ;
+  - « en attente / accepté / refusé » côté client ;
+  - départ par l'échelle du sas : une seule demande au sommet, grimpeur compté, coéquipier qui arrive à pied.
+- **Bancs v4.12** (hors moteur, C++ pur, exécutés). Chaque fichier donne sa commande en tête ; résultats dans
+  [`Docs/v412/`](Docs/v412/) :
+
+  | Banc | Vérifications |
+  |---|---|
+  | `Tools/Transactions/test_transactions.cpp` | 51 |
+  | `Tools/Departure/test_departure.cpp` | 30 |
+  | `Tools/Light/test_light.cpp` | 6 |
+  | `Tools/Content/test_content.cpp` | 67 |
+  | `Tools/Mechanisms/test_mechanisms.cpp` | 49 |
+
+  Exemple :
+  ```sh
+  g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Mechanisms/test_mechanisms.cpp \
+      Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_mechanisms && ./test_mechanisms
+  ```
 
 ---
 
