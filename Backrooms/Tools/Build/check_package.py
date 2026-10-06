@@ -11,11 +11,15 @@ ne prouve rien : les formats sont lus.
                  essentielles (essential_packages.txt). Le code de sortie de l'outil est verifie ;
   architecture : machine des binaires (PE x64, ELF x86_64, Mach-O : architectures de toutes les bibliotheques du .app) ;
   dependances  : bibliotheques importees par l'executable presentes dans le paquet, ou connues du systeme cible ;
-  lancement    : (--launch) le paquet est lance sur cet hote avec -BRAutoTest -BRSmokeTest ; code de sortie et rapport lus.
+  lancement    : (--launch) le paquet est lance sur cet hote avec -BRAutoTest -BRSmokeTest -BRAutoTestStrict. v4.11 : le
+                 rapport doit exister, venir de cet essai (son chemin figure dans la ligne de commande du jeu) et suivre
+                 le schema (etat, problemes, non_verifies) ; code de sortie et etat doivent concorder. Etat INCOMPLET si
+                 le jeu a demarre mais n'a pas tout verifie.
 
 Modes :
   --mode release (defaut) : structure, contenu, architecture et dependances sont obligatoires ; le lancement aussi avec
-      --require-launch. Une verification impossible (outil absent, format illisible, hote different) donne
+      --require-launch. v4.11 : avec --launch, un lancement qui a eu lieu compte toujours (echec -> ECHEC, incomplet ->
+      INSPECTION INCOMPLETE) ; seul un lancement impossible sur cet hote reste facultatif. Une verification impossible (outil absent, format illisible, hote different) donne
       « INSPECTION INCOMPLETE » (code 2) : une livraison doit la traiter comme un blocage.
   --mode structure : developpement. Seule la structure est obligatoire et le resultat le dit : « CONTROLE STRUCTUREL
       SEULEMENT ». Le contenu n'est pas presente comme verifie.
@@ -36,6 +40,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -46,7 +51,7 @@ CULTURES = ["fr", "en", "de", "es-ES", "pt-BR", "ru", "it", "tr", "es-419", "pl"
 FONTS = ["NotoSans%s-%s.ttf" % (s, w) for s in ("Arabic", "SC", "TC", "JP", "KR") for w in ("Regular", "Bold")]
 MAP_PACKAGE = "/Game/Backrooms/Maps/L_Backrooms"
 
-OK, FAIL, SKIP = "OK", "ECHEC", "NON VERIFIE"
+OK, FAIL, SKIP, PARTIAL = "OK", "ECHEC", "NON VERIFIE", "INCOMPLET"
 CHECKS = ("structure", "contenu", "architecture", "dependances", "lancement")
 
 PAK_MAGIC = struct.pack("<I", 0x5A6F12E1)
@@ -106,6 +111,12 @@ class Check(object):
             self.reason = reason
             self.state = SKIP
 
+    def partial(self, reason):
+        """v4.11 : verification faite mais qui ne prouve pas tout (lancement avec des verifications non faites)"""
+        if self.state is None:
+            self.reason = reason
+            self.state = PARTIAL
+
     def close(self):
         if self.problems:
             self.state = FAIL
@@ -139,29 +150,71 @@ def read_tail(path, n):
         return b""
 
 
-def pe_info(path):
-    """(architecture, imports, imports differes) d'un executable Windows, ou None si ce n'est pas un PE"""
+class BadFormat(Exception):
+    """Fichier qui porte la signature d'un format mais dont la structure est invalide (tronque, offset hors limites)"""
+
+
+class Blob(object):
+    """Lectures bornees : tout offset, toute longueur venant du fichier est verifie avant lecture (v4.11)"""
+
+    def __init__(self, data, what):
+        self.data = data
+        self.what = what
+
+    def need(self, off, size):
+        if off < 0 or size < 0 or off + size > len(self.data):
+            raise BadFormat("%s : lecture hors du fichier (offset %d, %d octets, taille %d)" % (self.what, off, size, len(self.data)))
+
+    def unpack(self, fmt, off):
+        self.need(off, struct.calcsize(fmt))
+        return struct.unpack_from(fmt, self.data, off)
+
+    def cstr(self, off, limit=4096):
+        self.need(off, 1)
+        end = self.data.find(b"\0", off, min(len(self.data), off + limit))
+        if end < 0:
+            raise BadFormat("%s : chaine sans fin a l'offset %d" % (self.what, off))
+        return self.data[off:end].decode("utf-8", "replace")
+
+
+def read_all(path):
     try:
         with open(path, "rb") as fh:
-            data = fh.read()
+            return fh.read()
     except OSError:
         return None
-    if data[:2] != b"MZ" or len(data) < 0x40:
+
+
+def pe_info(path):
+    """(architecture, imports, imports differes) d'un executable Windows ; None si ce n'est pas un PE ;
+    BadFormat si la signature est la mais la structure est invalide"""
+    data = read_all(path)
+    if data is None or data[:2] != b"MZ":
         return None
-    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    b = Blob(data, "PE " + os.path.basename(path))
+    pe = b.unpack("<I", 0x3C)[0]
+    b.need(pe, 24)
     if data[pe:pe + 4] != b"PE\0\0":
         return None
-    machine, nsec = struct.unpack_from("<HH", data, pe + 4)
-    opt_size = struct.unpack_from("<H", data, pe + 20)[0]
+    machine, nsec = b.unpack("<HH", pe + 4)
+    opt_size = b.unpack("<H", pe + 20)[0]
     opt = pe + 24
-    magic = struct.unpack_from("<H", data, opt)[0]
-    dirs = opt + (112 if magic == 0x20B else 96)
+    b.need(opt, opt_size)  # en-tete optionnel complet
+    b.need(opt + opt_size, nsec * 40)  # table des sections complete
+    if nsec > 96:
+        raise BadFormat("%s : %d sections (96 au plus)" % (b.what, nsec))
     sections = []
     sec = opt + opt_size
     for i in range(nsec):
         # En-tete de section : nom (8), VirtualSize, VirtualAddress, SizeOfRawData, PointerToRawData
-        vsize, va, raw_size, raw_ptr = struct.unpack_from("<IIII", data, sec + i * 40 + 8)
+        vsize, va, raw_size, raw_ptr = b.unpack("<IIII", sec + i * 40 + 8)
         sections.append((va, max(vsize, raw_size), raw_ptr))
+    arch = PE_MACHINES.get(machine, "machine 0x%x" % machine)
+    if opt_size == 0:
+        return arch, [], []
+    magic = b.unpack("<H", opt)[0]
+    dirs = opt + (112 if magic == 0x20B else 96)
+    ndirs = b.unpack("<I", dirs - 4)[0]
 
     def rva(r):
         for va, size, ptr in sections:
@@ -169,61 +222,61 @@ def pe_info(path):
                 return r - va + ptr
         return None
 
-    def cstr(off):
-        if off is None:
-            return ""
-        end = data.find(b"\0", off)
-        return data[off:end].decode("ascii", "replace")
-
     def names(dir_index, entry_size, name_field):
         out = []
-        ndirs = struct.unpack_from("<I", data, dirs - 4)[0]
-        if dir_index >= ndirs:
+        if dir_index >= min(ndirs, 16):
             return out
-        r, size = struct.unpack_from("<II", data, dirs + dir_index * 8)
+        r, _ = b.unpack("<II", dirs + dir_index * 8)
         off = rva(r) if r else None
-        while off is not None and off + entry_size <= len(data):
+        for _ in range(4096):  # au plus 4096 bibliotheques : une table sans fin est une erreur
+            if off is None:
+                return out
+            b.need(off, entry_size)
             fields = data[off:off + entry_size]
             if not any(fields):
-                break
-            name_rva = struct.unpack_from("<I", data, off + name_field)[0]
+                return out
+            name_rva = b.unpack("<I", off + name_field)[0]
             if name_rva == 0:
-                break
-            out.append(cstr(rva(name_rva)))
+                return out
+            name_off = rva(name_rva)
+            if name_off is None:
+                raise BadFormat("%s : nom de bibliotheque hors des sections" % b.what)
+            out.append(b.cstr(name_off))
             off += entry_size
-        return out
+        raise BadFormat("%s : table des importations sans fin" % b.what)
 
-    imports = names(1, 20, 12)
-    delayed = names(13, 32, 4)
-    return PE_MACHINES.get(machine, "machine 0x%x" % machine), imports, delayed
+    return arch, names(1, 20, 12), names(13, 32, 4)
 
 
 def elf_info(path):
-    """(architecture, DT_NEEDED) d'un binaire ELF 64 bits, ou None"""
-    try:
-        with open(path, "rb") as fh:
-            data = fh.read()
-    except OSError:
+    """(architecture, DT_NEEDED) d'un binaire ELF 64 bits ; None si ce n'est pas un ELF ; BadFormat si invalide"""
+    data = read_all(path)
+    if data is None or data[:4] != b"\x7fELF":
         return None
-    if data[:4] != b"\x7fELF" or data[4] != 2:
+    b = Blob(data, "ELF " + os.path.basename(path))
+    b.need(0, 64)
+    if data[4] != 2:
         return None
-    machine = struct.unpack_from("<H", data, 18)[0]
-    phoff = struct.unpack_from("<Q", data, 32)[0]
-    phentsize, phnum = struct.unpack_from("<HH", data, 54)
+    machine = b.unpack("<H", 18)[0]
+    phoff = b.unpack("<Q", 32)[0]
+    phentsize, phnum = b.unpack("<HH", 54)
+    if phnum and phentsize < 56:
+        raise BadFormat("%s : entree de programme trop courte (%d)" % (b.what, phentsize))
     loads = []
     dynamic = None
     for i in range(phnum):
-        p_type, _, p_offset, p_vaddr, _, p_filesz = struct.unpack_from("<IIQQQQ", data, phoff + i * phentsize)
+        p_type, _, p_offset, p_vaddr, _, p_filesz = b.unpack("<IIQQQQ", phoff + i * phentsize)
         if p_type == 1:
             loads.append((p_vaddr, p_filesz, p_offset))
         elif p_type == 2:
+            b.need(p_offset, p_filesz)
             dynamic = (p_offset, p_filesz)
     needed = []
     if dynamic:
         strtab = None
         entries = []
-        for off in range(dynamic[0], dynamic[0] + dynamic[1], 16):
-            tag, val = struct.unpack_from("<qQ", data, off)
+        for off in range(dynamic[0], dynamic[0] + dynamic[1] - 15, 16):
+            tag, val = b.unpack("<qQ", off)
             if tag == 0:
                 break
             if tag == 5:
@@ -234,55 +287,74 @@ def elf_info(path):
         for vaddr, size, offset in loads:
             if strtab is not None and vaddr <= strtab < vaddr + size:
                 base = strtab - vaddr + offset
-        if base is not None:
-            for e in entries:
-                end = data.find(b"\0", base + e)
-                needed.append(data[base + e:end].decode("ascii", "replace"))
+        if entries and base is None:
+            raise BadFormat("%s : table des chaines introuvable" % b.what)
+        for e in entries:
+            needed.append(b.cstr(base + e))
     return ELF_MACHINES.get(machine, "machine %d" % machine), needed
 
 
 def macho_info(path):
-    """(architectures, bibliotheques chargees) d'un binaire Mach-O (fin ou universel), ou None"""
-    try:
-        with open(path, "rb") as fh:
-            data = fh.read()
-    except OSError:
+    """(architectures, bibliotheques chargees) d'un binaire Mach-O (fin ou universel) ; None si ce n'en est pas un ;
+    BadFormat si invalide"""
+    data = read_all(path)
+    if data is None or len(data) < 8:
         return None
-    if len(data) < 8:
-        return None
-    magic = struct.unpack_from(">I", data, 0)[0]
+    b = Blob(data, "Mach-O " + os.path.basename(path))
+    magic = b.unpack(">I", 0)[0]
     slices = []
     if magic in (0xCAFEBABE, 0xCAFEBABF):
-        n = struct.unpack_from(">I", data, 4)[0]
+        n = b.unpack(">I", 4)[0]
+        if n == 0 or n > 32:
+            # 0xCAFEBABE est aussi la signature des classes Java : un nombre aberrant d'architectures n'est pas un Mach-O
+            raise BadFormat("%s : %d architectures annoncees" % (b.what, n))
         wide = magic == 0xCAFEBABF
         for i in range(n):
             if wide:
-                cpu, _, off, size = struct.unpack_from(">iiQQ", data, 8 + i * 32)[0:4]
+                cpu, _, off, size = b.unpack(">iiQQ", 8 + i * 32)
             else:
-                cpu, _, off, size = struct.unpack_from(">iiII", data, 8 + i * 20)[0:4]
-            slices.append((cpu, off))
+                cpu, _, off, size = b.unpack(">iiII", 8 + i * 20)
+            b.need(off, max(size, 28))
+            slices.append((cpu, off, size))
     else:
-        le = struct.unpack_from("<I", data, 0)[0]
+        le = b.unpack("<I", 0)[0]
         if le not in (0xFEEDFACF, 0xFEEDFACE):
             return None
-        slices.append((struct.unpack_from("<i", data, 4)[0], 0))
+        slices.append((b.unpack("<i", 4)[0], 0, len(data)))
     archs = []
     libs = set()
-    for cpu, off in slices:
+    for cpu, off, size in slices:
         archs.append(MACHO_CPUS.get(cpu & 0xFFFFFFFF, "cpu 0x%x" % (cpu & 0xFFFFFFFF)))
-        mh = struct.unpack_from("<I", data, off)[0]
+        mh = b.unpack("<I", off)[0]
         if mh not in (0xFEEDFACF, 0xFEEDFACE):
-            continue
-        ncmds = struct.unpack_from("<I", data, off + 16)[0]
+            raise BadFormat("%s : tranche %s sans en-tete Mach-O" % (b.what, archs[-1]))
+        ncmds, sizeofcmds = b.unpack("<II", off + 16)
         cmd_off = off + (32 if mh == 0xFEEDFACF else 28)
+        end = cmd_off + sizeofcmds
+        b.need(cmd_off, sizeofcmds)
+        if ncmds > 4096:
+            raise BadFormat("%s : %d commandes de chargement" % (b.what, ncmds))
         for _ in range(ncmds):
-            cmd, size = struct.unpack_from("<II", data, cmd_off)
+            cmd, csize = b.unpack("<II", cmd_off)
+            if csize < 8 or cmd_off + csize > end:
+                raise BadFormat("%s : commande de chargement de taille %d hors limites" % (b.what, csize))
             if cmd in (0xC, 0x18 | 0x80000000, 0x1F | 0x80000000):  # LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB
-                name_off = struct.unpack_from("<I", data, cmd_off + 8)[0]
-                end = data.find(b"\0", cmd_off + name_off)
-                libs.add(data[cmd_off + name_off:end].decode("utf-8", "replace"))
-            cmd_off += size
+                name_off = b.unpack("<I", cmd_off + 8)[0]
+                if name_off >= csize:
+                    raise BadFormat("%s : nom de bibliotheque hors de sa commande" % b.what)
+                libs.add(b.cstr(cmd_off + name_off, csize - name_off))
+            cmd_off += csize
     return archs, sorted(libs)
+
+
+def binary_info(reader, path):
+    """(informations, erreur) : informations None et erreur None si le fichier n'est pas de ce format"""
+    try:
+        return reader(path), None
+    except BadFormat as e:
+        return None, str(e)
+    except (struct.error, ValueError, IndexError, OverflowError) as e:  # filet : jamais d'exception non geree
+        return None, "%s : structure illisible (%s)" % (os.path.basename(path), e)
 
 
 def project_uses_iostore(project):
@@ -385,10 +457,17 @@ def check_structure(c, platform, base, project):
     else:
         c.info("binaire : %s (%d Mo)" % (os.path.relpath(binary, root), os.path.getsize(binary) // (1024 * 1024)))
         if platform == "Windows":
-            if not pe_info(binary) or not pe_info(launcher):
-                c.fail("lanceur ou binaire qui n'est pas un executable Windows")
+            for f in (launcher, binary):
+                info, err = binary_info(pe_info, f)
+                if err:
+                    c.fail(err)
+                elif not info:
+                    c.fail("%s n'est pas un executable Windows" % os.path.basename(f))
         elif platform == "Linux":
-            if not elf_info(binary):
+            info, err = binary_info(elf_info, binary)
+            if err:
+                c.fail(err)
+            elif not info:
                 c.fail("binaire qui n'est pas un ELF 64 bits")
             if not read_head(launcher, 2) == b"#!":
                 c.fail("Backrooms.sh n'est pas un script (#! absent)")
@@ -397,7 +476,10 @@ def check_structure(c, platform, base, project):
             elif not (os.access(binary, os.X_OK) and os.access(launcher, os.X_OK)):
                 c.fail("droit d'execution absent sur le binaire ou Backrooms.sh")
         else:
-            if not macho_info(binary):
+            info, err = binary_info(macho_info, binary)
+            if err:
+                c.fail(err)
+            elif not info:
                 c.fail("binaire qui n'est pas un Mach-O")
             if os.name != "nt" and not os.access(binary, os.X_OK):
                 c.fail("droit d'execution absent sur %s" % binary)
@@ -520,43 +602,34 @@ def check_architecture(c, platform, root, binary, expected_archs):
     if not binary:
         c.skip("binaire introuvable")
         return
-    if platform == "Windows":
-        info = pe_info(binary)
-        if not info:
-            c.fail("binaire illisible")
-            return
+    reader = {"Windows": pe_info, "Linux": elf_info}.get(platform, macho_info)
+    info, err = binary_info(reader, binary)
+    if err or not info:
+        c.fail(err or "binaire illisible")
+        return
+    if platform in ("Windows", "Linux"):
         c.info("binaire : %s" % info[0])
         if info[0] != "x86_64":
             c.fail("architecture %s, x86_64 attendu" % info[0])
-        for dll in glob.glob(os.path.join(root, "**", "*.dll"), recursive=True):
-            d = pe_info(dll)
-            if d and d[0] != "x86_64":
-                c.fail("bibliotheque %s en %s" % (os.path.relpath(dll, root), d[0]))
-    elif platform == "Linux":
-        info = elf_info(binary)
-        if not info:
-            c.fail("binaire illisible")
-            return
-        c.info("binaire : %s" % info[0])
-        if info[0] != "x86_64":
-            c.fail("architecture %s, x86_64 attendu" % info[0])
-        for so in glob.glob(os.path.join(root, "**", "*.so*"), recursive=True):
-            d = elf_info(so)
-            if d and d[0] != "x86_64":
-                c.fail("bibliotheque %s en %s" % (os.path.relpath(so, root), d[0]))
+        pattern = "*.dll" if platform == "Windows" else "*.so*"
+        for lib in glob.glob(os.path.join(root, "**", pattern), recursive=True):
+            d, derr = binary_info(reader, lib)
+            if derr:
+                c.fail(derr)
+            elif d and d[0] != "x86_64":
+                c.fail("bibliotheque %s en %s" % (os.path.relpath(lib, root), d[0]))
     else:
         want = set(expected_archs)
+        c.info("binaire : %s" % "+".join(info[0]))
         for f in [binary] + glob.glob(os.path.join(root, "Contents", "**", "*"), recursive=True):
             if not os.path.isfile(f) or os.path.islink(f):
                 continue
-            d = macho_info(f)
-            if not d:
+            d, derr = binary_info(macho_info, f)
+            if derr:
+                c.fail(derr)
                 continue
-            if not want.issubset(set(d[0])):
+            if d and not want.issubset(set(d[0])):
                 c.fail("%s : %s (attendu : %s)" % (os.path.relpath(f, root), "+".join(d[0]), "+".join(sorted(want))))
-        info = macho_info(binary)
-        if info:
-            c.info("binaire : %s" % "+".join(info[0]))
 
 
 def check_dependencies(c, platform, root, binary):
@@ -564,11 +637,12 @@ def check_dependencies(c, platform, root, binary):
         c.skip("binaire introuvable")
         return
     shipped = {os.path.basename(f).lower() for f in glob.glob(os.path.join(root, "**", "*"), recursive=True) if os.path.isfile(f)}
+    reader = {"Windows": pe_info, "Linux": elf_info}.get(platform, macho_info)
+    info, err = binary_info(reader, binary)
+    if err or not info:
+        c.fail(err or "binaire illisible")
+        return
     if platform == "Windows":
-        info = pe_info(binary)
-        if not info:
-            c.fail("binaire illisible")
-            return
         _, imports, delayed = info
         c.info("importees : %d, chargees a la demande : %d" % (len(imports), len(delayed)))
         for dll in imports:
@@ -579,20 +653,12 @@ def check_dependencies(c, platform, root, binary):
             if not (windows_system_dll(dll) or dll.lower() in shipped):
                 c.info("chargee a la demande, absente du paquet (verifier son usage) : %s" % dll)
     elif platform == "Linux":
-        info = elf_info(binary)
-        if not info:
-            c.fail("binaire illisible")
-            return
         for lib in info[1]:
             if LINUX_SYSTEM_LIBS.match(lib) or lib.lower() in shipped:
                 continue
             c.fail("bibliotheque requise absente du paquet : %s" % lib)
         c.info("requises : %s" % ", ".join(info[1]))
     else:
-        info = macho_info(binary)
-        if not info:
-            c.fail("binaire illisible")
-            return
         for lib in info[1]:
             if lib.startswith(("/usr/lib/", "/System/")):
                 continue
@@ -600,43 +666,94 @@ def check_dependencies(c, platform, root, binary):
                 c.fail("bibliotheque requise absente du bundle : %s" % lib)
 
 
-def check_launch(c, platform, root, launcher, timeout):
-    host = {"win32": "Windows", "linux": "Linux", "darwin": "Mac"}.get(sys.platform)
+def host_platform():
+    return {"win32": "Windows", "linux": "Linux", "darwin": "Mac"}.get(sys.platform)
+
+
+def launch_command(platform, root, launcher):
+    """Commande qui lance le paquet (remplacee par les tests unitaires)"""
+    if platform == "Mac":
+        # open -W attend la fin de l'application ; son code de sortie n'est pas celui du jeu (le rapport fait foi)
+        return ["open", "-W", "-n", root, "--args"]
+    return [launcher]
+
+
+LAUNCH_STATES = ("reussi", "echec", "incomplet")
+
+
+def read_launch_report(path, out_dir, started):
+    """(rapport, erreur) : le rapport doit exister, etre ecrit par CET essai et suivre le schema du jeu (v4.11)"""
+    if not os.path.isfile(path):
+        return None, "aucun rapport de lancement"
+    if os.path.getmtime(path) + 2 < started:
+        return None, "rapport anterieur a l'essai (%s)" % path
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            rep = json.load(fh)
+    except (ValueError, OSError) as e:
+        return None, "rapport de lancement illisible (%s)" % e
+    if not isinstance(rep, dict):
+        return None, "rapport de lancement mal forme (objet JSON attendu)"
+    missing = [k for k in ("etat", "jeu", "ligne_de_commande", "problemes", "non_verifies") if k not in rep]
+    if missing:
+        return None, "rapport de lancement incomplet : champ(s) absent(s) %s" % ", ".join(missing)
+    if rep["etat"] not in LAUNCH_STATES:
+        return None, "etat inconnu dans le rapport : %r" % (rep["etat"],)
+    for k in ("problemes", "non_verifies"):
+        if not isinstance(rep[k], list) or not all(isinstance(x, str) for x in rep[k]):
+            return None, "champ %s mal forme (liste de textes attendue)" % k
+    cmdline = rep["ligne_de_commande"] if isinstance(rep["ligne_de_commande"], str) else ""
+    # Le chemin du rapport est un dossier temporaire neuf : un rapport qui ne le cite pas vient d'un autre essai
+    if "-BRSmokeTest" not in cmdline or os.path.basename(out_dir) not in cmdline:
+        return None, "le rapport ne correspond pas a cet essai (ligne de commande : %s)" % cmdline[:200]
+    return rep, None
+
+
+def check_launch(c, platform, root, launcher, timeout, required):
+    host = host_platform()
     if host != platform:
         c.skip("lancement possible seulement sur un hote %s (hote actuel : %s)" % (platform, host))
         return
     out_dir = tempfile.mkdtemp(prefix="br_smoke_")
     result = os.path.join(out_dir, "smoke.json")
     log = os.path.join(out_dir, "smoke.log")
-    if platform == "Mac":
-        cmd = ["open", "-W", "-n", root, "--args"]
-    else:
-        cmd = [launcher]
-    cmd += ["-BRAutoTest", "-BRSmokeTest", "-BRSmokeOut=%s" % result, "-unattended", "-windowed", "-ResX=960", "-ResY=540",
-            "-abslog=%s" % log]
+    # -BRAutoTestStrict : une verification non faite rend le code 2 (jamais un succes silencieux)
+    cmd = launch_command(platform, root, launcher) + ["-BRAutoTest", "-BRSmokeTest", "-BRAutoTestStrict", "-BRSmokeOut=%s" % result,
+                                                       "-unattended", "-windowed", "-ResX=960", "-ResY=540", "-abslog=%s" % log]
+    started = time.time()
     try:
         p = subprocess.run(cmd, timeout=timeout)
-        code = p.returncode
+        code = p.returncode if platform != "Mac" else None
     except subprocess.TimeoutExpired:
         c.fail("le jeu n'a pas fini le test de lancement en %d s" % timeout)
         return
     except OSError as e:
         c.fail("lancement impossible : %s" % e)
         return
-    if not os.path.isfile(result):
-        c.fail("le jeu s'est arrete sans rapport de lancement (code %s ; journal : %s)" % (code, log))
+    rep, err = read_launch_report(result, out_dir, started)
+    if err:
+        c.fail("%s (code de sortie %s ; journal : %s)" % (err, code, log))
         return
-    try:
-        with open(result, encoding="utf-8-sig") as fh:
-            rep = json.load(fh)
-    except ValueError:
-        c.fail("rapport de lancement illisible : %s" % result)
-        return
-    c.info("lancement : code %s, %s" % (code, rep.get("resume", "")))
-    for p in rep.get("problemes", []):
-        c.fail(p)
-    if code not in (0, None) and not c.problems:
+    c.info("lancement : code %s, etat %s, %d probleme(s), %d verification(s) non faite(s)" % (
+        "inconnu (open)" if code is None else code, rep["etat"], len(rep["problemes"]), len(rep["non_verifies"])))
+    for prob in rep["problemes"]:
+        c.fail(prob)
+    if rep["etat"] == "echec" and not rep["problemes"]:
+        c.fail("le jeu indique un echec sans le detailler")
+    if rep["etat"] == "reussi" and (rep["problemes"] or rep["non_verifies"]):
+        c.fail("rapport incoherent : etat reussi avec des problemes ou des verifications non faites")
+    if code not in (None, 0, 2):
         c.fail("code de sortie %s" % code)
+    if code == 2 and rep["etat"] != "incomplet":
+        c.fail("code de sortie 2 (verifications non faites) mais etat %s" % rep["etat"])
+    if code == 0 and rep["etat"] == "incomplet":
+        c.info("code de sortie 0 malgre -BRAutoTestStrict : le rapport fait foi (etat incomplet)")
+    if c.problems:
+        return
+    if rep["etat"] == "incomplet" or rep["non_verifies"]:
+        for item in rep["non_verifies"]:
+            c.info("non verifie : " + item)
+        c.partial("le jeu a demarre mais %d verification(s) n'ont pas ete faites" % len(rep["non_verifies"]))
 
 
 def main(argv=None):
@@ -658,21 +775,30 @@ def main(argv=None):
         return 3
 
     checks = {n: Check(n) for n in CHECKS}
-    st = check_structure(checks["structure"], a.platform, a.dir, a.project)
+
+    def guarded(check, fn, *args):
+        # v4.11 : une erreur imprevue dans une verification la met en ECHEC, avec son rapport (jamais de trace Python)
+        try:
+            return fn(check, *args)
+        except Exception as e:  # noqa: BLE001
+            check.fail("erreur interne de la verification : %s: %s" % (type(e).__name__, e))
+            return None
+
+    st = guarded(checks["structure"], check_structure, a.platform, a.dir, a.project)
     if st:
         root, launcher, binary, paks, utocs = st
         tool = find_unrealpak(a)
         if a.mode == "structure":
             checks["contenu"].skip("mode structure : contenu non lu")
         else:
-            check_content(checks["contenu"], tool, paks, utocs)
-        check_architecture(checks["architecture"], a.platform, root, binary, [x for x in a.archs.split(",") if x])
-        check_dependencies(checks["dependances"], a.platform, root, binary)
+            guarded(checks["contenu"], check_content, tool, paks, utocs)
+        guarded(checks["architecture"], check_architecture, a.platform, root, binary, [x for x in a.archs.split(",") if x])
+        guarded(checks["dependances"], check_dependencies, a.platform, root, binary)
         if a.launch or a.require_launch:
             if checks["structure"].close().state == OK:
-                check_launch(checks["lancement"], a.platform, root, launcher, a.launch_timeout)
+                guarded(checks["lancement"], check_launch, a.platform, root, launcher, a.launch_timeout, a.require_launch)
             else:
-                checks["lancement"].skip("structure en echec : paquet non lance")
+                checks["lancement"].fail("structure en echec : paquet non lance")
         else:
             checks["lancement"].skip("non demande (--launch)")
     else:
@@ -684,12 +810,17 @@ def main(argv=None):
     required = ["structure"] if a.mode == "structure" else ["structure", "contenu", "architecture", "dependances"]
     if a.require_launch:
         required.append("lancement")
-    failed = [n for n in required if checks[n].state == FAIL]
-    missing = [n for n in required if checks[n].state == SKIP]
+    # v4.11 : un lancement demande (--launch) qui a eu lieu compte toujours : un echec fait echouer la commande, un essai
+    # incomplet la rend incomplete. Seul un lancement impossible sur cet hote reste facultatif avec --launch.
+    counted = list(required)
+    if a.launch and "lancement" not in counted and checks["lancement"].state in (FAIL, PARTIAL):
+        counted.append("lancement")
+    failed = [n for n in counted if checks[n].state == FAIL]
+    missing = [n for n in counted if checks[n].state in (SKIP, PARTIAL)]
     if failed:
         status, code = "ECHEC", 1
     elif missing:
-        status, code = "INSPECTION INCOMPLETE", 2
+        status, code = "INSPECTION INCOMPLETE" + (" (lancement incomplet)" if checks["lancement"].state == PARTIAL else ""), 2
     elif a.mode == "structure":
         status, code = "CONTROLE STRUCTUREL SEULEMENT (contenu non verifie)", 0
     else:
@@ -698,7 +829,7 @@ def main(argv=None):
     print("Paquet %s : %s" % (a.platform, a.dir))
     for n in CHECKS:
         c = checks[n]
-        flag = "" if n in required else " (facultatif)"
+        flag = "" if n in counted else " (facultatif)"
         print("  %-12s %s%s%s" % (n, c.state, flag, (" : " + c.reason) if c.reason else ""))
         for d in c.details:
             print("      " + d)
@@ -709,7 +840,7 @@ def main(argv=None):
         os.makedirs(os.path.dirname(os.path.abspath(a.json)), exist_ok=True)
         with open(a.json, "w", encoding="utf-8") as fh:
             json.dump({"plateforme": a.platform, "dossier": os.path.abspath(a.dir), "mode": a.mode, "resultat": status, "code": code,
-                       "obligatoires": required, "verifications": {n: checks[n].as_dict() for n in CHECKS}}, fh, ensure_ascii=False, indent=2)
+                       "obligatoires": counted, "verifications": {n: checks[n].as_dict() for n in CHECKS}}, fh, ensure_ascii=False, indent=2)
     return code
 
 

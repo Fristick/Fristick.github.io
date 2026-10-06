@@ -35,15 +35,18 @@ PLIST="$APP/Contents/Info.plist"
 
 if [ -n "${MAC_SIGN_IDENTITY:-}" ]; then
 	ENT="$BR_TOOLS/mac/Backrooms.entitlements"
-	# Bibliotheques internes d'abord, puis le paquet (pas de --deep : chaque binaire est signe explicitement)
-	find "$APP/Contents" \( -name '*.dylib' -o -name '*.so' \) -type f -print0 | while IFS= read -r -d '' LIB; do
-		codesign --force --timestamp --options runtime --sign "$MAC_SIGN_IDENTITY" "$LIB"
+	# v4.11 : tout le code imbrique, reconnu par son contenu (Mach-O) et non par son extension, de l'interieur vers
+	# l'exterieur : bibliotheques et executables auxiliaires, bundles imbriques (CrashReportClient.app, frameworks),
+	# puis le bundle du jeu, seul a recevoir les droits. Pas de --deep : chaque element est signe explicitement.
+	python3 "$BR_TOOLS/mac_sign_order.py" --print0 "$APP" | while IFS= read -r -d '' ITEM; do
+		if [ "$ITEM" = "$APP" ]; then
+			codesign --force --timestamp --options runtime --entitlements "$ENT" --sign "$MAC_SIGN_IDENTITY" "$ITEM"
+		else
+			codesign --force --timestamp --options runtime --sign "$MAC_SIGN_IDENTITY" "$ITEM"
+		fi
 	done
-	find "$APP/Contents" -name '*.framework' -type d -prune -print0 | while IFS= read -r -d '' FW; do
-		codesign --force --timestamp --options runtime --sign "$MAC_SIGN_IDENTITY" "$FW"
-	done
-	codesign --force --timestamp --options runtime --entitlements "$ENT" --sign "$MAC_SIGN_IDENTITY" "$APP"
-	codesign --verify --strict --verbose=2 "$APP"
+	# Verification de tout ce qui est imbrique (--deep en verification seulement)
+	codesign --verify --deep --strict --verbose=2 "$APP"
 	if [ -n "${NOTARY_PROFILE:-}" ]; then
 		ZIP="$OUT/Backrooms-notarize.zip"
 		ditto -c -k --keepParent "$APP" "$ZIP"
