@@ -1,4 +1,5 @@
 #include "BREntity.h"
+#include "BRLightLogic.h"
 #include "BRHUD.h"
 #include "BRLoc.h"
 #include "Backrooms.h"
@@ -1520,6 +1521,17 @@ void ABREntity::StartVanish()
 		Vanish = 0.f;
 		GetCharacterMovement()->StopMovementImmediately();
 		SetActorEnableCollision(false);
+		// v4.12 : effet annonce (sous-titre, sur chaque machine) : un Smiler dissipe par la lumiere ambiante
+		if (Kind == EBREntityKind::Smiler)
+		{
+			if (const ABRWorld* W = World.Get())
+			{
+				if (W->LightLevelAt(GetActorLocation()) > BRLight::SmilerVanish)
+				{
+					ABRHUD::Caption(this, BR_STR(NSLOCTEXT("BR", "Caption.SmilerLight", "[Un Smiler se dissipe dans la lumi\u00e8re]")), GetActorLocation(), 3.f);
+				}
+			}
+		}
 	}
 }
 
@@ -2047,7 +2059,8 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 	const FVector PL = P->GetActorLocation();
 	FacePlayer(Dt);
 	const float Light = W->LightLevelAt(GetActorLocation());
-	if (Light > 0.5f && State != EState::Chase)
+	// v4.12 : la lumiere ambiante (plafonniers, et balises ou sortie eclairees : BRLight) dissipe un Smiler hors poursuite
+	if (Light > BRLight::SmilerVanish && State != EState::Chase)
 	{
 		StartVanish(); // la lumiere les fait fuir
 		return;

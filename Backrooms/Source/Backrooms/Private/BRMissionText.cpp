@@ -1,6 +1,7 @@
 // v4.11 : textes des missions, composes dans la langue de chaque joueur. Les symboles, lettres, chiffres et angles
 // gardent leur sens dans toutes les langues ; la longueur d'une traduction ne change jamais un code.
 #include "BRMission.h"
+#include "BRLightLogic.h"
 #include "BRLoc.h"
 #include "BRKeys.h"
 
@@ -365,7 +366,14 @@ FString BRMissionText::StepHint(int32 Level, int32 Step)
 	case 51: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.5.1", "Le trousseau ne tient que trois cl\u00e9s. Une cl\u00e9 inutile se remet \u00e0 son crochet. Chaque serrure n'accepte que sa cl\u00e9."));
 	case 52: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.5.2", "La consigne est affich\u00e9e pr\u00e8s de la chaudi\u00e8re. Trop de pression la fait siffler : redescendez."));
 	case 60: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.6.0", "La plaque de d\u00e9part est en relief : on la lit m\u00eame dans le noir. Elle donne la premi\u00e8re balise."));
-	case 61: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.6.1", "Maintenez {Key} pour remonter une balise : elle fait du bruit pendant ce temps. Activ\u00e9e, elle \u00e9claire et montre la suivante. Une balise hors ordre ne s'enclenche pas."), { { TEXT("Key"), BRLoc::Arg(K) } });
+	case 61:
+	{
+		// v4.12 : l'effet reel des balises sur les Smilers (BRLight : apport > seuil a moins de R x (1 - racine(seuil / I)))
+		const float Reach = BRLight::BeaconRadius * (1.f - FMath::Sqrt(BRLight::SmilerVanish / BRLight::BeaconIntensity));
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.6.1", "Maintenez {Key} pour remonter une balise : elle fait du bruit pendant ce temps. Activ\u00e9e, elle \u00e9claire et montre la suivante. Une balise hors ordre ne s'enclenche pas."), { { TEXT("Key"), BRLoc::Arg(K) } })
+			+ TEXT(" ") + BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.6.Light", "\u00c0 moins de {Meters} m d'une balise allum\u00e9e, un Smiler qui ne vous poursuit pas se dissipe ; braquer la lampe sur lui le met en col\u00e8re."),
+				{ { TEXT("Meters"), BRLoc::Int(FMath::FloorToInt(Reach / 100.f)) } });
+	}
 	case 62: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.6.2", "La derni\u00e8re balise m\u00e8ne \u00e0 l'alimentation de secours, pr\u00e8s de la sortie."));
 	case 80: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.8.0", "Les marques de passage sont grav\u00e9es dans la roche, pr\u00e8s du d\u00e9part. Elles donnent l'ordre des treuils."));
 	case 81: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.8.1", "Maintenez {Key} sur un treuil : il garde sa progression si vous le l\u00e2chez. Hors ordre, le c\u00e2ble reste mou."), { { TEXT("Key"), BRLoc::Arg(K) } });

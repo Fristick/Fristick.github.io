@@ -50,9 +50,18 @@ public:
 	bool WantsTick() const { return bAnimated; }
 	/** v4.11 : machine alimentee en marche (relais, disjoncteur, generateur, treuil, balise) : le Clump s'en ecarte */
 	bool IsRunning() const;
-	/** Visible (son chunk est construit) */
+	/** Visible (son chunk est construit). v4.12 : masque, il ne s'anime plus (Tick coupe), son etat logique reste ; a la
+	 *  reapparition, il reprend la bonne position sans rejouer d'animation */
 	void SetShown(bool bShow);
 	bool IsShown() const { return bShown; }
+	/** v4.12 (mesures) : Ticks des mecanismes et temps passe (secondes) depuis la derniere remise a zero */
+	static int64 TickCount;
+	static double TickSeconds;
+	static void ResetTickStats()
+	{
+		TickCount = 0;
+		TickSeconds = 0.0;
+	}
 
 protected:
 	UPROPERTY(VisibleAnywhere)
@@ -90,6 +99,13 @@ protected:
 	/** Balises du Niveau 6 : seule lumiere du mecanisme, sans ombre */
 	UPROPERTY()
 	TObjectPtr<UPointLightComponent> BeaconLight;
+
+	/** v4.12 : lumiere reelle d'un element eclaire par la mission (sortie de secours du Niveau 6, porche du Niveau 9) */
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> GateLight;
+
+	/** v4.12 : sources de lumiere de gameplay de ce mecanisme (balise, element eclaire), d'apres son etat */
+	void UpdateGameplayLights();
 
 	/** Piece affichee quand l'objet est present (fusible, cle) ou insere (prise) */
 	UPROPERTY()

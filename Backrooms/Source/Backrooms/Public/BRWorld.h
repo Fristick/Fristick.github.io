@@ -79,6 +79,21 @@ struct FBRNetMission
 
 	UPROPERTY()
 	uint8 LastFeedback = 0;
+
+	/** v4.12 : placement retenu par l'hote : 0 normal, 1 variante de secours, 2 module de secours pres du depart. Le
+	 *  client place exactement de la meme facon */
+	UPROPERTY()
+	uint8 Tier = 0;
+
+	/** v4.12 : version du placement (BRMission::PlaceVersion) */
+	UPROPERTY()
+	uint8 PlaceVersion = 0;
+
+	/** v4.12 : avis pour les joueurs (montre une fois par niveau) : 0 aucun, 1 module de secours, 2 mission non
+	 *  restauree (sauvegarde d'une autre version, copie conservee), 3 mecanismes replaces (progression conservee),
+	 *  4 mission indisponible (sortie ouverte, explicitement) */
+	UPROPERTY()
+	uint8 Notice = 0;
 };
 
 /** v4.11 : donnees de campagne (fragments de route, objectifs facultatifs, fins vues), tenues par l'hote */
@@ -249,6 +264,16 @@ public:
 	/** Ancien mode des objectifs (cassettes VHS du Niveau 0) : session commencee avant la v4.11, jusqu'a sa sortie */
 	bool IsLegacyObjectives() const;
 	uint8 GetMissionGen() const { return MissionGen; }
+	/** v4.12 : placement retenu (0 normal, 1 variante de secours, 2 module de secours) */
+	uint8 GetMissionTier() const { return MissionTier; }
+	uint8 GetMissionNotice() const { return MissionNotice; }
+	/** v4.12 : l'hote doit copier la sauvegarde avant de la reecrire (mission non restauree) ; remis a faux */
+	bool ConsumeSaveBackupRequest()
+	{
+		const bool b = bSaveBackupRequested;
+		bSaveBackupRequested = false;
+		return b;
+	}
 	bool IsMissionFallback() const { return MissionPlan.bFallback; }
 	const BRMission::FPlan& GetMissionPlan() const { return MissionPlan; }
 	const BRMission::FState& GetMissionState() const { return MissionState; }
@@ -392,6 +417,11 @@ public:
 	UBRWaterSim* GetWaterSim() const { return WaterSim; }
 	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire) */
 	float LightLevelAt(const FVector& P) const;
+	/** v4.12 : source de lumiere de gameplay (mecanisme de mission allume) : enregistree ou retiree, sur chaque machine,
+	 *  d'apres l'etat replique ; autonome (une coupure des neons ne l'eteint pas). Slot : plusieurs sources par acteur */
+	void SetGameplayLight(const AActor* Owner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn);
+	/** v4.12 (tests) : sources de gameplay actives */
+	int32 NumGameplayLights() const { return GameplayLights.Num(); }
 	/** A* sur la grille (v4.6 : les cellules d'une salle de fosses coutent plus cher : on passe par la galerie si possible) */
 	bool FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes = 1500) const;
 
@@ -726,6 +756,19 @@ private:
 	void SetupMission();
 	/** Place les mecanismes et les sorties garanties ; false si impossible (la variante de secours est alors essayee) */
 	bool PlaceMission(const BRMission::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells) const;
+	/** v4.12 : module de secours : tous les mecanismes pres du depart, sur les murs des premieres cellules atteintes (ou
+	 *  des poteaux), sorties gardees a la cellule atteinte la plus lointaine. Toujours possible : une mission n'est plus
+	 *  jamais abandonnee (avant : sorties ouvertes en silence) */
+	bool PlaceMissionModule(const BRMission::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells) const;
+	/** v4.12 : placement retenu (0 normal, 1 variante de secours, 2 module) et avis aux joueurs (FBRNetMission::Notice) */
+	uint8 MissionTier = 0;
+	uint8 MissionNotice = 0;
+	int32 NoticeShownSerial = 0;
+	/** v4.12 : version de placement de la session reprise (1 : sauvegarde d'avant la v4.12) */
+	int32 ResumePlaceVersion = 0;
+	/** v4.12 : la sauvegarde doit etre copiee avant sa prochaine ecriture (mission non restauree) */
+	bool bSaveBackupRequested = false;
+	void ShowMissionNotice(uint8 Notice);
 	void SpawnMissionActors();
 	void ClearMission();
 	/** Serveur : publie l'etat (revision, dernier changement), donnees de campagne, journal */
@@ -745,6 +788,15 @@ private:
 	TWeakObjectPtr<ABRCharacter> DepartureInitiator;
 	/** v4.12 : sortie choisie par le depart en cours (ignoree par les tests de vue) */
 	TWeakObjectPtr<ABRExit> DepartureExit;
+	/** v4.12 : lumieres de gameplay des mecanismes (cle : acteur et emplacement) */
+	struct FGameplayLight
+	{
+		FVector Pos = FVector::ZeroVector;
+		float Radius = 0.f;
+		float Intensity = 0.f;
+		TWeakObjectPtr<const AActor> Owner;
+	};
+	TMap<uint64, FGameplayLight> GameplayLights;
 	uint8 SeenDeparturePhase = 0;
 	uint16 SeenDepartureId = 0;
 

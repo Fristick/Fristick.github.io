@@ -481,6 +481,33 @@ namespace BRSaves
 		return FString::Printf(TEXT("%s_Format%d"), *SlotName(Slot), Version);
 	}
 
+	FString RecoverySlotName(int32 Slot)
+	{
+		return FString::Printf(TEXT("%s_AvantRecuperation"), *SlotName(Slot));
+	}
+
+	bool PreserveBeforeRecovery(int32 Slot)
+	{
+		if (Slot < 0 || Slot >= MaxSlots)
+		{
+			return false;
+		}
+		Flush(); // le fichier sur le disque est celui d'avant la recuperation
+		const FString Copy = RecoverySlotName(Slot);
+		if (FileThere(Copy))
+		{
+			return true; // la premiere copie est la bonne : jamais remplacee
+		}
+		TArray<uint8> Bytes;
+		if (!FFileHelper::LoadFileToArray(Bytes, *PathOf(SlotName(Slot))))
+		{
+			return false;
+		}
+		const bool bOk = WriteFileAtomic(Copy, Bytes);
+		UE_LOG(LogBackrooms, Log, TEXT("Sauvegarde %d copiee avant recuperation : %s (%s)"), Slot, *Copy, bOk ? TEXT("ok") : TEXT("echec"));
+		return bOk;
+	}
+
 	UBRSaveGame* Load(int32 Slot)
 	{
 		if (Slot < 0 || Slot >= MaxSlots)
@@ -714,6 +741,7 @@ namespace BRSaves
 		IFileManager::Get().Delete(*PathOf(SlotName(Slot)), false, true, true);
 		IFileManager::Get().Delete(*PathOf(BackupSlotName(Slot)), false, true, true);
 		IFileManager::Get().Delete(*PathOf(LegacySlotName(Slot, 1)), false, true, true);
+		IFileManager::Get().Delete(*PathOf(RecoverySlotName(Slot)), false, true, true);
 		{
 			FScopeLock Lock(&QueueLock());
 			FutureSlots().Remove(Slot); // suppression explicite (confirmee) d'une partie d'un format plus recent

@@ -9,6 +9,8 @@
 #include "BRKeys.h"
 #include "BRLoc.h"
 #include "Backrooms.h"
+#include "BRLightLogic.h"
+#include "HAL/PlatformTime.h"
 
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
@@ -518,6 +520,16 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			}
 			GlowMID = A->NewGlow(this, FLinearColor(1.f, 0.78f, 0.45f), 0.f);
 			AddPart(A->Sphere(), FVector(8.f, 0.f, Z + 52.f), FRotator::ZeroRotator, FVector(9.f, 9.f, 9.f), GlowMID);
+			// v4.12 : la lampe du porche eclaire vraiment une fois allumee
+			GateLight = NewObject<UPointLightComponent>(this);
+			GateLight->SetupAttachment(Root);
+			GateLight->SetRelativeLocation(FVector(40.f, 0.f, Z + 52.f));
+			GateLight->SetIntensityUnits(ELightUnits::Lumens);
+			GateLight->SetIntensity(0.f);
+			GateLight->SetLightColor(FLinearColor(1.f, 0.78f, 0.45f));
+			GateLight->SetAttenuationRadius(BRLight::LitGateRadius);
+			GateLight->SetCastShadows(false);
+			GateLight->RegisterComponent();
 			BoxCenter = FVector(5.f, 0.f, Z + 24.f);
 			BoxExtent = FVector(6.f, 32.f, 26.f);
 		}
@@ -546,6 +558,19 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			GlowMID = A->NewGlow(this, Device.Role == BRM::R_Passage ? FLinearColor(0.6f, 0.5f, 1.f) : FLinearColor(1.f, 0.95f, 0.8f), 0.f);
 			AddBoxPart(FVector(2.f, 0.f, 200.f), FVector(4.f, 90.f, 10.f), GlowMID);
 			AddBoxPart(FVector(1.f, 0.f, 200.f), FVector(2.f, 100.f, 16.f), DarkMetal);
+			if (Device.Role == BRM::R_LightsExit)
+			{
+				// v4.12 : la sortie "eclairee" eclaire vraiment (et compte pour les regles : BRLight)
+				GateLight = NewObject<UPointLightComponent>(this);
+				GateLight->SetupAttachment(Root);
+				GateLight->SetRelativeLocation(FVector(30.f, 0.f, 190.f));
+				GateLight->SetIntensityUnits(ELightUnits::Lumens);
+				GateLight->SetIntensity(0.f);
+				GateLight->SetLightColor(FLinearColor(1.f, 0.95f, 0.85f));
+				GateLight->SetAttenuationRadius(BRLight::LitGateRadius);
+				GateLight->SetCastShadows(false);
+				GateLight->RegisterComponent();
+			}
 			break;
 		case BRM::R_Bridge:
 			// Passerelle levee (verticale) qui descend en pont
@@ -624,6 +649,19 @@ void ABRMissionDevice::SetShown(bool bShow)
 	}
 	bShown = bShow;
 	SetActorHiddenInGame(!bShow);
+	if (!bShow)
+	{
+		// v4.12 : zone dechargee : plus aucune animation (neon, balise, vapeur) ; l'etat logique de la mission reste
+		SetActorTickEnabled(false);
+	}
+	else
+	{
+		// Reapparition : la bonne position tout de suite, sans rejouer le mouvement (le monde rallume le Tick des
+		// mecanismes animes proches)
+		ShownPos = TargetPos;
+		Tick(0.f);
+		SetActorTickEnabled(false);
+	}
 	Box->SetCollisionEnabled(bShow && Device.Kind != BRM::EKind::Gate ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 	if (!bShow)
 	{
@@ -669,9 +707,9 @@ void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& Sta
 		TargetPos = 0.f;
 		break;
 	}
-	if (!bAnimate)
+	if (!bAnimate || !bShown)
 	{
-		ShownPos = TargetPos;
+		ShownPos = TargetPos; // v4.12 : masque, pas d'animation : il apparaitra deja en place
 	}
 	else if (!FMath::IsNearlyEqual(ShownPos, TargetPos))
 	{
@@ -725,6 +763,11 @@ void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& Sta
 	{
 		BeaconLight->SetIntensity(StateValue >= Device.Positions ? 2200.f : 0.f);
 	}
+	if (GateLight)
+	{
+		GateLight->SetIntensity(GateValue ? 1600.f : 0.f);
+	}
+	UpdateGameplayLights();
 	if (Device.Kind == BRM::EKind::Gate && bBlocking && bShown)
 	{
 		Blocker->SetCollisionEnabled(GateValue < 200 ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
@@ -739,7 +782,11 @@ void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& Sta
 void ABRMissionDevice::PlayFeedback(uint8 Feedback)
 {
 	FlashTime = Time;
-	SetActorTickEnabled(true);
+	// v4.12 : un retour recu pendant que la zone est dechargee ne relance pas le Tick (le son, lui, reste)
+	if (bShown)
+	{
+		SetActorTickEnabled(true);
+	}
 	UBRAssets* A = UBRAssets::Get(this);
 	if (!A)
 	{
@@ -828,11 +875,35 @@ void ABRMissionDevice::PlayFeedback(uint8 Feedback)
 	}
 }
 
+int64 ABRMissionDevice::TickCount = 0;
+double ABRMissionDevice::TickSeconds = 0.0;
+
+void ABRMissionDevice::UpdateGameplayLights()
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!W)
+	{
+		return;
+	}
+	if (BeaconLight)
+	{
+		W->SetGameplayLight(this, 0, BeaconLight->GetComponentLocation(), BRLight::BeaconRadius, BRLight::BeaconIntensity, StateValue >= Device.Positions);
+	}
+	if (GateLight)
+	{
+		W->SetGameplayLight(this, 1, GateLight->GetComponentLocation(), BRLight::LitGateRadius, BRLight::LitGateIntensity, GateValue != 0);
+	}
+}
+
 void ABRMissionDevice::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// Mesure : seuls les vrais Ticks du moteur comptent (Tick(0) applique une position sans animation)
+	const double TickStart = FPlatformTime::Seconds();
+	TickCount += DeltaSeconds > 0.f ? 1 : 0;
 	Time += DeltaSeconds;
-	bool bKeep = bAnimated;
+	// v4.12 : un mecanisme masque ne garde jamais son Tick (avant : bKeep = bAnimated, meme zone dechargee)
+	bool bKeep = bAnimated && bShown;
 	if (!FMath::IsNearlyEqual(ShownPos, TargetPos, 0.002f))
 	{
 		ShownPos = FMath::FInterpTo(ShownPos, TargetPos, DeltaSeconds, 6.f);
@@ -936,6 +1007,10 @@ void ABRMissionDevice::Tick(float DeltaSeconds)
 	if (!bKeep)
 	{
 		SetActorTickEnabled(false);
+	}
+	if (DeltaSeconds > 0.f)
+	{
+		TickSeconds += FPlatformTime::Seconds() - TickStart;
 	}
 }
 

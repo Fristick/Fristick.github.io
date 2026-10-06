@@ -21,6 +21,7 @@
 #include "BRWaterSim.h"
 #include "BRItems.h"
 #include "BRTxnLogic.h"
+#include "BRLightLogic.h"
 
 #include "Algo/Reverse.h"
 #include "Components/AudioComponent.h"
@@ -556,6 +557,7 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 				// etat de sa mission ; appliques par SetupMission
 				ResumeMissionGen = static_cast<uint8>(FMath::Clamp(Resume.GenVersion, 1, 255));
 				ResumeMissionBlob = Resume.Mission;
+				ResumePlaceVersion = Resume.PlaceVersion;
 				bBlackoutRecorded = Resume.bBlackoutRecorded;
 				bEntityRecorded = Resume.bEntityRecorded;
 				for (const uint64 Id : Resume.Collected)
@@ -2201,7 +2203,7 @@ void ABRWorld::UpdatePopulation(float Dt)
 		}
 		const float Z = Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f;
 		const FVector Loc = CellCenter(Cell, Z);
-		if (Info.bNeedsDark && LightLevelAt(Loc) > 0.12f)
+		if (Info.bNeedsDark && LightLevelAt(Loc) > BRLight::NeedsDark)
 		{
 			continue;
 		}
@@ -3599,7 +3601,7 @@ bool ABRWorld::FindSpawnSpot(EBREntityKind Kind, const ABRCharacter* Anchor, flo
 			continue; // v4.6 : une entite terrestre n'apparait pas entre les fosses
 		}
 		const FVector Loc = CellCenter(Cell, Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
-		if (Info.bNeedsDark && LightLevelAt(Loc) > 0.12f)
+		if (Info.bNeedsDark && LightLevelAt(Loc) > BRLight::NeedsDark)
 		{
 			continue;
 		}
@@ -4350,31 +4352,76 @@ float ABRWorld::LightLevelAt(const FVector& P) const
 	{
 		return 1.f;
 	}
-	if (D.Fixture == EBRFixture::None || Power < 0.05f)
-	{
-		return 0.f;
-	}
-	const FIntPoint C = WorldToCell(P);
-	const int32 R = FMath::Clamp(FMath::CeilToInt(D.LightRadius / D.CellSize), 1, 4);
+	// Plafonniers du niveau (suivent les coupures)
 	float Acc = 0.f;
-	for (int32 DX = -R; DX <= R; ++DX)
+	if (D.Fixture != EBRFixture::None && Power >= 0.05f)
 	{
-		for (int32 DY = -R; DY <= R; ++DY)
+		const FIntPoint C = WorldToCell(P);
+		const int32 R = FMath::Clamp(FMath::CeilToInt(D.LightRadius / D.CellSize), 1, 4);
+		for (int32 DX = -R; DX <= R; ++DX)
 		{
-			const FBRLightInfo L = CellLight(C.X + DX, C.Y + DY);
-			if (!L.bHas || L.bBroken)
+			for (int32 DY = -R; DY <= R; ++DY)
+			{
+				const FBRLightInfo L = CellLight(C.X + DX, C.Y + DY);
+				if (!L.bHas || L.bBroken)
+				{
+					continue;
+				}
+				const FVector LP = CellCenter(FIntPoint(C.X + DX, C.Y + DY)) + L.Offset;
+				const float Dist = static_cast<float>(FVector::Dist2D(P, LP));
+				if (Dist < D.LightRadius)
+				{
+					Acc += FMath::Square(1.f - Dist / D.LightRadius) * (L.bFlicker ? 0.6f : 1.f);
+				}
+			}
+		}
+		Acc *= Power;
+	}
+	// v4.12 : sources de mission allumees (balises, sortie eclairee, porche) : autonomes, meme loi que les plafonniers, en
+	// 3D, et un mur entre la source et le point l'annule. Peu de sources (quelques-unes par niveau), une trace chacune et
+	// seulement a portee : le cout reste borne
+	if (GameplayLights.Num() > 0 && GetWorld())
+	{
+		for (const TPair<uint64, FGameplayLight>& Pair : GameplayLights)
+		{
+			const FGameplayLight& L = Pair.Value;
+			const float Dist = static_cast<float>(FVector::Dist(P, L.Pos));
+			const float Add = BRLight::Contribution(Dist, L.Radius, L.Intensity);
+			if (Add <= 0.01f)
 			{
 				continue;
 			}
-			const FVector LP = CellCenter(FIntPoint(C.X + DX, C.Y + DY)) + L.Offset;
-			const float Dist = static_cast<float>(FVector::Dist2D(P, LP));
-			if (Dist < D.LightRadius)
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRGameplayLight), false);
+			if (const AActor* Owner = L.Owner.Get())
 			{
-				Acc += FMath::Square(1.f - Dist / D.LightRadius) * (L.bFlicker ? 0.6f : 1.f);
+				Q.AddIgnoredActor(Owner);
+			}
+			if (!GetWorld()->LineTraceTestByChannel(L.Pos, P, ECC_WorldStatic, Q))
+			{
+				Acc += Add;
 			}
 		}
 	}
-	return FMath::Clamp(Acc * Power, 0.f, 1.5f);
+	return FMath::Clamp(Acc, 0.f, 1.5f);
+}
+
+void ABRWorld::SetGameplayLight(const AActor* Owner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn)
+{
+	if (!Owner)
+	{
+		return;
+	}
+	const uint64 Key = (static_cast<uint64>(Owner->GetUniqueID()) << 8) | Slot;
+	if (!bOn)
+	{
+		GameplayLights.Remove(Key);
+		return;
+	}
+	FGameplayLight& L = GameplayLights.FindOrAdd(Key);
+	L.Pos = Where;
+	L.Radius = Radius;
+	L.Intensity = Intensity;
+	L.Owner = Owner;
 }
 
 bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes) const

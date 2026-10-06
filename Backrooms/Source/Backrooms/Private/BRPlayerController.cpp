@@ -2101,6 +2101,7 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 				// v4.11 : version de generation (1 : session d'avant la v4.11 encore en cours, gardee jusqu'a sa sortie), etat
 				// de la mission (mecanismes, objets d'equipe, sorties ouvertes) et documents facultatifs
 				Session.GenVersion = W->GetMissionGen() != 0 ? W->GetMissionGen() : BRMission::GenVersion;
+				Session.PlaceVersion = BRMission::PlaceVersion;
 				Session.Mission = W->GetMissionBlob();
 				Session.LoreFound = W->GetLoreFound();
 				Session.bBlackoutRecorded = W->IsBlackoutRecorded();
@@ -2111,6 +2112,14 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 				Session.Spot = SafeSpot;
 				Session.Yaw = SafeYaw;
 			}
+		}
+	}
+	// v4.12 : mission non restauree a la reprise : la sauvegarde d'origine est copiee avant sa premiere reecriture
+	if (ABRWorld* MW = ABRWorld::Get(this))
+	{
+		if (MW->ConsumeSaveBackupRequest())
+		{
+			BRSaves::PreserveBeforeRecovery(BRSaves::ActiveSlot());
 		}
 	}
 	const bool bQueued = bBlocking ? BRSaves::Write(BRSaves::ActiveSlot(), ActiveSave) : BRSaves::WriteAsync(BRSaves::ActiveSlot(), ActiveSave);

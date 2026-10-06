@@ -82,6 +82,10 @@ struct FBRSessionState
 	UPROPERTY(SaveGame)
 	int32 LoreFound = 0;
 
+	/** v4.12 : version du placement des mecanismes (BRMission::PlaceVersion) ; 1 : session d'avant la v4.12 */
+	UPROPERTY(SaveGame)
+	int32 PlaceVersion = 1;
+
 	UPROPERTY(SaveGame)
 	bool bBlackoutRecorded = false;
 
@@ -252,6 +256,10 @@ namespace BRSaves
 	BACKROOMS_API FString UnreadableSlotName(int32 Slot);
 	/** v4.7 : copie intacte d'une sauvegarde d'un ancien format, faite avant sa premiere reecriture */
 	BACKROOMS_API FString LegacySlotName(int32 Slot, int32 Version);
+	/** v4.12 : copie intacte faite avant une recuperation (mission non restauree) */
+	BACKROOMS_API FString RecoverySlotName(int32 Slot);
+	/** v4.12 : copie le fichier de cet emplacement sous RecoverySlotName (une seule fois) ; true si la copie existe */
+	BACKROOMS_API bool PreserveBeforeRecovery(int32 Slot);
 	/** nullptr si l'emplacement est vide ou illisible. v4.7 : principal illisible -> copie de secours ; les deux
 	 *  illisibles -> le fichier est mis de cote (UnreadableSlotName) et signale par TakeLoadMessages ; ancien format ->
 	 *  migre en memoire (une copie intacte est gardee sous LegacySlotName) */

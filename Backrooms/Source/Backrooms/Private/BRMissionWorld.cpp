@@ -182,6 +182,7 @@ void ABRWorld::ClearMission()
 		}
 	}
 	MissionDevices.Reset();
+	GameplayLights.Reset(); // v4.12 : les sources des mecanismes partent avec eux
 	for (ABRExit* E : MissionExits)
 	{
 		if (IsValid(E))
@@ -219,6 +220,9 @@ void ABRWorld::SetupMission()
 		return;
 	}
 	bool bWantFallback = false;
+	uint8 WantTier = 0;
+	MissionTier = 0;
+	MissionNotice = 0;
 	if (HasAuthority())
 	{
 		// Session reprise d'avant la v4.11 (version 1) : elle garde son ancien mode jusqu'a la sortie du niveau
@@ -229,6 +233,8 @@ void ABRWorld::SetupMission()
 		const bool bMatch = NetMission.Serial == NetLevel.Serial && NetMission.Gen != 0;
 		MissionGen = bMatch ? NetMission.Gen : static_cast<uint8>(BRM::GenVersion);
 		bWantFallback = bMatch && NetMission.bFallback;
+		// v4.12 : le client place exactement comme l'hote (normal, variante de secours ou module de secours)
+		WantTier = bMatch ? NetMission.Tier : 0;
 	}
 	if (MissionGen >= 2)
 	{
@@ -244,19 +250,41 @@ void ABRWorld::SetupMission()
 		TArray<FBRMissionSpot> Spots;
 		TArray<FMissionExitSpot> Exits;
 		TSet<FIntPoint> Cells;
-		bool bPlaced = PlaceMission(Plan, Spots, Exits, Cells);
-		if (!bPlaced && !Plan.bFallback)
+		bool bPlaced = false;
+		if (WantTier >= 2)
 		{
-			// Placement impossible avec cette graine : variante de secours deterministe, avant de placer les joueurs
-			UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d : placement impossible (graine %u), variante de secours"), Level, Seed);
-			BRM::BuildFallbackPlan(Level, Seed, Plan);
+			bPlaced = PlaceMissionModule(Plan, Spots, Exits, Cells);
+			MissionTier = 2;
+		}
+		else
+		{
 			bPlaced = PlaceMission(Plan, Spots, Exits, Cells);
+			MissionTier = Plan.bFallback ? 1 : 0;
+			if (!bPlaced && !Plan.bFallback)
+			{
+				// Placement impossible avec cette graine : variante de secours deterministe, avant de placer les joueurs
+				UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d : placement impossible (graine %u), variante de secours"), Level, Seed);
+				BRM::BuildFallbackPlan(Level, Seed, Plan);
+				bPlaced = PlaceMission(Plan, Spots, Exits, Cells);
+				MissionTier = 1;
+			}
+			if (!bPlaced)
+			{
+				// v4.12 : module de secours pres du depart (toujours possible) : la mission n'est jamais abandonnee, les
+				// sorties ne s'ouvrent pas en silence
+				UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d : placement impossible (graine %u) : module de secours pres du depart"), Level, Seed);
+				bPlaced = PlaceMissionModule(Plan, Spots, Exits, Cells);
+				MissionTier = 2;
+				MissionNotice = 1;
+			}
 		}
 		if (!bPlaced)
 		{
-			// Aucune zone de mission atteignable : le niveau garde des sorties libres (signale, jamais en silence)
-			UE_LOG(LogBackrooms, Error, TEXT("Mission du Niveau %d : aucune zone atteignable (graine %u) : sorties libres"), Level, Seed);
+			// Ne devrait jamais arriver (le module de secours se pose toujours) : signale aux joueurs, sortie ouverte
+			// explicitement plutot qu'une partie bloquee
+			UE_LOG(LogBackrooms, Error, TEXT("Mission du Niveau %d : aucun placement possible (graine %u) : sortie ouverte, signalee aux joueurs"), Level, Seed);
 			MissionGen = 0;
+			MissionNotice = 4;
 		}
 		else
 		{
@@ -274,10 +302,19 @@ void ABRWorld::SetupMission()
 					{
 						MissionState = Restored;
 						UE_LOG(LogBackrooms, Log, TEXT("Reprise : mission du Niveau %d restauree (%s)"), Level, (MissionState.Solved & 1) ? TEXT("resolue") : TEXT("en cours"));
+						// v4.12 : placement d'une autre version : la progression est gardee, les mecanismes peuvent avoir bouge
+						if (ResumePlaceVersion != BRM::PlaceVersion && MissionNotice == 0)
+						{
+							MissionNotice = 3;
+						}
 					}
 					else
 					{
-						UE_LOG(LogBackrooms, Warning, TEXT("Reprise : etat de mission du Niveau %d ne correspond pas au plan (graine %u) : mission reprise du debut"), Level, Seed);
+						// v4.12 : jamais en silence : la sauvegarde d'origine est copiee avant d'etre reecrite, et les joueurs
+						// sont prevenus que la mission de ce niveau recommence
+						UE_LOG(LogBackrooms, Warning, TEXT("Reprise : etat de mission du Niveau %d ne correspond pas au plan (graine %u) : mission reprise du debut, sauvegarde copiee"), Level, Seed);
+						MissionNotice = 2;
+						bSaveBackupRequested = true;
 					}
 				}
 			}
@@ -296,6 +333,7 @@ void ABRWorld::SetupMission()
 	}
 	ResumeMissionGen = 0;
 	ResumeMissionBlob.Reset();
+	ResumePlaceVersion = 0;
 	// Mission deja resolue a la reprise : pas d'annonce ni de bruit de porte a l'arrivee
 	BRM::FEval E;
 	GetMissionEval(E);
@@ -312,6 +350,37 @@ void ABRWorld::SetupMission()
 	{
 		OnMissionStateChanged(255, 0, false);
 	}
+	if (MissionNotice != 0)
+	{
+		ShowMissionNotice(MissionNotice);
+	}
+}
+
+void ABRWorld::ShowMissionNotice(uint8 Notice)
+{
+	// Une fois par niveau et par machine, dans la langue de chacun
+	if (NoticeShownSerial == LoadedSerial || Notice == 0)
+	{
+		return;
+	}
+	NoticeShownSerial = LoadedSerial;
+	FText Msg;
+	switch (Notice)
+	{
+	case 1:
+		Msg = NSLOCTEXT("BR", "Mission.Notice.Module", "Mission de ce niveau : les m\u00e9canismes sont regroup\u00e9s pr\u00e8s du point de d\u00e9part (le d\u00e9cor ne permettait pas leur placement habituel).");
+		break;
+	case 2:
+		Msg = NSLOCTEXT("BR", "Mission.Notice.NotRestored", "La mission de ce niveau n'a pas pu \u00eatre reprise telle quelle (sauvegarde d'une autre version) : elle recommence. Une copie de la sauvegarde d'origine est conserv\u00e9e.");
+		break;
+	case 3:
+		Msg = NSLOCTEXT("BR", "Mission.Notice.Moved", "Les m\u00e9canismes de ce niveau ont \u00e9t\u00e9 r\u00e9am\u00e9nag\u00e9s par la mise \u00e0 jour : votre progression dans la mission est conserv\u00e9e.");
+		break;
+	default:
+		Msg = NSLOCTEXT("BR", "Mission.Notice.Unavailable", "Mission indisponible dans ce niveau (erreur de g\u00e9n\u00e9ration signal\u00e9e) : la sortie reste ouverte.");
+		break;
+	}
+	ABRHUD::Notify(this, Msg.ToString(), 9.f, FLinearColor(1.f, 0.85f, 0.5f));
 }
 
 bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells) const
@@ -775,6 +844,207 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	return true;
 }
 
+bool ABRWorld::PlaceMissionModule(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells) const
+{
+	// v4.12 : module de secours. Le placement normal (zones de distance, salles reservees) peut echouer sur un decor
+	// tres ferme ; ici, tout se pose pres du depart, dans les premieres cellules atteintes a pied (parcours en largeur,
+	// au sec, hors des salles de fosses), sur leurs murs puis sur des poteaux. Toujours possible : la mission n'est plus
+	// abandonnee et les sorties restent gardees. Deterministe (memes cellules, memes emplacements chez tous)
+	OutSpots.Reset();
+	OutExits.Reset();
+	OutCells.Reset();
+	if (Plan.NumDevices <= 0)
+	{
+		return false;
+	}
+	const FBRLevelDef& D = Def();
+	const float S = D.CellSize;
+	auto Allowed = [&](const FIntPoint& C)
+	{
+		return IsCellInBounds(C.X, C.Y) && IsWalkable(C) && !IsPoolCell(C.X, C.Y) && !IsPitRoomCell(C.X, C.Y) && IsSafelyReachable(C);
+	};
+	TArray<FIntPoint> Order;
+	TSet<FIntPoint> Seen;
+	Order.Add(FIntPoint(0, 0));
+	Seen.Add(FIntPoint(0, 0));
+	for (int32 Head = 0; Head < Order.Num() && Order.Num() < 400; ++Head)
+	{
+		for (const FIntPoint& Dir : GMissionDirs)
+		{
+			const FIntPoint N = Order[Head] + Dir;
+			if (!Seen.Contains(N) && Allowed(N) && CanStep(Order[Head], N))
+			{
+				Seen.Add(N);
+				Order.Add(N);
+			}
+		}
+	}
+	auto Faces = [&](const FIntPoint& C, TArray<FIntPoint>& OutDirs)
+	{
+		OutDirs.Reset();
+		for (const FIntPoint& Dir : GMissionDirs)
+		{
+			const FIntPoint Next = C + Dir;
+			bool bFace = IsSolid(Next.X, Next.Y);
+			if (!bFace)
+			{
+				if (Dir.X == 1) bFace = EdgeE(C.X, C.Y) == EBREdge::Wall;
+				else if (Dir.X == -1) bFace = EdgeE(Next.X, Next.Y) == EBREdge::Wall;
+				else if (Dir.Y == 1) bFace = EdgeN(C.X, C.Y) == EBREdge::Wall;
+				else bFace = EdgeN(Next.X, Next.Y) == EBREdge::Wall;
+			}
+			if (bFace)
+			{
+				OutDirs.Add(Dir);
+			}
+		}
+	};
+	auto FaceSpot = [&](const FIntPoint& C, const FIntPoint& Dir, float Lateral)
+	{
+		FBRMissionSpot Spot;
+		const FIntPoint Next = C + Dir;
+		const float Inset = IsSolid(Next.X, Next.Y) ? 0.f : D.WallThickness * 0.5f;
+		const FVector Side(-Dir.Y, Dir.X, 0.f);
+		Spot.Pos = CellCenter(C, 0.f) + FVector(Dir.X, Dir.Y, 0.f) * (S * 0.5f - Inset) + Side * Lateral;
+		Spot.Pos.Z = FloorZAt(Spot.Pos - FVector(Dir.X, Dir.Y, 0.f) * 40.f);
+		Spot.Yaw = YawOf(-Dir.X, -Dir.Y);
+		Spot.Cell = C;
+		Spot.bWall = true;
+		Spot.bValid = true;
+		return Spot;
+	};
+	auto PostSpot = [&](const FIntPoint& C, float Lateral, uint32 Salt)
+	{
+		FBRMissionSpot Spot;
+		const float Yaw = 90.f * static_cast<float>(BRM::Hash(Plan.Seed ^ static_cast<uint32>(C.X * 73856093) ^ static_cast<uint32>(C.Y * 19349663), Salt) % 4u);
+		const FVector Fwd = FRotator(0.f, Yaw, 0.f).Vector();
+		const FVector Side(-Fwd.Y, Fwd.X, 0.f);
+		Spot.Pos = CellCenter(C, 0.f) + Side * Lateral - Fwd * (S * 0.2f);
+		Spot.Pos.Z = FloorZAt(Spot.Pos);
+		Spot.Yaw = Yaw;
+		Spot.Cell = C;
+		Spot.bWall = false;
+		Spot.bValid = true;
+		return Spot;
+	};
+	TArray<FIntPoint> Dirs;
+	// Sorties gardees (niveaux infinis) : a la cellule atteinte la plus lointaine, la suivante juste avant
+	int32 GateDevice = -1;
+	for (int32 I = 0; I < Plan.NumDevices; ++I)
+	{
+		if (Plan.Devices[I].Kind == BRM::EKind::Gate && Plan.Devices[I].Zone == 4 && Plan.Devices[I].Role != BRM::R_Passage)
+		{
+			GateDevice = I;
+			break;
+		}
+	}
+	if (D.BoundsChunks <= 0)
+	{
+		TArray<int32> Targets;
+		for (const FBRExitDef& Ex : D.Exits)
+		{
+			if (BRM::IsExitGuarded(Plan.Level, Ex.Target))
+			{
+				Targets.AddUnique(Ex.Target);
+			}
+		}
+		if (Plan.Level == 11)
+		{
+			Targets.Insert(BRM::EndingTarget, 0);
+		}
+		const int32 Fwd = ForwardTarget(Plan.Level);
+		Targets.Sort([Fwd](int32 A, int32 B) { return (A == Fwd) > (B == Fwd); });
+		for (int32 T = 0; T < Targets.Num(); ++T)
+		{
+			const FIntPoint Cell = Order[FMath::Max(0, Order.Num() - 1 - T)];
+			EBRExitStyle Style = EBRExitStyle::Door;
+			for (const FBRExitDef& Ex : D.Exits)
+			{
+				if (Ex.Target == Targets[T])
+				{
+					Style = Ex.Style;
+				}
+			}
+			if (Targets[T] == BRM::EndingTarget || Style == EBRExitStyle::HouseDoor || Style == EBRExitStyle::BuildingDoor || Style == EBRExitStyle::Barn)
+			{
+				Style = EBRExitStyle::Door; // une porte complete tient dans n'importe quelle cellule
+			}
+			FMissionExitSpot Spot;
+			Spot.Target = Targets[T];
+			Spot.Style = Style;
+			Faces(Cell, Dirs);
+			if (Style != EBRExitStyle::NoclipFloor && Dirs.Num() > 0)
+			{
+				const FBRMissionSpot F = FaceSpot(Cell, Dirs[0], 0.f);
+				Spot.Pos = F.Pos;
+				Spot.Yaw = F.Yaw;
+			}
+			else
+			{
+				Spot.Pos = CellCenter(Cell, 0.f);
+				Spot.Pos.Z = FloorZAt(Spot.Pos);
+			}
+			Spot.Shaft = 0.f;
+			OutExits.Add(Spot);
+			OutCells.Add(Cell);
+		}
+	}
+	// Emplacements des mecanismes : murs des cellules les plus proches (trois par face, 70 cm d'ecart), puis poteaux
+	TArray<FBRMissionSpot> Slots;
+	for (const FIntPoint& C : Order)
+	{
+		if (OutCells.Contains(C))
+		{
+			continue;
+		}
+		Faces(C, Dirs);
+		for (const FIntPoint& Dir : Dirs)
+		{
+			for (int32 K = 0; K < 3; ++K)
+			{
+				Slots.Add(FaceSpot(C, Dir, (K - 1) * 70.f));
+			}
+		}
+		if (Slots.Num() >= Plan.NumDevices * 2 + 6)
+		{
+			break;
+		}
+	}
+	for (int32 K = 0; Slots.Num() < Plan.NumDevices + 4; ++K)
+	{
+		const FIntPoint C = Order[K % Order.Num()];
+		Slots.Add(PostSpot(C, static_cast<float>((K / Order.Num()) % 5 - 2) * 70.f, 0x9100u + static_cast<uint32>(K)));
+	}
+	OutSpots.SetNum(Plan.NumDevices);
+	int32 Next = 0;
+	for (int32 I = 0; I < Plan.NumDevices; ++I)
+	{
+		if (I == GateDevice && OutExits.Num() > 0)
+		{
+			// L'element visible de la mission devant la sortie qu'il garde
+			const FMissionExitSpot& E = OutExits[0];
+			FBRMissionSpot G;
+			G.Pos = E.Pos + FRotator(0.f, E.Yaw, 0.f).Vector() * 48.f;
+			G.Pos.Z = FloorZAt(G.Pos);
+			G.Yaw = E.Yaw;
+			G.Cell = WorldToCell(G.Pos);
+			G.bWall = true;
+			G.bValid = true;
+			OutSpots[I] = G;
+			continue;
+		}
+		// La porte s'ouvre devant la sortie : rien a moins de 1,4 m
+		while (Next < Slots.Num() - 1 && OutExits.Num() > 0 && FVector::Dist2D(Slots[Next].Pos, OutExits[0].Pos) < 140.f)
+		{
+			++Next;
+		}
+		OutSpots[I] = Slots[FMath::Min(Next, Slots.Num() - 1)];
+		++Next;
+		OutCells.Add(OutSpots[I].Cell);
+	}
+	return true;
+}
+
 void ABRWorld::SpawnMissionActors()
 {
 	UWorld* World = GetWorld();
@@ -858,6 +1128,8 @@ void ABRWorld::UpdateMissionDevices(float Dt)
 			{
 				E->SetActorHiddenInGame(!bShow);
 				E->SetActorEnableCollision(bShow);
+				// v4.12 : une sortie masquee (zone dechargee) ne s'anime plus (lueur du conduit d'une echelle)
+				E->SetActorTickEnabled(bShow && E->IsClimbable());
 			}
 		}
 	}
@@ -974,6 +1246,9 @@ void ABRWorld::PublishMission(int32 Device, uint8 Feedback, bool bAnimate)
 	NetMission.Gen = MissionGen;
 	NetMission.bFallback = MissionPlan.bFallback;
 	NetMission.Serial = NetLevel.Serial;
+	NetMission.Tier = MissionTier;
+	NetMission.PlaceVersion = static_cast<uint8>(BRM::PlaceVersion);
+	NetMission.Notice = MissionNotice;
 	NetMission.State.Reset();
 	if (IsMissionActive())
 	{
@@ -1008,12 +1283,16 @@ void ABRWorld::OnRep_Mission()
 	{
 		return; // etat d'un autre niveau, ou niveau pas encore construit (SetupMission le lira)
 	}
-	const bool bConfig = NetMission.Gen != MissionGen || (MissionGen >= 2 && NetMission.bFallback != MissionPlan.bFallback);
+	const bool bConfig = NetMission.Gen != MissionGen || (MissionGen >= 2 && (NetMission.bFallback != MissionPlan.bFallback || NetMission.Tier != MissionTier));
 	if (bConfig)
 	{
 		// La version ou la variante annoncees par l'hote different de la supposition faite au chargement : on suit l'hote
 		SetupMission();
 		return;
+	}
+	if (NetMission.Notice != 0)
+	{
+		ShowMissionNotice(NetMission.Notice);
 	}
 	if (MissionGen < 2)
 	{

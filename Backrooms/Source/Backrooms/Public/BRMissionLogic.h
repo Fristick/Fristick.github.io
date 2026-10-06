@@ -23,6 +23,10 @@ namespace BRMission
 {
 	/** Version de generation des missions (sauvegardes : une session d'une autre version garde son ancien mode) */
 	constexpr int GenVersion = 2;
+	/** v4.12 : version du placement des mecanismes dans le decor (1 : v4.11 ; 2 : v4.12, module de secours garanti et
+	 *  modules physiques). Le plan (et donc l'etat sauvegarde) ne change pas avec elle : une session reprise garde sa
+	 *  progression, les mecanismes peuvent etre places autrement (le joueur en est averti) */
+	constexpr int PlaceVersion = 2;
 	constexpr int MaxDevices = 24;
 	constexpr int MaxSteps = 4;
 	constexpr int MaxParams = 24;
