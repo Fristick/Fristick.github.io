@@ -1,0 +1,27 @@
+# Execute le 2026-10-06T15:53Z (g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0)
+# g++ -std=c++17 -O1 -Wall -Wextra -o repro_base Docs/v412/repro_base_v411.cpp && ./repro_base
+# Reproduction sur des copies des fonctions de la base v4.11 (d9c47f9)
+
+4.2  capacite envoyee a l'hote : 4 ; lampe rangee dans la derniere case pendant l'attente
+     reponse acceptee : ReceivePickup -> false, bandages 0 -> 0 (l'hote a deja retire l'objet du monde)
+     HandlePickupResult (base 1555) ignore le retour : l'objet accepte est perdu -> REPRODUIT
+
+4.3  poches et sac pleins, lampe a la ceinture, main libre
+     RoomFor(Lampe) = 0 (demande refusee : Full) ; AddItem(Lampe, 1) -> reste 0, main = lampe -> REPRODUIT
+
+4.6  sante 100, reponse de soin acceptee d'un ancien niveau (serie 7, niveau courant 8), NewHealth 35, numero plus recent
+     sante apres la branche bStale : 35 -> REPRODUIT (100 -> 35)
+
+4.1  sommet de la montee (BRInteractables.cpp:576) et critere "pret" (BRMissionWorld.cpp:1210, 1287)
+     Niveau  0, plafond 290, conduit 300 : grimpeur a 440 cm, ecart 290 cm -> PAS PRET (attend, la demande repart a chaque image)
+     Niveau  2, plafond 280, conduit 300 : grimpeur a 430 cm, ecart 280 cm -> PAS PRET (attend, la demande repart a chaque image)
+     Niveau  6, plafond 290, conduit 300 : grimpeur a 440 cm, ecart 290 cm -> PAS PRET (attend, la demande repart a chaque image)
+     Niveau  8, plafond 450, conduit 300 : grimpeur a 600 cm, ecart 450 cm -> PAS PRET (attend, la demande repart a chaque image)
+     Niveau 37, plafond 450, conduit 300 : grimpeur a 600 cm, ecart 450 cm -> PAS PRET (attend, la demande repart a chaque image)
+     Niveau  6, plafond 290, conduit   0 : grimpeur a 196 cm, ecart  46 cm -> compte pret
+     Niveau  8, plafond 450, conduit   0 : grimpeur a 356 cm, ecart 206 cm -> compte pret
+     Niveau 37, plafond 450, conduit   0 : grimpeur a 356 cm, ecart 206 cm -> compte pret
+     5 cas sur 8 : le grimpeur au sommet n'est pas compte -> REPRODUIT
+
+Constats reproduits : 4 sur 4
+code de sortie : 0
