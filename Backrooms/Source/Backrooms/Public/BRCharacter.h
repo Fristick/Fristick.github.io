@@ -337,13 +337,71 @@ protected:
 	 *  train de mourir), le delai entre deux soins et la possession (objets de soin declares a l'arrivee, plus ceux ramasses
 	 *  depuis), puis applique le soin a la sante officielle et repond. L'objet n'est consomme qu'a l'acceptation. */
 	UFUNCTION(Server, Reliable, WithValidation)
-	void ServerRequestHeal(uint8 Item, uint16 RequestId);
-	/** v4.10 : reponse du serveur : acceptee (sante officielle et numero du soin) ou refusee (raison : EBRHealRefusal) */
+	void ServerRequestHeal(uint8 Item, uint16 RequestId, int32 LevelSerial);
+	/** v4.10 : reponse du serveur : acceptee (sante officielle et numero du soin) ou refusee (raison : EBRHealRefusal).
+	 *  v4.11 : avec le numero du niveau de la demande ; une reponse deja appliquee est ignoree, une reponse d'un niveau
+	 *  precedent ne fait que reconcilier la quantite et la sante officielle (aucun effet rejoue) */
 	UFUNCTION(Client, Reliable)
-	void ClientHealResult(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Serial, uint8 Reason);
-	/** v4.10 : le proprietaire declare ses objets de soin au serveur (arrivee dans un niveau) */
+	void ClientHealResult(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Serial, uint8 Reason, int32 LevelSerial);
+	/** v4.10 : le proprietaire declare ses objets de soin au serveur. v4.11 : une seule fois par session (inventaire de
+	 *  depart ou de la sauvegarde) ; une declaration repetee ou en retard est ignoree et ne peut plus reintroduire des
+	 *  objets consommes. Ensuite, seuls les ramassages et les soins acceptes par l'hote changent ce stock */
 	UFUNCTION(Server, Reliable)
 	void ServerDeclareHealStock(uint8 Water, uint8 Bandages);
+
+	/** v4.11 : demande de ramassage d'un objet par son identifiant stable, numerotee, avec le numero du niveau ou elle est
+	 *  faite et la place libre annoncee pour cet objet. L'hote verifie (existence, type, distance 3D, ligne de vue, joueur
+	 *  vivant et charge, niveau courant, objet encore disponible), attribue l'objet en une seule operation et repond.
+	 *  Une demande repetee recoit la meme reponse sans second effet */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerRequestPickup(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 ExpectedItem, uint8 Room);
+	/** v4.11 : reponse de l'hote (EBRPickupResult) ; seule une acceptation change l'inventaire, une seule fois */
+	UFUNCTION(Client, Reliable)
+	void ClientPickupResult(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 Item, uint8 Result);
+public:
+	/** v4.11 : ramasser un objet : demande a l'hote (client) ou transaction directe (hote, partie solo) */
+	void RequestPickup(class ABRPickup* Pickup);
+	/** v4.11 (tests) : demande de ramassage en attente ; ramassages acceptes et refuses par l'hote pour ce joueur */
+	bool IsPickupPending() const { return PendingPickup.RequestId != 0; }
+	int32 ServerPickupsAccepted = 0;
+	int32 ServerPickupsRefused = 0;
+	/** v4.11 (tests) : reponses de soin ou de ramassage ignorees (repetees ou d'un ancien niveau) */
+	int32 IgnoredRepeatedResults = 0;
+	int32 StaleResultsReconciled = 0;
+	/** v4.11 : declaration du stock de soin acceptee par l'hote (une fois par session) */
+	bool IsHealStockDeclared() const { return bServerHealStockKnown; }
+
+	// ---- v4.11 : missions
+	/** Action sur un mecanisme (BRMission::EAction) : demande numerotee a l'hote (client), ou appliquee tout de suite
+	 *  (hote, partie solo) ; la reponse donne le retour (message, son) */
+	void RequestMissionAction(int32 Device, uint8 Action);
+	/** v4.11 : demande d'action sur un mecanisme, avec le numero du niveau. L'hote verifie tout (voir
+	 *  ABRWorld::ServerMissionAct) ; une demande repetee recoit la meme reponse sans second effet */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerMissionInteract(uint8 Device, uint8 Action, uint16 RequestId, int32 LevelSerial);
+	UFUNCTION(Client, Reliable)
+	void ClientMissionResult(uint8 Device, uint16 RequestId, uint8 Feedback, uint8 Related, uint8 Count, int32 LevelSerial);
+	/** v4.11 : sortie de groupe demandee a l'hote (une vraie sortie a portee, verifiee chez lui) */
+	void RequestDepartureFromServer(int32 Target);
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerRequestDeparture(int32 Target, int32 LevelSerial);
+	UFUNCTION(Client, Reliable)
+	void ClientDepartureRefused(uint8 Reason);
+	/** Message d'un depart refuse (raisons de ABRWorld::ServerStartDeparture) */
+	void NotifyDepartureRefused(uint8 Reason);
+	/** Action maintenue en cours (observation, manivelle) : mecanisme (-1 aucun) et avancement de l'unite (0..1) */
+	int32 GetMissionHoldDevice() const;
+	float GetMissionHoldProgress() const { return HoldTimer / 0.5f; }
+	/** Document de mission ouvert (indice lu) : indice du mecanisme, -1 aucun */
+	int32 GetMissionDoc() const { return MissionDoc; }
+	void CloseMissionDoc() { MissionDoc = -1; }
+	/** v4.11 (tests) : actions envoyees, reponses recues, reponses ignorees (repetees ou d'un autre niveau) */
+	int32 MissionActionsSent = 0;
+	int32 MissionResultsReceived = 0;
+	int32 MissionResultsIgnored = 0;
+	uint8 LastMissionFeedback = 0;
+
+protected:
 
 	/** v4.8 : reveil refuse par le serveur (trop tot pour cette cause) : le joueur reste a terre le temps restant */
 	UFUNCTION(Client, Reliable)
@@ -442,6 +500,62 @@ private:
 	uint16 PendingHealRequest = 0;
 	float PendingHealSince = 0.f;
 	float LocalLastHealTime = -100.f;
+	/** v4.11 : numero du niveau (FBRNetLevel::Serial) de la demande de soin en attente */
+	int32 PendingHealLevel = 0;
+	/** v4.11 : serveur : reponses deja donnees aux dernieres demandes de soin (une demande repetee recoit la meme) ;
+	 *  proprietaire : dernieres reponses appliquees (une reponse repetee n'est jamais appliquee deux fois) */
+	struct FBRTxnRecord
+	{
+		uint16 RequestId = 0;
+		uint64 Key = 0;
+		uint8 Item = 0;
+		uint8 Result = 0;
+		float Health = 0.f;
+		uint16 Serial = 0;
+	};
+	static constexpr int32 TxnHistory = 32;
+	FBRTxnRecord ServerHealHistory[TxnHistory];
+	int32 ServerHealHistoryNext = 0;
+	uint16 AppliedHealResults[TxnHistory] = {};
+	int32 AppliedHealNext = 0;
+	/** v4.11 : ramassages. Serveur : reponses deja donnees ; proprietaire : demande en attente et reponses appliquees */
+	FBRTxnRecord ServerPickupHistory[TxnHistory];
+	int32 ServerPickupHistoryNext = 0;
+	uint16 AppliedPickupResults[TxnHistory] = {};
+	int32 AppliedPickupNext = 0;
+	struct FBRPendingPickup
+	{
+		uint64 Id = 0;
+		uint16 RequestId = 0;
+		EBRItem Item = EBRItem::None;
+		int32 LevelSerial = 0;
+		float Since = 0.f;
+	};
+	FBRPendingPickup PendingPickup;
+	uint16 NextPickupRequest = 0;
+	/** v4.11 : missions. Serveur : reponses deja donnees ; proprietaire : reponses appliquees, maintien en cours */
+	FBRTxnRecord ServerMissionHistory[TxnHistory];
+	int32 ServerMissionHistoryNext = 0;
+	uint16 AppliedMissionResults[TxnHistory] = {};
+	int32 AppliedMissionNext = 0;
+	uint16 NextMissionRequest = 0;
+	TWeakObjectPtr<class ABRMissionDevice> HoldDevice;
+	float HoldTimer = 0.f;
+	int32 MissionDoc = -1;
+	FVector MissionDocWhere = FVector::ZeroVector;
+	/** Maintien d'une observation ou d'une manivelle : une unite demandee toutes les 0,5 s tant que la touche est tenue */
+	void UpdateMissionHold(float Dt);
+	/** Reponse a une action de mission, chez le joueur qui l'a faite */
+	void HandleMissionResult(int32 Device, uint8 Feedback, uint8 Related, uint8 Count);
+	/** Une reponse deja appliquee (repetition) */
+	static bool WasApplied(const uint16 (&Applied)[TxnHistory], uint16 RequestId);
+	static void RememberApplied(uint16 (&Applied)[TxnHistory], int32& Next, uint16 RequestId);
+	/** Reponse a une demande de ramassage, chez le joueur qui l'a faite (client, ou hote/solo directement) */
+	void HandlePickupResult(uint64 PickupId, uint16 RequestId, int32 LevelSerial, EBRItem Item, EBRPickupResult Result);
+	/** Message d'un ramassage refuse */
+	void NotifyPickupRefused(EBRPickupResult Result);
+	/** Place libre pour un exemplaire de cet objet (poches et sac) */
+	int32 RoomFor(EBRItem Item) const;
 	/** Soin accepte : objet consomme, sante officielle, effets */
 	void ApplyHealAccepted(EBRItem Item, float NewHealth);
 	/** Message d'un soin refuse (rien n'est consomme) */

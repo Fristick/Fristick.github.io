@@ -47,7 +47,8 @@ private:
 		FLinearColor Color = FLinearColor::White;
 	};
 
-	enum class ETab : uint8 { Character, Journal, Settings, Keys };
+	/** v4.11 : Notebook (carnet de mission) ajoute a la fin (indices 0-3 inchanges) */
+	enum class ETab : uint8 { Character, Journal, Settings, Keys, Notebook };
 
 	/** Reference a une case d'inventaire */
 	struct FSlotRef
@@ -141,6 +142,16 @@ private:
 	void LayoutCharacterTab(ABRCharacter* C);
 	void DrawCharacterTab(ABRCharacter* C, ABRWorld* W);
 	void DrawJournalTab(ABRCharacter* C, ABRWorld* W);
+	/** v4.11 : carnet de mission : etapes, observations acquises, objets d'equipe, aide progressive activable */
+	void DrawNotebookTab(ABRCharacter* C, ABRWorld* W);
+	/** v4.11 : indice lu ou observation documentee (ouvert apres la reponse de l'hote) */
+	void DrawMissionDoc(ABRCharacter* C, ABRWorld* W);
+	/** v4.11 : sortie de groupe en cours : rassemblement, temps restant, joueurs a terre emmenes */
+	void DrawDeparture(ABRWorld* W);
+	/** v4.11 : action maintenue sur un mecanisme (observation, manivelle) */
+	void DrawMissionHold(ABRCharacter* C);
+	/** v4.11 : fin de la campagne (Niveau 11) et sa variante */
+	void DrawEnding(ABRPlayerController* PC, ABRWorld* W);
 	void DrawSettingsTab(ABRPlayerController* PC);
 	/** v4.9 : panneau ETAT de l'onglet Personnage : exactement deux jauges, ENDURANCE et SANTE MENTALE (libelle, forme,
 	 *  icone et valeur : jamais la couleur seule) */
@@ -294,6 +305,16 @@ private:
 	/** v4.9 : defilement des objectifs et des deux colonnes du journal */
 	float ObjectiveScroll = 0.f;
 	float JournalScroll[2] = { 0.f, 0.f };
+	/** v4.11 : carnet : defilement des observations ; aide demandee par etape (cle : niveau * 16 + etape, graine) */
+	float NotebookScroll = 0.f;
+	TMap<int32, int32> NotebookHint;
+	int32 NotebookHintStep = -1;
+	uint32 NotebookHintSeed = 0;
+public:
+	/** v4.11 (tests) : lignes d'observation et niveau d'aide dessines par le carnet a la derniere image */
+	int32 LastNotebookObservations = 0;
+	int32 LastNotebookHintLevel = 0;
+private:
 
 	// Zone de l'inventaire (calculee a chaque image)
 	float IX = 0.f, IY = 0.f, IW = 0.f, IH = 0.f;

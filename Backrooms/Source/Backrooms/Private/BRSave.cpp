@@ -423,6 +423,18 @@ namespace BRSaves
 				UE_LOG(LogBackrooms, Log, TEXT("%s : journal converti en identifiants (%d / %d notes reconnues)"), *SlotName(Slot), Converted,
 					Save->Notes.Num());
 			}
+			if (Save->LoadedVersion < 4)
+			{
+				// Formats 1 a 3 (avant la v4.11) : la session en cours garde son ancien mode (GenVersion 1, valeur par
+				// defaut) jusqu'a la sortie de son niveau : cassettes VHS et enregistrement du Niveau 0 conserves tels quels,
+				// sorties libres ailleurs. Les niveaux suivants auront leur mission. Campagne vide (aucun fragment encore).
+				Save->Session.GenVersion = 1;
+				Save->Session.Mission.Reset();
+				Save->Session.LoreFound = 0;
+				UE_LOG(LogBackrooms, Log, TEXT("%s : session %s (Niveau %d, %d cassette(s), coupure filmee : %s) gardee dans l'ancien mode jusqu'a sa sortie"),
+					*SlotName(Slot), Save->Session.bValid ? TEXT("en cours") : TEXT("absente"), Save->Session.Level, Save->Session.VHSFound,
+					Save->Session.bBlackoutRecorded ? TEXT("oui") : TEXT("non"));
+			}
 			Save->Version = UBRSaveGame::CurrentVersion;
 			UE_LOG(LogBackrooms, Log, TEXT("%s : sauvegarde au format %d migree vers le format %d (copie d'origine : %s.sav)"), *SlotName(Slot),
 				Save->LoadedVersion, UBRSaveGame::CurrentVersion, *Legacy);

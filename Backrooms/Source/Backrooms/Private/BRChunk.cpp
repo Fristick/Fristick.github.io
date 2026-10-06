@@ -507,8 +507,9 @@ bool ABRChunk::PickFreeCell(int32 Salt, FIntPoint& Out, bool bFullScan) const
 	const int32 Y0 = Coord.Y * N;
 	auto IsFree = [&](const FIntPoint& Cell)
 	{
+		// v4.11 : jamais sur une cellule reservee a un mecanisme ou a une sortie de mission
 		return W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y) && !HidingCells.Contains(Cell) && !W->IsPitRoomCell(Cell.X, Cell.Y)
-			&& W->IsSafelyReachable(Cell);
+			&& W->IsSafelyReachable(Cell) && !W->IsMissionCell(Cell.X, Cell.Y);
 	};
 	for (int32 Try = 0; Try < 8; ++Try)
 	{
@@ -1428,7 +1429,7 @@ bool ABRChunk::StepPlan()
 				AddLight(X, Y, L);
 			}
 			if (InWorld->IsWalkable(FIntPoint(X, Y)) && !HidingCells.Contains(FIntPoint(X, Y)) && !ExitCells.Contains(FIntPoint(X, Y))
-				&& !InWorld->IsPitRoomCell(X, Y))
+				&& !InWorld->IsPitRoomCell(X, Y) && !InWorld->IsMissionCell(X, Y))
 			{
 				BuildCellProps(X, Y);
 			}
@@ -1649,7 +1650,7 @@ void ABRChunk::BuildHidingSpots()
 			const FIntPoint Cell(Coord.X * N + static_cast<int32>(Hh % static_cast<uint32>(N)), Coord.Y * N + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
 			const FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
 			if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell)
-				|| W->IsPitRoomCell(Cell.X, Cell.Y))
+				|| W->IsPitRoomCell(Cell.X, Cell.Y) || W->IsMissionCell(Cell.X, Cell.Y))
 			{
 				continue;
 			}
@@ -2367,7 +2368,7 @@ void ABRChunk::PlanExits()
 					Dir = GDirs[Idx % 4];
 				}
 				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell)
-					|| W->IsPitRoomCell(Cell.X, Cell.Y) || !W->IsSafelyReachable(Cell))
+					|| W->IsPitRoomCell(Cell.X, Cell.Y) || !W->IsSafelyReachable(Cell) || W->IsMissionCell(Cell.X, Cell.Y))
 				{
 					continue; // v4.6 : jamais dans une salle de fosses ; niveau fini : atteignable sans la traverser
 				}

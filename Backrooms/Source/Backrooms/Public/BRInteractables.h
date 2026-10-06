@@ -28,6 +28,10 @@ public:
 	FString GetPrompt() const;
 	void Collect(ABRCharacter* By);
 
+	/** v4.11 : demande de ramassage envoyee a l'hote, reponse attendue (l'objet n'est pas encore donne) */
+	void SetPending(bool bInPending);
+	bool IsPending() const { return bPending; }
+
 	EBRItem Item = EBRItem::AlmondWater;
 	uint64 Id = 0;
 	/** v4.8 : identifiant de la note (Note.L0.3) : chaque joueur la lit dans sa langue */
@@ -45,6 +49,7 @@ protected:
 	TObjectPtr<UPointLightComponent> Glint;
 
 	float Time = 0.f;
+	bool bPending = false;
 };
 
 /** Passage vers un autre niveau */
@@ -105,8 +110,8 @@ protected:
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> LadderParts;
 
-	/** Quitte le niveau (transition vers Target) */
-	void Leave();
+	/** Quitte le niveau : seul, transition vers Target ; en ligne (v4.11), demande de depart de groupe a l'hote */
+	void Leave(ABRCharacter* By);
 
 	bool bUsed = false;
 	float Time = 0.f;

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "BRTypes.h"
+#include "BRMissionLogic.h"
 #include "BRWorld.generated.h"
 
 class ABRChunk;
@@ -21,6 +22,8 @@ class UReverbEffect;
 class ABRPlayerController;
 class APlayerState;
 class UBRWaterSim;
+class ABRMissionDevice;
+class ABRExit;
 
 /** Niveau en cours, choisi par le serveur et recopie chez les clients (multijoueur) */
 USTRUCT()
@@ -40,6 +43,108 @@ struct FBRNetLevel
 	int32 Serial = 0;
 };
 
+/** v4.11 : etat de la mission du niveau, tenu par l'hote. Un client qui rejoint recoit cet instantane avec le niveau
+ *  (meme acteur, meme paquet), puis chaque changement. Le plan se reconstruit chez chacun d'apres le niveau, la graine,
+ *  la version de generation et la variante de secours. */
+USTRUCT()
+struct FBRNetMission
+{
+	GENERATED_BODY()
+
+	/** Version de generation : 0 aucune, 1 ancien mode (sessions d'avant la v4.11 : cassettes du Niveau 0, sorties
+	 *  libres), 2 missions v4.11 (BRMission::GenVersion) */
+	UPROPERTY()
+	uint8 Gen = 0;
+
+	/** Variante de secours deterministe (graine invalide ou placement impossible) */
+	UPROPERTY()
+	bool bFallback = false;
+
+	/** Niveau (FBRNetLevel::Serial) auquel cet etat appartient */
+	UPROPERTY()
+	int32 Serial = 0;
+
+	/** Revision, augmentee a chaque changement */
+	UPROPERTY()
+	uint16 Rev = 0;
+
+	/** Etat serialise (BRMission::Serialize) */
+	UPROPERTY()
+	TArray<uint8> State;
+
+	/** Dernier changement : mecanisme et retour (son et lueur chez tous) */
+	UPROPERTY()
+	uint8 LastDevice = 255;
+
+	UPROPERTY()
+	uint8 LastFeedback = 0;
+};
+
+/** v4.11 : donnees de campagne (fragments de route, objectifs facultatifs, fins vues), tenues par l'hote */
+USTRUCT()
+struct FBRNetCampaign
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	uint8 RouteBits = 0;
+
+	UPROPERTY()
+	uint16 OptionalFound = 0;
+
+	/** Bits : 1 fin principale vue, 2 variante vue */
+	UPROPERTY()
+	uint8 Endings = 0;
+};
+
+/** v4.11 : sortie de groupe. Toucher une sortie ne transporte plus tout le monde : l'hote verifie la mission et le
+ *  rassemblement (joueurs vivants et charges a moins de 8 m en 3D de la sortie, meme etage, sans mur entre), annonce le
+ *  depart, puis emmene le groupe ; un joueur a terre est emmene, un joueur en chargement n'est pas attendu. */
+USTRUCT()
+struct FBRNetDeparture
+{
+	GENERATED_BODY()
+
+	/** 0 aucun, 1 rassemblement, 2 depart, 3 annule */
+	UPROPERTY()
+	uint8 Phase = 0;
+
+	/** Annulation : 1 temps ecoule, 2 l'initiateur s'est eloigne, 3 annule par un joueur, 4 plus personne debout */
+	UPROPERTY()
+	uint8 Reason = 0;
+
+	/** Numero du depart (une demande repetee ou perimee ne relance rien) */
+	UPROPERTY()
+	uint16 Id = 0;
+
+	UPROPERTY()
+	int32 Serial = 0;
+
+	UPROPERTY()
+	int32 Target = 0;
+
+	UPROPERTY()
+	FVector Location = FVector::ZeroVector;
+
+	/** Temps du serveur (AGameStateBase::GetServerWorldTimeSeconds) a l'annulation automatique */
+	UPROPERTY()
+	float Deadline = 0.f;
+
+	UPROPERTY()
+	uint8 Ready = 0;
+
+	UPROPERTY()
+	uint8 Needed = 0;
+
+	/** Joueurs a terre emmenes */
+	UPROPERTY()
+	uint8 Carried = 0;
+
+	/** Nom de l'initiateur */
+	UPROPERTY()
+	FString By;
+};
+
 /** Objectif affiche dans l'inventaire (colonne OBJECTIFS) et dans le coin de l'ecran */
 struct FBRObjective
 {
@@ -48,6 +153,7 @@ struct FBRObjective
 	int32 Goal = 1;
 	float Partial = 0.f;     // progression de l'etape en cours (enregistrement...)
 	bool bRequired = false;  // necessaire pour quitter le niveau
+	bool bHideCount = false; // v4.11 : etape sans compteur (affichee sans "0/1")
 	bool IsDone() const { return Progress >= Goal; }
 };
 
@@ -90,12 +196,84 @@ public:
 	bool HasLivingTeammate() const;
 	/** Client : une entite repliquee rejoint la liste (lampes rouges, camescope, sante mentale) */
 	void RegisterEntity(ABREntity* Entity);
-	/** Serveur : un client a ramasse un objet (il disparait chez tout le monde) */
-	void ServerCollected(uint64 Id);
-	/** Serveur : un client a termine un enregistrement (0 = coupure, 1 = entite) */
+	/** v4.11 : serveur : transaction de ramassage. Verifie le niveau (numero de la demande), l'etat du joueur (vivant,
+	 *  charge), l'objet (existe, meme type, encore disponible), la distance 3D depuis les yeux du joueur et la ligne de vue,
+	 *  la place annoncee ; puis, en une seule operation : objet attribue et retire pour tous, stock de soin credite,
+	 *  cassette comptee (ancien mode du Niveau 0) ou document facultatif note. OutItem : objet attribue */
+	EBRPickupResult ServerTryCollect(ABRCharacter* By, uint64 Id, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, EBRItem& OutItem);
+	/** v4.11 : distance maximale (cm, 3D, depuis les yeux) acceptee par l'hote pour un ramassage : portee de visee (260)
+	 *  plus la marge du reseau */
+	static constexpr float PickupReachServer = 420.f;
+	/** v4.11 : numero du niveau charge sur cette machine (FBRNetLevel::Serial) : une demande ou une reponse d'un autre
+	 *  niveau est perimee */
+	int32 GetLevelSerial() const { return LoadedSerial; }
+	/** Serveur : un enregistrement est valide (0 = coupure, 1 = entite) */
 	void ServerCompleteObjective(uint8 Which);
+	/** v4.11 : serveur : enregistrement annonce par un client, valide seulement si les conditions sont vraies chez l'hote :
+	 *  coupure noire depuis au moins 4,5 s (5 s demandees, marge du reseau), ou entite a moins de 26 m du joueur, visible */
+	void ServerValidateRecording(uint8 Which, ABRCharacter* By);
 	/** Console : valide tous les objectifs (serveur) */
 	void DebugCompleteObjectives();
+
+	// ------------------------------------------------------------ v4.11 : missions de niveau
+	/** La mission v4.11 du niveau est en place (sinon : ancien mode ou niveau sans mission) */
+	bool IsMissionActive() const;
+	/** Ancien mode des objectifs (cassettes VHS du Niveau 0) : session commencee avant la v4.11, jusqu'a sa sortie */
+	bool IsLegacyObjectives() const;
+	uint8 GetMissionGen() const { return MissionGen; }
+	bool IsMissionFallback() const { return MissionPlan.bFallback; }
+	const BRMission::FPlan& GetMissionPlan() const { return MissionPlan; }
+	const BRMission::FState& GetMissionState() const { return MissionState; }
+	BRMission::FCampaign GetMissionCampaign() const;
+	void GetMissionEval(BRMission::FEval& Out) const;
+	/** Cellule reservee a un mecanisme ou a une sortie de mission (les chunks n'y posent rien) */
+	bool IsMissionCell(int32 X, int32 Y) const { return MissionCells.Contains(FIntPoint(X, Y)); }
+	/** Mecanisme d'apres son indice (nullptr si absent) */
+	ABRMissionDevice* FindMissionDevice(int32 Index) const;
+	const TArray<TObjectPtr<ABRMissionDevice>>& GetMissionDevices() const { return MissionDevices; }
+	/** Revision de l'etat recu (HUD) */
+	uint16 GetMissionRev() const { return NetMission.Rev; }
+	/** Serveur : action d'un joueur sur un mecanisme. Verifie le niveau, l'etat du joueur, la distance 3D, la ligne de
+	 *  vue, la cadence des actions maintenues (une unite par 0,4 s au plus) et le rearmement apres une erreur ; applique
+	 *  l'action (une seule attribution par objet d'equipe) et publie l'etat. Retour : BRMission::EFeedback ou
+	 *  BRMissionText::Cooldown/TooFar/NotNow/Taken */
+	uint8 ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, int32 LevelSerial, uint8& OutRelated, uint8& OutCount);
+	/** Distance 3D maximale (cm) acceptee par l'hote entre les yeux du joueur et un mecanisme */
+	static constexpr float MissionReachServer = 340.f;
+	/** Une sortie vers Target peut etre prise maintenant (mission du niveau resolue, ou sortie de retour). OutReason :
+	 *  message dans la langue du joueur */
+	bool CanUseExit(int32 Target, FString& OutReason) const;
+	/** Etat de mission a sauvegarder (vide hors mission v4.11) */
+	TArray<uint8> GetMissionBlob() const;
+	/** Campagne : donnees de la sauvegarde de l'hote (chargement d'une partie) */
+	void SetCampaign(uint8 RouteBits, uint16 OptionalFound, uint8 Endings);
+	const FBRNetCampaign& GetCampaign() const { return NetCampaign; }
+	/** Cassette VHS (document facultatif) acceptee par l'hote dans une nouvelle partie */
+	void OnMissionLoreFound();
+	/** Console : resout la mission (serveur) */
+	void DebugCompleteMission();
+	/** Mecanismes : affichage selon les chunks construits et animation des seuls mecanismes proches */
+	void UpdateMissionDevices(float Dt);
+
+	// ------------------------------------------------------------ v4.11 : sortie de groupe et fin
+	/** Un joueur prend une sortie : seul, depart immediat ; en ligne, demande de depart de groupe a l'hote */
+	void RequestDeparture(ABRCharacter* By, int32 Target, const FVector& ExitLocation);
+	/** Serveur : demande d'un joueur ; false (+ raison : 1 sortie fermee, 2 trop loin, 3 autre depart, 4 niveau perime,
+	 *  5 a terre ou en chargement) si refusee */
+	bool ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelSerial, uint8& OutReason);
+	/** Serveur : un joueur annule le depart en cours */
+	void ServerCancelDeparture(ABRCharacter* By);
+	const FBRNetDeparture& GetDeparture() const { return NetDeparture; }
+	/** Secondes restantes avant l'annulation automatique du depart */
+	float GetDepartureRemaining() const;
+	/** Rayon (cm) du rassemblement, ecart vertical maximal (cm) */
+	static constexpr float GatherRadius = 800.f;
+	static constexpr float GatherHeight = 260.f;
+	/** Fin de campagne affichee (Niveau 11) et sa variante */
+	bool IsEndingShown() const { return bEndingShown; }
+	bool IsEndingVariant() const { return bEndingVariant; }
+	/** Fin : continuer l'exploration (l'hote emmene le groupe vers un niveau au hasard) ou revenir au menu */
+	void CloseEnding(bool bContinue);
 
 	// ------------------------------------------------------------ Niveaux
 	/** Lance une transition (fondu + effet "noclip") vers un niveau. -1 = niveau aleatoire.
@@ -276,7 +454,6 @@ public:
 
 	// ------------------------------------------------------------ Etat
 	bool IsCollected(uint64 Id) const { return Collected.Contains(Id) || NetCollected.Contains(Id); }
-	void MarkCollected(uint64 Id);
 	void Discover(EBREntityKind Kind);
 	bool IsDiscovered(EBREntityKind Kind) const { return Discovered.Contains(static_cast<int32>(Kind)); }
 	void UnregisterEntity(ABREntity* Entity);
@@ -326,7 +503,8 @@ public:
 	/** false (+ raison) si les sorties sont encore instables */
 	bool CanLeaveLevel(FString& OutReason) const;
 	bool AreObjectivesComplete() const;
-	void OnVHSCollected();
+	/** v4.11 : documents facultatifs trouves dans ce niveau (cassettes VHS des nouvelles parties du Niveau 0) */
+	int32 GetLoreFound() const { return LoreFound; }
 	/** Appele chaque image tant que le joueur tient le camescope */
 	void NotifyRecording(float Dt, const FVector& Eye, const FVector& Dir);
 	/** Entite visible dans un cone (ligne de vue verifiee) */
@@ -400,6 +578,10 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_Objectives)
 	int32 VHSFound = 0;
 
+	/** v4.11 : documents facultatifs (cassettes VHS des nouvelles parties) */
+	UPROPERTY(Replicated)
+	int32 LoreFound = 0;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Objectives)
 	bool bBlackoutRecorded = false;
 
@@ -418,11 +600,87 @@ protected:
 	UFUNCTION()
 	void OnRep_Objectives();
 
+	// ---- v4.11 : missions, campagne, depart de groupe
+	UPROPERTY(ReplicatedUsing = OnRep_Mission)
+	FBRNetMission NetMission;
+
+	UPROPERTY(Replicated)
+	FBRNetCampaign NetCampaign;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Departure)
+	FBRNetDeparture NetDeparture;
+
+	UFUNCTION()
+	void OnRep_Mission();
+
+	UFUNCTION()
+	void OnRep_Departure();
+
+	/** Fin de la campagne : ecran de fin chez tous */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastEnding(bool bVariant);
+
+	UPROPERTY()
+	TArray<TObjectPtr<ABRMissionDevice>> MissionDevices;
+
+	/** Sorties garanties pres de la salle de mission (niveaux infinis) */
+	UPROPERTY()
+	TArray<TObjectPtr<ABRExit>> MissionExits;
+
 	/** Tout le monde plonge dans le noir en meme temps ; le niveau suit quand le serveur l'a choisi */
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastTransition(int32 TargetLevel, bool bFromDeath);
 
 private:
+	// ---- v4.11 : missions (BRMissionWorld.cpp)
+	BRMission::FPlan MissionPlan;
+	BRMission::FState MissionState;
+	uint8 MissionGen = 0;
+	/** Reprise : version et etat de mission de la session sauvegardee (consommes par SetupMission) */
+	uint8 ResumeMissionGen = 0;
+	TArray<uint8> ResumeMissionBlob;
+	TSet<FIntPoint> MissionCells;
+	/** Mecanisme -> emplacement ; sorties garanties (position, orientation, cible, style) */
+	TArray<FBRMissionSpot> MissionSpots;
+	struct FMissionExitSpot
+	{
+		FVector Pos = FVector::ZeroVector;
+		float Yaw = 0.f;
+		int32 Target = 0;
+		EBRExitStyle Style = EBRExitStyle::Door;
+		float Shaft = 0.f;
+	};
+	TArray<FMissionExitSpot> MissionExitSpots;
+	/** Serveur : derniere unite maintenue acceptee (joueur, mecanisme) et rearmement apres une erreur */
+	TMap<uint64, double> MissionHoldTimes;
+	TMap<int32, double> MissionCooldowns;
+	float MissionDeviceTimer = 0.f;
+	bool bMissionSolvedSeen = false;
+	/** Construit le plan, place les mecanismes (cellules reservees avant la construction des chunks) et cree leurs acteurs.
+	 *  Serveur : decide la version (reprise d'une session ancienne : ancien mode) et l'etat ; client : suit NetMission */
+	void SetupMission();
+	/** Place les mecanismes et les sorties garanties ; false si impossible (la variante de secours est alors essayee) */
+	bool PlaceMission(const BRMission::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells) const;
+	void SpawnMissionActors();
+	void ClearMission();
+	/** Serveur : publie l'etat (revision, dernier changement), donnees de campagne, journal */
+	void PublishMission(int32 Device, uint8 Feedback, bool bAnimate = true);
+	/** Etat change (hote ou client) : mecanismes, sons, messages, mission resolue */
+	void OnMissionStateChanged(int32 Device, uint8 Feedback, bool bAnimate);
+	void UpdateDeparture(float Dt);
+	void CancelDeparture(uint8 Reason);
+	/** Depart du groupe : transition vers Target, ou fin de la campagne */
+	void LeaveForTarget(int32 Target);
+	bool bEndingShown = false;
+	bool bEndingVariant = false;
+	/** La campagne de la sauvegarde de l'hote a ete lue (une fois par carte) */
+	bool bCampaignLoaded = false;
+	float DepartureReadyTime = 0.f;
+	uint16 NextDepartureId = 0;
+	TWeakObjectPtr<ABRCharacter> DepartureInitiator;
+	uint8 SeenDeparturePhase = 0;
+	uint16 SeenDepartureId = 0;
+
 	/** v4.10 : Preparing : apres le fondu au noir, attente des ressources indispensables du niveau (ecran sobre, delai
 	 *  maximal, retour au menu possible) avant sa construction */
 	enum class ETrans : uint8 { None, FadingOut, Preparing, FadingIn };
@@ -486,6 +744,8 @@ private:
 	void EnterBlackoutPhase(uint8 Phase, bool bSilent = false);
 	void DestroyPickup(uint64 Id);
 	void AnnounceVHS();
+	/** v4.11 : serveur : effet d'un ramassage accepte sur le niveau (cassette du mode historique, document facultatif) */
+	void OnServerPickupAccepted(EBRItem Item);
 	void CompleteObjective(uint8 Which);
 	ABRPlayerController* LocalPC() const;
 	/** Un joueur vivant au hasard (point d'ancrage des apparitions) */
@@ -582,6 +842,8 @@ private:
 
 	// v2 : coupures
 	EBlackout BlackoutPhase = EBlackout::None;
+	/** v4.11 : instant (temps du niveau) ou la coupure est devenue noire : validation des enregistrements */
+	float DarkSince = -1.f;
 	float BlackoutTimer = 90.f;
 	/** v4.10 : coupure demandee (mode developpeur, tests) : commence meme pendant une poursuite ou le repit qui suit */
 	bool bBlackoutForced = false;

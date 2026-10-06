@@ -53,6 +53,41 @@ struct FBRItemSlot
 /** Groupe de cases (poches, sac, equipement) */
 enum class EBRSlotGroup : uint8 { Pockets, Storage, Equipment };
 
+/** v4.11 : emplacement d'un mecanisme : sur une face de mur (bWall) ou sur un poteau au milieu de la cellule (exterieur) */
+struct FBRMissionSpot
+{
+	FVector Pos = FVector::ZeroVector;
+	/** Orientation : +X local vers le joueur (sortie du mur) */
+	float Yaw = 0.f;
+	FIntPoint Cell = FIntPoint::ZeroValue;
+	bool bWall = true;
+	bool bValid = false;
+};
+
+/** v4.11 : reponse de l'hote a une demande de ramassage (transaction unique : un seul gagnant par objet) */
+enum class EBRPickupResult : uint8
+{
+	Accepted,
+	/** Deja attribue (un coequipier l'a pris, ou cette demande a deja ete servie) */
+	AlreadyTaken,
+	/** Trop loin de l'objet (distance 3D vue par l'hote) */
+	TooFar,
+	/** Un mur ou un plancher entre le joueur et l'objet */
+	NotVisible,
+	/** Joueur a terre ou mort */
+	Dead,
+	/** Joueur encore en chargement du niveau */
+	Loading,
+	/** Demande faite dans un autre niveau (ou pendant un changement de niveau) */
+	StaleLevel,
+	/** Objet inconnu de l'hote (identifiant ou type different) */
+	Unknown,
+	/** Plus de place pour cet objet */
+	Full,
+	/** Une demande est deja en attente */
+	Busy
+};
+
 enum class EBREntityKind : uint8
 {
 	Smiler,

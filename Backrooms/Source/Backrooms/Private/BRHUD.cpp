@@ -1,4 +1,5 @@
 #include "BRHUD.h"
+#include "BRMission.h"
 #include "BRFonts.h"
 #include "BRLoc.h"
 #include "Backrooms.h"
@@ -83,6 +84,10 @@ namespace
 		Btn_SettingCat = 1600,   // v4.9 : 1600 + categorie de l'onglet Parametres (jeu, video, interface, graphismes)
 		Btn_VideoKeep = 1700,    // v4.9 : confirmation de l'affichage
 		Btn_VideoRevert = 1701,
+		Btn_TabNotebook = 104,   // v4.11 : onglet CARNET (contigu aux autres onglets)
+		Btn_NotebookHint = 1800, // v4.11 : aide progressive du carnet
+		Btn_EndingContinue = 1810,
+		Btn_EndingMenu = 1811,
 		Btn_KeySlot = 1000       // 1000 + action * 3 + case
 	};
 
@@ -1228,6 +1233,14 @@ void ABRHUD::DrawHUD()
 	{
 		DrawNote(C);
 	}
+	if (C && C->GetMissionDoc() >= 0 && !bInv && !C->IsReadingNote())
+	{
+		DrawMissionDoc(C, W);
+	}
+	if (W && !bInv && !(PC && PC->IsInMenu()))
+	{
+		DrawDeparture(W);
+	}
 	if (C && C->IsDead())
 	{
 		DrawDeath(C);
@@ -1271,6 +1284,10 @@ void ABRHUD::DrawHUD()
 	if (PC && PC->IsPauseMenuOpen() && !bInv)
 	{
 		DrawPause(PC);
+	}
+	if (W && W->IsEndingShown())
+	{
+		DrawEnding(PC, W);
 	}
 	DrawVideoConfirm(PC);
 }
@@ -3345,7 +3362,7 @@ void ABRHUD::DrawObjectiveTracker(ABRWorld* W)
 		}
 		FLinearColor Col = O.IsDone() ? Done : (O.bRequired ? WithAlpha(Yellow, 0.92f) : WithAlpha(InkDim, 0.8f));
 		Col.A *= A;
-		const FString Line = O.Goal > 0 ? FString::Printf(TEXT("%s  %d/%d"), *O.Text, O.Progress, O.Goal) : O.Text;
+		const FString Line = (O.Goal > 0 && !O.bHideCount) ? FString::Printf(TEXT("%s  %d/%d"), *O.Text, O.Progress, O.Goal) : O.Text;
 		const FVector2f LS = TextSize(Line, 11.5f, EUiWeight::Regular);
 		TextF(Line, RX, Y, Col, 11.5f, O.IsDone() ? EUiWeight::Light : EUiWeight::Regular, EUiAlign::Right);
 		const float D = 7.f * U;
@@ -3391,6 +3408,7 @@ void ABRHUD::DrawCrosshair(ABRCharacter* C)
 		// Progression d'un geste (relever un coequipier) : pas une jauge de statut
 		Bar(CX - 130.f * U, CY + 84.f * U, 260.f * U, 8.f * U, C->GetReviveProgress(), FLinearColor(0.55f, 1.f, 0.55f, 0.9f), BR_STR(NSLOCTEXT("BR", "HUD.Reanimation", "R\u00c9ANIMATION")));
 	}
+	DrawMissionHold(C);
 }
 
 void ABRHUD::DrawMessages(float Dt, bool bOverPanel)
@@ -3810,20 +3828,23 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	if (PC)
 	{
 		const int32 Wanted = PC->ConsumeRequestedTab();
-		if (Wanted >= 0 && Wanted <= 3)
+		if (Wanted >= 0 && Wanted <= 4)
 		{
 			Tab = static_cast<ETab>(Wanted);
 		}
 	}
-	if (!C && (Tab == ETab::Character || Tab == ETab::Journal))
+	if (!C && (Tab == ETab::Character || Tab == ETab::Journal || Tab == ETab::Notebook))
 	{
 		Tab = ETab::Settings;
 	}
-	const FString TabNames[] = { BR_STR(NSLOCTEXT("BR", "HUD.Personnage", "PERSONNAGE")), BR_STR(NSLOCTEXT("BR", "HUD.Journal", "JOURNAL")), BR_STR(NSLOCTEXT("BR", "HUD.Parametres", "PARAM\u00c8TRES")), BR_STR(NSLOCTEXT("BR", "HUD.Touches", "TOUCHES")) };
+	const FString TabNames[] = { BR_STR(NSLOCTEXT("BR", "HUD.Personnage", "PERSONNAGE")), BR_STR(NSLOCTEXT("BR", "HUD.Journal", "JOURNAL")), BR_STR(NSLOCTEXT("BR", "HUD.Parametres", "PARAM\u00c8TRES")), BR_STR(NSLOCTEXT("BR", "HUD.Touches", "TOUCHES")),
+		BR_STR(NSLOCTEXT("BR", "HUD.Carnet", "CARNET")) };
 	float TX = IX;
-	for (int32 i = 0; i < 4; ++i)
+	// v4.11 : le carnet de mission vient juste apres le personnage
+	const int32 TabOrder[] = { 0, 4, 1, 2, 3 };
+	for (const int32 i : TabOrder)
 	{
-		if (!C && i < 2)
+		if (!C && (i < 2 || i == 4))
 		{
 			continue; // v4.9 : menu titre : parametres et touches seulement
 		}
@@ -3852,6 +3873,9 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 		break;
 	case ETab::Journal:
 		DrawJournalTab(C, W);
+		break;
+	case ETab::Notebook:
+		DrawNotebookTab(C, W);
 		break;
 	case ETab::Settings:
 		DrawSettingsTab(PC);
@@ -4047,7 +4071,9 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		const float Bottom = IY + ObjH - 12.f * U;
 		const float TextW0 = LW - 74.f * U;
 		const float LineH = 20.f * U;
-		const FString Footer = W->Def().bRequireObjectives ? (W->AreObjectivesComplete()
+		const FString Footer = W->IsMissionActive() ? (W->AreObjectivesComplete() ? BRMissionText::SolvedLine(W->GetLevelNumber())
+			: BR_STR(NSLOCTEXT("BR", "HUD.MissionFooter", "La sortie s'ouvre quand la mission est r\u00e9solue. Indices, observations et aide : onglet CARNET.")))
+			: (W->Def().bRequireObjectives && W->IsLegacyObjectives()) ? (W->AreObjectivesComplete()
 			? BR_STR(NSLOCTEXT("BR", "HUD.SortiesSontStablesTrouvezMur", "Les sorties sont stables : trouvez un mur qui gr\u00e9sille."))
 			: BR_STR(NSLOCTEXT("BR", "HUD.ObjectifsRequisStabiliserSortiesNiveau", "Objectifs requis pour stabiliser les sorties du niveau."))) : FString();
 		// v4.9 : texte coupe sur plusieurs lignes (langues aux mots longs) plutot que reduit ; la molette fait defiler
@@ -4058,7 +4084,7 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 			for (const FBRObjective& O : Objs)
 			{
 				const FLinearColor Col = O.IsDone() ? Done : (O.bRequired ? Ink : InkDim);
-				const FString Count = O.Goal > 0 ? FString::Printf(TEXT("%d/%d"), O.Progress, O.Goal) : FString();
+				const FString Count = (O.Goal > 0 && !O.bHideCount) ? FString::Printf(TEXT("%d/%d"), O.Progress, O.Goal) : FString();
 				const TArray<FString> Lines = Wrap(O.Text, TextW0, Small, 0.78f * U);
 				for (int32 k = 0; k < Lines.Num(); ++k)
 				{
@@ -4754,10 +4780,17 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 			{
 				PC->ResetKeys();
 			}
-			else if (Id >= Btn_TabCharacter && Id <= Btn_TabKeys)
+			else if (Id == Btn_NotebookHint && C)
+			{
+				// v4.11 : aide progressive de l'etape en cours : aucune, indice, rappel des indices trouves
+				int32& Level = NotebookHint.FindOrAdd(NotebookHintStep);
+				Level = (Level + 1) % 3;
+				C->PlayUISound(TEXT("S_UIClick"), 0.5f);
+			}
+			else if (Id >= Btn_TabCharacter && Id <= Btn_TabNotebook)
 			{
 				const ETab NewTab = static_cast<ETab>(Id - Btn_TabCharacter);
-				if (C || NewTab == ETab::Settings || NewTab == ETab::Keys)
+				if (C || NewTab == ETab::Settings || NewTab == ETab::Keys) // carnet et personnage : seulement en jeu
 				{
 					Tab = NewTab;
 				}
@@ -5089,5 +5122,462 @@ void ABRHUD::DrawPlayerList()
 		TextF(i == 0 ? FString(TEXT("\u2014")) : BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PingMs", "{Ping} ms"), { { TEXT("Ping"), BRLoc::Int(Ping) } }), X + PW - 22.f * U, NY, PingCol, 12.f, EUiWeight::Bold,
 			EUiAlign::Right, false);
 		Y += RowH;
+	}
+}
+
+// =====================================================================================================================
+// v4.11 : missions (carnet, documents, action maintenue), sortie de groupe, fin de campagne
+// =====================================================================================================================
+
+namespace
+{
+	/** Roles dont les indices servent a une etape (rappel de l'aide de second niveau) */
+	void StepRoles(int32 Level, int32 Step, TArray<uint8>& Out)
+	{
+		using namespace BRMission;
+		Out.Reset();
+		switch (Level * 10 + Step)
+		{
+		case 0: case 1: Out = { R_Anomaly, R_MaintNote }; break;
+		case 10: case 11: Out = { R_Schematic }; break;
+		case 12: Out = { R_Schematic, R_ReserveNote }; break;
+		case 20: Out = { R_PressurePlate }; break;
+		case 21: Out = { R_Gauge }; break;
+		case 22: Out = { R_PressurePlate, R_Gauge }; break;
+		case 30: case 33: Out = { R_LoadBoard }; break;
+		case 31: Out = { R_JunctionBox }; break;
+		case 32: Out = { R_LoadBoard, R_JunctionBox }; break;
+		case 40: Out = { R_Planning }; break;
+		case 41: Out = { R_Directory }; break;
+		case 42: Out = { R_Planning, R_Directory }; break;
+		case 50: Out = { R_Register }; break;
+		case 51: Out = { R_Register, R_Key }; break;
+		case 52: Out = { R_BoilerNote }; break;
+		case 60: Out = { R_StartPlate }; break;
+		case 61: case 62: Out = { R_StartPlate, R_Beacon }; break;
+		case 80: case 81: Out = { R_PassageMarks }; break;
+		case 90: case 91: Out = { R_HousePlan }; break;
+		case 92: Out = { R_HousePlan, R_HouseMarker }; break;
+		case 100: Out = { R_FenceMark }; break;
+		case 101: Out = { R_BarnBoard }; break;
+		case 102: Out = { R_FenceMark, R_BarnBoard }; break;
+		case 111: case 112: Out = { R_CityBoard }; break;
+		case 370: Out = { R_LevelMarks }; break;
+		case 371: Out = { R_Current }; break;
+		case 372: Out = { R_LevelMarks, R_Current }; break;
+		default: break;
+		}
+	}
+}
+
+void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
+{
+	if (!W || !C)
+	{
+		return;
+	}
+	const float U = Ui();
+	UFont* Medium = GEngine->GetMediumFont();
+	UFont* Small = GEngine->GetSmallFont();
+	const float Gap = IW * 0.02f;
+	const float LW = IW * 0.47f;
+	const float RX = IX + LW + Gap;
+	const float RW = IW - LW - Gap;
+	const float ColWidth = LW - 40.f * U;
+	Panel(IX, IY, LW, IH, BR_STR(NSLOCTEXT("BR", "HUD.CarnetMission", "CARNET DE MISSION")));
+	float X = IX + 20.f * U;
+	float Y = IY + 60.f * U;
+	LastNotebookObservations = 0;
+	LastNotebookHintLevel = 0;
+
+	if (!W->IsMissionActive())
+	{
+		const FString Info = W->IsLegacyObjectives()
+			? BR_STR(NSLOCTEXT("BR", "HUD.NotebookLegacy", "Partie commenc\u00e9e avant la version 4.11 : ce niveau garde son ancien objectif (cassettes VHS et enregistrement pendant une coupure). Les niveaux suivants auront leur mission, qui s'affichera ici."))
+			: BR_STR(NSLOCTEXT("BR", "HUD.NotebookNone", "Aucune mission dans ce niveau : trouvez une sortie."));
+		for (const FString& L : Wrap(Info, ColWidth, Medium, 0.8f * U))
+		{
+			TxtLine(L, X, Y, ColWidth, Ink, 0.8f * U, Medium);
+			Y += 24.f * U;
+		}
+		return;
+	}
+	const BRMission::FPlan& Plan = W->GetMissionPlan();
+	const BRMission::FState& State = W->GetMissionState();
+	BRMission::FEval E;
+	W->GetMissionEval(E);
+
+	// ---- Etapes
+	int32 Current = -1;
+	for (int32 I = 0; I < E.NumSteps; ++I)
+	{
+		const bool bUnknown = E.Steps[I] == BRMission::EStep::Hidden;
+		const bool bDone = E.Steps[I] == BRMission::EStep::Done;
+		if (!bDone && !bUnknown && Current < 0)
+		{
+			Current = I;
+		}
+		const FString Title = bUnknown ? BR_STR(NSLOCTEXT("BR", "HUD.StepUnknown", "\u00c9tape encore inconnue")) : BRMissionText::StepTitle(Plan.Level, I);
+		const FLinearColor Col = bDone ? Done : (I == Current ? Yellow : (bUnknown ? WithAlpha(InkDim, 0.6f) : Ink));
+		const FString Count = (!bUnknown && E.Goal[I] > 1) ? FString::Printf(TEXT("%d/%d"), E.Progress[I], E.Goal[I]) : FString();
+		DrawRect(Col, X, Y + 7.f * U, 7.f * U, 7.f * U);
+		const TArray<FString> Lines = Wrap(Title, ColWidth - 80.f * U, Medium, 0.82f * U);
+		for (int32 K = 0; K < Lines.Num(); ++K)
+		{
+			TxtLine(Lines[K], X + 18.f * U, Y, ColWidth - 80.f * U, Col, 0.82f * U, Medium);
+			if (K == 0 && !Count.IsEmpty())
+			{
+				TxtRight(Count, X + ColWidth, Y, Col, 0.8f * U, Medium);
+			}
+			Y += 24.f * U;
+		}
+		Y += 4.f * U;
+	}
+	if (E.bSolved)
+	{
+		for (const FString& L : Wrap(BRMissionText::SolvedLine(Plan.Level), ColWidth, Small, 0.74f * U))
+		{
+			TxtLine(L, X, Y, ColWidth, Done, 0.74f * U, Small);
+			Y += 19.f * U;
+		}
+		if (Plan.Level == 0 && E.Route != 255)
+		{
+			const FString Route = E.Route ? BR_STR(NSLOCTEXT("BR", "HUD.RoutePool", "Route ouverte : trappe vers les Poolrooms (Niveau 37)"))
+				: BR_STR(NSLOCTEXT("BR", "HUD.RouteL1", "Route ouverte : mur vers le Niveau 1"));
+			TxtLine(Route, X, Y, ColWidth, Yellow, 0.74f * U, Small);
+			Y += 19.f * U;
+		}
+	}
+	// ---- Objets de l'equipe (fusibles, cles) : partages, un depart ne les emporte pas
+	FString Items;
+	for (int32 D = 0; D < Plan.NumDevices; ++D)
+	{
+		const BRMission::FDevice& Dev = Plan.Devices[D];
+		if (Dev.Kind == BRMission::EKind::Item && State.Dev[D] && BRMission::Held(Plan, State, Dev.Need) > 0)
+		{
+			Items += (Items.IsEmpty() ? FString() : FString(TEXT(", "))) + BRMissionText::DeviceName(Plan, D);
+		}
+	}
+	if (!Items.IsEmpty())
+	{
+		Y += 6.f * U;
+		for (const FString& L : Wrap(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TeamItems", "Objets de l'\u00e9quipe : {Items}"), { { TEXT("Items"), BRLoc::Arg(Items) } }), ColWidth, Small, 0.74f * U))
+		{
+			TxtLine(L, X, Y, ColWidth, Ink, 0.74f * U, Small);
+			Y += 19.f * U;
+		}
+	}
+	// ---- Facultatif
+	const FString Opt = BRMissionText::OptionalLine(Plan.Level);
+	if (!Opt.IsEmpty())
+	{
+		Y += 6.f * U;
+		const bool bOptDone = Plan.Level == 0 ? W->GetLoreFound() >= 3 : E.bOptionalDone;
+		for (const FString& L : Wrap(Opt, ColWidth, Small, 0.74f * U))
+		{
+			TxtLine(L, X, Y, ColWidth, bOptDone ? Done : InkDim, 0.74f * U, Small);
+			Y += 19.f * U;
+		}
+	}
+
+	// ---- Aide progressive de l'etape en cours (activable : rien n'est montre sans la demander)
+	const uint32 HintSeed = W->GetSeed() ^ static_cast<uint32>(Plan.Level * 7919);
+	if (HintSeed != NotebookHintSeed)
+	{
+		NotebookHintSeed = HintSeed;
+		NotebookHint.Reset();
+	}
+	NotebookHintStep = Current >= 0 ? Plan.Level * 16 + Current : -1;
+	if (Current >= 0)
+	{
+		const int32 HintLevel = NotebookHint.FindRef(NotebookHintStep);
+		LastNotebookHintLevel = HintLevel;
+		Y = FMath::Max(Y + 14.f * U, IY + IH * 0.55f);
+		const FString BtnLabel = HintLevel == 0 ? BR_STR(NSLOCTEXT("BR", "HUD.HintAsk", "AIDE : afficher un indice"))
+			: (HintLevel == 1 ? BR_STR(NSLOCTEXT("BR", "HUD.HintMore", "AIDE : rappeler les indices trouv\u00e9s")) : BR_STR(NSLOCTEXT("BR", "HUD.HintHide", "AIDE : masquer")));
+		const float BW = FMath::Min(ColWidth, TextW(BtnLabel, Medium, 0.78f * U) + 30.f * U);
+		const bool bHov = Hover(X, Y, BW, 30.f * U);
+		RoundRect(X, Y, BW, 30.f * U, 8.f * U, bHov ? FLinearColor(0.95f, 0.78f, 0.25f, 0.35f) : FLinearColor(0.95f, 0.78f, 0.25f, 0.15f));
+		TxtLine(BtnLabel, X + 15.f * U, Y + 4.f * U, BW - 30.f * U, Yellow, 0.78f * U, Medium);
+		AddButton(Btn_NotebookHint, X, Y, BW, 30.f * U);
+		Y += 40.f * U;
+		const float Bottom = IY + IH - 16.f * U;
+		if (HintLevel >= 1)
+		{
+			for (const FString& L : Wrap(BRKeys::Expand(BRMissionText::StepHint(Plan.Level, Current)), ColWidth, Small, 0.74f * U))
+			{
+				if (Y + 19.f * U > Bottom) break;
+				TxtLine(L, X, Y, ColWidth, Ink, 0.74f * U, Small);
+				Y += 19.f * U;
+			}
+		}
+		if (HintLevel >= 2)
+		{
+			// Rappel de ce qui a deja ete lu ou observe pour cette etape (jamais la solution elle-meme)
+			TArray<uint8> Roles;
+			StepRoles(Plan.Level, Current, Roles);
+			TArray<FString> Recall;
+			for (int32 D = 0; D < Plan.NumDevices; ++D)
+			{
+				BRMission::FClue Clue;
+				if (Roles.Contains(Plan.Devices[D].Role) && BRMission::GetClue(Plan, State, D, Clue))
+				{
+					BRMissionText::ClueLines(Clue, Recall);
+				}
+			}
+			if (Plan.Level == 11)
+			{
+				for (int32 I = 0; I < 3; ++I)
+				{
+					const int32 Digit = BRMission::KnownDigit(Plan, State, W->GetMissionCampaign(), I);
+					if (Digit >= 0)
+					{
+						Recall.Add(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.RouteFragment", "Destination, chiffre {I} : {D}"), { { TEXT("I"), BRLoc::Int(I + 1) }, { TEXT("D"), BRLoc::Arg(FString::FromInt(Digit)) } }));
+					}
+				}
+			}
+			if (Recall.Num() == 0)
+			{
+				Recall.Add(BR_STR(NSLOCTEXT("BR", "HUD.HintNothingYet", "Rien d'utile n'a encore \u00e9t\u00e9 trouv\u00e9 pour cette \u00e9tape.")));
+			}
+			Y += 6.f * U;
+			for (const FString& R : Recall)
+			{
+				for (const FString& L : Wrap(R, ColWidth - 14.f * U, Small, 0.72f * U))
+				{
+					if (Y + 18.f * U > Bottom) break;
+					TxtLine(L, X + 14.f * U, Y, ColWidth - 14.f * U, Yellow, 0.72f * U, Small);
+					Y += 18.f * U;
+				}
+			}
+		}
+	}
+
+	// ---- Observations acquises (indices lus, observations, fragments de route de la campagne)
+	Panel(RX, IY, RW, IH, BR_STR(NSLOCTEXT("BR", "HUD.Observations", "OBSERVATIONS")));
+	const float OX = RX + 20.f * U;
+	const float OW = RW - 40.f * U;
+	struct FLine
+	{
+		FString Text;
+		bool bHeader;
+	};
+	TArray<FLine> Lines;
+	float ContentH = 0.f;
+	for (int32 D = 0; D < Plan.NumDevices; ++D)
+	{
+		const BRMission::EKind K = Plan.Devices[D].Kind;
+		BRMission::FClue Clue;
+		if ((K != BRMission::EKind::Clue && K != BRMission::EKind::Observe && Plan.Devices[D].Role != BRMission::R_Beacon) || !BRMission::GetClue(Plan, State, D, Clue))
+		{
+			continue;
+		}
+		TArray<FString> ClueText;
+		BRMissionText::ClueLines(Clue, ClueText);
+		Lines.Add({ BRMissionText::DeviceName(Plan, D), true });
+		ContentH += 24.f * U;
+		for (const FString& T : ClueText)
+		{
+			for (const FString& L : Wrap(T, OW - 14.f * U, Small, 0.74f * U))
+			{
+				Lines.Add({ L, false });
+				ContentH += 19.f * U;
+			}
+			++LastNotebookObservations;
+		}
+		ContentH += 8.f * U;
+	}
+	if (Plan.Level == 11)
+	{
+		for (int32 I = 0; I < 3; ++I)
+		{
+			if ((W->GetCampaign().RouteBits & (1 << I)) != 0)
+			{
+				const int32 Digit = BRMission::KnownDigit(Plan, State, W->GetMissionCampaign(), I);
+				Lines.Add({ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.CampaignFragment", "Fragment de route rapport\u00e9 d'un niveau pr\u00e9c\u00e9dent : chiffre {I} = {D}"),
+					{ { TEXT("I"), BRLoc::Int(I + 1) }, { TEXT("D"), BRLoc::Arg(FString::FromInt(Digit)) } }), false });
+				ContentH += 19.f * U;
+				++LastNotebookObservations;
+			}
+		}
+	}
+	const float Top = IY + 60.f * U;
+	const float Bottom = IY + IH - 16.f * U;
+	if (Lines.Num() == 0)
+	{
+		for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.NoObservation", "Rien pour l'instant : lisez les panneaux et examinez ce qui sort de l'ordinaire (maintenir la touche d'interaction).")), OW, Small, 0.74f * U))
+		{
+			TxtLine(L, OX, Y = (Y < Top ? Top : Y), OW, InkDim, 0.74f * U, Small);
+			Y += 19.f * U;
+		}
+		return;
+	}
+	float LY = Top + ScrollArea(NotebookScroll, OX, Top, OW, Bottom - Top, ContentH);
+	for (const FLine& L : Lines)
+	{
+		const float H = L.bHeader ? 24.f * U : 19.f * U;
+		if (LY >= Top - 1.f && LY + H <= Bottom + 1.f)
+		{
+			if (L.bHeader)
+			{
+				TxtLine(L.Text, OX, LY, OW, Yellow, 0.78f * U, Medium);
+			}
+			else
+			{
+				TxtLine(L.Text, OX + 14.f * U, LY, OW - 14.f * U, Ink, 0.74f * U, Small);
+			}
+		}
+		LY += H + (L.bHeader ? 0.f : 0.f);
+	}
+}
+
+void ABRHUD::DrawMissionDoc(ABRCharacter* C, ABRWorld* W)
+{
+	if (!C || !W || !W->IsMissionActive())
+	{
+		return;
+	}
+	const BRMission::FPlan& Plan = W->GetMissionPlan();
+	const int32 D = C->GetMissionDoc();
+	if (D < 0 || D >= Plan.NumDevices)
+	{
+		return;
+	}
+	// Le contenu ne depend que du plan : l'hote a confirme la lecture, l'etat replique peut arriver une image apres
+	BRMission::FState Known = W->GetMissionState();
+	Known.Dev[D] = FMath::Max<uint8>(Known.Dev[D], Plan.Devices[D].Positions);
+	BRMission::FClue Clue;
+	TArray<FString> Lines;
+	if (BRMission::GetClue(Plan, Known, D, Clue))
+	{
+		BRMissionText::ClueLines(Clue, Lines);
+	}
+	const float U = Ui();
+	UFont* Medium = GEngine->GetMediumFont();
+	const float Wd = 760.f * U;
+	const float X = (Canvas->ClipX - Wd) * 0.5f;
+	TArray<FString> Wrapped;
+	for (const FString& L : Lines)
+	{
+		Wrapped.Append(Wrap(L, Wd - 80.f * U, Medium, 1.f * U));
+	}
+	const float H = FMath::Max(260.f * U, 170.f * U + Wrapped.Num() * 32.f * U);
+	const float Y = (Canvas->ClipY - H) * 0.5f;
+	const bool bObserve = Plan.Devices[D].Kind == BRMission::EKind::Observe;
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.45f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	DrawRect(bObserve ? FLinearColor(0.06f, 0.07f, 0.06f, 0.95f) : FLinearColor(0.86f, 0.83f, 0.71f, 0.97f), X, Y, Wd, H);
+	DrawRect(bObserve ? FLinearColor(0.9f, 0.15f, 0.1f, 0.8f) : FLinearColor(0.75f, 0.68f, 0.5f, 0.6f), X, Y, Wd, 6.f * U);
+	const FLinearColor TitleCol = bObserve ? FLinearColor(1.f, 0.85f, 0.4f) : FLinearColor(0.25f, 0.18f, 0.1f);
+	const FLinearColor TextCol = bObserve ? FLinearColor(0.92f, 0.95f, 0.9f) : FLinearColor(0.12f, 0.1f, 0.25f);
+	const FString Title = bObserve ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ObservationTitle", "Observation enregistr\u00e9e : {Name}"), { { TEXT("Name"), BRLoc::Arg(BRMissionText::DeviceName(Plan, D)) } })
+		: BRMissionText::DeviceName(Plan, D);
+	TxtLine(Title, X + 40.f * U, Y + 30.f * U, Wd - 80.f * U, TitleCol, 1.05f * U, Medium);
+	float LY = Y + 84.f * U;
+	for (const FString& L : Wrapped)
+	{
+		TxtLine(L, X + 40.f * U, LY, Wd - 80.f * U, TextCol, 1.f * U, Medium);
+		LY += 32.f * U;
+	}
+	Txt(BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.MissionDocClose", "{Interact} Ranger  (copi\u00e9 dans le CARNET : {Inventory})"))), X + Wd * 0.5f, Y + H - 46.f * U,
+		bObserve ? FLinearColor(0.7f, 0.7f, 0.65f) : FLinearColor(0.3f, 0.25f, 0.2f), 0.85f * U, Medium, true, false);
+}
+
+void ABRHUD::DrawMissionHold(ABRCharacter* C)
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	const int32 D = C ? C->GetMissionHoldDevice() : -1;
+	if (!W || D < 0 || !W->IsMissionActive() || D >= W->GetMissionPlan().NumDevices)
+	{
+		return;
+	}
+	const BRMission::FDevice& Dev = W->GetMissionPlan().Devices[D];
+	const float Have = static_cast<float>(W->GetMissionState().Dev[D]);
+	const float Fill = FMath::Clamp((Have + FMath::Clamp(C->GetMissionHoldProgress(), 0.f, 1.f)) / FMath::Max<float>(1.f, Dev.Positions), 0.f, 1.f);
+	const float U = Ui();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float CY = Canvas->ClipY * 0.5f;
+	const FString Label = Dev.Kind == BRMission::EKind::Observe ? BR_STR(NSLOCTEXT("BR", "HUD.Documenting", "OBSERVATION")) : BR_STR(NSLOCTEXT("BR", "HUD.Cranking", "M\u00c9CANISME"));
+	Bar(CX - 130.f * U, CY + 84.f * U, 260.f * U, 8.f * U, Fill, FLinearColor(1.f, 0.82f, 0.22f, 0.9f), Label);
+}
+
+void ABRHUD::DrawDeparture(ABRWorld* W)
+{
+	const FBRNetDeparture& D = W->GetDeparture();
+	if (D.Phase != 1 || W->IsTransitioning())
+	{
+		return;
+	}
+	const float U = Ui();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float Y = 150.f * U;
+	const FString Dest = D.Target == BRMission::EndingTarget ? BR_STR(NSLOCTEXT("BR", "Mission.Depart.Ending", "le dernier quai"))
+		: BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Depart.Level", "Niveau {N}"), { { TEXT("N"), BRLoc::Int(D.Target) } });
+	const FString Line1 = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DepartureBanner", "D\u00c9PART VERS {Dest}  \u00b7  {Ready}/{Needed} rassembl\u00e9s  \u00b7  {Secs} s"),
+		{ { TEXT("Dest"), BRLoc::Arg(Dest.ToUpper()) }, { TEXT("Ready"), BRLoc::Int(D.Ready) }, { TEXT("Needed"), BRLoc::Int(D.Needed) },
+			{ TEXT("Secs"), BRLoc::Int(FMath::CeilToInt(W->GetDepartureRemaining())) } });
+	FString Line2 = BR_STR(NSLOCTEXT("BR", "HUD.DepartureHelp", "Rejoignez la sortie (moins de 8 m, m\u00eame \u00e9tage). S'en \u00e9loigner annule le d\u00e9part."));
+	if (D.Carried > 0)
+	{
+		Line2 += TEXT("  ") + BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DepartureCarried", "{Count} {Count}|plural(one=joueur \u00e0 terre emmen\u00e9,other=joueurs \u00e0 terre emmen\u00e9s)."), { { TEXT("Count"), BRLoc::Int(D.Carried) } });
+	}
+	const FVector2f S1 = TextSize(Line1, 13.f, EUiWeight::Bold);
+	const FVector2f S2 = TextSize(Line2, 11.f, EUiWeight::Regular);
+	const float PW = FMath::Max(S1.X, S2.X) + 40.f * U;
+	RoundRect(CX - PW * 0.5f, Y, PW, 64.f * U, 12.f * U, FLinearColor(0.f, 0.f, 0.f, 0.55f));
+	TextF(Line1, CX, Y + 8.f * U, Yellow, 13.f, EUiWeight::Bold, EUiAlign::Center, false);
+	TextF(Line2, CX, Y + 36.f * U, Ink, 11.f, EUiWeight::Regular, EUiAlign::Center, false);
+}
+
+void ABRHUD::DrawEnding(ABRPlayerController* PC, ABRWorld* W)
+{
+	const float U = Ui();
+	const float CX = Canvas->ClipX * 0.5f;
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.86f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	Buttons.Reset();
+	const bool bVariant = W->IsEndingVariant();
+	const FString Title = bVariant ? BR_STR(NSLOCTEXT("BR", "Ending.TitleVariant", "FIN : CE QUE LES AUTRES ONT LAISS\u00c9"))
+		: BR_STR(NSLOCTEXT("BR", "Ending.Title", "FIN : LE DERNIER QUAI"));
+	const FString Body = bVariant
+		? BR_STR(NSLOCTEXT("BR", "Ending.BodyVariant", "Les carnets, les cassettes et les notes que vous avez gard\u00e9s racontent la m\u00eame histoire : d'autres sont pass\u00e9s avant vous et ont laiss\u00e9 des rep\u00e8res pour ceux qui suivraient. Avant de monter dans le train, vous ajoutez les v\u00f4tres au mur du quai. Quelqu'un, un jour, saura o\u00f9 aller."))
+		: BR_STR(NSLOCTEXT("BR", "Ending.Body", "Le train de la station sans nom d\u00e9marre sans un bruit. Derri\u00e8re les vitres, les couloirs jaunes d\u00e9filent puis s'effacent. Quand les portes s'ouvrent, il fait jour et l'air sent la pluie. Vous ne savez pas si c'est la sortie ou un niveau qui imite tr\u00e8s bien le monde. Mais pour la premi\u00e8re fois, rien ne bourdonne."));
+	const FString Note = bVariant ? BR_STR(NSLOCTEXT("BR", "Ending.NoteVariant", "Variante obtenue gr\u00e2ce \u00e0 au moins trois objectifs facultatifs remplis pendant la campagne."))
+		: BR_STR(NSLOCTEXT("BR", "Ending.Note", "Une autre fin existe : remplissez au moins trois objectifs facultatifs pendant la campagne."));
+	const float W0 = FMath::Min(Canvas->ClipX - 120.f * U, 980.f * U);
+	float Y = Canvas->ClipY * 0.2f;
+	TextF(Title, CX, Y, Yellow, 26.f, EUiWeight::Black, EUiAlign::Center);
+	Y += 70.f * U;
+	const TArray<FString> Lines = WrapF(Body, W0, 15.f, EUiWeight::Light);
+	DrawParagraph(Lines, CX - W0 * 0.5f, Y, W0, 30.f * U, Ink, 15.f, EUiWeight::Light);
+	Y += Lines.Num() * 30.f * U + 24.f * U;
+	TextF(Note, CX, Y, InkDim, 11.f, EUiWeight::Regular, EUiAlign::Center);
+	Y += 70.f * U;
+	const bool bHost = !W->IsNetGame() || W->HasAuthority();
+	const FString Cont = bHost ? BR_STR(NSLOCTEXT("BR", "Ending.Continue", "Continuer l'exploration (niveau au hasard)"))
+		: BR_STR(NSLOCTEXT("BR", "Ending.Close", "Fermer (l'h\u00f4te d\u00e9cide de la suite)"));
+	const FString Menu = BR_STR(NSLOCTEXT("BR", "Ending.Menu", "Menu principal"));
+	const float BW = 420.f * U;
+	const float BH = 48.f * U;
+	const int32 Ids[] = { Btn_EndingContinue, Btn_EndingMenu };
+	const FString Labels[] = { Cont, Menu };
+	for (int32 I = 0; I < 2; ++I)
+	{
+		const float BX = CX - BW * 0.5f;
+		const float BY = Y + I * (BH + 14.f * U);
+		const bool bHov = Hover(BX, BY, BW, BH);
+		RoundRect(BX, BY, BW, BH, 12.f * U, bHov ? FLinearColor(0.95f, 0.78f, 0.25f, 0.4f) : FLinearColor(0.95f, 0.78f, 0.25f, 0.16f));
+		TextFit(Labels[I], CX, BY + 12.f * U, BW - 30.f * U, bHov ? Yellow : Ink, 13.f, EUiWeight::Regular, EUiAlign::Center, false);
+		AddButton(Ids[I], BX, BY, BW, BH);
+	}
+	if (PC && PlayerOwner)
+	{
+		PlayerOwner->GetMousePosition(MouseX, MouseY);
+		if (PlayerOwner->WasInputKeyJustPressed(EKeys::LeftMouseButton) && !BRDisplay::IsPending())
+		{
+			const int32 Id = ButtonAt(MouseX, MouseY);
+			if (Id == Btn_EndingContinue || Id == Btn_EndingMenu)
+			{
+				PC->CloseEnding(Id == Btn_EndingContinue);
+			}
+		}
 	}
 }

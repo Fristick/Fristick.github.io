@@ -50,6 +50,20 @@ struct FBRSessionState
 	UPROPERTY(SaveGame)
 	int32 VHSFound = 0;
 
+	/** v4.11 (format 4) : version de generation de la session. 1 (valeur par defaut, donc celle de toute session d'un
+	 *  format anterieur) : ancien mode, garde jusqu'a la sortie du niveau (cassettes VHS du Niveau 0, sorties libres) ;
+	 *  2 : missions v4.11 (BRMission::GenVersion). La graine seule ne suffit pas : l'algorithme a change */
+	UPROPERTY(SaveGame)
+	int32 GenVersion = 1;
+
+	/** v4.11 : etat de la mission (mecanismes, objets d'equipe, verrous leves), lie au plan par son empreinte */
+	UPROPERTY(SaveGame)
+	TArray<uint8> Mission;
+
+	/** v4.11 : documents facultatifs (cassettes VHS des nouvelles parties) trouves dans ce niveau */
+	UPROPERTY(SaveGame)
+	int32 LoreFound = 0;
+
 	UPROPERTY(SaveGame)
 	bool bBlackoutRecorded = false;
 
@@ -77,8 +91,9 @@ class BACKROOMS_API UBRSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
-	/** Format du fichier (1 : v4.1 a v4.6 ; 2 : v4.7, session reprise ; 3 : v4.8, journal par identifiants de notes) */
-	static constexpr int32 CurrentVersion = 3;
+	/** Format du fichier (1 : v4.1 a v4.6 ; 2 : v4.7, session reprise ; 3 : v4.8, journal par identifiants de notes ;
+	 *  4 : v4.11, missions de niveau et campagne) */
+	static constexpr int32 CurrentVersion = 4;
 
 	/** Format du fichier. La valeur par defaut reste 1 : les proprietes egales a celles de l'objet par defaut ne sont
 	 *  pas ecrites, et un fichier v4.1-v4.6 (Version = 1, donc absente du fichier) doit etre reconnu comme tel.
@@ -135,6 +150,17 @@ public:
 
 	UPROPERTY(SaveGame)
 	int32 Deaths = 0;
+
+	/** v4.11 : campagne. Fragments de route (bits, Niveau 11), objectifs facultatifs remplis (bits, variante de la fin),
+	 *  fins vues (1 principale, 2 variante) */
+	UPROPERTY(SaveGame)
+	uint8 RouteBits = 0;
+
+	UPROPERTY(SaveGame)
+	uint16 OptionalFound = 0;
+
+	UPROPERTY(SaveGame)
+	uint8 Endings = 0;
 
 	/** v4.7 : session en cours (reprise fidele apres fermeture du jeu) */
 	UPROPERTY(SaveGame)

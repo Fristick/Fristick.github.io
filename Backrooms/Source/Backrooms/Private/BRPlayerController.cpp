@@ -1,4 +1,5 @@
 #include "BRPlayerController.h"
+#include "BRMissionLogic.h"
 #include "BRLoc.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
@@ -848,7 +849,30 @@ ABRCharacter* ABRPlayerController::GetBRCharacter() const
 
 bool ABRPlayerController::IsModalDialogOpen() const
 {
-	return BRDisplay::IsPending();
+	// v4.11 : l'ecran de fin de campagne est aussi un dialogue (curseur, actions de jeu suspendues)
+	const ABRWorld* W = ABRWorld::Get(this);
+	return BRDisplay::IsPending() || (W && W->IsEndingShown());
+}
+
+void ABRPlayerController::OnEndingShown()
+{
+	// La fin est enregistree tout de suite (campagne, fins vues)
+	WriteActiveSave();
+	UpdateInputMode();
+}
+
+void ABRPlayerController::CloseEnding(bool bContinue)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (W)
+	{
+		W->CloseEnding(bContinue);
+	}
+	UpdateInputMode();
+	if (!bContinue)
+	{
+		ReturnToMainMenu();
+	}
 }
 
 bool ABRPlayerController::CanPlay() const
@@ -1981,6 +2005,8 @@ void ABRPlayerController::ApplyActiveSave()
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
 		W->RestoreJournal(ActiveSave ? ActiveSave->Discovered : TArray<int32>(), ActiveSave ? ActiveSave->Explored : TArray<int32>());
+		// v4.11 : campagne de la partie (hote seulement : le monde l'ignore chez un client)
+		W->SetCampaign(ActiveSave ? ActiveSave->RouteBits : 0, ActiveSave ? ActiveSave->OptionalFound : 0, ActiveSave ? ActiveSave->Endings : 0);
 	}
 	AutoSaveTimer = 60.f;
 }
@@ -2053,6 +2079,10 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 	if (W)
 	{
 		ActiveSave->Discovered = W->GetDiscoveredList();
+		// v4.11 : campagne (fragments de route, objectifs facultatifs, fins vues), tenue par l'hote
+		ActiveSave->RouteBits = W->GetCampaign().RouteBits;
+		ActiveSave->OptionalFound = W->GetCampaign().OptionalFound;
+		ActiveSave->Endings = W->GetCampaign().Endings;
 		if (W->IsLevelReady() && !W->IsTransitioning() && (!bDevSession || ActiveSave->IsExplored(W->GetLevelNumber())))
 		{
 			ActiveSave->CurrentLevel = W->GetLevelNumber();
@@ -2065,6 +2095,11 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 				Session.Level = W->GetLevelNumber();
 				Session.Seed = W->GetSeed();
 				Session.VHSFound = W->GetVHSFound();
+				// v4.11 : version de generation (1 : session d'avant la v4.11 encore en cours, gardee jusqu'a sa sortie), etat
+				// de la mission (mecanismes, objets d'equipe, sorties ouvertes) et documents facultatifs
+				Session.GenVersion = W->GetMissionGen() != 0 ? W->GetMissionGen() : BRMission::GenVersion;
+				Session.Mission = W->GetMissionBlob();
+				Session.LoreFound = W->GetLoreFound();
 				Session.bBlackoutRecorded = W->IsBlackoutRecorded();
 				Session.bEntityRecorded = W->IsEntityRecorded();
 				Session.Collected = W->GetCollectedList();
@@ -2261,68 +2296,26 @@ void ABRPlayerController::ServerRequestTransition_Implementation(int32 TargetLev
 	{
 		return;
 	}
-	// v4.7 : un client ne fait changer le groupe de niveau qu'en prenant une vraie sortie, ouverte, a cote de lui.
-	// Le saut de niveau du mode developpeur passe seulement si l'hote autorise les commandes de test.
+	// v4.11 : les sorties passent par le depart de groupe (ABRCharacter::ServerRequestDeparture, distance 3D, ligne de
+	// vue, mission, rassemblement). Ce chemin ne sert plus qu'au saut de niveau du mode developpeur, si l'hote autorise les
+	// commandes de test : l'ancienne validation par proximite 2D a 6 m d'une sortie est retiree.
 	if (!AreCheatsAllowed())
 	{
-		const ABRCharacter* C = Cast<ABRCharacter>(GetPawn());
-		FString Reason;
-		bool bNearExit = false;
-		if (C && !C->IsDead() && W->CanLeaveLevel(Reason))
-		{
-			for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
-			{
-				if (It->Target == TargetLevel && FVector::DistSquared2D(It->GetActorLocation(), C->GetActorLocation()) < FMath::Square(600.f))
-				{
-					bNearExit = true;
-					break;
-				}
-			}
-		}
-		if (!bNearExit)
-		{
-			UE_LOG(LogBackrooms, Warning, TEXT("Changement de niveau refuse pour %s (cible %d) : aucune sortie ouverte a proximite"),
-				*GetNameSafe(PlayerState), TargetLevel);
-			return;
-		}
+		UE_LOG(LogBackrooms, Warning, TEXT("Changement de niveau refuse pour %s (cible %d) : passer par une sortie et le depart de groupe"),
+			*GetNameSafe(PlayerState), TargetLevel);
+		return;
 	}
 	W->RequestTransition(TargetLevel);
 }
 
-void ABRPlayerController::ServerMarkCollected_Implementation(uint64 Id)
-{
-	// v4.10 : objet de soin ramasse par ce joueur : ajoute a ceux que le serveur lui connait (possession verifiee aux soins).
-	// Le ramassage detruit l'objet : un message renvoye ne le compte pas deux fois.
-	if (ABRCharacter* C = GetBRCharacter(); C && GetWorld())
-	{
-		for (TActorIterator<ABRPickup> It(GetWorld()); It; ++It)
-		{
-			if (It->Id == Id && !It->IsActorBeingDestroyed())
-			{
-				C->CreditHealItem(It->Item, 1);
-				break;
-			}
-		}
-	}
-	if (ABRWorld* W = ABRWorld::Get(this))
-	{
-		W->ServerCollected(Id);
-	}
-}
-
-void ABRPlayerController::ServerVHSCollected_Implementation()
-{
-	if (ABRWorld* W = ABRWorld::Get(this))
-	{
-		W->OnVHSCollected();
-	}
-}
+// v4.11 : ServerMarkCollected et ServerVHSCollected sont retires : un client ne peut plus marquer un objet ramasse ni
+// compter une cassette lui-meme. Les ramassages passent par ABRCharacter::ServerRequestPickup (transaction de l'hote).
 
 void ABRPlayerController::ServerCompleteObjective_Implementation(uint8 Which)
 {
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
-		W->ServerCompleteObjective(Which);
+		W->ServerValidateRecording(Which, GetBRCharacter());
 	}
 }
 

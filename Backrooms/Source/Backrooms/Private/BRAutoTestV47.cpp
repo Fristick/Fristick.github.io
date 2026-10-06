@@ -227,6 +227,8 @@ void ABRAutoTest::AddRegressionSteps()
 			return true;
 		}
 		TestPickupId = Best->Id;
+		// v4.11 : l'hote verifie la distance et la ligne de vue : le joueur se place d'abord a cote de la cassette
+		C->SetActorLocation(Best->GetActorLocation() + FVector(60.f, 0.f, C->GetSimpleCollisionHalfHeight() + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
 		Best->Collect(C);
 		// Le joueur se tient ensuite a une cellule du depart (point sur), le temps que le point de reprise soit releve
 		const FVector Spot = W->CellCenter(FIntPoint(1, 0), C->GetSimpleCollisionHalfHeight() + 5.f);

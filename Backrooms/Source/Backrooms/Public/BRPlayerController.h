@@ -108,12 +108,8 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestTransition(int32 TargetLevel);
 
-	UFUNCTION(Server, Reliable)
-	void ServerMarkCollected(uint64 Id);
-
-	UFUNCTION(Server, Reliable)
-	void ServerVHSCollected();
-
+	/** Enregistrement termine (0 : pendant une coupure, 1 : une entite). v4.11 : l'hote verifie les conditions (coupure
+	 *  noire depuis assez longtemps, entite visible et proche du joueur) avant de valider */
 	UFUNCTION(Server, Reliable)
 	void ServerCompleteObjective(uint8 Which);
 
@@ -133,6 +129,9 @@ public:
 	int32 ConsumeRequestedTab();
 	void TogglePause();
 	void QuitToDesktop();
+	/** v4.11 : fin de la campagne affichee (sauvegarde, curseur) ; choix du joueur : continuer l'exploration ou menu */
+	void OnEndingShown();
+	void CloseEnding(bool bContinue);
 
 	// ---- Touches (onglet TOUCHES) ----
 	void BeginKeyCapture(int32 Action, int32 Slot);

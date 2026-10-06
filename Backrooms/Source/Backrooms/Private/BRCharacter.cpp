@@ -1,4 +1,5 @@
 #include "BRCharacter.h"
+#include "BRMission.h"
 #include "BRLoc.h"
 #include "BRLevels.h"
 #include "Backrooms.h"
@@ -576,7 +577,9 @@ bool ABRCharacter::UseItemEffect(EBRItem Item)
 			PendingHealRequest = NextHealRequest;
 			PendingHealSince = Now;
 			LocalLastHealTime = Now;
-			ServerRequestHeal(static_cast<uint8>(Item), PendingHealRequest);
+			const ABRWorld* HW = ABRWorld::Get(this);
+			PendingHealLevel = HW ? HW->GetLevelSerial() : 0;
+			ServerRequestHeal(static_cast<uint8>(Item), PendingHealRequest, PendingHealLevel);
 			return false; // consomme a l'acceptation
 		}
 		// Hote ou partie solo : la sante officielle est la sienne
@@ -920,6 +923,11 @@ void ABRCharacter::Interact()
 		bReadingNote = false;
 		return;
 	}
+	if (MissionDoc >= 0)
+	{
+		MissionDoc = -1; // v4.11 : ranger le document de mission
+		return;
+	}
 	if (bInputLocked)
 	{
 		return;
@@ -937,6 +945,20 @@ void ABRCharacter::Interact()
 	else if (ABRExit* E = Cast<ABRExit>(Target))
 	{
 		E->Use(this);
+	}
+	else if (ABRMissionDevice* D = Cast<ABRMissionDevice>(Target))
+	{
+		// v4.11 : observation et manivelle se maintiennent ; le reste agit tout de suite
+		if (D->IsHoldAction())
+		{
+			HoldDevice = D;
+			HoldTimer = 0.f;
+			RequestMissionAction(D->GetIndex(), static_cast<uint8>(BRMission::EAction::Hold));
+		}
+		else
+		{
+			RequestMissionAction(D->GetIndex(), static_cast<uint8>(BRMission::EAction::Use));
+		}
 	}
 }
 
@@ -1161,23 +1183,26 @@ void ABRCharacter::ServerSyncVitals_Implementation(float InHealth, uint16 AckSer
 	Health = Wanted <= Health ? Wanted : FMath::Min(Wanted, Health + 1.2f * Since + 0.5f);
 }
 
-bool ABRCharacter::ServerRequestHeal_Validate(uint8 Item, uint16 RequestId)
+bool ABRCharacter::ServerRequestHeal_Validate(uint8 Item, uint16 RequestId, int32 LevelSerial)
 {
 	return Item < static_cast<uint8>(EBRItem::Count) && RequestId != 0;
 }
 
-void ABRCharacter::ServerRequestHeal_Implementation(uint8 Item, uint16 RequestId)
+void ABRCharacter::ServerRequestHeal_Implementation(uint8 Item, uint16 RequestId, int32 LevelSerial)
 {
-	// Demande deja traitee (renvoi) : meme reponse, rien n'est applique une seconde fois
-	if (RequestId == ServerLastHealRequest)
+	// v4.11 : demande deja traitee (renvoi, meme ancienne) : la meme reponse, rien n'est applique une seconde fois
+	for (const FBRTxnRecord& R : ServerHealHistory)
 	{
-		ClientHealResult(Item, RequestId, bServerLastHealAccepted, Health, HealSerial, ServerLastHealReason);
-		return;
+		if (R.RequestId == RequestId && R.RequestId != 0)
+		{
+			ClientHealResult(R.Item, RequestId, R.Result == 0, R.Health, R.Serial, R.Result, static_cast<int32>(R.Key));
+			return;
+		}
 	}
-	ServerLastHealRequest = RequestId;
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	const EBRItem What = static_cast<EBRItem>(Item);
 	const float Amount = What == EBRItem::Bandage ? 35.f : (What == EBRItem::AlmondWater ? 10.f : 0.f);
+	const ABRWorld* W = ABRWorld::Get(this);
 	uint8 Reason = 0;
 	if (Amount <= 0.f)
 	{
@@ -1187,54 +1212,122 @@ void ABRCharacter::ServerRequestHeal_Implementation(uint8 Item, uint16 RequestId
 	{
 		Reason = 2; // a terre, ou coup mortel en cours
 	}
+	else if (W && LevelSerial != W->GetLevelSerial())
+	{
+		Reason = 7; // demande faite dans un autre niveau : refusee, rien n'est consomme
+	}
 	else if (Now - ServerLastHealTime < HealCooldown - HealServerTolerance)
 	{
 		Reason = 1; // trop tot apres le soin precedent
 	}
-	else if (bServerHealStockKnown && GetServerHealStock(What) <= 0)
+	else if (!bServerHealStockKnown)
 	{
-		Reason = 3; // objet que le serveur ne lui connait pas
+		Reason = 6; // v4.11 : inventaire pas encore declare a l'hote : refuse (avant : accepte sans verification)
 	}
+	else if (GetServerHealStock(What) <= 0)
+	{
+		Reason = 3; // objet que l'hote ne lui connait pas (deja utilise, jamais ramasse)
+	}
+	FBRTxnRecord& Rec = ServerHealHistory[ServerHealHistoryNext];
+	ServerHealHistoryNext = (ServerHealHistoryNext + 1) % TxnHistory;
+	Rec = FBRTxnRecord();
+	Rec.RequestId = RequestId;
+	Rec.Item = Item;
+	Rec.Key = static_cast<uint64>(static_cast<uint32>(LevelSerial));
 	if (Reason != 0)
 	{
+		Rec.Result = Reason;
+		Rec.Health = Health;
+		Rec.Serial = HealSerial;
+		ServerLastHealRequest = RequestId;
 		bServerLastHealAccepted = false;
 		ServerLastHealReason = Reason;
 		++ServerHealsRefused;
-		ClientHealResult(Item, RequestId, false, Health, HealSerial, Reason);
+		ClientHealResult(Item, RequestId, false, Health, HealSerial, Reason, LevelSerial);
 		return;
 	}
+	// Une seule operation : sante officielle, numero du soin, stock tenu par l'hote
 	ServerLastHealTime = Now;
 	Health = FMath::Min(100.f, Health + Amount);
 	++HealSerial;
-	if (bServerHealStockKnown)
-	{
-		ServerHealStock.FindOrAdd(Item) -= 1;
-	}
+	ServerHealStock.FindOrAdd(Item) -= 1;
+	Rec.Result = 0;
+	Rec.Health = Health;
+	Rec.Serial = HealSerial;
+	ServerLastHealRequest = RequestId;
 	bServerLastHealAccepted = true;
 	ServerLastHealReason = 0;
 	++ServerHealsAccepted;
-	ClientHealResult(Item, RequestId, true, Health, HealSerial, 0);
+	ClientHealResult(Item, RequestId, true, Health, HealSerial, 0, LevelSerial);
 }
 
-void ABRCharacter::ClientHealResult_Implementation(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Serial, uint8 Reason)
+bool ABRCharacter::WasApplied(const uint16 (&Applied)[TxnHistory], uint16 RequestId)
 {
-	if (RequestId == PendingHealRequest)
+	for (const uint16 Id : Applied)
+	{
+		if (Id == RequestId && Id != 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ABRCharacter::RememberApplied(uint16 (&Applied)[TxnHistory], int32& Next, uint16 RequestId)
+{
+	Applied[Next] = RequestId;
+	Next = (Next + 1) % TxnHistory;
+}
+
+void ABRCharacter::ClientHealResult_Implementation(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Serial, uint8 Reason, int32 LevelSerial)
+{
+	// v4.11 : une reponse deja recue (renvoi de l'hote, doublon) n'est jamais appliquee deux fois
+	if (WasApplied(AppliedHealResults, RequestId))
+	{
+		++IgnoredRepeatedResults;
+		return;
+	}
+	RememberApplied(AppliedHealResults, AppliedHealNext, RequestId);
+	const bool bWasPending = RequestId == PendingHealRequest;
+	if (bWasPending)
 	{
 		PendingHealRequest = 0;
 	}
+	const ABRWorld* W = ABRWorld::Get(this);
+	const bool bStale = W && LevelSerial != W->GetLevelSerial();
 	if (!bAccepted)
 	{
-		NotifyHealRefused(Reason);
+		if (bWasPending && !bStale)
+		{
+			NotifyHealRefused(Reason);
+		}
 		return;
 	}
-	AckHealSerial = Serial;
-	LastServerHealth = NewHealth;
+	// Soin accepte : l'hote a consomme l'objet. La quantite est reconciliee dans tous les cas ; la sante officielle n'est
+	// reprise que si ce soin est plus recent que le dernier recu (un coup ou un soin plus recent l'emporte)
 	const EBRItem What = static_cast<EBRItem>(Item);
 	if (RemoveItem(What, 1) == 0)
 	{
-		UE_LOG(LogBackrooms, Warning, TEXT("Soin accepte par le serveur sans %s dans l'inventaire (demande %u)"), *BRItems::Get(What).Name.ToString(), RequestId);
+		UE_LOG(LogBackrooms, Warning, TEXT("Soin accepte par l'hote sans %s dans l'inventaire (demande %u)"), *BRItems::Get(What).Name.ToString(), RequestId);
 	}
-	ApplyHealAccepted(What, NewHealth);
+	const bool bNewer = static_cast<int16>(Serial - AckHealSerial) > 0;
+	if (bNewer)
+	{
+		AckHealSerial = Serial;
+		LastServerHealth = NewHealth;
+	}
+	if (bStale)
+	{
+		// Reponse d'un niveau precedent (changement de niveau pendant l'attente) : rien n'est rejoue dans ce niveau
+		++StaleResultsReconciled;
+		if (bNewer)
+		{
+			Health = FMath::Clamp(NewHealth, 0.f, 100.f);
+			LastSentHealth = Health;
+		}
+		return;
+	}
+	ApplyHealAccepted(What, bNewer ? NewHealth : Health);
 }
 
 void ABRCharacter::ApplyHealAccepted(EBRItem Item, float NewHealth)
@@ -1271,6 +1364,12 @@ void ABRCharacter::NotifyHealRefused(uint8 Reason)
 	case 4:
 		Msg = NSLOCTEXT("BR", "Player.HealPending", "Soin en cours\u2026");
 		break;
+	case 6:
+		Msg = NSLOCTEXT("BR", "Player.HealStockUnknown", "Soin refus\u00e9 : l'h\u00f4te n'a pas encore re\u00e7u votre inventaire. R\u00e9essayez dans un instant.");
+		break;
+	case 7:
+		Msg = NSLOCTEXT("BR", "Player.HealStale", "Soin annul\u00e9 par le changement de niveau. Rien n'a \u00e9t\u00e9 utilis\u00e9.");
+		break;
 	default:
 		Msg = NSLOCTEXT("BR", "Player.HealRefused", "Soin refus\u00e9. Rien n'a \u00e9t\u00e9 utilis\u00e9.");
 		break;
@@ -1280,11 +1379,216 @@ void ABRCharacter::NotifyHealRefused(uint8 Reason)
 
 void ABRCharacter::ServerDeclareHealStock_Implementation(uint8 Water, uint8 Bandages)
 {
-	// Declaration a l'arrivee dans un niveau (inventaire du joueur, tenu chez lui) : base des verifications de possession.
-	// Les ramassages confirmes par le serveur s'y ajoutent, les soins acceptes s'en retirent.
-	ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::AlmondWater)) = FMath::Min<int32>(Water, 40);
-	ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::Bandage)) = FMath::Min<int32>(Bandages, 40);
+	// v4.11 : une seule declaration par session : l'inventaire avec lequel le joueur arrive (depart ou sauvegarde). Une
+	// declaration repetee (chaque niveau en v4.10) ou en retard est ignoree : elle ne peut plus reintroduire des objets
+	// deja consommes. Ensuite, seuls les ramassages acceptes et les soins acceptes par l'hote changent ce stock, et un
+	// reveil apres une mort le ramene a l'equipement de depart. Plafond : ce que l'inventaire peut contenir.
+	if (bServerHealStockKnown)
+	{
+		UE_LOG(LogBackrooms, Verbose, TEXT("%s : declaration du stock de soin ignoree (deja connue de l'hote)"), *GetName());
+		return;
+	}
+	auto Cap = [](EBRItem Item)
+	{
+		return (NumPockets + NumStorage) * FMath::Max(1, BRItems::Get(Item).MaxStack);
+	};
+	ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::AlmondWater)) = FMath::Min<int32>(Water, Cap(EBRItem::AlmondWater));
+	ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::Bandage)) = FMath::Min<int32>(Bandages, Cap(EBRItem::Bandage));
 	bServerHealStockKnown = true;
+}
+
+bool ABRCharacter::ServerRequestPickup_Validate(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 ExpectedItem, uint8 Room)
+{
+	return RequestId != 0 && ExpectedItem < static_cast<uint8>(EBRItem::Count);
+}
+
+void ABRCharacter::ServerRequestPickup_Implementation(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 ExpectedItem, uint8 Room)
+{
+	// Demande deja servie (renvoi) : la meme reponse, sans second effet
+	for (const FBRTxnRecord& R : ServerPickupHistory)
+	{
+		if (R.RequestId == RequestId && R.RequestId != 0 && R.Key == PickupId)
+		{
+			ClientPickupResult(PickupId, RequestId, LevelSerial, R.Item, R.Result);
+			return;
+		}
+	}
+	ABRWorld* W = ABRWorld::Get(this);
+	EBRItem Given = EBRItem::None;
+	const EBRPickupResult Result = W ? W->ServerTryCollect(this, PickupId, LevelSerial, ExpectedItem, Room, Given) : EBRPickupResult::Unknown;
+	FBRTxnRecord& Rec = ServerPickupHistory[ServerPickupHistoryNext];
+	ServerPickupHistoryNext = (ServerPickupHistoryNext + 1) % TxnHistory;
+	Rec = FBRTxnRecord();
+	Rec.RequestId = RequestId;
+	Rec.Key = PickupId;
+	Rec.Item = static_cast<uint8>(Result == EBRPickupResult::Accepted ? Given : static_cast<EBRItem>(ExpectedItem));
+	Rec.Result = static_cast<uint8>(Result);
+	if (Result == EBRPickupResult::Accepted)
+	{
+		++ServerPickupsAccepted;
+	}
+	else
+	{
+		++ServerPickupsRefused;
+	}
+	ClientPickupResult(PickupId, RequestId, LevelSerial, Rec.Item, Rec.Result);
+}
+
+void ABRCharacter::ClientPickupResult_Implementation(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 Item, uint8 Result)
+{
+	HandlePickupResult(PickupId, RequestId, LevelSerial, static_cast<EBRItem>(Item), static_cast<EBRPickupResult>(Result));
+}
+
+int32 ABRCharacter::RoomFor(EBRItem Item) const
+{
+	const int32 MaxStack = FMath::Max(1, BRItems::Get(Item).MaxStack);
+	int32 Room = 0;
+	for (const TArray<FBRItemSlot>* Arr : { &Pockets, &Storage })
+	{
+		for (const FBRItemSlot& S : *Arr)
+		{
+			if (S.IsEmpty())
+			{
+				Room += MaxStack;
+			}
+			else if (S.Item == Item)
+			{
+				Room += FMath::Max(0, MaxStack - S.Count);
+			}
+		}
+	}
+	return Room;
+}
+
+void ABRCharacter::RequestPickup(ABRPickup* Pickup)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!Pickup || !W || bDead)
+	{
+		return;
+	}
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (PendingPickup.RequestId != 0 && Now - PendingPickup.Since < 4.f)
+	{
+		return; // une demande a la fois ; l'objet en attente reste estompe
+	}
+	const int32 Room = RoomFor(Pickup->Item);
+	if (Room <= 0)
+	{
+		NotifyPickupRefused(EBRPickupResult::Full);
+		return;
+	}
+	NextPickupRequest = static_cast<uint16>(NextPickupRequest % 65535 + 1);
+	const uint16 RequestId = NextPickupRequest;
+	const int32 Serial = W->GetLevelSerial();
+	if (HasAuthority())
+	{
+		// Hote ou partie solo : la meme transaction, appliquee tout de suite
+		EBRItem Given = EBRItem::None;
+		const EBRPickupResult Result = W->ServerTryCollect(this, Pickup->Id, Serial, static_cast<uint8>(Pickup->Item), static_cast<uint8>(FMath::Min(Room, 255)), Given);
+		if (Result == EBRPickupResult::Accepted)
+		{
+			++ServerPickupsAccepted;
+		}
+		else
+		{
+			++ServerPickupsRefused;
+		}
+		PendingPickup.Id = Pickup->Id;
+		PendingPickup.RequestId = RequestId;
+		PendingPickup.Item = Pickup->Item;
+		PendingPickup.LevelSerial = Serial;
+		HandlePickupResult(Pickup->Id, RequestId, Serial, Result == EBRPickupResult::Accepted ? Given : Pickup->Item, Result);
+		return;
+	}
+	PendingPickup.Id = Pickup->Id;
+	PendingPickup.RequestId = RequestId;
+	PendingPickup.Item = Pickup->Item;
+	PendingPickup.LevelSerial = Serial;
+	PendingPickup.Since = Now;
+	Pickup->SetPending(true);
+	ServerRequestPickup(Pickup->Id, RequestId, Serial, static_cast<uint8>(Pickup->Item), static_cast<uint8>(FMath::Min(Room, 255)));
+}
+
+void ABRCharacter::HandlePickupResult(uint64 PickupId, uint16 RequestId, int32 LevelSerial, EBRItem Item, EBRPickupResult Result)
+{
+	// Une reponse deja appliquee (renvoi, doublon) ne donne jamais un second objet
+	if (WasApplied(AppliedPickupResults, RequestId))
+	{
+		++IgnoredRepeatedResults;
+		return;
+	}
+	RememberApplied(AppliedPickupResults, AppliedPickupNext, RequestId);
+	const bool bMine = PendingPickup.RequestId == RequestId;
+	if (bMine)
+	{
+		PendingPickup = FBRPendingPickup();
+	}
+	ABRWorld* W = ABRWorld::Get(this);
+	const bool bStale = W && LevelSerial != W->GetLevelSerial();
+	if (W && !bStale && Result != EBRPickupResult::Accepted)
+	{
+		for (TActorIterator<ABRPickup> It(GetWorld()); It; ++It)
+		{
+			if (It->Id == PickupId)
+			{
+				It->SetPending(false);
+			}
+		}
+	}
+	if (Result != EBRPickupResult::Accepted)
+	{
+		if (!bStale)
+		{
+			NotifyPickupRefused(Result);
+		}
+		return;
+	}
+	if (bStale)
+	{
+		// Accepte dans le niveau precedent (reponse arrivee apres le changement) : l'objet est bien a ce joueur (l'hote l'a
+		// compte), mais rien ne touche le nouveau niveau
+		++StaleResultsReconciled;
+		AddItem(Item, 1);
+		return;
+	}
+	ReceivePickup(Item, FString());
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		const FName SoundName = Item == EBRItem::Battery ? FName(TEXT("S_Battery")) : (Item == EBRItem::VHSTape ? FName(TEXT("S_ItemMove")) : FName(TEXT("S_Pickup")));
+		if (USoundBase* S = A->Sound(SoundName))
+		{
+			UGameplayStatics::PlaySound2D(this, S, 0.8f);
+		}
+	}
+}
+
+void ABRCharacter::NotifyPickupRefused(EBRPickupResult Result)
+{
+	FText Msg;
+	switch (Result)
+	{
+	case EBRPickupResult::AlreadyTaken:
+		Msg = NSLOCTEXT("BR", "Player.PickupTaken", "Trop tard : un co\u00e9quipier l'a d\u00e9j\u00e0 pris.");
+		break;
+	case EBRPickupResult::TooFar:
+	case EBRPickupResult::NotVisible:
+		Msg = NSLOCTEXT("BR", "Player.PickupTooFar", "Hors de port\u00e9e : approchez-vous de l'objet.");
+		break;
+	case EBRPickupResult::Full:
+		ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.InventairePleinInventoryFairePlace", "Inventaire plein ! {Inventory} pour faire de la place."))), 2.5f,
+			FLinearColor(1.f, 0.6f, 0.5f));
+		return;
+	case EBRPickupResult::Dead:
+	case EBRPickupResult::Loading:
+	case EBRPickupResult::StaleLevel:
+		Msg = NSLOCTEXT("BR", "Player.PickupNotNow", "Impossible de ramasser maintenant.");
+		break;
+	default:
+		Msg = NSLOCTEXT("BR", "Player.PickupRefused", "Ramassage refus\u00e9 par l'h\u00f4te.");
+		break;
+	}
+	ABRHUD::Notify(this, Msg.ToString(), 2.5f, FLinearColor(1.f, 0.7f, 0.5f));
 }
 
 void ABRCharacter::DieOf(EBRDeathCause Cause, int8 InKiller, AActor* Killer)
@@ -1367,6 +1671,13 @@ void ABRCharacter::ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint
 	{
 		bServerDying = false;
 		Health = Event == 2 ? 35.f : 100.f; // releve : un peu de sante ; reveille : sante pleine
+		if (Event == 3 && bServerHealStockKnown)
+		{
+			// v4.11 : reveil apres une mort : le joueur repart avec l'equipement de depart (ResetInventory), le stock tenu
+			// par l'hote aussi (une eau d'amande, un bandage)
+			ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::AlmondWater)) = 1;
+			ServerHealStock.FindOrAdd(static_cast<uint8>(EBRItem::Bandage)) = 1;
+		}
 	}
 	DeathState.bDead = bInDead;
 	DeathState.Cause = bInDead ? static_cast<uint8>(Cause) : 0;
@@ -1869,9 +2180,11 @@ bool ABRCharacter::ReceivePickup(EBRItem Item, const FString& Note)
 	const FBRItemInfo& Info = BRItems::Get(Item);
 	if (Item == EBRItem::VHSTape)
 	{
-		if (ABRWorld* W = ABRWorld::Get(this))
+		// v4.11 : la cassette est comptee par l'hote dans la transaction de ramassage (plus de message separe)
+		const ABRWorld* W = ABRWorld::Get(this);
+		if (W && !(W->Def().bRequireObjectives && W->IsLegacyObjectives()))
 		{
-			W->OnVHSCollected();
+			ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.LoreTape", "Cassette VHS : un document facultatif, ajout\u00e9 au journal.")), 3.f, FLinearColor(0.9f, 0.88f, 0.75f));
 		}
 	}
 	else
@@ -2009,6 +2322,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	UpdateFlashlight(Dt);
 	UpdateFocus();
 	UpdateRevive(Dt);
+	UpdateMissionHold(Dt);
 	UpdateAudio(Dt);
 	UpdatePostProcess(Dt);
 	AnimateBody(Dt);
@@ -2478,6 +2792,16 @@ void ABRCharacter::UpdateFocus()
 	const FVector Dir = GetViewDirection();
 	auto Accept = [this](AActor* A) -> bool
 	{
+		if (const ABRMissionDevice* D = Cast<ABRMissionDevice>(A))
+		{
+			if (D->IsInteractable())
+			{
+				FocusActor = A;
+				FocusPrompt = D->GetPrompt();
+				return !FocusPrompt.IsEmpty();
+			}
+			return false;
+		}
 		if (const ABRPickup* P = Cast<ABRPickup>(A))
 		{
 			FocusActor = A;
@@ -2523,7 +2847,8 @@ void ABRCharacter::UpdateFocus()
 			AActor* A = O.GetActor();
 			const UPrimitiveComponent* Comp = O.GetComponent();
 			const ABRExit* E = Cast<ABRExit>(A);
-			if (!A || !Comp || (!Cast<ABRPickup>(A) && !(E && E->IsInteractable())))
+			const ABRMissionDevice* MD = Cast<ABRMissionDevice>(A);
+			if (!A || !Comp || (!Cast<ABRPickup>(A) && !(E && E->IsInteractable()) && !(MD && MD->IsInteractable())))
 			{
 				continue;
 			}
@@ -3498,4 +3823,201 @@ FString ABRCharacter::GetOpenNote() const
 		return BR_STR(NSLOCTEXT("BR", "Player.NoteIllisibleEncreCoule", "(La note est illisible, l'encre a coul\u00e9.)"));
 	}
 	return BRLevels::NoteText(OpenNote).ToString();
+}
+
+// =====================================================================================================================
+// v4.11 : missions et sortie de groupe
+// =====================================================================================================================
+
+int32 ABRCharacter::GetMissionHoldDevice() const
+{
+	const ABRMissionDevice* D = HoldDevice.Get();
+	return D ? D->GetIndex() : -1;
+}
+
+void ABRCharacter::RequestMissionAction(int32 Device, uint8 Action)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!W || bDead || !W->IsMissionActive() || Device < 0 || Device > 254)
+	{
+		return;
+	}
+	NextMissionRequest = static_cast<uint16>(NextMissionRequest % 65535 + 1);
+	++MissionActionsSent;
+	if (HasAuthority())
+	{
+		// Hote ou partie solo : la meme validation, appliquee tout de suite
+		uint8 Related = 255, Count = 0;
+		const uint8 Fb = W->ServerMissionAct(this, Device, Action, W->GetLevelSerial(), Related, Count);
+		RememberApplied(AppliedMissionResults, AppliedMissionNext, NextMissionRequest);
+		HandleMissionResult(Device, Fb, Related, Count);
+		return;
+	}
+	ServerMissionInteract(static_cast<uint8>(Device), Action, NextMissionRequest, W->GetLevelSerial());
+}
+
+bool ABRCharacter::ServerMissionInteract_Validate(uint8 Device, uint8 Action, uint16 RequestId, int32 LevelSerial)
+{
+	return Action <= static_cast<uint8>(BRMission::EAction::Hold) && Device < BRMission::MaxDevices;
+}
+
+void ABRCharacter::ServerMissionInteract_Implementation(uint8 Device, uint8 Action, uint16 RequestId, int32 LevelSerial)
+{
+	// Demande deja servie (renvoi) : la meme reponse, sans second effet
+	for (const FBRTxnRecord& R : ServerMissionHistory)
+	{
+		if (R.RequestId == RequestId && R.RequestId != 0 && R.Key == Device)
+		{
+			ClientMissionResult(Device, RequestId, R.Item, R.Result, static_cast<uint8>(R.Serial), LevelSerial);
+			return;
+		}
+	}
+	ABRWorld* W = ABRWorld::Get(this);
+	uint8 Related = 255, Count = 0;
+	const uint8 Fb = W ? W->ServerMissionAct(this, Device, Action, LevelSerial, Related, Count) : BRMissionText::NotNow;
+	FBRTxnRecord& Rec = ServerMissionHistory[ServerMissionHistoryNext];
+	ServerMissionHistoryNext = (ServerMissionHistoryNext + 1) % TxnHistory;
+	Rec = FBRTxnRecord();
+	Rec.RequestId = RequestId;
+	Rec.Key = Device;
+	Rec.Item = Fb;
+	Rec.Result = Related;
+	Rec.Serial = Count;
+	ClientMissionResult(Device, RequestId, Fb, Related, Count, LevelSerial);
+}
+
+void ABRCharacter::ClientMissionResult_Implementation(uint8 Device, uint16 RequestId, uint8 Feedback, uint8 Related, uint8 Count, int32 LevelSerial)
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	// Reponse repetee, ou d'un niveau quitte depuis : ignoree (l'etat officiel vient de toute facon de la replication)
+	if (WasApplied(AppliedMissionResults, RequestId) || !W || LevelSerial != W->GetLevelSerial())
+	{
+		++MissionResultsIgnored;
+		return;
+	}
+	RememberApplied(AppliedMissionResults, AppliedMissionNext, RequestId);
+	HandleMissionResult(Device, Feedback, Related, Count);
+}
+
+void ABRCharacter::HandleMissionResult(int32 Device, uint8 Feedback, uint8 Related, uint8 Count)
+{
+	++MissionResultsReceived;
+	LastMissionFeedback = Feedback;
+	const ABRWorld* W = ABRWorld::Get(this);
+	if (!W || !IsLocallyControlled() || !W->IsMissionActive() || Device < 0 || Device >= W->GetMissionPlan().NumDevices)
+	{
+		return;
+	}
+	const BRMission::FPlan& Plan = W->GetMissionPlan();
+	const BRMission::FDevice& D = Plan.Devices[Device];
+	const BRMission::EFeedback F = static_cast<BRMission::EFeedback>(Feedback);
+	const bool bDone = F == BRMission::EFeedback::Done || F == BRMission::EFeedback::AlreadyDone;
+	// Fin d'une action maintenue (objectif atteint, refus, ordre non respecte)
+	if (HoldDevice.IsValid() && HoldDevice->GetIndex() == Device && F != BRMission::EFeedback::Progress)
+	{
+		HoldDevice.Reset();
+		HoldTimer = 0.f;
+	}
+	if (bDone && (D.Kind == BRMission::EKind::Clue || D.Kind == BRMission::EKind::Observe))
+	{
+		// Indice lu ou observation documentee : le document s'ouvre (et reste dans le carnet)
+		MissionDoc = Device;
+		MissionDocWhere = GetActorLocation();
+		PlaySound2D(D.Kind == BRMission::EKind::Clue ? TEXT("S_ItemMove") : TEXT("S_RecBeep"), 0.5f);
+		return;
+	}
+	if (F == BRMission::EFeedback::Progress || F == BRMission::EFeedback::None)
+	{
+		return;
+	}
+	if (F == BRMission::EFeedback::Done && (D.Kind == BRMission::EKind::Switch || D.Kind == BRMission::EKind::Crank))
+	{
+		return; // le mecanisme montre lui-meme sa nouvelle position
+	}
+	const FString Msg = BRMissionText::Feedback(Plan, Device, Feedback, Related, Count);
+	if (Msg.IsEmpty())
+	{
+		return;
+	}
+	const bool bGood = F == BRMission::EFeedback::Done || F == BRMission::EFeedback::Returned;
+	const bool bWarn = F == BRMission::EFeedback::Warning || F == BRMission::EFeedback::Tripped;
+	ABRHUD::Notify(this, Msg, bWarn ? 5.f : 3.5f, bGood ? FLinearColor(0.55f, 1.f, 0.55f) : (bWarn ? FLinearColor(1.f, 0.55f, 0.3f) : FLinearColor(1.f, 0.8f, 0.5f)));
+	if (!bGood && !bWarn)
+	{
+		PlaySound2D(TEXT("S_UIDeny"), 0.4f);
+	}
+}
+
+void ABRCharacter::UpdateMissionHold(float Dt)
+{
+	// Document ouvert : il se range si l'on s'eloigne
+	if (MissionDoc >= 0 && FVector::DistSquared(GetActorLocation(), MissionDocWhere) > FMath::Square(250.f))
+	{
+		MissionDoc = -1;
+	}
+	ABRMissionDevice* D = HoldDevice.Get();
+	if (!D)
+	{
+		return;
+	}
+	if (!bInteractHeld || bDead || bInputLocked || FocusActor.Get() != D)
+	{
+		HoldDevice.Reset();
+		HoldTimer = 0.f;
+		return;
+	}
+	HoldTimer += Dt;
+	if (HoldTimer >= 0.5f)
+	{
+		HoldTimer -= 0.5f;
+		RequestMissionAction(D->GetIndex(), static_cast<uint8>(BRMission::EAction::Hold));
+	}
+}
+
+void ABRCharacter::RequestDepartureFromServer(int32 Target)
+{
+	if (const ABRWorld* W = ABRWorld::Get(this))
+	{
+		ServerRequestDeparture(Target, W->GetLevelSerial());
+	}
+}
+
+bool ABRCharacter::ServerRequestDeparture_Validate(int32 Target, int32 LevelSerial)
+{
+	return true;
+}
+
+void ABRCharacter::ServerRequestDeparture_Implementation(int32 Target, int32 LevelSerial)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	uint8 Reason = 0;
+	if (W && !W->ServerStartDeparture(this, Target, LevelSerial, Reason))
+	{
+		ClientDepartureRefused(Reason);
+	}
+}
+
+void ABRCharacter::ClientDepartureRefused_Implementation(uint8 Reason)
+{
+	NotifyDepartureRefused(Reason);
+}
+
+void ABRCharacter::NotifyDepartureRefused(uint8 Reason)
+{
+	FString Msg;
+	switch (Reason)
+	{
+	case 1:
+		Msg = BR_STR(NSLOCTEXT("BR", "Mission.Depart.RefusedLocked", "Cette sortie est encore verrouill\u00e9e."));
+		break;
+	case 2:
+		Msg = BR_STR(NSLOCTEXT("BR", "Mission.Depart.RefusedFar", "Approchez-vous de la sortie."));
+		break;
+	case 3:
+		Msg = BR_STR(NSLOCTEXT("BR", "Mission.Depart.RefusedOther", "Un autre d\u00e9part est d\u00e9j\u00e0 pr\u00e9vu : rejoignez le groupe."));
+		break;
+	default:
+		return; // demande d'un niveau quitte, ou joueur a terre : rien a dire
+	}
+	ABRHUD::Notify(this, Msg, 3.5f, FLinearColor(1.f, 0.75f, 0.4f));
 }

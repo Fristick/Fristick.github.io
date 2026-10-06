@@ -1,4 +1,5 @@
 #include "BRWorld.h"
+#include "BRMission.h"
 #include "BRLoc.h"
 #include "BRSave.h"
 #include "ShaderPipelineCache.h"
@@ -170,6 +171,10 @@ void ABRWorld::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(ABRWorld, NetBlackout);
 	DOREPLIFETIME(ABRWorld, NetCollected);
 	DOREPLIFETIME(ABRWorld, VHSFound);
+	DOREPLIFETIME(ABRWorld, LoreFound);
+	DOREPLIFETIME(ABRWorld, NetMission);
+	DOREPLIFETIME(ABRWorld, NetCampaign);
+	DOREPLIFETIME(ABRWorld, NetDeparture);
 	DOREPLIFETIME(ABRWorld, bBlackoutRecorded);
 	DOREPLIFETIME(ABRWorld, bEntityRecorded);
 }
@@ -496,8 +501,25 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		TensionQuiet = 0.f;
 		NetCollected.Reset();
 		VHSFound = 0;
+		LoreFound = 0;
 		bBlackoutRecorded = false;
 		bEntityRecorded = false;
+		// v4.11 : depart de groupe et fin : rien ne passe d'un niveau a l'autre
+		NetDeparture = FBRNetDeparture();
+		bEndingShown = false;
+		// v4.11 : la campagne vient de la sauvegarde de l'hote (ABRPlayerController::ApplyActiveSave), une fois au debut ;
+		// premiere construction sans partie appliquee : la sauvegarde active, si l'hote en a une
+		if (!bCampaignLoaded)
+		{
+			bCampaignLoaded = true;
+			if (const ABRPlayerController* HostPC = LocalPC())
+			{
+				if (const UBRSaveGame* Save = HostPC->GetActiveSave())
+				{
+					SetCampaign(Save->RouteBits, Save->OptionalFound, Save->Endings);
+				}
+			}
+		}
 		// v4.7 : reprise d'une partie : meme graine, donc meme disposition. Objectifs et objets ramasses sont remis
 		// avant la construction des chunks : un objet deja ramasse n'est jamais cree. Le point de reprise est applique
 		// au placement du joueur, une fois le sol et les collisions construits.
@@ -509,6 +531,11 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 			if (Resume.Level == Current->Number && Resume.Seed == Seed)
 			{
 				VHSFound = Resume.VHSFound;
+				LoreFound = Resume.LoreFound;
+				// v4.11 : version de generation de la session (1 : d'avant la v4.11, ancien mode jusqu'a la sortie) et
+				// etat de sa mission ; appliques par SetupMission
+				ResumeMissionGen = static_cast<uint8>(FMath::Clamp(Resume.GenVersion, 1, 255));
+				ResumeMissionBlob = Resume.Mission;
 				bBlackoutRecorded = Resume.bBlackoutRecorded;
 				bEntityRecorded = Resume.bEntityRecorded;
 				for (const uint64 Id : Resume.Collected)
@@ -580,6 +607,9 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	}
 
 	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title.ToString(), Seed);
+
+	// v4.11 : mission du niveau (plan, placement, cellules reservees) avant la construction des chunks
+	SetupMission();
 
 	// v4.10 : les chargements synchrones de la construction sont comptes (ressources non preparees pendant le fondu)
 	UBRAssets::bCountBuildLoads = true;
@@ -700,28 +730,88 @@ void ABRWorld::OnRep_Objectives()
 	bPrevEntityRecorded = bEntityRecorded;
 }
 
-void ABRWorld::MarkCollected(uint64 Id)
+EBRPickupResult ABRWorld::ServerTryCollect(ABRCharacter* By, uint64 Id, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, EBRItem& OutItem)
 {
-	Collected.Add(Id);
-	if (HasAuthority())
-	{
-		NetCollected.AddUnique(Id);
-	}
-	else if (ABRPlayerController* PC = LocalPC())
-	{
-		PC->ServerMarkCollected(Id);
-	}
-}
-
-void ABRWorld::ServerCollected(uint64 Id)
-{
+	OutItem = EBRItem::None;
 	if (!HasAuthority())
 	{
-		return;
+		return EBRPickupResult::Unknown;
 	}
+	// Niveau : une demande faite dans un niveau precedent (ou pendant un changement) ne touche jamais le niveau courant
+	if (LevelSerial != LoadedSerial || !bLevelReady || TransState != ETrans::None)
+	{
+		return EBRPickupResult::StaleLevel;
+	}
+	if (!IsValid(By) || By->IsDead() || By->GetDeathState().bDead)
+	{
+		return EBRPickupResult::Dead;
+	}
+	if (By->IsLevelLoading())
+	{
+		return EBRPickupResult::Loading;
+	}
+	if (IsCollected(Id))
+	{
+		return EBRPickupResult::AlreadyTaken;
+	}
+	ABRPickup* Pickup = nullptr;
+	for (TActorIterator<ABRPickup> It(GetWorld()); It; ++It)
+	{
+		if (It->Id == Id && !It->IsActorBeingDestroyed())
+		{
+			Pickup = *It;
+			break;
+		}
+	}
+	// Objet absent chez l'hote (identifiant forge, ou zone non construite) ou d'un autre type que celui annonce
+	if (!Pickup || static_cast<uint8>(Pickup->Item) != ExpectedItem || Pickup->Item == EBRItem::Note)
+	{
+		return EBRPickupResult::Unknown;
+	}
+	// Distance en 3D depuis les yeux (un etage au-dessus ne compte pas comme "a cote")
+	const FVector Eye = By->GetEyeLocation();
+	const FVector Target = Pickup->GetActorLocation() + FVector(0.f, 0.f, 10.f);
+	if (FVector::Dist(Eye, Target) > PickupReachServer)
+	{
+		return EBRPickupResult::TooFar;
+	}
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRPickupLos), false, By);
+	Q.AddIgnoredActor(Pickup);
+	if (GetWorld()->LineTraceTestByChannel(Eye, Target, ECC_WorldStatic, Q))
+	{
+		return EBRPickupResult::NotVisible;
+	}
+	if (Room == 0)
+	{
+		return EBRPickupResult::Full;
+	}
+	// Une seule operation : attribue, retire pour tous, stock de soin, effet sur le niveau
+	OutItem = Pickup->Item;
 	Collected.Add(Id);
 	NetCollected.AddUnique(Id);
 	DestroyPickup(Id);
+	By->CreditHealItem(OutItem, 1);
+	OnServerPickupAccepted(OutItem);
+	return EBRPickupResult::Accepted;
+}
+
+void ABRWorld::OnServerPickupAccepted(EBRItem Item)
+{
+	if (Item != EBRItem::VHSTape)
+	{
+		return;
+	}
+	if (Def().bRequireObjectives && IsLegacyObjectives())
+	{
+		// Ancien mode du Niveau 0 (partie en cours d'une version precedente) : les cassettes restent l'objectif
+		++VHSFound;
+		PrevVHSFound = VHSFound;
+		AnnounceVHS();
+		return;
+	}
+	// v4.11 : document facultatif (lore, indices) ; compte pour la variante de fin
+	++LoreFound;
+	OnMissionLoreFound();
 }
 
 void ABRWorld::DestroyPickup(uint64 Id)
@@ -774,17 +864,42 @@ void ABRWorld::ServerCompleteObjective(uint8 Which)
 	}
 }
 
+void ABRWorld::ServerValidateRecording(uint8 Which, ABRCharacter* By)
+{
+	if (!HasAuthority() || !IsValid(By) || By->IsDead() || TransState != ETrans::None)
+	{
+		return;
+	}
+	if (Which == 0)
+	{
+		const bool bDarkLongEnough = BlackoutPhase == EBlackout::Dark && DarkSince >= 0.f && LevelTime - DarkSince >= 4.5f;
+		if (!bDarkLongEnough)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("Enregistrement de coupure refuse pour %s : coupure noire depuis %.1f s"), *By->GetName(),
+				BlackoutPhase == EBlackout::Dark && DarkSince >= 0.f ? LevelTime - DarkSince : 0.f);
+			return;
+		}
+		ServerCompleteObjective(0);
+		return;
+	}
+	if (FindVisibleEntity(By->GetEyeLocation(), By->GetViewDirection(), 2600.f, 0.5f) == nullptr)
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Enregistrement d'entite refuse pour %s : aucune entite visible a moins de 26 m"), *By->GetName());
+		return;
+	}
+	ServerCompleteObjective(1);
+}
+
 void ABRWorld::DebugCompleteObjectives()
 {
 	if (!HasAuthority())
 	{
 		return;
 	}
-	const int32 Missing = FMath::Max(0, Def().VHSRequired - VHSFound);
-	for (int32 i = 0; i < Missing; ++i)
-	{
-		OnVHSCollected();
-	}
+	// Console de developpement (jamais en Shipping) : objectifs de l'ancien mode remplis, mission resolue
+	VHSFound = FMath::Max(VHSFound, Def().VHSRequired);
+	PrevVHSFound = VHSFound;
+	DebugCompleteMission();
 	if (Def().bBlackouts)
 	{
 		ServerCompleteObjective(0);
@@ -1171,6 +1286,9 @@ void ABRWorld::Tick(float DeltaSeconds)
 	}
 	LevelTime += Dt;
 	TitleTime = FMath::Max(0.f, TitleTime - Dt);
+	// v4.11 : mecanismes de mission (affichage, animation de proximite) et depart de groupe (serveur)
+	UpdateMissionDevices(Dt);
+	UpdateDeparture(Dt);
 
 	if (!bPlayerPlaced)
 	{
@@ -2418,6 +2536,7 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 
 	BlackoutPhase = static_cast<EBlackout>(FMath::Min<uint8>(Phase, static_cast<uint8>(EBlackout::Restoring)));
 	PowerFlickerTimer = 0.f;
+	DarkSince = BlackoutPhase == EBlackout::Dark ? LevelTime : -1.f;
 	if (bAuth)
 	{
 		NetBlackout = static_cast<uint8>(BlackoutPhase);
@@ -2491,7 +2610,52 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 {
 	Out.Reset();
 	const FBRLevelDef& D = Def();
-	if (D.bRequireObjectives)
+	if (IsMissionActive())
+	{
+		// v4.11 : etapes de la mission (les etapes encore inconnues ne sont pas montrees), facultatif, entite a filmer
+		BRMission::FEval E;
+		GetMissionEval(E);
+		for (int32 I = 0; I < E.NumSteps; ++I)
+		{
+			if (E.Steps[I] == BRMission::EStep::Hidden)
+			{
+				continue;
+			}
+			FBRObjective Step;
+			Step.Text = BRMissionText::StepTitle(D.Number, I).ToUpper();
+			Step.Progress = E.Steps[I] == BRMission::EStep::Done ? FMath::Max<int32>(1, E.Goal[I]) : E.Progress[I];
+			Step.Goal = E.Goal[I] > 1 ? E.Goal[I] : 0;
+			if (Step.Goal == 0)
+			{
+				Step.Progress = E.Steps[I] == BRMission::EStep::Done ? 1 : 0;
+				Step.Goal = 1;
+				Step.bHideCount = true;
+			}
+			Step.bRequired = true;
+			Out.Add(Step);
+		}
+		const FString Opt = BRMissionText::OptionalLine(D.Number);
+		if (!Opt.IsEmpty())
+		{
+			FBRObjective O;
+			O.Text = Opt;
+			O.Goal = D.Number == 0 ? 3 : 1;
+			O.Progress = D.Number == 0 ? FMath::Min(LoreFound, 3) : (E.bOptionalDone ? 1 : 0);
+			O.bHideCount = D.Number != 0;
+			Out.Add(O);
+		}
+		if (D.Entities.Num() > 0 && D.MaxEntities > 0)
+		{
+			FBRObjective Ent;
+			Ent.Text = BR_STR(NSLOCTEXT("BR", "World.FilmerEntite", "FILMER UNE ENTIT\u00c9"));
+			Ent.Progress = bEntityRecorded ? 1 : 0;
+			Ent.Partial = bEntityRecorded ? 1.f : FMath::Clamp(EntityRecordTime / 3.f, 0.f, 1.f);
+			Ent.bHideCount = true;
+			Out.Add(Ent);
+		}
+		return;
+	}
+	if (D.bRequireObjectives && IsLegacyObjectives())
 	{
 		FBRObjective Vhs;
 		Vhs.Text = BR_STR(NSLOCTEXT("BR", "World.TrouverCassettesVhs", "TROUVER LES CASSETTES VHS"));
@@ -2500,7 +2664,7 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 		Vhs.bRequired = true;
 		Out.Add(Vhs);
 	}
-	if (D.bBlackouts)
+	if (D.bBlackouts && (IsLegacyObjectives() || !D.bRequireObjectives))
 	{
 		FBRObjective Rec;
 		Rec.Text = BR_STR(NSLOCTEXT("BR", "World.FilmerPendantCoupure", "FILMER PENDANT UNE COUPURE"));
@@ -2518,7 +2682,7 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 		Out.Add(Ent);
 	}
 	FBRObjective Exit;
-	Exit.Text = D.bRequireObjectives ? BR_STR(NSLOCTEXT("BR", "World.StabiliserPrendreSortie", "STABILISER ET PRENDRE LA SORTIE")) : BR_STR(NSLOCTEXT("BR", "World.TrouverSortie", "TROUVER UNE SORTIE"));
+	Exit.Text = (D.bRequireObjectives && IsLegacyObjectives()) ? BR_STR(NSLOCTEXT("BR", "World.StabiliserPrendreSortie", "STABILISER ET PRENDRE LA SORTIE")) : BR_STR(NSLOCTEXT("BR", "World.TrouverSortie", "TROUVER UNE SORTIE"));
 	Exit.Progress = 0;
 	Out.Add(Exit);
 }
@@ -2526,7 +2690,12 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 bool ABRWorld::AreObjectivesComplete() const
 {
 	const FBRLevelDef& D = Def();
-	if (!D.bRequireObjectives)
+	if (IsMissionActive())
+	{
+		return (MissionState.Solved & 1) != 0;
+	}
+	// v4.11 : l'ancien objectif (cassettes) ne s'applique qu'aux sessions d'avant la v4.11 (version 1)
+	if (!D.bRequireObjectives || !IsLegacyObjectives())
 	{
 		return true;
 	}
@@ -2535,7 +2704,8 @@ bool ABRWorld::AreObjectivesComplete() const
 
 bool ABRWorld::CanLeaveLevel(FString& OutReason) const
 {
-	if (AreObjectivesComplete())
+	// v4.11 : en mission, chaque sortie est verifiee par CanUseExit (sortie gardee ou de retour)
+	if (IsMissionActive() || AreObjectivesComplete())
 	{
 		return true;
 	}
@@ -2559,27 +2729,11 @@ void ABRWorld::CompleteTask(const FString& Text)
 			UGameplayStatics::PlaySound2D(this, S, 0.8f);
 		}
 	}
-	if (Def().bRequireObjectives && AreObjectivesComplete())
+	if (Def().bRequireObjectives && IsLegacyObjectives() && AreObjectivesComplete())
 	{
 		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "World.SortiesSontStabiliseesTrouvezPassage", "Les sorties se sont stabilis\u00e9es. Trouvez un passage (noclip) pour quitter le Niveau.")), 7.f,
 			FLinearColor(1.f, 0.9f, 0.5f));
 	}
-}
-
-void ABRWorld::OnVHSCollected()
-{
-	if (!HasAuthority())
-	{
-		// Les cassettes trouvees par chacun comptent pour tout le groupe
-		if (ABRPlayerController* PC = LocalPC())
-		{
-			PC->ServerVHSCollected();
-		}
-		return;
-	}
-	++VHSFound;
-	PrevVHSFound = VHSFound;
-	AnnounceVHS();
 }
 
 void ABRWorld::AnnounceVHS()

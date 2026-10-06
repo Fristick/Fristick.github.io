@@ -1,4 +1,5 @@
 #include "BRInteractables.h"
+#include "BRMissionLogic.h"
 #include "BRLoc.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
@@ -172,6 +173,10 @@ FString ABRPickup::GetPrompt() const
 	{
 		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.ReadNote", "{Key} Lire la note"), { { TEXT("Key"), BRLoc::Arg(BRKeys::Tag(EBRAction::Interact)) } });
 	}
+	if (bPending)
+	{
+		return BR_STR(NSLOCTEXT("BR", "Interact.PickupPending", "Ramassage en cours\u2026 (r\u00e9ponse de l'h\u00f4te)"));
+	}
 	return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.InteractRamasserItem", "{Interact} Ramasser : {Item}"), { { TEXT("Interact"), BRLoc::Arg(BRKeys::Tag(EBRAction::Interact)) }, { TEXT("Item"), BRLoc::Arg(BRItems::Get(Item).Name) } });
 }
 
@@ -181,31 +186,33 @@ void ABRPickup::Collect(ABRCharacter* By)
 	{
 		return;
 	}
-	if (!By->ReceivePickup(Item, NoteText))
+	if (Item == EBRItem::Note)
 	{
-		return; // inventaire plein : l'objet reste au sol
+		// v4.11 : une note n'est pas un objet consommable : chaque joueur la lit (et l'ajoute a son journal), elle reste en
+		// place pour les autres. Rien n'est demande a l'hote.
+		By->ReceivePickup(Item, NoteText);
+		if (UBRAssets* A = UBRAssets::Get(this))
+		{
+			if (USoundBase* S = A->Sound(TEXT("S_ItemMove")))
+			{
+				UGameplayStatics::PlaySound2D(this, S, 0.6f);
+			}
+		}
+		return;
 	}
-	if (ABRWorld* W = ABRWorld::Get(this))
+	// v4.11 : objet unique : transaction confirmee par l'hote (un seul gagnant, aucun objet accorde a l'avance)
+	By->RequestPickup(this);
+}
+
+void ABRPickup::SetPending(bool bInPending)
+{
+	bPending = bInPending;
+	if (Mesh)
 	{
-		W->MarkCollected(Id);
+		// En attente de la reponse de l'hote : l'objet s'estompe un peu (aucun objet n'est encore donne)
+		Mesh->SetScalarParameterValueOnMaterials(TEXT("Opacity"), bPending ? 0.5f : 1.f);
+		Mesh->SetRenderCustomDepth(bPending);
 	}
-	if (UBRAssets* A = UBRAssets::Get(this))
-	{
-		FName SoundName = TEXT("S_Pickup");
-		if (Item == EBRItem::Battery)
-		{
-			SoundName = TEXT("S_Battery");
-		}
-		else if (Item == EBRItem::Note || Item == EBRItem::VHSTape)
-		{
-			SoundName = TEXT("S_ItemMove");
-		}
-		if (USoundBase* S = A->Sound(SoundName))
-		{
-			UGameplayStatics::PlaySound2D(this, S, 0.8f);
-		}
-	}
-	Destroy();
 }
 
 // =====================================================================================================================
@@ -398,8 +405,18 @@ void ABRExit::NotifyActorBeginOverlap(AActor* OtherActor)
 
 FString ABRExit::GetPrompt() const
 {
-	const FString Dest = (Target >= 0 && BRLevels::Exists(Target)) ? BRLoc::Fmt(NSLOCTEXT("BR", "Interact.NiveauTarget", "Niveau {Target} ?"), { { TEXT("Target"), BRLoc::Int(Target) } }) : FString(TEXT("???"));
+	const FString Dest = (Target >= 0 && BRLevels::Exists(Target)) ? BRLoc::Fmt(NSLOCTEXT("BR", "Interact.NiveauTarget", "Niveau {Target} ?"), { { TEXT("Target"), BRLoc::Int(Target) } })
+		: (Target == BRMission::EndingTarget ? BR_STR(NSLOCTEXT("BR", "Interact.LastPlatform", "dernier quai")) : FString(TEXT("???")));
 	const FString Key = BRKeys::Tag(EBRAction::Interact);
+	// v4.11 : sortie gardee par la mission : on le dit dans l'invite
+	if (const ABRWorld* W = ABRWorld::Get(this))
+	{
+		FString Reason;
+		if (!W->CanUseExit(Target, Reason))
+		{
+			return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.ExitLocked", "Sortie verrouill\u00e9e ({Dest}) : mission du niveau en cours"), { { TEXT("Dest"), BRLoc::Arg(Dest) } });
+		}
+	}
 	switch (Style)
 	{
 	case EBRExitStyle::Door:
@@ -434,7 +451,8 @@ void ABRExit::Use(ABRCharacter* By)
 		return;
 	}
 	FString Reason;
-	if (!W->CanLeaveLevel(Reason))
+	// v4.11 : la sortie suit la mission du niveau (sorties de retour toujours ouvertes)
+	if (!W->CanUseExit(Target, Reason))
 	{
 		if (!By->IsLocallyControlled())
 		{
@@ -475,15 +493,19 @@ void ABRExit::Use(ABRCharacter* By)
 			}
 		}
 	}
-	Leave();
+	Leave(By);
 }
 
-void ABRExit::Leave()
+void ABRExit::Leave(ABRCharacter* By)
 {
 	if (ABRWorld* W = ABRWorld::Get(this))
 	{
-		bUsed = true;
-		W->RequestTransition(Target);
+		// v4.11 : seul, on part tout de suite ; en ligne, l'hote rassemble le groupe avant le depart (ABRWorld)
+		if (!W->IsNetGame())
+		{
+			bUsed = true;
+		}
+		W->RequestDeparture(By, Target, GetActorLocation());
 	}
 }
 
@@ -495,13 +517,13 @@ void ABRExit::FinishClimb(ABRCharacter* By)
 		return;
 	}
 	FString Reason;
-	if (!W->CanLeaveLevel(Reason))
+	if (!W->CanUseExit(Target, Reason))
 	{
 		ABRHUD::Notify(this, Reason, 4.f, FLinearColor(1.f, 0.55f, 0.35f));
 		By->StopClimb();
 		return;
 	}
-	Leave();
+	Leave(By);
 }
 
 FVector ABRExit::GetClimbAnchor() const
