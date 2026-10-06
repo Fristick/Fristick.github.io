@@ -519,8 +519,9 @@ void ABRExit::FinishClimb(ABRCharacter* By)
 	FString Reason;
 	if (!W->CanUseExit(Target, Reason))
 	{
+		// v4.12 : on reste au sommet (plus de chute de l'echelle) ; redescendre puis remonter redemande
 		ABRHUD::Notify(this, Reason, 4.f, FLinearColor(1.f, 0.55f, 0.35f));
-		By->StopClimb();
+		By->OnClimbExitRefused();
 		return;
 	}
 	Leave(By);

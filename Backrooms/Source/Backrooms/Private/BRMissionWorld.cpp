@@ -2,6 +2,7 @@
 // l'hote et replique, validation des actions, sorties conditionnees par la mission, sortie de groupe, campagne et fin.
 #include "BRWorld.h"
 #include "BRMission.h"
+#include "BRGatherLogic.h"
 #include "BRCharacter.h"
 #include "BREntity.h"
 #include "BRInteractables.h"
@@ -62,6 +63,44 @@ namespace
 		case 37: return 4;
 		default: return -1;
 		}
+	}
+
+	BRGather::FVec ToGather(const FVector& V)
+	{
+		BRGather::FVec Out;
+		Out.X = static_cast<float>(V.X);
+		Out.Y = static_cast<float>(V.Y);
+		Out.Z = static_cast<float>(V.Z);
+		return Out;
+	}
+
+	FVector FromGather(const BRGather::FVec& V)
+	{
+		return FVector(V.X, V.Y, V.Z);
+	}
+
+	/** v4.12 : forme d'une sortie pour le depart de groupe (pied, direction vers la piece, conduit d'une echelle) */
+	BRGather::FExitShape GatherShapeOf(const ABRExit* E)
+	{
+		BRGather::FExitShape S;
+		S.Style = E->IsClimbable() ? BRGather::EStyle::Ladder : (E->Style == EBRExitStyle::Barn ? BRGather::EStyle::Barn : BRGather::EStyle::Door);
+		S.Foot = ToGather(E->GetActorLocation());
+		const FVector Fwd = FRotator(0.f, E->GetActorRotation().Yaw, 0.f).Vector();
+		S.Forward = ToGather(Fwd);
+		S.Anchor = ToGather(E->IsClimbable() ? E->GetClimbAnchor() : E->GetActorLocation());
+		S.TopZ = E->IsClimbable() ? E->GetClimbTopZ() : static_cast<float>(E->GetActorLocation().Z);
+		return S;
+	}
+
+	BRGather::FExitShape GatherShapeOf(const FBRNetDeparture& D)
+	{
+		BRGather::FExitShape S;
+		S.Style = static_cast<BRGather::EStyle>(FMath::Min<uint8>(D.Style, 2));
+		S.Foot = ToGather(D.Foot);
+		S.Forward = ToGather(D.Forward);
+		S.Anchor = ToGather(D.Anchor);
+		S.TopZ = D.TopZ;
+		return S;
 	}
 
 	uint64 HoldKey(const ABRCharacter* By, int32 Device)
@@ -1160,33 +1199,36 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 		OutReason = 1;
 		return false;
 	}
-	// Une vraie sortie de cette cible, a portee en 3D et sans mur entre (une echelle : le grimpeur peut etre plus haut)
+	// v4.12 : une vraie sortie de cette cible, demandee depuis son echelle (a n'importe quelle hauteur de la montee : le
+	// conduit est ferme) ou a sa portee avec une ligne de vue vers le point de rassemblement (le meme point que le
+	// rassemblement lui-meme). Regle partagee BRGather
 	const ABRExit* Found = nullptr;
+	BRGather::FExitShape FoundShape;
+	const BRGather::FVec PL = ToGather(By->GetActorLocation());
 	for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
 	{
 		if (It->Target != Target || It->IsHidden())
 		{
 			continue;
 		}
-		const FVector EL = It->GetActorLocation();
-		const FVector PL = By->GetActorLocation();
-		const bool bLadder = It->IsClimbable();
-		const bool bBarn = It->Style == EBRExitStyle::Barn;
-		const float DXY = static_cast<float>(FVector::Dist2D(EL, PL));
-		const float DZ = static_cast<float>(PL.Z - EL.Z);
-		const bool bNear = bLadder ? (DXY < 260.f && DZ > -150.f && DZ < 900.f) : (bBarn ? DXY < 800.f && FMath::Abs(DZ) < 300.f : FVector::Dist(EL, PL) < 360.f);
-		if (!bNear)
+		const BRGather::FExitShape Shape = GatherShapeOf(*It);
+		const BRGather::EGather G = BRGather::CanRequest(Shape, PL);
+		if (G == BRGather::EGather::No)
 		{
 			continue;
 		}
-		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRDepartLos), false, By);
-		Q.AddIgnoredActor(*It);
-		const FVector Probe = bBarn ? EL + FRotator(0.f, It->GetActorRotation().Yaw, 0.f).Vector() * 520.f + FVector(0.f, 0.f, 120.f) : EL + FVector(0.f, 0.f, 100.f);
-		if (!GetWorld()->LineTraceTestByChannel(By->GetEyeLocation(), Probe, ECC_WorldStatic, Q))
+		if (G == BRGather::EGather::FloorNeedsView)
 		{
-			Found = *It;
-			break;
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRDepartLos), false, By);
+			Q.AddIgnoredActor(*It);
+			if (GetWorld()->LineTraceTestByChannel(By->GetEyeLocation(), FromGather(BRGather::ViewPoint(Shape)), ECC_WorldStatic, Q))
+			{
+				continue;
+			}
 		}
+		Found = *It;
+		FoundShape = Shape;
+		break;
 	}
 	if (!Found)
 	{
@@ -1207,16 +1249,20 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 	NetDeparture.Id = ++NextDepartureId;
 	NetDeparture.Serial = LoadedSerial;
 	NetDeparture.Target = Target;
-	NetDeparture.Location = Found->IsClimbable() ? Found->GetActorLocation() + FVector(0.f, 0.f, 150.f) : Found->GetActorLocation();
-	if (Found->Style == EBRExitStyle::Barn)
-	{
-		NetDeparture.Location += FRotator(0.f, Found->GetActorRotation().Yaw, 0.f).Vector() * 520.f;
-	}
+	// v4.12 : la forme de la sortie choisie (et non plus un point unique 150 cm au-dessus du pied d'une echelle)
+	NetDeparture.Location = FromGather(BRGather::GatherPoint(FoundShape));
+	NetDeparture.Style = static_cast<uint8>(FoundShape.Style);
+	NetDeparture.Foot = FromGather(FoundShape.Foot);
+	NetDeparture.Forward = FromGather(FoundShape.Forward);
+	NetDeparture.Anchor = FromGather(FoundShape.Anchor);
+	NetDeparture.TopZ = FoundShape.TopZ;
+	DepartureExit = const_cast<ABRExit*>(Found);
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	NetDeparture.Deadline = (GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds()) + 90.f;
 	if (const APlayerState* PS = By->GetPlayerState())
 	{
 		NetDeparture.By = PS->GetPlayerName();
+		NetDeparture.ByPlayerId = PS->GetPlayerId();
 	}
 	DepartureInitiator = By;
 	DepartureReadyTime = 0.f;
@@ -1229,11 +1275,36 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 
 void ABRWorld::ServerCancelDeparture(ABRCharacter* By)
 {
-	if (HasAuthority() && NetDeparture.Phase == 1)
+	// v4.12 : seul l'initiateur annule (en redescendant de l'echelle) ; un autre joueur qui s'eloigne cesse seulement
+	// d'etre compte
+	if (HasAuthority() && NetDeparture.Phase == 1 && By && By == DepartureInitiator.Get())
 	{
-		(void)By;
 		CancelDeparture(3);
 	}
+}
+
+bool ABRWorld::IsGatheredForDeparture(const ABRCharacter* C) const
+{
+	if (!C || NetDeparture.Phase != 1)
+	{
+		return false;
+	}
+	const BRGather::FExitShape Shape = GatherShapeOf(NetDeparture);
+	const BRGather::EGather G = BRGather::Classify(Shape, ToGather(C->GetActorLocation()));
+	if (G == BRGather::EGather::Ladder)
+	{
+		return true;
+	}
+	if (G != BRGather::EGather::FloorNeedsView)
+	{
+		return false;
+	}
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRGatherLos), false, C);
+	if (const ABRExit* E = DepartureExit.Get())
+	{
+		Q.AddIgnoredActor(E);
+	}
+	return !GetWorld()->LineTraceTestByChannel(C->GetEyeLocation(), FromGather(BRGather::ViewPoint(Shape)), ECC_WorldStatic, Q);
 }
 
 void ABRWorld::CancelDeparture(uint8 Reason)
@@ -1241,6 +1312,7 @@ void ABRWorld::CancelDeparture(uint8 Reason)
 	NetDeparture.Phase = 3;
 	NetDeparture.Reason = Reason;
 	DepartureInitiator.Reset();
+	DepartureExit.Reset();
 	ForceNetUpdate();
 	OnRep_Departure();
 }
@@ -1283,15 +1355,8 @@ void ABRWorld::UpdateDeparture(float Dt)
 			continue; // en chargement : on ne l'attend pas
 		}
 		++Needed;
-		const FVector P = C->GetActorLocation();
-		const bool bClose = FVector::Dist2D(P, Loc) < GatherRadius && FMath::Abs(P.Z - Loc.Z) < GatherHeight + (Loc.Z > P.Z + 100.f ? 250.f : 0.f);
-		bool bSeen = false;
-		if (bClose)
-		{
-			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRGatherLos), false, C);
-			bSeen = !GetWorld()->LineTraceTestByChannel(C->GetEyeLocation(), Loc + FVector(0.f, 0.f, 90.f), ECC_WorldStatic, Q);
-		}
-		Ready += (bClose && bSeen) ? 1 : 0;
+		// v4.12 : sur l'echelle (grimpeur compte a toute hauteur), ou au meme etage a vue du point de rassemblement
+		Ready += IsGatheredForDeparture(C) ? 1 : 0;
 	}
 	if (Ready != NetDeparture.Ready || Needed != NetDeparture.Needed || Carried != NetDeparture.Carried)
 	{

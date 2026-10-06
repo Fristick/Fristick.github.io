@@ -9,6 +9,7 @@
 #include "BRTypes.h"
 #include "BRRig.h"
 #include "BRTxnLogic.h"
+#include "BRGatherLogic.h"
 #include "BRCharacter.generated.h"
 
 class UCameraComponent;
@@ -123,6 +124,12 @@ public:
 	void StartClimb(ABRExit* Ladder);
 	void StopClimb();
 	bool IsClimbing() const { return bClimbing; }
+	/** v4.12 : au sommet d'une echelle en ligne : etat de l'attente du groupe (HUD, tests) */
+	BRGather::FClimbWait::EState GetClimbWaitState() const { return ClimbWait.State; }
+	/** v4.12 : sortie au sommet refusee (verrouillee, autre depart) : on reste au sommet, sans redemander */
+	void OnClimbExitRefused() { ClimbWait.OnRefused(); }
+	/** v4.12 (tests) : demandes de depart envoyees depuis une echelle */
+	int32 ClimbRequestsSent = 0;
 
 	/** v4.4 : jumpscare propre a chaque entite. Source : l'entite qui frappe (son modele se jette sur la camera) ;
 	 *  sans Source (test du mode developpeur), elle apparait devant soi. bLethal : la mort attend la fin */
@@ -434,6 +441,9 @@ public:
 	void ServerRequestDeparture(int32 Target, int32 LevelSerial);
 	UFUNCTION(Client, Reliable)
 	void ClientDepartureRefused(uint8 Reason);
+	/** v4.12 : l'initiateur redescend de l'echelle pendant le rassemblement : il annule le depart */
+	UFUNCTION(Server, Reliable)
+	void ServerCancelDeparture();
 	/** Message d'un depart refuse (raisons de ABRWorld::ServerStartDeparture) */
 	void NotifyDepartureRefused(uint8 Reason);
 	/** Action maintenue en cours (observation, manivelle) : mecanisme (-1 aucun) et avancement de l'unite (0..1) */
@@ -645,6 +655,8 @@ private:
 	/** Echelle en cours d'ascension */
 	TWeakObjectPtr<ABRExit> ClimbLadder;
 	bool bClimbing = false;
+	/** v4.12 : attente au sommet (une demande par arrivee, etat stable, annulation en redescendant) */
+	BRGather::FClimbWait ClimbWait;
 	bool bDevFly = false;
 	float ClimbInput = 0.f;
 	float ClimbStepAcc = 0.f;

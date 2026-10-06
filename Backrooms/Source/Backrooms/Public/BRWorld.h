@@ -144,6 +144,27 @@ struct FBRNetDeparture
 	/** Nom de l'initiateur */
 	UPROPERTY()
 	FString By;
+
+	/** v4.12 : identifiant de joueur de l'initiateur (APlayerState::GetPlayerId) : lui seul annule en redescendant */
+	UPROPERTY()
+	int32 ByPlayerId = -1;
+
+	/** v4.12 : forme de la sortie choisie (BRGather::FExitShape) : 0 porte, 1 echelle, 2 grange ; pied, direction vers
+	 *  la piece, accroche et sommet de la montee d'une echelle. Location est le point de rassemblement */
+	UPROPERTY()
+	uint8 Style = 0;
+
+	UPROPERTY()
+	FVector Foot = FVector::ZeroVector;
+
+	UPROPERTY()
+	FVector Forward = FVector(1.f, 0.f, 0.f);
+
+	UPROPERTY()
+	FVector Anchor = FVector::ZeroVector;
+
+	UPROPERTY()
+	float TopZ = 0.f;
 };
 
 /** Objectif affiche dans l'inventaire (colonne OBJECTIFS) et dans le coin de l'ecran */
@@ -268,8 +289,11 @@ public:
 	/** Serveur : demande d'un joueur ; false (+ raison : 1 sortie fermee, 2 trop loin, 3 autre depart, 4 niveau perime,
 	 *  5 a terre ou en chargement) si refusee */
 	bool ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelSerial, uint8& OutReason);
-	/** Serveur : un joueur annule le depart en cours */
+	/** Serveur : l'initiateur annule le depart en cours (un autre joueur ne peut pas l'annuler) */
 	void ServerCancelDeparture(ABRCharacter* By);
+	/** v4.12 : un joueur est-il rassemble pour le depart en cours (sur l'echelle, ou au meme etage a vue du point de
+	 *  rassemblement) ? Regle partagee BRGather, meme point de vue que la demande */
+	bool IsGatheredForDeparture(const ABRCharacter* C) const;
 	const FBRNetDeparture& GetDeparture() const { return NetDeparture; }
 	/** Secondes restantes avant l'annulation automatique du depart */
 	float GetDepartureRemaining() const;
@@ -719,6 +743,8 @@ private:
 	float DepartureReadyTime = 0.f;
 	uint16 NextDepartureId = 0;
 	TWeakObjectPtr<ABRCharacter> DepartureInitiator;
+	/** v4.12 : sortie choisie par le depart en cours (ignoree par les tests de vue) */
+	TWeakObjectPtr<ABRExit> DepartureExit;
 	uint8 SeenDeparturePhase = 0;
 	uint16 SeenDepartureId = 0;
 

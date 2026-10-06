@@ -5617,19 +5617,45 @@ void ABRHUD::DrawMissionHold(ABRCharacter* C)
 void ABRHUD::DrawDeparture(ABRWorld* W)
 {
 	const FBRNetDeparture& D = W->GetDeparture();
-	if (D.Phase != 1 || W->IsTransitioning())
+	if (W->IsTransitioning())
 	{
 		return;
 	}
 	const float U = Ui();
 	const float CX = Canvas->ClipX * 0.5f;
 	const float Y = 150.f * U;
+	// v4.12 : au sommet d'une echelle (en ligne) : l'etat de l'attente est dit, sans demande repetee
+	const ABRCharacter* Me = PlayerOwner ? Cast<ABRCharacter>(PlayerOwner->GetPawn()) : nullptr;
+	const BRGather::FClimbWait::EState Wait = (Me && Me->IsClimbing()) ? Me->GetClimbWaitState() : BRGather::FClimbWait::EState::Climbing;
+	if (D.Phase != 1)
+	{
+		if (Wait == BRGather::FClimbWait::EState::Waiting || Wait == BRGather::FClimbWait::EState::Stopped)
+		{
+			const FString Line = Wait == BRGather::FClimbWait::EState::Waiting
+				? BR_STR(NSLOCTEXT("BR", "HUD.ClimbWaitRequest", "Au sommet de l'\u00e9chelle : demande de d\u00e9part envoy\u00e9e\u2026"))
+				: BR_STR(NSLOCTEXT("BR", "HUD.ClimbWaitStopped", "Pas de d\u00e9part pour l'instant. Redescendez d'un m\u00e8tre puis remontez pour redemander."));
+			const FVector2f S0 = TextSize(Line, 11.f, EUiWeight::Regular);
+			RoundRect(CX - S0.X * 0.5f - 20.f * U, Y, S0.X + 40.f * U, 36.f * U, 12.f * U, FLinearColor(0.f, 0.f, 0.f, 0.55f));
+			TextF(Line, CX, Y + 9.f * U, Ink, 11.f, EUiWeight::Regular, EUiAlign::Center, false);
+		}
+		return;
+	}
 	const FString Dest = D.Target == BRMission::EndingTarget ? BR_STR(NSLOCTEXT("BR", "Mission.Depart.Ending", "le dernier quai"))
 		: BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Depart.Level", "Niveau {N}"), { { TEXT("N"), BRLoc::Int(D.Target) } });
 	const FString Line1 = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DepartureBanner", "D\u00c9PART VERS {Dest}  \u00b7  {Ready}/{Needed} rassembl\u00e9s  \u00b7  {Secs} s"),
 		{ { TEXT("Dest"), BRLoc::Arg(Dest.ToUpper()) }, { TEXT("Ready"), BRLoc::Int(D.Ready) }, { TEXT("Needed"), BRLoc::Int(D.Needed) },
 			{ TEXT("Secs"), BRLoc::Int(FMath::CeilToInt(W->GetDepartureRemaining())) } });
 	FString Line2 = BR_STR(NSLOCTEXT("BR", "HUD.DepartureHelp", "Rejoignez la sortie (moins de 8 m, m\u00eame \u00e9tage). S'en \u00e9loigner annule le d\u00e9part."));
+	if (D.Style == static_cast<uint8>(BRGather::EStyle::Ladder))
+	{
+		// v4.12 : une echelle : sur l'echelle, a toute hauteur, on est compte ; l'initiateur annule en redescendant
+		const APlayerState* PS = Me ? Me->GetPlayerState() : nullptr;
+		const bool bInitiator = PS && PS->GetPlayerId() == D.ByPlayerId;
+		Line2 = Wait == BRGather::FClimbWait::EState::Waiting
+			? (bInitiator ? BR_STR(NSLOCTEXT("BR", "HUD.ClimbWaitInitiator", "Au sommet : vous \u00eates compt\u00e9. Le groupe vous rejoint au pied ou sur l'\u00e9chelle. Redescendre annule le d\u00e9part."))
+						  : BR_STR(NSLOCTEXT("BR", "HUD.ClimbWaitMate", "Sur l'\u00e9chelle : vous \u00eates compt\u00e9. Attendez le groupe.")))
+			: BR_STR(NSLOCTEXT("BR", "HUD.DepartureHelpLadder", "Rejoignez le pied de l'\u00e9chelle (moins de 8 m, m\u00eame \u00e9tage) ou montez-y."));
+	}
 	if (D.Carried > 0)
 	{
 		Line2 += TEXT("  ") + BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DepartureCarried", "{Count} {Count}|plural(one=joueur \u00e0 terre emmen\u00e9,other=joueurs \u00e0 terre emmen\u00e9s)."), { { TEXT("Count"), BRLoc::Int(D.Carried) } });

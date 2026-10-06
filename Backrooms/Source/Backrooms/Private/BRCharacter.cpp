@@ -3713,6 +3713,7 @@ void ABRCharacter::StartClimb(ABRExit* Ladder)
 	ClimbLadder = Ladder;
 	ClimbInput = 0.f;
 	ClimbStepAcc = 0.f;
+	ClimbWait.Reset();
 	Move->StopMovementImmediately();
 	Move->SetMovementMode(MOVE_Flying);
 	// Face a l'echelle (le dos a la piece)
@@ -3735,6 +3736,7 @@ void ABRCharacter::StopClimb()
 	bClimbing = false;
 	ClimbLadder.Reset();
 	ClimbInput = 0.f;
+	ClimbWait.Reset();
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		if (!bSwimming)
@@ -3778,10 +3780,30 @@ void ABRCharacter::UpdateClimb(float Dt)
 		StopClimb(); // les pieds touchent le sol
 		return;
 	}
+	// v4.12 : au sommet, une seule demande de depart, puis une attente stable (pas une demande par image) : on ne monte
+	// pas plus haut, on attend le groupe ; redescendre annule (initiateur) ou rearme la demande
+	BRGather::FClimbWait::FOut Wait;
+	if (!W->IsTransitioning())
+	{
+		const FBRNetDeparture& D = W->GetDeparture();
+		const APlayerState* PS = GetPlayerState();
+		const bool bForThis = D.Target == L->Target && D.Serial == W->GetLevelSerial();
+		const bool bInitiator = PS && D.ByPlayerId == PS->GetPlayerId();
+		Wait = ClimbWait.Update(Dt, static_cast<float>(Pos.Z), TopZ, Up, D.Phase, D.Id, bForThis, bInitiator);
+		if (Wait.bClampTop && Up > 0.f)
+		{
+			Up = 0.f;
+		}
+	}
 	// Colle a l'echelle, monte et descend a 1,4 m/s
 	const FVector Anchor = L->GetClimbAnchor();
 	const float Pull = FMath::Min(1.f, Dt * 10.f);
-	const FVector Delta((Anchor.X - Pos.X) * Pull, (Anchor.Y - Pos.Y) * Pull, Up * 140.f * Dt);
+	float DZ = Up * 140.f * Dt;
+	if (!W->IsTransitioning() && Pos.Z + DZ > TopZ)
+	{
+		DZ = FMath::Max(0.f, TopZ - static_cast<float>(Pos.Z)); // le sommet de la montee, pas au-dela
+	}
+	const FVector Delta((Anchor.X - Pos.X) * Pull, (Anchor.Y - Pos.Y) * Pull, DZ);
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		Move->Velocity = FVector::ZeroVector;
@@ -3795,9 +3817,29 @@ void ABRCharacter::UpdateClimb(float Dt)
 		static const TCHAR* const Rungs[] = { TEXT("S_Step_Hard_1"), TEXT("S_Step_Hard_2"), TEXT("S_Step_Hard_3"), TEXT("S_Step_Hard_4") };
 		PlaySound2D(Rungs[FMath::RandRange(0, 3)], 0.35f);
 	}
-	if (GetActorLocation().Z >= TopZ && !W->IsTransitioning())
+	if (Wait.bSendRequest)
 	{
+		++ClimbRequestsSent;
 		L->FinishClimb(this);
+	}
+	if (Wait.bSendCancel)
+	{
+		if (HasAuthority())
+		{
+			W->ServerCancelDeparture(this);
+		}
+		else
+		{
+			ServerCancelDeparture();
+		}
+	}
+}
+
+void ABRCharacter::ServerCancelDeparture_Implementation()
+{
+	if (ABRWorld* W = ABRWorld::Get(this))
+	{
+		W->ServerCancelDeparture(this);
 	}
 }
 
@@ -4244,6 +4286,7 @@ void ABRCharacter::ClientDepartureRefused_Implementation(uint8 Reason)
 
 void ABRCharacter::NotifyDepartureRefused(uint8 Reason)
 {
+	ClimbWait.OnRefused(); // v4.12 : au sommet d'une echelle, on reste sans redemander
 	FString Msg;
 	switch (Reason)
 	{
