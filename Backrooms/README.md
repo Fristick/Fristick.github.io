@@ -7,7 +7,47 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.10** (fiabilité, fluidité, finition) : d'abord des corrections, aucune fonction nouvelle.
+**Version 4.11** (missions des douze niveaux, transactions coop, créatures lisibles) :
+
+- **Où lire** : constats sur la base dans [`Docs/AUDIT_v4.11.md`](Docs/AUDIT_v4.11.md) ; corrections, vérifications,
+  commandes, résultats et limites dans [`Docs/RAPPORT_v4.11.md`](Docs/RAPPORT_v4.11.md) ; règles de chaque niveau,
+  variantes et parades contre les neuf entités dans [`Docs/GAMEPLAY_v4.11.md`](Docs/GAMEPLAY_v4.11.md) ; deux niveaux
+  proposés (non implémentés) dans [`Docs/PROPOSITIONS_NIVEAUX_v4.11.md`](Docs/PROPOSITIONS_NIVEAUX_v4.11.md) ;
+  journaux réels dans [`Docs/v411/`](Docs/v411/).
+
+> **Rien de compilé ni de lancé dans Unreal pour la v4.11** : ni moteur ni GPU dans le conteneur de travail. Les tests du
+> jeu (`-BRAutoTestV411`, `-BRNetTest`), les paquets, les captures et les images par seconde sont **préparés, non
+> exécutés**. Ce qui a été exécuté : le banc des missions (3000 graines × 12 niveaux), les tests des outils de
+> livraison, la vérification syntaxique du code (clang avec des en-têtes simplifiés), la localisation et les empreintes
+> des modèles protégés.
+
+- **Missions** : chaque niveau a sa mission, tirée de la graine du niveau, avec des indices à lire ou à observer et des
+  mécanismes (fusibles, vannes, relais, molettes, clés, balises, treuils, frein…). La sortie de progression reste
+  fermée tant que la mission n'est pas résolue ; une erreur se voit et se rattrape, sans impasse. Le Niveau 0 laisse
+  choisir la route (Niveau 1 ou Poolrooms) ; le Niveau 11 mène à une **fin** (le dernier quai). Règles dans le
+  document de gameplay.
+- **Coopération** :
+  - l'hôte décide de chaque action de mission (distance, ligne de vue, joueur vivant), de chaque **ramassage** (un seul
+    preneur, l'objet n'entre dans l'inventaire qu'une fois accepté) et de chaque soin ;
+  - le stock de soins n'est déclaré qu'une fois ; une réponse de soin répétée ou d'un ancien niveau n'est jamais
+    réappliquée ;
+  - **départ de groupe** : une sortie ouverte lance un départ annoncé, les coéquipiers proches sont attendus, un joueur
+    à terre est emmené.
+- **Sauvegardes** (format 4) : état de la mission et campagne. Une partie v4.10 ou plus ancienne reprend dans son
+  ancien mode (cassettes du Niveau 0) jusqu'à la sortie du niveau en cours ; rien n'est réinitialisé.
+- **Créatures** : cible choisie selon ce qu'elles perçoivent (vue, bruit) et gardée quelques secondes ; signes avant
+  une attaque (Smiler qui se crispe, Hound qui gronde, Faceling hostile qui se fige) ; Wretch et Clump ont enfin des
+  règles distinctes ; **budget de menace** qui évite d'empiler coupure et poursuites.
+- **Finition** : carnet dans l'inventaire avec aide progressive ; sous-titres des sons utiles avec leur direction ;
+  volumes séparés des effets et des voix ; Niveau 10 sous un soleil bas avec des nuages ; rues du Niveau 11 éclairées ;
+  337 nouveaux textes dans les 22 langues (traduction automatique, **non relue**).
+- **Outils de livraison** : un lancement de paquet en échec ou incomplet n'est plus un succès ; les binaires tronqués
+  donnent un ÉCHEC expliqué au lieu d'une exception ; signature Mac de l'intérieur vers l'extérieur (préparée, non
+  exécutée).
+- **Tests** : `-BRAutoTestV411` ; nouvelles étapes de `-BRNetTest` ; banc hors moteur `Tools/Missions/test_mission_logic.cpp`
+  (§ 9).
+
+**Nouveautés de la version 4.10** (fiabilité, fluidité, finition) : d'abord des corrections, aucune fonction nouvelle.
 
 - **Où lire** : chaque défaut, sa catégorie, sa correction, son test et son résultat, les mesures avant / après et ce
   qui reste à vérifier, dans [`Docs/RAPPORT_v4.10.md`](Docs/RAPPORT_v4.10.md).
@@ -873,22 +913,27 @@ L'image garde un léger grain et un effet VHS (désactivables), sans cadre de ca
 
 | N° | Titre (wiki) | Ambiance dans le jeu | Entités | Sorties |
 |---|---|---|---|---|
-| **0** | *Threshold* (« The Lobby ») | Salles jaunes (zone close de 112 m), papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent, sautent lors des coupures et **rougissent près de la Bacteria**. Placards et trous dans le mur pour se cacher | Bacteria (fait des rondes), Smilers (dans le noir et à chaque coupure) | Zone close de 112 m. Mur qui glitche → 1, échelle vers une trappe du plafond → 37 (on noclippe en montant). **Objectifs requis** : 6 cassettes VHS + filmer une coupure |
-| **1** | *Habitable Zone* | Entrepôt de béton brumeux, piliers, flaques, caisses | Smilers, Facelings, Hounds | Porte de secours → 2, ascenseur → 4 |
-| **2** | *Abandoned Utility Halls* (« Pipe Dreams ») | Labyrinthe de couloirs étroits, tuyaux, ampoules orange | Wretches, Hounds, Clump, Smilers | Porte → 3, échelle → 1 |
-| **3** | *Electrical Station* | Briques, grilles métalliques, armoires électriques, vacarme de machines | Hounds, Skin-Stealers, Smilers, Deathmoths, Wretches | Ascenseur → 4, porte → 2 |
-| **4** | *Abandoned Office* | Rangées de petits bureaux cloisonnés (ordinateur beige, chaise noire, fontaine à eau), allées à moquette bleu marine, faux plafond blanc ; quelques open spaces. Beaucoup d'eau d'amande | Facelings, Partygoer (rare) | Porte → 5, ascenseur → 1 |
-| **5** | *Terror Hotel* | Couloirs d'hôtel des années 1920, moquette rouge, appliques, portes numérotées | Skin-Stealers, Partygoers, Facelings | Porte « chaufferie » → 6 |
-| **6** | *Lights Out* | Obscurité totale : seule votre lampe éclaire | Smilers (nombreux) | Échelle → 8 |
-| **8** | *Cave System* | Grottes rocheuses, vieilles lampes de mine | Deathmoths, Clump, Hounds | Échelle → 9 |
-| **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10 |
-| **10** | *Field of Wheat* | Champ de blé infini sous un ciel couvert, granges, poteaux | Faceling (paisible) | Grange → 11 |
-| **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour | Facelings (paisibles) | Porte d'immeuble → niveau aléatoire |
-| **37** | *Sublimity* (« Poolrooms ») | Couloirs en carrelage vert d'eau bordés de canaux et de trottoirs, arches en plein cintre, corniches sous un plafond en plâtre, grandes salles inondées à colonnades, plafonniers ovales et grandes verrières inclinées. Eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4 |
+| **0** | *Threshold* (« The Lobby ») | Salles jaunes (zone close de 112 m), papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent, sautent lors des coupures et **rougissent près de la Bacteria**. Placards et trous dans le mur pour se cacher | Bacteria (fait des rondes), Smilers (dans le noir et à chaque coupure) | Zone close de 112 m. Mur qui glitche → 1, échelle vers une trappe du plafond → 37 (on noclippe en montant). **Mission (v4.11)** : néons anormaux observés, panneau de trois cadrans, levier d'aiguillage qui choisit la route (1 ou 37). Une partie d'avant la v4.11 garde les 6 cassettes et l'enregistrement d'une coupure jusqu'à la sortie du niveau |
+| **1** | *Habitable Zone* | Entrepôt de béton brumeux, piliers, flaques, caisses | Smilers, Facelings, Hounds | Porte de secours → 2, ascenseur → 4. **Mission** : schéma, fusibles, deux circuits, appel de l'ascenseur |
+| **2** | *Abandoned Utility Halls* (« Pipe Dreams ») | Labyrinthe de couloirs étroits, tuyaux, ampoules orange | Wretches, Hounds, Clump, Smilers | Porte → 3, échelle → 1. **Mission** : plaque des pressions, manomètres, vannes (vapeur dissipée) |
+| **3** | *Electrical Station* | Briques, grilles métalliques, armoires électriques, vacarme de machines | Hounds, Skin-Stealers, Smilers, Deathmoths, Wretches | Ascenseur → 4, porte → 2. **Mission** : tableau de charge, boîte en défaut, relais |
+| **4** | *Abandoned Office* | Rangées de petits bureaux cloisonnés (ordinateur beige, chaise noire, fontaine à eau), allées à moquette bleu marine, faux plafond blanc ; quelques open spaces. Beaucoup d'eau d'amande | Facelings, Partygoer (rare) | Porte → 5 (derrière une grille), ascenseur → 1. **Mission** : planning, annuaire des archives, code à trois molettes |
+| **5** | *Terror Hotel* | Couloirs d'hôtel des années 1920, moquette rouge, appliques, portes numérotées | Skin-Stealers, Partygoers, Facelings | Porte « chaufferie » → 6, retour → 4. **Mission** : registre, trousseau, serrures, consigne de la chaudière |
+| **6** | *Lights Out* | Obscurité totale : seule votre lampe éclaire | Smilers (nombreux) | Échelle → 8. **Mission** : plaque en relief, chaîne de balises, alimentation de secours (sortie éclairée) |
+| **8** | *Cave System* | Grottes rocheuses, vieilles lampes de mine | Deathmoths, Clump, Hounds | Échelle → 9. **Mission** : marques gravées, treuils dans l'ordre, passerelle |
+| **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10. **Mission** : plans des maisons, boîtier de rue |
+| **10** | *Field of Wheat* | Champ de blé infini sous un soleil bas et des nuages (v4.11), granges, poteaux | Faceling (paisible) | Grange → 11. **Mission** : marque de clôture, tableau des granges, moulin, frein |
+| **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour ; rues éclairées (v4.11) | Facelings (paisibles) | **Mission** : générateur, chiffres de la route, destination → **fin** (le dernier quai). Porte d'immeuble → niveau aléatoire (route annexe) |
+| **37** | *Sublimity* (« Poolrooms ») | Couloirs en carrelage vert d'eau bordés de canaux et de trottoirs, arches en plein cintre, corniches sous un plafond en plâtre, grandes salles inondées à colonnades, plafonniers ovales et grandes verrières inclinées. Eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4. **Mission** : marques de niveau, sens du courant, deux vannes (passage sec découvert) |
 
 Chaque niveau est une grille **infinie** (sauf le Niveau 0, une zone close de 112 m depuis la v4.3) générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
 quartier pavillonnaire (9), espace ouvert (10), îlots urbains (11).
+
+**v4.11** : chaque niveau a une **mission** tirée de sa graine. La sortie de progression reste fermée jusqu'à sa
+résolution ; les sorties de retour restent ouvertes. Les étapes, indices et objets d'équipe sont dans le **carnet**
+(onglet de l'inventaire), avec une aide progressive. Règles complètes, variantes et menaces :
+[`Docs/GAMEPLAY_v4.11.md`](Docs/GAMEPLAY_v4.11.md).
 
 ---
 
@@ -911,6 +956,15 @@ en C++ : marche avec flexion des genoux, bras tendus pendant les poursuites, tê
 Les Hounds marchent à quatre pattes (pattes en deux segments). Les bras du Clump ondulent en huit faisceaux indépendants.
 Les entités se déplacent grâce à un **A\*** sur la grille du niveau, sans NavMesh.
 Le journal (**Tab**) enregistre chaque entité rencontrée, avec sa fiche et un conseil.
+
+**v4.11, règles lisibles** : une créature choisit sa cible selon ce qu'elle perçoit (vue d'abord, puis bruit ; un
+joueur caché compte moins) et la garde quelques secondes au lieu d'en changer sans cesse. Les mécanismes de mission
+font du bruit (manivelle, balise, relais) et attirent les créatures proches. Signes avant une attaque : le Smiler se
+crispe quand la lampe le vise (charge après un peu plus d'une seconde), le Hound gronde tête basse avant de mordre, le
+Faceling hostile se fige et crie, le Skin-Stealer s'arrête net quand on lui fait signe à la lampe. Le **Wretch** suit
+les bruits et s'arrête, haletant, après une longue course ; le **Clump** garde un passage et revient à son poste. Un
+**budget de menace** empêche d'empiler coupure et poursuites. Détails et parades :
+[`Docs/GAMEPLAY_v4.11.md`](Docs/GAMEPLAY_v4.11.md).
 
 ---
 
@@ -1277,6 +1331,31 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 - **Codes de sortie** (v4.10) : 0 aucun problème ; 1 au moins un problème ; avec `-BRAutoTestStrict`, 2 si une
   vérification n'a pas pu être faite. `Saved/AutoTest/Rapport.json` reprend le résultat, les problèmes et les
   vérifications « NON VÉRIFIÉ ». Avant la v4.10, le code valait toujours 0.
+- **`-BRAutoTestV411`** (v4.11, avec `-BRAutoTest`) lance seules les vérifications v4.11 ; elles sont aussi dans
+  `-BRAutoTest`. **Préparé, non exécuté** : écrit sans Unreal sous la main, à lancer en premier après la compilation.
+  Les parties du joueur et ses réglages sont rétablis à la fin (sauvegardes du test : `BR_AutoTestV411_*`) :
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV411 -BRAutoTestStrict
+  ```
+  - **missions des douze niveaux** (graine 4111) : sortie verrouillée avant ; solution du solveur partagé rejouée par de
+    vraies interactions (joueur placé devant chaque mécanisme, demande validée par l'hôte, retour comparé) ; sortie
+    ouverte après ; départ au Niveau 2 ; fin de campagne au Niveau 11 ;
+  - mécanisme hors de portée refusé ; ramassage demandé deux fois dans la même image (une seule acceptation) ; objet
+    trop loin refusé ;
+  - **ancienne partie** (format 3) : migrée, reprise en ancien mode, niveau suivant avec sa mission ;
+  - carnet et aide progressive, sous-titres, volumes séparés, choix de cible des créatures, bruit, budget de menace.
+
+  **`-BRNetTest`, v4.11** : état de la mission reçu à la connexion (empreinte, révision, contrôle), indice lu par le
+  client et validé par l'hôte, ramassage disputé (un seul gagnant), soin d'un ancien niveau refusé sans rien consommer,
+  départ de groupe (coéquipier attendu, puis départ commun).
+- **Banc des missions** (v4.11, hors moteur, C++ pur, exécuté) : 3000 graines par niveau, solveur qui n'utilise que ce
+  que le joueur voit, actions au hasard (aucune impasse), erreurs typiques, sauvegarde de l'état. Depuis `Backrooms/` :
+  ```sh
+  g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Missions/test_mission_logic.cpp \
+      Source/Backrooms/Private/BRMissionLogic.cpp Source/Backrooms/Private/BRMissionSolver.cpp -o test_missions
+  ./test_missions 3000
+  ```
+  Résultat et journaux : [`Docs/RAPPORT_v4.11.md`](Docs/RAPPORT_v4.11.md), [`Docs/v411/`](Docs/v411/).
 
 ---
 
