@@ -85,7 +85,9 @@ enum class EBRPickupResult : uint8
 	/** Plus de place pour cet objet */
 	Full,
 	/** Une demande est deja en attente */
-	Busy
+	Busy,
+	/** v4.12 : demande faite avant un reveil confirme par l'hote (inventaire d'une autre vie) : rien n'est attribue */
+	StaleLife
 };
 
 enum class EBREntityKind : uint8

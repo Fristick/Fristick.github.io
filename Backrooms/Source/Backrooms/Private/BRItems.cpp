@@ -1,4 +1,5 @@
 #include "BRItems.h"
+#include "BRTxnLogic.h"
 
 namespace
 {
@@ -52,6 +53,16 @@ namespace
 			TEXT("SM_Vest"), TEXT("I_Vest"), 1, EBREquipSlot::Chest, false, NSLOCTEXT("BR", "Item.Equiper", "\u00c9quiper"));
 		L[static_cast<int32>(EBRItem::Note)] = Make(NSLOCTEXT("BR", "Item.Note", "Note"), NSLOCTEXT("BR", "Item.Note2", "NOTE"), NSLOCTEXT("BR", "Item.NoteLaisseeVagabond", "Une note laiss\u00e9e par un vagabond."),
 			TEXT("SM_Note"), TEXT("I_Note"), 1, EBREquipSlot::None, false, NSLOCTEXT("BR", "Item.Lire", "Lire"));
+		// v4.12 : piles, emplacements et consommables viennent des regles partagees (BRTxn::Rule) : l'inventaire, la
+		// verification de place et le banc hors moteur lisent la meme table
+		for (int32 I = 0; I < L.Num(); ++I)
+		{
+			const BRTxn::FRule& R = BRTxn::Rule(static_cast<uint8>(I));
+			L[I].MaxStack = R.MaxStack;
+			L[I].bConsumable = R.bConsumable;
+			const int32 Preferred = BRTxn::PreferredSlot(static_cast<uint8>(I));
+			L[I].Slot = Preferred >= 0 ? static_cast<EBREquipSlot>(Preferred) : EBREquipSlot::None;
+		}
 		return L;
 	}
 }
@@ -67,15 +78,8 @@ namespace BRItems
 
 	bool CanEquipIn(EBRItem Item, EBREquipSlot Slot)
 	{
-		if (Item == EBRItem::None)
-		{
-			return true;
-		}
-		if (Item == EBRItem::Flashlight)
-		{
-			return Slot == EBREquipSlot::Hand || Slot == EBREquipSlot::Belt;
-		}
-		return Get(Item).Slot == Slot;
+		// v4.12 : regle partagee (lampe torche : main ou ceinture ; frontale : tete ; gilet : torse)
+		return BRTxn::CanEquipIn(static_cast<uint8>(Item), static_cast<int32>(Slot));
 	}
 
 	FText SlotName(EBREquipSlot Slot)

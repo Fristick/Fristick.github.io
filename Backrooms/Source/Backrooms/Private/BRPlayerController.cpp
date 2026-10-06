@@ -2106,6 +2106,7 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 				Session.bBlackoutRecorded = W->IsBlackoutRecorded();
 				Session.bEntityRecorded = W->IsEntityRecorded();
 				Session.Collected = W->GetCollectedList();
+				Session.Returned = W->GetReturnedList();
 				Session.bHasSpot = bHasSafeSpot;
 				Session.Spot = SafeSpot;
 				Session.Yaw = SafeYaw;

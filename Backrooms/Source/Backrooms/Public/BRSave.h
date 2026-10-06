@@ -30,6 +30,24 @@ struct FBRSavedItem
 	int32 Count = 0;
 };
 
+/** v4.12 : objet rendu au monde par l'hote : attribue a un joueur parti (deconnexion) avant d'en accuser reception.
+ *  Il reapparait a sa place, sous un nouvel identifiant, et se ramasse comme les autres */
+USTRUCT()
+struct FBRReturnedPickup
+{
+	GENERATED_BODY()
+
+	UPROPERTY(SaveGame)
+	uint64 Id = 0;
+
+	/** EBRItem */
+	UPROPERTY(SaveGame)
+	uint8 Item = 0;
+
+	UPROPERTY(SaveGame)
+	FVector Location = FVector::ZeroVector;
+};
+
 /** v4.7 : ce qu'il faut pour reprendre un niveau tel qu'on l'a laisse (meme disposition, objectifs, objets ramasses) */
 USTRUCT()
 struct FBRSessionState
@@ -73,6 +91,10 @@ struct FBRSessionState
 	/** Objets deja ramasses dans ce niveau (identifiants stables de ABRPickup) : ils ne reapparaissent pas */
 	UPROPERTY(SaveGame)
 	TArray<uint64> Collected;
+
+	/** v4.12 : objets rendus au monde et pas encore ramasses (nouveau champ, absent des sauvegardes anterieures) */
+	UPROPERTY(SaveGame)
+	TArray<FBRReturnedPickup> Returned;
 
 	/** Dernier point sur et au sol du joueur (pas au-dessus d'une fosse, pas dans l'eau profonde) */
 	UPROPERTY(SaveGame)
@@ -129,6 +151,11 @@ public:
 
 	UPROPERTY(SaveGame)
 	TArray<FBRSavedItem> Items;
+
+	/** v4.12 : objets acceptes par l'hote sans place au moment de la reponse ("mis de cote"), ranges des qu'une place se
+	 *  libere. Nouveau champ : une version anterieure l'ignore, et une sauvegarde anterieure n'en a pas */
+	UPROPERTY(SaveGame)
+	TArray<FBRSavedItem> Recovered;
 
 	UPROPERTY(SaveGame)
 	float Health = 100.f;

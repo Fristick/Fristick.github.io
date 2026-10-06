@@ -19,6 +19,8 @@
 #include "BRInteractables.h"
 #include "BRPhenomena.h"
 #include "BRWaterSim.h"
+#include "BRItems.h"
+#include "BRTxnLogic.h"
 
 #include "Algo/Reverse.h"
 #include "Components/AudioComponent.h"
@@ -176,6 +178,7 @@ void ABRWorld::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(ABRWorld, NetTension);
 	DOREPLIFETIME(ABRWorld, NetBlackout);
 	DOREPLIFETIME(ABRWorld, NetCollected);
+	DOREPLIFETIME(ABRWorld, NetReturned);
 	DOREPLIFETIME(ABRWorld, VHSFound);
 	DOREPLIFETIME(ABRWorld, LoreFound);
 	DOREPLIFETIME(ABRWorld, NetMission);
@@ -428,6 +431,16 @@ void ABRWorld::ClearLevel()
 	TearingDown.Empty();
 	LightRefreshQueue.Empty();
 
+	// v4.12 : objets rendus au monde (poses par le monde, pas par un chunk)
+	for (ABRPickup* P : ReturnedActors)
+	{
+		if (IsValid(P))
+		{
+			P->Destroy();
+		}
+	}
+	ReturnedActors.Reset();
+
 	TArray<TObjectPtr<ABREntity>> Copy = Entities;
 	Entities.Empty();
 	BlackoutEntities.Reset();
@@ -506,6 +519,7 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		TensionLength = FMath::FRandRange(35.f, 60.f);
 		TensionQuiet = 0.f;
 		NetCollected.Reset();
+		NetReturned.Reset();
 		VHSFound = 0;
 		LoreFound = 0;
 		bBlackoutRecorded = false;
@@ -549,6 +563,8 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 					Collected.Add(Id);
 					NetCollected.AddUnique(Id);
 				}
+				// v4.12 : objets rendus au monde, pas encore ramasses
+				NetReturned = Resume.Returned;
 				bHasResumeSpot = Resume.bHasSpot;
 				ResumeSpot = Resume.Spot;
 				ResumeYaw = Resume.Yaw;
@@ -702,6 +718,88 @@ void ABRWorld::OnRep_Blackout()
 	}
 }
 
+void ABRWorld::OnRep_Returned()
+{
+	SpawnReturnedPickups();
+}
+
+void ABRWorld::SpawnReturnedPickups()
+{
+	UWorld* W = GetWorld();
+	if (!W || !bLevelReady || (!HasAuthority() && NetLevel.Serial != LoadedSerial))
+	{
+		return;
+	}
+	ReturnedActors.RemoveAll([](const TObjectPtr<ABRPickup>& P) { return !IsValid(P); });
+	for (const FBRReturnedPickup& R : NetReturned)
+	{
+		if (IsCollected(R.Id) || R.Item == 0 || R.Item >= static_cast<uint8>(EBRItem::Count))
+		{
+			continue;
+		}
+		bool bPresent = false;
+		for (const ABRPickup* P : ReturnedActors)
+		{
+			bPresent |= P->Id == R.Id;
+		}
+		if (bPresent)
+		{
+			continue;
+		}
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (ABRPickup* P = W->SpawnActor<ABRPickup>(ABRPickup::StaticClass(), FTransform(FRotator::ZeroRotator, R.Location), Params))
+		{
+			P->Init(static_cast<EBRItem>(R.Item), R.Id, FString());
+			ReturnedActors.Add(P);
+		}
+	}
+}
+
+void ABRWorld::ServerReturnPickup(uint64 PickupId, EBRItem Item, const FVector& Where)
+{
+	if (!HasAuthority() || !bLevelReady || Item == EBRItem::None || Item == EBRItem::Note)
+	{
+		return;
+	}
+	FBRReturnedPickup R;
+	// Nouvel identifiant (l'ancien reste dans la liste des objets ramasses : il ne reapparait pas chez un client en retard)
+	R.Id = (PickupId * 0x9E3779B97F4A7C15ull) ^ (0x52455455524E0000ull + static_cast<uint64>(++ReturnCounter));
+	R.Item = static_cast<uint8>(Item);
+	R.Location = Where;
+	NetReturned.Add(R);
+	// Effets compenses : l'objet n'a jamais atteint un inventaire (le stock de soin du joueur parti n'existe plus)
+	if (Item == EBRItem::VHSTape)
+	{
+		if (Def().bRequireObjectives && IsLegacyObjectives())
+		{
+			VHSFound = FMath::Max(0, VHSFound - 1);
+			PrevVHSFound = VHSFound;
+		}
+		else
+		{
+			LoreFound = FMath::Max(0, LoreFound - 1);
+		}
+	}
+	SpawnReturnedPickups();
+	ForceNetUpdate();
+	UE_LOG(LogBackrooms, Log, TEXT("Objet %s rendu au monde (joueur parti sans accuse de reception) : %s"), *BRItems::Get(Item).Name.ToString(), *Where.ToString());
+}
+
+TArray<FBRReturnedPickup> ABRWorld::GetReturnedList() const
+{
+	TArray<FBRReturnedPickup> Out;
+	for (const FBRReturnedPickup& R : NetReturned)
+	{
+		if (!IsCollected(R.Id))
+		{
+			Out.Add(R);
+		}
+	}
+	return Out;
+}
+
 void ABRWorld::OnRep_Collected()
 {
 	for (const uint64 Id : NetCollected)
@@ -736,30 +834,25 @@ void ABRWorld::OnRep_Objectives()
 	bPrevEntityRecorded = bEntityRecorded;
 }
 
-EBRPickupResult ABRWorld::ServerTryCollect(ABRCharacter* By, uint64 Id, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, EBRItem& OutItem)
+EBRPickupResult ABRWorld::ServerTryCollect(ABRCharacter* By, uint64 Id, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, uint8 Epoch, EBRItem& OutItem,
+	FVector* OutWhere)
 {
 	OutItem = EBRItem::None;
 	if (!HasAuthority())
 	{
 		return EBRPickupResult::Unknown;
 	}
-	// Niveau : une demande faite dans un niveau precedent (ou pendant un changement) ne touche jamais le niveau courant
-	if (LevelSerial != LoadedSerial || !bLevelReady || TransState != ETrans::None)
-	{
-		return EBRPickupResult::StaleLevel;
-	}
-	if (!IsValid(By) || By->IsDead() || By->GetDeathState().bDead)
-	{
-		return EBRPickupResult::Dead;
-	}
-	if (By->IsLevelLoading())
-	{
-		return EBRPickupResult::Loading;
-	}
-	if (IsCollected(Id))
-	{
-		return EBRPickupResult::AlreadyTaken;
-	}
+	// v4.12 : l'hote mesure (niveau, etat du joueur, objet, distance, ligne de vue) ; la decision est la regle partagee
+	// (BRTxn::DecideServerPickup), verifiee hors moteur. Nouveau : l'epoque de l'inventaire (une demande faite avant un
+	// reveil n'est jamais servie dans le nouvel inventaire)
+	BRTxn::FServerPickupIn In;
+	In.bLevelMatches = LevelSerial == LoadedSerial && TransState == ETrans::None;
+	In.bLevelReady = bLevelReady;
+	In.bDead = !IsValid(By) || By->IsDead() || By->GetDeathState().bDead;
+	In.bLoading = IsValid(By) && By->IsLevelLoading();
+	In.Epoch = Epoch;
+	In.ServerEpoch = IsValid(By) ? By->GetDeathState().WakeCount : Epoch;
+	In.bCollected = IsCollected(Id);
 	ABRPickup* Pickup = nullptr;
 	for (TActorIterator<ABRPickup> It(GetWorld()); It; ++It)
 	{
@@ -770,29 +863,35 @@ EBRPickupResult ABRWorld::ServerTryCollect(ABRCharacter* By, uint64 Id, int32 Le
 		}
 	}
 	// Objet absent chez l'hote (identifiant forge, ou zone non construite) ou d'un autre type que celui annonce
-	if (!Pickup || static_cast<uint8>(Pickup->Item) != ExpectedItem || Pickup->Item == EBRItem::Note)
+	In.bExists = Pickup != nullptr;
+	In.bTypeMatches = Pickup && static_cast<uint8>(Pickup->Item) == ExpectedItem && Pickup->Item != EBRItem::Note;
+	if (Pickup && IsValid(By) && !In.bDead)
 	{
-		return EBRPickupResult::Unknown;
+		// Distance en 3D depuis les yeux (un etage au-dessus ne compte pas comme "a cote"), puis ligne de vue
+		const FVector Eye = By->GetEyeLocation();
+		const FVector Target = Pickup->GetActorLocation() + FVector(0.f, 0.f, 10.f);
+		In.bInReach = FVector::Dist(Eye, Target) <= PickupReachServer;
+		if (In.bInReach)
+		{
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRPickupLos), false, By);
+			Q.AddIgnoredActor(Pickup);
+			In.bVisible = !GetWorld()->LineTraceTestByChannel(Eye, Target, ECC_WorldStatic, Q);
+		}
 	}
-	// Distance en 3D depuis les yeux (un etage au-dessus ne compte pas comme "a cote")
-	const FVector Eye = By->GetEyeLocation();
-	const FVector Target = Pickup->GetActorLocation() + FVector(0.f, 0.f, 10.f);
-	if (FVector::Dist(Eye, Target) > PickupReachServer)
+	In.Room = Room;
+	static_assert(static_cast<uint8>(EBRPickupResult::StaleLife) == static_cast<uint8>(BRTxn::EPickup::StaleLife)
+		&& static_cast<uint8>(EBRPickupResult::Full) == static_cast<uint8>(BRTxn::EPickup::Full), "BRTxn::EPickup : memes valeurs que EBRPickupResult");
+	const BRTxn::EPickup Decision = BRTxn::DecideServerPickup(In);
+	if (Decision != BRTxn::EPickup::Accepted)
 	{
-		return EBRPickupResult::TooFar;
-	}
-	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRPickupLos), false, By);
-	Q.AddIgnoredActor(Pickup);
-	if (GetWorld()->LineTraceTestByChannel(Eye, Target, ECC_WorldStatic, Q))
-	{
-		return EBRPickupResult::NotVisible;
-	}
-	if (Room == 0)
-	{
-		return EBRPickupResult::Full;
+		return static_cast<EBRPickupResult>(Decision);
 	}
 	// Une seule operation : attribue, retire pour tous, stock de soin, effet sur le niveau
 	OutItem = Pickup->Item;
+	if (OutWhere)
+	{
+		*OutWhere = Pickup->GetActorLocation();
+	}
 	Collected.Add(Id);
 	NetCollected.AddUnique(Id);
 	DestroyPickup(Id);

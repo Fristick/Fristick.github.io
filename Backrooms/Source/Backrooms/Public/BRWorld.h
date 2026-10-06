@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "BRTypes.h"
 #include "BRMissionLogic.h"
+#include "BRSave.h"
 #include "BRWorld.generated.h"
 
 class ABRChunk;
@@ -200,7 +201,13 @@ public:
 	 *  charge), l'objet (existe, meme type, encore disponible), la distance 3D depuis les yeux du joueur et la ligne de vue,
 	 *  la place annoncee ; puis, en une seule operation : objet attribue et retire pour tous, stock de soin credite,
 	 *  cassette comptee (ancien mode du Niveau 0) ou document facultatif note. OutItem : objet attribue */
-	EBRPickupResult ServerTryCollect(ABRCharacter* By, uint64 Id, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, EBRItem& OutItem);
+	EBRPickupResult ServerTryCollect(ABRCharacter* By, uint64 Id, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, uint8 Epoch, EBRItem& OutItem,
+		FVector* OutWhere);
+	/** v4.12 : serveur : objet attribue a un joueur parti avant d'en accuser reception : il revient dans le monde (nouvel
+	 *  identifiant, meme place) et ses effets sont compenses (cassette decomptee) */
+	void ServerReturnPickup(uint64 PickupId, EBRItem Item, const FVector& Where);
+	/** v4.12 : objets rendus au monde pas encore ramasses (sauvegarde de la session) */
+	TArray<FBRReturnedPickup> GetReturnedList() const;
 	/** v4.11 : distance maximale (cm, 3D, depuis les yeux) acceptee par l'hote pour un ramassage : portee de visee (260)
 	 *  plus la marge du reseau */
 	static constexpr float PickupReachServer = 420.f;
@@ -587,6 +594,15 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_Collected)
 	TArray<uint64> NetCollected;
 
+	/** v4.12 : objets rendus au monde dans ce niveau */
+	UPROPERTY(ReplicatedUsing = OnRep_Returned)
+	TArray<FBRReturnedPickup> NetReturned;
+	UPROPERTY()
+	TArray<TObjectPtr<class ABRPickup>> ReturnedActors;
+	uint32 ReturnCounter = 0;
+	/** Fait apparaitre les objets rendus qui ne sont ni ramasses ni deja presents */
+	void SpawnReturnedPickups();
+
 	UPROPERTY(Replicated)
 	uint8 NetTension = 0;
 
@@ -611,6 +627,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_Collected();
+
+	UFUNCTION()
+	void OnRep_Returned();
 
 	UFUNCTION()
 	void OnRep_Objectives();

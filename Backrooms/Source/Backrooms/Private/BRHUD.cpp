@@ -4241,6 +4241,31 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 	{
 		VLabel(BR_STR(NSLOCTEXT("BR", "HUD.Stockage", "STOCKAGE")), ColX[1] + 28.f * U, FirstStorage->Y, Yellow, 0.75f * U);
 	}
+	// v4.12 : objets acceptes par l'hote sans place a la reponse : listes sous le sac, ranges automatiquement
+	if (C && C->Recovered.Num() > 0)
+	{
+		float Bottom = 0.f, Left = 0.f, Right = 0.f;
+		for (const FSlotBox& B : Slots)
+		{
+			if (B.Ref.Group == EBRSlotGroup::Storage)
+			{
+				Bottom = FMath::Max(Bottom, B.Y + B.S);
+				Left = Left == 0.f ? B.X : FMath::Min(Left, B.X);
+				Right = FMath::Max(Right, B.X + B.S);
+			}
+		}
+		FString Items;
+		for (const FBRItemSlot& R : C->Recovered)
+		{
+			if (!R.IsEmpty())
+			{
+				Items += (Items.IsEmpty() ? FString() : FString(TEXT(", "))) + FString::Printf(TEXT("%s x%d"), *BRItems::Get(R.Item).Name.ToString(), R.Count);
+			}
+		}
+		const FString Line = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.RecoveredItems", "MIS DE C\u00d4T\u00c9 : {Items}  -  faites de la place, ils se rangent tout seuls"),
+			{ { TEXT("Items"), BRLoc::Arg(Items) } });
+		TxtLine(Line, Left, Bottom + 8.f * U, Right - Left, Yellow, 0.72f * U, GEngine->GetSmallFont());
+	}
 
 	// ---------------- Colonne de droite : EQUIPEMENT
 	Panel(ColX[2], IY, ColW[2], IH, BR_STR(NSLOCTEXT("BR", "HUD.Equipement", "\u00c9QUIPEMENT")));

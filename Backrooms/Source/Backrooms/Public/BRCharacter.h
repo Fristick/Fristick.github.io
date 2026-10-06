@@ -8,6 +8,7 @@
 #include "GameFramework/Character.h"
 #include "BRTypes.h"
 #include "BRRig.h"
+#include "BRTxnLogic.h"
 #include "BRCharacter.generated.h"
 
 class UCameraComponent;
@@ -55,6 +56,15 @@ struct FBRDeathState
 	 *  sa propre langue (aucun texte ne circule) */
 	UPROPERTY()
 	int8 Killer = -1;
+
+	/** v4.12 : revision de la sante officielle a cet evenement (commune aux coups, soins, morts, releves et reveils) */
+	UPROPERTY()
+	uint16 HealthRev = 0;
+
+	/** v4.12 : reveils (equipement de depart) confirmes par le serveur : l'epoque de l'inventaire. Une reponse de l'hote
+	 *  d'une autre epoque ne touche pas l'inventaire de la nouvelle vie */
+	UPROPERTY()
+	uint8 WakeCount = 0;
 };
 
 UCLASS()
@@ -70,6 +80,8 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	/** v4.12, serveur : un joueur qui part (deconnexion) sans avoir accuse reception d'un objet attribue le rend au monde */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	/** Reception d'un saut : gerbe d'eau si on atterrit dans l'eau */
@@ -172,8 +184,20 @@ public:
 	int32 GetServerHealStock(EBRItem Item) const;
 	/** v4.10 : serveur : objet de soin ramasse par ce joueur (pickup confirme) */
 	void CreditHealItem(EBRItem Item, int32 Count);
-	/** Ajoute un objet (poches puis sac). Retourne le nombre NON ajoute (0 = tout est rentre). */
+	/** Ajoute un objet (piles, equipement libre compatible, cases vides). Retourne le nombre NON ajoute (0 = tout est
+	 *  rentre). v4.12 : meme algorithme que la verification de place (BRTxn) */
 	int32 AddItem(EBRItem Item, int32 Count = 1);
+	/** v4.12 : objets acceptes par l'hote sans place au moment de la reponse : "mis de cote", ranges des qu'une place se
+	 *  libere, gardes dans la sauvegarde. Un objet accepte n'est jamais perdu */
+	TArray<FBRItemSlot> Recovered;
+	/** v4.12 : range dans l'inventaire ce qui peut l'etre ; retour : exemplaires ranges */
+	int32 StowRecovered(bool bNotify = true);
+	int32 CountRecovered() const;
+	/** v4.12 : epoque de l'inventaire (reveils confirmes par l'hote, plus un reveil local en attente de confirmation) */
+	uint8 GetInvEpoch() const;
+	/** v4.12 : l'inventaire vu par les regles partagees (BRTxn), et son retour */
+	BRTxn::FInv ToTxn() const;
+	void FromTxn(const BRTxn::FInv& Inv);
 	/** Deplace / empile / echange le contenu de deux cases (glisser-deposer) */
 	bool MoveItem(EBRSlotGroup FromGroup, int32 FromIndex, EBRSlotGroup ToGroup, int32 ToIndex);
 	/** Double-clic : consomme, equipe ou desequipe */
@@ -323,26 +347,29 @@ protected:
 	void ServerReportRespawn();
 
 	/** v4.8 : effet d'un coup decide par le serveur (secousse, son, jumpscare) et sante qui en resulte, a appliquer telle
-	 *  quelle. SourceKind : EBREntityKind de l'entite (-1 : autre) ; Serial : numero du coup (accuse dans ServerSyncVitals) */
+	 *  quelle. SourceKind : EBREntityKind de l'entite (-1 : autre). v4.12 : Rev, revision de la sante (commune aux coups,
+	 *  soins, morts et reveils) ; Epoch, vie du joueur : un coup d'une vie terminee ou plus ancien que l'etat recu est
+	 *  ignore */
 	UFUNCTION(Client, Reliable)
-	void ClientHitFeedback(float Damage, float SanityDamage, AActor* Source, int8 SourceKind, float NewHealth, uint16 Serial, bool bLethal);
+	void ClientHitFeedback(float Damage, float SanityDamage, AActor* Source, int8 SourceKind, float NewHealth, uint16 Rev, uint8 Epoch, bool bLethal);
 
-	/** v4.8 : le proprietaire envoie sa sante (noyade, folie, recuperation) au serveur, avec le dernier coup et (v4.10) le
-	 *  dernier soin recus ; un envoi anterieur au dernier coup ou au dernier soin est ignore (il l'effacerait), une hausse est
+	/** v4.8 : le proprietaire envoie sa sante (noyade, folie, recuperation) au serveur. v4.12 : avec la derniere revision
+	 *  recue ; un envoi parti avant un coup, un soin, une mort ou un reveil est ignore (il l'effacerait), une hausse est
 	 *  plafonnee */
 	UFUNCTION(Server, Unreliable, WithValidation)
-	void ServerSyncVitals(float InHealth, uint16 AckSerial, uint16 AckHeal);
+	void ServerSyncVitals(float InHealth, uint16 AckRev);
 
 	/** v4.10 : soin par un objet (eau d'amande, bandage) : demande numerotee. Le serveur verifie l'etat (vivant, pas en
 	 *  train de mourir), le delai entre deux soins et la possession (objets de soin declares a l'arrivee, plus ceux ramasses
 	 *  depuis), puis applique le soin a la sante officielle et repond. L'objet n'est consomme qu'a l'acceptation. */
 	UFUNCTION(Server, Reliable, WithValidation)
-	void ServerRequestHeal(uint8 Item, uint16 RequestId, int32 LevelSerial);
-	/** v4.10 : reponse du serveur : acceptee (sante officielle et numero du soin) ou refusee (raison : EBRHealRefusal).
-	 *  v4.11 : avec le numero du niveau de la demande ; une reponse deja appliquee est ignoree, une reponse d'un niveau
-	 *  precedent ne fait que reconcilier la quantite et la sante officielle (aucun effet rejoue) */
+	void ServerRequestHeal(uint8 Item, uint16 RequestId, int32 LevelSerial, uint8 Epoch);
+	/** v4.10 : reponse du serveur : acceptee (sante officielle) ou refusee (raison : EBRHealRefusal). v4.11 : avec le
+	 *  numero du niveau de la demande. v4.12 : avec la revision de la sante et l'epoque de l'inventaire ; la quantite et
+	 *  la sante sont reconciliees separement (BRTxn::DecideHeal) : l'objet n'est retire que dans la meme vie, la sante
+	 *  n'est ecrite que si aucun etat plus recent n'a ete recu, aucun effet n'est rejoue hors du niveau courant */
 	UFUNCTION(Client, Reliable)
-	void ClientHealResult(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Serial, uint8 Reason, int32 LevelSerial);
+	void ClientHealResult(uint8 Item, uint16 RequestId, bool bAccepted, float NewHealth, uint16 Rev, uint8 Reason, int32 LevelSerial, uint8 Epoch);
 	/** v4.10 : le proprietaire declare ses objets de soin au serveur. v4.11 : une seule fois par session (inventaire de
 	 *  depart ou de la sauvegarde) ; une declaration repetee ou en retard est ignoree et ne peut plus reintroduire des
 	 *  objets consommes. Ensuite, seuls les ramassages et les soins acceptes par l'hote changent ce stock */
@@ -354,10 +381,17 @@ protected:
 	 *  vivant et charge, niveau courant, objet encore disponible), attribue l'objet en une seule operation et repond.
 	 *  Une demande repetee recoit la meme reponse sans second effet */
 	UFUNCTION(Server, Reliable, WithValidation)
-	void ServerRequestPickup(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 ExpectedItem, uint8 Room);
-	/** v4.11 : reponse de l'hote (EBRPickupResult) ; seule une acceptation change l'inventaire, une seule fois */
+	void ServerRequestPickup(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, uint8 Epoch);
+	/** v4.11 : reponse de l'hote (EBRPickupResult) ; seule une acceptation change l'inventaire, une seule fois. v4.12 : avec
+	 *  l'epoque de l'inventaire au moment de l'attribution (BRTxn::DecidePickup) */
 	UFUNCTION(Client, Reliable)
-	void ClientPickupResult(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 Item, uint8 Result);
+	void ClientPickupResult(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 Item, uint8 Result, uint8 Epoch);
+	/** v4.12 : accuse de reception d'un objet attribue (range ou mis de cote) : l'hote n'a plus a le rendre au monde */
+	UFUNCTION(Server, Reliable)
+	void ServerAckPickup(uint16 RequestId);
+	/** v4.12 : reponse a un reveil signale (accepte, ou deja vivant pour le serveur) : fin du reveil en attente */
+	UFUNCTION(Client, Reliable)
+	void ClientWakeAck(uint8 WakeCount);
 public:
 	/** v4.11 : ramasser un objet : demande a l'hote (client) ou transaction directe (hote, partie solo) */
 	void RequestPickup(class ABRPickup* Pickup);
@@ -368,6 +402,19 @@ public:
 	/** v4.11 (tests) : reponses de soin ou de ramassage ignorees (repetees ou d'un ancien niveau) */
 	int32 IgnoredRepeatedResults = 0;
 	int32 StaleResultsReconciled = 0;
+	/** v4.12 (tests) : objets mis de cote, objets d'une vie terminee, coups ou soins d'un etat plus ancien ignores,
+	 *  deplacements refuses pour garder la place reservee ; serveur : objets rendus au monde a une deconnexion */
+	int32 RecoveredPickups = 0;
+	int32 LostWithLifeResults = 0;
+	int32 IgnoredStaleHealth = 0;
+	int32 ReservedMovesRefused = 0;
+	int32 ServerReturnedPickups = 0;
+	/** v4.12 (tests) : revision de la sante (serveur) et derniere revision recue (proprietaire) */
+	uint16 GetHealthRev() const { return HealthRev; }
+	uint16 GetAckHealthRev() const { return AckHealthRev; }
+	bool IsWakePending() const { return PendingWakeReports > 0; }
+	/** v4.12 (tests) : attributions de l'hote sans accuse de reception, dans ce niveau */
+	int32 CountUnackedPickups(int32 LevelSerial) const;
 	/** v4.11 : declaration du stock de soin acceptee par l'hote (une fois par session) */
 	bool IsHealStockDeclared() const { return bServerHealStockKnown; }
 
@@ -474,9 +521,14 @@ private:
 	bool bServerTeammateAtDeath = false;
 
 	// ---- v4.8 : sante decidee par le serveur ----
-	/** Numero du dernier coup applique par le serveur, et du dernier coup recu (proprietaire) */
-	uint16 HitSerial = 0;
-	uint16 AckHitSerial = 0;
+	/** v4.12 : revision de la sante officielle (serveur), commune aux coups, soins, morts, releves et reveils (avant :
+	 *  un numero pour les coups, un autre pour les soins, aucun pour le reveil) ; derniere revision recue (proprietaire) */
+	uint16 HealthRev = 0;
+	uint16 AckHealthRev = 0;
+	/** v4.12 : proprietaire : reveils confirmes par le serveur (ClientWakeAck), reveils locaux signales dont la reponse
+	 *  (confirmation ou refus, une par signalement, dans l'ordre) n'est pas encore arrivee */
+	uint8 KnownWakeCount = 0;
+	uint8 PendingWakeReports = 0;
 	/** Serveur : coup mortel recu, mort officielle a la fin du jumpscare (ou du delai de secours) */
 	bool bServerDying = false;
 	float ServerDyingTimer = 0.f;
@@ -484,11 +536,9 @@ private:
 	/** Serveur : dernier envoi de sante accepte et dernier soin par objet */
 	float ServerLastVitalsTime = -100.f;
 	float ServerLastHealTime = -100.f;
-	/** v4.10 : soins. Serveur : numero du dernier soin applique, objets de soin connus (declares + ramasses - utilises),
-	 *  derniere demande traitee (une demande renvoyee n'est jamais appliquee deux fois). Proprietaire : dernier soin recu,
-	 *  demande en attente de reponse, dernier soin local (meme delai que le serveur). */
-	uint16 HealSerial = 0;
-	uint16 AckHealSerial = 0;
+	/** v4.10 : soins. Serveur : objets de soin connus (declares + ramasses - utilises), derniere demande traitee (une
+	 *  demande renvoyee n'est jamais appliquee deux fois). Proprietaire : demande en attente de reponse, dernier soin local
+	 *  (meme delai que le serveur). */
 	/** v4.10 : derniere sante officielle recue du serveur (coup ou soin) : tests de coherence */
 	float LastServerHealth = -1.f;
 	TMap<uint8, int32> ServerHealStock;
@@ -511,7 +561,11 @@ private:
 		uint8 Item = 0;
 		uint8 Result = 0;
 		float Health = 0.f;
-		uint16 Serial = 0;
+		/** v4.12 : revision de la sante et epoque de l'inventaire de la reponse */
+		uint16 Rev = 0;
+		uint8 Epoch = 0;
+		/** Missions : nombre d'elements (retour Wrong) */
+		uint8 Count = 0;
 	};
 	static constexpr int32 TxnHistory = 32;
 	FBRTxnRecord ServerHealHistory[TxnHistory];
@@ -533,6 +587,13 @@ private:
 	};
 	FBRPendingPickup PendingPickup;
 	uint16 NextPickupRequest = 0;
+	/** v4.12, serveur : objets attribues a ce joueur en attente de son accuse de reception */
+	BRTxn::FLedger PickupLedger;
+	/** v4.12 : deplacement refuse : il prendrait la place reservee a l'objet en cours de ramassage */
+	bool CheckReservation(const BRTxn::FInv& After);
+	/** v4.12 : range un objet attribue (inventaire, sinon reserve "mis de cote") ; effets si demande */
+	void StorePickup(EBRItem Item, bool bEffects);
+	float StowTimer = 0.f;
 	/** v4.11 : missions. Serveur : reponses deja donnees ; proprietaire : reponses appliquees, maintien en cours */
 	FBRTxnRecord ServerMissionHistory[TxnHistory];
 	int32 ServerMissionHistoryNext = 0;
@@ -551,13 +612,15 @@ private:
 	static bool WasApplied(const uint16 (&Applied)[TxnHistory], uint16 RequestId);
 	static void RememberApplied(uint16 (&Applied)[TxnHistory], int32& Next, uint16 RequestId);
 	/** Reponse a une demande de ramassage, chez le joueur qui l'a faite (client, ou hote/solo directement) */
-	void HandlePickupResult(uint64 PickupId, uint16 RequestId, int32 LevelSerial, EBRItem Item, EBRPickupResult Result);
+	void HandlePickupResult(uint64 PickupId, uint16 RequestId, int32 LevelSerial, EBRItem Item, EBRPickupResult Result, uint8 Epoch);
 	/** Message d'un ramassage refuse */
 	void NotifyPickupRefused(EBRPickupResult Result);
-	/** Place libre pour un exemplaire de cet objet (poches et sac) */
+	/** Place libre pour cet objet. v4.12 : meme regle que l'ajout (equipement libre compatible compris) */
 	int32 RoomFor(EBRItem Item) const;
 	/** Soin accepte : objet consomme, sante officielle, effets */
 	void ApplyHealAccepted(EBRItem Item, float NewHealth);
+	/** v4.12 : effets d'un soin accepte : propre a l'objet (sante mentale de l'eau d'amande), son et message */
+	void ApplyHealEffects(EBRItem Item, bool bItemEffect, bool bEffects);
 	/** Message d'un soin refuse (rien n'est consomme) */
 	void NotifyHealRefused(uint8 Reason);
 	/** Proprietaire : envoi periodique de la sante */

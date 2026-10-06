@@ -1155,7 +1155,7 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		}
 		TestCountA = C->CountItem(EBRItem::Bandage);
 		// La demande porte le numero du niveau precedent : comme un soin parti juste avant un changement de niveau
-		C->ServerRequestHeal(static_cast<uint8>(EBRItem::Bandage), 60001, W->GetLevelSerial() - 1);
+		C->ServerRequestHeal(static_cast<uint8>(EBRItem::Bandage), 60001, W->GetLevelSerial() - 1, C->GetInvEpoch());
 		return true;
 	});
 	Add(TEXT("v4.11 reseau : soin perime refuse"), 2.f, [this, bClient]()
