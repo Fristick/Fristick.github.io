@@ -2235,7 +2235,7 @@ void ABRChunk::SpawnPlannedExit(int32 Index)
 		Exit->Init(P.Target, P.Style);
 		if (P.Style == EBRExitStyle::Ladder)
 		{
-			Exit->InitLadder(D.WallHeight, P.Shaft);
+			Exit->InitLadder(D.WallHeight - static_cast<float>(P.Pos.Z), P.Shaft); // v4.12 : depuis le pied (trottoir)
 		}
 		Spawned.Add(Exit);
 	}

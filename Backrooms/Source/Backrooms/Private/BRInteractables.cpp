@@ -399,6 +399,51 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 	}
 }
 
+void ABRExit::SetMissionOpen(bool bOpen, bool bAnimate)
+{
+	const int8 Want = bOpen ? 1 : 0;
+	if (MissionOpen == Want || IsSealed())
+	{
+		return;
+	}
+	const bool bFirst = MissionOpen < 0;
+	MissionOpen = Want;
+	UBRAssets* A = UBRAssets::Get(this);
+	if (Light && Style != EBRExitStyle::HouseDoor)
+	{
+		// Voyant : rouge et plus faible tant que la mission garde la sortie, vert (sa lueur d'origine) une fois ouverte
+		Light->SetLightColor(bOpen ? FLinearColor(0.3f, 1.f, 0.4f) : FLinearColor(1.f, 0.2f, 0.12f));
+		Light->SetIntensity(bOpen ? 150.f : 90.f);
+	}
+	if (Style == EBRExitStyle::Elevator && A)
+	{
+		if (!IndicatorMID)
+		{
+			// Voyant d'appel au-dessus des portes : fleche rouge eteinte sans courant, verte quand la cabine est la
+			IndicatorMID = A->NewGlow(this, FLinearColor(1.f, 0.2f, 0.1f), 0.f);
+			UStaticMeshComponent* Ind = NewObject<UStaticMeshComponent>(this);
+			Ind->SetupAttachment(Root);
+			Ind->SetStaticMesh(A->Cube());
+			Ind->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Ind->SetRelativeLocation(FVector(6.f, 0.f, 245.f));
+			Ind->SetRelativeScale3D(FVector(0.03f, 0.34f, 0.1f));
+			Ind->SetMaterial(0, IndicatorMID);
+			Ind->SetCastShadow(false);
+			Ind->RegisterComponent();
+			LadderParts.Add(Ind);
+		}
+		IndicatorMID->SetVectorParameterValue(TEXT("Emissive"), bOpen ? FLinearColor(0.2f, 1.f, 0.3f) * 8.f : FLinearColor(1.f, 0.15f, 0.05f) * 1.2f);
+		if (bOpen && bAnimate && !bFirst)
+		{
+			if (USoundBase* S = A->Sound(TEXT("S_Objective")))
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation() + FVector(0.f, 0.f, 200.f), 0.6f, 1.6f, 0.f, A->Attenuation(2400.f, false));
+			}
+			ABRHUD::Caption(this, BR_STR(NSLOCTEXT("BR", "Caption.ElevatorArrives", "[Sonnerie : l'ascenseur est arriv\u00e9]")), GetActorLocation(), 4.f);
+		}
+	}
+}
+
 void ABRExit::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "BRTypes.h"
 #include "BRMissionLogic.h"
+#include "BRMechLogic.h"
 #include "BRSave.h"
 #include "BRWorld.generated.h"
 
@@ -427,6 +428,22 @@ public:
 	void SetGameplayLight(const AActor* LightOwner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn);
 	/** v4.12 (tests) : sources de gameplay actives */
 	int32 NumGameplayLights() const { return GameplayLights.Num(); }
+	/** v4.12 : eau locale d'une mission (bassins et sas des Poolrooms, BRMech) : volume enregistre par son mecanisme, sur
+	 *  chaque machine, d'apres l'etat replique. La surface s'anime vers sa cible a Speed cm/s (bSnap : tout de suite, a la
+	 *  reprise d'une partie ou a l'arrivee d'un joueur) */
+	void SetLocalWater(const AActor* WaterOwner, uint8 Slot, const BRMech::FWaterBox& Box, float Target, float Speed, bool bSnap);
+	/** Surface courante d'un volume local (-1e6 s'il n'existe pas) ; OutRate : variation (cm/s, signee) */
+	float GetLocalWaterSurface(const AActor* WaterOwner, uint8 Slot, float* OutRate = nullptr) const;
+	/** v4.12 : eau en P : le volume local qui contient P, sinon l'eau du niveau. Nage, profondeur, immersion de la camera,
+	 *  noyade et corps qui flotte passent par la */
+	BRMech::FWaterQuery WaterAt(const FVector& P) const;
+	int32 NumLocalWaters() const { return LocalWaters.Num(); }
+	/** v4.12 : passerelle du Niveau 8 (repere du module, tablier pose ou non) : la navigation des entites suit le meme etat
+	 *  que le sol et les collisions */
+	void SetBridgeNav(const BRMech::FFrame& Frame, bool bDown);
+	/** Etape suivante d'une entite au sol vers Goal quand l'un des deux est sur le module de la passerelle (marches, appui,
+	 *  tablier, palier) ; false : rien a contourner */
+	bool MissionNavDetour(const FVector& From, const FVector& Goal, FVector& OutWaypoint) const;
 	/** A* sur la grille (v4.6 : les cellules d'une salle de fosses coutent plus cher : on passe par la galerie si possible) */
 	bool FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes = 1500) const;
 
@@ -809,6 +826,25 @@ private:
 		TWeakObjectPtr<const AActor> Owner;
 	};
 	TMap<uint64, FGameplayLight> GameplayLights;
+	/** v4.12 : eau locale des mecanismes */
+	struct FLocalWater
+	{
+		TWeakObjectPtr<const AActor> Owner;
+		uint8 Slot = 0;
+		BRMech::FWaterBox Box;
+		float Target = 0.f;
+		float Speed = 0.f;
+		float Rate = 0.f;
+	};
+	TArray<FLocalWater> LocalWaters;
+	void UpdateLocalWaters(float Dt);
+	struct FBridgeNav
+	{
+		bool bActive = false;
+		bool bDown = false;
+		BRMech::FFrame Frame;
+	};
+	FBridgeNav BridgeNav;
 	uint8 SeenDeparturePhase = 0;
 	uint16 SeenDepartureId = 0;
 

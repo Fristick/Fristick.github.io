@@ -190,6 +190,8 @@ void ABRWorld::ClearMission()
 	}
 	MissionDevices.Reset();
 	GameplayLights.Reset(); // v4.12 : les sources des mecanismes partent avec eux
+	LocalWaters.Reset(); // v4.12 : l'eau locale des bassins et du sas aussi
+	BridgeNav = FBridgeNav();
 	for (ABRExit* E : MissionExits)
 	{
 		if (IsValid(E))
@@ -626,6 +628,41 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	{
 		return false;
 	}
+	// v4.12 : passerelle du Niveau 8 : l'echelle gardee s'adosse a une face dont la cellule d'en face est libre (le palier,
+	// l'interruption, l'appui et ses marches s'y etendent sur BRMech::Bridge::TotalLength)
+	const bool bBridgeModule = Plan.Level == 8 && !bBounded;
+	FIntPoint BridgeDir(0, 0);
+	bool bBridgeFace = false;
+	auto ModuleFace = [&](const FIntPoint& C, FIntPoint& OutDir)
+	{
+		TArray<FIntPoint> Ds;
+		Faces(C, Ds);
+		const int32 N = Ds.Num();
+		for (int32 K = 0; K < N; ++K)
+		{
+			const FIntPoint Dir = Ds[(CellHash(C, 0xB41Du) + static_cast<uint32>(K)) % static_cast<uint32>(N)];
+			const FIntPoint Front = C - Dir;
+			if (Dist.Contains(Front) && CanStep(C, Front) && !IsSpawnArea(Front.X, Front.Y) && !OutCells.Contains(Front))
+			{
+				OutDir = Dir;
+				return true;
+			}
+		}
+		return false;
+	};
+	if (bBridgeModule)
+	{
+		bBridgeFace = ModuleFace(Room, BridgeDir);
+		for (uint32 Salt = 1; Salt < 16 && !bBridgeFace; ++Salt)
+		{
+			FIntPoint Other(0, 0);
+			if (PickCell(4, 0x5A20u + Salt, true, 2, Other) && ModuleFace(Other, BridgeDir))
+			{
+				Room = Other;
+				bBridgeFace = true;
+			}
+		}
+	}
 	Used.Add(Room);
 	OutCells.Add(Room);
 	FIntPoint ExitFace(0, 0);
@@ -698,7 +735,11 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 			Faces(Cell, Dirs);
 			if (!bFloorStyle && Dirs.Num() > 0)
 			{
-				const FIntPoint Dir = Dirs[CellHash(Cell, 0xE517u + T) % static_cast<uint32>(Dirs.Num())];
+				FIntPoint Dir = Dirs[CellHash(Cell, 0xE517u + T) % static_cast<uint32>(Dirs.Num())];
+				if (T == 0 && bBridgeFace && Style == EBRExitStyle::Ladder)
+				{
+					Dir = BridgeDir;
+				}
 				const FBRMissionSpot F = FaceSpot(Cell, Dir, 0.f);
 				Spot.Pos = F.Pos;
 				Spot.Yaw = F.Yaw;
@@ -744,17 +785,41 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	{
 		if (OutExits.Num() > 0)
 		{
-			const FMissionExitSpot& E = OutExits[0];
+			FMissionExitSpot& E = OutExits[0];
 			FBRMissionSpot G;
 			const FVector Fwd = FRotator(0.f, E.Yaw, 0.f).Vector();
-			const float Ahead = E.Style == EBRExitStyle::Barn ? 525.f : (E.Style == EBRExitStyle::NoclipFloor ? 140.f : 48.f);
+			float Ahead = E.Style == EBRExitStyle::Barn ? 525.f : (E.Style == EBRExitStyle::NoclipFloor ? 140.f : 48.f);
+			// v4.12 : modules physiques devant l'echelle gardee : sas du passage sec (Poolrooms), passerelle (Niveau 8)
+			const bool bLadderFace = E.Style == EBRExitStyle::Ladder && bHasExitFace;
+			if (bLadderFace && Plan.Devices[GateDevice].Role == BRM::R_DryPassage)
+			{
+				Ahead = BRMech::Pool::ChannelLength;
+				G.Module = BRMech::Module::PoolLock;
+			}
+			else if (bLadderFace && bBridgeFace && Plan.Devices[GateDevice].Role == BRM::R_Bridge)
+			{
+				Ahead = BRMech::Bridge::FarDepth;
+				G.Module = BRMech::Module::Bridge;
+			}
 			G.Pos = E.Pos + Fwd * Ahead;
-			G.Pos.Z = FloorZAt(G.Pos);
+			// Le sas mesure son sol juste devant son entree (marche) ; les autres a leur pied
+			G.Pos.Z = FloorZAt(G.Module == BRMech::Module::PoolLock ? G.Pos + Fwd * 30.f : G.Pos);
 			G.Yaw = E.Yaw;
 			G.Cell = WorldToCell(G.Pos);
 			G.bWall = E.Style != EBRExitStyle::NoclipFloor && E.Style != EBRExitStyle::Barn;
 			G.bValid = true;
 			OutSpots[GateDevice] = G;
+			if (G.Module == BRMech::Module::PoolLock)
+			{
+				// L'echelle part du dallage du sas (au-dessus de l'eau des canaux)
+				E.Pos.Z = BRMech::Pool::SlabTop(D.WaterHeight, D.DeckHeight);
+			}
+			else if (G.Module == BRMech::Module::Bridge)
+			{
+				// L'echelle part du palier ; la cellule d'en face porte l'appui et ses marches
+				E.Pos.Z = G.Pos.Z + BRMech::Bridge::FarTop;
+				OutCells.Add(Room - BridgeDir);
+			}
 		}
 		else
 		{
@@ -838,6 +903,40 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		else
 		{
 			OutSpots[I] = PostSpot(C, 0.f, 0x7300u + I);
+		}
+	}
+	// v4.12 : Poolrooms : les deux bassins sont adosses au mur de la vanne A ; la vanne B est fixee a cote d'elle, sur
+	// l'avant du bassin B (meme face). Sans place sur cette face, les vannes restent murales (sans bassins visibles)
+	if (Plan.Level == 37)
+	{
+		int32 SA = -1, SB = -1;
+		for (int32 I = 0; I < Plan.NumDevices; ++I)
+		{
+			if (Plan.Devices[I].Role == BRM::R_Sluice)
+			{
+				(Plan.Devices[I].Label == 0 ? SA : SB) = I;
+			}
+		}
+		if (SA >= 0 && SB >= 0 && OutSpots[SA].bValid && OutSpots[SA].bWall)
+		{
+			FBRMissionSpot& A = OutSpots[SA];
+			const FVector Fwd = FRotator(0.f, A.Yaw, 0.f).Vector();
+			const FVector Left(-Fwd.Y, Fwd.X, 0.f);
+			const float Lat = static_cast<float>(FVector::DotProduct(A.Pos - CellCenter(A.Cell, 0.f), Left));
+			const float Half = S * 0.5f - D.WallThickness * 0.5f;
+			if (Lat + BRMech::Pool::AY0 - BRMech::Pool::Wall >= -Half && Lat + BRMech::Pool::BY1 + BRMech::Pool::Wall <= Half)
+			{
+				FBRMissionSpot B = A;
+				B.Pos = A.Pos + Left * BRMech::Pool::WheelLateralB + Fwd * BRMech::Pool::TankDepth;
+				A.Pos += Fwd * BRMech::Pool::TankDepth;
+				A.Pos.Z = FloorZAt(A.Pos + Fwd * 40.f);
+				B.Pos.Z = FloorZAt(B.Pos + Fwd * 40.f);
+				A.Cell = WorldToCell(A.Pos);
+				B.Cell = WorldToCell(B.Pos);
+				A.Module = BRMech::Module::PoolTanks;
+				B.Module = BRMech::Module::PoolWheelB;
+				OutSpots[SB] = B;
+			}
 		}
 	}
 	for (const FBRMissionSpot& Spot : OutSpots)
@@ -1081,7 +1180,9 @@ void ABRWorld::SpawnMissionActors()
 			Exit->Init(Spot.Target, Spot.Style);
 			if (Spot.Style == EBRExitStyle::Ladder)
 			{
-				Exit->InitLadder(Def().WallHeight, Spot.Shaft);
+				// v4.12 : hauteur jusqu'au plafond depuis le pied de l'echelle (trottoir, dallage du sas, palier) : avant, une
+				// echelle posee a 68 cm visait un sommet au-dessus du plafond et la montee s'y bloquait
+				Exit->InitLadder(Def().WallHeight - static_cast<float>(Spot.Pos.Z), Spot.Shaft);
 			}
 			Exit->SetActorHiddenInGame(true);
 			Exit->SetActorEnableCollision(false);
@@ -1360,6 +1461,14 @@ void ABRWorld::OnMissionStateChanged(int32 Device, uint8 Feedback, bool bAnimate
 					}
 				}
 			}
+		}
+	}
+	// v4.12 : les sorties gardees montrent l'etat qui les valide (voyant ; ascenseur alimente du Niveau 1)
+	for (ABRExit* X : MissionExits)
+	{
+		if (IsValid(X) && BRM::IsExitGuarded(GetLevelNumber(), X->Target))
+		{
+			X->SetMissionOpen(BRM::IsExitOpen(MissionPlan, MissionState, X->Target), bAnimate);
 		}
 	}
 	if (E.bSolved && !bMissionSolvedSeen)
@@ -1825,6 +1934,117 @@ void ABRWorld::CloseEnding(bool bContinue)
 		// Route annexe : l'exploration continue dans un niveau au hasard (la fin est enregistree)
 		RequestTransition(-1);
 	}
+}
+
+// =====================================================================================================================
+// v4.12 : effets physiques des missions (eau locale, passerelle)
+// =====================================================================================================================
+
+void ABRWorld::SetLocalWater(const AActor* WaterOwner, uint8 Slot, const BRMech::FWaterBox& Box, float Target, float Speed, bool bSnap)
+{
+	if (!WaterOwner)
+	{
+		return;
+	}
+	FLocalWater* Found = nullptr;
+	for (FLocalWater& W : LocalWaters)
+	{
+		if (W.Owner.Get() == WaterOwner && W.Slot == Slot)
+		{
+			Found = &W;
+			break;
+		}
+	}
+	if (!Found)
+	{
+		Found = &LocalWaters.AddDefaulted_GetRef();
+		Found->Owner = WaterOwner;
+		Found->Slot = Slot;
+		bSnap = true;
+	}
+	const float Prev = Found->Box.Surface;
+	Found->Box = Box;
+	Found->Box.Surface = bSnap ? Target : Prev;
+	Found->Target = Target;
+	Found->Speed = Speed;
+	if (bSnap)
+	{
+		Found->Rate = 0.f;
+	}
+}
+
+float ABRWorld::GetLocalWaterSurface(const AActor* WaterOwner, uint8 Slot, float* OutRate) const
+{
+	for (const FLocalWater& W : LocalWaters)
+	{
+		if (W.Owner.Get() == WaterOwner && W.Slot == Slot)
+		{
+			if (OutRate)
+			{
+				*OutRate = W.Rate;
+			}
+			return W.Box.Surface;
+		}
+	}
+	if (OutRate)
+	{
+		*OutRate = 0.f;
+	}
+	return -1.0e6f;
+}
+
+void ABRWorld::UpdateLocalWaters(float Dt)
+{
+	LocalWaters.RemoveAll([](const FLocalWater& W) { return !W.Owner.IsValid(); });
+	for (FLocalWater& W : LocalWaters)
+	{
+		const float Before = W.Box.Surface;
+		W.Box.Surface = BRMech::Approach(Before, W.Target, W.Speed, Dt);
+		W.Rate = Dt > 0.f ? (W.Box.Surface - Before) / Dt : 0.f;
+	}
+}
+
+BRMech::FWaterQuery ABRWorld::WaterAt(const FVector& P) const
+{
+	const FBRLevelDef& D = Def();
+	BRMech::FWaterBox Boxes[16];
+	int32 Num = 0;
+	for (const FLocalWater& W : LocalWaters)
+	{
+		if (Num < UE_ARRAY_COUNT(Boxes))
+		{
+			Boxes[Num++] = W.Box;
+		}
+	}
+	return BRMech::WaterAt(Boxes, Num, static_cast<float>(P.X), static_cast<float>(P.Y), static_cast<float>(P.Z), D.bWater, D.WaterHeight, FloorZAt(P));
+}
+
+void ABRWorld::SetBridgeNav(const BRMech::FFrame& Frame, bool bDown)
+{
+	BridgeNav.bActive = true;
+	BridgeNav.bDown = bDown;
+	BridgeNav.Frame = Frame;
+}
+
+bool ABRWorld::MissionNavDetour(const FVector& From, const FVector& Goal, FVector& OutWaypoint) const
+{
+	if (!BridgeNav.bActive)
+	{
+		return false;
+	}
+	BRMech::FVec3 F, G, Out;
+	F.X = static_cast<float>(From.X);
+	F.Y = static_cast<float>(From.Y);
+	F.Z = static_cast<float>(From.Z);
+	G.X = static_cast<float>(Goal.X);
+	G.Y = static_cast<float>(Goal.Y);
+	G.Z = static_cast<float>(Goal.Z);
+	if (!BRMech::Bridge::Detour(BridgeNav.Frame, BridgeNav.bDown, F, G, Out))
+	{
+		return false;
+	}
+	OutWaypoint = FVector(Out.X, Out.Y, Out.Z);
+	return true;
 }
 
 // =====================================================================================================================

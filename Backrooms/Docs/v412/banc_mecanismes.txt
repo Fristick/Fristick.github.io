@@ -1,0 +1,72 @@
+# Banc des mecanismes v4.12 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Mechanisms/test_mechanisms.cpp \
+#       Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_mechanisms && ./test_mechanisms
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-06T17:20:06Z
+
+Banc des mecanismes v4.12
+
+A. Eau locale
+  reperes tournes (0, 90, 180, 270 degres) : aller-retour exact, rectangle du monde correct            OK
+  dans le bassin : surface du bassin (160), fond du bassin (115)                                       OK
+  hors des volumes : eau du niveau (60 cm)                                                             OK
+  sas vide : pas d'eau (l'eau des canaux est sous le dallage), sol = dallage                           OK
+  bien au-dessus d'un bassin : le volume ne s'applique plus                                            OK
+  approche a vitesse constante, sans depasser la cible                                                 OK
+
+B. Bassins des Poolrooms (3000 graines, toutes positions des vannes)
+  plans des 3000 graines : deux vannes et un passage sec (3000)                                        OK
+  surface dans le bassin pour 108000 positions (au-dessus du fond, 10 cm sous le bord)                 OK
+  la regle graduee affiche la marque de la mission (bassin A 0-5, bassin B 0-7)                        OK
+  un cran de vanne = une marque = 15 cm ; A plus haut que B, les deux au-dessus des canaux             OK
+  B deborde exactement quand la mission le signale (4002 positions), a sa marque 7                     OK
+  resolution par actions -> marques voulues lues, mission resolue, passage ouvert (3000/3000)          OK
+
+C. Sas du passage sec
+  dallage au ras des trottoirs et au-dessus des canaux (70.0 cm)                                       OK
+  sas ferme : 100.0 cm d'eau (moins que la nage : 120.0)                                               OK
+  sas vide : surface sous le dallage (passage sec)                                                     OK
+  vidange en 5.2 s, visible                                                                            OK
+  le deversoir retient toujours l'eau (sommet >= surface + 10 cm), puis s'efface au sol                OK
+  deversoir ferme sous le haut des murets (pas de debordement par l'entree)                            OK
+  marche d'entree depuis le canal : 35.0 puis 35.0 cm (<= 35)                                          OK
+  murets a 190.0 cm (du canal) et 122.0 cm (du trottoir) : hors de portee d'un saut (101.0)            OK
+  garde-corps jusqu'a 270.0 cm : on n'entre que par l'entree                                           OK
+  entre deux poteaux : 61.0 cm (< largeur d'un joueur, 68.0)                                           OK
+  passage sous la traverse de l'entree : 199.0 cm (> joueur debout, 176.0)                             OK
+  echelle sur le dallage : sommet 356.0, tete a 444.0 (< plafond 450)                                  OK
+  defaut de la base reproduit : echelle sur un trottoir, sommet vise 424.0 (tete a 512.0 > 450 : inatteignable) OK
+
+D. Acces sans plongee ni creature
+  devant les vannes : hors des bassins, au plus dans l'eau des canaux (sans nager)                     OK
+  volants a portee depuis la place devant les bassins (340.0 cm)                                       OK
+  de l'entree du sas a l'echelle : au sec sur tout le trajet                                           OK
+  Poolrooms : aucune entite dans la definition du niveau (rappel du lot 1, verifie par -BRAutoTestV412) OK
+
+E. Passerelle du Niveau 8
+  tablier pose : bout sur l'appui (X 240.0, axe 96.0)                                                  OK
+  continuite au palier : dessus du tablier a 140.1 (palier 140.0)                                      OK
+  continuite a l'appui : marche de 12.1 cm (<= 35)                                                     OK
+  pente 9.0 degres (marchable : < 44,7)                                                                OK
+  leve : tablier vertical (90.0 degres), mur de 243.0 cm au bord du palier                             OK
+  palier inaccessible du sol (140.0 cm > saut 66.0 + marche 35.0)                                      OK
+  marches de l'appui franchissables sans sauter (<= 35 cm)                                             OK
+  chute du tablier ou du palier : 140.0 cm au plus (aucune mort de chute hors des fosses)              OK
+  contournement au sol des deux cotes (couloir de 400 cm : 90.0 cm > 68.0)                             OK
+  longueur du module 480.0 cm : dans la salle et la cellule d'en face (<= 600)                         OK
+  pendant la descente, le bout du tablier ne passe jamais sous l'appui                                 OK
+  treuils dans l'ordre (500 graines) : la passerelle descend sans jamais remonter                      OK
+  troisieme treuil : mission resolue, tablier pose (progression 1), sortie ouverte                     OK
+
+F. Detour des entites (meme etat que le tablier)
+  tablier leve : l'entite attend au pied du palier (X local 40.0)                                      OK
+  tablier pose, au sol : d'abord le pied des marches (X local 415.0)                                   OK
+  au pied des marches : vers le haut de l'appui                                                        OK
+  sur l'appui : par le tablier jusqu'au palier                                                         OK
+  du palier vers la salle : par le tablier et l'appui                                                  OK
+  de l'appui vers la salle : par les marches, pas par-dessus l'interruption                            OK
+  loin du module : aucun detour                                                                        OK
+
+RESULTAT : OK (49 verifications, 0 echec(s))
+# code de sortie : 0

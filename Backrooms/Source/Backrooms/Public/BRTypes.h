@@ -62,6 +62,8 @@ struct FBRMissionSpot
 	FIntPoint Cell = FIntPoint::ZeroValue;
 	bool bWall = true;
 	bool bValid = false;
+	/** v4.12 : module physique construit par ce mecanisme (BRMech::Module : bassins, sas, passerelle ; 0 : aucun) */
+	uint8 Module = 0;
 };
 
 /** v4.11 : reponse de l'hote a une demande de ramassage (transaction unique : un seul gagnant par objet) */

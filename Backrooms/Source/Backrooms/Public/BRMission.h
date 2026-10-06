@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "BRMissionLogic.h"
+#include "BRMechLogic.h"
 #include "BRTypes.h"
 #include "BRMission.generated.h"
 
@@ -110,6 +111,56 @@ protected:
 	/** Piece affichee quand l'objet est present (fusible, cle) ou insere (prise) */
 	UPROPERTY()
 	TObjectPtr<UStaticMeshComponent> ItemMesh;
+
+	// ---- v4.12 : module physique (BRMech) : bassins et sas des Poolrooms, passerelle du Niveau 8 ----
+	/** Type de module (BRMech::Module), choisi par le placement (meme chez tous) */
+	uint8 Module = 0;
+	/** Pieces portantes ou bloquantes du module (collision coupee quand la zone est masquee) */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> ModuleSolids;
+	/** Surfaces d'eau (bassin A, bassin B ; ou sas) */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> WaterPlanes;
+	/** Doublures dont la ligne d'eau suit la surface */
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> WaterLineMIDs;
+	/** Regles graduees : colonne d'eau et flotteur (par bassin) */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> GaugeColumns;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> GaugeFloats;
+	/** Ecoulements visibles : transfert A -> B, vidange de B, debordement de B ; deversoir du sas */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> Flows;
+	/** Indicateurs de courant (roues a aubes dans un regard) */
+	UPROPERTY()
+	TArray<TObjectPtr<USceneComponent>> Paddles;
+	/** Passerelle : cables (portique -> bout du tablier) et mains courantes */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> Cables;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> Ropes;
+	/** Passerelle : progression affichee et cible (0 levee .. 1 posee) */
+	float ModuleProgress = 0.f;
+	float ModuleTarget = 0.f;
+	/** Debordement du bassin B (regle depassee) ; ecoulement deja annonce par un son */
+	bool bOverflow = false;
+	bool bFlowSound = false;
+	float FlowSoundCooldown = 0.f;
+	/** Index de la vanne B dans le plan (bassins) */
+	int32 SluiceBIndex = -1;
+	UStaticMeshComponent* AddSolid(const FVector& Min, const FVector& Max, UMaterialInterface* Mat, bool bBlockSight, USceneComponent* Parent = nullptr);
+	/** Tige ou cable d'un point a un autre (repere de l'acteur ou de Parent) */
+	UStaticMeshComponent* AddRod(const FVector& From, const FVector& To, float Thick, UMaterialInterface* Mat, USceneComponent* Parent = nullptr);
+	void PlaceRod(UStaticMeshComponent* Rod, const FVector& From, const FVector& To, float Thick);
+	BRMech::FFrame ModuleFrame() const;
+	void BuildPoolTanks();
+	void BuildPoolLock();
+	void BuildBridge();
+	void ApplyModuleState(const BRMission::FPlan& Plan, const BRMission::FState& State, const BRMission::FEval& Eval, bool bAnimate);
+	/** Animation du module ; true tant que quelque chose bouge */
+	bool UpdateModule(float Dt);
+	void SetModuleCollision(bool bOn);
 
 	UStaticMeshComponent* AddPart(UStaticMesh* Mesh, const FVector& Loc, const FRotator& Rot, const FVector& Size, UMaterialInterface* Mat,
 		USceneComponent* Parent = nullptr);

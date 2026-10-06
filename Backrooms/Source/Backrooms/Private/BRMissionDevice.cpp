@@ -178,7 +178,15 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 	Level = Plan.Level;
 	Cell = Spot.Cell;
 	bWall = Spot.bWall;
+	Module = Spot.Module;
 	SetActorLocationAndRotation(Spot.Pos, FRotator(0.f, Spot.Yaw, 0.f));
+	for (int32 I = 0; I < Plan.NumDevices; ++I)
+	{
+		if (Plan.Devices[I].Role == BRM::R_Sluice && Plan.Devices[I].Label == 1)
+		{
+			SluiceBIndex = I;
+		}
+	}
 
 	UBRAssets* A = UBRAssets::Get(this);
 	if (!A)
@@ -550,6 +558,22 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 		const float W = bBig ? 360.f : 170.f;
 		const float H = bBig ? 320.f : 250.f;
 		Pivot = MakePivot(FVector(0.f, 0.f, 0.f));
+		// v4.12 : sas du passage sec (Poolrooms) et passerelle (Niveau 8) : un vrai module, pas un volet
+		if (Module == BRMech::Module::PoolLock || Module == BRMech::Module::Bridge)
+		{
+			if (Module == BRMech::Module::PoolLock)
+			{
+				BuildPoolLock();
+			}
+			else
+			{
+				BuildBridge();
+			}
+			bAnimated = true;
+			Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			BoxExtent = FVector(1.f, 1.f, 1.f);
+			break;
+		}
 		switch (Device.Role)
 		{
 		case BRM::R_ReserveLights:
@@ -594,10 +618,22 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			bBlocking = true;
 			if (Device.Role == BRM::R_SteamDoor)
 			{
-				GlowMID = A->NewGlow(this, FLinearColor(0.9f, 0.92f, 0.95f), 0.4f);
-				for (int32 I = 0; I < 4; ++I)
+				// v4.12 : vapeur en voiles translucides (eau tres diffusante, presque sans absorption) qui ondulent devant la
+				// porte, au lieu de spheres opaques ; elles s'eteignent quand les vannes sont bien reglees. Une fuite sort
+				// d'une conduite au-dessus de la porte
+				const FBRSurface SteamS(TEXT("T_WaterNormal"), FLinearColor(0.86f, 0.88f, 0.9f), 180.f, 0.3f, 0.f);
+				UMaterialInterface* Steam = A->WaterMaterial(SteamS, 0.04f, 1.f, 0.7f, 0.9f);
+				AddPart(A->Cylinder(), FVector(18.f, 0.f, H + 14.f), FRotator(0.f, 0.f, 90.f), FVector(14.f, 14.f, W + 20.f), DarkMetal);
+				for (int32 I = 0; I < 6; ++I)
 				{
-					AddPart(A->Sphere(), FVector(30.f + I * 8.f, -40.f + I * 26.f, 40.f + I * 30.f), FRotator::ZeroRotator, FVector(50.f, 50.f, 50.f), GlowMID, Pivot);
+					const float Y = -W * 0.4f + I * W * 0.16f;
+					UStaticMeshComponent* Veil = AddPart(A->Plane(), FVector(26.f + (I % 2) * 14.f, Y, H * 0.55f), FRotator(0.f, I % 2 ? 70.f : -70.f, 90.f),
+						FVector(70.f, 110.f + (I % 3) * 25.f, 100.f), Steam);
+					if (Veil)
+					{
+						Veil->SetTranslucentSortPriority(1);
+						Flows.Add(Veil);
+					}
 				}
 				bAnimated = true;
 			}
@@ -611,6 +647,12 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 
 	Box->SetRelativeLocation(BoxCenter);
 	Box->SetBoxExtent(BoxExtent);
+	if (Module == BRMech::Module::PoolTanks)
+	{
+		// v4.12 : la vanne A porte les deux bassins (derriere elle), leurs regles graduees et leurs conduites
+		BuildPoolTanks();
+		bAnimated = true;
+	}
 }
 
 bool ABRMissionDevice::IsInteractable() const
@@ -663,6 +705,7 @@ void ABRMissionDevice::SetShown(bool bShow)
 		SetActorTickEnabled(false);
 	}
 	Box->SetCollisionEnabled(bShow && Device.Kind != BRM::EKind::Gate ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+	SetModuleCollision(bShow); // v4.12 : sol, parois et tablier du module n'existent que si la zone est construite
 	if (!bShow)
 	{
 		Blocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -768,6 +811,10 @@ void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& Sta
 		GateLight->SetIntensity(GateValue ? 1600.f : 0.f);
 	}
 	UpdateGameplayLights();
+	if (Module != BRMech::Module::None)
+	{
+		ApplyModuleState(Plan, State, Eval, bAnimate);
+	}
 	if (Device.Kind == BRM::EKind::Gate && bBlocking && bShown)
 	{
 		Blocker->SetCollisionEnabled(GateValue < 200 ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
@@ -949,6 +996,10 @@ void ABRMissionDevice::Tick(float DeltaSeconds)
 			Moving->SetRelativeLocation(FVector(10.f, 0.f, WorkZ + ShownPos * 6.f));
 			break;
 		case BRM::EKind::Gate:
+			if (Module != BRMech::Module::None)
+			{
+				break; // v4.12 : anime par UpdateModule (meme etat que l'eau, le sol et les collisions)
+			}
 			if (Device.Role == BRM::R_Bridge)
 			{
 				Moving->SetRelativeRotation(FRotator(-ShownPos * 90.f, 0.f, 0.f));
@@ -980,24 +1031,27 @@ void ABRMissionDevice::Tick(float DeltaSeconds)
 		{
 			GlowMID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(0.6f, 0.75f, 1.f) * (FMath::FRand() < 0.12f ? 30.f : 0.f));
 		}
-		else if (Device.Role == BRM::R_SteamDoor)
+	}
+	if (Device.Role == BRM::R_SteamDoor && Flows.Num() > 0)
+	{
+		// v4.12 : voiles de vapeur : ils ondulent et montent, plus minces a mesure que les vannes approchent du bon reglage
+		const float Density = 1.f - ShownPos;
+		for (int32 I = 0; I < Flows.Num(); ++I)
 		{
-			const float Density = 1.f - ShownPos;
-			GlowMID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(0.9f, 0.92f, 0.95f) * Density * (0.3f + 0.1f * FMath::Sin(Time * 3.f)));
-			if (Moving)
+			UStaticMeshComponent* Veil = Flows[I];
+			if (!Veil)
 			{
-				for (USceneComponent* Child : Moving->GetAttachChildren())
-				{
-					if (UStaticMeshComponent* Puff = Cast<UStaticMeshComponent>(Child))
-					{
-						if (Puff->GetMaterial(0) == GlowMID)
-						{
-							Puff->SetVisibility(Density > 0.05f);
-						}
-					}
-				}
+				continue;
 			}
+			Veil->SetVisibility(Density > 0.05f);
+			const float Phase = Time * (0.9f + I * 0.17f) + I * 1.3f;
+			Veil->SetRelativeScale3D(FVector(0.7f * (0.4f + 0.6f * Density), (1.1f + (I % 3) * 0.25f) * (0.5f + 0.5f * Density) * (1.f + 0.12f * FMath::Sin(Phase)), 1.f));
+			Veil->SetRelativeRotation(FRotator(0.f, (I % 2 ? 70.f : -70.f) + 8.f * FMath::Sin(Phase * 0.7f), 90.f));
 		}
+	}
+	if (Module != BRMech::Module::None && UpdateModule(DeltaSeconds))
+	{
+		bKeep = true;
 	}
 	// Eclat bref a chaque retour de l'hote
 	if (LampMID && Time - FlashTime < 0.4f)
@@ -1071,4 +1125,532 @@ FString ABRMissionDevice::GetPrompt() const
 	}
 	FString Line = St.IsEmpty() ? Name : BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Prompt.NameState", "{Name} ({State})"), { { TEXT("Name"), BRLoc::Arg(Name) }, { TEXT("State"), BRLoc::Arg(St) } });
 	return Verb.IsEmpty() ? Line : BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Prompt.Full", "{Verb}  -  {Line}"), { { TEXT("Verb"), BRLoc::Arg(Verb) }, { TEXT("Line"), BRLoc::Arg(Line) } });
+}
+
+// =====================================================================================================================
+// v4.12 : modules physiques (BRMech) : bassins et sas des Poolrooms, passerelle du Niveau 8.
+// L'etat vient de la mission (repliquee et sauvegardee) ; l'eau est enregistree dans le monde (ABRWorld::WaterAt), le
+// sol et les parois sont de vraies collisions, coupees quand la zone est masquee.
+// =====================================================================================================================
+
+UStaticMeshComponent* ABRMissionDevice::AddSolid(const FVector& Min, const FVector& Max, UMaterialInterface* Mat, bool bBlockSight, USceneComponent* Parent)
+{
+	UStaticMeshComponent* C = AddBoxPart((Min + Max) * 0.5f, Max - Min, Mat, Parent);
+	if (C)
+	{
+		C->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		C->SetCollisionResponseToAllChannels(ECR_Block);
+		// Murets, garde-corps et tablier ne cachent rien : la vue (rassemblement, perception) passe au travers
+		C->SetCollisionResponseToChannel(ECC_Visibility, bBlockSight ? ECR_Block : ECR_Ignore);
+		C->SetCastShadow(true);
+		ModuleSolids.Add(C);
+	}
+	return C;
+}
+
+void ABRMissionDevice::PlaceRod(UStaticMeshComponent* Rod, const FVector& From, const FVector& To, float Thick)
+{
+	if (!Rod)
+	{
+		return;
+	}
+	const FVector D = To - From;
+	const float Len = static_cast<float>(D.Size());
+	Rod->SetRelativeLocation((From + To) * 0.5f);
+	Rod->SetRelativeRotation(Len > 0.1f ? FRotationMatrix::MakeFromX(D / Len).Rotator() : FRotator::ZeroRotator);
+	Rod->SetRelativeScale3D(FVector(FMath::Max(Len, 0.1f), Thick, Thick) / 100.f);
+}
+
+UStaticMeshComponent* ABRMissionDevice::AddRod(const FVector& From, const FVector& To, float Thick, UMaterialInterface* Mat, USceneComponent* Parent)
+{
+	UStaticMeshComponent* Rod = AddBoxPart(FVector::ZeroVector, FVector(1.f, Thick, Thick), Mat, Parent);
+	PlaceRod(Rod, From, To, Thick);
+	return Rod;
+}
+
+BRMech::FFrame ABRMissionDevice::ModuleFrame() const
+{
+	BRMech::FFrame F;
+	const FVector L = GetActorLocation();
+	F.X = static_cast<float>(L.X);
+	F.Y = static_cast<float>(L.Y);
+	F.Z = static_cast<float>(L.Z);
+	F.Yaw = static_cast<float>(GetActorRotation().Yaw);
+	return F;
+}
+
+void ABRMissionDevice::SetModuleCollision(bool bOn)
+{
+	for (UStaticMeshComponent* C : ModuleSolids)
+	{
+		if (C)
+		{
+			C->SetCollisionEnabled(bOn ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+		}
+	}
+}
+
+void ABRMissionDevice::BuildPoolTanks()
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!A || !W)
+	{
+		return;
+	}
+	namespace P = BRMech::Pool;
+	const FBRLevelDef& D = W->Def();
+	const float LW = D.WaterHeight;
+	const float Z0 = static_cast<float>(GetActorLocation().Z);
+	auto Zl = [Z0](float Abs) { return Abs - Z0; };
+	const float Ba = P::BottomA(LW), Bb = P::BottomB(LW), Ra = P::RimA(LW), Rb = P::RimB(LW);
+	const float X0 = -P::TankDepth, X1 = 0.f, Wl = P::Wall;
+	UMaterialInterface* Tile = A->Surface(D.Wall);
+	UMaterialInterface* Coping = A->Surface(FBRSurface(TEXT("T_Concrete"), FLinearColor(1.25f, 1.25f, 1.22f), 120.f, 0.45f, 0.1f));
+	UMaterialInterface* DarkMetal = A->Surface(MetalSurf(FLinearColor(0.14f, 0.15f, 0.16f), 0.55f));
+	UMaterialInterface* Steel = A->Surface(MetalSurf(FLinearColor(0.55f, 0.57f, 0.6f)));
+	UMaterialInterface* Enamel = A->Surface(FBRSurface(TEXT("T_Paper"), FLinearColor(0.95f, 0.95f, 0.9f), 40.f, 0.35f, 0.05f));
+	UMaterialInterface* InkMat = A->Surface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.04f, 0.04f, 0.05f), 50.f, 0.7f, 0.1f));
+	UMaterialInterface* FloatMat = A->Surface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.95f, 0.35f, 0.05f), 50.f, 0.5f, 0.1f));
+	const FBRSurface WaterS = W->GetWaterSurface();
+	UMaterialInterface* Water = A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.15f, 0.3f);
+
+	// Corps : fonds pleins (A plus haut que B), cloison commune, parois
+	AddSolid(FVector(X0, P::AY0 - Wl, Zl(-2.f)), FVector(X1, P::AY1, Zl(Ba)), Tile, true);
+	AddSolid(FVector(X0, P::AY1, Zl(-2.f)), FVector(X1, P::BY0, Zl(Ra)), Tile, true);
+	AddSolid(FVector(X0, P::BY0, Zl(-2.f)), FVector(X1, P::BY1 + Wl, Zl(Bb)), Tile, true);
+	AddSolid(FVector(X0, P::AY0 - Wl, Zl(Ba)), FVector(X1, P::AY0, Zl(Ra)), Tile, true);
+	AddSolid(FVector(X1 - Wl, P::AY0, Zl(Ba)), FVector(X1, P::AY1, Zl(Ra)), Tile, true);
+	AddSolid(FVector(X0, P::AY0, Zl(Ba)), FVector(X0 + Wl, P::AY1, Zl(Ra)), Tile, true);
+	AddSolid(FVector(X0, P::BY1, Zl(Bb)), FVector(X1, P::BY1 + Wl, Zl(Rb)), Tile, true);
+	AddSolid(FVector(X1 - Wl, P::BY0, Zl(Bb)), FVector(X1, P::BY1, Zl(Rb)), Tile, true);
+	AddSolid(FVector(X0, P::BY0, Zl(Bb)), FVector(X0 + Wl, P::BY1, Zl(Rb)), Tile, true);
+	// Margelles (le haut des parois, plus clair et un peu plus large)
+	AddBoxPart(FVector((X0 + X1) * 0.5f, (P::AY0 - Wl + P::BY0) * 0.5f, Zl(Ra) + 2.5f), FVector(P::TankDepth + 4.f, P::BY0 - P::AY0 + Wl + 4.f, 5.f), Coping);
+	AddBoxPart(FVector((X0 + X1) * 0.5f, (P::BY0 + P::BY1 + Wl) * 0.5f, Zl(Rb) + 2.5f), FVector(P::TankDepth + 4.f, P::BY1 + Wl - P::BY0 + 4.f, 5.f), Coping);
+
+	// Doublures interieures : leur ligne d'eau suit la surface (bande mouillee qui monte et descend)
+	struct FTank
+	{
+		float Y0, Y1, Bottom, Rim;
+	};
+	const FTank Tanks[2] = { { P::AY0, P::AY1, Ba, Ra }, { P::BY0, P::BY1, Bb, Rb } };
+	for (int32 T = 0; T < 2; ++T)
+	{
+		const FTank& K = Tanks[T];
+		FBRSurface Lining = D.Wall;
+		Lining.WaterLine = K.Bottom;
+		UMaterialInstanceDynamic* MID = A->NewSurface(Lining, this);
+		WaterLineMIDs.Add(MID);
+		const float XI0 = X0 + Wl, XI1 = X1 - Wl;
+		AddBoxPart(FVector(XI0 + 0.5f, (K.Y0 + K.Y1) * 0.5f, Zl((K.Bottom + K.Rim) * 0.5f)), FVector(1.f, K.Y1 - K.Y0, K.Rim - K.Bottom), MID);
+		AddBoxPart(FVector(XI1 - 0.5f, (K.Y0 + K.Y1) * 0.5f, Zl((K.Bottom + K.Rim) * 0.5f)), FVector(1.f, K.Y1 - K.Y0, K.Rim - K.Bottom), MID);
+		AddBoxPart(FVector((XI0 + XI1) * 0.5f, K.Y0 + 0.5f, Zl((K.Bottom + K.Rim) * 0.5f)), FVector(XI1 - XI0, 1.f, K.Rim - K.Bottom), MID);
+		AddBoxPart(FVector((XI0 + XI1) * 0.5f, K.Y1 - 0.5f, Zl((K.Bottom + K.Rim) * 0.5f)), FVector(XI1 - XI0, 1.f, K.Rim - K.Bottom), MID);
+		AddBoxPart(FVector((XI0 + XI1) * 0.5f, (K.Y0 + K.Y1) * 0.5f, Zl(K.Bottom) + 0.5f), FVector(XI1 - XI0, K.Y1 - K.Y0, 1.f), MID);
+		// Surface d'eau (placee par UpdateModule)
+		UStaticMeshComponent* Plane = AddPart(A->Plane(), FVector((XI0 + XI1) * 0.5f, (K.Y0 + K.Y1) * 0.5f, Zl(K.Bottom + 20.f)), FRotator::ZeroRotator,
+			FVector(XI1 - XI0, K.Y1 - K.Y0, 100.f), Water);
+		WaterPlanes.Add(Plane);
+		// Regle graduee sur l'avant : plaque emaillee, marques et chiffres, colonne d'eau et flotteur (lisibles du sol)
+		const int32 Marks = T == 0 ? P::MarksA : P::MarksB;
+		const float GY = T == 0 ? -78.f : 118.f;
+		const float S0 = T == 0 ? P::SurfaceA(0, LW) : P::SurfaceB(0, LW);
+		const float SN = T == 0 ? P::SurfaceA(Marks, LW) : P::SurfaceB(Marks, LW);
+		AddBoxPart(FVector(1.5f, GY, Zl((S0 + SN) * 0.5f)), FVector(2.f, 22.f, SN - S0 + 18.f), Enamel);
+		for (int32 M = 0; M <= Marks; ++M)
+		{
+			const float Z = T == 0 ? P::SurfaceA(M, LW) : P::SurfaceB(M, LW);
+			AddBoxPart(FVector(2.8f, GY + 2.f, Zl(Z)), FVector(0.8f, 8.f, 1.2f), InkMat);
+			AddLabel(FString::FromInt(M), FVector(3.2f, GY + 9.f, Zl(Z)), 5.5f, FColor(20, 20, 24));
+		}
+		UStaticMeshComponent* Column = AddBoxPart(FVector(3.f, GY - 6.f, Zl(S0)), FVector(1.5f, 4.f, 1.f), Water);
+		GaugeColumns.Add(Column);
+		GaugeFloats.Add(AddBoxPart(FVector(3.6f, GY - 6.f, Zl(S0)), FVector(2.f, 7.f, 2.5f), FloatMat));
+		AddLabel(T == 0 ? TEXT("A") : TEXT("B"), FVector(1.5f, GY, Zl(K.Rim) - 14.f), 22.f, FColor(30, 60, 70));
+	}
+
+	// Vanne A : dans la cloison, au fond du bassin A ; elle se deverse dans B par une bouche (jet visible)
+	AddPart(A->Cylinder(), FVector(-60.f, P::BY0 + 4.f, Zl(Ba + 6.f)), FRotator(0.f, 0.f, 90.f), FVector(12.f, 12.f, 10.f), DarkMetal);
+	Flows.Add(AddBoxPart(FVector(-60.f, P::BY0 + 11.f, Zl(Ba)), FVector(16.f, 3.f, 1.f), Water));
+	// Vanne B : vidange vers le canal (conduite coudee devant le bassin, bouche au-dessus d'une grille)
+	const float DY = 96.f;
+	AddRod(FVector(-2.f, DY, Zl(Bb + 10.f)), FVector(30.f, DY, Zl(Bb + 10.f)), 9.f, Steel);
+	AddRod(FVector(30.f, DY, Zl(Bb + 14.f)), FVector(30.f, DY, Zl(Bb - 14.f)), 9.f, Steel);
+	AddBoxPart(FVector(30.f, DY, 1.f), FVector(32.f, 32.f, 2.f), DarkMetal);
+	for (int32 I = 0; I < 4; ++I)
+	{
+		AddBoxPart(FVector(30.f, DY - 12.f + I * 8.f, 2.2f), FVector(30.f, 2.f, 0.6f), InkMat);
+	}
+	Flows.Add(AddBoxPart(FVector(30.f, DY, Zl(Bb - 14.f) * 0.5f), FVector(5.f, 7.f, 1.f), Water));
+	// Debordement de B (regle depassee) : nappe sur l'avant du bassin
+	Flows.Add(AddBoxPart(FVector(1.2f, (P::BY0 + P::BY1) * 0.5f, Zl(Rb) * 0.5f), FVector(1.f, P::BY1 - P::BY0 - 20.f, Zl(Rb)), Water));
+	// Regards des indicateurs de courant (roue a aubes) : sous la vanne A, et sur la vidange
+	const FVector Windows[2] = { FVector(1.f, 0.f, WorkZ - 52.f), FVector(1.f, DY, Zl(Bb + 30.f)) };
+	for (const FVector& Wd : Windows)
+	{
+		AddPart(A->Cylinder(), Wd, FRotator(90.f, 0.f, 0.f), FVector(20.f, 20.f, 2.f), DarkMetal);
+		USceneComponent* Pd = NewObject<USceneComponent>(this);
+		Pd->SetupAttachment(Root);
+		Pd->SetRelativeLocation(Wd + FVector(1.5f, 0.f, 0.f));
+		Pd->RegisterComponent();
+		Paddles.Add(Pd);
+		AddBoxPart(FVector::ZeroVector, FVector(1.f, 15.f, 3.f), Steel, Pd);
+		AddBoxPart(FVector::ZeroVector, FVector(1.f, 3.f, 15.f), Steel, Pd);
+	}
+	// Tige de la vanne A dans la cloison
+	AddPart(A->Cylinder(), FVector(3.f, 0.f, WorkZ), FRotator(90.f, 0.f, 0.f), FVector(7.f, 7.f, 6.f), DarkMetal);
+	for (UStaticMeshComponent* F : Flows)
+	{
+		if (F)
+		{
+			F->SetVisibility(false);
+		}
+	}
+}
+
+void ABRMissionDevice::BuildPoolLock()
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!A || !W || !Moving)
+	{
+		return;
+	}
+	namespace P = BRMech::Pool;
+	const FBRLevelDef& D = W->Def();
+	const float LW = D.WaterHeight;
+	const float Z0 = static_cast<float>(GetActorLocation().Z);
+	auto Zl = [Z0](float Abs) { return Abs - Z0; };
+	const float L = P::ChannelLength, HW = P::ChannelHalfWidth, CW = P::ChannelWall;
+	const float Slab = P::SlabTop(LW, D.DeckHeight);
+	const float StepTop = P::EntryStepTop(LW, D.DeckHeight);
+	UMaterialInterface* FloorMat = A->Surface(D.Floor);
+	UMaterialInterface* Coping = A->Surface(FBRSurface(TEXT("T_Concrete"), FLinearColor(1.25f, 1.25f, 1.22f), 120.f, 0.45f, 0.1f));
+	UMaterialInterface* DarkMetal = A->Surface(MetalSurf(FLinearColor(0.14f, 0.15f, 0.16f), 0.55f));
+	UMaterialInterface* Steel = A->Surface(MetalSurf(FLinearColor(0.55f, 0.57f, 0.6f)));
+	UMaterialInterface* Painted = A->Surface(MetalSurf(FLinearColor(0.25f, 0.42f, 0.4f), 0.5f));
+	UMaterialInterface* Hazard = A->Surface(FBRSurface(TEXT("T_Hazard"), FLinearColor(1.f, 1.f, 1.f), 40.f, 0.6f, 0.3f));
+	const FBRSurface WaterS = W->GetWaterSurface();
+	UMaterialInterface* Water = A->WaterMaterial(WaterS, D.WaterAbsorption, D.WaterScattering, 0.15f, 0.3f);
+
+	// Dallage du sas (au ras des trottoirs, au-dessus de l'eau des canaux) et marche d'entree
+	AddSolid(FVector(-L, -(HW + CW), Zl(-2.f)), FVector(0.f, HW + CW, Zl(Slab)), FloorMat, true);
+	if (Z0 < StepTop - 1.f)
+	{
+		AddSolid(FVector(0.f, -HW, Zl(-2.f)), FVector(P::EntryStepDepth, HW, Zl(StepTop)), FloorMat, true);
+	}
+	// Murets carreles (ligne d'eau mobile), margelles, garde-corps : on ne passe que par l'entree
+	FBRSurface Lining = D.Wall;
+	Lining.WaterLine = Slab;
+	UMaterialInstanceDynamic* MID = A->NewSurface(Lining, this);
+	WaterLineMIDs.Add(MID);
+	for (int32 Side = -1; Side <= 1; Side += 2)
+	{
+		const float YIn = Side * HW, YOut = Side * (HW + CW);
+		AddSolid(FVector(-L, FMath::Min(YIn, YOut), Zl(Slab)), FVector(0.f, FMath::Max(YIn, YOut), Zl(Slab + P::ChannelWallHeight)), MID, false);
+		AddBoxPart(FVector(-L * 0.5f, Side * (HW + CW * 0.5f), Zl(Slab + P::ChannelWallHeight) + 2.f), FVector(L, CW + 4.f, 4.f), Coping);
+		const int32 Posts = FMath::FloorToInt((L - 16.f) / 56.f) + 1;
+		for (int32 I = 0; I < Posts; ++I)
+		{
+			const float X = -L + 10.f + I * (L - 16.f) / FMath::Max(1, Posts - 1);
+			AddSolid(FVector(X - 2.5f, Side * (HW + CW * 0.5f) - 2.5f, Zl(Slab + P::ChannelWallHeight + 4.f)),
+				FVector(X + 2.5f, Side * (HW + CW * 0.5f) + 2.5f, Zl(Slab + P::RailHeight)), Steel, false);
+		}
+		AddSolid(FVector(-L, Side * (HW + CW * 0.5f) - 2.f, Zl(Slab + P::RailHeight) - 4.f), FVector(0.f, Side * (HW + CW * 0.5f) + 2.f, Zl(Slab + P::RailHeight)), Steel, false);
+		AddSolid(FVector(-L, Side * (HW + CW * 0.5f) - 1.5f, Zl(Slab + 162.f) - 3.f), FVector(0.f, Side * (HW + CW * 0.5f) + 1.5f, Zl(Slab + 162.f)), Steel, false);
+		// Glissieres du deversoir
+		AddSolid(FVector(-13.f, Side > 0 ? HW - 3.f : -(HW + CW), Zl(Slab)), FVector(-1.f, Side > 0 ? HW + CW : -(HW - 3.f), Zl(Slab + 200.f)), DarkMetal, false);
+	}
+	// Traverse au-dessus de l'entree (on passe dessous) et son moteur
+	AddBoxPart(FVector(-7.f, 0.f, Zl(Slab + 204.f)), FVector(14.f, 2.f * (HW + CW), 10.f), DarkMetal);
+	AddBoxPart(FVector(-7.f, HW * 0.5f, Zl(Slab + 216.f)), FVector(22.f, 30.f, 16.f), Painted);
+	// Deversoir : un panneau qui descend dans sa fente juste devant l'eau qui baisse
+	Moving->SetRelativeLocation(FVector(-7.f, 0.f, Zl(Slab)));
+	AddSolid(FVector(-4.f, -HW, -P::WeirMax), FVector(4.f, HW, 0.f), Painted, true, Moving);
+	AddBoxPart(FVector(0.f, 0.f, -3.f), FVector(9.f, 2.f * HW, 6.f), Hazard, Moving);
+	// Bonde au fond du sas, contre le mur de l'echelle
+	AddBoxPart(FVector(-L + 35.f, 0.f, Zl(Slab) + 0.6f), FVector(40.f, 70.f, 1.2f), DarkMetal);
+	for (int32 I = 0; I < 6; ++I)
+	{
+		AddBoxPart(FVector(-L + 35.f, -30.f + I * 12.f, Zl(Slab) + 1.4f), FVector(38.f, 2.f, 0.6f), Steel);
+	}
+	// Eau du sas et nappe qui passe par-dessus le deversoir pendant la vidange
+	WaterPlanes.Add(AddPart(A->Plane(), FVector((-L - 8.f) * 0.5f, 0.f, Zl(P::ChannelFull(Slab))), FRotator::ZeroRotator, FVector(L - 8.f, 2.f * HW, 100.f), Water));
+	Flows.Add(AddBoxPart(FVector(3.f, 0.f, 0.f), FVector(3.f, 2.f * HW * 0.9f, 1.f), Water));
+	Flows[0]->SetVisibility(false);
+}
+
+void ABRMissionDevice::BuildBridge()
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!A || !W || !Moving)
+	{
+		return;
+	}
+	namespace BB = BRMech::Bridge;
+	const FBRLevelDef& D = W->Def();
+	const float Z0 = static_cast<float>(GetActorLocation().Z);
+	UMaterialInterface* Rock = A->Surface(D.Wall);
+	UMaterialInterface* DarkMetal = A->Surface(MetalSurf(FLinearColor(0.14f, 0.15f, 0.16f), 0.55f));
+	UMaterialInterface* Steel = A->Surface(MetalSurf(FLinearColor(0.5f, 0.5f, 0.52f), 0.5f));
+	UMaterialInterface* Wood = A->Surface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.42f, 0.3f, 0.2f), 80.f, 0.8f, 0.4f));
+	UMaterialInterface* Hazard = A->Surface(FBRSurface(TEXT("T_Hazard"), FLinearColor(1.f, 1.f, 1.f), 40.f, 0.6f, 0.3f));
+	UMaterialInterface* CableMat = A->Surface(MetalSurf(FLinearColor(0.08f, 0.08f, 0.08f), 0.7f));
+
+	// Palier de l'echelle, interruption, appui d'arrivee et ses marches (on contourne le module au sol, des deux cotes)
+	AddSolid(FVector(-BB::FarDepth, -BB::HalfWidth, -2.f), FVector(0.f, BB::HalfWidth, BB::FarTop), Rock, true);
+	AddSolid(FVector(BB::Gap, -BB::HalfWidth, -2.f), FVector(BB::Gap + BB::NearDepth, BB::HalfWidth, BB::NearTop), Rock, true);
+	for (int32 I = 0; I < BB::Steps; ++I)
+	{
+		const float SX = BB::Gap + BB::NearDepth + I * BB::StepDepth;
+		const float Top = BB::NearTop * (BB::Steps - I) / (BB::Steps + 1.f);
+		AddSolid(FVector(SX, -BB::HalfWidth, -2.f), FVector(SX + BB::StepDepth, BB::HalfWidth, Top), Rock, true);
+	}
+	// Charniere, plaque d'appui, bords signales
+	AddBoxPart(FVector(-3.f, 0.f, BB::FarTop - 3.f), FVector(6.f, 2.f * BB::DeckHalfWidth + 20.f, 6.f), DarkMetal);
+	AddBoxPart(FVector(BB::Gap + (BB::Bearing + 10.f) * 0.5f, 0.f, BB::NearTop + 0.5f), FVector(BB::Bearing + 10.f, 2.f * BB::DeckHalfWidth, 1.f), Steel);
+	AddBoxPart(FVector(-6.f, 0.f, BB::FarTop + 0.4f), FVector(10.f, 2.f * BB::HalfWidth, 0.8f), Hazard);
+	AddBoxPart(FVector(BB::Gap + 5.f, 0.f, BB::NearTop + 0.4f), FVector(10.f, 2.f * BB::HalfWidth, 0.8f), Hazard);
+	// Tablier : charniere en haut de l'arete du palier ; vraie surface portante qui suit son animation
+	const float Len = BB::DeckLength();
+	Moving->SetRelativeLocation(FVector(0.f, 0.f, BB::HingeZ()));
+	AddSolid(FVector(0.f, -BB::DeckHalfWidth, -BB::DeckThick * 0.5f), FVector(Len, BB::DeckHalfWidth, BB::DeckThick * 0.5f), Wood, false, Moving);
+	for (int32 I = 0; I < 9; ++I)
+	{
+		AddBoxPart(FVector(14.f + I * (Len - 28.f) / 8.f, 0.f, BB::DeckThick * 0.5f + 0.6f), FVector(6.f, 2.f * BB::DeckHalfWidth - 6.f, 1.2f), Steel, Moving);
+	}
+	for (int32 Side = -1; Side <= 1; Side += 2)
+	{
+		AddBoxPart(FVector(Len * 0.5f, Side * (BB::DeckHalfWidth - 3.f), BB::DeckThick * 0.5f + 5.f), FVector(Len, 6.f, 10.f), DarkMetal, Moving);
+		AddBoxPart(FVector(Len - 8.f, Side * (BB::DeckHalfWidth - 6.f), BB::DeckThick * 0.5f + 12.f), FVector(8.f, 4.f, 8.f), Steel, Moving);
+	}
+	// Portique sur le palier : poteaux, traverse, poulies ; cables vers le bout du tablier (places a chaque image)
+	for (int32 Side = -1; Side <= 1; Side += 2)
+	{
+		const float PY = Side * (BB::DeckHalfWidth + 15.f);
+		AddSolid(FVector(-35.f, PY - 5.f, BB::FarTop), FVector(-25.f, PY + 5.f, BB::FarTop + 230.f), DarkMetal, false);
+		AddPart(A->Cylinder(), FVector(-30.f, Side * (BB::DeckHalfWidth - 6.f), BB::FarTop + 222.f), FRotator(0.f, 0.f, 90.f), FVector(16.f, 16.f, 6.f), Steel);
+		Cables.Add(AddRod(FVector(-30.f, Side * (BB::DeckHalfWidth - 6.f), BB::FarTop + 214.f), FVector(Len, Side * (BB::DeckHalfWidth - 6.f), BB::HingeZ() + 12.f), 2.f, CableMat));
+		// Poteau de main courante sur l'appui ; corde tendue une fois le tablier pose
+		AddSolid(FVector(BB::Gap + 22.f, Side * (BB::DeckHalfWidth + 6.f) - 3.f, BB::NearTop), FVector(BB::Gap + 28.f, Side * (BB::DeckHalfWidth + 6.f) + 3.f, BB::NearTop + 100.f), DarkMetal, false);
+		Ropes.Add(AddRod(FVector(-30.f, PY, BB::FarTop + 100.f), FVector(BB::Gap + 25.f, Side * (BB::DeckHalfWidth + 6.f), BB::NearTop + 100.f), 2.5f, CableMat));
+	}
+	AddBoxPart(FVector(-30.f, 0.f, BB::FarTop + 234.f), FVector(10.f, 2.f * (BB::DeckHalfWidth + 20.f), 8.f), DarkMetal);
+	// Le cable des treuils : du portique vers la paroi, puis le long du plafond vers les galeries (lien visible avec les
+	// treuils de la mission)
+	const float Ceil = D.WallHeight - Z0 - 18.f;
+	AddRod(FVector(-30.f, 0.f, BB::FarTop + 238.f), FVector(-BB::FarDepth + 8.f, 0.f, Ceil), 2.5f, CableMat);
+	AddRod(FVector(-BB::FarDepth + 8.f, 0.f, Ceil), FVector(BB::TotalLength + 260.f, 0.f, Ceil), 2.5f, CableMat);
+	for (int32 I = 0; I < 6; ++I)
+	{
+		const float X = -BB::FarDepth + 40.f + I * (BB::TotalLength + 200.f) / 5.f;
+		AddBoxPart(FVector(X, 0.f, Ceil + 8.f), FVector(3.f, 3.f, 16.f), DarkMetal);
+	}
+	for (UStaticMeshComponent* R : Ropes)
+	{
+		R->SetVisibility(false);
+	}
+}
+
+void ABRMissionDevice::ApplyModuleState(const BRM::FPlan& Plan, const BRM::FState& State, const BRM::FEval& Eval, bool bAnimate)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!W)
+	{
+		return;
+	}
+	const bool bSnap = !bAnimate || !bShown;
+	const BRMech::FFrame F = ModuleFrame();
+	const FBRLevelDef& D = W->Def();
+	namespace P = BRMech::Pool;
+	switch (Module)
+	{
+	case BRMech::Module::PoolTanks:
+	{
+		int32 LA = 0, LB = 0;
+		BRM::PoolLevels(Plan, State, LA, LB);
+		const float X0 = -P::TankDepth + P::Wall, X1 = -P::Wall;
+		W->SetLocalWater(this, 0, BRMech::MakeBox(F, X0, P::AY0, X1, P::AY1, P::BottomA(D.WaterHeight), P::RimA(D.WaterHeight), 0.f), P::SurfaceA(LA, D.WaterHeight),
+			P::TankSpeed, bSnap);
+		W->SetLocalWater(this, 1, BRMech::MakeBox(F, X0, P::BY0, X1, P::BY1, P::BottomB(D.WaterHeight), P::RimB(D.WaterHeight), 0.f), P::SurfaceB(LB, D.WaterHeight),
+			P::TankSpeed, bSnap);
+		bOverflow = SluiceBIndex >= 0 && Eval.WarningDevice == SluiceBIndex;
+		break;
+	}
+	case BRMech::Module::PoolLock:
+	{
+		const float Slab = P::SlabTop(D.WaterHeight, D.DeckHeight);
+		// Meme etat que la sortie : la mission resolue ouvre le passage, le sas se vide et le deversoir descend
+		const bool bOpen = Eval.bSolved || GateValue >= 200;
+		W->SetLocalWater(this, 0, BRMech::MakeBox(F, -P::ChannelLength, -P::ChannelHalfWidth, -8.f, P::ChannelHalfWidth, Slab, Slab + P::ChannelWallHeight, 0.f),
+			bOpen ? P::ChannelDry(Slab) : P::ChannelFull(Slab), P::DrainSpeed, bSnap);
+		break;
+	}
+	case BRMech::Module::Bridge:
+		ModuleTarget = GateValue / 255.f;
+		if (bSnap)
+		{
+			ModuleProgress = ModuleTarget;
+		}
+		W->SetBridgeNav(F, ModuleProgress >= 0.99f && GateValue >= 255);
+		break;
+	default:
+		break;
+	}
+	if (!bSnap)
+	{
+		SetActorTickEnabled(true);
+	}
+}
+
+bool ABRMissionDevice::UpdateModule(float Dt)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!W)
+	{
+		return false;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float Z0 = static_cast<float>(GetActorLocation().Z);
+	namespace P = BRMech::Pool;
+	FlowSoundCooldown = FMath::Max(0.f, FlowSoundCooldown - Dt);
+	auto FlowSound = [&](bool bFlowing, float Volume)
+	{
+		if (bFlowing && !bFlowSound && FlowSoundCooldown <= 0.f && A && Dt > 0.f)
+		{
+			if (USoundBase* S = A->Sound(TEXT("S_Splash")))
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation(), Volume);
+			}
+			FlowSoundCooldown = 1.2f;
+		}
+		bFlowSound = bFlowing;
+	};
+	bool bMoving = false;
+	switch (Module)
+	{
+	case BRMech::Module::PoolTanks:
+	{
+		float RateA = 0.f, RateB = 0.f;
+		const float SA = W->GetLocalWaterSurface(this, 0, &RateA);
+		const float SB = W->GetLocalWaterSurface(this, 1, &RateB);
+		if (SA < -1.0e5f || SB < -1.0e5f || WaterPlanes.Num() < 2 || GaugeColumns.Num() < 2 || Flows.Num() < 3)
+		{
+			return false;
+		}
+		const float Surf[2] = { SA, SB };
+		const float S0[2] = { P::SurfaceA(0, D.WaterHeight), P::SurfaceB(0, D.WaterHeight) };
+		for (int32 T = 0; T < 2; ++T)
+		{
+			FVector PL = WaterPlanes[T]->GetRelativeLocation();
+			PL.Z = Surf[T] - Z0;
+			WaterPlanes[T]->SetRelativeLocation(PL);
+			if (WaterLineMIDs.IsValidIndex(T) && WaterLineMIDs[T])
+			{
+				WaterLineMIDs[T]->SetScalarParameterValue(TEXT("WaterLine"), Surf[T]);
+			}
+			// Colonne de la regle : du bas de la regle a la surface ; flotteur a la surface
+			const float Bottom = S0[T] - 8.f;
+			const float H = FMath::Max(1.f, Surf[T] - Bottom);
+			FVector CL = GaugeColumns[T]->GetRelativeLocation();
+			CL.Z = Bottom + H * 0.5f - Z0;
+			GaugeColumns[T]->SetRelativeLocation(CL);
+			GaugeColumns[T]->SetRelativeScale3D(FVector(1.5f, 4.f, H) / 100.f);
+			FVector FL = GaugeFloats[T]->GetRelativeLocation();
+			FL.Z = Surf[T] - Z0;
+			GaugeFloats[T]->SetRelativeLocation(FL);
+		}
+		// Transfert A -> B (positif) et vidange de B vers le canal (positif), d'apres les variations des surfaces
+		const float Transfer = -RateA;
+		const float Drain = Transfer - RateB;
+		const float SpoutZ = P::BottomA(D.WaterHeight) + 6.f;
+		const float FallH = FMath::Max(1.f, SpoutZ - SB);
+		Flows[0]->SetVisibility(Transfer > 1.f);
+		Flows[0]->SetRelativeLocation(FVector(-60.f, P::BY0 + 11.f, SpoutZ - FallH * 0.5f - Z0));
+		Flows[0]->SetRelativeScale3D(FVector(FMath::Clamp(Transfer, 4.f, 16.f), 3.f, FallH) / 100.f);
+		const float MouthZ = P::BottomB(D.WaterHeight) - 14.f;
+		const float DrainH = FMath::Max(1.f, MouthZ - Z0);
+		Flows[1]->SetVisibility(Drain > 1.f);
+		Flows[1]->SetRelativeLocation(FVector(30.f, 96.f, DrainH * 0.5f));
+		Flows[1]->SetRelativeScale3D(FVector(5.f, FMath::Clamp(Drain * 0.6f, 3.f, 9.f), DrainH) / 100.f);
+		Flows[2]->SetVisibility(bOverflow);
+		if (Paddles.Num() >= 2)
+		{
+			Paddles[0]->AddRelativeRotation(FRotator(0.f, 0.f, Transfer * Dt * 25.f));
+			Paddles[1]->AddRelativeRotation(FRotator(0.f, 0.f, Drain * Dt * 25.f));
+		}
+		FlowSound(FMath::Abs(Transfer) > 1.f || FMath::Abs(Drain) > 1.f, 0.35f);
+		bMoving = FMath::Abs(RateA) > 0.01f || FMath::Abs(RateB) > 0.01f || bOverflow;
+		break;
+	}
+	case BRMech::Module::PoolLock:
+	{
+		float Rate = 0.f;
+		const float S = W->GetLocalWaterSurface(this, 0, &Rate);
+		if (S < -1.0e5f || WaterPlanes.Num() < 1 || Flows.Num() < 1)
+		{
+			return false;
+		}
+		const float Slab = P::SlabTop(D.WaterHeight, D.DeckHeight);
+		const float Weir = P::WeirHeight(S, Slab);
+		Moving->SetRelativeLocation(FVector(-7.f, 0.f, Slab + Weir - Z0));
+		FVector PL = WaterPlanes[0]->GetRelativeLocation();
+		PL.Z = S - Z0;
+		WaterPlanes[0]->SetRelativeLocation(PL);
+		WaterPlanes[0]->SetVisibility(S > Slab + 0.5f);
+		if (WaterLineMIDs.Num() > 0 && WaterLineMIDs[0])
+		{
+			WaterLineMIDs[0]->SetScalarParameterValue(TEXT("WaterLine"), FMath::Max(S, Slab));
+		}
+		// Pendant la vidange, l'eau passe par-dessus le deversoir et tombe devant l'entree
+		const bool bSpill = Rate < -1.f && Weir > 1.f;
+		const float Top = Slab + Weir - Z0;
+		Flows[0]->SetVisibility(bSpill);
+		Flows[0]->SetRelativeLocation(FVector(3.f, 0.f, Top * 0.5f));
+		Flows[0]->SetRelativeScale3D(FVector(3.f, 2.f * P::ChannelHalfWidth * 0.9f, FMath::Max(1.f, Top)) / 100.f);
+		FlowSound(bSpill, 0.8f);
+		bMoving = FMath::Abs(Rate) > 0.01f;
+		break;
+	}
+	case BRMech::Module::Bridge:
+	{
+		namespace BB = BRMech::Bridge;
+		const float Before = ModuleProgress;
+		ModuleProgress = Dt > 0.f ? BRMech::Approach(ModuleProgress, ModuleTarget, BB::Speed, Dt) : ModuleProgress;
+		Moving->SetRelativeRotation(FRotator(BB::DeckPitch(ModuleProgress), 0.f, 0.f));
+		float TX = 0.f, TZ = 0.f;
+		BB::DeckTip(ModuleProgress, TX, TZ);
+		const float R = FMath::DegreesToRadians(BB::DeckPitch(ModuleProgress));
+		// Anneau du cable : au bout du tablier, sur sa face superieure
+		const FVector Eye(TX - FMath::Sin(R) * 12.f - FMath::Cos(R) * 8.f, 0.f, TZ + FMath::Cos(R) * 12.f - FMath::Sin(R) * 8.f);
+		for (int32 I = 0; I < Cables.Num(); ++I)
+		{
+			const float Side = I == 0 ? -1.f : 1.f;
+			PlaceRod(Cables[I], FVector(-30.f, Side * (BB::DeckHalfWidth - 6.f), BB::FarTop + 214.f), FVector(Eye.X, Side * (BB::DeckHalfWidth - 6.f), Eye.Z), 2.f);
+		}
+		for (UStaticMeshComponent* Rope : Ropes)
+		{
+			Rope->SetVisibility(ModuleProgress >= 0.98f);
+		}
+		W->SetBridgeNav(ModuleFrame(), ModuleProgress >= 0.99f && GateValue >= 255);
+		const bool bMove = !FMath::IsNearlyEqual(Before, ModuleProgress);
+		if (bMove && !bFlowSound && A && FlowSoundCooldown <= 0.f && Dt > 0.f)
+		{
+			if (USoundBase* S = A->Sound(TEXT("S_M_Crank")))
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation() + FVector(0.f, 0.f, BB::FarTop), 0.7f);
+			}
+			FlowSoundCooldown = 1.5f;
+		}
+		bFlowSound = bMove;
+		bMoving = bMove || !FMath::IsNearlyEqual(ModuleProgress, ModuleTarget);
+		break;
+	}
+	default:
+		break;
+	}
+	return bMoving;
 }

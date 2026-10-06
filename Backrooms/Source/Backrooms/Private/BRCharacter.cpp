@@ -1804,7 +1804,11 @@ void ABRCharacter::DieOf(EBRDeathCause Cause, int8 InKiller, AActor* Killer)
 		// v4.7 : le corps d'un noye remonte et flotte a la surface : un coequipier peut l'atteindre et le relever
 		FVector L = GetActorLocation();
 		const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
-		L.Z = FMath::Max(static_cast<float>(L.Z), W->Def().WaterHeight - Half * 0.6f);
+		const BRMech::FWaterQuery Water = W->WaterAt(FVector(L.X, L.Y, L.Z - Half));
+		if (Water.bWater)
+		{
+			L.Z = FMath::Max(static_cast<float>(L.Z), Water.Surface - Half * 0.6f);
+		}
 		SetActorLocation(L, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 	if (Cause != EBRDeathCause::Fall)
@@ -1915,7 +1919,7 @@ void ABRCharacter::ServerReportDeath_Implementation(uint8 InCause)
 		}
 		break;
 	case EBRDeathCause::Drowning:
-		if (!W || !W->Def().bWater || L.Z > W->Def().WaterHeight + 60.f)
+		if (!W || !W->WaterAt(L).bWater || L.Z > W->WaterAt(L).Surface + 60.f)
 		{
 			UE_LOG(LogBackrooms, Warning, TEXT("%s : noyade annoncee hors de l'eau (%s) : notee comme blessure"), *GetName(), *L.ToString());
 			Cause = EBRDeathCause::Injury;
@@ -2697,7 +2701,17 @@ void ABRCharacter::TickRemote(float Dt)
 	bSwimming = (NetFlags & 4) != 0;
 	const ABRWorld* W = ABRWorld::Get(this);
 	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
-	WaterDepth = (W && W->IsLevelReady() && W->Def().bWater) ? FMath::Max(0.f, W->Def().WaterHeight - static_cast<float>(GetActorLocation().Z - Half)) : 0.f;
+	if (W && W->IsLevelReady())
+	{
+		// v4.12 : eau du point (bassin ou sas d'une mission, sinon l'eau du niveau)
+		const FVector RL = GetActorLocation();
+		const BRMech::FWaterQuery Water = W->WaterAt(FVector(RL.X, RL.Y, RL.Z - Half));
+		WaterDepth = Water.bWater ? FMath::Max(0.f, Water.Surface - static_cast<float>(RL.Z - Half)) : 0.f;
+	}
+	else
+	{
+		WaterDepth = 0.f;
+	}
 
 	// Sa lampe eclaire la ou il regarde
 	const bool bLight = IsFlashlightOn();
@@ -3952,7 +3966,7 @@ void ABRCharacter::UpdateWater(float Dt)
 	ClimbGrace = FMath::Max(0.f, ClimbGrace - Dt);
 	ABRWorld* W = ABRWorld::Get(this);
 	UCharacterMovementComponent* Move = GetCharacterMovement();
-	if (!W || !Move || W->IsTransitioning() || !W->Def().bWater)
+	if (!W || !Move || W->IsTransitioning() || (!W->Def().bWater && W->NumLocalWaters() == 0))
 	{
 		WaterZ = -1.0e6f;
 		WaterDepth = 0.f;
@@ -3963,10 +3977,13 @@ void ABRCharacter::UpdateWater(float Dt)
 		return;
 	}
 
-	WaterZ = W->Def().WaterHeight;
 	const FVector L = GetActorLocation();
 	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
-	const float FloorZ = W->FloorZAt(L);
+	// v4.12 : l'eau du point ou l'on se tient : un bassin ou le sas d'une mission (surface suivant l'etat de la mission),
+	// sinon l'eau du niveau. Profondeur, nage, immersion de la camera et apnee suivent cette surface
+	const BRMech::FWaterQuery Water = W->WaterAt(FVector(L.X, L.Y, L.Z - Half));
+	WaterZ = Water.bWater ? Water.Surface : -1.0e6f;
+	const float FloorZ = Water.Floor;
 	WaterDepth = FMath::Max(0.f, WaterZ - static_cast<float>(L.Z - Half));
 	const bool bDeep = WaterZ - FloorZ > 120.f;
 	const bool bWasUnder = bUnderwater;

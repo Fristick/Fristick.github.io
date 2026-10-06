@@ -1639,13 +1639,21 @@ void ABREntity::MoveTowards(const FVector& Dest, float Speed)
 	AddMovementInput(Dir, 1.f);
 }
 
-void ABREntity::FollowPathTo(const FVector& Goal, float Speed, float Dt)
+void ABREntity::FollowPathTo(const FVector& InGoal, float Speed, float Dt)
 {
 	ABRWorld* W = World.Get();
 	if (!W)
 	{
-		MoveTowards(Goal, Speed);
+		MoveTowards(InGoal, Speed);
 		return;
+	}
+	// v4.12 : passerelle du Niveau 8 : on passe par les marches, l'appui et le tablier pose (le meme etat que le sol et les
+	// collisions) ; tablier leve, le palier de l'echelle est hors d'atteinte et l'entite attend au pied
+	FVector Goal = InGoal;
+	FVector Detour;
+	if (!MyInfo().bFlying && W->MissionNavDetour(GetActorLocation(), InGoal, Detour))
+	{
+		Goal = Detour;
 	}
 	const FIntPoint MyCell = W->WorldToCell(GetActorLocation());
 	const FIntPoint GoalCell = W->WorldToCell(Goal);

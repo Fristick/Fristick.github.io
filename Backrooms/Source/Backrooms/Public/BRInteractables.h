@@ -85,6 +85,10 @@ public:
 	bool IsSealed() const;
 	/** v4.12 : nom de la destination dans cette version ("Niveau 1", "fin du contenu disponible", "dernier quai") */
 	FString DestinationLabel() const;
+	/** v4.12 : sortie gardee par la mission : voyant rouge tant qu'elle est verrouillee, vert une fois ouverte ;
+	 *  l'ascenseur alimente (Niveau 1) allume son voyant d'appel et sonne a son arrivee. Meme etat que la validation de
+	 *  la sortie */
+	void SetMissionOpen(bool bOpen, bool bAnimate);
 
 	int32 Target = 1;
 	EBRExitStyle Style = EBRExitStyle::Door;
@@ -122,4 +126,9 @@ protected:
 	float Time = 0.f;
 	float LastDenied = -100.f;
 	float ClimbTopZ = 0.f;
+	/** v4.12 : etat de mission affiche (-1 : sortie libre, jamais appele) */
+	int8 MissionOpen = -1;
+	/** Ascenseur : voyant d'appel */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> IndicatorMID;
 };

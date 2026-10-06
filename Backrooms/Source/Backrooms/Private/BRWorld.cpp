@@ -1410,6 +1410,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 	TitleTime = FMath::Max(0.f, TitleTime - Dt);
 	// v4.11 : mecanismes de mission (affichage, animation de proximite) et depart de groupe (serveur)
 	UpdateMissionDevices(Dt);
+	UpdateLocalWaters(Dt); // v4.12 : bassins et sas (meme animation sur chaque machine)
 	UpdateDeparture(Dt);
 
 	if (!bPlayerPlaced)
@@ -3502,6 +3503,14 @@ bool ABRWorld::IsPoolCell(int32 X, int32 Y) const
 
 float ABRWorld::FloorZAt(const FVector& P) const
 {
+	// v4.12 : fond d'un volume d'eau local (bassin, sas) : le sol de marche y est celui du module
+	for (const FLocalWater& W : LocalWaters)
+	{
+		if (P.X >= W.Box.MinX && P.X <= W.Box.MaxX && P.Y >= W.Box.MinY && P.Y <= W.Box.MaxY)
+		{
+			return W.Box.FloorZ;
+		}
+	}
 	const FIntPoint C = WorldToCell(P);
 	if (IsPoolCell(C.X, C.Y))
 	{
