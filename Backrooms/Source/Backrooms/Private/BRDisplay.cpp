@@ -32,6 +32,9 @@ namespace
 		bool bRestoredAtStartup = false;
 		/** v4.10 : taille verifiee une fois sur l'ecran reel de la fenetre (au lancement, la fenetre n'existe pas encore) */
 		bool bFitChecked = false;
+		/** Dessins du HUD en cours (imbrication possible) ; application de la resolution reportee hors du dessin */
+		int32 HudDrawDepth = 0;
+		bool bApplyQueued = false;
 	};
 
 	FDisplayState& State()
@@ -154,7 +157,16 @@ namespace
 		}
 		G->SetFullscreenMode(ToEngine(M.Window));
 		G->SetScreenResolution(M.Resolution);
-		G->ApplyResolutionSettings(false);
+		if (State().HudDrawDepth > 0)
+		{
+			// Demande faite pendant le dessin du HUD : appliquee au debut de l'image suivante (BRDisplay::Tick)
+			State().bApplyQueued = true;
+		}
+		else
+		{
+			State().bApplyQueued = false;
+			G->ApplyResolutionSettings(false);
+		}
 		FBRSettings::Get().WindowMode = M.Window;
 		// La fenetre change a la fin de l'image : le suivi des changements exterieurs attend un peu
 		State().NextSync = FPlatformTime::Seconds() + 2.0;
@@ -456,6 +468,12 @@ namespace BRDisplay
 		return b;
 	}
 
+	void SetHudDrawing(bool bDrawing)
+	{
+		FDisplayState& St = State();
+		St.HudDrawDepth = FMath::Max(0, St.HudDrawDepth + (bDrawing ? 1 : -1));
+	}
+
 	bool Tick()
 	{
 		if (!CanChange())
@@ -464,6 +482,15 @@ namespace BRDisplay
 		}
 		FDisplayState& St = State();
 		const double Now = FPlatformTime::Seconds();
+		if (St.bApplyQueued && St.HudDrawDepth == 0)
+		{
+			St.bApplyQueued = false;
+			if (UGameUserSettings* G = Settings())
+			{
+				G->ApplyResolutionSettings(false);
+			}
+			St.NextSync = Now + 2.0;
+		}
 		if (St.bPending)
 		{
 			if (Now >= St.Deadline)

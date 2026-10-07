@@ -149,10 +149,12 @@ namespace BRTestV410
 	}
 }
 
-using namespace BRTestV410;
+// Pas de "using namespace" au niveau du fichier : en build unity il deborderait sur les autres fichiers de tests
+// (YesNo de BRTestV411 / BRTestV412 devenait ambigu). Il est repris dans chaque fonction.
 
 void ABRAutoTest::AddV410Steps()
 {
+	using namespace BRTestV410;
 	AddLoad(0, 5.f, TEXT("v4.10 : polices, sauvegardes, prechargement, preparation, affichage (Niveau 0)"));
 	Add(TEXT("v4.10 : preparation"), 0.5f, [this]()
 	{
@@ -614,6 +616,36 @@ void ABRAutoTest::AddV410Steps()
 		PC->SetInventoryOpen(false);
 		return true;
 	});
+	// Demande faite pendant le dessin de l'inventaire (clic dans les parametres) : plantage reproduit le 6 octobre 2026
+	// (Unreal redessinait la fenetre dans le dessin en cours ; le HUD continuait sans Canvas). Le changement est maintenant
+	// applique a l'image suivante
+	Add(TEXT("v4.10 affichage : demande pendant le dessin"), 0.f, [this]()
+	{
+		if (!bDisplayTestable)
+		{
+			return true;
+		}
+		ABRPlayerController* PC = GetPC();
+		PC->SetInventoryOpen(true, 2);
+		Hud(PC)->bTestDisplayRequestDone = false;
+		Hud(PC)->TestDisplayRequestInDraw = FIntPoint(1280, 720);
+		return true;
+	});
+	Add(TEXT("v4.10 affichage : demande pendant le dessin, resultat"), 1.5f, [this]()
+	{
+		if (!bDisplayTestable)
+		{
+			return true;
+		}
+		ABRPlayerController* PC = GetPC();
+		const BRDisplay::FMode Eff = BRDisplay::Effective();
+		const bool bOk = Hud(PC)->bTestDisplayRequestDone && BRDisplay::IsPending() && Eff.Window == 2 && Eff.Resolution == FIntPoint(1280, 720);
+		Note(FString::Printf(TEXT("changement d'affichage demande pendant le dessin de l'inventaire : jeu toujours en marche, essai en attente %s, fenetre obtenue %d %dx%d (attendu 2 1280x720)"),
+			YesNo(BRDisplay::IsPending()), Eff.Window, Eff.Resolution.X, Eff.Resolution.Y), !bOk);
+		BRDisplay::Revert();
+		PC->SetInventoryOpen(false);
+		return true;
+	});
 	Add(TEXT("v4.10 affichage : dialogue en exploration, coup recu"), 0.5f, [this]()
 	{
 		if (!bDisplayTestable)
@@ -964,6 +996,7 @@ void ABRAutoTest::AddV410Steps()
 
 void ABRAutoTest::AddNetV410Steps(bool bClient)
 {
+	using namespace BRTestV410;
 	// L'hote blesse chaque client (coup decide par le serveur) ; chaque client se soigne deux fois de suite
 	Add(TEXT("v4.10 soins : blessure"), 2.f, [this, bClient]()
 	{
@@ -1169,6 +1202,7 @@ void ABRAutoTest::AddNetV410Steps(bool bClient)
 
 void ABRAutoTest::AddSmokeSteps()
 {
+	using namespace BRTestV410;
 	{
 		FLevelReport R;
 		R.Title = TEXT("Lancement du paquet");
@@ -1225,6 +1259,7 @@ void ABRAutoTest::AddSmokeSteps()
 
 void ABRAutoTest::AddSoakSteps(float Minutes)
 {
+	using namespace BRTestV410;
 	AddLoad(0, 4.f, TEXT("v4.10 : session longue"));
 	Add(TEXT("session longue : debut"), 0.f, [this, Minutes]()
 	{

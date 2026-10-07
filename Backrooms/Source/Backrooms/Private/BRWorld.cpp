@@ -4524,9 +4524,9 @@ float ABRWorld::LightLevelAt(const FVector& P) const
 				continue;
 			}
 			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRGameplayLight), false);
-			if (const AActor* Owner = L.Owner.Get())
+			if (const AActor* LightActor = L.Owner.Get())
 			{
-				Q.AddIgnoredActor(Owner);
+				Q.AddIgnoredActor(LightActor);
 			}
 			if (!GetWorld()->LineTraceTestByChannel(L.Pos, P, ECC_WorldStatic, Q))
 			{

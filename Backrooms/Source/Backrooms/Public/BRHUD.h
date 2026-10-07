@@ -296,6 +296,9 @@ private:
 	float LastMsgBottom = 0.f;
 	/** v4.10 (tests) : intensite du signal d'air a la derniere image (constante sans flashs) */
 	float LastAirCuePulse = 0.f;
+	/** (tests) demande d'affichage faite pendant le dessin de l'inventaire, comme un clic dans les parametres */
+	FIntPoint TestDisplayRequestInDraw = FIntPoint::ZeroValue;
+	bool bTestDisplayRequestDone = false;
 	float TestAirBreath = -1.f;
 	float LastMenuMouseX = -1.f;
 	float LastMenuMouseY = -1.f;

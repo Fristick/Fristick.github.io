@@ -51,6 +51,11 @@ namespace BRDisplay
 	/** Message a montrer une fois : configuration retablie au lancement */
 	BACKROOMS_API bool TakeRestoredAtStartup();
 
+	/** Dessin du HUD en cours (ABRHUD::DrawHUD) : un changement demande pendant le dessin (clic dans les parametres, boutons
+	 *  du dialogue) est applique au debut de l'image suivante. Appliquer tout de suite faisait redessiner la fenetre par
+	 *  Unreal a l'interieur du dessin en cours ; au retour, le HUD dessinait sans Canvas (plantage) */
+	BACKROOMS_API void SetHudDrawing(bool bDrawing);
+
 	/** v4.10 : ecran qui contient la fenetre du jeu (centre de la fenetre ; ecran principal sans fenetre) : taille en pixels
 	 *  physiques, zone utile (sans la barre des taches), DPI, rang et nombre d'ecrans. Avant : toujours l'ecran principal
 	 *  (GetDesktopResolution), meme quand le jeu etait sur un autre ecran */

@@ -1216,6 +1216,12 @@ void ABRHUD::DrawHUD()
 	{
 		return;
 	}
+	// Changements d'affichage demandes pendant ce dessin : appliques a l'image suivante (BRDisplay::SetHudDrawing)
+	struct FHudDrawScope
+	{
+		FHudDrawScope() { BRDisplay::SetHudDrawing(true); }
+		~FHudDrawScope() { BRDisplay::SetHudDrawing(false); }
+	} HudDrawScope;
 	const double Now = FPlatformTime::Seconds();
 	const float Dt = LastTime > 0.0 ? FMath::Min(static_cast<float>(Now - LastTime), 0.1f) : 0.f;
 	LastTime = Now;
@@ -4057,7 +4063,17 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	{
 		DrawInspect(C);
 	}
+	if (TestDisplayRequestInDraw.X > 0)
+	{
+		// Tests : meme chemin qu'un clic sur MODE D'AFFICHAGE (AdjustSetting -> BRDisplay::Request pendant le dessin)
+		bTestDisplayRequestDone = BRDisplay::Request(2, TestDisplayRequestInDraw);
+		TestDisplayRequestInDraw = FIntPoint::ZeroValue;
+	}
 	HandleInventoryMouse(PC, C);
+	if (!Canvas)
+	{
+		return; // par securite : une action du clic a fait redessiner la fenetre (Canvas rendu par le moteur)
+	}
 
 	// Pied de page
 	const float FY = Canvas->ClipY - 70.f * U;
