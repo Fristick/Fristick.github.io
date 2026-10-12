@@ -233,21 +233,52 @@ static void MistakeScenarios(int Level, uint32_t Seed, int& Checked)
 	}
 	case 6:
 	{
-		int Decoy = -1;
-		for (int D : FindRole(P, R_Beacon))
+		// v4.13 : ordre du LiDAR (calibrage, poste, cage, porte), porte fausse reversible et explicite
+		const std::vector<int> Posts = FindRole(P, R_LidarPost);
+		const std::vector<int> Cages = FindRole(P, R_LidarCage);
+		const std::vector<int> Doors = FindRole(P, R_LidarDoor);
+		const int Calib = FindRole(P, R_LidarTarget)[0];
+		Expect(Do(X, Posts[0], EAction::Hold, 1), EFeedback::Locked, "poste avant le calibrage");
+		Expect(Do(X, Doors[0], EAction::Use, 0), EFeedback::Locked, "porte avant les postes");
+		X.HoldUntilDone(Calib);
+		Expect(Do(X, Cages[1], EAction::Hold, 1), EFeedback::Locked, "cage avant son poste");
+		for (int D : Posts) X.HoldUntilDone(D);
+		Expect(Do(X, Doors[0], EAction::Use, 0), EFeedback::Locked, "porte avant le releve des cages");
+		int CodeOf[NumFigures];
+		for (int F = 0; F < NumFigures; ++F) CodeOf[F] = -1;
+		for (int D : Cages)
 		{
-			if (GetClue(P, S, D, C) && C.B[0] == 255) Decoy = D;
+			X.HoldUntilDone(D);
+			if (GetClue(P, S, D, C)) CodeOf[C.A[0]] = C.B[0];
 		}
-		if (Decoy < 0) Fail(Level, Seed, "balise leurre non signalee");
-		else Expect(Do(X, Decoy, EAction::Hold, 1), EFeedback::Dead, "balise leurre");
-		ReadDev(X, FindRole(P, R_StartPlate)[0], C);
-		for (int D : FindRole(P, R_Beacon))
+		Expect(Do(X, Doors[0], EAction::Use, 0), EFeedback::Locked, "porte avant le journal");
+		ReadDev(X, FindRole(P, R_TeamLog)[0], C);
+		const int Fig = C.A[0];
+		// Une seule porte avec toutes les informations ; deux sans le journal (paires exactes), deux sans les cages
+		int Full = 0, NoLog = 0, NoCages = 0, Wrong = -1;
+		for (int D : Doors)
 		{
-			if (D != Decoy && P.Devices[D].Label != C.A[0])
-			{
-				Expect(Do(X, D, EAction::Hold, 1), EFeedback::Order, "balise hors ordre");
-				break;
-			}
+			FClue Pl;
+			GetClue(P, S, D, Pl);
+			const bool bPair = Pl.A[0] < NumFigures && CodeOf[Pl.A[0]] == Pl.B[0];
+			Full += (Pl.A[0] == Fig && bPair) ? 1 : 0;
+			NoLog += bPair ? 1 : 0;
+			NoCages += Pl.A[0] == Fig ? 1 : 0;
+			if (!(Pl.A[0] == Fig && bPair) && Wrong < 0) Wrong = D;
+		}
+		++Checked;
+		if (Full != 1) Fail(Level, Seed, "porte du passage non unique");
+		++Checked;
+		if (NoLog < 2) Fail(Level, Seed, "porte devinable sans le journal");
+		++Checked;
+		if (NoCages < 2) Fail(Level, Seed, "porte devinable sans les cages");
+		const FState Before = S;
+		const FResult R = Do(X, Wrong, EAction::Use, 0);
+		Expect(R, EFeedback::Wrong, "porte fausse");
+		++Checked;
+		if (R.Count < 1 || R.Count > 2 || (S.Solved & 1) || std::memcmp(S.Dev, Before.Dev, sizeof(S.Dev)) != 0 || S.Mistakes != Before.Mistakes + 1)
+		{
+			Fail(Level, Seed, "porte fausse : retour sans nombre d'elements faux, ou etat modifie");
 		}
 		break;
 	}
@@ -490,6 +521,62 @@ int main(int argc, char** argv)
 			FCtx X{ P, S, FCampaign() };
 			std::string Why;
 			if (!P.bFallback || !CheckPlanShape(P, Why) || !Solve(X, 0) || !(S.Solved & 1)) Fail(Level, 0, "variante de secours");
+		}
+
+		// 4 bis. v4.13 : Niveau 6, anciennes sauvegardes (chaine de balises v4.12) converties : terminee -> terminee,
+		// en cours -> calibrage et postes acquis, rien n'est perdu ni bloque ; un blob d'une autre graine n'est pas converti
+		if (Level == 6)
+		{
+			int Converted = 0, Kept = 0, Refused = 0;
+			for (int I = 0; I < Seeds; ++I)
+			{
+				const uint32_t Seed = 0x1000u + (uint32_t)I * 2654435761u;
+				FPlan P, Old;
+				BuildPlan(6, Seed, P);
+				BuildLegacyPlan6(Seed, false, Old);
+				for (int Done = 0; Done <= 4; ++Done)
+				{
+					// Ancien etat : plaque lue, Done balises de la chaine allumees (4 : alimentation de secours, resolue)
+					FState OS;
+					InitState(Old, OS);
+					OS.Dev[0] = 1;
+					for (int K = 0; K < Done && K < 3; ++K) OS.Dev[Old.Params[K]] = Old.Devices[Old.Params[K]].Positions;
+					if (Done < 3) OS.Dev[Old.Params[Done]] = 1;
+					OS.Solved = Done == 4 ? 1 : 0;
+					OS.Mistakes = 2;
+					uint8_t Blob[MaxBlob];
+					const int N = Serialize(Old, OS, Blob, sizeof(Blob));
+					FState Back, NS;
+					if (Deserialize(P, Blob, N, Back))
+					{
+						Fail(6, Seed, "ancien blob accepte tel quel par le nouveau plan");
+					}
+					if (!MigrateState(P, Blob, N, NS))
+					{
+						Fail(6, Seed, "ancien blob non converti");
+						continue;
+					}
+					++Converted;
+					FEval E;
+					Evaluate(P, NS, FCampaign(), E);
+					const int PostsDone = E.Progress[1];
+					const bool bOk = Done == 4 ? (E.bSolved && IsExitOpen(P, NS, 8)) : (!E.bSolved && E.Steps[0] == EStep::Done && PostsDone == Done && NS.Mistakes == 2);
+					std::string Why;
+					if (!bOk || !StateValid(P, NS, Why) || !Roundtrip(P, NS)) Fail(6, Seed, "conversion d'une ancienne sauvegarde incorrecte");
+					else ++Kept;
+					// La mission convertie se termine
+					FCtx X{ P, NS, FCampaign() };
+					if (!Solve(X, 0) || !(NS.Solved & 1)) Fail(6, Seed, "mission convertie bloquee");
+					// Blob d'une autre graine : pas de conversion
+					FPlan Other;
+					BuildPlan(6, Seed ^ 0x5A5A5A5Au, Other);
+					FState OS2;
+					if (MigrateState(Other, Blob, N, OS2)) Fail(6, Seed, "ancien blob d'une autre graine converti");
+					else ++Refused;
+				}
+			}
+			std::printf("Niveau  6 : anciennes sauvegardes (balises v4.12) : %d converties, %d conformes (etapes gardees, terminee -> terminee), %d refusees (autre graine)\n",
+				Converted, Kept, Refused);
 		}
 
 		// 5. Niveau 11 : fragments de route de la campagne (moins de panneaux a lire), variante de fin

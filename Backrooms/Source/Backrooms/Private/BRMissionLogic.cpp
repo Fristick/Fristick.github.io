@@ -72,8 +72,11 @@ namespace Impl
 		L4_Plan = 0, L4_Dir = 1, L4_Arch = 2, L4_Dial = 3, L4_Enter = 6, L4_Access = 7,
 		// Niveau 5 : registre, cinq cles, trois serrures, consigne, cadran, passage, note du personnel
 		L5_Reg = 0, L5_Key = 1, L5_Lock = 6, L5_Note = 9, L5_Dial = 10, L5_Pass = 11, L5_Staff = 12,
-		// Niveau 6 : plaque, quatre balises, alimentation, sortie
-		L6_Start = 0, L6_Beacon = 1, L6_Power = 5, L6_Exit = 6,
+		// Niveau 6 (v4.13, LiDAR) : mire de calibrage, quatre postes, quatre cages (cage k : poste k), journal de l'equipe,
+		// quatre portes du passage, emetteur de parasites au dernier passage
+		L6_Calib = 0, L6_Post = 1, L6_Cage = 5, L6_Log = 9, L6_Door = 10, L6_Static = 14,
+		// Niveau 6 jusqu'a la v4.12 (conversion des anciennes sauvegardes) : plaque, quatre balises, alimentation, sortie
+		L6Old_Start = 0, L6Old_Beacon = 1, L6Old_Power = 5,
 		// Niveau 8 : marques, cinq treuils (dont deux grippes), passerelle
 		L8_Marks = 0, L8_Winch = 1, L8_Bridge = 6,
 		// Niveau 9 : trois plans, boitier de rue, trois maisons, porte
@@ -92,7 +95,9 @@ namespace Impl
 	//   3 : [0] secteur en defaut, [1..4] secteur de chaque relais, [5] relais en defaut
 	//   4 : [0..2] symboles du planning, [3..8] numero de bureau par symbole
 	//   5 : [0..2] symbole de chaque serrure, [3..5] cle de chaque serrure, [6] pression, [7..11] chambre de chaque cle
-	//   6 : [0..2] balises de la chaine (indices d'appareil), [3] leurre, [4..7] symbole de chaque balise
+	//   6 : [0] porte du passage (indice d'appareil), [1] cage suivie par l'equipe (0-3), [2..5] silhouette de chaque cage,
+	//       [6..9] code de chaque cage
+	//       (jusqu'a la v4.12 : [0..2] balises de la chaine (indices d'appareil), [3] leurre, [4..7] symbole de chaque balise)
 	//   8 : [0..2] ordre des treuils (lettres), [3] [4] treuils grippes
 	//   9 : [0] circuit (1-4), [1] porche, [2] fenetres, [3] maison correcte (indice d'appareil)
 	//  10 : [0] grange cible, [1..3] symbole des granges, [4..6] direction des granges
@@ -256,26 +261,60 @@ namespace Impl
 		}
 		case 6:
 		{
-			uint8_t Chain[4] = { 0, 1, 2, 3 };
-			R.Shuffle(Chain, 4);
-			Add(P, EKind::Clue, R_StartPlate, 0, 1, 0, 0);
+			// v4.13 : mission LiDAR. Mire de calibrage pres du depart (scan focalise), quatre postes a reactiver (anciennes
+			// balises, ordre libre) ; chaque poste rend consultable sa cage (silhouette et code, au scan focalise). Le journal
+			// de l'equipe de L. nomme la silhouette suivie ; les quatre portes du passage portent chacune une silhouette et un
+			// code : une seule porte porte la silhouette suivie ET le code de sa cage. Leurres : la bonne silhouette avec le
+			// code d'une autre cage, la paire exacte d'une autre cage, le bon code avec une autre silhouette (sans le journal,
+			// deux paires exactes ; sans les cages, deux portes a la bonne silhouette : rien ne se devine)
+			uint8_t Fig[NumFigures] = { 0, 1, 2, 3, 4, 5 };
+			R.Shuffle(Fig, NumFigures);
+			const int T = R.Range(4);
+			Add(P, EKind::Observe, R_LidarTarget, 0, 3, 0, 0);
 			uint8_t Zones[4] = { 1, 2, 3, 2 };
 			R.Shuffle(Zones, 4);
-			for (int B = 0; B < 4; ++B)
+			for (int K = 0; K < 4; ++K)
 			{
-				Add(P, EKind::Crank, R_Beacon, Sym[B], 3, Zones[B], 0);
-				P.Params[4 + B] = Sym[B];
+				Add(P, EKind::Crank, R_LidarPost, K, 3, Zones[K], 10 + K);
 			}
-			for (int I = 0; I < 3; ++I)
+			for (int K = 0; K < 4; ++K)
 			{
-				P.Params[I] = (uint8_t)(L6_Beacon + Chain[I]);
-				P.Devices[L6_Beacon + Chain[I]].Info[0] = I < 2 ? Sym[Chain[I + 1]] : (uint8_t)254;
+				const int D = Add(P, EKind::Observe, R_LidarCage, K, 2, Zones[K], 10 + K);
+				P.Devices[D].Info[0] = Fig[K];
+				P.Devices[D].Info[1] = Sym[K];
+				P.Params[2 + K] = Fig[K];
+				P.Params[6 + K] = Sym[K];
 			}
-			P.Params[3] = (uint8_t)(L6_Beacon + Chain[3]);
-			P.Devices[L6_Beacon + Chain[3]].Info[0] = 255;
-			Add(P, EKind::Button, R_EmergencyPower, 0, 1, 4, 1);
-			Add(P, EKind::Gate, R_LightsExit, 0, 1, 4, 1);
-			P.NumSteps = 3;
+			const int Log = Add(P, EKind::Clue, R_TeamLog, 0, 1, 4, 1);
+			P.Devices[Log].Info[0] = Fig[T];
+			P.Params[1] = (uint8_t)T;
+			// Les trois autres cages, dans un ordre tire : u (code d'une autre cage), v (paire d'une autre cage), w (silhouette)
+			uint8_t Others[3];
+			int NO = 0;
+			for (int K = 0; K < 4; ++K)
+			{
+				if (K != T)
+				{
+					Others[NO++] = (uint8_t)K;
+				}
+			}
+			R.Shuffle(Others, 3);
+			uint8_t DoorFig[4] = { Fig[T], Fig[T], Fig[Others[1]], Fig[Others[2]] };
+			uint8_t DoorCode[4] = { Sym[T], Sym[Others[0]], Sym[Others[1]], Sym[T] };
+			uint8_t Slot[4] = { 0, 1, 2, 3 };
+			R.Shuffle(Slot, 4);
+			for (int I = 0; I < 4; ++I)
+			{
+				// Slot[I] : paire portee par la porte I (de gauche a droite le long du mur)
+				const int D = Add(P, EKind::Button, R_LidarDoor, DoorCode[Slot[I]], 1, 4, 2);
+				P.Devices[D].Info[0] = DoorFig[Slot[I]];
+				if (Slot[I] == 0)
+				{
+					P.Params[0] = (uint8_t)D;
+				}
+			}
+			Add(P, EKind::Gate, R_LidarStatic, 0, 1, 4, 1);
+			P.NumSteps = 4;
 			return true;
 		}
 		case 8:
@@ -403,6 +442,41 @@ namespace Impl
 		}
 	}
 
+	/** Niveau 6 de la v4.12 (chaine de balises), a l'identique : meme prologue que BuildLevel (symboles), memes tirages.
+	 *  Sert seulement a reconnaitre et convertir les anciennes sauvegardes (MigrateState) */
+	void BuildLevel6Old(FRng& R, FPlan& P)
+	{
+		P.NumDevices = 0;
+		P.NumSteps = 0;
+		P.bHasRoute = false;
+		for (int I = 0; I < MaxParams; ++I)
+		{
+			P.Params[I] = 0;
+		}
+		uint8_t Sym[NumSymbols] = { 0, 1, 2, 3, 4, 5 };
+		R.Shuffle(Sym, NumSymbols);
+		uint8_t Chain[4] = { 0, 1, 2, 3 };
+		R.Shuffle(Chain, 4);
+		Add(P, EKind::Clue, R_StartPlate, 0, 1, 0, 0);
+		uint8_t Zones[4] = { 1, 2, 3, 2 };
+		R.Shuffle(Zones, 4);
+		for (int B = 0; B < 4; ++B)
+		{
+			Add(P, EKind::Crank, R_Beacon, Sym[B], 3, Zones[B], 0);
+			P.Params[4 + B] = Sym[B];
+		}
+		for (int I = 0; I < 3; ++I)
+		{
+			P.Params[I] = (uint8_t)(L6Old_Beacon + Chain[I]);
+			P.Devices[L6Old_Beacon + Chain[I]].Info[0] = I < 2 ? Sym[Chain[I + 1]] : (uint8_t)254;
+		}
+		P.Params[3] = (uint8_t)(L6Old_Beacon + Chain[3]);
+		P.Devices[L6Old_Beacon + Chain[3]].Info[0] = 255;
+		Add(P, EKind::Button, R_EmergencyPower, 0, 1, 4, 1);
+		Add(P, EKind::Gate, R_LightsExit, 0, 1, 4, 1);
+		P.NumSteps = 3;
+	}
+
 	inline bool Read(const FState& S, int D) { return S.Dev[D] != 0; }
 	inline bool Observed(const FPlan& P, const FState& S, int D) { return S.Dev[D] >= P.Devices[D].Positions; }
 	inline bool Solved(const FState& S) { return (S.Solved & 1) != 0; }
@@ -453,7 +527,8 @@ namespace Impl
 		return N;
 	}
 
-	int BeaconsDone6(const FPlan& P, const FState& S)
+	/** Niveau 6 jusqu'a la v4.12 : balises de la chaine allumees (plan v4.12) */
+	int BeaconsDone6Old(const FPlan& P, const FState& S)
 	{
 		int N = 0;
 		for (int I = 0; I < 3; ++I)
@@ -461,6 +536,16 @@ namespace Impl
 			N += Observed(P, S, P.Params[I]) ? 1 : 0;
 		}
 		return N;
+	}
+
+	int CountObserved(const FPlan& P, const FState& S, int From, int N)
+	{
+		int C = 0;
+		for (int I = 0; I < N; ++I)
+		{
+			C += Observed(P, S, From + I) ? 1 : 0;
+		}
+		return C;
 	}
 
 	int WinchesDone8(const FPlan& P, const FState& S)
@@ -657,27 +742,8 @@ namespace Impl
 			R.Feedback = EFeedback::AlreadyDone;
 			return R;
 		}
-		if (P.Level == 6)
-		{
-			if (Dev == P.Params[3])
-			{
-				R.Feedback = EFeedback::Dead;
-				return R;
-			}
-			for (int I = 0; I < 3; ++I)
-			{
-				if (P.Params[I] == Dev)
-				{
-					if (I > 0 && !Observed(P, S, P.Params[I - 1]))
-					{
-						R.Feedback = EFeedback::Order;
-						return R;
-					}
-					break;
-				}
-			}
-		}
-		else if (P.Level == 8)
+		// v4.13 : les postes du Niveau 6 se reactivent dans n'importe quel ordre (plus de chaine ni de leurre)
+		if (P.Level == 8)
 		{
 			if (D.Label == P.Params[3] || D.Label == P.Params[4])
 			{
@@ -736,9 +802,14 @@ namespace Impl
 			}
 			break;
 		case 6:
-			Wrong = 3 - BeaconsDone6(P, S);
+		{
+			// Silhouette et code de la porte contre ceux de la cage suivie
+			const FDevice& Door = P.Devices[Dev];
+			const int T = P.Params[1] & 3;
+			Wrong = (Door.Info[0] != P.Params[2 + T] ? 1 : 0) + (Door.Label != P.Params[6 + T] ? 1 : 0);
 			bCount = true;
 			break;
+		}
 		case 9:
 			Wrong = Dev == P.Params[3] ? 0 : 1;
 			break;
@@ -836,6 +907,17 @@ void BuildFallbackPlan(int Level, uint32_t Seed, FPlan& Out)
 	}
 }
 
+void BuildLegacyPlan6(uint32_t Seed, bool bFallback, FPlan& Out)
+{
+	Out = FPlan();
+	Out.Level = 6;
+	Out.Seed = Seed;
+	Out.bFallback = bFallback;
+	// Premier tirage de BuildPlan (ou de BuildFallbackPlan) : la chaine de la v4.12 etait toujours valide au premier essai
+	FRng R = bFallback ? FRng(0xB0A7F00DU, 0x5EC0U + 6U) : FRng(Seed, 0x4D490000U + 6U);
+	BuildLevel6Old(R, Out);
+}
+
 void BuildPlan(int Level, uint32_t Seed, FPlan& Out)
 {
 	Out = FPlan();
@@ -924,6 +1006,32 @@ FResult CanUse(const FPlan& P, const FState& S, const FCampaign& Campaign, int D
 			}
 		}
 		break;
+	case 6:
+	{
+		// Calibrage avant les postes ; chaque cage apres son poste ; les portes apres les postes, les cages et le journal
+		const FDevice& Dv = P.Devices[Dev];
+		if (Dv.Role == R_LidarPost && !Observed(P, S, L6_Calib))
+		{
+			R.Related = (uint8_t)L6_Calib;
+		}
+		else if (Dv.Role == R_LidarCage && !Observed(P, S, L6_Post + (Dv.Label & 3)))
+		{
+			R.Related = (uint8_t)(L6_Post + (Dv.Label & 3));
+		}
+		else if (Dv.Role == R_LidarDoor && !Solved(S))
+		{
+			R.Related = FirstUnobserved(P, S, L6_Post, 4);
+			if (R.Related == 255)
+			{
+				R.Related = FirstUnobserved(P, S, L6_Cage, 4);
+			}
+			if (R.Related == 255 && !S.Dev[L6_Log])
+			{
+				R.Related = (uint8_t)L6_Log;
+			}
+		}
+		break;
+	}
 	case 9:
 		if (P.Devices[Dev].Role == R_HouseMarker && !Solved(S) && S.Dev[L9_Box] != P.Params[0])
 		{
@@ -1143,15 +1251,26 @@ void Evaluate(const FPlan& P, const FState& S, const FCampaign& Campaign, FEval&
 		E.bOptionalDone = S.Dev[L5_Staff] != 0;
 		break;
 	case 6:
-		SetStep(E, 0, S.Dev[L6_Start] ? 1 : 0, 1, true);
-		SetStep(E, 1, BeaconsDone6(P, S), 3, StepDone(E, 0));
-		SetStep(E, 2, bSolved ? 1 : 0, 1, StepDone(E, 1));
-		for (int B = 0; B < 4; ++B)
+	{
+		// Etapes : scanner calibre, postes k/4, cages relevees k/4, passage. Elements visibles : poste allume (255), cage
+		// sous tension (128) puis relevee (255), portes sous tension (128) puis porte du passage ouverte (255), parasites
+		const int Posts = CountObserved(P, S, L6_Post, 4);
+		const int Cages = CountObserved(P, S, L6_Cage, 4);
+		SetStep(E, 0, Observed(P, S, L6_Calib) ? 1 : 0, 1, true);
+		SetStep(E, 1, bSolved ? 4 : Posts, 4, StepDone(E, 0));
+		SetStep(E, 2, bSolved ? 4 : Cages, 4, Posts > 0);
+		SetStep(E, 3, bSolved ? 1 : 0, 1, StepDone(E, 2));
+		E.Gate[L6_Calib] = Observed(P, S, L6_Calib) ? 255 : 0;
+		for (int K = 0; K < 4; ++K)
 		{
-			E.Gate[L6_Beacon + B] = Observed(P, S, L6_Beacon + B) ? 255 : 0;
+			E.Gate[L6_Post + K] = Observed(P, S, L6_Post + K) ? 255 : 0;
+			E.Gate[L6_Cage + K] = Observed(P, S, L6_Cage + K) ? 255 : (Observed(P, S, L6_Post + K) ? 128 : 0);
+			E.Gate[L6_Door + K] = (bSolved && L6_Door + K == P.Params[0]) ? 255 : (Posts == 4 ? 128 : 0);
 		}
-		E.Gate[L6_Exit] = bSolved ? 255 : 0;
+		E.Gate[L6_Log] = S.Dev[L6_Log] ? 255 : 0;
+		E.Gate[L6_Static] = bSolved ? 255 : 0;
 		break;
+	}
 	case 8:
 	{
 		int Units = 0;
@@ -1352,6 +1471,28 @@ bool GetClue(const FPlan& P, const FState& S, int Dev, FClue& C)
 		C.N = 1;
 		C.A[0] = D.Label;
 		C.B[0] = D.Info[0];
+		return true;
+	case R_LidarCage:
+		// Silhouette et code, une fois la cage relevee au scan focalise
+		if (!bKnown) return false;
+		C.Kind = EClue::CageRecord;
+		C.N = 1;
+		C.A[0] = D.Info[0];
+		C.B[0] = D.Info[1];
+		C.A[1] = D.Label;
+		return true;
+	case R_TeamLog:
+		if (!bKnown) return false;
+		C.Kind = EClue::TeamLog;
+		C.N = 1;
+		C.A[0] = D.Info[0];
+		return true;
+	case R_LidarDoor:
+		// Plaque de la porte : visible de tous (au scanner), sans condition
+		C.Kind = EClue::DoorPlate;
+		C.N = 1;
+		C.A[0] = D.Info[0];
+		C.B[0] = D.Label;
 		return true;
 	case R_PassageMarks:
 		if (!bKnown) return false;
@@ -1632,5 +1773,60 @@ bool Deserialize(const FPlan& Plan, const uint8_t* In, int Size, FState& Out)
 	Out.Solved = (uint8_t)(In[8 + Plan.NumDevices] & 1);
 	Out.Mistakes = In[9 + Plan.NumDevices];
 	return true;
+}
+
+bool MigrateState(const FPlan& Plan, const uint8_t* In, int Size, FState& Out)
+{
+	InitState(Plan, Out);
+	if (Plan.Level != 6 || !In || Size < 11 || In[0] != 0x4D || In[2] != 6)
+	{
+		return false;
+	}
+	// Ancien plan de cette graine (normal ou de secours) : l'empreinte du blob doit lui correspondre
+	for (int Variant = 0; Variant < 2; ++Variant)
+	{
+		FPlan Old;
+		BuildLegacyPlan6(Plan.Seed, Variant == 1, Old);
+		FState OldState;
+		if (!Deserialize(Old, In, Size, OldState))
+		{
+			continue;
+		}
+		const bool bSolvedOld = (OldState.Solved & 1) != 0;
+		Out.Mistakes = OldState.Mistakes;
+		if (bSolvedOld)
+		{
+			// Mission terminee : elle le reste, toutes les etapes accomplies (rien ne bloque la sortie vers le Niveau 8)
+			Out.Dev[L6_Calib] = Plan.Devices[L6_Calib].Positions;
+			for (int K = 0; K < 4; ++K)
+			{
+				Out.Dev[L6_Post + K] = Plan.Devices[L6_Post + K].Positions;
+				Out.Dev[L6_Cage + K] = Plan.Devices[L6_Cage + K].Positions;
+			}
+			Out.Dev[L6_Log] = 1;
+			Out.Solved = 1;
+			return true;
+		}
+		// En cours : la plaque de depart lue vaut le calibrage (premiere etape) ; chaque balise de la chaine allumee vaut un
+		// poste reactive, dans l'ordre des postes ; la balise en cours de manivelle garde sa progression sur le poste suivant
+		const int Done = BeaconsDone6Old(Old, OldState);
+		const bool bStarted = OldState.Dev[L6Old_Start] != 0 || Done > 0;
+		if (bStarted)
+		{
+			Out.Dev[L6_Calib] = Plan.Devices[L6_Calib].Positions;
+		}
+		for (int K = 0; K < Done && K < 4; ++K)
+		{
+			Out.Dev[L6_Post + K] = Plan.Devices[L6_Post + K].Positions;
+		}
+		if (Done < 3 && bStarted)
+		{
+			const int Partial = OldState.Dev[Old.Params[Done]];
+			const int Cap = Plan.Devices[L6_Post + Done].Positions - 1;
+			Out.Dev[L6_Post + Done] = U8(Partial < Cap ? Partial : Cap);
+		}
+		return true;
+	}
+	return false;
 }
 }

@@ -32,6 +32,9 @@ namespace BRMission
 	constexpr int MaxParams = 24;
 	/** Symboles des indices (meme ordre dans le jeu et dans les textes) */
 	constexpr int NumSymbols = 6;
+	/** v4.13 : silhouettes des cages du Niveau 6 (derivees en points des modeles proteges ; meme ordre dans le jeu et dans
+	 *  les textes) : 0 Hound, 1 Faceling, 2 Partygoer, 3 Skin-Stealer, 4 Wretch, 5 Clump */
+	constexpr int NumFigures = 6;
 	/** Sortie speciale du Niveau 11 : la fin de la campagne (positive : les cibles negatives tirent un niveau au hasard) */
 	constexpr int EndingTarget = 999;
 	/** Trousseau du Niveau 5 : cles portees en meme temps par l'equipe */
@@ -104,6 +107,7 @@ namespace BRMission
 		/** Hors service (balise leurre) */
 		Dead
 	};
+	// v4.13 : le retour Wrong d'une porte du Niveau 6 donne dans Count le nombre d'elements faux (silhouette, code)
 
 	struct FDevice
 	{
@@ -142,7 +146,8 @@ namespace BRMission
 		R_Planning, R_Directory, R_Archive, R_CodeDial, R_CodeEnter, R_HotelAccess,
 		// Niveau 5
 		R_Register, R_Key, R_Lock, R_BoilerNote, R_BoilerDial, R_BoilerPassage, R_StaffNote,
-		// Niveau 6
+		// Niveau 6 jusqu'a la v4.12 (chaine de balises ; identifiants gardes pour les empreintes et la conversion des
+		// anciennes sauvegardes)
 		R_StartPlate, R_Beacon, R_EmergencyPower, R_LightsExit,
 		// Niveau 8
 		R_PassageMarks, R_Winch, R_Bridge,
@@ -154,6 +159,10 @@ namespace BRMission
 		R_Generator, R_CityBoard, R_DestDial, R_DestConfirm, R_StationGate,
 		// Niveau 37
 		R_LevelMarks, R_Current, R_Sluice, R_DryPassage, R_DiveLog,
+		// v4.13 : Niveau 6 LiDAR (ajoutes en fin : les roles des autres niveaux, et donc leurs empreintes, ne changent pas)
+		// mire de calibrage, poste de confinement (ancienne balise), cage, journal de l'equipe, porte du passage, emetteur
+		// de parasites au dernier passage
+		R_LidarTarget, R_LidarPost, R_LidarCage, R_TeamLog, R_LidarDoor, R_LidarStatic,
 		R_Count
 	};
 
@@ -253,7 +262,11 @@ namespace BRMission
 		RouteDigit,     // A0 rang (0-2), B0 chiffre
 		LevelMarks,     // A0 = 0 bassin A, B0 niveau voulu ; A1 = 1 bassin B, B1 niveau voulu (graduations 0-7)
 		CurrentDir,     // regle du courant (A se deverse dans B, B se vide dans l'evacuation)
-		DiveLog         // texte
+		DiveLog,        // texte
+		// v4.13 : Niveau 6 LiDAR
+		CageRecord,     // A0 silhouette (0..NumFigures-1), B0 code de la cage (symbole), A1 numero de la cage (0-3)
+		TeamLog,        // A0 silhouette que l'equipe de L. a suivie
+		DoorPlate       // A0 silhouette, B0 code (plaque de la porte, lisible au scanner)
 	};
 
 	struct FClue
@@ -305,6 +318,12 @@ namespace BRMission
 	bool Deserialize(const FPlan& Plan, const uint8_t* In, int Size, FState& Out);
 	/** Empreinte du plan (graine, parametres, appareils) */
 	uint32_t Fingerprint(const FPlan& Plan);
+	/** v4.13 : etat sauvegarde avec le plan d'une version precedente du meme niveau, converti quand les deux missions se
+	 *  correspondent (Niveau 6 : plaque de depart lue -> scanner calibre ; balises allumees dans l'ordre -> postes
+	 *  reactives ; mission resolue -> resolue). false si le blob n'est pas un ancien etat de ce niveau et de cette graine */
+	bool MigrateState(const FPlan& Plan, const uint8_t* In, int Size, FState& Out);
+	/** Plan v4.12 du Niveau 6 (chaine de balises), pour reconnaitre et convertir les anciennes sauvegardes */
+	void BuildLegacyPlan6(uint32_t Seed, bool bFallback, FPlan& Out);
 
 	/** Generateur deterministe (graine, sel) */
 	uint32_t Hash(uint32_t Seed, uint32_t Salt);

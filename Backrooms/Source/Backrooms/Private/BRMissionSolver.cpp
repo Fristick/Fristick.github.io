@@ -387,29 +387,56 @@ namespace BRMission
 		}
 		case 6:
 		{
-			if (!Read(FirstRole(P, R_StartPlate), Cl))
+			// v4.13 : calibrage, postes, cages (silhouette et code), journal (silhouette suivie), puis la seule porte qui
+			// porte la silhouette suivie et le code de sa cage
+			if (!HoldUntilDone(FirstRole(P, R_LidarTarget)))
 			{
 				return false;
 			}
-			int Sym = Cl.A[0];
-			for (int Step = 0; Step < 4; ++Step)
+			N = FindRole(P, R_LidarPost, List, MaxDevices);
+			for (int I = 0; I < N; ++I)
 			{
-				const int B = FindRoleLabel(P, R_Beacon, Sym);
-				if (B < 0 || !HoldUntilDone(B) || !GetClue(P, S, B, Cl))
+				if (!HoldUntilDone(List[I]))
 				{
 					return false;
 				}
-				if (Cl.B[0] == 254)
-				{
-					break;
-				}
-				if (Cl.B[0] == 255)
-				{
-					return false;
-				}
-				Sym = Cl.B[0];
 			}
-			return SolverImpl::DoneOrAlready(Do(FirstRole(P, R_EmergencyPower), EAction::Use, 0));
+			int CodeOf[NumFigures];
+			for (int F = 0; F < NumFigures; ++F)
+			{
+				CodeOf[F] = -1;
+			}
+			N = FindRole(P, R_LidarCage, List, MaxDevices);
+			for (int I = 0; I < N; ++I)
+			{
+				if (!HoldUntilDone(List[I]) || !GetClue(P, S, List[I], Cl) || Cl.A[0] >= NumFigures)
+				{
+					return false;
+				}
+				CodeOf[Cl.A[0]] = Cl.B[0];
+			}
+			if (!Read(FirstRole(P, R_TeamLog), Cl) || Cl.A[0] >= NumFigures || CodeOf[Cl.A[0]] < 0)
+			{
+				return false;
+			}
+			const int Fig = Cl.A[0];
+			int Pick = -1;
+			int Matches = 0;
+			N = FindRole(P, R_LidarDoor, List, MaxDevices);
+			for (int I = 0; I < N; ++I)
+			{
+				if (GetClue(P, S, List[I], Cl) && Cl.A[0] == Fig && Cl.B[0] == CodeOf[Fig])
+				{
+					Pick = List[I];
+					++Matches;
+				}
+			}
+			if (Matches != 1)
+			{
+				Why = "passage du Niveau 6 non unique";
+				return false;
+			}
+			return SolverImpl::DoneOrAlready(Do(Pick, EAction::Use, 0));
 		}
 		case 8:
 		{

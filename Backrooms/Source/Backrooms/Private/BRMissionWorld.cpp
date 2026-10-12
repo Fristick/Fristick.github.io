@@ -307,6 +307,19 @@ void ABRWorld::SetupMission()
 							MissionNotice = 3;
 						}
 					}
+					else if (BRM::MigrateState(MissionPlan, ResumeMissionBlob.GetData(), ResumeMissionBlob.Num(), Restored))
+					{
+						// v4.13 : ancienne mission du meme niveau (Niveau 6 : chaine de balises v4.12) convertie quand elle a un
+						// equivalent (plaque lue -> calibrage, balises allumees -> postes, terminee -> terminee). La sauvegarde
+						// d'origine est copiee avant d'etre reecrite ; les joueurs sont prevenus que la progression est gardee
+						MissionState = Restored;
+						BRM::FEval Conv;
+						BRM::Evaluate(MissionPlan, MissionState, GetMissionCampaign(), Conv);
+						UE_LOG(LogBackrooms, Log, TEXT("Reprise : mission du Niveau %d d'une version precedente convertie (graine %u) : %s, etapes %d/%d %d/%d %d/%d, sauvegarde copiee"),
+							Level, Seed, Conv.bSolved ? TEXT("terminee") : TEXT("en cours"), Conv.Progress[0], Conv.Goal[0], Conv.Progress[1], Conv.Goal[1], Conv.Progress[2], Conv.Goal[2]);
+						MissionNotice = 3;
+						bSaveBackupRequested = true;
+					}
 					else
 					{
 						// v4.12 : jamais en silence : la sauvegarde d'origine est copiee avant d'etre reecrite, et les joueurs
