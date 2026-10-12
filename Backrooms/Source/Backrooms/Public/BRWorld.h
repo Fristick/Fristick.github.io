@@ -8,6 +8,7 @@
 #include "BRMissionLogic.h"
 #include "BRMechLogic.h"
 #include "BRStoryLogic.h"
+#include "BRLidarLogic.h"
 #include "BRSave.h"
 #include "BRWorld.generated.h"
 
@@ -370,6 +371,8 @@ public:
 	uint8 ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, int32 LevelSerial, uint8& OutRelated, uint8& OutCount);
 	/** Distance 3D maximale (cm) acceptee par l'hote entre les yeux du joueur et un mecanisme */
 	static constexpr float MissionReachServer = 340.f;
+	/** v4.13 : portee du scan focalise sur la mire et les cages du Level 6 (verifiee par l'hote, en ligne de vue) */
+	static constexpr float MissionScanReachServer = 900.f;
 	/** Une sortie vers Target peut etre prise maintenant (mission du niveau resolue, ou sortie de retour). OutReason :
 	 *  message dans la langue du joueur */
 	bool CanUseExit(int32 Target, FString& OutReason) const;
@@ -604,6 +607,22 @@ public:
 	bool SegmentCrossesPit(const FVector& A, const FVector& B, float Margin) const;
 	/** Salles de fosses des chunks a moins de Radius chunks de AroundChunk (niveau fini : toutes) */
 	void GetPitRooms(TArray<FIntRect>& Out, const FIntPoint& AroundChunk, int32 Radius) const;
+	// ------------------------------------------------------------ v4.13 : Level 6 sans lumiere (BRLidarWorld.cpp)
+	/** Le niveau se joue au scanner LiDAR (Level 6) */
+	bool IsLidarLevel() const;
+	/** Aile d'essai du niveau (la meme chez tous, d'apres la graine) */
+	const BRLidar::FWing& GetLidarWing() const { return LidarWing; }
+	/** Cellule de l'aile (repere local U profondeur depuis l'entree, V lateral) */
+	FIntPoint LidarCell(int32 U, int32 V) const;
+	/** Reperes de l'equipe de L. au sol (chemin de la mire de calibrage a l'entree de l'aile) : position, direction */
+	const TArray<FVector>& GetLidarMarks() const { return LidarMarks; }
+	const TArray<FVector>& GetLidarMarkDirs() const { return LidarMarkDirs; }
+	/** Emetteur de parasites actif (passage ouvert) et sa position */
+	bool GetLidarStatic(FVector& OutLocation) const;
+	/** Scanner calibre (premiere etape de la mission) : la zone sure du depart s'ouvre aux entites */
+	bool IsLidarCalibrated() const;
+	/** Une impulsion large s'entend : les Smilers proches viennent voir (regle lisible, BRLidarLogic.h) */
+	void ReportLidarPulse(const FVector& Location);
 	/** Point de vue sur la salle de fosses la plus proche (coin de la salle, regard en diagonale sur la grille de fosses) */
 	bool FindPitRoomView(const FVector& From, FVector& OutLoc, FRotator& OutRot) const;
 	/** Niveau fini : la cellule est atteignable depuis le depart sans entrer dans une salle de fosses (les objectifs et
@@ -1091,6 +1110,12 @@ private:
 	/** v4.6 : serveur : un joueur passe sous le bord d'une fosse -> mort par le systeme existant (chez lui, via RPC) */
 	void UpdatePitFalls();
 	TMap<FIntPoint, FIntRect> BoundedPitRooms;
+	/** v4.13 : aile LiDAR du Level 6 (calculee au chargement, avant les chunks) et reperes au sol */
+	BRLidar::FWing LidarWing;
+	TArray<FVector> LidarMarks;
+	TArray<FVector> LidarMarkDirs;
+	/** Reperes au sol : chemin de la mire de calibrage a l'entree de l'aile (apres le placement de la mission) */
+	void ComputeLidarMarks();
 	TSet<FIntPoint> SafeReach;
 	TSet<FIntPoint> FullReach;
 	/** v4.6 : niveau fini : murs perces d'une porte pour relier au depart les zones que les murs tires enfermaient

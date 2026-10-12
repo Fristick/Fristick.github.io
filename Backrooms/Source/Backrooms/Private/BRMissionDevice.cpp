@@ -12,6 +12,7 @@
 #include "BRLightLogic.h"
 #include "HAL/PlatformTime.h"
 
+#include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -231,7 +232,8 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 	{
 		const bool bMetalPlate = Device.Role == BRM::R_Schematic || Device.Role == BRM::R_PressurePlate || Device.Role == BRM::R_LoadBoard || Device.Role == BRM::R_StartPlate
 			|| Device.Role == BRM::R_CityBoard || Device.Role == BRM::R_LevelMarks;
-		const bool bNotebook = Device.Role == BRM::R_ReserveNote || Device.Role == BRM::R_DiveLog || Device.Role == BRM::R_Register || Device.Role == BRM::R_Archive;
+		const bool bNotebook = Device.Role == BRM::R_ReserveNote || Device.Role == BRM::R_DiveLog || Device.Role == BRM::R_Register || Device.Role == BRM::R_Archive
+			|| Device.Role == BRM::R_TeamLog;
 		if (Device.Role == BRM::R_PassageMarks)
 		{
 			// Entailles dans la roche
@@ -348,6 +350,53 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddSymbol(Device.Info[0], FVector(4.5f, 20.f, 90.f), 26.f, RedPaint);
 			BoxCenter = FVector(4.f, 0.f, 90.f);
 			BoxExtent = FVector(8.f, 60.f, 30.f);
+			break;
+		}
+		case BRM::R_LidarTarget:
+		{
+			// v4.13 : mire de calibrage du scanner (zone sure du depart) : cibles concentriques en relief, bandes de danger
+			BuildWallPlate(64.f, 64.f, Paper);
+			for (int32 I = 0; I < 4; ++I)
+			{
+				AddPart(A->Cylinder(), FVector(3.6f + I * 0.4f, 0.f, Z + 20.f), FRotator(90.f, 0.f, 0.f), FVector(52.f - I * 12.f, 52.f - I * 12.f, 0.8f),
+					I % 2 ? Paper : InkMat);
+			}
+			AddBoxPart(FVector(3.f, 0.f, Z + 54.f), FVector(1.5f, 68.f, 4.f), Hazard);
+			AddBoxPart(FVector(3.f, 0.f, Z - 14.f), FVector(1.5f, 68.f, 4.f), Hazard);
+			AddBoxPart(FVector(3.8f, 26.f, Z + 46.f), FVector(1.f, 4.f, 4.f), LampMID);
+			BoxCenter = FVector(5.f, 0.f, Z + 20.f);
+			BoxExtent = FVector(6.f, 34.f, 34.f);
+			break;
+		}
+		case BRM::R_LidarCage:
+		{
+			// v4.13 : cage de confinement contre le mur : socle, toit, barreaux ; plaque du code et numero sur le montant.
+			// Rien n'est visible a l'oeil dans la cage : la silhouette n'apparait qu'au scan focalise (points du scanner)
+			constexpr float D0 = 12.f, Dep = 110.f, HW = 60.f, HH = 210.f;
+			AddBoxPart(FVector(D0 + Dep * 0.5f, 0.f, 4.f), FVector(Dep, HW * 2.f, 8.f), DarkMetal);
+			AddBoxPart(FVector(D0 + Dep * 0.5f, 0.f, HH), FVector(Dep, HW * 2.f, 4.f), DarkMetal);
+			for (int32 I = 0; I <= 6; ++I)
+			{
+				AddPart(A->Cylinder(), FVector(D0 + Dep, -HW + I * HW / 3.f, HH * 0.5f), FRotator::ZeroRotator, FVector(3.f, 3.f, HH), Metal);
+			}
+			for (int32 I = 1; I <= 3; ++I)
+			{
+				for (int32 Side = -1; Side <= 1; Side += 2)
+				{
+					AddPart(A->Cylinder(), FVector(D0 + I * Dep / 4.f, Side * HW, HH * 0.5f), FRotator::ZeroRotator, FVector(3.f, 3.f, HH), Metal);
+				}
+			}
+			AddBoxPart(FVector(D0 + Dep + 3.f, HW - 18.f, 150.f), FVector(1.5f, 26.f, 26.f), Metal);
+			AddSymbol(Device.Info[1], FVector(D0 + Dep + 4.2f, HW - 18.f, 150.f), 16.f, InkMat);
+			AddLabel(FString::FromInt(Device.Label + 1), FVector(D0 + Dep + 4.5f, HW - 18.f, 128.f), 10.f, LabelColor);
+			AddBoxPart(FVector(D0 + Dep + 3.5f, HW - 18.f, 170.f), FVector(1.f, 4.f, 4.f), LampMID);
+			// La cage occupe sa place : on ne la traverse pas (le scanner la touche aussi)
+			Blocker->SetRelativeLocation(FVector(D0 + Dep * 0.5f, 0.f, HH * 0.5f));
+			Blocker->SetBoxExtent(FVector(Dep * 0.5f, HW, HH * 0.5f));
+			Blocker->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			Blocker->SetCollisionResponseToAllChannels(ECR_Block);
+			BoxCenter = FVector(D0 + Dep + 4.f, 0.f, 120.f);
+			BoxExtent = FVector(8.f, HW, 90.f);
 			break;
 		}
 		default: // BRM::R_Current : fleche flottante au bord du trottoir
@@ -478,16 +527,34 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 		}
 		break;
 	case BRM::EKind::Crank:
-		if (Device.Role == BRM::R_Beacon)
+		if (Device.Role == BRM::R_Beacon || Device.Role == BRM::R_LidarPost)
 		{
-			// Balise : poteau, lanterne, symbole en relief (lisible au toucher et a la lampe), manivelle
+			// Balise : poteau, lanterne, symbole en relief (lisible au toucher et a la lampe), manivelle.
+			// v4.13 : poste de confinement du Level 6 (ancienne balise) : meme poteau et meme manivelle, numero du poste, petit
+			// voyant au lieu d'une lanterne : il ne rallume pas le secteur (aucune lumiere de gameplay)
+			const bool bPost = Device.Role == BRM::R_LidarPost;
 			AddBoxPart(FVector(14.f, 0.f, 75.f), FVector(10.f, 10.f, 150.f), DarkMetal);
-			GlowMID = A->NewGlow(this, FLinearColor(1.f, 0.7f, 0.3f), 0.f);
-			AddPart(A->Sphere(), FVector(14.f, 0.f, 160.f), FRotator::ZeroRotator, FVector(18.f, 18.f, 22.f), GlowMID);
-			AddSymbol(Device.Label, FVector(19.5f, 0.f, 120.f), 14.f, Brass);
+			GlowMID = A->NewGlow(this, bPost ? FLinearColor(0.3f, 0.85f, 1.f) : FLinearColor(1.f, 0.7f, 0.3f), 0.f);
+			AddPart(A->Sphere(), FVector(14.f, 0.f, 160.f), FRotator::ZeroRotator, bPost ? FVector(8.f, 8.f, 8.f) : FVector(18.f, 18.f, 22.f), GlowMID);
+			if (bPost)
+			{
+				AddLabel(FString::FromInt(Device.Label + 1), FVector(19.5f, 0.f, 120.f), 14.f, LabelColor);
+			}
+			else
+			{
+				AddSymbol(Device.Label, FVector(19.5f, 0.f, 120.f), 14.f, Brass);
+			}
 			Pivot = MakePivot(FVector(20.f, 0.f, 90.f));
 			MovingMesh = AddBoxPart(FVector(2.f, 0.f, 6.f), FVector(3.f, 2.f, 14.f), Metal, Pivot);
 			AddBoxPart(FVector(6.f, 0.f, 12.f), FVector(8.f, 3.f, 3.f), RedPaint, Pivot);
+			if (bPost)
+			{
+				AddBoxPart(FVector(19.5f, 0.f, 140.f), FVector(1.f, 4.f, 4.f), LampMID);
+				bAnimated = true;
+				BoxCenter = FVector(18.f, 0.f, 110.f);
+				BoxExtent = FVector(14.f, 16.f, 60.f);
+				break;
+			}
 			BeaconLight = NewObject<UPointLightComponent>(this);
 			BeaconLight->SetupAttachment(Root);
 			BeaconLight->SetRelativeLocation(FVector(30.f, 0.f, 160.f));
@@ -517,7 +584,32 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 		}
 		break;
 	case BRM::EKind::Button:
-		if (Device.Role == BRM::R_HouseMarker)
+		if (Device.Role == BRM::R_LidarDoor)
+		{
+			// v4.13 : porte du passage du Level 6. Dans une ouverture d'entree de l'aile : vrai battant (module) ; placement
+			// de secours : plaque murale (silhouette, code) avec un bouton
+			for (int32 I = 0; I < Index && I < Plan.NumDevices; ++I)
+			{
+				DoorNumber += Plan.Devices[I].Role == BRM::R_LidarDoor ? 1 : 0;
+			}
+			++DoorNumber;
+			if (Module == BRMech::Module::LidarDoor)
+			{
+				BuildLidarDoor(Plan);
+				BoxCenter = FVector(BRMech::LidarDoor::LeafThick + 6.f, 0.f, 120.f);
+				BoxExtent = FVector(8.f, BRMech::LidarDoor::Width * 0.5f, 100.f);
+				break;
+			}
+			BuildWallPlate(56.f, 56.f, Metal);
+			AddSymbol(Device.Label, FVector(3.8f, -12.f, Z + 30.f), 16.f, InkMat);
+			AddLabel(BRMissionText::FigureName(Device.Info[0]), FVector(3.9f, 10.f, Z + 30.f), 6.f, LabelColor);
+			AddLabel(FString::FromInt(DoorNumber), FVector(3.9f, 0.f, Z + 8.f), 10.f, LabelColor);
+			AddPart(A->Cylinder(), FVector(6.f, 18.f, Z + 8.f), FRotator(90.f, 0.f, 0.f), FVector(10.f, 10.f, 6.f), RedPaint);
+			AddBoxPart(FVector(4.f, -18.f, Z + 8.f), FVector(1.f, 6.f, 3.f), LampMID);
+			BoxCenter = FVector(6.f, 0.f, Z + 20.f);
+			BoxExtent = FVector(8.f, 30.f, 30.f);
+		}
+		else if (Device.Role == BRM::R_HouseMarker)
 		{
 			// Plaque de facade : porche (symbole), fenetres (carres), lampe du porche
 			BuildWallPlate(60.f, 44.f, Wood);
@@ -576,6 +668,27 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 		}
 		switch (Device.Role)
 		{
+		case BRM::R_LidarStatic:
+		{
+			// v4.13 : emetteur de parasites du dernier passage : vieux poste radio pose a cote de l'echelle (sans la gener),
+			// antenne, voyant ; il crepite (son positionnel) des que le passage est ouvert
+			const FVector At(-20.f, 85.f, 0.f);
+			AddBoxPart(At + FVector(0.f, 0.f, 25.f), FVector(28.f, 40.f, 50.f), Painted);
+			AddBoxPart(At + FVector(14.5f, 0.f, 32.f), FVector(1.f, 30.f, 20.f), InkMat);
+			AddRod(At + FVector(0.f, 12.f, 50.f), At + FVector(-6.f, 22.f, 150.f), 1.2f, Metal);
+			AddBoxPart(At + FVector(14.8f, -12.f, 44.f), FVector(1.f, 4.f, 4.f), LampMID);
+			StaticAudio = NewObject<UAudioComponent>(this);
+			StaticAudio->SetupAttachment(Root);
+			StaticAudio->SetRelativeLocation(At + FVector(0.f, 0.f, 40.f));
+			StaticAudio->bAutoActivate = false;
+			if (USoundBase* Hiss = A->Sound(TEXT("S_LidarStatic")))
+			{
+				StaticAudio->SetSound(Hiss);
+			}
+			StaticAudio->AttenuationSettings = A->Attenuation(BRLidar::StaticRange, false);
+			StaticAudio->RegisterComponent();
+			break;
+		}
 		case BRM::R_ReserveLights:
 		case BRM::R_Passage:
 		case BRM::R_LightsExit:
@@ -714,6 +827,14 @@ void ABRMissionDevice::SetShown(bool bShow)
 	{
 		Blocker->SetCollisionEnabled(GateValue < 200 ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 	}
+	else if (Module == BRMech::Module::LidarDoor)
+	{
+		Blocker->SetCollisionEnabled(ModuleTarget < 0.5f ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+	}
+	else if (Device.Role == BRM::R_LidarCage)
+	{
+		Blocker->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
 }
 
 void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& State, const BRM::FEval& Eval, bool bAnimate)
@@ -781,6 +902,24 @@ void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& Sta
 			break;
 		case BRM::EKind::Button:
 			Lamp = bSolved ? FLinearColor(0.2f, 1.f, 0.3f) * 4.f : (bLocked ? FLinearColor(0.3f, 0.02f, 0.02f) : FLinearColor(1.f, 0.15f, 0.05f) * 2.5f);
+			if (Device.Role == BRM::R_LidarDoor)
+			{
+				// Porte du passage : eteinte sans courant, ambre sous tension, verte ouverte
+				Lamp = GateValue >= 255 ? FLinearColor(0.2f, 1.f, 0.3f) * 3.f : (GateValue ? FLinearColor(1.f, 0.55f, 0.1f) * 1.5f : FLinearColor::Black);
+			}
+			break;
+		case BRM::EKind::Observe:
+			// v4.13 : mire calibree, cage sous tension (ambre) puis relevee (verte)
+			if (Device.Role == BRM::R_LidarTarget || Device.Role == BRM::R_LidarCage)
+			{
+				Lamp = GateValue >= 255 ? FLinearColor(0.2f, 1.f, 0.3f) * 3.f : (GateValue ? FLinearColor(1.f, 0.55f, 0.1f) * 1.5f : FLinearColor::Black);
+			}
+			break;
+		case BRM::EKind::Gate:
+			if (Device.Role == BRM::R_LidarStatic)
+			{
+				Lamp = GateValue ? FLinearColor(1.f, 0.1f, 0.05f) * 3.f : FLinearColor::Black;
+			}
 			break;
 		default:
 			break;
@@ -801,6 +940,11 @@ void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& Sta
 		{
 			GlowMID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(1.f, 0.7f, 0.3f) * (StateValue >= Device.Positions ? 12.f : 0.f));
 		}
+		else if (Device.Role == BRM::R_LidarPost)
+		{
+			// Voyant du poste : faible (il ne doit pas eclairer le secteur)
+			GlowMID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor(0.3f, 0.85f, 1.f) * (StateValue >= Device.Positions ? 2.5f : 0.f));
+		}
 	}
 	if (BeaconLight)
 	{
@@ -809,6 +953,19 @@ void ABRMissionDevice::ApplyState(const BRM::FPlan& Plan, const BRM::FState& Sta
 	if (GateLight)
 	{
 		GateLight->SetIntensity(GateValue ? 1600.f : 0.f);
+	}
+	if (StaticAudio)
+	{
+		// v4.13 : les parasites du dernier passage commencent quand la bonne porte s'ouvre
+		const bool bHiss = GateValue != 0 && bShown;
+		if (bHiss && !StaticAudio->IsPlaying())
+		{
+			StaticAudio->Play(FMath::FRandRange(0.f, 2.f));
+		}
+		else if (!bHiss && StaticAudio->IsPlaying())
+		{
+			StaticAudio->Stop();
+		}
 	}
 	UpdateGameplayLights();
 	if (Module != BRMech::Module::None)
@@ -849,6 +1006,14 @@ void ABRMissionDevice::PlayFeedback(uint8 Feedback)
 		Name = TEXT("S_M_Trip");
 		break;
 	case BRM::EFeedback::Wrong:
+		if (Device.Role == BRM::R_LidarDoor)
+		{
+			// v4.13 : la porte refuse dans un crepitement de parasites ; le battant tremble (UpdateModule)
+			Name = TEXT("S_LidarDeny");
+			break;
+		}
+		Name = TEXT("S_UIDeny");
+		break;
 	case BRM::EFeedback::Overload:
 	case BRM::EFeedback::NoFuse:
 	case BRM::EFeedback::Order:
@@ -874,16 +1039,18 @@ void ABRMissionDevice::PlayFeedback(uint8 Feedback)
 			Name = TEXT("S_Pickup");
 			break;
 		case BRM::EKind::Crank:
-			Name = Device.Role == BRM::R_Beacon ? TEXT("S_M_Beacon") : TEXT("S_M_Crank");
+			Name = Device.Role == BRM::R_Beacon ? TEXT("S_M_Beacon")
+				: ((Device.Role == BRM::R_LidarPost && static_cast<BRM::EFeedback>(Feedback) == BRM::EFeedback::Done) ? TEXT("S_LidarPost") : TEXT("S_M_Crank"));
 			break;
 		case BRM::EKind::Button:
-			Name = TEXT("S_M_Switch");
+			Name = Device.Role == BRM::R_LidarDoor ? TEXT("S_ServiceDoor") : TEXT("S_M_Switch");
 			break;
 		case BRM::EKind::Clue:
 			Name = TEXT("S_ItemMove");
 			break;
 		case BRM::EKind::Observe:
-			Name = static_cast<BRM::EFeedback>(Feedback) == BRM::EFeedback::Done ? TEXT("S_RecBeep") : nullptr;
+			// v4.13 : mire du Level 6 calibree : trois bips montants (le scanner est pret)
+			Name = static_cast<BRM::EFeedback>(Feedback) == BRM::EFeedback::Done ? (Device.Role == BRM::R_LidarTarget ? TEXT("S_LidarCalib") : TEXT("S_RecBeep")) : nullptr;
 			break;
 		default:
 			break;
@@ -912,6 +1079,10 @@ void ABRMissionDevice::PlayFeedback(uint8 Feedback)
 			else if (N == TEXT("S_M_Mill")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Mill", "[Grincement du moulin]"));
 			else if (N == TEXT("S_Splash")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Overflow", "[L'eau d\u00e9borde]"));
 			else if (N == TEXT("S_UIDeny")) Text = BR_STR(NSLOCTEXT("BR", "Caption.Deny", "[Le m\u00e9canisme refuse]"));
+			else if (N == TEXT("S_LidarDeny")) Text = BR_STR(NSLOCTEXT("BR", "Caption.LidarDeny", "[La porte refuse : cr\u00e9pitement de parasites]"));
+			else if (N == TEXT("S_LidarCalib")) Text = BR_STR(NSLOCTEXT("BR", "Caption.LidarCalib", "[Trois bips : le scanner est calibr\u00e9]"));
+			else if (N == TEXT("S_LidarPost")) Text = BR_STR(NSLOCTEXT("BR", "Caption.LidarPost", "[Un poste de confinement se remet sous tension]"));
+			else if (N == TEXT("S_ServiceDoor")) Text = BR_STR(NSLOCTEXT("BR", "Caption.LidarDoorOpen", "[Une porte s'ouvre sur ses charni\u00e8res]"));
 			ABRHUD::Caption(this, Text, GetActorLocation());
 		}
 		if (USoundBase* S = A->Sound(Name))
@@ -1454,6 +1625,96 @@ void ABRMissionDevice::BuildBridge()
 	}
 }
 
+bool ABRMissionDevice::GetLidarPlate(FVector& OutCenter, FVector& OutRight, FVector& OutUp, FVector& OutNormal) const
+{
+	if (Device.Role != BRM::R_LidarDoor)
+	{
+		return false;
+	}
+	const FTransform T = GetActorTransform();
+	if (Module == BRMech::Module::LidarDoor && DoorLeaf)
+	{
+		// Plaque au milieu du battant, cote galerie (le battant ferme est dans le plan du mur)
+		const FTransform L = DoorLeaf->GetComponentTransform();
+		const float LW = BRMech::LidarDoor::Width - 4.f;
+		OutCenter = L.TransformPosition(FVector(BRMech::LidarDoor::LeafThick * 0.5f + 2.f, LW * 0.5f, BRMech::LidarDoor::PlateZ));
+		OutNormal = L.TransformVectorNoScale(FVector(1.f, 0.f, 0.f));
+		OutRight = L.TransformVectorNoScale(FVector(0.f, 1.f, 0.f));
+		OutUp = FVector::UpVector;
+		return true;
+	}
+	// Plaque murale (placement de secours)
+	OutCenter = T.TransformPosition(FVector(4.5f, 0.f, WorkZ + 30.f));
+	OutNormal = T.TransformVectorNoScale(FVector(1.f, 0.f, 0.f));
+	OutRight = T.TransformVectorNoScale(FVector(0.f, 1.f, 0.f));
+	OutUp = FVector::UpVector;
+	return true;
+}
+
+bool ABRMissionDevice::GetCageFrame(FTransform& Out) const
+{
+	if (Device.Role != BRM::R_LidarCage)
+	{
+		return false;
+	}
+	// Interieur de la cage (voir Init : profondeur 12..122 cm devant le mur)
+	Out = FTransform(GetActorRotation(), GetActorTransform().TransformPosition(FVector(67.f, 0.f, 8.f)));
+	return true;
+}
+
+void ABRMissionDevice::BuildLidarDoor(const BRM::FPlan& Plan)
+{
+	// Repere de la porte : origine au sol au milieu de l'ouverture, X vers la galerie (le joueur arrive de ce cote), Y
+	// lateral. Le mur (WallThickness) est centre sur X = 0 ; l'ouverture du chunk mesure DoorWidth (140 cm) sur 225 cm
+	UBRAssets* A = UBRAssets::Get(this);
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!A || !W)
+	{
+		return;
+	}
+	namespace LD = BRMech::LidarDoor;
+	const float T = W->Def().WallThickness;
+	UMaterialInterface* Steel = A->Surface(MetalSurf(FLinearColor(0.2f, 0.21f, 0.22f), 0.5f));
+	UMaterialInterface* Frame = A->Surface(MetalSurf(FLinearColor(0.12f, 0.12f, 0.13f), 0.6f));
+	UMaterialInterface* Plate = A->Surface(MetalSurf(FLinearColor(0.55f, 0.57f, 0.6f)));
+	UMaterialInterface* PlateInk = A->Surface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.05f, 0.05f, 0.06f), 50.f, 0.7f, 0.1f));
+	UMaterialInterface* Hazard = A->Surface(FBRSurface(TEXT("T_Hazard"), FLinearColor(1.f, 1.f, 1.f), 40.f, 0.6f, 0.3f));
+	// Cadre (dormant) sur les deux faces du mur, sans collision : le mur du chunk porte deja l'ouverture
+	for (int32 Side = -1; Side <= 1; Side += 2)
+	{
+		AddBoxPart(FVector(0.f, Side * (LD::Width * 0.5f + 4.f), LD::Height * 0.5f), FVector(T + 6.f, 8.f, LD::Height), Frame);
+	}
+	AddBoxPart(FVector(0.f, 0.f, LD::Height + 4.f), FVector(T + 6.f, LD::Width + 16.f, 8.f), Frame);
+	AddBoxPart(FVector(T * 0.5f + 3.5f, 0.f, LD::Height + 4.f), FVector(1.f, LD::Width + 16.f, 6.f), Hazard);
+	// Battant sur pivot (charnieres a -Y) : il s'ouvre vers l'aile
+	DoorLeaf = NewObject<USceneComponent>(this);
+	DoorLeaf->SetupAttachment(Root);
+	DoorLeaf->SetRelativeLocation(FVector(0.f, -LD::Width * 0.5f + 1.f, 0.f));
+	DoorLeaf->RegisterComponent();
+	const float LW = LD::Width - 4.f;
+	AddBoxPart(FVector(0.f, LW * 0.5f, LD::Height * 0.5f - 1.f), FVector(LD::LeafThick, LW, LD::Height - 4.f), Steel, DoorLeaf);
+	for (int32 I = 0; I < 3; ++I)
+	{
+		AddPart(A->Cylinder(), FVector(0.f, -1.f, 30.f + I * 80.f), FRotator::ZeroRotator, FVector(4.f, 4.f, 16.f), Frame, DoorLeaf);
+	}
+	AddBoxPart(FVector(LD::LeafThick * 0.5f + 3.f, LW - 14.f, 105.f), FVector(4.f, 3.f, 22.f), Frame, DoorLeaf);
+	// Plaque de la porte, cote galerie : code (symbole en relief), silhouette (nom) et rang de la porte. Le scanner en fait
+	// un releve en points (BRLidar) ; de pres, la lampe faible suffit aussi
+	const FVector PC(LD::LeafThick * 0.5f + 0.8f, LW * 0.5f, LD::PlateZ);
+	AddBoxPart(PC, FVector(1.5f, LD::PlateSize, LD::PlateSize), Plate, DoorLeaf);
+	AddSymbol(Device.Label, PC + FVector(1.1f, -12.f, 6.f), 16.f, PlateInk, DoorLeaf);
+	AddLabel(BRMissionText::FigureName(Device.Info[0]), PC + FVector(1.3f, 10.f, 6.f), 6.f, FColor(30, 30, 32), DoorLeaf);
+	AddLabel(FString::FromInt(DoorNumber), PC + FVector(1.3f, 0.f, -18.f), 10.f, FColor(30, 30, 32), DoorLeaf);
+	AddBoxPart(PC + FVector(0.8f, LD::PlateSize * 0.5f - 6.f, LD::PlateSize * 0.5f - 6.f), FVector(1.f, 4.f, 4.f), LampMID, DoorLeaf);
+	// Le battant ferme bloque l'ouverture (collision suivie par ApplyModuleState)
+	Blocker->SetRelativeLocation(FVector(0.f, 0.f, LD::Height * 0.5f));
+	Blocker->SetBoxExtent(FVector(T * 0.5f + 2.f, LD::Width * 0.5f, LD::Height * 0.5f));
+	Blocker->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Blocker->SetCollisionResponseToAllChannels(ECR_Block);
+	bBlocking = true;
+	(void)Plan;
+}
+
 void ABRMissionDevice::ApplyModuleState(const BRM::FPlan& Plan, const BRM::FState& State, const BRM::FEval& Eval, bool bAnimate)
 {
 	ABRWorld* W = ABRWorld::Get(this);
@@ -1496,6 +1757,18 @@ void ABRMissionDevice::ApplyModuleState(const BRM::FPlan& Plan, const BRM::FStat
 		}
 		W->SetBridgeNav(F, ModuleProgress >= 0.99f && GateValue >= 255);
 		break;
+	case BRMech::Module::LidarDoor:
+		// v4.13 : seule la porte du passage s'ouvre (Gate 255) ; les autres restent fermees pour toujours
+		ModuleTarget = GateValue >= 255 ? 1.f : 0.f;
+		if (bSnap)
+		{
+			ModuleProgress = ModuleTarget;
+		}
+		if (bShown)
+		{
+			Blocker->SetCollisionEnabled(ModuleTarget < 0.5f ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+		}
+		break;
 	default:
 		break;
 	}
@@ -1532,6 +1805,18 @@ bool ABRMissionDevice::UpdateModule(float Dt)
 	bool bMoving = false;
 	switch (Module)
 	{
+	case BRMech::Module::LidarDoor:
+	{
+		// v4.13 : battant de la porte du passage ; un refus le fait trembler (parasites)
+		if (!DoorLeaf)
+		{
+			return false;
+		}
+		ModuleProgress = Dt > 0.f ? BRMech::Approach(ModuleProgress, ModuleTarget, 0.8f, Dt) : ModuleTarget;
+		const float Shake = (Time - FlashTime < 0.5f && ModuleTarget < 0.5f) ? FMath::Sin(Time * 60.f) * 1.5f : 0.f;
+		DoorLeaf->SetRelativeRotation(FRotator(0.f, BRMech::LidarDoor::OpenAngle * ModuleProgress + Shake, 0.f));
+		return !FMath::IsNearlyEqual(ModuleProgress, ModuleTarget) || Shake != 0.f;
+	}
 	case BRMech::Module::PoolTanks:
 	{
 		float RateA = 0.f, RateB = 0.f;

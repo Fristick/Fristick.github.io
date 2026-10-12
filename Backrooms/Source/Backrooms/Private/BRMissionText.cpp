@@ -29,6 +29,20 @@ FString BRMissionText::Symbol(uint8 Sym)
 	}
 }
 
+FString BRMissionText::FigureName(uint8 Figure)
+{
+	// v4.13 : silhouettes des cages du Level 6 (BRMission::NumFigures), derivees des modeles proteges
+	switch (Figure)
+	{
+	case 0: return BR_STR(NSLOCTEXT("BR", "Mission.Fig.Hound", "Hound"));
+	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Fig.Faceling", "Faceling"));
+	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Fig.Partygoer", "Partygoer"));
+	case 3: return BR_STR(NSLOCTEXT("BR", "Mission.Fig.SkinStealer", "Skin-Stealer"));
+	case 4: return BR_STR(NSLOCTEXT("BR", "Mission.Fig.Wretch", "Wretch"));
+	default: return BR_STR(NSLOCTEXT("BR", "Mission.Fig.Clump", "Clump"));
+	}
+}
+
 FString BRMissionText::Letter(uint8 V)
 {
 	return FString::Chr(TEXT('A') + FMath::Min<int32>(V, 25));
@@ -76,6 +90,20 @@ FString BRMissionText::DeviceName(const BRM::FPlan& P, int32 Dev)
 	case BRM::R_Beacon: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.Beacon", "Balise {Sym}"), { { TEXT("Sym"), BRLoc::Arg(Symbol(D.Label)) } });
 	case BRM::R_EmergencyPower: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.EmergencyPower", "Alimentation de secours"));
 	case BRM::R_LightsExit: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.LightsExit", "Sortie de secours"));
+	case BRM::R_LidarTarget: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.LidarTarget", "Mire de calibrage du scanner"));
+	case BRM::R_LidarPost: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.LidarPost", "Poste de confinement {N}"), { { TEXT("N"), BRLoc::Arg(N1(D.Label)) } });
+	case BRM::R_LidarCage: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.LidarCage", "Cage de confinement {N}"), { { TEXT("N"), BRLoc::Arg(N1(D.Label)) } });
+	case BRM::R_TeamLog: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.TeamLog", "Journal de l'\u00e9quipe de L."));
+	case BRM::R_LidarDoor:
+	{
+		int32 Rank = 0;
+		for (int32 I = 0; I <= Dev; ++I)
+		{
+			Rank += P.Devices[I].Role == BRM::R_LidarDoor ? 1 : 0;
+		}
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.LidarDoor", "Porte du passage {N}"), { { TEXT("N"), BRLoc::Int(Rank) } });
+	}
+	case BRM::R_LidarStatic: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.LidarStatic", "\u00c9metteur de parasites"));
 	case BRM::R_PassageMarks: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.PassageMarks", "Marques de passage"));
 	case BRM::R_Winch: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.Winch", "Treuil {L}"), { { TEXT("L"), BRLoc::Arg(L(D.Label)) } });
 	case BRM::R_Bridge: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.Bridge", "Passerelle"));
@@ -247,6 +275,18 @@ void BRMissionText::ClueLines(const BRM::FClue& C, TArray<FString>& Out)
 			Out.Add(BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Clue.BeaconNext", "Balise {Sym} : suivante {Next}"), { { TEXT("Sym"), BRLoc::Arg(Symbol(C.A[0])) }, { TEXT("Next"), BRLoc::Arg(Symbol(C.B[0])) } }));
 		}
 		break;
+	case BRM::EClue::CageRecord:
+		Out.Add(BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Clue.Cage", "Cage {N} : silhouette {Fig}, code {Sym}"),
+			{ { TEXT("N"), BRLoc::Arg(N1(C.A[1])) }, { TEXT("Fig"), BRLoc::Arg(FigureName(C.A[0])) }, { TEXT("Sym"), BRLoc::Arg(Symbol(C.B[0])) } }));
+		break;
+	case BRM::EClue::TeamLog:
+		Out.Add(BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Clue.TeamLog", "Journal de L. : \u00ab Nous avons suivi le {Fig}. Son passage porte sa silhouette ET le code de sa cage. Les autres portes ne m\u00e8nent nulle part. \u00bb"),
+			{ { TEXT("Fig"), BRLoc::Arg(FigureName(C.A[0])) } }));
+		break;
+	case BRM::EClue::DoorPlate:
+		Out.Add(BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Clue.DoorPlate", "Plaque : silhouette {Fig}, code {Sym}"),
+			{ { TEXT("Fig"), BRLoc::Arg(FigureName(C.A[0])) }, { TEXT("Sym"), BRLoc::Arg(Symbol(C.B[0])) } }));
+		break;
 	case BRM::EClue::WinchOrder:
 		Out.Add(BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Clue.WinchOrder", "Treuils, dans l'ordre : {A}, puis {B}, puis {C}. Les autres sont gripp\u00e9s."),
 			{ { TEXT("A"), BRLoc::Arg(L(C.A[0])) }, { TEXT("B"), BRLoc::Arg(L(C.A[1])) }, { TEXT("C"), BRLoc::Arg(L(C.A[2])) } }));
@@ -310,9 +350,11 @@ FString BRMissionText::StepTitle(int32 Level, int32 Step)
 	case 50: return BR_STR(NSLOCTEXT("BR", "Mission.Step.5.0", "Lire le registre de la r\u00e9ception"));
 	case 51: return BR_STR(NSLOCTEXT("BR", "Mission.Step.5.1", "Ouvrir les serrures de la chaufferie"));
 	case 52: return BR_STR(NSLOCTEXT("BR", "Mission.Step.5.2", "Appliquer la consigne de pression"));
-	case 60: return BR_STR(NSLOCTEXT("BR", "Mission.Step.6.0", "Lire la plaque de d\u00e9part"));
-	case 61: return BR_STR(NSLOCTEXT("BR", "Mission.Step.6.1", "Activer les balises dans l'ordre"));
-	case 62: return BR_STR(NSLOCTEXT("BR", "Mission.Step.6.2", "R\u00e9tablir l'alimentation de secours"));
+	// v4.13 : Level 6 LiDAR (nouvelles cles : la chaine de balises de la v4.12 est retiree)
+	case 60: return BR_STR(NSLOCTEXT("BR", "Mission.Step.6L.0", "Calibrer le scanner sur la mire"));
+	case 61: return BR_STR(NSLOCTEXT("BR", "Mission.Step.6L.1", "R\u00e9activer les postes de confinement"));
+	case 62: return BR_STR(NSLOCTEXT("BR", "Mission.Step.6L.2", "Relever les cages au scan focalis\u00e9"));
+	case 63: return BR_STR(NSLOCTEXT("BR", "Mission.Step.6L.3", "Ouvrir la bonne porte, traverser, suivre les parasites"));
 	case 80: return BR_STR(NSLOCTEXT("BR", "Mission.Step.8.0", "Lire les marques de passage"));
 	case 81: return BR_STR(NSLOCTEXT("BR", "Mission.Step.8.1", "Actionner les treuils dans l'ordre"));
 	case 90: return BR_STR(NSLOCTEXT("BR", "Mission.Step.9.0", "Rassembler les plans des maisons"));
@@ -352,16 +394,10 @@ FString BRMissionText::StepHint(int32 Level, int32 Step)
 	case 50: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.5.0", "Le registre de la r\u00e9ception dit dans quelle chambre se trouve la cl\u00e9 de chaque serrure."));
 	case 51: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.5.1", "Le trousseau ne tient que trois cl\u00e9s. Une cl\u00e9 inutile se remet \u00e0 son crochet. Chaque serrure n'accepte que sa cl\u00e9."));
 	case 52: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.5.2", "La consigne est affich\u00e9e pr\u00e8s de la chaudi\u00e8re. Trop de pression la fait siffler : redescendez."));
-	case 60: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.6.0", "La plaque de d\u00e9part est en relief : on la lit m\u00eame dans le noir. Elle donne la premi\u00e8re balise."));
-	case 61:
-	{
-		// v4.12 : l'effet reel des balises sur les Smilers (BRLight : apport > seuil a moins de R x (1 - racine(seuil / I)))
-		const float Reach = BRLight::BeaconRadius * (1.f - FMath::Sqrt(BRLight::SmilerVanish / BRLight::BeaconIntensity));
-		return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.6.1", "Maintenez {Key} pour remonter une balise : elle fait du bruit pendant ce temps. Activ\u00e9e, elle \u00e9claire et montre la suivante. Une balise hors ordre ne s'enclenche pas."), { { TEXT("Key"), BRLoc::Arg(K) } })
-			+ TEXT(" ") + BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.6.Light", "\u00c0 moins de {Meters} m d'une balise allum\u00e9e, un Smiler qui ne vous poursuit pas se dissipe ; braquer la lampe sur lui le met en col\u00e8re."),
-				{ { TEXT("Meters"), BRLoc::Int(FMath::FloorToInt(Reach / 100.f)) } });
-	}
-	case 62: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.6.2", "La derni\u00e8re balise m\u00e8ne \u00e0 l'alimentation de secours, pr\u00e8s de la sortie."));
+	case 60: return BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Mission.Hint.6L.0", "La mire est pr\u00e8s du d\u00e9part, dans la zone s\u00fbre. {LidarPulse} : une impulsion montre la pi\u00e8ce en points. Visez la mire et maintenez {LidarFocus} : le scan focalis\u00e9 la calibre.")));
+	case 61: return BRKeys::Expand(BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.6L.1", "Suivez les fl\u00e8ches bleues au sol. Maintenez {Key} sur un poste pour le remettre sous tension : il garde sa progression si vous le l\u00e2chez, et il fait du bruit. Les postes allument leur cage, pas le secteur."), { { TEXT("Key"), BRLoc::Arg(K) } }));
+	case 62: return BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Mission.Hint.6L.2", "Chaque cage sous tension se rel\u00e8ve en maintenant {LidarFocus} dessus : la silhouette appara\u00eet en points ambre, le code est sur la plaque. Le carnet garde chaque relev\u00e9.")));
+	case 63: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.6L.3", "Le journal de l'\u00e9quipe dit quelle silhouette suivre. Une seule porte porte cette silhouette ET le code de sa cage. Une porte fausse refuse et se r\u00e9arme : rien n'est perdu. Derri\u00e8re, le sol est perc\u00e9 : scannez avant de marcher, puis suivez les parasites."));
 	case 80: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.8.0", "Les marques de passage sont grav\u00e9es dans la roche, pr\u00e8s du d\u00e9part. Elles donnent l'ordre des treuils."));
 	case 81: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.8.1", "Maintenez {Key} sur un treuil : il garde sa progression si vous le l\u00e2chez. Hors ordre, le c\u00e2ble reste mou."), { { TEXT("Key"), BRLoc::Arg(K) } });
 	case 90: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.9.0", "Trois plans sont pos\u00e9s dans trois maisons du quartier. Chacun donne un seul indice."));
@@ -398,6 +434,12 @@ FString BRMissionText::Feedback(const BRM::FPlan& P, int32 Dev, uint8 Fb, uint8 
 	case static_cast<uint8>(BRM::EFeedback::NoFuse):
 		return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Fb.NoFuse", "Rien ne s'allume : {Device} est vide."), { { TEXT("Device"), BRLoc::Arg(Rel) } });
 	case static_cast<uint8>(BRM::EFeedback::Wrong):
+		if (P.Level == 6 && Dev >= 0 && Dev < P.NumDevices && P.Devices[Dev].Role == BRM::R_LidarDoor)
+		{
+			// v4.13 : porte du passage fausse : combien d'elements ne correspondent pas (silhouette, code), rien n'est perdu
+			return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Fb.LidarDoor", "La porte refuse dans un cr\u00e9pitement de parasites : {Count} {Count}|plural(one=\u00e9l\u00e9ment ne correspond pas,other=\u00e9l\u00e9ments ne correspondent pas) (silhouette, code). Rien n'est perdu ; elle se r\u00e9arme."),
+				{ { TEXT("Count"), BRLoc::Int(Count) } });
+		}
 		return Count > 0 ? BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Fb.WrongCount", "Refus\u00e9 : {Count} {Count}|plural(one=\u00e9l\u00e9ment faux,other=\u00e9l\u00e9ments faux). Rien n'est perdu."), { { TEXT("Count"), BRLoc::Int(Count) } })
 			: BR_STR(NSLOCTEXT("BR", "Mission.Fb.Wrong", "Refus\u00e9 : le r\u00e9glage n'est pas le bon. Rien n'est perdu."));
 	case static_cast<uint8>(BRM::EFeedback::Warning):

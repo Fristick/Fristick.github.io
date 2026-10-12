@@ -300,6 +300,11 @@ protected:
 	TObjectPtr<UInputAction> TalkAction;
 	UPROPERTY()
 	TObjectPtr<UInputAction> MenuDeleteAction;
+	/** v4.13 : scanner LiDAR du Level 6 */
+	UPROPERTY()
+	TObjectPtr<UInputAction> LidarPulseAction;
+	UPROPERTY()
+	TObjectPtr<UInputAction> LidarFocusAction;
 
 private:
 	void EnsureInput();
@@ -345,6 +350,9 @@ private:
 	void OnInteractCompleted(const FInputActionValue& Value);
 	void OnTalkStarted(const FInputActionValue& Value);
 	void OnTalkCompleted(const FInputActionValue& Value);
+	void OnLidarPulse(const FInputActionValue& Value);
+	void OnLidarFocusStarted(const FInputActionValue& Value);
+	void OnLidarFocusCompleted(const FInputActionValue& Value);
 	void UpdateVoice(float DeltaTime);
 	void OnMenuDown(const FInputActionValue& Value);
 	void SetMenuPage(EBRMenuPage Page);

@@ -28,6 +28,9 @@ enum class EBRAction : uint8
 	ThirdPerson,
 	Pause,
 	PushToTalk,
+	/** v4.13 : scanner LiDAR du Level 6 : impulsion large, scan focalise (maintenu) */
+	LidarPulse,
+	LidarFocus,
 	Count
 };
 

@@ -21,6 +21,8 @@ class UAudioComponent;
 class UMaterialInstanceDynamic;
 class UBRSaveGame;
 class ABRExit;
+class ABRLidar;
+class ABREntity;
 class UPoseableMeshComponent;
 class ABREntity;
 
@@ -243,6 +245,22 @@ public:
 	FVector GetViewDirection() const;
 	/** Rotation de visee : celle du controleur, ou la visee repliquee pour le pion d'un autre joueur */
 	FRotator GetAimRotation() const;
+	/** v4.13 : composant de la vue (camera), pour les objets tenus devant soi (scanner LiDAR) */
+	USceneComponent* GetViewComponent() const;
+
+	// ---- v4.13 : scanner LiDAR du Level 6 (BRLidar.h) : local, cree au Level 6 seulement
+	ABRLidar* GetLidar() const { return Lidar.Get(); }
+	/** Touches : impulsion large, scan focalise (maintenu) */
+	void LidarPulse();
+	void LidarFocus(bool bOn);
+	/** L'impulsion s'entend : l'hote la signale aux Smilers (une impulsion par recharge au plus) */
+	void NotifyLidarPulse(const FVector& At);
+	UFUNCTION(Server, Unreliable, WithValidation)
+	void ServerLidarPulse(FVector_NetQuantize At);
+	/** Smiler maintenu dans le faisceau focalise : il recule (l'hote verifie distance, ligne de vue, visee) */
+	void RequestLidarRepel(ABREntity* E);
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerLidarRepel(ABREntity* E);
 	/** v4.8 : entite qui a tue (EBREntityKind, -1 : aucune) */
 	int8 GetKillerKind() const { return KillerKind; }
 	float GetDeathTime() const { return DeathTime; }
@@ -631,6 +649,11 @@ private:
 	FVector MissionDocWhere = FVector::ZeroVector;
 	/** Maintien d'une observation ou d'une manivelle : une unite demandee toutes les 0,5 s tant que la touche est tenue */
 	void UpdateMissionHold(float Dt);
+	/** v4.13 : scanner LiDAR : cree au Level 6 pour le joueur local, retire ailleurs */
+	void UpdateLidar(float Dt);
+	TWeakObjectPtr<ABRLidar> Lidar;
+	/** Hote : derniere impulsion acceptee (une par recharge) */
+	double ServerLastPulse = -100.0;
 	/** Reponse a une action de mission, chez le joueur qui l'a faite */
 	void HandleMissionResult(int32 Device, uint8 Feedback, uint8 Related, uint8 Count);
 	/** v4.12 : etat de la derniere demande a l'hote (voir GetActionStatus) */

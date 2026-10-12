@@ -79,6 +79,9 @@ public:
 
 	/** L'entite poursuit le joueur */
 	bool IsHunting() const { return State == EState::Chase; }
+	/** v4.13 : Level 6 : pris dans le faisceau focalise du scanner (hote) : un Smiler recule et ne revient pas avant un
+	 *  moment (regle lisible, BRLidarLogic.h) */
+	void LidarRepel(const FVector& From);
 	/** Fait disparaitre l'entite (fin d'une coupure de courant pour les Smilers) */
 	void Dismiss() { StartVanish(); }
 	/** Bacteria : 0..1, a quel point elle a repere le joueur (1 = poursuite) */
@@ -354,6 +357,10 @@ private:
 	float LostSight = 0.f;
 	float EyeContact = 0.f;
 	float BeamTime = 0.f;
+	/** v4.13 : recul impose par le scanner (temps du monde) et point d'ou il vient ; approche deja annoncee (souffle) */
+	float LidarRepelUntil = -1.f;
+	FVector LidarRepelFrom = FVector::ZeroVector;
+	bool bLidarTelegraphed = false;
 	float AnimTime = 0.f;
 	float Life = 0.f;
 	float Vanish = -1.f;

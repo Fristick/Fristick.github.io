@@ -1,4 +1,5 @@
 #include "BRPlayerController.h"
+#include "BRLidar.h"
 #include "BRMissionLogic.h"
 #include "BRLoc.h"
 #include "Backrooms.h"
@@ -94,6 +95,9 @@ namespace
 		Row_Crosshair,
 		Row_QuickBar,
 		Row_Objectives,
+		Row_LidarSize,        // v4.13 : scanner LiDAR du Level 6 : taille des points
+		Row_LidarContrast,    // contraste des points
+		Row_LidarPersistence, // persistance des points
 		Row_DevMode,
 		Row_Count
 	};
@@ -239,6 +243,8 @@ void ABRPlayerController::BeginPlay()
 	{
 		return; // copie serveur du controleur d'un autre joueur
 	}
+	// v4.13 : reglages du scanner LiDAR (affiches dans les parametres avant le Level 6)
+	ABRLidar::LoadSettings();
 	if (!GNetHooks && GEngine)
 	{
 		GNetHooks = true;
@@ -379,6 +385,8 @@ void ABRPlayerController::EnsureInput()
 	TalkAction = MakeAction(TEXT("IA_Talk"), EInputActionValueType::Boolean, true);
 	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean);
 	MenuDeleteAction = MakeAction(TEXT("IA_MenuDelete"), EInputActionValueType::Boolean);
+	LidarPulseAction = MakeAction(TEXT("IA_LidarPulse"), EInputActionValueType::Boolean);
+	LidarFocusAction = MakeAction(TEXT("IA_LidarFocus"), EInputActionValueType::Boolean);
 	PocketActions.Reset();
 	for (int32 i = 0; i < 4; ++i)
 	{
@@ -426,6 +434,10 @@ UInputAction* ABRPlayerController::ActionFor(int32 BRAction) const
 		return PauseAction;
 	case EBRAction::PushToTalk:
 		return TalkAction;
+	case EBRAction::LidarPulse:
+		return LidarPulseAction;
+	case EBRAction::LidarFocus:
+		return LidarFocusAction;
 	default:
 		return nullptr;
 	}
@@ -484,6 +496,9 @@ void ABRPlayerController::RebuildMappings()
 	MapKey(Ctx, BandageAction, EKeys::Gamepad_DPad_Down);
 	MapKey(Ctx, ViewAction, EKeys::Gamepad_RightThumbstick);
 	MapKey(Ctx, PauseAction, EKeys::Gamepad_Special_Right);
+	// v4.13 : scanner LiDAR : gachettes de la manette (gauche : impulsion, droite : scan focalise maintenu)
+	MapKey(Ctx, LidarPulseAction, EKeys::Gamepad_LeftTrigger);
+	MapKey(Ctx, LidarFocusAction, EKeys::Gamepad_RightTrigger);
 	MapKey(Ctx, QuitAction, EKeys::End);
 	MapKey(Ctx, MenuPrevAction, EKeys::Left);
 	MapKey(Ctx, MenuPrevAction, EKeys::A);
@@ -562,6 +577,9 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(InteractAction, ETriggerEvent::Completed, this, &ABRPlayerController::OnInteractCompleted);
 	EIC->BindAction(TalkAction, ETriggerEvent::Started, this, &ABRPlayerController::OnTalkStarted);
 	EIC->BindAction(TalkAction, ETriggerEvent::Completed, this, &ABRPlayerController::OnTalkCompleted);
+	EIC->BindAction(LidarPulseAction, ETriggerEvent::Started, this, &ABRPlayerController::OnLidarPulse);
+	EIC->BindAction(LidarFocusAction, ETriggerEvent::Started, this, &ABRPlayerController::OnLidarFocusStarted);
+	EIC->BindAction(LidarFocusAction, ETriggerEvent::Completed, this, &ABRPlayerController::OnLidarFocusCompleted);
 	EIC->BindAction(DrinkAction, ETriggerEvent::Started, this, &ABRPlayerController::OnDrink);
 	EIC->BindAction(ReloadAction, ETriggerEvent::Started, this, &ABRPlayerController::OnReload);
 	EIC->BindAction(JournalAction, ETriggerEvent::Started, this, &ABRPlayerController::OnInventory);
@@ -1194,6 +1212,37 @@ void ABRPlayerController::OnNightVision(const FInputActionValue& Value)
 		{
 			C->ToggleNightVision();
 		}
+	}
+}
+
+void ABRPlayerController::OnLidarPulse(const FInputActionValue& Value)
+{
+	if (CanPlay())
+	{
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->LidarPulse();
+		}
+	}
+}
+
+void ABRPlayerController::OnLidarFocusStarted(const FInputActionValue& Value)
+{
+	if (CanPlay())
+	{
+		if (ABRCharacter* C = GetBRCharacter())
+		{
+			C->LidarFocus(true);
+		}
+	}
+}
+
+void ABRPlayerController::OnLidarFocusCompleted(const FInputActionValue& Value)
+{
+	// Relachee meme hors jeu (menu ouvert pendant l'appui) : le scan s'arrete
+	if (ABRCharacter* C = GetBRCharacter())
+	{
+		C->LidarFocus(false);
 	}
 }
 
@@ -2796,7 +2845,8 @@ int32 ABRPlayerController::FindSettingRow(const FString& Name)
 		{ TEXT("CreatureReflections"), Row_CreatureReflections }, { TEXT("RTShadows"), Row_RTShadows }, { TEXT("AreaLights"), Row_AreaLights },
 		{ TEXT("UiScale"), Row_UiScale }, { TEXT("HudOpacity"), Row_HudOpacity }, { TEXT("Crosshair"), Row_Crosshair }, { TEXT("QuickBar"), Row_QuickBar },
 		{ TEXT("Objectives"), Row_Objectives }, { TEXT("EffectsVolume"), Row_EffectsVolume }, { TEXT("VoiceVolume"), Row_VoiceVolume },
-		{ TEXT("Subtitles"), Row_Subtitles } };
+		{ TEXT("Subtitles"), Row_Subtitles }, { TEXT("LidarSize"), Row_LidarSize }, { TEXT("LidarContrast"), Row_LidarContrast },
+		{ TEXT("LidarPersistence"), Row_LidarPersistence } };
 	for (const FNamedRow& R : Rows)
 	{
 		if (Name == R.Name)
@@ -2823,6 +2873,9 @@ int32 ABRPlayerController::GetSettingCategory(int32 Index) const
 	case Row_Crosshair:
 	case Row_QuickBar:
 	case Row_Objectives:
+	case Row_LidarSize:
+	case Row_LidarContrast:
+	case Row_LidarPersistence:
 		return 2; // INTERFACE
 	case Row_Profile:
 	case Row_Quality:
@@ -2900,6 +2953,12 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.Crosshair", "R\u00c9TICULE"));
 	case Row_QuickBar:
 		return BR_STR(NSLOCTEXT("BR", "Menu.QuickBarRow", "OBJETS RAPIDES"));
+	case Row_LidarSize:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarSize", "SCANNER : TAILLE DES POINTS"));
+	case Row_LidarContrast:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarContrast", "SCANNER : CONTRASTE DES POINTS"));
+	case Row_LidarPersistence:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarPersistence", "SCANNER : PERSISTANCE DES POINTS"));
 	case Row_Objectives:
 		return BR_STR(NSLOCTEXT("BR", "Menu.ObjectivesRow", "OBJECTIFS \u00c0 L'\u00c9CRAN"));
 	case Row_RenderScale:
@@ -3006,6 +3065,12 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return CrosshairNames(S.CrosshairMode);
 	case Row_QuickBar:
 		return ShowNames(S.QuickBarMode);
+	case Row_LidarSize:
+		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(ABRLidar::Settings().PointSize * 100.f));
+	case Row_LidarContrast:
+		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(ABRLidar::Settings().Contrast * 100.f));
+	case Row_LidarPersistence:
+		return FString::Printf(TEXT("%d s"), FMath::RoundToInt(ABRLidar::Settings().Persistence));
 	case Row_Objectives:
 		return ShowNames(S.ObjectivesMode);
 	case Row_RenderScale:
@@ -3093,6 +3158,12 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.CrosshairHint", "Point au centre de l'\u00e9cran : toujours, seulement sur un objet utilisable, ou jamais. Les consignes d'interaction et la r\u00e9animation restent affich\u00e9es."));
 	case Row_QuickBar:
 		return BR_STR(NSLOCTEXT("BR", "Menu.QuickBarHint", "Poches 1 \u00e0 4 en bas de l'\u00e9cran : bri\u00e8vement apr\u00e8s un changement (ramassage, utilisation), toujours, ou masqu\u00e9es. Elles restent dans l'inventaire."));
+	case Row_LidarSize:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarSizeHint", "Level 6 : taille des points du scanner LiDAR. Les cat\u00e9gories gardent leur forme (carr\u00e9 : d\u00e9cor, triangle : danger, losange : m\u00e9canisme, croix : menace, chevron : rep\u00e8re de L.)."));
+	case Row_LidarContrast:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarContrastHint", "Level 6 : \u00e9clat des points du scanner sur le noir. Ne change aucun r\u00e9glage graphique."));
+	case Row_LidarPersistence:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarPersistenceHint", "Level 6 : dur\u00e9e pendant laquelle un relev\u00e9 reste visible avant de s'\u00e9teindre."));
 	case Row_Objectives:
 		return BR_STR(NSLOCTEXT("BR", "Menu.ObjectivesHint", "Objectifs en haut \u00e0 droite : bri\u00e8vement \u00e0 l'arriv\u00e9e et \u00e0 chaque progr\u00e8s, toujours, ou masqu\u00e9s. Ils restent dans l'inventaire (onglet Personnage)."));
 	case Row_RenderScale:
@@ -3239,6 +3310,26 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	case Row_QuickBar:
 		S.QuickBarMode = (S.QuickBarMode + Dir + 3) % 3;
 		break;
+	case Row_LidarSize:
+	case Row_LidarContrast:
+	case Row_LidarPersistence:
+	{
+		BRLidar::FSettings& L = ABRLidar::Settings();
+		if (Index == Row_LidarSize)
+		{
+			L.PointSize = FMath::RoundToFloat((L.PointSize + Dir * 0.25f) * 4.f) / 4.f;
+		}
+		else if (Index == Row_LidarContrast)
+		{
+			L.Contrast = FMath::RoundToFloat((L.Contrast + Dir * 0.25f) * 4.f) / 4.f;
+		}
+		else
+		{
+			L.Persistence = L.Persistence + Dir * 2.f;
+		}
+		ABRLidar::SaveSettings();
+		break;
+	}
 	case Row_Objectives:
 		S.ObjectivesMode = (S.ObjectivesMode + Dir + 3) % 3;
 		break;

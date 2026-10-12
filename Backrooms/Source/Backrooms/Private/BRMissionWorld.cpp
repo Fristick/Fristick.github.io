@@ -339,6 +339,11 @@ void ABRWorld::SetupMission()
 				}
 			}
 			SpawnMissionActors();
+			// v4.13 : Level 6 : reperes au sol de l'equipe de L. (chemin de la mire a l'aile), calcules sur chaque machine
+			if (IsLidarLevel())
+			{
+				ComputeLidarMarks();
+			}
 			UE_LOG(LogBackrooms, Log, TEXT("Mission du Niveau %d : %d mecanismes, %d sortie(s) garantie(s)%s"), Level, MissionPlan.NumDevices, MissionExitSpots.Num(),
 				MissionPlan.bFallback ? TEXT(", variante de secours") : TEXT(""));
 		}
@@ -645,7 +650,28 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 
 	// 3. Salle de la mission et sortie garantie (niveaux infinis : on ne marche pas sans fin en attendant une sortie)
 	FIntPoint Room(0, 0);
-	if (!PickCell(4, 0x5A11u, !bOutdoor, bOutdoor ? 0 : 2, Room) && !PickCell(4, 0x5A12u, false, 0, Room))
+	// v4.13 : Level 6 : la salle de la mission est la galerie devant l'entree de l'aile LiDAR (portes du passage dans
+	// ses quatre ouvertures, echelle au fond d'une alcove). Entree hors d'atteinte (rare) : placement ordinaire
+	const FIntPoint WingOut(LidarWing.OutX, LidarWing.OutY);
+	bool bWingRoom = false;
+	if (Plan.Level == 6 && IsLidarLevel() && LidarWing.bValid)
+	{
+		for (const int32 V : { 1, 2, 0, 3 })
+		{
+			const FIntPoint G = LidarCell(0, V) + WingOut;
+			if (Dist.Contains(G))
+			{
+				Room = G;
+				bWingRoom = true;
+				break;
+			}
+		}
+		if (!bWingRoom)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("[Lidar] Entree de l'aile non atteinte depuis le depart (graine %u) : mecanismes du passage places dans une salle ordinaire"), Plan.Seed);
+		}
+	}
+	if (!bWingRoom && !PickCell(4, 0x5A11u, !bOutdoor, bOutdoor ? 0 : 2, Room) && !PickCell(4, 0x5A12u, false, 0, Room))
 	{
 		return false;
 	}
@@ -697,7 +723,32 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 			break;
 		}
 	}
-	if (!bBounded)
+	if (bWingRoom)
+	{
+		// Echelle de sortie contre le mur du fond de l'alcove tiree ; l'emetteur de parasites (element visible) devant elle
+		const FIntPoint Alcove = LidarCell(BRLidar::WingCells - 1, LidarWing.LadderSlot);
+		const FBRMissionSpot F = FaceSpot(Alcove, FIntPoint(-WingOut.X, -WingOut.Y), 0.f);
+		FMissionExitSpot Spot;
+		Spot.Target = ForwardTarget(Plan.Level);
+		Spot.Style = EBRExitStyle::Ladder;
+		Spot.Pos = F.Pos;
+		Spot.Yaw = F.Yaw;
+		Spot.Shaft = 0.f;
+		OutExits.Add(Spot);
+		// Rien d'autre dans l'aile ni devant ses portes
+		for (int32 U = 0; U < BRLidar::WingCells; ++U)
+		{
+			for (int32 V = 0; V < BRLidar::WingCells; ++V)
+			{
+				OutCells.Add(LidarCell(U, V));
+			}
+		}
+		for (int32 V = 0; V < BRLidar::WingCells; ++V)
+		{
+			OutCells.Add(LidarCell(0, V) + WingOut);
+		}
+	}
+	else if (!bBounded)
 	{
 		TArray<int32> Targets;
 		for (const FBRExitDef& Ex : D.Exits)
@@ -848,11 +899,38 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		}
 	}
 
+	// v4.13 : portes du passage du Level 6 dans les quatre ouvertures d'entree de l'aile (une par cellule, de V = 0 a 3),
+	// tournees vers la galerie (module : battant, cadre et plaque lisible au scanner)
+	TArray<FVector> WingDoors;
+	if (bWingRoom)
+	{
+		int32 V = 0;
+		for (int32 I = 0; I < Plan.NumDevices && V < BRLidar::WingCells; ++I)
+		{
+			if (Plan.Devices[I].Role != BRM::R_LidarDoor)
+			{
+				continue;
+			}
+			const FIntPoint Inside = LidarCell(0, V);
+			FBRMissionSpot Spot;
+			Spot.Pos = CellCenter(Inside, 0.f) + FVector(WingOut.X, WingOut.Y, 0.f) * (S * 0.5f);
+			Spot.Pos.Z = FloorZAt(Spot.Pos + FVector(WingOut.X, WingOut.Y, 0.f) * 60.f);
+			Spot.Yaw = YawOf(WingOut.X, WingOut.Y);
+			Spot.Cell = Inside + WingOut;
+			Spot.bWall = false;
+			Spot.Module = BRMech::Module::LidarDoor;
+			Spot.bValid = true;
+			OutSpots[I] = Spot;
+			WingDoors.Add(Spot.Pos);
+			++V;
+		}
+	}
+
 	// 4. Groupes (meme piece) puis mecanismes seuls, chacun dans sa bande de distance
 	TMap<int32, TArray<int32>> Groups;
 	for (int32 I = 0; I < Plan.NumDevices; ++I)
 	{
-		if (I == GateDevice)
+		if (I == GateDevice || OutSpots[I].bValid)
 		{
 			continue;
 		}
@@ -884,8 +962,19 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		int32 SlotIdx = 0;
 		for (const int32 Dev : Members)
 		{
+			auto NearWingDoor = [&WingDoors](const FVector& P)
+			{
+				for (const FVector& Dw : WingDoors)
+				{
+					if (FVector::Dist2D(P, Dw) < 150.f)
+					{
+						return true;
+					}
+				}
+				return false;
+			};
 			while (SlotIdx < Slots.Num() && GroupRoom == Room && OutExits.Num() > 0
-				&& FVector::Dist2D(Slots[SlotIdx].Pos, OutExits[0].Pos) < 140.f)
+				&& (FVector::Dist2D(Slots[SlotIdx].Pos, OutExits[0].Pos) < 140.f || NearWingDoor(Slots[SlotIdx].Pos)))
 			{
 				++SlotIdx;
 			}
@@ -1289,7 +1378,12 @@ uint8 ABRWorld::ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, i
 	// Distance 3D depuis les yeux et ligne de vue (pas a travers un mur, pas depuis un autre etage)
 	const FVector Eye = By->GetEyeLocation();
 	const FVector Target = Dev->GetInteractPoint();
-	if (FVector::DistSquared(Eye, Target) > FMath::Square(MissionReachServer))
+	// v4.13 : la mire et les cages du Level 6 se relevent au scan focalise, de plus loin (toujours en ligne de vue)
+	const BRM::EKind KindAt = MissionPlan.Devices[Device].Kind;
+	const uint8 RoleAt = MissionPlan.Devices[Device].Role;
+	const bool bScanned = KindAt == BRM::EKind::Observe && (RoleAt == BRM::R_LidarTarget || RoleAt == BRM::R_LidarCage);
+	const float Reach = bScanned ? MissionScanReachServer : MissionReachServer;
+	if (FVector::DistSquared(Eye, Target) > FMath::Square(Reach))
 	{
 		return BRMissionText::TooFar;
 	}
@@ -1336,9 +1430,9 @@ uint8 ABRWorld::ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, i
 		float Radius = 500.f;
 		switch (D.Kind)
 		{
-		case BRM::EKind::Crank: Radius = D.Role == BRM::R_Beacon ? 1800.f : 1000.f; break;
+		case BRM::EKind::Crank: Radius = (D.Role == BRM::R_Beacon || D.Role == BRM::R_LidarPost) ? 1800.f : 1000.f; break;
 		case BRM::EKind::Switch: Radius = D.Role == BRM::R_Relay ? 1200.f : 600.f; break;
-		case BRM::EKind::Button: Radius = 800.f; break;
+		case BRM::EKind::Button: Radius = D.Role == BRM::R_LidarDoor ? 1400.f : 800.f; break;
 		default: break;
 		}
 		if (R.Feedback == BRM::EFeedback::Tripped)
@@ -1351,7 +1445,8 @@ uint8 ABRWorld::ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, i
 	{
 		// Une erreur se comprend et se corrige, mais le mecanisme se rearme (pas d'essais en rafale) ; le moulin tourne
 		// un tour a vide
-		MissionCooldowns.Add(Device, Now + (D.Role == BRM::R_MillBrake ? 8.0 : 4.0));
+		// v4.13 : une porte du passage du Level 6 refuse dans un crepitement de parasites et se rearme
+		MissionCooldowns.Add(Device, Now + (D.Role == BRM::R_MillBrake ? 8.0 : (D.Role == BRM::R_LidarDoor ? static_cast<double>(BRMech::LidarDoor::Rearm) : 4.0)));
 	}
 	uint8 Fb = static_cast<uint8>(R.Feedback);
 	if (D.Kind == BRM::EKind::Item && R.Feedback == BRM::EFeedback::AlreadyDone)

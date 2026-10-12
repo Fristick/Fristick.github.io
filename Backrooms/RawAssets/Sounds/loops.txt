@@ -19,3 +19,5 @@ S_MenuTheme
 S_Moth
 S_Underwater
 S_Draft
+S_LidarFocus
+S_LidarStatic

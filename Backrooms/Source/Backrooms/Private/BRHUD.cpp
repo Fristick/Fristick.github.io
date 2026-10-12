@@ -1,4 +1,5 @@
 #include "BRHUD.h"
+#include "BRLidar.h"
 #include "BRMission.h"
 #include "BRFonts.h"
 #include "BRLoc.h"
@@ -15,6 +16,7 @@
 #include "BRWorld.h"
 
 #include "CanvasItem.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -1307,6 +1309,7 @@ void ABRHUD::DrawHUD()
 			DrawCrosshair(C);
 		}
 		DrawContextCues(C); // v4.9 : aucune jauge en exploration
+		DrawLidar(C, W);
 		DrawQuickBar(C);
 		DrawObjectiveTracker(W);
 	}
@@ -5344,8 +5347,9 @@ namespace
 		case 50: Out = { R_Register }; break;
 		case 51: Out = { R_Register, R_Key }; break;
 		case 52: Out = { R_BoilerNote }; break;
-		case 60: Out = { R_StartPlate }; break;
-		case 61: case 62: Out = { R_StartPlate, R_Beacon }; break;
+		// v4.13 : Level 6 LiDAR : les cages et le journal servent a choisir la porte
+		case 62: Out = { R_LidarCage }; break;
+		case 63: Out = { R_LidarCage, R_TeamLog }; break;
 		case 80: case 81: Out = { R_PassageMarks }; break;
 		case 90: case 91: Out = { R_HousePlan }; break;
 		case 92: Out = { R_HousePlan, R_HouseMarker }; break;
@@ -5655,6 +5659,11 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		{
 			continue;
 		}
+		// v4.13 : la mire de calibrage n'a rien a dire (son etape suffit)
+		if (Plan.Devices[D].Role == BRMission::R_LidarTarget)
+		{
+			continue;
+		}
 		TArray<FString> ClueText;
 		BRMissionText::ClueLines(Clue, ClueText);
 		Lines.Add({ BRMissionText::DeviceName(Plan, D), true });
@@ -5669,6 +5678,25 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			++LastNotebookObservations;
 		}
 		ContentH += 8.f * U;
+	}
+	// v4.13 : Level 6 : plaques des portes relevees par CE joueur au scan focalise (releve local, comme une photo)
+	if (Plan.Level == 6)
+	{
+		if (const ABRLidar* L = C ? C->GetLidar() : nullptr)
+		{
+			TArray<int32> Ranks;
+			L->GetScannedPlates().GetKeys(Ranks);
+			Ranks.Sort();
+			for (const int32 Rank : Ranks)
+			{
+				const FIntPoint FS = L->GetScannedPlates()[Rank];
+				Lines.Add({ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LidarPlate", "Porte du passage {N} : silhouette {Fig}, code {Sym}"),
+					{ { TEXT("N"), BRLoc::Int(Rank) }, { TEXT("Fig"), BRLoc::Arg(BRMissionText::FigureName(static_cast<uint8>(FS.X))) },
+						{ TEXT("Sym"), BRLoc::Arg(BRMissionText::Symbol(static_cast<uint8>(FS.Y))) } }), false });
+				ContentH += 19.f * U;
+				++LastNotebookObservations;
+			}
+		}
 	}
 	if (Plan.Level == 11)
 	{
@@ -5765,6 +5793,94 @@ void ABRHUD::DrawMissionDoc(ABRCharacter* C, ABRWorld* W)
 	}
 	Txt(BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.MissionDocClose", "{Interact} Ranger  (copi\u00e9 dans le CARNET : {Inventory})"))), X + Wd * 0.5f, Y + H - 46.f * U,
 		bObserve ? FLinearColor(0.7f, 0.7f, 0.65f) : FLinearColor(0.3f, 0.25f, 0.2f), 0.85f * U, Medium, true, false);
+}
+
+void ABRHUD::DrawLidar(ABRCharacter* C, ABRWorld* W)
+{
+	// v4.13 : scanner LiDAR du Level 6 : cone du scan focalise, recharge de l'impulsion, releve en cours, aide de direction
+	// des parasites (sans le son), rappel des touches. Aucune jauge de statut
+	const ABRLidar* L = C ? C->GetLidar() : nullptr;
+	if (!L || !W || !W->IsLidarLevel())
+	{
+		return;
+	}
+	const float U = Ui();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float CY = Canvas->ClipY * 0.5f;
+	const float A = FMath::Max(HudAlpha(), 0.6f);
+	// Cone du scan focalise (demi-angle rapporte au champ de vision horizontal)
+	float Fov = 90.f;
+	if (PlayerOwner && PlayerOwner->PlayerCameraManager)
+	{
+		Fov = PlayerOwner->PlayerCameraManager->GetFOVAngle();
+	}
+	const float R = CX * FMath::Tan(FMath::DegreesToRadians(BRLidar::FocusHalfAngle)) / FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f));
+	const FLinearColor Cone = L->IsFocusing() ? FLinearColor(1.f, 0.78f, 0.3f, 0.85f * A) : FLinearColor(0.6f, 0.8f, 1.f, 0.25f * A);
+	for (int32 Q = 0; Q < 4; ++Q)
+	{
+		const float Ang = FMath::DegreesToRadians(45.f + Q * 90.f);
+		const float X = CX + FMath::Cos(Ang) * R;
+		const float Y = CY + FMath::Sin(Ang) * R;
+		RoundRect(X - 3.f * U, Y - 3.f * U, 6.f * U, 6.f * U, 3.f * U, Cone);
+	}
+	// Recharge de l'impulsion (petite barre sous le reticule)
+	const float Charge = 1.f - FMath::Clamp(L->GetPulseCharge(), 0.f, 1.f);
+	RoundRect(CX - 30.f * U, CY + R + 14.f * U, 60.f * U, 4.f * U, 2.f * U, FLinearColor(0.f, 0.f, 0.f, 0.4f * A));
+	RoundRect(CX - 30.f * U, CY + R + 14.f * U, 60.f * U * Charge, 4.f * U, 2.f * U, Charge >= 1.f ? FLinearColor(0.55f, 0.8f, 1.f, 0.85f * A) : FLinearColor(0.5f, 0.5f, 0.55f, 0.6f * A));
+	// Releve en cours (mire ou cage dans l'axe du scan focalise)
+	if (const ABRMissionDevice* D = L->GetFocusDevice())
+	{
+		const BRMission::FDevice& Def = D->GetDeviceDef();
+		if (Def.Kind == BRMission::EKind::Observe && W->IsMissionActive() && D->GetIndex() < W->GetMissionPlan().NumDevices)
+		{
+			const float Have = static_cast<float>(W->GetMissionState().Dev[D->GetIndex()]);
+			const float Fill = FMath::Clamp(Have / FMath::Max<float>(1.f, Def.Positions), 0.f, 1.f);
+			const bool bLocked = Def.Role == BRMission::R_LidarCage && D->GetGateValue() < 128;
+			Bar(CX - 130.f * U, CY + 84.f * U, 260.f * U, 8.f * U, bLocked ? 0.f : Fill, bLocked ? FLinearColor(0.6f, 0.3f, 0.25f, 0.9f) : FLinearColor(1.f, 0.72f, 0.22f, 0.9f),
+				bLocked ? BR_STR(NSLOCTEXT("BR", "HUD.LidarCageOff", "CAGE HORS TENSION : R\u00c9ACTIVEZ SON POSTE")) : BR_STR(NSLOCTEXT("BR", "HUD.LidarSurvey", "RELEV\u00c9 AU SCANNER")));
+		}
+	}
+	// Aide de direction des parasites (le dernier passage) : intensite et cap, lisibles sans le son
+	FVector Static;
+	if (W->GetLidarStatic(Static))
+	{
+		const FVector Eye = C->GetEyeLocation();
+		const float Level = BRLidar::StaticLevel(static_cast<float>(FVector::Dist(Eye, Static)));
+		if (Level > 0.f)
+		{
+			const FVector To = (Static - Eye).GetSafeNormal2D();
+			const FVector Fwd = C->GetAimRotation().Vector().GetSafeNormal2D();
+			const float Cross = static_cast<float>(Fwd.X * To.Y - Fwd.Y * To.X);
+			const float Dot = static_cast<float>(FVector::DotProduct(Fwd, To));
+			const float Bearing = FMath::RadiansToDegrees(FMath::Atan2(Cross, Dot)); // > 0 : a droite
+			const float BY = 70.f * U;
+			const float BW = 240.f * U;
+			TextSpaced(BR_STR(NSLOCTEXT("BR", "HUD.LidarStatic", "PARASITES")), CX, BY - 20.f * U, FLinearColor(1.f, 0.85f, 0.6f, 0.9f * A), 11.f, EUiWeight::Bold, 4.f * U, EUiAlign::Center);
+			RoundRect(CX - BW * 0.5f, BY, BW, 6.f * U, 3.f * U, FLinearColor(0.f, 0.f, 0.f, 0.45f * A));
+			for (int32 I = 0; I < 10; ++I)
+			{
+				if (Level * 10.f > I)
+				{
+					RoundRect(CX - BW * 0.5f + I * BW / 10.f + 1.f * U, BY + 1.f * U, BW / 10.f - 2.f * U, 4.f * U, 2.f * U, FLinearColor(1.f, 0.55f + 0.04f * I, 0.2f, 0.9f * A));
+				}
+			}
+			// Cap : un repere glisse sous la barre vers le cote des parasites ; derriere soi, il clignote aux deux bouts
+			const bool bBehind = FMath::Abs(Bearing) > 100.f;
+			const float MX = CX + FMath::Clamp(Bearing / 90.f, -1.f, 1.f) * BW * 0.5f;
+			const float Blink = bBehind ? (0.4f + 0.6f * FMath::Abs(FMath::Sin(Clock * 5.f))) : 1.f;
+			RoundRect(MX - 5.f * U, BY + 10.f * U, 10.f * U, 10.f * U, 5.f * U, FLinearColor(1.f, 0.9f, 0.7f, Blink * A));
+			if (bBehind)
+			{
+				TextF(BR_STR(NSLOCTEXT("BR", "HUD.LidarBehind", "derri\u00e8re vous")), CX, BY + 24.f * U, FLinearColor(1.f, 0.9f, 0.7f, 0.85f * A), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
+			}
+		}
+	}
+	// Rappel des touches (configurables) tant que le scanner n'est pas calibre, puis discret
+	const bool bCalibrated = W->IsLidarCalibrated();
+	TArray<TPair<FString, FString>> Hints;
+	Hints.Add(TPair<FString, FString>(BRKeys::Primary(EBRAction::LidarPulse), BR_STR(NSLOCTEXT("BR", "HUD.LidarPulseHint", "Impulsion"))));
+	Hints.Add(TPair<FString, FString>(BRKeys::Primary(EBRAction::LidarFocus), BR_STR(NSLOCTEXT("BR", "HUD.LidarFocusHint", "Scan focalis\u00e9 (maintenir)"))));
+	KeyHints(CX, Canvas->ClipY - 118.f * U, Hints, bCalibrated ? 0.35f * A : 0.95f, true);
 }
 
 void ABRHUD::DrawMissionHold(ABRCharacter* C)

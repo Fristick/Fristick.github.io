@@ -15,6 +15,7 @@ class UStaticMeshComponent;
 class UTextRenderComponent;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
+class UAudioComponent;
 class ABRCharacter;
 
 /** Mecanisme de mission (panneau, cadran, vanne, prise, cle, manivelle, bouton, porte...). Cree localement chez chaque
@@ -55,6 +56,13 @@ public:
 	 *  reapparition, il reprend la bonne position sans rejouer d'animation */
 	void SetShown(bool bShow);
 	bool IsShown() const { return bShown; }
+	/** v4.13 : scanner LiDAR : definition du mecanisme, ouverture affichee (0..255) */
+	const BRMission::FDevice& GetDeviceDef() const { return Device; }
+	uint8 GetGateValue() const { return GateValue; }
+	/** v4.13 : plaque lisible au scanner (porte du passage) : centre, axes (droite, haut) et normale, dans le monde */
+	bool GetLidarPlate(FVector& OutCenter, FVector& OutRight, FVector& OutUp, FVector& OutNormal) const;
+	/** v4.13 : repere de l'interieur d'une cage (origine au sol au centre, X vers l'avant de la cage) */
+	bool GetCageFrame(FTransform& Out) const;
 	/** v4.12 : module physique (BRMech::Module), son repere et la progression affichee (passerelle : 0 levee .. 1 posee) */
 	uint8 GetModule() const { return Module; }
 	BRMech::FFrame GetModuleFrame() const { return ModuleFrame(); }
@@ -161,6 +169,16 @@ protected:
 	void BuildPoolTanks();
 	void BuildPoolLock();
 	void BuildBridge();
+	/** v4.13 : porte du passage du Level 6 (cadre, battant sur pivot, plaque silhouette et code) */
+	void BuildLidarDoor(const BRMission::FPlan& Plan);
+	/** v4.13 : battant de la porte du passage (pivot sur les charnieres) */
+	UPROPERTY()
+	TObjectPtr<USceneComponent> DoorLeaf;
+	/** v4.13 : parasites de l'emetteur du dernier passage (boucle positionnelle) */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> StaticAudio;
+	/** v4.13 : rang de la porte du passage le long du mur (1-4) */
+	int32 DoorNumber = 0;
 	void ApplyModuleState(const BRMission::FPlan& Plan, const BRMission::FState& State, const BRMission::FEval& Eval, bool bAnimate);
 	/** Animation du module ; true tant que quelque chose bouge */
 	bool UpdateModule(float Dt);
@@ -205,6 +223,8 @@ namespace BRMissionText
 	BACKROOMS_API FString Symbol(uint8 Sym);
 	/** Lettre A-E */
 	BACKROOMS_API FString Letter(uint8 L);
+	/** v4.13 : nom d'une silhouette des cages du Level 6 (BRMission::NumFigures) */
+	BACKROOMS_API FString FigureName(uint8 Figure);
 	/** Nom d'un mecanisme (avec son inscription) */
 	BACKROOMS_API FString DeviceName(const BRMission::FPlan& Plan, int32 Device);
 	/** Etat lisible d'un mecanisme (position, marche/arret, progression), vide si rien a dire */

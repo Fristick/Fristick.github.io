@@ -394,12 +394,21 @@ namespace
 		D.Entities = { E(EBREntityKind::Smiler, 1.f) };
 		D.MaxEntities = 3; D.SpawnInterval = 25.f;
 		D.AlmondWaterChance = 0.25f; D.BatteryChance = 0.45f; D.NoteChance = 0.15f;
-		D.Exits = { X(8, EBRExitStyle::Ladder, 0.12f) };
+		// v4.13 : une seule sortie vers le Niveau 8, l'echelle au fond de l'aile LiDAR (placee par la mission) : aucune
+		// echelle tiree dans les chunks ne contourne le passage
+		D.Exits = { X(8, EBRExitStyle::Ladder, 0.f) };
 		D.bPhenomena = true;
+		// v4.13 : obscurite reelle et scanner LiDAR ; l'aile d'essai reprend les cotes des fosses (trous de 210 cm, passages
+		// de 140 cm entre deux trous, chute mortelle)
+		D.bLidar = true;
+		D.PitRoomCells = 4;
+		D.PitHoleSize = 210.f;
+		D.PitPassage = 140.f;
+		D.PitDoorsPerSide = 1;
 		D.Notes = {
-			{ FName(TEXT("Note.L6.1")), NSLOCTEXT("BR", "Note.L6.1", "Garde ta lampe \u00e9teinte quand tu vois deux yeux. Recule. Lentement.") },
-			{ FName(TEXT("Note.L6.2")), NSLOCTEXT("BR", "Note.L6.2", "Les piles sont plus pr\u00e9cieuses que l'eau ici. {Battery} pour en changer.") },
-			{ FName(TEXT("Note.L6.3")), NSLOCTEXT("BR", "Note.L6.3", "Il y a des \u00e9chelles qui descendent. En bas, \u00e7a sent la terre mouill\u00e9e.") }
+			{ FName(TEXT("Note.L6.4")), NSLOCTEXT("BR", "Note.L6.4", "Ici, les lampes meurent et la vision nocturne ne voit que de la neige. Le scanner, lui, marche : une impulsion pour la pi\u00e8ce, un faisceau maintenu pour le d\u00e9tail. - L.") },
+			{ FName(TEXT("Note.L6.5")), NSLOCTEXT("BR", "Note.L6.5", "Les sourires entendent les impulsions. Un faisceau maintenu sur eux les fait reculer. Ne les laissez pas approcher dans le noir. - L.") },
+			{ FName(TEXT("Note.L6.6")), NSLOCTEXT("BR", "Note.L6.6", "Les fl\u00e8ches bleues au sol sont de nous. Elles m\u00e8nent \u00e0 l'aile d'essai. Au-del\u00e0 des portes, le sol est perc\u00e9 : regardez avant de marcher. - L.") }
 		};
 		return D;
 	}

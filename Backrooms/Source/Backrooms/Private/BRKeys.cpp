@@ -37,6 +37,8 @@ namespace
 			{ TEXT("ThirdPerson"), NSLOCTEXT("BR", "Key.Action.ThirdPerson", "VUE \u00c0 LA 3E PERSONNE") },
 			{ TEXT("Pause"), NSLOCTEXT("BR", "Key.Action.Pause", "PAUSE") },
 			{ TEXT("PushToTalk"), NSLOCTEXT("BR", "Key.Action.PushToTalk", "PARLER (CHAT VOCAL)") },
+			{ TEXT("LidarPulse"), NSLOCTEXT("BR", "Key.Action.LidarPulse", "SCANNER : IMPULSION") },
+			{ TEXT("LidarFocus"), NSLOCTEXT("BR", "Key.Action.LidarFocus", "SCANNER : SCAN FOCALIS\u00c9 (MAINTENIR)") },
 		};
 		static_assert(UE_ARRAY_COUNT(Defs) == static_cast<int32>(EBRAction::Count), "Une ligne par action");
 		return Defs[FMath::Clamp(static_cast<int32>(Action), 0, static_cast<int32>(EBRAction::Count) - 1)];
@@ -143,6 +145,8 @@ namespace BRKeys
 		SetDefault(EBRAction::ThirdPerson, EKeys::V);
 		SetDefault(EBRAction::Pause, EKeys::P, EKeys::Escape);
 		SetDefault(EBRAction::PushToTalk, EKeys::T);
+		SetDefault(EBRAction::LidarPulse, EKeys::RightMouseButton, EKeys::G);
+		SetDefault(EBRAction::LidarFocus, EKeys::X, EKeys::MiddleMouseButton);
 		++GRevision;
 	}
 

@@ -13,6 +13,7 @@
 #include "BRPlayerController.h"
 #include "BREntity.h"
 #include "BRSave.h"
+#include "BRLidar.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
@@ -945,6 +946,21 @@ void ABRCharacter::ToggleNightVision()
 	{
 		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Player.BatterieCamescopeVide", "Batterie du cam\u00e9scope vide.")), 2.5f, FLinearColor(1.f, 0.8f, 0.4f));
 		return;
+	}
+	// v4.13 : Level 6 : les parasites brouillent le capteur ; la vision nocturne ne montre que de la neige (le scanner,
+	// lui, marche). Les reglages graphiques ne changent pas
+	if (!bNightVision)
+	{
+		if (const ABRWorld* LW = ABRWorld::Get(this))
+		{
+			if (LW->IsLidarLevel())
+			{
+				ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Player.LidarNightVision", "La vision nocturne ne capte que de la neige : les parasites brouillent le capteur. Utilisez le scanner : {LidarPulse} impulsion, {LidarFocus} scan focalis\u00e9."))),
+					4.f, FLinearColor(0.6f, 0.8f, 1.f));
+				PlaySound2D(TEXT("S_UIDeny"), 0.4f);
+				return;
+			}
+		}
 	}
 	bNightVision = !bNightVision;
 	UpdateViewMode();
@@ -2600,6 +2616,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	UpdateFocus();
 	UpdateRevive(Dt);
 	UpdateMissionHold(Dt);
+	UpdateLidar(Dt);
 	UpdateAudio(Dt);
 	UpdatePostProcess(Dt);
 	AnimateBody(Dt);
@@ -3027,6 +3044,20 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 			FlashFlicker = FMath::FInterpTo(FlashFlicker, 1.f, Dt, 6.f);
 			Mult *= FlashFlicker;
 		}
+		// v4.13 : Level 6 : appareils perturbes : la lampe ne donne qu'une lueur courte et vacillante (elle ne contourne
+		// pas le scanner) ; ailleurs, portee normale
+		const ABRWorld* FW = ABRWorld::Get(this);
+		const bool bPerturbed = FW && FW->IsLidarLevel();
+		if (bPerturbed)
+		{
+			if (FMath::FRand() < 0.12f)
+			{
+				FlashFlicker = FMath::FRandRange(0.f, 0.6f);
+			}
+			FlashFlicker = FMath::FInterpTo(FlashFlicker, 1.f, Dt, 4.f);
+			Mult *= 0.12f * FlashFlicker;
+		}
+		Flashlight->SetAttenuationRadius(bPerturbed ? 380.f : 2400.f);
 		Flashlight->SetIntensity(FlashCandelas * Mult * (bHeadlamp ? 0.55f : 1.f));
 		Flashlight->SetVisibility(true);
 		Glow = Mult;
@@ -4321,6 +4352,150 @@ void ABRCharacter::UpdateMissionHold(float Dt)
 		HoldTimer -= 0.5f;
 		RequestMissionAction(D->GetIndex(), static_cast<uint8>(BRMission::EAction::Hold));
 	}
+}
+
+// =====================================================================================================================
+// v4.13 : scanner LiDAR du Level 6
+// =====================================================================================================================
+
+USceneComponent* ABRCharacter::GetViewComponent() const
+{
+	return Camera;
+}
+
+void ABRCharacter::UpdateLidar(float Dt)
+{
+	(void)Dt;
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+	const ABRWorld* W = ABRWorld::Get(this);
+	const bool bWant = W && W->IsLidarLevel() && W->IsLevelReady() && !bDead;
+	ABRLidar* L = Lidar.Get();
+	if (bWant && !L)
+	{
+		FActorSpawnParameters P;
+		P.Owner = this;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		L = GetWorld()->SpawnActor<ABRLidar>(ABRLidar::StaticClass(), FTransform::Identity, P);
+		if (L)
+		{
+			L->Init(this);
+			Lidar = L;
+			// Sas d'entree : la perturbation des appareils est expliquee (aucun reglage graphique ne change)
+			ABRHUD::Notify(this, BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "Lidar.Airlock", "Sas d'entr\u00e9e : ici, les appareils sont perturb\u00e9s. La lampe ne donne qu'une lueur, la vision nocturne ne voit que de la neige. Le scanner LiDAR de l'\u00e9quipe de L. marche : {LidarPulse} impulsion, {LidarFocus} scan focalis\u00e9 (maintenir)."))),
+				10.f, FLinearColor(0.6f, 0.8f, 1.f));
+		}
+	}
+	else if (!bWant && L && (!W || !W->IsLidarLevel()))
+	{
+		// Autre niveau : le scanner et ses points disparaissent (une mort au Level 6 le garde : les points s'eteignent seuls)
+		L->Destroy();
+		Lidar.Reset();
+	}
+	else if (L && bDead)
+	{
+		L->SetFocus(false);
+	}
+}
+
+void ABRCharacter::LidarPulse()
+{
+	if (ABRLidar* L = Lidar.Get())
+	{
+		if (!bInputLocked && !L->Pulse())
+		{
+			PlaySound2D(TEXT("S_UIDeny"), 0.2f);
+		}
+	}
+}
+
+void ABRCharacter::LidarFocus(bool bOn)
+{
+	if (ABRLidar* L = Lidar.Get())
+	{
+		L->SetFocus(bOn && !bInputLocked && !bDead);
+	}
+}
+
+void ABRCharacter::NotifyLidarPulse(const FVector& At)
+{
+	if (HasAuthority())
+	{
+		ServerLidarPulse_Implementation(At);
+	}
+	else
+	{
+		ServerLidarPulse(At);
+	}
+}
+
+bool ABRCharacter::ServerLidarPulse_Validate(FVector_NetQuantize At)
+{
+	return true;
+}
+
+void ABRCharacter::ServerLidarPulse_Implementation(FVector_NetQuantize At)
+{
+	ABRWorld* W = ABRWorld::Get(this);
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	// Une impulsion par recharge, pres du joueur (pas de bruit lance a distance)
+	if (!W || bDead || Now - ServerLastPulse < BRLidar::PulseCooldown * 0.8 || FVector::DistSquared(At, GetActorLocation()) > FMath::Square(300.f))
+	{
+		return;
+	}
+	ServerLastPulse = Now;
+	W->ReportLidarPulse(At);
+}
+
+void ABRCharacter::RequestLidarRepel(ABREntity* E)
+{
+	if (!E)
+	{
+		return;
+	}
+	if (HasAuthority())
+	{
+		ServerLidarRepel_Implementation(E);
+	}
+	else
+	{
+		ServerLidarRepel(E);
+	}
+}
+
+bool ABRCharacter::ServerLidarRepel_Validate(ABREntity* E)
+{
+	return true;
+}
+
+void ABRCharacter::ServerLidarRepel_Implementation(ABREntity* E)
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	if (!W || !W->IsLidarLevel() || !IsValid(E) || bDead || E->Kind != EBREntityKind::Smiler)
+	{
+		return;
+	}
+	// Verifie chez l'hote : a portee du scanner, en ligne de vue, dans l'axe de la visee
+	const FVector Eye = GetEyeLocation();
+	const FVector To = E->GetActorLocation() + FVector(0.f, 0.f, 60.f);
+	if (FVector::DistSquared(Eye, To) > FMath::Square(BRLidar::Range))
+	{
+		return;
+	}
+	const FVector Aim = GetAimRotation().Vector();
+	if (FVector::DotProduct(Aim, (To - Eye).GetSafeNormal()) < FMath::Cos(FMath::DegreesToRadians(BRLidar::FocusHalfAngle * 2.f)))
+	{
+		return;
+	}
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRLidarRepel), false, this);
+	Q.AddIgnoredActor(E);
+	if (GetWorld()->LineTraceTestByChannel(Eye, To, ECC_Visibility, Q))
+	{
+		return;
+	}
+	E->LidarRepel(GetActorLocation());
 }
 
 void ABRCharacter::RequestDepartureFromServer(int32 Target)

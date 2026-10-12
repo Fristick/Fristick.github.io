@@ -43,6 +43,24 @@ namespace BRMech
 		constexpr uint8_t PoolLock = 3;
 		/** Passerelle du Niveau 8 : palier, interruption, appui, tablier, portique */
 		constexpr uint8_t Bridge = 4;
+		/** v4.13 : porte du passage du Level 6, dans une ouverture d'entree de l'aile LiDAR : cadre, battant, plaque */
+		constexpr uint8_t LidarDoor = 5;
+	}
+
+	/** v4.13 : porte du passage du Level 6 (repere de la porte : origine au sol au milieu de l'ouverture, X vers la galerie,
+	 *  Y lateral). Le battant ferme bloque l'ouverture (largeur DoorWidth du niveau, 140 cm), pivote sur ses charnieres
+	 *  vers l'aile quand c'est la bonne porte */
+	namespace LidarDoor
+	{
+		constexpr float Width = 140.f;
+		constexpr float Height = 225.f;
+		constexpr float LeafThick = 6.f;
+		constexpr float OpenAngle = 95.f;
+		/** Plaque (silhouette et code, en relief) sur la face cote galerie, a hauteur des yeux */
+		constexpr float PlateZ = 150.f;
+		constexpr float PlateSize = 56.f;
+		/** Apres un refus, la porte se rearme (s) : on ne peut pas essayer les quatre portes d'un coup */
+		constexpr float Rearm = 4.f;
 	}
 
 	// =================================================================================================================

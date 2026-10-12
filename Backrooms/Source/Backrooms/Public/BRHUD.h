@@ -168,6 +168,8 @@ private:
 	void DrawDeparture(ABRWorld* W);
 	/** v4.11 : action maintenue sur un mecanisme (observation, manivelle) */
 	void DrawMissionHold(ABRCharacter* C);
+	/** v4.13 : scanner LiDAR du Level 6 (cone, recharge, releve, aide de direction des parasites, touches) */
+	void DrawLidar(ABRCharacter* C, ABRWorld* W);
 	/** v4.11 : fin de la campagne (Niveau 11) et sa variante */
 	void DrawEnding(ABRPlayerController* PC, ABRWorld* W);
 	void DrawSettingsTab(ABRPlayerController* PC);

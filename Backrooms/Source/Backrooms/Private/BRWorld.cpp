@@ -2203,6 +2203,11 @@ void ABRWorld::UpdatePopulation(float Dt)
 	{
 		return;
 	}
+	// v4.13 : Level 6 : la zone sure du depart le reste tant que le scanner n'est pas calibre (tutoriel sans menace)
+	if (!IsLidarCalibrated())
+	{
+		return;
+	}
 	SpawnTimer -= Dt;
 	if (SpawnTimer > 0.f)
 	{
@@ -3125,7 +3130,8 @@ uint32 ABRWorld::SeedFromUser(uint32 N, int32 Level)
 bool ABRWorld::HasPits() const
 {
 	const FBRLevelDef& D = Def();
-	return D.PitRoomChance > 0.f && D.PoolChance <= 0.f && (D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze);
+	// v4.13 : l'aile LiDAR du Level 6 est une salle de fosses (sol perce, chute, evitement des entites) a regles propres
+	return (D.PitRoomChance > 0.f || D.bLidar) && D.PoolChance <= 0.f && (D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze);
 }
 
 bool ABRWorld::ComputePitRoom(const FIntPoint& Chunk, FIntRect& OutRoom) const
@@ -3134,6 +3140,17 @@ bool ABRWorld::ComputePitRoom(const FIntPoint& Chunk, FIntRect& OutRoom) const
 	if (!HasPits() || !IsChunkInBounds(Chunk) || IsSpawnChunk(this, Chunk))
 	{
 		return false;
+	}
+	if (D.bLidar)
+	{
+		// v4.13 : une seule salle, l'aile d'essai
+		if (!LidarWing.bValid || Chunk != FIntPoint(LidarWing.ChunkX, LidarWing.ChunkY))
+		{
+			return false;
+		}
+		OutRoom.Min = FIntPoint(LidarWing.MinX, LidarWing.MinY);
+		OutRoom.Max = OutRoom.Min + FIntPoint(BRLidar::WingCells, BRLidar::WingCells);
+		return true;
 	}
 	bool bPicked = false;
 	if (D.BoundsChunks > 0)
@@ -3192,6 +3209,10 @@ bool ABRWorld::HasPitAtCorner(int32 X, int32 Y) const
 	if (!GetPitRoom(CellToChunk(FIntPoint(X, Y)), R) || X < R.Min.X || X + 1 >= R.Max.X || Y < R.Min.Y || Y + 1 >= R.Max.Y)
 	{
 		return false;
+	}
+	if (Def().bLidar)
+	{
+		return BRLidar::HoleAtCorner(LidarWing, X, Y);
 	}
 	return BRHash::Rand(X, Y, 1953, Seed) < Def().PitHoleChance;
 }
@@ -3297,6 +3318,11 @@ EBREdge ABRWorld::PitEdge(int32 X, int32 Y, bool bEast, bool& bOut) const
 		return EBREdge::Open; // bord du chunk : regle ordinaire
 	}
 	bOut = true;
+	if (Def().bLidar)
+	{
+		// v4.13 : aile LiDAR : quatre ouvertures d'entree (portes du passage), murs pleins ailleurs, alcoves au fond
+		return static_cast<EBREdge>(BRLidar::EdgeBetween(LidarWing, A.X, A.Y, B.X, B.Y));
+	}
 	auto In = [&R](const FIntPoint& C) { return C.X >= R.Min.X && C.X < R.Max.X && C.Y >= R.Min.Y && C.Y < R.Max.Y; };
 	const bool bInA = In(A);
 	const bool bInB = In(B);
@@ -3399,6 +3425,16 @@ void ABRWorld::PrepareLevelLayout()
 	FullReach.Reset();
 	ForcedDoors.Reset();
 	const FBRLevelDef& D = Def();
+	// v4.13 : aile LiDAR du Level 6, d'apres la graine seule (avant toute arete : PitEdge et les trous la lisent)
+	LidarWing = D.bLidar ? BRLidar::PickWing(Seed, D.ChunkCells) : BRLidar::FWing();
+	LidarMarks.Reset();
+	LidarMarkDirs.Reset();
+	if (LidarWing.bValid)
+	{
+		UE_LOG(LogBackrooms, Log, TEXT("[Lidar] Aile d'essai : chunk (%d, %d), cellules (%d, %d) a (%d, %d), entree vers (%d, %d), echelle dans l'alcove %d"),
+			LidarWing.ChunkX, LidarWing.ChunkY, LidarWing.MinX, LidarWing.MinY, LidarWing.MinX + BRLidar::WingCells - 1, LidarWing.MinY + BRLidar::WingCells - 1,
+			LidarWing.OutX, LidarWing.OutY, LidarWing.LadderSlot);
+	}
 	if (D.BoundsChunks <= 0)
 	{
 		return;
@@ -4167,6 +4203,11 @@ EBREdge ABRWorld::EdgeE(int32 X, int32 Y) const
 		{
 			return EBREdge::Open;
 		}
+		// v4.13 : couloir garanti du depart a l'aile LiDAR (Level 6) : un mur tire sur ce chemin recoit une porte
+		if (LidarWing.bValid && BRLidar::CorridorEdge(LidarWing, X, Y, X + 1, Y))
+		{
+			return EBREdge::Door;
+		}
 		return BRHash::Rand(X, Y, 103, Seed) < D.DoorChance ? EBREdge::Door : EBREdge::Wall;
 	}
 	if (D.Layout == EBRLayout::Maze)
@@ -4219,6 +4260,10 @@ EBREdge ABRWorld::EdgeN(int32 X, int32 Y) const
 		if (BRHash::Rand(SegIdx, Y, 112, Seed) >= D.WallLineChance * ZoneDensity(X, Y))
 		{
 			return EBREdge::Open;
+		}
+		if (LidarWing.bValid && BRLidar::CorridorEdge(LidarWing, X, Y, X, Y + 1))
+		{
+			return EBREdge::Door;
 		}
 		return BRHash::Rand(X, Y, 113, Seed) < D.DoorChance ? EBREdge::Door : EBREdge::Wall;
 	}

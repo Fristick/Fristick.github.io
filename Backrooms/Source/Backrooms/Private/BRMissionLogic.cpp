@@ -1809,21 +1809,21 @@ bool MigrateState(const FPlan& Plan, const uint8_t* In, int Size, FState& Out)
 		}
 		// En cours : la plaque de depart lue vaut le calibrage (premiere etape) ; chaque balise de la chaine allumee vaut un
 		// poste reactive, dans l'ordre des postes ; la balise en cours de manivelle garde sa progression sur le poste suivant
-		const int Done = BeaconsDone6Old(Old, OldState);
-		const bool bStarted = OldState.Dev[L6Old_Start] != 0 || Done > 0;
+		const int Lit = BeaconsDone6Old(Old, OldState);
+		const bool bStarted = OldState.Dev[L6Old_Start] != 0 || Lit > 0;
 		if (bStarted)
 		{
 			Out.Dev[L6_Calib] = Plan.Devices[L6_Calib].Positions;
 		}
-		for (int K = 0; K < Done && K < 4; ++K)
+		for (int K = 0; K < Lit && K < 4; ++K)
 		{
 			Out.Dev[L6_Post + K] = Plan.Devices[L6_Post + K].Positions;
 		}
-		if (Done < 3 && bStarted)
+		if (Lit < 3 && bStarted)
 		{
-			const int Partial = OldState.Dev[Old.Params[Done]];
-			const int Cap = Plan.Devices[L6_Post + Done].Positions - 1;
-			Out.Dev[L6_Post + Done] = U8(Partial < Cap ? Partial : Cap);
+			const int Partial = OldState.Dev[Old.Params[Lit]];
+			const int Cap = Plan.Devices[L6_Post + Lit].Positions - 1;
+			Out.Dev[L6_Post + Lit] = U8(Partial < Cap ? Partial : Cap);
 		}
 		return true;
 	}

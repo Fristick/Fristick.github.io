@@ -1,0 +1,31 @@
+# Empreintes des plans de mission avant/apres v4.13 suite (Level 6) — sortie reelle
+# Commit d82729d (avant la mission LiDAR) contre la logique actuelle : 500 graines + variante de secours par niveau
+
+## Avant
+1 f69fad2f
+2 8fb3e818
+3 d0ae70c2
+4 f5eda544
+5 fbe5a233
+6 d2b3ba66
+8 e484482d
+9 d84229ce
+10 8502bfd6
+11 e7c51e4a
+37 67e6a407
+
+## Apres
+1 f69fad2f
+2 8fb3e818
+3 d0ae70c2
+4 f5eda544
+5 fbe5a233
+6 29277141
+8 e484482d
+9 d84229ce
+10 8502bfd6
+11 e7c51e4a
+37 67e6a407
+
+## Plan v4.12 du Level 6 reconstruit (BuildLegacyPlan6) contre BuildPlan(6) de la v4.12 : 4 graines + secours
+identiques

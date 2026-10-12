@@ -418,6 +418,12 @@ struct FBRLevelDef
 	/** Ouvertures dans les murs de la salle, par cote */
 	int32 PitDoorsPerSide = 1;
 
+	// --- v4.13 : Level 6 sans lumiere ---
+	/** Obscurite reelle et scanner LiDAR de l'equipe de L. : lampe perturbee, vision nocturne inutilisable, aile d'essai
+	 *  (BRLidarLogic.h : salle fermee a quatre portes, zone de trous, alcoves) posee d'apres la graine. Les reglages de
+	 *  fosses (PitHoleSize, PitPassage, PitDepth...) s'appliquent a ses trous */
+	bool bLidar = false;
+
 	// --- v4.3 : Niveau 0 plus petit ---
 	/** > 0 : niveau fini de 2 x BoundsChunks chunks de cote autour du point de depart, ferme par des murs d'enceinte.
 	 *  Les cassettes VHS et les sorties y sont tirees parmi les chunks (nombre garanti) au lieu d'un tirage par chunk */

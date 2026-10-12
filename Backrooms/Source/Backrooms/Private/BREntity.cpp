@@ -6,6 +6,7 @@
 #include "BRAssets.h"
 #include "BRCharacter.h"
 #include "BRWorld.h"
+#include "BRLidarLogic.h"
 
 #include "AIController.h"
 #include "Components/AudioComponent.h"
@@ -2073,6 +2074,29 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 		StartVanish(); // la lumiere les fait fuir
 		return;
 	}
+	// v4.13 : Level 6 (scanner LiDAR), regle lisible : une impulsion large s'entend et l'attire ; le faisceau focalise
+	// maintenu sur lui le fait reculer, et il ne revient pas avant un moment. Son approche s'annonce (souffle, une fois)
+	if (W->IsLidarLevel())
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		if (Now < LidarRepelUntil)
+		{
+			const FVector Away = GetActorLocation() + (GetActorLocation() - LidarRepelFrom).GetSafeNormal2D() * BRLidar::RepelDistance;
+			FollowPathTo(Away, I.ChaseSpeed * 0.8f, Dt);
+			return;
+		}
+		FVector Heard;
+		if (State != EState::Chase && !S.bLOS && W->FindRecentNoise(GetActorLocation(), Heard))
+		{
+			if (!bLidarTelegraphed)
+			{
+				bLidarTelegraphed = true;
+				MulticastVoiceCue(0.45f);
+			}
+			FollowPathTo(Heard, I.WalkSpeed, Dt);
+			return;
+		}
+	}
 
 	// Comme dans Escape Together : un faisceau braque sur lui le fait charger
 	const bool bBeamed = P->IsFlashlightOn() && S.bLOS && S.Dist < 1600.f && IsLookedAtBy(P, 0.97f);
@@ -2130,6 +2154,25 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 	{
 		MoveTowards(GetActorLocation(), 0.f);
 	}
+}
+
+void ABREntity::LidarRepel(const FVector& From)
+{
+	if (!HasAuthority() || !GetWorld())
+	{
+		return;
+	}
+	LidarRepelFrom = From;
+	LidarRepelUntil = GetWorld()->GetTimeSeconds() + BRLidar::RepelLock;
+	BeamTime = 0.f;
+	Agitation = 0.f;
+	bLidarTelegraphed = false;
+	if (State == EState::Chase)
+	{
+		SetState(EState::Wander);
+	}
+	// Sifflement : il recule (le joueur l'entend autant qu'il le voit au scanner)
+	MulticastVoiceCue(0.8f);
 }
 
 // ------------------------------------------------------------------ Hounds
