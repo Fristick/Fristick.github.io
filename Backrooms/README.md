@@ -7,13 +7,13 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.13** (Level 0 sans énigme, progression stable, histoire de l'équipe de L., kit Blender du Level 0) :
+**Version 4.13** (Level 0 sans énigme, progression stable, histoire de l'équipe de L., kit Blender du Level 0 ; suite : porte tirée à chaque partie, Level 6 sans lumière au scanner LiDAR) :
 
 - **Où lire** :
   - constats sur la base : [`Docs/AUDIT_v4.13.md`](Docs/AUDIT_v4.13.md) ;
   - corrections, vérifications, commandes, résultats et limites : [`Docs/RAPPORT_v4.13.md`](Docs/RAPPORT_v4.13.md) ;
   - fil narratif, état de la partie, migration : [`Docs/HISTOIRE_PROGRESSION_v4.13.md`](Docs/HISTOIRE_PROGRESSION_v4.13.md) ;
-  - règles du Level 0 et des transitions : [`Docs/GAMEPLAY_v4.13.md`](Docs/GAMEPLAY_v4.13.md) ;
+  - règles du Level 0, des transitions et du Level 6 LiDAR : [`Docs/GAMEPLAY_v4.13.md`](Docs/GAMEPLAY_v4.13.md) ;
   - chapitres et mises à jour de contenu : [`Docs/PLAN_PUBLICATION.md`](Docs/PLAN_PUBLICATION.md) ;
   - kit Blender du Level 0 : [`RawAssets/Level0Kit/README.md`](RawAssets/Level0Kit/README.md) ;
   - journaux réels : [`Docs/v413/`](Docs/v413/).
@@ -23,13 +23,15 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 > **Préparé, non exécuté** : les tests du jeu (`-BRAutoTestV413`, `-BRNetTest`), l'import du kit dans Unreal, les
 > paquets, les captures du jeu et les mesures.
 >
-> **Exécuté** : les bancs hors moteur (histoire, contenu, missions, mécanismes, départ, lumière, transactions), la
-> simulation de la porte de service sur 500 graines, les outils de langues et de livraison, un contrôle syntaxique du
-> code, et le **kit Blender complet** (Blender 5.0.1 : modules, textures, FBX relus, `.blend`, rendus Cycles).
+> **Exécuté** : les bancs hors moteur (histoire, contenu, missions, mécanismes, départ, lumière, transactions, LiDAR),
+> la simulation de la porte de service (500 et 5000 graines) et de l'aile LiDAR (500 graines), les outils de langues et
+> de livraison, un contrôle syntaxique du code, et le **kit Blender complet** (Blender 5.0.1 : modules, textures, FBX
+> relus, `.blend`, rendus Cycles, repères des candidats de porte).
 
 - **Level 0 sans énigme** : on se réveille, on suit l'air froid et les marques de craie de L., on ouvre une vraie
   **porte de service** (cadre, charnières, battant, poignée, sas) vers le Niveau 1. Plus de cadrans, de levier, de
-  cassettes ni de liste « 0/1 ». La porte est posée une fois, à 84–140 m de marche, sans traverser de fosse. Aide
+  cassettes ni de liste « 0/1 ». La porte est **tirée à chaque nouvelle partie** (graine de la partie), puis gardée pour
+  toute la partie (mort, reprise, rechargement, client tardif), à 84–140 m de marche, sans traverser de fosse. Aide
   d'orientation facultative après 7 minutes ; rencontres dosées. En coopération, l'hôte ouvre la porte pour le groupe,
   rassemblement, un seul départ.
 - **Un seul fil** : `0 → 1 → Poolrooms → 2 → fin du chapitre 1` ; campagne complète
@@ -42,8 +44,15 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
 - **Anciennes parties** : copiées puis migrées ; Level 0 sans condition ; traversée des Poolrooms créditée seulement sur
   preuve, sinon organisée (progression garée, reprise à leur sortie).
 - **Kit Blender du Level 0** (`Tools/Blender/build_level0_kit.py`) : 38 modules `SM_L0_*` texturés (PBR 2K), collisions
-  `UCX_`, UV de lightmap, scène de la graine 9 (vrais trous de 14 m), porte de service, éclairage, repères, FBX,
-  `L0_Placement.json` (conversion Unreal), six rendus Cycles.
+  `UCX_`, UV de lightmap, scène de la graine 9 (vrais trous de 14 m), porte de service (exemple) et un repère
+  `MK_DoorCandidate_NNN` par emplacement possible, éclairage, repères, FBX, `L0_Placement.json` (conversion Unreal), six
+  rendus Cycles.
+- **Level 6 « Lights Out » sans lumière** : obscurité réelle, **scanner LiDAR** (impulsion large, scan focalisé
+  maintenu ; points de couleurs ET de formes ; taille, contraste, persistance réglables ; touches configurables).
+  Mission : calibrer le scanner sur la mire, réactiver quatre postes, relever quatre cages (silhouette et code), lire le
+  journal de L., ouvrir la seule bonne porte (une erreur ne coûte rien), traverser une zone au sol réellement percé
+  (passages de 140 cm, aucun saut), suivre les parasites jusqu'à l'échelle du Niveau 8. Smilers : l'impulsion les
+  attire, le faisceau maintenu les repousse. Anciennes parties à balises converties.
 
 **Nouveautés de la version 4.12** (stabilité, effets physiques des missions, publication progressive) :
 
@@ -792,6 +801,8 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 | S'accroupir / **plonger** (dans l'eau profonde) | **Ctrl** ou **C** | B / Rond |
 | Sauter / **remonter à la surface** / se hisser hors de l'eau | **Espace** | A / Croix |
 | Lampe torche (main, ceinture ou frontale) | **F** | Y / Triangle |
+| **Level 6 : scanner, impulsion** | **clic droit** ou **G** | Gâchette gauche |
+| **Level 6 : scanner, scan focalisé** (maintenir) | **X** ou **clic molette** | Gâchette droite |
 | Vision nocturne (caméscope sur soi) | **N** | Croix haut |
 | Interagir / ramasser / lire | **E** | X / Carré |
 | Utiliser la poche 1 à 4 | **1 2 3 4** (AZERTY : **& é " '**) | |
@@ -813,7 +824,8 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 `BRLevel 37` (aller à un niveau) · `BRGod` (invincible) · `BRSpawn 0..8` (faire apparaître une entité ; 8 = Bacteria) ·
 `BRGiveAll` (remplit l'inventaire) · `BRBlackout` (coupure de courant) · `BRObjectives` (valide les objectifs) ·
 `BRSensitivity 1.5` · `BRInvertY` · v4.6 : `BRPits` (bord de la salle de fosses) · `BRSeed 9` (recharge le niveau avec
-cette graine, hôte seulement).
+cette graine, hôte seulement) · v4.13 : `BRDoor` (Level 0 : graine de la partie, porte retenue, candidats par bande,
+dessinés 30 s dans le monde).
 Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau ; `-BRSeed=9` pour une disposition fixe.
 
 **Mode développeur** (voir les nouveautés de la 4.4) : **Page préc. / Page suiv.** (niveau suivant / précédent),
@@ -1012,7 +1024,7 @@ L'image garde un léger grain et un effet VHS (désactivables), sans cadre de ca
 | **3** | *Electrical Station* | Briques, grilles métalliques, armoires électriques, vacarme de machines | Hounds, Skin-Stealers, Smilers, Deathmoths, Wretches | Ascenseur → 4, porte → 2. **Mission** : tableau de charge, boîte en défaut, relais |
 | **4** | *Abandoned Office* | Rangées de petits bureaux cloisonnés (ordinateur beige, chaise noire, fontaine à eau), allées à moquette bleu marine, faux plafond blanc ; quelques open spaces. Beaucoup d'eau d'amande | Facelings, Partygoer (rare) | Porte → 5 (derrière une grille), ascenseur → 3 (retour). **Mission** : planning, annuaire des archives, code à trois molettes |
 | **5** | *Terror Hotel* | Couloirs d'hôtel des années 1920, moquette rouge, appliques, portes numérotées | Skin-Stealers, Partygoers, Facelings | Porte « chaufferie » → 6, retour → 4. **Mission** : registre, trousseau, serrures, consigne de la chaudière |
-| **6** | *Lights Out* | Obscurité totale : seule votre lampe éclaire | Smilers (nombreux) | Échelle → 8. **Mission** : plaque en relief, chaîne de balises, alimentation de secours (sortie éclairée) |
+| **6** | *Lights Out* | Obscurité totale (v4.13 : la lampe ne donne qu'une lueur, la vision nocturne ne voit que de la neige) ; **scanner LiDAR** | Smilers (attirés par l'impulsion, repoussés par le faisceau maintenu) | Échelle de l'aile d'essai → 8. **Mission** (« Retrouver dans le noir le passage de l'équipe ») : mire, quatre postes, quatre cages, journal de L., portes du passage, sol percé, parasites |
 | **8** | *Cave System* | Grottes rocheuses, vieilles lampes de mine | Deathmoths, Clump, Hounds | Échelle → 9. **Mission** : marques gravées, treuils dans l'ordre, passerelle |
 | **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10. **Mission** : plans des maisons, boîtier de rue |
 | **10** | *Field of Wheat* | Champ de blé infini sous un soleil bas et des nuages (v4.11), granges, poteaux | Faceling (paisible) | Grange → 11. **Mission** : marque de clôture, tableau des granges, moulin, frein |
@@ -1512,10 +1524,19 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
     porte ouverte à la main, arrivée au Niveau 1, étape sauvegardée ; `1 → 37 → 2 → fin du chapitre` en marchant ;
     inscription de L. ; mission accomplie au retour ; CONTINUER et exploration après la fin ;
   - **migration** de vrais fichiers du format 4 : copie d'origine identique, traversée des Poolrooms organisée ou prouvée,
-    session du Level 0 sans condition.
+    session du Level 0 sans condition ;
+  - **porte stable** (suite v4.13) : même graine du Level 0 et même porte après une mort, une sauvegarde et reprise, un
+    rechargement ; porte relue (pas retirée) ; graine et porte gardées après l'ouverture ;
+  - **Level 6 LiDAR** (`BRAutoTestV413Lidar.cpp`, graine 4136) : aile, 15 mécanismes, quatre portes du passage, repères
+    au sol, zone sûre, scanner local, vision nocturne refusée ; impulsion (1400 rayons, recharge) ; calibrage au scan
+    focalisé ; mission jouée en marchant ; cages relevées, parasites actifs ; traversée de la zone percée et arrivée au
+    Niveau 8 sans chute ; sauvegarde et reprise d'une mission en cours ; anciennes sessions à balises (en cours et
+    terminée) converties. Captures `v413_lidar_*`.
 
   **`-BRNetTest`, v4.13** (Level 0, graine 9) : porte fermée chez les deux ; l'hôte l'ouvre, le client reçoit l'état et
-  voit le battant s'ouvrir ; rassemblement, coéquipier à pied, un seul départ vers le Niveau 1.
+  voit le battant s'ouvrir ; rassemblement, coéquipier à pied, un seul départ vers le Niveau 1. Puis Level 6 : même aile
+  et même plan chez l'hôte et le client, points locaux à chaque machine, calibrage de l'hôte reçu par le client. Quatre
+  joueurs et client arrivé en cours de partie : **non automatisés** (à faire à la main).
 - **Bancs v4.13** (exécutés, [`Docs/v413/`](Docs/v413/)) : `Tools/Story/test_story.cpp` (histoire, 44 vérifications),
   banc de contenu (68), missions (3000 graines × 12 niveaux), et `python3 Tools/verify_pitfalls.py --doors 1-500` (porte
   de service, 500 graines, 0 problème).

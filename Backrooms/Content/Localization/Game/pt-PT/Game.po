@@ -3735,7 +3735,7 @@ msgstr "{Key} Entrar no prédio  ({Dest})"
 
 #. Key:	Interact.ExitSealedUse
 #. SourceLocation:	Source/Backrooms/Private/BRInteractables.cpp(605)
-#: Source/Backrooms/Private/BRInteractables.cpp(605) Source/Backrooms/Private/BRMissionWorld.cpp(1646)
+#: Source/Backrooms/Private/BRInteractables.cpp(605) Source/Backrooms/Private/BRMissionWorld.cpp(1664)
 #, fuzzy
 msgctxt "BR,Interact.ExitSealedUse"
 msgid "Ce passage ne mène nulle part pour l'instant : le niveau suivant arrivera dans une prochaine mise à jour."
@@ -7384,80 +7384,80 @@ msgid "[Une porte lourde se déplace]"
 msgstr "[Uma porta pesada desloca-se]"
 
 #. Key:	Mission.Exit.Locked
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1668)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1668)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1686)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1686)
 #, fuzzy
 msgctxt "BR,Mission.Exit.Locked"
 msgid "Sortie verrouillée. Mission : {Step}  {Key}"
 msgstr "Saída trancada. Missão: {Step}  {Key}"
 
 #. Key:	Mission.Depart.Started
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1934)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1934)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1952)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1952)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Started"
 msgid "{Name} veut partir vers {Dest} : rejoignez la sortie (moins de 8 m)."
 msgstr "{Name} quer partir para {Dest}: vai até à saída (a menos de 8 m)."
 
 #. Key:	Mission.Depart.Leaving
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1938)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1938)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1956)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1956)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Leaving"
 msgid "Le groupe part vers {Dest}."
 msgstr "O grupo parte para {Dest}."
 
 #. Key:	Mission.Depart.Timeout
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1944)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1944)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1962)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1962)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Timeout"
 msgid "Départ annulé : tout le monde n'a pas rejoint la sortie à temps."
 msgstr "Partida cancelada: nem todos chegaram à saída a tempo."
 
 #. Key:	Mission.Depart.Left
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1947)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1947)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1965)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1965)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Left"
 msgid "Départ annulé : la personne qui l'a demandé s'est éloignée."
 msgstr "Partida cancelada: quem a pediu afastou-se."
 
 #. Key:	Mission.Depart.Nobody
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1950)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1950)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1968)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1968)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Nobody"
 msgid "Départ annulé : plus personne n'est debout."
 msgstr "Partida cancelada: já ninguém está de pé."
 
 #. Key:	Mission.Depart.Cancelled
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1953)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1953)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1971)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1971)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Cancelled"
 msgid "Départ annulé."
 msgstr "Partida cancelada."
 
 #. Key:	Mission.Depart.Ending
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1968)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1968)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1986)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1986)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Ending"
 msgid "le dernier quai"
 msgstr "o último cais"
 
 #. Key:	Mission.Depart.ChapterEnd
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1972)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1972)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1990)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1990)
 #, fuzzy
 msgctxt "BR,Mission.Depart.ChapterEnd"
 msgid "la fin du contenu disponible"
 msgstr "o fim do conteúdo disponível"
 
 #. Key:	Mission.Depart.Level
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1974)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1974)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1992)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1992)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Level"
 msgid "Niveau {N}"

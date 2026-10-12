@@ -1,0 +1,78 @@
+# Outils de langues, de protection et de livraison, v4.13 suite — sortie reelle
+# Date : 2026-10-12T21:15:01Z
+# Python : Python 3.11.15
+# Constat de cette passe : loc_extract.py ignorait --check et reecrivait les catalogues. Un premier passage a ainsi
+#   mis a jour BRLocKeys.inl (1142 -> 1181 cles) et fr/Game.po, restes en retard au commit e312a3c (les .locres
+#   etaient deja justes : loc_build.py relit les textes du code pour le francais). --check est maintenant en lecture
+#   seule (code 1 si un fichier n'est pas a jour) ; la sortie ci-dessous est celle d'apres la correction.
+
+## python3 Tools/Localization/loc_extract.py --check (depuis Backrooms/)
+fr       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+en       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+de       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+es-ES    1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pt-BR    1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ru       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+it       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+tr       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+es-419   1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pl       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+zh-Hans  1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+uk       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ar       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ko       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+fa       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ja       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+hu       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+cs       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pt-PT    1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+sv       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+zh-Hant  1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+id       1181 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+Cles : Source/Backrooms/Private/BRLocKeys.inl
+Verification seule (rien n'est ecrit) : a jour
+# Code de sortie : 0
+
+## python3 Tools/Localization/loc_build.py --check (depuis Backrooms/)
+fr       traduits 1181/1181  relus 1181  manquants    0  refuses   0  a revoir   0
+en       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+de       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+es-ES    traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+pt-BR    traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+ru       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+it       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+tr       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+es-419   traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+pl       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hans  traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+uk       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+ar       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+ko       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+fa       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+ja       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+hu       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+cs       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+pt-PT    traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+sv       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hant  traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+id       traduits 1181/1181  relus    0  manquants    0  refuses   0  a revoir   0
+# Code de sortie : 0
+
+## python3 Tools/Localization/loc_review.py (depuis Backrooms/)
+Relecture ciblee des traductions (gauche/droite, identifiants, nombres, unites)
+verifications : cote 189, identifiants 2709, unites 210 ; nombres en toutes lettres relus a la main : 20
+problemes : 0
+
+# Code de sortie : 0
+
+## python3 Tools/protect_assets.py check (depuis Backrooms/)
+OK
+# Code de sortie : 0
+
+## python3 -m unittest Tools/Build/tests/test_packaging.py (depuis Backrooms/)
+........................s.....................................
+----------------------------------------------------------------------
+Ran 62 tests in 2.014s
+
+OK (skipped=1)
+# Code de sortie : 0

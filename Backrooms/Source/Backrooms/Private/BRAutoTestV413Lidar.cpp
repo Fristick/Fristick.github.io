@@ -1,7 +1,7 @@
 // v4.13 : test du jeu du Level 6 sans lumiere (scanner LiDAR) : aile et mission placees, scanner local, calibrage au scan
 // focalise, mission jouee par de vraies interactions (solveur des bancs), traversee de la zone de trous jusqu'a l'echelle,
-// conversion d'une ancienne session (chaine de balises v4.12), et en reseau : meme aile et meme etat chez l'hote et le
-// client, points locaux a chaque machine.
+// conversion d'une ancienne session (chaine de balises v4.12, en cours ou terminee), sauvegarde et reprise d'une mission
+// LiDAR en cours, et en reseau : meme aile et meme etat chez l'hote et le client, points locaux a chaque machine.
 // Prepare, non execute ici (pas d'Unreal dans l'environnement de developpement) : lancer -BRAutoTestV413 ou -BRNetTest.
 #include "BRAutoTest.h"
 #include "BRWorld.h"
@@ -46,6 +46,35 @@ namespace BRTestLidar
 		{
 			Ctrl->SetControlRotation((Target - C->GetEyeLocation()).Rotation());
 		}
+	}
+
+	/** Session du Level 6 sauvegardee avec cet etat de mission (plan courant ou ancien plan v4.12) */
+	FBRSessionState MakeSession(uint32 LevelSeed, const BRM::FPlan& P, const BRM::FState& S)
+	{
+		uint8 Buffer[11 + BRM::MaxDevices];
+		const int32 Size = BRM::Serialize(P, S, Buffer, sizeof(Buffer));
+		FBRSessionState Session;
+		Session.bValid = Size > 0;
+		Session.Level = 6;
+		Session.Seed = LevelSeed;
+		Session.GenVersion = BRM::GenVersion;
+		Session.PlaceVersion = BRM::PlaceVersion;
+		Session.Mission = TArray<uint8>(Buffer, Size);
+		return Session;
+	}
+
+	/** Etat d'une session v4.12 de la chaine de balises : plaque lue, Lit balises allumees, ou mission terminee */
+	BRM::FState LegacyState(const BRM::FPlan& Old, int32 Lit, bool bSolved)
+	{
+		BRM::FState OS;
+		BRM::InitState(Old, OS);
+		OS.Dev[0] = 1;
+		for (int32 B = 0; B < Lit; ++B)
+		{
+			OS.Dev[Old.Params[B]] = Old.Devices[Old.Params[B]].Positions;
+		}
+		OS.Solved = bSolved ? 1 : 0;
+		return OS;
 	}
 }
 
@@ -205,21 +234,7 @@ void ABRAutoTest::AddV413LidarSteps()
 		}
 		BRM::FPlan Old;
 		BRM::BuildLegacyPlan6(LevelSeed, false, Old);
-		BRM::FState OS;
-		BRM::InitState(Old, OS);
-		OS.Dev[0] = 1;
-		OS.Dev[Old.Params[0]] = Old.Devices[Old.Params[0]].Positions;
-		OS.Dev[Old.Params[1]] = Old.Devices[Old.Params[1]].Positions;
-		uint8 Buffer[64];
-		const int32 Size = BRM::Serialize(Old, OS, Buffer, sizeof(Buffer));
-		FBRSessionState Session;
-		Session.bValid = true;
-		Session.Level = 6;
-		Session.Seed = LevelSeed;
-		Session.GenVersion = BRM::GenVersion;
-		Session.PlaceVersion = BRM::PlaceVersion;
-		Session.Mission = TArray<uint8>(Buffer, Size);
-		BRSaves::PendingResume() = Session;
+		BRSaves::PendingResume() = MakeSession(LevelSeed, Old, LegacyState(Old, 2, false));
 		TestCountC = W->GetLevelSerial();
 		W->RequestTransition(6, false, LevelSeed);
 		return true;
@@ -236,6 +251,67 @@ void ABRAutoTest::AddV413LidarSteps()
 		const bool bOk = W->GetMissionNotice() == 3 && E.Steps[0] == BRM::EStep::Done && E.Progress[1] == 2 && !E.bSolved;
 		Note(FString::Printf(TEXT("ancienne session (plaque lue, 2 balises allumees) : avis %d (attendu 3 : progression gardee), calibrage %s, postes %d/4, copie de la sauvegarde demandee"),
 			W->GetMissionNotice(), Oui(E.Steps[0] == BRM::EStep::Done), E.Progress[1]), !bOk);
+		return true;
+	});
+	// Sauvegarde et reprise d'une mission LiDAR en cours (format v4.13) : meme aile, meme progression, pas de reprise du debut
+	Add(TEXT("v4.13 Level 6 : sauvegarde et reprise"), 0.f, [this, LevelSeed]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6)
+		{
+			return StepTime > 30.f;
+		}
+		BRM::FEval E;
+		W->GetMissionEval(E);
+		TestCountA = E.Progress[1];
+		TestCountB = W->GetLidarWing().ChunkX * 1000 + W->GetLidarWing().ChunkY;
+		BRSaves::PendingResume() = MakeSession(LevelSeed, W->GetMissionPlan(), W->GetMissionState());
+		TestCountC = W->GetLevelSerial();
+		W->RequestTransition(6, false, LevelSeed);
+		return true;
+	});
+	Add(TEXT("v4.13 Level 6 : sauvegarde et reprise, verification"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6 || W->GetLevelSerial() == TestCountC)
+		{
+			return StepTime > 30.f;
+		}
+		BRM::FEval E;
+		W->GetMissionEval(E);
+		const bool bSameWing = W->GetLidarWing().ChunkX * 1000 + W->GetLidarWing().ChunkY == TestCountB;
+		const bool bOk = bSameWing && W->GetMissionNotice() != 2 && E.Steps[0] == BRM::EStep::Done && E.Progress[1] == TestCountA && W->IsLidarCalibrated();
+		Note(FString::Printf(TEXT("reprise d'une mission LiDAR en cours : meme aile %s, avis %d (2 = reprise du debut), calibrage %s, postes %d/4 (avant : %d)"), Oui(bSameWing),
+			W->GetMissionNotice(), Oui(E.Steps[0] == BRM::EStep::Done), E.Progress[1], TestCountA), !bOk);
+		return true;
+	});
+	// Une ancienne session terminee reste terminee : le Level 6 fini ne bloque jamais la sortie vers le Niveau 8
+	Add(TEXT("v4.13 Level 6 : ancienne session terminee"), 0.f, [this, LevelSeed]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning())
+		{
+			return false;
+		}
+		BRM::FPlan Old;
+		BRM::BuildLegacyPlan6(LevelSeed, false, Old);
+		BRSaves::PendingResume() = MakeSession(LevelSeed, Old, LegacyState(Old, 0, true));
+		TestCountC = W->GetLevelSerial();
+		W->RequestTransition(6, false, LevelSeed);
+		return true;
+	});
+	Add(TEXT("v4.13 Level 6 : ancienne session terminee, verification"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6 || W->GetLevelSerial() == TestCountC)
+		{
+			return StepTime > 30.f;
+		}
+		BRM::FEval E;
+		W->GetMissionEval(E);
+		const bool bOk = E.bSolved && W->GetMissionNotice() == 3;
+		Note(FString::Printf(TEXT("ancienne session terminee : mission terminee %s, avis %d (attendu 3), sortie vers le Niveau 8 ouverte %s"), Oui(E.bSolved), W->GetMissionNotice(),
+			Oui(E.bSolved)), !bOk);
 		return true;
 	});
 }

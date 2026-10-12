@@ -1,9 +1,18 @@
 # Aile LiDAR du Level 6 dans la grille du niveau (Tools/verify_lidar.py) — sortie reelle
-# Commande : python3 Tools/verify_lidar.py --seeds 1-500
-# Date : 2026-10-12T20:40:33Z
+# Date : 2026-10-12T21:46:42Z
+# Python : Python 3.11.15
 
+## python3 Tools/verify_lidar.py --seeds 1-500
 Level 6 (Tools/verify_lidar.py) : parametres lus dans BRLevels.cpp : bLidar=True, CellSize=350, PitHoleSize=210, PitPassage=140, WallLineChance=0.6, DoorChance=0.3
 Entree de l'aile atteinte depuis le depart : 500/500 graines ; distance de marche (cellules de 3.5 m) : min 18, mediane 28, max 41
 Pourtour : 4 portes d'entree et aucun autre passage sur les graines conformes
+RESULTAT : OK (0 echec(s))
+# Code de sortie : 0
+
+## python3 Tools/verify_lidar.py --seeds 1-6 --sheet Docs/v413/lidar_ailes_6_graines.png --sheet-seeds 1-6   (planche : simulation, pas une capture du jeu)
+Level 6 (Tools/verify_lidar.py) : parametres lus dans BRLevels.cpp : bLidar=True, CellSize=350, PitHoleSize=210, PitPassage=140, WallLineChance=0.6, DoorChance=0.3
+Entree de l'aile atteinte depuis le depart : 6/6 graines ; distance de marche (cellules de 3.5 m) : min 21, mediane 29, max 31
+Pourtour : 4 portes d'entree et aucun autre passage sur les graines conformes
+Planche : Docs/v413/lidar_ailes_6_graines.png (graines 1 a 6 ; simulation, pas une capture du jeu)
 RESULTAT : OK (0 echec(s))
 # Code de sortie : 0

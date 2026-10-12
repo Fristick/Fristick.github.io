@@ -11,8 +11,9 @@ Unreal, et verifie pour chaque graine :
     autrement que par ses portes (les trois autres cotes sont des murs pleins).
 La logique fine de l'aile (trous, passages de 140 cm, alcoves, echelle) est verifiee par Tools/Lidar/test_lidar.cpp.
 
-Usage :  python Tools/verify_lidar.py [--seeds 1-500]
+Usage :  python Tools/verify_lidar.py [--seeds 1-500] [--sheet Docs/v413/lidar_ailes_6_graines.png --sheet-seeds 1-6]
 Code de sortie : 0 si tout passe. La sortie sert de journal (Docs/v413/lidar_aile.txt).
+--sheet : planche vue de dessus (simulation, PAS une capture du jeu) : aile, trous, alcove de l'echelle, couloir garanti.
 """
 import argparse
 import os
@@ -161,6 +162,106 @@ class Level6(vp.Level0):
         return e
 
 
+def hole_at_corner(w, x, y):
+    """BRLidar::HoleAtCorner : trou au coin (x + 1, y + 1) de la cellule (x, y)"""
+    if not contains(w, (x, y)) or not contains(w, (x + 1, y + 1)):
+        return False
+    return min(to_local(w, (x, y))[0], to_local(w, (x + 1, y + 1))[0]) in (0, 1)
+
+
+def walk_path(L, goal, radius=48):
+    """Plus court chemin a pied du depart a goal, hors de l'aile (parcours en largeur)"""
+    parent = {(0, 0): None}
+    q = deque([(0, 0)])
+    while q:
+        c = q.popleft()
+        if c == goal:
+            break
+        for d in vp.DIRS:
+            n = (c[0] + d[0], c[1] + d[1])
+            if n in parent or abs(n[0]) > radius or abs(n[1]) > radius or L.is_pit_cell(*n) or not L.can_step(c, n):
+                continue
+            parent[n] = c
+            q.append(n)
+    if goal not in parent:
+        return []
+    path, c = [], goal
+    while c is not None:
+        path.append(c)
+        c = parent[c]
+    return path[::-1]
+
+
+def draw_wing_map(L, res, size=14):
+    from PIL import Image, ImageDraw
+    w = L.wing
+    path = walk_path(L, res["room"]) if res["room"] else []
+    xs = [0, w["min"][0], w["min"][0] + WING] + [c[0] for c in path]
+    ys = [0, w["min"][1], w["min"][1] + WING] + [c[1] for c in path]
+    x0, x1, y0, y1 = min(xs) - 2, max(xs) + 2, min(ys) - 2, max(ys) + 2
+    W, H = (x1 - x0) * size + 1, (y1 - y0) * size + 1
+    img = Image.new("RGB", (max(W, 260), H + 30), (12, 14, 18))
+    d = ImageDraw.Draw(img)
+
+    def px(x, y):  # cellule -> pixels (y vers le haut)
+        return (int((x - x0) * size), int((y1 - y) * size))
+    for x in range(x0, x1):
+        for y in range(y0, y1):
+            a = px(x, y + 1)
+            col = (40, 46, 56)
+            if contains(w, (x, y)):
+                u, _v = to_local(w, (x, y))
+                col = (70, 60, 40) if u < WING - 1 else (46, 70, 60)
+            d.rectangle([a[0], a[1], a[0] + size - 1, a[1] + size - 1], fill=col)
+    # couloir garanti et chemin a pied
+    if len(path) > 1:
+        d.line([px(c[0] + 0.5, c[1] + 0.5) for c in path], fill=(90, 150, 255), width=2)
+    # murs et portes
+    for x in range(x0, x1):
+        for y in range(y0, y1):
+            for east in (True, False):
+                e = L.edge(x, y, east)
+                if e == OPEN:
+                    continue
+                a, b = (px(x + 1, y), px(x + 1, y + 1)) if east else (px(x, y + 1), px(x + 1, y + 1))
+                d.line([a, b], fill=(200, 205, 215) if e == WALL else (90, 200, 120), width=2 if e == WALL else 1)
+    # trous (PitHoleSize, aux angles interieurs)
+    half = L.P["PitHoleSize"] / L.P["CellSize"] * size * 0.5
+    for x in range(w["min"][0], w["min"][0] + WING):
+        for y in range(w["min"][1], w["min"][1] + WING):
+            if hole_at_corner(w, x, y):
+                c = px(x + 1, y + 1)
+                d.rectangle([c[0] - half, c[1] - half, c[0] + half, c[1] + half], fill=(255, 140, 30))
+    # alcove de l'echelle (et emetteur de parasites), depart
+    lc = to_cell(w, WING - 1, w["ladder"])
+    c = px(lc[0] + 0.5, lc[1] + 0.5)
+    d.ellipse([c[0] - 4, c[1] - 4, c[0] + 4, c[1] + 4], fill=(220, 80, 230))
+    c = px(0.5, 0.5)
+    d.ellipse([c[0] - 4, c[1] - 4, c[0] + 4, c[1] + 4], fill=(255, 255, 255))
+    d.text((3, H + 3), "BRSeed=%d  %s  %d cellules a pied" % (L.user_seed, "OK" if res["ok"] else "ECHEC", res["dist"]), fill=(230, 230, 230))
+    d.text((3, H + 15), "simulation, pas une capture du jeu", fill=(150, 150, 150))
+    return img
+
+
+def sheet(rows, path, cols=3):
+    from PIL import Image, ImageDraw
+    maps = [draw_wing_map(L, r) for L, r in rows]
+    cw = max(m.size[0] for m in maps) + 8
+    ch = max(m.size[1] for m in maps) + 8
+    nrows = (len(maps) + cols - 1) // cols
+    legend = 44
+    out = Image.new("RGB", (cols * cw + 8, nrows * ch + 8 + legend), (6, 6, 8))
+    for i, m in enumerate(maps):
+        out.paste(m, (8 + (i % cols) * cw, 8 + (i // cols) * ch))
+    d = ImageDraw.Draw(out)
+    y = nrows * ch + 10
+    d.text((8, y), "Level 6 : aile LiDAR (Tools/verify_lidar.py). Brun : zone percee ; vert : alcoves ; orange : trous de %g cm ; violet : echelle et parasites ;"
+           % rows[0][0].P["PitHoleSize"], fill=(220, 220, 220))
+    d.text((8, y + 14), "blanc : depart ; bleu : chemin a pied le plus court jusqu'a l'entree ; traits verts : portes et passages ; traits clairs : murs.", fill=(220, 220, 220))
+    d.text((8, y + 28), "Simulation de la grille du jeu, PAS une capture : rendu, eclairage et decor ne sont pas representes.", fill=(160, 160, 160))
+    out.save(path)
+
+
 def check(L, radius=48):
     w = L.wing
     res = {"ok": True, "why": []}
@@ -217,6 +318,8 @@ def check(L, radius=48):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-500")
+    ap.add_argument("--sheet", default=None, help="planche PNG (simulation, pas une capture du jeu)")
+    ap.add_argument("--sheet-seeds", default="1-6")
     a = ap.parse_args()
     lo, hi = (int(x) for x in a.seeds.split("-"))
     P = read_level(6)
@@ -242,6 +345,14 @@ def main():
         print("Entree de l'aile atteinte depuis le depart : %d/%d graines ; distance de marche (cellules de %g m) : min %d, mediane %d, max %d"
               % (len(dists), n, P["CellSize"] / 100.0, dists[0], dists[len(dists) // 2], dists[-1]))
     print("Pourtour : 4 portes d'entree et aucun autre passage sur les graines conformes")
+    if a.sheet:
+        slo, shi = (int(x) for x in a.sheet_seeds.split("-"))
+        rows = []
+        for sd in range(slo, shi + 1):
+            L = Level6(P, sd)
+            rows.append((L, check(L)))
+        sheet(rows, a.sheet)
+        print("Planche : %s (graines %d a %d ; simulation, pas une capture du jeu)" % (a.sheet, slo, shi))
     print("RESULTAT : %s (%d echec(s))" % ("OK" if bad == 0 else "ECHEC", bad))
     return 0 if bad == 0 else 1
 

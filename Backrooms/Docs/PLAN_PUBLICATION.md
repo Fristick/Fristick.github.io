@@ -18,7 +18,7 @@ retirées.
 |---|---|---|---|---|---|
 | 1 — lancement | Le Seuil | 0 Threshold, 1 Habitable Zone, 37 Poolrooms, 2 Utility Halls | **publié** | Smiler, Bacteria, Faceling, Hound, Wretch, Clump (Poolrooms sans entités) | Apprendre les règles communes : se réveiller et s'orienter (Level 0 sans énigme, porte de service), observer, actionner, se rassembler. Un seul fil : `0 → 1 → 37 → 2`, Poolrooms obligatoires, puis la fin du chapitre. |
 | 2 | La Station et les Bureaux | 3 Electrical Station, 4 Abandoned Office | test interne | Hound, Skin-Stealer, Smiler, Faceling, Partygoer | Missions à états multiples (secteurs en défaut, relais, code d'accès) ; premier lieu calme et lisible (bureaux) après la station. |
-| 3 | L'Hôtel et le Noir | 5 Terror Hotel, 6 Lights Out | développé | Skin-Stealer, Partygoer, Faceling, Smiler | Pression et lumière : serrures, consigne de pression, balises qui dissipent les Smilers (règle de lumière de la v4.12). |
+| 3 | L'Hôtel et le Noir | 5 Terror Hotel, 6 Lights Out | développé | Skin-Stealer, Partygoer, Faceling, Smiler | Pression, puis le noir : serrures et consigne de pression (5) ; Level 6 **sans lumière** au scanner LiDAR (v4.13 suite : impulsion et scan focalisé, mire, postes, cages, portes du passage, sol percé, parasites ; Smilers attirés par l'impulsion, repoussés par le faisceau maintenu). |
 | 4 | Les Grottes, la Banlieue et le Champ | 8 Cave System, 9 The Suburbs, 10 Field of Wheat | développé | Deathmoth, Clump, Hound, Skin-Stealer, Faceling | Traversées physiques (passerelle portante du Niveau 8, treuils), enquête en extérieur, orientation du moulin. |
 | 5 | La Ville | 11 The Endless City (et le dernier quai) | développé | Faceling | Fin de la campagne : station à manivelle, données de route, dernier quai (deux fins). |
 | Extensions | Level ! (1001), Level Fun (1002) | — | proposées (`Docs/PROPOSITIONS_NIVEAUX_v4.11.md`) | — | Routes facultatives depuis les Niveaux 6 et 8, sans changer la progression principale. Identifiants réservés, absents de la table tant qu'ils ne sont pas développés. |
@@ -106,6 +106,11 @@ l'hôte. L'hôte refuse un niveau indisponible : demande d'un client, console de
   (`BRSaves::MigrateStory`) : étapes dépassées créditées, traversée des Poolrooms créditée seulement sur preuve, sinon
   organisée (la session au-delà est garée intacte et reprend à la sortie des Poolrooms), Level 0 sans condition. La
   génération des missions des autres niveaux n'est pas modifiée.
+- **v4.13 suite (même format 5, champs ajoutés)** : la partie garde la graine de son Level 0 (`StoryIntroSeed`) et la
+  porte de service retenue (cellule, face, palier, version de placement) ; un fichier qui ne les a pas encore les reçoit
+  à la prochaine visite du Level 0 (ou de la session du Level 0 en cours, à la migration). Les sessions du Level 6 de
+  la v4.12 (chaîne de balises) sont converties vers la mission LiDAR quand elles ont un équivalent (plaque lue →
+  calibrage, balises → postes, terminée → terminée), après copie de la sauvegarde ; `GenVersion` n'est pas monté.
 - **Arrivée d'un lot** : rien à migrer. Le point de reprise d'une partie arrêtée à une fin de chapitre est déjà le niveau
   suivant du fil ; dès qu'il est disponible, CONTINUER y mène.
 
@@ -195,8 +200,10 @@ comme version publique pour Steam.
 
 - Constructions Shipping par canal.
 - `-BRAutoTestV413` : porte de service à pied sur cinq graines, histoire `0 → 1 → 37 → 2 → fin du chapitre` en marchant,
-  raccourcis refusés par l'hôte, migration de vrais fichiers du format 4 ; `-BRNetTest` : porte ouverte par l'hôte pour
-  le groupe, un seul départ.
+  raccourcis refusés par l'hôte, migration de vrais fichiers du format 4 ; porte stable après une mort, une sauvegarde
+  et reprise, un rechargement ; Level 6 LiDAR (scanner, calibrage, mission en marchant, traversée jusqu'au Niveau 8,
+  sauvegarde et reprise, anciennes sessions converties) ; `-BRNetTest` : porte ouverte par l'hôte pour le groupe, un seul
+  départ ; Level 6 : même aile et même plan chez l'hôte et le client, calibrage de l'hôte reçu par le client.
 - `-BRAutoTestV412`, dans la version publiée simulée (`BRLevels::SetChannelOverride`, hors Shipping) :
   - liste du menu ;
   - sorties du fil, sans raccourci ;

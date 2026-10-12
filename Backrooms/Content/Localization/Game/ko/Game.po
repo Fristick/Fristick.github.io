@@ -3735,7 +3735,7 @@ msgstr "{Key} 건물로 들어가기  ({Dest})"
 
 #. Key:	Interact.ExitSealedUse
 #. SourceLocation:	Source/Backrooms/Private/BRInteractables.cpp(605)
-#: Source/Backrooms/Private/BRInteractables.cpp(605) Source/Backrooms/Private/BRMissionWorld.cpp(1646)
+#: Source/Backrooms/Private/BRInteractables.cpp(605) Source/Backrooms/Private/BRMissionWorld.cpp(1664)
 #, fuzzy
 msgctxt "BR,Interact.ExitSealedUse"
 msgid "Ce passage ne mène nulle part pour l'instant : le niveau suivant arrivera dans une prochaine mise à jour."
@@ -7384,80 +7384,80 @@ msgid "[Une porte lourde se déplace]"
 msgstr "[무거운 문이 움직임]"
 
 #. Key:	Mission.Exit.Locked
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1668)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1668)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1686)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1686)
 #, fuzzy
 msgctxt "BR,Mission.Exit.Locked"
 msgid "Sortie verrouillée. Mission : {Step}  {Key}"
 msgstr "출구 잠김. 임무: {Step}  {Key}"
 
 #. Key:	Mission.Depart.Started
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1934)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1934)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1952)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1952)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Started"
 msgid "{Name} veut partir vers {Dest} : rejoignez la sortie (moins de 8 m)."
 msgstr "{Name} 님이 {Dest}(으)로 출발하려 합니다. 출구로 오세요(8m 이내)."
 
 #. Key:	Mission.Depart.Leaving
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1938)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1938)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1956)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1956)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Leaving"
 msgid "Le groupe part vers {Dest}."
 msgstr "그룹이 {Dest}(으)로 출발합니다."
 
 #. Key:	Mission.Depart.Timeout
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1944)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1944)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1962)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1962)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Timeout"
 msgid "Départ annulé : tout le monde n'a pas rejoint la sortie à temps."
 msgstr "출발 취소: 모두가 제시간에 출구에 오지 못했습니다."
 
 #. Key:	Mission.Depart.Left
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1947)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1947)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1965)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1965)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Left"
 msgid "Départ annulé : la personne qui l'a demandé s'est éloignée."
 msgstr "출발 취소: 출발을 요청한 사람이 멀어졌습니다."
 
 #. Key:	Mission.Depart.Nobody
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1950)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1950)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1968)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1968)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Nobody"
 msgid "Départ annulé : plus personne n'est debout."
 msgstr "출발 취소: 서 있는 사람이 없습니다."
 
 #. Key:	Mission.Depart.Cancelled
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1953)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1953)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1971)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1971)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Cancelled"
 msgid "Départ annulé."
 msgstr "출발이 취소되었습니다."
 
 #. Key:	Mission.Depart.Ending
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1968)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1968)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1986)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1986)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Ending"
 msgid "le dernier quai"
 msgstr "마지막 승강장"
 
 #. Key:	Mission.Depart.ChapterEnd
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1972)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1972)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1990)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1990)
 #, fuzzy
 msgctxt "BR,Mission.Depart.ChapterEnd"
 msgid "la fin du contenu disponible"
 msgstr "이용 가능한 콘텐츠의 끝"
 
 #. Key:	Mission.Depart.Level
-#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1974)
-#: Source/Backrooms/Private/BRMissionWorld.cpp(1974)
+#. SourceLocation:	Source/Backrooms/Private/BRMissionWorld.cpp(1992)
+#: Source/Backrooms/Private/BRMissionWorld.cpp(1992)
 #, fuzzy
 msgctxt "BR,Mission.Depart.Level"
 msgid "Niveau {N}"

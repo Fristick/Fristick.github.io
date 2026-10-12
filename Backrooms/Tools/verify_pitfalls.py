@@ -770,6 +770,22 @@ def check_service_door(L, res, capsule=42.0):
         prob.append("porte sauvegardee non reprise")
 
 
+def _doors_chunk(args):
+    return check_doors_only(*args)
+
+
+def check_doors_parallel(P, seeds, jobs):
+    """check_doors_only reparti sur plusieurs processus (meme resultat, dans l'ordre des graines)"""
+    if jobs <= 1 or len(seeds) < 2 * jobs:
+        return check_doors_only(P, seeds)
+    import multiprocessing
+    step = (len(seeds) + jobs - 1) // jobs
+    chunks = [(P, seeds[i:i + step]) for i in range(0, len(seeds), step)]
+    with multiprocessing.Pool(jobs) as pool:
+        parts = pool.map(_doors_chunk, chunks)
+    return [r for part in parts for r in part]
+
+
 def check_doors_only(P, seeds):
     """Verification rapide de la porte de service sur beaucoup de graines (sans les sols des salles)"""
     rows = []
@@ -1094,11 +1110,12 @@ def main():
     ap.add_argument("--report", default=None, help="rapport texte (en plus de la console)")
     ap.add_argument("--pick-demo", action="store_true", help="propose une graine de demonstration (salle proche du depart)")
     ap.add_argument("--doors", default=None, help="v4.13 : seulement la porte de service, sur ces graines (ex. 1-500)")
+    ap.add_argument("--jobs", type=int, default=1, help="avec --doors : nombre de processus (meme resultat)")
     a = ap.parse_args()
     P = read_level0()
     if a.doors:
         seeds = parse_seeds(a.doors)
-        rows = check_doors_only(P, seeds)
+        rows = check_doors_parallel(P, seeds, a.jobs)
         lines = []
         def outd(t=""):
             print(t)

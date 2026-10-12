@@ -1,4 +1,4 @@
-# Gameplay v4.13 : Level 0 sans énigme, progression stable, histoire
+# Gameplay v4.13 : Level 0 sans énigme, progression stable, histoire, Level 6 sans lumière
 
 Ce document décrit les règles **telles qu'elles sont codées** dans la v4.13. Il complète
 [`GAMEPLAY_v4.12.md`](GAMEPLAY_v4.12.md), qui reste valable pour ce que la v4.13 ne change pas : ramassage, santé,
@@ -21,32 +21,61 @@ dans Unreal** : rendu, collisions, déplacements et réseau sont à vérifier av
 | Une mission se refait à chaque retour | Une étape accomplie le reste : au retour, la mission est déjà résolue, la sortie ouverte |
 | Menu : tout niveau exploré comme point de départ | **CONTINUER** (l'histoire) ou **REJOUER** (un niveau découvert, sans toucher à l'histoire) |
 | Destinations au hasard qui peuvent faire progresser | Exploration au hasard seulement après une fin, parmi les niveaux déjà atteints |
+| Porte de service au même endroit pour une même graine de niveau | **Tirée à chaque nouvelle partie**, puis gardée pour toute la partie (mort, reprise, rechargement, client tardif) |
+| Level 6 : chaîne de balises éclairées dans le noir | Level 6 **sans lumière** : scanner LiDAR (impulsion, scan focalisé), mire, postes, cages, portes du passage, sol percé, parasites (§ 6) |
 
 ## 2. Level 0
 
 ### 2.1 La porte de service
 
-**Placement** (`ABRWorld::PlaceServiceDoor`, une fois par chargement, sur l'hôte et sur chaque client avec la même
+**Graine de partie.** Le Level 0 d'une partie a sa propre graine (`IntroSeed`), tirée à la **nouvelle partie** puis
+sauvegardée dans l'histoire avec la porte retenue : cellule, face, palier du choix et version de placement
+(`BRStory::DoorPlaceVersion` = 2). Deux nouvelles parties ont donc, en général, deux portes différentes ; une même
+partie garde la sienne :
+
+| Situation | Graine | Porte |
+|---|---|---|
+| Nouvelle partie (même lancée depuis un menu déjà au Level 0 : rechargement forcé) | nouvelle, tirée | nouveau tirage |
+| Mort, retour au Level 0, CONTINUER, rechargement, hôte qui relance | celle de la partie | **relue** dans la sauvegarde, pas retirée |
+| Client qui rejoint (même tardivement) | celle de l'hôte (état répliqué) | celle de l'hôte, ouverte si elle l'est déjà |
+| REJOUER le Level 0 | celle de la partie | celle de la partie |
+| Session libre (développement), `-BRSeed` | imposée | tirée pour cette graine ; ne remplace pas celle d'une partie déjà commencée |
+
+Si la porte sauvegardée n'est plus un emplacement valide pour la graine (génération changée), un nouveau choix est fait
+et journalisé (`[Story] Porte sauvegardee … plus valide`) : jamais de partie sans sortie.
+
+**Placement** (`ABRWorld::PlaceServiceDoor`, à chaque chargement, sur l'hôte et sur chaque client avec la même
 graine) :
 
 1. parcours en largeur depuis la zone de départ, à travers les passages ouverts, **sans entrer dans une salle de
    fosses** ;
-2. candidats : les cellules du bord de la zone (pas les coins) dont le mur d'enceinte est plein ;
-3. fenêtre de distance de marche : **24 à 40 cellules** (84 à 140 m). Parmi les candidats de la fenêtre, le plus petit
-   tirage de la graine ;
-4. repli déterministe si la fenêtre est vide : la cellule de bord atteignable la plus proche de 32 cellules (palier 1) ;
+2. candidats : les cellules contre le mur d'enceinte (ni coin, ni zone de départ, ni cellule de mission) ; la porte est
+   percée dans ce mur ;
+3. la porte déjà retenue pour cette partie, si elle est encore candidate ;
+4. sinon, **bande visée 24 à 40 cellules** de marche (84 à 140 m) : parmi ses candidats, celui que désigne la graine (plus
+   petit hachage) ; bande vide : **bande élargie 16 à 56** ; vide aussi : **secours** déterministe, le candidat le plus
+   proche de 32 cellules ;
 5. le chemin (cellules du parcours) est gardé : il porte les marques de craie, et **rien n'y est posé** (ni cachette, ni
    meuble mural) : une capsule de joueur y passe toujours.
 
-Vérifié hors moteur sur 500 graines ([`v413/fosses_et_porte.txt`](v413/fosses_et_porte.txt)) :
+Vérifié hors moteur ([`v413/fosses_et_porte.txt`](v413/fosses_et_porte.txt)) :
 
-- distance de marche : min 24, moyenne 31, max 40 cellules ;
-- repli : 0 fois sur 500 ;
-- portes réparties sur les quatre murs (ouest 124, sud 122, nord 121, est 133) ;
+- 500 graines : distance de marche min 24, moyenne 31, max 40 cellules ; bande visée retenue 500 fois, bande élargie et
+  secours 0 fois ; de 9 à 114 candidats dans la bande par graine (moyenne 77,7) ;
+- **diversité** : 118 emplacements différents (cellule et face) pour 500 graines, sur les quatre murs (ouest 124, sud 122,
+  nord 121, est 133) ; sur **5000 graines** : 120 emplacements différents, c'est-à-dire tous les emplacements de bord
+  possibles, et les quatre murs à parts presque égales (1240 à 1263), 0 problème, toujours dans la bande visée ;
+- **reproductibilité** : même graine → même porte ; porte sauvegardée → reprise telle quelle : vérifié pour chaque
+  graine ;
 - 0 problème (chemin continu, sans fosse, porte dans un mur d'enceinte plein, capsule de 42 cm de rayon libre le long
   du chemin) ;
 - planche de 12 graines : [`v413/cartes_porte_12_graines.png`](v413/cartes_porte_12_graines.png) (simulation, pas une
   capture du jeu).
+
+**Outil de développement** : la commande console `BRDoor` (mode développeur) affiche la graine du niveau et celle de la
+partie, la porte retenue (palier, reprise ou non), la longueur du chemin et le nombre de candidats par bande ; elle
+liste chaque candidat dans le journal et les dessine 30 s dans le monde (rouge : retenu ; vert : bande visée ; jaune :
+bande élargie ; gris : secours).
 
 **Construction** (`ABRChunk::AddServiceDoorway`, `ABRExit::BuildServiceDoor`) :
 
@@ -127,7 +156,121 @@ du chapitre (publié : `0 → 1 → 37 → 2 → fin du contenu`), aucun passage
   partie ne se déplace pas.
 - **Après une fin** : « Continuer l'exploration » tire un niveau déjà atteint (et disponible).
 
-## 6. Tests du jeu (préparés, non exécutés)
+## 6. Level 6 « Lights Out » : sans lumière, au scanner LiDAR
 
-`-BRAutoTestV413` (seul) ou dans `-BRAutoTest` ; fichier `Source/Backrooms/Private/BRAutoTestV413.cpp`. Le détail est
-dans le [rapport](RAPPORT_v4.13.md), § 7.
+But affiché : **« Retrouver dans le noir le passage de l'équipe »**. Sortie : l'échelle au fond de l'aile d'essai, vers le
+**Niveau 8**. Logique pure : `BRMissionLogic` (plan, règles), `BRLidarLogic` (aile, scanner) ; monde :
+`BRLidarWorld.cpp`, `BRMissionWorld.cpp` ; scanner : `ABRLidar` (`BRLidar.h/.cpp`).
+
+### 6.1 Référence et adaptation
+
+La demande cite une vidéo de référence : « Level 6: Lights Out (LiDAR) Teaching The Homie | Backrooms: Escape
+Together ». **Elle n'a pas été visionnée ici** (aucune lecture de vidéo dans cet environnement). L'adaptation suit la
+description écrite de la demande ; rien n'est repris du jeu de la vidéo (modèles, sons, textes, plans et règles sont
+ceux du projet).
+
+| Ce que la demande décrit (référence) | Ce qui est fait ici (adaptation) |
+|---|---|
+| Obscurité réelle, la lumière ne sert pas | aucune lumière de niveau ; la lampe ne donne qu'une lueur, la vision nocturne ne voit que de la neige, expliqué au sas d'entrée et dans une note ; **aucun réglage graphique n'est changé** |
+| Scanner : impulsion large et scan focalisé | deux commandes configurables (§ 6.2) ; points qui s'estompent |
+| Points de couleurs ET de formes | six catégories, chacune une couleur et une forme (lisible sans distinguer les couleurs) |
+| Apprendre à un coéquipier (« teaching the homie ») | zone sûre au départ, sans entité tant que le scanner n'est pas calibré ; aides par étape ; flèches bleues de L. au sol |
+| Postes, cages, portes, une seule bonne | quatre postes (les anciennes balises), quatre cages (silhouette et code), quatre portes ; une seule solution, déduite des informations vues |
+| Zone dangereuse percée | six **vrais trous** (on tombe), passages d'au moins 140 cm, tous visibles au scanner : **aucun saut à l'aveugle** |
+| Dernier passage aux parasites | émetteur de parasites à l'échelle ; aide de direction **sans le son** (HUD) |
+| Silhouettes | points dérivés des modèles protégés (lus seulement, jamais modifiés) |
+| Menace | Smilers, règle lisible et annoncée (§ 6.5) |
+
+### 6.2 Le scanner
+
+Chaque joueur porte son scanner (`ABRLidar`, local : les points ne sont pas répliqués ; ce que le scanner **valide**
+— mire, cages, recul d'un Smiler — est vérifié par l'hôte).
+
+| Commande | Touches par défaut | Effet |
+|---|---|---|
+| **Impulsion** (`LidarPulse`) | clic droit, `G` ; manette : gâchette gauche | 1400 rayons répartis sur 7 images (220 par image), cône de 100 × 64°, portée 26 m, recharge 1,6 s. **S'entend** (bruit de 18 m de rayon) |
+| **Scan focalisé** (`LidarFocus`, maintenir) | `X`, clic molette ; manette : gâchette droite | 36 rayons par image dans un cône de 7° (demi-angle) ; relève les détails (mire, cages, plaques des portes, silhouettes) |
+
+Les deux actions se reconfigurent dans le menu des touches, comme les autres.
+
+**Points** (plus grand vide de l'impulsion : 1,36° ; capacité 24 000 points en 8 groupes d'âge, le plus ancien est vidé
+et réutilisé) :
+
+| Catégorie | Couleur | Forme |
+|---|---|---|
+| Décor (murs, sol, plafond) | blanc bleuté | petit carré |
+| Danger (bord d'un trou, fond d'une fosse) | orange | triangle |
+| Mécanisme de mission, objet | vert | losange |
+| Entité | rouge | croix |
+| Repères de L. au sol | bleu | chevron, dans le sens du chemin |
+| Silhouettes et inscriptions (cages, plaques) | ambre | point |
+
+**Réglages** (menu Paramètres) : taille des points 0,5 à 2 ; contraste 0,5 à 2 ; persistance 4 à 30 s (12 s par défaut).
+Un groupe reste à plein éclat pendant le premier quart de la persistance, puis s'éteint linéairement.
+
+**HUD** : cône de visée, recharge, « RELEVÉ AU SCANNER » pendant un relevé, et l'aide **PARASITES** (direction de
+l'émetteur, « derrière vous ») qui remplace le son pour qui ne l'entend pas.
+
+**Budget** : une instance groupée par catégorie et par groupe d'âge ; aucune lumière, ombre, éclairage indirect ni ray
+tracing par point. Le banc mesure au plus 257 rayons et 377 points ajoutés par image
+([`v413/banc_lidar.txt`](v413/banc_lidar.txt)).
+
+### 6.3 La mission
+
+| Étape | Ce qu'on fait | Règle |
+|---|---|---|
+| 1. Calibrer | dans la zone sûre près du départ, viser la **mire** et maintenir le scan focalisé | relevé validé par l'hôte (portée 9 m, ligne de vue) ; avant lui, aucune entité n'apparaît |
+| 2. Postes | suivre les flèches bleues ; maintenir Interagir sur chacun des **quatre postes de confinement** (ordre libre) | la manivelle garde sa progression si on la lâche ; elle fait du bruit ; un poste allume **sa** cage |
+| 3. Cages | maintenir le scan focalisé sur chaque **cage** sous tension | la silhouette apparaît en points ambre, le code est sur la plaque ; le carnet garde chaque relevé |
+| 4. Journal | lire le **journal de l'équipe de L.** devant l'aile | il dit quelle silhouette suivre |
+| 5. Porte | ouvrir la **porte du passage** qui porte cette silhouette **et** le code de sa cage | une seule porte convient ; une porte fausse refuse (« {N} éléments ne correspondent pas »), **rien n'est perdu**, elle se réarme |
+| 6. Traverser | scanner avant de marcher, contourner les trous, suivre les parasites jusqu'à l'échelle | l'échelle mène au Niveau 8 |
+
+Les portes restent verrouillées tant que les postes, les cages et le journal n'ont pas été vus. Sans le journal, ou sans
+les cages, au moins deux portes restent possibles : la solution ne se devine pas (vérifié sur 3000 graines,
+[`v413/banc_missions.txt`](v413/banc_missions.txt)). Les silhouettes sont celles du Hound, du Faceling, du Partygoer, du
+Skin-Stealer, du Wretch et du Clump.
+
+### 6.4 L'aile d'essai
+
+Salle fermée de **4 × 4 cellules** (14 × 14 m), posée d'après la graine seule (la même chez tous les joueurs) dans un
+chunk à deux chunks du départ, l'entrée tournée vers lui.
+
+- **Entrée** : quatre ouvertures, une par cellule, fermées par les quatre portes du passage ; les trois autres côtés sont
+  des murs pleins. Un **couloir garanti** relie le départ à l'entrée (18 à 41 cellules de marche sur 500 graines,
+  [`v413/lidar_aile.txt`](v413/lidar_aile.txt)).
+- **Zone percée** (trois premières rangées) : six trous de 210 cm aux angles intérieurs des dalles ; entre deux trous, au
+  moins **140 cm** de passage. Les trous sont ceux des salles de fosses (sol réellement ouvert, chute mortelle, évitement
+  par les entités).
+- **Alcôves** (dernière rangée) : quatre alcôves séparées par des murs ; l'échelle et l'émetteur de parasites sont dans
+  l'une d'elles.
+
+Vérifié (banc LiDAR, 2000 graines) : six trous partout ; marche réelle d'une capsule de 42 cm sur une grille de 5 cm
+(200 graines) : depuis chaque porte, toutes les alcôves sont atteintes sans passer au-dessus d'un trou. Planche de six
+graines, vue de dessus : [`v413/lidar_ailes_6_graines.png`](v413/lidar_ailes_6_graines.png) (simulation de la grille,
+pas une capture du jeu).
+
+### 6.5 Menace lisible : les Smilers
+
+- Seule espèce du niveau (trois au plus) ; **aucune** apparition tant que le scanner n'est pas calibré.
+- **L'impulsion s'entend** et les attire : un Smiler qui l'entend vient voir ; son approche s'annonce une fois (souffle).
+- **Le faisceau focalisé maintenu 0,6 s** sur un Smiler le fait **reculer de 7 m** ; il ne revient pas avant 6 s.
+  L'hôte vérifie la portée (26 m), la ligne de vue et l'axe de visée.
+- La règle est écrite par L. (notes `Note.L6.4` à `.6`) avant d'être nécessaire.
+
+### 6.6 Coopération, sauvegarde, anciennes parties
+
+- **Hôte** : plan de la mission, relevés, postes, portes, recul des Smilers ; l'état est répliqué, y compris à un client
+  qui arrive en cours de partie. Chaque joueur scanne pour lui-même.
+- **Sauvegarde** : l'état de la mission est sauvegardé avec la partie ; la reprise retrouve l'aile et
+  le plan (même graine).
+- **Parties de la v4.12** (chaîne de balises) : l'ancien plan est reconstruit à l'identique, puis converti — plaque de
+  départ lue → scanner calibré ; balises allumées → postes réactivés ; mission terminée → **terminée** (un Level 6 fini
+  ne bloque jamais). La sauvegarde d'origine est **copiée** avant d'être réécrite, et un avis dit que la progression est
+  gardée. `GenVersion` n'est pas monté : les autres niveaux gardent leurs plans (empreintes identiques avant et après,
+  [`v413/empreintes_missions.txt`](v413/empreintes_missions.txt)).
+
+## 7. Tests du jeu (préparés, non exécutés)
+
+`-BRAutoTestV413` (seul) ou dans `-BRAutoTest` ; fichiers `Source/Backrooms/Private/BRAutoTestV413.cpp` et
+`BRAutoTestV413Lidar.cpp`. Le détail est dans le [rapport](RAPPORT_v4.13.md), § 7 et § 15.

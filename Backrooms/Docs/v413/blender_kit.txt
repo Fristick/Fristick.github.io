@@ -111,3 +111,20 @@ sys	0m2.461s
  "seconds": 104.1
 }
 FBX relus conformes : 38 / 38
+
+## v4.13 suite : python3 Tools/Blender/build_level0_kit.py --seed 9 --skip-textures --out <dossier temporaire>   (reperes des candidats de porte)
+# Date : 2026-10-12T21:13:27Z ; sortie dans un dossier temporaire (les fichiers du depot ne sont pas reecrits par cette relance)
+Disposition : graine 9 (niveau 1896875771), 1 salle(s) de fosses, porte de service ((-16, 6), (-1, 0))
+Controles : {"reference_1m_dims": [1.0, 1.0, 1.0], "normals": {}, "holes_open": 16, "holes_blocked": [], "door_path_steps": 28, "door_path_blocked": [], "doorway_clear_width_m": 1.5, "service_door_clear_width_m": 1.1}
+00:24.513  cycles           | WARNING CUEW initialization failed: Error opening the library
+Info: Packed 28 file(s)
+Info: Saved as "BR_Level0.blend"
+Termine en 25 s : <dossier temporaire>
+real	0m25.790s
+user	0m27.142s
+sys	0m2.850s
+Reperes : 174, dont 120 MK_DoorCandidate_NNN ; bandes : bande 0 : 85, bande 1 : 35
+Exemple pose : Candidat de porte de service : cellule -16,6, face (-1,0), 28 cellules de marche, bande 0, exemple pose dans cet export (tirage de l'hote a chaque nouvelle partie)
+FBX relus : 38 sur 38
+L0_Placement.json identique a celui du depot (RawAssets/Level0Kit/) : oui
+# Code de sortie : 0

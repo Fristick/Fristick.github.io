@@ -2,7 +2,7 @@
 # Commande (depuis Backrooms/) :
 #   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Lidar/test_lidar.cpp Source/Backrooms/Private/BRLidarLogic.cpp -o test_lidar && ./test_lidar 
 # Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
-# Date : 2026-10-12T20:40:14Z
+# Date : 2026-10-12T21:16:55Z
 
 Banc d'essai du Level 6 (LiDAR) : 2000 graines
 Impulsion : 1400 rayons en 7 images (220 par image), cone 100 x 64 degres, plus grand vide 1.36 degres ; scan focalise : 37 rayons par image, cone de 14 degres

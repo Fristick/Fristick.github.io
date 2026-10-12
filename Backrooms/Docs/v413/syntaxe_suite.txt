@@ -1,0 +1,17 @@
+# Controle de syntaxe C++ v4.13 suite (clang, en-tetes Unreal simules) — sortie reelle
+# Ce n'est PAS une compilation Unreal : les en-tetes du moteur sont remplaces par des declarations minimales.
+# Compilateur : Ubuntu clang version 18.1.3 (1ubuntu1)
+# Date : 2026-10-12T21:23:18Z
+# Fichiers (modifies ou ajoutes depuis d82729d~1, copie de travail) : BRAutoTestV413 BRAutoTestV413Lidar BRCharacter BREntity BRHUD BRKeys BRLevels BRLidar BRLidarLogic BRLidarWorld BRMissionDevice BRMissionLogic BRMissionSolver BRMissionText BRMissionWorld BRPlayerController BRStoryWorld BRWorld
+# Options : -std=c++20 -fms-extensions -fsyntax-only -Wall -Wshadow-all
+# Non couverts : BRAutoTest BRSave (en-tetes du moteur absents des declarations simulees, deja le cas dans la base)
+
+# Aucune ligne entre l'en-tete et ce commentaire : aucun avertissement ni erreur
+
+## shadowcheck.py (variables masquees, regle du projet ; outil du poste de travail)
+problems: 0
+
+## unitycheck.py (noms en collision dans un build unity ; outil du poste de travail)
+BRAssets.cpp:639: 'Done' masquerait en build unity la declaration globale BRHUD.cpp:49
+unity problems: 1
+# Le seul cas signale existe deja dans la base 90bd60c (BRAssets.cpp / BRHUD.cpp, hors v4.13)

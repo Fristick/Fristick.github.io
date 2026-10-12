@@ -1,11 +1,11 @@
-# Rapport v4.13 : Level 0 sans énigme, progression stable, histoire de l'équipe de L.
+# Rapport v4.13 : Level 0 sans énigme, progression stable, histoire de l'équipe de L., Level 6 sans lumière
 
 Travail fait le 12 octobre 2026 sur la branche `backrooms`.
 
 | | |
 |---|---|
 | **Commit de base** | `90bd60c` (v4.12, 9/9), vérifié avant toute modification ([audit](AUDIT_v4.13.md)) |
-| **Commits v4.13** | huit commits « v4.13 (n/8) », listés ci-dessous |
+| **Commits v4.13** | huit commits « v4.13 (n/8) », listés ci-dessous ; puis six commits « v4.13 suite (n) » : porte tirée à chaque partie, Level 6 sans lumière ([§ 14](#14-suite-v413--porte-tirée-à-chaque-partie-level-6-sans-lumière)) |
 | **Documents** | [Audit](AUDIT_v4.13.md) · [Histoire et progression](HISTOIRE_PROGRESSION_v4.13.md) · [Gameplay](GAMEPLAY_v4.13.md) · [Plan de publication](PLAN_PUBLICATION.md) · [Kit Blender du Level 0](../RawAssets/Level0Kit/README.md) · journaux réels dans [`Docs/v413/`](v413/) |
 
 Commits v4.13 :
@@ -17,7 +17,10 @@ Commits v4.13 :
 - `ade878c` (5/8) : kit Blender du Level 0 (scripts, modules, textures, FBX, `.blend`, placement, rendus) ;
 - `77b69c7` (6/8) : journaux réels (`Docs/v413/`), planche des portes ;
 - `9f01682` (7/8) : histoire et progression, gameplay, plan de publication ;
-- **8/8 (ce rapport, README)** : le dernier de la branche (`git log -1`).
+- `abbf28c` (8/8) : rapport, README.
+
+La suite (porte tirée à chaque partie, Level 6 sans lumière) est décrite aux §§ 14 à 19 ; les §§ 1 à 13 décrivent la
+première passe et restent valables pour ce que la suite ne change pas.
 
 ## 1. Où, comment, et ce qui n'a pas pu être fait
 
@@ -249,3 +252,168 @@ migration), `BRTypes.h`, `Config/DefaultGame.ini`.
 6. Importer le kit Blender dans Unreal avec les réglages de son README ; comparer à une capture du Level 0 de la
    graine 9.
 7. Paquets natifs, signature et notarisation ; préparation Steam, sans publication.
+
+## 14. Suite v4.13 : porte tirée à chaque partie, Level 6 sans lumière
+
+Demande traitée : « amélioration Backrooms 3 » (porte du Level 0 aléatoire par partie, douze niveaux obligatoires,
+Level 6 LiDAR, migration, kit Blender, tests et documents). Même machine, mêmes limites (§ 1) : **pas d'Unreal, pas de
+GPU** ; `dev.epicgames.com`, `partner.steamgames.com` et la documentation NVIDIA refusées (**403**), rien de contourné.
+
+Commits de la suite :
+
+- `d82729d` suite (1) : porte du Level 0 tirée à chaque nouvelle partie ;
+- `90fcdfd` suite (2) : Level 6, logique de la mission LiDAR (plan, solveur, banc, conversion des balises) ;
+- `49c2887` suite (3) : Level 6 sans lumière : aile d'essai, scanner, décor, sons, bancs ;
+- `e312a3c` suite (4) : textes du Level 6 en 22 langues, polices ;
+- `fe49feb` suite (5) : autotests du Level 6, repères des candidats de porte dans le kit Blender ;
+- **suite (6)** (ce rapport) : documents, journaux, liste des clés de langue, `loc_extract.py --check` en lecture seule,
+  étapes de sauvegarde et reprise du Level 6, planche des ailes (`verify_lidar.py --sheet`), `verify_pitfalls.py --jobs` ;
+  le dernier de la branche (`git log -1`).
+
+### 14.1 Porte du Level 0 tirée à chaque partie (demande A)
+
+| Demande | Fait | Catégorie |
+|---|---|---|
+| Une porte différente à chaque nouvelle partie | graine du Level 0 propre à la partie (`IntroSeed`), tirée à la nouvelle partie (aussi depuis un menu déjà au Level 0 : rechargement forcé) | vérifié hors moteur : 118 emplacements différents pour 500 graines, 120 (tous les emplacements de bord possibles) pour 5000 graines ; test préparé |
+| Sauvegardée et stable : graine, emplacement, version, état ouvert | histoire (format 5, champs ajoutés) : `IntroSeed`, `DoorX/Y/Dir`, `DoorTier`, `DoorVersion` (= 2) ; événement `DoorOpened` ; à chaque chargement, la porte sauvegardée est **relue** si elle est encore candidate, sinon nouveau choix journalisé | vérifié hors moteur (même graine → même porte, porte sauvegardée reprise : chaque graine) ; test préparé : mort, sauvegarde et reprise, rechargement, après ouverture |
+| Coop, client tardif | graine et porte de l'hôte répliquées (`FBRNetStory`) | test préparé (client connecté au début) ; client tardif non automatisé |
+| Placement sûr, varié | candidats contre le mur d'enceinte (ni coin, ni départ, ni mission), atteints sans fosse ; bandes 24–40, 16–56, secours le plus proche de 32 | vérifié hors moteur : 0 problème, bande visée retenue 500/500 |
+| Outils de développement | commande `BRDoor` : graines, porte, palier, candidats par bande (journal et boîtes de couleur 30 s) | code ; non exécuté |
+| Tests de diversité et de reproductibilité | `Tools/verify_pitfalls.py --doors` (reproductibilité, reprise de la porte sauvegardée, diversité, murs) | **exécuté** (§ 16) |
+
+### 14.2 Douze niveaux obligatoires (demande B)
+
+Déjà en place depuis la première passe et vérifié à nouveau : le fil `0 → 1 → 37 → 2 → 3 → 4 → 5 → 6 → 8 → 9 → 10 → 11
+→ dernier quai` ne saute aucun niveau (banc de contenu, 68 vérifications : aucune sortie vers un niveau indisponible,
+aucun raccourci, fin atteinte dans chaque canal) ; les douze missions sont résolues sur 3000 graines chacune (banc des
+missions). Le Level 6 garde sa place (`5 → 6 → 8`) ; sa mission change (§ 14.3).
+
+### 14.3 Level 6 « Lights Out » au scanner LiDAR (demande C)
+
+Règles détaillées : [`GAMEPLAY_v4.13.md`](GAMEPLAY_v4.13.md), § 6.
+
+**Référence et adaptation.** La vidéo de référence (« Level 6: Lights Out (LiDAR) Teaching The Homie | Backrooms: Escape
+Together ») **n'a pas été visionnée ici** : l'adaptation suit la description écrite de la demande. Rien n'est repris du
+jeu de la vidéo ; modèles, sons, textes, plans et règles sont ceux du projet (tableau de correspondance dans le document
+de gameplay, § 6.1).
+
+| Demande | Fait | Catégorie |
+|---|---|---|
+| Obscurité réelle | aucune lumière de niveau ; lampe réduite à une lueur, vision nocturne brouillée (refusée), expliquées au sas d'entrée et par une note ; aucun réglage graphique changé | test préparé (vision nocturne refusée) |
+| Scanner : impulsion et scan focalisé | `ABRLidar` local : impulsion de 1400 rayons sur 7 images, cône 100 × 64°, portée 26 m, recharge 1,6 s ; scan focalisé de 36 rayons par image dans 7° | banc LiDAR (couverture : plus grand vide 1,36°, cône focalisé) ; test préparé |
+| Points de couleurs ET de formes | six catégories (carré, triangle, losange, croix, chevron, point) ; maillages `SM_Lidar*` (Blender) | banc (catégories) ; rendu non vu |
+| Réglages, touches | taille 0,5–2, contraste 0,5–2, persistance 4–30 s ; `LidarPulse` (clic droit, G, gâchette gauche), `LidarFocus` (X, clic molette, gâchette droite), reconfigurables | banc (bornes) ; code |
+| Mission avec tutoriel et repères bleus | mire de calibrage dans une zone sûre (aucune entité avant le calibrage) ; flèches bleues de L. au sol, du calibrage à l'aile | banc des missions ; test préparé |
+| Postes, cages, portes à solution unique | 4 postes (anciennes balises, ordre libre), 4 cages (silhouette, code ; ouvertes par leur poste), journal de L., 4 portes ; une seule solution ; sans journal ou sans cages, au moins deux portes possibles | **banc : 3000 graines, unicité, solveur sur les seules informations visibles** |
+| Erreur réversible | porte fausse : refus, nombre d'éléments faux, réarmement, rien de perdu | banc (erreurs typiques) |
+| Zone dangereuse aux vrais trous, sans saut à l'aveugle | aile de 4 × 4 cellules : six trous de 210 cm (machinerie des salles de fosses : sol ouvert, chute mortelle, évitement), passages ≥ 140 cm, bords en triangles orange | **banc : 2000 graines, marche d'une capsule de 42 cm au pas de 5 cm (200 graines), toutes les alcôves atteintes depuis chaque porte** |
+| Dernier passage aux parasites, aide sans le son | émetteur de parasites à l'échelle (son `S_LidarStatic`) ; HUD « PARASITES » avec direction | banc (niveau monotone en distance) ; test préparé (émetteur actif) |
+| Silhouettes dérivées des modèles protégés | points tirés des maillages `RawAssets/Skeletal/SK_*` de six entités, lus seulement (`build_lidar_assets.py --silhouettes`) ; planche `v413/lidar_silhouettes.png` | exécuté (Blender) ; `protect_assets.py check` OK |
+| Menace lisible et apprise | Smilers : l'impulsion s'entend (18 m) et attire ; faisceau maintenu 0,6 s → recul de 7 m, pas de retour avant 6 s (vérifié par l'hôte : portée, vue, axe) ; approche annoncée ; notes de L. | code ; test non automatisé |
+| Ancienne chaîne de balises réutilisée | les balises de la v4.12 deviennent les postes (même rôle de manivelle, même progression) | banc (conversion) |
+| Coop tenue par l'hôte | plan, relevés, postes, portes, recul : hôte ; état répliqué ; points de scanner locaux | test préparé (`-BRNetTest`) |
+| Performances | instances groupées par catégorie et âge, aucune lumière, ombre, éclairage indirect ni ray tracing par point ; au plus 257 rayons et 377 points par image ; 24 000 points au plus | banc (budget) ; mesure en jeu préparée (`StatRays`, `StatSeconds`) |
+| Sortie vers le Niveau 8 | échelle dans une alcôve de l'aile | test préparé (arrivée au Niveau 8 sans chute) |
+| Livrables | maillages (`RawAssets/Meshes/SM_Lidar*.fbx`, scanner tenu en main), sons (`S_LidarPulse`, `Focus`, `Static`, `Deny`, `Post`, `Calib`, générés), textes (51 nouveaux, 22 langues), documents | exécuté (générés ici) ; captures du jeu préparées, non exécutées |
+
+### 14.4 Migration (demande D)
+
+| Demande | Fait | Vérification |
+|---|---|---|
+| Pas de `GenVersion` monté à l'aveugle | inchangé (2) ; rôles du Level 6 ajoutés en fin d'énumération | **empreintes des plans des onze autres niveaux identiques avant et après** (`v413/empreintes_missions.txt`) |
+| Anciennes sessions du Level 6 (balises) converties | `BRMission::MigrateState` : plan v4.12 reconstruit à l'identique (`BuildLegacyPlan6`, vérifié contre la v4.12) ; plaque lue → calibrage, balises → postes (progression partielle gardée), terminée → terminée | banc : 15 000 converties et conformes, 15 000 d'une autre graine refusées ; test préparé (en cours, terminée) |
+| Copie avant réécriture | copie de la sauvegarde demandée à la conversion ; avis « progression gardée » | test préparé (avis 3) |
+| Un Level 6 fini ne bloque jamais | mission terminée → toutes étapes accomplies, résolue | banc ; test préparé |
+| Level 0 : parties sans graine de partie | la session du Level 0 en cours donne sa graine ; sinon tirage à la prochaine visite, puis gardée | code (`MigrateStory`) ; test préparé |
+
+### 14.5 Kit Blender (demande E)
+
+Le module de porte se pose sur **n'importe quel candidat** (quatre orientations) ; le kit exporte un repère
+`MK_DoorCandidate_NNN` par emplacement (cellule, face, distance de marche, bande), et la porte de la scène n'est qu'un
+exemple : l'hôte choisit à chaque partie. Graine 9 : 120 candidats (85 en bande visée, 35 en bande élargie). Relance
+exécutée (Blender 5.0.1, 25 s) : `L0_Placement.json` identique à celui du dépôt, 38 FBX relus sur 38
+(`v413/blender_kit.txt`). README du kit mis à jour.
+
+## 15. Tests du jeu ajoutés par la suite (préparés, non exécutés)
+
+Dans `-BRAutoTestV413` (et `-BRAutoTest`) ; fichiers `BRAutoTestV413.cpp` (porte) et `BRAutoTestV413Lidar.cpp` (Level 6).
+
+| Étape | Vérifie |
+|---|---|
+| porte stable : mort, sauvegarde et reprise, rechargement | même graine du Level 0, même cellule, même face ; porte relue (`WasServiceDoorRestored`) ; histoire sauvegardée conforme |
+| porte stable : après ouverture | graine et porte gardées, événement « porte ouverte » |
+| Level 6 : aile, mission, scanner | aile valide, 15 mécanismes, 4 portes dans l'aile, repères au sol, zone sûre, scanner local ; vision nocturne refusée ; capture `v413_lidar_arrivee` |
+| Level 6 : impulsion | rayons tracés ≥ 1400, points affichés, seconde impulsion refusée pendant la recharge ; temps passé dans le scanner ; capture |
+| Level 6 : calibrage au scan focalisé | mire à 3 m en ligne de vue, calibrage validé par l'hôte ; capture |
+| mission en marchant (v4.12), plaques et cages relevées | mission résolue par de vraies interactions, parasites actifs, erreurs ; capture `v413_lidar_passage_ouvert` |
+| sortie à pied, arrivée au Niveau 8 | traversée de la zone percée sans chute ; scanner retiré hors du Level 6 |
+| ancienne session convertie | plaque lue + 2 balises → avis 3, calibrage fait, 2 postes sur 4 |
+| sauvegarde et reprise | mission LiDAR en cours : même aile, même progression, pas de reprise du début |
+| ancienne session terminée | mission terminée, avis 3 : le Level 6 fini ne bloque pas |
+| `-BRNetTest` : Level 6 | même aile et même empreinte de plan chez l'hôte et le client ; points locaux ; calibrage de l'hôte reçu par le client |
+
+**Non automatisés** : quatre joueurs et client arrivé en cours de partie (notés « SAUTÉ » dans le rapport du test) ;
+recul d'un Smiler au faisceau (aucune étape). À faire à la main (§ 19).
+
+## 16. Commandes et résultats de la suite (exécutés ici)
+
+| Commande | Résultat | Journal |
+|---|---|---|
+| huit bancs C++ (`run_benches`, commandes en tête de chaque journal) | histoire 44, contenu 68, missions 3000 graines × 12 niveaux, mécanismes 49, départ 30, lumière 6, transactions 51, **LiDAR 18 207** : 0 échec | `v413/banc_*.txt` |
+| `python3 Tools/verify_pitfalls.py --doors 1-500` | 0 problème ; 24–40 cellules (moyenne 31) ; 118 emplacements différents ; reproductibilité et reprise : chaque graine | `v413/fosses_et_porte.txt` |
+| `python3 Tools/verify_pitfalls.py --doors 1-5000 --jobs 4` | 0 problème ; bande visée 5000 fois sur 5000 ; 120 emplacements différents (tous les emplacements de bord) ; murs 1240 à 1263 ; 729 s sur 4 processus (option `--jobs` ajoutée : sortie identique à un seul processus, comparée sur 40 graines) | `v413/fosses_et_porte.txt` |
+| `python3 Tools/verify_lidar.py --seeds 1-500` | entrée de l'aile atteinte 500/500 (18 à 41 cellules, médiane 28) ; 4 portes, aucun autre passage | `v413/lidar_aile.txt` |
+| `python3 Tools/verify_lidar.py --seeds 1-6 --sheet Docs/v413/lidar_ailes_6_graines.png` | planche vue de dessus (simulation, pas une capture du jeu) | `v413/lidar_ailes_6_graines.png` |
+| empreintes des plans avant (`d82729d`) et après | onze niveaux identiques ; plan v4.12 du Level 6 reconstruit à l'identique | `v413/empreintes_missions.txt` |
+| `python3 Tools/Blender/build_level0_kit.py --seed 9 --skip-textures --out <temporaire>` | 174 repères dont 120 candidats ; placement identique au dépôt ; 38 FBX relus | `v413/blender_kit.txt` |
+| `loc_extract.py --check`, `loc_build.py --check`, `loc_review.py` | 1181 clés, 22 langues à 1181/1181, 0 problème | `v413/outils_suite.txt` |
+| `protect_assets.py check` ; tests des outils de paquet | OK ; 62 tests, 61 OK, 1 sauté | `v413/outils_suite.txt` |
+| clang 18, contrôle syntaxique (18 fichiers de la suite) | 0 avertissement, 0 erreur ; 0 masquage ; 1 conflit regroupé déjà dans la base | `v413/syntaxe_suite.txt` |
+
+**Constat corrigé pendant cette passe** : `Tools/Localization/loc_extract.py` ignorait `--check` et réécrivait les
+catalogues. Sa première exécution a mis à jour `BRLocKeys.inl` (1142 → 1181 clés : la liste de recensement des
+traductions en jeu) et `fr/Game.po`, restés en retard au commit (4) ; les `.locres` étaient déjà justes. `--check` est
+maintenant en lecture seule (code 1 si un fichier n'est pas à jour).
+
+## 17. Fichiers de la suite
+
+- **Nouveaux** : `Public/BRLidarLogic.h`, `Private/BRLidarLogic.cpp`, `Private/BRLidarWorld.cpp`, `Public/BRLidar.h`,
+  `Private/BRLidar.cpp`, `Private/BRLidarShapes.inl`, `Private/BRAutoTestV413Lidar.cpp` ; `Tools/Lidar/test_lidar.cpp`,
+  `Tools/verify_lidar.py`, `Tools/Blender/build_lidar_assets.py`, `Tools/generate_lidar_sounds.py` ;
+  `RawAssets/Meshes/SM_Lidar*.fbx`, `RawAssets/Sounds/S_Lidar*.wav` ; `Docs/v413/banc_lidar.txt`, `lidar_aile.txt`,
+  `empreintes_missions.txt`, `lidar_silhouettes.png`, `lidar_ailes_6_graines.png`, `outils_suite.txt`, `syntaxe_suite.txt`.
+- **Jeu** : `BRWorld`, `BRStoryWorld` (porte par partie), `BRMissionWorld`, `BRMissionLogic`, `BRMissionSolver`,
+  `BRMission.h`, `BRMissionDevice`, `BRMissionText`, `BRMechLogic.h`, `BRTypes.h`, `BRLevels`, `BRKeys`,
+  `BRPlayerController`, `BRCharacter`, `BREntity`, `BRHUD`, `BRSave` (champs de la porte), `BRStoryLogic.h`.
+- **Tests et bancs** : `BRAutoTest.cpp/.h`, `BRAutoTestV413.cpp`, `Tools/Missions/test_mission_logic.cpp`,
+  `Tools/verify_pitfalls.py`.
+- **Langues** : `Content/Localization/Game/*/Game.po` et `.locres`, `BRLocKeys.inl`, polices CJK et arabe,
+  `Docs/LOCALISATION_COUVERTURE.md` ; `Tools/Localization/loc_extract.py`.
+- **Kit Blender** : `Tools/Blender/build_level0_kit.py`, `RawAssets/Level0Kit/` (`.blend`, placement, rapport, README).
+- **Documents** : ce rapport, `GAMEPLAY_v4.13.md`, `HISTOIRE_PROGRESSION_v4.13.md`, `PLAN_PUBLICATION.md`, `README.md`.
+
+## 18. Limitations de la suite
+
+1. **Rien n'a été compilé ni joué dans Unreal** : rendu des points, lisibilité des formes, budget réel par image,
+   collisions de l'aile, chute dans les trous et recul des Smilers restent à voir en jeu.
+2. **Référence non visionnée** : l'adaptation suit la description écrite ; à comparer à la vidéo par quelqu'un qui peut
+   la voir.
+3. Captures du jeu (`v413_lidar_*`, `v413_graine_*`) : préparées, non exécutées. Les planches `lidar_silhouettes.png`,
+   `lidar_ailes_6_graines.png` et les cartes de portes sont des rendus hors jeu (Blender, simulation), pas des captures.
+4. Quatre joueurs, client arrivé en cours de partie, recul d'un Smiler : non automatisés.
+5. Textes du Level 6 : traduits ici, marqués « fuzzy » (à relire par des locuteurs), polices régénérées.
+6. Silhouettes : nuages de points tirés des maillages protégés, réduits ; leur lisibilité à 9 m reste à juger en jeu.
+7. Documentation Epic, Steamworks et NVIDIA inaccessible (403) : rien contourné, rien vérifié sur ces sites.
+
+## 19. Essais restant à exécuter (suite), dans l'ordre
+
+1. Compiler (Editor puis Shipping, unités regroupées comprises) ; corriger les erreurs réelles.
+2. `-BRAutoTest -BRAutoTestV413 -BRAutoTestStrict` : lire le rapport et les captures `v413_lidar_*` ; relever
+   `StatRays` et `StatSeconds` (coût du scanner par image).
+3. `-BRNetTest`, puis à la main : quatre joueurs au Level 6 ; un client qui rejoint pendant la mission LiDAR ; un client
+   qui rejoint au Level 0 après l'ouverture de la porte.
+4. À la main : deux nouvelles parties → deux portes ; mort et reprise → même porte ; `BRDoor`.
+5. À la main au Level 6 : lisibilité des formes et des couleurs (y compris en simulation de daltonisme), réglages,
+   touches et manette ; recul d'un Smiler au faisceau ; aide « PARASITES » sans le son.
+6. Reprendre une vraie partie v4.12 arrêtée au Level 6 (en cours, puis terminée) : lire l'avis et la copie.
+7. Comparer l'adaptation à la vidéo de référence.

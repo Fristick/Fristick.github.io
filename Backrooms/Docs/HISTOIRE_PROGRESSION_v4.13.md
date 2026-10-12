@@ -49,7 +49,7 @@ progression mène au niveau suivant du fil, et seulement à lui.
 | 3 | Rétablir l'alimentation centrale | → 4 | (chapitre 2, textes à venir) |
 | 4 | Retrouver la destination dans les archives | → 5 | |
 | 5 | Rouvrir la route de la chaufferie | → 6 | |
-| 6 | Rallumer la chaîne de balises | → 8 | |
+| 6 | Retrouver dans le noir le passage de l'équipe | échelle de l'aile d'essai → 8 | flèches bleues au sol jusqu'à l'aile ; journal de l'équipe (silhouette à suivre) ; « En bas, la terre. On descend. » gratté sur le montant de la porte du passage (lu à son ouverture) ; notes `Note.L6.4` à `.6` (scanner, Smilers, sol percé) |
 | 8 | Franchir le passage que l'équipe n'a pas pu tenir | → 9 | |
 | 9 | Rallumer le bon porche | → 10 | |
 | 10 | Ouvrir la grange qui indique la route | → 11 | |
@@ -66,8 +66,11 @@ réussite, une ligne courte annonce la suite (`Mission.Solved.*`, `Mission.Story
   sous-titre « [Le bourdonnement des néons. La moquette est humide sous vos mains.] », puis l'avis « Quelque part, un
   courant d'air froid passe. L'air ne devrait pas bouger ici. »
 - **Aucune énigme, aucune liste.** La seule sortie est une **porte de service** réelle (cadre, charnières, battant sur
-  pivot, poignées, collision), posée une fois par le monde dans le mur d'enceinte, à 24 à 40 cellules de marche du départ
-  (84 à 140 m), sans traverser de salle de fosses.
+  pivot, poignées, collision), dans le mur d'enceinte, à 24 à 40 cellules de marche du départ (84 à 140 m), sans
+  traverser de salle de fosses.
+- **Une porte par partie.** Le Level 0 d'une partie a sa graine, tirée à la nouvelle partie : la disposition et la porte
+  changent d'une partie à l'autre. Dans une même partie, elles ne changent plus : une mort, un retour, CONTINUER, un
+  rechargement ou un client qui rejoint retrouvent la porte au même endroit (relue dans la sauvegarde, pas retirée).
 - **Repères d'orientation**, tous redondants :
   - à l'oreille : le courant d'air sous la porte (`S_Draft`, boucle), distinct du bourdonnement ;
   - à l'œil : un filet de lumière froide sous le battant ; les marques de craie de L. toutes les trois cellules du
@@ -120,6 +123,8 @@ réplication), sauvegardé dans la partie (format 5). Aucun Tick : il change aux
 | `ChapterEnds` | fins de chapitre vues (une par lot) |
 | `Resume` | point de reprise de « Continuer » |
 | `Parked` | ancienne partie : niveau où reprendre après la traversée des Poolrooms |
+| `IntroSeed` | graine du Level 0 de la partie, tirée à la nouvelle partie (0 : pas encore tirée) |
+| `DoorX`, `DoorY`, `DoorDir`, `DoorTier`, `DoorVersion` | porte de service retenue pour `IntroSeed` : cellule, face, palier du choix (bande visée, bande élargie, secours), version de placement ; relue à chaque chargement du Level 0 de la partie |
 
 ### Règle d'accès (hôte)
 
@@ -161,9 +166,12 @@ Au premier chargement, la partie est copiée telle quelle (`<emplacement>_Format
 | Partie allée au-delà des Poolrooms sans preuve | la session en cours est **garée intacte** (graine, objets, mission) ; la partie reprend aux Poolrooms ; à leur sortie, la progression d'avant reprend là où elle était (`TakeParkedSession`), avec un avis |
 | Partie déjà commencée (plus d'une minute) | le réveil n'est pas rejoué |
 | Génération de mission | **inchangée** pour les autres niveaux : monter `GenVersion` aurait fait passer toutes les missions v4.12 sauvegardées en mode historique ; seule la session du Level 0 change de mode |
+| Partie sans graine de Level 0 (avant la porte tirée par partie) | la graine de la session du Level 0 en cours devient celle de la partie ; sinon, la prochaine visite du Level 0 la tire puis la garde |
+| Session du Level 6 de la v4.12 (chaîne de balises) | l'ancien plan est reconstruit à l'identique et l'état converti : plaque de départ lue → scanner calibré ; balises allumées → postes réactivés ; mission terminée → terminée (**un Level 6 fini ne bloque jamais**). Sauvegarde copiée avant réécriture, avis « progression gardée ». Un état qui ne correspond à aucun ancien plan de cette graine n'est pas converti (mission reprise du début, copie et avis, comme en v4.12) |
 
-Vérifié hors moteur (banc d'histoire) et préparé dans le jeu (`-BRAutoTestV413`, étapes « migration » sur de vrais
-fichiers du format 4).
+Vérifié hors moteur (banc d'histoire ; banc des missions pour le Level 6 : 15 000 anciennes sessions converties et
+conformes, 15 000 d'une autre graine refusées) et préparé dans le jeu (`-BRAutoTestV413`, étapes « migration » sur de
+vrais fichiers du format 4, et « ancienne session convertie » pour le Level 6).
 
 ## 6. Fichiers
 
@@ -172,4 +180,7 @@ fichiers du format 4).
 - Textes : `Private/BRMissionText.cpp` (buts, lignes de réussite, inscription), `Private/BRLevels.cpp` (notes),
   `Private/BRHUD.cpp` (carnet, fin du chapitre) ; 22 langues.
 - Sauvegarde : `Public/BRSave.h` (format 5), `Private/BRSave.cpp` (migration).
-- Test du jeu : `Private/BRAutoTestV413.cpp` (préparé, non exécuté).
+- Level 6 : `Public/BRLidarLogic.h`, `Private/BRLidarLogic.cpp` (aile, scanner, logique pure ; banc
+  `Tools/Lidar/test_lidar.cpp`), `Private/BRLidarWorld.cpp`, `Public/BRLidar.h`, `Private/BRLidar.cpp` (scanner) ;
+  mission dans `BRMissionLogic` (banc `Tools/Missions/test_mission_logic.cpp`).
+- Test du jeu : `Private/BRAutoTestV413.cpp`, `Private/BRAutoTestV413Lidar.cpp` (préparés, non exécutés).
