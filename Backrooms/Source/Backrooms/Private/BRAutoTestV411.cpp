@@ -555,7 +555,7 @@ void ABRAutoTest::AddV411Steps()
 
 	// ---------------------------------------------------------------------------------------------- Missions
 	// Ordre de la campagne ; chaque niveau est charge avec sa graine (les fragments de route s'accumulent pour le Niveau 11)
-	AddMissionSteps(0, 4111, false);
+	// v4.13 : le Level 0 n'a plus de mission (introduction, porte de service) : il est couvert par BRAutoTestV413
 	AddMissionSteps(1, 4111, false);
 	AddMissionSteps(2, 4111, true);   // depart vers le Niveau 3 par la sortie ouverte
 	AddMissionSteps(3, 4111, false);
@@ -569,7 +569,8 @@ void ABRAutoTest::AddV411Steps()
 	AddMissionSteps(11, 4111, true);  // fin de la campagne
 	Add(TEXT("v4.11 missions : bilan"), 0.f, [this]()
 	{
-		Note(FString::Printf(TEXT("missions resolues par interactions : %d niveau(x) rapportes sur 12"), TestMissionLines.Num()), TestMissionLines.Num() != 12);
+		Note(FString::Printf(TEXT("missions resolues par interactions : %d niveau(x) rapportes sur 11 (Level 0 sans mission depuis la v4.13)"), TestMissionLines.Num()),
+			TestMissionLines.Num() != 11);
 		return true;
 	});
 
@@ -692,10 +693,14 @@ void ABRAutoTest::AddV411Steps()
 		UGameplayStatics::SaveGameToMemory(Old, Bytes);
 		FFileHelper::SaveArrayToFile(Bytes, *BRSaves::FilePath(BRSaves::SlotName(LegacySlot)));
 		UBRSaveGame* L = BRSaves::Load(LegacySlot);
-		const bool bOk = L && L->LoadedVersion == 3 && L->Version == UBRSaveGame::CurrentVersion && L->Session.bValid && L->Session.GenVersion == 1
-			&& L->Session.Mission.Num() == 0 && L->RouteBits == 0 && L->Endings == 0;
-		Note(FString::Printf(TEXT("format 3 migre : %s (format lu %d, generation de la session %d : ancien mode garde)"), bOk ? TEXT("OK") : TEXT("ECHEC"),
-			L ? L->LoadedVersion : -1, L ? L->Session.GenVersion : -1), !bOk);
+		// v4.13 : une session du Level 0 (ancien mode VHS) n'a plus d'objectif : elle passe au mode courant, garde sa graine
+		// et ses cassettes (documents) ; l'histoire commence au Level 0 (rien d'accompli, rien de gare)
+		const bool bOk = L && L->LoadedVersion == 3 && L->Version == UBRSaveGame::CurrentVersion && L->Session.bValid && L->Session.GenVersion == BRM::GenVersion
+			&& L->Session.Mission.Num() == 0 && L->Session.VHSFound == 1 && L->RouteBits == 0 && L->Endings == 0 && L->StoryResume == 0 && L->StoryDone == 0
+			&& L->StoryParked == -1;
+		Note(FString::Printf(TEXT("format 3 migre : %s (format lu %d, generation de la session %d, cassettes gardees %d, histoire : reprise %d, etapes 0x%x, gare %d)"),
+			bOk ? TEXT("OK") : TEXT("ECHEC"), L ? L->LoadedVersion : -1, L ? L->Session.GenVersion : -1, L ? L->Session.VHSFound : -1, L ? L->StoryResume : -1,
+			L ? L->StoryDone : 0u, L ? L->StoryParked : -2), !bOk);
 		return true;
 	});
 	Add(TEXT("v4.11 ancienne partie : reprise"), 0.f, [this]()
@@ -717,7 +722,7 @@ void ABRAutoTest::AddV411Steps()
 		W->RequestTransition(L->Session.Level, false, L->Session.Seed);
 		return true;
 	});
-	Add(TEXT("v4.11 ancienne partie : ancien mode"), 1.f, [this]()
+	Add(TEXT("v4.11 ancienne partie : Level 0 sans condition (v4.13)"), 1.f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRPlayerController* PC = GetPC();
@@ -725,9 +730,15 @@ void ABRAutoTest::AddV411Steps()
 		{
 			return StepTime > 30.f;
 		}
-		const bool bOk = W->IsResumedSession() && W->GetMissionGen() == 1 && !W->IsMissionActive() && W->IsLegacyObjectives() && W->GetVHSFound() == 1;
-		Note(FString::Printf(TEXT("ancienne session reprise : generation %d, mission %s, objectifs anciens (cassettes) %s, cassettes %d"), W->GetMissionGen(),
-			W->IsMissionActive() ? TEXT("ACTIVE") : TEXT("aucune"), YesNo(W->IsLegacyObjectives()), W->GetVHSFound()), !bOk);
+		// v4.13 : la session reprend (meme graine, cassettes gardees), sans mission ni ancien objectif ; la porte de service
+		// s'ouvre sans condition
+		FString Why;
+		const bool bDoor = W->HasServiceDoor() && W->CanUseExit(1, Why);
+		const bool bOk = W->IsResumedSession() && !W->IsMissionActive() && !W->IsLegacyObjectives() && W->GetVHSFound() == 1 && bDoor
+			&& W->GetSessionMode() == EBRSessionMode::Story;
+		Note(FString::Printf(TEXT("ancienne session reprise : generation %d, mission %s, objectifs anciens %s, cassettes gardees %d, porte de service %s, session d'histoire %s"),
+			W->GetMissionGen(), W->IsMissionActive() ? TEXT("ACTIVE") : TEXT("aucune"), YesNo(W->IsLegacyObjectives()), W->GetVHSFound(),
+			bDoor ? TEXT("ouverte a tous") : *FString::Printf(TEXT("FERMEE (%s)"), *Why), YesNo(W->GetSessionMode() == EBRSessionMode::Story)), !bOk);
 		PC->SetInventoryOpen(true, static_cast<int32>(ABRHUD::ETab::Notebook));
 		return true;
 	});
@@ -740,14 +751,52 @@ void ABRAutoTest::AddV411Steps()
 		}
 		return true;
 	});
-	Add(TEXT("v4.11 ancienne partie : niveau suivant"), 0.f, [this]()
+	Add(TEXT("v4.11 ancienne partie : saut refuse par l'histoire (v4.13)"), 0.f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();
 		if (!W || W->IsTransitioning())
 		{
 			return false;
 		}
+		// v4.13 : en session d'histoire, l'hote refuse une transition que le fil n'a pas preparee (ici : Niveau 1 depuis
+		// un Level 0 dont la porte n'a pas ete prise) ; on passe donc par la porte de service, comme un joueur
+		FString Why;
+		const bool bRefused = !W->CanEnterLevel(1, &Why);
 		W->RequestTransition(1);
+		Note(FString::Printf(TEXT("Niveau 1 demande sans prendre la porte : %s (%s)"), bRefused ? TEXT("refuse") : TEXT("ACCEPTE"), *Why), !bRefused);
+		return true;
+	});
+	Add(TEXT("v4.11 ancienne partie : devant la porte de service"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C || W->IsTransitioning() || !W->HasServiceDoor())
+		{
+			return StepTime > 10.f;
+		}
+		const FVector Fwd = FRotator(0.f, W->GetServiceDoorYaw(), 0.f).Vector();
+		C->SetActorLocation(W->GetServiceDoorLocation() + Fwd * 120.f + FVector(0.f, 0.f, C->GetSimpleCollisionHalfHeight() + 5.f), false, nullptr,
+			ETeleportType::TeleportPhysics);
+		return true;
+	});
+	Add(TEXT("v4.11 ancienne partie : niveau suivant"), 1.5f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C || W->IsTransitioning())
+		{
+			return false;
+		}
+		ABRExit* Door = nullptr;
+		for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
+		{
+			Door = It->Style == EBRExitStyle::ServiceDoor ? *It : Door;
+		}
+		if (!Door)
+		{
+			return StepTime > 15.f; // chunk de la porte en construction
+		}
+		Door->Use(C);
 		return true;
 	});
 	Add(TEXT("v4.11 ancienne partie : mission au niveau suivant"), 1.f, [this]()
@@ -760,9 +809,12 @@ void ABRAutoTest::AddV411Steps()
 		}
 		PC->WriteActiveSave(true);
 		const UBRSaveGame* L = BRSaves::Load(LegacySlot);
-		const bool bOk = W->GetMissionGen() == BRM::GenVersion && W->IsMissionActive() && L && L->Session.GenVersion == BRM::GenVersion && L->Session.Mission.Num() > 0;
-		Note(FString::Printf(TEXT("niveau suivant : generation %d, mission %s, sauvegarde : generation %d, etat de mission %d octets"), W->GetMissionGen(),
-			W->IsMissionActive() ? TEXT("active") : TEXT("ABSENTE"), L ? L->Session.GenVersion : -1, L ? L->Session.Mission.Num() : -1), !bOk);
+		// v4.13 : l'etape du Level 0 est accomplie (porte prise), la reprise est au Niveau 1
+		const bool bStory = L && BRStory::IsDone(L->GetStory(), 0) && L->StoryResume == 1;
+		const bool bOk = W->GetMissionGen() == BRM::GenVersion && W->IsMissionActive() && L && L->Session.GenVersion == BRM::GenVersion && L->Session.Mission.Num() > 0 && bStory;
+		Note(FString::Printf(TEXT("niveau suivant : generation %d, mission %s, sauvegarde : generation %d, etat de mission %d octets, Level 0 accompli %s, reprise %d"),
+			W->GetMissionGen(), W->IsMissionActive() ? TEXT("active") : TEXT("ABSENTE"), L ? L->Session.GenVersion : -1, L ? L->Session.Mission.Num() : -1,
+			YesNo(L && BRStory::IsDone(L->GetStory(), 0)), L ? L->StoryResume : -1), !bOk);
 		// Retour a la session de test d'avant (partie active, mode)
 		BRSaves::ActiveSlot() = TestOrigSlot;
 		PC->ActiveSave = TestOrigSave;

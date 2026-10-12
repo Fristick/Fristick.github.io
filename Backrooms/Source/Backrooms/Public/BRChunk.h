@@ -141,6 +141,14 @@ protected:
 	/** Segment de mur sur une ligne de la grille (A..B le long de la ligne, ZLo..ZHi en hauteur) */
 	void AddWallSegment(bool bAlongY, float Fixed, float A, float B, float ZLo, float ZHi, bool bWithTrim, bool bWithPipes);
 	void AddDoorway(bool bAlongY, float Fixed, float Mid);
+	/** v4.13 : porte de service du Level 0 dans le mur d'enceinte : mur perce a la taille du cadre (ABRExit), linteau, et
+	 *  derriere, un sas de beton ferme dont l'escalier descend dans le noir. OutSign : cote exterieur (+1 ou -1) */
+	void AddServiceDoorway(bool bAlongY, float Fixed, float Mid, float OutSign);
+	/** v4.13 : marque de craie de L. (cercle barre, "L.", fleche vers la suite du chemin) sur un mur de la cellule */
+	void AddChalkMark(int32 X, int32 Y, const FIntPoint& Next);
+	/** v4.13 : trait fin sur un plan de mur (repere : Origin, rotation du mur WallQ ; A, B en cm dans le plan, axe 1 a droite
+	 *  vu de face, axe 2 vers le haut) */
+	void AddStroke(const FBRSurface& S, const FVector& Origin, const FQuat& WallQ, const FVector2D& A, const FVector2D& B, float Width);
 	void AddFaceProp(int32 X, int32 Y, const FIntPoint& Dir, FName Mesh, float Along, float Z, const FVector& FallbackSize, bool bCollision);
 	/** Plan d'eau du niveau, ou flaque calme (bCalm : presque pas de vagues) */
 	void AddWaterPlane(const FVector& Center, const FVector2D& Size, bool bCalm = false);

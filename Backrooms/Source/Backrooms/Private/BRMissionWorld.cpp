@@ -2,6 +2,7 @@
 // l'hote et replique, validation des actions, sorties conditionnees par la mission, sortie de groupe, campagne et fin.
 #include "BRWorld.h"
 #include "BRMission.h"
+#include "BRMissionSolver.h"
 #include "BRStoryLogic.h"
 #include "BRGatherLogic.h"
 #include "BRCharacter.h"
@@ -327,6 +328,24 @@ void ABRWorld::SetupMission()
 			SpawnMissionActors();
 			UE_LOG(LogBackrooms, Log, TEXT("Mission du Niveau %d : %d mecanismes, %d sortie(s) garantie(s)%s"), Level, MissionPlan.NumDevices, MissionExitSpots.Num(),
 				MissionPlan.bFallback ? TEXT(", variante de secours") : TEXT(""));
+		}
+	}
+	// v4.13 : etape deja accomplie dans l'histoire (retour dans un niveau quitte par sa sortie de progression) : la
+	// mission reste accomplie. Le solveur (celui des bancs, qui n'utilise que ce que le joueur voit) la resout sur le plan
+	// de cette graine ; les effets (eau, passerelle, sorties) suivent l'etat comme a une reprise
+	if (HasAuthority() && IsMissionActive() && !(bResumed && ResumeMissionBlob.Num() > 0))
+	{
+		EnsureStoryLoaded();
+		if (HostSessionMode() == EBRSessionMode::Story && BRStory::IsDone(GetStory(), Level) && (MissionState.Solved & 1) == 0)
+		{
+			BRM::FSolver Solver(MissionPlan, MissionState, GetMissionCampaign());
+			const bool bSolved = Solver.Solve(0) && (MissionState.Solved & 1) != 0;
+			UE_LOG(LogBackrooms, Log, TEXT("[Story] Mission du Niveau %d deja accomplie dans l'histoire : %s (%d actions)"), Level,
+				bSolved ? TEXT("resolue a l'arrivee") : TEXT("ECHEC du solveur, mission a refaire"), Solver.Actions);
+			if (!bSolved)
+			{
+				BRM::InitState(MissionPlan, MissionState);
+			}
 		}
 	}
 	ResumeMissionGen = 0;
@@ -1517,11 +1536,6 @@ bool ABRWorld::CanUseExit(int32 Target, FString& OutReason) const
 	{
 		return true;
 	}
-	if ((MissionState.Solved & 1) && MissionPlan.Level == 0)
-	{
-		OutReason = BR_STR(NSLOCTEXT("BR", "Mission.Exit.OtherRoute", "Ce passage est ferm\u00e9 : le levier d'aiguillage ouvre l'autre route."));
-		return false;
-	}
 	BRM::FEval E;
 	GetMissionEval(E);
 	FString Step;
@@ -1647,6 +1661,10 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 	NetDeparture.Anchor = FromGather(FoundShape.Anchor);
 	NetDeparture.TopZ = FoundShape.TopZ;
 	DepartureExit = const_cast<ABRExit*>(Found);
+	if (Found->Style == EBRExitStyle::ServiceDoor)
+	{
+		ServerOpenServiceDoor(By); // v4.13 : la porte s'ouvre pour tout le groupe, puis le rassemblement commence
+	}
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	NetDeparture.Deadline = (GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds()) + 90.f;
 	if (const APlayerState* PS = By->GetPlayerState())
@@ -1825,6 +1843,7 @@ void ABRWorld::OnRep_Departure()
 
 FString ABRWorld::DestinationLabel(int32 Target) const
 {
+	Target = StoryDestination(Target); // v4.13 : niveau gare d'une ancienne partie apres les Poolrooms
 	const BRContent::FExitResolution R = BRLevels::ResolveExit(GetLevelNumber(), Target);
 	if (R.Kind == BRContent::EExit::Ending || Target == BRM::EndingTarget)
 	{
@@ -1839,6 +1858,15 @@ FString ABRWorld::DestinationLabel(int32 Target) const
 
 void ABRWorld::LeaveForTarget(int32 Target)
 {
+	// v4.13 : histoire : la sortie de progression accomplit l'etape (ou termine le chapitre) avant la transition, que
+	// l'hote valide ensuite contre le fil. Apres les Poolrooms, une ancienne partie retrouve sa progression gardee
+	uint32 StorySeed = 0;
+	const int32 Dest = StoryOnLeave(Target, StorySeed);
+	if (Dest != Target)
+	{
+		RequestTransition(Dest, false, StorySeed);
+		return;
+	}
 	// v4.12 : la destination suit la disponibilite des niveaux de cette version (meme regle que l'invite et l'hote)
 	const BRContent::FExitResolution Res = BRLevels::ResolveExit(GetLevelNumber(), Target);
 	if (Res.Kind == BRContent::EExit::ChapterEnd)

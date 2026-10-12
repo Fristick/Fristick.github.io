@@ -91,6 +91,19 @@ public:
 	void SetMissionOpen(bool bOpen, bool bAnimate);
 	/** v4.12 : voyant affiche (-1 : sortie libre, 0 : rouge, 1 : vert) */
 	int8 GetMissionOpen() const { return MissionOpen; }
+	/** v4.13 : porte de service du Level 0 : ouverte ou fermee selon l'etat de l'hote ; bAnimate : le battant pivote
+	 *  sur ses charnieres (son), sinon il est mis en place (arrivee, chunk reconstruit) */
+	void SetServiceDoorOpen(bool bOpen, bool bAnimate);
+	bool IsServiceDoorOpen() const { return bDoorOpen; }
+	/** v4.13 (tests) : angle du battant (0 ferme, 95 ouvert) */
+	float GetServiceDoorAngle() const { return DoorYaw; }
+	/** v4.13 : aide d'orientation donnee : le courant d'air s'entend de plus loin */
+	void BoostDraft();
+	/** v4.13 : ouverture laissee dans le mur d'enceinte par le chunk (cadre compris) */
+	static constexpr float ServiceHoleWidth = 130.f;
+	static constexpr float ServiceHoleHeight = 225.f;
+	/** v4.13 : delai entre l'ouverture de la porte et le depart, seul */
+	static constexpr float ServiceLeaveDelay = 1.3f;
 
 	int32 Target = 1;
 	EBRExitStyle Style = EBRExitStyle::Door;
@@ -133,4 +146,20 @@ protected:
 	/** Ascenseur : voyant d'appel */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> IndicatorMID;
+
+	/** v4.13 : porte de service : charniere (pivot) et battant */
+	UPROPERTY()
+	TObjectPtr<USceneComponent> DoorPivot;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> DoorLeaf;
+
+	float DoorYaw = 0.f;
+	float DoorYawTarget = 0.f;
+	bool bDoorOpen = false;
+	/** Seul : depart apres l'ouverture de la porte */
+	FTimerHandle LeaveTimer;
+	TWeakObjectPtr<ABRCharacter> LeaveBy;
+	void LeaveAfterDoor();
+	void BuildServiceDoor();
 };

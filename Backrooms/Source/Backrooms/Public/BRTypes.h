@@ -122,6 +122,17 @@ enum class EBRExitStyle : uint8
 	ServiceDoor
 };
 
+/** v4.13 : nature de la session, decidee par l'hote.
+ *  Histoire : la partie avance (l'hote valide chaque transition contre le fil, l'etat narratif est mis a jour et
+ *  sauvegarde). Rejouer : un niveau deja decouvert, sans rien changer a l'histoire ni a la session sauvegardee
+ *  (transitions limitees aux niveaux deja atteints). Libre : sans partie, developpement, tests automatiques */
+enum class EBRSessionMode : uint8
+{
+	Free,
+	Story,
+	Replay
+};
+
 /** v4.7 : cause de la mort d'un joueur : decide si un coequipier peut le relever, le delai avant le reveil et les messages.
  *  Fixee explicitement par le code qui tue (jamais deduite de la position) et repliquee par le serveur */
 enum class EBRDeathCause : uint8

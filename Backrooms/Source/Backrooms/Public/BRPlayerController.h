@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
+#include "BRTypes.h"
 #include "BRPlayerController.generated.h"
 
 class UInputMappingContext;
@@ -76,6 +77,14 @@ public:
 	float GetDevHelpTime() const { return DevHelpTime; }
 	/** Niveau visite en mode developpeur, pas ajoute a la partie */
 	bool IsDevSession() const { return bDevSession; }
+	/** v4.13 : nature de la session de cette manette : histoire (partie choisie, CONTINUER), rejouer (un niveau decouvert,
+	 *  sans toucher a l'histoire) ou libre (sans partie, mode developpeur, tests). L'hote decide pour le groupe */
+	EBRSessionMode GetSessionMode() const;
+	/** v4.13 : niveau ou CONTINUER reprend l'histoire de la partie choisie (BRStory::ResumePoint) */
+	int32 GetContinueLevel() const;
+	/** v4.13 : apres les Poolrooms, session gardee d'une ancienne partie pour ce niveau : elle devient la session a
+	 *  reprendre (graine renvoyee ; 0 : aucune) */
+	uint32 TakeParkedSession(int32 Level);
 	/** Confirmation de suppression d'une partie (page PARTIES) */
 	bool IsConfirmingDelete() const { return bConfirmDelete; }
 	int32 GetDeleteSlot() const { return DeleteSlot; }
@@ -333,8 +342,10 @@ private:
 	void UpdateVoice(float DeltaTime);
 	void OnMenuDown(const FInputActionValue& Value);
 	void SetMenuPage(EBRMenuPage Page);
-	void StartSolo();
-	void HostGame();
+	/** Seul : CONTINUER (histoire) ou REJOUER (bReplay : le niveau choisi dans le carrousel) */
+	void StartSolo(bool bReplay = false);
+	/** Heberger : meme choix, la carte est rechargee en serveur */
+	void HostGame(bool bReplay = false);
 	void JoinGame();
 	void SpawnInFront(int32 Kind);
 	/** Champ de saisie de l'adresse IP (Slate : respecte la disposition du clavier, AZERTY compris) */

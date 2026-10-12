@@ -18,3 +18,4 @@ S_LightBuzz
 S_MenuTheme
 S_Moth
 S_Underwater
+S_Draft

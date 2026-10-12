@@ -185,6 +185,7 @@ void ABRWorld::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(ABRWorld, NetMission);
 	DOREPLIFETIME(ABRWorld, NetCampaign);
 	DOREPLIFETIME(ABRWorld, NetDeparture);
+	DOREPLIFETIME(ABRWorld, NetStory);
 	DOREPLIFETIME(ABRWorld, bBlackoutRecorded);
 	DOREPLIFETIME(ABRWorld, bEntityRecorded);
 }
@@ -267,17 +268,11 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath, uint32 InSe
 	}
 	if (TargetLevel < 0)
 	{
-		// v4.12 : tirage parmi les niveaux disponibles dans cette version (BRLevels::All), jamais un niveau reserve
-		const TArray<FBRLevelDef>& All = BRLevels::All();
+		// v4.12 : tirage parmi les niveaux disponibles dans cette version (BRLevels::All), jamais un niveau reserve.
+		// v4.13 : exploration apres une fin seulement, parmi les niveaux deja atteints dans l'histoire : rien n'avance
 		TArray<int32> Choices;
-		for (const FBRLevelDef& L : All)
-		{
-			if (L.Number != GetLevelNumber())
-			{
-				Choices.Add(L.Number);
-			}
-		}
-		TargetLevel = Choices.Num() > 0 ? Choices[FMath::RandRange(0, Choices.Num() - 1)] : 0;
+		GetExplorationChoices(Choices);
+		TargetLevel = Choices.Num() > 0 ? Choices[FMath::RandRange(0, Choices.Num() - 1)] : GetLevelNumber();
 	}
 	if (!BRLevels::Exists(TargetLevel))
 	{
@@ -289,6 +284,16 @@ void ABRWorld::RequestTransition(int32 TargetLevel, bool bFromDeath, uint32 InSe
 			return;
 		}
 		TargetLevel = GetLevelNumber(); // reveil apres une mort : on reste dans le niveau courant
+	}
+	FString StoryReason;
+	if (!bFromDeath && !CanEnterLevel(TargetLevel, &StoryReason))
+	{
+		// v4.13 : l'hote valide la destination contre l'histoire (histoire et rejouer ; libre : disponibilite seule).
+		// Aucune sortie ne mene la ou le fil ne passe pas : une demande refusee ici vient d'une console ou d'un bogue
+		UE_LOG(LogBackrooms, Warning, TEXT("[Story] Transition refusee vers le Niveau %d depuis le Niveau %d (mode %d) : %s"), TargetLevel, GetLevelNumber(),
+			static_cast<int32>(GetSessionMode()), *StoryReason);
+		ABRHUD::Notify(this, StoryReason, 5.f, FLinearColor(1.f, 0.7f, 0.45f));
+		return;
 	}
 	PendingSeed = InSeed;
 	MulticastTransition(TargetLevel, bFromDeath);
@@ -502,6 +507,11 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	Seed = Seed != 0 ? Seed : 1u;
 	// v4.6 : salles de fosses et cellules atteignables du niveau fini (avant la construction des chunks)
 	PrepareLevelLayout();
+	// v4.13 : porte de service du Level 0 et chemin balise (apres les portes forcees : chemin garanti sans fosse)
+	PlaceServiceDoor();
+	GetWorldTimerManager().ClearTimer(IntroUnlockTimer);
+	bIntroPending = false;
+	IntroStartTime = -1.0;
 	bLevelReady = true;
 	Collected.Empty();
 	LevelTime = 0.f;
@@ -649,6 +659,8 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	UpdateStreaming(true);
 	PlacePlayer(bFirstClientLoad);
 	UBRAssets::bCountBuildLoads = false;
+	// v4.13 : histoire : arrivee dans le fil, reveil et aide du Level 0 (hote) ; publie l'etat
+	OnStoryLevelLoaded();
 	// Sauvegarde de la partie en cours : ce niveau est desormais explore
 	if (ABRPlayerController* PC = LocalPC())
 	{
@@ -1491,6 +1503,10 @@ void ABRWorld::Tick(float DeltaSeconds)
 			if (ABRCharacter* P = GetPlayer())
 			{
 				P->SetInputLocked(false);
+			}
+			if (bIntroPending)
+			{
+				StartPendingIntro(); // v4.13 : reveil du Level 0 apres le fondu d'arrivee
 			}
 			// v4.10 : sol, collisions et shaders prets : les entites peuvent de nouveau s'interesser a ce joueur
 			SetLocalLoading(false);
@@ -2736,6 +2752,10 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 {
 	Out.Reset();
 	const FBRLevelDef& D = Def();
+	if (bServiceDoor)
+	{
+		return; // v4.13 : Level 0 : une introduction a explorer, sans liste d'objectifs (le carnet raconte)
+	}
 	if (IsMissionActive())
 	{
 		// v4.11 : etapes de la mission (les etapes encore inconnues ne sont pas montrees), facultatif, entite a filmer

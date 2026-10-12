@@ -1376,6 +1376,8 @@ int32 ABRPlayerController::GetMenuItemCount() const
 		return 3;
 	case EBRMenuPage::Saves:
 		return bConfirmDelete ? 2 : SaveOrder.Num() + (CanCreateSave() ? 1 : 0) + 1;
+	case EBRMenuPage::Solo:
+		return 3; // v4.13 : CONTINUER (histoire), REJOUER (niveau du carrousel), RETOUR
 	default:
 		return 2;
 	}
@@ -1539,9 +1541,14 @@ FString ABRPlayerController::GetMenuItemLabel(int32 Item) const
 		return Item == 0 ? (bHostFlow ? BR_STR(NSLOCTEXT("BR", "Menu.Heberger", "H\u00c9BERGER")) : BR_STR(NSLOCTEXT("BR", "Menu.Commencer", "COMMENCER"))) : BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR"));
 	case EBRMenuPage::Solo:
 	{
-		if (Item == 1)
+		if (Item == 2)
 		{
 			return BR_STR(NSLOCTEXT("BR", "Menu.Retour", "RETOUR"));
+		}
+		if (Item == 0)
+		{
+			// v4.13 : l'histoire reprend la ou elle s'est arretee (point de reprise du fil)
+			return bHostFlow ? BR_STR(NSLOCTEXT("BR", "Menu.HostContinue", "H\u00c9BERGER : CONTINUER")) : BR_STR(NSLOCTEXT("BR", "Menu.Continue", "CONTINUER"));
 		}
 		const TArray<FBRLevelDef>& All = BRLevels::All();
 		const int32 Level = All[FMath::Clamp(MenuIndex, 0, All.Num() - 1)].Number;
@@ -1549,7 +1556,7 @@ FString ABRPlayerController::GetMenuItemLabel(int32 Item) const
 		{
 			return BR_STR(NSLOCTEXT("BR", "Menu.Verrouille", "VERROUILL\u00c9"));
 		}
-		return bHostFlow ? BR_STR(NSLOCTEXT("BR", "Menu.Heberger", "H\u00c9BERGER")) : BR_STR(NSLOCTEXT("BR", "Menu.Noclipper", "NOCLIPPER"));
+		return bHostFlow ? BR_STR(NSLOCTEXT("BR", "Menu.HostReplay", "H\u00c9BERGER : REJOUER")) : BR_STR(NSLOCTEXT("BR", "Menu.Replay", "REJOUER"));
 	}
 	case EBRMenuPage::Saves:
 	{
@@ -1747,8 +1754,8 @@ void ABRPlayerController::MenuActivate(int32 Item)
 		return;
 	}
 	MenuCursor = Item;
-	// Niveau pas encore explore dans cette partie : on ne peut pas y aller depuis le menu
-	if (MenuPage == EBRMenuPage::Solo && Item == 0)
+	// Niveau pas encore explore dans cette partie : on ne peut pas le rejouer depuis le menu
+	if (MenuPage == EBRMenuPage::Solo && Item == 1)
 	{
 		const TArray<FBRLevelDef>& All = BRLevels::All();
 		const FBRLevelDef& D = All[FMath::Clamp(MenuIndex, 0, All.Num() - 1)];
@@ -1847,15 +1854,16 @@ void ABRPlayerController::MenuActivate(int32 Item)
 		}
 		break;
 	case EBRMenuPage::Solo:
-		if (Item == 0)
+		if (Item == 0 || Item == 1)
 		{
+			// v4.13 : 0 CONTINUER l'histoire, 1 REJOUER le niveau choisi (sans toucher a l'histoire)
 			if (bHostFlow)
 			{
-				HostGame();
+				HostGame(Item == 1);
 			}
 			else
 			{
-				StartSolo();
+				StartSolo(Item == 1);
 			}
 		}
 		else
@@ -2008,7 +2016,51 @@ void ABRPlayerController::SelectSave(int32 Slot)
 			static_cast<int32>(BRLevels::Channel()), Level, bCopied ? TEXT("oui") : TEXT("non"));
 	}
 	SetMenuPage(EBRMenuPage::Solo);
-	MenuIndex = FMath::Max(0, BRLevels::IndexOf(Level));
+	// v4.13 : CONTINUER (histoire) est propose d'abord ; le carrousel (REJOUER) part du meme niveau
+	const int32 Continue = GetContinueLevel();
+	MenuIndex = FMath::Max(0, BRLevels::IndexOf(BRLevels::Exists(Continue) ? Continue : Level));
+	MenuCursor = 0;
+	if (S->StoryParked >= 0 && S->ParkedSession.bValid)
+	{
+		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ParkedSave", "Ancienne partie : l'\u00e9quipe de L. est pass\u00e9e par les Poolrooms, et vous non. Traversez-les : votre progression au Niveau {Level} reprendra \u00e0 leur sortie."),
+			{ { TEXT("Level"), BRLoc::Int(S->StoryParked) } }), 9.f, FLinearColor(0.8f, 0.9f, 1.f));
+	}
+}
+
+EBRSessionMode ABRPlayerController::GetSessionMode() const
+{
+	if (!ActiveSave || bDevSession || bInMenu || BRSaves::ActiveSlot() == INDEX_NONE)
+	{
+		return EBRSessionMode::Free;
+	}
+	return BRSaves::ReplaySession() ? EBRSessionMode::Replay : EBRSessionMode::Story;
+}
+
+int32 ABRPlayerController::GetContinueLevel() const
+{
+	if (!ActiveSave)
+	{
+		return 0;
+	}
+	return BRStory::ResumePoint(ActiveSave->GetStory(), [](int Level, void*) { return BRLevels::Exists(Level); }, nullptr);
+}
+
+uint32 ABRPlayerController::TakeParkedSession(int32 Level)
+{
+	if (!ActiveSave || !ActiveSave->ParkedSession.bValid || ActiveSave->ParkedSession.Level != Level || ActiveSave->ParkedSession.Seed == 0)
+	{
+		if (ActiveSave)
+		{
+			ActiveSave->ParkedSession = FBRSessionState();
+		}
+		return 0;
+	}
+	BRSaves::PendingResume() = ActiveSave->ParkedSession;
+	const uint32 ParkedSeed = ActiveSave->ParkedSession.Seed;
+	ActiveSave->ParkedSession = FBRSessionState();
+	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ParkedRestored", "Les Poolrooms sont travers\u00e9es : votre ancienne progression reprend au Niveau {Level}, l\u00e0 o\u00f9 vous l'aviez laiss\u00e9e."),
+		{ { TEXT("Level"), BRLoc::Int(Level) } }), 7.f, FLinearColor(0.75f, 1.f, 0.75f));
+	return ParkedSeed;
 }
 
 void ABRPlayerController::StartNewSave()
@@ -2031,9 +2083,10 @@ void ABRPlayerController::StartNewSave()
 	}
 	S->SaveName = Name.Left(28);
 	S->Created = FDateTime::Now();
-	// Une nouvelle partie commence toujours au Niveau 0
+	// Une nouvelle partie commence toujours au Niveau 0 (v4.13 : au debut de l'histoire)
 	S->CurrentLevel = 0;
 	S->MarkExplored(0);
+	S->SetStory(BRStory::FState());
 	BRSaves::Write(Slot, S);
 	BRSaves::ActiveSlot() = Slot;
 	ActiveSave = S;
@@ -2041,11 +2094,11 @@ void ABRPlayerController::StartNewSave()
 	ShowNameBox(false);
 	if (bHostFlow)
 	{
-		HostGame();
+		HostGame(false);
 	}
 	else
 	{
-		StartSolo();
+		StartSolo(false);
 	}
 }
 
@@ -2061,6 +2114,8 @@ void ABRPlayerController::ApplyActiveSave()
 		W->RestoreJournal(ActiveSave ? ActiveSave->Discovered : TArray<int32>(), ActiveSave ? ActiveSave->Explored : TArray<int32>());
 		// v4.11 : campagne de la partie (hote seulement : le monde l'ignore chez un client)
 		W->SetCampaign(ActiveSave ? ActiveSave->RouteBits : 0, ActiveSave ? ActiveSave->OptionalFound : 0, ActiveSave ? ActiveSave->Endings : 0);
+		// v4.13 : etat narratif et nature de la session (histoire, rejouer, libre), tenus par l'hote
+		W->SetStory(ActiveSave ? ActiveSave->GetStory() : BRStory::FState(), GetSessionMode());
 	}
 	AutoSaveTimer = 60.f;
 }
@@ -2085,7 +2140,10 @@ void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 		return;
 	}
 	ActiveSave->MarkExplored(LevelNumber);
-	ActiveSave->CurrentLevel = LevelNumber;
+	if (GetSessionMode() != EBRSessionMode::Replay)
+	{
+		ActiveSave->CurrentLevel = LevelNumber; // v4.13 : rejouer ne deplace pas la partie
+	}
 	// Ecrit un peu plus tard : apres une mort, l'inventaire est remis a zero juste apres le chargement
 	PendingSaveDelay = 2.f;
 	if (bNew)
@@ -2137,7 +2195,13 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 		ActiveSave->RouteBits = W->GetCampaign().RouteBits;
 		ActiveSave->OptionalFound = W->GetCampaign().OptionalFound;
 		ActiveSave->Endings = W->GetCampaign().Endings;
-		if (W->IsLevelReady() && !W->IsTransitioning() && (!bDevSession || ActiveSave->IsExplored(W->GetLevelNumber())))
+		// v4.13 : histoire tenue par l'hote (seulement en session d'histoire : rejouer et le mode developpeur n'y touchent pas)
+		const EBRSessionMode Mode = GetSessionMode();
+		if (Mode == EBRSessionMode::Story && W->GetSessionMode() == EBRSessionMode::Story)
+		{
+			ActiveSave->SetStory(W->GetStory());
+		}
+		if (W->IsLevelReady() && !W->IsTransitioning() && (!bDevSession || ActiveSave->IsExplored(W->GetLevelNumber())) && Mode != EBRSessionMode::Replay)
 		{
 			ActiveSave->CurrentLevel = W->GetLevelNumber();
 			ActiveSave->MarkExplored(W->GetLevelNumber());
@@ -2192,14 +2256,16 @@ void ABRPlayerController::RequestDeleteSave(int32 Slot)
 	PlayMenuSound(TEXT("S_UIDeny"), 0.5f);
 }
 
-void ABRPlayerController::HostGame()
+void ABRPlayerController::HostGame(bool bReplay)
 {
-	// La carte est rechargee en serveur "listen" : les amis peuvent rejoindre sur le port 7777
-	const int32 Level = BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number;
+	// La carte est rechargee en serveur "listen" : les amis peuvent rejoindre sur le port 7777.
+	// v4.13 : CONTINUER heberge l'histoire a son point de reprise ; REJOUER, le niveau du carrousel
+	const int32 Level = bReplay ? BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number : GetContinueLevel();
+	BRSaves::ReplaySession() = bReplay;
 	MenuStatus = BR_STR(NSLOCTEXT("BR", "Menu.CreationPartie", "Cr\u00e9ation de la partie..."));
 	// v4.7 : l'hote reprend sa session (la carte est rechargee : le monde la retrouve dans BRSaves::PendingResume)
 	BRSaves::PendingResume() = FBRSessionState();
-	if (ActiveSave && ActiveSave->Session.bValid && ActiveSave->Session.Level == Level && ActiveSave->Session.Seed != 0)
+	if (!bReplay && ActiveSave && ActiveSave->Session.bValid && ActiveSave->Session.Level == Level && ActiveSave->Session.Seed != 0)
 	{
 		BRSaves::PendingResume() = ActiveSave->Session;
 	}
@@ -2212,6 +2278,7 @@ void ABRPlayerController::JoinGame()
 {
 	// Invite : la progression appartient a la partie de l'hote
 	BRSaves::ActiveSlot() = INDEX_NONE;
+	BRSaves::ReplaySession() = false;
 	ActiveSave = nullptr;
 	const FString Address = JoinAddress.TrimStartAndEnd();
 	if (Address.IsEmpty())
@@ -2413,7 +2480,7 @@ void ABRPlayerController::ServerCheat_Implementation(uint8 Command, int32 Value)
 	}
 }
 
-void ABRPlayerController::StartSolo()
+void ABRPlayerController::StartSolo(bool bReplay)
 {
 	ABRWorld* W = ABRWorld::Get(this);
 	if (!W || W->IsTransitioning())
@@ -2424,14 +2491,16 @@ void ABRPlayerController::StartSolo()
 	ShowAddressBox(false);
 	ShowNameBox(false);
 	UpdateInputMode();
-	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart)
+	// v4.13 : CONTINUER reprend l'histoire a son point de reprise ; REJOUER visite un niveau decouvert sans rien changer a
+	// l'histoire ni a la session sauvegardee. Mode developpeur : un niveau pas encore explore se visite librement
+	const int32 Target = bReplay ? BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number : GetContinueLevel();
+	BRSaves::ReplaySession() = bReplay;
+	bDevSession = bReplay && ActiveSave && !ActiveSave->IsExplored(Target); // CONTINUER suit toujours l'histoire
+	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart), histoire et nature de la session
 	ApplyActiveSave();
-	const int32 Target = BRLevels::All()[MenuIndex].Number;
-	// Mode developpeur : un niveau pas encore explore se visite sans etre ajoute a la partie
-	bDevSession = ActiveSave && !ActiveSave->IsExplored(Target);
 	// v4.7 : reprise apres fermeture du jeu : meme graine, objectifs, objets ramasses et point de reprise.
 	// (Apres une mort, la session a ete invalidee : le niveau sera neuf, comme le veut la regle.)
-	const FBRSessionState* Session = ActiveSave ? &ActiveSave->Session : nullptr;
+	const FBRSessionState* Session = (ActiveSave && !bReplay) ? &ActiveSave->Session : nullptr;
 	if (Session && Session->bValid && Session->Level == Target && Session->Seed != 0 && !bDevSession)
 	{
 		BRSaves::PendingResume() = *Session;

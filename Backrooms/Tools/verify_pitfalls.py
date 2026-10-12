@@ -1,5 +1,8 @@
 """
 v4.6 : verification hors moteur des salles de fosses du Niveau 0 ("Hole Variation").
+v4.13 : et de la porte de service (ABRWorld::PlaceServiceDoor) : cellule de bord atteinte sans fosse, distance de marche,
+chemin du depart a la porte (pas valides, aucune salle de fosses, ni cachette ni pilier sur la ligne des centres, marge
+aux fosses), marques de craie. --doors 1-500 : seulement ces verifications, sur beaucoup de graines.
 
 Ce script REJOUE la generation du Niveau 0 telle que le C++ l'ecrit (meme hachage BRHash, memes regles d'aretes, de
 salles de fosses, de cachettes, de cassettes VHS et de sorties, meme decoupage du sol), sans Unreal. Il ne remplace pas
@@ -122,6 +125,66 @@ class Level0:
         self.forced = set()
         self.safe = self.repair() if self.B > 0 else self.flood(True)
         self.full = self.flood(False)
+        self.door = None
+        self.door_path = []
+        self.door_info = {}
+        if self.B > 0 and any(st == "ServiceDoor" for _, st, _ in P["Exits"]):
+            self.place_service_door()
+
+    # ---- v4.13 : porte de service (ABRWorld::PlaceServiceDoor)
+    def place_service_door(self):
+        dist = {(0, 0): 0}
+        parent = {}
+        order = [(0, 0)]
+        q = deque([(0, 0)])
+        while q:
+            c = q.popleft()
+            for d in DIRS:
+                n = (c[0] + d[0], c[1] + d[1])
+                if n in dist or not self.cell_in_bounds(*n) or self.is_pit_cell(*n) or not self.can_step(c, n):
+                    continue
+                dist[n] = dist[c] + 1
+                parent[n] = c
+                order.append(n)
+                q.append(n)
+        cands = []
+        maxd = 0
+        for c in order:
+            if self.spawn_area(*c):
+                continue
+            outs = [k for k, d in enumerate(DIRS) if not self.cell_in_bounds(c[0] + d[0], c[1] + d[1])]
+            if len(outs) != 1:
+                continue
+            k = outs[0]
+            cands.append((c, k, dist[c], bhash(c[0] * 4 + k, c[1], 2101, self.seed)))
+            maxd = max(maxd, dist[c])
+        if not cands:
+            return
+        lo, hi, aim = 24, 40, 32  # cellules (BRStoryWorld.cpp)
+        best, tier = None, 0
+        for cd in cands:
+            if lo <= cd[2] <= hi and (best is None or cd[3] < best[3]):
+                best = cd
+        if best is None:
+            tier = 1
+            for cd in cands:
+                gap = abs(cd[2] - aim)
+                if best is None or gap < abs(best[2] - aim) or (gap == abs(best[2] - aim) and cd[3] < best[3]):
+                    best = cd
+        self.door = (best[0], DIRS[best[1]])
+        path = [best[0]]
+        while path[-1] != (0, 0):
+            path.append(parent[path[-1]])
+        self.door_path = path[::-1]
+        self.door_info = {"dist": best[2], "max": maxd, "lo": lo, "hi": hi, "tier": tier, "candidates": len(cands)}
+
+    def chalk_marks(self):
+        """ABRWorld::IsChalkMarkCell : une marque toutes les trois cellules du chemin, ni au depart ni devant la porte"""
+        out = []
+        for i, c in enumerate(self.door_path):
+            if i >= 3 and i + 2 < len(self.door_path) and i % 3 == 0 and not self.spawn_area(*c):
+                out.append((c, self.door_path[i + 1]))
+        return out
 
     # ---- enceinte, depart
     def chunk_of(self, c):
@@ -369,8 +432,8 @@ class Level0:
                 h = bhash(ch[0], ch[1], 1742 + k * 37 + t, self.seed)
                 cell = (ch[0] * N + h % N, ch[1] * N + (h >> 8) % N)
                 d = DIRS[(h >> 16) % 4]
-                if self.spawn_area(*cell) or cell in out or self.is_pit_cell(*cell):
-                    continue
+                if self.spawn_area(*cell) or cell in out or self.is_pit_cell(*cell) or cell in self.door_path:
+                    continue  # v4.13 : jamais sur le chemin de la porte de service
                 e = self.edge_e(cell[0] if d[0] > 0 else cell[0] - 1, cell[1]) if d[0] != 0 else self.edge_n(cell[0], cell[1] if d[1] > 0 else cell[1] - 1)
                 if e != WALL:
                     continue
@@ -401,6 +464,11 @@ class Level0:
         P, N = self.P, self.N
         out = []
         for i, (target, style, chance) in enumerate(P["Exits"]):
+            if style == "ServiceDoor":
+                # v4.13 : posee par le monde (place_service_door), dans le chunk de sa cellule
+                if self.door and self.chunk_of(self.door[0]) == ch:
+                    out.append((target, style, self.door[0], self.door[1]))
+                continue
             if not self.chunk_picked(ch, 1100 + i, max(1, round_to_int(F32(chance) * F32(self.bounded_count(True)))), True):
                 continue
             tries = 24 + N * N * 4 if self.B > 0 else 24
@@ -431,6 +499,8 @@ class Level0:
 
     def vhs(self, ch, hiding):
         P = self.P
+        if not P.get("bRequireObjectives", 1.0):
+            return None  # v4.13 : plus de cassettes a trouver au Level 0
         if not self.chunk_picked(ch, 1008, P["VHSRequired"] + 2, True):
             return None
         return self.pick_free_cell(ch, 1008, hiding, True)
@@ -593,8 +663,9 @@ def check_seed(P, user_seed, verbose=False):
     for t, st, c, d in res["exits"]:
         if L.is_pit_cell(*c) or c not in L.safe:
             prob.append("sortie %s %s dans une salle de fosses ou inaccessible" % (st, c))
-    if len(res["vhs"]) < P["VHSRequired"]:
+    if P.get("bRequireObjectives", 1.0) and len(res["vhs"]) < P["VHSRequired"]:
         prob.append("%d cassettes placees pour %d exigees" % (len(res["vhs"]), P["VHSRequired"]))
+    check_service_door(L, res)
     for t, st, chance in P["Exits"]:
         if not any(e[1] == st for e in res["exits"]):
             prob.append("aucune sortie %s" % st)
@@ -620,6 +691,76 @@ def check_seed(P, user_seed, verbose=False):
     res["room_dist"] = best
     check_navigation(L, res)
     return res
+
+
+def check_service_door(L, res, capsule=42.0):
+    """v4.13 : porte de service et chemin garanti (capsule du joueur : rayon 42 cm, marge 10 cm)"""
+    prob = res["problems"]
+    if not any(st == "ServiceDoor" for _, st, _ in L.P["Exits"]):
+        return
+    if not L.door:
+        prob.append("aucune porte de service")
+        return
+    cell, d = L.door
+    S = L.S
+    info = dict(L.door_info)
+    info["cell"] = cell
+    info["dir"] = d
+    info["path"] = len(L.door_path) - 1
+    info["marks"] = len(L.chalk_marks())
+    res["door"] = info
+    if L.is_pit_cell(*cell) or cell not in L.safe or L.spawn_area(*cell):
+        prob.append("porte de service %s dans une salle de fosses, au depart ou inaccessible" % (cell,))
+    if L.cell_in_bounds(cell[0] + d[0], cell[1] + d[1]):
+        prob.append("porte de service %s pas sur le mur d'enceinte" % (cell,))
+    # arete d'enceinte : un mur plein (le chunk le perce a la taille du cadre)
+    e = L.edge_e(cell[0] if d[0] > 0 else cell[0] - 1, cell[1]) if d[0] != 0 else L.edge_n(cell[0], cell[1] if d[1] > 0 else cell[1] - 1)
+    if e != WALL:
+        prob.append("porte de service %s : l'arete d'enceinte n'est pas un mur" % (cell,))
+    p = L.door_path
+    if not p or p[0] != (0, 0) or p[-1] != cell:
+        prob.append("chemin de la porte de service incomplet")
+        return
+    for a, b in zip(p, p[1:]):
+        if abs(a[0] - b[0]) + abs(a[1] - b[1]) != 1 or not L.can_step(a, b):
+            prob.append("chemin de la porte : pas impossible %s -> %s" % (a, b))
+        if L.is_pit_cell(*b):
+            prob.append("chemin de la porte par une salle de fosses %s" % (b,))
+        p0 = ((a[0] + 0.5) * S, (a[1] + 0.5) * S)
+        p1 = ((b[0] + 0.5) * S, (b[1] + 0.5) * S)
+        if L.pit_rooms and segment_crosses_pit(L, p0, p1, capsule + 10.0):
+            prob.append("chemin de la porte trop pres d'une fosse %s -> %s" % (a, b))
+    if len(set(p)) != len(p):
+        prob.append("chemin de la porte qui boucle")
+    # piliers aux coins des cellules du chemin : a 175 cm de la ligne des centres (rayon de pilier + capsule bien moindre)
+    half_pillar = L.P["PillarSize"] * 0.5 if "PillarSize" in L.P else 22.5
+    if half_pillar + capsule + 10.0 > S * 0.5:
+        prob.append("pilier trop proche de la ligne des centres")
+    # cachettes : aucune sur le chemin (ABRChunk::BuildHidingSpots)
+    hid = set(res.get("hiding", []))
+    for c in p:
+        if c in hid:
+            prob.append("cachette sur le chemin de la porte %s" % (c,))
+    # porte : passage libre (130 cm de cadre moins deux jambages de 10 cm) pour la capsule
+    if 130.0 - 20.0 < 2 * capsule + 10.0:
+        prob.append("passage de la porte trop etroit pour la capsule")
+    if info["tier"] == 0 and not (info["lo"] <= info["dist"] <= info["hi"]):
+        prob.append("distance de la porte hors de la fenetre visee")
+
+
+def check_doors_only(P, seeds):
+    """Verification rapide de la porte de service sur beaucoup de graines (sans les sols des salles)"""
+    rows = []
+    for sd in seeds:
+        L = Level0(P, sd)
+        res = {"seed": sd, "problems": [], "hiding": []}
+        B = L.B
+        for cx in range(-B, B):
+            for cy in range(-B, B):
+                res["hiding"] += L.hiding_cells((cx, cy))
+        check_service_door(L, res)
+        rows.append(res)
+    return rows
 
 
 def segment_crosses_pit(L, a, b, margin):
@@ -920,8 +1061,44 @@ def main():
     ap.add_argument("--json", default=None, help="export des boites du chunk de la salle (rendu Blender)")
     ap.add_argument("--report", default=None, help="rapport texte (en plus de la console)")
     ap.add_argument("--pick-demo", action="store_true", help="propose une graine de demonstration (salle proche du depart)")
+    ap.add_argument("--doors", default=None, help="v4.13 : seulement la porte de service, sur ces graines (ex. 1-500)")
     a = ap.parse_args()
     P = read_level0()
+    if a.doors:
+        seeds = parse_seeds(a.doors)
+        rows = check_doors_only(P, seeds)
+        lines = []
+        def outd(t=""):
+            print(t)
+            lines.append(t)
+        outd("Porte de service du Level 0 : verification hors moteur (simulation Python de ABRWorld::PlaceServiceDoor) sur %d graines" % len(seeds))
+        bad = [r for r in rows if r["problems"]]
+        dists = [r["door"]["dist"] for r in rows if "door" in r]
+        maxs = [r["door"]["max"] for r in rows if "door" in r]
+        tiers = sum(1 for r in rows if r.get("door", {}).get("tier", 0) == 1)
+        marks = [r["door"]["marks"] for r in rows if "door" in r]
+        sides = {}
+        for r in rows:
+            if "door" in r:
+                sides[r["door"]["dir"]] = sides.get(r["door"]["dir"], 0) + 1
+        if dists:
+            outd("distance de marche (cellules de 3,5 m) : min %d, moyenne %.1f, max %d ; plus long chemin vers le bord : moyenne %.1f"
+                 % (min(dists), sum(dists) / len(dists), max(dists), sum(maxs) / len(maxs)))
+            outd("soit %.0f a %.0f m de marche ; repli deterministe utilise : %d fois ; marques de craie : %d a %d par graine"
+                 % (min(dists) * P["CellSize"] / 100.0, max(dists) * P["CellSize"] / 100.0, tiers, min(marks), max(marks)))
+            outd("murs d'enceinte : " + ", ".join("%s %d" % ({(1, 0): "est", (-1, 0): "ouest", (0, 1): "nord", (0, -1): "sud"}[k], v) for k, v in sorted(sides.items())))
+        for r in rows[:12]:
+            d = r.get("door")
+            if d:
+                outd("  graine %-5d porte %s vers %s, %d cellules (fenetre %d-%d, plus long %d), %d marques%s" % (r["seed"], d["cell"], d["dir"], d["dist"], d["lo"],
+                     d["hi"], d["max"], d["marks"], ", repli" if d["tier"] else ""))
+        for r in bad:
+            outd("  graine %d : %s" % (r["seed"], " ; ".join(r["problems"])))
+        outd("%d graine(s), %d avec probleme(s)." % (len(rows), len(bad)))
+        if a.report:
+            with open(a.report, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(lines) + "\n")
+        return 1 if bad else 0
     demo = read_demo_seed()
     seeds = [a.seed] if a.seed is not None else parse_seeds(a.seeds)
     if a.seed is None and demo is not None and demo not in seeds:
@@ -949,6 +1126,10 @@ def main():
             len(r["exits"]), r["reach_safe"], r["reach_full"], r["forced"], ok, " (demo)" if sd == demo else ""))
         for p in r["problems"]:
             out("    - " + p)
+        if r.get("door"):
+            d = r["door"]
+            out("         porte de service : cellule %s vers %s, %d cellules de marche (fenetre %d-%d), %d marques de craie%s" % (d["cell"], d["dir"],
+                d["dist"], d["lo"], d["hi"], d["marks"], ", repli" if d["tier"] else ""))
         nav = r.get("nav", {})
         out("         navigation : %d chemins (%d segments), %d au-dessus du vide, %d traversees de salle sur %d trajets autour ; marge %.0f cm "
             "(passage - rayon du Clump)" % (nav.get("chemins", 0), nav.get("segments", 0), nav.get("au_dessus_du_vide", 0),

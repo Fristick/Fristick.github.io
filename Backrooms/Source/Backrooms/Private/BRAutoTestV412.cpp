@@ -31,6 +31,7 @@
 #include "BRMissionSolver.h"
 #include "BRPlayerController.h"
 #include "BRSave.h"
+#include "BRStoryLogic.h"
 #include "BRWorld.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -801,13 +802,25 @@ void ABRAutoTest::AddV412Steps()
 			int32 To;
 			const TCHAR* What;
 		};
+		// v4.13 : plus de redirection : le fil est le meme dans tous les canaux (0 -> 1 -> Poolrooms -> 2 -> fin du chapitre)
 		const FCase Cases[] = {
-			{ 0, 1, BRContent::EExit::Go, 1, TEXT("Niveau 0 -> Niveau 1") },
-			{ 0, 37, BRContent::EExit::Go, 37, TEXT("Niveau 0 -> Poolrooms") },
-			{ 37, 4, BRContent::EExit::Go, 1, TEXT("Poolrooms -> echelle : Niveau 1 (redirigee)") },
-			{ 1, 4, BRContent::EExit::Go, 2, TEXT("Niveau 1 -> ascenseur : Niveau 2 (redirigee)") },
+			{ 0, 1, BRContent::EExit::Go, 1, TEXT("Level 0 -> porte de service : Niveau 1") },
+			{ 1, 37, BRContent::EExit::Go, 37, TEXT("Niveau 1 -> ascenseur : Poolrooms") },
+			{ 37, 2, BRContent::EExit::Go, 2, TEXT("Poolrooms -> echelle : Niveau 2") },
 			{ 2, 3, BRContent::EExit::ChapterEnd, -1, TEXT("Niveau 2 -> sortie de progression : fin du contenu disponible") },
 		};
+		// Aucune sortie ne saute une etape du fil (les anciennes 0 -> 37, 1 -> 2, 1 -> 4, 37 -> 4 n'existent plus)
+		int32 Shortcuts = 0;
+		for (const FBRLevelDef& D : BRLevels::Defined())
+		{
+			for (const FBRExitDef& X : D.Exits)
+			{
+				const int32 IFrom = BRStory::IndexOf(D.Number);
+				const int32 ITo = BRStory::IndexOf(X.Target);
+				Shortcuts += (X.Target < 0 || (ITo > IFrom + 1 && X.Target != BRStory::Ending)) ? 1 : 0;
+			}
+		}
+		Note(FString::Printf(TEXT("sorties qui sautent une etape du fil ou menent au hasard : %d"), Shortcuts), Shortcuts != 0);
 		for (const FCase& K : Cases)
 		{
 			const BRContent::FExitResolution R = BRLevels::ResolveExit(K.From, K.Target);
@@ -837,6 +850,17 @@ void ABRAutoTest::AddV412Steps()
 		const bool bResume = Resume == 1 && bMoved && Explored.Num() == 4 && BRLevels::CountAvailable(Explored) == 2;
 		Note(FString::Printf(TEXT("partie v4.11 au Niveau 5 (0, 1, 4, 5 explores) : reprise au Niveau %d, deplacee %s, niveaux explores gardes %d, disponibles %d"), Resume,
 			YesNo(bMoved), Explored.Num(), BRLevels::CountAvailable(Explored)), !bResume);
+		// v4.13 : la meme partie migree vers l'histoire : alle au-dela des Poolrooms sans les traverser, elle reprend dans les
+		// Poolrooms (disponibles dans la version publiee) ; sa progression est garee, pas perdue
+		BRStory::FLegacy Legacy;
+		Legacy.Explored = Explored.GetData();
+		Legacy.NumExplored = Explored.Num();
+		Legacy.Current = 5;
+		const BRStory::FMigration M = BRStory::MigrateLegacy(Legacy);
+		const int32 Cont = BRStory::ResumePoint(M.State, [](int Level, void*) { return BRLevels::Exists(Level); }, nullptr);
+		const bool bStory = M.bParkSession && M.State.Parked == 5 && Cont == BRStory::Poolrooms && !M.bPoolroomsCredited;
+		Note(FString::Printf(TEXT("la meme partie en histoire : CONTINUER au Niveau %d, progression garee au Niveau %d, Poolrooms creditees %s"), Cont, M.State.Parked,
+			YesNo(M.bPoolroomsCredited)), !bStory);
 		return true;
 	});
 	Add(TEXT("v4.12 contenu : menu de la version publiee"), 1.2f, [this]()

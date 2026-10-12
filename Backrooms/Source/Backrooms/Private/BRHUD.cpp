@@ -1357,6 +1357,18 @@ void ABRHUD::DrawHUD()
 		{
 			DrawRect(FLinearColor(0.f, 0.f, 0.f, W->GetFade()), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
 		}
+		// v4.13 : reveil du Level 0 : les paupieres s'ouvrent en deux battements (environ 3 s)
+		const float Wake = W->GetIntroElapsed();
+		if (Wake >= 0.f && Wake < 3.2f)
+		{
+			const float T = Wake / 3.2f;
+			const float Blink = T < 0.35f ? FMath::Sin(T / 0.35f * PI * 0.5f) * 0.55f : (T < 0.5f ? 0.55f - (T - 0.35f) / 0.15f * 0.35f : 0.2f + (T - 0.5f) / 0.5f * 0.8f);
+			const float Open = FMath::Clamp(Blink, 0.f, 1.f);
+			const float Lid = Canvas->ClipY * 0.5f * (1.f - Open);
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 1.f), 0.f, 0.f, Canvas->ClipX, Lid);
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 1.f), 0.f, Canvas->ClipY - Lid, Canvas->ClipX, Lid);
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f * (1.f - T)), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+		}
 		// v4.10 : preparation du niveau suivant (ressources indispensables) : ecran sobre, avancement, puis issue proposee
 		if (W->IsPreparing())
 		{
@@ -2245,7 +2257,8 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 
 	// En-tete : partie choisie et progression
 	DrawLogo(X0 - 240.f * U * 0.03f, 46.f * U, 240.f * U, In, false);
-	TextSpaced(PC->IsHostFlow() ? BR_STR(NSLOCTEXT("BR", "HUD.HebergerChoisissezNiveau", "H\u00c9BERGER : CHOISISSEZ UN NIVEAU")) : BR_STR(NSLOCTEXT("BR", "HUD.ChoisissezNiveau", "CHOISISSEZ UN NIVEAU")), CX, 100.f * U, WithAlpha(Yellow, In), 13.f, EUiWeight::Bold,
+	// v4.13 : CONTINUER l'histoire, ou REJOUER un niveau decouvert (carrousel)
+	TextSpaced(PC->IsHostFlow() ? BR_STR(NSLOCTEXT("BR", "HUD.HostStoryOrReplay", "H\u00c9BERGER : CONTINUER L'HISTOIRE OU REJOUER UN NIVEAU")) : BR_STR(NSLOCTEXT("BR", "HUD.StoryOrReplay", "CONTINUER L'HISTOIRE OU REJOUER UN NIVEAU")), CX, 100.f * U, WithAlpha(Yellow, In), 13.f, EUiWeight::Bold,
 		5.f * U, EUiAlign::Center);
 	const FString Progress = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.SavenameExploredcountValueNiveauxExplore", "{SaveName}  \u00b7  {ExploredCount} / {Value} niveaux explor\u00e9s"), { { TEXT("SaveName"), BRLoc::Arg(Save ? *FString::Printf(TEXT("\u00ab %s \u00bb"), *Save->SaveName) : BR_STR(NSLOCTEXT("BR", "HUD.SansPartie", "Sans partie"))) }, { TEXT("ExploredCount"), BRLoc::Int(ExploredCount) }, { TEXT("Value"), BRLoc::Int(Num) } });
 	TextF(Progress, CX, 126.f * U, WithAlpha(Ink, 0.9f * In), 12.5f, EUiWeight::Regular, EUiAlign::Center);
@@ -2364,12 +2377,6 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 			Y += 22.f * U;
 		}
 		Y += 6.f * U;
-		if (D.bRequireObjectives)
-		{
-			TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ObjectifsVhsrequiredCassettesVhsFilmer", "Objectifs : {VHSRequired} cassettes VHS + filmer pendant une coupure de courant"), { { TEXT("VHSRequired"), BRLoc::Int(D.VHSRequired) } }), CX, Y,
-				WithAlpha(Yellow, In), 12.f, EUiWeight::Regular, EUiAlign::Center);
-			Y += 21.f * U;
-		}
 		TArray<FString> Names;
 		for (const FBREntitySpawn& E : D.Entities)
 		{
@@ -2400,15 +2407,21 @@ void ABRHUD::DrawMenuSolo(ABRPlayerController* PC, bool bInteractive)
 		}
 	}
 
-	// NOCLIPPER (ou HEBERGER) / RETOUR
+	// v4.13 : CONTINUER (point de reprise de l'histoire) / REJOUER (niveau du carrousel) / RETOUR
+	const int32 Continue = PC->GetContinueLevel();
+	TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.StoryResume", "Histoire : reprise au Niveau {Level}  \u00b7  REJOUER ne change rien \u00e0 votre progression"), { { TEXT("Level"), BRLoc::Int(Continue) } }),
+		CX, Y + 4.f * U, WithAlpha(InkDim, 0.9f * In), 12.f, EUiWeight::Regular, EUiAlign::Center);
+	Y += 24.f * U;
 	const float BH = 60.f * U;
 	const float PW0 = 300.f * U;
-	const float PW1 = 210.f * U;
+	const float PW1 = 250.f * U;
+	const float PW2 = 190.f * U;
 	const float BG = 18.f * U;
-	const float BX = CX - (PW0 + PW1 + BG) * 0.5f;
+	const float BX = CX - (PW0 + PW1 + PW2 + 2.f * BG) * 0.5f;
 	const float BY = FMath::Max(836.f * U, Y + 18.f * U);
-	MenuPill(0, BX, BY, PW0, BH, bLocked ? TEXT("UI_IconLock") : TEXT("UI_IconPlay"), true, bInteractive, In, false, bLocked);
-	MenuPill(1, BX + PW0 + BG, BY, PW1, BH, TEXT("UI_IconBack"), false, bInteractive, In);
+	MenuPill(0, BX, BY, PW0, BH, TEXT("UI_IconPlay"), true, bInteractive, In);
+	MenuPill(1, BX + PW0 + BG, BY, PW1, BH, bLocked ? TEXT("UI_IconLock") : TEXT("UI_IconPlay"), false, bInteractive, In, false, bLocked);
+	MenuPill(2, BX + PW0 + PW1 + 2.f * BG, BY, PW2, BH, TEXT("UI_IconBack"), false, bInteractive, In);
 
 	TextF(ControlsLine(0), CX, H - 134.f * U, WithAlpha(InkDim, 0.75f * In), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
 	TextF(ControlsLine(1), CX, H - 112.f * U, WithAlpha(InkDim, 0.75f * In), 10.5f, EUiWeight::Regular, EUiAlign::Center, false);
@@ -2952,11 +2965,11 @@ void ABRHUD::HandleMenuMouse(ABRPlayerController* PC)
 	}
 	else if (Id >= Btn_MenuCard && Id <= Btn_MenuCard + 6)
 	{
-		// Carte du carrousel : celle du centre lance la partie, une voisine devient la selection
+		// Carte du carrousel : celle du centre rejoue ce niveau (v4.13), une voisine devient la selection
 		const int32 Rel = Id - Btn_MenuCard - 3;
 		if (Rel == 0)
 		{
-			PC->MenuActivate(0);
+			PC->MenuActivate(1);
 		}
 		for (int32 k = 0; k < FMath::Abs(Rel); ++k)
 		{
@@ -4223,7 +4236,8 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		const float Bottom = IY + ObjH - 12.f * U;
 		const float TextW0 = LW - 74.f * U;
 		const float LineH = 20.f * U;
-		const FString Footer = W->IsMissionActive() ? (W->AreObjectivesComplete() ? BRMissionText::SolvedLine(W->GetLevelNumber())
+		const FString Footer = W->HasServiceDoor() ? BR_STR(NSLOCTEXT("BR", "HUD.L0Footer", "Aucun objectif ici : explorez. Quelque part, de l'air froid passe sous une porte de service."))
+			: W->IsMissionActive() ? (W->AreObjectivesComplete() ? BRMissionText::SolvedLine(W->GetLevelNumber())
 			: BR_STR(NSLOCTEXT("BR", "HUD.MissionFooter", "La sortie s'ouvre quand la mission est r\u00e9solue. Indices, observations et aide : onglet CARNET.")))
 			: (W->Def().bRequireObjectives && W->IsLegacyObjectives()) ? (W->AreObjectivesComplete()
 			? BR_STR(NSLOCTEXT("BR", "HUD.SortiesSontStablesTrouvezMur", "Les sorties sont stables : trouvez un mur qui gr\u00e9sille."))
@@ -5367,6 +5381,27 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	LastNotebookObservations = 0;
 	LastNotebookHintLevel = 0;
 
+	if (W->HasServiceDoor())
+	{
+		// v4.13 : Level 0 : pas de mission ni de liste ; ce que l'on sait de l'equipe de L., et l'aide si elle a ete donnee
+		TArray<FString> Info;
+		Info.Add(BR_STR(NSLOCTEXT("BR", "HUD.NotebookL0", "Vous vous \u00eates r\u00e9veill\u00e9 ici. Rien \u00e0 r\u00e9parer, rien \u00e0 r\u00e9soudre : il faut seulement trouver comment sortir.")));
+		Info.Add(BR_STR(NSLOCTEXT("BR", "HUD.NotebookL0Team", "Quelqu'un est pass\u00e9 avant vous : des marques \u00e0 la craie, un cercle barr\u00e9 et un L. Les notes trouv\u00e9es en parlent.")));
+		if (W->IsDraftHintGiven())
+		{
+			Info.Add(BR_STR(NSLOCTEXT("BR", "HUD.NotebookL0Hint", "AIDE : suivez l'air froid. Il passe sous une porte de service, dans un mur ext\u00e9rieur. Les fl\u00e8ches \u00e0 la craie montrent le chemin.")));
+		}
+		for (const FString& Para : Info)
+		{
+			for (const FString& L : Wrap(Para, ColWidth, Medium, 0.8f * U))
+			{
+				TxtLine(L, X, Y, ColWidth, Ink, 0.8f * U, Medium);
+				Y += 24.f * U;
+			}
+			Y += 10.f * U;
+		}
+		return;
+	}
 	if (!W->IsMissionActive())
 	{
 		const FString Info = W->IsLegacyObjectives()

@@ -6,6 +6,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BRStoryLogic.h"
 #include "GameFramework/SaveGame.h"
 #include "BRSave.generated.h"
 
@@ -118,8 +119,8 @@ class BACKROOMS_API UBRSaveGame : public USaveGame
 
 public:
 	/** Format du fichier (1 : v4.1 a v4.6 ; 2 : v4.7, session reprise ; 3 : v4.8, journal par identifiants de notes ;
-	 *  4 : v4.11, missions de niveau et campagne) */
-	static constexpr int32 CurrentVersion = 4;
+	 *  4 : v4.11, missions de niveau et campagne ; 5 : v4.13, etat narratif) */
+	static constexpr int32 CurrentVersion = 5;
 
 	/** Format du fichier. La valeur par defaut reste 1 : les proprietes egales a celles de l'objet par defaut ne sont
 	 *  pas ecrites, et un fichier v4.1-v4.6 (Version = 1, donc absente du fichier) doit etre reconnu comme tel.
@@ -197,6 +198,32 @@ public:
 	UPROPERTY(SaveGame)
 	FBRSessionState Session;
 
+	/** v4.13 (format 5) : etat narratif (BRStoryLogic) : plus loin atteint (rang dans le fil), etapes accomplies (bits),
+	 *  evenements vus, fins de chapitre (bit 1 << lot), point de reprise (niveau), niveau gare (-1 : aucun). Une partie
+	 *  d'un format anterieur est migree au chargement (BRStory::MigrateLegacy) */
+	UPROPERTY(SaveGame)
+	int32 StoryReached = 0;
+
+	UPROPERTY(SaveGame)
+	uint32 StoryDone = 0;
+
+	UPROPERTY(SaveGame)
+	uint32 StoryEvents = 0;
+
+	UPROPERTY(SaveGame)
+	uint32 StoryChapterEnds = 0;
+
+	UPROPERTY(SaveGame)
+	int32 StoryResume = 0;
+
+	UPROPERTY(SaveGame)
+	int32 StoryParked = -1;
+
+	/** v4.13 : session d'une ancienne partie allee au-dela des Poolrooms sans les traverser : gardee intacte (graine,
+	 *  objets ramasses, mission), elle reprend a la sortie des Poolrooms */
+	UPROPERTY(SaveGame)
+	FBRSessionState ParkedSession;
+
 	/** v4.7 : mort pas encore resolue au moment de l'ecriture (jeu ferme a terre ou pendant le fondu).
 	 *  Au chargement : equipement de depart et niveau neuf, comme si la mort etait allee a son terme. */
 	UPROPERTY(SaveGame)
@@ -215,6 +242,28 @@ public:
 
 	bool IsExplored(int32 Level) const { return Explored.Contains(Level); }
 	void MarkExplored(int32 Level) { Explored.AddUnique(Level); }
+
+	/** v4.13 : etat narratif de la partie */
+	BRStory::FState GetStory() const
+	{
+		BRStory::FState S;
+		S.Reached = StoryReached;
+		S.Done = StoryDone;
+		S.Events = StoryEvents;
+		S.ChapterEnds = StoryChapterEnds;
+		S.Resume = StoryResume;
+		S.Parked = StoryParked;
+		return S;
+	}
+	void SetStory(const BRStory::FState& S)
+	{
+		StoryReached = S.Reached;
+		StoryDone = S.Done;
+		StoryEvents = S.Events;
+		StoryChapterEnds = S.ChapterEnds;
+		StoryResume = S.Resume;
+		StoryParked = S.Parked;
+	}
 };
 
 /** v4.8 : cause d'un echec d'ecriture (le message est compose a l'affichage, dans la langue du joueur) */
@@ -294,6 +343,12 @@ namespace BRSaves
 	/** v4.7 : session a reprendre au prochain chargement de son niveau (survit au rechargement de la carte quand
 	 *  l'hote ouvre une partie en ligne). Consommee par ABRWorld::LoadLevelNow si le niveau et la graine concordent */
 	BACKROOMS_API FBRSessionState& PendingResume();
+	/** v4.13 : la partie en cours est une session REJOUER (un niveau decouvert, sans toucher a l'histoire ni a la session
+	 *  sauvegardee). Survit au rechargement de la carte quand l'hote ouvre une partie en ligne */
+	BACKROOMS_API bool& ReplaySession();
+	/** v4.13 : migration de l'histoire d'une partie des formats 1 a 4 (partagee avec les tests) : etapes depassees,
+	 *  reprise coherente, traversee des Poolrooms organisee (session garee), Level 0 sans condition */
+	BACKROOMS_API void MigrateStory(UBRSaveGame* Save);
 	/** "2 h 05", "14 min" */
 	BACKROOMS_API FString FormatPlayTime(float Seconds);
 	/** Date et heure au format de la langue courante */

@@ -435,6 +435,11 @@ namespace BRSaves
 					*SlotName(Slot), Save->Session.bValid ? TEXT("en cours") : TEXT("absente"), Save->Session.Level, Save->Session.VHSFound,
 					Save->Session.bBlackoutRecorded ? TEXT("oui") : TEXT("non"));
 			}
+			if (Save->LoadedVersion < 5)
+			{
+				// Formats 1 a 4 (avant la v4.13) : etat narratif deduit de la progression (BRStory::MigrateLegacy)
+				MigrateStory(Save);
+			}
 			Save->Version = UBRSaveGame::CurrentVersion;
 			UE_LOG(LogBackrooms, Log, TEXT("%s : sauvegarde au format %d migree vers le format %d (copie d'origine : %s.sav)"), *SlotName(Slot),
 				Save->LoadedVersion, UBRSaveGame::CurrentVersion, *Legacy);
@@ -479,6 +484,54 @@ namespace BRSaves
 	FString LegacySlotName(int32 Slot, int32 Version)
 	{
 		return FString::Printf(TEXT("%s_Format%d"), *SlotName(Slot), Version);
+	}
+
+	void MigrateStory(UBRSaveGame* Save)
+	{
+		if (!Save)
+		{
+			return;
+		}
+		BRStory::FLegacy L;
+		L.Explored = Save->Explored.GetData();
+		L.NumExplored = Save->Explored.Num();
+		L.Current = Save->CurrentLevel;
+		L.Endings = Save->Endings;
+		const BRStory::FMigration M = BRStory::MigrateLegacy(L);
+		BRStory::FState S = M.State;
+		if (Save->PlayTime > 60.f)
+		{
+			S.Events |= BRStory::Event::IntroWake; // partie deja commencee : pas de reveil rejoue
+		}
+		FBRSessionState& Session = Save->Session;
+		if (M.bParkSession)
+		{
+			// Allee au-dela des Poolrooms sans les traverser : la session est gardee intacte et reprendra a leur sortie ;
+			// la partie reprend dans les Poolrooms (niveau neuf)
+			if (Session.bValid && Session.Level == S.Parked)
+			{
+				Save->ParkedSession = Session;
+			}
+			Session = FBRSessionState();
+			Save->CurrentLevel = BRStory::Poolrooms;
+		}
+		if (Session.bValid && Session.Level == 0)
+		{
+			// Level 0 (ancien mode VHS, cadrans en cours ou mission resolue) : plus d'objectif ; la graine, les objets
+			// ramasses, les documents et le point de reprise restent, la porte de service s'ouvre sans condition
+			Session.GenVersion = 2;
+			Session.Mission.Reset();
+		}
+		Save->SetStory(S);
+		UE_LOG(LogBackrooms, Log, TEXT("[Story] Migration : niveaux %d, courant %d -> atteint %d, etapes 0x%x, reprise %d, gare %d, Poolrooms %s, session %s"),
+			Save->Explored.Num(), L.Current, S.Reached, S.Done, S.Resume, S.Parked, M.bPoolroomsCredited ? TEXT("traversees (preuve)") : TEXT("non creditees"),
+			M.bParkSession ? TEXT("garee") : (Session.bValid ? TEXT("gardee") : TEXT("aucune")));
+	}
+
+	bool& ReplaySession()
+	{
+		static bool bReplay = false;
+		return bReplay;
 	}
 
 	FString RecoverySlotName(int32 Slot)
@@ -740,7 +793,10 @@ namespace BRSaves
 		// cote restent, ils ne font plus partie d'aucun emplacement
 		IFileManager::Get().Delete(*PathOf(SlotName(Slot)), false, true, true);
 		IFileManager::Get().Delete(*PathOf(BackupSlotName(Slot)), false, true, true);
-		IFileManager::Get().Delete(*PathOf(LegacySlotName(Slot, 1)), false, true, true);
+		for (int32 V = 1; V < UBRSaveGame::CurrentVersion; ++V)
+		{
+			IFileManager::Get().Delete(*PathOf(LegacySlotName(Slot, V)), false, true, true); // v4.13 : toutes les copies d'anciens formats
+		}
 		IFileManager::Get().Delete(*PathOf(RecoverySlotName(Slot)), false, true, true);
 		{
 			FScopeLock Lock(&QueueLock());

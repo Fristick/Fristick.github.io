@@ -717,6 +717,162 @@ void ABRChunk::AddDoorway(bool bAlongY, float Fixed, float Mid)
 	}
 }
 
+void ABRChunk::AddServiceDoorway(bool bAlongY, float Fixed, float Mid, float OutSign)
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float S = D.CellSize;
+	const float T = D.WallThickness;
+	const float H = D.WallHeight;
+	const float Hole = ABRExit::ServiceHoleWidth;
+	const float HoleH = ABRExit::ServiceHoleHeight;
+	// Mur d'enceinte perce a la taille du cadre (les jambages et la traverse sont ceux de la porte), linteau au-dessus
+	AddWallSegment(bAlongY, Fixed, Mid - S * 0.5f - T * 0.5f, Mid - Hole * 0.5f, 0.f, H, true, false);
+	AddWallSegment(bAlongY, Fixed, Mid + Hole * 0.5f, Mid + S * 0.5f + T * 0.5f, 0.f, H, true, false);
+	AddWallSegment(bAlongY, Fixed, Mid - Hole * 0.5f, Mid + Hole * 0.5f, HoleH, H, false, false);
+	// Sas de service derriere la porte (hors de l'enceinte, ferme) : palier, escalier de beton qui descend dans le noir,
+	// murs, plafond bas. Repere : Along le long du mur, Out vers l'exterieur depuis l'axe du mur
+	const FBRSurface Concrete(TEXT("T_Concrete"), FLinearColor(0.62f, 0.63f, 0.62f), 260.f, 0.85f, 0.35f);
+	const FBRSurface Dark(TEXT("T_Grime"), FLinearColor(0.015f, 0.015f, 0.014f), 100.f, 0.95f, 0.f);
+	const FBRSurface Rail(TEXT("T_Grime"), FLinearColor(0.35f, 0.36f, 0.33f), 60.f, 0.4f, 0.8f);
+	auto Box = [&](float Along, float Out, float Z, float SAlong, float SOut, float SZ, const FBRSurface& Surf, bool bCollision)
+	{
+		const FVector C = bAlongY ? FVector(Fixed + OutSign * Out, Along, Z) : FVector(Along, Fixed + OutSign * Out, Z);
+		AddBox(Surf, C, bAlongY ? FVector(SOut, SAlong, SZ) : FVector(SAlong, SOut, SZ), bCollision);
+	};
+	constexpr float VW = 240.f;      // largeur interieure
+	constexpr float Landing = 140.f; // palier
+	constexpr int32 Steps = 8;
+	constexpr float Tread = 30.f;
+	constexpr float Riser = 20.f;
+	constexpr float Bottom = -Steps * Riser - 30.f;
+	constexpr float VH = 250.f;
+	const float O0 = T * 0.5f;
+	const float Depth = Landing + Steps * Tread + 90.f;
+	Box(Mid, O0 + Landing * 0.5f, -10.f, VW, Landing, 20.f, Concrete, true);
+	for (int32 K = 0; K < Steps; ++K)
+	{
+		const float Top = -Riser * (K + 1);
+		Box(Mid, O0 + Landing + Tread * (K + 0.5f), (Top + Bottom) * 0.5f, VW, Tread, Top - Bottom, Concrete, true);
+	}
+	Box(Mid, O0 + Landing + Steps * Tread + 45.f, Bottom - 10.f, VW, 90.f, 20.f, Concrete, true);
+	for (int32 Side = -1; Side <= 1; Side += 2)
+	{
+		Box(Mid + Side * (VW * 0.5f + 10.f), O0 + Depth * 0.5f, (Bottom + VH) * 0.5f, 20.f, Depth, VH - Bottom, Concrete, true);
+		// Main courante le long de l'escalier
+		Box(Mid + Side * (VW * 0.5f - 4.f), O0 + Landing + Steps * Tread * 0.5f, -Steps * Riser * 0.5f + 90.f, 4.f, Steps * Tread + 40.f, 4.f, Rail, false);
+	}
+	Box(Mid, O0 + Depth + 10.f, (Bottom + VH) * 0.5f, VW + 40.f, 20.f, VH - Bottom, Dark, true);
+	Box(Mid, O0 + Depth * 0.5f, VH + 10.f, VW + 40.f, Depth, 20.f, Concrete, true);
+	// En bas de l'escalier, le noir : un voile sombre devant le mur du fond
+	Box(Mid, O0 + Depth - 4.f, (Bottom + 120.f) * 0.5f, VW - 4.f, 2.f, 120.f - Bottom, Dark, false);
+}
+
+void ABRChunk::AddStroke(const FBRSurface& Surf, const FVector& Origin, const FQuat& WallQ, const FVector2D& A, const FVector2D& B, float Width)
+{
+	UBRAssets* Assets = UBRAssets::Get(this);
+	if (!Assets || !Assets->Cube())
+	{
+		return;
+	}
+	const FVector2D Delta = B - A;
+	const float Len = Delta.Size();
+	if (Len < 0.1f)
+	{
+		return;
+	}
+	const FVector2D Mid = (A + B) * 0.5f;
+	const FVector Right = WallQ.RotateVector(FVector(0.f, 1.f, 0.f));
+	const FVector Center = Origin + Right * Mid.X + FVector(0.f, 0.f, Mid.Y);
+	const FQuat Q = WallQ * FQuat(FVector(1.f, 0.f, 0.f), FMath::Atan2(static_cast<float>(Delta.Y), static_cast<float>(Delta.X)));
+	const FString Key = FString::Printf(TEXT("CHALK|%s"), *Surf.Key());
+	FBatch& Batch = GetBatch(Key, Assets->Cube(), Assets->Surface(Surf), false, false, 2500.f);
+	Batch.Transforms.Add(FTransform(Q, Center - GetActorLocation(), FVector(0.5f, Len + Width * 0.6f, Width) / 100.f));
+}
+
+void ABRChunk::AddChalkMark(int32 X, int32 Y, const FIntPoint& Next)
+{
+	ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float S = D.CellSize;
+	const FIntPoint Travel(Next.X - X, Next.Y - Y);
+	// Un vrai mur de la cellule, de preference parallele au chemin (la fleche le suit) ; sinon le mur d'en face
+	auto IsWall = [&](const FIntPoint& Dir)
+	{
+		const FIntPoint N(X + Dir.X, Y + Dir.Y);
+		if (W->IsSolid(N.X, N.Y))
+		{
+			return true;
+		}
+		if (Dir.X != 0)
+		{
+			return W->EdgeE(Dir.X > 0 ? X : X - 1, Y) == EBREdge::Wall;
+		}
+		return W->EdgeN(X, Dir.Y > 0 ? Y : Y - 1) == EBREdge::Wall;
+	};
+	FIntPoint Face(0, 0);
+	bool bArrow = false;
+	for (const FIntPoint& Dir : GDirs)
+	{
+		if (Dir.X * Travel.X + Dir.Y * Travel.Y == 0 && IsWall(Dir))
+		{
+			Face = Dir;
+			bArrow = true;
+			break;
+		}
+	}
+	if (!bArrow)
+	{
+		const FIntPoint Back(-Travel.X, -Travel.Y);
+		if (!IsWall(Back))
+		{
+			return;
+		}
+		Face = Back;
+	}
+	// Repere du mur vu de face : on regarde vers le mur (Face), la droite de celui qui regarde est l'axe 1
+	const float Inset = W->IsSolid(X + Face.X, Y + Face.Y) ? 0.f : D.WallThickness * 0.5f;
+	const FVector Origin = W->CellCenter(FIntPoint(X, Y), 138.f) + FVector(Face.X, Face.Y, 0.f) * (S * 0.5f - Inset - 0.35f);
+	const FQuat WallQ(FVector(0.f, 0.f, 1.f), FMath::Atan2(static_cast<float>(Face.Y), static_cast<float>(Face.X)));
+	const FVector Right = WallQ.RotateVector(FVector(0.f, 1.f, 0.f));
+	// Le long du mur, decale d'une main de son centre (jamais derriere un meuble de coin)
+	const float Shift = (BRHash::Rand(X, Y, 2140, W->GetSeed()) - 0.5f) * 60.f;
+	const FVector O = Origin + Right * Shift;
+	const FBRSurface Chalk(TEXT("T_Concrete"), FLinearColor(1.75f, 1.72f, 1.62f), 40.f, 0.98f, 0.f);
+	constexpr float Wd = 2.2f;
+	// Cercle barre
+	constexpr int32 Seg = 10;
+	constexpr float R = 10.f;
+	for (int32 K = 0; K < Seg; ++K)
+	{
+		const float A0 = 2.f * PI * K / Seg;
+		const float A1 = 2.f * PI * (K + 1) / Seg;
+		AddStroke(Chalk, O, WallQ, FVector2D(-12.f + R * FMath::Cos(A0), R * FMath::Sin(A0)), FVector2D(-12.f + R * FMath::Cos(A1), R * FMath::Sin(A1)), Wd);
+	}
+	AddStroke(Chalk, O, WallQ, FVector2D(-19.f, -7.f), FVector2D(-5.f, 7.f), Wd);
+	// "L."
+	AddStroke(Chalk, O, WallQ, FVector2D(6.f, -10.f), FVector2D(6.f, 9.f), Wd);
+	AddStroke(Chalk, O, WallQ, FVector2D(6.f, -10.f), FVector2D(15.f, -10.f), Wd);
+	AddStroke(Chalk, O, WallQ, FVector2D(19.f, -10.f), FVector2D(20.5f, -10.f), Wd + 0.6f);
+	if (!bArrow)
+	{
+		return;
+	}
+	// Fleche vers la suite du chemin, sous la marque
+	const float DirSign = (Travel.X * Right.X + Travel.Y * Right.Y) >= 0.f ? 1.f : -1.f;
+	AddStroke(Chalk, O, WallQ, FVector2D(-16.f * DirSign, -24.f), FVector2D(16.f * DirSign, -24.f), Wd);
+	AddStroke(Chalk, O, WallQ, FVector2D(16.f * DirSign, -24.f), FVector2D(9.f * DirSign, -19.f), Wd);
+	AddStroke(Chalk, O, WallQ, FVector2D(16.f * DirSign, -24.f), FVector2D(9.f * DirSign, -29.f), Wd);
+}
+
 void ABRChunk::AddFaceProp(int32 X, int32 Y, const FIntPoint& Dir, FName Mesh, float Along, float Z, const FVector& FallbackSize, bool bCollision)
 {
 	ABRWorld* W = World.Get();
@@ -1182,7 +1338,9 @@ bool ABRChunk::StepPlan()
 		for (int32 Y = Y0; Y <= Y0 + N; ++Y)
 		{
 			const EBREdge E = (Y < Y0 + N) ? InWorld->EdgeE(X, Y) : EBREdge::Open;
-			if (E == EBREdge::Wall)
+			// v4.13 : porte de service du Level 0 dans le mur d'enceinte (Est) : le mur s'arrete, le passage est bati a part
+			const bool bService = E == EBREdge::Wall && Y < Y0 + N && InWorld->IsServiceDoorEdge(X, Y, true);
+			if (E == EBREdge::Wall && !bService)
 			{
 				if (RunStart == MIN_int32)
 				{
@@ -1200,6 +1358,10 @@ bool ABRChunk::StepPlan()
 			{
 				AddDoorway(true, Fixed, (Y + 0.5f) * S);
 			}
+			if (bService)
+			{
+				AddServiceDoorway(true, Fixed, (Y + 0.5f) * S, InWorld->GetServiceDoorDir().X > 0 ? 1.f : -1.f);
+			}
 		}
 		NextColumn();
 		break;
@@ -1214,7 +1376,8 @@ bool ABRChunk::StepPlan()
 		for (int32 X = X0; X <= X0 + N; ++X)
 		{
 			const EBREdge E = (X < X0 + N) ? InWorld->EdgeN(X, Y) : EBREdge::Open;
-			if (E == EBREdge::Wall)
+			const bool bService = E == EBREdge::Wall && X < X0 + N && InWorld->IsServiceDoorEdge(X, Y, false);
+			if (E == EBREdge::Wall && !bService)
 			{
 				if (RunStart == MIN_int32)
 				{
@@ -1232,6 +1395,10 @@ bool ABRChunk::StepPlan()
 			{
 				AddDoorway(false, Fixed, (X + 0.5f) * S);
 			}
+			if (bService)
+			{
+				AddServiceDoorway(false, Fixed, (X + 0.5f) * S, InWorld->GetServiceDoorDir().Y > 0 ? 1.f : -1.f);
+			}
 		}
 		NextColumn();
 		break;
@@ -1243,13 +1410,42 @@ bool ABRChunk::StepPlan()
 			// Niveau fini (v4.3) : murs d'enceinte a l'ouest et au sud (a l'est et au nord, ce sont des aretes de la grille)
 			if (D.BoundsChunks > 0)
 			{
+				// v4.13 : la porte de service du Level 0 peut couper un de ces murs : il est bati en deux, de part et d'autre
+				int32 DoorAt = MIN_int32;
 				if (Coord.X == -D.BoundsChunks)
 				{
-					AddWallSegment(true, X0 * S, Y0 * S - T * 0.5f, (Y0 + N) * S + T * 0.5f, 0.f, H, true, false);
+					for (int32 Y = Y0; Y < Y0 + N; ++Y)
+					{
+						DoorAt = InWorld->IsServiceDoorEdge(X0 - 1, Y, true) ? Y : DoorAt;
+					}
+					if (DoorAt == MIN_int32)
+					{
+						AddWallSegment(true, X0 * S, Y0 * S - T * 0.5f, (Y0 + N) * S + T * 0.5f, 0.f, H, true, false);
+					}
+					else
+					{
+						AddWallSegment(true, X0 * S, Y0 * S - T * 0.5f, DoorAt * S, 0.f, H, true, false);
+						AddWallSegment(true, X0 * S, (DoorAt + 1) * S, (Y0 + N) * S + T * 0.5f, 0.f, H, true, false);
+						AddServiceDoorway(true, X0 * S, (DoorAt + 0.5f) * S, -1.f);
+					}
 				}
+				DoorAt = MIN_int32;
 				if (Coord.Y == -D.BoundsChunks)
 				{
-					AddWallSegment(false, Y0 * S, X0 * S - T * 0.5f, (X0 + N) * S + T * 0.5f, 0.f, H, true, false);
+					for (int32 X = X0; X < X0 + N; ++X)
+					{
+						DoorAt = InWorld->IsServiceDoorEdge(X, Y0 - 1, false) ? X : DoorAt;
+					}
+					if (DoorAt == MIN_int32)
+					{
+						AddWallSegment(false, Y0 * S, X0 * S - T * 0.5f, (X0 + N) * S + T * 0.5f, 0.f, H, true, false);
+					}
+					else
+					{
+						AddWallSegment(false, Y0 * S, X0 * S - T * 0.5f, DoorAt * S, 0.f, H, true, false);
+						AddWallSegment(false, Y0 * S, (DoorAt + 1) * S, (X0 + N) * S + T * 0.5f, 0.f, H, true, false);
+						AddServiceDoorway(false, Y0 * S, (DoorAt + 0.5f) * S, -1.f);
+					}
 				}
 			}
 		}
@@ -1432,6 +1628,11 @@ bool ABRChunk::StepPlan()
 				&& !InWorld->IsPitRoomCell(X, Y) && !InWorld->IsMissionCell(X, Y))
 			{
 				BuildCellProps(X, Y);
+			}
+			FIntPoint ChalkNext;
+			if (InWorld->IsChalkMarkCell(X, Y, ChalkNext))
+			{
+				AddChalkMark(X, Y, ChalkNext); // v4.13 : le chemin de l'equipe de L. vers la porte de service
 			}
 		}
 		NextColumn();
@@ -1650,9 +1851,9 @@ void ABRChunk::BuildHidingSpots()
 			const FIntPoint Cell(Coord.X * N + static_cast<int32>(Hh % static_cast<uint32>(N)), Coord.Y * N + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
 			const FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
 			if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell)
-				|| W->IsPitRoomCell(Cell.X, Cell.Y) || W->IsMissionCell(Cell.X, Cell.Y))
+				|| W->IsPitRoomCell(Cell.X, Cell.Y) || W->IsMissionCell(Cell.X, Cell.Y) || W->IsServicePathCell(Cell.X, Cell.Y))
 			{
-				continue;
+				continue; // v4.13 : ni sur le chemin de la porte de service (une capsule y passe toujours en ligne droite)
 			}
 			// Contre un vrai mur (ni porte ni passage)
 			const FIntPoint Next(Cell.X + Dir.X, Cell.Y + Dir.Y);
@@ -2277,6 +2478,21 @@ void ABRChunk::PlanExits()
 	for (int32 i = 0; i < D.Exits.Num(); ++i)
 	{
 		const FBRExitDef& Ex = D.Exits[i];
+		if (Ex.Style == EBRExitStyle::ServiceDoor)
+		{
+			// v4.13 : porte de service : une seule, posee par le monde (ABRWorld::PlaceServiceDoor), dans le chunk de sa cellule
+			if (W->HasServiceDoor() && W->CellToChunk(W->GetServiceDoorCell()) == Coord)
+			{
+				FPlannedExit Door;
+				Door.Pos = W->GetServiceDoorLocation();
+				Door.Yaw = W->GetServiceDoorYaw();
+				Door.Target = Ex.Target;
+				Door.Style = Ex.Style;
+				ExitCells.Add(W->GetServiceDoorCell());
+				PlannedExits.Add(Door);
+			}
+			continue;
+		}
 		// Niveau fini : un nombre garanti de sorties de chaque sorte, tirees parmi les chunks (hors point de depart)
 		const bool bPicked = bBounded
 			? W->IsChunkPicked(Coord, 1100 + i, FMath::Max(1, FMath::RoundToInt(Ex.ChancePerChunk * W->BoundedChunkCount(true))), true)

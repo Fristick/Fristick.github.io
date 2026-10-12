@@ -7,6 +7,7 @@
 #include "BRTypes.h"
 #include "BRMissionLogic.h"
 #include "BRMechLogic.h"
+#include "BRStoryLogic.h"
 #include "BRSave.h"
 #include "BRWorld.generated.h"
 
@@ -183,6 +184,49 @@ struct FBRNetDeparture
 	float TopZ = 0.f;
 };
 
+/** v4.13 : etat narratif de la partie (BRStoryLogic), tenu par l'hote, replique (un client qui arrive le recoit) et
+ *  sauvegarde par l'hote. Aucun Tick : il change aux transitions, a la porte et aux evenements */
+USTRUCT()
+struct FBRNetStory
+{
+	GENERATED_BODY()
+
+	/** EBRSessionMode */
+	UPROPERTY()
+	uint8 Mode = 0;
+
+	/** BRStory::FState */
+	UPROPERTY()
+	int32 Reached = 0;
+
+	UPROPERTY()
+	uint32 Done = 0;
+
+	UPROPERTY()
+	uint32 Events = 0;
+
+	UPROPERTY()
+	uint32 ChapterEnds = 0;
+
+	UPROPERTY()
+	int32 Resume = 0;
+
+	UPROPERTY()
+	int32 Parked = -1;
+
+	/** Porte de service du Level 0 ouverte dans le niveau charge (FBRNetLevel::Serial ; 0 : fermee). L'etat de la porte
+	 *  appartient a l'hote : chacun la voit ouverte des que l'hote l'a ouverte, y compris en arrivant plus tard */
+	UPROPERTY()
+	int32 DoorSerial = 0;
+
+	/** Aide d'orientation du Level 0 donnee dans le niveau charge (FBRNetLevel::Serial ; 0 : aucune) */
+	UPROPERTY()
+	int32 HintSerial = 0;
+
+	UPROPERTY()
+	uint16 Rev = 0;
+};
+
 /** Objectif affiche dans l'inventaire (colonne OBJECTIFS) et dans le coin de l'ecran */
 struct FBRObjective
 {
@@ -336,6 +380,59 @@ public:
 	FString DestinationLabel(int32 Target) const;
 	/** Fin : continuer l'exploration (l'hote emmene le groupe vers un niveau au hasard) ou revenir au menu */
 	void CloseEnding(bool bContinue);
+
+	// ------------------------------------------------------------ v4.13 : histoire et porte de service (BRStoryWorld.cpp)
+	/** Hote : etat narratif de la partie (lu dans sa sauvegarde) et nature de la session. Chez un client : ignore */
+	void SetStory(const BRStory::FState& S, EBRSessionMode Mode);
+	/** Etat narratif courant (celui de l'hote, recu chez un client) */
+	BRStory::FState GetStory() const;
+	const FBRNetStory& GetNetStory() const { return NetStory; }
+	/** Hote : celle de sa partie (manette locale : partie choisie, rejouer, developpement) ; client : celle recue */
+	EBRSessionMode GetSessionMode() const;
+	bool IsStorySession() const { return GetSessionMode() == EBRSessionMode::Story; }
+	bool IsReplaySession() const { return GetSessionMode() == EBRSessionMode::Replay; }
+	bool HasStoryEvent(uint32 Event) const { return (NetStory.Events & Event) != 0; }
+	/** Hote : evenement narratif vu (une fois par partie, histoire seulement) */
+	void MarkStoryEvent(uint32 Event);
+	/** L'hote laisse-t-il entrer dans ce niveau (histoire et rejouer : fil narratif ; libre : disponibilite seule).
+	 *  OutReason : message dans la langue du joueur */
+	bool CanEnterLevel(int32 Level, FString* OutReason = nullptr) const;
+	/** Niveaux tires par "continuer l'exploration" apres une fin (disponibles, deja atteints dans l'histoire) */
+	void GetExplorationChoices(TArray<int32>& Out) const;
+	/** Level 0 : porte de service (posee une fois par le monde dans le mur d'enceinte, chemin garanti sans fosse) */
+	bool HasServiceDoor() const { return bServiceDoor; }
+	/** Cellule interieure devant la porte et direction vers l'exterieur (le mur d'enceinte) */
+	FIntPoint GetServiceDoorCell() const { return ServiceDoorCell; }
+	FIntPoint GetServiceDoorDir() const { return ServiceDoorDir; }
+	/** 0 : distance de marche visee ; 1 : repli deterministe (cellule de bord atteignable la plus proche de la cible) */
+	uint8 GetServiceDoorTier() const { return ServiceDoorTier; }
+	/** Arete d'enceinte de la porte : Est (bEast) ou Nord de la cellule (X, Y) ; X, Y peuvent etre hors de l'enceinte */
+	bool IsServiceDoorEdge(int32 X, int32 Y, bool bEast) const;
+	bool IsServiceDoorCell(int32 X, int32 Y) const { return bServiceDoor && ServiceDoorCell == FIntPoint(X, Y); }
+	/** Chemin du depart a la porte (cellules, sans salle de fosses) : marques a la craie de L. le long du chemin */
+	const TArray<FIntPoint>& GetServicePath() const { return ServicePath; }
+	bool IsServicePathCell(int32 X, int32 Y) const { return ServicePathIndex.Contains(FIntPoint(X, Y)); }
+	/** Marque de craie posee dans cette cellule du chemin (une sur trois ou quatre, jamais au depart) */
+	bool IsChalkMarkCell(int32 X, int32 Y, FIntPoint& OutNext) const;
+	/** Pied de la porte (face interieure du mur) et orientation (vers la piece) */
+	FVector GetServiceDoorLocation() const;
+	float GetServiceDoorYaw() const;
+	bool IsServiceDoorOpen() const { return NetStory.DoorSerial != 0 && NetStory.DoorSerial == LoadedSerial; }
+	/** Hote : la porte s'ouvre (depart demande devant elle) ; publie l'etat, chacun l'anime */
+	void ServerOpenServiceDoor(const ABRCharacter* By);
+	/** La porte construite par son chunk (elle prend l'etat ouvert ou ferme de l'hote) */
+	void RegisterServiceDoor(ABRExit* Door);
+	/** v4.13 (tests) : etat de l'aide d'orientation du Level 0 (secondes avant l'aide, -1 : aucune prevue) */
+	float GetDraftHintRemaining() const;
+	/** v4.13 : secondes depuis le debut du reveil du Level 0 (-1 : aucun reveil en cours ou joue) ; HUD (paupieres) */
+	float GetIntroElapsed() const;
+	/** v4.13 : l'aide d'orientation a ete donnee dans ce niveau (carnet) */
+	bool IsDraftHintGiven() const { return NetStory.HintSerial != 0 && NetStory.HintSerial == LoadedSerial; }
+	/** v4.13 : destination reelle d'une sortie de ce niveau (histoire : le niveau gare d'une ancienne partie apres les
+	 *  Poolrooms) */
+	int32 StoryDestination(int32 Target) const;
+	/** v4.13 : fin du reveil, appelee a la fin du fondu d'arrivee */
+	void StartPendingIntro();
 
 	// ------------------------------------------------------------ Niveaux
 	/** Lance une transition (fondu + effet "noclip") vers un niveau. -1 = niveau aleatoire.
@@ -720,6 +817,13 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_Departure)
 	FBRNetDeparture NetDeparture;
 
+	/** v4.13 : etat narratif et porte de service (hote) */
+	UPROPERTY(ReplicatedUsing = OnRep_Story)
+	FBRNetStory NetStory;
+
+	UFUNCTION()
+	void OnRep_Story();
+
 	UFUNCTION()
 	void OnRep_Mission();
 
@@ -950,6 +1054,50 @@ private:
 	/** v4.6 : niveau fini : murs perces d'une porte pour relier au depart les zones que les murs tires enfermaient
 	 *  (cle : (X * 2 + 1 pour une arete Est, Y)) */
 	TSet<FIntPoint> ForcedDoors;
+	// ---- v4.13 : histoire et porte de service (BRStoryWorld.cpp)
+	/** Hote : publie l'etat narratif (revision, replication, effets locaux) */
+	void PublishStory(const BRStory::FState& S);
+	/** Hote, apres le chargement d'un niveau : arrivee dans le fil, reveil et aide du Level 0 */
+	void OnStoryLevelLoaded();
+	/** Hote : la sortie de progression du niveau est prise vers Target. Met a jour l'histoire (etape accomplie, fin de
+	 *  chapitre) et renvoie la destination reelle (niveau gare d'une ancienne partie) ; OutSeed : graine de la session
+	 *  garee a restaurer (0 : niveau neuf) */
+	int32 StoryOnLeave(int32 Target, uint32& OutSeed);
+	/** Niveau fini avec une porte de service : cellule de bord, chemin, repli (appele par PrepareLevelLayout) */
+	void PlaceServiceDoor();
+	/** Effets locaux d'un changement d'etat narratif (porte, reveil, aide, inscription) */
+	void ApplyStoryLocal(bool bInitial);
+	/** Mode de la session chez l'hote (sa manette locale le connait) */
+	EBRSessionMode HostSessionMode() const;
+	/** Level 0 : reveil (une fois par partie) et aide d'orientation apres une longue errance */
+	void PlayIntroWake();
+	void OnDraftHint();
+	void ShowDraftHint();
+	bool bServiceDoor = false;
+	uint8 ServiceDoorTier = 0;
+	FIntPoint ServiceDoorCell = FIntPoint::ZeroValue;
+	FIntPoint ServiceDoorDir = FIntPoint(1, 0);
+	TArray<FIntPoint> ServicePath;
+	/** Cellule du chemin -> rang depuis le depart */
+	TMap<FIntPoint, int32> ServicePathIndex;
+	TWeakObjectPtr<ABRExit> ServiceDoorActor;
+	uint32 SeenStoryEvents = 0;
+	int32 SeenDoorSerial = 0;
+	/** Le reveil du Level 0 a ete joue pour ce niveau charge (numero) ; l'aide d'orientation aussi */
+	int32 IntroPlayedSerial = 0;
+	int32 HintShownSerial = 0;
+	FTimerHandle DraftHintTimer;
+	FTimerHandle IntroUnlockTimer;
+	/** Reveil demande pendant le fondu d'arrivee : il commence a la fin du fondu */
+	bool bIntroPending = false;
+	double IntroStartTime = -1.0;
+	/** Premier etat narratif recu (client) : pas d'effet pour ce qui s'est passe avant l'arrivee */
+	bool bStorySeen = false;
+	void EndIntroWake();
+	/** Lit l'etat narratif dans la sauvegarde de l'hote si personne ne l'a encore donne (premiere construction) */
+	void EnsureStoryLoaded();
+	/** L'etat narratif de la sauvegarde de l'hote a ete lu (une fois par carte) */
+	bool bStoryLoaded = false;
 	/** Serveur : graine imposee a la prochaine transition (console BRSeed, mode developpeur) */
 	uint32 PendingSeed = 0;
 	void UpdateBlackout(float Dt);

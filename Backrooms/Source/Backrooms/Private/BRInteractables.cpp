@@ -345,6 +345,12 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 		SetupMesh(TEXT("SM_ExitDoor"), FVector(6.f, 95.f, 210.f), FLinearColor(0.3f, 0.35f, 0.3f));
 		SetupInteractBox(FVector(10.f, 0.f, 105.f), FVector(15.f, 50.f, 105.f));
 		break;
+	case EBRExitStyle::ServiceDoor:
+		// v4.13 : vraie porte de service (cadre, charnieres, battant sur pivot, poignees), dans l'ouverture que le chunk
+		// laisse dans le mur d'enceinte ; le sas de beton est derriere
+		BuildServiceDoor();
+		SetupInteractBox(FVector(10.f, 0.f, 105.f), FVector(15.f, ServiceHoleWidth * 0.5f - 7.f, 105.f));
+		break;
 	}
 
 	// Petite lueur pour reperer les portes (sauf dans le noir total du Niveau 6)
@@ -387,6 +393,26 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 		}
 	}
 
+	// v4.13 : la porte de service se reconnait a l'oreille par son courant d'air (pas de bourdonnement de sortie) ;
+	// elle prend l'etat ouvert ou ferme de l'hote des sa construction
+	if (Style == EBRExitStyle::ServiceDoor)
+	{
+		USoundBase* Draft = A->Sound(TEXT("S_Draft"));
+		if (!Draft)
+		{
+			Draft = A->Sound(TEXT("S_Amb_Wind"));
+		}
+		if (Draft)
+		{
+			Audio->SetSound(Draft);
+			Audio->AttenuationSettings = A->Attenuation(1100.f, false);
+			Audio->SetVolumeMultiplier(0.4f);
+			Audio->SetRelativeLocation(FVector(-D.WallThickness - 30.f, 0.f, 30.f));
+			Audio->Play(FMath::FRandRange(0.f, 4.f));
+		}
+		W->RegisterServiceDoor(this);
+		return;
+	}
 	// Un bourdonnement discret aide a trouver les sorties a l'oreille
 	if (USoundBase* Hum = A->Sound(TEXT("S_ExitHum")))
 	{
@@ -448,6 +474,20 @@ void ABRExit::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	Time += DeltaSeconds;
+	if (DoorPivot)
+	{
+		// v4.13 : battant de la porte de service : rapide au debut, freine en fin de course ; le Tick s'arrete ensuite
+		const float Remaining = DoorYawTarget - DoorYaw;
+		const float Speed = 40.f + 2.6f * FMath::Abs(Remaining);
+		DoorYaw = FMath::FInterpConstantTo(DoorYaw, DoorYawTarget, DeltaSeconds, Speed);
+		DoorPivot->SetRelativeRotation(FRotator(0.f, DoorYaw, 0.f));
+		if (FMath::IsNearlyEqual(DoorYaw, DoorYawTarget, 0.01f))
+		{
+			DoorYaw = DoorYawTarget;
+			SetActorTickEnabled(false);
+		}
+		return;
+	}
 	if (GlitchMID)
 	{
 		const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 7.f) * FMath::Sin(Time * 2.3f);
@@ -483,7 +523,9 @@ bool ABRExit::IsSealed() const
 FString ABRExit::DestinationLabel() const
 {
 	const ABRWorld* W = ABRWorld::Get(this);
-	const BRContent::FExitResolution R = BRLevels::ResolveExit(W ? W->GetLevelNumber() : 0, Target);
+	// v4.13 : apres les Poolrooms, une ancienne partie retrouve son niveau gare (la meme regle que le depart)
+	const int32 Dest = W ? W->StoryDestination(Target) : Target;
+	const BRContent::FExitResolution R = BRLevels::ResolveExit(W ? W->GetLevelNumber() : 0, Dest);
 	switch (R.Kind)
 	{
 	case BRContent::EExit::Ending:
@@ -517,6 +559,8 @@ FString ABRExit::GetPrompt() const
 	}
 	switch (Style)
 	{
+	case EBRExitStyle::ServiceDoor:
+		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyOpenServiceDoor", "{Key} Ouvrir la porte de service  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::Door:
 		return BRLoc::Fmt(NSLOCTEXT("BR", "Interact.KeyOuvrirPorteSecoursDest", "{Key} Ouvrir la porte de secours  ({Dest})"), { { TEXT("Key"), BRLoc::Arg(Key) }, { TEXT("Dest"), BRLoc::Arg(Dest) } });
 	case EBRExitStyle::HotelDoor:
@@ -596,6 +640,20 @@ void ABRExit::Use(ABRCharacter* By)
 		}
 		return;
 	}
+	if (Style == EBRExitStyle::ServiceDoor)
+	{
+		if (!W->IsNetGame())
+		{
+			// v4.13 : seul : la porte s'ouvre vraiment (poignee, charnieres, air froid), puis le depart
+			bUsed = true;
+			LeaveBy = By;
+			W->ServerOpenServiceDoor(By);
+			GetWorldTimerManager().SetTimer(LeaveTimer, this, &ABRExit::LeaveAfterDoor, ServiceLeaveDelay, false);
+			return;
+		}
+		Leave(By); // en ligne : l'hote ouvre la porte pour tout le groupe et lance le rassemblement
+		return;
+	}
 	if (IsInteractable())
 	{
 		if (UBRAssets* A = UBRAssets::Get(this))
@@ -607,6 +665,154 @@ void ABRExit::Use(ABRCharacter* By)
 		}
 	}
 	Leave(By);
+}
+
+void ABRExit::LeaveAfterDoor()
+{
+	ABRCharacter* By = LeaveBy.Get();
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!By || !W || By->IsDead() || W->IsTransitioning())
+	{
+		bUsed = false; // mort ou transition entre-temps : la porte reste ouverte, on pourra repartir
+		return;
+	}
+	Leave(By);
+}
+
+void ABRExit::BuildServiceDoor()
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	ABRWorld* W = ABRWorld::Get(this);
+	if (!A || !W || !A->Cube())
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float T = D.WallThickness;
+	const float Clear = ServiceHoleWidth - 20.f; // passage libre (jambages de 10 cm)
+	const float HoleH = ServiceHoleHeight;
+	// Acier peint gris-vert, cadre gris, quincaillerie brossee, plaque sombre
+	UMaterialInterface* FrameMat = A->NewSurface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.55f, 0.56f, 0.53f), 90.f, 0.45f, 0.55f), this);
+	UMaterialInterface* LeafMat = A->NewSurface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.40f, 0.46f, 0.43f), 120.f, 0.5f, 0.5f), this);
+	UMaterialInterface* MetalMat = A->NewSurface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.78f, 0.77f, 0.73f), 50.f, 0.28f, 1.f), this);
+	UMaterialInterface* PlateMat = A->NewSurface(FBRSurface(TEXT("T_Grime"), FLinearColor(0.08f, 0.08f, 0.075f), 60.f, 0.6f, 0.3f), this);
+	auto Part = [this, A](USceneComponent* Parent, const FVector& Center, const FVector& Size, UMaterialInterface* Mat, bool bCollide)
+	{
+		UStaticMeshComponent* P = NewObject<UStaticMeshComponent>(this);
+		P->SetupAttachment(Parent);
+		P->SetStaticMesh(A->Cube());
+		P->SetRelativeLocation(Center);
+		P->SetRelativeScale3D(Size / 100.f);
+		P->SetMaterial(0, Mat);
+		if (bCollide)
+		{
+			P->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+			P->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		}
+		else
+		{
+			P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		P->RegisterComponent();
+		LadderParts.Add(P);
+		return P;
+	};
+	// Repere local : X vers la piece, le mur d'enceinte va de X = 0 (face interieure) a X = -T (face exterieure)
+	Part(Root, FVector(-T * 0.5f + 1.f, -(Clear * 0.5f + 5.f), HoleH * 0.5f), FVector(T + 2.f, 10.f, HoleH), FrameMat, true);
+	Part(Root, FVector(-T * 0.5f + 1.f, Clear * 0.5f + 5.f, HoleH * 0.5f), FVector(T + 2.f, 10.f, HoleH), FrameMat, true);
+	Part(Root, FVector(-T * 0.5f + 1.f, 0.f, HoleH - 5.f), FVector(T + 2.f, ServiceHoleWidth, 10.f), FrameMat, true);
+	// Butee du battant (le battant s'ouvre vers le sas) et seuil
+	Part(Root, FVector(-T + 2.f, 0.f, HoleH - 12.f), FVector(4.f, Clear, 4.f), FrameMat, false);
+	Part(Root, FVector(-T * 0.5f, 0.f, 0.8f), FVector(T, Clear, 1.6f), MetalMat, false);
+	// Trois charnieres, cote gauche vu de la piece
+	for (const float Z : { 28.f, 110.f, 192.f })
+	{
+		Part(Root, FVector(-T + 6.f, -Clear * 0.5f + 1.5f, Z), FVector(4.f, 4.f, 13.f), MetalMat, false);
+	}
+	// Battant sur son pivot (charniere), pres de la face exterieure
+	DoorPivot = NewObject<USceneComponent>(this);
+	DoorPivot->SetupAttachment(Root);
+	DoorPivot->SetRelativeLocation(FVector(-T + 8.f, -Clear * 0.5f + 1.5f, 0.f));
+	DoorPivot->RegisterComponent();
+	const float LeafW = Clear - 3.f;
+	const float LeafH = HoleH - 14.f;
+	constexpr float LeafT = 4.5f;
+	DoorLeaf = Part(DoorPivot, FVector(0.f, LeafW * 0.5f, LeafH * 0.5f + 1.5f), FVector(LeafT, LeafW, LeafH), LeafMat, true);
+	// Plaque "SERVICE" cote piece (lettres effacees), barre de poussee cote sas, poignee bequille des deux cotes
+	Part(DoorPivot, FVector(LeafT * 0.5f + 0.4f, LeafW * 0.5f, 165.f), FVector(0.8f, 36.f, 10.f), PlateMat, false);
+	Part(DoorPivot, FVector(-(LeafT * 0.5f + 3.f), LeafW * 0.5f, 100.f), FVector(4.f, LeafW - 24.f, 4.f), MetalMat, false);
+	for (int32 Side = -1; Side <= 1; Side += 2)
+	{
+		Part(DoorPivot, FVector(Side * (LeafT * 0.5f + 1.2f), LeafW - 9.f, 104.f), FVector(2.4f, 5.5f, 22.f), MetalMat, false);
+		Part(DoorPivot, FVector(Side * (LeafT * 0.5f + 4.2f), LeafW - 16.f, 108.f), FVector(2.4f, 14.f, 2.6f), MetalMat, false);
+	}
+	// L'air froid se voit aussi : un filet de lumiere froide sous la porte (seuil eclaire par le sas)
+	if (UMaterialInstanceDynamic* Glow = A->NewGlow(this, FLinearColor(0.7f, 0.85f, 1.f), 1.6f))
+	{
+		Part(Root, FVector(-T + 2.f, 0.f, 1.8f), FVector(3.f, Clear - 8.f, 0.8f), Glow, false);
+	}
+	// Lampe froide du sas (ombres : elle n'eclaire la piece que porte ouverte)
+	Light = NewObject<UPointLightComponent>(this);
+	Light->SetupAttachment(Root);
+	Light->SetRelativeLocation(FVector(-T - 160.f, 0.f, 215.f));
+	Light->SetIntensityUnits(ELightUnits::Lumens);
+	Light->SetIntensity(260.f);
+	Light->SetLightColor(FLinearColor(0.72f, 0.84f, 1.f));
+	Light->SetAttenuationRadius(520.f);
+	Light->SetCastShadows(true);
+	Light->RegisterComponent();
+}
+
+void ABRExit::SetServiceDoorOpen(bool bOpen, bool bAnimate)
+{
+	if (!DoorPivot)
+	{
+		return;
+	}
+	const bool bChanged = bDoorOpen != bOpen;
+	bDoorOpen = bOpen;
+	DoorYawTarget = bOpen ? 95.f : 0.f;
+	if (!bAnimate || !bChanged)
+	{
+		DoorYaw = DoorYawTarget;
+		DoorPivot->SetRelativeRotation(FRotator(0.f, DoorYaw, 0.f));
+		return;
+	}
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		USoundBase* S = A->Sound(TEXT("S_ServiceDoor"));
+		if (!S)
+		{
+			S = A->Sound(TEXT("S_Door"));
+		}
+		if (S)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation() + FVector(0.f, 0.f, 110.f), 0.9f, 1.f, 0.f, A->Attenuation(2200.f, false));
+		}
+	}
+	if (bOpen)
+	{
+		ABRHUD::Caption(this, BR_STR(NSLOCTEXT("BR", "Caption.ServiceDoorOpens", "[La poignée cède. La porte s'ouvre sur un escalier de béton, l'air est glacé.]")),
+			GetActorLocation(), 4.f);
+	}
+	SetActorTickEnabled(true);
+}
+
+void ABRExit::BoostDraft()
+{
+	if (Style != EBRExitStyle::ServiceDoor || !Audio)
+	{
+		return;
+	}
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		Audio->AttenuationSettings = A->Attenuation(2600.f, false);
+		Audio->SetVolumeMultiplier(0.7f);
+		if (!Audio->IsPlaying())
+		{
+			Audio->Play();
+		}
+	}
 }
 
 void ABRExit::Leave(ABRCharacter* By)

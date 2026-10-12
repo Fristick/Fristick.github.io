@@ -43,12 +43,7 @@ FString BRMissionText::DeviceName(const BRM::FPlan& P, int32 Dev)
 	const BRM::FDevice& D = P.Devices[Dev];
 	switch (D.Role)
 	{
-	case BRM::R_Anomaly: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.Anomaly", "N\u00e9on anormal (motif {Sym})"), { { TEXT("Sym"), BRLoc::Arg(Symbol(D.Label)) } });
 	case BRM::R_MaintNote: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.MaintNote", "Note de maintenance"));
-	case BRM::R_Dial: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.Dial", "Cadran {Sym}"), { { TEXT("Sym"), BRLoc::Arg(Symbol(D.Label)) } });
-	case BRM::R_Stabilize: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.Stabilize", "Bouton STABILISER"));
-	case BRM::R_RouteLever: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.RouteLever", "Levier d'aiguillage"));
-	case BRM::R_Passage: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.Passage", "Passage instable"));
 	case BRM::R_Schematic: return BR_STR(NSLOCTEXT("BR", "Mission.Dev.Schematic", "Sch\u00e9ma de distribution"));
 	case BRM::R_Fuse: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.Fuse", "Fusible {L}"), { { TEXT("L"), BRLoc::Arg(L(D.Label)) } });
 	case BRM::R_FuseSocket: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Dev.FuseSocket", "Porte-fusible {L}"), { { TEXT("L"), BRLoc::Arg(L(D.Label)) } });
@@ -135,9 +130,6 @@ FString BRMissionText::DeviceState(const BRM::FPlan& P, const BRM::FState& S, in
 		case BRM::R_Breaker:
 		case BRM::R_Relay:
 			return V ? On : Off;
-		case BRM::R_RouteLever:
-			return V ? BR_STR(NSLOCTEXT("BR", "Mission.State.RoutePool", "route : Poolrooms"))
-				: BR_STR(NSLOCTEXT("BR", "Mission.State.RouteL1", "route : Niveau 1"));
 		case BRM::R_StreetBox:
 			return V ? BRLoc::Fmt(NSLOCTEXT("BR", "Mission.State.Circuit", "circuit {N}"), { { TEXT("N"), BRLoc::Int(V) } })
 				: BR_STR(NSLOCTEXT("BR", "Mission.State.Disconnected", "d\u00e9connect\u00e9"));
@@ -299,11 +291,9 @@ void BRMissionText::ClueLines(const BRM::FClue& C, TArray<FString>& Out)
 
 FString BRMissionText::StepTitle(int32 Level, int32 Step)
 {
+	// v4.13 : plus de texte de mission pour le Level 0 (introduction sans enigme : porte de service)
 	switch (Level * 10 + Step)
 	{
-	case 0: return BR_STR(NSLOCTEXT("BR", "Mission.Step.0.0", "Documenter les n\u00e9ons anormaux"));
-	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Step.0.1", "R\u00e9gler le panneau et stabiliser le passage"));
-	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Step.0.2", "Choisir la route au levier, puis partir"));
 	case 10: return BR_STR(NSLOCTEXT("BR", "Mission.Step.1.0", "Lire le sch\u00e9ma de distribution"));
 	case 11: return BR_STR(NSLOCTEXT("BR", "Mission.Step.1.1", "Poser les fusibles de l'ascenseur"));
 	case 12: return BR_STR(NSLOCTEXT("BR", "Mission.Step.1.2", "Alimenter et appeler l'ascenseur"));
@@ -346,9 +336,6 @@ FString BRMissionText::StepHint(int32 Level, int32 Step)
 	const FString K = Key();
 	switch (Level * 10 + Step)
 	{
-	case 0: return BRLoc::Fmt(NSLOCTEXT("BR", "Mission.Hint.0.0", "Trois n\u00e9ons portent un motif peint et clignotent par s\u00e9ries, puis s'arr\u00eatent. Regardez-en un en maintenant {Key} : le cam\u00e9scope du sac enregistre le rythme."), { { TEXT("Key"), BRLoc::Arg(K) } });
-	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.0.1", "Le panneau de stabilisation porte trois cadrans marqu\u00e9s d'un motif. Chacun attend le rythme du n\u00e9on au m\u00eame motif. Une erreur ne co\u00fbte rien : le panneau dit combien de cadrans sont faux."));
-	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.0.2", "Le levier d'aiguillage ouvre soit le mur vers le Niveau 1, soit la trappe vers les Poolrooms. Vous pouvez changer d'avis tant que personne n'est parti."));
 	case 10: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.1.0", "Le sch\u00e9ma est affich\u00e9 pr\u00e8s du d\u00e9part, sur un panneau m\u00e9tallique. Il dit quels circuits alimentent l'ascenseur."));
 	case 11: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.1.1", "Les fusibles sont marqu\u00e9s d'une lettre et dispers\u00e9s dans le parking. Chacun ne va que dans le porte-fusible de sa lettre, dans la salle \u00e9lectrique."));
 	case 12: return BR_STR(NSLOCTEXT("BR", "Mission.Hint.1.2", "Deux circuits au plus peuvent \u00eatre allum\u00e9s. \u00c9teignez ce qui ne sert pas l'ascenseur avant de l'appeler."));
@@ -456,7 +443,6 @@ FString BRMissionText::SolvedLine(int32 Level)
 {
 	switch (Level)
 	{
-	case 0: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.0", "Le passage se stabilise : la route choisie au levier est ouverte."));
 	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.1", "Le courant revient : l'ascenseur arrive et la porte de service se d\u00e9verrouille."));
 	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.2", "La pression s'\u00e9quilibre : la vapeur se dissipe devant la porte."));
 	case 3: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.3", "Les secteurs sont aliment\u00e9s : l'ascenseur se remet en marche."));
@@ -476,7 +462,6 @@ FString BRMissionText::OptionalLine(int32 Level)
 {
 	switch (Level)
 	{
-	case 0: return BR_STR(NSLOCTEXT("BR", "Mission.Optional.0", "Facultatif : retrouver au moins trois cassettes VHS (souvenirs)"));
 	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Optional.1", "Facultatif : \u00e9clairer la r\u00e9serve et lire le carnet du gardien"));
 	case 4: return BR_STR(NSLOCTEXT("BR", "Mission.Optional.4", "Facultatif : consulter le dossier du personnel"));
 	case 5: return BR_STR(NSLOCTEXT("BR", "Mission.Optional.5", "Facultatif : trouver la note du personnel"));
