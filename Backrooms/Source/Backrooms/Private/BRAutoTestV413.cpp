@@ -348,7 +348,7 @@ void ABRAutoTest::AddV413Steps()
 		BRSaves::ReplaySession() = false;
 		PC->ActiveSave = S;
 		PC->bDevSession = false;
-		W->SetStory(S->GetStory(), EBRSessionMode::Story);
+		W->SetStory(S->GetStory(), EBRSessionMode::Story, true);
 		W->RequestTransition(0, false, ABRWorld::SeedFromUser(StorySeed, 0));
 		Note(FString::Printf(TEXT("partie d'histoire de test ecrite %s (emplacement %d, format %d)"), Oui(bWritten), StorySlot, UBRSaveGame::CurrentVersion), !bWritten);
 		return true;
@@ -405,7 +405,74 @@ void ABRAutoTest::AddV413Steps()
 		Note(FString::Printf(TEXT("Poolrooms demandees directement : %s"), bOk ? TEXT("refuse, toujours au Level 0") : TEXT("TRANSITION LANCEE")), !bOk);
 		return true;
 	});
+	// La porte est tiree une fois par partie : la mort (retour au Level 0), la reprise d'une sauvegarde et un rechargement
+	// redonnent la meme graine du Level 0, donc la meme porte (relue dans l'etat de l'histoire, pas retiree)
+	struct FReload { const TCHAR* Name; int32 Kind; };
+	for (const FReload R : { FReload{ TEXT("mort"), 0 }, FReload{ TEXT("sauvegarde et reprise"), 1 }, FReload{ TEXT("rechargement"), 2 } })
+	{
+		const FString Name = R.Name;
+		const int32 Kind = R.Kind;
+		Add(FString::Printf(TEXT("v4.13 porte stable : %s"), *Name), 0.f, [this, Kind]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRPlayerController* PC = GetPC();
+			if (!W || !PC || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 0)
+			{
+				return false;
+			}
+			TestDoorCell = W->GetServiceDoorCell();
+			TestDoorDir = W->GetServiceDoorDir();
+			TestDoorSeed = W->GetSeed();
+			TestCountA = W->GetLevelSerial();
+			if (Kind == 1)
+			{
+				// Sauvegarde puis reprise comme CONTINUER : la graine vient de la partie, pas de la demande
+				PC->WriteActiveSave(true);
+				const UBRSaveGame* L = BRSaves::Load(StorySlot);
+				TestCountB = L && L->StoryIntroSeed == TestDoorSeed && L->StoryDoorX == TestDoorCell.X && L->StoryDoorY == TestDoorCell.Y && L->StoryDoorDir >= 0
+					&& L->StoryDoorVersion == BRStory::DoorPlaceVersion ? 1 : 0;
+				W->RequestTransition(0, false, 0u);
+			}
+			else
+			{
+				TestCountB = 1;
+				W->RequestTransition(0, Kind == 0, 0u);
+			}
+			return true;
+		});
+		Add(FString::Printf(TEXT("v4.13 porte stable : %s, verification"), *Name), 1.f, [this, Name]()
+		{
+			ABRWorld* W = GetBRWorld();
+			if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelSerial() == TestCountA)
+			{
+				return StepTime > 40.f;
+			}
+			const BRStory::FState S = W->GetStory();
+			const bool bSame = W->GetSeed() == TestDoorSeed && W->GetServiceDoorCell() == TestDoorCell && W->GetServiceDoorDir() == TestDoorDir;
+			const bool bOk = bSame && W->WasServiceDoorRestored() && S.IntroSeed == TestDoorSeed && S.DoorX == TestDoorCell.X && S.DoorY == TestDoorCell.Y
+				&& !W->IsServiceDoorOpen() && W->GetLevelNumber() == 0 && TestCountB == 1;
+			Note(FString::Printf(TEXT("%s : graine %u -> %u, porte (%d, %d) -> (%d, %d), sens (%d, %d) -> (%d, %d), relue dans l'histoire %s, sauvegarde %s, "
+				"histoire : graine %u, porte (%d, %d) sens %d version %d, fermee %s"), *Name, TestDoorSeed, W->GetSeed(), TestDoorCell.X, TestDoorCell.Y,
+				W->GetServiceDoorCell().X, W->GetServiceDoorCell().Y, TestDoorDir.X, TestDoorDir.Y, W->GetServiceDoorDir().X, W->GetServiceDoorDir().Y,
+				Oui(W->WasServiceDoorRestored()), TestCountB == 1 ? TEXT("conforme") : TEXT("NON CONFORME"), S.IntroSeed, S.DoorX, S.DoorY, S.DoorDir, S.DoorVersion, Oui(!W->IsServiceDoorOpen())), !bOk);
+			return true;
+		});
+	}
 	AddServiceDoorWalkSteps(TEXT("histoire"), true);
+	Add(TEXT("v4.13 porte stable : apres ouverture"), 0.f, [this]()
+	{
+		// Au Niveau 1, l'histoire garde la porte et son etat ouvert : un retour au Level 0 la retrouve ouverte, au meme endroit
+		ABRWorld* W = GetBRWorld();
+		if (!W)
+		{
+			return false;
+		}
+		const BRStory::FState S = W->GetStory();
+		const bool bOk = S.IntroSeed == TestDoorSeed && S.DoorX == TestDoorCell.X && S.DoorY == TestDoorCell.Y && (S.Events & BRStory::Event::DoorOpened) != 0;
+		Note(FString::Printf(TEXT("apres la porte : graine du Level 0 gardee %s, porte gardee %s, ouverte %s"), Oui(S.IntroSeed == TestDoorSeed),
+			Oui(S.DoorX == TestDoorCell.X && S.DoorY == TestDoorCell.Y), Oui((S.Events & BRStory::Event::DoorOpened) != 0)), !bOk);
+		return true;
+	});
 	Add(TEXT("v4.13 histoire : Level 0 accompli"), 0.5f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();

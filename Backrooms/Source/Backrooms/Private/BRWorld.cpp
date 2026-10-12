@@ -151,7 +151,10 @@ void ABRWorld::BeginPlay()
 
 	// v4.7 : l'hote reprend une partie en ligne : la carte vient d'etre rechargee, la session attend son niveau
 	const FBRSessionState& Resume = BRSaves::PendingResume();
-	LoadLevelNow(StartLevel, (Resume.bValid && Resume.Level == StartLevel) ? Resume.Seed : 0u);
+	// v4.13 : une partie hebergee au Level 0 retrouve le Level 0 de la partie (sa graine), sans session a reprendre
+	const uint32 IntroSeed = BRSaves::PendingIntroSeed();
+	BRSaves::PendingIntroSeed() = 0;
+	LoadLevelNow(StartLevel, (Resume.bValid && Resume.Level == StartLevel) ? Resume.Seed : (StartLevel == 0 ? IntroSeed : 0u));
 	TransState = ETrans::FadingIn;
 	TransTimer = 0.f;
 	Fade = 1.f;
@@ -505,6 +508,18 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		Seed = SeedFromUser(FixedSeed, LevelNumber);
 	}
 	Seed = Seed != 0 ? Seed : 1u;
+	// v4.13 : le Level 0 d'une partie (histoire, rejouer) a sa graine, tiree une fois a la nouvelle partie puis gardee :
+	// une mort, un retour, une reprise ou une reconnexion retrouvent la meme disposition et la porte au meme endroit.
+	// Une graine imposee (reprise d'une session, test) est utilisee telle quelle ; -BRSeed ne remplace pas celle d'une
+	// partie deja commencee
+	if (LevelNumber == 0 && HasAuthority() && HostSessionMode() != EBRSessionMode::Free)
+	{
+		EnsureStoryLoaded();
+		if (InSeed == 0 && NetStory.IntroSeed != 0)
+		{
+			Seed = NetStory.IntroSeed;
+		}
+	}
 	// v4.6 : salles de fosses et cellules atteignables du niveau fini (avant la construction des chunks)
 	PrepareLevelLayout();
 	// v4.13 : porte de service du Level 0 et chemin balise (apres les portes forcees : chemin garanti sans fosse)

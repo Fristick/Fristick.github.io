@@ -60,7 +60,21 @@ namespace BRStory
 		int Resume = 0;
 		/** Ancienne partie : niveau ou reprendre ses progres apres l'etape manquante des Poolrooms (-1 : aucun) */
 		int Parked = -1;
+		/** Level 0 de la partie : graine tiree a la nouvelle partie (0 : pas encore tiree). Mort, retour, reprise,
+		 *  reconnexion : le meme Level 0, la porte au meme endroit */
+		uint32_t IntroSeed = 0;
+		/** Porte de service retenue pour IntroSeed : cellule, face vers l'exterieur (0 +X, 1 -X, 2 +Y, 3 -Y ; -1 : aucune),
+		 *  palier du choix (0 bande visee, 1 bande elargie, 2 secours) et version de generation (DoorPlaceVersion) */
+		int DoorX = 0;
+		int DoorY = 0;
+		int DoorDir = -1;
+		int DoorTier = 0;
+		int DoorVersion = 0;
 	};
+
+	/** Version du placement de la porte de service (bande visee, bande elargie, secours). Une porte sauvegardee reste
+	 *  a sa place tant qu'elle est encore un emplacement valide, meme si cette version change */
+	constexpr int DoorPlaceVersion = 2;
 
 	bool IsDone(const FState& S, int Level);
 	void SetDone(FState& S, int Level);

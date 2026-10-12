@@ -268,6 +268,10 @@ private:
 	int32 TestCountC = 0;
 	uint64 TestPickup = 0;
 	FVector TestExitSpot = FVector::ZeroVector;
+	/** Porte de service relevee avant un rechargement (v4.13 : meme porte apres la mort, la reprise, le rechargement) */
+	FIntPoint TestDoorCell = FIntPoint::ZeroValue;
+	FIntPoint TestDoorDir = FIntPoint::ZeroValue;
+	uint32 TestDoorSeed = 0;
 	/** Partie active et mode de session avant le test de l'ancienne partie (retablis ensuite) */
 	int32 TestOrigSlot = INDEX_NONE;
 	bool bTestDevSession = true;

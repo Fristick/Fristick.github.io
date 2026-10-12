@@ -38,7 +38,36 @@ namespace
 		S.ChapterEnds = N.ChapterEnds;
 		S.Resume = N.Resume;
 		S.Parked = N.Parked;
+		S.IntroSeed = N.IntroSeed;
+		S.DoorX = N.DoorX;
+		S.DoorY = N.DoorY;
+		S.DoorDir = N.DoorDir;
+		S.DoorTier = N.DoorTier;
+		S.DoorVersion = N.DoorVersion;
 		return S;
+	}
+
+	void CopyState(FBRNetStory& N, const BRStory::FState& S)
+	{
+		N.Reached = S.Reached;
+		N.Done = S.Done;
+		N.Events = S.Events;
+		N.ChapterEnds = S.ChapterEnds;
+		N.Resume = S.Resume;
+		N.Parked = S.Parked;
+		N.IntroSeed = S.IntroSeed;
+		N.DoorX = S.DoorX;
+		N.DoorY = S.DoorY;
+		N.DoorDir = S.DoorDir;
+		N.DoorTier = static_cast<uint8>(FMath::Clamp(S.DoorTier, 0, 255));
+		N.DoorVersion = static_cast<uint8>(FMath::Clamp(S.DoorVersion, 0, 255));
+	}
+
+	/** Face de la porte (BRStory::FState::DoorDir) : 0 +X, 1 -X, 2 +Y, 3 -Y */
+	FIntPoint ServiceDoorDirOf(int32 Idx)
+	{
+		const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+		return Idx >= 0 && Idx < 4 ? Dirs[Idx] : FIntPoint::ZeroValue;
 	}
 
 	/** Duree du reveil (entrees bloquees) et delai avant l'aide d'orientation du Level 0 */
@@ -83,15 +112,10 @@ void ABRWorld::EnsureStoryLoaded()
 	bStoryLoaded = true;
 	const BRStory::FState S = Save->GetStory();
 	SeenStoryEvents = S.Events; // deja vus dans cette partie : rien n'est rejoue
-	NetStory.Reached = S.Reached;
-	NetStory.Done = S.Done;
-	NetStory.Events = S.Events;
-	NetStory.ChapterEnds = S.ChapterEnds;
-	NetStory.Resume = S.Resume;
-	NetStory.Parked = S.Parked;
+	CopyState(NetStory, S);
 }
 
-void ABRWorld::SetStory(const BRStory::FState& S, EBRSessionMode Mode)
+void ABRWorld::SetStory(const BRStory::FState& S, EBRSessionMode Mode, bool bLevelChanging)
 {
 	if (!HasAuthority())
 	{
@@ -102,14 +126,9 @@ void ABRWorld::SetStory(const BRStory::FState& S, EBRSessionMode Mode)
 	SeenStoryEvents = S.Events; // evenements deja vus dans cette partie : seuls les nouveaux auront un effet
 	UE_LOG(LogBackrooms, Log, TEXT("[Story] Partie appliquee : mode %d, atteint %d, etapes 0x%x, evenements 0x%x, fins 0x%x, reprise %d, gare %d"),
 		static_cast<int32>(Mode), S.Reached, S.Done, S.Events, S.ChapterEnds, S.Resume, S.Parked);
-	if (bLevelReady)
+	if (bLevelReady && !bLevelChanging && !IsTransitioning())
 	{
-		NetStory.Reached = S.Reached;
-		NetStory.Done = S.Done;
-		NetStory.Events = S.Events;
-		NetStory.ChapterEnds = S.ChapterEnds;
-		NetStory.Resume = S.Resume;
-		NetStory.Parked = S.Parked;
+		CopyState(NetStory, S);
 		OnStoryLevelLoaded();
 		return;
 	}
@@ -122,12 +141,7 @@ void ABRWorld::PublishStory(const BRStory::FState& S)
 	{
 		return;
 	}
-	NetStory.Reached = S.Reached;
-	NetStory.Done = S.Done;
-	NetStory.Events = S.Events;
-	NetStory.ChapterEnds = S.ChapterEnds;
-	NetStory.Resume = S.Resume;
-	NetStory.Parked = S.Parked;
+	CopyState(NetStory, S);
 	NetStory.Mode = static_cast<uint8>(HostSessionMode());
 	++NetStory.Rev;
 	ForceNetUpdate();
@@ -151,6 +165,13 @@ void ABRWorld::OnRep_Story()
 	// Client : le premier etat recu decrit ce qui s'est passe avant l'arrivee (pas de reveil ni d'annonce rejoues)
 	const bool bInitial = !bStorySeen;
 	bStorySeen = true;
+	// La porte de l'hote fait foi : la meme graine et la meme version donnent la meme porte ; un ecart est signale
+	if (bLevelReady && bServiceDoor && NetStory.IntroSeed == Seed && NetStory.DoorDir >= 0
+		&& (ServiceDoorCell != FIntPoint(NetStory.DoorX, NetStory.DoorY) || GetServiceDoorDir() != ServiceDoorDirOf(NetStory.DoorDir)))
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("[Story] Porte de service : l'hote l'a en %d,%d (face %d), ce client en %d,%d"), NetStory.DoorX, NetStory.DoorY,
+			NetStory.DoorDir, ServiceDoorCell.X, ServiceDoorCell.Y);
+	}
 	ApplyStoryLocal(bInitial);
 }
 
@@ -288,6 +309,25 @@ void ABRWorld::OnStoryLevelLoaded()
 	const int32 Level = GetLevelNumber();
 	if (HostSessionMode() == EBRSessionMode::Story)
 	{
+		if (Level == 0 && HasServiceDoor())
+		{
+			// Level 0 de la partie : sa graine (tiree a la nouvelle partie) et la porte retenue, sauvegardees avec elle.
+			// Une graine imposee pour un essai (autre que celle de la partie) ne remplace rien
+			if (S.IntroSeed == 0)
+			{
+				S.IntroSeed = Seed;
+				UE_LOG(LogBackrooms, Log, TEXT("[Story] Level 0 de la partie : graine %u"), Seed);
+			}
+			if (S.IntroSeed == Seed)
+			{
+				const FIntPoint Dir = GetServiceDoorDir();
+				S.DoorX = ServiceDoorCell.X;
+				S.DoorY = ServiceDoorCell.Y;
+				S.DoorDir = Dir.X > 0 ? 0 : (Dir.X < 0 ? 1 : (Dir.Y > 0 ? 2 : 3));
+				S.DoorTier = ServiceDoorTier;
+				S.DoorVersion = BRStory::DoorPlaceVersion;
+			}
+		}
 		BRStory::OnArrive(S, Level);
 		if (Level == 0 && !BRStory::IsDone(S, 0) && (S.Events & BRStory::Event::IntroWake) == 0)
 		{
@@ -466,6 +506,8 @@ void ABRWorld::PlaceServiceDoor()
 {
 	bServiceDoor = false;
 	ServiceDoorTier = 0;
+	bServiceDoorRestored = false;
+	ServiceDoorCands.Reset();
 	ServicePath.Reset();
 	ServicePathIndex.Reset();
 	const FBRLevelDef& D = Def();
@@ -502,15 +544,16 @@ void ABRWorld::PlaceServiceDoor()
 			Queue.Add(N);
 		}
 	}
-	// 2. Cellules contre le mur d'enceinte (pas un coin, pas le depart), atteintes sans fosse
-	struct FCand
-	{
-		FIntPoint Cell;
-		int32 DirIdx = 0;
-		int32 Dist = 0;
-		uint32 Hash = 0;
-	};
-	TArray<FCand> Cands;
+	// 2. Emplacements possibles : cellules contre le mur d'enceinte (pas un coin, pas le depart), atteintes sans fosse.
+	//    Une porte decrit une cellule, une face (vers l'exterieur), l'orientation qui en decoule et la hauteur du module
+	//    (ouverture de 1,30 x 2,25 m au pied du mur) ; le chemin qui y mene est reserve avant les meubles (BRChunk)
+	constexpr int32 BandLo = 24;
+	constexpr int32 BandHi = 40;
+	constexpr int32 WideLo = 16;
+	constexpr int32 WideHi = 56;
+	constexpr int32 Aim = 32;
+	ServiceDoorCands.Reset();
+	bServiceDoorRestored = false;
 	int32 MaxD = 0;
 	for (const FIntPoint& C : Queue)
 	{
@@ -532,37 +575,72 @@ void ABRWorld::PlaceServiceDoor()
 		{
 			continue; // interieur, ou coin de l'enceinte
 		}
-		FCand Cand;
+		FBRDoorCandidate Cand;
 		Cand.Cell = C;
-		Cand.DirIdx = OutIdx;
+		Cand.Dir = Dirs[OutIdx];
 		Cand.Dist = Dist.FindChecked(C);
 		Cand.Hash = BRHash::Hash(C.X * 4 + OutIdx, C.Y, 2101, Seed);
+		Cand.Band = (Cand.Dist >= BandLo && Cand.Dist <= BandHi) ? 0 : ((Cand.Dist >= WideLo && Cand.Dist <= WideHi) ? 1 : 2);
 		MaxD = FMath::Max(MaxD, Cand.Dist);
-		Cands.Add(Cand);
+		ServiceDoorCands.Add(Cand);
 	}
-	if (Cands.Num() == 0)
+	if (ServiceDoorCands.Num() == 0)
 	{
 		UE_LOG(LogBackrooms, Error, TEXT("[Story] Level 0 (graine %u) : aucune cellule de bord atteignable pour la porte de service"), Seed);
 		return;
 	}
-	// 3. Distance de marche visee : 24 a 40 cellules (84 a 140 m par le plus court chemin : une vraie marche, la meme
-	//    duree d'introduction quelle que soit la disposition) ; parmi elles, le plus petit hachage. Repli deterministe :
-	//    la cellule de bord la plus proche de 32 cellules
-	constexpr int32 Lo = 24;
-	constexpr int32 Hi = 40;
-	constexpr int32 Aim = 32;
-	const FCand* Best = nullptr;
-	for (const FCand& Cand : Cands)
+	auto DirIndex = [&](const FIntPoint& Dir)
 	{
-		if (Cand.Dist >= Lo && Cand.Dist <= Hi && (!Best || Cand.Hash < Best->Hash))
+		for (int32 K = 0; K < 4; ++K)
 		{
-			Best = &Cand;
+			if (Dirs[K] == Dir)
+			{
+				return K;
+			}
 		}
+		return -1;
+	};
+	// 3. La porte deja retenue pour ce Level 0 dans la partie (sauvegarde, ou etat de l'hote chez un client) reste a sa
+	//    place tant qu'elle est encore un emplacement valide : ni une mort, ni une reprise, ni un rechargement ne
+	//    tirent une autre porte
+	const FBRDoorCandidate* Best = nullptr;
+	if (NetStory.IntroSeed == Seed && NetStory.DoorDir >= 0 && NetStory.DoorDir < 4)
+	{
+		for (const FBRDoorCandidate& Cand : ServiceDoorCands)
+		{
+			if (Cand.Cell == FIntPoint(NetStory.DoorX, NetStory.DoorY) && DirIndex(Cand.Dir) == NetStory.DoorDir)
+			{
+				Best = &Cand;
+				ServiceDoorTier = NetStory.DoorTier;
+				bServiceDoorRestored = true;
+				break;
+			}
+		}
+		if (!Best)
+		{
+			UE_LOG(LogBackrooms, Warning, TEXT("[Story] Porte sauvegardee (%d,%d face %d) plus valide pour la graine %u : nouveau choix"), NetStory.DoorX, NetStory.DoorY,
+				NetStory.DoorDir, Seed);
+		}
+	}
+	// 4. Sinon : la bande de distance de marche visee (24 a 40 cellules, 84 a 140 m par le plus court chemin praticable) ;
+	//    parmi ses emplacements, celui que designe la graine (plus petit hachage). Bande vide : bande elargie (16 a 56) ;
+	//    vide aussi : secours deterministe, l'emplacement atteignable le plus proche de 32 cellules. Jamais de partie
+	//    sans sortie
+	for (uint8 Band = 0; !Best && Band < 2; ++Band)
+	{
+		for (const FBRDoorCandidate& Cand : ServiceDoorCands)
+		{
+			if (Cand.Band <= Band && (!Best || Cand.Hash < Best->Hash))
+			{
+				Best = &Cand;
+			}
+		}
+		ServiceDoorTier = Band;
 	}
 	if (!Best)
 	{
-		ServiceDoorTier = 1;
-		for (const FCand& Cand : Cands)
+		ServiceDoorTier = 2;
+		for (const FBRDoorCandidate& Cand : ServiceDoorCands)
 		{
 			const int32 Gap = FMath::Abs(Cand.Dist - Aim);
 			const int32 BestGap = Best ? FMath::Abs(Best->Dist - Aim) : MAX_int32;
@@ -574,7 +652,8 @@ void ABRWorld::PlaceServiceDoor()
 	}
 	bServiceDoor = true;
 	ServiceDoorCell = Best->Cell;
-	ServiceDoorDir = Dirs[Best->DirIdx];
+	ServiceDoorDir = Best->Dir;
+	const int32 BestDist = Best->Dist;
 	// 4. Chemin du depart a la porte (marques de craie)
 	FIntPoint Cur = ServiceDoorCell;
 	ServicePath.Add(Cur);
@@ -588,8 +667,14 @@ void ABRWorld::PlaceServiceDoor()
 	{
 		ServicePathIndex.Add(ServicePath[I], I);
 	}
-	UE_LOG(LogBackrooms, Log, TEXT("[Story] Porte de service du Level 0 (graine %u) : cellule %d,%d vers %d,%d, %d cellules de marche (plus long %d)%s"),
-		Seed, ServiceDoorCell.X, ServiceDoorCell.Y, ServiceDoorDir.X, ServiceDoorDir.Y, Best->Dist, MaxD, ServiceDoorTier ? TEXT(", repli") : TEXT(""));
+	int32 InBand = 0;
+	for (const FBRDoorCandidate& Cand : ServiceDoorCands)
+	{
+		InBand += Cand.Band == 0 ? 1 : 0;
+	}
+	UE_LOG(LogBackrooms, Log, TEXT("[Story] Porte de service du Level 0 (graine %u) : cellule %d,%d vers %d,%d, %d cellules de marche (plus long %d), palier %d, %d emplacement(s) dans la bande sur %d%s"),
+		Seed, ServiceDoorCell.X, ServiceDoorCell.Y, ServiceDoorDir.X, ServiceDoorDir.Y, BestDist, MaxD, ServiceDoorTier, InBand, ServiceDoorCands.Num(),
+		bServiceDoorRestored ? TEXT(", porte de la partie (sauvegardee)") : TEXT(""));
 }
 
 bool ABRWorld::IsServiceDoorEdge(int32 X, int32 Y, bool bEast) const

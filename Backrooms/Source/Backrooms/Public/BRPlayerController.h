@@ -223,6 +223,12 @@ public:
 	UFUNCTION(Exec)
 	void BRSeed(int32 Number);
 
+	/** v4.13 : porte de service du Level 0 : graine du niveau et de la partie, porte retenue (palier, sauvegardee ou
+	 *  non), emplacements possibles par bande ; apercu 30 s des emplacements (vert : bande visee, jaune : bande elargie,
+	 *  gris : secours seulement, rouge : porte retenue). Outil de developpement */
+	UFUNCTION(Exec)
+	void BRDoor();
+
 private:
 	/** v4.7 : vrai si les commandes de test sont permises ici, sinon message et faux */
 	bool CheatGate();
@@ -359,7 +365,8 @@ private:
 	/** Cree une partie et la lance au Niveau 0 */
 	void StartNewSave();
 	/** Applique la partie choisie au personnage et au journal (debut de partie) */
-	void ApplyActiveSave();
+	/** bLevelChanging : un nouveau niveau va etre charge (l'histoire s'appliquera a son arrivee, pas au niveau actuel) */
+	void ApplyActiveSave(bool bLevelChanging = false);
 	/** v4.7 : partie fermee pendant une mort : la mort va a son terme (equipement de depart, niveau neuf) */
 	void ResolvePendingDeath(UBRSaveGame* Save);
 	/** v4.7 : messages du chargement des sauvegardes (copie de secours, fichier illisible) */

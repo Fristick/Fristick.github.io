@@ -13,6 +13,7 @@
 #include "BRSave.h"
 #include "BRInteractables.h"
 #include "EngineUtils.h"
+#include "DrawDebugHelpers.h"
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -2102,7 +2103,7 @@ void ABRPlayerController::StartNewSave()
 	}
 }
 
-void ABRPlayerController::ApplyActiveSave()
+void ABRPlayerController::ApplyActiveSave(bool bLevelChanging)
 {
 	ResolvePendingDeath(ActiveSave);
 	if (ABRCharacter* C = GetBRCharacter())
@@ -2115,7 +2116,7 @@ void ABRPlayerController::ApplyActiveSave()
 		// v4.11 : campagne de la partie (hote seulement : le monde l'ignore chez un client)
 		W->SetCampaign(ActiveSave ? ActiveSave->RouteBits : 0, ActiveSave ? ActiveSave->OptionalFound : 0, ActiveSave ? ActiveSave->Endings : 0);
 		// v4.13 : etat narratif et nature de la session (histoire, rejouer, libre), tenus par l'hote
-		W->SetStory(ActiveSave ? ActiveSave->GetStory() : BRStory::FState(), GetSessionMode());
+		W->SetStory(ActiveSave ? ActiveSave->GetStory() : BRStory::FState(), GetSessionMode(), bLevelChanging);
 	}
 	AutoSaveTimer = 60.f;
 }
@@ -2265,9 +2266,15 @@ void ABRPlayerController::HostGame(bool bReplay)
 	MenuStatus = BR_STR(NSLOCTEXT("BR", "Menu.CreationPartie", "Cr\u00e9ation de la partie..."));
 	// v4.7 : l'hote reprend sa session (la carte est rechargee : le monde la retrouve dans BRSaves::PendingResume)
 	BRSaves::PendingResume() = FBRSessionState();
+	BRSaves::PendingIntroSeed() = 0;
 	if (!bReplay && ActiveSave && ActiveSave->Session.bValid && ActiveSave->Session.Level == Level && ActiveSave->Session.Seed != 0)
 	{
 		BRSaves::PendingResume() = ActiveSave->Session;
+	}
+	else if (Level == 0 && ActiveSave)
+	{
+		// v4.13 : le Level 0 de la partie (sa graine) ; 0 pour une nouvelle partie : un Level 0 neuf
+		BRSaves::PendingIntroSeed() = ActiveSave->StoryIntroSeed;
 	}
 	BRSaves::Flush();
 	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);
@@ -2496,20 +2503,30 @@ void ABRPlayerController::StartSolo(bool bReplay)
 	const int32 Target = bReplay ? BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number : GetContinueLevel();
 	BRSaves::ReplaySession() = bReplay;
 	bDevSession = bReplay && ActiveSave && !ActiveSave->IsExplored(Target); // CONTINUER suit toujours l'histoire
-	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart), histoire et nature de la session
-	ApplyActiveSave();
 	// v4.7 : reprise apres fermeture du jeu : meme graine, objectifs, objets ramasses et point de reprise.
 	// (Apres une mort, la session a ete invalidee : le niveau sera neuf, comme le veut la regle.)
 	const FBRSessionState* Session = (ActiveSave && !bReplay) ? &ActiveSave->Session : nullptr;
-	if (Session && Session->bValid && Session->Level == Target && Session->Seed != 0 && !bDevSession)
+	const bool bResume = Session && Session->bValid && Session->Level == Target && Session->Seed != 0 && !bDevSession;
+	// v4.13 : le Level 0 de la partie garde sa graine (meme disposition, porte au meme endroit) ; une nouvelle partie tire
+	// un Level 0 neuf, meme si le menu en montre deja un
+	uint32 LoadSeed = bResume ? Session->Seed : 0u;
+	bool bLoad = bResume || Target != W->GetLevelNumber();
+	if (!bResume && Target == 0 && ActiveSave && !bDevSession)
+	{
+		LoadSeed = ActiveSave->StoryIntroSeed;
+		bLoad = bLoad || (bReplay ? (LoadSeed != 0 && LoadSeed != W->GetSeed()) : (LoadSeed == 0 || LoadSeed != W->GetSeed()));
+	}
+	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart), histoire et nature de la
+	// session ; l'histoire s'applique a l'arrivee dans le niveau charge, pas au decor du menu
+	ApplyActiveSave(bLoad);
+	if (bResume)
 	{
 		BRSaves::PendingResume() = *Session;
 		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ReprisePartieSavenameNiveauTarget", "Reprise de la partie \u00ab {SaveName} \u00bb : Niveau {Target}, l\u00e0 o\u00f9 vous l'aviez laiss\u00e9."), { { TEXT("SaveName"), BRLoc::Arg(ActiveSave->SaveName) }, { TEXT("Target"), BRLoc::Int(Target) } }), 5.f, FLinearColor(0.75f, 0.95f, 1.f));
-		W->RequestTransition(Target, false, Session->Seed);
 	}
-	else if (Target != W->GetLevelNumber())
+	if (bLoad)
 	{
-		W->RequestTransition(Target);
+		W->RequestTransition(Target, false, LoadSeed);
 	}
 	else
 	{
@@ -2599,6 +2616,48 @@ void ABRPlayerController::BRSeed(int32 Number)
 	const int32 Level = W->GetLevelNumber();
 	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.NiveauLevelGraineNumber", "Niveau {Level}, graine {Number}"), { { TEXT("Level"), BRLoc::Int(Level) }, { TEXT("Number"), BRLoc::Int(Number) } }), 3.f, FLinearColor(0.6f, 0.9f, 1.f));
 	W->RequestTransition(Level, false, ABRWorld::SeedFromUser(static_cast<uint32>(Number), Level));
+}
+
+void ABRPlayerController::BRDoor()
+{
+	if (!CheatGate())
+	{
+		return;
+	}
+	const ABRWorld* W = ABRWorld::Get(this);
+	if (!W || !W->HasServiceDoor())
+	{
+		ABRHUD::Notify(this, TEXT("BRDoor : aucune porte de service dans ce niveau (Level 0 seulement)"), 4.f);
+		return;
+	}
+	const TArray<FBRDoorCandidate>& Cands = W->GetServiceDoorCandidates();
+	int32 Bands[3] = { 0, 0, 0 };
+	for (const FBRDoorCandidate& C : Cands)
+	{
+		++Bands[FMath::Min<int32>(C.Band, 2)];
+	}
+	const FBRNetStory& St = W->GetNetStory();
+	const FString Msg = FString::Printf(TEXT("Level 0 : graine %u (Level 0 de la partie : %u). Porte en (%d, %d), face (%d, %d), palier %d%s, chemin %d cellules. Emplacements : %d dans la bande 24-40, %d de plus dans 16-56, %d autres (secours)"),
+		W->GetSeed(), St.IntroSeed, W->GetServiceDoorCell().X, W->GetServiceDoorCell().Y, W->GetServiceDoorDir().X, W->GetServiceDoorDir().Y, W->GetServiceDoorTier(),
+		W->WasServiceDoorRestored() ? TEXT(", reprise de la partie") : TEXT(""), W->GetServicePath().Num() - 1, Bands[0], Bands[1], Bands[2]);
+	UE_LOG(LogBackrooms, Display, TEXT("[BRDoor] %s"), *Msg);
+	for (const FBRDoorCandidate& C : Cands)
+	{
+		UE_LOG(LogBackrooms, Display, TEXT("[BRDoor]   (%3d, %3d) face (%2d, %2d) : %2d cellules, bande %d%s"), C.Cell.X, C.Cell.Y, C.Dir.X, C.Dir.Y, C.Dist, C.Band,
+			C.Cell == W->GetServiceDoorCell() && C.Dir == W->GetServiceDoorDir() ? TEXT("  <- retenue") : TEXT(""));
+	}
+	ABRHUD::Notify(this, Msg, 10.f, FLinearColor(0.6f, 0.9f, 1.f));
+#if ENABLE_DRAW_DEBUG
+	const float Half = W->Def().CellSize * 0.5f - W->Def().WallThickness * 0.5f;
+	for (const FBRDoorCandidate& C : Cands)
+	{
+		const bool bChosen = C.Cell == W->GetServiceDoorCell() && C.Dir == W->GetServiceDoorDir();
+		const FColor Col = bChosen ? FColor::Red : (C.Band == 0 ? FColor::Green : (C.Band == 1 ? FColor::Yellow : FColor(110, 110, 110)));
+		const FVector P = W->CellCenter(C.Cell, 112.f) + FVector(C.Dir.X, C.Dir.Y, 0.f) * Half;
+		const FVector Ext = C.Dir.X != 0 ? FVector(12.f, 65.f, 112.f) : FVector(65.f, 12.f, 112.f);
+		DrawDebugBox(GetWorld(), P, Ext, Col, false, 30.f, 0, bChosen ? 6.f : 3.f);
+	}
+#endif
 }
 
 void ABRPlayerController::BRGod()

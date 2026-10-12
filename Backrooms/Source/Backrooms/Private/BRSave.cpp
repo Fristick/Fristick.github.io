@@ -521,6 +521,8 @@ namespace BRSaves
 			// ramasses, les documents et le point de reprise restent, la porte de service s'ouvre sans condition
 			Session.GenVersion = 2;
 			Session.Mission.Reset();
+			// Ce Level 0 devient celui de la partie : sa porte de service sera tiree une fois pour cette graine et gardee
+			S.IntroSeed = Session.Seed;
 		}
 		Save->SetStory(S);
 		UE_LOG(LogBackrooms, Log, TEXT("[Story] Migration : niveaux %d, courant %d -> atteint %d, etapes 0x%x, reprise %d, gare %d, Poolrooms %s, session %s"),
@@ -831,6 +833,12 @@ namespace BRSaves
 	{
 		static FBRSessionState Resume;
 		return Resume;
+	}
+
+	uint32& PendingIntroSeed()
+	{
+		static uint32 IntroSeed = 0;
+		return IntroSeed;
 	}
 
 	FString FormatPlayTime(float Seconds)

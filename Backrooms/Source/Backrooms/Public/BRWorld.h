@@ -223,8 +223,40 @@ struct FBRNetStory
 	UPROPERTY()
 	int32 HintSerial = 0;
 
+	/** Level 0 de la partie et porte retenue par l'hote (BRStory::FState) : les clients la comparent a la leur */
+	UPROPERTY()
+	uint32 IntroSeed = 0;
+
+	UPROPERTY()
+	int32 DoorX = 0;
+
+	UPROPERTY()
+	int32 DoorY = 0;
+
+	UPROPERTY()
+	int32 DoorDir = -1;
+
+	UPROPERTY()
+	uint8 DoorTier = 0;
+
+	UPROPERTY()
+	uint8 DoorVersion = 0;
+
 	UPROPERTY()
 	uint16 Rev = 0;
+};
+
+/** v4.13 : emplacement possible de la porte de service du Level 0 (choix de l'hote, outils de developpement, tests) */
+struct FBRDoorCandidate
+{
+	/** Cellule interieure devant la porte et direction vers le mur d'enceinte */
+	FIntPoint Cell = FIntPoint::ZeroValue;
+	FIntPoint Dir = FIntPoint(1, 0);
+	/** Distance de marche depuis le depart (cellules, sans traverser de salle de fosses) */
+	int32 Dist = 0;
+	uint32 Hash = 0;
+	/** 0 : bande visee (24-40 cellules) ; 1 : bande elargie (16-56) ; 2 : hors bande (secours seulement) */
+	uint8 Band = 2;
 };
 
 /** Objectif affiche dans l'inventaire (colonne OBJECTIFS) et dans le coin de l'ecran */
@@ -383,7 +415,7 @@ public:
 
 	// ------------------------------------------------------------ v4.13 : histoire et porte de service (BRStoryWorld.cpp)
 	/** Hote : etat narratif de la partie (lu dans sa sauvegarde) et nature de la session. Chez un client : ignore */
-	void SetStory(const BRStory::FState& S, EBRSessionMode Mode);
+	void SetStory(const BRStory::FState& S, EBRSessionMode Mode, bool bLevelChanging = false);
 	/** Etat narratif courant (celui de l'hote, recu chez un client) */
 	BRStory::FState GetStory() const;
 	const FBRNetStory& GetNetStory() const { return NetStory; }
@@ -406,6 +438,10 @@ public:
 	FIntPoint GetServiceDoorDir() const { return ServiceDoorDir; }
 	/** 0 : distance de marche visee ; 1 : repli deterministe (cellule de bord atteignable la plus proche de la cible) */
 	uint8 GetServiceDoorTier() const { return ServiceDoorTier; }
+	/** v4.13 : emplacements possibles de la porte pour cette graine (outils de developpement, tests) */
+	const TArray<FBRDoorCandidate>& GetServiceDoorCandidates() const { return ServiceDoorCands; }
+	/** v4.13 : la porte vient de la sauvegarde de la partie (meme emplacement qu'avant), pas d'un nouveau choix */
+	bool WasServiceDoorRestored() const { return bServiceDoorRestored; }
 	/** Arete d'enceinte de la porte : Est (bEast) ou Nord de la cellule (X, Y) ; X, Y peuvent etre hors de l'enceinte */
 	bool IsServiceDoorEdge(int32 X, int32 Y, bool bEast) const;
 	bool IsServiceDoorCell(int32 X, int32 Y) const { return bServiceDoor && ServiceDoorCell == FIntPoint(X, Y); }
@@ -417,7 +453,13 @@ public:
 	/** Pied de la porte (face interieure du mur) et orientation (vers la piece) */
 	FVector GetServiceDoorLocation() const;
 	float GetServiceDoorYaw() const;
-	bool IsServiceDoorOpen() const { return NetStory.DoorSerial != 0 && NetStory.DoorSerial == LoadedSerial; }
+	/** Ouverte dans ce chargement, ou deja ouverte dans cette partie (histoire, rejouer : le Level 0 de la partie garde
+	 *  sa porte ouverte une fois franchie) */
+	bool IsServiceDoorOpen() const
+	{
+		return (NetStory.DoorSerial != 0 && NetStory.DoorSerial == LoadedSerial)
+			|| (NetStory.Mode != 0 && NetStory.IntroSeed != 0 && NetStory.IntroSeed == Seed && (NetStory.Events & BRStory::Event::DoorOpened) != 0);
+	}
 	/** Hote : la porte s'ouvre (depart demande devant elle) ; publie l'etat, chacun l'anime */
 	void ServerOpenServiceDoor(const ABRCharacter* By);
 	/** La porte construite par son chunk (elle prend l'etat ouvert ou ferme de l'hote) */
@@ -1078,6 +1120,8 @@ private:
 	FTimerHandle InscriptionTimer;
 	bool bServiceDoor = false;
 	uint8 ServiceDoorTier = 0;
+	bool bServiceDoorRestored = false;
+	TArray<FBRDoorCandidate> ServiceDoorCands;
 	FIntPoint ServiceDoorCell = FIntPoint::ZeroValue;
 	FIntPoint ServiceDoorDir = FIntPoint(1, 0);
 	TArray<FIntPoint> ServicePath;

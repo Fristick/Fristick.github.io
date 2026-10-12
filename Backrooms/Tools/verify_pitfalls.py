@@ -108,7 +108,8 @@ OPEN, WALL, DOOR = 0, 1, 2
 class Level0:
     """Portage fidele de ABRWorld (grille, salles de fosses) et de ABRChunk (cachettes, sorties, cassettes, sol)"""
 
-    def __init__(self, P, user_seed):
+    def __init__(self, P, user_seed, saved_door=None):
+        self.saved_door = saved_door  # v4.13 : porte sauvegardee de la partie (cellule, direction) ou None
         self.P = P
         self.user_seed = user_seed
         self.seed = mix(user_seed ^ (0 * 7919 + 17)) or 1
@@ -149,6 +150,7 @@ class Level0:
                 q.append(n)
         cands = []
         maxd = 0
+        band_lo, band_hi, wide_lo, wide_hi, aim = 24, 40, 16, 56, 32  # cellules (BRStoryWorld.cpp)
         for c in order:
             if self.spawn_area(*c):
                 continue
@@ -156,27 +158,39 @@ class Level0:
             if len(outs) != 1:
                 continue
             k = outs[0]
-            cands.append((c, k, dist[c], bhash(c[0] * 4 + k, c[1], 2101, self.seed)))
-            maxd = max(maxd, dist[c])
+            dc = dist[c]
+            band = 0 if band_lo <= dc <= band_hi else (1 if wide_lo <= dc <= wide_hi else 2)
+            cands.append((c, k, dc, bhash(c[0] * 4 + k, c[1], 2101, self.seed), band))
+            maxd = max(maxd, dc)
+        self.door_cands = cands
         if not cands:
             return
-        lo, hi, aim = 24, 40, 32  # cellules (BRStoryWorld.cpp)
-        best, tier = None, 0
-        for cd in cands:
-            if lo <= cd[2] <= hi and (best is None or cd[3] < best[3]):
-                best = cd
+        best, tier, restored = None, 0, False
+        if self.saved_door is not None:
+            for cd in cands:
+                if cd[0] == self.saved_door[0] and DIRS[cd[1]] == self.saved_door[1]:
+                    best, tier, restored = cd, self.saved_door[2] if len(self.saved_door) > 2 else 0, True
+        for band in (0, 1):
+            if best is not None:
+                break
+            for cd in cands:
+                if cd[4] <= band and (best is None or cd[3] < best[3]):
+                    best = cd
+            tier = band
         if best is None:
-            tier = 1
+            tier = 2
             for cd in cands:
                 gap = abs(cd[2] - aim)
                 if best is None or gap < abs(best[2] - aim) or (gap == abs(best[2] - aim) and cd[3] < best[3]):
                     best = cd
+        lo, hi = band_lo, band_hi
         self.door = (best[0], DIRS[best[1]])
         path = [best[0]]
         while path[-1] != (0, 0):
             path.append(parent[path[-1]])
         self.door_path = path[::-1]
-        self.door_info = {"dist": best[2], "max": maxd, "lo": lo, "hi": hi, "tier": tier, "candidates": len(cands)}
+        self.door_info = {"dist": best[2], "max": maxd, "lo": lo, "hi": hi, "tier": tier, "candidates": len(cands), "restored": restored,
+                          "in_band": sum(1 for cd in cands if cd[4] == 0), "in_wide": sum(1 for cd in cands if cd[4] <= 1)}
 
     def chalk_marks(self):
         """ABRWorld::IsChalkMarkCell : une marque toutes les trois cellules du chemin, ni au depart ni devant la porte"""
@@ -746,6 +760,14 @@ def check_service_door(L, res, capsule=42.0):
         prob.append("passage de la porte trop etroit pour la capsule")
     if info["tier"] == 0 and not (info["lo"] <= info["dist"] <= info["hi"]):
         prob.append("distance de la porte hors de la fenetre visee")
+    # v4.13 : meme graine, meme porte (rechargement, mort, reconnexion) ; porte sauvegardee reprise telle quelle
+    again = Level0(L.P, L.user_seed)
+    if again.door != L.door:
+        prob.append("porte differente pour la meme graine")
+    tier = info["tier"]
+    kept = Level0(L.P, L.user_seed, saved_door=(cell, d, tier))
+    if kept.door != L.door or not kept.door_info.get("restored"):
+        prob.append("porte sauvegardee non reprise")
 
 
 def check_doors_only(P, seeds):
@@ -1085,7 +1107,10 @@ def main():
         bad = [r for r in rows if r["problems"]]
         dists = [r["door"]["dist"] for r in rows if "door" in r]
         maxs = [r["door"]["max"] for r in rows if "door" in r]
-        tiers = sum(1 for r in rows if r.get("door", {}).get("tier", 0) == 1)
+        tiers = sum(1 for r in rows if r.get("door", {}).get("tier", 0) >= 1)
+        tier_counts = [sum(1 for r in rows if r.get("door", {}).get("tier", -1) == t) for t in (0, 1, 2)]
+        in_band = [r["door"]["in_band"] for r in rows if "door" in r]
+        distinct = len(set((r["door"]["cell"], r["door"]["dir"]) for r in rows if "door" in r))
         marks = [r["door"]["marks"] for r in rows if "door" in r]
         sides = {}
         for r in rows:
@@ -1096,12 +1121,16 @@ def main():
                  % (min(dists), sum(dists) / len(dists), max(dists), sum(maxs) / len(maxs)))
             outd("soit %.0f a %.0f m de marche ; repli deterministe utilise : %d fois ; marques de craie : %d a %d par graine"
                  % (min(dists) * P["CellSize"] / 100.0, max(dists) * P["CellSize"] / 100.0, tiers, min(marks), max(marks)))
+            outd("emplacements possibles dans la bande 24-40 par graine : min %d, moyenne %.1f, max %d ; paliers retenus : bande %d, bande elargie %d, secours %d"
+                 % (min(in_band), sum(in_band) / len(in_band), max(in_band), tier_counts[0], tier_counts[1], tier_counts[2]))
+            outd("diversite : %d emplacements differents (cellule et face) pour %d graines ; meme graine -> meme porte et porte sauvegardee reprise : verifie pour chaque graine"
+                 % (distinct, len(rows)))
             outd("murs d'enceinte : " + ", ".join("%s %d" % ({(1, 0): "est", (-1, 0): "ouest", (0, 1): "nord", (0, -1): "sud"}[k], v) for k, v in sorted(sides.items())))
         for r in rows[:12]:
             d = r.get("door")
             if d:
-                outd("  graine %-5d porte %s vers %s, %d cellules (fenetre %d-%d, plus long %d), %d marques%s" % (r["seed"], d["cell"], d["dir"], d["dist"], d["lo"],
-                     d["hi"], d["max"], d["marks"], ", repli" if d["tier"] else ""))
+                outd("  graine %-5d porte %s vers %s, %d cellules (fenetre %d-%d, plus long %d), %d marques, %d emplacements dans la bande%s" % (r["seed"], d["cell"],
+                     d["dir"], d["dist"], d["lo"], d["hi"], d["max"], d["marks"], d["in_band"], ["", ", bande elargie", ", secours"][d["tier"]]))
         for r in bad:
             outd("  graine %d : %s" % (r["seed"], " ; ".join(r["problems"])))
         outd("%d graine(s), %d avec probleme(s)." % (len(rows), len(bad)))

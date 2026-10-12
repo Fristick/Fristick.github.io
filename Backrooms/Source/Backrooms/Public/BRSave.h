@@ -219,6 +219,26 @@ public:
 	UPROPERTY(SaveGame)
 	int32 StoryParked = -1;
 
+	/** v4.13 : Level 0 de la partie (graine tiree a la nouvelle partie, 0 : pas encore) et porte de service retenue
+	 *  (cellule, face, palier, version de generation) : la porte reste au meme endroit pour toute la partie */
+	UPROPERTY(SaveGame)
+	uint32 StoryIntroSeed = 0;
+
+	UPROPERTY(SaveGame)
+	int32 StoryDoorX = 0;
+
+	UPROPERTY(SaveGame)
+	int32 StoryDoorY = 0;
+
+	UPROPERTY(SaveGame)
+	int32 StoryDoorDir = -1;
+
+	UPROPERTY(SaveGame)
+	int32 StoryDoorTier = 0;
+
+	UPROPERTY(SaveGame)
+	int32 StoryDoorVersion = 0;
+
 	/** v4.13 : session d'une ancienne partie allee au-dela des Poolrooms sans les traverser : gardee intacte (graine,
 	 *  objets ramasses, mission), elle reprend a la sortie des Poolrooms */
 	UPROPERTY(SaveGame)
@@ -253,6 +273,12 @@ public:
 		S.ChapterEnds = StoryChapterEnds;
 		S.Resume = StoryResume;
 		S.Parked = StoryParked;
+		S.IntroSeed = StoryIntroSeed;
+		S.DoorX = StoryDoorX;
+		S.DoorY = StoryDoorY;
+		S.DoorDir = StoryDoorDir;
+		S.DoorTier = StoryDoorTier;
+		S.DoorVersion = StoryDoorVersion;
 		return S;
 	}
 	void SetStory(const BRStory::FState& S)
@@ -263,6 +289,12 @@ public:
 		StoryChapterEnds = S.ChapterEnds;
 		StoryResume = S.Resume;
 		StoryParked = S.Parked;
+		StoryIntroSeed = S.IntroSeed;
+		StoryDoorX = S.DoorX;
+		StoryDoorY = S.DoorY;
+		StoryDoorDir = S.DoorDir;
+		StoryDoorTier = S.DoorTier;
+		StoryDoorVersion = S.DoorVersion;
 	}
 };
 
@@ -343,6 +375,9 @@ namespace BRSaves
 	/** v4.7 : session a reprendre au prochain chargement de son niveau (survit au rechargement de la carte quand
 	 *  l'hote ouvre une partie en ligne). Consommee par ABRWorld::LoadLevelNow si le niveau et la graine concordent */
 	BACKROOMS_API FBRSessionState& PendingResume();
+	/** v4.13 : graine du Level 0 de la partie a utiliser au prochain chargement du Level 0 apres le rechargement de la
+	 *  carte (heberger une partie) ; 0 : aucune. Consommee par ABRWorld */
+	BACKROOMS_API uint32& PendingIntroSeed();
 	/** v4.13 : la partie en cours est une session REJOUER (un niveau decouvert, sans toucher a l'histoire ni a la session
 	 *  sauvegardee). Survit au rechargement de la carte quand l'hote ouvre une partie en ligne */
 	BACKROOMS_API bool& ReplaySession();
