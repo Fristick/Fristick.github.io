@@ -1,0 +1,67 @@
+# Banc de l'histoire (fil, acces, migration) v4.13 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Story/test_story.cpp Source/Backrooms/Private/BRStoryLogic.cpp Source/Backrooms/Private/BRContentLogic.cpp -o test_story && ./test_story 
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-12T13:30:27Z
+
+Banc du fil narratif v4.13
+
+A. Ordre de la campagne
+  fil : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai                    OK
+  precedent et position coherents pour les 12 niveaux                                                  OK
+  Poolrooms entre le Niveau 1 et le Niveau 2                                                           OK
+  niveaux hors du fil (7, 1001, 1002) : aucun suivant, acces inconnu                                   OK
+
+B. Campagne neuve dans chaque canal (regles de l'hote)
+  version publiee : 0 -> 1 -> 37 -> 2 -> fin du chapitre                                               OK
+  test interne : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> fin du chapitre                                        OK
+  developpement : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai          OK
+  le chapitre 1 (0 -> 1 -> 37 -> 2) est identique dans les trois canaux                                OK
+
+C. Aucun raccourci (validation de l'hote)
+  Level 0, porte pas ouverte : Niveau 1 refuse                                                         OK
+  Level 0 : Poolrooms refusees                                                                         OK
+  Level 0 : Niveau 2 refuse (Poolrooms obligatoires)                                                   OK
+  porte ouverte : Niveau 1 accepte, Level 0 accompli                                                   OK
+  Niveau 1, mission pas faite : Poolrooms refusees                                                     OK
+  Niveau 1 : Niveaux 2 et 4 refuses (Poolrooms obligatoires)                                           OK
+  Niveau 1 accompli : Poolrooms acceptees ; Niveau 2 toujours refuse                                   OK
+  simple visite des Poolrooms : pas d'etape accomplie                                                  OK
+  sortie des Poolrooms prise : Niveau 2 accepte, etape enregistree                                     OK
+  Niveau 2 : Niveau 3 refuse avant la mission, Niveau 4 refuse                                         OK
+  12 x 12 paires etape/destination : seules les etapes atteintes s'ouvrent (0 ecart)                   OK
+
+D. Retours et detours
+  retour du Niveau 2 vers les Poolrooms puis le Niveau 1 : acceptes                                    OK
+  au retour, les etapes deja accomplies le restent (mission du Niveau 1 non refaite)                   OK
+  depuis le Niveau 1, la suite de l'histoire reste les Poolrooms                                       OK
+  le plus loin atteint ne recule pas (Niveau 2)                                                        OK
+  point de reprise : le niveau ou l'on est revenu (Niveau 1)                                           OK
+
+E. Fin du chapitre 1 et mise a jour suivante
+  fin du chapitre 1 enregistree, Niveau 2 accompli                                                     OK
+  version publiee : Continuer reprend au Niveau 2 (rien de plus a ouvrir)                              OK
+  chapitre 2 publie : Continuer ouvre directement le Niveau 3, sans refaire le Level 0                 OK
+  et l'hote accepte le Niveau 3                                                                        OK
+  nouvelle partie : Continuer = Level 0                                                                OK
+
+F. Migration des anciennes parties
+  format 1 a 3, au Level 0 (cassettes, coupure) : reprise 0, gare -1, Poolrooms a traverser            OK
+  v4.11/v4.12, au Level 0 (cadrans, mission resolue ou non) : reprise 0, gare -1, Poolrooms a traverser OK
+  au Niveau 1 (0, 1 explores) : reprise 1, gare -1, Poolrooms a traverser                              OK
+  dans les Poolrooms par l'ancienne echelle (0, 37) : reprise 37, gare -1, Poolrooms a traverser       OK
+  au Niveau 5 par 0 -> 37 -> 4 -> 5 (Poolrooms traversees) : reprise 5, gare -1, Poolrooms creditees   OK
+  au Niveau 5 par 0 -> 1 -> 4 -> 5 (sans les Poolrooms) : reprise 37, gare 5, Poolrooms a traverser    OK
+  v4.12 publiee, fin du chapitre au Niveau 2 (0 -> 1 -> 2) : reprise 37, gare 2, Poolrooms a traverser OK
+  v4.12 publiee, 0 -> 37 -> 1 -> 2 (redirection : pas une preuve) : reprise 37, gare 2, Poolrooms a traverser OK
+  revenu au Niveau 1 apres le Niveau 4 (sans les Poolrooms) : reprise 1, gare -1, Poolrooms a traverser OK
+  campagne finie par 0 -> 37 -> 4 -> ... -> 11 : reprise 11, gare -1, Poolrooms creditees              OK
+  au Niveau 5 sans les Poolrooms : Poolrooms ouvertes, Niveaux 2 et 5 en attente de la traversee       OK
+  sortie du sas : retour au Niveau 5 (progression d'avant), etape enregistree                          OK
+  les Niveaux 1 et 4 deja depasses restent accomplis                                                   OK
+  meme partie dans la version publiee (Niveau 5 indisponible) : la sortie du sas mene au Niveau 2      OK
+  fin du lot 1 de la v4.12 conservee comme fin de chapitre                                             OK
+
+Verifications : 44, echecs : 0
+RESULTAT : OK
+# Code de sortie : 0

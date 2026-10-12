@@ -913,6 +913,16 @@ def draw_map(res, size=8):
         dot(c, (40, 200, 60))
     for t, st, c, dd in res["exits"]:
         dot(c, (220, 60, 220) if st == "Ladder" else (230, 70, 40))
+    # v4.13 : chemin de L. (depart -> porte de service), marques de craie, porte dans le mur d'enceinte
+    if L.door:
+        pts = [to_px(c[0] + 0.5, c[1] + 0.5) for c in L.door_path]
+        if len(pts) > 1:
+            d.line(pts, fill=(80, 210, 230), width=2)
+        for c, _ in L.chalk_marks():
+            dot(c, (235, 235, 225), 2)
+        (cx, cy), dd = L.door
+        a = to_px(cx + 0.5 + dd[0] * 0.5, cy + 0.5 + dd[1] * 0.5)
+        d.rectangle([a[0] - 4, a[1] - 4, a[0] + 4, a[1] + 4], fill=(255, 140, 40))
     dot((0, 0), (255, 255, 255), 4)
     ok = "OK" if not res["problems"] else "%d PB" % len(res["problems"])
     d.text((3, px + 1), "BRSeed=%d  %s  salles:%d" % (res["seed"], ok, len(L.pit_rooms)), fill=(230, 230, 220))
@@ -932,7 +942,7 @@ def sheet(results, path, cols=6):
     y = rows * (h + 6) + 10
     d.text((8, y), "SIMULATION PYTHON DE LA GENERATION (pas une capture du jeu) - Niveau 0, 32 x 32 cellules de 3,5 m.  "
            "Noir : fosses.  Clair : salle de fosses.  Jaune : atteignable sans traverser de salle.  Brun : atteignable par les passages.", fill=(230, 230, 220))
-    d.text((8, y + 14), "Blanc : depart.  Vert : cassettes VHS.  Rouge : mur glitche (Niveau 1).  Magenta : echelle (Niveau 37).  "
+    d.text((8, y + 14), "Blanc : depart.  Orange : porte de service (Niveau 1).  Cyan : chemin de L. vers la porte, points clairs : marques de craie.  "
            "Violet : cachettes.  Traits sombres : murs.  Traits bleus : portes.", fill=(230, 230, 220))
     out.save(path)
 

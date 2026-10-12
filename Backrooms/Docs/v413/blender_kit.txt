@@ -1,0 +1,113 @@
+# Kit Blender du Level 0 v4.13 — sortie reelle (lignes de progression des operateurs Blender retirees)
+# Blender : bpy 5.0.1 (module Python, sans interface), Cycles sur processeur, 4 coeurs, sans GPU
+# Date : 2026-10-12T14:05:31Z
+
+## python3 Tools/Blender/build_level0_kit.py --seed 9 --render --samples 48 --res 1280x720   (construction complete)
+Textures...
+Disposition : graine 9 (niveau 1896875771), 1 salle(s) de fosses, porte de service ((-16, 6), (-1, 0))
+Controles : {"reference_1m_dims": [1.0, 1.0, 1.0], "normals": {}, "holes_open": 16, "holes_blocked": [], "door_path_steps": 28, "door_path_blocked": [], "doorway_clear_width_m": 1.5, "service_door_clear_width_m": 1.1}
+01:18.007  cycles           | WARNING CUEW initialization failed: Error opening the library
+05:24.585  render           | Saved: '/home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit/Renders/L0_Couloir.jpg'
+  rendu L0_Couloir : 247 s
+09:36.612  render           | Saved: '/home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit/Renders/L0_SalleRepetitive.jpg'
+  rendu L0_SalleRepetitive : 252 s
+14:04.191  render           | Saved: '/home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit/Renders/L0_Intersection.jpg'
+  rendu L0_Intersection : 268 s
+17:56.555  render           | Saved: '/home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit/Renders/L0_Fosses.jpg'
+  rendu L0_Fosses : 232 s
+21:51.479  render           | Saved: '/home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit/Renders/L0_PorteDeService.jpg'
+  rendu L0_PorteDeService : 235 s
+24:09.164  render           | Saved: '/home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit/Renders/L0_VueEnsemble.jpg'
+  rendu L0_VueEnsemble : 138 s
+Info: Packed 28 file(s)
+Info: Saved as "BR_Level0.blend"
+Termine en 1449 s : /home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit
+real	24m10.284s
+user	88m18.398s
+sys	0m30.201s
+
+## python3 Tools/Blender/build_level0_kit.py --seed 9 --render --skip-textures --only L0_VueEnsemble   (vue d'ensemble refaite en image carree)
+Disposition : graine 9 (niveau 1896875771), 1 salle(s) de fosses, porte de service ((-16, 6), (-1, 0))
+Controles : {"reference_1m_dims": [1.0, 1.0, 1.0], "normals": {}, "holes_open": 16, "holes_blocked": [], "door_path_steps": 28, "door_path_blocked": [], "doorway_clear_width_m": 1.5, "service_door_clear_width_m": 1.1}
+00:28.367  cycles           | WARNING CUEW initialization failed: Error opening the library
+01:43.812  render           | Saved: '/home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit/Renders/L0_VueEnsemble.jpg'
+  rendu L0_VueEnsemble : 75 s
+Info: Packed 28 file(s)
+Info: Saved as "BR_Level0.blend"
+Termine en 104 s : /home/user/Fristick.github.io/Backrooms/RawAssets/Level0Kit
+real	1m45.076s
+user	5m25.304s
+sys	0m2.461s
+
+## Rapport de construction (RawAssets/Level0Kit/build_report.json, extrait)
+{
+ "blender": "5.0.1",
+ "seed": 9,
+ "seed_level": 1896875771,
+ "counts": {
+  "wall": 824,
+  "doorway": 416,
+  "post": 929,
+  "pillar": 43,
+  "floor": 999,
+  "ceiling": 1024,
+  "light": 313,
+  "light_off": 14,
+  "pit_tile": 16,
+  "shaft": 16,
+  "decals": 136
+ },
+ "modules": 34,
+ "archive": [
+  "ladder",
+  "hatch",
+  "lid",
+  "unstable"
+ ],
+ "materials": 22,
+ "images": 28,
+ "checks": {
+  "reference_1m_dims": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "normals": {},
+  "holes_open": 16,
+  "holes_blocked": [],
+  "door_path_steps": 28,
+  "door_path_blocked": [],
+  "service_door": {
+   "cell": [
+    -16,
+    6
+   ],
+   "dir_game": [
+    -1,
+    0
+   ],
+   "foot_m": [
+    -55.70000076293945,
+    -22.75,
+    0.0
+   ],
+   "yaw_blender": -0.0,
+   "path_cells": 28,
+   "chalk_marks": 7,
+   "tier": 0
+  },
+  "doorway_clear_width_m": 1.5,
+  "service_door_clear_width_m": 1.1
+ },
+ "render_seconds": {
+  "L0_Couloir": 246.6,
+  "L0_SalleRepetitive": 252.0,
+  "L0_Intersection": 267.6,
+  "L0_Fosses": 232.4,
+  "L0_PorteDeService": 234.9,
+  "L0_VueEnsemble": 75.4
+ },
+ "blend_mb": 30.8,
+ "seconds": 104.1
+}
+FBX relus conformes : 38 / 38

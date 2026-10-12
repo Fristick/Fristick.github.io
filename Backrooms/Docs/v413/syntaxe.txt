@@ -1,0 +1,18 @@
+# Controle de syntaxe C++ v4.13 (clang, en-tetes Unreal simules) — sortie reelle
+# Ce n'est PAS une compilation Unreal : les en-tetes du moteur sont remplaces par des declarations minimales.
+# Compilateur : Ubuntu clang version 18.1.3 (1ubuntu1)
+# Date : 2026-10-12T13:47:59Z
+# Fichiers : BRStoryWorld BRStoryLogic BRWorld BRMissionWorld BRChunk BRInteractables BRPlayerController BRHUD BRMissionText BRLevels BRAutoTestV411 BRAutoTestV412 BRAutoTestV413
+# Options : -std=c++20 -fms-extensions -fsyntax-only -Wall -Wshadow-all
+# Non couverts : BRSave.cpp (archives du moteur FArchive / FObjectAndNameAsStringProxyArchive absentes des en-tetes
+#   simules : erreurs de l'outil sur le code d'archive v4.12, pas sur MigrateStory v4.13) ; BRAutoTest.cpp (Dom/JsonObject.h).
+
+# Aucune ligne entre l'en-tete et ce commentaire : aucun avertissement ni erreur
+
+## shadowcheck.py (variables masquees, regle du projet ; outil du poste de travail)
+problems: 0
+
+## unitycheck.py (noms en collision dans un build unity ; outil du poste de travail)
+BRAssets.cpp:639: 'Done' masquerait en build unity la declaration globale BRHUD.cpp:47
+unity problems: 1
+# Le seul cas signale existe deja dans la base 90bd60c (BRAssets.cpp / BRHUD.cpp, hors v4.13)
