@@ -490,7 +490,7 @@ FString BRMissionText::SolvedLine(int32 Level)
 	case 3: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.3", "Les secteurs sont aliment\u00e9s : l'ascenseur se remet en marche."));
 	case 4: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.4", "Code accept\u00e9 : la grille de l'acc\u00e8s \u00e0 l'h\u00f4tel se l\u00e8ve."));
 	case 5: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.5", "La chaudi\u00e8re tourne \u00e0 la bonne pression : le passage de la chaufferie s'ouvre."));
-	case 6: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.6", "L'alimentation de secours s'allume : la sortie est \u00e9clair\u00e9e."));
+	case 6: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.6L", "La porte du passage s'ouvre. Derri\u00e8re, le sol est perc\u00e9 ; plus loin, des parasites cr\u00e9pitent pr\u00e8s de l'\u00e9chelle."));
 	case 8: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.8", "La passerelle est descendue : l'\u00e9chelle est accessible."));
 	case 9: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.9", "Le porche s'allume et la porte de la maison s'entrouvre."));
 	case 10: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.10", "Le moulin s'aligne : la porte de la grange d\u00e9sign\u00e9e s'ouvre."));
@@ -510,7 +510,7 @@ FString BRMissionText::GoalTitle(int32 Level)
 	case 3: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.3", "R\u00e9tablir l'alimentation centrale"));
 	case 4: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.4", "Retrouver la destination dans les archives"));
 	case 5: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.5", "Rouvrir la route de la chaufferie"));
-	case 6: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.6", "Rallumer la cha\u00eene de balises"));
+	case 6: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.6L", "Retrouver dans le noir le passage de l'\u00e9quipe"));
 	case 8: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.8", "Franchir le passage que l'\u00e9quipe n'a pas pu tenir"));
 	case 9: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.9", "Rallumer le bon porche"));
 	case 10: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.10", "Ouvrir la grange qui indique la route"));
@@ -531,6 +531,7 @@ FString BRMissionText::StoryLine(int32 Level)
 	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Story.1", "[Sur la porte de la cabine, \u00e0 la craie : \u00ab Les bassins, puis la vapeur. On tient bon. - L. \u00bb]"));
 	case 37: return BR_STR(NSLOCTEXT("BR", "Mission.Story.37", "[Au pied de l'\u00e9chelle, une marque de L. et une fl\u00e8che vers le haut. L'air sent le m\u00e9tal chaud.]"));
 	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Story.2", "[Sur la porte de la station, \u00e0 la craie : un cercle barr\u00e9, un L. et \u00ab Station. On continue. \u00bb]"));
+	case 6: return BR_STR(NSLOCTEXT("BR", "Mission.Story.6", "[Sur le montant de la porte, gratt\u00e9 dans la peinture : un cercle barr\u00e9, un L. et \u00ab En bas, la terre. On descend. \u00bb]"));
 	default: return FString();
 	}
 }

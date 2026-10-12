@@ -407,7 +407,7 @@ namespace
 		D.PitDoorsPerSide = 1;
 		D.Notes = {
 			{ FName(TEXT("Note.L6.4")), NSLOCTEXT("BR", "Note.L6.4", "Ici, les lampes meurent et la vision nocturne ne voit que de la neige. Le scanner, lui, marche : une impulsion pour la pi\u00e8ce, un faisceau maintenu pour le d\u00e9tail. - L.") },
-			{ FName(TEXT("Note.L6.5")), NSLOCTEXT("BR", "Note.L6.5", "Les sourires entendent les impulsions. Un faisceau maintenu sur eux les fait reculer. Ne les laissez pas approcher dans le noir. - L.") },
+			{ FName(TEXT("Note.L6.5")), NSLOCTEXT("BR", "Note.L6.5", "Les sourires entendent les impulsions. Le faisceau maintenu du scanner les fait reculer ; la lampe, elle, les met en col\u00e8re. - L.") },
 			{ FName(TEXT("Note.L6.6")), NSLOCTEXT("BR", "Note.L6.6", "Les fl\u00e8ches bleues au sol sont de nous. Elles m\u00e8nent \u00e0 l'aile d'essai. Au-del\u00e0 des portes, le sol est perc\u00e9 : regardez avant de marcher. - L.") }
 		};
 		return D;
