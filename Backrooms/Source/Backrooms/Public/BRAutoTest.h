@@ -25,6 +25,11 @@
 // balises (lumiere de gameplay), mecanismes masques sans Tick, regle de place unique, objets mis de cote, sante perimee,
 // reprise d'un etat ou d'un placement d'une autre version, carnet. Inclus dans -BRAutoTest ; -BRNetTest y ajoute la
 // compatibilite, l'etat "en attente / accepte / refuse" d'une demande et le depart de groupe par une echelle.
+// v4.13 : -BRAutoTestV413 : porte de service du Level 0 sur plusieurs graines (chemin, marche reelle, visee), histoire
+// (reveil, raccourcis refuses par l'hote, porte prise, suite 1 -> Poolrooms -> 2 -> fin du chapitre, inscription de L.,
+// mission accomplie au retour, CONTINUER et exploration apres la fin), migration des parties du format 4 (copie d'origine,
+// traversee des Poolrooms organisee ou prouvee, session du Level 0). Inclus dans -BRAutoTest ; -BRNetTest y ajoute la
+// porte ouverte par l'hote pour le groupe (etat recu par le client, rassemblement, un seul depart).
 #pragma once
 
 #include "CoreMinimal.h"
@@ -160,6 +165,13 @@ private:
 	/** v4.12 : multijoueur : compatibilite, etat d'une demande d'un client (en attente, accepte, refuse), depart de groupe
 	 *  par une echelle (une seule demande au sommet, grimpeur rassemble, coequipier qui arrive a pied) */
 	void AddNetV412Steps(bool bClient);
+	/** v4.13 : porte de service, histoire, migration (BRAutoTestV413.cpp) */
+	void AddV413Steps();
+	/** v4.13 : porte de service du Level 0 en cours : chemin de L. (continu, sans fosse, marque), marche reelle jusqu'a la
+	 *  porte, visee par l'interaction ; bUse : la porte est prise (touche d'interaction), depart et arrivee au Niveau 1 */
+	void AddServiceDoorWalkSteps(const FString& Tag, bool bUse);
+	/** v4.13 : multijoueur : porte fermee chez les deux, ouverte par l'hote pour le groupe, coequipier a pied, un seul depart */
+	void AddNetV413Steps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
 	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */

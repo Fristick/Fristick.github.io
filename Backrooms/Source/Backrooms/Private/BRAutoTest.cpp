@@ -175,6 +175,17 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Session longue de %.0f min : %d etapes. Rapport : %s"), SoakMinutes, Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV413")))
+	{
+		AddV413Steps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.13 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV412")))
 	{
 		AddV412Steps();
@@ -419,6 +430,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 	AddV410Steps(); // v4.10
 	AddV411Steps(); // v4.11
 	AddV412Steps(); // v4.12
+	AddV413Steps(); // v4.13
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
 	AddLoad(4, 8.f, TEXT("Galerie des entites"));
@@ -775,6 +787,8 @@ void ABRAutoTest::BuildNetPlan()
 	});
 	// v4.12 : compatibilite, etat d'une demande (en attente, accepte, refuse), depart de groupe par l'echelle du sas
 	AddNetV412Steps(bClient);
+	// v4.13 : porte de service du Level 0 ouverte par l'hote pour le groupe, coequipier a pied, un seul depart
+	AddNetV413Steps(bClient);
 	// Le client part le premier ; l'hote attend un peu avant de fermer la partie
 	Add(TEXT("Fin"), bClient ? 6.f : 12.f, []()
 	{

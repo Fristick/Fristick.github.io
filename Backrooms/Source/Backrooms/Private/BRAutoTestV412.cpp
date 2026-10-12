@@ -20,6 +20,7 @@
 // echelle (une seule demande au sommet, grimpeur compte comme rassemble, coequipier qui arrive a pied).
 // Une verification qui ne peut pas etre faite ici est notee "NON VERIFIE", jamais comptee comme reussie.
 #include "BRAutoTest.h"
+#include "BRAutoTestWalk.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
 #include "BRHUD.h"
@@ -153,44 +154,8 @@ namespace BRTestV412
 	// =================================================================================================================
 	// Marche reelle : chemin sur la grille, puis seulement les entrees du joueur
 	// =================================================================================================================
-	struct FWalk
-	{
-		TArray<FVector> Points;
-		int32 Next = 0;
-		FVector Goal = FVector::ZeroVector;
-		float Radius = 80.f;
-		/** Hauteur des pieds attendue a l'arrivee (palier, appui) ; ignoree si bCheckZ est faux */
-		float GoalFeetZ = 0.f;
-		bool bCheckZ = false;
-		/** Pres de la passerelle du Niveau 8 : l'etape suivante vient de la regle des entites (ABRWorld::MissionNavDetour) */
-		bool bDetour = true;
-		/** Chemin de grille trouve (sinon : tout droit vers le but) */
-		bool bPath = false;
-		double Start = 0.0;
-		double CheckAt = 0.0;
-		FVector CheckPos = FVector::ZeroVector;
-		int32 StuckChecks = 0;
-		int32 Jumps = 0;
-		int32 Replans = 0;
-		bool bWantJump = false;
-		bool bJumpHeld = false;
-		float SideLeft = 0.f;
-		float SideSign = 1.f;
-		FVector LastPos = FVector::ZeroVector;
-		float Travelled = 0.f;
-		int32 Frames = 0;
-		int32 SwimFrames = 0;
-		/** Dans un volume d'eau local (bassins, sas) : images, images a la nage, profondeur maximale (surface - pieds) */
-		int32 LocalFrames = 0;
-		int32 LocalSwimFrames = 0;
-		float LocalMaxDepth = 0.f;
-		float MaxFeetZ = -1.0e6f;
-		/** Deplacements de plus de 3 m en une image (le personnage ne doit jamais etre deplace pendant la marche) */
-		int32 Teleports = 0;
-	};
 	FWalk Walk;
 
-	enum class EWalk : uint8 { Moving, Arrived, Stuck };
 
 	bool Replan(const ABRWorld* W, const ABRCharacter* C)
 	{
@@ -210,7 +175,7 @@ namespace BRTestV412
 		return true;
 	}
 
-	bool BeginWalk(const ABRWorld* W, const ABRCharacter* C, const FVector& Goal, float Radius, bool bDetour, bool bCheckZ = false, float GoalFeetZ = 0.f)
+	bool BeginWalk(const ABRWorld* W, const ABRCharacter* C, const FVector& Goal, float Radius, bool bDetour, bool bCheckZ, float GoalFeetZ)
 	{
 		Walk = FWalk();
 		Walk.Goal = Goal;
