@@ -219,6 +219,12 @@ namespace BRMissionText
 	BACKROOMS_API FString Feedback(const BRMission::FPlan& Plan, int32 Device, uint8 Feedback, uint8 Related, uint8 Count);
 	/** Changement visible quand la mission est resolue */
 	BACKROOMS_API FString SolvedLine(int32 Level);
+	/** v4.13 : but du niveau, exprime comme un resultat concret (« Retablir la liaison de service ») */
+	BACKROOMS_API FString GoalTitle(int32 Level);
+	/** v4.13 : court element narratif qui annonce la suite, apres la reussite (trace de l'equipe de L.) ; vide sinon */
+	BACKROOMS_API FString StoryLine(int32 Level);
+	/** v4.13 : inscription de L. dans les Poolrooms (information indispensable : la route naturelle vers la sortie) */
+	BACKROOMS_API FString PoolInscription();
 	/** Objectif facultatif du niveau (vide s'il n'y en a pas) */
 	BACKROOMS_API FString OptionalLine(int32 Level);
 	/** Retours propres au jeu (en plus de BRMission::EFeedback) */

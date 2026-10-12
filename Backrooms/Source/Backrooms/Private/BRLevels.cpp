@@ -162,7 +162,8 @@ namespace
 			{ FName(TEXT("Note.L1.1")), NSLOCTEXT("BR", "Note.L1.1", "Les caisses contiennent parfois de l'eau d'amande et des piles. Fouille-les. Ici, on peut presque survivre.") },
 			{ FName(TEXT("Note.L1.2")), NSLOCTEXT("BR", "Note.L1.2", "Quand les tubes au plafond clignotent, eloigne-toi. Quand ils s'\u00e9teignent, cours.") },
 			{ FName(TEXT("Note.L1.3")), NSLOCTEXT("BR", "Note.L1.3", "L'ascenseur du parking descend vers l'eau. Il faut d'abord remettre la liaison de service sous tension : le sch\u00e9ma est pr\u00e8s de l'entr\u00e9e. - L.") },
-			{ FName(TEXT("Note.L1.4")), NSLOCTEXT("BR", "Note.L1.4", "Les Facelings ne sont pas m\u00e9chants. La plupart. Ne les regarde pas trop longtemps.") }
+			{ FName(TEXT("Note.L1.4")), NSLOCTEXT("BR", "Note.L1.4", "Les Facelings ne sont pas m\u00e9chants. La plupart. Ne les regarde pas trop longtemps.") },
+			{ FName(TEXT("Note.L1.5")), NSLOCTEXT("BR", "Note.L1.5", "Le parking r\u00e9pond encore : quand la liaison a repris, les n\u00e9ons se sont rallum\u00e9s un par un. On a cru que c'\u00e9tait fini. Ce n'\u00e9tait que le d\u00e9but de la route. - L.") }
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 120.f;
 		D.Wall.FloorGrime = 0.5f; D.Pillar.FloorGrime = 0.5f;
@@ -210,7 +211,8 @@ namespace
 		D.Notes = {
 			{ FName(TEXT("Note.L2.1")), NSLOCTEXT("BR", "Note.L2.1", "Il fait si chaud. Les tuyaux sifflent. Ne touche pas ceux qui fument.") },
 			{ FName(TEXT("Note.L2.2")), NSLOCTEXT("BR", "Note.L2.2", "Les Wretches \u00e9taient des gens comme nous. Ils sont lents. Ne les laisse pas s'approcher.") },
-			{ FName(TEXT("Note.L2.3")), NSLOCTEXT("BR", "Note.L2.3", "Une porte de secours plus loin. On dit qu'elle m\u00e8ne \u00e0 la Station \u00e9lectrique. Pr\u00e9pare-toi.") }
+			{ FName(TEXT("Note.L2.3")), NSLOCTEXT("BR", "Note.L2.3", "Une porte de secours plus loin. On dit qu'elle m\u00e8ne \u00e0 la Station \u00e9lectrique. Pr\u00e9pare-toi.") },
+			{ FName(TEXT("Note.L2.4")), NSLOCTEXT("BR", "Note.L2.4", "La vapeur garde la porte de la station. R\u00e8gle les pressions, pas les vannes. Quand elle s'ouvrira, on la marquera pour ceux qui suivent. - L.") }
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 100.f;
 		D.Wall.FloorGrime = 0.5f;
@@ -561,7 +563,7 @@ namespace
 		D.Exits = {};
 		D.Props = EBRProps::City;
 		D.Notes = {
-			{ FName(TEXT("Note.L11.1")), NSLOCTEXT("BR", "Note.L11.1", "Les portes des immeubles m\u00e8nent n'importe o\u00f9. Vraiment n'importe o\u00f9.") },
+			{ FName(TEXT("Note.L11.1")), NSLOCTEXT("BR", "Note.L11.1", "Les portes des immeubles sont mur\u00e9es. La seule route qui reste passe sous la ville, par la station. - L.") },
 			{ FName(TEXT("Note.L11.2")), NSLOCTEXT("BR", "Note.L11.2", "Les Facelings d'ici sont gentils. Ils ne parlent pas, mais ils ne font pas de mal.") }
 		};
 		return D;
@@ -613,7 +615,8 @@ namespace
 		D.Exits = { X(1, EBRExitStyle::NoclipFloor, 0.08f), X(2, EBRExitStyle::Ladder, 0.06f) };
 		D.Notes = {
 			{ FName(TEXT("Note.L37.1")), NSLOCTEXT("BR", "Note.L37.1", "L'eau est ti\u00e8de. Elle n'a pas de fond, a certains endroits. N'y plonge pas.") },
-			{ FName(TEXT("Note.L37.2")), NSLOCTEXT("BR", "Note.L37.2", "C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est \u00e7a, le pi\u00e8ge.") }
+			{ FName(TEXT("Note.L37.2")), NSLOCTEXT("BR", "Note.L37.2", "C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est \u00e7a, le pi\u00e8ge.") },
+			{ FName(TEXT("Note.L37.3")), NSLOCTEXT("BR", "Note.L37.3", "Nous sommes rest\u00e9s trop longtemps au bord de l'eau. M. voulait attendre ici. Nous sommes repartis sans elle, par l'\u00e9chelle. Je reviendrai. - L.") }
 		};
 		// Reflets d'eau animes sur le carrelage (tres doux au plafond)
 		D.Floor.Caustics = 1.f; D.Wall.Caustics = 1.f; D.Pillar.Caustics = 1.f; D.Ceiling.Caustics = 0.35f;

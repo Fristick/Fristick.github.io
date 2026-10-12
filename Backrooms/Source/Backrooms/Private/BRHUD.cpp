@@ -460,7 +460,7 @@ namespace
 			NSLOCTEXT("BR", "HUD.HoundsFuyezCourantFaitesLeur", "Hounds : ne fuyez pas en courant. Faites-leur face, regardez-les et reculez calmement."),
 			NSLOCTEXT("BR", "HUD.PartygoersSoutenezLeurRegardPendant", "Partygoers : ne soutenez pas leur regard. Pendant les coupures de courant, cachez-vous."),
 			NSLOCTEXT("BR", "HUD.EauAmandeApaiseEspritBuvez", "L'eau d'amande apaise l'esprit : buvez-en ({Drink}) quand votre sant\u00e9 mentale baisse."),
-			NSLOCTEXT("BR", "HUD.Niveau0RamassezCassettesVhs", "Au Niveau 0, ramassez les cassettes VHS et filmez une coupure de courant pour ouvrir la sortie."),
+			NSLOCTEXT("BR", "HUD.Level0DraftTip", "Au Niveau 0, rien n'est \u00e0 r\u00e9soudre : suivez l'air froid et les marques de craie de L. jusqu'\u00e0 la porte de service."),
 			NSLOCTEXT("BR", "HUD.MultijoueurJoueurPcPuissantDoit", "En multijoueur, c'est le joueur qui a le PC le plus puissant qui doit h\u00e9berger la partie."),
 			NSLOCTEXT("BR", "HUD.InventoryOuvreInventaireGlissezObjets", "{Inventory} ouvre l'inventaire : glissez les objets, double-cliquez pour les utiliser."),
 			NSLOCTEXT("BR", "HUD.PlacardsTrousMursFoisCache", "Placards, trous dans les murs : une fois cach\u00e9, les entit\u00e9s ne vous voient plus."),
@@ -4667,7 +4667,7 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TempsNiveauLeveltime", "Temps sur ce niveau : {LevelTime}"), { { TEXT("LevelTime"), BRLoc::Arg(Timecode(W->GetLevelTime())) } }), X, Y, FLinearColor(0.7f, 0.8f, 0.9f), 0.8f * U, Medium,
 		false, false);
 	Y += 26.f * U;
-	for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.QuitterNiveauCherchezPassageMur", "Pour quitter un niveau : cherchez un passage (mur qui gr\u00e9sille, porte, \u00e9chelle...). Les sorties \u00e9mettent un bourdonnement \u00e9lectrique : \u00e9coutez.")), ColWidth, Small, 0.75f * U))
+	for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.LeaveLevelHelp", "Pour quitter un niveau : cherchez sa sortie (porte, ascenseur, \u00e9chelle...). Les sorties \u00e9mettent un bourdonnement \u00e9lectrique ; au Niveau 0, la porte de service laisse passer un courant d'air froid.")), ColWidth, Small, 0.75f * U))
 	{
 		TxtLine(L, X, Y, ColWidth, Yellow, 0.75f * U, Small);
 		Y += 20.f * U;
@@ -5456,6 +5456,16 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		LeftH += H;
 	};
 
+	// ---- v4.13 : le but du niveau (resultat concret), puis ses etapes utiles
+	const FString Goal = BRMissionText::GoalTitle(Plan.Level);
+	if (!Goal.IsEmpty())
+	{
+		for (const FString& L : Wrap(Goal.ToUpper(), ColWidth, Medium, 0.86f * U))
+		{
+			Push(L, E.bSolved ? Done : Yellow, 0.86f * U, Medium, 0.f, 26.f * U);
+		}
+		Space(6.f * U);
+	}
 	// ---- Etapes
 	int32 Current = -1;
 	for (int32 I = 0; I < E.NumSteps; ++I)
@@ -5482,15 +5492,6 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		{
 			Push(L, Done, 0.74f * U, Small, 0.f, 19.f * U);
 		}
-		if (Plan.Level == 0 && E.Route != 255)
-		{
-			const FString Route = E.Route ? BR_STR(NSLOCTEXT("BR", "HUD.RoutePool", "Route ouverte : trappe vers les Poolrooms (Niveau 37)"))
-				: BR_STR(NSLOCTEXT("BR", "HUD.RouteL1", "Route ouverte : mur vers le Niveau 1"));
-			for (const FString& L : Wrap(Route, ColWidth, Small, 0.74f * U))
-			{
-				Push(L, Yellow, 0.74f * U, Small, 0.f, 19.f * U);
-			}
-		}
 	}
 	// ---- Objets de l'equipe (fusibles, cles) : partages, un depart ne les emporte pas
 	FString Items;
@@ -5515,10 +5516,20 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	if (!Opt.IsEmpty())
 	{
 		Space(6.f * U);
-		const bool bOptDone = Plan.Level == 0 ? W->GetLoreFound() >= 3 : E.bOptionalDone;
+		const bool bOptDone = E.bOptionalDone;
 		for (const FString& L : Wrap(Opt, ColWidth, Small, 0.74f * U))
 		{
 			Push(L, bOptDone ? Done : InkDim, 0.74f * U, Small, 0.f, 19.f * U);
+		}
+	}
+
+	// ---- v4.13 : Poolrooms : l'inscription de L. (information indispensable sur la route), toujours relisible ici
+	if (Plan.Level == BRStory::Poolrooms)
+	{
+		Space(8.f * U);
+		for (const FString& L : Wrap(BRMissionText::PoolInscription(), ColWidth, Small, 0.74f * U))
+		{
+			Push(L, Ink, 0.74f * U, Small, 0.f, 19.f * U);
 		}
 	}
 
@@ -5849,6 +5860,12 @@ void ABRHUD::DrawEnding(ABRPlayerController* PC, ABRWorld* W)
 		Body = BRLoc::Fmt(NSLOCTEXT("BR", "Ending.ChapterBody", "Le passage s'ouvre sur un couloir qui ne m\u00e8ne encore nulle part : vous avez atteint la fin du contenu disponible dans cette version. La suite, \u00ab {Next} \u00bb, arrivera dans une prochaine mise \u00e0 jour de contenu. Votre partie, vos d\u00e9couvertes et vos fins sont conserv\u00e9es : ce passage s'ouvrira avec la suite."),
 			{ { TEXT("Next"), BRLoc::Arg(BRLevels::LotName(Lot + 1).ToString()) } });
 		Note = BR_STR(NSLOCTEXT("BR", "Ending.ChapterNote", "En attendant, les niveaux d\u00e9j\u00e0 disponibles restent \u00e0 explorer : objectifs facultatifs, documents, autres routes."));
+		if (Lot == 1)
+		{
+			// v4.13 : le chapitre 1 se termine sur la trace de l'equipe de L. : elle est passee par la station
+			Body = BRLoc::Fmt(NSLOCTEXT("BR", "Ending.Chapter1Body", "La vapeur retomb\u00e9e, la porte de la station s'ouvre sur un escalier qui descend vers un bourdonnement \u00e9lectrique. Sur le battant, \u00e0 la craie : un cercle barr\u00e9, un L., et dessous : \u00ab Station. On continue. \u00bb L'\u00e9quipe de L. est pass\u00e9e ici, et elle allait plus loin, vers le dernier quai. Votre chapitre s'arr\u00eate l\u00e0 : la suite, \u00ab {Next} \u00bb, arrivera dans une prochaine mise \u00e0 jour, et votre partie reprendra exactement ici."),
+				{ { TEXT("Next"), BRLoc::Arg(BRLevels::LotName(Lot + 1).ToString()) } });
+		}
 	}
 	const float W0 = FMath::Min(Canvas->ClipX - 120.f * U, 980.f * U);
 	float Y = Canvas->ClipY * 0.2f;
@@ -5860,7 +5877,8 @@ void ABRHUD::DrawEnding(ABRPlayerController* PC, ABRWorld* W)
 	TextF(Note, CX, Y, InkDim, 11.f, EUiWeight::Regular, EUiAlign::Center);
 	Y += 70.f * U;
 	const bool bHost = !W->IsNetGame() || W->HasAuthority();
-	const FString Cont = bHost ? (W->IsChapterEnd() ? BR_STR(NSLOCTEXT("BR", "Ending.ContinueAvailable", "Continuer l'exploration (niveau disponible au hasard)"))
+	// v4.13 : l'exploration apres une fin tire un niveau deja atteint dans l'histoire (rien n'avance)
+	const FString Cont = bHost ? (W->IsChapterEnd() ? BR_STR(NSLOCTEXT("BR", "Ending.ContinueReached", "Continuer l'exploration (un niveau d\u00e9j\u00e0 atteint, au hasard)"))
 		: BR_STR(NSLOCTEXT("BR", "Ending.Continue", "Continuer l'exploration (niveau au hasard)")))
 		: BR_STR(NSLOCTEXT("BR", "Ending.Close", "Fermer (l'h\u00f4te d\u00e9cide de la suite)"));
 	const FString Menu = BR_STR(NSLOCTEXT("BR", "Ending.Menu", "Menu principal"));

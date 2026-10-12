@@ -2761,6 +2761,17 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 		// v4.11 : etapes de la mission (les etapes encore inconnues ne sont pas montrees), facultatif, entite a filmer
 		BRMission::FEval E;
 		GetMissionEval(E);
+		// v4.13 : d'abord le but du niveau, un resultat concret ; les etapes utiles suivent
+		const FString Goal = BRMissionText::GoalTitle(D.Number);
+		if (!Goal.IsEmpty())
+		{
+			FBRObjective G;
+			G.Text = Goal.ToUpper();
+			G.Progress = E.bSolved ? 1 : 0;
+			G.bRequired = true;
+			G.bHideCount = true;
+			Out.Add(G);
+		}
 		for (int32 I = 0; I < E.NumSteps; ++I)
 		{
 			if (E.Steps[I] == BRMission::EStep::Hidden)

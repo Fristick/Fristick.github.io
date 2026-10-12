@@ -1073,6 +1073,9 @@ private:
 	void PlayIntroWake();
 	void OnDraftHint();
 	void ShowDraftHint();
+	/** Poolrooms : inscription de L. (route vers la sortie), en sous-titre peu apres l'arrivee, chez chacun */
+	void ShowPoolInscription();
+	FTimerHandle InscriptionTimer;
 	bool bServiceDoor = false;
 	uint8 ServiceDoorTier = 0;
 	FIntPoint ServiceDoorCell = FIntPoint::ZeroValue;

@@ -443,8 +443,8 @@ FString BRMissionText::SolvedLine(int32 Level)
 {
 	switch (Level)
 	{
-	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.1", "Le courant revient : l'ascenseur arrive et la porte de service se d\u00e9verrouille."));
-	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.2", "La pression s'\u00e9quilibre : la vapeur se dissipe devant la porte."));
+	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.1", "La liaison de service est sous tension : les n\u00e9ons du parking se rallument et l'ascenseur arrive."));
+	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.2", "La pression s'\u00e9quilibre : la vapeur retombe et la porte vers la station est d\u00e9gag\u00e9e."));
 	case 3: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.3", "Les secteurs sont aliment\u00e9s : l'ascenseur se remet en marche."));
 	case 4: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.4", "Code accept\u00e9 : la grille de l'acc\u00e8s \u00e0 l'h\u00f4tel se l\u00e8ve."));
 	case 5: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.5", "La chaudi\u00e8re tourne \u00e0 la bonne pression : le passage de la chaufferie s'ouvre."));
@@ -453,7 +453,42 @@ FString BRMissionText::SolvedLine(int32 Level)
 	case 9: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.9", "Le porche s'allume et la porte de la maison s'entrouvre."));
 	case 10: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.10", "Le moulin s'aligne : la porte de la grange d\u00e9sign\u00e9e s'ouvre."));
 	case 11: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.11", "Destination accept\u00e9e : le portique de la station s'ouvre sur le dernier quai."));
-	case 37: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.37", "Les bassins sont \u00e9quilibr\u00e9s : le passage sec est d\u00e9couvert."));
+	case 37: return BR_STR(NSLOCTEXT("BR", "Mission.Solved.37", "Les bassins sont \u00e9quilibr\u00e9s : le passage sec est d\u00e9couvert jusqu'\u00e0 l'\u00e9chelle."));
+	default: return FString();
+	}
+}
+
+FString BRMissionText::GoalTitle(int32 Level)
+{
+	switch (Level)
+	{
+	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.1", "R\u00e9tablir la liaison de service"));
+	case 37: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.37", "D\u00e9couvrir le passage sec"));
+	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.2", "S\u00e9curiser le passage vers la station"));
+	case 3: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.3", "R\u00e9tablir l'alimentation centrale"));
+	case 4: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.4", "Retrouver la destination dans les archives"));
+	case 5: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.5", "Rouvrir la route de la chaufferie"));
+	case 6: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.6", "Rallumer la cha\u00eene de balises"));
+	case 8: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.8", "Franchir le passage que l'\u00e9quipe n'a pas pu tenir"));
+	case 9: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.9", "Rallumer le bon porche"));
+	case 10: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.10", "Ouvrir la grange qui indique la route"));
+	case 11: return BR_STR(NSLOCTEXT("BR", "Mission.Goal.11", "Rejoindre le dernier quai"));
+	default: return FString();
+	}
+}
+
+FString BRMissionText::PoolInscription()
+{
+	return BR_STR(NSLOCTEXT("BR", "Story.PoolInscription", "Peint au carrelage, \u00e0 la craie bleue : \u00ab Ne nagez pas. Les vannes font monter et baisser l'eau : quand les bassins sont justes, un chemin sec m\u00e8ne \u00e0 l'\u00e9chelle. Elle monte vers la vapeur. - L. \u00bb"));
+}
+
+FString BRMissionText::StoryLine(int32 Level)
+{
+	switch (Level)
+	{
+	case 1: return BR_STR(NSLOCTEXT("BR", "Mission.Story.1", "[Sur la porte de la cabine, \u00e0 la craie : \u00ab Les bassins, puis la vapeur. On tient bon. - L. \u00bb]"));
+	case 37: return BR_STR(NSLOCTEXT("BR", "Mission.Story.37", "[Au pied de l'\u00e9chelle, une marque de L. et une fl\u00e8che vers le haut. L'air sent le m\u00e9tal chaud.]"));
+	case 2: return BR_STR(NSLOCTEXT("BR", "Mission.Story.2", "[Sur la porte de la station, \u00e0 la craie : un cercle barr\u00e9, un L. et \u00ab Station. On continue. \u00bb]"));
 	default: return FString();
 	}
 }

@@ -1485,6 +1485,12 @@ void ABRWorld::OnMissionStateChanged(int32 Device, uint8 Feedback, bool bAnimate
 		if (bAnimate)
 		{
 			ABRHUD::Notify(this, BRMissionText::SolvedLine(GetLevelNumber()), 7.f, FLinearColor(0.55f, 1.f, 0.55f));
+			// v4.13 : un court element narratif annonce la suite (trace de l'equipe de L.), en sous-titre
+			const FString Story = BRMissionText::StoryLine(GetLevelNumber());
+			if (!Story.IsEmpty())
+			{
+				ABRHUD::Caption(this, Story, FVector::ZeroVector, 7.f);
+			}
 			if (UBRAssets* A = UBRAssets::Get(this))
 			{
 				if (USoundBase* S = A->Sound(TEXT("S_Objective")))
@@ -1492,6 +1498,10 @@ void ABRWorld::OnMissionStateChanged(int32 Device, uint8 Feedback, bool bAnimate
 					UGameplayStatics::PlaySound2D(this, S, 0.8f);
 				}
 			}
+		}
+		if (GetLevelNumber() == 1)
+		{
+			MarkStoryEvent(BRStory::Event::ServiceLink); // v4.13 : premiere preuve que les installations repondent encore
 		}
 	}
 }

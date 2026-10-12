@@ -12,6 +12,7 @@
 #include "BRAssets.h"
 #include "BRLevels.h"
 #include "BRLoc.h"
+#include "BRMission.h"
 #include "Backrooms.h"
 
 #include "Algo/Reverse.h"
@@ -272,6 +273,12 @@ int32 ABRWorld::StoryOnLeave(int32 Target, uint32& OutSeed)
 void ABRWorld::OnStoryLevelLoaded()
 {
 	GetWorldTimerManager().ClearTimer(DraftHintTimer);
+	GetWorldTimerManager().ClearTimer(InscriptionTimer);
+	if (GetLevelNumber() == BRStory::Poolrooms)
+	{
+		// Chaque machine, a chaque arrivee : l'information de route ne depend d'aucune collecte
+		GetWorldTimerManager().SetTimer(InscriptionTimer, this, &ABRWorld::ShowPoolInscription, 9.f, false);
+	}
 	if (!HasAuthority())
 	{
 		return;
@@ -434,6 +441,16 @@ void ABRWorld::ShowDraftHint()
 	ABRHUD::Caption(this, BRLoc::Fmt(NSLOCTEXT("BR", "Story.DraftHint", "[Un courant d'air froid, {Dir}. Il vient d'une porte.]"), { { TEXT("Dir"), BRLoc::Arg(Dir) } }),
 		GetServiceDoorLocation(), 7.f);
 	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Story.DraftHintNote", "Suivez l'air froid et les marques de craie de L. (un cercle barré et un L).")), 7.f, FLinearColor(0.8f, 0.9f, 1.f));
+}
+
+void ABRWorld::ShowPoolInscription()
+{
+	if (GetLevelNumber() != BRStory::Poolrooms || IsTransitioning())
+	{
+		return;
+	}
+	ABRHUD::Caption(this, FString(TEXT("[")) + BRMissionText::PoolInscription() + TEXT("]"), FVector::ZeroVector, 10.f);
+	MarkStoryEvent(BRStory::Event::PoolInscription);
 }
 
 float ABRWorld::GetDraftHintRemaining() const
