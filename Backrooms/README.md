@@ -7,7 +7,45 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.12** (stabilité, effets physiques des missions, publication progressive) :
+**Version 4.13** (Level 0 sans énigme, progression stable, histoire de l'équipe de L., kit Blender du Level 0) :
+
+- **Où lire** :
+  - constats sur la base : [`Docs/AUDIT_v4.13.md`](Docs/AUDIT_v4.13.md) ;
+  - corrections, vérifications, commandes, résultats et limites : [`Docs/RAPPORT_v4.13.md`](Docs/RAPPORT_v4.13.md) ;
+  - fil narratif, état de la partie, migration : [`Docs/HISTOIRE_PROGRESSION_v4.13.md`](Docs/HISTOIRE_PROGRESSION_v4.13.md) ;
+  - règles du Level 0 et des transitions : [`Docs/GAMEPLAY_v4.13.md`](Docs/GAMEPLAY_v4.13.md) ;
+  - chapitres et mises à jour de contenu : [`Docs/PLAN_PUBLICATION.md`](Docs/PLAN_PUBLICATION.md) ;
+  - kit Blender du Level 0 : [`RawAssets/Level0Kit/README.md`](RawAssets/Level0Kit/README.md) ;
+  - journaux réels : [`Docs/v413/`](Docs/v413/).
+
+> **Rien de compilé ni de lancé dans Unreal pour la v4.13** : ni moteur ni GPU dans le conteneur de travail.
+>
+> **Préparé, non exécuté** : les tests du jeu (`-BRAutoTestV413`, `-BRNetTest`), l'import du kit dans Unreal, les
+> paquets, les captures du jeu et les mesures.
+>
+> **Exécuté** : les bancs hors moteur (histoire, contenu, missions, mécanismes, départ, lumière, transactions), la
+> simulation de la porte de service sur 500 graines, les outils de langues et de livraison, un contrôle syntaxique du
+> code, et le **kit Blender complet** (Blender 5.0.1 : modules, textures, FBX relus, `.blend`, rendus Cycles).
+
+- **Level 0 sans énigme** : on se réveille, on suit l'air froid et les marques de craie de L., on ouvre une vraie
+  **porte de service** (cadre, charnières, battant, poignée, sas) vers le Niveau 1. Plus de cadrans, de levier, de
+  cassettes ni de liste « 0/1 ». La porte est posée une fois, à 84–140 m de marche, sans traverser de fosse. Aide
+  d'orientation facultative après 7 minutes ; rencontres dosées. En coopération, l'hôte ouvre la porte pour le groupe,
+  rassemblement, un seul départ.
+- **Un seul fil** : `0 → 1 → Poolrooms → 2 → fin du chapitre 1` ; campagne complète
+  `0 → 1 → 37 → 2 → 3 → 4 → 5 → 6 → 8 → 9 → 10 → 11 → dernier quai`. Les Poolrooms sont obligatoires ; plus aucune
+  redirection ni raccourci ; l'hôte valide chaque transition contre l'histoire ; une étape accomplie le reste.
+- **Histoire** : l'équipe de « L. » marche vers le dernier quai et laisse ses traces ; chaque niveau a un but concret ;
+  inscription dans les Poolrooms ; porte de la station marquée à la fin du chapitre 1. État narratif tenu par l'hôte,
+  répliqué, sauvegardé (format 5).
+- **Menu** : NOUVELLE PARTIE, **CONTINUER** (l'histoire), **REJOUER** (un niveau découvert, sans toucher à l'histoire).
+- **Anciennes parties** : copiées puis migrées ; Level 0 sans condition ; traversée des Poolrooms créditée seulement sur
+  preuve, sinon organisée (progression garée, reprise à leur sortie).
+- **Kit Blender du Level 0** (`Tools/Blender/build_level0_kit.py`) : 38 modules `SM_L0_*` texturés (PBR 2K), collisions
+  `UCX_`, UV de lightmap, scène de la graine 9 (vrais trous de 14 m), porte de service, éclairage, repères, FBX,
+  `L0_Placement.json` (conversion Unreal), six rendus Cycles.
+
+**Nouveautés de la version 4.12** (stabilité, effets physiques des missions, publication progressive) :
 
 - **Où lire** :
   - constats sur la base : [`Docs/AUDIT_v4.12.md`](Docs/AUDIT_v4.12.md) ;
@@ -728,8 +766,8 @@ rapport, vérifications et commandes dans [`Docs/RAPPORT_v4.6.md`](Docs/RAPPORT_
    *(Depuis une v3.9 ou v4.0 déjà importée, seuls les nouveaux fichiers (images du menu, sons, texture T_Hazard) sont importés et les
    matériaux reconstruits (flaques), tout seuls à l'ouverture de l'éditeur.)*
 4. Appuyez sur **Play** (Alt+P). Dans le menu principal, choisissez **SOLO**, puis **NOUVELLE PARTIE** (nom, puis
-   **COMMENCER** : Niveau 0) ou une partie existante (choix du niveau parmi ceux déjà explorés, ← / →, puis
-   **NOCLIPPER**). Pour jouer à plusieurs : **MULTIJOUEUR** (voir § 2 ter).
+   **COMMENCER** : Level 0) ou une partie existante : **CONTINUER** reprend l'histoire, **REJOUER** revisite un niveau
+   découvert (← / →) sans changer l'histoire. Pour jouer à plusieurs : **MULTIJOUEUR** (voir § 2 ter).
 
 > Pour relancer l'import à la main : *Window → Output Log*, choisir **Python** en bas, puis
 > `import backrooms_setup; backrooms_setup.run(force=True)`
@@ -790,8 +828,8 @@ Ligne de commande : `-BRLevel=3` pour démarrer directement sur un niveau ; `-BR
 
 L'écran reprend la disposition d'*Escape Together*, avec quelques différences :
 - en-tête **MENU >** et onglets **PERSONNAGE**, **JOURNAL**, **PARAMÈTRES**, **TOUCHES** ;
-- colonne de gauche : **OBJECTIFS** (ex. « FILMER PENDANT UNE COUPURE 0/1 », « TROUVER LES CASSETTES VHS 1/6 »), qui
-  passent à la ligne et défilent à la molette, et **ÉTAT** (v4.9) : exactement deux jauges. **ENDURANCE** a 10
+- colonne de gauche : **OBJECTIFS** (v4.13 : le but du niveau, ex. « RÉTABLIR LA LIAISON DE SERVICE », puis ses étapes
+  utiles ; aucun au Level 0), qui passent à la ligne et défilent à la molette, et **ÉTAT** (v4.9) : exactement deux jauges. **ENDURANCE** a 10
   segments et une icône en chevrons ; **SANTÉ MENTALE** est une barre continue avec une icône en œil. Chacune donne un
   pourcentage, un état en mots et une tendance. Il n'y a **pas de jauge de santé** ;
 - au centre : **POCHES** (4 cases, raccourcis 1 à 4) et **STOCKAGE** (20 cases) ;
@@ -807,7 +845,7 @@ Le monde **continue de tourner** quand l'inventaire est ouvert : comme dans le j
 | Bandages | +35 santé |
 | Piles | recharge la lampe et le caméscope |
 | Barre énergétique | endurance au maximum et récupération doublée pendant 30 s |
-| Cassette VHS | objectif du Niveau 0 |
+| Cassette VHS | document (anciennes parties ; plus d'objectif depuis la v4.13) |
 | Lampe torche | main ou ceinture, **F** |
 | Lampe frontale | tête : éclaire en gardant les mains libres |
 | Gilet de protection | torse : −30 % de dégâts |
@@ -873,8 +911,8 @@ La dernière adresse utilisée est mémorisée. Si la connexion échoue, un mess
 - le niveau et ses salles (même graine de génération) ; quand un joueur prend une sortie, **tout le groupe change de niveau** ;
 - les coupures de courant et les lampes rouges du Niveau 0 ;
 - les entités : l'hôte les simule, et elles traquent le joueur vivant le plus proche (un joueur caché est délaissé) ;
-- les objectifs du Niveau 0 : les cassettes VHS et les enregistrements de chacun comptent pour tous. Un objet ramassé
-  disparaît chez tout le monde.
+- l'histoire (v4.13) : l'hôte la tient et la sauvegarde ; il ouvre la porte de service du Level 0 pour tout le groupe et
+  valide chaque changement de niveau. Un objet ramassé disparaît chez tout le monde.
 
 Vous voyez vos coéquipiers en combinaison hazmat (lampe allumée, objet en main, nage), leur nom et leur distance
 au-dessus de leur tête, et vous entendez leurs pas.
@@ -938,10 +976,12 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
   Filmer une entité pendant 3 secondes l'ajoute au journal.
 - **Coupures de courant** (Niveaux 0, 1, 2, 3, 5) : les néons vacillent puis s'éteignent pendant 25 à 40 secondes.
   Les entités en profitent (Partygoers en chasse, Smilers plus nombreux).
-- **Objectifs du Niveau 0** : comme dans Escape Together, les sorties restent **instables** tant que vous n'avez pas
-  retrouvé **6 cassettes VHS** (elles luisent faiblement) et **filmé pendant une coupure** (5 secondes, caméscope sur vous).
-- **Sorties** : chaque niveau contient des passages vers d'autres niveaux (mur qui « glitche », porte de secours,
-  ascenseur, échelle, grange…). Ils émettent un **bourdonnement électrique** : écoutez-le pour les trouver.
+- **Level 0** (v4.13) : aucun objectif à remplir. La seule sortie est une **porte de service** dans le mur d'enceinte :
+  suivez le courant d'air froid (on l'entend, un filet de lumière passe sous la porte) et les marques de craie de L. (un
+  cercle barré et un « L. »).
+- **Sorties** : chaque niveau contient des passages vers d'autres niveaux (porte de secours, ascenseur, échelle,
+  grange…). Ils émettent un **bourdonnement électrique** : écoutez-le pour les trouver. La sortie de progression mène au
+  niveau suivant de l'histoire ; l'hôte refuse un niveau que l'histoire n'a pas encore atteint.
   Les **échelles** se grimpent (**E** pour s'accrocher, avancer / reculer pour monter ou descendre, **Espace** pour
   lâcher) : on noclippe en haut, dans le conduit au-dessus de la trappe.
 - **Notes** : des vagabonds ont laissé des notes, avec des indices et les règles de survie.
@@ -956,7 +996,7 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
 - **Mort** : vous vous réveillez au Niveau 0 avec l'équipement de départ (caméscope dans le sac, lampe, eau, bandage,
   piles).
 - **Fosses** (Niveau 0, v4.6) : restez sur les passages. Une chute est mortelle et personne ne peut vous relever. La
-  galerie qui fait le tour de la salle permet de l'éviter : cassettes et sorties ne sont jamais dedans.
+  galerie qui fait le tour de la salle permet de l'éviter ; le chemin de la porte de service n'y passe jamais.
 
 L'image garde un léger grain et un effet VHS (désactivables), sans cadre de caméscope depuis la 4.2.
 
@@ -966,18 +1006,18 @@ L'image garde un léger grain et un effet VHS (désactivables), sans cadre de ca
 
 | N° | Titre (wiki) | Ambiance dans le jeu | Entités | Sorties |
 |---|---|---|---|---|
-| **0** | *Threshold* (« The Lobby ») | Salles jaunes (zone close de 112 m), papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent, sautent lors des coupures et **rougissent près de la Bacteria**. Placards et trous dans le mur pour se cacher | Bacteria (fait des rondes), Smilers (dans le noir et à chaque coupure) | Zone close de 112 m. Mur qui glitche → 1, échelle vers une trappe du plafond → 37 (on noclippe en montant). **Mission (v4.11)** : néons anormaux observés, panneau de trois cadrans, levier d'aiguillage qui choisit la route (1 ou 37). Une partie d'avant la v4.11 garde les 6 cassettes et l'enregistrement d'une coupure jusqu'à la sortie du niveau |
-| **1** | *Habitable Zone* | Entrepôt de béton brumeux, piliers, flaques, caisses | Smilers, Facelings, Hounds | Porte de secours → 2, ascenseur → 4. **Mission** : schéma, fusibles, deux circuits, appel de l'ascenseur |
-| **2** | *Abandoned Utility Halls* (« Pipe Dreams ») | Labyrinthe de couloirs étroits, tuyaux, ampoules orange | Wretches, Hounds, Clump, Smilers | Porte → 3, échelle → 1. **Mission** : plaque des pressions, manomètres, vannes (vapeur dissipée) |
+| **0** | *Threshold* (« The Lobby ») | Salles jaunes (zone close de 112 m), papier peint en relief, moquette humide, prises et aérations, néons qui bourdonnent, clignotent, sautent lors des coupures et **rougissent près de la Bacteria**. Placards et trous dans le mur pour se cacher | Bacteria (fait des rondes), Smilers (dans le noir et à chaque coupure) | Zone close de 112 m. **v4.13** : une seule sortie, la **porte de service** → 1, dans le mur d'enceinte (air froid, marques de craie de L.). Aucune mission, aucune liste d'objectifs |
+| **1** | *Habitable Zone* | Entrepôt de béton brumeux, piliers, flaques, caisses | Smilers, Facelings, Hounds | Ascenseur → 37 (v4.13). **Mission** (« Rétablir la liaison de service ») : schéma, fusibles, deux circuits, appel de l'ascenseur |
+| **2** | *Abandoned Utility Halls* (« Pipe Dreams ») | Labyrinthe de couloirs étroits, tuyaux, ampoules orange | Wretches, Hounds, Clump, Smilers | Porte de la station → 3 (fin du chapitre 1 dans la version publiée), échelle → 37 (retour). **Mission** (« Sécuriser le passage vers la station ») : plaque des pressions, manomètres, vannes (vapeur dissipée) |
 | **3** | *Electrical Station* | Briques, grilles métalliques, armoires électriques, vacarme de machines | Hounds, Skin-Stealers, Smilers, Deathmoths, Wretches | Ascenseur → 4, porte → 2. **Mission** : tableau de charge, boîte en défaut, relais |
-| **4** | *Abandoned Office* | Rangées de petits bureaux cloisonnés (ordinateur beige, chaise noire, fontaine à eau), allées à moquette bleu marine, faux plafond blanc ; quelques open spaces. Beaucoup d'eau d'amande | Facelings, Partygoer (rare) | Porte → 5 (derrière une grille), ascenseur → 1. **Mission** : planning, annuaire des archives, code à trois molettes |
+| **4** | *Abandoned Office* | Rangées de petits bureaux cloisonnés (ordinateur beige, chaise noire, fontaine à eau), allées à moquette bleu marine, faux plafond blanc ; quelques open spaces. Beaucoup d'eau d'amande | Facelings, Partygoer (rare) | Porte → 5 (derrière une grille), ascenseur → 3 (retour). **Mission** : planning, annuaire des archives, code à trois molettes |
 | **5** | *Terror Hotel* | Couloirs d'hôtel des années 1920, moquette rouge, appliques, portes numérotées | Skin-Stealers, Partygoers, Facelings | Porte « chaufferie » → 6, retour → 4. **Mission** : registre, trousseau, serrures, consigne de la chaudière |
 | **6** | *Lights Out* | Obscurité totale : seule votre lampe éclaire | Smilers (nombreux) | Échelle → 8. **Mission** : plaque en relief, chaîne de balises, alimentation de secours (sortie éclairée) |
 | **8** | *Cave System* | Grottes rocheuses, vieilles lampes de mine | Deathmoths, Clump, Hounds | Échelle → 9. **Mission** : marques gravées, treuils dans l'ordre, passerelle |
 | **9** | *The Suburbs* | Banlieue infinie la nuit, maisons, lampadaires au sodium | Skin-Stealers, Hounds, Facelings | Porte de maison entrouverte → 10. **Mission** : plans des maisons, boîtier de rue |
 | **10** | *Field of Wheat* | Champ de blé infini sous un soleil bas et des nuages (v4.11), granges, poteaux | Faceling (paisible) | Grange → 11. **Mission** : marque de clôture, tableau des granges, moulin, frein |
-| **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour ; rues éclairées (v4.11) | Facelings (paisibles) | **Mission** : générateur, chiffres de la route, destination → **fin** (le dernier quai). Porte d'immeuble → niveau aléatoire (route annexe) |
-| **37** | *Sublimity* (« Poolrooms ») | Couloirs en carrelage vert d'eau bordés de canaux et de trottoirs, arches en plein cintre, corniches sous un plafond en plâtre, grandes salles inondées à colonnades, plafonniers ovales et grandes verrières inclinées. Eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Sol qui glitche → 0, échelle → 4. **Mission** : marques de niveau, sens du courant, deux vannes (passage sec découvert) |
+| **11** | *The Endless City* | Ville infinie de gratte-ciel, en plein jour ; rues éclairées (v4.11) | Facelings (paisibles) | **Mission** : générateur, chiffres de la route, destination → **fin** (le dernier quai). Plus de porte d'immeuble vers un niveau au hasard (v4.13) |
+| **37** | *Sublimity* (« Poolrooms ») | Couloirs en carrelage vert d'eau bordés de canaux et de trottoirs, arches en plein cintre, corniches sous un plafond en plâtre, grandes salles inondées à colonnades, plafonniers ovales et grandes verrières inclinées. Eau tiède, limpide et turquoise, presque immobile : ce sont les joueurs qui la font onduler (sillage simulé, réfraction, caustiques). **Bassins profonds** où l'on nage, éclairés par des projecteurs immergés | aucune | Échelle du passage sec → 2 (v4.13, étape obligatoire), sol qui glitche → 1 (retour). **Mission** (« Découvrir le passage sec ») : marques de niveau, sens du courant, deux vannes ; inscription de L. |
 
 Chaque niveau est une grille **infinie** (sauf le Niveau 0, une zone close de 112 m depuis la v4.3) générée par hachage déterministe à partir d'une graine. Elle est chargée par morceaux de 8×8 cellules (« chunks ») autour du joueur, et chaque visite produit une nouvelle disposition.
 Algorithmes : salles aléatoires (0, 1, 4, 6, 37), labyrinthe (2, 3), couloirs d'hôtel (5), grottes (8),
@@ -1064,6 +1104,7 @@ Backrooms/
 ├── RawAssets/                   Ressources sources (déjà générées)
 │   ├── Textures/ (+ normal maps *_N)  Icons/  Sounds/  Meshes/ (FBX)  Skeletal/ (FBX à squelette)  Previews/
 │   ├── protected_assets.json    v4.5 : empreintes des fichiers tirés des modèles fournis (Tools/protect_assets.py)
+│   ├── Level0Kit/               v4.13 : kit modulaire du Level 0 (BR_Level0.blend, FBX, textures, placement, rendus)
 ├── Tools/
 │   ├── Blender/generate_models.py    ★ Modélisation procédurale (décor, objets, formes de secours) + icônes (Blender)
 │   ├── Blender/preview_entities.py   Rendu d'aperçu des entités assemblées
@@ -1072,7 +1113,12 @@ Backrooms/
 │   ├── Blender/build_creatures.py    v4.5 : Wretch et Clump reconstruits (squelettes, peau cuite)
 │   ├── Blender/render_compare.py     v4.5 : rendus Blender avant / après (Docs/v45)
 │   ├── protect_assets.py             v4.5 : protection des modèles fournis (check / update / list)
-│   ├── verify_pitfalls.py            v4.6 : génération du Niveau 0 rejouée en Python (fosses, accès, raccords, IA)
+│   ├── verify_pitfalls.py            v4.6 : génération du Niveau 0 rejouée en Python (fosses, accès, raccords, IA ;
+│   │                                 v4.13 : porte de service et chemin de L., --doors)
+│   ├── Blender/build_level0_kit.py   v4.13 : kit modulaire du Level 0 (modules, scène, exports, rendus)
+│   ├── Blender/level0_kit_textures.py v4.13 : textures PBR du kit (numpy, Pillow)
+│   ├── Story/test_story.cpp          v4.13 : banc du fil narratif (ordre, accès, migration)
+│   ├── generate_story_sounds.py      v4.13 : sons de la porte de service (S_Draft, S_ServiceDoor)
 │   ├── check_paths.py                v4.9 : casse des noms de ressources, polices et inclusions (Linux, macOS)
 │   ├── Build/                        v4.9 : construction Windows, Linux, macOS (versions.env, build_*, check_package.py)
 │   ├── Steam/                        v4.9 : fichiers SteamPipe (make_steam_vdf.py) et envoi (upload_steam.sh)
@@ -1114,6 +1160,10 @@ python Tools/verify_pitfalls.py --seeds 1-24 --maps Docs/v46/cartes_24_graines.p
 python Tools/verify_pitfalls.py --seed 9 --json pit.json && python Tools/Blender/render_pitroom.py -- pit.json Docs/v46/blender_fosses
 python Tools/Blender/check_rig_motion.py -- Docs/v46/blender_rigs_en_mouvement.jpg
 python Tools/Blender/build_hound_lite.py -- --preview Docs/v46/blender_hound_original_vs_lite.jpg   # (--force pour refaire)
+# v4.13
+python Tools/verify_pitfalls.py --doors 1-500                       # porte de service du Level 0 (500 graines)
+python Tools/Blender/build_level0_kit.py --seed 9 --render          # kit du Level 0 -> RawAssets/Level0Kit
+python Tools/generate_story_sounds.py                               # S_Draft, S_ServiceDoor
 ```
 Les fichiers tirés des modèles fournis sont **protégés** : un script relancé ne les remplace pas (« PROTEGE, non
 remplacé »). Pour les régénérer volontairement, ajoutez `--force` : l'ancienne version est d'abord copiée dans
@@ -1450,6 +1500,30 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Mechanisms/test_mechanisms.cpp \
       Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_mechanisms && ./test_mechanisms
   ```
+- **`-BRAutoTestV413`** (v4.13, avec `-BRAutoTest`) lance seules les vérifications v4.13 ; elles sont aussi dans
+  `-BRAutoTest`. **Préparé, non exécuté.** La partie active et le mode du joueur sont rétablis à la fin (sauvegardes du
+  test : `BR_AutoTestV413_*`) :
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV413 -BRAutoTestStrict
+  ```
+  - **porte de service** sur cinq graines (9, 1, 77, 4605, 31337) : chemin continu sans fosse, marques, une seule sortie,
+    marche réelle du départ à la porte (entrées du joueur seulement), porte visée par l'interaction ;
+  - **histoire** (partie de test) : réveil, aide programmée, porte fermée ; Niveaux 1, 37 et 2 refusés depuis le Level 0 ;
+    porte ouverte à la main, arrivée au Niveau 1, étape sauvegardée ; `1 → 37 → 2 → fin du chapitre` en marchant ;
+    inscription de L. ; mission accomplie au retour ; CONTINUER et exploration après la fin ;
+  - **migration** de vrais fichiers du format 4 : copie d'origine identique, traversée des Poolrooms organisée ou prouvée,
+    session du Level 0 sans condition.
+
+  **`-BRNetTest`, v4.13** (Level 0, graine 9) : porte fermée chez les deux ; l'hôte l'ouvre, le client reçoit l'état et
+  voit le battant s'ouvrir ; rassemblement, coéquipier à pied, un seul départ vers le Niveau 1.
+- **Bancs v4.13** (exécutés, [`Docs/v413/`](Docs/v413/)) : `Tools/Story/test_story.cpp` (histoire, 44 vérifications),
+  banc de contenu (68), missions (3000 graines × 12 niveaux), et `python3 Tools/verify_pitfalls.py --doors 1-500` (porte
+  de service, 500 graines, 0 problème).
+- **Kit Blender du Level 0** (v4.13, exécuté avec Blender 5.0.1) :
+  ```sh
+  python Tools/Blender/build_level0_kit.py --seed 9 --render     # ou : blender -b -P Tools/Blender/build_level0_kit.py -- --seed 9 --render
+  ```
+  Sortie et réglages d'import (préparés, non exécutés) : [`RawAssets/Level0Kit/README.md`](RawAssets/Level0Kit/README.md).
 
 ---
 
