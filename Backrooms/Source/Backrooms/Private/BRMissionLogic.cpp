@@ -61,8 +61,7 @@ namespace Impl
 	// Indices des appareils par niveau (l'ordre de BuildLevel)
 	enum : int
 	{
-		// Niveau 0 : trois anomalies, note, trois cadrans, bouton, levier de route, passage
-		L0_Anom = 0, L0_Note = 3, L0_Dial = 4, L0_Stab = 7, L0_Lever = 8, L0_Pass = 9,
+		// Niveau 0 : sans mission depuis la v4.13 (introduction d'exploration ; porte de service posee par le monde)
 		// Niveau 1 : schema, trois fusibles, prises A-E, disjoncteurs A-E, appel, reserve, note de reserve
 		L1_Schem = 0, L1_Fuse = 1, L1_Sock = 4, L1_Brk = 9, L1_Call = 14, L1_ResLights = 15, L1_ResNote = 16,
 		// Niveau 2 : plaque, trois manometres, trois vannes, porte de vapeur
@@ -88,7 +87,6 @@ namespace Impl
 	};
 
 	// Parametres (Params) par niveau :
-	//   0 : [0..2] clignotements des anomalies, [3..5] valeur voulue de chaque cadran
 	//   1 : [0] [1] circuits de l'ascenseur, [2] circuit de la reserve, [3] [4] circuits sans fusible
 	//   2 : [0..2] pression voulue par manometre, [3..5] vanne de chaque manometre, [6..8] cible de chaque vanne
 	//   3 : [0] secteur en defaut, [1..4] secteur de chaque relais, [5] relais en defaut
@@ -114,32 +112,6 @@ namespace Impl
 		R.Shuffle(Sym, NumSymbols);
 		switch (Level)
 		{
-		case 0:
-		{
-			uint8_t Zones[3] = { 1, 2, 3 };
-			R.Shuffle(Zones, 3);
-			for (int I = 0; I < 3; ++I)
-			{
-				const int D = Add(P, EKind::Observe, R_Anomaly, Sym[I], 4, Zones[I], 0);
-				P.Params[I] = (uint8_t)(1 + R.Range(7));
-				P.Devices[D].Info[0] = P.Params[I];
-			}
-			Add(P, EKind::Clue, R_MaintNote, 0, 1, 0, 0);
-			uint8_t Ord[3] = { 0, 1, 2 };
-			R.Shuffle(Ord, 3);
-			for (int I = 0; I < 3; ++I)
-			{
-				Add(P, EKind::Switch, R_Dial, Sym[Ord[I]], 8, 4, 1);
-				P.Params[3 + I] = P.Params[Ord[I]];
-			}
-			Add(P, EKind::Button, R_Stabilize, 0, 1, 4, 1);
-			Add(P, EKind::Switch, R_RouteLever, 0, 2, 4, 1);
-			Add(P, EKind::Gate, R_Passage, 0, 1, 4, 1);
-			P.NumSteps = 3;
-			P.bHasRoute = true;
-			// Les trois anomalies identiques rendraient le panneau trivial
-			return !(P.Params[0] == P.Params[1] && P.Params[1] == P.Params[2]);
-		}
 		case 1:
 		{
 			uint8_t Letters[5] = { 0, 1, 2, 3, 4 };
@@ -438,16 +410,6 @@ namespace Impl
 	int Pos37A(const FState& S) { return S.Dev[L37_SluiceA]; }
 	int Pos37B(const FState& S) { return S.Dev[L37_SluiceB]; }
 	int RawLevelB(const FPlan& P, const FState& S) { return P.Params[2] + Pos37A(S) - Pos37B(S); }
-
-	int WrongDials0(const FPlan& P, const FState& S)
-	{
-		int N = 0;
-		for (int I = 0; I < 3; ++I)
-		{
-			N += S.Dev[L0_Dial + I] != P.Params[3 + I] ? 1 : 0;
-		}
-		return N;
-	}
 
 	int CorrectValves2(const FPlan& P, const FState& S)
 	{
@@ -759,10 +721,6 @@ namespace Impl
 		bool bCount = false;
 		switch (P.Level)
 		{
-		case 0:
-			Wrong = WrongDials0(P, S);
-			bCount = true;
-			break;
 		case 1:
 			Wrong = (S.Dev[L1_Brk + P.Params[0]] == 1 ? 0 : 1) + (S.Dev[L1_Brk + P.Params[1]] == 1 ? 0 : 1);
 			bCount = true;
@@ -849,7 +807,8 @@ bool HasMission(int Level)
 {
 	switch (Level)
 	{
-	case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 8: case 9: case 10: case 11: case 37:
+	// v4.13 : le Niveau 0 n'a plus de mission (introduction d'exploration, porte de service sans condition)
+	case 1: case 2: case 3: case 4: case 5: case 6: case 8: case 9: case 10: case 11: case 37:
 		return true;
 	default:
 		return false;
@@ -936,12 +895,6 @@ FResult CanUse(const FPlan& P, const FState& S, const FCampaign& Campaign, int D
 	}
 	switch (P.Level)
 	{
-	case 0:
-		if (Dev == L0_Stab && !Solved(S))
-		{
-			R.Related = FirstUnobserved(P, S, L0_Anom, 3);
-		}
-		break;
 	case 1:
 		if (Dev == L1_ResNote && !S.Dev[Dev] && S.Dev[L1_Brk + P.Params[2]] != 1)
 		{
@@ -1112,23 +1065,6 @@ void Evaluate(const FPlan& P, const FState& S, const FCampaign& Campaign, FEval&
 	const bool bSolved = E.bSolved;
 	switch (P.Level)
 	{
-	case 0:
-	{
-		int Docs = 0;
-		for (int I = 0; I < 3; ++I)
-		{
-			Docs += Observed(P, S, L0_Anom + I) ? 1 : 0;
-		}
-		SetStep(E, 0, Docs, 3, true);
-		SetStep(E, 1, bSolved ? 1 : 0, 1, StepDone(E, 0));
-		SetStep(E, 2, 0, 1, bSolved);
-		if (bSolved)
-		{
-			E.Route = S.Dev[L0_Lever];
-			E.Gate[L0_Pass] = 255;
-		}
-		break;
-	}
 	case 1:
 	{
 		const int Fused = (S.Dev[L1_Sock + P.Params[0]] ? 1 : 0) + (S.Dev[L1_Sock + P.Params[1]] ? 1 : 0);
@@ -1499,10 +1435,13 @@ bool GetClue(const FPlan& P, const FState& S, int Dev, FClue& C)
 
 bool IsExitGuarded(int Level, int Target)
 {
+	// v4.13 : la sortie de progression de chaque niveau, dans l'ordre de la campagne (BRStoryLogic : 0 -> 1 -> 37 -> 2 ->
+	// 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai). Le Niveau 0 n'a pas de mission : sa porte de service est
+	// libre. Les sorties de retour restent libres
 	switch (Level)
 	{
-	case 0: return Target == 1 || Target == 37;
-	case 1: return Target == 2 || Target == 4;
+	case 1: return Target == 37;
+	case 37: return Target == 2;
 	case 2: return Target == 3;
 	case 3: return Target == 4;
 	case 4: return Target == 5;
@@ -1512,7 +1451,6 @@ bool IsExitGuarded(int Level, int Target)
 	case 9: return Target == 10;
 	case 10: return Target == 11;
 	case 11: return Target == EndingTarget;
-	case 37: return Target == 0 || Target == 4;
 	default: return false;
 	}
 }
@@ -1523,15 +1461,7 @@ bool IsExitOpen(const FPlan& Plan, const FState& State, int Target)
 	{
 		return true;
 	}
-	if (!Solved(State))
-	{
-		return false;
-	}
-	if (Plan.Level == 0)
-	{
-		return State.Dev[L0_Lever] == (Target == 1 ? 0 : 1);
-	}
-	return true;
+	return Solved(State);
 }
 
 uint8_t RouteBitFor(int Level)
@@ -1549,7 +1479,8 @@ uint16_t OptionalBitFor(int Level)
 {
 	switch (Level)
 	{
-	case 0: return 1u << 0;
+	// Bit 0 : objectif facultatif du Niveau 0 jusqu'a la v4.12 (trois cassettes) ; plus attribue, garde dans les parties
+	// qui l'ont deja (il compte toujours pour la variante de la fin)
 	case 1: return 1u << 1;
 	case 4: return 1u << 2;
 	case 5: return 1u << 3;

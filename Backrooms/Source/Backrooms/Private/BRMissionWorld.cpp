@@ -2,6 +2,7 @@
 // l'hote et replique, validation des actions, sorties conditionnees par la mission, sortie de groupe, campagne et fin.
 #include "BRWorld.h"
 #include "BRMission.h"
+#include "BRStoryLogic.h"
 #include "BRGatherLogic.h"
 #include "BRCharacter.h"
 #include "BREntity.h"
@@ -45,24 +46,12 @@ namespace
 		}
 	}
 
-	/** Sortie de progression de la base (v4.11) */
+	/** Sortie de progression d'un niveau. v4.13 : l'ordre de la campagne (BRStoryLogic : 0 -> 1 -> 37 -> 2 -> 3 -> ... ->
+	 *  11 -> dernier quai), le meme dans toutes les versions */
 	int32 BaseForwardTarget(int32 Level)
 	{
-		switch (Level)
-		{
-		case 1: return 4;
-		case 2: return 3;
-		case 3: return 4;
-		case 4: return 5;
-		case 5: return 6;
-		case 6: return 8;
-		case 8: return 9;
-		case 9: return 10;
-		case 10: return 11;
-		case 11: return BRM::EndingTarget;
-		case 37: return 4;
-		default: return -1;
-		}
+		const int Next = BRStory::NextOf(Level);
+		return Next == BRStory::Ending ? BRM::EndingTarget : Next;
 	}
 
 	/** Sortie que la porte de la mission garde (la porte est posee devant). v4.12 : adaptee a cette version : si la

@@ -116,7 +116,10 @@ enum class EBRExitStyle : uint8
 	Ladder,
 	Barn,
 	HouseDoor,
-	BuildingDoor
+	BuildingDoor,
+	/** v4.13 : porte de service du Level 0 (cadre, battant sur pivot, poignee), posee une fois par le monde dans le mur
+	 *  d'enceinte, jamais tiree par les chunks. Ajoutee en fin d'enum : les valeurs des styles existants ne changent pas */
+	ServiceDoor
 };
 
 /** v4.7 : cause de la mort d'un joueur : decide si un coequipier peut le relever, le delai avant le reveil et les messages.

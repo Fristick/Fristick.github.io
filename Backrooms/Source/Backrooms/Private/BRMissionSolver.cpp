@@ -56,10 +56,13 @@ namespace BRMission
 
 	int ForwardTarget(int Level, int Route)
 	{
+		(void)Route; // v4.13 : plus de choix de route (le levier du Niveau 0 est retire)
 		switch (Level)
 		{
-		case 0: return Route == 0 ? 1 : 37;
-		case 1: return 4;
+		// v4.13 : ordre de la campagne (BRStoryLogic) ; le Niveau 0 n'a pas de mission, sa porte mene au Niveau 1
+		case 0: return 1;
+		case 1: return 37;
+		case 37: return 2;
 		case 2: return 3;
 		case 3: return 4;
 		case 4: return 5;
@@ -69,7 +72,6 @@ namespace BRMission
 		case 9: return 10;
 		case 10: return 11;
 		case 11: return EndingTarget;
-		case 37: return 4;
 		default: return -1;
 		}
 	}
@@ -175,44 +177,12 @@ namespace BRMission
 
 	bool FSolver::Solve(int Route)
 	{
+		(void)Route;
 		FClue Cl;
 		int List[MaxDevices];
 		int N = 0;
 		switch (P.Level)
 		{
-		case 0:
-		{
-			int Blinks[NumSymbols];
-			for (int I = 0; I < NumSymbols; ++I)
-			{
-				Blinks[I] = -1;
-			}
-			N = FindRole(P, R_Anomaly, List, MaxDevices);
-			for (int I = 0; I < N; ++I)
-			{
-				if (!HoldUntilDone(List[I]) || !GetClue(P, S, List[I], Cl) || Cl.Kind != EClue::AnomalyBlinks || Cl.A[0] >= NumSymbols)
-				{
-					return false;
-				}
-				Blinks[Cl.A[0]] = Cl.B[0];
-			}
-			Read(FirstRole(P, R_MaintNote), Cl);
-			N = FindRole(P, R_Dial, List, MaxDevices);
-			for (int I = 0; I < N; ++I)
-			{
-				const int Sym = P.Devices[List[I]].Label;
-				if (Sym >= NumSymbols || Blinks[Sym] < 0 || !SetSwitch(List[I], Blinks[Sym]))
-				{
-					return false;
-				}
-			}
-			if (!SolverImpl::DoneOrAlready(Do(FirstRole(P, R_Stabilize), EAction::Use, 0)))
-			{
-				return false;
-			}
-			SetSwitch(FirstRole(P, R_RouteLever), Route);
-			return true;
-		}
 		case 1:
 		{
 			if (!Read(FirstRole(P, R_Schematic), Cl))

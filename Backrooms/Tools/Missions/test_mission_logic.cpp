@@ -1,4 +1,6 @@
 // v4.11 : banc d'essai hors moteur de la logique des missions (Source/Backrooms/Private/BRMissionLogic.cpp).
+// v4.13 : le Niveau 0 n'a plus de mission (introduction d'exploration) : il est verifie a part (aucun plan, aucune sortie
+// gardee, sa porte mene au Niveau 1) ; les sorties gardees suivent l'ordre de la campagne (0 -> 1 -> 37 -> 2 -> ...).
 //
 // Compilation et lancement (depuis Backrooms/) :
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Missions/test_mission_logic.cpp
@@ -29,7 +31,7 @@
 
 using namespace BRMission;
 
-static const int Levels[] = { 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37 };
+static const int Levels[] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37 };
 static int Failures = 0;
 static std::map<std::string, int> FailureKinds;
 
@@ -71,11 +73,6 @@ static std::vector<int> FindRole(const FPlan& P, int Role)
 static bool ReadDev(FCtx& X, int D, FClue& C)
 {
 	return X.Read(D, C);
-}
-
-static bool HoldUntilDone(FCtx& X, int D)
-{
-	return X.HoldUntilDone(D);
 }
 
 static bool Solve(FCtx& X, int Route)
@@ -167,15 +164,6 @@ static void MistakeScenarios(int Level, uint32_t Seed, int& Checked)
 	};
 	switch (Level)
 	{
-	case 0:
-	{
-		Expect(Do(X, FindRole(P, R_Stabilize)[0], EAction::Use, 0), EFeedback::Locked, "stabiliser sans observations");
-		for (int D : FindRole(P, R_Anomaly)) HoldUntilDone(X, D);
-		const FResult R = Do(X, FindRole(P, R_Stabilize)[0], EAction::Use, 0);
-		Expect(R, EFeedback::Wrong, "cadrans au repos");
-		if (R.Count == 0) Fail(Level, Seed, "nombre de cadrans faux absent");
-		break;
-	}
 	case 1:
 	{
 		ReadDev(X, FindRole(P, R_Schematic)[0], C);
@@ -309,7 +297,50 @@ static void MistakeScenarios(int Level, uint32_t Seed, int& Checked)
 int main(int argc, char** argv)
 {
 	const int Seeds = argc > 1 ? std::atoi(argv[1]) : 3000;
-	std::printf("Banc d'essai des missions v4.11 : %d graines par niveau, generation %d\n", Seeds, GenVersion);
+	std::printf("Banc d'essai des missions v4.13 : %d graines par niveau, generation %d\n", Seeds, GenVersion);
+	// v4.13 : le Niveau 0 est une introduction sans mission : aucun plan (normal ou de secours), aucune sortie gardee
+	{
+		int Empty = 0;
+		for (int I = 0; I < Seeds; ++I)
+		{
+			FPlan P;
+			BuildPlan(0, 0x1000u + (uint32_t)I * 2654435761u, P);
+			Empty += (P.NumDevices == 0 && P.NumSteps == 0 && !P.bHasRoute) ? 1 : 0;
+		}
+		FPlan F;
+		BuildFallbackPlan(0, 0, F);
+		FState S;
+		InitState(F, S);
+		bool bFree = !HasMission(0) && F.NumDevices == 0;
+		for (int T : { 1, 37, 2, 4, 0 })
+		{
+			bFree = bFree && !IsExitGuarded(0, T) && IsExitOpen(F, S, T);
+		}
+		if (Empty != Seeds || !bFree || ForwardTarget(0, 0) != 1 || ForwardTarget(0, 1) != 1)
+		{
+			Fail(0, 0, "Niveau 0 : une mission ou une condition de sortie subsiste");
+		}
+		std::printf("Niveau  0 : introduction sans mission : %d/%d graines sans plan, variante de secours vide, aucune sortie gardee, porte vers le Niveau %d\n",
+			Empty, Seeds, ForwardTarget(0, 0));
+	}
+	// v4.13 : une seule sortie gardee par niveau, celle de l'ordre de la campagne ; les anciennes (1 -> 2, 1 -> 4, 37 -> 4,
+	// 37 -> 0, 0 -> 37) ne le sont plus
+	{
+		const int Chain[] = { 0, 1, 37, 2, 3, 4, 5, 6, 8, 9, 10, 11 };
+		bool bOrder = true;
+		for (int I = 1; I < 12; ++I)
+		{
+			const int Next = I + 1 < 12 ? Chain[I + 1] : EndingTarget;
+			bOrder = bOrder && ForwardTarget(Chain[I], 0) == Next && IsExitGuarded(Chain[I], Next);
+		}
+		const bool bOld = !IsExitGuarded(1, 2) && !IsExitGuarded(1, 4) && !IsExitGuarded(37, 4) && !IsExitGuarded(37, 0) && !IsExitGuarded(0, 37);
+		if (!bOrder || !bOld)
+		{
+			Fail(0, 0, "sorties gardees hors de l'ordre de la campagne");
+		}
+		std::printf("Ordre : sortie gardee de chaque niveau = suivant dans 0 -> 1 -> 37 -> 2 -> ... -> 11 -> dernier quai : %s ; anciennes sorties gardees retirees : %s\n",
+			bOrder ? "oui" : "NON", bOld ? "oui" : "NON");
+	}
 	long TotalActions = 0, TotalFuzz = 0;
 	for (int Level : Levels)
 	{
@@ -336,7 +367,7 @@ int main(int argc, char** argv)
 			Variants.insert(std::vector<uint8_t>(P.Params, P.Params + MaxParams));
 
 			// 1. Resolution directe par les seules informations visibles
-			for (int Route = 0; Route < (Level == 0 ? 2 : 1); ++Route)
+			for (int Route = 0; Route < 1; ++Route)
 			{
 				FState S;
 				InitState(P, S);
@@ -353,8 +384,6 @@ int main(int argc, char** argv)
 				}
 				Evaluate(P, S, X.C, E);
 				if (!E.bSolved || !IsExitOpen(P, S, Target)) Fail(Level, Seed, "sortie fermee apres resolution");
-				if (Level == 0 && E.Route != Route) Fail(Level, Seed, "route du levier ignoree");
-				if (Level == 0 && IsExitOpen(P, S, ForwardTarget(0, 1 - Route))) Fail(Level, Seed, "les deux routes ouvertes");
 				for (int St = 0; St < E.NumSteps; ++St)
 				{
 					if (E.Steps[St] == EStep::Hidden) Fail(Level, Seed, "etape cachee apres resolution");
@@ -490,7 +519,7 @@ int main(int argc, char** argv)
 			Level, Solved, Seeds, FuzzSolved, Seeds, Variants.size(), Fallbacks, Seeds ? (double)Actions / Seeds : 0.0,
 			Mistakes, Checked);
 		std::printf("           mode joueur (appuis du jeu, rejoues a l'identique) : %d/%d resolues, %.1f actions en moyenne, %d au plus\n",
-			PlayerSolved, Seeds, Seeds ? (double)PlayerActions / (Seeds * (Level == 0 ? 2 : 1)) : 0.0, MaxPlayerActions);
+			PlayerSolved, Seeds, Seeds ? (double)PlayerActions / Seeds : 0.0, MaxPlayerActions);
 		TotalActions += Actions;
 	}
 	// Une prise a un seul gagnant : deux demandes successives du meme fusible

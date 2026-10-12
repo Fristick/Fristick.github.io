@@ -10,11 +10,11 @@
 //
 // Toutes les entrees passent par ces regles : menus, portes, echelles, noclip, progression de la campagne, destinations
 // au hasard, demandes reseau (validees par l'hote). Une sortie vers un niveau indisponible :
-//   - est redirigee si une redirection est prevue pour ce lot (lot 1 : l'echelle des Poolrooms remonte au Niveau 1,
-//     l'ascenseur du Niveau 1 descend au Niveau 2) ;
-//   - devient la FIN DU CONTENU DISPONIBLE si c'est la sortie de progression du niveau et qu'aucune autre ne l'est ;
-//   - sinon, elle est condamnee (visible, annoncee "pas encore accessible"), et la mission du niveau garde une autre
-//     sortie : aucune mission ne demande d'atteindre un niveau non publie.
+//   - devient la FIN DU CONTENU DISPONIBLE si c'est la sortie de progression du niveau ;
+//   - sinon, elle est condamnee (visible, annoncee "pas encore accessible").
+// v4.13 : plus aucune redirection. L'ordre de la campagne (BRStoryLogic : 0 -> 1 -> 37 -> 2 -> 3 -> ...) est le meme dans
+// tous les canaux ; la disponibilite dit seulement ou s'arrete le chapitre publie. Un chapitre suivant prolonge la sortie
+// de progression du dernier niveau publie, sans changer l'ordre deja appris.
 // Les identifiants de niveaux sont stables (numeros du wiki ; 1001 et 1002 reserves aux propositions Level ! et Level
 // Fun) ; une sauvegarde garde ses niveaux, decouvertes et fins quelle que soit la version.
 #pragma once
@@ -52,7 +52,7 @@ namespace BRContent
 	/** Destination speciale : fin du contenu disponible (positive, distincte de BRMission::EndingTarget = 999) */
 	constexpr int ChapterEndTarget = 998;
 	/** Version du protocole reseau (une partie ne melange pas deux versions) */
-	constexpr int NetVersion = 412;
+	constexpr int NetVersion = 413;
 
 	bool IsKnown(int Level);
 	EStage StageOf(int Level);
@@ -63,7 +63,7 @@ namespace BRContent
 
 	enum class EExit : uint8_t
 	{
-		/** Destination disponible (Target, eventuellement redirigee) */
+		/** Destination disponible (Target) */
 		Go,
 		/** Fin du contenu disponible (sortie de progression vers un niveau pas encore publie) */
 		ChapterEnd,
@@ -77,7 +77,7 @@ namespace BRContent
 		EExit Kind = EExit::Sealed;
 		/** Go : niveau d'arrivee (-1 : tire au hasard parmi les niveaux disponibles) */
 		int Target = -1;
-		/** Go : la destination a ete redirigee pour ce canal */
+		/** Go : la destination a ete redirigee pour ce canal (plus utilise depuis la v4.13 : toujours faux) */
 		bool bRedirected = false;
 	};
 	/** Sorties d'un niveau telles que le jeu les definit (BRLevels.cpp) : cibles, et "gardee par la mission" */

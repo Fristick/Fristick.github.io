@@ -49,7 +49,7 @@ namespace BRMission
 		bool HoldUntilDone(int Dev);
 		/** Interrupteur sur une position (mode joueur : appuis successifs) */
 		bool SetSwitch(int Dev, int Value);
-		/** Resout la mission du plan ; Route : niveau 0 (0 : Niveau 1, 1 : Poolrooms). false : bloque */
+		/** Resout la mission du plan (Route : ignore depuis la v4.13, le Niveau 0 n'a plus de levier). false : bloque */
 		bool Solve(int Route);
 	};
 
@@ -59,7 +59,8 @@ namespace BRMission
 	int FirstRole(const FPlan& P, int Role);
 	/** Mecanisme d'un role portant une inscription, -1 s'il n'y en a pas */
 	int FindRoleLabel(const FPlan& P, int Role, int Label);
-	/** Destination de la sortie ouverte par la mission du niveau (Route : niveau 0) ; -1 sans mission */
+	/** Destination de la sortie de progression du niveau (ordre de la campagne, BRStoryLogic) ; -1 hors du fil.
+	 *  Route : ignore depuis la v4.13 */
 	int ForwardTarget(int Level, int Route);
 	/** Rejoue des actions enregistrees sur un etat : true si chaque retour est identique a l'enregistrement */
 	bool Replay(const FPlan& P, FState& S, const FCampaign& C, const FSolveStep* Steps, int NumSteps);

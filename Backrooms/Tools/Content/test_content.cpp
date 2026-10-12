@@ -1,26 +1,30 @@
 // v4.12 : banc hors moteur de la disponibilite des niveaux (publication progressive, Docs/PLAN_PUBLICATION.md).
+// v4.13 : la sortie de progression suit le fil de la campagne (BRStoryLogic : 0 -> 1 -> 37 -> 2 -> 3 -> ...), identique
+// dans tous les canaux ; plus de redirections ; le Level 0 n'a qu'une porte de service vers le Niveau 1.
 //
-// Il compile BRContentLogic.cpp et BRMissionLogic.cpp (le code exact du jeu) et LIT les sorties des niveaux dans
-// Source/Backrooms/Private/BRLevels.cpp (D.Number, D.Exits) et la sortie de progression de la base dans
-// BRMissionWorld.cpp (BaseForwardTarget) : aucune table recopiee. Pour chaque canal (version publiee, test interne,
+// Il compile BRContentLogic.cpp, BRMissionLogic.cpp et BRStoryLogic.cpp (le code exact du jeu) et LIT les sorties des
+// niveaux dans Source/Backrooms/Private/BRLevels.cpp (D.Number, D.Exits) : aucune table recopiee. Il verifie aussi que
+// BRMissionWorld.cpp prend sa sortie de progression dans le fil. Pour chaque canal (version publiee, test interne,
 // developpement) :
 //   - la table couvre exactement les 12 niveaux du projet, chacun avec une etape et un lot ;
 //   - depuis une nouvelle partie et depuis chaque niveau du menu, en suivant TOUTES les sorties (portes, echelles,
 //     noclip, ascenseurs, tirages au hasard), aucun niveau indisponible n'est atteint ;
 //   - la sortie que garde chaque mission mene quelque part (niveau disponible, fin du contenu ou fin de la campagne),
 //     jamais vers un passage condamne : aucune mission ne demande d'atteindre un niveau non publie ;
-//   - les deux routes du Niveau 0 (mur glitche -> Niveau 1, echelle -> Poolrooms) menent a la fin du contenu disponible ;
-//   - redirections du lot 1 (echelle des Poolrooms -> Niveau 1, ascenseur du Niveau 1 -> Niveau 2) ;
+//   - depuis une nouvelle partie, la sortie de progression mene par 0 -> 1 -> 37 -> 2 (meme chapitre partout) ;
+//   - aucune sortie ne saute les Poolrooms (1 -> 2, 1 -> 4, 0 -> 37 n'existent plus) ;
 //   - fin du contenu : dans la version publiee au Niveau 2 (lot 1), en test interne au Niveau 4 (lot 2), jamais en
 //     developpement (la campagne finit au dernier quai) ;
 //   - reprise d'une partie dont le dernier niveau n'est pas disponible (partie v4.11 ou de version de test) ;
 //   - signatures distinctes par canal ; un client d'une autre version ou d'un autre contenu est refuse.
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Content/test_content.cpp
-//       Source/Backrooms/Private/BRContentLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_content
+//       Source/Backrooms/Private/BRContentLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp
+//       Source/Backrooms/Private/BRStoryLogic.cpp -o test_content
 //   ./test_content [chemin de Source/Backrooms/Private]   (depuis Backrooms/ par defaut)
 #include "BRContentLogic.h"
 #include "BRMissionLogic.h"
+#include "BRStoryLogic.h"
 
 #include <cstdio>
 #include <fstream>
@@ -49,7 +53,6 @@ namespace
 		std::string Style;
 	};
 	std::map<int, std::vector<FExit>> GExits;
-	std::map<int, int> GBaseForward;
 
 	std::string ReadFile(const std::string& Path)
 	{
@@ -95,7 +98,7 @@ namespace
 		return !Numbers.empty();
 	}
 
-	// int32 BaseForwardTarget(int32 Level) { switch (Level) { case N: return T; ... } }
+	// v4.13 : BaseForwardTarget de BRMissionWorld.cpp prend la sortie de progression dans le fil (BRStory::NextOf)
 	bool ParseForward(const std::string& Src)
 	{
 		const size_t At = Src.find("int32 BaseForwardTarget(int32 Level)");
@@ -103,15 +106,8 @@ namespace
 		{
 			return false;
 		}
-		const size_t End = Src.find("default:", At);
-		const std::string Body = Src.substr(At, End - At);
-		const std::regex CaseRe(R"(case\s+(\d+)\s*:\s*return\s+([\w:]+)\s*;)");
-		for (auto It = std::sregex_iterator(Body.begin(), Body.end(), CaseRe); It != std::sregex_iterator(); ++It)
-		{
-			const std::string T = (*It)[2];
-			GBaseForward[std::stoi((*It)[1])] = T.find("EndingTarget") != std::string::npos ? BRMission::EndingTarget : std::stoi(T);
-		}
-		return !GBaseForward.empty();
+		const size_t End = Src.find("}", Src.find("{", At));
+		return Src.substr(At, End - At).find("BRStory::NextOf") != std::string::npos;
 	}
 
 	// Meme construction que BRLevels::ExitListOf
@@ -137,8 +133,8 @@ namespace
 
 	int BaseForward(int Level)
 	{
-		const auto It = GBaseForward.find(Level);
-		return It == GBaseForward.end() ? -1 : It->second;
+		const int Next = BRStory::NextOf(Level);
+		return Next == BRStory::Ending ? BRMission::EndingTarget : Next;
 	}
 
 	const char* ChannelName(EChannel C)
@@ -157,20 +153,12 @@ namespace
 		}
 	}
 
-	// Tous les niveaux atteignables : nouvelle partie (Niveau 0) et menu (niveaux disponibles), puis toutes les sorties
+	// Tous les niveaux atteignables depuis une nouvelle partie (Niveau 0), par toutes les sorties. v4.13 : le menu ne
+	// propose plus que la reprise au point narratif et les niveaux deja decouverts : rien de plus que ces sorties
 	std::set<int> Reachable(EChannel C, std::vector<std::string>& OutBad)
 	{
 		std::set<int> Seen;
 		std::vector<int> Todo = { 0 };
-		int N = 0;
-		const FLevelEntry* T = Levels(N);
-		for (int I = 0; I < N; ++I)
-		{
-			if (IsAvailable(T[I].Level, C))
-			{
-				Todo.push_back(T[I].Level);
-			}
-		}
 		while (!Todo.empty())
 		{
 			const int L = Todo.back();
@@ -235,7 +223,7 @@ namespace
 				return false;
 			}
 			L = R.Target;
-			OutPath += " -> " + std::to_string(L) + (R.bRedirected ? " (redirection)" : "");
+			OutPath += " -> " + std::to_string(L) + (R.bRedirected ? " (REDIRECTION)" : "");
 		}
 		return false;
 	}
@@ -246,9 +234,9 @@ int main(int Argc, char** Argv)
 	const std::string Dir = Argc > 1 ? Argv[1] : "Source/Backrooms/Private";
 	const bool bLevels = ParseLevels(ReadFile(Dir + "/BRLevels.cpp"));
 	const bool bForward = ParseForward(ReadFile(Dir + "/BRMissionWorld.cpp"));
-	std::printf("Banc de contenu v4.12 (sources lues dans %s)\n", Dir.c_str());
+	std::printf("Banc de contenu v4.13 (sources lues dans %s)\n", Dir.c_str());
 	Line("BRLevels.cpp : niveaux et sorties lus", bLevels);
-	Line("BRMissionWorld.cpp : sorties de progression de la base lues", bForward);
+	Line("BRMissionWorld.cpp : sortie de progression prise dans le fil de la campagne (BRStory::NextOf)", bForward);
 	if (!bLevels || !bForward)
 	{
 		std::printf("RESULTAT : ECHEC (sources illisibles)\n");
@@ -288,6 +276,36 @@ int main(int Argc, char** Argv)
 	Line("lots courants : publiee 1, test interne 2, developpement 5",
 		CurrentLot(EChannel::Public) == 1 && CurrentLot(EChannel::Internal) == 2 && CurrentLot(EChannel::All) == 5);
 	Line("Niveau 7 (inexistant) et 1001/1002 (reserves) inconnus et indisponibles", !IsKnown(7) && !IsKnown(1001) && !IsAvailable(1002, EChannel::All));
+	{
+		const std::vector<FExit>& L0 = GExits[0];
+		Line("Level 0 : une seule sortie, la porte de service vers le Niveau 1",
+			L0.size() == 1 && L0[0].Target == 1 && L0[0].Style == "ServiceDoor");
+		bool bNoShortcut = true;
+		std::string Found;
+		for (const auto& E : GExits)
+		{
+			for (const FExit& X : E.second)
+			{
+				// Une sortie vers l'avant ne peut mener qu'au niveau suivant du fil ; vers l'arriere, a un niveau deja traverse
+				const int IFrom = BRStory::IndexOf(E.first), ITo = BRStory::IndexOf(X.Target);
+				if (X.Target < 0 || (ITo > IFrom && X.Target != BRStory::NextOf(E.first)))
+				{
+					bNoShortcut = false;
+					Found += " " + std::to_string(E.first) + "->" + std::to_string(X.Target);
+				}
+			}
+		}
+		Line("aucune sortie ne saute une etape du fil ni ne tire au hasard" + (Found.empty() ? std::string() : " :" + Found), bNoShortcut);
+		bool bGuards = true;
+		for (const auto& E : GExits)
+		{
+			for (const FExit& X : E.second)
+			{
+				bGuards &= BRMission::IsExitGuarded(E.first, X.Target) == (X.Target == BRStory::NextOf(E.first) && E.first != 0);
+			}
+		}
+		Line("chaque sortie vers l'avant est gardee par la mission (sauf la porte du Level 0) ; les retours sont libres", bGuards);
+	}
 
 	// Regles de resolution sur des listes de sorties construites (cas absents de la configuration actuelle)
 	{
@@ -303,8 +321,8 @@ int main(int Argc, char** Argv)
 		Line("seule sortie gardee indisponible : fin du contenu disponible", ResolveExit(2, 5, true, One, EChannel::Public).Kind == EExit::ChapterEnd);
 		Line("sortie libre (non gardee) indisponible : condamnee", ResolveExit(2, 5, false, One, EChannel::Public).Kind == EExit::Sealed);
 		Line("sortie vers un niveau disponible : inchangee", ResolveExit(2, 1, false, One, EChannel::Public).Target == 1);
-		Line("redirection seulement depuis le niveau prevu (Niveau 3 -> 4 : pas redirigee)",
-			!ResolveExit(3, 4, true, One, EChannel::Public).bRedirected);
+		Line("aucune redirection (v4.13) : Poolrooms -> 4 et Niveau 1 -> 4 ne sont pas detournes",
+			!ResolveExit(37, 4, true, One, EChannel::Public).bRedirected && !ResolveExit(1, 4, true, One, EChannel::Public).bRedirected);
 		Line("destination au hasard : jamais condamnee", ResolveExit(11, -1, false, One, EChannel::Public).Kind == EExit::Go);
 		Line("dernier quai demande hors du Niveau 11 : fin du contenu", ResolveExit(2, BRMission::EndingTarget, true, One, EChannel::All).Kind == EExit::ChapterEnd);
 	}
@@ -370,26 +388,21 @@ int main(int Argc, char** Argv)
 		Line("la sortie gardee par chaque mission mene quelque part (jamais condamnee)", bForwardOk);
 		std::printf("    passages condamnes : %s\n", Sealed.empty() ? "aucun" : Sealed.c_str());
 
-		// Les deux routes du Niveau 0
-		for (const int Route : { 1, 37 })
+		// v4.13 : la route du chapitre depuis une nouvelle partie : 0 -> 1 -> 37 -> 2, puis la suite selon le canal
 		{
-			const FExitResolution R0 = Resolve(0, Route, C);
 			int Last = -1;
 			EExit End = EExit::Sealed;
-			std::string Path = "0";
-			const bool bFollow = R0.Kind == EExit::Go && FollowForward(R0.Target, C, Last, End, Path);
-			const bool bExpect = C == EChannel::All ? (End == EExit::Ending && Last == 11)
-				: (End == EExit::ChapterEnd && Last == (C == EChannel::Public ? 2 : 4));
-			Line(std::string("route du Niveau 0 par le Niveau ") + std::to_string(Route) + " : 0 -> " + Path, bFollow && bExpect);
+			std::string Path;
+			const bool bFollow = FollowForward(0, C, Last, End, Path);
+			const char* Expect = C == EChannel::Public ? "0 -> 1 -> 37 -> 2 -> fin du contenu"
+				: (C == EChannel::Internal ? "0 -> 1 -> 37 -> 2 -> 3 -> 4 -> fin du contenu" : "0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai");
+			Line("route du chapitre depuis une nouvelle partie : " + Path, bFollow && Path == Expect);
 		}
-		// Redirections du lot 1 : echelle des Poolrooms, ascenseur du Niveau 1
-		const FExitResolution P = Resolve(37, 4, C);
-		Line("Poolrooms -> echelle : " + KindName(P),
-			C == EChannel::Public ? (P.Kind == EExit::Go && P.Target == 1 && P.bRedirected) : (P.Kind == EExit::Go && P.Target == 4 && !P.bRedirected));
-		const FExitResolution L1 = Resolve(1, 4, C);
-		Line("Niveau 1 -> ascenseur (sortie gardee par la mission) : " + KindName(L1),
-			C == EChannel::Public ? (L1.Kind == EExit::Go && L1.Target == 2 && L1.bRedirected) : (L1.Kind == EExit::Go && L1.Target == 4));
-		Line("la mission du Niveau 1 garde toujours l'ascenseur", AdaptedForward(1, BaseForward(1), ExitListOf(1), C) == 4);
+		const FExitResolution P = Resolve(37, 2, C);
+		Line("Poolrooms -> echelle du passage sec : " + KindName(P), P.Kind == EExit::Go && P.Target == 2 && !P.bRedirected);
+		const FExitResolution L1 = Resolve(1, 37, C);
+		Line("Niveau 1 -> ascenseur (sortie gardee par la mission) : " + KindName(L1), L1.Kind == EExit::Go && L1.Target == 37);
+		Line("la mission du Niveau 1 garde l'ascenseur vers les Poolrooms", AdaptedForward(1, BaseForward(1), ExitListOf(1), C) == 37);
 		if (C == EChannel::Public)
 		{
 			Line("lot 1 : aucun passage condamne", Sealed.empty());
@@ -448,7 +461,8 @@ int main(int Argc, char** Argv)
 	Line("signatures distinctes par canal", SP != SI && SI != SA && SP != SA);
 	Line("signature stable (deux calculs identiques)", SP == Signature(EChannel::Public));
 	Line("meme version, meme contenu : accepte", CheckJoin(NetVersion, true, SP, EChannel::Public) == EJoin::Ok);
-	Line("autre version (v4.11 : 411) : refus version", CheckJoin(411, true, SP, EChannel::Public) == EJoin::Version);
+	Line("autre version (v4.12 : 412) : refus version", CheckJoin(412, true, SP, EChannel::Public) == EJoin::Version);
+	Line("protocole v4.13 : 413", NetVersion == 413);
 	Line("client sans controle (avant v4.12) : refus version", CheckJoin(-1, false, 0, EChannel::Public) == EJoin::Version);
 	Line("version de test contre version publiee : refus contenu", CheckJoin(NetVersion, true, SI, EChannel::Public) == EJoin::Content);
 	Line("version publiee contre hote de developpement : refus contenu", CheckJoin(NetVersion, true, SP, EChannel::All) == EJoin::Content);

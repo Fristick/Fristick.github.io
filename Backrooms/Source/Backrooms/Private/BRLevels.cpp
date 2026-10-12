@@ -42,7 +42,7 @@ namespace
 		D.Number = 0;
 		D.Title = NSLOCTEXT("BR", "Level.0.Title", "Threshold");
 		D.Nickname = NSLOCTEXT("BR", "Level.0.Nickname", "Le Seuil - \"Yellow Hell\"");
-		D.Description = NSLOCTEXT("BR", "Level.0.Description", "Un labyrinthe clos de salles de bureau vides : papier peint jaune moisi, moquette humide, n\u00e9ons qui bourdonnent sans fin. Les salles se ressemblent toutes. Quelque part, une \u00e9chelle monte dans le plafond.");
+		D.Description = NSLOCTEXT("BR", "Level.0.Description", "Un labyrinthe clos de salles de bureau vides : papier peint jaune moisi, moquette humide, n\u00e9ons qui bourdonnent sans fin. Les salles se ressemblent toutes. Quelque part, un courant d'air froid passe sous une porte de service.");
 		D.SurvivalClass = 1;
 		D.ClassText = NSLOCTEXT("BR", "Level.0.ClassText", "Classe 1 : S\u00fbr - Stable - Entit\u00e9s quasi absentes");
 		D.Layout = EBRLayout::Rooms;
@@ -71,22 +71,25 @@ namespace
 		D.SanityDrain = 0.08f;
 		// La Bacteria fait des rondes (lampes rouges a 10 m d'elle) ; les Smilers surgissent du noir, surtout pendant les coupures
 		D.Entities = { E(EBREntityKind::Smiler, 1.f) };
-		D.MaxEntities = 1; D.SpawnInterval = 100.f;
-		// v4.7 : premiere ronde a 110 s : la premiere coupure (75 s) et la premiere ronde ne se chevauchent plus, et le joueur a
-		// le temps de decouvrir les commandes, les objectifs et quelques salles
-		D.bPatrolEntity = true; D.PatrolKind = EBREntityKind::Bacteria; D.PatrolDelay = 110.f;
+		// v4.13 : introduction : rencontres dosees pour laisser le temps d'apprendre a regarder et a se deplacer (premiere
+		// apparition et premiere coupure plus tard, moins de Smilers pendant les coupures). Aucune rencontre n'est
+		// necessaire pour sortir : la porte de service s'ouvre a la main
+		D.MaxEntities = 1; D.SpawnInterval = 150.f;
+		D.bPatrolEntity = true; D.PatrolKind = EBREntityKind::Bacteria; D.PatrolDelay = 200.f;
 		D.RedLightRadius = 1000.f;
-		D.BlackoutSmilers = 3;
+		D.BlackoutSmilers = 2;
 		D.HidingSpotChance = 0.85f;
 		D.AlmondWaterChance = 0.3f; D.BatteryChance = 0.15f; D.NoteChance = 0.25f;
 		D.BandageChance = 0.12f; D.EnergyBarChance = 0.08f; D.GearChance = 0.03f;
-		// v4.3 : une zone finie de 4 x 4 chunks (112 m de cote) ; a la place du sol qui glitchait, deux echelles a trouver :
-		// on y grimpe, et dans le conduit au-dessus de la trappe, on noclippe (vers les Poolrooms). Deux murs glitches (Niveau 1)
+		// v4.3 : une zone finie de 4 x 4 chunks (112 m de cote).
+		// v4.13 : introduction sans enigme : une seule sortie, une porte de service vers le Niveau 1, posee par le monde
+		// (ABRWorld::PlaceServiceDoor) dans le mur d'enceinte, a une distance de marche choisie depuis le depart et sans
+		// traverser de salle de fosses. Plus de mur glitche, d'echelle vers les Poolrooms, de cassettes ni d'enregistrement
+		// a faire : rien ne conditionne la porte
 		D.BoundsChunks = 2;
-		D.Exits = { X(1, EBRExitStyle::NoclipWall, 0.17f), X(37, EBRExitStyle::Ladder, 0.17f) };
-		// Comme dans Escape Together : cassettes VHS + enregistrement pendant une coupure pour stabiliser la sortie
-		D.bRequireObjectives = true; D.VHSRequired = 6; D.VHSChance = 0.22f;
-		D.bBlackouts = true; D.BlackoutFirst = 75.f; D.BlackoutMinInterval = 120.f; D.BlackoutMaxInterval = 220.f;
+		D.Exits = { X(1, EBRExitStyle::ServiceDoor, 0.f) };
+		D.bRequireObjectives = false; D.VHSRequired = 0; D.VHSChance = 0.f;
+		D.bBlackouts = true; D.BlackoutFirst = 150.f; D.BlackoutMinInterval = 120.f; D.BlackoutMaxInterval = 220.f;
 		D.WallDetailChance = 0.1f;
 		D.Wall.FloorGrime = 0.6f;
 		// v4.7 : le motif du papier peint reste, sa repetition tous les 1,2 m ne se voit plus (teinte et aureoles a 17 m)
@@ -104,12 +107,12 @@ namespace
 		D.Notes = {
 			{ FName(TEXT("Note.L0.1")), NSLOCTEXT("BR", "Note.L0.1", "Si tu lis ceci, tu as \"noclipp\u00e9\" hors de la r\u00e9alit\u00e9. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds.") },
 			{ FName(TEXT("Note.L0.2")), NSLOCTEXT("BR", "Note.L0.2", "Le bourdonnement ne s'arr\u00eate jamais. J'ai compte plus de six cents salles. Toujours la m\u00eame moquette humide. Toujours la m\u00eame odeur.") },
-			{ FName(TEXT("Note.L0.3")), NSLOCTEXT("BR", "Note.L0.3", "Certains murs ont l'air FAUX, comme une image qui se brouille. Touche-les. C'est comme \u00e7a que j'ai quitt\u00e9 cet endroit.") },
+			{ FName(TEXT("Note.L0.3")), NSLOCTEXT("BR", "Note.L0.3", "Ne cherche pas un mur qui s'efface. La seule sortie que nous ayons trouv\u00e9e est une porte de service, une vraie, avec une poign\u00e9e. L\u00e0 o\u00f9 l'air devient froid. - L.") },
 			{ FName(TEXT("Note.L0.4")), NSLOCTEXT("BR", "Note.L0.4", "L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. {Drink} pour boire.") },
 			{ FName(TEXT("Note.L0.5")), NSLOCTEXT("BR", "Note.L0.5", "Si les lumi\u00e8res sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir.") },
 			{ FName(TEXT("Note.L0.6")), NSLOCTEXT("BR", "Note.L0.6", "Jour 3 (je crois). J'ai entendu des pas derri\u00e8re moi. Quand je me suis retourn\u00e9, il n'y avait que le bourdonnement.") },
-			{ FName(TEXT("Note.L0.7")), NSLOCTEXT("BR", "Note.L0.7", "Il y a une \u00e9chelle contre un mur, elle monte dans une trappe du plafond. Une lueur violette l\u00e0-haut. Monte, et ne regarde pas en bas.") },
-			{ FName(TEXT("Note.L0.8")), NSLOCTEXT("BR", "Note.L0.8", "Les sorties ne tiennent pas. Il faut r\u00e9cup\u00e9rer les six cassettes et filmer le noir pendant une coupure. Apr\u00e8s, les murs c\u00e8dent.") },
+			{ FName(TEXT("Note.L0.7")), NSLOCTEXT("BR", "Note.L0.7", "Nous marquons notre passage \u00e0 la craie : un cercle barr\u00e9 et un L. Si tu vois la marque, tu es sur notre chemin. Nous allons vers la station qu'ils appellent le dernier quai. - L.") },
+			{ FName(TEXT("Note.L0.8")), NSLOCTEXT("BR", "Note.L0.8", "Inutile de tout fouiller : rien ici n'ouvre rien. La porte de service s'ouvre \u00e0 la main. Ce qui compte, c'est de la trouver avant que les n\u00e9ons ne s'\u00e9teignent. - L.") },
 			{ FName(TEXT("Note.L0.9")), NSLOCTEXT("BR", "Note.L0.9", "Quand les n\u00e9ons s'\u00e9teignent, allume la vision nocturne du cam\u00e9scope ({NightVision}). La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle.") }
 		};
 		return D;
@@ -151,12 +154,14 @@ namespace
 		D.Entities = { E(EBREntityKind::Smiler, 1.f), E(EBREntityKind::Faceling, 1.f), E(EBREntityKind::Hound, 0.4f) };
 		D.MaxEntities = 2; D.SpawnInterval = 60.f;
 		D.AlmondWaterChance = 0.4f; D.BatteryChance = 0.3f; D.NoteChance = 0.2f;
-		D.Exits = { X(2, EBRExitStyle::Door, 0.18f), X(4, EBRExitStyle::Elevator, 0.05f) };
+		// v4.13 : une seule sortie de progression, l'ascenseur que la mission remet sous tension : il descend aux Poolrooms
+		// (ordre de la campagne : 0 -> 1 -> 37 -> 2). Plus de porte directe vers le Niveau 2 ni d'ascenseur vers le Niveau 4
+		D.Exits = { X(37, EBRExitStyle::Elevator, 0.05f) };
 		D.Props = EBRProps::Warehouse; D.PropDensity = 0.12f;
 		D.Notes = {
 			{ FName(TEXT("Note.L1.1")), NSLOCTEXT("BR", "Note.L1.1", "Les caisses contiennent parfois de l'eau d'amande et des piles. Fouille-les. Ici, on peut presque survivre.") },
 			{ FName(TEXT("Note.L1.2")), NSLOCTEXT("BR", "Note.L1.2", "Quand les tubes au plafond clignotent, eloigne-toi. Quand ils s'\u00e9teignent, cours.") },
-			{ FName(TEXT("Note.L1.3")), NSLOCTEXT("BR", "Note.L1.3", "Les portes de service m\u00e8nent plus bas. Plus bas, c'est pire. Mais c'est peut-etre la seule sortie.") },
+			{ FName(TEXT("Note.L1.3")), NSLOCTEXT("BR", "Note.L1.3", "L'ascenseur du parking descend vers l'eau. Il faut d'abord remettre la liaison de service sous tension : le sch\u00e9ma est pr\u00e8s de l'entr\u00e9e. - L.") },
 			{ FName(TEXT("Note.L1.4")), NSLOCTEXT("BR", "Note.L1.4", "Les Facelings ne sont pas m\u00e9chants. La plupart. Ne les regarde pas trop longtemps.") }
 		};
 		D.bBlackouts = true; D.BlackoutFirst = 120.f;
@@ -199,7 +204,8 @@ namespace
 		D.Entities = { E(EBREntityKind::Wretch, 1.f), E(EBREntityKind::Hound, 0.7f), E(EBREntityKind::Clump, 0.4f), E(EBREntityKind::Smiler, 0.5f) };
 		D.MaxEntities = 3; D.SpawnInterval = 50.f;
 		D.AlmondWaterChance = 0.25f; D.BatteryChance = 0.25f; D.NoteChance = 0.2f;
-		D.Exits = { X(3, EBRExitStyle::Door, 0.15f), X(1, EBRExitStyle::Ladder, 0.05f) };
+		// v4.13 : l'echelle de retour remonte vers les Poolrooms (on arrive des Poolrooms par leur sas)
+		D.Exits = { X(3, EBRExitStyle::Door, 0.15f), X(37, EBRExitStyle::Ladder, 0.05f) };
 		D.Props = EBRProps::Pipes; D.PropDensity = 0.6f;
 		D.Notes = {
 			{ FName(TEXT("Note.L2.1")), NSLOCTEXT("BR", "Note.L2.1", "Il fait si chaud. Les tuyaux sifflent. Ne touche pas ceux qui fument.") },
@@ -296,7 +302,8 @@ namespace
 		D.Entities = { E(EBREntityKind::Faceling, 1.f), E(EBREntityKind::Partygoer, 0.15f) };
 		D.MaxEntities = 1; D.SpawnInterval = 120.f;
 		D.AlmondWaterChance = 0.5f; D.BatteryChance = 0.3f; D.NoteChance = 0.2f;
-		D.Exits = { X(5, EBRExitStyle::Door, 0.15f), X(1, EBRExitStyle::Elevator, 0.05f) };
+		// v4.13 : l'ascenseur de retour remonte vers la station electrique (Niveau 3), d'ou l'on vient
+		D.Exits = { X(5, EBRExitStyle::Door, 0.15f), X(3, EBRExitStyle::Elevator, 0.05f) };
 		D.Props = EBRProps::Office; D.PropDensity = 0.35f;
 		D.Notes = {
 			{ FName(TEXT("Note.L4.1")), NSLOCTEXT("BR", "Note.L4.1", "Les fontaines distribuent de l'eau d'amande. Remplis tes bouteilles ici.") },
@@ -522,7 +529,7 @@ namespace
 		D.Number = 11;
 		D.Title = NSLOCTEXT("BR", "Level.11.Title", "The Endless City");
 		D.Nickname = NSLOCTEXT("BR", "Level.11.Nickname", "La ville sans fin");
-		D.Description = NSLOCTEXT("BR", "Level.11.Description", "Une m\u00e9tropole infinie de gratte-ciel et d'avenues d\u00e9sertes, baign\u00e9e de soleil. Des Facelings y vivent paisiblement. Ses immeubles m\u00e8nent un peu partout.");
+		D.Description = NSLOCTEXT("BR", "Level.11.Description", "Une m\u00e9tropole infinie de gratte-ciel et d'avenues d\u00e9sertes, baign\u00e9e de soleil. Des Facelings y vivent paisiblement. Quelque part, une station attend ses derniers voyageurs.");
 		D.SurvivalClass = 1;
 		D.ClassText = NSLOCTEXT("BR", "Level.11.ClassText", "Classe 1 : S\u00fbr - Stable - Habit\u00e9");
 		D.Layout = EBRLayout::City;
@@ -549,7 +556,9 @@ namespace
 		D.Entities = { E(EBREntityKind::Faceling, 1.f) };
 		D.MaxEntities = 4; D.SpawnInterval = 30.f;
 		D.AlmondWaterChance = 0.3f; D.BatteryChance = 0.2f; D.NoteChance = 0.15f;
-		D.Exits = { X(-1, EBRExitStyle::BuildingDoor, 0.15f) };
+		// v4.13 : plus de porte d'immeuble vers un niveau tire au hasard : la seule sortie est le portique de la station
+		// (mission). Le hasard reste une option d'exploration apres une fin (ABRWorld::CloseEnding)
+		D.Exits = {};
 		D.Props = EBRProps::City;
 		D.Notes = {
 			{ FName(TEXT("Note.L11.1")), NSLOCTEXT("BR", "Note.L11.1", "Les portes des immeubles m\u00e8nent n'importe o\u00f9. Vraiment n'importe o\u00f9.") },
@@ -599,7 +608,9 @@ namespace
 		D.Step = EBRStep::Water;
 		D.SanityDrain = -0.03f;
 		D.AlmondWaterChance = 0.2f; D.BatteryChance = 0.1f; D.NoteChance = 0.15f;
-		D.Exits = { X(0, EBRExitStyle::NoclipFloor, 0.08f), X(4, EBRExitStyle::Ladder, 0.06f) };
+		// v4.13 : etape obligatoire du chapitre 1 : l'echelle du passage sec monte vers les couloirs techniques (Niveau 2) ;
+		// le sol qui glitche ramene au Niveau 1 (retour, jamais un raccourci)
+		D.Exits = { X(1, EBRExitStyle::NoclipFloor, 0.08f), X(2, EBRExitStyle::Ladder, 0.06f) };
 		D.Notes = {
 			{ FName(TEXT("Note.L37.1")), NSLOCTEXT("BR", "Note.L37.1", "L'eau est ti\u00e8de. Elle n'a pas de fond, a certains endroits. N'y plonge pas.") },
 			{ FName(TEXT("Note.L37.2")), NSLOCTEXT("BR", "Note.L37.2", "C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est \u00e7a, le pi\u00e8ge.") }

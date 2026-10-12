@@ -1,4 +1,4 @@
-// v4.12 : disponibilite des niveaux par version (voir BRContentLogic.h). C++ pur.
+// v4.12 : disponibilite des niveaux par version (voir BRContentLogic.h). C++ pur. v4.13 : sans redirections.
 #include "BRContentLogic.h"
 #include "BRMissionLogic.h"
 
@@ -27,22 +27,6 @@ namespace BRContent
 			{ 11, EStage::Developed, 5 },
 		};
 		constexpr int NumTable = static_cast<int>(sizeof(Table) / sizeof(Table[0]));
-
-		struct FRedirect
-		{
-			int From;
-			int Target;
-			int To;
-		};
-		// Tant que le Niveau 4 n'est pas disponible :
-		//   - l'echelle de sortie des Poolrooms remonte vers le Niveau 1 : les deux routes du Niveau 0 se rejoignent avant
-		//     la fin du lot 1 (Niveau 2) ;
-		//   - l'ascenseur du Niveau 1 (celui que la mission alimente et appelle) descend au Niveau 2 : la mission garde son
-		//     sens, et aucun passage du lot 1 n'est condamne
-		const FRedirect Redirects[] = {
-			{ 37, 4, 1 },
-			{ 1, 4, 2 },
-		};
 
 		const FLevelEntry* Find(int Level)
 		{
@@ -149,16 +133,6 @@ namespace BRContent
 			R.Target = Target;
 			return R;
 		}
-		for (const ContentImpl::FRedirect& D : ContentImpl::Redirects)
-		{
-			if (D.From == From && D.Target == Target && IsAvailable(D.To, Channel))
-			{
-				R.Kind = EExit::Go;
-				R.Target = D.To;
-				R.bRedirected = true;
-				return R;
-			}
-		}
 		if (bGuarded)
 		{
 			// Sortie de progression vers un niveau pas encore publie : si une autre sortie gardee mene quelque part, la
@@ -170,12 +144,7 @@ namespace BRContent
 				{
 					continue;
 				}
-				bool bLeads = IsAvailable(T2, Channel);
-				for (const ContentImpl::FRedirect& D : ContentImpl::Redirects)
-				{
-					bLeads |= D.From == From && D.Target == T2 && IsAvailable(D.To, Channel);
-				}
-				if (bLeads)
+				if (IsAvailable(T2, Channel))
 				{
 					R.Kind = EExit::Sealed;
 					return R;

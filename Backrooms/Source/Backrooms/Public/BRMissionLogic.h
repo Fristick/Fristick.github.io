@@ -130,7 +130,7 @@ namespace BRMission
 	enum ERole : uint8_t
 	{
 		R_None,
-		// Niveau 0
+		// Niveau 0 (retires en v4.13 : identifiants gardes pour les empreintes des plans)
 		R_Anomaly, R_MaintNote, R_Dial, R_Stabilize, R_RouteLever, R_Passage,
 		// Niveau 1
 		R_Schematic, R_Fuse, R_FuseSocket, R_Breaker, R_ElevatorCall, R_ReserveLights, R_ReserveNote,
@@ -177,7 +177,7 @@ namespace BRMission
 		uint8_t Params[MaxParams] = {};
 		/** Variante de secours deterministe utilisee (graine invalide ou placement impossible) */
 		bool bFallback = false;
-		/** Niveau 0 : la mission ouvre l'une ou l'autre sortie selon le levier de route */
+		/** Niveau 0 jusqu'a la v4.12 (levier de route) ; toujours faux depuis la v4.13 */
 		bool bHasRoute = false;
 	};
 
