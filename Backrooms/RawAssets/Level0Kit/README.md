@@ -119,6 +119,15 @@ La porte de service suit le repère du jeu (`ABRExit::BuildServiceDoor`) : X loc
 intérieure) à X = -0,6 ; la charnière est du côté +Y local (−Y dans Unreal) ; le battant s'ouvre vers le sas (+95° de
 lacet dans Unreal).
 
+**Porte tirée à chaque nouvelle partie (v4.13).** Le jeu ne fixe plus l'emplacement de la porte : l'hôte le tire à chaque
+nouvelle partie parmi les **candidats** : cellules contre le mur d'enceinte (ni coin, ni zone de départ), atteintes depuis
+le départ sans traverser de fosse ; la porte est percée dans ce mur d'enceinte. Le tirage suit une graine de partie,
+sauvegardée avec l'emplacement retenu (`ABRWorld::PlaceServiceDoor`). Les modules `SM_L0_ServiceDoor_*` (cadre, battant,
+poignée, charnières, sas) se posent **sur n'importe quel candidat**, quelle que soit la face de l'enceinte (quatre
+orientations) : il suffit de placer le repère du module au pied du mur, X local vers la pièce. La
+porte posée dans la scène n'est qu'un **exemple** (celle que la graine 9 de l'export retiendrait) ; les candidats sont
+tous exportés en repères `MK_DoorCandidate_NNN` (§ 6), pour que le tirage final reste celui de l'hôte.
+
 ## 6. Collections de la scène
 
 | Collection | Contenu |
@@ -134,9 +143,14 @@ lacet dans Unreal).
 | `L0_Archive` | modules archivés, hors rendu |
 | `L0_RenderOnly` | aides des rendus seulement : lampe du joueur (vue de la porte), soleil et tracé du chemin (vue d'ensemble) ; masqués ailleurs |
 
-Repères (54 pour la graine 9) : `MK_PlayerStart` et trois places de coéquipiers, `MK_ServiceDoor` (entrée côté pièce),
+Repères (174 pour la graine 9) : `MK_PlayerStart` et trois places de coéquipiers, `MK_ServiceDoor` (entrée côté pièce),
 `MK_ServiceDoor_Pivot` (axe des charnières), `MK_ServiceDoor_Exit` (sas), `MK_ChalkMark_NN`, `MK_PitRoom_*`,
-`MK_PitKill_*`, `MK_Item_NN_<objet>` (objets tirés par la graine), `MK_Hiding_NN` (cachettes).
+`MK_PitKill_*`, `MK_Item_NN_<objet>` (objets tirés par la graine), `MK_Hiding_NN` (cachettes), et
+`MK_DoorCandidate_NNN` (120 pour la graine 9) : un repère par emplacement possible de la porte de service, au pied du mur,
+tourné vers la pièce. Sa propriété `description` donne la cellule, la face, la distance de marche depuis le départ et la
+**bande** du tirage : 0 = 24 à 40 cellules (85 candidats pour la graine 9), 1 = bande élargie 16 à 56 (35), 2 = repli
+(aucun ici). Les repères sont triés par bande, puis par distance ; celui de la porte d'exemple porte la mention « exemple
+pose dans cet export ». L'hôte tire d'abord dans la bande 0, puis 1, puis le repli.
 
 **Nommage** : `SM_L0_*` pour les maillages ; `UCX_<maillage>_NN` pour les collisions convexes (convention d'Unreal) ;
 `M_L0_*` pour les matériaux ; `T_L0K_*` pour les textures ; instances `L0_<type>_<cellule>`.
@@ -227,10 +241,10 @@ Avec cette conversion, la cellule (X, Y) du jeu a son centre en ((X + 0,5) × 35
 `ABRWorld::CellCenter`. En tête du fichier : graine, grille, comptes, porte de service (cellule, direction, pied, lacet,
 longueur du chemin, marques), salles de fosses (centres des trous).
 
-Graine 9 : 5205 instances, 54 repères ; 824 murs, 416 passages, 929 poteaux, 43 piliers, 999 sols, 1024 plafonds,
-313 néons allumés et 14 en panne, 1 salle de fosses (16 trous), 136 décals ; porte de service en (−16, 6), mur ouest,
-chemin de 28 cellules, 7 marques de craie posées (une cellule marquée sans mur pour la porter n'en a pas, comme dans
-le jeu).
+Graine 9 : 5205 instances, 174 repères (dont 120 candidats de porte) ; 824 murs, 416 passages, 929 poteaux,
+43 piliers, 999 sols, 1024 plafonds, 313 néons allumés et 14 en panne, 1 salle de fosses (16 trous), 136 décals ;
+porte de service d'exemple en (−16, 6), mur ouest, chemin de 28 cellules, 7 marques de craie posées (une cellule marquée
+sans mur pour la porter n'en a pas, comme dans le jeu).
 
 ## 10. Contrôles (exécutés à chaque construction)
 
@@ -263,6 +277,8 @@ Caméras à hauteur d'œil (1,62 m) sauf la vue d'ensemble.
 - La disposition vient de la simulation Python du générateur : elle n'a pas été comparée à une capture du jeu.
 - Le jeu construit le Level 0 lui-même (`ABRChunk`) : ce kit est un **asset de production** (modules, matériaux, scène de
   référence), pas un niveau chargé par le jeu.
+- La porte de la scène est un exemple : dans le jeu, son emplacement change à chaque nouvelle partie (tirage de l'hôte,
+  sauvegardé). Les candidats exportés sont ceux de la simulation Python pour la graine 9.
 - Lumières : surfaces de Blender (55 W par néon), réglées à l'œil sur les rendus ; ce ne sont pas les intensités
   d'Unreal.
 - Modules par boîtes : arêtes vives, pas de chanfreins ni de LOD. Décals : simples plans.

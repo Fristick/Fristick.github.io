@@ -855,6 +855,18 @@ def build_mission(vp, L, mods, colls, records, markers):
     markers.append(("MK_ServiceDoor", foot + rot @ Vector((1.2, 0, 0)), yaw_b, "narrative", "Porte de service du Level 0 (vers le Niveau 1), entree cote piece"))
     markers.append(("MK_ServiceDoor_Pivot", hinge, yaw_b, "gameplay", "Axe des charnieres (ouverture : +95 degres de lacet dans Unreal, vers le sas)"))
     markers.append(("MK_ServiceDoor_Exit", foot + rot @ Vector((-T - 1.5, 0, 0)), yaw_b, "gameplay", "Sas : point de depart du groupe"))
+    # v4.13 : la porte n'est plus fixee par le kit : l'hote la tire a chaque nouvelle partie parmi les candidats (cellule de
+    # bord atteinte sans fosse, face du mur d'enceinte). Les modules SM_L0_ServiceDoor_* se posent sur n'importe lequel ;
+    # la porte placee ci-dessus n'est qu'un exemple (graine de l'export). Un marqueur par candidat, avec sa bande de
+    # distance de marche (0 : 24-40 cellules, 1 : 16-56, 2 : repli) : ABRWorld::PlaceServiceDoor
+    for i, (cc, k, dc, _h, band) in enumerate(sorted(getattr(L, "door_cands", []), key=lambda t: (t[4], t[2], t[0]))):
+        dd = vp.DIRS[k]
+        cf = g2b((cc[0] + 0.5) * S_cm + dd[0] * (S_cm / 2 - T * 50), (cc[1] + 0.5) * S_cm + dd[1] * (S_cm / 2 - T * 50))
+        cyaw = -math.degrees(math.atan2(-dd[1], -dd[0]))
+        chosen = (cc, dd) == L.door
+        markers.append(("MK_DoorCandidate_%03d" % i, cf, cyaw, "gameplay",
+                        "Candidat de porte de service : cellule %d,%d, face (%d,%d), %d cellules de marche, bande %d%s (tirage de l'hote a chaque nouvelle partie)"
+                        % (cc[0], cc[1], dd[0], dd[1], dc, band, ", exemple pose dans cet export" if chosen else "")))
     # Marques de craie le long du chemin (ABRWorld::IsChalkMarkCell, ABRChunk::AddChalkMark)
     marks = 0
     for (c, nxt) in L.chalk_marks():

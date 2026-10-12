@@ -789,6 +789,8 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetV412Steps(bClient);
 	// v4.13 : porte de service du Level 0 ouverte par l'hote pour le groupe, coequipier a pied, un seul depart
 	AddNetV413Steps(bClient);
+	// v4.13 : Level 6 : meme aile et meme etat chez chacun, points du scanner locaux
+	AddNetV413LidarSteps(bClient);
 	// Le client part le premier ; l'hote attend un peu avant de fermer la partie
 	Add(TEXT("Fin"), bClient ? 6.f : 12.f, []()
 	{

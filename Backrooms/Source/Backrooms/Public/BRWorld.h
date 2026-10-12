@@ -385,6 +385,8 @@ public:
 	void OnMissionLoreFound();
 	/** Console : resout la mission (serveur) */
 	void DebugCompleteMission();
+	/** v4.13 (tests) : mene un mecanisme maintenu a son terme par les regles ordinaires (hote) */
+	void DebugCompleteMissionDevice(int32 Device);
 	/** Mecanismes : affichage selon les chunks construits et animation des seuls mecanismes proches */
 	void UpdateMissionDevices(float Dt);
 

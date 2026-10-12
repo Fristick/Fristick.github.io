@@ -1634,6 +1634,24 @@ void ABRWorld::DebugCompleteMission()
 	PublishMission(-1, 0);
 }
 
+void ABRWorld::DebugCompleteMissionDevice(int32 Device)
+{
+	// v4.13 (tests) : un mecanisme maintenu (observation, manivelle) mene a son terme par les regles ordinaires (hote)
+	if (!HasAuthority() || !IsMissionActive() || Device < 0 || Device >= MissionPlan.NumDevices)
+	{
+		return;
+	}
+	for (int32 I = 0; I < 16; ++I)
+	{
+		const BRM::FResult R = BRM::Act(MissionPlan, MissionState, GetMissionCampaign(), Device, BRM::EAction::Hold, 1);
+		if (R.Feedback != BRM::EFeedback::Progress)
+		{
+			break;
+		}
+	}
+	PublishMission(Device, static_cast<uint8>(BRM::EFeedback::Done));
+}
+
 // =====================================================================================================================
 // Sorties
 // =====================================================================================================================

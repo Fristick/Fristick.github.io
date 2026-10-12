@@ -685,6 +685,8 @@ void ABRAutoTest::AddV413Steps()
 		Note(FString::Printf(TEXT("porte de service : %d graine(s) verifiee(s)"), DoorLines.Num()), DoorLines.Num() < static_cast<int32>(UE_ARRAY_COUNT(DoorSeeds)));
 		return true;
 	});
+	// v4.13 : Level 6 sans lumiere (scanner LiDAR)
+	AddV413LidarSteps();
 }
 
 // =====================================================================================================================

@@ -172,6 +172,9 @@ private:
 	void AddServiceDoorWalkSteps(const FString& Tag, bool bUse);
 	/** v4.13 : multijoueur : porte fermee chez les deux, ouverte par l'hote pour le groupe, coequipier a pied, un seul depart */
 	void AddNetV413Steps(bool bClient);
+	/** v4.13 : Level 6 sans lumiere (BRAutoTestV413Lidar.cpp) : solo et reseau */
+	void AddV413LidarSteps();
+	void AddNetV413LidarSteps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
 	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */

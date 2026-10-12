@@ -1001,14 +1001,6 @@
    ]
   }
  },
- "render_seconds": {
-  "L0_Couloir": 246.6,
-  "L0_SalleRepetitive": 252.0,
-  "L0_Intersection": 267.6,
-  "L0_Fosses": 232.4,
-  "L0_PorteDeService": 234.9,
-  "L0_VueEnsemble": 75.4
- },
  "blend_mb": 30.8,
- "seconds": 104.1
+ "seconds": 25.1
 }
