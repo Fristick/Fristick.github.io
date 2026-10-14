@@ -5,7 +5,7 @@ Travail fait le 14 octobre 2026 sur la branche `backrooms`.
 | | |
 |---|---|
 | **Commit de base** | `b8f9449` (v4.13 suite 6), vérifié avant toute modification ([audit](AUDIT_v4.14.md)) |
-| **Commits v4.14** | `4a53b64` (1/n) : audit, rejeu isolé, migration prouvée, scanner fiabilisé ; `3ef8ee3` (2/n) : kit du Level 0 importé et branché, HUD du scanner contextuel ; (3/n) : tests du jeu v4.14, versions, journaux, documents |
+| **Commits v4.14** | `4a53b64` (1/n) : audit, rejeu isolé, migration prouvée, scanner fiabilisé ; `3ef8ee3` (2/n) : kit du Level 0 importé et branché, HUD du scanner contextuel ; `0b8a60c` (3/n) : tests du jeu v4.14, versions, journaux, documents ; (4/4) : ce tableau |
 | **Documents** | [Audit](AUDIT_v4.14.md) · [Gameplay v4.14](GAMEPLAY_v4.14.md) · [Gameplay v4.13](GAMEPLAY_v4.13.md) (règles inchangées) · [Kit Blender du Level 0](../RawAssets/Level0Kit/README.md) · journaux réels dans [`Docs/v414/`](v414/) |
 
 **Ordre suivi** (celui du prompt) : protéger les parties, fiabiliser le LiDAR, préparer la vérification dans Unreal ;
