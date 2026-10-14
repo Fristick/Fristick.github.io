@@ -362,13 +362,9 @@ void ABRAutoTest::AddNetV413LidarSteps(bool bClient)
 		{
 			return false;
 		}
-		if (TestMissionPhase != 64)
+		if (TestMissionPhase != 64 && TestMissionPhase != 65)
 		{
 			TestMissionPhase = 64;
-			if (L)
-			{
-				L->Pulse();
-			}
 			// L'hote calibre (action ordinaire, verifiee chez lui) ; le client doit le voir par la replication
 			if (!bClient)
 			{
@@ -378,16 +374,22 @@ void ABRAutoTest::AddNetV413LidarSteps(bool bClient)
 					W->DebugCompleteMissionDevice(Calib);
 				}
 			}
-			return false;
 		}
-		if (!W->IsLidarCalibrated() && StepTime < 20.f)
+		// Une impulsion n'est acceptee qu'une fois le joueur libre d'agir (arrivee dans le niveau, titre) : elle est redemandee
+		// jusqu'a ce qu'elle parte, puis ses points se posent sur quelques images
+		if (TestMissionPhase == 64 && L && L->Pulse())
+		{
+			TestMissionPhase = 65;
+		}
+		const int32 Points = L ? L->GetPointCount() : 0;
+		if ((!W->IsLidarCalibrated() || Points <= 0) && StepTime < 20.f)
 		{
 			return false;
 		}
+		const bool bPulsed = TestMissionPhase == 65;
 		TestMissionPhase = 0;
-		const int32 Points = L ? L->GetPointCount() : 0;
-		Note(FString::Printf(TEXT("%s : scanner local %s, %d points (non repliques), calibrage de l'hote recu %s"), bClient ? TEXT("client") : TEXT("hote"), Oui(L != nullptr), Points,
-			Oui(W->IsLidarCalibrated())), !L || Points <= 0 || !W->IsLidarCalibrated());
+		Note(FString::Printf(TEXT("%s : scanner local %s, impulsion partie %s, %d points (non repliques), calibrage de l'hote recu %s"), bClient ? TEXT("client") : TEXT("hote"),
+			Oui(L != nullptr), Oui(bPulsed), Points, Oui(W->IsLidarCalibrated())), !L || Points <= 0 || !W->IsLidarCalibrated());
 		Skip(TEXT("4 joueurs et client arrive en cours de partie : non reproductibles dans ce banc (deux instances, connectees au debut) ; l'etat de mission parvient a un client "
 			"tardif par la premiere replication (OnRep_Mission), ses points de scanner sont les siens"));
 		return true;

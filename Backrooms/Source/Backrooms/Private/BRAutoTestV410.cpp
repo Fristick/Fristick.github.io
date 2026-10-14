@@ -1093,8 +1093,9 @@ void ABRAutoTest::AddNetV410Steps(bool bClient)
 			TestHealth = C->Health;
 		}
 		TestHits = 0;
+		// Client : heure des deux soins rapproches (le serveur refuse un soin moins de 0,55 s apres le precedent accepte)
+		FallStart = bClient ? TestTimer : 0.0;
 		TestTimer = 0.0;
-		FallStart = 0.0;
 		bTestPrepShown = false;
 		return true;
 	});
@@ -1151,8 +1152,9 @@ void ABRAutoTest::AddNetV410Steps(bool bClient)
 		}
 		if (!bTestPrepShown)
 		{
-			// Le premier coup arrive : soin tout de suite (au milieu de la serie)
-			if (C->Health < TestHealth - 1.f && !C->IsHealPending())
+			// Le premier coup arrive : soin tout de suite (au milieu de la serie), une fois l'intervalle minimal entre deux soins
+			// passe depuis les soins rapproches (un joueur ne peut pas se soigner plus vite : delai local de 0,8 s)
+			if (C->Health < TestHealth - 1.f && !C->IsHealPending() && FPlatformTime::Seconds() - FallStart >= 1.0)
 			{
 				C->LocalLastHealTime = -100.f;
 				C->QuickUse(EBRItem::Bandage);
@@ -1217,6 +1219,7 @@ void ABRAutoTest::AddSmokeSteps()
 		}
 		return true;
 	});
+	LimitLastStep(105.f);
 	Add(TEXT("lancement : verifications"), 0.f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();

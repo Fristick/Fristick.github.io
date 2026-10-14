@@ -22,6 +22,7 @@
 #include "BRCharacter.h"
 #include "BRChunk.h"
 #include "BRHUD.h"
+#include "BRLevels.h"
 #include "BRLidar.h"
 #include "BRLidarLogic.h"
 #include "BRMission.h"
@@ -45,7 +46,6 @@ namespace BRTestV414
 	constexpr int32 CampaignSlot = 1;
 	constexpr int32 MigrationSlot = 2;
 	/** Graines : Level 1 rejoue, Level 6 (deux chargements), Level 0 du kit (9 : graine de la scene du kit) */
-	constexpr uint32 ReplaySeed = 4141u;
 	constexpr uint32 Lidar6SeedA = 4136u;
 	constexpr uint32 Lidar6SeedB = 4142u;
 	constexpr uint32 KitSeed = 9u;
@@ -155,13 +155,15 @@ void ABRAutoTest::AddV414Steps()
 		TestOrigSlot = BRSaves::ActiveSlot();
 		TestOrigSave = PC->ActiveSave;
 		bTestDevSession = PC->bDevSession;
-		// REJOUER le Niveau 1 depuis cette partie (comme le menu : la partie est chargee, la session est un rejeu)
+		// REJOUER le Niveau 1 depuis cette partie, par le meme chemin que le bouton du menu (StartSolo) : partie choisie,
+		// niveau du carrousel, menu ferme. Avant : le test imitait le menu sans le fermer ; la session restait "libre"
+		// (GetSessionMode : menu ouvert) et le test concluait a tort que REJOUER ne marchait pas
 		BRSaves::ActiveSlot() = CampaignSlot;
-		BRSaves::ReplaySession() = true;
 		PC->ActiveSave = BRSaves::Load(CampaignSlot);
 		PC->bDevSession = false;
-		W->SetStory(St, EBRSessionMode::Replay, true);
-		W->RequestTransition(1, false, ABRWorld::SeedFromUser(ReplaySeed, 1));
+		PC->bInMenu = true;
+		PC->MenuIndex = BRLevels::IndexOf(1);
+		PC->StartSolo(true);
 		Note(FString::Printf(TEXT("partie de campagne de test ecrite %s (emplacement %d) : %s"), Oui(bWritten), CampaignSlot, *Snapshot), !bWritten);
 		return true;
 	});
@@ -486,6 +488,8 @@ void ABRAutoTest::AddV414Steps()
 			TestMissionPhase = 143;
 			TestCountA = FMath::RoundToInt(H->LastLidarChargeAlpha * 100.f) + 1000 * FMath::RoundToInt(H->LastLidarConeAlpha * 100.f);
 			TestCountB = FMath::RoundToInt(H->LastLidarHintAlpha * 100.f);
+			Note(FString::Printf(TEXT("au repos (16 s sans action) : barre de recharge %.2f, cone %.2f, rappel %.2f ; recharge restante %.2f, focus %s"),
+				H->LastLidarChargeAlpha, H->LastLidarConeAlpha, H->LastLidarHintAlpha, L->GetPulseCharge(), Oui(L->IsFocusing())));
 			L->Pulse();
 			TestT0 = StepTime;
 			return false;
@@ -671,18 +675,45 @@ void ABRAutoTest::AddNetV414Steps(bool bClient)
 			return false;
 		}
 		const FBRNetStory& St = W->GetNetStory();
-		if (bClient && St.DoorDir < 0 && StepTime < 30.f)
+		// La porte retenue n'est dans l'etat de la partie que pour le Level 0 de la partie (session histoire, graine de la
+		// partie) ; ailleurs (session libre, graine imposee) chaque machine la tire de la meme graine
+		const bool bPartyDoor = St.IntroSeed == W->GetSeed() && St.DoorDir >= 0 && St.DoorDir < 4;
+		if (bClient && !bPartyDoor && W->GetSessionMode() != EBRSessionMode::Free && StepTime < 30.f)
 		{
 			return false; // etat de l'hote pas encore recu
 		}
 		TestMissionPhase = 0;
 		static const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
-		const FIntPoint HostCell(St.DoorX, St.DoorY);
-		const FIntPoint HostDir = St.DoorDir >= 0 && St.DoorDir < 4 ? Dirs[St.DoorDir] : FIntPoint(0, 0);
-		const bool bSame = W->GetServiceDoorCell() == HostCell && W->GetServiceDoorDir() == HostDir;
-		Note(FString::Printf(TEXT("%s : porte en (%d, %d) face (%d, %d) ; porte de l'hote (%d, %d) face (%d, %d) : identique %s"), bClient ? TEXT("client") : TEXT("hote"),
-			W->GetServiceDoorCell().X, W->GetServiceDoorCell().Y, W->GetServiceDoorDir().X, W->GetServiceDoorDir().Y, HostCell.X, HostCell.Y, HostDir.X, HostDir.Y, Oui(bSame)),
-			!bSame);
+		const TCHAR* Who = bClient ? TEXT("client") : TEXT("hote");
+		const FIntPoint Cell = W->GetServiceDoorCell();
+		const FIntPoint Dir = W->GetServiceDoorDir();
+		if (bPartyDoor)
+		{
+			const FIntPoint HostCell(St.DoorX, St.DoorY);
+			const FIntPoint HostDir = Dirs[St.DoorDir];
+			const bool bSame = Cell == HostCell && Dir == HostDir;
+			Note(FString::Printf(TEXT("%s : porte en (%d, %d) face (%d, %d) ; porte de la partie (%d, %d) face (%d, %d) : identique %s"), Who, Cell.X, Cell.Y, Dir.X, Dir.Y,
+				HostCell.X, HostCell.Y, HostDir.X, HostDir.Y, Oui(bSame)), !bSame);
+		}
+		else
+		{
+			// Meme regle que ABRWorld::PlaceServiceDoor sans porte retenue : bande visee, sinon elargie ; plus petit hachage
+			const FBRDoorCandidate* Best = nullptr;
+			for (uint8 Band = 0; !Best && Band < 2; ++Band)
+			{
+				for (const FBRDoorCandidate& Cand : W->GetServiceDoorCandidates())
+				{
+					if (Cand.Band <= Band && (!Best || Cand.Hash < Best->Hash))
+					{
+						Best = &Cand;
+					}
+				}
+			}
+			const bool bSeedChoice = Best && Best->Cell == Cell && Best->Dir == Dir;
+			Note(FString::Printf(TEXT("%s : porte en (%d, %d) face (%d, %d) ; pas de porte de partie pour cette graine (session %d, graine %u, partie %u) : choix de la graine "
+				"%s"), Who, Cell.X, Cell.Y, Dir.X, Dir.Y, static_cast<int32>(W->GetSessionMode()), W->GetSeed(), St.IntroSeed, Best ? Oui(bSeedChoice) : TEXT("secours")),
+				Best && !bSeedChoice);
+		}
 		Skip(TEXT("etat de la porte recu APRES la construction du niveau (client tardif sous latence) : ABRWorld::ReconcileServiceDoor reconstruit le Level 0 ; a provoquer "
 			"avec -BRNetTest et Net PktLag eleve, journal \"porte de service du client reprise\""));
 		return true;

@@ -73,6 +73,8 @@ private:
 		FString Name;
 		TFunction<bool()> Action;
 		float Wait = 0.f;
+		/** Duree au-dela de laquelle l'etape est notee bloquee (une marche ou une mission a pied peut durer plusieurs minutes) */
+		float Limit = 60.f;
 	};
 
 	/** Mesures d'un niveau, pour le rapport */
@@ -116,6 +118,8 @@ private:
 	/** Multijoueur : niveau, graine, joueurs, chunks, entites et position du personnage (dans le rapport) */
 	void NoteNetState(const TCHAR* When);
 	void Add(const FString& Name, float Wait, TFunction<bool()> Action);
+	/** Limite de duree de la derniere etape ajoutee (60 s par defaut), pour une etape qui a son propre delai plus long */
+	void LimitLastStep(float Seconds);
 	void AddLevelSteps(int32 Level);
 	void AddEntityShot(int32 Level, EBREntityKind Kind);
 	/** v4.6 : scenario de la salle de fosses */

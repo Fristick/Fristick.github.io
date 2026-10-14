@@ -210,12 +210,18 @@ void ABRAutoTest::AddRegressionSteps()
 		{
 			return false;
 		}
+		// v4.13 : plus de cassettes au Level 0 : l'objet le plus proche (une cassette d'abord s'il y en a). Pas une note, qui
+		// reste en place
 		ABRPickup* Best = nullptr;
 		float BestD = TNumericLimits<float>::Max();
 		for (TActorIterator<ABRPickup> It(GetWorld()); It; ++It)
 		{
-			const float D = static_cast<float>(FVector::DistSquared(It->GetActorLocation(), C->GetActorLocation()));
-			if (It->Item == EBRItem::VHSTape && D < BestD)
+			if (It->Item == EBRItem::Note)
+			{
+				continue;
+			}
+			const float D = static_cast<float>(FVector::DistSquared(It->GetActorLocation(), C->GetActorLocation())) * (It->Item == EBRItem::VHSTape ? 0.01f : 1.f);
+			if (D < BestD)
 			{
 				Best = *It;
 				BestD = D;
@@ -223,7 +229,7 @@ void ABRAutoTest::AddRegressionSteps()
 		}
 		if (!Best)
 		{
-			Note(TEXT("reprise : aucune cassette chargee pres du depart (graine 4605)"), true);
+			Note(TEXT("reprise : aucun objet charge pres du depart (graine 4605)"), true);
 			return true;
 		}
 		TestPickupId = Best->Id;
@@ -328,10 +334,13 @@ void ABRAutoTest::AddRegressionSteps()
 		{
 			return false;
 		}
-		// Regle voulue : seul, une mort ramene au Niveau 0 avec une NOUVELLE graine (la reprise ne s'applique pas)
-		const bool bOk = W->GetLevelNumber() == 0 && W->GetSeed() != TestSeed && !W->IsResumedSession() && !C->GetDeathState().bDead;
-		Note(FString::Printf(TEXT("apres la mort : %s (Niveau %d, nouvelle graine %s, etat serveur vivant %s)"), bOk ? TEXT("OK") : TEXT("ECHEC"),
-			W->GetLevelNumber(), W->GetSeed() != TestSeed ? TEXT("oui") : TEXT("non"), C->GetDeathState().bDead ? TEXT("non") : TEXT("oui")), !bOk);
+		// Regle voulue : seul, une mort ramene au Niveau 0 sans reprendre la session (objets, cassettes). v4.13 : le Level 0
+		// d'une partie garde sa graine (tiree a la nouvelle partie) : meme disposition, porte au meme endroit
+		const uint32 PartySeed = W->GetNetStory().IntroSeed;
+		const bool bOk = W->GetLevelNumber() == 0 && PartySeed != 0 && W->GetSeed() == PartySeed && !W->IsResumedSession() && !C->GetDeathState().bDead;
+		Note(FString::Printf(TEXT("apres la mort : %s (Niveau %d, graine %u, graine du Level 0 de la partie %u : gardee %s ; session reprise %s, etat serveur vivant %s)"),
+			bOk ? TEXT("OK") : TEXT("ECHEC"), W->GetLevelNumber(), W->GetSeed(), PartySeed, W->GetSeed() == PartySeed ? TEXT("oui") : TEXT("NON"),
+			W->IsResumedSession() ? TEXT("OUI") : TEXT("non"), C->GetDeathState().bDead ? TEXT("non") : TEXT("oui")), !bOk);
 		C->bGodMode = true;
 		if (ABRPlayerController* PC = GetPC())
 		{

@@ -316,6 +316,63 @@ namespace BRTestV412
 		return EWalk::Moving;
 	}
 
+	/** Sol sous (X, Y) dans l'eau (fond sous la surface) : le joueur y nagerait */
+	bool IsWetSpot(const ABRWorld* W, const FVector& P, float FromZ, const AActor* Ignore, const AActor* Self, float* OutFloorZ = nullptr)
+	{
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestWet), false, Self);
+		Q.AddIgnoredActor(Ignore);
+		FHitResult Floor;
+		if (!W->GetWorld()->LineTraceSingleByChannel(Floor, FVector(P.X, P.Y, FromZ + 150.f), FVector(P.X, P.Y, FromZ - 450.f), ECC_WorldStatic, Q))
+		{
+			return true; // pas de sol : pas une place
+		}
+		const float FloorZ = static_cast<float>(Floor.ImpactPoint.Z);
+		if (OutFloorZ)
+		{
+			*OutFloorZ = FloorZ;
+		}
+		const BRMech::FWaterQuery WQ = W->WaterAt(FVector(P.X, P.Y, FloorZ + 5.f));
+		return WQ.bWater && WQ.Surface > FloorZ + 10.f;
+	}
+
+	/** Place au sec pres d'un mecanisme pose au bord de l'eau (fleche du courant des Poolrooms) : un joueur l'observe depuis
+	 *  le trottoir, pas a la nage. A portee de l'hote (ABRWorld::MissionReachServer depuis les yeux) et a vue, la plus proche */
+	bool DryStandNear(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, FVector& Out)
+	{
+		UWorld* World = W->GetWorld();
+		const FVector Aim = Dev->GetInteractPoint();
+		const FVector Fwd = Dev->GetActorForwardVector().GetSafeNormal2D().IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Dev->GetActorForwardVector().GetSafeNormal2D();
+		const float Half = C->GetSimpleCollisionHalfHeight();
+		const float EyeUp = static_cast<float>(C->GetEyeLocation().Z - C->GetActorLocation().Z);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestDryStand), false, C);
+		Q.AddIgnoredActor(Dev);
+		for (const float Dist : { 110.f, 160.f, 210.f, 260.f })
+		{
+			for (int32 Turn = 0; Turn < 16; ++Turn)
+			{
+				const FVector P = Aim + Fwd.RotateAngleAxis(Turn * 22.5f, FVector::UpVector) * Dist;
+				float FloorZ = 0.f;
+				if (IsWetSpot(W, P, static_cast<float>(Aim.Z), Dev, C, &FloorZ))
+				{
+					continue;
+				}
+				const FVector Stand(P.X, P.Y, FloorZ + Half + 5.f);
+				if (World->OverlapAnyTestByChannel(Stand, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(36.f, Half - 4.f), Q))
+				{
+					continue;
+				}
+				const FVector Eye = Stand + FVector(0.f, 0.f, EyeUp);
+				if (FVector::Dist(Eye, Aim) > ABRWorld::MissionReachServer - 40.f || World->LineTraceTestByChannel(Eye, Aim, ECC_WorldStatic, Q))
+				{
+					continue;
+				}
+				Out = Stand;
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Point au centre d'un volume local (repere d'un module) */
 	FVector BoxCenter(const BRMech::FFrame& F, float LX0, float LY0, float LX1, float LY1, float Z)
 	{
@@ -360,8 +417,11 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			Red += It->GetMissionOpen() == 0 ? 1 : 0;
 			Green += It->GetMissionOpen() == 1 ? 1 : 0;
 		}
+		// v4.13 : le Level 0 n'a pas de mission (sa porte de service est libre) ; les autres niveaux en ont une
+		const bool bWantMission = Level != 0;
 		Note(FString::Printf(TEXT("Niveau %d (canal %d) : mission %s, placement %d, passages condamnes %d, voyants rouges %d, verts %d"), Level,
-			static_cast<int32>(BRLevels::Channel()), W->IsMissionActive() ? TEXT("active") : TEXT("ABSENTE"), Tier, Sealed, Red, Green), !W->IsMissionActive());
+			static_cast<int32>(BRLevels::Channel()), W->IsMissionActive() ? TEXT("active") : (bWantMission ? TEXT("ABSENTE") : TEXT("aucune (Level 0, v4.13)")), Tier, Sealed,
+			Red, Green), W->IsMissionActive() != bWantMission);
 		TestMission.Reset();
 		TestMissionStep = 0;
 		TestMissionPhase = 0;
@@ -440,7 +500,19 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			TestMissionDevice = D;
 			TestMissionRetries = 0;
 			const FVector Aim = Dev->GetInteractPoint();
-			const FVector Goal = Aim + Dev->GetActorForwardVector().GetSafeNormal2D() * 110.f;
+			FVector Goal = Aim + Dev->GetActorForwardVector().GetSafeNormal2D() * 110.f;
+			// Devant le mecanisme, c'est l'eau (fleche du courant au bord du trottoir) : place au sec a portee
+			FVector Dry;
+			if (IsWetSpot(W, Goal, static_cast<float>(Aim.Z), Dev, C))
+			{
+				if (!DryStandNear(W, C, Dev, Dry))
+				{
+					Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) au bord de l'eau : aucune place au sec a portee et a vue"), Level, D,
+						*BRMissionText::DeviceName(P, D)), true);
+					return true;
+				}
+				Goal = Dry;
+			}
 			BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), 70.f, true);
 			TestMissionPhase = 2;
 			return false;
@@ -490,11 +562,14 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			}
 			if (TestMissionRetries++ == 0)
 			{
-				// Un pas plus pres, puis on vise a nouveau
+				// Un pas plus pres (pas dans l'eau), puis on vise a nouveau
 				const FVector Goal = Dev->GetInteractPoint() + Dev->GetActorForwardVector().GetSafeNormal2D() * 60.f;
-				BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), 35.f, true);
-				TestMissionPhase = 2;
-				return false;
+				if (!IsWetSpot(W, Goal, static_cast<float>(Dev->GetInteractPoint().Z), Dev, C))
+				{
+					BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), 35.f, true);
+					TestMissionPhase = 2;
+					return false;
+				}
 			}
 			const AActor* Seen = C->FocusActor.Get();
 			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) atteint mais PAS VISE par l'interaction (vise : %s)"), Level, TestMissionDevice,
@@ -561,6 +636,7 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			return true;
 		}
 	});
+	LimitLastStep(920.f);
 }
 
 void ABRAutoTest::AddWalkExitSteps(int32 Level)
@@ -585,11 +661,13 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			// Mission resolue, sortie ouverte (voyant vert), place devant la sortie
 			BRM::FEval E;
 			W->GetMissionEval(E);
+			// v4.13 : sans mission (Level 0), la sortie est libre : la porte de service
+			const bool bSolved = E.bSolved || !W->IsMissionActive();
 			TestLevel = OpenForwardTarget(W, Level);
 			ABRExit* Exit = TestLevel >= 0 ? FindExit(GetWorld(), TestLevel) : nullptr;
-			if (!E.bSolved || !Exit)
+			if (!bSolved || !Exit)
 			{
-				Note(FString::Printf(TEXT("Niveau %d : mission resolue %s, sortie ouverte trouvee %s : sortie non testee"), Level, YesNo(E.bSolved), YesNo(Exit != nullptr)), true);
+				Note(FString::Printf(TEXT("Niveau %d : mission resolue %s, sortie ouverte trouvee %s : sortie non testee"), Level, YesNo(bSolved), YesNo(Exit != nullptr)), true);
 				return true;
 			}
 			const FVector Fwd = FRotator(0.f, Exit->GetActorRotation().Yaw, 0.f).Vector();
@@ -725,6 +803,7 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 		}
 		}
 	});
+	LimitLastStep(330.f);
 }
 
 // =====================================================================================================================
@@ -910,8 +989,12 @@ void ABRAutoTest::AddV412Steps()
 		// La reponse de l'hote arrive alors que l'inventaire s'est rempli : l'objet est mis de cote, jamais perdu
 		const int32 Before = C->RecoveredPickups;
 		const int32 Almond = C->CountItem(EBRItem::AlmondWater);
+		const int32 RoomBefore = C->RoomFor(EBRItem::AlmondWater);
+		const int32 AsideBefore = C->CountRecovered();
 		C->StorePickup(EBRItem::AlmondWater, false);
 		const bool bAside = C->CountRecovered() == 1 && C->RecoveredPickups == Before + 1 && C->CountItem(EBRItem::AlmondWater) == Almond;
+		const FString AsideInfo = FString::Printf(TEXT("place avant %d, mis de cote avant %d apres %d, compteur +%d, eaux %d -> %d"), RoomBefore, AsideBefore, C->CountRecovered(),
+			C->RecoveredPickups - Before, Almond, C->CountItem(EBRItem::AlmondWater));
 		// Une place se libere : il se range
 		C->RemoveItem(EBRItem::Vest, 1);
 		const int32 Stowed = C->StowRecovered(false);
@@ -924,8 +1007,8 @@ void ABRAutoTest::AddV412Steps()
 		UGameplayStatics::SaveGameToMemory(S, Bytes);
 		const UBRSaveGame* Back = Cast<UBRSaveGame>(UGameplayStatics::LoadGameFromMemory(Bytes));
 		const bool bSaved = Back && Back->Recovered.Num() == 1 && Back->Recovered[0].Item == static_cast<uint8>(EBRItem::Battery);
-		Note(FString::Printf(TEXT("reponse acceptee sans place : mise de cote %s ; place liberee : rangee %s ; dans la sauvegarde %s"), YesNo(bAside), YesNo(bStowed),
-			YesNo(bSaved)), !bAside || !bStowed || !bSaved);
+		Note(FString::Printf(TEXT("reponse acceptee sans place : mise de cote %s%s ; place liberee : rangee %s ; dans la sauvegarde %s"), YesNo(bAside),
+			bAside ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *AsideInfo), YesNo(bStowed), YesNo(bSaved)), !bAside || !bStowed || !bSaved);
 		C->Pockets = SavedPockets;
 		C->Storage = SavedStorage;
 		C->Equipment = SavedEquipment;
@@ -1093,6 +1176,7 @@ void ABRAutoTest::AddV412Steps()
 		Shot(TEXT("v412_passerelle_levee"));
 		return true;
 	});
+	LimitLastStep(200.f);
 	AddWalkMissionSteps(8, 4128, false);
 	Add(TEXT("v4.12 passerelle : tablier pose"), 0.2f, [this]()
 	{
@@ -1134,8 +1218,16 @@ void ABRAutoTest::AddV412Steps()
 		const BRM::FPlan& P = W->GetMissionPlan();
 		const ABRMissionDevice* Beacon = W->FindMissionDevice(BRM::FirstRole(P, BRM::R_Beacon));
 		LightsBefore = W->NumGameplayLights();
-		BeaconLightBefore = Beacon ? W->LightLevelAt(Beacon->GetActorLocation() + Beacon->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 100.f)) : -1.f;
-		Note(FString::Printf(TEXT("avant : %d source(s) de gameplay, lumiere devant la premiere balise %.2f"), LightsBefore, BeaconLightBefore), !Beacon);
+		if (!Beacon)
+		{
+			// v4.13 : le Level 6 se joue sans lumiere (scanner LiDAR) ; ses postes de confinement (anciennes balises) ont un
+			// petit voyant qui n'eclaire pas le secteur. Les balises ne restent que pour convertir les anciennes sauvegardes
+			BeaconLightBefore = -1.f;
+			Note(FString::Printf(TEXT("avant (Level 6 sans lumiere depuis la v4.13) : %d source(s) de gameplay (attendu 0)"), LightsBefore), LightsBefore != 0);
+			return true;
+		}
+		BeaconLightBefore = W->LightLevelAt(Beacon->GetActorLocation() + Beacon->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 100.f));
+		Note(FString::Printf(TEXT("avant : %d source(s) de gameplay, lumiere devant la premiere balise %.2f"), LightsBefore, BeaconLightBefore));
 		return true;
 	});
 	AddWalkMissionSteps(6, 4126, false);
@@ -1150,6 +1242,10 @@ void ABRAutoTest::AddV412Steps()
 		const ABRMissionDevice* Beacon = W->FindMissionDevice(BRM::FirstRole(P, BRM::R_Beacon));
 		if (!Beacon)
 		{
+			// v4.13 : postes faits, toujours aucune source de gameplay (le secteur reste a decouvrir au scanner)
+			const int32 Lights = W->NumGameplayLights();
+			Note(FString::Printf(TEXT("apres (Level 6 sans lumiere) : %d source(s) de gameplay (attendu 0), mission resolue %s"), Lights,
+				YesNo((W->GetMissionState().Solved & 1) != 0)), Lights != 0);
 			return true;
 		}
 		const FVector Probe = Beacon->GetActorLocation() + Beacon->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 100.f);
@@ -1498,7 +1594,20 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 			return StepTime > 20.f;
 		}
 		const FVector Aim = Dev->GetInteractPoint();
-		PlaceAndFace(C, FVector(Aim.X, Aim.Y, C->GetActorLocation().Z) + Dev->GetActorForwardVector().GetSafeNormal2D() * 120.f, Aim);
+		if (TestMissionPhase != 412)
+		{
+			// La position du client part a l'hote avec ses mouvements, pas avec la demande : apres un deplacement instantane,
+			// la demande attend que l'hote ait recu la nouvelle position (sinon il juge la distance d'ou etait le client)
+			PlaceAndFace(C, FVector(Aim.X, Aim.Y, C->GetActorLocation().Z) + Dev->GetActorForwardVector().GetSafeNormal2D() * 120.f, Aim);
+			TestMissionPhase = 412;
+			TestTimer = FPlatformTime::Seconds();
+			return false;
+		}
+		if (FPlatformTime::Seconds() - TestTimer < 0.6)
+		{
+			return false;
+		}
+		TestMissionPhase = 0;
 		TestMissionDevice = D;
 		TestCountA = C->MissionResultsReceived;
 		C->RequestMissionAction(D, static_cast<uint8>(BRM::EAction::Use));
@@ -1525,7 +1634,8 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		float Age = 0.f;
 		const EBRActionStatus S = C->GetActionStatus(Detail, Age);
 		const bool bOk = C->MissionResultsReceived > TestCountA && S == EBRActionStatus::Accepted;
-		Note(FString::Printf(TEXT("client : reponse en %.0f ms, etat affiche %d (attendu : accepte)"), (FPlatformTime::Seconds() - TestTimer) * 1000.0, static_cast<int32>(S)), !bOk);
+		Note(FString::Printf(TEXT("client : reponse en %.0f ms, etat affiche %d (attendu : accepte)%s"), (FPlatformTime::Seconds() - TestTimer) * 1000.0, static_cast<int32>(S),
+			Detail.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(", raison \"%s\""), *Detail)), !bOk);
 		Shot(TEXT("v412_reseau_acceptee"));
 		return true;
 	});
@@ -1547,6 +1657,17 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 			}
 			const FVector Far = Dev->GetInteractPoint() + Dev->GetActorForwardVector().GetSafeNormal2D() * 900.f;
 			C->SetActorLocation(FVector(Far.X, Far.Y, C->GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+			TestTimer = FPlatformTime::Seconds();
+			TestCountB = 2;
+			return false;
+		}
+		if (TestCountB == 2)
+		{
+			// Demande une fois la nouvelle position recue par l'hote (voir plus haut)
+			if (FPlatformTime::Seconds() - TestTimer < 0.6)
+			{
+				return false;
+			}
 			TestCountA = C->MissionResultsReceived;
 			C->RequestMissionAction(TestMissionDevice, static_cast<uint8>(BRM::EAction::Use));
 			TestCountB = 1;
@@ -1695,6 +1816,38 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
 		if (TestMissionPhase != 31)
 		{
+			// Les deux machines avancent a leur rythme : l'hote mesure son attente 4 s apres etre arrive au sommet. Le client ne
+			// part a pied qu'une fois l'hote monte (plus haut qu'au depart) et immobile depuis 6 s ; sinon le groupe partirait
+			// avant la mesure (2/2 rassembles, depart lance)
+			TArray<ABRCharacter*> Players;
+			W->GetPlayers(Players);
+			const ABRCharacter* Host = nullptr;
+			for (const ABRCharacter* P : Players)
+			{
+				Host = P && !P->IsLocallyControlled() ? P : Host;
+			}
+			const double Now = FPlatformTime::Seconds();
+			if (Host && StepTime < 45.f)
+			{
+				const FVector HostLoc = Host->GetActorLocation();
+				if (TestMissionPhase != 30)
+				{
+					TestMissionPhase = 30;
+					TestExitSpot = HostLoc;
+					FallStart = HostLoc.Z;
+					TestTimer = Now;
+					return false;
+				}
+				if (FVector::Dist(HostLoc, TestExitSpot) > 5.f)
+				{
+					TestExitSpot = HostLoc;
+					TestTimer = Now;
+				}
+				if (HostLoc.Z < FallStart + 100.f || Now - TestTimer < 6.0)
+				{
+					return false;
+				}
+			}
 			const FVector Loc = W->GetDeparture().Location;
 			BeginWalk(W, C, FVector(Loc.X, Loc.Y, C->GetActorLocation().Z), 250.f, true);
 			TestMissionPhase = 31;
@@ -1714,6 +1867,7 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		Note(FString::Printf(TEXT("client : point de rassemblement non atteint a pied (%s)"), *WalkStats()), true);
 		return true;
 	});
+	LimitLastStep(110.f);
 	Add(TEXT("v4.12 reseau : depart par l'echelle"), 1.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();

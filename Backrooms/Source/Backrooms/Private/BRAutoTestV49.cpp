@@ -672,9 +672,11 @@ void ABRAutoTest::AddV49Steps()
 				Bad.Add(FString::Printf(TEXT("%s : sans valeur ou sans aide"), Name));
 			}
 		}
-		if (PerCat[2] != 5)
+		// v4.13 : 5 lignes de l'interface d'exploration, plus les 4 reglages du scanner LiDAR (taille, contraste, persistance,
+		// aide statique)
+		if (PerCat[2] != 9)
 		{
-			Bad.Add(FString::Printf(TEXT("INTERFACE : %d ligne(s) au lieu de 5"), PerCat[2]));
+			Bad.Add(FString::Printf(TEXT("INTERFACE : %d ligne(s) au lieu de 9 (5 + 4 du scanner)"), PerCat[2]));
 		}
 		Note(FString::Printf(TEXT("parametres : %d lignes (jeu %d, video %d, interface %d, graphismes %d)%s%s"), PC->GetSettingsCount(), PerCat[0], PerCat[1], PerCat[2], PerCat[3],
 			Bad.Num() > 0 ? TEXT(" ; ") : TEXT(""), *FString::Join(Bad, TEXT(", "))), Bad.Num() > 0);

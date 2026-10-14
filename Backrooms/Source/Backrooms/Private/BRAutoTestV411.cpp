@@ -158,6 +158,24 @@ namespace BRTestV411
 		}
 	}
 
+	/** Portee d'un mecanisme telle que la juge l'hote (ABRWorld::ServerMissionAct) : distance des yeux, ligne de vue */
+	FString ReachInfo(UWorld* World, const ABRCharacter* C, const ABRMissionDevice* Dev)
+	{
+		if (!World || !C || !Dev)
+		{
+			return TEXT("mecanisme ou joueur absent");
+		}
+		const FVector Eye = C->GetEyeLocation();
+		const FVector Target = Dev->GetInteractPoint();
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestReach), false, C);
+		Q.AddIgnoredActor(Dev);
+		FHitResult Hit;
+		const bool bBlocked = World->LineTraceSingleByChannel(Hit, Eye, Target, ECC_WorldStatic, Q);
+		return FString::Printf(TEXT("yeux (%.0f, %.0f, %.0f), point (%.0f, %.0f, %.0f), %.0f cm (portee %.0f), vue %s"), Eye.X, Eye.Y, Eye.Z, Target.X, Target.Y, Target.Z,
+			FVector::Dist(Eye, Target), ABRWorld::MissionReachServer, bBlocked ? *FString::Printf(TEXT("BLOQUEE par %s (%s) a %.0f cm"), *GetNameSafe(Hit.GetActor()),
+			*GetNameSafe(Hit.GetComponent()), Hit.Distance) : TEXT("libre"));
+	}
+
 	/** Premiere sortie de cette cible (visible) */
 	ABRExit* FindExit(UWorld* World, int32 Target)
 	{
@@ -442,6 +460,7 @@ void ABRAutoTest::AddMissionSteps(int32 Level, uint32 UserSeed, bool bDepart)
 		}
 		}
 	});
+	LimitLastStep(260.f);
 
 	if (bDepart)
 	{
@@ -849,6 +868,14 @@ void ABRAutoTest::AddV411Steps()
 		// Le bouton AIDE fait passer l'etape en cours de 0 a 1 puis 2 (indice, puis rappel des indices trouves) ; ici, le
 		// niveau d'aide est regle comme le ferait un clic, et l'image suivante doit l'afficher
 		const int32 Step = TestCountA;
+		// L'aide est rangee par etape du carnet de ce niveau (cle et graine fixees au dessin du carnet) : on attend que le
+		// carnet de ce niveau ait ete dessine, sinon l'aide demandee irait a une cle perimee et serait effacee
+		const ABRWorld* W = GetBRWorld();
+		const uint32 HintSeed = W ? (W->GetSeed() ^ static_cast<uint32>(W->GetMissionPlan().Level * 7919)) : 0u;
+		if (Step == 0 && (H->NotebookHintSeed != HintSeed || H->NotebookHintStep < 0) && StepTime < 5.f)
+		{
+			return false;
+		}
 		if (Step == 0)
 		{
 			const bool bTab = H->Tab == ABRHUD::ETab::Notebook && H->LastNotebookHintLevel == 0;
@@ -976,12 +1003,29 @@ void ABRAutoTest::AddV411Steps()
 			return false;
 		}
 		const FVector Here = C->GetActorLocation();
+		// A 5 m en vue directe (un mur entre les deux reduit la portee a 55 % : 4,95 m pour un bruit de 9 m, regle voulue) :
+		// une direction degagee autour du joueur
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestNoise), false, C);
+		FVector Dir = FVector::ZeroVector;
+		for (int32 Turn = 0; Turn < 8 && Dir.IsZero(); ++Turn)
+		{
+			const FVector Try = FVector(1.f, 0.f, 0.f).RotateAngleAxis(Turn * 45.f, FVector::UpVector);
+			if (!GetWorld()->LineTraceTestByChannel(Here + Try * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Q))
+			{
+				Dir = Try;
+			}
+		}
+		if (Dir.IsZero())
+		{
+			Skip(TEXT("bruit de mecanisme : aucune direction degagee sur 5 m autour du joueur"));
+			return true;
+		}
 		W->ReportNoise(Here, 900.f);
 		FVector Heard;
-		const bool bNear = W->FindRecentNoise(Here + FVector(500.f, 0.f, 0.f), Heard) && FVector::Dist(Heard, Here) < 50.f;
+		const bool bNear = W->FindRecentNoise(Here + Dir * 500.f, Heard) && FVector::Dist(Heard, Here) < 50.f;
 		FVector Unused;
-		const bool bFar = W->FindRecentNoise(Here + FVector(5000.f, 0.f, 0.f), Unused);
-		Note(FString::Printf(TEXT("bruit de mecanisme : entendu a 5 m %s, a 50 m %s (attendu oui, non)"), YesNo(bNear), bFar ? TEXT("oui") : TEXT("non")), !bNear || bFar);
+		const bool bFar = W->FindRecentNoise(Here + Dir * 5000.f, Unused);
+		Note(FString::Printf(TEXT("bruit de mecanisme : entendu a 5 m en vue %s, a 50 m %s (attendu oui, non)"), YesNo(bNear), bFar ? TEXT("oui") : TEXT("non")), !bNear || bFar);
 		return true;
 	});
 	Add(TEXT("v4.11 creatures : budget de menace"), 0.5f, [this]()
@@ -1025,7 +1069,43 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 {
 	using namespace BRTestV411;
 
-	// Etat de mission a la connexion : meme generation, meme plan, meme etat (sinon le client verrait d'autres mecanismes)
+	// v4.13 : le Level 0 n'a plus de mission (sa porte de service mene au Niveau 1) : l'hote emmene le groupe au Niveau 1
+	Add(TEXT("v4.11 reseau : niveau a mission"), 0.f, [this, bClient]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W)
+		{
+			return false;
+		}
+		if (!bClient && TestMissionPhase != 1411)
+		{
+			if (W->IsTransitioning())
+			{
+				return false;
+			}
+			TestMissionPhase = 1411;
+			if (W->GetLevelNumber() != 1)
+			{
+				if (ABRPlayerController* PC = GetPC())
+				{
+					PC->BRLevel(1);
+				}
+				return false;
+			}
+		}
+		if ((W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 1 || !W->IsMissionActive()) && StepTime < 45.f)
+		{
+			return false;
+		}
+		TestMissionPhase = 0;
+		if (W->GetLevelNumber() != 1 || !W->IsMissionActive())
+		{
+			Note(FString::Printf(TEXT("%s : Niveau 1 avec mission pas atteint en 45 s (niveau %d)"), bClient ? TEXT("client") : TEXT("hote"), W->GetLevelNumber()), true);
+		}
+		return true;
+	});
+
+	// Etat de mission : meme generation, meme plan, meme etat (sinon le client verrait d'autres mecanismes)
 	Add(TEXT("v4.11 reseau : mission a la connexion"), 1.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
@@ -1083,12 +1163,25 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 			}
 			return StepTime > 20.f;
 		}
-		if (!StandNear(GetWorld(), Dev->GetInteractPoint(), Dev->GetActorForwardVector(), C->GetSimpleCollisionHalfHeight(), Dev, C, Stand))
+		if (TestMissionPhase != 4111)
 		{
-			Note(TEXT("action d'un client : aucune place devant l'indice"), true);
-			return true;
+			if (!StandNear(GetWorld(), Dev->GetInteractPoint(), Dev->GetActorForwardVector(), C->GetSimpleCollisionHalfHeight(), Dev, C, Stand))
+			{
+				Note(TEXT("action d'un client : aucune place devant l'indice"), true);
+				return true;
+			}
+			// La position du client part a l'hote avec ses mouvements, pas avec la demande : la demande attend que l'hote
+			// l'ait recue
+			PlaceAndFace(C, Stand, Dev->GetInteractPoint());
+			TestMissionPhase = 4111;
+			TestTimer = FPlatformTime::Seconds();
+			return false;
 		}
-		PlaceAndFace(C, Stand, Dev->GetInteractPoint());
+		if (FPlatformTime::Seconds() - TestTimer < 0.6)
+		{
+			return false;
+		}
+		TestMissionPhase = 0;
 		TestCountA = C->MissionResultsReceived;
 		TestTimer = FPlatformTime::Seconds();
 		C->RequestMissionAction(D, static_cast<uint8>(BRM::EAction::Use));
@@ -1118,7 +1211,12 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		}
 		else
 		{
-			Note(FString::Printf(TEXT("hote : indice %d lu par le client %s"), D, YesNo(bRead)), !bRead);
+			FString Seen;
+			for (const ABRCharacter* M : Mates(W))
+			{
+				Seen = ReachInfo(GetWorld(), M, W->FindMissionDevice(D));
+			}
+			Note(FString::Printf(TEXT("hote : indice %d lu par le client %s ; client vu par l'hote : %s"), D, YesNo(bRead), *Seen), !bRead);
 		}
 		return true;
 	});
@@ -1232,13 +1330,23 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 			return true;
 		}
 		ABRCharacter* M = Others[0];
-		if (M->ServerHealsRefused == TestCountA && StepTime < 10.f)
+		// Les deux machines avancent a leur rythme : la demande peut arriver avant que l'hote releve ses compteurs. La reponse
+		// donnee a cette demande (numero 60001) est cherchee dans l'historique du serveur
+		int32 Result = -1;
+		for (const ABRCharacter::FBRTxnRecord& R : M->ServerHealHistory)
+		{
+			if (R.RequestId == 60001)
+			{
+				Result = R.Result;
+			}
+		}
+		if (Result < 0 && StepTime < 10.f)
 		{
 			return false;
 		}
-		const bool bOk = M->ServerHealsRefused > TestCountA && M->GetServerHealStock(EBRItem::Bandage) >= TestCountB;
-		Note(FString::Printf(TEXT("hote : soin perime du client refuse %s, bandages connus de l'hote %d -> %d"), YesNo(M->ServerHealsRefused > TestCountA), TestCountB,
-			M->GetServerHealStock(EBRItem::Bandage)), !bOk);
+		const bool bOk = Result == 7 && M->GetServerHealStock(EBRItem::Bandage) >= TestCountB;
+		Note(FString::Printf(TEXT("hote : soin perime du client refuse %s (raison %d, attendu 7 : autre niveau), bandages connus de l'hote %d -> %d"), YesNo(Result == 7), Result,
+			TestCountB, M->GetServerHealStock(EBRItem::Bandage)), !bOk);
 		return true;
 	});
 
@@ -1250,7 +1358,14 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		ABRCharacter* C = GetPlayer();
 		if (!W || !C || !W->IsMissionActive())
 		{
-			return StepTime > 15.f;
+			if (StepTime > 15.f)
+			{
+				// Pas de depart a verifier : les etapes suivantes ne doivent pas reussir sur un niveau inchange
+				TestLevel = -1;
+				Note(TEXT("depart de groupe : aucune mission active sur ce niveau"), true);
+				return true;
+			}
+			return false;
 		}
 		TestLevel = BRM::ForwardTarget(W->GetLevelNumber(), 0);
 		TestCountA = W->GetLevelSerial();
@@ -1268,16 +1383,25 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		}
 		TestExitSpot = Stand;
 		PlaceAndFace(C, Stand, Exit->GetActorLocation());
-		W->RequestDeparture(C, TestLevel, Exit->GetActorLocation());
+		// La demande de l'hote en partie en ligne (ce que fait RequestDeparture), avec la raison d'un refus
+		uint8 Reason = 0;
+		if (!W->ServerStartDeparture(C, TestLevel, W->GetLevelSerial(), Reason))
+		{
+			FString Why;
+			W->CanUseExit(TestLevel, Why);
+			Note(FString::Printf(TEXT("depart de groupe vers %d refuse a l'hote : raison %d (1 sortie fermee, 2 hors de portee ou sans vue, 3 autre depart, 4 niveau, 5 a terre) ; "
+				"hote en (%.0f, %.0f, %.0f), sortie en (%.0f, %.0f, %.0f), %.0f cm ; %s"), TestLevel, Reason, Stand.X, Stand.Y, Stand.Z, Exit->GetActorLocation().X,
+				Exit->GetActorLocation().Y, Exit->GetActorLocation().Z, FVector::Dist(Stand, Exit->GetActorLocation()), Why.IsEmpty() ? TEXT("sortie utilisable") : *Why), true);
+		}
 		TestTimer = FPlatformTime::Seconds();
 		return true;
 	});
 	Add(TEXT("v4.11 reseau : coequipier attendu"), 0.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
-		if (!W)
+		if (!W || TestLevel < 0)
 		{
-			return false;
+			return TestLevel < 0;
 		}
 		const FBRNetDeparture& Dep = W->GetDeparture();
 		if (Dep.Phase != 1 && StepTime < 15.f)
@@ -1298,9 +1422,9 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
-		if (!W || !C)
+		if (!W || !C || TestLevel < 0)
 		{
-			return false;
+			return TestLevel < 0;
 		}
 		if (bClient)
 		{
@@ -1319,9 +1443,9 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 	Add(TEXT("v4.11 reseau : depart commun"), 1.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
-		if (!W)
+		if (!W || TestLevel < 0)
 		{
-			return false;
+			return TestLevel < 0;
 		}
 		const double Elapsed = FPlatformTime::Seconds() - TestTimer;
 		if ((W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != TestLevel) && Elapsed < 40.0)

@@ -386,6 +386,14 @@ void ABRAutoTest::Add(const FString& Name, float Wait, TFunction<bool()> Action)
 	Plan.Add(MoveTemp(S));
 }
 
+void ABRAutoTest::LimitLastStep(float Seconds)
+{
+	if (Plan.Num() > 0)
+	{
+		Plan.Last().Limit = Seconds;
+	}
+}
+
 // =====================================================================================================================
 // Plan
 // =====================================================================================================================
@@ -1727,9 +1735,9 @@ void ABRAutoTest::Tick(float DeltaSeconds)
 			bActionDone = true;
 			WaitLeft = S.Wait;
 		}
-		else if (StepTime > 60.f)
+		else if (StepTime > S.Limit)
 		{
-			Note(FString::Printf(TEXT("etape bloquee plus de 60 s : %s"), *S.Name), true);
+			Note(FString::Printf(TEXT("etape bloquee plus de %.0f s : %s"), S.Limit, *S.Name), true);
 			bActionDone = true;
 			WaitLeft = 0.f;
 		}

@@ -228,6 +228,7 @@ void ABRAutoTest::AddServiceDoorWalkSteps(const FString& Tag, bool bUse)
 		TestTimer = FPlatformTime::Seconds();
 		return true;
 	});
+	LimitLastStep(320.f);
 	Add(FString::Printf(TEXT("v4.13 %s : porte visee"), *Tag), 0.f, [this, Tag, bUse]()
 	{
 		ABRWorld* W = GetBRWorld();
@@ -838,6 +839,7 @@ void ABRAutoTest::AddNetV413Steps(bool bClient)
 		Note(FString::Printf(TEXT("client : point de rassemblement de la porte non atteint a pied (%s)"), *BRTestV412::WalkStats()), true);
 		return true;
 	});
+	LimitLastStep(170.f);
 	Add(TEXT("v4.13 reseau : depart par la porte"), 1.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
