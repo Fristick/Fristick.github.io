@@ -1431,11 +1431,24 @@ def _kit_instance(name, parent, spec):
     return mi
 
 
-def _kit_fbx_options():
+def _fbx_has_ucx(path):
+    """Le FBX contient des volumes de collision UCX_ (noms des noeuds lus dans le fichier)"""
+    try:
+        with open(path, "rb") as fh:
+            return b"UCX_" in fh.read()
+    except OSError:
+        return False
+
+
+def _kit_fbx_options(with_ucx=False):
     o = fbx_options()
     sm = o.get_editor_property("static_mesh_import_data")
-    # Collisions : les volumes UCX_<module>_NN du FBX (convexes), jamais une boite generee a la place
-    safe_set(sm, "auto_generate_collision", False)
+    # Collisions : les volumes UCX_<module>_NN du FBX (convexes), jamais une boite generee a la place.
+    # Unreal 5.8 importe les FBX par Interchange : l'option "auto_generate_collision" y devient bCollision, qui commande
+    # AUSSI les UCX. A False, aucun UCX n'etait importe (0 collision partout, kit refuse par le jeu). Elle est donc activee
+    # pour les modules qui ont des UCX (Interchange ne genere rien quand un UCX est importe) et coupee pour les autres
+    # (decals, marques : aucune collision)
+    safe_set(sm, "auto_generate_collision", bool(with_ucx))
     safe_set(sm, "one_convex_hull_per_ucx", True)
     # UV1 du kit : canal de lightmap sans chevauchement (lightmap_pack) ; normales et tangentes du FBX
     safe_set(sm, "generate_lightmap_u_vs", False)
@@ -1481,7 +1494,7 @@ def import_level0_kit(force=False):
         for name, spec in KIT_MATERIALS.items():
             kind = "pbr" if "tex" in spec else ("decal" if "decal" in spec else "color")
             _kit_instance(name, masters[kind], spec)
-        tasks = [make_task(kit_raw("FBX", f), KIT_MESH, os.path.splitext(f)[0], _kit_fbx_options()) for f in fbx]
+        tasks = [make_task(kit_raw("FBX", f), KIT_MESH, os.path.splitext(f)[0], _kit_fbx_options(_fbx_has_ucx(kit_raw("FBX", f)))) for f in fbx]
         tools().import_asset_tasks(tasks)
     # Materiaux par nom de slot (le jeu garde les materiaux du maillage pour le kit)
     missing = []

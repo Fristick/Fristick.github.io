@@ -40,6 +40,16 @@ void ABRGameMode::PreLogin(const FString& Options, const FString& Address, const
 		return; // partie complete (4 joueurs) ou refus du moteur
 	}
 	ErrorMessage = BRLevels::CheckJoinOptions(Options);
+	// Test reseau (-BRNetTest, hors version finale) : un client lance avec l'adresse en ligne de commande ("127.0.0.1",
+	// procedure du README) n'envoie pas les options de version, que seul le menu MULTIJOUEUR ajoute. Il est accepte et
+	// signale ; un client qui envoie des options differentes reste refuse
+#if !UE_BUILD_SHIPPING
+	if (!ErrorMessage.IsEmpty() && FParse::Param(FCommandLine::Get(), TEXT("BRNetTest")) && !UGameplayStatics::HasOption(Options, TEXT("BRNet")))
+	{
+		UE_LOG(LogBackrooms, Warning, TEXT("Test reseau : client sans options de version (adresse en ligne de commande) accepte (%s)"), *Address);
+		ErrorMessage.Reset();
+	}
+#endif
 	if (!ErrorMessage.IsEmpty())
 	{
 		UE_LOG(LogBackrooms, Warning, TEXT("Connexion refusee (%s) : %s"), *Address, *ErrorMessage);

@@ -948,7 +948,8 @@ void ABRAutoTest::AddV411Steps()
 		S.VoiceVolume = 0.5f;
 		PC->ApplySettings();
 		A->Sound(TEXT("S_M_Switch"));
-		const float Primary = Audio->GetTransientPrimaryVolume();
+		// Unreal 5.8 : GetTransientPrimaryVolume ne se lit que sur le fil audio (assertion, plantage du test) : non lu ici
+		Skip(TEXT("volumes : volume general de l'appareil lisible seulement sur le fil audio (Unreal 5.8) : non verifie"));
 		const float EffectsHalfVoice = Wave->Volume;
 		// Effets a 25 %, voix a 100 %
 		S.VoiceVolume = 1.f;
@@ -956,10 +957,10 @@ void ABRAutoTest::AddV411Steps()
 		PC->ApplySettings();
 		A->Sound(TEXT("S_M_Switch"));
 		const float EffectsQuarter = Wave->Volume;
-		const bool bOk = Base > 0.f && FMath::IsNearlyEqual(Primary, 0.5f, 0.01f) && FMath::IsNearlyEqual(EffectsHalfVoice, Base * 2.f, Base * 0.02f)
+		const bool bOk = Base > 0.f && FMath::IsNearlyEqual(EffectsHalfVoice, Base * 2.f, Base * 0.02f)
 			&& FMath::IsNearlyEqual(EffectsQuarter, Base * 0.25f, Base * 0.02f);
-		Note(FString::Printf(TEXT("volumes : voix 50 %% -> appareil %.2f, effets percus %.2f (attendu 1.00) ; effets 25 %% -> %.2f (attendu 0.25)"), Primary,
-			Base > 0.f ? Primary * EffectsHalfVoice / Base : 0.f, Base > 0.f ? EffectsQuarter / Base : 0.f), !bOk);
+		Note(FString::Printf(TEXT("volumes : voix 50 %% -> sons du jeu x%.2f (attendu 2.00, l'appareil passe a 50 %%) ; effets 25 %% -> x%.2f (attendu 0.25)"),
+			Base > 0.f ? EffectsHalfVoice / Base : 0.f, Base > 0.f ? EffectsQuarter / Base : 0.f), !bOk);
 		S = Saved;
 		PC->ApplySettings();
 		return true;
