@@ -1,8 +1,8 @@
 # Couverture des traductions
 
-Fichier ecrit par `Tools/Localization/loc_build.py` le 2026-10-12 : ne pas modifier a la main.
+Fichier ecrit par `Tools/Localization/loc_build.py` le 2026-10-14 : ne pas modifier a la main.
 
-Le jeu compte **1181 textes** (58978 caracteres en francais, la langue source).
+Le jeu compte **1187 textes** (59376 caracteres en francais, la langue source).
 
 Deux mesures sont distinctes :
 
@@ -14,28 +14,28 @@ Le jeu le dit sur la page Langue. Une langue passe en « relue » dans le jeu qu
 
 | Langue | Code | Traduits | Relus | Manquants (francais affiche) | Refuses par les controles | A revoir (source changee) |
 |---|---|---|---|---|---|---|
-| Français | `fr` | 1181 / 1181 (100 %) | 1181 | 0 | 0 | 0 |
-| Anglais | `en` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Allemand | `de` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Espagnol (Espagne) | `es-ES` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Portugais (Brésil) | `pt-BR` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Russe | `ru` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Italien | `it` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Turc | `tr` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Espagnol (Amérique latine) | `es-419` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Polonais | `pl` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Chinois simplifié | `zh-Hans` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Ukrainien | `uk` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Arabe | `ar` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Coréen | `ko` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Persan | `fa` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Japonais | `ja` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Hongrois | `hu` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Tchèque | `cs` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Portugais (Portugal) | `pt-PT` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Suédois | `sv` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Chinois traditionnel | `zh-Hant` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
-| Indonésien | `id` | 1181 / 1181 (100 %) | 0 | 0 | 0 | 0 |
+| Français | `fr` | 1187 / 1187 (100 %) | 1187 | 0 | 0 | 0 |
+| Anglais | `en` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Allemand | `de` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Espagnol (Espagne) | `es-ES` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Portugais (Brésil) | `pt-BR` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Russe | `ru` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Italien | `it` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Turc | `tr` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Espagnol (Amérique latine) | `es-419` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Polonais | `pl` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Chinois simplifié | `zh-Hans` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Ukrainien | `uk` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Arabe | `ar` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Coréen | `ko` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Persan | `fa` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Japonais | `ja` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Hongrois | `hu` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Tchèque | `cs` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Portugais (Portugal) | `pt-PT` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Suédois | `sv` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Chinois traditionnel | `zh-Hant` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
+| Indonésien | `id` | 1187 / 1187 (100 %) | 0 | 0 | 0 | 0 |
 
 ## Ce qui n'est pas traduit
 

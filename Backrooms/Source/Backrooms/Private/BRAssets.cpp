@@ -11,6 +11,7 @@
 #include "Engine/World.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "PhysicsEngine/BodySetup.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
 #include "TextureResource.h"
@@ -41,6 +42,24 @@
 namespace
 {
 	const TCHAR* MeshFolder = TEXT("/Game/Backrooms/Meshes");
+	/** v4.14 : kit Blender du Level 0, importe a part (Content/Python/backrooms_setup.py, import_level0_kit) */
+	const TCHAR* KitMeshFolder = TEXT("/Game/Backrooms/Level0Kit/Meshes");
+	const TCHAR* KitFolder = TEXT("/Game/Backrooms/Level0Kit/");
+	/** Modules poses par ABRChunk (meme liste que KIT_REQUIRED dans backrooms_setup.py) ; bCollision : volumes UCX exiges */
+	struct FKitModule
+	{
+		const TCHAR* Name;
+		bool bCollision;
+	};
+	const FKitModule KitModules[] = {
+		{ TEXT("SM_L0_Wall_350"), true }, { TEXT("SM_L0_Wall_Aged_350"), true }, { TEXT("SM_L0_Doorway"), true },
+		{ TEXT("SM_L0_DoorCasing"), false }, { TEXT("SM_L0_Baseboard_290"), false }, { TEXT("SM_L0_Baseboard_070"), false },
+		{ TEXT("SM_L0_Wall_Corner"), true }, { TEXT("SM_L0_Wall_JunctionT"), true }, { TEXT("SM_L0_Wall_JunctionX"), true },
+		{ TEXT("SM_L0_Wall_End"), true }, { TEXT("SM_L0_Wall_Straight"), true }, { TEXT("SM_L0_Pillar"), true },
+		{ TEXT("SM_L0_ServiceDoor_Wall"), true },
+	};
+	bool GKitWanted = true;
+	bool GKitWantedRead = false;
 	const TCHAR* TexFolder = TEXT("/Game/Backrooms/Textures");
 	const TCHAR* UIFolder = TEXT("/Game/Backrooms/UI");
 	const TCHAR* SoundFolder = TEXT("/Game/Backrooms/Sounds");
@@ -482,6 +501,12 @@ FString UBRAssets::SetKeyForAsset(const FString& Name, bool bTexture)
 	{
 		return *Prop;
 	}
+	// v4.14 : kit Blender du Level 0 (modules, textures, materiaux maitres) : precharge pour le Level 0 seulement
+	if (Name.StartsWith(TEXT("SM_L0_"), ESearchCase::CaseSensitive) || Name.StartsWith(TEXT("T_L0K_"), ESearchCase::CaseSensitive)
+		|| Name.StartsWith(TEXT("M_L0K_"), ESearchCase::CaseSensitive))
+	{
+		return TEXT("kit:Level0");
+	}
 	if (bTexture)
 	{
 		// v4.10 : texture d'un style de modele (Rust : T_MetalPanel, Wood : T_Wood...) : les modeles communs (tuyaux, grilles,
@@ -554,6 +579,10 @@ TArray<FString> UBRAssets::EssentialSetsForLevel(int32 Level)
 		Out.AddUnique(EntitySetKey(EBREntityKind::Smiler));
 	}
 	PropSetsForLevel(D, Out);
+	if (D.bKitModules)
+	{
+		Out.AddUnique(TEXT("kit:Level0"));
+	}
 	return Out;
 }
 
@@ -991,6 +1020,101 @@ UTexture2D* UBRAssets::LoadRawTexture(const TCHAR* SubFolder, FName Name, bool b
 UStaticMesh* UBRAssets::Mesh(FName Name)
 {
 	return Cast<UStaticMesh>(LoadAsset(MeshFolder, Name, UStaticMesh::StaticClass()));
+}
+
+UStaticMesh* UBRAssets::KitMesh(FName Name)
+{
+	return Cast<UStaticMesh>(LoadAsset(KitMeshFolder, Name, UStaticMesh::StaticClass()));
+}
+
+bool UBRAssets::IsLevel0KitWanted()
+{
+	if (!GKitWantedRead)
+	{
+		GKitWantedRead = true;
+		GKitWanted = !FParse::Param(FCommandLine::Get(), TEXT("BRNoLevel0Kit"));
+	}
+	return GKitWanted;
+}
+
+void UBRAssets::SetLevel0KitWanted(bool bOn)
+{
+	GKitWantedRead = true;
+	GKitWanted = bOn;
+}
+
+const FString& UBRAssets::GetLevel0KitStatus()
+{
+	UseLevel0Kit();
+	return KitStatus;
+}
+
+bool UBRAssets::UseLevel0Kit()
+{
+	if (KitState < 0)
+	{
+		// Une seule verification par lancement : un module absent, sans collision ou habille d'un autre materiau que ceux du
+		// kit (import incomplet) renvoie tout le Level 0 aux boites, plutot qu'un melange ou des murs traversables
+		TArray<FString> Problems;
+		int32 Found = 0;
+		for (const FKitModule& K : KitModules)
+		{
+			UStaticMesh* M = KitMesh(FName(K.Name));
+			if (!M)
+			{
+				Problems.Add(FString::Printf(TEXT("%s absent"), K.Name));
+				continue;
+			}
+			++Found;
+			const UBodySetup* Body = M->GetBodySetup();
+			if (K.bCollision && (!Body || Body->AggGeom.GetElementCount() == 0))
+			{
+				Problems.Add(FString::Printf(TEXT("%s sans collision UCX"), K.Name));
+			}
+			for (const FStaticMaterial& SM : M->GetStaticMaterials())
+			{
+				if (!SM.MaterialInterface || !SM.MaterialInterface->GetPathName().StartsWith(KitFolder))
+				{
+					Problems.Add(FString::Printf(TEXT("%s : slot %s sans materiau du kit"), K.Name, *SM.MaterialSlotName.ToString()));
+					break;
+				}
+			}
+		}
+		// Repere des modules : le kit est construit dans Blender (main droite) ; l'import FBX d'Unreal retourne Y. L'angle a
+		// ses plinthes sur ses faces -X et -Y de Blender : -X et +Y attendus dans Unreal. Lu sur le maillage plutot que suppose
+		if (const UStaticMesh* Corner = Problems.Num() == 0 ? KitMesh(FName(TEXT("SM_L0_Wall_Corner"))) : nullptr)
+		{
+			const FBox B = Corner->GetBoundingBox();
+			const bool bPlusY = B.Max.Y > 30.75f && B.Min.Y > -30.75f;
+			const bool bMinusY = B.Min.Y < -30.75f && B.Max.Y < 30.75f;
+			if (bPlusY == bMinusY || B.Min.X > -30.75f)
+			{
+				Problems.Add(FString::Printf(TEXT("SM_L0_Wall_Corner : boite inattendue (%.1f..%.1f, %.1f..%.1f cm), echelle ou axes de l'import a verifier"),
+					B.Min.X, B.Max.X, B.Min.Y, B.Max.Y));
+			}
+			bKitMirrorY = bMinusY;
+		}
+		KitState = Problems.Num() == 0 ? 1 : 0;
+		if (KitState == 1)
+		{
+			KitStatus = FString::Printf(TEXT("kit du Level 0 complet (%d modules%s)"), Found, bKitMirrorY ? TEXT(", axe Y non retourne a l'import") : TEXT(""));
+			UE_LOG(LogBackrooms, Log, TEXT("%s"), *KitStatus);
+		}
+		else
+		{
+			KitStatus = FString::Printf(TEXT("kit du Level 0 incomplet (%d/%d modules) : %s ; murs generes (boites)"), Found,
+				static_cast<int32>(UE_ARRAY_COUNT(KitModules)), *FString::Join(Problems, TEXT(", ")));
+			if (Found > 0)
+			{
+				UE_LOG(LogBackrooms, Warning, TEXT("%s"), *KitStatus);
+			}
+			else
+			{
+				UE_LOG(LogBackrooms, Log, TEXT("%s"), *KitStatus);
+			}
+		}
+	}
+	return KitState == 1 && IsLevel0KitWanted();
 }
 
 namespace

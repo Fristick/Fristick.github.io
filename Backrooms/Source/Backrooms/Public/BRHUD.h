@@ -247,6 +247,21 @@ private:
 	double LastTime = 0.0;
 	float Clock = 0.f;
 
+	/** v4.14 : HUD contextuel du scanner LiDAR : chargement vu (rappel des touches a chaque arrivee), fin du rappel, fin
+	 *  de la derniere recharge, dernier instant de scan focalise */
+	uint64 LidarSeenKey = 0;
+	float LidarHintsUntil = 0.f;
+	float LidarReadyAt = -100.f;
+	float LidarFocusAt = -100.f;
+public:
+	/** v4.14 (tests) : opacites de la derniere image du HUD du scanner (recharge, cone du focus, rappel des touches,
+	 *  aide des parasites) ; 0 = rien de dessine */
+	float LastLidarChargeAlpha = 0.f;
+	float LastLidarConeAlpha = 0.f;
+	float LastLidarHintAlpha = 0.f;
+	float LastLidarStaticAlpha = 0.f;
+private:
+
 	// Inventaire
 	ETab Tab = ETab::Character;
 	TArray<FSlotBox> Slots;

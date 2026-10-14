@@ -1,0 +1,38 @@
+# Banc du Level 6 sans lumiere (aile, traversee, scanner) v4.14 — sortie reelle
+# Commande (depuis Backrooms/) :
+#   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Lidar/test_lidar.cpp Source/Backrooms/Private/BRLidarLogic.cpp -o test_lidar && ./test_lidar 
+# Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Date : 2026-10-14T15:08:23Z
+
+Banc d'essai du Level 6 (LiDAR) : 2000 graines
+Impulsion : 1400 rayons en 0.20 s (260 par image au plus), cone 100 x 64 degres, plus grand vide 1.36 degres ; scan focalise : 1110 rayons/s (48 par image au plus), cone de 14 degres
+Scanner (v4.14, BRLidar::RunFrame : meme logique que ABRLidar::Tick) :
+  focus 30 s,  30 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 37 rayons au plus par image, 14800 points en reserve
+  focus 30 s,  60 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 19 rayons au plus par image, 14615 points en reserve
+  focus 30 s, 144 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 8 rayons au plus par image, 14569 points en reserve
+  focus 30 s, 240 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 5 rayons au plus par image, 14569 points en reserve
+  focus 30 s,  30 images/s (irreguliere, saccades de 120 ms) : 30845 points demandes, 100.0 % acceptes, 0 images sans point, 1027 rayons/s, 48 rayons au plus par image, 12995 points en reserve
+  focus 30 s,  60 images/s (irreguliere, saccades de 120 ms) : 32030 points demandes, 100.0 % acceptes, 0 images sans point, 1068 rayons/s, 48 rayons au plus par image, 13839 points en reserve
+  focus 30 s, 144 images/s (irreguliere, saccades de 120 ms) : 31725 points demandes, 100.0 % acceptes, 0 images sans point, 1054 rayons/s, 48 rayons au plus par image, 13677 points en reserve
+  focus 30 s, 240 images/s (irreguliere, saccades de 120 ms) : 31946 points demandes, 100.0 % acceptes, 0 images sans point, 1065 rayons/s, 48 rayons au plus par image, 13747 points en reserve
+  saturation (impulsion a chaque recharge + focus, 90 s, persistance 30 s, 144 images/s) : decor 13737 / 15000 points, 165729 remplaces (les plus anciens), 0 refuses ; trou vise ensuite : 555 bords releves en 0,5 s, 100 % acceptes, eclat 100 %
+  longue image de 13 s, persistance 12 s : 0 points restent, 100 expires
+  persistance 4 s : points encore visibles a 3.95 s, tous expires a 4.15 s apres l'arret
+  persistance 30 s : points encore visibles a 29.95 s, tous expires a 30.15 s apres l'arret
+  persistance ramenee de 30 a 4 s : 0 points restent apres 5 s
+  impulsion + focus a  10 images/s : 6 images (0.600 s), 308 rayons au plus par image
+  impulsion + focus a  30 images/s : 6 images (0.200 s), 271 rayons au plus par image
+  impulsion + focus a  60 images/s : 12 images (0.200 s), 136 rayons au plus par image
+  impulsion + focus a 144 images/s : 29 images (0.201 s), 57 rayons au plus par image
+  impulsion + focus a 240 images/s : 48 images (0.200 s), 35 rayons au plus par image
+  plaque (code a 24 cases) cadree par tous les rayons, 3 s a  30 images/s : 3330 rayons sur la porte -> 90 cibles distinctes, 88 points d'inscription (une passe de 88), releve au carnet 1 fois, au plus 30 points d'inscription et 67 points par image (v4.13 : jusqu'a 1073 par image)
+  plaque (code a 24 cases) cadree par tous les rayons, 3 s a 240 images/s : 3330 rayons sur la porte -> 720 cibles distinctes, 88 points d'inscription (une passe de 88), releve au carnet 1 fois, au plus 4 points d'inscription et 9 points par image (v4.13 : jusqu'a 1073 par image)
+  quatre portes et quatre cages cadrees ensemble (60 images/s) : 8 inscriptions completes en 1.15 s, 1026 points (1026 attendus), 15 au plus par image
+  borne par image (constantes du code) : 260 rayons d'impulsion + 48 rayons focalises + 120 points d'inscription, plus un chevron par repere et par groupe
+  reserve : 24000 points (decor 15000, dangers 3000, mecanismes 1500, menaces 600, reperes 400, inscriptions 3500), 8 groupes d'age par categorie
+Aile : 2000/2000 graines avec six trous ; traversee a pied verifiee (grille de 5 cm, capsule de 42 cm) sur 200 graines : toutes les alcoves atteintes depuis chaque porte
+       passage minimal entre deux trous : 140 cm ; 20 chunks differents ; entree vers +X 586, -X 612, +Y 399, -Y 403 ; echelle dans l'alcove 1..4 : 500, 487, 510, 503
+       couloir garanti du depart a l'entree : continu, hors de l'aile, 41 cellules au plus
+Verifications : 18228, echecs : 0
+RESULTAT : OK
+# Code de sortie : 0

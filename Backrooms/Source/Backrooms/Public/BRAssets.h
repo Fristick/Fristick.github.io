@@ -31,6 +31,17 @@ public:
 	UStaticMesh* Mesh(FName Name);
 	/** v4.4 : maillage a squelette (combinaison du joueur SK_Hazmat), nullptr s'il n'est pas importe */
 	class USkeletalMesh* SkeletalMesh(FName Name);
+	/** v4.14 : module du kit Blender du Level 0, /Game/Backrooms/Level0Kit/Meshes/<Name> (backrooms_setup.import_level0_kit) */
+	UStaticMesh* KitMesh(FName Name);
+	/** v4.14 : le generateur pose-t-il les modules du kit ? Il faut le kit voulu (-BRNoLevel0Kit ou BRLevel0Kit 0 l'ecartent)
+	 *  et complet : chaque module requis importe, avec ses collisions UCX quand il en faut, et uniquement des materiaux du
+	 *  kit. Verifie une fois ; la raison d'un refus est dans le journal et dans GetLevel0KitStatus */
+	bool UseLevel0Kit();
+	const FString& GetLevel0KitStatus();
+	static void SetLevel0KitWanted(bool bOn);
+	static bool IsLevel0KitWanted();
+	/** v4.14 : axe Y des modules non retourne par l'import (lu sur SM_L0_Wall_Corner, voir UseLevel0Kit) */
+	bool IsKitMirrorY() const { return bKitMirrorY; }
 	UStaticMesh* Cube();
 	UStaticMesh* Sphere();
 	UStaticMesh* Cylinder();
@@ -186,6 +197,12 @@ private:
 	TMap<FName, TObjectPtr<UObject>> Loaded;
 
 	TSet<FName> Missing;
+	/** v4.14 : etat du kit du Level 0 (-1 : pas encore verifie, 0 : incomplet, 1 : complet) et sa description */
+	int32 KitState = -1;
+	FString KitStatus;
+	/** v4.14 : sens de l'axe Y des modules importes, lu sur la boite de SM_L0_Wall_Corner (plinthes du cote +Y d'Unreal
+	 *  quand l'import retourne Y, comme prevu ; du cote -Y sinon). Sert a orienter les poteaux d'angle et en T */
+	bool bKitMirrorY = false;
 
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UMaterialInterface>> MatCache;

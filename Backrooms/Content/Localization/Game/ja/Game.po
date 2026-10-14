@@ -5,7 +5,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Backrooms\n"
-"PO-Revision-Date: 2026-10-12\n"
+"PO-Revision-Date: 2026-10-14\n"
 "Language-Team: \n"
 "Language: ja\n"
 "MIME-Version: 1.0\n"
@@ -14,8 +14,8 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #. Key:	Assets.WrongScale
-#. SourceLocation:	Source/Backrooms/Private/BRAssets.cpp(1649)
-#: Source/Backrooms/Private/BRAssets.cpp(1649)
+#. SourceLocation:	Source/Backrooms/Private/BRAssets.cpp(1773)
+#: Source/Backrooms/Private/BRAssets.cpp(1773)
 #, fuzzy
 msgctxt "BR,Assets.WrongScale"
 msgid "Modèles 3D importés à la mauvaise échelle ({Mesh} : {Size} cm au lieu de {Expected}) : ils sont invisibles. Relancez l'import : Fenêtre > Journal de sortie > Python : import backrooms_setup; backrooms_setup.run(force=True)"
@@ -486,24 +486,24 @@ msgid "Sas d'entrée : ici, les appareils sont perturbés. La lampe ne donne qu'
 msgstr "入口のエアロック：ここでは機器が乱れます。ライトはかすかに光るだけ、暗視は砂嵐しか映しません。L.のチームの LiDAR スキャナーは使えます：{LidarPulse} パルス、{LidarFocus} フォーカススキャン（長押し）。"
 
 #. Key:	Mission.Depart.RefusedLocked
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4537)
-#: Source/Backrooms/Private/BRCharacter.cpp(4537)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4570)
+#: Source/Backrooms/Private/BRCharacter.cpp(4570)
 #, fuzzy
 msgctxt "BR,Mission.Depart.RefusedLocked"
 msgid "Cette sortie est encore verrouillée."
 msgstr "この出口はまだロックされています。"
 
 #. Key:	Mission.Depart.RefusedFar
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4540)
-#: Source/Backrooms/Private/BRCharacter.cpp(4540)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4573)
+#: Source/Backrooms/Private/BRCharacter.cpp(4573)
 #, fuzzy
 msgctxt "BR,Mission.Depart.RefusedFar"
 msgid "Approchez-vous de la sortie."
 msgstr "出口にもっと近づいてください。"
 
 #. Key:	Mission.Depart.RefusedOther
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4543)
-#: Source/Backrooms/Private/BRCharacter.cpp(4543)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4576)
+#: Source/Backrooms/Private/BRCharacter.cpp(4576)
 #, fuzzy
 msgctxt "BR,Mission.Depart.RefusedOther"
 msgid "Un autre départ est déjà prévu : rejoignez le groupe."
@@ -3358,240 +3358,240 @@ msgid "{Interact} Ranger  (copié dans le CARNET : {Inventory})"
 msgstr "{Interact} しまう  （手帳に写しました：{Inventory}）"
 
 #. Key:	HUD.LidarCageOff
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5840)
-#: Source/Backrooms/Private/BRHUD.cpp(5840)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5870)
+#: Source/Backrooms/Private/BRHUD.cpp(5870)
 #, fuzzy
 msgctxt "BR,HUD.LidarCageOff"
 msgid "CAGE HORS TENSION : RÉACTIVEZ SON POSTE"
 msgstr "檻に電源なし：対応するステーションを再起動"
 
 #. Key:	HUD.LidarSurvey
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5840)
-#: Source/Backrooms/Private/BRHUD.cpp(5840)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5870)
+#: Source/Backrooms/Private/BRHUD.cpp(5870)
 #, fuzzy
 msgctxt "BR,HUD.LidarSurvey"
 msgid "RELEVÉ AU SCANNER"
 msgstr "スキャナーで記録中"
 
 #. Key:	HUD.LidarStatic
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5858)
-#: Source/Backrooms/Private/BRHUD.cpp(5858)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5897)
+#: Source/Backrooms/Private/BRHUD.cpp(5897)
 #, fuzzy
 msgctxt "BR,HUD.LidarStatic"
 msgid "PARASITES"
 msgstr "ノイズ"
 
 #. Key:	HUD.LidarBehind
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5874)
-#: Source/Backrooms/Private/BRHUD.cpp(5874)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5913)
+#: Source/Backrooms/Private/BRHUD.cpp(5913)
 #, fuzzy
 msgctxt "BR,HUD.LidarBehind"
 msgid "derrière vous"
 msgstr "背後"
 
 #. Key:	HUD.LidarPulseHint
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5881)
-#: Source/Backrooms/Private/BRHUD.cpp(5881)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5948)
+#: Source/Backrooms/Private/BRHUD.cpp(5948)
 #, fuzzy
 msgctxt "BR,HUD.LidarPulseHint"
 msgid "Impulsion"
 msgstr "パルス"
 
 #. Key:	HUD.LidarFocusHint
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5882)
-#: Source/Backrooms/Private/BRHUD.cpp(5882)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5949)
+#: Source/Backrooms/Private/BRHUD.cpp(5949)
 #, fuzzy
 msgctxt "BR,HUD.LidarFocusHint"
 msgid "Scan focalisé (maintenir)"
 msgstr "フォーカススキャン（長押し）"
 
 #. Key:	HUD.Documenting
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5900)
-#: Source/Backrooms/Private/BRHUD.cpp(5900)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5968)
+#: Source/Backrooms/Private/BRHUD.cpp(5968)
 #, fuzzy
 msgctxt "BR,HUD.Documenting"
 msgid "OBSERVATION"
 msgstr "観察中"
 
 #. Key:	HUD.Cranking
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5900)
-#: Source/Backrooms/Private/BRHUD.cpp(5900)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5968)
+#: Source/Backrooms/Private/BRHUD.cpp(5968)
 #, fuzzy
 msgctxt "BR,HUD.Cranking"
 msgid "MÉCANISME"
 msgstr "装置操作中"
 
 #. Key:	HUD.ClimbWaitRequest
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5922)
-#: Source/Backrooms/Private/BRHUD.cpp(5922)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5990)
+#: Source/Backrooms/Private/BRHUD.cpp(5990)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitRequest"
 msgid "Au sommet de l'échelle : demande de départ envoyée…"
 msgstr "はしごの最上部：出発のリクエストを送信しました…"
 
 #. Key:	HUD.ClimbWaitStopped
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5923)
-#: Source/Backrooms/Private/BRHUD.cpp(5923)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5991)
+#: Source/Backrooms/Private/BRHUD.cpp(5991)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitStopped"
 msgid "Pas de départ pour l'instant. Redescendez d'un mètre puis remontez pour redemander."
 msgstr "今は出発しません。1 メートル降りてから登り直すと、もう一度リクエストできます。"
 
 #. Key:	HUD.DepartureBanner
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5931)
-#: Source/Backrooms/Private/BRHUD.cpp(5931)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5999)
+#: Source/Backrooms/Private/BRHUD.cpp(5999)
 #, fuzzy
 msgctxt "BR,HUD.DepartureBanner"
 msgid "DÉPART VERS {Dest}  ·  {Ready}/{Needed} rassemblés  ·  {Secs} s"
 msgstr "{Dest} へ出発  ·  集合 {Ready}/{Needed}  ·  {Secs} 秒"
 
 #. Key:	HUD.DepartureHelp
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5934)
-#: Source/Backrooms/Private/BRHUD.cpp(5934)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6002)
+#: Source/Backrooms/Private/BRHUD.cpp(6002)
 #, fuzzy
 msgctxt "BR,HUD.DepartureHelp"
 msgid "Rejoignez la sortie (moins de 8 m, même étage). S'en éloigner annule le départ."
 msgstr "出口へ向かってください（8 m 以内、同じ階）。離れると出発は中止されます。"
 
 #. Key:	HUD.ClimbWaitInitiator
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5941)
-#: Source/Backrooms/Private/BRHUD.cpp(5941)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6009)
+#: Source/Backrooms/Private/BRHUD.cpp(6009)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitInitiator"
 msgid "Au sommet : vous êtes compté. Le groupe vous rejoint au pied ou sur l'échelle. Redescendre annule le départ."
 msgstr "最上部：あなたは数に入っています。仲間ははしごの下か、はしごの上で合流します。降りると出発は取り消されます。"
 
 #. Key:	HUD.ClimbWaitMate
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5942)
-#: Source/Backrooms/Private/BRHUD.cpp(5942)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6010)
+#: Source/Backrooms/Private/BRHUD.cpp(6010)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitMate"
 msgid "Sur l'échelle : vous êtes compté. Attendez le groupe."
 msgstr "はしごの上：あなたは数に入っています。仲間を待ってください。"
 
 #. Key:	HUD.DepartureHelpLadder
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5943)
-#: Source/Backrooms/Private/BRHUD.cpp(5943)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6011)
+#: Source/Backrooms/Private/BRHUD.cpp(6011)
 #, fuzzy
 msgctxt "BR,HUD.DepartureHelpLadder"
 msgid "Rejoignez le pied de l'échelle (moins de 8 m, même étage) ou montez-y."
 msgstr "はしごの下（8 m 以内、同じ階）へ行くか、はしごを登ってください。"
 
 #. Key:	HUD.DepartureCarried
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5947)
-#: Source/Backrooms/Private/BRHUD.cpp(5947)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6015)
+#: Source/Backrooms/Private/BRHUD.cpp(6015)
 #, fuzzy
 msgctxt "BR,HUD.DepartureCarried"
 msgid "{Count} {Count}|plural(one=joueur à terre emmené,other=joueurs à terre emmenés)."
 msgstr "倒れたプレイヤー {Count} 人を一緒に連れて行きます。"
 
 #. Key:	Ending.TitleVariant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5964)
-#: Source/Backrooms/Private/BRHUD.cpp(5964)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6032)
+#: Source/Backrooms/Private/BRHUD.cpp(6032)
 #, fuzzy
 msgctxt "BR,Ending.TitleVariant"
 msgid "FIN : CE QUE LES AUTRES ONT LAISSÉ"
 msgstr "エンディング：先人たちが残したもの"
 
 #. Key:	Ending.Title
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5965)
-#: Source/Backrooms/Private/BRHUD.cpp(5965)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6033)
+#: Source/Backrooms/Private/BRHUD.cpp(6033)
 #, fuzzy
 msgctxt "BR,Ending.Title"
 msgid "FIN : LE DERNIER QUAI"
 msgstr "エンディング：最後のホーム"
 
 #. Key:	Ending.BodyVariant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5967)
-#: Source/Backrooms/Private/BRHUD.cpp(5967)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6035)
+#: Source/Backrooms/Private/BRHUD.cpp(6035)
 #, fuzzy
 msgctxt "BR,Ending.BodyVariant"
 msgid "Les carnets, les cassettes et les notes que vous avez gardés racontent la même histoire : d'autres sont passés avant vous et ont laissé des repères pour ceux qui suivraient. Avant de monter dans le train, vous ajoutez les vôtres au mur du quai. Quelqu'un, un jour, saura où aller."
 msgstr "残してきた手帳やテープやメモが同じ物語を語っている。先に来た誰かが、後に続く人のために目印を残していたのだ。列車に乗る前に、あなたもホームの壁に自分の目印を書き加える。いつか誰かが、どこへ行けばいいかを知るだろう。"
 
 #. Key:	Ending.Body
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5968)
-#: Source/Backrooms/Private/BRHUD.cpp(5968)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6036)
+#: Source/Backrooms/Private/BRHUD.cpp(6036)
 #, fuzzy
 msgctxt "BR,Ending.Body"
 msgid "Le train de la station sans nom démarre sans un bruit. Derrière les vitres, les couloirs jaunes défilent puis s'effacent. Quand les portes s'ouvrent, il fait jour et l'air sent la pluie. Vous ne savez pas si c'est la sortie ou un niveau qui imite très bien le monde. Mais pour la première fois, rien ne bourdonne."
 msgstr "名もない駅の列車が音もなく動き出す。窓の向こうを黄色い廊下が流れ、やがて消えていく。扉が開くと昼間で、空気は雨の匂いがする。ここが出口なのか、それとも世界をとても上手にまねたレベルなのかはわからない。けれど初めて、何もうなっていない。"
 
 #. Key:	Ending.NoteVariant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5969)
-#: Source/Backrooms/Private/BRHUD.cpp(5969)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6037)
+#: Source/Backrooms/Private/BRHUD.cpp(6037)
 #, fuzzy
 msgctxt "BR,Ending.NoteVariant"
 msgid "Variante obtenue grâce à au moins trois objectifs facultatifs remplis pendant la campagne."
 msgstr "キャンペーン中に任意目標を3つ以上達成して得た別エンディングです。"
 
 #. Key:	Ending.Note
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5970)
-#: Source/Backrooms/Private/BRHUD.cpp(5970)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6038)
+#: Source/Backrooms/Private/BRHUD.cpp(6038)
 #, fuzzy
 msgctxt "BR,Ending.Note"
 msgid "Une autre fin existe : remplissez au moins trois objectifs facultatifs pendant la campagne."
 msgstr "別のエンディングがあります：キャンペーン中に任意目標を3つ以上達成してください。"
 
 #. Key:	Ending.ChapterTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5975)
-#: Source/Backrooms/Private/BRHUD.cpp(5975)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6043)
+#: Source/Backrooms/Private/BRHUD.cpp(6043)
 #, fuzzy
 msgctxt "BR,Ending.ChapterTitle"
 msgid "FIN DU CHAPITRE {Lot} : {Name}"
 msgstr "第 {Lot} 章 終わり：{Name}"
 
 #. Key:	Ending.ChapterBody
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5976)
-#: Source/Backrooms/Private/BRHUD.cpp(5976)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6044)
+#: Source/Backrooms/Private/BRHUD.cpp(6044)
 #, fuzzy
 msgctxt "BR,Ending.ChapterBody"
 msgid "Le passage s'ouvre sur un couloir qui ne mène encore nulle part : vous avez atteint la fin du contenu disponible dans cette version. La suite, « {Next} », arrivera dans une prochaine mise à jour de contenu. Votre partie, vos découvertes et vos fins sont conservées : ce passage s'ouvrira avec la suite."
 msgstr "通路は、まだどこにも通じていない廊下へと続いています。このバージョンで遊べる内容の終わりに到達しました。続き「{Next}」は今後のコンテンツアップデートで追加されます。セーブ、発見、エンディングは保持されます。この通路は続きとともに開きます。"
 
 #. Key:	Ending.ChapterNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5978)
-#: Source/Backrooms/Private/BRHUD.cpp(5978)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6046)
+#: Source/Backrooms/Private/BRHUD.cpp(6046)
 #, fuzzy
 msgctxt "BR,Ending.ChapterNote"
 msgid "En attendant, les niveaux déjà disponibles restent à explorer : objectifs facultatifs, documents, autres routes."
 msgstr "それまでの間、すでに遊べるレベルを探索できます：任意目標、資料、別のルート。"
 
 #. Key:	Ending.Chapter1Body
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5982)
-#: Source/Backrooms/Private/BRHUD.cpp(5982)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6050)
+#: Source/Backrooms/Private/BRHUD.cpp(6050)
 #, fuzzy
 msgctxt "BR,Ending.Chapter1Body"
 msgid "La vapeur retombée, la porte de la station s'ouvre sur un escalier qui descend vers un bourdonnement électrique. Sur le battant, à la craie : un cercle barré, un L., et dessous : « Station. On continue. » L'équipe de L. est passée ici, et elle allait plus loin, vers le dernier quai. Votre chapitre s'arrête là : la suite, « {Next} », arrivera dans une prochaine mise à jour, et votre partie reprendra exactement ici."
 msgstr "蒸気が収まると、ステーションの扉が開き、電気のうなりへと下る階段が現れる。扉板にはチョークで、斜線の入った円とL.、その下に「ステーション。先へ進む。」と書かれている。L.のチームはここを通り、さらに先、最後のホームへ向かっていた。あなたの章はここで終わる。続きの「{Next}」は今後のアップデートで登場し、ゲームはちょうどここから再開する。"
 
 #. Key:	Ending.ContinueReached
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5997)
-#: Source/Backrooms/Private/BRHUD.cpp(5997)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6065)
+#: Source/Backrooms/Private/BRHUD.cpp(6065)
 #, fuzzy
 msgctxt "BR,Ending.ContinueReached"
 msgid "Continuer l'exploration (un niveau déjà atteint, au hasard)"
 msgstr "探索を続ける（到達済みのレベルからランダム）"
 
 #. Key:	Ending.Continue
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5998)
-#: Source/Backrooms/Private/BRHUD.cpp(5998)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6066)
+#: Source/Backrooms/Private/BRHUD.cpp(6066)
 #, fuzzy
 msgctxt "BR,Ending.Continue"
 msgid "Continuer l'exploration (niveau au hasard)"
 msgstr "探索を続ける（ランダムなレベル）"
 
 #. Key:	Ending.Close
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5999)
-#: Source/Backrooms/Private/BRHUD.cpp(5999)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6067)
+#: Source/Backrooms/Private/BRHUD.cpp(6067)
 #, fuzzy
 msgctxt "BR,Ending.Close"
 msgid "Fermer (l'hôte décide de la suite)"
 msgstr "閉じる（この先はホストが決めます）"
 
 #. Key:	Ending.Menu
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6000)
-#: Source/Backrooms/Private/BRHUD.cpp(6000)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6068)
+#: Source/Backrooms/Private/BRHUD.cpp(6068)
 #, fuzzy
 msgctxt "BR,Ending.Menu"
 msgid "Menu principal"
@@ -4295,24 +4295,24 @@ msgid "Classe 1 : Sûr - Stable - Entités quasi absentes"
 msgstr "クラス1：安全 - 安定 - エンティティはほぼいない"
 
 #. Key:	Note.L0.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(108)
-#: Source/Backrooms/Private/BRLevels.cpp(108)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(110)
+#: Source/Backrooms/Private/BRLevels.cpp(110)
 #, fuzzy
 msgctxt "BR,Note.L0.1"
 msgid "Si tu lis ceci, tu as \"noclippé\" hors de la réalité. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds."
 msgstr "これを読んでいるなら、お前は現実から「ノークリップ」したんだ。慌てるな。壁は動かない：迷っているのはお前のほうだ。"
 
 #. Key:	Note.L0.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(109)
-#: Source/Backrooms/Private/BRLevels.cpp(109)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(111)
+#: Source/Backrooms/Private/BRLevels.cpp(111)
 #, fuzzy
 msgctxt "BR,Note.L0.2"
 msgid "Le bourdonnement ne s'arrête jamais. J'ai compte plus de six cents salles. Toujours la même moquette humide. Toujours la même odeur."
 msgstr "うなりは決して止まらない。600以上の部屋を数えた。いつも同じ湿ったカーペット。いつも同じにおい。"
 
 #. Key:	Note.L0.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(110)
-#: Source/Backrooms/Private/BRLevels.cpp(110)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(112)
+#: Source/Backrooms/Private/BRLevels.cpp(112)
 #, fuzzy
 #| msgid "Certains murs ont l'air FAUX, comme une image qui se brouille. Touche-les. C'est comme ça que j'ai quitté cet endroit."
 msgctxt "BR,Note.L0.3"
@@ -4320,32 +4320,32 @@ msgid "Ne cherche pas un mur qui s'efface. La seule sortie que nous ayons trouv�
 msgstr "消える壁を探すな。私たちが見つけた唯一の出口は業務用扉だ。ノブのついた、本物の扉。空気が冷たくなる場所にある。- L."
 
 #. Key:	Note.L0.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(111)
-#: Source/Backrooms/Private/BRLevels.cpp(111)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(113)
+#: Source/Backrooms/Private/BRLevels.cpp(113)
 #, fuzzy
 msgctxt "BR,Note.L0.4"
 msgid "L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. {Drink} pour boire."
 msgstr "アーモンドウォーターは心を落ち着かせる。いつも1本は持っておけ。{Drink} で飲む。"
 
 #. Key:	Note.L0.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(112)
-#: Source/Backrooms/Private/BRLevels.cpp(112)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(114)
+#: Source/Backrooms/Private/BRLevels.cpp(114)
 #, fuzzy
 msgctxt "BR,Note.L0.5"
 msgid "Si les lumières sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir."
 msgstr "ある場所の明かりが死んでいたら、入るな。暗闇で何かが笑っている。"
 
 #. Key:	Note.L0.6
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(113)
-#: Source/Backrooms/Private/BRLevels.cpp(113)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(115)
+#: Source/Backrooms/Private/BRLevels.cpp(115)
 #, fuzzy
 msgctxt "BR,Note.L0.6"
 msgid "Jour 3 (je crois). J'ai entendu des pas derrière moi. Quand je me suis retourné, il n'y avait que le bourdonnement."
 msgstr "3日目（たぶん）。後ろで足音が聞こえた。振り返ると、うなりしかなかった。"
 
 #. Key:	Note.L0.7
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(114)
-#: Source/Backrooms/Private/BRLevels.cpp(114)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(116)
+#: Source/Backrooms/Private/BRLevels.cpp(116)
 #, fuzzy
 #| msgid "Il y a une échelle contre un mur, elle monte dans une trappe du plafond. Une lueur violette là-haut. Monte, et ne regarde pas en bas."
 msgctxt "BR,Note.L0.7"
@@ -4353,8 +4353,8 @@ msgid "Nous marquons notre passage à la craie : un cercle barré et un L. Si tu
 msgstr "私たちはチョークで通った道に印をつけている。斜線の入った円とL.だ。その印を見たら、君は私たちの道の上にいる。私たちは「最後のホーム」と呼ばれる駅へ向かう。- L."
 
 #. Key:	Note.L0.8
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(115)
-#: Source/Backrooms/Private/BRLevels.cpp(115)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(117)
+#: Source/Backrooms/Private/BRLevels.cpp(117)
 #, fuzzy
 #| msgid "Les sorties ne tiennent pas. Il faut récupérer les six cassettes et filmer le noir pendant une coupure. Après, les murs cèdent."
 msgctxt "BR,Note.L0.8"
@@ -4362,64 +4362,64 @@ msgid "Inutile de tout fouiller : rien ici n'ouvre rien. La porte de service s'o
 msgstr "全部を探し回る必要はない。ここでは何も何かを開けたりしない。業務用扉は手で開く。大事なのは、照明が消える前にそれを見つけることだ。- L."
 
 #. Key:	Note.L0.9
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(116)
-#: Source/Backrooms/Private/BRLevels.cpp(116)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(118)
+#: Source/Backrooms/Private/BRLevels.cpp(118)
 #, fuzzy
 msgctxt "BR,Note.L0.9"
 msgid "Quand les néons s'éteignent, allume la vision nocturne du caméscope ({NightVision}). La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle."
 msgstr "蛍光灯が消えたら、ビデオカメラの暗視をつけろ（{NightVision}）。あの大きくて細いやつは、近づくと音を立てる。そっちへ走るな。"
 
 #. Key:	Level.1.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(126)
-#: Source/Backrooms/Private/BRLevels.cpp(126)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(128)
+#: Source/Backrooms/Private/BRLevels.cpp(128)
 #, fuzzy
 msgctxt "BR,Level.1.Title"
 msgid "Habitable Zone"
 msgstr "Habitable Zone"
 
 #. Key:	Level.1.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(127)
-#: Source/Backrooms/Private/BRLevels.cpp(127)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(129)
+#: Source/Backrooms/Private/BRLevels.cpp(129)
 #, fuzzy
 msgctxt "BR,Level.1.Nickname"
 msgid "Zone habitable"
 msgstr "居住可能区域"
 
 #. Key:	Level.1.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(128)
-#: Source/Backrooms/Private/BRLevels.cpp(128)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(130)
+#: Source/Backrooms/Private/BRLevels.cpp(130)
 #, fuzzy
 msgctxt "BR,Level.1.Description"
 msgid "Un parking souterrain de béton, immense et brumeux : piliers, places peintes, flaques qui reflètent les néons. Des caisses de ravitaillement apparaissent parfois. Quand les néons s'éteignent, quelque chose se met à rôder."
 msgstr "霧に包まれた巨大な地下コンクリート駐車場：柱、白線の駐車枠、蛍光灯を映す水たまり。ときどき補給箱が現れる。蛍光灯が消えると、何かがうろつき始める。"
 
 #. Key:	Level.1.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(130)
-#: Source/Backrooms/Private/BRLevels.cpp(130)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(132)
+#: Source/Backrooms/Private/BRLevels.cpp(132)
 #, fuzzy
 msgctxt "BR,Level.1.ClassText"
 msgid "Classe 1 : Sûr - Stable - Peu d'entités"
 msgstr "クラス1：安全 - 安定 - エンティティは少ない"
 
 #. Key:	Note.L1.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(162)
-#: Source/Backrooms/Private/BRLevels.cpp(162)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(164)
+#: Source/Backrooms/Private/BRLevels.cpp(164)
 #, fuzzy
 msgctxt "BR,Note.L1.1"
 msgid "Les caisses contiennent parfois de l'eau d'amande et des piles. Fouille-les. Ici, on peut presque survivre."
 msgstr "箱にはアーモンドウォーターや電池が入っていることがある。漁ってみろ。ここならなんとか生き延びられる。"
 
 #. Key:	Note.L1.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(163)
-#: Source/Backrooms/Private/BRLevels.cpp(163)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(165)
+#: Source/Backrooms/Private/BRLevels.cpp(165)
 #, fuzzy
 msgctxt "BR,Note.L1.2"
 msgid "Quand les tubes au plafond clignotent, eloigne-toi. Quand ils s'éteignent, cours."
 msgstr "天井の蛍光管がちらついたら、離れろ。消えたら、走れ。"
 
 #. Key:	Note.L1.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(164)
-#: Source/Backrooms/Private/BRLevels.cpp(164)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(166)
+#: Source/Backrooms/Private/BRLevels.cpp(166)
 #, fuzzy
 #| msgid "Les portes de service mènent plus bas. Plus bas, c'est pire. Mais c'est peut-etre la seule sortie."
 msgctxt "BR,Note.L1.3"
@@ -4427,472 +4427,472 @@ msgid "L'ascenseur du parking descend vers l'eau. Il faut d'abord remettre la li
 msgstr "駐車場のエレベーターは水のほうへ下りていく。まず業務用連絡線に電気を戻さなければならない。配線図は入口の近くにある。- L."
 
 #. Key:	Note.L1.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(165)
-#: Source/Backrooms/Private/BRLevels.cpp(165)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(167)
+#: Source/Backrooms/Private/BRLevels.cpp(167)
 #, fuzzy
 msgctxt "BR,Note.L1.4"
 msgid "Les Facelings ne sont pas méchants. La plupart. Ne les regarde pas trop longtemps."
 msgstr "Facelings は悪いやつじゃない。ほとんどは。あまり長く見つめるな。"
 
 #. Key:	Note.L1.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(166)
-#: Source/Backrooms/Private/BRLevels.cpp(166)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(168)
+#: Source/Backrooms/Private/BRLevels.cpp(168)
 #, fuzzy
 msgctxt "BR,Note.L1.5"
 msgid "Le parking répond encore : quand la liaison a repris, les néons se sont rallumés un par un. On a cru que c'était fini. Ce n'était que le début de la route. - L."
 msgstr "駐車場はまだ応える。連絡線が戻ると、照明がひとつずつ灯った。これで終わりだと思った。道の始まりにすぎなかった。- L."
 
 #. Key:	Level.2.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(180)
-#: Source/Backrooms/Private/BRLevels.cpp(180)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(182)
+#: Source/Backrooms/Private/BRLevels.cpp(182)
 #, fuzzy
 msgctxt "BR,Level.2.Title"
 msgid "Abandoned Utility Halls"
 msgstr "Abandoned Utility Halls"
 
 #. Key:	Level.2.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(181)
-#: Source/Backrooms/Private/BRLevels.cpp(181)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(183)
+#: Source/Backrooms/Private/BRLevels.cpp(183)
 #, fuzzy
 msgctxt "BR,Level.2.Nickname"
 msgid "Couloirs techniques abandonnés - \"Pipe Dreams\""
 msgstr "廃墟の設備通路 - 「Pipe Dreams」"
 
 #. Key:	Level.2.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(182)
-#: Source/Backrooms/Private/BRLevels.cpp(182)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(184)
+#: Source/Backrooms/Private/BRLevels.cpp(184)
 #, fuzzy
 msgctxt "BR,Level.2.Description"
 msgid "Un réseau sans fin de tunnels de maintenance étroits, en béton sale, couverts de tuyaux. La chaleur y est étouffante et l'éclairage rare."
 msgstr "配管に覆われた汚いコンクリートの狭いメンテナンス通路が、果てしなく続く網。暑さは息苦しく、明かりは乏しい。"
 
 #. Key:	Level.2.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(184)
-#: Source/Backrooms/Private/BRLevels.cpp(184)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(186)
+#: Source/Backrooms/Private/BRLevels.cpp(186)
 #, fuzzy
 msgctxt "BR,Level.2.ClassText"
 msgid "Classe 2 : Instable - Entités présentes"
 msgstr "クラス2：不安定 - エンティティあり"
 
 #. Key:	Note.L2.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(212)
-#: Source/Backrooms/Private/BRLevels.cpp(212)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(214)
+#: Source/Backrooms/Private/BRLevels.cpp(214)
 #, fuzzy
 msgctxt "BR,Note.L2.1"
 msgid "Il fait si chaud. Les tuyaux sifflent. Ne touche pas ceux qui fument."
 msgstr "すごく暑い。パイプがシューシュー鳴っている。煙を出しているのには触るな。"
 
 #. Key:	Note.L2.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(213)
-#: Source/Backrooms/Private/BRLevels.cpp(213)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(215)
+#: Source/Backrooms/Private/BRLevels.cpp(215)
 #, fuzzy
 msgctxt "BR,Note.L2.2"
 msgid "Les Wretches étaient des gens comme nous. Ils sont lents. Ne les laisse pas s'approcher."
 msgstr "Wretches は俺たちと同じ人間だった。動きは遅い。近づかせるな。"
 
 #. Key:	Note.L2.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(214)
-#: Source/Backrooms/Private/BRLevels.cpp(214)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(216)
+#: Source/Backrooms/Private/BRLevels.cpp(216)
 #, fuzzy
 msgctxt "BR,Note.L2.3"
 msgid "Une porte de secours plus loin. On dit qu'elle mène à la Station électrique. Prépare-toi."
 msgstr "この先に非常ドアがある。発電所に通じているらしい。覚悟しろ。"
 
 #. Key:	Note.L2.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(215)
-#: Source/Backrooms/Private/BRLevels.cpp(215)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(217)
+#: Source/Backrooms/Private/BRLevels.cpp(217)
 #, fuzzy
 msgctxt "BR,Note.L2.4"
 msgid "La vapeur garde la porte de la station. Règle les pressions, pas les vannes. Quand elle s'ouvrira, on la marquera pour ceux qui suivent. - L."
 msgstr "蒸気が駅の扉を守っている。バルブではなく、圧力を合わせろ。扉が開いたら、後から来る者のために印をつけておく。- L."
 
 #. Key:	Level.3.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(228)
-#: Source/Backrooms/Private/BRLevels.cpp(228)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(230)
+#: Source/Backrooms/Private/BRLevels.cpp(230)
 #, fuzzy
 msgctxt "BR,Level.3.Title"
 msgid "Electrical Station"
 msgstr "Electrical Station"
 
 #. Key:	Level.3.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(229)
-#: Source/Backrooms/Private/BRLevels.cpp(229)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(231)
+#: Source/Backrooms/Private/BRLevels.cpp(231)
 #, fuzzy
 msgctxt "BR,Level.3.Nickname"
 msgid "Station électrique"
 msgstr "発電所"
 
 #. Key:	Level.3.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(230)
-#: Source/Backrooms/Private/BRLevels.cpp(230)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(232)
+#: Source/Backrooms/Private/BRLevels.cpp(232)
 #, fuzzy
 msgctxt "BR,Level.3.Description"
 msgid "Un dédale assourdissant de briques, de grilles et de machines électriques. L'un des niveaux les plus hostiles connus : les entités y sont nombreuses."
 msgstr "レンガ、格子、電気機械でできた耳をつんざく迷宮。知られている中でも特に危険なレベル：エンティティだらけだ。"
 
 #. Key:	Level.3.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(232)
-#: Source/Backrooms/Private/BRLevels.cpp(232)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(234)
+#: Source/Backrooms/Private/BRLevels.cpp(234)
 #, fuzzy
 msgctxt "BR,Level.3.ClassText"
 msgid "Classe 4 : Dangereux - Infesté d'entités"
 msgstr "クラス4：危険 - エンティティが蔓延"
 
 #. Key:	Note.L3.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(261)
-#: Source/Backrooms/Private/BRLevels.cpp(261)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(263)
+#: Source/Backrooms/Private/BRLevels.cpp(263)
 #, fuzzy
 msgctxt "BR,Note.L3.1"
 msgid "LES HOUNDS SENTENT LA PEUR. Ne cours pas devant eux. Regarde-les dans les yeux et recule."
 msgstr "HOUNDS は恐怖を嗅ぎつける。やつらの前で走るな。目を見て、後ずされ。"
 
 #. Key:	Note.L3.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(262)
-#: Source/Backrooms/Private/BRLevels.cpp(262)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(264)
+#: Source/Backrooms/Private/BRLevels.cpp(264)
 #, fuzzy
 msgctxt "BR,Note.L3.2"
 msgid "Si quelqu'un t'appelle par ton nom dans ces couloirs, ce n'est pas un humain. Ne réponds pas."
 msgstr "この廊下で誰かがお前の名前を呼んだら、それは人間じゃない。答えるな。"
 
 #. Key:	Note.L3.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(263)
-#: Source/Backrooms/Private/BRLevels.cpp(263)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(265)
+#: Source/Backrooms/Private/BRLevels.cpp(265)
 #, fuzzy
 msgctxt "BR,Note.L3.3"
 msgid "Les ascenseurs fonctionnent encore. Ils mènent à un bureau. Un endroit calme. Trouve-les."
 msgstr "エレベーターはまだ動く。オフィスに通じている。静かな場所だ。探せ。"
 
 #. Key:	Level.4.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(276)
-#: Source/Backrooms/Private/BRLevels.cpp(276)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(278)
+#: Source/Backrooms/Private/BRLevels.cpp(278)
 #, fuzzy
 msgctxt "BR,Level.4.Title"
 msgid "Abandoned Office"
 msgstr "Abandoned Office"
 
 #. Key:	Level.4.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(277)
-#: Source/Backrooms/Private/BRLevels.cpp(277)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(279)
+#: Source/Backrooms/Private/BRLevels.cpp(279)
 #, fuzzy
 msgctxt "BR,Level.4.Nickname"
 msgid "Bureau abandonné"
 msgstr "廃墟のオフィス"
 
 #. Key:	Level.4.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(278)
-#: Source/Backrooms/Private/BRLevels.cpp(278)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(280)
+#: Source/Backrooms/Private/BRLevels.cpp(280)
 #, fuzzy
 msgctxt "BR,Level.4.Description"
 msgid "Des rangées de petits bureaux cloisonnés, vides, propres et bien éclairés : un vieil ordinateur beige, une chaise, parfois une fontaine à eau d'amande. Un rare moment de répit... si l'on ignore qu'ils sont tous identiques."
 msgstr "空っぽで清潔な、明るい小さな仕切り席の列：古いベージュのコンピューター、椅子、ときにはアーモンドウォーターのサーバー。めったにない一息つける時間……すべてが同じだということを気にしなければ。"
 
 #. Key:	Level.4.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(280)
-#: Source/Backrooms/Private/BRLevels.cpp(280)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(282)
+#: Source/Backrooms/Private/BRLevels.cpp(282)
 #, fuzzy
 msgctxt "BR,Level.4.ClassText"
 msgid "Classe 1 : Sûr - Stable - Peu d'entités"
 msgstr "クラス1：安全 - 安定 - エンティティは少ない"
 
 #. Key:	Note.L4.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(311)
-#: Source/Backrooms/Private/BRLevels.cpp(311)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(313)
+#: Source/Backrooms/Private/BRLevels.cpp(313)
 #, fuzzy
 msgctxt "BR,Note.L4.1"
 msgid "Les fontaines distribuent de l'eau d'amande. Remplis tes bouteilles ici."
 msgstr "サーバーからアーモンドウォーターが出る。ここでボトルを満タンにしろ。"
 
 #. Key:	Note.L4.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(312)
-#: Source/Backrooms/Private/BRLevels.cpp(312)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(314)
+#: Source/Backrooms/Private/BRLevels.cpp(314)
 #, fuzzy
 msgctxt "BR,Note.L4.2"
 msgid "La cage d'escalier descend vers un hôtel. Ne t'y attarde pas."
 msgstr "階段はホテルへと下りている。そこに長居するな。"
 
 #. Key:	Note.L4.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(313)
-#: Source/Backrooms/Private/BRLevels.cpp(313)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(315)
+#: Source/Backrooms/Private/BRLevels.cpp(315)
 #, fuzzy
 msgctxt "BR,Note.L4.3"
 msgid "Si tu vois quelqu'un de jaune qui sourit, NE LE QUITTE PAS DES YEUX."
 msgstr "笑っている黄色い誰かを見たら、絶対に目を離すな。"
 
 #. Key:	Level.5.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(325)
-#: Source/Backrooms/Private/BRLevels.cpp(325)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(327)
+#: Source/Backrooms/Private/BRLevels.cpp(327)
 #, fuzzy
 msgctxt "BR,Level.5.Title"
 msgid "Terror Hotel"
 msgstr "Terror Hotel"
 
 #. Key:	Level.5.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(326)
-#: Source/Backrooms/Private/BRLevels.cpp(326)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(328)
+#: Source/Backrooms/Private/BRLevels.cpp(328)
 #, fuzzy
 msgctxt "BR,Level.5.Nickname"
 msgid "L'hôtel de la terreur"
 msgstr "恐怖のホテル"
 
 #. Key:	Level.5.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(327)
-#: Source/Backrooms/Private/BRLevels.cpp(327)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(329)
+#: Source/Backrooms/Private/BRLevels.cpp(329)
 #, fuzzy
 msgctxt "BR,Level.5.Description"
 msgid "Un hôtel des années 1920 qui ne finit jamais : couloirs feutrés, moquette rouge, portes numérotées qui ne s'ouvrent pas. Une musique lointaine. L'impression d'être observé."
 msgstr "終わりのない1920年代のホテル：静まり返った廊下、赤いカーペット、開かない番号付きのドア。遠くの音楽。見られている感覚。"
 
 #. Key:	Level.5.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(329)
-#: Source/Backrooms/Private/BRLevels.cpp(329)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(331)
+#: Source/Backrooms/Private/BRLevels.cpp(331)
 #, fuzzy
 msgctxt "BR,Level.5.ClassText"
 msgid "Classe 2 : Instable - Entités présentes"
 msgstr "クラス2：不安定 - エンティティあり"
 
 #. Key:	Note.L5.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(355)
-#: Source/Backrooms/Private/BRLevels.cpp(355)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(357)
+#: Source/Backrooms/Private/BRLevels.cpp(357)
 #, fuzzy
 msgctxt "BR,Note.L5.1"
 msgid "Chambre 1508... ou était-ce 5108 ? Les numéros changent quand on ne regarde pas."
 msgstr "1508号室……それとも5108だったか？ 見ていないうちに番号が変わる。"
 
 #. Key:	Note.L5.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(356)
-#: Source/Backrooms/Private/BRLevels.cpp(356)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(358)
+#: Source/Backrooms/Private/BRLevels.cpp(358)
 #, fuzzy
 msgctxt "BR,Note.L5.2"
 msgid "La chaufferie est au bout du couloir. Après elle, il n'y a plus de lumière du tout."
 msgstr "ボイラー室は廊下の突き当たりだ。その先には、明かりがまったくない。"
 
 #. Key:	Note.L5.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(357)
-#: Source/Backrooms/Private/BRLevels.cpp(357)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(359)
+#: Source/Backrooms/Private/BRLevels.cpp(359)
 #, fuzzy
 msgctxt "BR,Note.L5.3"
 msgid "Quelqu'un frappe aux portes la nuit. N'ouvre jamais."
 msgstr "夜、誰かがドアを叩く。絶対に開けるな。"
 
 #. Key:	Level.6.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(370)
-#: Source/Backrooms/Private/BRLevels.cpp(370)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(372)
+#: Source/Backrooms/Private/BRLevels.cpp(372)
 #, fuzzy
 msgctxt "BR,Level.6.Title"
 msgid "Lights Out"
 msgstr "Lights Out"
 
 #. Key:	Level.6.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(371)
-#: Source/Backrooms/Private/BRLevels.cpp(371)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(373)
+#: Source/Backrooms/Private/BRLevels.cpp(373)
 #, fuzzy
 msgctxt "BR,Level.6.Nickname"
 msgid "Lumières éteintes"
 msgstr "消灯"
 
 #. Key:	Level.6.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(372)
-#: Source/Backrooms/Private/BRLevels.cpp(372)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(374)
+#: Source/Backrooms/Private/BRLevels.cpp(374)
 #, fuzzy
 msgctxt "BR,Level.6.Description"
 msgid "Une obscurité totale. Aucune source de lumière ne fonctionne, sauf celle que l'on apporte. Des bruits étranges, des murmures... et des sourires dans le noir."
 msgstr "完全な暗闇。持ち込んだもの以外、どんな光源も働かない。奇妙な音、ささやき……そして暗闇の中の笑み。"
 
 #. Key:	Level.6.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(374)
-#: Source/Backrooms/Private/BRLevels.cpp(374)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(376)
+#: Source/Backrooms/Private/BRLevels.cpp(376)
 #, fuzzy
 msgctxt "BR,Level.6.ClassText"
 msgid "Classe 4 : Dangereux - Obscurité totale"
 msgstr "クラス4：危険 - 完全な暗闇"
 
 #. Key:	Note.L6.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(409)
-#: Source/Backrooms/Private/BRLevels.cpp(409)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(411)
+#: Source/Backrooms/Private/BRLevels.cpp(411)
 #, fuzzy
 msgctxt "BR,Note.L6.4"
 msgid "Ici, les lampes meurent et la vision nocturne ne voit que de la neige. Le scanner, lui, marche : une impulsion pour la pièce, un faisceau maintenu pour le détail. - L."
 msgstr "ここではライトが消え、暗視は砂嵐しか映さない。スキャナーは動く：部屋にはパルス、細部には照射を続けて。- L."
 
 #. Key:	Note.L6.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(410)
-#: Source/Backrooms/Private/BRLevels.cpp(410)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(412)
+#: Source/Backrooms/Private/BRLevels.cpp(412)
 #, fuzzy
 msgctxt "BR,Note.L6.5"
 msgid "Les sourires entendent les impulsions. Le faisceau maintenu du scanner les fait reculer ; la lampe, elle, les met en colère. - L."
 msgstr "笑顔たちはパルスを聞きつける。スキャナーの照射を当て続けると退く。ライトは怒らせるだけだ。- L."
 
 #. Key:	Note.L6.6
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(411)
-#: Source/Backrooms/Private/BRLevels.cpp(411)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(413)
+#: Source/Backrooms/Private/BRLevels.cpp(413)
 #, fuzzy
 msgctxt "BR,Note.L6.6"
 msgid "Les flèches bleues au sol sont de nous. Elles mènent à l'aile d'essai. Au-delà des portes, le sol est percé : regardez avant de marcher. - L."
 msgstr "床の青い矢印は私たちのものだ。試験棟へ続いている。扉の先は床に穴がある：踏み出す前に見ること。- L."
 
 #. Key:	Level.8.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(421)
-#: Source/Backrooms/Private/BRLevels.cpp(421)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(423)
+#: Source/Backrooms/Private/BRLevels.cpp(423)
 #, fuzzy
 msgctxt "BR,Level.8.Title"
 msgid "Cave System"
 msgstr "Cave System"
 
 #. Key:	Level.8.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(422)
-#: Source/Backrooms/Private/BRLevels.cpp(422)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(424)
+#: Source/Backrooms/Private/BRLevels.cpp(424)
 #, fuzzy
 msgctxt "BR,Level.8.Nickname"
 msgid "Le réseau de grottes"
 msgstr "洞窟群"
 
 #. Key:	Level.8.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(423)
-#: Source/Backrooms/Private/BRLevels.cpp(423)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(425)
+#: Source/Backrooms/Private/BRLevels.cpp(425)
 #, fuzzy
 msgctxt "BR,Level.8.Description"
 msgid "Un enchevêtrement de grottes humides, éclairées çà et là par de vieilles lampes de mine. Des Deathmoths nichent au plafond, attirées par la moindre lumière."
 msgstr "古い鉱山ランプにところどころ照らされた、湿った洞窟の迷路。天井には Deathmoths が巣くい、わずかな光にも引き寄せられる。"
 
 #. Key:	Level.8.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(425)
-#: Source/Backrooms/Private/BRLevels.cpp(425)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(427)
+#: Source/Backrooms/Private/BRLevels.cpp(427)
 #, fuzzy
 msgctxt "BR,Level.8.ClassText"
 msgid "Classe 4 : Dangereux - Entités nombreuses"
 msgstr "クラス4：危険 - エンティティ多数"
 
 #. Key:	Note.L8.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(451)
-#: Source/Backrooms/Private/BRLevels.cpp(451)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(453)
+#: Source/Backrooms/Private/BRLevels.cpp(453)
 #, fuzzy
 msgctxt "BR,Note.L8.1"
 msgid "Les papillons. Énormes. Ils viennent vers la lumière. Éteins ta lampe quand tu entends les ailes."
 msgstr "蛾だ。巨大な。光に向かってくる。羽音が聞こえたらライトを消せ。"
 
 #. Key:	Note.L8.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(452)
-#: Source/Backrooms/Private/BRLevels.cpp(452)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(454)
+#: Source/Backrooms/Private/BRLevels.cpp(454)
 #, fuzzy
 msgctxt "BR,Note.L8.2"
 msgid "Une échelle remonte vers la surface. Il fait nuit là-haut. Toujours nuit."
 msgstr "はしごが地上へ戻っている。上は夜だ。ずっと夜だ。"
 
 #. Key:	Level.9.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(462)
-#: Source/Backrooms/Private/BRLevels.cpp(462)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(464)
+#: Source/Backrooms/Private/BRLevels.cpp(464)
 #, fuzzy
 msgctxt "BR,Level.9.Title"
 msgid "The Suburbs"
 msgstr "The Suburbs"
 
 #. Key:	Level.9.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(463)
-#: Source/Backrooms/Private/BRLevels.cpp(463)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(465)
+#: Source/Backrooms/Private/BRLevels.cpp(465)
 #, fuzzy
 msgctxt "BR,Level.9.Nickname"
 msgid "La banlieue"
 msgstr "郊外"
 
 #. Key:	Level.9.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(464)
-#: Source/Backrooms/Private/BRLevels.cpp(464)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(466)
+#: Source/Backrooms/Private/BRLevels.cpp(466)
 #, fuzzy
 msgctxt "BR,Level.9.Description"
 msgid "Un quartier résidentiel sans fin, plongé dans une nuit éternelle. Les lampadaires grésillent, les maisons sont vides. Ne restez pas dans la rue."
 msgstr "永遠の夜に沈む、果てしない住宅街。街灯はパチパチと音を立て、家はどれも空っぽ。通りにとどまるな。"
 
 #. Key:	Level.9.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(466)
-#: Source/Backrooms/Private/BRLevels.cpp(466)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(468)
+#: Source/Backrooms/Private/BRLevels.cpp(468)
 #, fuzzy
 msgctxt "BR,Level.9.ClassText"
 msgid "Classe 4 : Dangereux la nuit"
 msgstr "クラス4：夜間は危険"
 
 #. Key:	Note.L9.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(492)
-#: Source/Backrooms/Private/BRLevels.cpp(492)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(494)
+#: Source/Backrooms/Private/BRLevels.cpp(494)
 #, fuzzy
 msgctxt "BR,Note.L9.1"
 msgid "Certaines maisons ont la porte entrouverte. Derrière l'une d'elles, j'ai vu un champ de blé en plein jour."
 msgstr "ドアが少し開いた家がある。そのひとつの向こうに、真っ昼間の麦畑が見えた。"
 
 #. Key:	Note.L9.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(493)
-#: Source/Backrooms/Private/BRLevels.cpp(493)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(495)
+#: Source/Backrooms/Private/BRLevels.cpp(495)
 #, fuzzy
 msgctxt "BR,Note.L9.2"
 msgid "Les lampadaires ne te protègent pas. Ils te rendent juste plus visible."
 msgstr "街灯はお前を守ってくれない。目立たせるだけだ。"
 
 #. Key:	Level.10.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(503)
-#: Source/Backrooms/Private/BRLevels.cpp(503)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(505)
+#: Source/Backrooms/Private/BRLevels.cpp(505)
 #, fuzzy
 msgctxt "BR,Level.10.Title"
 msgid "Field of Wheat"
 msgstr "Field of Wheat"
 
 #. Key:	Level.10.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(504)
-#: Source/Backrooms/Private/BRLevels.cpp(504)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(506)
+#: Source/Backrooms/Private/BRLevels.cpp(506)
 #, fuzzy
 msgctxt "BR,Level.10.Nickname"
 msgid "Le champ de blé"
 msgstr "麦畑"
 
 #. Key:	Level.10.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(505)
-#: Source/Backrooms/Private/BRLevels.cpp(505)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(507)
+#: Source/Backrooms/Private/BRLevels.cpp(507)
 #, fuzzy
 msgctxt "BR,Level.10.Description"
 msgid "Un champ de blé infini sous un ciel couvert. Le vent, le bruissement des épis, quelques granges isolées. Un endroit étrangement paisible."
 msgstr "曇り空の下、どこまでも続く麦畑。風、穂のざわめき、ぽつんと立つ納屋。不思議なほど穏やかな場所。"
 
 #. Key:	Level.10.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(507)
-#: Source/Backrooms/Private/BRLevels.cpp(507)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(509)
+#: Source/Backrooms/Private/BRLevels.cpp(509)
 #, fuzzy
 msgctxt "BR,Level.10.ClassText"
 msgid "Classe 1 : Sûr - Stable"
 msgstr "クラス1：安全 - 安定"
 
 #. Key:	Note.L10.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(530)
-#: Source/Backrooms/Private/BRLevels.cpp(530)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(532)
+#: Source/Backrooms/Private/BRLevels.cpp(532)
 #, fuzzy
 msgctxt "BR,Note.L10.1"
 msgid "Les granges ont toujours une porte. L'une d'elles s'ouvre sur une ville."
 msgstr "納屋には必ずドアがある。そのひとつは街に通じている。"
 
 #. Key:	Note.L10.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(531)
-#: Source/Backrooms/Private/BRLevels.cpp(531)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(533)
+#: Source/Backrooms/Private/BRLevels.cpp(533)
 #, fuzzy
 msgctxt "BR,Note.L10.2"
 msgid "Pour la premiere fois depuis des semaines, j'ai dormi."
 msgstr "何週間ぶりかで、眠れた。"
 
 #. Key:	Level.11.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(541)
-#: Source/Backrooms/Private/BRLevels.cpp(541)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(543)
+#: Source/Backrooms/Private/BRLevels.cpp(543)
 #, fuzzy
 msgctxt "BR,Level.11.Title"
 msgid "The Endless City"
 msgstr "The Endless City"
 
 #. Key:	Level.11.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(542)
-#: Source/Backrooms/Private/BRLevels.cpp(542)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(544)
+#: Source/Backrooms/Private/BRLevels.cpp(544)
 #, fuzzy
 msgctxt "BR,Level.11.Nickname"
 msgid "La ville sans fin"
 msgstr "果てしない街"
 
 #. Key:	Level.11.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(543)
-#: Source/Backrooms/Private/BRLevels.cpp(543)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(545)
+#: Source/Backrooms/Private/BRLevels.cpp(545)
 #, fuzzy
 #| msgid "Une métropole infinie de gratte-ciel et d'avenues désertes, baignée de soleil. Des Facelings y vivent paisiblement. Ses immeubles mènent un peu partout."
 msgctxt "BR,Level.11.Description"
@@ -4900,16 +4900,16 @@ msgid "Une métropole infinie de gratte-ciel et d'avenues désertes, baignée de
 msgstr "高層ビルと人のいない大通りが果てしなく続く、陽光に満ちた大都市。フェイスリングたちが穏やかに暮らしている。どこかで、ひとつの駅が最後の乗客を待っている。"
 
 #. Key:	Level.11.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(545)
-#: Source/Backrooms/Private/BRLevels.cpp(545)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(547)
+#: Source/Backrooms/Private/BRLevels.cpp(547)
 #, fuzzy
 msgctxt "BR,Level.11.ClassText"
 msgid "Classe 1 : Sûr - Stable - Habité"
 msgstr "クラス1：安全 - 安定 - 居住者あり"
 
 #. Key:	Note.L11.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(575)
-#: Source/Backrooms/Private/BRLevels.cpp(575)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(577)
+#: Source/Backrooms/Private/BRLevels.cpp(577)
 #, fuzzy
 #| msgid "Les portes des immeubles mènent n'importe où. Vraiment n'importe où."
 msgctxt "BR,Note.L11.1"
@@ -4917,168 +4917,168 @@ msgid "Les portes des immeubles sont murées. La seule route qui reste passe sou
 msgstr "建物の扉はふさがれている。残された道は街の下、駅を通る道だけだ。- L."
 
 #. Key:	Note.L11.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(576)
-#: Source/Backrooms/Private/BRLevels.cpp(576)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(578)
+#: Source/Backrooms/Private/BRLevels.cpp(578)
 #, fuzzy
 msgctxt "BR,Note.L11.2"
 msgid "Les Facelings d'ici sont gentils. Ils ne parlent pas, mais ils ne font pas de mal."
 msgstr "ここの Facelings は優しい。しゃべらないが、誰にも危害を加えない。"
 
 #. Key:	Level.37.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(586)
-#: Source/Backrooms/Private/BRLevels.cpp(586)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(588)
+#: Source/Backrooms/Private/BRLevels.cpp(588)
 #, fuzzy
 msgctxt "BR,Level.37.Title"
 msgid "Sublimity"
 msgstr "Sublimity"
 
 #. Key:	Level.37.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(587)
-#: Source/Backrooms/Private/BRLevels.cpp(587)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(589)
+#: Source/Backrooms/Private/BRLevels.cpp(589)
 #, fuzzy
 msgctxt "BR,Level.37.Nickname"
 msgid "Les Poolrooms"
 msgstr "プールルーム"
 
 #. Key:	Level.37.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(588)
-#: Source/Backrooms/Private/BRLevels.cpp(588)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(590)
+#: Source/Backrooms/Private/BRLevels.cpp(590)
 #, fuzzy
 msgctxt "BR,Level.37.Description"
 msgid "Un dédale de couloirs carrelés bordés de canaux, d'arches et de salles inondées d'une eau tiède et claire. La lumière est douce, l'écho infini. Un calme presque réconfortant... presque."
 msgstr "水路、アーチ、ぬるく澄んだ水に満たされた部屋が並ぶ、タイル張りの廊下の迷宮。光は柔らかく、反響は果てしない。ほとんど心が安らぐほどの静けさ……ほとんど。"
 
 #. Key:	Level.37.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(590)
-#: Source/Backrooms/Private/BRLevels.cpp(590)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(592)
+#: Source/Backrooms/Private/BRLevels.cpp(592)
 #, fuzzy
 msgctxt "BR,Level.37.ClassText"
 msgid "Classe 1 : Sûr - Stable - Aucune entité"
 msgstr "クラス1：安全 - 安定 - エンティティなし"
 
 #. Key:	Note.L37.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(626)
-#: Source/Backrooms/Private/BRLevels.cpp(626)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(628)
+#: Source/Backrooms/Private/BRLevels.cpp(628)
 #, fuzzy
 msgctxt "BR,Note.L37.1"
 msgid "L'eau est tiède. Elle n'a pas de fond, a certains endroits. N'y plonge pas."
 msgstr "水はぬるい。底のない場所もある。飛び込むな。"
 
 #. Key:	Note.L37.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(627)
-#: Source/Backrooms/Private/BRLevels.cpp(627)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(629)
+#: Source/Backrooms/Private/BRLevels.cpp(629)
 #, fuzzy
 msgctxt "BR,Note.L37.2"
 msgid "C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est ça, le piège."
 msgstr "ここはきれいだ。きれいすぎる。もう出ていきたくないと思っている。それこそが罠だ。"
 
 #. Key:	Note.L37.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(628)
-#: Source/Backrooms/Private/BRLevels.cpp(628)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(630)
+#: Source/Backrooms/Private/BRLevels.cpp(630)
 #, fuzzy
 msgctxt "BR,Note.L37.3"
 msgid "Nous sommes restés trop longtemps au bord de l'eau. M. voulait attendre ici. Nous sommes repartis sans elle, par l'échelle. Je reviendrai. - L."
 msgstr "私たちは水辺に長くいすぎた。M.はここで待つと言った。私たちは彼女を置いて、はしごを登った。必ず戻る。- L."
 
 #. Key:	Content.ChannelPublic
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(852)
-#: Source/Backrooms/Private/BRLevels.cpp(852)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(854)
+#: Source/Backrooms/Private/BRLevels.cpp(854)
 #, fuzzy
 msgctxt "BR,Content.ChannelPublic"
 msgid "version publiée"
 msgstr "公開版"
 
 #. Key:	Content.ChannelInternal
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(853)
-#: Source/Backrooms/Private/BRLevels.cpp(853)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(855)
+#: Source/Backrooms/Private/BRLevels.cpp(855)
 #, fuzzy
 msgctxt "BR,Content.ChannelInternal"
 msgid "version de test interne"
 msgstr "社内テスト版"
 
 #. Key:	Content.ChannelAll
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(854)
-#: Source/Backrooms/Private/BRLevels.cpp(854)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(856)
+#: Source/Backrooms/Private/BRLevels.cpp(856)
 #, fuzzy
 msgctxt "BR,Content.ChannelAll"
 msgid "version de développement"
 msgstr "開発版"
 
 #. Key:	Content.Lot1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(877)
-#: Source/Backrooms/Private/BRLevels.cpp(877)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(879)
+#: Source/Backrooms/Private/BRLevels.cpp(879)
 #, fuzzy
 msgctxt "BR,Content.Lot1"
 msgid "Le Seuil"
 msgstr "入口"
 
 #. Key:	Content.Lot2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(878)
-#: Source/Backrooms/Private/BRLevels.cpp(878)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(880)
+#: Source/Backrooms/Private/BRLevels.cpp(880)
 #, fuzzy
 msgctxt "BR,Content.Lot2"
 msgid "La Station et les Bureaux"
 msgstr "ステーションとオフィス"
 
 #. Key:	Content.Lot3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(879)
-#: Source/Backrooms/Private/BRLevels.cpp(879)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(881)
+#: Source/Backrooms/Private/BRLevels.cpp(881)
 #, fuzzy
 msgctxt "BR,Content.Lot3"
 msgid "L'Hôtel et le Noir"
 msgstr "ホテルと暗闇"
 
 #. Key:	Content.Lot4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(880)
-#: Source/Backrooms/Private/BRLevels.cpp(880)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(882)
+#: Source/Backrooms/Private/BRLevels.cpp(882)
 #, fuzzy
 msgctxt "BR,Content.Lot4"
 msgid "Les Grottes, la Banlieue et le Champ"
 msgstr "洞窟、郊外、そして畑"
 
 #. Key:	Content.Lot5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(881)
-#: Source/Backrooms/Private/BRLevels.cpp(881)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(883)
+#: Source/Backrooms/Private/BRLevels.cpp(883)
 #, fuzzy
 msgctxt "BR,Content.Lot5"
 msgid "La Ville"
 msgstr "街"
 
 #. Key:	Note.Common.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(888)
-#: Source/Backrooms/Private/BRLevels.cpp(888)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(890)
+#: Source/Backrooms/Private/BRLevels.cpp(890)
 #, fuzzy
 msgctxt "BR,Note.Common.1"
 msgid "RÈGLE N°1 : ne cours pas si tu n'y es pas obligé. Le bruit attire les choses."
 msgstr "ルールその1：必要なとき以外は走るな。物音は何かを引き寄せる。"
 
 #. Key:	Note.Common.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(889)
-#: Source/Backrooms/Private/BRLevels.cpp(889)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(891)
+#: Source/Backrooms/Private/BRLevels.cpp(891)
 #, fuzzy
 msgctxt "BR,Note.Common.2"
 msgid "RÈGLE N°2 : bois de l'eau d'amande quand ta tête commence à tourner. La folie tue aussi sûrement que les entites."
 msgstr "ルールその2：頭がくらくらしてきたらアーモンドウォーターを飲め。狂気はエンティティと同じくらい確実に命を奪う。"
 
 #. Key:	Note.Common.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(890)
-#: Source/Backrooms/Private/BRLevels.cpp(890)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(892)
+#: Source/Backrooms/Private/BRLevels.cpp(892)
 #, fuzzy
 msgctxt "BR,Note.Common.3"
 msgid "RÈGLE N°3 : une lampe allumée se voit de loin. Parfois, il vaut mieux rester dans le noir."
 msgstr "ルールその3：点いたライトは遠くからでも見える。暗闇にいるほうがいいときもある。"
 
 #. Key:	Note.Common.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(891)
-#: Source/Backrooms/Private/BRLevels.cpp(891)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(893)
+#: Source/Backrooms/Private/BRLevels.cpp(893)
 #, fuzzy
 msgctxt "BR,Note.Common.4"
 msgid "Ils l'appellent le \"Front\" - la réalité d'où nous venons. Je ne suis plus sûr qu'elle ait existé."
 msgstr "彼らはそれを「Frontrooms」と呼ぶ。俺たちがやってきた現実だ。それが本当にあったのか、もうわからない。"
 
 #. Key:	Note.Common.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(892)
-#: Source/Backrooms/Private/BRLevels.cpp(892)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(894)
+#: Source/Backrooms/Private/BRLevels.cpp(894)
 #, fuzzy
 msgctxt "BR,Note.Common.5"
 msgid "Note pour moi-même : {Inventory} pour ouvrir le journal. Ne pas oublier ce que j'ai vu."
@@ -7464,1632 +7464,1680 @@ msgid "Niveau {N}"
 msgstr "レベル {N}"
 
 #. Key:	Menu.Performance
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(107)
-#: Source/Backrooms/Private/BRPlayerController.cpp(107)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(108)
+#: Source/Backrooms/Private/BRPlayerController.cpp(108)
 #, fuzzy
 msgctxt "BR,Menu.Performance"
 msgid "PERFORMANCE"
 msgstr "パフォーマンス"
 
 #. Key:	Menu.Qualite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(107)
-#: Source/Backrooms/Private/BRPlayerController.cpp(107)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(108)
+#: Source/Backrooms/Private/BRPlayerController.cpp(108)
 #, fuzzy
 msgctxt "BR,Menu.Qualite"
 msgid "QUALITÉ"
 msgstr "品質"
 
 #. Key:	Menu.Cinematique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(107)
-#: Source/Backrooms/Private/BRPlayerController.cpp(107) Source/Backrooms/Private/BRPlayerController.cpp(114)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(108)
+#: Source/Backrooms/Private/BRPlayerController.cpp(108) Source/Backrooms/Private/BRPlayerController.cpp(115)
 #, fuzzy
 msgctxt "BR,Menu.Cinematique"
 msgid "CINÉMATIQUE"
 msgstr "シネマティック"
 
 #. Key:	Menu.Personnalise
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(107)
-#: Source/Backrooms/Private/BRPlayerController.cpp(107)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(108)
+#: Source/Backrooms/Private/BRPlayerController.cpp(108)
 #, fuzzy
 msgctxt "BR,Menu.Personnalise"
 msgid "PERSONNALISÉ"
 msgstr "カスタム"
 
 #. Key:	Menu.RtxFluide
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(107)
-#: Source/Backrooms/Private/BRPlayerController.cpp(107)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(108)
+#: Source/Backrooms/Private/BRPlayerController.cpp(108)
 #, fuzzy
 msgctxt "BR,Menu.RtxFluide"
 msgid "RTX FLUIDE"
 msgstr "快適RTX"
 
 #. Key:	Menu.Bas
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(114)
-#: Source/Backrooms/Private/BRPlayerController.cpp(114)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(115)
+#: Source/Backrooms/Private/BRPlayerController.cpp(115)
 #, fuzzy
 msgctxt "BR,Menu.Bas"
 msgid "BAS"
 msgstr "低"
 
 #. Key:	Menu.Moyen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(114)
-#: Source/Backrooms/Private/BRPlayerController.cpp(114)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(115)
+#: Source/Backrooms/Private/BRPlayerController.cpp(115)
 #, fuzzy
 msgctxt "BR,Menu.Moyen"
 msgid "MOYEN"
 msgstr "中"
 
 #. Key:	Menu.Eleve
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(114)
-#: Source/Backrooms/Private/BRPlayerController.cpp(114)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(115)
+#: Source/Backrooms/Private/BRPlayerController.cpp(115)
 #, fuzzy
 msgctxt "BR,Menu.Eleve"
 msgid "ÉLEVÉ"
 msgstr "高"
 
 #. Key:	Menu.Epique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(114)
-#: Source/Backrooms/Private/BRPlayerController.cpp(114)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(115)
+#: Source/Backrooms/Private/BRPlayerController.cpp(115)
 #, fuzzy
 msgctxt "BR,Menu.Epique"
 msgid "ÉPIQUE"
 msgstr "エピック"
 
 #. Key:	Menu.VoixOuverte
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(119)
-#: Source/Backrooms/Private/BRPlayerController.cpp(119)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(120)
+#: Source/Backrooms/Private/BRPlayerController.cpp(120)
 #, fuzzy
 msgctxt "BR,Menu.VoixOuverte"
 msgid "VOIX OUVERTE"
 msgstr "マイク常時オン"
 
 #. Key:	Menu.AppuyerParler
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(119)
-#: Source/Backrooms/Private/BRPlayerController.cpp(119)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(120)
+#: Source/Backrooms/Private/BRPlayerController.cpp(120)
 #, fuzzy
 msgctxt "BR,Menu.AppuyerParler"
 msgid "APPUYER POUR PARLER"
 msgstr "プッシュトゥトーク"
 
 #. Key:	Menu.MicroCoupe
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(119)
-#: Source/Backrooms/Private/BRPlayerController.cpp(119)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(120)
+#: Source/Backrooms/Private/BRPlayerController.cpp(120)
 #, fuzzy
 msgctxt "BR,Menu.MicroCoupe"
 msgid "MICRO COUPÉ"
 msgstr "マイクミュート"
 
 #. Key:	Menu.PleinEcran
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(124)
-#: Source/Backrooms/Private/BRPlayerController.cpp(124)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(125)
+#: Source/Backrooms/Private/BRPlayerController.cpp(125)
 #, fuzzy
 msgctxt "BR,Menu.PleinEcran"
 msgid "PLEIN ÉCRAN"
 msgstr "フルスクリーン"
 
 #. Key:	Menu.FenetreSansBordure
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(124)
-#: Source/Backrooms/Private/BRPlayerController.cpp(124)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(125)
+#: Source/Backrooms/Private/BRPlayerController.cpp(125)
 #, fuzzy
 msgctxt "BR,Menu.FenetreSansBordure"
 msgid "FENÊTRÉ SANS BORDURE"
 msgstr "ボーダーレスウィンドウ"
 
 #. Key:	Menu.Fenetre
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(124)
-#: Source/Backrooms/Private/BRPlayerController.cpp(124)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(125)
+#: Source/Backrooms/Private/BRPlayerController.cpp(125)
 #, fuzzy
 msgctxt "BR,Menu.Fenetre"
 msgid "FENÊTRÉ"
 msgstr "ウィンドウ"
 
 #. Key:	Menu.ShowContextual
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(130)
-#: Source/Backrooms/Private/BRPlayerController.cpp(130)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(131)
+#: Source/Backrooms/Private/BRPlayerController.cpp(131)
 #, fuzzy
 msgctxt "BR,Menu.ShowContextual"
 msgid "BRIÈVEMENT"
 msgstr "短く"
 
 #. Key:	Menu.ShowAlways
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(130)
-#: Source/Backrooms/Private/BRPlayerController.cpp(130)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(131)
+#: Source/Backrooms/Private/BRPlayerController.cpp(131)
 #, fuzzy
 msgctxt "BR,Menu.ShowAlways"
 msgid "TOUJOURS"
 msgstr "常に"
 
 #. Key:	Menu.ShowHidden
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(130)
-#: Source/Backrooms/Private/BRPlayerController.cpp(130)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(131)
+#: Source/Backrooms/Private/BRPlayerController.cpp(131)
 #, fuzzy
 msgctxt "BR,Menu.ShowHidden"
 msgid "MASQUÉS"
 msgstr "非表示"
 
 #. Key:	Menu.CrosshairDot
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(135)
-#: Source/Backrooms/Private/BRPlayerController.cpp(135)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(136)
+#: Source/Backrooms/Private/BRPlayerController.cpp(136)
 #, fuzzy
 msgctxt "BR,Menu.CrosshairDot"
 msgid "POINT"
 msgstr "点"
 
 #. Key:	Menu.CrosshairFocus
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(135)
-#: Source/Backrooms/Private/BRPlayerController.cpp(135)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(136)
+#: Source/Backrooms/Private/BRPlayerController.cpp(136)
 #, fuzzy
 msgctxt "BR,Menu.CrosshairFocus"
 msgid "SUR LES OBJETS"
 msgstr "物の上のみ"
 
 #. Key:	Menu.Aucun
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(135)
-#: Source/Backrooms/Private/BRPlayerController.cpp(135) Source/Backrooms/Private/BRPlayerController.cpp(3013) Source/Backrooms/Private/BRPlayerController.cpp(3015)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(136)
+#: Source/Backrooms/Private/BRPlayerController.cpp(136) Source/Backrooms/Private/BRPlayerController.cpp(3139) Source/Backrooms/Private/BRPlayerController.cpp(3141)
 #, fuzzy
 msgctxt "BR,Menu.Aucun"
 msgid "AUCUN"
 msgstr "なし"
 
 #. Key:	Menu.Active
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(150)
-#: Source/Backrooms/Private/BRPlayerController.cpp(150)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(151)
+#: Source/Backrooms/Private/BRPlayerController.cpp(151)
 #, fuzzy
 msgctxt "BR,Menu.Active"
 msgid "ACTIVÉ"
 msgstr "オン"
 
 #. Key:	Menu.Desactive
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(150)
-#: Source/Backrooms/Private/BRPlayerController.cpp(150)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(151)
+#: Source/Backrooms/Private/BRPlayerController.cpp(151)
 #, fuzzy
 msgctxt "BR,Menu.Desactive"
 msgid "DÉSACTIVÉ"
 msgstr "オフ"
 
 #. Key:	Menu.JoinRefusedVersion
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(168)
-#: Source/Backrooms/Private/BRPlayerController.cpp(168)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(169)
+#: Source/Backrooms/Private/BRPlayerController.cpp(169)
 #, fuzzy
 msgctxt "BR,Menu.JoinRefusedVersion"
 msgid "Impossible de rejoindre : l'hôte a la version {Host} du jeu, vous avez la version {Local}. Installez la même version des deux côtés."
 msgstr "参加できません：ホストはバージョン {Host}、あなたはバージョン {Local} です。両方で同じバージョンをインストールしてください。"
 
 #. Key:	Menu.JoinRefusedContent
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(172)
-#: Source/Backrooms/Private/BRPlayerController.cpp(172)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(173)
+#: Source/Backrooms/Private/BRPlayerController.cpp(173)
 #, fuzzy
 msgctxt "BR,Menu.JoinRefusedContent"
 msgid "Impossible de rejoindre : l'hôte joue avec la {HostChannel} (contenu jusqu'au chapitre {HostLot}), vous avez la {LocalChannel} (chapitre {LocalLot}). Les deux joueurs doivent avoir le même contenu."
 msgstr "参加できません：ホスト：{HostChannel}（第 {HostLot} 章までの内容）、あなた：{LocalChannel}（第 {LocalLot} 章）。両方のプレイヤーに同じ内容が必要です。"
 
 #. Key:	Menu.JoinOtherVersion
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(191)
-#: Source/Backrooms/Private/BRPlayerController.cpp(191)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(192)
+#: Source/Backrooms/Private/BRPlayerController.cpp(192)
 #, fuzzy
 msgctxt "BR,Menu.JoinOtherVersion"
 msgid "Impossible de rejoindre : l'hôte a une autre version du jeu (vous avez la version {Local}). Installez la même version des deux côtés."
 msgstr "参加できません：ホストのゲームのバージョンが異なります（あなたはバージョン {Local}）。両方で同じバージョンをインストールしてください。"
 
 #. Key:	Menu.JoinServerFull
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(197)
-#: Source/Backrooms/Private/BRPlayerController.cpp(197)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(198)
+#: Source/Backrooms/Private/BRPlayerController.cpp(198)
 #, fuzzy
 msgctxt "BR,Menu.JoinServerFull"
 msgid "Impossible de rejoindre : la partie est complète (4 joueurs)."
 msgstr "参加できません：ゲームは満員です（4 人）。"
 
 #. Key:	Menu.ImpossibleRejoindrePartieVerifiezAdresse
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(200)
-#: Source/Backrooms/Private/BRPlayerController.cpp(200)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(201)
 #, fuzzy
 msgctxt "BR,Menu.ImpossibleRejoindrePartieVerifiezAdresse"
 msgid "Impossible de rejoindre la partie : vérifiez l'adresse, le port 7777 (UDP) et le pare-feu de l'hôte."
 msgstr "ゲームに参加できません：アドレス、ポート 7777（UDP）、ホストのファイアウォールを確認してください。"
 
 #. Key:	Menu.ConnexionPerdueHote
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(204)
-#: Source/Backrooms/Private/BRPlayerController.cpp(204)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(205)
+#: Source/Backrooms/Private/BRPlayerController.cpp(205)
 #, fuzzy
 msgctxt "BR,Menu.ConnexionPerdueHote"
 msgid "Connexion perdue avec l'hôte."
 msgstr "ホストとの接続が切れました。"
 
 #. Key:	Menu.ImpossibleHebergerPort7777Peut
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(207)
-#: Source/Backrooms/Private/BRPlayerController.cpp(207)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(208)
+#: Source/Backrooms/Private/BRPlayerController.cpp(208)
 #, fuzzy
 msgctxt "BR,Menu.ImpossibleHebergerPort7777Peut"
 msgid "Impossible d'héberger : le port 7777 est peut-être déjà utilisé."
 msgstr "ホストできません：ポート 7777 がすでに使用されている可能性があります。"
 
 #. Key:	Menu.ErreurReseau
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(210)
-#: Source/Backrooms/Private/BRPlayerController.cpp(210)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(211)
+#: Source/Backrooms/Private/BRPlayerController.cpp(211)
 #, fuzzy
 msgctxt "BR,Menu.ErreurReseau"
 msgid "Erreur réseau : "
 msgstr "ネットワークエラー： "
 
 #. Key:	Menu.ImpossibleRejoindrePartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(217)
-#: Source/Backrooms/Private/BRPlayerController.cpp(217)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(218)
+#: Source/Backrooms/Private/BRPlayerController.cpp(218)
 #, fuzzy
 msgctxt "BR,Menu.ImpossibleRejoindrePartie"
 msgid "Impossible de rejoindre la partie : "
 msgstr "ゲームに参加できません： "
 
 #. Key:	Display.RestoredAtStartup
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(271)
-#: Source/Backrooms/Private/BRPlayerController.cpp(271)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(272)
+#: Source/Backrooms/Private/BRPlayerController.cpp(272)
 #, fuzzy
 msgctxt "BR,Display.RestoredAtStartup"
 msgid "Affichage rétabli : le changement précédent n'avait pas été confirmé."
 msgstr "表示を元に戻しました：前回の変更が確定されていませんでした。"
 
 #. Key:	Display.Reverted
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(614)
-#: Source/Backrooms/Private/BRPlayerController.cpp(614)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(638)
+#: Source/Backrooms/Private/BRPlayerController.cpp(638)
 #, fuzzy
 msgctxt "BR,Display.Reverted"
 msgid "Affichage rétabli (pas de confirmation)."
 msgstr "表示を元に戻しました（未確定）。"
 
 #. Key:	Menu.HebergezPartieVotrePcFait
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(728)
-#: Source/Backrooms/Private/BRPlayerController.cpp(728)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(753)
+#: Source/Backrooms/Private/BRPlayerController.cpp(753)
 #, fuzzy
 msgctxt "BR,Menu.HebergezPartieVotrePcFait"
 msgid "Vous hébergez la partie : votre PC fait tourner le monde et les entités pour tout le groupe. Gardez le jeu ouvert jusqu'à la fin."
 msgstr "あなたがホストです：あなたのPCがグループ全体のために世界とエンティティを処理します。最後までゲームを開いたままにしてください。"
 
 #. Key:	Menu.ConnectePartieHoteRestezGroupes
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(733)
-#: Source/Backrooms/Private/BRPlayerController.cpp(733)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(758)
+#: Source/Backrooms/Private/BRPlayerController.cpp(758)
 #, fuzzy
 msgctxt "BR,Menu.ConnectePartieHoteRestezGroupes"
 msgid "Connecté à la partie de l'hôte. Restez groupés : on s'entend mieux de près."
 msgstr "ホストのゲームに接続しました。固まって行動しよう：近いほうがよく聞こえる。"
 
 #. Key:	Menu.ChatVocalProximiteMaintenezPushtotalk
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(738)
-#: Source/Backrooms/Private/BRPlayerController.cpp(738)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(763)
+#: Source/Backrooms/Private/BRPlayerController.cpp(763)
 #, fuzzy
 msgctxt "BR,Menu.ChatVocalProximiteMaintenezPushtotalk"
 msgid "Chat vocal de proximité : maintenez {PushToTalk} pour parler."
 msgstr "近接ボイスチャット：{PushToTalk} を長押しして話す。"
 
 #. Key:	Menu.TouchesDefautRetablies
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(849)
-#: Source/Backrooms/Private/BRPlayerController.cpp(849)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(875)
+#: Source/Backrooms/Private/BRPlayerController.cpp(875)
 #, fuzzy
 msgctxt "BR,Menu.TouchesDefautRetablies"
 msgid "Touches par défaut rétablies."
 msgstr "デフォルトの操作に戻しました。"
 
 #. Key:	Menu.KRetireeRemoved
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(893)
-#: Source/Backrooms/Private/BRPlayerController.cpp(893)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(919)
+#: Source/Backrooms/Private/BRPlayerController.cpp(919)
 #, fuzzy
 msgctxt "BR,Menu.KRetireeRemoved"
 msgid "{K} retirée de : {Removed}"
 msgstr "{K} の割り当てを解除：{Removed}"
 
 #. Key:	Menu.CommandeTestDesactiveeModeDeveloppeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1485)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1485)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1512)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1512)
 #, fuzzy
 msgctxt "BR,Menu.CommandeTestDesactiveeModeDeveloppeur"
 msgid "Commande de test désactivée (mode développeur requis, absent des versions publiées)."
 msgstr "テストコマンドは無効です（開発者モードが必要。製品版にはありません）。"
 
 #. Key:	Menu.ModeDevNiveauNumberTitle
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1504)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1504)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1531)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1531)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevNiveauNumberTitle"
 msgid "MODE DÉV : Niveau {Number} - {Title}"
 msgstr "開発者モード：レベル {Number} - {Title}"
 
 #. Key:	Menu.ModeDevObjectifsRemplis
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1535)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1535)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1562)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1562)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevObjectifsRemplis"
 msgid "MODE DÉV : objectifs remplis"
 msgstr "開発者モード：目標達成"
 
 #. Key:	Menu.ModeDevVolLibreTravers
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1548)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1548)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1575)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1575)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevVolLibreTravers"
 msgid "MODE DÉV : vol libre (à travers les murs, Espace pour monter, Maj pour accélérer)"
 msgstr "開発者モード：自由飛行（壁をすり抜け、スペースで上昇、Shiftで加速）"
 
 #. Key:	Menu.ModeDevVolLibreCoupe
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1549)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1549)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1576)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1576)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevVolLibreCoupe"
 msgid "MODE DÉV : vol libre coupé"
 msgstr "開発者モード：自由飛行オフ"
 
 #. Key:	Menu.Solo
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1577)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1577)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1604)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1604)
 #, fuzzy
 msgctxt "BR,Menu.Solo"
 msgid "SOLO"
 msgstr "ソロ"
 
 #. Key:	Menu.Multijoueur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1577)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1577)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1604)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1604)
 #, fuzzy
 msgctxt "BR,Menu.Multijoueur"
 msgid "MULTIJOUEUR"
 msgstr "マルチプレイ"
 
 #. Key:	Menu.Parametres
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1577)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1577)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1604)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1604)
 #, fuzzy
 msgctxt "BR,Menu.Parametres"
 msgid "PARAMÈTRES"
 msgstr "設定"
 
 #. Key:	Menu.Language
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1577)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1577)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1604)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1604)
 #, fuzzy
 msgctxt "BR,Menu.Language"
 msgid "LANGUE"
 msgstr "言語"
 
 #. Key:	Menu.Quitter
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1577)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1577)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1604)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1604)
 #, fuzzy
 msgctxt "BR,Menu.Quitter"
 msgid "QUITTER"
 msgstr "終了"
 
 #. Key:	Menu.HebergerPartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1578)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1578)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1605)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1605)
 #, fuzzy
 msgctxt "BR,Menu.HebergerPartie"
 msgid "HÉBERGER UNE PARTIE"
 msgstr "ゲームをホスト"
 
 #. Key:	Menu.RejoindrePartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1578)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1578)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1605)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1605)
 #, fuzzy
 msgctxt "BR,Menu.RejoindrePartie"
 msgid "REJOINDRE UNE PARTIE"
 msgstr "ゲームに参加"
 
 #. Key:	Menu.Retour
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1578)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1578) Source/Backrooms/Private/BRPlayerController.cpp(1585) Source/Backrooms/Private/BRPlayerController.cpp(1589) Source/Backrooms/Private/BRPlayerController.cpp(1591)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1605)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1605) Source/Backrooms/Private/BRPlayerController.cpp(1612) Source/Backrooms/Private/BRPlayerController.cpp(1616) Source/Backrooms/Private/BRPlayerController.cpp(1618)
 #, fuzzy
 msgctxt "BR,Menu.Retour"
 msgid "RETOUR"
 msgstr "戻る"
 
 #. Key:	Menu.Connecter
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1589)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1589)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1616)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1616)
 #, fuzzy
 msgctxt "BR,Menu.Connecter"
 msgid "SE CONNECTER"
 msgstr "接続"
 
 #. Key:	Menu.Heberger
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1591)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1591)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1618)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1618)
 #, fuzzy
 msgctxt "BR,Menu.Heberger"
 msgid "HÉBERGER"
 msgstr "ホスト"
 
 #. Key:	Menu.Commencer
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1591)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1591)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1618)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1618)
 #, fuzzy
 msgctxt "BR,Menu.Commencer"
 msgid "COMMENCER"
 msgstr "開始"
 
 #. Key:	Menu.HostContinue
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1601)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1601)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1628)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1628)
 #, fuzzy
 msgctxt "BR,Menu.HostContinue"
 msgid "HÉBERGER : CONTINUER"
 msgstr "ホスト：続ける"
 
 #. Key:	Menu.Continue
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1601)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1601)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1628)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1628)
 #, fuzzy
 msgctxt "BR,Menu.Continue"
 msgid "CONTINUER"
 msgstr "続ける"
 
 #. Key:	Menu.Verrouille
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1607)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1607)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1634)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1634)
 #, fuzzy
 msgctxt "BR,Menu.Verrouille"
 msgid "VERROUILLÉ"
 msgstr "ロック中"
 
 #. Key:	Menu.HostReplay
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1609)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1609)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1636)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1636)
 #, fuzzy
 msgctxt "BR,Menu.HostReplay"
 msgid "HÉBERGER : REJOUER"
 msgstr "ホスト：リプレイ"
 
 #. Key:	Menu.Replay
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1609)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1609)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1636)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1636)
 #, fuzzy
 msgctxt "BR,Menu.Replay"
 msgid "REJOUER"
 msgstr "リプレイ"
 
 #. Key:	Menu.OuiSupprimer
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1615)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1615)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1642)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1642)
 #, fuzzy
 msgctxt "BR,Menu.OuiSupprimer"
 msgid "OUI, SUPPRIMER"
 msgstr "はい、削除"
 
 #. Key:	Menu.Annuler
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1615)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1615)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1642)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1642)
 #, fuzzy
 msgctxt "BR,Menu.Annuler"
 msgid "ANNULER"
 msgstr "キャンセル"
 
 #. Key:	Menu.NouvellePartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1623)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1623)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1650)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1650)
 #, fuzzy
 msgctxt "BR,Menu.NouvellePartie"
 msgid "NOUVELLE PARTIE"
 msgstr "ニューゲーム"
 
 #. Key:	Menu.PartieFree
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1727)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1727)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1754)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1754)
 #, fuzzy
 msgctxt "BR,Menu.PartieFree"
 msgid "Partie {Free}"
 msgstr "ゲーム {Free}"
 
 #. Key:	Menu.LanguageChanged
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1791)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1791)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1818)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1818)
 #, fuzzy
 msgctxt "BR,Menu.LanguageChanged"
 msgid "Langue : {Language}"
 msgstr "言語：{Language}"
 
 #. Key:	Menu.NiveauNumberEncoreExploreCette
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1815)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1815)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1842)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1842)
 #, fuzzy
 msgctxt "BR,Menu.NiveauNumberEncoreExploreCette"
 msgid "Niveau {Number} : pas encore exploré dans cette partie. Trouvez une sortie qui y mène."
 msgstr "レベル {Number}：このセーブではまだ未探索です。そこへ通じる出口を見つけてください。"
 
 #. Key:	Menu.PartieNameSupprimee
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1872)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1872)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1899)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1899)
 #, fuzzy
 msgctxt "BR,Menu.PartieNameSupprimee"
 msgid "Partie « {Name} » supprimée."
 msgstr "セーブ「{Name}」を削除しました。"
 
 #. Key:	Save.Error.Replace
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1991)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1991)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2018)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2018)
 #, fuzzy
 msgctxt "BR,Save.Error.Replace"
 msgid "le fichier {File}.sav n'a pas pu être remplacé (ouvert par un autre programme ?)"
 msgstr "ファイル {File}.sav を置き換えられませんでした（別のプログラムで開いていませんか？）"
 
 #. Key:	Save.Error.FutureFormat
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1995)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1995)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2022)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2022)
 #, fuzzy
 msgctxt "BR,Save.Error.FutureFormat"
 msgid "partie d'une version plus récente du jeu (format {Format}) : réécriture refusée, fichier préservé"
 msgstr "より新しいバージョンのセーブ（形式 {Format}）：上書きを拒否し、ファイルを保護しました"
 
 #. Key:	Save.Error.TempWrite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1999)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1999)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2026)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2026)
 #, fuzzy
 msgctxt "BR,Save.Error.TempWrite"
 msgid "écriture impossible de {File} (disque plein ou dossier protégé ?)"
 msgstr "{File} に書き込めません（ディスクがいっぱい、またはフォルダーが保護されていませんか？）"
 
 #. Key:	Save.Error.Notice
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2003)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2003)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2030)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2030)
 #, fuzzy
 msgctxt "BR,Save.Error.Notice"
 msgid "Échec de la sauvegarde (emplacement {Slot}, demande n° {Request}) : {Cause}. La partie continue ; nouvel essai à la prochaine sauvegarde."
 msgstr "セーブに失敗しました（スロット {Slot}、リクエスト番号 {Request}）：{Cause}。ゲームは続行します。次のセーブで再試行します。"
 
 #. Key:	Menu.DerniereSessionArreteePendantMort
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2032)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2032)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2059)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2059)
 #, fuzzy
 msgctxt "BR,Menu.DerniereSessionArreteePendantMort"
 msgid "La dernière session s'est arrêtée pendant une mort : vous repartez avec l'équipement de départ."
 msgstr "前回のセッションは死亡中に終了しました：初期装備で再スタートします。"
 
 #. Key:	Menu.CettePartieVientVersionRecente
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2046)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2046)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2073)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2073)
 #, fuzzy
 msgctxt "BR,Menu.CettePartieVientVersionRecente"
 msgid "Cette partie vient d'une version plus récente du jeu (format {LoadedVersion}) : elle reste intacte et ne peut pas être reprise ici."
 msgstr "このセーブはより新しいバージョンのゲームのものです（形式 {LoadedVersion}）：変更されず、ここでは続けられません。"
 
 #. Key:	Menu.SaveLevelNotAvailableCopy
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2062)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2062)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2089)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2089)
 #, fuzzy
 msgctxt "BR,Menu.SaveLevelNotAvailableCopy"
 msgid "Le Niveau {Level} de cette partie n'est pas encore disponible dans cette version : reprise au Niveau {Resume}. Vos niveaux, découvertes et fins sont conservés, et une copie de la partie est gardée."
 msgstr "このセーブのレベル {Level} はこのバージョンではまだ遊べません：レベル {Resume} から再開します。レベル、発見、エンディングは保持され、セーブの複製も保存されます。"
 
 #. Key:	Menu.SaveLevelNotAvailable
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2063)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2063)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2090)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2090)
 #, fuzzy
 msgctxt "BR,Menu.SaveLevelNotAvailable"
 msgid "Le Niveau {Level} de cette partie n'est pas encore disponible dans cette version : reprise au Niveau {Resume}. Vos niveaux, découvertes et fins sont conservés."
 msgstr "このセーブのレベル {Level} はこのバージョンではまだ遊べません：レベル {Resume} から再開します。レベル、発見、エンディングは保持されます。"
 
-#. Key:	Menu.ParkedSave
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2075)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2075)
+#. Key:	Menu.ParkedWaiting
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2106)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2106)
 #, fuzzy
-msgctxt "BR,Menu.ParkedSave"
-msgid "Ancienne partie : l'équipe de L. est passée par les Poolrooms, et vous non. Traversez-les : votre progression au Niveau {Level} reprendra à leur sortie."
-msgstr "古いセーブ：L.のチームはプールルームを通ったが、あなたは通っていない。そこを抜ければ、レベル{Level}での進行がその出口から再開する。"
+msgctxt "BR,Menu.ParkedWaiting"
+msgid "Votre ancienne progression au Niveau {Level} est conservée : elle reprendra quand ce niveau sera disponible."
+msgstr "レベル{Level}での以前の進行は保持されています。そのレベルが利用可能になると再開します。"
+
+#. Key:	Menu.ParkedSaveV414
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2107)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2107)
+#, fuzzy
+msgctxt "BR,Menu.ParkedSaveV414"
+msgid "Ancienne partie : la traversée des Poolrooms n'est pas enregistrée dans cette sauvegarde. Traversez-les : votre progression au Niveau {Level} reprendra ensuite, rien n'est perdu."
+msgstr "古いセーブ：このセーブにはプールルームの通過が記録されていません。そこを抜ければ、その後レベル{Level}での進行が再開します。何も失われません。"
 
 #. Key:	Menu.ParkedRestored
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2111)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2111)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2153)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2153)
 #, fuzzy
 msgctxt "BR,Menu.ParkedRestored"
 msgid "Les Poolrooms sont traversées : votre ancienne progression reprend au Niveau {Level}, là où vous l'aviez laissée."
 msgstr "プールルームを抜けた。以前の進行はレベル{Level}の、中断した場所から再開する。"
 
 #. Key:	Menu.6EmplacementsSontOccupesSupprimez
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2121)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2121)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2163)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2163)
 #, fuzzy
 msgctxt "BR,Menu.6EmplacementsSontOccupesSupprimez"
 msgid "Les 6 emplacements sont occupés : supprimez une partie (touche Suppr)."
 msgstr "6つのスロットがすべて使用中です：セーブを削除してください（Deleteキー）。"
 
 #. Key:	Menu.PartieSlot
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2132)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2132)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2174)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2174)
 #, fuzzy
 msgctxt "BR,Menu.PartieSlot"
 msgid "Partie {Slot}"
 msgstr "ゲーム {Slot}"
 
 #. Key:	Menu.ModeDeveloppeurNiveauLevelnumberVisite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2189)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2189)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2231)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2231)
 #, fuzzy
 msgctxt "BR,Menu.ModeDeveloppeurNiveauLevelnumberVisite"
 msgid "MODE DÉVELOPPEUR : Niveau {LevelNumber} visité sans l'ajouter à la partie « {SaveName} »."
 msgstr "開発者モード：レベル {LevelNumber} を訪れましたが、セーブ「{SaveName}」には追加されません。"
 
 #. Key:	Menu.NiveauLevelnumberAjouteVosNiveaux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2201)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2201)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2244)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2244)
 #, fuzzy
 msgctxt "BR,Menu.NiveauLevelnumberAjouteVosNiveaux"
 msgid "Niveau {LevelNumber} ajouté à vos niveaux explorés ({Explored} / {All}) : vous pourrez y revenir depuis le menu."
 msgstr "レベル {LevelNumber} を探索済みレベルに追加しました（{Explored} / {All}）：メニューからここに戻れます。"
 
 #. Key:	Menu.CreationPartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2315)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2315)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2385)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2385)
 #, fuzzy
 msgctxt "BR,Menu.CreationPartie"
 msgid "Création de la partie..."
 msgstr "ゲームを作成中……"
 
 #. Key:	Menu.EntrezAdresseIpHoteEx
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2342)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2342)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2416)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2416)
 #, fuzzy
 msgctxt "BR,Menu.EntrezAdresseIpHoteEx"
 msgid "Entrez l'adresse IP de l'hôte (ex. 192.168.1.20)."
 msgstr "ホストのIPアドレスを入力してください（例：192.168.1.20）。"
 
 #. Key:	Menu.ConnexionAddress
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2347)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2347)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2421)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2421)
 #, fuzzy
 msgctxt "BR,Menu.ConnexionAddress"
 msgid "Connexion à {Address}..."
 msgstr "{Address} に接続中……"
 
 #. Key:	Menu.AdresseIpHoteEx192
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2376)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2376)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2450)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2450)
 #, fuzzy
 msgctxt "BR,Menu.AdresseIpHoteEx192"
 msgid "Adresse IP de l'hôte, ex. 192.168.1.20"
 msgstr "ホストのIPアドレス（例：192.168.1.20）"
 
 #. Key:	Menu.NomPartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2434)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2434)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2508)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2508)
 #, fuzzy
 msgctxt "BR,Menu.NomPartie"
 msgid "Nom de la partie"
 msgstr "セーブ名"
 
 #. Key:	Menu.ReprisePartieSavenameNiveauTarget
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2574)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2574)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2654)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2654)
 #, fuzzy
 msgctxt "BR,Menu.ReprisePartieSavenameNiveauTarget"
 msgid "Reprise de la partie « {SaveName} » : Niveau {Target}, là où vous l'aviez laissé."
 msgstr "セーブ「{SaveName}」を再開：レベル {Target}、中断したその場所から。"
 
 #. Key:	Menu.ModeDevSalleFossesNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2629)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2629)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2709)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevSalleFossesNiveau"
 msgid "MODE DÉV : salle de fosses (Niveau {LevelNumber}, graine {Seed}). Attention au bord."
 msgstr "開発者モード：穴の部屋（レベル {LevelNumber}、シード {Seed}）。縁に注意。"
 
 #. Key:	Menu.SalleFossesNiveauHotePeut
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2634)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2634)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2714)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2714)
 #, fuzzy
 msgctxt "BR,Menu.SalleFossesNiveauHotePeut"
 msgid "Pas de salle de fosses dans ce niveau (l'hôte peut charger le Niveau 0 : BRPits)."
 msgstr "このレベルには穴の部屋がありません（ホストはレベル0を読み込めます：BRPits）。"
 
 #. Key:	Menu.ModeDevNiveau0Graine
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2643)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2643)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2723)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2723)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevNiveau0Graine"
 msgid "MODE DÉV : Niveau 0, graine de démonstration {DemoSeed}"
 msgstr "開発者モード：レベル0、デモ用シード {DemoSeed}"
 
 #. Key:	Menu.SeedHostOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2661)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2661)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2741)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2741)
 #, fuzzy
 msgctxt "BR,Menu.SeedHostOnly"
 msgid "BRSeed : réservé à l'hôte de la partie."
 msgstr "BRSeed：ゲームのホスト専用です。"
 
 #. Key:	Menu.NiveauLevelGraineNumber
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2666)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2666)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2746)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2746)
 #, fuzzy
 msgctxt "BR,Menu.NiveauLevelGraineNumber"
 msgid "Niveau {Level}, graine {Number}"
 msgstr "レベル {Level}、シード {Number}"
 
 #. Key:	Menu.ModeInvincible
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2721)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2721)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2844)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2844)
 #, fuzzy
 msgctxt "BR,Menu.ModeInvincible"
 msgid "Mode invincible : ON"
 msgstr "無敵モード：オン"
 
 #. Key:	Menu.ModeInvincibleOff
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2721)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2721)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2844)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2844)
 #, fuzzy
 msgctxt "BR,Menu.ModeInvincibleOff"
 msgid "Mode invincible : OFF"
 msgstr "無敵モード：オフ"
 
 #. Key:	Menu.SensibiliteSensitivity
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2758)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2758)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2881)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2881)
 #, fuzzy
 msgctxt "BR,Menu.SensibiliteSensitivity"
 msgid "Sensibilité : {Sensitivity}"
 msgstr "感度：{Sensitivity}"
 
 #. Key:	Menu.AxeInverse
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2765)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2765)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2888)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2888)
 #, fuzzy
 msgctxt "BR,Menu.AxeInverse"
 msgid "Axe Y inversé"
 msgstr "Y軸反転"
 
 #. Key:	Menu.AxeNormal
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2765)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2765)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2888)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2888)
 #, fuzzy
 msgctxt "BR,Menu.AxeNormal"
 msgid "Axe Y normal"
 msgstr "Y軸通常"
 
 #. Key:	Menu.RtUnavailableMac
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2902)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2902)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3026)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3026)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableMac"
 msgid "Indisponible sur macOS dans cette version ({RHI}) : Lumen logiciel est utilisé. Le ray tracing matériel Metal d'Unreal est expérimental, limité à certains Mac Apple Silicon, et n'est pas validé pour ce jeu."
 msgstr "このバージョンでは macOS で利用できません（{RHI}）：ソフトウェア Lumen を使用します。Unreal の Metal ハードウェアレイトレーシングは実験的で、一部の Apple シリコン搭載 Mac に限られ、このゲームでは検証されていません。"
 
 #. Key:	Menu.RtUnavailableLinux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2904)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2904)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3028)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3028)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableLinux"
 msgid "Indisponible sur Linux dans cette version ({RHI}) : Lumen logiciel est utilisé. Le ray tracing Vulkan d'Unreal dépend du pilote et n'est pas validé pour ce jeu."
 msgstr "このバージョンでは Linux で利用できません（{RHI}）：ソフトウェア Lumen を使用します。Unreal の Vulkan レイトレーシングはドライバーに依存し、このゲームでは検証されていません。"
 
 #. Key:	Menu.RtUnavailableWindows
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2906)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2906)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3030)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3030)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableWindows"
 msgid "Indisponible : le jeu a démarré sans ray tracing matériel ({RHI}). Il faut DirectX 12 et une carte qui le prend en charge. Lumen logiciel est utilisé ; un changement de carte ou de RHI demande un redémarrage."
 msgstr "利用できません：ゲームはハードウェアレイトレーシングなしで起動しました（{RHI}）。DirectX 12 と対応するグラフィックカードが必要です。ソフトウェア Lumen を使用します。カードや RHI の変更には再起動が必要です。"
 
 #. Key:	Menu.LanguageRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2915)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2915)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3039)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3039)
 #, fuzzy
 msgctxt "BR,Menu.LanguageRow"
 msgid "LANGUE"
 msgstr "言語"
 
 #. Key:	Menu.SensibiliteSouris
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2917)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2917)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3041)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3041)
 #, fuzzy
 msgctxt "BR,Menu.SensibiliteSouris"
 msgid "SENSIBILITÉ DE LA SOURIS"
 msgstr "マウス感度"
 
 #. Key:	Menu.InverserAxeVertical
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2919)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2919)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3043)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3043)
 #, fuzzy
 msgctxt "BR,Menu.InverserAxeVertical"
 msgid "INVERSER L'AXE VERTICAL"
 msgstr "上下反転"
 
 #. Key:	Menu.ChampVision
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2921)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2921)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3045)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3045)
 #, fuzzy
 msgctxt "BR,Menu.ChampVision"
 msgid "CHAMP DE VISION"
 msgstr "視野角"
 
 #. Key:	Menu.BalancementCamera
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2923)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2923)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3047)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3047)
 #, fuzzy
 msgctxt "BR,Menu.BalancementCamera"
 msgid "BALANCEMENT DE LA CAMÉRA"
 msgstr "カメラの揺れ（歩行）"
 
 #. Key:	Menu.TremblementsCamera
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2925)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2925)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3049)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3049)
 #, fuzzy
 msgctxt "BR,Menu.TremblementsCamera"
 msgid "TREMBLEMENTS DE LA CAMÉRA"
 msgstr "カメラシェイク"
 
 #. Key:	Menu.FlashsClignotements
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2927)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2927)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3051)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3051)
 #, fuzzy
 msgctxt "BR,Menu.FlashsClignotements"
 msgid "FLASHS ET CLIGNOTEMENTS"
 msgstr "閃光と点滅"
 
 #. Key:	Menu.FlouMouvement
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2929)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2929)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3053)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3053)
 #, fuzzy
 msgctxt "BR,Menu.FlouMouvement"
 msgid "FLOU DE MOUVEMENT"
 msgstr "モーションブラー"
 
 #. Key:	Menu.VolumeGeneral
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2931)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2931)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3055)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3055)
 #, fuzzy
 msgctxt "BR,Menu.VolumeGeneral"
 msgid "VOLUME GÉNÉRAL"
 msgstr "マスター音量"
 
 #. Key:	Menu.EffectsVolume
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2933)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2933)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3057)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3057)
 #, fuzzy
 msgctxt "BR,Menu.EffectsVolume"
 msgid "VOLUME DES EFFETS ET AMBIANCES"
 msgstr "効果音と環境音の音量"
 
 #. Key:	Menu.VoiceVolume
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2935)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2935)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3059)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3059)
 #, fuzzy
 msgctxt "BR,Menu.VoiceVolume"
 msgid "VOLUME DES VOIX"
 msgstr "ボイスの音量"
 
 #. Key:	Menu.Subtitles
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2937)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2937)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3061)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3061)
 #, fuzzy
 msgctxt "BR,Menu.Subtitles"
 msgid "SOUS-TITRES DES SONS"
 msgstr "効果音の字幕"
 
 #. Key:	Menu.ChatVocalProximite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2939)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2939)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3063)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3063)
 #, fuzzy
 msgctxt "BR,Menu.ChatVocalProximite"
 msgid "CHAT VOCAL (PROXIMITÉ)"
 msgstr "ボイスチャット（近接）"
 
 #. Key:	Menu.Luminosite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2941)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2941)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3065)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3065)
 #, fuzzy
 msgctxt "BR,Menu.Luminosite"
 msgid "LUMINOSITÉ"
 msgstr "明るさ"
 
 #. Key:	Menu.ModeAffichage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2943)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2943)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3067)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3067)
 #, fuzzy
 msgctxt "BR,Menu.ModeAffichage"
 msgid "MODE D'AFFICHAGE"
 msgstr "表示モード"
 
 #. Key:	Menu.ResolutionFenetre
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2945)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2945)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3069)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3069)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionFenetre"
 msgid "RÉSOLUTION"
 msgstr "解像度"
 
 #. Key:	Menu.CreatureReflections
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2947)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2947)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3071)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3071)
 #, fuzzy
 msgctxt "BR,Menu.CreatureReflections"
 msgid "CRÉATURES DANS LES REFLETS"
 msgstr "反射に映るクリーチャー"
 
 #. Key:	Menu.UiScale
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2949)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2949)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3073)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3073)
 #, fuzzy
 msgctxt "BR,Menu.UiScale"
 msgid "TAILLE DE L'INTERFACE"
 msgstr "インターフェースのサイズ"
 
 #. Key:	Menu.HudOpacity
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2951)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2951)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3075)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3075)
 #, fuzzy
 msgctxt "BR,Menu.HudOpacity"
 msgid "OPACITÉ DE L'INTERFACE"
 msgstr "インターフェースの不透明度"
 
 #. Key:	Menu.Crosshair
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2953)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2953)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3077)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3077)
 #, fuzzy
 msgctxt "BR,Menu.Crosshair"
 msgid "RÉTICULE"
 msgstr "照準"
 
 #. Key:	Menu.QuickBarRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2955)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2955)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3079)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3079)
 #, fuzzy
 msgctxt "BR,Menu.QuickBarRow"
 msgid "OBJETS RAPIDES"
 msgstr "クイックアイテム"
 
 #. Key:	Menu.LidarSize
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2957)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2957)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3081)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3081)
 #, fuzzy
 msgctxt "BR,Menu.LidarSize"
 msgid "SCANNER : TAILLE DES POINTS"
 msgstr "スキャナー：点の大きさ"
 
 #. Key:	Menu.LidarContrast
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2959)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2959)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3083)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3083)
 #, fuzzy
 msgctxt "BR,Menu.LidarContrast"
 msgid "SCANNER : CONTRASTE DES POINTS"
 msgstr "スキャナー：点のコントラスト"
 
 #. Key:	Menu.LidarPersistence
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2961)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2961)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3085)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3085)
 #, fuzzy
 msgctxt "BR,Menu.LidarPersistence"
 msgid "SCANNER : PERSISTANCE DES POINTS"
 msgstr "スキャナー：点の残る時間"
 
+#. Key:	Menu.LidarStaticAid
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3087)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3087)
+#, fuzzy
+msgctxt "BR,Menu.LidarStaticAid"
+msgid "SCANNER : AIDE VISUELLE DES PARASITES"
+msgstr "スキャナー：ノイズの視覚補助"
+
 #. Key:	Menu.ObjectivesRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2963)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2963)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3089)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3089)
 #, fuzzy
 msgctxt "BR,Menu.ObjectivesRow"
 msgid "OBJECTIFS À L'ÉCRAN"
 msgstr "画面上の目標"
 
 #. Key:	Menu.ResolutionRendu
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2965)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2965)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3091)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3091)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionRendu"
 msgid "RÉSOLUTION DE RENDU"
 msgstr "レンダリング解像度"
 
 #. Key:	Menu.SynchroVerticaleVSync
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2967)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2967)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3093)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3093)
 #, fuzzy
 msgctxt "BR,Menu.SynchroVerticaleVSync"
 msgid "SYNCHRO VERTICALE (V-SYNC)"
 msgstr "垂直同期（V-SYNC）"
 
 #. Key:	Menu.ImagesSecondeMax
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2969)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2969)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3095)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3095)
 #, fuzzy
 msgctxt "BR,Menu.ImagesSecondeMax"
 msgid "IMAGES PAR SECONDE MAX."
 msgstr "最大フレームレート"
 
 #. Key:	Menu.ProfilGraphique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2971)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2971)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3097)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3097)
 #, fuzzy
 msgctxt "BR,Menu.ProfilGraphique"
 msgid "PROFIL GRAPHIQUE"
 msgstr "グラフィックプロファイル"
 
 #. Key:	Menu.QualiteGraphique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2973)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2973)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3099)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3099)
 #, fuzzy
 msgctxt "BR,Menu.QualiteGraphique"
 msgid "QUALITÉ GRAPHIQUE"
 msgstr "グラフィック品質"
 
 #. Key:	Menu.RayTracingMaterielRtx
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2975)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2975)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3101)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3101)
 #, fuzzy
 msgctxt "BR,Menu.RayTracingMaterielRtx"
 msgid "RAY TRACING MATÉRIEL (RTX)"
 msgstr "ハードウェアレイトレーシング（RTX）"
 
 #. Key:	Menu.RefletsRayTracesHauteQualite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2977)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2977)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3103)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3103)
 #, fuzzy
 msgctxt "BR,Menu.RefletsRayTracesHauteQualite"
 msgid "REFLETS RAY TRACÉS HAUTE QUALITÉ"
 msgstr "高品質レイトレーシング反射"
 
 #. Key:	Menu.OmbresRayTraceesLampe
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2979)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2979)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3105)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3105)
 #, fuzzy
 msgctxt "BR,Menu.OmbresRayTraceesLampe"
 msgid "OMBRES RAY TRACÉES (LAMPE)"
 msgstr "レイトレーシングの影（ライト）"
 
 #. Key:	Menu.NeonsLumieresSurfaciques
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2981)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2981)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3107)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3107)
 #, fuzzy
 msgctxt "BR,Menu.NeonsLumieresSurfaciques"
 msgid "NÉONS EN LUMIÈRES SURFACIQUES"
 msgstr "蛍光灯を面光源にする"
 
 #. Key:	Menu.ModelesCompletsEntites
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2983)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2983)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3109)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3109)
 #, fuzzy
 msgctxt "BR,Menu.ModelesCompletsEntites"
 msgid "MODÈLES COMPLETS DES ENTITÉS"
 msgstr "エンティティの完全モデル"
 
 #. Key:	Menu.VolumetricFog
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2985)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2985)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3111)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3111)
 #, fuzzy
 msgctxt "BR,Menu.VolumetricFog"
 msgid "BROUILLARD VOLUMÉTRIQUE"
 msgstr "ボリュメトリックフォグ"
 
 #. Key:	Menu.GrainImage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2987)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2987)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3113)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3113)
 #, fuzzy
 msgctxt "BR,Menu.GrainImage"
 msgid "GRAIN DE L'IMAGE"
 msgstr "フィルムグレイン"
 
 #. Key:	Menu.EffetVhs
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2989)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2989)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3115)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3115)
 #, fuzzy
 msgctxt "BR,Menu.EffetVhs"
 msgid "EFFET VHS"
 msgstr "VHSエフェクト"
 
 #. Key:	Menu.ModeDeveloppeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2991)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2991)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3117)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3117)
 #, fuzzy
 msgctxt "BR,Menu.ModeDeveloppeur"
 msgid "MODE DÉVELOPPEUR"
 msgstr "開発者モード"
 
 #. Key:	Menu.Normaux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3015)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3015)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3141)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3141)
 #, fuzzy
 msgctxt "BR,Menu.Normaux"
 msgid "NORMAUX"
 msgstr "通常"
 
 #. Key:	Menu.Attenues
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3015)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3015)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3141)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3141)
 #, fuzzy
 msgctxt "BR,Menu.Attenues"
 msgid "ATTÉNUÉS"
 msgstr "軽減"
 
 #. Key:	Menu.WindowModeEffective
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3035)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3035)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3161)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3161)
 #, fuzzy
 msgctxt "BR,Menu.WindowModeEffective"
 msgid "{Want} → {Got}"
 msgstr "{Want} → {Got}"
 
 #. Key:	Menu.ResolutionScreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3042)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3042)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3168)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3168)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionScreen"
 msgid "{Res} (écran)"
 msgstr "{Res}（画面）"
 
 #. Key:	Menu.ReflectScreenOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3048)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3048) Source/Backrooms/Private/BRPlayerController.cpp(3058)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3174)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3174) Source/Backrooms/Private/BRPlayerController.cpp(3184)
 #, fuzzy
 msgctxt "BR,Menu.ReflectScreenOnly"
 msgid "ÉCRAN SEULEMENT"
 msgstr "画面のみ"
 
 #. Key:	Menu.ReflectFullHit
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3052)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3052)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3178)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3178)
 #, fuzzy
 msgctxt "BR,Menu.ReflectFullHit"
 msgid "COMPLETS (RAYONS)"
 msgstr "完全（レイ）"
 
 #. Key:	Menu.ReflectNotInEngine
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3056)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3056)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3182)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3182)
 #, fuzzy
 msgctxt "BR,Menu.ReflectNotInEngine"
 msgid "ÉCRAN (MOTEUR)"
 msgstr "画面（エンジン）"
 
 #. Key:	Menu.ReflectRetrace
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3058)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3058)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3184)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3184)
 #, fuzzy
 msgctxt "BR,Menu.ReflectRetrace"
 msgid "RAYONS"
 msgstr "レイ"
 
+#. Key:	Menu.StaticAidStandard
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3202)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3202)
+#, fuzzy
+msgctxt "BR,Menu.StaticAidStandard"
+msgid "STANDARD"
+msgstr "標準"
+
+#. Key:	Menu.StaticAidLarge
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3202)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3202)
+#, fuzzy
+msgctxt "BR,Menu.StaticAidLarge"
+msgid "GRANDE"
+msgstr "大"
+
+#. Key:	Menu.StaticAidEdges
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3203)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3203)
+#, fuzzy
+msgctxt "BR,Menu.StaticAidEdges"
+msgid "GRANDE + BORDS"
+msgstr "大＋画面端"
+
 #. Key:	Menu.RenderscaleX
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3080)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3080)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3212)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3212)
 #, fuzzy
 msgctxt "BR,Menu.RenderscaleX"
 msgid "{RenderScale} %  ({X}×{Y})"
 msgstr "{RenderScale}%  （{X}×{Y}）"
 
 #. Key:	Menu.Illimite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3085)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3085)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3217)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3217)
 #, fuzzy
 msgctxt "BR,Menu.Illimite"
 msgid "ILLIMITÉ"
 msgstr "無制限"
 
 #. Key:	Menu.Indisponible
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3091)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3091) Source/Backrooms/Private/BRPlayerController.cpp(3093) Source/Backrooms/Private/BRPlayerController.cpp(3095)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3223)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3223) Source/Backrooms/Private/BRPlayerController.cpp(3225) Source/Backrooms/Private/BRPlayerController.cpp(3227)
 #, fuzzy
 msgctxt "BR,Menu.Indisponible"
 msgid "INDISPONIBLE"
 msgstr "使用不可"
 
 #. Key:	Menu.LanguageHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3118)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3118)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3250)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3250)
 #, fuzzy
 msgctxt "BR,Menu.LanguageHint"
 msgid "Langue des textes, des nombres et des dates. S'applique tout de suite et reste enregistrée. En coop, chaque joueur garde la sienne. Les voix et les sons ne changent pas (pas de doublage)."
 msgstr "テキスト、数字、日付の言語。すぐに適用され、保存されます。協力プレイでは各プレイヤーが自分の言語のままです。音声や効果音は変わりません（吹き替えなし）。"
 
 #. Key:	Menu.DesactivezMouvementCameraPendantMarche
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3120)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3120)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3252)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3252)
 #, fuzzy
 msgctxt "BR,Menu.DesactivezMouvementCameraPendantMarche"
 msgid "Désactivez-le si le mouvement de la caméra pendant la marche vous incommode."
 msgstr "歩行中のカメラの動きで気分が悪くなる場合はオフにしてください。"
 
 #. Key:	Menu.SecoussesCameraQuandFrappePendant
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3122)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3122)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3254)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3254)
 #, fuzzy
 msgctxt "BR,Menu.SecoussesCameraQuandFrappePendant"
 msgid "Secousses de la caméra quand on est frappé et pendant les jumpscares. Les coups et leurs dégâts ne changent pas."
 msgstr "攻撃を受けたときやジャンプスケア中のカメラの揺れ。攻撃とそのダメージは変わりません。"
 
 #. Key:	Menu.EclairsJumpscaresImageMortNeons
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3124)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3124)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3256)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3256)
 #, fuzzy
 msgctxt "BR,Menu.EclairsJumpscaresImageMortNeons"
 msgid "Éclairs des jumpscares, image de la mort, néons qui clignotent. Atténués ou supprimés si les lumières vives qui clignotent vous gênent ; les coupures de courant restent annoncées par le son."
 msgstr "ジャンプスケアの閃光、死亡画面、点滅する蛍光灯。強い点滅が苦手な場合は軽減または除去します。停電は引き続き音で知らせます。"
 
 #. Key:	Menu.FlouMouvementsRapidesCameraDesactive
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3126)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3126)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3258)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3258)
 #, fuzzy
 msgctxt "BR,Menu.FlouMouvementsRapidesCameraDesactive"
 msgid "Flou des mouvements rapides de la caméra. Désactivé par défaut."
 msgstr "カメラをすばやく動かしたときのぼかし。デフォルトはオフ。"
 
 #. Key:	Menu.VolumeToutJeuAmbianceEntites
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3128)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3128)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3260)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3260)
 #, fuzzy
 msgctxt "BR,Menu.VolumeToutJeuAmbianceEntites"
 msgid "Volume de tout le jeu (ambiance, entités, voix des coéquipiers)."
 msgstr "ゲーム全体の音量（環境音、エンティティ、仲間の声）。"
 
 #. Key:	Menu.EffectsVolumeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3130)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3130)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3262)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3262)
 #, fuzzy
 msgctxt "BR,Menu.EffectsVolumeHint"
 msgid "Entités, mécanismes, pas, ambiances et interface, sans changer les voix. Chaque son utile a aussi un signe visible ou un sous-titre."
 msgstr "エンティティ、装置、足音、環境音、インターフェース。ボイスは変わりません。役立つ音には、目に見える合図か字幕も必ずあります。"
 
 #. Key:	Menu.VoiceVolumeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3132)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3132)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3264)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3264)
 #, fuzzy
 msgctxt "BR,Menu.VoiceVolumeHint"
 msgid "Voix des coéquipiers, sans changer les effets. Pour ne plus les entendre du tout : CHAT VOCAL. Aucune énigme ne demande le micro."
 msgstr "仲間の声。効果音は変わりません。まったく聞こえないようにするには：ボイスチャット。マイクが必要な謎解きはありません。"
 
 #. Key:	Menu.SubtitlesHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3134)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3134)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3266)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3266)
 #, fuzzy
 msgctxt "BR,Menu.SubtitlesHint"
 msgid "Écrit en bas de l'écran ce que l'on entend d'utile : entité proche et sa direction, mécanisme qui réagit, coupure de courant."
 msgstr "聞こえた役立つ音を画面下部に表示します：近くのエンティティとその方向、反応した装置、停電。"
 
 #. Key:	Menu.EntendAutresJoueursPresLeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3136)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3136)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3268)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3268)
 #, fuzzy
 msgctxt "BR,Menu.EntendAutresJoueursPresLeur"
 msgid "On entend les autres joueurs près de leur personnage, étouffés par les murs. Appuyer pour parler : touche {PushToTalk}. Voix ouverte : le micro transmet en permanence. Micro coupé : vous entendez toujours les autres."
 msgstr "ほかのプレイヤーの声はそのキャラクターの近くで聞こえ、壁でこもります。プッシュトゥトーク：{PushToTalk} キー。マイク常時オン：常に送信します。マイクミュート：ほかの人の声は引き続き聞こえます。"
 
 #. Key:	Menu.RendImageClaireSombreZones
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3138)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3138)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3270)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3270)
 #, fuzzy
 msgctxt "BR,Menu.RendImageClaireSombreZones"
 msgid "Rend l'image plus claire ou plus sombre (les zones sans lumière restent noires)."
 msgstr "画面を明るく、または暗くします（光のない場所は黒いままです）。"
 
 #. Key:	Menu.WindowModeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3142)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3142)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3274)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3274)
 #, fuzzy
 msgctxt "BR,Menu.WindowModeHint"
 msgid "Plein écran, plein écran fenêtré (sans bordures, à la taille de l'écran, Alt+Tab instantané) ou fenêtre. Chaque changement est à confirmer dans les 15 secondes, sinon l'affichage précédent revient. Sans effet dans l'éditeur."
 msgstr "フルスクリーン、ボーダーレスフルスクリーン（枠なし、画面サイズ、Alt+Tab が即座）、またはウィンドウ。変更のたびに 15 秒以内の確定が必要で、確定しないと以前の表示に戻ります。エディターでは無効です。"
 
 #. Key:	Menu.NoExclusiveFullscreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3145)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3145)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3277)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3277)
 #, fuzzy
 msgctxt "BR,Menu.NoExclusiveFullscreen"
 msgid "Sur ce système, le plein écran est une fenêtre sans bordures à la taille de l'écran : le mode réellement obtenu est indiqué après la flèche."
 msgstr "このシステムでは、フルスクリーンは画面サイズのボーダーレスウィンドウになります：実際に得られたモードは矢印の後に表示されます。"
 
 #. Key:	Menu.ResolutionHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3150)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3150)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3282)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3282)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionHint"
 msgid "Taille de la fenêtre, ou définition de l'écran en plein écran. Le plein écran fenêtré prend toujours celle de l'écran. À confirmer dans les 15 secondes. L'échelle de rendu (RÉSOLUTION DE RENDU) est un réglage à part."
 msgstr "ウィンドウのサイズ、またはフルスクリーン時の画面の解像度。ボーダーレスフルスクリーンは常に画面の解像度を使います。15 秒以内に確定してください。レンダリングスケール（レンダリング解像度）は別の設定です。"
 
 #. Key:	Menu.CreatureReflectionsHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3152)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3152)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3284)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3284)
 #, fuzzy
 msgctxt "BR,Menu.CreatureReflectionsHint"
 msgid "ÉCRAN SEULEMENT : les reflets montrent une créature seulement si elle est à l'écran ; hors champ, elle n'y apparaît pas. RAYONS : les créatures sont dans la scène ray tracée et éclairées par les rayons là où le cache de surfaces de Lumen ne les couvre pas, y compris hors champ ; plus coûteux. Demande le ray tracing matériel et une version du moteur qui le permet (sinon : ÉCRAN (MOTEUR)). Les reflets HAUTE QUALITÉ les montrent toujours."
 msgstr "画面のみ：クリーチャーは画面内にいるときだけ反射に映り、画面外では映りません。レイ：クリーチャーをレイトレーシングのシーンに含め、Lumen のサーフェスキャッシュが覆わない部分をレイで照らします（画面外も含む）。負荷が高めです。ハードウェアレイトレーシングと、それに対応したエンジンのバージョンが必要です（ない場合：画面（エンジン））。高品質の反射では常に映ります。"
 
 #. Key:	Menu.UiScaleHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3154)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3154)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3286)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3286)
 #, fuzzy
 msgctxt "BR,Menu.UiScaleHint"
 msgid "Taille des textes et des panneaux, pour tous les écrans (de 1280×720 à l'ultra large et aux écrans Retina)."
 msgstr "文字とパネルのサイズ。あらゆる画面に対応（1280×720 からウルトラワイドや Retina ディスプレイまで）。"
 
 #. Key:	Menu.HudOpacityHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3156)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3156)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3288)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3288)
 #, fuzzy
 msgctxt "BR,Menu.HudOpacityHint"
 msgid "Opacité des informations affichées pendant l'exploration (objets rapides, objectifs, réticule). Les messages importants restent lisibles."
 msgstr "探索中に表示される情報の不透明度（クイックアイテム、目標、照準）。重要なメッセージは読みやすいままです。"
 
 #. Key:	Menu.CrosshairHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3158)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3158)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3290)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3290)
 #, fuzzy
 msgctxt "BR,Menu.CrosshairHint"
 msgid "Point au centre de l'écran : toujours, seulement sur un objet utilisable, ou jamais. Les consignes d'interaction et la réanimation restent affichées."
 msgstr "画面中央の点：常に表示、使える物の上だけ表示、または非表示。操作ヒントと蘇生表示は残ります。"
 
 #. Key:	Menu.QuickBarHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3160)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3160)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3292)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3292)
 #, fuzzy
 msgctxt "BR,Menu.QuickBarHint"
 msgid "Poches 1 à 4 en bas de l'écran : brièvement après un changement (ramassage, utilisation), toujours, ou masquées. Elles restent dans l'inventaire."
 msgstr "画面下部のポケット 1〜4：変化の後（拾う、使う）に短く表示、常に表示、または非表示。インベントリには残ります。"
 
 #. Key:	Menu.LidarSizeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3162)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3162)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3294)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3294)
 #, fuzzy
 msgctxt "BR,Menu.LidarSizeHint"
 msgid "Level 6 : taille des points du scanner LiDAR. Les catégories gardent leur forme (carré : décor, triangle : danger, losange : mécanisme, croix : menace, chevron : repère de L.)."
 msgstr "Level 6：LiDAR スキャナーの点の大きさ。種類ごとの形は変わりません（四角：周囲、三角：危険、ひし形：装置、十字：脅威、山形：L.の印）。"
 
 #. Key:	Menu.LidarContrastHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3164)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3164)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3296)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3296)
 #, fuzzy
 msgctxt "BR,Menu.LidarContrastHint"
 msgid "Level 6 : éclat des points du scanner sur le noir. Ne change aucun réglage graphique."
 msgstr "Level 6：暗闇の中でのスキャナーの点の明るさ。グラフィック設定は変わりません。"
 
 #. Key:	Menu.LidarPersistenceHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3166)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3166)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3298)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3298)
 #, fuzzy
 msgctxt "BR,Menu.LidarPersistenceHint"
 msgid "Level 6 : durée pendant laquelle un relevé reste visible avant de s'éteindre."
 msgstr "Level 6：記録が消えるまで表示される時間。"
 
+#. Key:	Menu.LidarStaticAidHint
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3300)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3300)
+#, fuzzy
+msgctxt "BR,Menu.LidarStaticAidHint"
+msgid "Level 6 : repère des parasites lisible sans le son (intensité et direction). Grande : plus grand et toujours opaque. Bords : chevrons au bord de l'écran du côté des parasites. Il n'est jamais masqué."
+msgstr "Level 6：音なしでも読めるノイズ表示（強さと方向）。大：より大きく、常に不透明。画面端：ノイズのある側の画面端に山形マーク。決して隠されません。"
+
 #. Key:	Menu.ObjectivesHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3168)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3168)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3302)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3302)
 #, fuzzy
 msgctxt "BR,Menu.ObjectivesHint"
 msgid "Objectifs en haut à droite : brièvement à l'arrivée et à chaque progrès, toujours, ou masqués. Ils restent dans l'inventaire (onglet Personnage)."
 msgstr "右上の目標：到着時と進展があるたびに短く表示、常に表示、または非表示。インベントリ（キャラクタータブ）には残ります。"
 
 #. Key:	Menu.Dessous100ImageCalculeePetite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3170)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3170)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3304)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3304)
 #, fuzzy
 msgctxt "BR,Menu.Dessous100ImageCalculeePetite"
 msgid "En dessous de 100 %, l'image est calculée plus petite puis agrandie par TSR : beaucoup plus fluide, légèrement plus floue."
 msgstr "100%未満では画像を小さく計算してから TSR で拡大します：ずっと滑らかになり、少しぼやけます。"
 
 #. Key:	Menu.SupprimeDechiruresImageAjoutePeu
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3172)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3172)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3306)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3306)
 #, fuzzy
 msgctxt "BR,Menu.SupprimeDechiruresImageAjoutePeu"
 msgid "Supprime les déchirures d'image, ajoute un peu de latence."
 msgstr "ティアリングをなくしますが、遅延が少し増えます。"
 
 #. Key:	Menu.LimiterImagesSecondeReduitChaleur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3174)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3174)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3308)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3308)
 #, fuzzy
 msgctxt "BR,Menu.LimiterImagesSecondeReduitChaleur"
 msgid "Limiter les images par seconde réduit la chaleur et le bruit de la carte graphique. Sans effet dans l'éditeur."
 msgstr "フレームレートを制限すると、グラフィックカードの発熱と騒音が減ります。エディタでは効果がありません。"
 
 #. Key:	Menu.PerformanceQualiteEleveeLumenLogiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3176)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3176)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3310)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3310)
 #, fuzzy
 msgctxt "BR,Menu.PerformanceQualiteEleveeLumenLogiciel"
 msgid "PERFORMANCE : qualité Élevée, Lumen logiciel, rendu à 67 % (TSR). QUALITÉ : Épique, Lumen en ray tracing matériel (cache de surfaces), rendu à 80 %. RTX FLUIDE : ray tracing matériel, rendu à 67 % agrandi par TSR, ombres des néons jusqu'à 25 m, Hound allégé : vise 60 images/s stables avec une carte RTX. CINÉMATIQUE : reflets éclairés par les rayons, ombres ray tracées de la lampe, modèles complets, rendu à 100 %. Modifier un réglage ci-dessous passe en PERSONNALISÉ. S'applique tout de suite, aussi aux zones déjà chargées."
 msgstr "パフォーマンス：品質「高」、ソフトウェアLumen、67%レンダリング（TSR）。品質：エピック、ハードウェアレイトレーシングのLumen（サーフェスキャッシュ）、80%レンダリング。快適RTX：ハードウェアレイトレーシング、TSRで拡大する67%レンダリング、蛍光灯の影は25 mまで、軽量版Hound：RTXカードで安定した60fpsを目指します。シネマティック：レイで照らされた反射、レイトレーシングのライトの影、完全モデル、100%レンダリング。下の設定を変更するとカスタムになります。読み込み済みの区域も含め、すぐに適用されます。"
 
 #. Key:	Menu.OmbresLumenTexturesAntiCrenelage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3178)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3178)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3312)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3312)
 #, fuzzy
 msgctxt "BR,Menu.OmbresLumenTexturesAntiCrenelage"
 msgid "Ombres, Lumen, textures, anti-crénelage (scalability). S'applique tout de suite."
 msgstr "影、Lumen、テクスチャ、アンチエイリアス（スケーラビリティ）。すぐに適用されます。"
 
 #. Key:	Menu.LumenRayTracingMaterielReflets
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3181)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3181)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3315)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3315)
 #, fuzzy
 msgctxt "BR,Menu.LumenRayTracingMaterielReflets"
 msgid "Lumen en ray tracing matériel : reflets et lumière indirecte bien plus précis (carte RTX / RX 6000+). S'applique tout de suite."
 msgstr "ハードウェアレイトレーシングのLumen：反射と間接光がはるかに正確になります（RTX / RX 6000以降のカード）。すぐに適用されます。"
 
 #. Key:	Menu.RefletsEclairesRayonsEuxMemes
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3184)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3184)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3318)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3318)
 #, fuzzy
 msgctxt "BR,Menu.RefletsEclairesRayonsEuxMemes"
 msgid "Reflets éclairés par les rayons eux-mêmes (eau, flaques, carrelage, métal) au lieu du cache de surfaces de Lumen. Le plus coûteux des réglages : seul le profil CINÉMATIQUE l'active."
 msgstr "Lumenのサーフェスキャッシュではなく、レイそのもので照らされた反射（水、水たまり、タイル、金属）。最も重い設定で、シネマティックのプロファイルでのみ有効になります。"
 
 #. Key:	Menu.OmbresLampeTorcheRayTracees
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3186)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3186)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3320)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3320)
 #, fuzzy
 msgctxt "BR,Menu.OmbresLampeTorcheRayTracees"
 msgid "Ombres de la lampe torche ray tracées (contact net, pas de recalcul des ombres virtuelles à chaque mouvement de la lampe). Les plafonniers gardent les ombres virtuelles (VSM), moins chères pour des dizaines de lumières fixes."
 msgstr "懐中電灯の影をレイトレーシングにします（くっきりした接地、ライトを動かすたびに仮想シャドウを再計算しない）。天井灯は仮想シャドウ（VSM）のままで、多数の固定照明ではこちらのほうが軽量です。"
 
 #. Key:	Menu.OmbresDoucesNeonsAppliqueTout
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3188)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3188)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3322)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3322)
 #, fuzzy
 msgctxt "BR,Menu.OmbresDoucesNeonsAppliqueTout"
 msgid "Ombres douces des néons. S'applique tout de suite, zones déjà chargées comprises (quelques lumières par image)."
 msgstr "蛍光灯の柔らかい影。読み込み済みの区域も含め、すぐに適用されます（1フレームにつき数灯ずつ）。"
 
 #. Key:	Menu.HoundOrigine175000Sommets
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3190)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3190)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3324)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3324)
 #, fuzzy
 msgctxt "BR,Menu.HoundOrigine175000Sommets"
 msgid "Hound d'origine (175 000 sommets, pelage complet) au lieu du dérivé allégé. Très coûteux en ray tracing. S'applique aussi aux entités présentes."
 msgstr "軽量版ではなくオリジナルのHound（17万5000頂点、毛並みすべて）。レイトレーシングでは非常に重くなります。出現済みのエンティティにも適用されます。"
 
 #. Key:	Menu.HalosLumiereAirHumide
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3192)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3192)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3326)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3326)
 #, fuzzy
 msgctxt "BR,Menu.HalosLumiereAirHumide"
 msgid "Halos de lumière dans l'air humide."
 msgstr "湿った空気中の光のにじみ。"
 
 #. Key:	Menu.LignesBalayageLegereAberrationSalete
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3194)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3194)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3328)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3328)
 #, fuzzy
 msgctxt "BR,Menu.LignesBalayageLegereAberrationSalete"
 msgid "Lignes de balayage, légère aberration et saleté d'objectif. Désactivé : image nette."
 msgstr "走査線、わずかな色収差、レンズの汚れ。オフ：クリアな画像。"
 
 #. Key:	Menu.TousNiveauxJouablesDepuisChoix
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3196)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3196)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3330)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3330)
 #, fuzzy
 msgctxt "BR,Menu.TousNiveauxJouablesDepuisChoix"
 msgid "Tous les niveaux jouables depuis le choix des niveaux (non ajoutés à la partie). En jeu : Page préc. / suiv. niveau, Début nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares."
 msgstr "すべてのレベルをレベル選択からプレイ可能（セーブには追加されません）。ゲーム中：Page Up / Down でレベル、Home で配置再生成、End で目標、Insert で停電、F6 で自由飛行、F7 で無敵、F10 でジャンプスケア。"
 
 #. Key:	Display.EditorOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3259)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3259)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3393)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3393)
 #, fuzzy
 msgctxt "BR,Display.EditorOnly"
 msgid "Mode d'affichage : sans effet dans l'éditeur (lancez le jeu seul)."
 msgstr "表示モード：エディターでは無効です（ゲームを単独で起動してください）。"
 
 #. Key:	Display.BorderlessFollowsScreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3273)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3273)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3407)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3407)
 #, fuzzy
 msgctxt "BR,Display.BorderlessFollowsScreen"
 msgid "Le plein écran fenêtré prend la définition de l'écran. Changez le mode pour choisir une résolution."
 msgstr "ボーダーレスフルスクリーンは画面の解像度を使います。解像度を選ぶにはモードを変更してください。"
 
 #. Key:	Menu.RhinameHitXXX2
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3568)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3568)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3707)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3707)
 #, fuzzy
 msgctxt "BR,Menu.RhinameHitXXX2"
 msgid "{RHIName}  ·  {Hit}  ·  {X}x{Y} → {X2}x{Y2} {Upscaler}{DynRes}"
 msgstr "{RHIName}  ·  {Hit}  ·  {X}x{Y} → {X2}x{Y2} {Upscaler}{DynRes}"
 
 #. Key:	Menu.RtHitLighting
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3568)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3568)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3707)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3707)
 #, fuzzy
 msgctxt "BR,Menu.RtHitLighting"
 msgid "RT + HIT LIGHTING"
 msgstr "RT + HIT LIGHTING"
 
 #. Key:	Menu.LumenRt
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3568)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3568)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3707)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3707)
 #, fuzzy
 msgctxt "BR,Menu.LumenRt"
 msgid "LUMEN RT"
 msgstr "LUMEN RT"
 
 #. Key:	Menu.LumenLogiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3568)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3568)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3707)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3707)
 #, fuzzy
 msgctxt "BR,Menu.LumenLogiciel"
 msgid "LUMEN LOGICIEL"
 msgstr "ソフトウェアLUMEN"
 
 #. Key:	Menu.Dyn
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3568)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3568)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3707)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3707)
 #, fuzzy
 msgctxt "BR,Menu.Dyn"
 msgid " dyn."
 msgstr " 動的"
 
 #. Key:	Menu.ModeReelRhinameSm6Ray
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.ModeReelRhinameSm6Ray"
 msgid "Mode réel : {RHIName} {SM6}  ·  ray tracing matériel {RTOn}  ·  Lumen {LumenHW} (reflets : {Hit})  ·  ombres : {VSM}{LampRT}  ·  rendu {X}x{Y} → {X2}x{Y2} ({SP} %, {Upscaler}{DynRes})"
 msgstr "実際のモード：{RHIName} {SM6}  ·  ハードウェアレイトレーシング {RTOn}  ·  Lumen {LumenHW}（反射：{Hit}）  ·  影：{VSM}{LampRT}  ·  レンダリング {X}x{Y} → {X2}x{Y2}（{SP}%、{Upscaler}{DynRes}）"
 
 #. Key:	Menu.Actif
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.Actif"
 msgid "actif"
 msgstr "有効"
 
 #. Key:	Menu.Indisponible2
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.Indisponible2"
 msgid "indisponible"
 msgstr "使用不可"
 
 #. Key:	Menu.Materiel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.Materiel"
 msgid "matériel"
 msgstr "ハードウェア"
 
 #. Key:	Menu.Logiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.Logiciel"
 msgid "logiciel"
 msgstr "ソフトウェア"
 
 #. Key:	Menu.EclairesRayons
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.EclairesRayons"
 msgid "éclairés par les rayons"
 msgstr "レイで照明"
 
 #. Key:	Menu.CacheSurfaces
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.CacheSurfaces"
 msgid "cache de surfaces"
 msgstr "サーフェスキャッシュ"
 
 #. Key:	Menu.VirtuellesVsm
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.VirtuellesVsm"
 msgid "virtuelles (VSM)"
 msgstr "仮想（VSM）"
 
 #. Key:	Menu.CartesClassiques
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.CartesClassiques"
 msgid "cartes classiques"
 msgstr "従来のシャドウマップ"
 
 #. Key:	Menu.LampeRayTracee
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.LampeRayTracee"
 msgid ", lampe ray tracée"
 msgstr "、レイトレーシングのライト"
 
 #. Key:	Menu.ResolutionDynamique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3570)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3570)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3709)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3709)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionDynamique"
 msgid ", résolution dynamique"
@@ -9104,128 +9152,128 @@ msgid "Partie « {Name} » : créée par une version plus récente du jeu (forma
 msgstr "セーブ「{Name}」：より新しいバージョンのゲームで作成されました（形式 {Format}）。変更されず、ここでは続けられません。"
 
 #. Key:	Save.RestoredFromBackup
-#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(609)
-#: Source/Backrooms/Private/BRSave.cpp(609)
+#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(611)
+#: Source/Backrooms/Private/BRSave.cpp(611)
 #, fuzzy
 msgctxt "BR,Save.RestoredFromBackup"
 msgid "Partie « {Name} » : fichier principal illisible, reprise depuis la copie de secours."
 msgstr "セーブ「{Name}」：メインファイルが読めないため、バックアップから再開しました。"
 
 #. Key:	Save.Unreadable
-#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(626)
-#: Source/Backrooms/Private/BRSave.cpp(626)
+#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(628)
+#: Source/Backrooms/Private/BRSave.cpp(628)
 #, fuzzy
 msgctxt "BR,Save.Unreadable"
 msgid "Emplacement {Slot} : sauvegarde illisible. Le fichier est gardé à part (Saved/SaveGames/{File}.sav) et l'emplacement est libre."
 msgstr "スロット {Slot}：セーブが読めません。ファイルは別に保管され（Saved/SaveGames/{File}.sav）、スロットは空きになりました。"
 
 #. Key:	Save.PlayTimeMinutes
-#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(849)
-#: Source/Backrooms/Private/BRSave.cpp(849)
+#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(851)
+#: Source/Backrooms/Private/BRSave.cpp(851)
 #, fuzzy
 msgctxt "BR,Save.PlayTimeMinutes"
 msgid "{Minutes} min"
 msgstr "{Minutes}分"
 
 #. Key:	Save.PlayTimeHours
-#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(851)
-#: Source/Backrooms/Private/BRSave.cpp(851)
+#. SourceLocation:	Source/Backrooms/Private/BRSave.cpp(853)
+#: Source/Backrooms/Private/BRSave.cpp(853)
 #, fuzzy
 msgctxt "BR,Save.PlayTimeHours"
 msgid "{Hours} h {Minutes}"
 msgstr "{Hours}時間{Minutes}分"
 
 #. Key:	Story.Unavailable
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(184)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(184)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(180)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(180)
 #, fuzzy
 msgctxt "BR,Story.Unavailable"
 msgid "Ce niveau n'existe pas encore dans cette version."
 msgstr "このレベルはこのバージョンにはまだ存在しない。"
 
 #. Key:	Story.PoolroomsRequired
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(210)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(210)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(206)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(206)
 #, fuzzy
 msgctxt "BR,Story.PoolroomsRequired"
 msgid "L'équipe de L. est passée par les Poolrooms : la suite du chemin n'est pas encore ouverte."
 msgstr "L.のチームはプールルームを通った。この先の道はまだ開いていない。"
 
 #. Key:	Story.ReplayBeyond
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(217)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(217)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(213)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(213)
 #, fuzzy
 msgctxt "BR,Story.ReplayBeyond"
 msgid "Rejouer : ce passage mène au-delà de votre progression. Reprenez l'histoire avec CONTINUER."
 msgstr "リプレイ：この通路はあなたの進行より先へ通じている。物語は「続ける」から再開しよう。"
 
 #. Key:	Story.NotReached
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(218)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(218)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(214)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(214)
 #, fuzzy
 msgctxt "BR,Story.NotReached"
 msgid "Ce niveau n'est pas encore atteint dans l'histoire."
 msgstr "このレベルは物語でまだ到達していない。"
 
 #. Key:	Story.IntroWake
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(412)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(412)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(430)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(430)
 #, fuzzy
 msgctxt "BR,Story.IntroWake"
 msgid "[Le bourdonnement des néons. La moquette est humide sous vos mains.]"
 msgstr "[蛍光灯のうなり。カーペットが手の下で湿っている。]"
 
 #. Key:	Story.IntroAir
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(423)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(423)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(441)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(441)
 #, fuzzy
 msgctxt "BR,Story.IntroAir"
 msgid "Quelque part, un courant d'air froid passe. L'air ne devrait pas bouger ici."
 msgstr "どこかで冷たいすきま風が通り過ぎる。ここで空気が動くはずはない。"
 
 #. Key:	Story.DraftAhead
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(467)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(467)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(485)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(485)
 #, fuzzy
 msgctxt "BR,Story.DraftAhead"
 msgid "devant vous"
 msgstr "前方"
 
 #. Key:	Story.DraftBehind
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(471)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(471)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(489)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(489)
 #, fuzzy
 msgctxt "BR,Story.DraftBehind"
 msgid "derrière vous"
 msgstr "背後"
 
 #. Key:	Story.DraftRight
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(475)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(475)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(493)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(493)
 #, fuzzy
 msgctxt "BR,Story.DraftRight"
 msgid "sur votre droite"
 msgstr "右側"
 
 #. Key:	Story.DraftLeft
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(479)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(479)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(497)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(497)
 #, fuzzy
 msgctxt "BR,Story.DraftLeft"
 msgid "sur votre gauche"
 msgstr "左側"
 
 #. Key:	Story.DraftHint
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(481)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(481)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(499)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(499)
 #, fuzzy
 msgctxt "BR,Story.DraftHint"
 msgid "[Un courant d'air froid, {Dir}. Il vient d'une porte.]"
 msgstr "[冷たいすきま風、{Dir}。扉から吹いてくる。]"
 
 #. Key:	Story.DraftHintNote
-#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(483)
-#: Source/Backrooms/Private/BRStoryWorld.cpp(483)
+#. SourceLocation:	Source/Backrooms/Private/BRStoryWorld.cpp(501)
+#: Source/Backrooms/Private/BRStoryWorld.cpp(501)
 #, fuzzy
 msgctxt "BR,Story.DraftHintNote"
 msgid "Suivez l'air froid et les marques de craie de L. (un cercle barré et un L)."
@@ -9240,200 +9288,200 @@ msgid "Vous vous réveillez au point de départ. Votre équipement est resté l�
 msgstr "開始地点で目を覚ます。装備は倒れた場所に残っている。"
 
 #. Key:	World.FilmerPendantCoupure
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(862)
-#: Source/Backrooms/Private/BRWorld.cpp(862) Source/Backrooms/Private/BRWorld.cpp(1000) Source/Backrooms/Private/BRWorld.cpp(2847)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(884)
+#: Source/Backrooms/Private/BRWorld.cpp(884) Source/Backrooms/Private/BRWorld.cpp(1022) Source/Backrooms/Private/BRWorld.cpp(2871)
 #, fuzzy
 msgctxt "BR,World.FilmerPendantCoupure"
 msgid "FILMER PENDANT UNE COUPURE"
 msgstr "停電中に撮影"
 
 #. Key:	World.FilmerEntite
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(866)
-#: Source/Backrooms/Private/BRWorld.cpp(866) Source/Backrooms/Private/BRWorld.cpp(1005) Source/Backrooms/Private/BRWorld.cpp(2827) Source/Backrooms/Private/BRWorld.cpp(2856)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(888)
+#: Source/Backrooms/Private/BRWorld.cpp(888) Source/Backrooms/Private/BRWorld.cpp(1027) Source/Backrooms/Private/BRWorld.cpp(2851) Source/Backrooms/Private/BRWorld.cpp(2880)
 #, fuzzy
 msgctxt "BR,World.FilmerEntite"
 msgid "FILMER UNE ENTITÉ"
 msgstr "エンティティを撮影"
 
 #. Key:	World.NouvelleEntreeJournalNumberName
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1419)
-#: Source/Backrooms/Private/BRWorld.cpp(1419)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1441)
+#: Source/Backrooms/Private/BRWorld.cpp(1441)
 #, fuzzy
 msgctxt "BR,World.NouvelleEntreeJournalNumberName"
 msgid "Nouvelle entrée du journal : {Number} - {Name}  {Inventory}"
 msgstr "日誌に新しい項目：{Number} - {Name}  {Inventory}"
 
 #. Key:	World.ObjectifsTrouverVhsrequiredCassettesVhs
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1628)
-#: Source/Backrooms/Private/BRWorld.cpp(1628)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1652)
+#: Source/Backrooms/Private/BRWorld.cpp(1652)
 #, fuzzy
 msgctxt "BR,World.ObjectifsTrouverVhsrequiredCassettesVhs"
 msgid "OBJECTIFS : trouver {VHSRequired} cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  {Inventory}"
 msgstr "目標：VHSテープを {VHSRequired} 本見つけ、停電中に撮影して出口を安定させる。  {Inventory}"
 
 #. Key:	World.StickGaucheDeplacerClicStick
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2300)
-#: Source/Backrooms/Private/BRWorld.cpp(2300)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2324)
+#: Source/Backrooms/Private/BRWorld.cpp(2324)
 #, fuzzy
 msgctxt "BR,World.StickGaucheDeplacerClicStick"
 msgid "Stick gauche : se déplacer  ·  clic du stick : courir  ·  Y : lampe  ·  B : s'accroupir"
 msgstr "左スティック：移動  ·  スティック押し込み：走る  ·  Y：ライト  ·  B：しゃがむ"
 
 #. Key:	World.MoveforwardMoveleftMovebackwardMoveright
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2301)
-#: Source/Backrooms/Private/BRWorld.cpp(2301)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2325)
+#: Source/Backrooms/Private/BRWorld.cpp(2325)
 #, fuzzy
 msgctxt "BR,World.MoveforwardMoveleftMovebackwardMoveright"
 msgid "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight} : se déplacer  ·  {Sprint} : courir  ·  {Flashlight} : lampe  ·  {Crouch} : s'accroupir"
 msgstr "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}：移動  ·  {Sprint}：走る  ·  {Flashlight}：ライト  ·  {Crouch}：しゃがむ"
 
 #. Key:	World.BoutonVueInventaireObjectifsJournal
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2304)
-#: Source/Backrooms/Private/BRWorld.cpp(2304)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2328)
+#: Source/Backrooms/Private/BRWorld.cpp(2328)
 #, fuzzy
 msgctxt "BR,World.BoutonVueInventaireObjectifsJournal"
 msgid "Bouton Vue : inventaire, objectifs et journal  ·  X : interagir"
 msgstr "ビューボタン：インベントリ、目標、日誌  ·  X：調べる"
 
 #. Key:	World.InventoryInventaireObjectifsJournalInter
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2305)
-#: Source/Backrooms/Private/BRWorld.cpp(2305)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2329)
+#: Source/Backrooms/Private/BRWorld.cpp(2329)
 #, fuzzy
 msgctxt "BR,World.InventoryInventaireObjectifsJournalInter"
 msgid "{Inventory} : inventaire, objectifs et journal  ·  {Interact} : interagir"
 msgstr "{Inventory}：インベントリ、目標、日誌  ·  {Interact}：調べる"
 
 #. Key:	World.CamescopeSacSortezFilmerCroix
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2309)
-#: Source/Backrooms/Private/BRWorld.cpp(2309)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2333)
+#: Source/Backrooms/Private/BRWorld.cpp(2333)
 #, fuzzy
 msgctxt "BR,World.CamescopeSacSortezFilmerCroix"
 msgid "Le caméscope est dans le sac : sortez-le pour filmer. Croix haut : vision nocturne dans le noir."
 msgstr "ビデオカメラはバッグの中：撮影するには取り出そう。十字キー上：暗闇で暗視。"
 
 #. Key:	World.CamescopeSacSortezFilmerNightvision
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2310)
-#: Source/Backrooms/Private/BRWorld.cpp(2310)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2334)
+#: Source/Backrooms/Private/BRWorld.cpp(2334)
 #, fuzzy
 msgctxt "BR,World.CamescopeSacSortezFilmerNightvision"
 msgid "Le caméscope est dans le sac : sortez-le pour filmer. {NightVision} : vision nocturne dans le noir."
 msgstr "ビデオカメラはバッグの中：撮影するには取り出そう。{NightVision}：暗闇で暗視。"
 
 #. Key:	World.SortiesBourdonnentEcoutezGuide
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2311)
-#: Source/Backrooms/Private/BRWorld.cpp(2311)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2335)
+#: Source/Backrooms/Private/BRWorld.cpp(2335)
 #, fuzzy
 msgctxt "BR,World.SortiesBourdonnentEcoutezGuide"
 msgid "Les sorties bourdonnent : écoutez, le son vous guide."
 msgstr "出口はうなっている：耳を澄まそう。音が導いてくれる。"
 
 #. Key:	World.RepereCassezLigneVuePortes
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2314)
-#: Source/Backrooms/Private/BRWorld.cpp(2314)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2338)
+#: Source/Backrooms/Private/BRWorld.cpp(2338)
 #, fuzzy
 msgctxt "BR,World.RepereCassezLigneVuePortes"
 msgid "Repéré ? Cassez la ligne de vue (portes, virages). Les placards cachent ; les trous dans les murs se prennent accroupi."
 msgstr "見つかった？ 視線を切れ（ドア、曲がり角）。クローゼットに隠れられる。壁の穴にはしゃがんで入る。"
 
 #. Key:	Caption.Blackout
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2710)
-#: Source/Backrooms/Private/BRWorld.cpp(2710)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2734)
+#: Source/Backrooms/Private/BRWorld.cpp(2734)
 #, fuzzy
 msgctxt "BR,Caption.Blackout"
 msgid "[Les néons grésillent : coupure de courant]"
 msgstr "［蛍光灯がジジッと鳴る：停電］"
 
 #. Key:	World.CoupureCourant
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2721)
-#: Source/Backrooms/Private/BRWorld.cpp(2721) Source/Backrooms/Private/BRWorld.cpp(2992)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2745)
+#: Source/Backrooms/Private/BRWorld.cpp(2745) Source/Backrooms/Private/BRWorld.cpp(3016)
 #, fuzzy
 msgctxt "BR,World.CoupureCourant"
 msgid "COUPURE DE COURANT"
 msgstr "停電"
 
 #. Key:	World.FilmezPendantCoupureGardezCamescope
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2724)
-#: Source/Backrooms/Private/BRWorld.cpp(2724)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2748)
+#: Source/Backrooms/Private/BRWorld.cpp(2748)
 #, fuzzy
 msgctxt "BR,World.FilmezPendantCoupureGardezCamescope"
 msgid "Filmez pendant la coupure : gardez le caméscope sur vous et regardez autour de vous."
 msgstr "停電中に撮影しよう：ビデオカメラを身につけ、周りを見回して。"
 
 #. Key:	World.TrouverCassettesVhs
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2838)
-#: Source/Backrooms/Private/BRWorld.cpp(2838)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2862)
+#: Source/Backrooms/Private/BRWorld.cpp(2862)
 #, fuzzy
 msgctxt "BR,World.TrouverCassettesVhs"
 msgid "TROUVER LES CASSETTES VHS"
 msgstr "VHSテープを探す"
 
 #. Key:	World.StabiliserPrendreSortie
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2862)
-#: Source/Backrooms/Private/BRWorld.cpp(2862)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2886)
+#: Source/Backrooms/Private/BRWorld.cpp(2886)
 #, fuzzy
 msgctxt "BR,World.StabiliserPrendreSortie"
 msgid "STABILISER ET PRENDRE LA SORTIE"
 msgstr "出口を安定させて進む"
 
 #. Key:	World.TrouverSortie
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2862)
-#: Source/Backrooms/Private/BRWorld.cpp(2862)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2886)
+#: Source/Backrooms/Private/BRWorld.cpp(2886)
 #, fuzzy
 msgctxt "BR,World.TrouverSortie"
 msgid "TROUVER UNE SORTIE"
 msgstr "出口を探す"
 
 #. Key:	World.ExitUnstableTapes
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2890)
-#: Source/Backrooms/Private/BRWorld.cpp(2890)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2914)
+#: Source/Backrooms/Private/BRWorld.cpp(2914)
 #, fuzzy
 msgctxt "BR,World.ExitUnstableTapes"
 msgid "La sortie est instable... Cassettes VHS {Found}/{Required}"
 msgstr "出口が不安定だ……VHSテープ {Found}/{Required}"
 
 #. Key:	World.FilmerPendantCoupureBlackoutrecorded1
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2893)
-#: Source/Backrooms/Private/BRWorld.cpp(2893)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2917)
+#: Source/Backrooms/Private/BRWorld.cpp(2917)
 #, fuzzy
 msgctxt "BR,World.FilmerPendantCoupureBlackoutrecorded1"
 msgid ", filmer pendant une coupure {BlackoutRecorded}/1"
 msgstr "、停電中の撮影 {BlackoutRecorded}/1"
 
 #. Key:	World.TacheAccomplieText
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2901)
-#: Source/Backrooms/Private/BRWorld.cpp(2901)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2925)
+#: Source/Backrooms/Private/BRWorld.cpp(2925)
 #, fuzzy
 msgctxt "BR,World.TacheAccomplieText"
 msgid "TÂCHE ACCOMPLIE : {Text}"
 msgstr "タスク完了：{Text}"
 
 #. Key:	World.SortiesSontStabiliseesTrouvezPassage
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2911)
-#: Source/Backrooms/Private/BRWorld.cpp(2911)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2935)
+#: Source/Backrooms/Private/BRWorld.cpp(2935)
 #, fuzzy
 msgctxt "BR,World.SortiesSontStabiliseesTrouvezPassage"
 msgid "Les sorties se sont stabilisées. Trouvez un passage (noclip) pour quitter le Niveau."
 msgstr "出口が安定した。通路（ノークリップ）を見つけてレベルを出よう。"
 
 #. Key:	World.1CassetteVhsVhsfound
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2921)
-#: Source/Backrooms/Private/BRWorld.cpp(2921)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2945)
+#: Source/Backrooms/Private/BRWorld.cpp(2945)
 #, fuzzy
 msgctxt "BR,World.1CassetteVhsVhsfound"
 msgid "+1 Cassette VHS  ({VHSFound})"
 msgstr "+1 VHSテープ  （{VHSFound}）"
 
 #. Key:	World.TapesTaskDone
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2926)
-#: Source/Backrooms/Private/BRWorld.cpp(2926)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2950)
+#: Source/Backrooms/Private/BRWorld.cpp(2950)
 #, fuzzy
 msgctxt "BR,World.TapesTaskDone"
 msgid "CASSETTES VHS {Found}/{Required}"
 msgstr "VHSテープ {Found}/{Required}"
 
 #. Key:	World.CassetteVhsVhsfoundVhsrequired
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2930)
-#: Source/Backrooms/Private/BRWorld.cpp(2930)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2954)
+#: Source/Backrooms/Private/BRWorld.cpp(2954)
 #, fuzzy
 msgctxt "BR,World.CassetteVhsVhsfoundVhsrequired"
 msgid "Cassette VHS  {VHSFound}/{VHSRequired}"

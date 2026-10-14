@@ -72,6 +72,7 @@ void ABRLidar::LoadSettings()
 	if (Cfg.GetString(LidarSection, TEXT("PointSize"), V)) S.PointSize = FCString::Atof(*V);
 	if (Cfg.GetString(LidarSection, TEXT("Contrast"), V)) S.Contrast = FCString::Atof(*V);
 	if (Cfg.GetString(LidarSection, TEXT("Persistence"), V)) S.Persistence = FCString::Atof(*V);
+	if (Cfg.GetString(LidarSection, TEXT("StaticAid"), V)) S.StaticAid = FCString::Atoi(*V);
 	Settings() = BRLidar::Clamp(S);
 }
 
@@ -82,6 +83,7 @@ void ABRLidar::SaveSettings()
 	Cfg.SetString(LidarSection, TEXT("PointSize"), *FString::SanitizeFloat(Settings().PointSize));
 	Cfg.SetString(LidarSection, TEXT("Contrast"), *FString::SanitizeFloat(Settings().Contrast));
 	Cfg.SetString(LidarSection, TEXT("Persistence"), *FString::SanitizeFloat(Settings().Persistence));
+	Cfg.SetString(LidarSection, TEXT("StaticAid"), *FString::FromInt(Settings().StaticAid));
 	BRConfig::Save();
 }
 

@@ -88,6 +88,9 @@ namespace BRLidar
 		float Contrast = 1.f;
 		/** Persistance (secondes, 4 .. 30) */
 		float Persistence = 12.f;
+		/** v4.14 : aide visuelle des parasites (sans le son) : 0 standard, 1 grande (taille 1,5, fond opaque, opacite du HUD
+		 *  ignoree), 2 grande et reperes au bord de l'ecran. Jamais masquee : c'est une information de danger */
+		int StaticAid = 0;
 	};
 	FSettings Clamp(const FSettings& In);
 

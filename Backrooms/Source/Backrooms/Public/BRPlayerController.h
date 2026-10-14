@@ -238,6 +238,16 @@ public:
 	UFUNCTION(Exec)
 	void BRDoor();
 
+	/** v4.14 : kit Blender du Level 0 : BRLevel0Kit (etat), BRLevel0Kit 0 (murs generes, boites), BRLevel0Kit 1 (modules du
+	 *  kit) ; reconstruit les chunks de cette machine pour comparer. Outil de developpement */
+	UFUNCTION(Exec)
+	void BRLevel0Kit(int32 Mode = -1);
+
+	/** v4.14 : compteurs du scanner LiDAR (rayons, points acceptes, remplaces, expires, refuses, inscriptions, temps) ;
+	 *  BRLidarStats 1 les remet a zero */
+	UFUNCTION(Exec)
+	void BRLidarStats(int32 Reset = 0);
+
 private:
 	/** v4.7 : vrai si les commandes de test sont permises ici, sinon message et faux */
 	bool CheatGate();

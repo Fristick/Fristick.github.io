@@ -6,8 +6,8 @@ de l'interface (`BRFonts.cpp`). Pour ajouter des caracteres, relancer l'outil.
 
 | Fichier | Caracteres | Taille | SHA-256 (16) | Version source |
 |---|---|---|---|---|
-| NotoSansSC-Regular.ttf | 8255 | 2.54 Mo | `a41140b944d09e5f` | Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603 |
-| NotoSansSC-Bold.ttf | 8255 | 2.54 Mo | `e3f00f56d09c2eb9` | Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603 |
+| NotoSansSC-Regular.ttf | 8256 | 2.54 Mo | `23473cb00c934eab` | Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603 |
+| NotoSansSC-Bold.ttf | 8256 | 2.54 Mo | `a9f70b32769b9f8d` | Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603 |
 | NotoSansTC-Regular.ttf | 5950 | 1.97 Mo | `93061d297cf1afe2` | Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603 |
 | NotoSansTC-Bold.ttf | 5950 | 1.97 Mo | `978f57da047247a4` | Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603 |
 | NotoSansJP-Regular.ttf | 7184 | 2.31 Mo | `6cb3faca9cfea74b` | Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603 |

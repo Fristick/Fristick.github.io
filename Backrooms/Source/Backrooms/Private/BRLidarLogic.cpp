@@ -216,6 +216,7 @@ FSettings Clamp(const FSettings& In)
 	S.PointSize = ClampF(In.PointSize, 0.5f, 2.f);
 	S.Contrast = ClampF(In.Contrast, 0.5f, 2.f);
 	S.Persistence = ClampF(In.Persistence, 4.f, 30.f);
+	S.StaticAid = In.StaticAid < 0 ? 0 : (In.StaticAid > 2 ? 2 : In.StaticAid);
 	return S;
 }
 

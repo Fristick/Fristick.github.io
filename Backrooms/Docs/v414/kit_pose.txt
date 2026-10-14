@@ -1,0 +1,19 @@
+# Pose du kit du Level 0 v4.14 — sortie reelle
+# Commande (depuis Backrooms/) : python3 Tools/verify_level0_kit.py --seeds 200
+# Python : Python 3.11.15
+# Date : 2026-10-14T15:10:27Z
+# Premier passage (40 graines) : 5 defauts trouves (bout de mur de 30 cm dans un poteau, porte de service en bout de chunk), corriges dans BRChunk.cpp
+
+Pose du kit du Level 0 (regles de BRChunk.cpp v4.14), grille de Tools/verify_pitfalls.py
+Cotes lues dans BRLevels.cpp : cellule 350, mur 60 x 290, chunks 8, enceinte 2
+Graine 9 (scene du kit) : Doorway 416, Pillar 5, ServiceDoor_Wall 1, Wall_350 667, Wall_Aged_350 157, Wall_Corner 26, Wall_End 94, Wall_JunctionT 188, Wall_JunctionX 265, Wall_Straight 356
+  modules compares : 2213 dans la scene, 2175 poses par le jeu, 2173 identiques
+  ecart voulu : scene SM_L0_Wall_End en (-5600, 2100) lacet 270 (porte de service non comptee comme bras)
+  ecart voulu : scene SM_L0_Wall_Corner en (-5600, 2450) lacet 90 (porte de service non comptee comme bras)
+  ecart voulu : jeu   SM_L0_Wall_Straight en (-5600, 2100) lacet 90 (le mur perce est un bras du poteau)
+  ecart voulu : jeu   SM_L0_Wall_JunctionT en (-5600, 2450) lacet 90 (le mur perce est un bras du poteau)
+  ecart voulu : 38 pilier(s) de la scene caches dans un poteau, non poses par le jeu
+  import sans retournement de Y (IsKitMirrorY) : 214 poteau(x) tourne(s), memes positions
+200 graine(s) : 200 sans defaut ; en moyenne Doorway 348, Pillar 13, ServiceDoor_Wall 1, Wall_350 624, Wall_Aged_350 138, Wall_Corner 25, Wall_End 102, Wall_JunctionT 170, Wall_JunctionX 202, Wall_Straight 374
+RESULTAT : OK
+# Code de sortie : 0

@@ -98,6 +98,7 @@ namespace
 		Row_LidarSize,        // v4.13 : scanner LiDAR du Level 6 : taille des points
 		Row_LidarContrast,    // contraste des points
 		Row_LidarPersistence, // persistance des points
+		Row_LidarStaticAid,   // v4.14 : aide visuelle des parasites
 		Row_DevMode,
 		Row_Count
 	};
@@ -2788,6 +2789,49 @@ void ABRPlayerController::BRDoor()
 #endif
 }
 
+void ABRPlayerController::BRLevel0Kit(int32 Mode)
+{
+	if (!CheatGate())
+	{
+		return;
+	}
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!A)
+	{
+		return;
+	}
+	if (Mode == 0 || Mode == 1)
+	{
+		UBRAssets::SetLevel0KitWanted(Mode == 1);
+		if (ABRWorld* W = ABRWorld::Get(this))
+		{
+			if (W->Def().bKitModules)
+			{
+				W->RebuildAllChunks();
+			}
+		}
+	}
+	const FString Msg = FString::Printf(TEXT("BRLevel0Kit : %s ; %s"), *A->GetLevel0KitStatus(),
+		A->UseLevel0Kit() ? TEXT("modules du kit poses") : (UBRAssets::IsLevel0KitWanted() ? TEXT("murs generes (kit incomplet)") : TEXT("murs generes (kit ecarte)")));
+	UE_LOG(LogBackrooms, Display, TEXT("%s"), *Msg);
+	ABRHUD::Notify(this, Msg, 6.f, FLinearColor(0.6f, 0.9f, 1.f));
+}
+
+void ABRPlayerController::BRLidarStats(int32 Reset)
+{
+	if (!CheatGate())
+	{
+		return;
+	}
+	const FString Msg = TEXT("BRLidarStats : ") + ABRLidar::Stats.ToString();
+	UE_LOG(LogBackrooms, Display, TEXT("%s"), *Msg);
+	ABRHUD::Notify(this, Msg, 8.f, FLinearColor(0.6f, 0.9f, 1.f));
+	if (Reset != 0)
+	{
+		ABRLidar::ResetStats();
+	}
+}
+
 void ABRPlayerController::BRGod()
 {
 	if (!CheatGate())
@@ -2925,7 +2969,7 @@ int32 ABRPlayerController::FindSettingRow(const FString& Name)
 		{ TEXT("UiScale"), Row_UiScale }, { TEXT("HudOpacity"), Row_HudOpacity }, { TEXT("Crosshair"), Row_Crosshair }, { TEXT("QuickBar"), Row_QuickBar },
 		{ TEXT("Objectives"), Row_Objectives }, { TEXT("EffectsVolume"), Row_EffectsVolume }, { TEXT("VoiceVolume"), Row_VoiceVolume },
 		{ TEXT("Subtitles"), Row_Subtitles }, { TEXT("LidarSize"), Row_LidarSize }, { TEXT("LidarContrast"), Row_LidarContrast },
-		{ TEXT("LidarPersistence"), Row_LidarPersistence } };
+		{ TEXT("LidarPersistence"), Row_LidarPersistence }, { TEXT("LidarStaticAid"), Row_LidarStaticAid } };
 	for (const FNamedRow& R : Rows)
 	{
 		if (Name == R.Name)
@@ -2955,6 +2999,7 @@ int32 ABRPlayerController::GetSettingCategory(int32 Index) const
 	case Row_LidarSize:
 	case Row_LidarContrast:
 	case Row_LidarPersistence:
+	case Row_LidarStaticAid:
 		return 2; // INTERFACE
 	case Row_Profile:
 	case Row_Quality:
@@ -3038,6 +3083,8 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.LidarContrast", "SCANNER : CONTRASTE DES POINTS"));
 	case Row_LidarPersistence:
 		return BR_STR(NSLOCTEXT("BR", "Menu.LidarPersistence", "SCANNER : PERSISTANCE DES POINTS"));
+	case Row_LidarStaticAid:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarStaticAid", "SCANNER : AIDE VISUELLE DES PARASITES"));
 	case Row_Objectives:
 		return BR_STR(NSLOCTEXT("BR", "Menu.ObjectivesRow", "OBJECTIFS \u00c0 L'\u00c9CRAN"));
 	case Row_RenderScale:
@@ -3150,6 +3197,12 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return FString::Printf(TEXT("%d %%"), FMath::RoundToInt(ABRLidar::Settings().Contrast * 100.f));
 	case Row_LidarPersistence:
 		return FString::Printf(TEXT("%d s"), FMath::RoundToInt(ABRLidar::Settings().Persistence));
+	case Row_LidarStaticAid:
+	{
+		const FString Items[] = { BR_STR(NSLOCTEXT("BR", "Menu.StaticAidStandard", "STANDARD")), BR_STR(NSLOCTEXT("BR", "Menu.StaticAidLarge", "GRANDE")),
+			BR_STR(NSLOCTEXT("BR", "Menu.StaticAidEdges", "GRANDE + BORDS")) };
+		return Items[FMath::Clamp(ABRLidar::Settings().StaticAid, 0, 2)];
+	}
 	case Row_Objectives:
 		return ShowNames(S.ObjectivesMode);
 	case Row_RenderScale:
@@ -3243,6 +3296,8 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.LidarContrastHint", "Level 6 : \u00e9clat des points du scanner sur le noir. Ne change aucun r\u00e9glage graphique."));
 	case Row_LidarPersistence:
 		return BR_STR(NSLOCTEXT("BR", "Menu.LidarPersistenceHint", "Level 6 : dur\u00e9e pendant laquelle un relev\u00e9 reste visible avant de s'\u00e9teindre."));
+	case Row_LidarStaticAid:
+		return BR_STR(NSLOCTEXT("BR", "Menu.LidarStaticAidHint", "Level 6 : rep\u00e8re des parasites lisible sans le son (intensit\u00e9 et direction). Grande : plus grand et toujours opaque. Bords : chevrons au bord de l'\u00e9cran du c\u00f4t\u00e9 des parasites. Il n'est jamais masqu\u00e9."));
 	case Row_Objectives:
 		return BR_STR(NSLOCTEXT("BR", "Menu.ObjectivesHint", "Objectifs en haut \u00e0 droite : bri\u00e8vement \u00e0 l'arriv\u00e9e et \u00e0 chaque progr\u00e8s, toujours, ou masqu\u00e9s. Ils restent dans l'inventaire (onglet Personnage)."));
 	case Row_RenderScale:
@@ -3392,6 +3447,7 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	case Row_LidarSize:
 	case Row_LidarContrast:
 	case Row_LidarPersistence:
+	case Row_LidarStaticAid:
 	{
 		BRLidar::FSettings& L = ABRLidar::Settings();
 		if (Index == Row_LidarSize)
@@ -3402,9 +3458,13 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		{
 			L.Contrast = FMath::RoundToFloat((L.Contrast + Dir * 0.25f) * 4.f) / 4.f;
 		}
-		else
+		else if (Index == Row_LidarPersistence)
 		{
 			L.Persistence = L.Persistence + Dir * 2.f;
+		}
+		else
+		{
+			L.StaticAid = (L.StaticAid + Dir + 3) % 3;
 		}
 		ABRLidar::SaveSettings();
 		break;

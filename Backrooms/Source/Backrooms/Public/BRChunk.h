@@ -125,6 +125,8 @@ protected:
 		bool bPowered = false;   // emissif eteint pendant les coupures
 		/** v4.8 : hors des structures ray tracees (eau translucide : noire dans les reflets d'autres surfaces) */
 		bool bNoRayTracing = false;
+		/** v4.14 : garder les materiaux du maillage (modules du kit du Level 0, habilles a l'import) */
+		bool bMeshMaterials = false;
 		TArray<FTransform> Transforms;
 		/** v4.8 : instances deja creees (sous-lots) */
 		int32 Cursor = 0;
@@ -138,7 +140,15 @@ protected:
 	void AddProp(FName MeshName, const FTransform& T, bool bCollision, const FVector& FallbackSize, const FBRSurface* FallbackSurface = nullptr,
 		float CullDistance = 0.f, bool bShadow = true);
 	void AddLight(int32 X, int32 Y, const FBRLightInfo& L);
-	/** Segment de mur sur une ligne de la grille (A..B le long de la ligne, ZLo..ZHi en hauteur) */
+	/** v4.14 : le niveau pose les modules du kit Blender (FBRLevelDef::bKitModules, cotes du kit, kit complet et voulu) */
+	bool UsesKit() const;
+	/** v4.14 : un module du kit (materiaux du maillage, collisions UCX) au sol en At, tourne de Yaw ; false s'il manque */
+	bool AddKitModule(FName Name, const FVector& At, float Yaw, bool bCollision, float CullDistance = 0.f);
+	/** v4.14 : poteau du kit au sommet (VX, VY) de la grille : croix, T, angle, droit ou extremite selon les murs et les
+	 *  portes qui y arrivent, oriente en consequence ; rien si aucun mur n'y arrive */
+	void AddKitPost(int32 VX, int32 VY);
+	/** Segment de mur sur une ligne de la grille (A..B le long de la ligne, ZLo..ZHi en hauteur). v4.14 : avec le kit, un
+	 *  mur plein d'un sommet a l'autre est pose cellule par cellule (SM_L0_Wall_350 ou _Aged_350, plinthes) */
 	void AddWallSegment(bool bAlongY, float Fixed, float A, float B, float ZLo, float ZHi, bool bWithTrim, bool bWithPipes);
 	void AddDoorway(bool bAlongY, float Fixed, float Mid);
 	/** v4.13 : porte de service du Level 0 dans le mur d'enceinte : mur perce a la taille du cadre (ABRExit), linteau, et

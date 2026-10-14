@@ -104,6 +104,8 @@ namespace
 		D.PitDepth = 1400.f; D.PitKillDepth = 450.f; D.PitLipThickness = 30.f; D.PitDoorsPerSide = 1;
 		// v4.6 : chambranles autour des portes (bureaux)
 		D.bDoorCasings = true;
+		// v4.14 : modules du kit Blender (murs, passages, poteaux, piliers) s'il est importe ; repli : boites
+		D.bKitModules = true;
 		D.Notes = {
 			{ FName(TEXT("Note.L0.1")), NSLOCTEXT("BR", "Note.L0.1", "Si tu lis ceci, tu as \"noclipp\u00e9\" hors de la r\u00e9alit\u00e9. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds.") },
 			{ FName(TEXT("Note.L0.2")), NSLOCTEXT("BR", "Note.L0.2", "Le bourdonnement ne s'arr\u00eate jamais. J'ai compte plus de six cents salles. Toujours la m\u00eame moquette humide. Toujours la m\u00eame odeur.") },

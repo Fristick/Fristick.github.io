@@ -384,6 +384,10 @@ struct FBRLevelDef
 	float ArchApex = 0.f;
 	/** v4.6 : chambranles (jambages et traverse en saillie, surface Trim) autour des portes a linteau droit */
 	bool bDoorCasings = false;
+	/** v4.14 : murs, passages, poteaux et piliers poses avec les modules du kit Blender (/Game/Backrooms/Level0Kit) quand
+	 *  il est importe et complet (UBRAssets::UseLevel0Kit) ; sinon, les boites habituelles. Cotes du kit : cellule 350,
+	 *  mur 60 x 290, passage 150, pilier 45 */
+	bool bKitModules = false;
 	/** Corniche a 45 degres entre les murs et le plafond (cote en cm, 0 = aucune) */
 	float CoveSize = 0.f;
 	/** Piliers alignes en grille reguliere dans les grandes salles ouvertes */

@@ -102,6 +102,104 @@ bool ABRChunk::AddSurfaceMesh(FName MeshName, const FBRSurface& S, const FTransf
 	return true;
 }
 
+bool ABRChunk::UsesKit() const
+{
+	const ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return false;
+	}
+	const FBRLevelDef& D = W->Def();
+	// Le kit est bati aux cotes du Level 0 : un autre niveau (ou des cotes modifiees) garde ses boites
+	if (!D.bKitModules || !FMath::IsNearlyEqual(D.CellSize, 350.f) || !FMath::IsNearlyEqual(D.WallThickness, 60.f)
+		|| !FMath::IsNearlyEqual(D.WallHeight, 290.f))
+	{
+		return false;
+	}
+	UBRAssets* A = UBRAssets::Get(this);
+	return A && A->UseLevel0Kit();
+}
+
+bool ABRChunk::AddKitModule(FName Name, const FVector& At, float Yaw, bool bCollision, float CullDistance)
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	UStaticMesh* M = A ? A->KitMesh(Name) : nullptr;
+	if (!M)
+	{
+		return false;
+	}
+	FBatch& B = GetBatch(TEXT("KIT|") + Name.ToString(), M, nullptr, bCollision, true, CullDistance);
+	B.bMeshMaterials = true;
+	B.Transforms.Add(FTransform(FRotator(0.f, Yaw, 0.f), At - GetActorLocation()));
+	return true;
+}
+
+void ABRChunk::AddKitPost(int32 VX, int32 VY)
+{
+	ABRWorld* W = World.Get();
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!W || !A)
+	{
+		return;
+	}
+	// Bras du sommet, dans l'ordre des lacets d'Unreal : +X (0), +Y (90), -X (180), -Y (270). Une porte arrive aussi sur le
+	// poteau (le module de passage s'arrete a ses faces, comme le mur)
+	const bool Arm[4] = { W->EdgeN(VX, VY - 1) != EBREdge::Open, W->EdgeE(VX - 1, VY) != EBREdge::Open, W->EdgeN(VX - 1, VY - 1) != EBREdge::Open,
+		W->EdgeE(VX - 1, VY - 1) != EBREdge::Open };
+	const int32 Count = (Arm[0] ? 1 : 0) + (Arm[1] ? 1 : 0) + (Arm[2] ? 1 : 0) + (Arm[3] ? 1 : 0);
+	if (Count == 0)
+	{
+		return;
+	}
+	// Modules au lacet 0 (import qui retourne Y) : angle bras +X et -Y, T sans le bras +Y, extremite bras +X, droit +X/-X.
+	// Import sans retournement (bKitMirrorY) : angle +X et +Y, T sans le bras -Y
+	const int32 CornerFirst = A->IsKitMirrorY() ? 0 : 3;
+	const int32 TeeMissing = A->IsKitMirrorY() ? 3 : 1;
+	FName Name;
+	int32 Turn = 0;
+	if (Count == 4)
+	{
+		Name = TEXT("SM_L0_Wall_JunctionX");
+	}
+	else if (Count == 3)
+	{
+		int32 Missing = 0;
+		while (Arm[Missing])
+		{
+			++Missing;
+		}
+		Name = TEXT("SM_L0_Wall_JunctionT");
+		Turn = Missing - TeeMissing;
+	}
+	else if (Count == 2 && Arm[0] == Arm[2])
+	{
+		Name = TEXT("SM_L0_Wall_Straight");
+		Turn = Arm[0] ? 0 : 1;
+	}
+	else if (Count == 2)
+	{
+		int32 First = 0;
+		while (!(Arm[First] && Arm[(First + 1) % 4]))
+		{
+			++First;
+		}
+		Name = TEXT("SM_L0_Wall_Corner");
+		Turn = First - CornerFirst;
+	}
+	else
+	{
+		int32 Only = 0;
+		while (!Arm[Only])
+		{
+			++Only;
+		}
+		Name = TEXT("SM_L0_Wall_End");
+		Turn = Only;
+	}
+	const float S = W->Def().CellSize;
+	AddKitModule(Name, FVector(VX * S, VY * S, 0.f), BRHash::PosMod(Turn, 4) * 90.f, true);
+}
+
 void ABRChunk::AddProp(FName MeshName, const FTransform& T, bool bCollision, const FVector& FallbackSize,
 	const FBRSurface* FallbackSurface, float CullDistance, bool bShadow)
 {
@@ -555,12 +653,62 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 	const float T = D.WallThickness;
 	const float Len = B - A;
 	const float Mid = (A + B) * 0.5f;
-	const FVector Center = bAlongY ? FVector(Fixed, Mid, (ZLo + ZHi) * 0.5f) : FVector(Mid, Fixed, (ZLo + ZHi) * 0.5f);
-	const FVector Size = bAlongY ? FVector(T, Len, ZHi - ZLo) : FVector(Len, T, ZHi - ZLo);
-	AddBox(D.Wall, Center, Size);
+
+	// v4.14 : kit du Level 0 : un mur plein qui va d'un sommet de la grille a un autre (bornes sur le sommet ou a un demi-mur
+	// de lui) est pose cellule par cellule ; les poteaux des sommets sont poses a part (AddKitPost, un par sommet). Les
+	// morceaux (jambages, linteaux, pans coupes) restent des boites
+	bool bKit = false;
+	if (bWithTrim && ZLo < 1.f && ZHi >= D.WallHeight - 1.f && UsesKit())
+	{
+		const float S = D.CellSize;
+		auto OnVertex = [S, T](float V, float Toward, int32& Out)
+		{
+			for (const float Probe : { V, V + Toward * T * 0.5f })
+			{
+				const float Q = Probe / S;
+				if (FMath::Abs(Q - FMath::RoundToFloat(Q)) * S < 0.5f)
+				{
+					Out = FMath::RoundToInt(Q);
+					return true;
+				}
+			}
+			return false;
+		};
+		int32 VA = 0;
+		int32 VB = 0;
+		// VB == VA : bout de mur contenu dans le poteau du sommet (mur d'enceinte coupe par la porte de service dans la
+		// premiere ou la derniere cellule du chunk) : rien a poser, le poteau le couvre
+		if (OnVertex(A, 1.f, VA) && OnVertex(B, -1.f, VB) && VB >= VA)
+		{
+			bKit = true;
+			const int32 Line = FMath::RoundToInt(Fixed / S);
+			const float Yaw = bAlongY ? 90.f : 0.f;
+			for (int32 C = VA; C < VB; ++C)
+			{
+				// Papier peint jauni : meme tirage que la scene du kit (Tools/Blender/build_level0_kit.py)
+				const int32 CX = bAlongY ? Line - 1 : C;
+				const int32 CY = bAlongY ? C : Line - 1;
+				const bool bAged = BRHash::Rand(CX * 2 + (bAlongY ? 1 : 0), CY, 7301, W->GetSeed()) < 0.18f;
+				const float Along = (C + 0.5f) * S;
+				const FVector P = bAlongY ? FVector(Fixed, Along, 0.f) : FVector(Along, Fixed, 0.f);
+				AddKitModule(bAged ? FName(TEXT("SM_L0_Wall_Aged_350")) : FName(TEXT("SM_L0_Wall_350")), P, Yaw, true);
+				if (D.bTrim)
+				{
+					AddKitModule(TEXT("SM_L0_Baseboard_290"), P, Yaw, false, 6000.f);
+					AddKitModule(TEXT("SM_L0_Baseboard_290"), P, Yaw + 180.f, false, 6000.f);
+				}
+			}
+		}
+	}
+	if (!bKit)
+	{
+		const FVector Center = bAlongY ? FVector(Fixed, Mid, (ZLo + ZHi) * 0.5f) : FVector(Mid, Fixed, (ZLo + ZHi) * 0.5f);
+		const FVector Size = bAlongY ? FVector(T, Len, ZHi - ZLo) : FVector(Len, T, ZHi - ZLo);
+		AddBox(D.Wall, Center, Size);
+	}
 
 	// Corniche a 45 degres sous le plafond, des deux cotes (Poolrooms) : le modele a la piece vers son -Y
-	if (D.CoveSize > 0.f && ZHi >= D.WallHeight - 1.f)
+	if (!bKit && D.CoveSize > 0.f && ZHi >= D.WallHeight - 1.f)
 	{
 		for (int32 Side = -1; Side <= 1; Side += 2)
 		{
@@ -572,7 +720,7 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 		}
 	}
 
-	if (bWithTrim && D.bGarage && ZLo < 1.f && ZHi > 150.f)
+	if (!bKit && bWithTrim && D.bGarage && ZLo < 1.f && ZHi > 150.f)
 	{
 		// Parking : bande de couleur a hauteur de pare-chocs, soubassement plus clair
 		// v4.7 : peinture : plus lisse que le beton nu, le grain du beton ne transparait qu'un peu (RoughDetail)
@@ -585,7 +733,7 @@ void ABRChunk::AddWallSegment(bool bAlongY, float Fixed, float A, float B, float
 			false);
 	}
 
-	if (bWithTrim && D.bTrim && ZLo < 1.f)
+	if (!bKit && bWithTrim && D.bTrim && ZLo < 1.f)
 	{
 		// v4.5 : plinthe mouluree des deux cotes (sabot, gorge, quart-de-rond : SM_Baseboard) ; a defaut, une boite
 		bool bMolded = true;
@@ -672,6 +820,37 @@ void ABRChunk::AddDoorway(bool bAlongY, float Fixed, float Mid)
 	const float DW = FMath::Min(D.DoorWidth, S - 2.f * T - 20.f);
 	const float Start = Mid - S * 0.5f - T * 0.5f;
 	const float End = Mid + S * 0.5f + T * 0.5f;
+	if (D.bLintels && !D.bArches && FMath::IsNearlyEqual(DW, 150.f) && UsesKit())
+	{
+		// v4.14 : kit du Level 0 : passage (jambages, linteau a 2,25 m), chambranle des deux faces, plinthes des jambages ;
+		// poteaux a part (AddKitPost). Memes details (prises, grilles) que les deux pans de mur
+		const FVector P = bAlongY ? FVector(Fixed, Mid, 0.f) : FVector(Mid, Fixed, 0.f);
+		const FVector Along = bAlongY ? FVector(0.f, 1.f, 0.f) : FVector(1.f, 0.f, 0.f);
+		const float Yaw = bAlongY ? 90.f : 0.f;
+		if (AddKitModule(TEXT("SM_L0_Doorway"), P, Yaw, true))
+		{
+			if (D.bDoorCasings)
+			{
+				AddKitModule(TEXT("SM_L0_DoorCasing"), P, Yaw, false, 6000.f);
+			}
+			if (D.bTrim)
+			{
+				// Plinthe de 70 cm au milieu de chaque jambage (290 - 150) / 2, sur les deux faces
+				const float JambMid = DW * 0.5f + (S - T - DW) * 0.25f;
+				for (int32 J = -1; J <= 1; J += 2)
+				{
+					AddKitModule(TEXT("SM_L0_Baseboard_070"), P + Along * (J * JambMid), Yaw, false, 6000.f);
+					AddKitModule(TEXT("SM_L0_Baseboard_070"), P + Along * (J * JambMid), Yaw + 180.f, false, 6000.f);
+				}
+			}
+			if (D.WallDetailChance > 0.f)
+			{
+				AddWallDetails(bAlongY, Fixed, Start, Mid - DW * 0.5f);
+				AddWallDetails(bAlongY, Fixed, Mid + DW * 0.5f, End);
+			}
+			return;
+		}
+	}
 	AddWallSegment(bAlongY, Fixed, Start, Mid - DW * 0.5f, 0.f, H, true, false);
 	AddWallSegment(bAlongY, Fixed, Mid + DW * 0.5f, End, 0.f, H, true, false);
 	if (D.bLintels && D.bArches)
@@ -730,10 +909,17 @@ void ABRChunk::AddServiceDoorway(bool bAlongY, float Fixed, float Mid, float Out
 	const float H = D.WallHeight;
 	const float Hole = ABRExit::ServiceHoleWidth;
 	const float HoleH = ABRExit::ServiceHoleHeight;
-	// Mur d'enceinte perce a la taille du cadre (les jambages et la traverse sont ceux de la porte), linteau au-dessus
-	AddWallSegment(bAlongY, Fixed, Mid - S * 0.5f - T * 0.5f, Mid - Hole * 0.5f, 0.f, H, true, false);
-	AddWallSegment(bAlongY, Fixed, Mid + Hole * 0.5f, Mid + S * 0.5f + T * 0.5f, 0.f, H, true, false);
-	AddWallSegment(bAlongY, Fixed, Mid - Hole * 0.5f, Mid + Hole * 0.5f, HoleH, H, false, false);
+	// Mur d'enceinte perce a la taille du cadre (les jambages et la traverse sont ceux de la porte), linteau au-dessus.
+	// v4.14 : avec le kit, le module SM_L0_ServiceDoor_Wall (meme trou de 1,30 x 2,25 m, de poteau a poteau) : son repere
+	// est au pied de la face interieure, X local vers la piece ; les poteaux sont ceux des sommets (AddKitPost)
+	const FVector InnerFoot = bAlongY ? FVector(Fixed - OutSign * T * 0.5f, Mid, 0.f) : FVector(Mid, Fixed - OutSign * T * 0.5f, 0.f);
+	const float RoomYaw = bAlongY ? (OutSign > 0.f ? 180.f : 0.f) : (OutSign > 0.f ? -90.f : 90.f);
+	if (!(UsesKit() && AddKitModule(TEXT("SM_L0_ServiceDoor_Wall"), InnerFoot, RoomYaw, true)))
+	{
+		AddWallSegment(bAlongY, Fixed, Mid - S * 0.5f - T * 0.5f, Mid - Hole * 0.5f, 0.f, H, true, false);
+		AddWallSegment(bAlongY, Fixed, Mid + Hole * 0.5f, Mid + S * 0.5f + T * 0.5f, 0.f, H, true, false);
+		AddWallSegment(bAlongY, Fixed, Mid - Hole * 0.5f, Mid + Hole * 0.5f, HoleH, H, false, false);
+	}
 	// Sas de service derriere la porte (hors de l'enceinte, ferme) : palier, escalier de beton qui descend dans le noir,
 	// murs, plafond bas. Repere : Along le long du mur, Out vers l'exterieur depuis l'axe du mur
 	const FBRSurface Concrete(TEXT("T_Concrete"), FLinearColor(0.62f, 0.63f, 0.62f), 260.f, 0.85f, 0.35f);
@@ -1449,10 +1635,48 @@ bool ABRChunk::StepPlan()
 				}
 			}
 		}
+		// v4.14 : kit : un poteau par sommet touche par un mur. Chaque chunk pose les sommets (X + 1, Y + 1) de ses cellules
+		// (comme les piliers) ; ceux de la ligne ouest et de la ligne sud de l'enceinte n'ont pas de chunk voisin : le chunk
+		// du bord les pose
+		const bool bKitPosts = UsesKit();
+		if (bKitPosts && PlanCursor == 0 && D.BoundsChunks > 0)
+		{
+			const bool bWest = Coord.X == -D.BoundsChunks;
+			const bool bSouth = Coord.Y == -D.BoundsChunks;
+			for (int32 K = 1; K <= N; ++K)
+			{
+				if (bWest)
+				{
+					AddKitPost(X0, Y0 + K);
+				}
+				if (bSouth)
+				{
+					AddKitPost(X0 + K, Y0);
+				}
+			}
+			if (bWest && bSouth)
+			{
+				AddKitPost(X0, Y0);
+			}
+		}
 		// Piliers aux coins
 		const int32 X = X0 + PlanCursor;
 		for (int32 Y = Y0; Y < Y0 + N; ++Y)
 		{
+			if (bKitPosts)
+			{
+				AddKitPost(X + 1, Y + 1);
+			}
+			if (InWorld->HasPillar(X, Y) && bKitPosts && FMath::IsNearlyEqual(D.PillarSize, 45.f) && !D.bGarage)
+			{
+				// Pilier du kit, sauf la ou un poteau occupe deja le sommet (la boite y etait cachee dans le mur)
+				const bool bPost = InWorld->EdgeN(X + 1, Y) != EBREdge::Open || InWorld->EdgeE(X, Y + 1) != EBREdge::Open
+					|| InWorld->EdgeN(X, Y) != EBREdge::Open || InWorld->EdgeE(X, Y) != EBREdge::Open;
+				if (bPost || AddKitModule(TEXT("SM_L0_Pillar"), FVector((X + 1) * S, (Y + 1) * S, 0.f), 0.f, true))
+				{
+					continue;
+				}
+			}
 			if (InWorld->HasPillar(X, Y))
 			{
 				AddBox(D.Pillar.Texture.IsNone() ? D.Wall : D.Pillar, FVector((X + 1) * S, (Y + 1) * S, H * 0.5f),
@@ -2760,7 +2984,7 @@ int32 ABRChunk::CreateBatchStep(const FString& Key, int32 MaxInstances)
 	TArray<FTransform> Part;
 	Part.Append(B.Transforms.GetData() + First, Count);
 	ISM->AddInstances(Part, false);
-	if (!B.bHidden)
+	if (!B.bHidden && !B.bMeshMaterials)
 	{
 		if (B.Material)
 		{

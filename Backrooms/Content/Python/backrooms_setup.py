@@ -17,7 +17,13 @@ Il importe :
   RawAssets/Icons/*.png         -> /Game/Backrooms/UI         (icones de l'inventaire)
   RawAssets/Sounds/*.wav        -> /Game/Backrooms/Sounds     (boucles d'apres loops.txt)
   RawAssets/Meshes/*.fbx        -> /Game/Backrooms/Meshes     (Tools/Blender/generate_models.py + import_user_models.py)
+  RawAssets/Level0Kit/FBX/*.fbx -> /Game/Backrooms/Level0Kit/Meshes      (v4.14 : kit Blender du Level 0, dossier separe)
+  RawAssets/Level0Kit/Textures/* -> /Game/Backrooms/Level0Kit/Textures   (BaseColor sRGB, ORM lineaire, Normal DirectX)
 puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface) et la carte L_Backrooms.
+
+v4.14 : le kit du Level 0 a son propre import, rejouable seul (les originaux de RawAssets ne sont jamais modifies) :
+
+    import backrooms_setup; backrooms_setup.import_level0_kit(force=True)   # Saved/BackroomsSetup_Level0Kit.txt
 
 Remarque : si cet import echoue, le jeu se debrouille quand meme dans l'editeur (il charge les textures
 directement depuis RawAssets et construit des materiaux equivalents en C++ : voir BRMaterialBuilder.cpp).
@@ -1304,6 +1310,221 @@ def needs_setup():
                 or missing_in("Skeletal", MESH, (".fbx",)) or not exists(MAP_PATH))
 
 
+# ---------------------------------------------------------------------------
+# v4.14 : kit Blender du Level 0 (RawAssets/Level0Kit, Tools/Blender/build_level0_kit.py)
+# ---------------------------------------------------------------------------
+KIT = ROOT + "/Level0Kit"
+KIT_MESH = KIT + "/Meshes"
+KIT_TEX = KIT + "/Textures"
+KIT_MAT = KIT + "/Materials"
+# Materiaux du kit (noms des slots des FBX) : textures T_L0K_<Nom>_BaseColor / _ORM / _Normal, teinte, couleur de sommet
+# (profondeur des puits), emission ; couleur unie ; decal (masque alpha). Meme table que le README du kit (section 7)
+KIT_MATERIALS = {
+    "M_L0_Wallpaper": {"tex": "T_L0K_Wallpaper"},
+    "M_L0_Wallpaper_Aged": {"tex": "T_L0K_Wallpaper", "tint": (0.93, 0.9, 0.82)},
+    "M_L0_Carpet": {"tex": "T_L0K_Carpet"},
+    "M_L0_CeilingTile": {"tex": "T_L0K_CeilingTile"},
+    "M_L0_Concrete": {"tex": "T_L0K_Concrete"},
+    "M_L0_PitConcrete": {"tex": "T_L0K_Concrete", "vertex": 1.0},
+    "M_L0_Baseboard": {"tex": "T_L0K_Baseboard"},
+    "M_L0_FixtureMetal": {"tex": "T_L0K_FixtureMetal"},
+    "M_L0_DoorSteel": {"tex": "T_L0K_DoorSteel"},
+    "M_L0_DoorHardware": {"tex": "T_L0K_Hardware"},
+    "M_L0_LightDiffuser": {"color_tex": "T_L0K_Diffuser_Emissive", "emissive": 6.0, "rough": 0.35},
+    "M_L0_LightDiffuser_Off": {"color": (0.55, 0.56, 0.52), "rough": 0.4},
+    "M_L0_DraftGlow": {"color": (0.7, 0.85, 1.0), "emissive": 6.0, "rough": 0.5},
+    "M_L0_PitDark": {"color": (0.008, 0.008, 0.007), "rough": 1.0},
+    "M_L0_Chalk": {"color": (0.82, 0.81, 0.76), "rough": 0.98},
+    "M_L0_Archive_Glitch": {"color": (0.5, 0.4, 0.8), "emissive": 2.0, "rough": 0.5},
+    "M_L0_DecalWall": {"decal": "T_L0K_Decal_WaterStain"},
+    "M_L0_DecalCeiling": {"decal": "T_L0K_Decal_CeilingStain"},
+    "M_L0_DecalCarpet": {"decal": "T_L0K_Decal_CarpetDamp"},
+}
+# Modules que le jeu pose dans le Level 0 genere (ABRChunk, v4.14) : le kit n'est utilise que s'ils sont tous la
+# (meme liste que KitModules dans BRAssets.cpp)
+KIT_REQUIRED = ("SM_L0_Wall_350", "SM_L0_Wall_Aged_350", "SM_L0_Doorway", "SM_L0_DoorCasing", "SM_L0_Baseboard_290", "SM_L0_Baseboard_070",
+                "SM_L0_Wall_Corner", "SM_L0_Wall_JunctionT", "SM_L0_Wall_JunctionX", "SM_L0_Wall_End", "SM_L0_Wall_Straight", "SM_L0_Pillar",
+                "SM_L0_ServiceDoor_Wall")
+
+
+def kit_raw(*parts):
+    return os.path.join(project_dir(), "RawAssets", "Level0Kit", *parts)
+
+
+def _kit_files(sub, exts):
+    folder = kit_raw(sub)
+    if not os.path.isdir(folder):
+        return []
+    return [f for f in sorted(os.listdir(folder)) if os.path.splitext(f)[1].lower() in exts]
+
+
+def _kit_master(name, kind):
+    """Materiaux maitres du kit : 'pbr' (cartes BaseColor / ORM / Normal), 'color' (couleur unie), 'decal' (masque)"""
+    path = KIT_MAT + "/" + name
+    if exists(path):
+        EAL.delete_asset(path)
+    m = tools().create_asset(name, KIT_MAT, unreal.Material, unreal.MaterialFactoryNew())
+    safe_set(m, "used_with_instanced_static_meshes", True)
+    g = Graph(m)
+    P = unreal.MaterialProperty
+    uv = g.uv0()
+    if kind == "pbr":
+        base = g.mul(g.mul(g.tex("BaseColor", load_tex("T_L0K_Wallpaper_BaseColor", KIT_TEX), uv), g.vector("Tint", (1, 1, 1, 1))),
+                     g.lerp(g.const(1.0), g.node(unreal.MaterialExpressionVertexColor), g.scalar("VertexDark", 0.0)))
+        # ORM : R = occlusion, G = rugosite, B = metal (un seul echantillonnage, lineaire)
+        orm = g.tex("ORM", load_tex("T_L0K_Wallpaper_ORM", KIT_TEX), uv)[0]
+        g.output(base, P.MP_BASE_COLOR)
+        g.output((orm, "R"), P.MP_AMBIENT_OCCLUSION)
+        g.output((orm, "G"), P.MP_ROUGHNESS)
+        g.output((orm, "B"), P.MP_METALLIC)
+        g.output(g.tex("Normal", load_tex("T_L0K_Wallpaper_Normal", KIT_TEX), uv, normal=True), P.MP_NORMAL)
+        g.output(g.mul(g.tex("EmissiveTex", black_tex(), uv), g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
+    elif kind == "color":
+        col = g.vector("Color", (0.8, 0.8, 0.8, 1))
+        g.output(col, P.MP_BASE_COLOR)
+        g.output(g.scalar("Roughness", 0.8), P.MP_ROUGHNESS)
+        g.output(g.mul(col, g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
+    else:
+        safe_set(m, "blend_mode", unreal.BlendMode.BLEND_MASKED)
+        safe_set(m, "two_sided", True)
+        t = g.tex("Decal", None, uv, out="RGBA")
+        g.output((t[0], "RGB"), P.MP_BASE_COLOR)
+        g.output((t[0], "A"), P.MP_OPACITY_MASK)
+        g.output(g.scalar("Roughness", 0.9), P.MP_ROUGHNESS)
+    finish_material(m)
+    return m
+
+
+def _kit_instance(name, parent, spec):
+    path = KIT_MAT + "/" + name
+    if exists(path):
+        EAL.delete_asset(path)
+    mi = tools().create_asset(name, KIT_MAT, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+    MEL.set_material_instance_parent(mi, parent)
+    if "tex" in spec:
+        for param, suffix in (("BaseColor", "_BaseColor"), ("ORM", "_ORM"), ("Normal", "_Normal")):
+            t = load_tex(spec["tex"] + suffix, KIT_TEX)
+            if t:
+                MEL.set_material_instance_texture_parameter_value(mi, param, t)
+            else:
+                warn("Kit : texture %s%s absente pour %s" % (spec["tex"], suffix, name))
+        if "tint" in spec:
+            MEL.set_material_instance_vector_parameter_value(mi, "Tint", unreal.LinearColor(*(tuple(spec["tint"]) + (1.0,))))
+        if "vertex" in spec:
+            MEL.set_material_instance_scalar_parameter_value(mi, "VertexDark", spec["vertex"])
+    elif "decal" in spec:
+        t = load_tex(spec["decal"], KIT_TEX)
+        if t:
+            MEL.set_material_instance_texture_parameter_value(mi, "Decal", t)
+    else:
+        if "color_tex" in spec:
+            # Diffuseur : couleur et emission de la meme image (pas d'ORM ni de normale)
+            t = load_tex(spec["color_tex"], KIT_TEX)
+            MEL.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(1.0, 0.97, 0.88, 1.0))
+            if t:
+                warn("Kit : %s : diffuseur en couleur unie (image %s gardee pour une version texturee)" % (name, spec["color_tex"]))
+        else:
+            MEL.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(*(tuple(spec["color"]) + (1.0,))))
+        MEL.set_material_instance_scalar_parameter_value(mi, "Roughness", spec.get("rough", 0.8))
+        MEL.set_material_instance_scalar_parameter_value(mi, "Emissive", spec.get("emissive", 0.0))
+    EAL.save_loaded_asset(mi, only_if_is_dirty=False)
+    return mi
+
+
+def _kit_fbx_options():
+    o = fbx_options()
+    sm = o.get_editor_property("static_mesh_import_data")
+    # Collisions : les volumes UCX_<module>_NN du FBX (convexes), jamais une boite generee a la place
+    safe_set(sm, "auto_generate_collision", False)
+    safe_set(sm, "one_convex_hull_per_ucx", True)
+    # UV1 du kit : canal de lightmap sans chevauchement (lightmap_pack) ; normales et tangentes du FBX
+    safe_set(sm, "generate_lightmap_u_vs", False)
+    safe_set(sm, "normal_import_method", unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS_AND_TANGENTS)
+    safe_set(sm, "import_uniform_scale", 1.0)
+    safe_set(sm, "convert_scene", True)
+    safe_set(sm, "force_front_x_axis", False)
+    safe_set(sm, "vertex_color_import_option", unreal.VertexColorImportOption.REPLACE)
+    return o
+
+
+def import_level0_kit(force=False):
+    """Importe le kit du Level 0 dans /Game/Backrooms/Level0Kit (maillages, textures, materiaux), affecte les materiaux
+    par nom de slot, puis verifie : rapport Saved/BackroomsSetup_Level0Kit.txt. Rejouable ; ne touche ni aux originaux
+    (RawAssets) ni aux autres dossiers"""
+    report = []
+    fbx = _kit_files("FBX", (".fbx",))
+    tex = _kit_files("Textures", IMG_EXT)
+    if not fbx:
+        warn("Kit du Level 0 absent (RawAssets/Level0Kit/FBX) : rien a importer, le jeu garde ses murs generes")
+        return False
+    if not force and all(exists(KIT_MESH + "/" + os.path.splitext(f)[0]) for f in fbx):
+        log("Kit du Level 0 deja importe (%d modules) ; force=True pour le refaire" % len(fbx))
+    else:
+        tasks = [make_task(kit_raw("Textures", f), KIT_TEX, os.path.splitext(f)[0]) for f in tex]
+        tools().import_asset_tasks(tasks)
+        for f in tex:
+            name = os.path.splitext(f)[0]
+            t = load_tex(name, KIT_TEX)
+            if not t:
+                report.append("texture non importee : " + name)
+                continue
+            if name.endswith("_Normal"):
+                safe_set(t, "srgb", False)
+                safe_set(t, "compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
+                safe_set(t, "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD_NORMAL_MAP)
+            elif name.endswith("_ORM"):
+                # Donnees lineaires (occlusion, rugosite, metal) : jamais en sRGB ; compression par defaut, lue par un
+                # echantillonneur "Linear Color" (une compression Masks exigerait un echantillonneur Masks)
+                safe_set(t, "srgb", False)
+            EAL.save_asset(KIT_TEX + "/" + name, only_if_is_dirty=False)
+        masters = {k: _kit_master("M_L0K_" + k.capitalize(), k) for k in ("pbr", "color", "decal")}
+        for name, spec in KIT_MATERIALS.items():
+            kind = "pbr" if "tex" in spec else ("decal" if "decal" in spec else "color")
+            _kit_instance(name, masters[kind], spec)
+        tasks = [make_task(kit_raw("FBX", f), KIT_MESH, os.path.splitext(f)[0], _kit_fbx_options()) for f in fbx]
+        tools().import_asset_tasks(tasks)
+    # Materiaux par nom de slot (le jeu garde les materiaux du maillage pour le kit)
+    missing = []
+    for f in fbx:
+        name = os.path.splitext(f)[0]
+        sm = unreal.load_asset(KIT_MESH + "/" + name)
+        if not sm:
+            missing.append(name)
+            continue
+        slots = list(sm.get_editor_property("static_materials"))
+        for i, slot in enumerate(slots):
+            slot_name = str(slot.get_editor_property("material_slot_name"))
+            mi = unreal.load_asset(KIT_MAT + "/" + slot_name) if exists(KIT_MAT + "/" + slot_name) else None
+            if mi:
+                slot.set_editor_property("material_interface", mi)
+                slots[i] = slot
+            else:
+                report.append("%s : slot %s sans materiau du kit" % (name, slot_name))
+        sm.set_editor_property("static_materials", slots)
+        try:
+            bs = sm.get_editor_property("body_setup")
+            ucx = len(bs.get_editor_property("agg_geom").get_editor_property("convex_elems")) if bs else 0
+        except Exception:
+            ucx = -1
+        report.append("%s : %d slot(s), %d collision(s) UCX" % (name, len(slots), ucx))
+        EAL.save_loaded_asset(sm, only_if_is_dirty=False)
+    missing_required = [n for n in KIT_REQUIRED if not exists(KIT_MESH + "/" + n)]
+    status = "OK" if not missing and not missing_required else "INCOMPLET"
+    lines = ["Kit du Level 0 : %s (%d modules, %d textures)" % (status, len(fbx), len(tex))]
+    lines += ["  module non importe : " + n for n in missing]
+    lines += ["  module requis par le jeu absent : " + n for n in missing_required]
+    lines += ["  " + r for r in report]
+    try:
+        out = os.path.join(unreal.Paths.project_saved_dir(), "BackroomsSetup_Level0Kit.txt")
+        with open(out, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+    except Exception as e:
+        warn("Rapport du kit non ecrit : %s" % e)
+    for l in lines[:12]:
+        log(l)
+    return status == "OK"
+
+
 def run(force=False):
     # Changement de version : tout est reimporte (les modeles et textures ont change)
     if installed_version() < VERSION:
@@ -1346,6 +1567,8 @@ def run(force=False):
             build_materials()
         task.enter_progress_frame(1, "Carte")
         create_map()
+    # v4.14 : kit Blender du Level 0, dans son dossier (le jeu garde ses murs generes tant qu'il manque)
+    import_level0_kit(force=force)
     problems = validate(verbose=True)
     if not problems:
         write_marker()
