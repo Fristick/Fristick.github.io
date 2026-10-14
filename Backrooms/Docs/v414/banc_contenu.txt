@@ -2,7 +2,7 @@
 # Commande (depuis Backrooms/) :
 #   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Content/test_content.cpp Source/Backrooms/Private/BRContentLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp Source/Backrooms/Private/BRStoryLogic.cpp -o test_content && ./test_content 
 # Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
-# Date : 2026-10-14T15:08:06Z
+# Date : 2026-10-14T15:23:35Z
 
 Banc de contenu v4.13 (sources lues dans Source/Backrooms/Private)
   BRLevels.cpp : niveaux et sorties lus                                                            OK
@@ -83,11 +83,12 @@ D. Compatibilite reseau
   signature stable (deux calculs identiques)                                                       OK
   meme version, meme contenu : accepte                                                             OK
   autre version (v4.12 : 412) : refus version                                                      OK
-  protocole v4.13 : 413                                                                            OK
+  autre version (v4.13 : 413) : refus version                                                      OK
+  protocole v4.14 : 414                                                                            OK
   client sans controle (avant v4.12) : refus version                                               OK
   version de test contre version publiee : refus contenu                                           OK
   version publiee contre hote de developpement : refus contenu                                     OK
   signature absente : refus contenu                                                                OK
 
-RESULTAT : OK (68 verifications, 0 echec(s))
+RESULTAT : OK (69 verifications, 0 echec(s))
 # Code de sortie : 0

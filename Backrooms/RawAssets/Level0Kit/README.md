@@ -12,6 +12,15 @@ GPU) : construction, contrôles, exports FBX, relecture de chaque FBX dans Blend
 **Non fait ici : l'import dans Unreal.** Unreal Engine n'est pas disponible dans cet environnement. Les réglages
 d'import du § 7 sont **préparés, non exécutés** : aucun résultat d'import n'est annoncé.
 
+**v4.14 : import scripté et branchement en jeu (préparés, non exécutés).** `Content/Python/backrooms_setup.py`,
+`import_level0_kit(force=True)`, importe le kit dans `/Game/Backrooms/Level0Kit/{Meshes,Textures,Materials}` avec les
+réglages du § 8 (UCX, sans collision générée, normales et tangentes du FBX, UV1 fourni), crée les matériaux par nom de
+slot et écrit `Saved/BackroomsSetup_Level0Kit.txt`. Le générateur du Level 0 (`ABRChunk`) pose alors les murs,
+passages, poteaux, piliers et le mur percé de la porte de service avec ces modules, **si le kit est complet**
+(`UBRAssets::UseLevel0Kit`), sinon ses murs habituels. La pose est vérifiée hors moteur par
+`Tools/verify_level0_kit.py` (200 graines ; graine 9 comparée à `L0_Placement.json` : 2173 modules identiques). Les
+modules archivés (`FBX/Archive`) ne sont pas importés.
+
 ## 1. Contenu
 
 ```
@@ -189,7 +198,7 @@ pose dans cet export ». L'hôte tire d'abord dans la bande 0, puis 1, puis le r
 | Texture | Réglage de la texture | Entrée du matériau |
 |---|---|---|
 | `*_BaseColor` | sRGB | Base Color |
-| `*_ORM` | **sRGB décoché**, compression *Masks* | R → Ambient Occlusion, G → Roughness, B → Metallic |
+| `*_ORM` | **sRGB décoché** (compression par défaut : *Masks* exigerait un échantillonneur *Masks* dans le matériau) | R → Ambient Occlusion, G → Roughness, B → Metallic, **un seul échantillonnage** |
 | `*_Normal` | compression *Normalmap* (sRGB décoché), **Flip Green Channel décoché** (déjà DirectX) | Normal |
 | `T_L0K_Diffuser_Emissive` | sRGB | Emissive Color × intensité |
 | `T_L0K_Decal_*` | sRGB, alpha | matériau translucide ou masqué (Opacity / Opacity Mask = A) |

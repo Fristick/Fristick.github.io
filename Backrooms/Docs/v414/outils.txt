@@ -1,0 +1,113 @@
+# Outils de livraison, de langues et de protection v4.14 — sortie reelle
+# Date : 2026-10-14T15:19:59Z
+# Python : Python 3.11.15
+
+## python3 -m unittest Tools/Build/tests/test_packaging.py -v (depuis Backrooms/)
+test_lancement_json_vide (Tools.Build.tests.test_packaging.CheckPackageTests.test_lancement_json_vide) ... ok
+test_lancement_obligatoire_incomplet (Tools.Build.tests.test_packaging.CheckPackageTests.test_lancement_obligatoire_incomplet) ... ok
+test_lancement_rapport_d_un_autre_essai (Tools.Build.tests.test_packaging.CheckPackageTests.test_lancement_rapport_d_un_autre_essai) ... ok
+test_lancement_rapport_incoherent (Tools.Build.tests.test_packaging.CheckPackageTests.test_lancement_rapport_incoherent) ... ok
+test_lancement_reussi (Tools.Build.tests.test_packaging.CheckPackageTests.test_lancement_reussi) ... ok
+test_lancement_sans_rapport (Tools.Build.tests.test_packaging.CheckPackageTests.test_lancement_sans_rapport) ... ok
+test_lancement_windows_simule (Tools.Build.tests.test_packaging.CheckPackageTests.test_lancement_windows_simule) ... ok
+test_langue_absente (Tools.Build.tests.test_packaging.CheckPackageTests.test_langue_absente) ... ok
+test_mode_structure_le_dit (Tools.Build.tests.test_packaging.CheckPackageTests.test_mode_structure_le_dit) ... ok
+test_outil_absent (Tools.Build.tests.test_packaging.CheckPackageTests.test_outil_absent) ... ok
+test_outil_en_echec (Tools.Build.tests.test_packaging.CheckPackageTests.test_outil_en_echec) ... ok
+test_pak_sans_signature (Tools.Build.tests.test_packaging.CheckPackageTests.test_pak_sans_signature) ... ok
+test_paquet_complet (Tools.Build.tests.test_packaging.CheckPackageTests.test_paquet_complet) ... ok
+test_paquet_linux_complet (Tools.Build.tests.test_packaging.CheckPackageTests.test_paquet_linux_complet) ... ok
+test_paquet_linux_sans_droits (Tools.Build.tests.test_packaging.CheckPackageTests.test_paquet_linux_sans_droits) ... ok
+test_ressource_essentielle_absente (Tools.Build.tests.test_packaging.CheckPackageTests.test_ressource_essentielle_absente) ... ok
+test_systeme_inconnu (Tools.Build.tests.test_packaging.CheckPackageTests.test_systeme_inconnu) ... ok
+test_ucas_absent (Tools.Build.tests.test_packaging.CheckPackageTests.test_ucas_absent) ... ok
+test_ordre_interieur_vers_exterieur (Tools.Build.tests.test_packaging.MacSignOrderTests.test_ordre_interieur_vers_exterieur) ... ok
+test_arbre_modifie_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_arbre_modifie_refuse) ... ok
+test_aucun_envoi (Tools.Build.tests.test_packaging.SteamVdfTests.test_aucun_envoi) ... ok
+test_autre_commit_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_autre_commit_refuse) ... ok
+test_conteneur_ancien_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_conteneur_ancien_refuse) ... ok
+test_contenu_different_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_contenu_different_refuse) ... ok
+test_contenu_inconnu_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_contenu_inconnu_refuse) ... ok
+test_contenu_interne_isole (Tools.Build.tests.test_packaging.SteamVdfTests.test_contenu_interne_isole) ... ok
+test_contenu_non_verifie_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_contenu_non_verifie_refuse) ... ok
+test_dossier_vide_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_dossier_vide_refuse) ... ok
+test_ecrit_apercu_sans_publication (Tools.Build.tests.test_packaging.SteamVdfTests.test_ecrit_apercu_sans_publication) ... ok
+test_identifiants_invalides (Tools.Build.tests.test_packaging.SteamVdfTests.test_identifiants_invalides) ... ok
+test_manifeste_absent_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_manifeste_absent_refuse) ... ok
+test_paquet_absent_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_paquet_absent_refuse) ... ok
+test_residu_refuse (Tools.Build.tests.test_packaging.SteamVdfTests.test_residu_refuse) ... ok
+test_systeme_inconnu (Tools.Build.tests.test_packaging.SteamVdfTests.test_systeme_inconnu) ... ok
+test_un_paquet_invalide_parmi_deux (Tools.Build.tests.test_packaging.SteamVdfTests.test_un_paquet_invalide_parmi_deux) ... ok
+
+----------------------------------------------------------------------
+Ran 62 tests in 2.357s
+
+OK (skipped=1)
+# Code de sortie : 0
+
+## python3 Tools/Localization/loc_extract.py --check (depuis Backrooms/)
+fr       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+en       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+de       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+es-ES    1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pt-BR    1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ru       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+it       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+tr       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+es-419   1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pl       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+zh-Hans  1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+uk       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ar       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ko       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+fa       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ja       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+hu       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+cs       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pt-PT    1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+sv       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+zh-Hant  1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+id       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+Cles : Source/Backrooms/Private/BRLocKeys.inl
+Verification seule (rien n'est ecrit) : a jour
+# Code de sortie : 0
+
+## python3 Tools/Localization/loc_build.py --check (depuis Backrooms/)
+fr       traduits 1187/1187  relus 1187  manquants    0  refuses   0  a revoir   0
+en       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+de       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+es-ES    traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+pt-BR    traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ru       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+it       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+tr       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+es-419   traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+pl       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hans  traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+uk       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ar       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ko       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+fa       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ja       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+hu       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+cs       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+pt-PT    traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+sv       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hant  traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+id       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+# Code de sortie : 0
+
+## python3 Tools/Localization/loc_review.py (depuis Backrooms/)
+Relecture ciblee des traductions (gauche/droite, identifiants, nombres, unites)
+verifications : cote 189, identifiants 2730, unites 210 ; nombres en toutes lettres relus a la main : 20
+problemes : 0
+
+# Code de sortie : 0
+
+## python3 Tools/protect_assets.py check (depuis Backrooms/)
+OK
+# Code de sortie : 0
+
+## python3 -m py_compile Content/Python/backrooms_setup.py Tools/verify_level0_kit.py (depuis Backrooms/)
+syntaxe Python OK (le module unreal n'existe que dans l'editeur : import non execute)
+# Code de sortie : 0

@@ -1,7 +1,7 @@
 # Pose du kit du Level 0 v4.14 — sortie reelle
 # Commande (depuis Backrooms/) : python3 Tools/verify_level0_kit.py --seeds 200
 # Python : Python 3.11.15
-# Date : 2026-10-14T15:10:27Z
+# Date : 2026-10-14T15:24:34Z
 # Premier passage (40 graines) : 5 defauts trouves (bout de mur de 30 cm dans un poteau, porte de service en bout de chunk), corriges dans BRChunk.cpp
 
 Pose du kit du Level 0 (regles de BRChunk.cpp v4.14), grille de Tools/verify_pitfalls.py

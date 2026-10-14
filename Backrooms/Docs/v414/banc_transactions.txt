@@ -2,7 +2,7 @@
 # Commande (depuis Backrooms/) :
 #   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Transactions/test_transactions.cpp Source/Backrooms/Private/BRTxnLogic.cpp -o test_transactions && ./test_transactions 
 # Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
-# Date : 2026-10-14T15:08:20Z
+# Date : 2026-10-14T15:23:51Z
 
 # Banc des transactions v4.12 (BRTxnLogic.cpp)
 

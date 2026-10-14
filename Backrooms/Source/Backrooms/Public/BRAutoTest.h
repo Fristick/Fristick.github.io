@@ -30,6 +30,10 @@
 // mission accomplie au retour, CONTINUER et exploration apres la fin), migration des parties du format 4 (copie d'origine,
 // traversee des Poolrooms organisee ou prouvee, session du Level 0). Inclus dans -BRAutoTest ; -BRNetTest y ajoute la
 // porte ouverte par l'hote pour le groupe (etat recu par le client, rassemblement, un seul depart).
+// v4.14 : -BRAutoTestV414 : REJOUER et mode developpeur sans ecriture de la partie (fichier relu), migration [0, 1, 37, 4]
+// sans traversee imaginaire, scanner (rechargement 6 -> 6, arret du focus, debit a 30/60/144/240 images/s, HUD
+// contextuel), kit du Level 0 (etat, passages, murs, captures avec et sans). Inclus dans -BRAutoTest ; -BRNetTest y
+// ajoute la porte du client comparee a celle de l'hote.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -175,6 +179,10 @@ private:
 	/** v4.13 : Level 6 sans lumiere (BRAutoTestV413Lidar.cpp) : solo et reseau */
 	void AddV413LidarSteps();
 	void AddNetV413LidarSteps(bool bClient);
+	/** v4.14 : REJOUER isole, migration ambigue, scanner (rechargement, arret, cadences, HUD), kit du Level 0
+	 *  (BRAutoTestV414.cpp) ; reseau : porte du client */
+	void AddV414Steps();
+	void AddNetV414Steps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
 	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */
@@ -267,6 +275,9 @@ private:
 	TArray<TWeakObjectPtr<ABREntity>> TestSpawned;
 	/** Compteurs avant une etape (ramassages, soins, retours) */
 	int32 TestCountA = 0;
+	/** v4.14 : identite d'un chargement du scanner, instant de debut d'une mesure (temps de l'etape) */
+	uint64 TestKey = 0;
+	float TestT0 = 0.f;
 	int32 TestCountB = 0;
 	int32 TestCountC = 0;
 	uint64 TestPickup = 0;

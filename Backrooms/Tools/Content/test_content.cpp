@@ -462,7 +462,8 @@ int main(int Argc, char** Argv)
 	Line("signature stable (deux calculs identiques)", SP == Signature(EChannel::Public));
 	Line("meme version, meme contenu : accepte", CheckJoin(NetVersion, true, SP, EChannel::Public) == EJoin::Ok);
 	Line("autre version (v4.12 : 412) : refus version", CheckJoin(412, true, SP, EChannel::Public) == EJoin::Version);
-	Line("protocole v4.13 : 413", NetVersion == 413);
+	Line("autre version (v4.13 : 413) : refus version", CheckJoin(413, true, SP, EChannel::Public) == EJoin::Version);
+	Line("protocole v4.14 : 414", NetVersion == 414);
 	Line("client sans controle (avant v4.12) : refus version", CheckJoin(-1, false, 0, EChannel::Public) == EJoin::Version);
 	Line("version de test contre version publiee : refus contenu", CheckJoin(NetVersion, true, SI, EChannel::Public) == EJoin::Content);
 	Line("version publiee contre hote de developpement : refus contenu", CheckJoin(NetVersion, true, SP, EChannel::All) == EJoin::Content);

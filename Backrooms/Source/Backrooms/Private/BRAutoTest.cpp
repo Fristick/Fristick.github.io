@@ -175,6 +175,17 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Session longue de %.0f min : %d etapes. Rapport : %s"), SoakMinutes, Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV414")))
+	{
+		AddV414Steps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.14 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV413")))
 	{
 		AddV413Steps();
@@ -431,6 +442,7 @@ void ABRAutoTest::BuildPlan(const TArray<int32>& Levels)
 	AddV411Steps(); // v4.11
 	AddV412Steps(); // v4.12
 	AddV413Steps(); // v4.13
+	AddV414Steps(); // v4.14
 
 	// Galerie : toutes les entites dans le bureau eclaire du Niveau 4
 	AddLoad(4, 8.f, TEXT("Galerie des entites"));
@@ -791,6 +803,7 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetV413Steps(bClient);
 	// v4.13 : Level 6 : meme aile et meme etat chez chacun, points du scanner locaux
 	AddNetV413LidarSteps(bClient);
+	AddNetV414Steps(bClient); // v4.14
 	// Le client part le premier ; l'hote attend un peu avant de fermer la partie
 	Add(TEXT("Fin"), bClient ? 6.f : 12.f, []()
 	{

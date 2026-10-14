@@ -2,7 +2,7 @@
 # Commande (depuis Backrooms/) :
 #   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Departure/test_departure.cpp Source/Backrooms/Private/BRGatherLogic.cpp -o test_departure && ./test_departure 
 # Compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
-# Date : 2026-10-14T15:08:19Z
+# Date : 2026-10-14T15:23:50Z
 
 # Banc du depart de groupe v4.12 (BRGatherLogic.cpp)
 

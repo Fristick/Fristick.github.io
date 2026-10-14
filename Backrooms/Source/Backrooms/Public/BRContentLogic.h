@@ -51,8 +51,9 @@ namespace BRContent
 	constexpr int LaunchLot = 1;
 	/** Destination speciale : fin du contenu disponible (positive, distincte de BRMission::EndingTarget = 999) */
 	constexpr int ChapterEndTarget = 998;
-	/** Version du protocole reseau (une partie ne melange pas deux versions) */
-	constexpr int NetVersion = 413;
+	/** Version du protocole reseau (une partie ne melange pas deux versions). v4.14 : 414 (visee du scanner validee par
+	 *  l'hote, ServerLidarAim) */
+	constexpr int NetVersion = 414;
 
 	bool IsKnown(int Level);
 	EStage StageOf(int Level);

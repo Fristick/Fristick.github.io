@@ -7,7 +7,40 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.13** (Level 0 sans énigme, progression stable, histoire de l'équipe de L., kit Blender du Level 0 ; suite : porte tirée à chaque partie, Level 6 sans lumière au scanner LiDAR) :
+**Version 4.14** (parties protégées, scanner LiDAR fiable à toute cadence, kit Blender du Level 0 importé et branché) :
+
+- **Où lire** :
+  - constats sur la base : [`Docs/AUDIT_v4.14.md`](Docs/AUDIT_v4.14.md) ;
+  - corrections, vérifications, commandes, résultats et limites : [`Docs/RAPPORT_v4.14.md`](Docs/RAPPORT_v4.14.md) ;
+  - ce qui change pour le joueur : [`Docs/GAMEPLAY_v4.14.md`](Docs/GAMEPLAY_v4.14.md) ;
+  - journaux réels : [`Docs/v414/`](Docs/v414/).
+
+> **Rien de compilé ni de lancé dans Unreal pour la v4.14** : ni moteur ni GPU dans le conteneur de travail.
+>
+> **Préparé, non exécuté** : la compilation Editor et Shipping, l'import du kit dans Unreal, les tests du jeu
+> (`-BRAutoTestV414`, `-BRNetTest`), les captures, le profilage sur la machine signalée, les paquets.
+>
+> **Exécuté** : huit bancs hors moteur sur le code du jeu (dont l'histoire, 71 vérifications, et le scanner, 18 228), la
+> pose du kit rejouée sur 200 graines et comparée à la scène du kit, les outils de langues, de livraison et de
+> protection, un contrôle syntaxique du code.
+
+- **REJOUER n'écrit plus la partie** : équipement, santé, morts, session, niveau, campagne, histoire et temps de jeu
+  restent ceux de la campagne ; seul le journal se complète. Le mode développeur n'écrit rien. Mort en REJOUER : le
+  niveau rejoué recommence.
+- **Anciennes parties** : la traversée des Poolrooms n'est créditée que sur **preuve** (sinon : reprise aux Poolrooms,
+  progression garée) ; la progression garée reste dans la sauvegarde jusqu'à sa reprise réussie, même si son niveau
+  n'est pas encore publié.
+- **Scanner LiDAR** : 1110 rayons/s à 30 comme à 240 images/s ; réserve par type de point où le plus ancien est
+  remplacé (plus aucun refus, un danger jamais chassé par le décor) ; expiration exacte même après une longue image ;
+  plaques et cages dessinées une fois par passage ; scanner remis à zéro à chaque chargement ; scan, son et sprint
+  arrêtés par l'inventaire, la pause, une touche changée ou la fenêtre qui perd le focus ; recul des Smilers vers un
+  point fixe, maintien sur un même Smiler vérifié par l'hôte. HUD contextuel et réglage de l'aide visuelle des parasites.
+- **Kit Blender du Level 0** : import explicite (`backrooms_setup.import_level0_kit`) dans `/Game/Backrooms/Level0Kit` ;
+  murs, passages, poteaux, piliers et mur de la porte de service posés par le générateur avec les modules du kit
+  s'il est complet, sinon les murs habituels (raison au journal). Le Level 0 reste généré, sa porte reste tirée.
+- Protocole réseau 414, version du projet 4.14.
+
+**Nouveautés de la version 4.13** (Level 0 sans énigme, progression stable, histoire de l'équipe de L., kit Blender du Level 0 ; suite : porte tirée à chaque partie, Level 6 sans lumière au scanner LiDAR) :
 
 - **Où lire** :
   - constats sur la base : [`Docs/AUDIT_v4.13.md`](Docs/AUDIT_v4.13.md) ;
@@ -1116,7 +1149,7 @@ Backrooms/
 ├── RawAssets/                   Ressources sources (déjà générées)
 │   ├── Textures/ (+ normal maps *_N)  Icons/  Sounds/  Meshes/ (FBX)  Skeletal/ (FBX à squelette)  Previews/
 │   ├── protected_assets.json    v4.5 : empreintes des fichiers tirés des modèles fournis (Tools/protect_assets.py)
-│   ├── Level0Kit/               v4.13 : kit modulaire du Level 0 (BR_Level0.blend, FBX, textures, placement, rendus)
+│   ├── Level0Kit/               v4.13 : kit modulaire du Level 0 (BR_Level0.blend, FBX, textures, placement, rendus) ; v4.14 : importe et pose en jeu
 ├── Tools/
 │   ├── Blender/generate_models.py    ★ Modélisation procédurale (décor, objets, formes de secours) + icônes (Blender)
 │   ├── Blender/preview_entities.py   Rendu d'aperçu des entités assemblées
@@ -1176,11 +1209,16 @@ python Tools/Blender/build_hound_lite.py -- --preview Docs/v46/blender_hound_ori
 python Tools/verify_pitfalls.py --doors 1-500                       # porte de service du Level 0 (500 graines)
 python Tools/Blender/build_level0_kit.py --seed 9 --render          # kit du Level 0 -> RawAssets/Level0Kit
 python Tools/generate_story_sounds.py                               # S_Draft, S_ServiceDoor
+# v4.14
+python Tools/verify_level0_kit.py --seeds 200                       # pose du kit dans le Level 0 genere (hors moteur)
 ```
 Les fichiers tirés des modèles fournis sont **protégés** : un script relancé ne les remplace pas (« PROTEGE, non
 remplacé »). Pour les régénérer volontairement, ajoutez `--force` : l'ancienne version est d'abord copiée dans
 `RawAssets/_Backup/<date>/`. Ensuite, `python Tools/protect_assets.py update` enregistre les nouvelles empreintes.
 Ensuite, dans Unreal : `import backrooms_setup; backrooms_setup.run(force=True)`.
+v4.14 : le kit du Level 0 s'importe aussi seul, dans son dossier (`/Game/Backrooms/Level0Kit`) :
+`import backrooms_setup; backrooms_setup.import_level0_kit(force=True)` ; rapport dans
+`Saved/BackroomsSetup_Level0Kit.txt`. Le jeu ne pose les modules que si le kit est complet (`BRLevel0Kit` en console).
 
 ![Modèles](Docs/apercu_modeles.jpg)
 ![Textures](Docs/apercu_textures.jpg)
@@ -1512,6 +1550,20 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Mechanisms/test_mechanisms.cpp \
       Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_mechanisms && ./test_mechanisms
   ```
+- **`-BRAutoTestV414`** (v4.14, avec `-BRAutoTest`) lance seules les vérifications v4.14 ; elles sont aussi dans
+  `-BRAutoTest`. **Préparé, non exécuté.** Sauvegardes du test : `BR_AutoTestV414_*` ; la partie active est rétablie.
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV414 -BRAutoTestStrict
+  ```
+  - **REJOUER** : partie de campagne de test ; consommation, ramassage, blessure, écritures, pause, mort, réveil dans le
+    niveau rejoué, fermeture : le **fichier relu** est identique ; même chose en mode développeur ;
+  - **migration** `[0, 1, 37, 4]` (vrai fichier du format 4) : pas de crédit, Niveau 4 garé, session garée conservée ;
+  - **scanner** : rechargement `6 → 6` (autre graine), focus arrêté par l'inventaire et la pause, débit à 30, 60, 144 et
+    240 images/s plafonnées, HUD contextuel ;
+  - **kit du Level 0** (graine 9) : état du kit, modules dans les chunks, portes franchissables par la capsule, murs
+    bloquants, captures `v414_kit_graine9_avec` / `_sans`.
+
+  **`-BRNetTest`, v4.14** : porte du Level 0 du client comparée à celle de l'hôte.
 - **`-BRAutoTestV413`** (v4.13, avec `-BRAutoTest`) lance seules les vérifications v4.13 ; elles sont aussi dans
   `-BRAutoTest`. **Préparé, non exécuté.** La partie active et le mode du joueur sont rétablis à la fin (sauvegardes du
   test : `BR_AutoTestV413_*`) :
