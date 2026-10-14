@@ -91,20 +91,26 @@ namespace BRLidar
 	};
 	FSettings Clamp(const FSettings& In);
 
-	/** Impulsion large : rayons, angle du cone (degres, horizontal x vertical), recharge (s), rayons traces par image */
+	/** Impulsion large : rayons, angle du cone (degres, horizontal x vertical), recharge (s) */
 	constexpr int PulseRays = 1400;
 	constexpr float PulseHalfYaw = 50.f;
 	constexpr float PulseHalfPitch = 32.f;
 	constexpr float PulseCooldown = 1.6f;
-	constexpr int PulseRaysPerFrame = 220;
-	/** Scan focalise : demi-angle (degres), rayons par image pendant l'appui */
+	/** v4.14 : une impulsion trace ses rayons en PulseSeconds, quelle que soit la cadence d'images, sans depasser
+	 *  PulseMaxPerFrame rayons dans une image (une image lente etale l'impulsion au lieu de la concentrer) */
+	constexpr float PulseSeconds = 0.2f;
+	constexpr int PulseMaxPerFrame = 260;
+	/** Scan focalise : demi-angle (degres). v4.14 : rayons par seconde (la cadence de la v4.13 a 30 images/s), plafond par
+	 *  image ; un rayon sur FocusCenterEvery suit l'axe de la vue */
 	constexpr float FocusHalfAngle = 7.f;
-	constexpr int FocusRaysPerFrame = 36;
+	constexpr float FocusRaysPerSecond = 1110.f;
+	constexpr int FocusMaxPerFrame = 48;
+	constexpr int FocusCenterEvery = 37;
 	/** Portee (cm) */
 	constexpr float Range = 2600.f;
-	/** Points au plus (tous les groupes), par categorie au plus */
+	/** Points au plus (toutes categories : somme des CategoryCapacity) */
 	constexpr int MaxPoints = 24000;
-	/** Groupes d'age (anneau) : les points d'un groupe s'estompent ensemble, le plus ancien est vide puis reutilise */
+	/** Groupes d'age par categorie (anneau) : les points d'un groupe s'estompent ensemble */
 	constexpr int AgeBuckets = 8;
 
 	/** Direction du rayon I (0 .. N-1) d'une impulsion, dans le repere de la vue (X devant, Y droite, Z haut) :
@@ -114,25 +120,168 @@ namespace BRLidar
 	/** Direction du rayon I d'un scan focalise (disque uniforme dans le cone) */
 	void FocusDir(int I, uint32_t Frame, float& OutX, float& OutY, float& OutZ);
 
-	/** Anneau de points par groupes d'age : ou ranger un nouveau point, quel groupe vider */
-	struct FRing
+	// --------------------------------------------------------------- v4.14 : reserve de points, budgets, inscriptions
+	/** Capacite reservee a une categorie (somme = MaxPoints) : le decor ne peut pas consommer la reserve des dangers, des
+	 *  menaces, des mecanismes, des reperes et des inscriptions */
+	int CategoryCapacity(int Cat);
+
+	/** Reserve de points : un anneau de AgeBuckets groupes par categorie, sur une horloge absolue.
+	 *   - Le groupe courant recoit les points pendant BucketSeconds() = Persistence / (AgeBuckets - 1), ou jusqu'a sa part
+	 *     de la capacite (CategoryCapacity / AgeBuckets) ; le groupe suivant prend alors le relais. Le groupe reutilise est
+	 *     le plus ancien : ses points sont remplaces (Replaced), jamais un nouveau point refuse tant qu'un ajout tient dans
+	 *     un groupe. La memoire et le travail restent bornes.
+	 *   - Un groupe expire quand son point le plus recent a Persistence secondes : TOUS les groupes expires sont vides a
+	 *     chaque Advance, quelle que soit la duree ecoulee (longue image, suspension, persistance changee). L'age d'un
+	 *     groupe n'est jamais raccourci. */
+	struct FPointStore
 	{
-		/** Duree de vie d'un groupe : Persistence / AgeBuckets */
-		float BucketSeconds = 1.5f;
-		int Capacity = MaxPoints;
-		int Current = 0;
-		float CurrentAge = 0.f;
-		int Count[AgeBuckets] = {};
-		/** Avance le temps ; true si le groupe courant change (l'ancien plus vieux groupe, retourne dans OutCleared, est
-		 *  vide et devient le groupe courant) */
-		bool Advance(float Dt, int& OutCleared);
-		/** Reserve N points dans le groupe courant ; retourne le nombre accepte (capacite bornee par groupe) */
-		int Reserve(int N);
+		double Now = 0.0;
+		float Persistence = 12.f;
+		int Current[NumCategories] = {};
+		int Count[NumCategories][AgeBuckets] = {};
+		double Start[NumCategories][AgeBuckets] = {};
+		double Last[NumCategories][AgeBuckets] = {};
+		/** Changements de groupe de la categorie (un chevron par repere et par groupe) */
+		int Serial[NumCategories] = {};
+		/** Mesures : points demandes, acceptes, remplaces (groupe le plus ancien reutilise), expires, refuses */
+		long long Requested = 0;
+		long long Accepted = 0;
+		long long Replaced = 0;
+		long long Expired = 0;
+		long long Rejected = 0;
+
+		void Reset();
+		float BucketSeconds() const;
+		/** Avance l'horloge, vide tous les groupes expires, change de groupe courant si sa duree est ecoulee.
+		 *  OutCleared[Cat] : masque des groupes vides (a vider aussi au rendu) */
+		void Advance(float Dt, uint8_t OutCleared[NumCategories]);
+		/** Ajoute N points a la categorie ; renvoie le nombre accepte (N, sauf si N depasse la part d'un groupe) et le groupe
+		 *  qui les recoit ; OutCleared : groupes vides pour faire place */
+		int Insert(int Cat, int N, int& OutBucket, uint8_t& OutCleared);
 		int Total() const;
-		/** Age (s) du groupe B (0 pour le courant) et son attenuation (1 neuf .. 0 eteint) */
-		float AgeOf(int B) const;
-		float FadeOf(int B, float Persistence) const;
+		int Total(int Cat) const;
+		/** Attenuation du groupe (1 neuf .. 0 expire), d'apres l'age de son point le plus recent */
+		float FadeOf(int Cat, int B) const;
 	};
+
+	/** Budget par seconde, independant des images par seconde, avec un plafond par image ; une image lente ne rattrape pas
+	 *  au-dela du plafond (pas d'arriere accumule) */
+	struct FRateBudget
+	{
+		float Rate = 0.f;
+		int MaxPerFrame = 0;
+		float Carry = 0.f;
+		int Take(float Dt);
+		void Reset() { Carry = 0.f; }
+	};
+
+	/** Inscriptions relevees au scan focalise : plaque d'une porte (silhouette reduite + code 7 x 7) ou silhouette d'une
+	 *  cage sous tension. Chaque inscription est dessinee au plus une fois par cible et par periode utile
+	 *  (GlyphRefreshSeconds), progressivement, sous un budget de points commun a toutes les cibles : de nombreux rayons
+	 *  sur la meme plaque ne la repetent pas */
+	constexpr int PlateFigurePoints = 64;
+	constexpr int CageFigurePoints = 175;
+	constexpr float GlyphPointsPerSecond = 900.f;
+	constexpr int GlyphMaxPerFrame = 120;
+	constexpr int MaxGlyphTargets = 16;
+	/** Symboles des codes (BRMission::NumSymbols, meme ordre que BRMissionText::Symbol) en grilles 7 x 7 */
+	constexpr int NumSymbols = 6;
+	bool SymbolCell(int Symbol, int Row, int Col);
+	int SymbolCellCount(int Symbol);
+	/** Points d'une plaque : silhouette puis cases du code (indices 0 .. PlateGlyphPoints - 1) */
+	int PlateGlyphPoints(int Symbol);
+	/** Point K de la plaque : true si c'est une case du code (OutRow, OutCol), false si c'est le point OutFigure de la
+	 *  silhouette (parmi FigurePoints points de figure) */
+	bool PlateGlyphPoint(int Symbol, int K, int FigurePoints, int& OutFigure, int& OutRow, int& OutCol);
+	/** Point K (0 .. CageFigurePoints - 1) d'une silhouette de cage : indice parmi FigurePoints */
+	int CageGlyphFigure(int K, int FigurePoints);
+	/** Une inscription completee est redessinee apres cette duree (avant de s'eteindre), si la cible est encore scannee */
+	float GlyphRefreshSeconds(float Persistence);
+
+	struct FGlyphEmit
+	{
+		int Target = -1;
+		int First = 0;
+		int Count = 0;
+	};
+	struct FGlyphPlanner
+	{
+		struct FTarget
+		{
+			int Id = -1;
+			int Total = 0;
+			int Cursor = 0;
+			double DoneAt = -1e30;
+			double TouchedAt = -1e30;
+			bool bTouched = false;
+		};
+		FTarget Targets[MaxGlyphTargets];
+		FRateBudget Budget{ GlyphPointsPerSecond, GlyphMaxPerFrame, 0.f };
+		/** Mesures : demandes de cibles (un rayon = une demande), cibles distinctes par image (apres deduplication) */
+		long long Touches = 0;
+		long long DistinctTouches = 0;
+
+		void Reset();
+		/** La cible a ete touchee par un rayon focalise dans cette image (dedupliquee) */
+		void Touch(int Id, int Total, double Now, float Persistence);
+		/** Repartit le budget de l'image entre les cibles touchees ; renvoie le nombre d'entrees. OutCompleted : cibles dont
+		 *  l'inscription vient d'etre completee (une fois par passe) */
+		int Plan(float Dt, double Now, FGlyphEmit* Out, int MaxOut, int* OutCompleted, int& NumCompleted);
+	};
+
+	// ------------------------------------------------------------------- v4.14 : image du scanner (jeu et banc)
+	struct FHit
+	{
+		/** Mecanisme a inscriptions touche (porte, cage sous tension) : identifiant, nombre de points ; -1 aucun */
+		int GlyphTarget = -1;
+		int GlyphTotal = 0;
+	};
+	/** Ce que le jeu (ABRLidar) ou le banc fournit : tracer un rayon et poser ses points en attente, poser des points
+	 *  d'inscription, compter les points en attente de l'image */
+	class IScanHost
+	{
+	public:
+		virtual ~IScanHost() {}
+		/** Rayon dans le repere de visee (X devant) ; bPulse : repere fige au tir ; bCenter : axe de la vue */
+		virtual FHit TraceRay(bool bPulse, bool bCenter, float X, float Y, float Z) = 0;
+		/** Pose les points [First, First + Count) de l'inscription de la cible ; renvoie le nombre pose */
+		virtual int EmitGlyphs(int Target, int First, int Count) = 0;
+		virtual int PendingPoints(int Cat) const = 0;
+	};
+	struct FFrameResult
+	{
+		int PulseRays = 0;
+		int FocusRays = 0;
+		int GlyphPoints = 0;
+		int Requested[NumCategories] = {};
+		int Accepted[NumCategories] = {};
+		int Bucket[NumCategories] = {};
+		uint8_t Cleared[NumCategories] = {};
+		int Completed[MaxGlyphTargets] = {};
+		int NumCompleted = 0;
+	};
+	struct FScanState
+	{
+		FPointStore Store;
+		FRateBudget PulseBudget{ PulseRays / PulseSeconds, PulseMaxPerFrame, 0.f };
+		FRateBudget FocusBudget{ FocusRaysPerSecond, FocusMaxPerFrame, 0.f };
+		FGlyphPlanner Glyphs;
+		/** Impulsion en cours : prochain rayon (-1 aucune) */
+		int PulseNext = -1;
+		float PulsePhase = 0.f;
+		float Cooldown = 0.f;
+		uint32_t Frame = 0;
+		/** Rayons focalises traces depuis le debut (choix du rayon d'axe) */
+		uint32_t FocusCount = 0;
+
+		void Reset();
+		/** Impulsion ; false pendant la recharge */
+		bool StartPulse(float Phase);
+	};
+	/** Une image : horloge et expiration, rayons d'impulsion et de focus du budget, inscriptions dedupliquees, insertion
+	 *  bornee des points en attente. Le jeu applique ensuite Out.Cleared puis ajoute Out.Accepted points par categorie dans
+	 *  le groupe Out.Bucket */
+	void RunFrame(FScanState& S, float Dt, float Persistence, bool bFocus, IScanHost& Host, FFrameResult& Out);
 
 	// --------------------------------------------------------------------------------------------- Menace lisible
 	/** Regle des Smilers dans le noir : une impulsion large s'entend (rayon, cm) et attire ; un Smiler pris dans le scan

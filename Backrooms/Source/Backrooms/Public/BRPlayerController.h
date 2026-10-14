@@ -80,11 +80,18 @@ public:
 	/** v4.13 : nature de la session de cette manette : histoire (partie choisie, CONTINUER), rejouer (un niveau decouvert,
 	 *  sans toucher a l'histoire) ou libre (sans partie, mode developpeur, tests). L'hote decide pour le groupe */
 	EBRSessionMode GetSessionMode() const;
+	/** v4.14 : cette session ecrit-elle la partie de campagne (histoire seulement ; REJOUER et le mode developpeur jouent
+	 *  sur un etat temporaire, voir BRStory::WritePolicyFor) */
+	bool WritesCampaign() const { return GetSessionMode() == EBRSessionMode::Story; }
 	/** v4.13 : niveau ou CONTINUER reprend l'histoire de la partie choisie (BRStory::ResumePoint) */
 	int32 GetContinueLevel() const;
 	/** v4.13 : apres les Poolrooms, session gardee d'une ancienne partie pour ce niveau : elle devient la session a
-	 *  reprendre (graine renvoyee ; 0 : aucune) */
+	 *  reprendre (graine renvoyee ; 0 : aucune). v4.14 : elle reste dans la partie jusqu'a ConfirmParkedRestored */
 	uint32 TakeParkedSession(int32 Level);
+	/** v4.14 : la partie garde-t-elle une session garee pour ce niveau */
+	bool HasParkedSession(int32 Level) const;
+	/** v4.14 : le monde a repris la session garee de ce niveau (ou il n'y avait rien a reprendre) : elle est liberee */
+	void ConfirmParkedRestored(int32 Level);
 	/** Confirmation de suppression d'une partie (page PARTIES) */
 	bool IsConfirmingDelete() const { return bConfirmDelete; }
 	int32 GetDeleteSlot() const { return DeleteSlot; }
@@ -132,6 +139,8 @@ public:
 	void ResetMenuDrift() { bMenuDriftInit = false; }
 	int32 GetMenuIndex() const { return MenuIndex; }
 	bool IsInventoryOpen() const { return bInventory; }
+	/** v4.14 : actions de jeu permises (ni menu, ni pause, ni inventaire, ni dialogue, ni saisie de touche) */
+	bool CanPlayActions() const { return CanPlay(); }
 	bool IsPauseMenuOpen() const { return bPauseMenu; }
 	void SetInventoryOpen(bool bOpen, int32 Tab = INDEX_NONE);
 	/** Onglet demande a l'ouverture de l'inventaire (lu une fois par le HUD) */
@@ -316,6 +325,9 @@ private:
 	void PollKeyCapture();
 	ABRCharacter* GetBRCharacter() const;
 	bool CanPlay() const;
+	/** v4.14 : arrete les actions maintenues (scan focalise, sprint) : interface ouverte, pause, saisie ou changement de
+	 *  touche, perte de focus de la fenetre */
+	void StopHeldActions();
 	/** v4.10 : un dialogue modal est ouvert (confirmation de l'affichage) : actions de jeu, onglets et menus bloques ; le
 	 *  monde continue (ni pause, ni invulnerabilite) */
 	bool IsModalDialogOpen() const;
@@ -389,6 +401,8 @@ private:
 
 	bool bInMenu = true;
 	bool bInventory = false;
+	/** v4.14 : la fenetre du jeu avait le focus a l'image precedente */
+	bool bWindowActive = true;
 	bool bPauseMenu = false;
 	bool bMappingAdded = false;
 	int32 MenuIndex = 0;

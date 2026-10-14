@@ -443,12 +443,24 @@ UInputAction* ABRPlayerController::ActionFor(int32 BRAction) const
 	}
 }
 
+void ABRPlayerController::StopHeldActions()
+{
+	// v4.14 : une action maintenue (scan focalise, sprint) ne continue jamais seule quand le contexte change ; il faut un
+	// nouvel appui
+	if (ABRCharacter* C = GetBRCharacter())
+	{
+		C->LidarFocus(false);
+		C->SetSprinting(false);
+	}
+}
+
 void ABRPlayerController::RebuildMappings()
 {
 	if (!MoveAction)
 	{
 		return;
 	}
+	StopHeldActions(); // v4.14 : touches changees
 	MappingRevision = BRKeys::Revision();
 	UInputMappingContext* Ctx = NewObject<UInputMappingContext>(this);
 
@@ -580,6 +592,8 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(LidarPulseAction, ETriggerEvent::Started, this, &ABRPlayerController::OnLidarPulse);
 	EIC->BindAction(LidarFocusAction, ETriggerEvent::Started, this, &ABRPlayerController::OnLidarFocusStarted);
 	EIC->BindAction(LidarFocusAction, ETriggerEvent::Completed, this, &ABRPlayerController::OnLidarFocusCompleted);
+	// v4.14 : un appui annule (contexte d'entree change, touche reconfiguree) arrete aussi le scan
+	EIC->BindAction(LidarFocusAction, ETriggerEvent::Canceled, this, &ABRPlayerController::OnLidarFocusCompleted);
 	EIC->BindAction(DrinkAction, ETriggerEvent::Started, this, &ABRPlayerController::OnDrink);
 	EIC->BindAction(ReloadAction, ETriggerEvent::Started, this, &ABRPlayerController::OnReload);
 	EIC->BindAction(JournalAction, ETriggerEvent::Started, this, &ABRPlayerController::OnInventory);
@@ -607,6 +621,15 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	{
 		RebuildMappings();
 	}
+	// v4.14 : perte de focus de la fenetre : les actions maintenues s'arretent et les touches sont purgees (reprise propre
+	// par un nouvel appui)
+	const bool bActiveNow = !FSlateApplication::IsInitialized() || FSlateApplication::Get().IsActive();
+	if (bWindowActive && !bActiveNow && IsLocalController())
+	{
+		StopHeldActions();
+		FlushPressedKeys();
+	}
+	bWindowActive = bActiveNow;
 	PollKeyCapture();
 	// v4.9 : confirmation de l'affichage (retour automatique a l'expiration) et changements faits hors du jeu
 	if (IsLocalController() && BRDisplay::Tick())
@@ -681,7 +704,8 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 		}
 		if (ActiveSave && !bInMenu && GetNetMode() != NM_Client)
 		{
-			if (!(bPauseMenu && !IsNetGame()))
+			// v4.14 : le temps de jeu de la partie ne compte que l'histoire (REJOUER, mode developpeur : etat temporaire)
+			if (!(bPauseMenu && !IsNetGame()) && WritesCampaign())
 			{
 				ActiveSave->PlayTime += DeltaTime;
 			}
@@ -827,6 +851,7 @@ void ABRPlayerController::BeginKeyCapture(int32 Action, int32 Slot)
 	CaptureAction = Action;
 	CaptureSlot = Slot;
 	CaptureStart = FPlatformTime::Seconds();
+	StopHeldActions();
 }
 
 void ABRPlayerController::CancelKeyCapture()
@@ -948,6 +973,7 @@ void ABRPlayerController::UpdateInputMode()
 	bShowMouseCursor = bCursor;
 	if (bCursor)
 	{
+		StopHeldActions(); // v4.14 : inventaire, pause, menu, dialogue, fin : le scan et le sprint s'arretent
 		FInputModeGameAndUI Mode;
 		Mode.SetHideCursorDuringCapture(false);
 		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
@@ -2072,8 +2098,13 @@ void ABRPlayerController::SelectSave(int32 Slot)
 	MenuCursor = 0;
 	if (S->StoryParked >= 0 && S->ParkedSession.bValid)
 	{
-		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ParkedSave", "Ancienne partie : l'\u00e9quipe de L. est pass\u00e9e par les Poolrooms, et vous non. Traversez-les : votre progression au Niveau {Level} reprendra \u00e0 leur sortie."),
-			{ { TEXT("Level"), BRLoc::Int(S->StoryParked) } }), 9.f, FLinearColor(0.8f, 0.9f, 1.f));
+		// v4.14 : la sauvegarde ne prouve pas la traversee (historique ambigu ou absent) : elle est organisee, sans rien
+		// effacer ; apres la traversee, la progression garee attend que son niveau soit disponible
+		const bool bCrossed = BRStory::IsDone(S->GetStory(), BRStory::Poolrooms);
+		const FText Msg = bCrossed
+			? NSLOCTEXT("BR", "Menu.ParkedWaiting", "Votre ancienne progression au Niveau {Level} est conserv\u00e9e : elle reprendra quand ce niveau sera disponible.")
+			: NSLOCTEXT("BR", "Menu.ParkedSaveV414", "Ancienne partie : la travers\u00e9e des Poolrooms n'est pas enregistr\u00e9e dans cette sauvegarde. Traversez-les : votre progression au Niveau {Level} reprendra ensuite, rien n'est perdu.");
+		ABRHUD::Notify(this, BRLoc::Fmt(Msg, { { TEXT("Level"), BRLoc::Int(S->StoryParked) } }), 9.f, FLinearColor(0.8f, 0.9f, 1.f));
 	}
 }
 
@@ -2095,19 +2126,29 @@ int32 ABRPlayerController::GetContinueLevel() const
 	return BRStory::ResumePoint(ActiveSave->GetStory(), [](int Level, void*) { return BRLevels::Exists(Level); }, nullptr);
 }
 
+bool ABRPlayerController::HasParkedSession(int32 Level) const
+{
+	return ActiveSave && ActiveSave->ParkedSession.bValid && ActiveSave->ParkedSession.Level == Level && ActiveSave->ParkedSession.Seed != 0;
+}
+
+void ABRPlayerController::ConfirmParkedRestored(int32 Level)
+{
+	if (ActiveSave && ActiveSave->ParkedSession.Level == Level)
+	{
+		ActiveSave->ParkedSession = FBRSessionState();
+	}
+}
+
 uint32 ABRPlayerController::TakeParkedSession(int32 Level)
 {
-	if (!ActiveSave || !ActiveSave->ParkedSession.bValid || ActiveSave->ParkedSession.Level != Level || ActiveSave->ParkedSession.Seed == 0)
+	// v4.14 : la session garee n'est pas effacee ici (ni quand elle ne correspond pas) : elle reste dans la partie jusqu'a
+	// ce que le monde l'ait reprise (ConfirmParkedRestored)
+	if (!HasParkedSession(Level))
 	{
-		if (ActiveSave)
-		{
-			ActiveSave->ParkedSession = FBRSessionState();
-		}
 		return 0;
 	}
 	BRSaves::PendingResume() = ActiveSave->ParkedSession;
 	const uint32 ParkedSeed = ActiveSave->ParkedSession.Seed;
-	ActiveSave->ParkedSession = FBRSessionState();
 	ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ParkedRestored", "Les Poolrooms sont travers\u00e9es : votre ancienne progression reprend au Niveau {Level}, l\u00e0 o\u00f9 vous l'aviez laiss\u00e9e."),
 		{ { TEXT("Level"), BRLoc::Int(Level) } }), 7.f, FLinearColor(0.75f, 1.f, 0.75f));
 	return ParkedSeed;
@@ -2189,11 +2230,12 @@ void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 		ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ModeDeveloppeurNiveauLevelnumberVisite", "MODE D\u00c9VELOPPEUR : Niveau {LevelNumber} visit\u00e9 sans l'ajouter \u00e0 la partie \u00ab {SaveName} \u00bb."), { { TEXT("LevelNumber"), BRLoc::Int(LevelNumber) }, { TEXT("SaveName"), BRLoc::Arg(ActiveSave->SaveName) } }), 6.f, FLinearColor(0.6f, 0.9f, 1.f));
 		return;
 	}
-	ActiveSave->MarkExplored(LevelNumber);
-	if (GetSessionMode() != EBRSessionMode::Replay)
+	if (!WritesCampaign())
 	{
-		ActiveSave->CurrentLevel = LevelNumber; // v4.13 : rejouer ne deplace pas la partie
+		return; // v4.14 : REJOUER, mode developpeur : la partie ne bouge pas (niveau courant, decouvertes, ecriture)
 	}
+	ActiveSave->MarkExplored(LevelNumber);
+	ActiveSave->CurrentLevel = LevelNumber;
 	// Ecrit un peu plus tard : apres une mort, l'inventaire est remis a zero juste apres le chargement
 	PendingSaveDelay = 2.f;
 	if (bNew)
@@ -2204,7 +2246,9 @@ void ABRPlayerController::OnLevelLoaded(int32 LevelNumber)
 
 void ABRPlayerController::NotifyPlayerDeath()
 {
-	if (ActiveSave && IsLocalController())
+	// v4.14 : une mort en REJOUER ou en mode developpeur ne touche pas la partie (ni compteur, ni mort en cours, ni
+	// equipement) : elle relance le niveau rejoue (ABRWorld)
+	if (ActiveSave && IsLocalController() && WritesCampaign())
 	{
 		++ActiveSave->Deaths;
 		// v4.7 : ecrit tout de suite : fermer le jeu a terre ne doit pas annuler la mort
@@ -2224,6 +2268,32 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 	}
 	const ABRCharacter* C = GetBRCharacter();
 	const ABRWorld* W = ABRWorld::Get(this);
+	// v4.14 : seule une session d'histoire ecrit la partie de campagne. REJOUER et le mode developpeur jouent sur un etat
+	// temporaire (le personnage et le monde de la session) : equipement, morts, session, niveau courant, campagne, histoire
+	// et temps de jeu de la partie ne changent pas, quelle que soit l'ecriture (minuterie, pause, fin, mort, menu,
+	// fermeture). Transfert explicite, en rejeu seulement : les documents lus completent le journal (union)
+	const BRStory::FWritePolicy Policy = BRStory::WritePolicyFor(static_cast<BRStory::ESession>(GetSessionMode()));
+	if (!Policy.bSession)
+	{
+		int32 Added = 0;
+		if (Policy.bJournalUnion && W)
+		{
+			for (const int32 Id : W->GetDiscoveredList())
+			{
+				if (!ActiveSave->Discovered.Contains(Id))
+				{
+					ActiveSave->Discovered.Add(Id);
+					++Added;
+				}
+			}
+		}
+		const bool bQueuedShared = Added > 0 && (bBlocking ? BRSaves::Write(BRSaves::ActiveSlot(), ActiveSave) : BRSaves::WriteAsync(BRSaves::ActiveSlot(), ActiveSave));
+		if (!bQueuedShared && bBlocking)
+		{
+			BRSaves::Flush();
+		}
+		return;
+	}
 	const bool bDeadNow = C && C->IsDead();
 	if (bDeadNow)
 	{
@@ -2245,18 +2315,17 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 		ActiveSave->RouteBits = W->GetCampaign().RouteBits;
 		ActiveSave->OptionalFound = W->GetCampaign().OptionalFound;
 		ActiveSave->Endings = W->GetCampaign().Endings;
-		// v4.13 : histoire tenue par l'hote (seulement en session d'histoire : rejouer et le mode developpeur n'y touchent pas)
-		const EBRSessionMode Mode = GetSessionMode();
-		if (Mode == EBRSessionMode::Story && W->GetSessionMode() == EBRSessionMode::Story)
+		// v4.13 : histoire tenue par l'hote (la session d'histoire du monde doit correspondre)
+		if (W->GetSessionMode() == EBRSessionMode::Story)
 		{
 			ActiveSave->SetStory(W->GetStory());
 		}
-		if (W->IsLevelReady() && !W->IsTransitioning() && (!bDevSession || ActiveSave->IsExplored(W->GetLevelNumber())) && Mode != EBRSessionMode::Replay)
+		if (W->IsLevelReady() && !W->IsTransitioning())
 		{
 			ActiveSave->CurrentLevel = W->GetLevelNumber();
 			ActiveSave->MarkExplored(W->GetLevelNumber());
 			// v4.7 : session a reprendre : meme disposition, objectifs, objets ramasses, dernier point sur
-			if (!bDeadNow && !bDevSession && C)
+			if (!bDeadNow && C)
 			{
 				FBRSessionState& Session = ActiveSave->Session;
 				Session.bValid = true;
@@ -2319,6 +2388,10 @@ void ABRPlayerController::HostGame(bool bReplay)
 	if (!bReplay && ActiveSave && ActiveSave->Session.bValid && ActiveSave->Session.Level == Level && ActiveSave->Session.Seed != 0)
 	{
 		BRSaves::PendingResume() = ActiveSave->Session;
+	}
+	else if (!bReplay && HasParkedSession(Level) && BRStory::WantsParked(ActiveSave->GetStory(), Level))
+	{
+		BRSaves::PendingResume() = ActiveSave->ParkedSession; // v4.14 : progression garee d'une ancienne partie
 	}
 	else if (Level == 0 && ActiveSave)
 	{
@@ -2555,6 +2628,12 @@ void ABRPlayerController::StartSolo(bool bReplay)
 	// v4.7 : reprise apres fermeture du jeu : meme graine, objectifs, objets ramasses et point de reprise.
 	// (Apres une mort, la session a ete invalidee : le niveau sera neuf, comme le veut la regle.)
 	const FBRSessionState* Session = (ActiveSave && !bReplay) ? &ActiveSave->Session : nullptr;
+	// v4.14 : CONTINUER vers le niveau gare d'une ancienne partie (Poolrooms traversees) : sa session garee est reprise
+	// (elle reste dans la partie jusqu'a ce que le monde confirme la reprise)
+	if (Session && !(Session->bValid && Session->Level == Target) && HasParkedSession(Target) && BRStory::WantsParked(ActiveSave->GetStory(), Target))
+	{
+		Session = &ActiveSave->ParkedSession;
+	}
 	const bool bResume = Session && Session->bValid && Session->Level == Target && Session->Seed != 0 && !bDevSession;
 	// v4.13 : le Level 0 de la partie garde sa graine (meme disposition, porte au meme endroit) ; une nouvelle partie tire
 	// un Level 0 neuf, meme si le menu en montre deja un

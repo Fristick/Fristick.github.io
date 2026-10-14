@@ -99,37 +99,98 @@ namespace BRStory
 	/** Destination de la sortie de progression de From : NextOf(From) ; apres les Poolrooms d'une ancienne partie garee,
 	 *  son niveau gare (s'il est disponible) */
 	int ProgressTarget(const FState& S, int From, FAvailable Available, void* Ctx);
-	/** Le groupe quitte From par sa sortie de progression vers To : etape accomplie, plus loin atteint, reprise */
+	/** Le groupe quitte From par sa sortie de progression vers To : etape accomplie, plus loin atteint, reprise.
+	 *  v4.14 : le niveau gare (Parked) n'est plus efface ici : il reste jusqu'a la reprise reussie de sa session
+	 *  (OnParkedRestored), meme si le niveau gare n'est pas disponible dans cette version */
 	void OnProgress(FState& S, int From, int To);
+	/** v4.14 : la session garee d'une ancienne partie vient d'etre reprise (ou il n'y avait rien a reprendre) : l'etape
+	 *  de migration est terminee */
+	void OnParkedRestored(FState& S);
+	/** v4.14 : faut-il reprendre la session garee en arrivant dans Level (Poolrooms traversees, niveau gare) */
+	bool WantsParked(const FState& S, int Level);
 	/** Arrivee dans un niveau du fil deja atteint (retour, reprise) : point de reprise */
 	void OnArrive(FState& S, int Level);
 	/** Fin du contenu disponible atteinte en quittant Level (lot Lot) : etape accomplie, fin de chapitre ; l'histoire
 	 *  reprendra au niveau suivant du fil quand il sera publie */
 	void OnChapterEnd(FState& S, int Level, int Lot);
-	/** Point de « Continuer » : la reprise si elle est disponible (et permise) ; sinon le dernier niveau atteint disponible
-	 *  en remontant le fil ; sinon le Level 0 */
+	/** Point de « Continuer » : la progression garee d'une ancienne partie si les Poolrooms sont traversees et son niveau
+	 *  disponible (v4.14) ; sinon la reprise si elle est disponible (et permise) ; sinon le dernier niveau atteint
+	 *  disponible en remontant le fil ; sinon le Level 0 */
 	int ResumePoint(const FState& S, FAvailable Available, void* Ctx);
+
+	/** v4.14 : nature de la session, du point de vue de la sauvegarde (meme ordre que EBRSessionMode du jeu) */
+	enum class ESession : uint8_t
+	{
+		/** Mode developpeur, menu, invite : aucune partie a ecrire */
+		Free = 0,
+		/** Histoire (nouvelle partie, CONTINUER) : la seule session qui ecrit la partie de campagne */
+		Story = 1,
+		/** REJOUER un niveau decouvert : etat temporaire */
+		Replay = 2
+	};
+	/** v4.14 : ce qu'une session peut ecrire dans la partie de campagne. REJOUER et le mode developpeur jouent sur un etat
+	 *  temporaire (le personnage et le monde de la session) : equipement, morts, session a reprendre, niveau courant,
+	 *  campagne, histoire et temps de jeu de la partie ne changent pas. Seul transfert explicite : en rejeu, les documents
+	 *  lus sont ajoutes au journal de la partie (union, jamais de retrait) */
+	struct FWritePolicy
+	{
+		/** Equipement, sante, batterie, statistiques du personnage */
+		bool bCharacter = false;
+		/** Morts, mort en cours (reprise apres une fermeture pendant la mort) */
+		bool bDeath = false;
+		/** Session a reprendre, niveau courant, niveaux explores enregistres par l'ecriture */
+		bool bSession = false;
+		/** Fragments de route, objectifs facultatifs, fins vues */
+		bool bCampaign = false;
+		/** Etat narratif */
+		bool bStory = false;
+		bool bPlayTime = false;
+		/** Journal remplace par celui du monde (histoire) */
+		bool bJournal = false;
+		/** Journal complete par union (rejeu) */
+		bool bJournalUnion = false;
+	};
+	FWritePolicy WritePolicyFor(ESession Mode);
 
 	/** Ancienne partie (formats 1 a 4) : ce qu'elle sait de sa progression */
 	struct FLegacy
 	{
-		/** Niveaux explores, dans l'ordre de decouverte */
+		/** Niveaux explores, dans l'ordre de PREMIERE decouverte (AddUnique) : ce n'est pas un journal des trajets */
 		const int* Explored = nullptr;
 		int NumExplored = 0;
 		/** Niveau ou la partie s'est arretee */
 		int Current = 0;
 		/** Fins vues (BRMission : bits 1 et 2 ; v4.12 : fin du lot n = bit 1 << (1 + n)) */
 		uint8_t Endings = 0;
+		/** Format du fichier (UBRSaveGame::LoadedVersion ; 0 : inconnu). Format 1 (v4.1 a v4.6) : la console des v4.1 a
+		 *  v4.3 ajoutait les niveaux visites aux decouvertes, l'ordre ne prouve donc rien */
+		int Format = 0;
 	};
+	/** v4.14 : ce que l'ancienne partie permet de conclure sur la traversee des Poolrooms */
+	enum class EPoolProof : uint8_t
+	{
+		/** Jamais visitees (ni decouvertes, ni niveau courant) : pas de traversee */
+		Absent,
+		/** Traversee certaine : le Niveau 4 (destination de leur echelle avant la v4.13) a ete decouvert apres les
+		 *  Poolrooms alors qu'aucun autre acces au Niveau 4 n'etait encore connu (ni 1, ni 3, ni 5, ni le Niveau 11 et ses
+		 *  destinations au hasard), dans un format sans ajout par la console */
+		Proven,
+		/** Visitees, mais l'historique ne permet pas de conclure (retours, revisites, Niveau 4 atteignable autrement,
+		 *  destination deja decouverte) : aucune preuve n'est inventee */
+		Ambiguous
+	};
+	EPoolProof PoolroomsProof(const FLegacy& L);
 	struct FMigration
 	{
 		FState State;
 		/** La session sauvegardee (niveau Current) est garee : elle reprendra apres la traversee des Poolrooms */
 		bool bParkSession = false;
-		/** Traversee des Poolrooms prouvee par l'ordre de decouverte (echelle 37 -> 4 des versions anterieures) */
+		/** Traversee des Poolrooms creditee (PoolProof == Proven seulement) */
 		bool bPoolroomsCredited = false;
+		EPoolProof PoolProof = EPoolProof::Absent;
 	};
-	/** Migration d'une ancienne partie : etapes depassees creditees, point de reprise coherent, traversee des Poolrooms
-	 *  organisee si la partie est allee au-dela sans les traverser (sa progression est garee, pas perdue) */
+	/** Migration d'une ancienne partie : etapes depassees creditees, point de reprise coherent. Poolrooms : creditees
+	 *  seulement sur preuve ; absentes ou ambigues avec une partie allee au-dela, la traversee est organisee (la
+	 *  progression ancienne est garee intacte, pas perdue ni effacee) */
 	FMigration MigrateLegacy(const FLegacy& L);
 }

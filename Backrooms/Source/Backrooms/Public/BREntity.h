@@ -357,9 +357,12 @@ private:
 	float LostSight = 0.f;
 	float EyeContact = 0.f;
 	float BeamTime = 0.f;
-	/** v4.13 : recul impose par le scanner (temps du monde) et point d'ou il vient ; approche deja annoncee (souffle) */
+	/** v4.13 : recul impose par le scanner (temps du monde) et point d'ou il vient ; approche deja annoncee (souffle).
+	 *  v4.14 : destination du recul fixee une fois (praticable : ni mur, ni fosse), puis attente sur place jusqu'a
+	 *  LidarRepelUntil (deplacement et delai separes) */
 	float LidarRepelUntil = -1.f;
 	FVector LidarRepelFrom = FVector::ZeroVector;
+	FVector LidarRepelDest = FVector::ZeroVector;
 	bool bLidarTelegraphed = false;
 	float AnimTime = 0.f;
 	float Life = 0.f;

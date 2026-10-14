@@ -257,10 +257,15 @@ public:
 	void NotifyLidarPulse(const FVector& At);
 	UFUNCTION(Server, Unreliable, WithValidation)
 	void ServerLidarPulse(FVector_NetQuantize At);
-	/** Smiler maintenu dans le faisceau focalise : il recule (l'hote verifie distance, ligne de vue, visee) */
+	/** Smiler maintenu dans le faisceau focalise : il recule (l'hote verifie distance, ligne de vue, visee, et v4.14 que
+	 *  la meme cible est visee sans interruption depuis RepelHold secondes) */
 	void RequestLidarRepel(ABREntity* E);
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerLidarRepel(ABREntity* E);
+	/** v4.14 : cible du faisceau focalise (Smiler ou rien), envoyee a l'hote seulement quand elle change */
+	void SetLidarAimTarget(ABREntity* E);
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerLidarAim(ABREntity* E);
 	/** v4.8 : entite qui a tue (EBREntityKind, -1 : aucune) */
 	int8 GetKillerKind() const { return KillerKind; }
 	float GetDeathTime() const { return DeathTime; }
@@ -654,6 +659,9 @@ private:
 	TWeakObjectPtr<ABRLidar> Lidar;
 	/** Hote : derniere impulsion acceptee (une par recharge) */
 	double ServerLastPulse = -100.0;
+	/** v4.14 : cible du faisceau chez l'hote et debut de sa visee (maintien mesure par l'hote) */
+	TWeakObjectPtr<ABREntity> ServerAimEntity;
+	double ServerAimSince = 0.0;
 	/** Reponse a une action de mission, chez le joueur qui l'a faite */
 	void HandleMissionResult(int32 Device, uint8 Feedback, uint8 Related, uint8 Count);
 	/** v4.12 : etat de la derniere demande a l'hote (voir GetActionStatus) */

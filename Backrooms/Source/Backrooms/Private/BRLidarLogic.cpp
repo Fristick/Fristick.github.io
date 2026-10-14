@@ -246,56 +246,431 @@ void FocusDir(int I, uint32_t Frame, float& OutX, float& OutY, float& OutZ)
 	OutZ = std::sin(Pitch);
 }
 
-bool FRing::Advance(float Dt, int& OutCleared)
+// ------------------------------------------------------------------------------- v4.14 : reserve de points
+int CategoryCapacity(int Cat)
 {
-	OutCleared = -1;
-	CurrentAge += Dt > 0.f ? Dt : 0.f;
-	if (CurrentAge < BucketSeconds)
+	switch (Cat)
 	{
-		return false;
+	case Env: return 15000;
+	case Danger: return 3000;
+	case Device: return 1500;
+	case Entity: return 600;
+	case Marker: return 400;
+	case Glyph: return 3500;
+	default: return 0;
 	}
-	CurrentAge = 0.f;
-	Current = (Current + 1) % AgeBuckets;
-	OutCleared = Current;
-	Count[Current] = 0;
-	return true;
 }
 
-int FRing::Reserve(int N)
+void FPointStore::Reset()
 {
-	const int PerBucket = Capacity / AgeBuckets;
-	const int Room = PerBucket - Count[Current];
+	const float P = Persistence;
+	*this = FPointStore();
+	Persistence = P;
+}
+
+float FPointStore::BucketSeconds() const
+{
+	// Avec AgeBuckets - 1 periodes par persistance, le groupe reutilise par le temps a deja expire : aucun point n'est
+	// remplace avant sa persistance tant que la categorie n'est pas saturee
+	const float P = Persistence > 0.1f ? Persistence : 0.1f;
+	return P / static_cast<float>(AgeBuckets - 1);
+}
+
+namespace
+{
+	void Rotate(FPointStore& S, int Cat, uint8_t& Mask)
+	{
+		int& Cur = S.Current[Cat];
+		Cur = (Cur + 1) % AgeBuckets;
+		if (S.Count[Cat][Cur] > 0)
+		{
+			S.Replaced += S.Count[Cat][Cur];
+			S.Count[Cat][Cur] = 0;
+			Mask |= static_cast<uint8_t>(1u << Cur);
+		}
+		S.Start[Cat][Cur] = S.Now;
+		S.Last[Cat][Cur] = S.Now;
+		++S.Serial[Cat];
+	}
+}
+
+void FPointStore::Advance(float Dt, uint8_t OutCleared[NumCategories])
+{
+	Now += Dt > 0.f ? static_cast<double>(Dt) : 0.0;
+	const double P = Persistence > 0.1f ? Persistence : 0.1f;
+	const double BS = BucketSeconds();
+	for (int Cat = 0; Cat < NumCategories; ++Cat)
+	{
+		uint8_t Mask = 0;
+		for (int B = 0; B < AgeBuckets; ++B)
+		{
+			if (Count[Cat][B] > 0 && Now - Last[Cat][B] >= P)
+			{
+				Expired += Count[Cat][B];
+				Count[Cat][B] = 0;
+				Mask |= static_cast<uint8_t>(1u << B);
+			}
+		}
+		const int Cur = Current[Cat];
+		if (Count[Cat][Cur] > 0 && Now - Start[Cat][Cur] >= BS)
+		{
+			Rotate(*this, Cat, Mask);
+		}
+		OutCleared[Cat] = Mask;
+	}
+}
+
+int FPointStore::Insert(int Cat, int N, int& OutBucket, uint8_t& OutCleared)
+{
+	OutCleared = 0;
+	OutBucket = 0;
+	if (Cat < 0 || Cat >= NumCategories || N <= 0)
+	{
+		return 0;
+	}
+	Requested += N;
+	const int PerBucket = CategoryCapacity(Cat) / AgeBuckets;
+	if (Count[Cat][Current[Cat]] > 0 && (Now - Start[Cat][Current[Cat]] >= BucketSeconds() || Count[Cat][Current[Cat]] + N > PerBucket))
+	{
+		// Duree ecoulee ou part du groupe atteinte : le groupe suivant (le plus ancien) est remplace, la decouverte continue
+		Rotate(*this, Cat, OutCleared);
+	}
+	const int Cur = Current[Cat];
+	const int Room = PerBucket - Count[Cat][Cur];
 	const int Got = N < Room ? N : (Room > 0 ? Room : 0);
-	Count[Current] += Got;
+	Rejected += N - Got;
+	if (Got > 0)
+	{
+		if (Count[Cat][Cur] == 0)
+		{
+			Start[Cat][Cur] = Now;
+		}
+		Count[Cat][Cur] += Got;
+		Last[Cat][Cur] = Now;
+		Accepted += Got;
+	}
+	OutBucket = Cur;
 	return Got;
 }
 
-int FRing::Total() const
+int FPointStore::Total() const
 {
 	int T = 0;
-	for (int B = 0; B < AgeBuckets; ++B)
+	for (int Cat = 0; Cat < NumCategories; ++Cat)
 	{
-		T += Count[B];
+		T += Total(Cat);
 	}
 	return T;
 }
 
-float FRing::AgeOf(int B) const
+int FPointStore::Total(int Cat) const
 {
-	const int Steps = (Current - B + AgeBuckets) % AgeBuckets;
-	return static_cast<float>(Steps) * BucketSeconds + CurrentAge;
+	int T = 0;
+	for (int B = 0; B < AgeBuckets; ++B)
+	{
+		T += Count[Cat][B];
+	}
+	return T;
 }
 
-float FRing::FadeOf(int B, float Persistence) const
+float FPointStore::FadeOf(int Cat, int B) const
 {
-	const float A = AgeOf(B);
-	if (Persistence <= 0.f || A >= Persistence)
+	if (Cat < 0 || Cat >= NumCategories || B < 0 || B >= AgeBuckets || Count[Cat][B] <= 0 || Persistence <= 0.f)
+	{
+		return 0.f;
+	}
+	const double A = Now - Last[Cat][B];
+	if (A >= Persistence)
 	{
 		return 0.f;
 	}
 	// Plein eclat pendant le premier quart, puis extinction lineaire
-	const float T = A / Persistence;
+	const float T = static_cast<float>(A / Persistence);
 	return T < 0.25f ? 1.f : ClampF(1.f - (T - 0.25f) / 0.75f, 0.f, 1.f);
+}
+
+int FRateBudget::Take(float Dt)
+{
+	Carry += Rate * (Dt > 0.f ? Dt : 0.f);
+	int N = static_cast<int>(Carry);
+	if (N > MaxPerFrame)
+	{
+		N = MaxPerFrame;
+	}
+	Carry -= static_cast<float>(N);
+	if (Carry > 1.f)
+	{
+		Carry = 1.f; // pas d'arriere : une image lente ne declenche pas de rattrapage
+	}
+	return N;
+}
+
+// ------------------------------------------------------------------------------------------- Inscriptions
+namespace
+{
+	/** Grilles 7 x 7, ligne du haut d'abord : triangle, cercle, carre, losange, croix, etoile a six branches */
+	const char* const SymbolMask[NumSymbols] = {
+		"...#.....#.#....#.#...#...#..#...#.#.....########",
+		"..###...#...#.#.....##.....##.....#.#...#...###..",
+		"########.....##.....##.....##.....##.....########",
+		"...#.....#.#...#...#.#.....#.#...#...#.#.....#...",
+		"...#......#......#...#######...#......#......#...",
+		".#...#...#.#....#.#..#######..#.#....#.#...#...#." };
+
+	int ClampSymbol(int S)
+	{
+		return S < 0 ? 0 : (S >= NumSymbols ? NumSymbols - 1 : S);
+	}
+}
+
+bool SymbolCell(int Symbol, int Row, int Col)
+{
+	if (Row < 0 || Row >= 7 || Col < 0 || Col >= 7)
+	{
+		return false;
+	}
+	return SymbolMask[ClampSymbol(Symbol)][Row * 7 + Col] == '#';
+}
+
+int SymbolCellCount(int Symbol)
+{
+	int N = 0;
+	for (int I = 0; I < 49; ++I)
+	{
+		N += SymbolMask[ClampSymbol(Symbol)][I] == '#' ? 1 : 0;
+	}
+	return N;
+}
+
+int PlateGlyphPoints(int Symbol)
+{
+	return PlateFigurePoints + SymbolCellCount(Symbol);
+}
+
+bool PlateGlyphPoint(int Symbol, int K, int FigurePoints, int& OutFigure, int& OutRow, int& OutCol)
+{
+	OutFigure = OutRow = OutCol = 0;
+	if (K < PlateFigurePoints)
+	{
+		OutFigure = (K * (FigurePoints > 0 ? FigurePoints : 1)) / PlateFigurePoints;
+		return false;
+	}
+	int Cell = K - PlateFigurePoints;
+	const char* M = SymbolMask[ClampSymbol(Symbol)];
+	for (int I = 0; I < 49; ++I)
+	{
+		if (M[I] == '#' && Cell-- == 0)
+		{
+			OutRow = I / 7;
+			OutCol = I % 7;
+			return true;
+		}
+	}
+	return true;
+}
+
+int CageGlyphFigure(int K, int FigurePoints)
+{
+	return (K * (FigurePoints > 0 ? FigurePoints : 1)) / CageFigurePoints;
+}
+
+float GlyphRefreshSeconds(float Persistence)
+{
+	const float R = Persistence * 0.6f;
+	return R > 2.f ? R : 2.f;
+}
+
+void FGlyphPlanner::Reset()
+{
+	*this = FGlyphPlanner();
+}
+
+void FGlyphPlanner::Touch(int Id, int Total, double Now, float Persistence)
+{
+	++Touches;
+	if (Id < 0 || Total <= 0)
+	{
+		return;
+	}
+	FTarget* T = nullptr;
+	for (FTarget& X : Targets)
+	{
+		if (X.Id == Id)
+		{
+			T = &X;
+			break;
+		}
+	}
+	if (!T)
+	{
+		// Nouvelle cible : une place libre, sinon la moins recemment touchee
+		T = &Targets[0];
+		for (FTarget& X : Targets)
+		{
+			if (X.Id < 0)
+			{
+				T = &X;
+				break;
+			}
+			if (X.TouchedAt < T->TouchedAt)
+			{
+				T = &X;
+			}
+		}
+		*T = FTarget();
+		T->Id = Id;
+	}
+	if (!T->bTouched)
+	{
+		++DistinctTouches;
+	}
+	T->Total = Total;
+	if (T->Cursor >= T->Total && Now - T->DoneAt >= GlyphRefreshSeconds(Persistence))
+	{
+		T->Cursor = 0; // nouvelle passe : l'inscription est redessinee avant de s'eteindre
+	}
+	T->bTouched = true;
+	T->TouchedAt = Now;
+}
+
+int FGlyphPlanner::Plan(float Dt, double Now, FGlyphEmit* Out, int MaxOut, int* OutCompleted, int& NumCompleted)
+{
+	NumCompleted = 0;
+	int Left = Budget.Take(Dt);
+	int NumOut = 0;
+	int Active = 0;
+	for (const FTarget& T : Targets)
+	{
+		Active += (T.bTouched && T.Cursor < T.Total) ? 1 : 0;
+	}
+	// Partage equitable du budget entre les cibles en cours, puis le reste a qui en a encore besoin
+	for (int Pass = 0; Pass < 2 && Left > 0 && Active > 0; ++Pass)
+	{
+		const int Share = Pass == 0 ? (Left / Active > 0 ? Left / Active : 1) : Left;
+		for (FTarget& T : Targets)
+		{
+			if (!T.bTouched || T.Cursor >= T.Total || Left <= 0 || NumOut >= MaxOut)
+			{
+				continue;
+			}
+			int N = T.Total - T.Cursor;
+			N = N < Share ? N : Share;
+			N = N < Left ? N : Left;
+			if (N <= 0)
+			{
+				continue;
+			}
+			Out[NumOut].Target = T.Id;
+			Out[NumOut].First = T.Cursor;
+			Out[NumOut].Count = N;
+			++NumOut;
+			T.Cursor += N;
+			Left -= N;
+			if (T.Cursor >= T.Total)
+			{
+				T.DoneAt = Now;
+				if (OutCompleted && NumCompleted < MaxGlyphTargets)
+				{
+					OutCompleted[NumCompleted++] = T.Id;
+				}
+			}
+		}
+	}
+	for (FTarget& T : Targets)
+	{
+		T.bTouched = false;
+	}
+	return NumOut;
+}
+
+// ----------------------------------------------------------------------------------------------- Image
+void FScanState::Reset()
+{
+	const float P = Store.Persistence;
+	*this = FScanState();
+	Store.Persistence = P;
+}
+
+bool FScanState::StartPulse(float Phase)
+{
+	if (Cooldown > 0.f)
+	{
+		return false;
+	}
+	Cooldown = PulseCooldown;
+	PulseNext = 0;
+	PulsePhase = Phase;
+	PulseBudget.Reset();
+	return true;
+}
+
+void RunFrame(FScanState& S, float Dt, float Persistence, bool bFocus, IScanHost& Host, FFrameResult& Out)
+{
+	Out = FFrameResult();
+	++S.Frame;
+	S.Cooldown = S.Cooldown - Dt > 0.f ? S.Cooldown - Dt : 0.f;
+	S.Store.Persistence = Persistence;
+	S.Store.Advance(Dt, Out.Cleared);
+	// Impulsion : PulseRays rayons en PulseSeconds, plafond par image
+	if (S.PulseNext >= 0)
+	{
+		const int N = S.PulseBudget.Take(Dt);
+		const int End = S.PulseNext + N < PulseRays ? S.PulseNext + N : PulseRays;
+		for (int I = S.PulseNext; I < End; ++I)
+		{
+			float X, Y, Z;
+			PulseDir(I, PulseRays, S.PulsePhase, X, Y, Z);
+			Host.TraceRay(true, false, X, Y, Z);
+		}
+		Out.PulseRays = End - S.PulseNext;
+		S.PulseNext = End >= PulseRays ? -1 : End;
+	}
+	// Scan focalise : FocusRaysPerSecond rayons, un sur FocusCenterEvery dans l'axe ; les cibles a inscriptions touchees
+	// par plusieurs rayons ne comptent qu'une fois
+	if (bFocus)
+	{
+		const int N = S.FocusBudget.Take(Dt);
+		for (int I = 0; I < N; ++I)
+		{
+			const bool bCenter = (S.FocusCount++ % FocusCenterEvery) == 0;
+			float X = 1.f, Y = 0.f, Z = 0.f;
+			if (!bCenter)
+			{
+				FocusDir(I, S.Frame, X, Y, Z);
+			}
+			const FHit H = Host.TraceRay(false, bCenter, X, Y, Z);
+			if (H.GlyphTarget >= 0)
+			{
+				S.Glyphs.Touch(H.GlyphTarget, H.GlyphTotal, S.Store.Now, Persistence);
+			}
+		}
+		Out.FocusRays = N;
+	}
+	else
+	{
+		S.FocusBudget.Reset();
+	}
+	FGlyphEmit Emits[MaxGlyphTargets * 2];
+	const int NumEmits = S.Glyphs.Plan(Dt, S.Store.Now, Emits, MaxGlyphTargets * 2, Out.Completed, Out.NumCompleted);
+	for (int E = 0; E < NumEmits; ++E)
+	{
+		Out.GlyphPoints += Host.EmitGlyphs(Emits[E].Target, Emits[E].First, Emits[E].Count);
+	}
+	for (int Cat = 0; Cat < NumCategories; ++Cat)
+	{
+		const int N = Host.PendingPoints(Cat);
+		Out.Requested[Cat] = N;
+		if (N > 0)
+		{
+			uint8_t Mask = 0;
+			Out.Accepted[Cat] = S.Store.Insert(Cat, N, Out.Bucket[Cat], Mask);
+			Out.Cleared[Cat] |= Mask;
+		}
+		else
+		{
+			Out.Bucket[Cat] = S.Store.Current[Cat];
+		}
+	}
 }
 
 float StaticLevel(float Distance)

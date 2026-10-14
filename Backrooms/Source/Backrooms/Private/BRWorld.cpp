@@ -427,6 +427,28 @@ void ABRWorld::RespawnLocalPlayer()
 		FLinearColor(1.f, 0.85f, 0.6f));
 }
 
+void ABRWorld::RebuildAllChunks()
+{
+	for (TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->Destroy(); // ses objets (porte, sas, meubles) partent avec lui (ABRChunk::EndPlay)
+		}
+	}
+	Chunks.Empty();
+	for (ABRChunk* C : TearingDown)
+	{
+		if (IsValid(C))
+		{
+			C->Destroy();
+		}
+	}
+	TearingDown.Empty();
+	ServiceDoorActor.Reset();
+	UpdateStreaming(true);
+}
+
 void ABRWorld::ClearLevel()
 {
 	for (TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
@@ -1547,7 +1569,9 @@ void ABRWorld::Tick(float DeltaSeconds)
 			}
 			else
 			{
-				RequestTransition(0, true);
+				// v4.14 : REJOUER : la mort relance le niveau rejoue (la partie de campagne n'est pas touchee) ; histoire et
+				// mode libre : retour au Level 0, regle de la campagne
+				RequestTransition(GetSessionMode() == EBRSessionMode::Replay ? GetLevelNumber() : 0, true);
 			}
 		}
 	}

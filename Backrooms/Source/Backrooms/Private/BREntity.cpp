@@ -2081,8 +2081,15 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 		const float Now = GetWorld()->GetTimeSeconds();
 		if (Now < LidarRepelUntil)
 		{
-			const FVector Away = GetActorLocation() + (GetActorLocation() - LidarRepelFrom).GetSafeNormal2D() * BRLidar::RepelDistance;
-			FollowPathTo(Away, I.ChaseSpeed * 0.8f, Dt);
+			// v4.14 : vers la destination fixee au debut du recul, puis il attend la fin du delai sans revenir
+			if (FVector::DistSquared2D(GetActorLocation(), LidarRepelDest) > FMath::Square(60.f))
+			{
+				FollowPathTo(LidarRepelDest, I.ChaseSpeed * 0.8f, Dt);
+			}
+			else
+			{
+				MoveTowards(GetActorLocation(), 0.f);
+			}
 			return;
 		}
 		FVector Heard;
@@ -2162,8 +2169,30 @@ void ABREntity::LidarRepel(const FVector& From)
 	{
 		return;
 	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < LidarRepelUntil)
+	{
+		return; // deja en recul : la regle ne se cumule pas (pas de recul prolonge en maintenant le faisceau)
+	}
 	LidarRepelFrom = From;
-	LidarRepelUntil = GetWorld()->GetTimeSeconds() + BRLidar::RepelLock;
+	LidarRepelUntil = Now + BRLidar::RepelLock;
+	// Destination fixee une fois : jusqu'a RepelDistance a l'oppose du scanner, raccourcie devant un mur et jamais
+	// au-dessus d'une fosse (la menace ne se teleporte pas et ne tombe pas)
+	const FVector Here = GetActorLocation();
+	const FVector Away = (Here - From).GetSafeNormal2D();
+	float Retreat = BRLidar::RepelDistance;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRLidarRetreat), false, this);
+	FHitResult Hit;
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Here, Here + Away * Retreat, ECC_Visibility, Q))
+	{
+		Retreat = FMath::Max(0.f, static_cast<float>(Hit.Distance) - 80.f);
+	}
+	const ABRWorld* RW = ABRWorld::Get(this);
+	while (Retreat > 0.f && RW && RW->IsOverPit(Here + Away * Retreat, 60.f))
+	{
+		Retreat -= 50.f;
+	}
+	LidarRepelDest = Here + Away * FMath::Max(0.f, Retreat);
 	BeamTime = 0.f;
 	Agitation = 0.f;
 	bLidarTelegraphed = false;

@@ -469,6 +469,11 @@ public:
 	void ServerOpenServiceDoor(const ABRCharacter* By);
 	/** La porte construite par son chunk (elle prend l'etat ouvert ou ferme de l'hote) */
 	void RegisterServiceDoor(ABRExit* Door);
+	/** v4.14 : client : si sa porte de service differe de celle de l'hote (etat recu apres la construction), reprend
+	 *  l'emplacement de l'hote et reconstruit le Level 0 ; rien chez l'hote */
+	void ReconcileServiceDoor();
+	/** v4.14 : detruit et reconstruit tout de suite tous les chunks (et leurs objets) du niveau */
+	void RebuildAllChunks();
 	/** v4.13 (tests) : etat de l'aide d'orientation du Level 0 (secondes avant l'aide, -1 : aucune prevue) */
 	float GetDraftHintRemaining() const;
 	/** v4.13 : secondes depuis le debut du reveil du Level 0 (-1 : aucun reveil en cours ou joue) ; HUD (paupieres) */

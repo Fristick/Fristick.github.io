@@ -165,13 +165,9 @@ void ABRWorld::OnRep_Story()
 	// Client : le premier etat recu decrit ce qui s'est passe avant l'arrivee (pas de reveil ni d'annonce rejoues)
 	const bool bInitial = !bStorySeen;
 	bStorySeen = true;
-	// La porte de l'hote fait foi : la meme graine et la meme version donnent la meme porte ; un ecart est signale
-	if (bLevelReady && bServiceDoor && NetStory.IntroSeed == Seed && NetStory.DoorDir >= 0
-		&& (ServiceDoorCell != FIntPoint(NetStory.DoorX, NetStory.DoorY) || GetServiceDoorDir() != ServiceDoorDirOf(NetStory.DoorDir)))
-	{
-		UE_LOG(LogBackrooms, Warning, TEXT("[Story] Porte de service : l'hote l'a en %d,%d (face %d), ce client en %d,%d"), NetStory.DoorX, NetStory.DoorY,
-			NetStory.DoorDir, ServiceDoorCell.X, ServiceDoorCell.Y);
-	}
+	// v4.14 : la porte de l'hote fait foi. Si ce client a construit son Level 0 avant de recevoir l'emplacement retenu
+	// (ou si l'hote garde une ancienne porte encore valide), le niveau est reconstruit avec la porte de l'hote
+	ReconcileServiceDoor();
 	ApplyStoryLocal(bInitial);
 }
 
@@ -277,8 +273,10 @@ int32 ABRWorld::StoryOnLeave(int32 Target, uint32& OutSeed)
 		return Target;
 	}
 	const int32 To = Res.Target >= 0 ? Res.Target : Dest;
-	const bool bParked = From == BRStory::Poolrooms && S.Parked >= 0 && To == S.Parked;
 	BRStory::OnProgress(S, From, To);
+	// v4.14 : ancienne partie : sa session garee reprend des qu'on arrive a son niveau, Poolrooms traversees (a leur
+	// sortie, ou plus tard par la progression ordinaire quand son niveau est publie)
+	const bool bParked = BRStory::WantsParked(S, To);
 	UE_LOG(LogBackrooms, Log, TEXT("[Story] Etape accomplie : Niveau %d -> Niveau %d%s"), From, To, bParked ? TEXT(" (progression gardee d'une ancienne partie)") : TEXT(""));
 	PublishStory(S);
 	if (bParked)
@@ -329,6 +327,26 @@ void ABRWorld::OnStoryLevelLoaded()
 			}
 		}
 		BRStory::OnArrive(S, Level);
+		// v4.14 : session garee d'une ancienne partie : liberee seulement une fois reprise (meme graine, objets, mission),
+		// ou s'il n'y avait rien a reprendre ; sinon elle reste pour la prochaine arrivee
+		if (BRStory::WantsParked(S, Level))
+		{
+			ABRPlayerController* PC = LocalPC();
+			const bool bHadParked = PC && PC->HasParkedSession(Level);
+			if (IsResumedSession() || !bHadParked)
+			{
+				BRStory::OnParkedRestored(S);
+				if (PC)
+				{
+					PC->ConfirmParkedRestored(Level);
+				}
+				UE_LOG(LogBackrooms, Log, TEXT("[Story] Progression garee reprise au Niveau %d (%s)"), Level, bHadParked ? TEXT("session restauree") : TEXT("aucune session a reprendre"));
+			}
+			else
+			{
+				UE_LOG(LogBackrooms, Warning, TEXT("[Story] Niveau %d atteint sans reprendre la session garee : elle est gardee"), Level);
+			}
+		}
 		if (Level == 0 && !BRStory::IsDone(S, 0) && (S.Events & BRStory::Event::IntroWake) == 0)
 		{
 			S.Events |= BRStory::Event::IntroWake; // reveil : une fois par partie, au premier Level 0
@@ -733,6 +751,34 @@ void ABRWorld::ServerOpenServiceDoor(const ABRCharacter* By)
 	}
 	UE_LOG(LogBackrooms, Log, TEXT("[Story] Porte de service ouverte par %s"), By ? *By->GetName() : TEXT("?"));
 	PublishStory(S);
+}
+
+void ABRWorld::ReconcileServiceDoor()
+{
+	if (HasAuthority() || !bLevelReady || !bServiceDoor || NetStory.IntroSeed != Seed || NetStory.DoorDir < 0 || NetStory.DoorDir > 3)
+	{
+		return;
+	}
+	const FIntPoint HostCell(NetStory.DoorX, NetStory.DoorY);
+	const FIntPoint HostDir = ServiceDoorDirOf(NetStory.DoorDir);
+	if (ServiceDoorCell == HostCell && GetServiceDoorDir() == HostDir)
+	{
+		return;
+	}
+	const FIntPoint OldCell = ServiceDoorCell;
+	// Meme graine : memes candidats ; PlaceServiceDoor reprend celui de l'hote (NetStory) avant tout nouveau tirage
+	PlaceServiceDoor();
+	if (ServiceDoorCell != HostCell || GetServiceDoorDir() != HostDir)
+	{
+		UE_LOG(LogBackrooms, Error, TEXT("[Story] Porte de service de l'hote (%d,%d face %d) absente des emplacements de ce client : version differente ?"),
+			HostCell.X, HostCell.Y, NetStory.DoorDir);
+		return;
+	}
+	// Mur perce, sas, chemin reserve (aucun meuble), battant et collisions : tout le Level 0 (16 chunks) est reconstruit
+	// tout de suite, dans cette image : jamais deux portes, ni un ancien trou, ni un sol absent sous les joueurs
+	RebuildAllChunks();
+	UE_LOG(LogBackrooms, Warning, TEXT("[Story] Porte de service : %d,%d -> %d,%d (emplacement de l'hote recu apres la construction) : Level 0 reconstruit"),
+		OldCell.X, OldCell.Y, HostCell.X, HostCell.Y);
 }
 
 void ABRWorld::RegisterServiceDoor(ABRExit* Door)

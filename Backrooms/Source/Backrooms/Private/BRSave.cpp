@@ -497,6 +497,7 @@ namespace BRSaves
 		L.NumExplored = Save->Explored.Num();
 		L.Current = Save->CurrentLevel;
 		L.Endings = Save->Endings;
+		L.Format = Save->LoadedVersion; // v4.14 : format 1 : la console pouvait ajouter des niveaux aux decouvertes
 		const BRStory::FMigration M = BRStory::MigrateLegacy(L);
 		BRStory::FState S = M.State;
 		if (Save->PlayTime > 60.f)
@@ -526,7 +527,8 @@ namespace BRSaves
 		}
 		Save->SetStory(S);
 		UE_LOG(LogBackrooms, Log, TEXT("[Story] Migration : niveaux %d, courant %d -> atteint %d, etapes 0x%x, reprise %d, gare %d, Poolrooms %s, session %s"),
-			Save->Explored.Num(), L.Current, S.Reached, S.Done, S.Resume, S.Parked, M.bPoolroomsCredited ? TEXT("traversees (preuve)") : TEXT("non creditees"),
+			Save->Explored.Num(), L.Current, S.Reached, S.Done, S.Resume, S.Parked,
+			M.PoolProof == BRStory::EPoolProof::Proven ? TEXT("traversees (preuve)") : (M.PoolProof == BRStory::EPoolProof::Absent ? TEXT("jamais visitees") : TEXT("historique ambigu, traversee organisee")),
 			M.bParkSession ? TEXT("garee") : (Session.bValid ? TEXT("gardee") : TEXT("aucune")));
 	}
 

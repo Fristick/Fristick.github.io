@@ -144,13 +144,13 @@ void ABRAutoTest::AddV413LidarSteps()
 		}
 		if (StepTime < 0.6f)
 		{
-			return false; // 7 images au plus pour tous les rayons
+			return false; // v4.14 : PulseSeconds (0,2 s) a toute cadence, plus si l'image depasse le plafond par image
 		}
 		TestMissionPhase = 0;
-		const int64 Rays = ABRLidar::StatRays;
+		const int64 Rays = ABRLidar::Stats.Rays;
 		const int32 Points = L->GetPointCount() - TestCountA;
-		Note(FString::Printf(TEXT("impulsion : %lld rayons traces (attendu %d), %d points affiches, %.2f ms passes dans le scanner, %d points au plus"), Rays, BRLidar::PulseRays, Points,
-			ABRLidar::StatSeconds * 1000.0, BRLidar::MaxPoints), Rays < BRLidar::PulseRays || Points <= 0);
+		Note(FString::Printf(TEXT("impulsion : %lld rayons traces (attendu %d), %d points affiches, %d points au plus ; mesures : %s"), Rays, BRLidar::PulseRays, Points,
+			BRLidar::MaxPoints, *ABRLidar::Stats.ToString()), Rays < BRLidar::PulseRays || Points <= 0);
 		Shot(TEXT("v413_lidar_impulsion"));
 		return true;
 	});

@@ -4470,10 +4470,43 @@ bool ABRCharacter::ServerLidarRepel_Validate(ABREntity* E)
 	return true;
 }
 
+void ABRCharacter::SetLidarAimTarget(ABREntity* E)
+{
+	if (HasAuthority())
+	{
+		ServerLidarAim_Implementation(E);
+	}
+	else
+	{
+		ServerLidarAim(E);
+	}
+}
+
+bool ABRCharacter::ServerLidarAim_Validate(ABREntity* E)
+{
+	return true;
+}
+
+void ABRCharacter::ServerLidarAim_Implementation(ABREntity* E)
+{
+	if (ServerAimEntity.Get() != E)
+	{
+		ServerAimEntity = E;
+		ServerAimSince = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	}
+}
+
 void ABRCharacter::ServerLidarRepel_Implementation(ABREntity* E)
 {
 	const ABRWorld* W = ABRWorld::Get(this);
 	if (!W || !W->IsLidarLevel() || !IsValid(E) || bDead || E->Kind != EBREntityKind::Smiler)
+	{
+		return;
+	}
+	// v4.14 : la regle « maintenir 0,6 s sur ce Smiler » est mesuree chez l'hote : meme cible depuis le debut de la visee,
+	// avec une tolerance pour la latence (l'annonce de la visee et la demande voyagent dans le meme ordre)
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (ServerAimEntity.Get() != E || Now - ServerAimSince < BRLidar::RepelHold - 0.2)
 	{
 		return;
 	}

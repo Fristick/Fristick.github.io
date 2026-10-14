@@ -1,6 +1,8 @@
 // v4.13 : banc hors moteur du fil narratif (BRStoryLogic) : ordre stable de la campagne, regle d'acces de l'hote (aucun
 // raccourci, Poolrooms obligatoires), progression complete dans les trois canaux de contenu, retours sans etape perdue,
 // fin de chapitre puis reprise a la mise a jour suivante, migration des anciennes parties (formats 1 a 4).
+// v4.14 : preuve de traversee des Poolrooms (prouvee, absente, ambigue), session garee conservee jusqu'a sa reprise, regle
+// d'ecriture de la partie (REJOUER et mode developpeur n'ecrivent pas la campagne).
 // Le banc compile le code meme du jeu (BRStoryLogic.cpp, BRContentLogic.cpp) ; il ne remplace pas un essai dans Unreal.
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Story/test_story.cpp
@@ -83,14 +85,115 @@ namespace
 		return P;
 	}
 
-	BRStory::FMigration Migrate(std::vector<int> Explored, int Current, uint8_t Endings = 0)
+	BRStory::FMigration Migrate(std::vector<int> Explored, int Current, uint8_t Endings = 0, int Format = 4)
 	{
 		BRStory::FLegacy L;
 		L.Explored = Explored.data();
 		L.NumExplored = static_cast<int>(Explored.size());
 		L.Current = Current;
 		L.Endings = Endings;
+		L.Format = Format;
 		return BRStory::MigrateLegacy(L);
+	}
+
+	/** v4.14 : champs durables d'une partie de campagne (ceux que WriteActiveSave peut toucher) */
+	struct FRecord
+	{
+		int Items = 0;
+		int Deaths = 0;
+		bool bPendingDeath = false;
+		bool bSessionValid = false;
+		int SessionLevel = -1;
+		unsigned SessionSeed = 0;
+		int CurrentLevel = 0;
+		int RouteBits = 0;
+		int OptionalFound = 0;
+		int Endings = 0;
+		int StoryDone = 0;
+		double PlayTime = 0.0;
+		std::vector<int> Journal;
+		bool operator==(const FRecord& O) const
+		{
+			return Items == O.Items && Deaths == O.Deaths && bPendingDeath == O.bPendingDeath && bSessionValid == O.bSessionValid && SessionLevel == O.SessionLevel
+				&& SessionSeed == O.SessionSeed && CurrentLevel == O.CurrentLevel && RouteBits == O.RouteBits && OptionalFound == O.OptionalFound
+				&& Endings == O.Endings && StoryDone == O.StoryDone && PlayTime == O.PlayTime && Journal == O.Journal;
+		}
+	};
+
+	/** Etat de la session en cours (personnage et monde), tel que WriteActiveSave le recopierait */
+	struct FPlay
+	{
+		int Items = 0;
+		bool bDead = false;
+		int Level = 0;
+		unsigned Seed = 0;
+		int RouteBits = 0;
+		int OptionalFound = 0;
+		int Endings = 0;
+		int StoryDone = 0;
+		std::vector<int> Journal;
+	};
+
+	/** Meme decoupage que ABRPlayerController::WriteActiveSave, NotifyPlayerDeath et le compteur de temps, gouverne par
+	 *  BRStory::WritePolicyFor */
+	void Write(const BRStory::FWritePolicy& P, FRecord& R, const FPlay& Play)
+	{
+		if (!P.bSession)
+		{
+			if (P.bJournalUnion)
+			{
+				for (int Id : Play.Journal)
+				{
+					bool bHas = false;
+					for (int J : R.Journal)
+					{
+						bHas |= J == Id;
+					}
+					if (!bHas)
+					{
+						R.Journal.push_back(Id);
+					}
+				}
+			}
+			return;
+		}
+		if (Play.bDead)
+		{
+			R.bPendingDeath = true;
+			R.bSessionValid = false;
+		}
+		else
+		{
+			R.Items = Play.Items;
+			R.bPendingDeath = false;
+			R.bSessionValid = true;
+			R.SessionLevel = Play.Level;
+			R.SessionSeed = Play.Seed;
+		}
+		R.Journal = Play.Journal;
+		R.RouteBits = Play.RouteBits;
+		R.OptionalFound = Play.OptionalFound;
+		R.Endings = Play.Endings;
+		R.StoryDone = Play.StoryDone;
+		R.CurrentLevel = Play.Level;
+	}
+
+	void Death(const BRStory::FWritePolicy& P, FRecord& R, FPlay& Play)
+	{
+		Play.bDead = true;
+		if (P.bDeath)
+		{
+			++R.Deaths;
+		}
+		Write(P, R, Play);
+	}
+
+	void Tick(const BRStory::FWritePolicy& P, FRecord& R, double Dt)
+	{
+		if (P.bPlayTime)
+		{
+			R.PlayTime += Dt;
+		}
 	}
 }
 
@@ -225,6 +328,14 @@ int main()
 			{ "v4.12 publiee, 0 -> 37 -> 1 -> 2 (redirection : pas une preuve)", { 0, 37, 1, 2 }, 2, 0, 37, 2, false },
 			{ "revenu au Niveau 1 apres le Niveau 4 (sans les Poolrooms)", { 0, 1, 4 }, 1, 0, 1, -1, false },
 			{ "campagne finie par 0 -> 37 -> 4 -> ... -> 11", { 0, 37, 4, 5, 6, 8, 9, 10, 11 }, 11, 1, 11, -1, true },
+			// v4.14 : l'ordre des premieres decouvertes n'est pas un journal des trajets
+			{ "[0, 1, 37, 4] : 1, retour a 0, 37, retour par 0, ascenseur 1 -> 4", { 0, 1, 37, 4 }, 4, 0, 37, 4, false },
+			{ "[0, 1, 4, 37] : vraie traversee vers un Niveau 4 deja connu (non prouvable)", { 0, 1, 4, 37 }, 4, 0, 37, 4, false },
+			{ "[0, 37, 1, 4, 5] : revisite, 1 decouvert avant 4", { 0, 37, 1, 4, 5 }, 5, 0, 37, 5, false },
+			{ "[0, 37, 2, 3, 4] : 3 (ascenseur -> 4) decouvert avant 4", { 0, 37, 2, 3, 4 }, 4, 0, 37, 4, false },
+			{ "[0, 37, 4, 1, 2, 3, 5] : retours et revisites apres une vraie traversee", { 0, 37, 4, 1, 2, 3, 5 }, 5, 0, 5, -1, true },
+			{ "[0, 37] arrete dans les Poolrooms (visitees, pas de preuve, rien a garer)", { 0, 37 }, 37, 0, 37, -1, false },
+			{ "[0, 1, 2] jamais visitees (absence prouvee), arrete au Niveau 2", { 0, 1, 2 }, 2, 0, 37, 2, false },
 		};
 		for (const FCase& K : Cases)
 		{
@@ -243,7 +354,10 @@ int main()
 			Line("au Niveau 5 sans les Poolrooms : Poolrooms ouvertes, Niveaux 2 et 5 en attente de la traversee", bLocked);
 			const int Target = ProgressTarget(S, 37, AvailAll, nullptr);
 			OnProgress(S, 37, Target);
-			Line("sortie du sas : retour au Niveau 5 (progression d'avant), etape enregistree", Target == 5 && IsDone(S, 37) && CanEnter(S, 5) == EAccess::Allowed && S.Parked == -1);
+			Line("sortie du sas : retour au Niveau 5 (progression d'avant), etape enregistree, gare jusqu'a la reprise (v4.14)",
+				Target == 5 && IsDone(S, 37) && CanEnter(S, 5) == EAccess::Allowed && S.Parked == 5 && WantsParked(S, 5));
+			OnParkedRestored(S);
+			Line("reprise de la session garee confirmee : etape de migration terminee", S.Parked == -1);
 			Line("les Niveaux 1 et 4 deja depasses restent accomplis", IsDone(S, 1) && IsDone(S, 4) && IsDone(S, 0));
 			BRContent::EChannel Pub = BRContent::EChannel::Public;
 			FMigration M2 = Migrate({ 0, 1, 4, 5 }, 5);
@@ -254,6 +368,104 @@ int main()
 			const FMigration M = Migrate({ 0, 1, 2 }, 2, 4);
 			Line("fin du lot 1 de la v4.12 conservee comme fin de chapitre", (M.State.ChapterEnds & (1u << 1)) != 0);
 		}
+	}
+
+	std::printf("\nG. v4.14 : preuve de traversee des Poolrooms\n");
+	{
+		Line("[0, 1, 37, 4] (contre-exemple de l'audit) : ambigu, pas de credit, partie garee, detour organise",
+			[] { const FMigration M = Migrate({ 0, 1, 37, 4 }, 4); return M.PoolProof == EPoolProof::Ambiguous && !M.bPoolroomsCredited && M.bParkSession
+				&& (M.State.Events & Event::MigratedDetour) && !IsDone(M.State, 37); }());
+		Line("[0, 37, 4, 5] format 4 : prouvee (seul acces au Niveau 4 connu : l'echelle des Poolrooms)",
+			Migrate({ 0, 37, 4, 5 }, 5).PoolProof == EPoolProof::Proven);
+		Line("[0, 37, 4, 5] format 1 (console v4.1 a v4.3) : ambigu", Migrate({ 0, 37, 4, 5 }, 5, 0, 1).PoolProof == EPoolProof::Ambiguous);
+		Line("[0, 37, 4, 5] format inconnu (0) : ambigu", Migrate({ 0, 37, 4, 5 }, 5, 0, 0).PoolProof == EPoolProof::Ambiguous);
+		Line("[0, 11, 37, 4] : Niveau 11 (destinations au hasard) connu avant 4 : ambigu", Migrate({ 0, 11, 37, 4 }, 4).PoolProof == EPoolProof::Ambiguous);
+		Line("[0, 1] : jamais visitees : absence prouvee", Migrate({ 0, 1 }, 1).PoolProof == EPoolProof::Absent);
+		Line("courant 37 sans decouverte enregistree : ambigu (visitees)", Migrate({ 0 }, 37).PoolProof == EPoolProof::Ambiguous);
+		// Rien n'est efface par la migration : seule la session est garee (le jeu la copie dans ParkedSession)
+		const FMigration M = Migrate({ 0, 1, 37, 4 }, 4);
+		Line("ancienne progression conservee : Niveaux 0 et 1 accomplis, plus loin atteint = Niveau 4", IsDone(M.State, 0) && IsDone(M.State, 1) && M.State.Reached == IndexOf(4));
+	}
+
+	std::printf("\nH. v4.14 : session garee conservee jusqu'a sa reprise (canaux, ajout d'un chapitre)\n");
+	{
+		BRContent::EChannel Pub = BRContent::EChannel::Public;
+		BRContent::EChannel Int = BRContent::EChannel::Internal;
+		BRContent::EChannel Dev = BRContent::EChannel::All;
+		FMigration M = Migrate({ 0, 1, 4, 5 }, 5);
+		FState& S = M.State;
+		// Version publique : le niveau gare (5) est indisponible : la sortie du sas mene au Niveau 2, la progression garee reste
+		const int T = ProgressTarget(S, 37, AvailIn, &Pub);
+		OnProgress(S, 37, T);
+		Line("version publique : sortie des Poolrooms vers le Niveau 2, Poolrooms accomplies, Niveau 5 toujours gare",
+			T == 2 && IsDone(S, 37) && S.Parked == 5 && !WantsParked(S, 2));
+		PlayCampaign(Pub, S);
+		Line("fin du chapitre 1 : la progression garee n'est pas videe", S.Parked == 5);
+		Line("chapitre 2 publie (Niveau 5 encore indisponible) : Continuer au Niveau 3, gare conserve", ResumePoint(S, AvailIn, &Int) == 3 && S.Parked == 5);
+		Line("Niveau 5 publie : Continuer reprend la progression garee au Niveau 5", ResumePoint(S, AvailIn, &Dev) == 5 && WantsParked(S, 5));
+		OnParkedRestored(S);
+		Line("reprise reussie : l'etape de migration est terminee", S.Parked == -1 && !WantsParked(S, 5));
+		// Canal de developpement : la sortie du sas mene directement au niveau gare ; la reprise n'est confirmee qu'a l'arrivee
+		FMigration M2 = Migrate({ 0, 1, 4, 5 }, 5);
+		const int T2 = ProgressTarget(M2.State, 37, AvailAll, nullptr);
+		OnProgress(M2.State, 37, T2);
+		Line("niveau gare disponible : sortie du sas vers le Niveau 5, gare jusqu'a la confirmation de la reprise", T2 == 5 && WantsParked(M2.State, 5) && M2.State.Parked == 5);
+	}
+
+	std::printf("\nI. v4.14 : REJOUER et mode developpeur n'ecrivent pas la partie de campagne\n");
+	{
+		const FWritePolicy Story = WritePolicyFor(ESession::Story);
+		const FWritePolicy Replay = WritePolicyFor(ESession::Replay);
+		const FWritePolicy Free = WritePolicyFor(ESession::Free);
+		// Partie de campagne arretee au Niveau 2 : inventaire de 5 objets, mission en cours, journal { 3, 7 }
+		FRecord R;
+		FPlay Camp;
+		Camp.Items = 5;
+		Camp.Level = 2;
+		Camp.Seed = 4242;
+		Camp.RouteBits = 1;
+		Camp.StoryDone = 0x0B;
+		Camp.Journal = { 3, 7 };
+		Write(Story, R, Camp);
+		Tick(Story, R, 600.0);
+		const FRecord Before = R;
+		// Rejeu du Level 0 : consommation (4 objets), ramassage (6), degats, document lu (9), fin vue, mort, menu, fermeture
+		FPlay Rep;
+		Rep.Level = 0;
+		Rep.Seed = 77;
+		Rep.Items = 4;
+		Rep.Journal = { 3, 7, 9 };
+		Rep.Endings = 2;
+		Rep.StoryDone = 0;
+		Write(Replay, R, Rep);
+		Rep.Items = 6;
+		Tick(Replay, R, 120.0);
+		Write(Replay, R, Rep);
+		Death(Replay, R, Rep);
+		Write(Replay, R, Rep);
+		FRecord Expected = Before;
+		Expected.Journal = { 3, 7, 9 };
+		Line("rejeu (consommation, ramassage, mort, fin, fermeture) : equipement, morts, session, niveau, campagne, histoire, temps inchanges",
+			R == Expected);
+		Line("transfert explicite : le document lu en rejeu complete le journal (union, rien retire)", R.Journal.size() == 3 && R.Journal[2] == 9);
+		// Mode developpeur sur un niveau deja decouvert : rien du tout
+		FRecord R2 = Before;
+		FPlay DevPlay = Rep;
+		DevPlay.bDead = false;
+		DevPlay.Items = 1;
+		DevPlay.Level = 2;
+		Write(Free, R2, DevPlay);
+		Death(Free, R2, DevPlay);
+		Tick(Free, R2, 60.0);
+		Line("mode developpeur (niveau deja decouvert, mort comprise) : partie identique", R2 == Before);
+		// CONTINUER retrouve exactement la session d'avant le rejeu
+		Line("CONTINUER apres le rejeu : session du Niveau 2, graine 4242, 5 objets", R.bSessionValid && R.SessionLevel == 2 && R.SessionSeed == 4242 && R.Items == 5 && !R.bPendingDeath);
+		// L'histoire, elle, ecrit tout (regle inchangee)
+		FRecord R3 = Before;
+		FPlay Next = Camp;
+		Next.Items = 3;
+		Write(Story, R3, Next);
+		Line("histoire : l'ecriture suit la session (3 objets)", R3.Items == 3);
 	}
 
 	std::printf("\nVerifications : %d, echecs : %d\nRESULTAT : %s\n", Checks, Failures, Failures == 0 ? "OK" : "ECHEC");

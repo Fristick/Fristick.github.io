@@ -1,0 +1,19 @@
+# Sondes de l'audit v4.14 sur b8f9449 — sortie reelle
+# Date : 2026-10-14T14:26:29Z ; compilateur : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# Les sondes sont liees aux fichiers du jeu de b8f9449 (BRLidarLogic.cpp, BRStoryLogic.cpp) ; leur source est reproduite
+# dans Docs/AUDIT_v4.14.md. Ce ne sont ni des mesures GPU ni des captures du jeu.
+
+## probe_ring.cpp + Source/Backrooms/Private/BRLidarLogic.cpp (FRing, 30 s de focus continu, un point par rayon)
+ 30 images/s : 33300 points demandes, 0.0 % rejetes, 0 images sans aucun point ajoute
+ 60 images/s : 66600 points demandes, 10.4 % rejetes, 170 images sans aucun point ajoute
+144 images/s : 159840 points demandes, 62.5 % rejetes, 2680 images sans aucun point ajoute
+240 images/s : 266400 points demandes, 77.5 % rejetes, 5559 images sans aucun point ajoute
+Advance(13 s), persistance 12 s : 100 points restent comptes (groupe 0), age 1.50 s, attenuation 1.00
+
+## probe_story.cpp + Source/Backrooms/Private/BRStoryLogic.cpp (MigrateLegacy)
+decouvertes [0, 1, 37, 4], courant 4 : Poolrooms creditees OUI, etape 37 accomplie OUI, partie garee NON, detour NON
+
+## Calcul des branches de ABRLidar::TraceRay / AddPlateGlyphs (masques SymbolMask de BRLidar.cpp)
+cases allumees par symbole : [18, 16, 24, 12, 13, 19]
+37 rayons de focus sur une porte : 37 x (1 point de mecanisme + 4 points de silhouette + symbole) = 629 a 1073 points
+avec 220 impacts d impulsion ordinaires : jusqu a 1293 points dans une image (calcul, pas une mesure)

@@ -79,16 +79,24 @@ namespace BRStory
 	void OnProgress(FState& S, int From, int To)
 	{
 		SetDone(S, From);
-		if (From == Poolrooms)
-		{
-			S.Parked = -1; // l'etape manquante est faite : la progression d'avant reprend
-		}
+		// v4.14 : le niveau gare reste note jusqu'a la reprise reussie de sa session (OnParkedRestored) : un niveau gare
+		// indisponible dans cette version (canal public) attend le chapitre qui le publiera
 		const int I = IndexOf(To);
 		if (I >= 0)
 		{
 			S.Reached = I > S.Reached ? I : S.Reached;
 			S.Resume = To;
 		}
+	}
+
+	void OnParkedRestored(FState& S)
+	{
+		S.Parked = -1;
+	}
+
+	bool WantsParked(const FState& S, int Level)
+	{
+		return S.Parked >= 0 && Level == S.Parked && IsDone(S, Poolrooms);
 	}
 
 	void OnArrive(FState& S, int Level)
@@ -117,6 +125,12 @@ namespace BRStory
 	int ResumePoint(const FState& S, FAvailable Available, void* Ctx)
 	{
 		const auto Avail = [&](int Level) { return Level >= 0 && Level != Ending && (!Available || Available(Level, Ctx)); };
+		// v4.14 : ancienne partie : apres la traversee des Poolrooms, sa progression garee reprend des que son niveau est
+		// disponible (ajout d'un chapitre)
+		if (S.Parked >= 0 && IsDone(S, Poolrooms) && Avail(S.Parked) && CanEnter(S, S.Parked) == EAccess::Allowed)
+		{
+			return S.Parked;
+		}
 		const int R = IndexOf(S.Resume) >= 0 ? S.Resume : 0;
 		if (Avail(R) && CanEnter(S, R) == EAccess::Allowed)
 		{
@@ -132,29 +146,74 @@ namespace BRStory
 		return 0;
 	}
 
+	FWritePolicy WritePolicyFor(ESession Mode)
+	{
+		FWritePolicy P;
+		if (Mode == ESession::Story)
+		{
+			P.bCharacter = P.bDeath = P.bSession = P.bCampaign = P.bStory = P.bPlayTime = P.bJournal = true;
+		}
+		else if (Mode == ESession::Replay)
+		{
+			P.bJournalUnion = true;
+		}
+		return P;
+	}
+
+	EPoolProof PoolroomsProof(const FLegacy& L)
+	{
+		int PoolPos = -1;
+		int FourPos = -1;
+		for (int K = 0; K < L.NumExplored; ++K)
+		{
+			if (L.Explored[K] == Poolrooms && PoolPos < 0)
+			{
+				PoolPos = K;
+			}
+			if (L.Explored[K] == 4 && FourPos < 0)
+			{
+				FourPos = K;
+			}
+		}
+		if (PoolPos < 0 && L.Current != Poolrooms)
+		{
+			return EPoolProof::Absent;
+		}
+		// La liste ne garde que les PREMIERES decouvertes : elle ne dit pas d'ou l'on est entre dans un niveau. Le Niveau 4
+		// a toujours ete atteignable depuis 1 (ascenseur), 3 (ascenseur), 5 (retour) et 37 (echelle), et au hasard depuis
+		// le Niveau 11 (porte d'immeuble, exploration apres une fin). Son entree prouve l'echelle des Poolrooms seulement
+		// si aucun de ces autres acces n'etait deja decouvert, et si la console n'a pas pu ajouter de niveau (format 1)
+		if (L.Format < 2 || PoolPos < 0 || FourPos < PoolPos)
+		{
+			return EPoolProof::Ambiguous;
+		}
+		for (int K = 0; K < FourPos; ++K)
+		{
+			const int Level = L.Explored[K];
+			if (Level == 1 || Level == 3 || Level == 5 || Level == 11)
+			{
+				return EPoolProof::Ambiguous;
+			}
+		}
+		return EPoolProof::Proven;
+	}
+
 	FMigration MigrateLegacy(const FLegacy& L)
 	{
 		FMigration M;
 		FState& S = M.State;
 		const int Pool = IndexOf(Poolrooms);
 		int MaxIdx = 0;
-		int PoolPos = -1;
 		for (int K = 0; K < L.NumExplored; ++K)
 		{
 			const int I = IndexOf(L.Explored[K]);
 			MaxIdx = I > MaxIdx ? I : MaxIdx;
-			if (L.Explored[K] == Poolrooms && PoolPos < 0)
-			{
-				PoolPos = K;
-			}
 		}
 		const int CurIdx = IndexOf(L.Current);
 		MaxIdx = CurIdx > MaxIdx ? CurIdx : MaxIdx;
-		// Preuve de traversee : le niveau decouvert juste apres les Poolrooms est le Niveau 4, la destination de leur
-		// echelle dans les versions anterieures (seul acces au Niveau 4 sans passer par les Niveaux 1 ou 3, pas encore
-		// decouverts). Une simple visite, ou la redirection vers le Niveau 1 de la v4.12 (le Niveau 1 s'atteint aussi
-		// depuis le Level 0), ne prouve rien
-		M.bPoolroomsCredited = PoolPos >= 0 && PoolPos + 1 < L.NumExplored && L.Explored[PoolPos + 1] == 4;
+		// v4.14 : traversee creditee seulement sur preuve (PoolroomsProof) ; absente ou ambigue, l'etape est organisee
+		M.PoolProof = PoolroomsProof(L);
+		M.bPoolroomsCredited = M.PoolProof == EPoolProof::Proven;
 		// Etapes depassees : un niveau explore avant le plus loin atteint a ete quitte vers l'avant
 		for (int K = 0; K < L.NumExplored; ++K)
 		{
@@ -177,8 +236,8 @@ namespace BRStory
 		S.Resume = CurIdx >= 0 ? L.Current : 0;
 		if (MaxIdx > Pool && !M.bPoolroomsCredited && CurIdx > Pool)
 		{
-			// Allee au-dela des Poolrooms sans les traverser : reprise dans les Poolrooms, la progression d'avant est garee
-			// et reprendra a la sortie du sas
+			// Allee au-dela des Poolrooms sans traversee prouvee : reprise dans les Poolrooms, la progression d'avant est
+			// garee (graine, objets, mission, documents) et reprendra apres la traversee
 			S.Resume = Poolrooms;
 			S.Parked = L.Current;
 			S.Events |= Event::MigratedDetour;
