@@ -1030,13 +1030,20 @@ void ABRAutoTest::AddLevelSteps(int32 Level)
 			Shot(FString::Printf(TEXT("L%02d_lampe"), Level));
 			return true;
 		});
-		Add(FString::Printf(TEXT("Niveau %d : vision nocturne"), Level), 1.f, [this]()
+		// v4.15 : niveau LiDAR (Level 6, v4.13) : la vision nocturne est refusee par conception (les parasites brouillent le
+		// capteur, ABRCharacter::ToggleNightVision) : la demande doit etre refusee, et non acceptee comme ailleurs
+		const bool bLidar = D.bLidar;
+		Add(FString::Printf(TEXT("Niveau %d : vision nocturne"), Level), 1.f, [this, bLidar]()
 		{
 			if (ABRCharacter* C = GetPlayer())
 			{
 				C->ToggleFlashlight();
 				C->ToggleNightVision();
-				if (!C->IsNightVision())
+				if (bLidar)
+				{
+					Note(FString::Printf(TEXT("vision nocturne refusee (niveau LiDAR) : %s"), C->IsNightVision() ? TEXT("NON") : TEXT("oui")), C->IsNightVision());
+				}
+				else if (!C->IsNightVision())
 				{
 					Note(TEXT("la vision nocturne ne s'active pas"), true);
 				}

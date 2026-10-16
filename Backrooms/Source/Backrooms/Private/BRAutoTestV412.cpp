@@ -62,6 +62,11 @@ namespace BRTestV412
 	TArray<uint8> OriginalBytes;
 	/** Mecanisme lu avant la reprise d'un placement d'une autre version */
 	int32 RestoredDevice = -1;
+	/** v4.15 : la reprise a change la session de test (partie active, mode, histoire) : retablie par l'etape "retour a la
+	 *  session de test", quelle que soit l'issue des etapes de reprise ; une reprise en echec saute la suivante */
+	bool bRepriseSession = false;
+	bool bRepriseFailed = false;
+	BRStory::FState StoryMark;
 
 	const TCHAR* YesNo(bool b)
 	{
@@ -991,10 +996,16 @@ void ABRAutoTest::AddV412Steps()
 		const int32 Almond = C->CountItem(EBRItem::AlmondWater);
 		const int32 RoomBefore = C->RoomFor(EBRItem::AlmondWater);
 		const int32 AsideBefore = C->CountRecovered();
+		const int32 AlmondInv = BRTxn::Count(C->ToTxn(), static_cast<uint8>(EBRItem::AlmondWater));
 		C->StorePickup(EBRItem::AlmondWater, false);
-		const bool bAside = C->CountRecovered() == 1 && C->RecoveredPickups == Before + 1 && C->CountItem(EBRItem::AlmondWater) == Almond;
-		const FString AsideInfo = FString::Printf(TEXT("place avant %d, mis de cote avant %d apres %d, compteur +%d, eaux %d -> %d"), RoomBefore, AsideBefore, C->CountRecovered(),
-			C->RecoveredPickups - Before, Almond, C->CountItem(EBRItem::AlmondWater));
+		// v4.15 : l'objet mis de cote est au joueur et compte (CountItem compte la reserve, comme le stock declare a l'hote),
+		// mais il n'est pas range (pas de place) : l'inventaire seul ne change pas. Avant : CountItem attendu inchange (faux)
+		const int32 AlmondAfter = C->CountItem(EBRItem::AlmondWater);
+		const int32 AlmondInvAfter = BRTxn::Count(C->ToTxn(), static_cast<uint8>(EBRItem::AlmondWater));
+		const bool bAside = C->CountRecovered() == AsideBefore + 1 && C->RecoveredPickups == Before + 1 && AlmondAfter == Almond + 1 && AlmondInvAfter == AlmondInv
+			&& C->Recovered.Num() > 0 && C->Recovered.Last().Item == EBRItem::AlmondWater;
+		const FString AsideInfo = FString::Printf(TEXT("place avant %d, mis de cote avant %d apres %d, compteur +%d, eaux %d -> %d, inventaire %d -> %d"), RoomBefore, AsideBefore,
+			C->CountRecovered(), C->RecoveredPickups - Before, Almond, AlmondAfter, AlmondInv, AlmondInvAfter);
 		// Une place se libere : il se range
 		C->RemoveItem(EBRItem::Vest, 1);
 		const int32 Stowed = C->StowRecovered(false);
@@ -1264,11 +1275,19 @@ void ABRAutoTest::AddV412Steps()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
-		if (!W || !C || W->GetMissionDevices().Num() == 0)
+		if (!W || !C)
 		{
 			return true;
 		}
 		TestCountA = 0;
+		if (W->GetLevelNumber() != 6 || W->GetMissionDevices().Num() == 0)
+		{
+			// v4.15 : pas au Niveau 6 (mort pendant la marche, retour au Level 0) : le controle suivant passait sans rien verifier
+			Note(FString::Printf(TEXT("Tick des mecanismes masques : controle impossible, Niveau %d avec %d mecanisme(s) (attendu : Niveau 6)"), W->GetLevelNumber(),
+				W->GetMissionDevices().Num()), true);
+			TestCountA = -1;
+			return true;
+		}
 		// Le plus loin possible des mecanismes (dans l'enceinte) : leurs chunks sont retires, ils sont masques
 		FVector Center = FVector::ZeroVector;
 		for (const ABRMissionDevice* D : W->GetMissionDevices())
@@ -1297,8 +1316,9 @@ void ABRAutoTest::AddV412Steps()
 	Add(TEXT("v4.12 Tick : mecanismes masques"), 0.f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();
-		if (!W)
+		if (!W || TestCountA < 0)
 		{
+			TestCountA = 0;
 			return true;
 		}
 		int32 Shown = 0;
@@ -1356,15 +1376,30 @@ void ABRAutoTest::AddV412Steps()
 		S->Session.GenVersion = BRM::GenVersion;
 		S->Session.PlaceVersion = 1;
 		S->Session.Mission = { 0x02, 0x13, 0x37, 0x00 }; // ne correspond a aucun plan
+		// v4.15 : la reprise est une session d'histoire : son fil va jusqu'au Niveau 2 (Level 0, Niveau 1 et Poolrooms faits).
+		// Sans cela, l'hote refusait le Niveau 2 (Poolrooms requis) et les verifications de reprise ne se faisaient pas
+		{
+			BRStory::FState St;
+			BRStory::SetDone(St, 0);
+			BRStory::SetDone(St, 1);
+			BRStory::SetDone(St, BRStory::Poolrooms);
+			St.Reached = BRStory::IndexOf(2);
+			St.Resume = 2;
+			S->SetStory(St);
+		}
 		OriginalBytes.Reset();
 		UGameplayStatics::SaveGameToMemory(S, OriginalBytes);
 		FFileHelper::SaveArrayToFile(OriginalBytes, *BRSaves::FilePath(BRSaves::SlotName(TestSlot)));
 		TestOrigSlot = BRSaves::ActiveSlot();
 		TestOrigSave = PC->ActiveSave;
 		bTestDevSession = PC->bDevSession;
+		StoryMark = W->GetStory();
+		bRepriseSession = true;
+		bRepriseFailed = false;
 		BRSaves::ActiveSlot() = TestSlot;
 		PC->ActiveSave = S;
 		PC->bDevSession = false;
+		W->SetStory(S->GetStory(), EBRSessionMode::Story, true);
 		BRSaves::PendingResume() = S->Session;
 		TestCountC = W->GetLevelSerial();
 		W->RequestTransition(2, false, Seed);
@@ -1374,9 +1409,23 @@ void ABRAutoTest::AddV412Steps()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRPlayerController* PC = GetPC();
+		if (!bRepriseSession)
+		{
+			return true; // reprise non preparee (etape precedente bloquee)
+		}
 		if (!W || !PC || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 2 || W->GetLevelSerial() == TestCountC)
 		{
-			return StepTime > 30.f;
+			if (StepTime <= 30.f)
+			{
+				return false;
+			}
+			// v4.15 : un delai depasse est un probleme (avant : etape terminee sans rien dire)
+			FString Why;
+			const bool bAllowed = W && W->CanEnterLevel(2, &Why);
+			Note(FString::Printf(TEXT("reprise : Niveau 2 non charge en 30 s (niveau %d ; entree %s%s)"), W ? W->GetLevelNumber() : -1, bAllowed ? TEXT("permise") : TEXT("refusee : "),
+				*Why), true);
+			bRepriseFailed = true;
+			return true;
 		}
 		const uint8 Notice = W->GetMissionNotice();
 		PC->WriteActiveSave(true);
@@ -1392,6 +1441,10 @@ void ABRAutoTest::AddV412Steps()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRPlayerController* PC = GetPC();
+		if (!bRepriseSession || bRepriseFailed)
+		{
+			return true; // la reprise precedente n'a pas eu lieu : deja signale
+		}
 		if (!W || !PC || W->IsTransitioning())
 		{
 			return false;
@@ -1429,31 +1482,75 @@ void ABRAutoTest::AddV412Steps()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRPlayerController* PC = GetPC();
+		if (!bRepriseSession || bRepriseFailed)
+		{
+			return true;
+		}
 		if (!W || !PC || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 2 || W->GetLevelSerial() == TestCountC)
 		{
-			return StepTime > 30.f;
+			if (StepTime <= 30.f)
+			{
+				return false;
+			}
+			Note(FString::Printf(TEXT("reprise d'un placement d'une autre version : Niveau 2 non recharge en 30 s (niveau %d)"), W ? W->GetLevelNumber() : -1), true);
+			return true;
 		}
 		const uint8 Notice = W->GetMissionNotice();
 		const bool bKept = RestoredDevice >= 0 && W->IsMissionActive() && W->GetMissionState().Dev[RestoredDevice] != 0;
 		Note(FString::Printf(TEXT("placement d'une autre version : avis %d (attendu 3 : mecanismes replaces), indice lu garde %s"), Notice, YesNo(bKept)), Notice != 3 || !bKept);
 		Shot(TEXT("v412_reprise_mecanismes_replaces"));
-		BRSaves::Flush();
-		BRSaves::ActiveSlot() = TestOrigSlot;
-		PC->ActiveSave = TestOrigSave;
-		PC->bDevSession = bTestDevSession;
-		TestOrigSave = nullptr;
+		return true;
+	});
+	// v4.15 : la session de test (partie active, emplacement, mode, histoire, prefixe des fichiers) est retablie quelle que
+	// soit l'issue des etapes de reprise (avant : seulement apres une reprise reussie ; un refus laissait le test en session
+	// d'histoire avec la partie de test, et les chargements suivants etaient refuses ou faits sans leur graine)
+	Add(TEXT("v4.12 reprise : retour a la session de test"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		if (bRepriseSession)
+		{
+			BRSaves::Flush();
+			BRSaves::ActiveSlot() = TestOrigSlot;
+			if (PC)
+			{
+				PC->ActiveSave = TestOrigSave;
+				PC->bDevSession = bTestDevSession;
+			}
+			TestOrigSave = nullptr;
+			if (W && PC)
+			{
+				W->SetStory(StoryMark, PC->GetSessionMode());
+			}
+			bRepriseSession = false;
+		}
+		bRepriseFailed = false;
 		DeleteSaveFiles();
 		BRSaves::SetTestPrefix(FString());
 		return true;
 	});
 
 	// ---------------------------------------------------------------------------------------------- Carnet
+	// v4.15 : le carnet est verifie sur un niveau a mission charge avec une graine fixe (avant : le niveau ou le test se
+	// trouvait, souvent le Level 0 apres une mort au Niveau 6 : pas de colonne d'aide, controles impossibles)
+	AddSeedLoad(4, 4113, TEXT("v4.12 carnet"));
 	Add(TEXT("v4.12 carnet : ouverture"), 0.5f, [this]()
 	{
 		ABRPlayerController* PC = GetPC();
-		if (!PC)
+		const ABRWorld* W = GetBRWorld();
+		if (!PC || !W)
 		{
 			return false;
+		}
+		if (!W->IsMissionActive() || W->HasServiceDoor() || W->GetLevelNumber() != 4)
+		{
+			if (StepTime < 10.f)
+			{
+				return false;
+			}
+			Note(FString::Printf(TEXT("carnet : controle impossible, Niveau %d sans mission (attendu : Niveau 4, graine 4113)"), W->GetLevelNumber()), true);
+			TestCountA = -1;
+			return true;
 		}
 		TestCountA = 0;
 		PC->SetInventoryOpen(true, static_cast<int32>(ABRHUD::ETab::Notebook));
@@ -1463,12 +1560,33 @@ void ABRAutoTest::AddV412Steps()
 	{
 		ABRPlayerController* PC = GetPC();
 		ABRHUD* H = PC ? Cast<ABRHUD>(PC->GetHUD()) : nullptr;
-		if (!H)
+		const ABRWorld* W = GetBRWorld();
+		if (!H || !W)
 		{
 			return false;
 		}
+		if (TestCountA < 0)
+		{
+			TestCountA = 0;
+			TestLanguage = BRLoc::Current().Code;
+			return true;
+		}
 		if (TestCountA == 0)
 		{
+			// Le carnet de ce niveau doit etre dessine (cle de l'aide : graine du niveau et niveau du plan), sinon l'aide
+			// demandee irait a une cle perimee
+			const uint32 HintSeed = W->GetSeed() ^ static_cast<uint32>(W->GetMissionPlan().Level * 7919);
+			if (H->NotebookHintSeed != HintSeed || H->NotebookHintStep < 0)
+			{
+				if (StepTime < 5.f)
+				{
+					return false;
+				}
+				Note(FString::Printf(TEXT("carnet : controle impossible, Niveau %d sans etape de mission dessinee (etape %d)"), W->GetLevelNumber(), H->NotebookHintStep), true);
+				TestLanguage = BRLoc::Current().Code;
+				return true;
+			}
+			Note(FString::Printf(TEXT("carnet controle au Niveau %d (mission active, etape %d)"), W->GetLevelNumber(), H->NotebookHintStep));
 			// Demande de defilement tres loin : l'image suivante la borne au contenu
 			H->NotebookLeftScroll = 1.0e6f;
 			TestCountA = 1;
@@ -1479,10 +1597,17 @@ void ABRAutoTest::AddV412Steps()
 			const bool bClamped = H->NotebookLeftScroll >= 0.f && H->NotebookLeftScroll < 1.0e6f;
 			Note(FString::Printf(TEXT("colonne de gauche : defilement borne au contenu %s (%.0f)"), YesNo(bClamped), H->NotebookLeftScroll), !bClamped);
 			Shot(TEXT("v412_carnet_bas"));
+			// v4.15 : la capture se fait a la fin de cette image : l'aide change a l'image suivante (sinon la capture montrait
+			// deja l'aide ouverte)
+			TestCountA = 2;
+			return false;
+		}
+		if (TestCountA == 2)
+		{
 			// Aide de niveau 2 : la colonne defile d'elle-meme jusqu'a l'aide
 			H->NotebookLeftScroll = 0.f;
 			H->NotebookHint.FindOrAdd(H->NotebookHintStep) = 2;
-			TestCountA = 2;
+			TestCountA = 3;
 			return false;
 		}
 		const bool bHint = H->NotebookHintShown == 2 && H->LastNotebookHintLevel == 2;

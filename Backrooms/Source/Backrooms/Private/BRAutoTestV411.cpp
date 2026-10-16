@@ -47,6 +47,10 @@ namespace BRTestV411
 	constexpr int32 LegacySlot = 0;
 	/** Reglage des sous-titres du joueur, retabli a la fin des etapes de sous-titres */
 	bool bPlayerSubtitles = true;
+	/** v4.15 : niveau d'aide en cours de verification dans le carnet (compteur propre a ces etapes : TestCountA venait de
+	 *  l'etape de ramassage, l'aide commencait au niveau 1) ; capture prise avant le changement suivant */
+	int32 NotebookStep = 0;
+	bool bNotebookShot = false;
 
 	const TCHAR* YesNo(bool b)
 	{
@@ -856,6 +860,8 @@ void ABRAutoTest::AddV411Steps()
 			return StepTime > 10.f;
 		}
 		PC->SetInventoryOpen(true, static_cast<int32>(ABRHUD::ETab::Notebook));
+		NotebookStep = 0;
+		bNotebookShot = false;
 		return true;
 	});
 	Add(TEXT("v4.11 carnet : aide progressive"), 0.3f, [this]()
@@ -868,7 +874,7 @@ void ABRAutoTest::AddV411Steps()
 		}
 		// Le bouton AIDE fait passer l'etape en cours de 0 a 1 puis 2 (indice, puis rappel des indices trouves) ; ici, le
 		// niveau d'aide est regle comme le ferait un clic, et l'image suivante doit l'afficher
-		const int32 Step = TestCountA;
+		const int32 Step = NotebookStep;
 		// L'aide est rangee par etape du carnet de ce niveau (cle et graine fixees au dessin du carnet) : on attend que le
 		// carnet de ce niveau ait ete dessine, sinon l'aide demandee irait a une cle perimee et serait effacee
 		const ABRWorld* W = GetBRWorld();
@@ -877,27 +883,35 @@ void ABRAutoTest::AddV411Steps()
 		{
 			return false;
 		}
-		if (Step == 0)
+		if (!bNotebookShot)
 		{
-			const bool bTab = H->Tab == ABRHUD::ETab::Notebook && H->LastNotebookHintLevel == 0;
-			Note(FString::Printf(TEXT("carnet ouvert : onglet %s, aide au depart %d"), YesNo(H->Tab == ABRHUD::ETab::Notebook), H->LastNotebookHintLevel), !bTab);
-			Shot(TEXT("v411_carnet_aide0"));
+			if (Step == 0)
+			{
+				const bool bTab = H->Tab == ABRHUD::ETab::Notebook && H->LastNotebookHintLevel == 0;
+				Note(FString::Printf(TEXT("carnet ouvert : onglet %s, aide au depart %d"), YesNo(H->Tab == ABRHUD::ETab::Notebook), H->LastNotebookHintLevel), !bTab);
+				Shot(TEXT("v411_carnet_aide0"));
+			}
+			else
+			{
+				const bool bLevel = H->LastNotebookHintLevel == Step;
+				Note(FString::Printf(TEXT("aide de niveau %d affichee : %s"), Step, YesNo(bLevel)), !bLevel);
+				Shot(FString::Printf(TEXT("v411_carnet_aide%d"), Step));
+			}
+			// v4.15 : la capture se fait a la fin de cette image : l'aide (ou la fermeture) change a l'image suivante, sinon
+			// la capture montrait deja l'etat suivant
+			bNotebookShot = true;
+			return false;
 		}
-		else
-		{
-			const bool bLevel = H->LastNotebookHintLevel == Step;
-			Note(FString::Printf(TEXT("aide de niveau %d affichee : %s"), Step, YesNo(bLevel)), !bLevel);
-			Shot(FString::Printf(TEXT("v411_carnet_aide%d"), Step));
-		}
+		bNotebookShot = false;
 		if (Step >= 2)
 		{
 			H->NotebookHint.Reset();
-			TestCountA = 0;
+			NotebookStep = 0;
 			PC->SetInventoryOpen(false);
 			return true;
 		}
 		H->NotebookHint.FindOrAdd(H->NotebookHintStep) = Step + 1;
-		++TestCountA;
+		++NotebookStep;
 		return false;
 	});
 
