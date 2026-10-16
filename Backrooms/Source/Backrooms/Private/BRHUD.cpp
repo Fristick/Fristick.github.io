@@ -3773,9 +3773,11 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 			GEngine->GetMediumFont(), true);
 	}
 	const float A2 = FMath::Clamp((T - 2.2f) / 1.f, 0.f, 1.f);
-	// v4.15 : parcours lineaire en solo : le niveau en cours recommence (meme disposition, equipement de depart)
+	// v4.15 : le texte suit la regle que la mort va appliquer (ABRWorld::GetDeathRule) : le niveau en cours recommence
+	// (parcours lineaire en solo : meme disposition, equipement de depart ; REJOUER : le niveau rejoue), sinon reveil au
+	// Level 0
 	const ABRWorld* LevelWorld = ABRWorld::Get(this);
-	const FString Wake = LevelWorld && LevelWorld->IsLinearLevel()
+	const FString Wake = LevelWorld && LevelWorld->GetDeathRule() == BRStory::EDeathRule::RestartLevel
 		? BR_STR(NSLOCTEXT("BR", "HUD.NiveauRecommence", "Le niveau recommence."))
 		: BR_STR(NSLOCTEXT("BR", "HUD.ReveillezMoquetteHumideEncore", "Vous vous r\u00e9veillez... sur une moquette humide. Encore."));
 	Txt(Wake, CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U, GEngine->GetMediumFont(), true);

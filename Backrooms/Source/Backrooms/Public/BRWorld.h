@@ -507,6 +507,10 @@ public:
 	/** v4.15 : le niveau charge appartient au parcours lineaire (hote : partie d'histoire lineaire ; client : recu avec le
 	 *  niveau, FBRNetLevel::Flags). REJOUER, le mode developpeur et les invites d'une partie classique : jamais */
 	bool IsLinearLevel() const { return bLinearLevel; }
+	/** v4.15 : ce que fera la mort du joueur local dans ce niveau (BRStory::DeathRuleFor sur la session, le parcours du
+	 *  niveau et le reseau) ; la seule source de la regle appliquee (Tick), du texte du reveil (HUD) et du niveau de reveil
+	 *  ecrit dans la partie (mort en attente) */
+	BRStory::EDeathRule GetDeathRule() const;
 	/** v4.15 : drapeaux du niveau recus ou publies (FBRNetLevel::Flags) */
 	uint8 GetNetLevelFlags() const { return NetLevel.Flags; }
 	/** v4.15 (tests, hors version finale) : impose le parcours des prochains chargements de l'hote (-1 : regle normale,

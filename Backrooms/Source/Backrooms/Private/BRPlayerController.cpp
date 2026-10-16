@@ -2056,6 +2056,19 @@ void ABRPlayerController::ResolvePendingDeath(UBRSaveGame* Save)
 	Save->Battery = 100.f;
 	Save->Session = FBRSessionState();
 	Save->CurrentLevel = Save->IsExplored(Save->PendingDeathLevel) ? Save->PendingDeathLevel : 0;
+	// v4.15 : parcours classique, mort en solo (niveau de reveil 0) : la mort ramene au Level 0, comme en jeu. Le point de
+	// reprise de l'histoire (que suit CONTINUER) passe au Level 0 comme a l'arrivee apres une mort (BRStory::OnArrive) ;
+	// avant, fermer le jeu a terre faisait reprendre au niveau de la mort. Parcours lineaire et cooperation : le niveau
+	// de reveil est celui de la mort, la reprise ne change pas
+	if (Save->PendingDeathLevel == 0 && !BRStory::IsLinear(Save->GetStory()))
+	{
+		BRStory::FState St = Save->GetStory();
+		BRStory::OnArrive(St, 0);
+		Save->SetStory(St);
+	}
+	// v4.15 : StartSolo doit savoir qu'une mort vient d'etre resolue (SelectSave la resout avant CONTINUER) : le niveau
+	// d'une partie lineaire est alors toujours recharge (mission neuve), meme si le monde montre deja ce niveau
+	bPendingDeathResolved = true;
 	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Menu.DerniereSessionArreteePendantMort", "La derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort : vous repartez avec l'\u00e9quipement de d\u00e9part.")), 7.f,
 		FLinearColor(1.f, 0.7f, 0.5f));
 }
@@ -2076,6 +2089,7 @@ void ABRPlayerController::SelectSave(int32 Slot)
 	}
 	ActiveSave = S;
 	BRSaves::ActiveSlot() = Slot;
+	bPendingDeathResolved = false; // v4.15 : seulement pour la partie choisie maintenant
 	ResolvePendingDeath(S);
 	// On reprend la ou on s'etait arrete
 	bool bMoved = false;
@@ -2306,9 +2320,10 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 	{
 		// v4.7 : mort en cours : l'inventaire d'avant la mort n'est pas reecrit, et la mort est notee pour le prochain
 		// chargement (seul : retour au Niveau 0 ; en equipe : reveil dans le niveau en cours). v4.15 : parcours lineaire :
-		// le niveau en cours, que CONTINUER recharge avec sa graine
+		// le niveau en cours, que CONTINUER recharge avec sa graine. Le niveau de reveil suit la regle de la mort du monde
+		// (ABRWorld::GetDeathRule) : Level 0 seulement si la mort y ramene
 		ActiveSave->bPendingDeath = true;
-		ActiveSave->PendingDeathLevel = (W && (IsNetGame() || W->IsLinearLevel())) ? W->GetLevelNumber() : 0;
+		ActiveSave->PendingDeathLevel = (W && W->GetDeathRule() != BRStory::EDeathRule::BackToStart) ? W->GetLevelNumber() : 0;
 		ActiveSave->Session.bValid = false;
 	}
 	else if (C)
@@ -2628,6 +2643,10 @@ void ABRPlayerController::StartSolo(bool bReplay)
 	ShowAddressBox(false);
 	ShowNameBox(false);
 	UpdateInputMode();
+	// v4.15 : une mort encore en attente est resolue avant le choix du niveau : CONTINUER suit alors la regle de la mort
+	// (classique : Level 0 ; lineaire : le niveau de la mort), quel que soit le chemin (le menu l'a deja fait dans
+	// SelectSave)
+	ResolvePendingDeath(ActiveSave);
 	// v4.13 : CONTINUER reprend l'histoire a son point de reprise ; REJOUER visite un niveau decouvert sans rien changer a
 	// l'histoire ni a la session sauvegardee. Mode developpeur : un niveau pas encore explore se visite librement
 	const int32 Target = bReplay ? BRLevels::All()[FMath::Clamp(MenuIndex, 0, BRLevels::All().Num() - 1)].Number : GetContinueLevel();
@@ -2654,18 +2673,20 @@ void ABRPlayerController::StartSolo(bool bReplay)
 	}
 	// v4.15 : parcours lineaire : CONTINUER (y compris apres une mort, jeu ferme a terre) charge le niveau avec sa graine
 	// (BRStory::LevelSeedFor) ; le decor du menu, meme s'il montre ce niveau, n'en tient pas lieu, et une mort en attente
-	// fait toujours recommencer le niveau (mission neuve). REJOUER : niveau neuf
+	// fait toujours recommencer le niveau (mission neuve), qu'elle ait ete resolue par SelectSave ou juste au-dessus
+	// (bPendingDeathResolved). REJOUER : niveau neuf
 	if (!bResume && !bReplay && Target != 0 && ActiveSave && !bDevSession)
 	{
 		if (const uint32 LinearSeed = BRStory::LevelSeedFor(ActiveSave->GetStory(), Target))
 		{
 			LoadSeed = LinearSeed;
-			bLoad = bLoad || LinearSeed != W->GetSeed() || !W->IsLinearLevel() || ActiveSave->bPendingDeath;
+			bLoad = bLoad || LinearSeed != W->GetSeed() || !W->IsLinearLevel() || bPendingDeathResolved;
 		}
 	}
 	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart), histoire et nature de la
 	// session ; l'histoire s'applique a l'arrivee dans le niveau charge, pas au decor du menu
 	ApplyActiveSave(bLoad);
+	bPendingDeathResolved = false;
 	if (bResume)
 	{
 		BRSaves::PendingResume() = *Session;

@@ -4,7 +4,7 @@
 #   (meme sortie avec cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-, MSVC 14.50.35739, 0 avertissement)
 # Compilateur : clang version 22.1.3 (clang-cl de Visual Studio 2026), 0 avertissement
 # Machine : Windows 11, RTX 5050 Laptop, 16 Go
-# Date : 2026-10-16T11:48:56Z
+# Date : 2026-10-16T12:57:46Z
 
 Banc du fil narratif v4.13
 
@@ -116,10 +116,11 @@ J. v4.15 : parcours lineaire
   acces de l'hote et destination de progression identiques en lineaire (12 x 12 paires, 0 ecart)       OK
   reprise (CONTINUER) identique en lineaire : fin du chapitre 1, puis chapitre 2 publie                OK
   niveau lineaire recommence apres une mort : reprise, etapes et plus loin atteint inchanges, meme graine OK
+  classique, jeu ferme pendant une mort en solo : CONTINUER ramene au Level 0, etapes et plus loin atteint gardes OK
   regles d'ecriture inchangees (histoire : tout ; REJOUER : journal par union ; libre : rien)          OK
   nouvelle partie (histoire) : parcours lineaire et graine du parcours enregistres                     OK
   REJOUER et mode developpeur dans une partie lineaire : parcours, graine et partie inchanges          OK
   migration des anciennes parties (7 historiques x formats 0 a 4) : toujours le parcours classique (0 lineaire) OK
 
-Verifications : 93, echecs : 0
+Verifications : 94, echecs : 0
 RESULTAT : OK

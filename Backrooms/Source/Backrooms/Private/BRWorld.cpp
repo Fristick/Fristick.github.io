@@ -430,6 +430,14 @@ void ABRWorld::RespawnLocalPlayer()
 		FLinearColor(1.f, 0.85f, 0.6f));
 }
 
+BRStory::EDeathRule ABRWorld::GetDeathRule() const
+{
+	// v4.15 : memes entrees partout (session, parcours du niveau charge, reseau) : le texte du reveil et le niveau ecrit
+	// dans une mort en attente ne peuvent pas annoncer autre chose que ce que fait la mort (ex. : mode developpeur ouvert
+	// sans rechargement dans un niveau lineaire : retour au Level 0, et c'est ce qui est affiche)
+	return BRStory::DeathRuleFor(static_cast<BRStory::ESession>(GetSessionMode()), bLinearLevel, IsNetGame());
+}
+
 void ABRWorld::SetLinearTestOverride(int8 Value)
 {
 #if !UE_BUILD_SHIPPING
@@ -1614,7 +1622,7 @@ void ABRWorld::Tick(float DeltaSeconds)
 			// quel que soit le parcours. v4.14 : REJOUER : la mort relance le niveau rejoue (la partie de campagne n'est pas
 			// touchee). v4.15 : parcours lineaire en solo : le niveau recommence de zero, meme disposition (graine du niveau,
 			// LoadLevelNow), mission neuve, equipement de depart. Histoire classique et mode libre : retour au Level 0
-			switch (BRStory::DeathRuleFor(static_cast<BRStory::ESession>(GetSessionMode()), bLinearLevel, IsNetGame()))
+			switch (GetDeathRule())
 			{
 			case BRStory::EDeathRule::RespawnInPlace:
 				RespawnLocalPlayer();

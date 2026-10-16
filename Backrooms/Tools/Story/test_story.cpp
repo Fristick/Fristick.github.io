@@ -623,6 +623,12 @@ int main()
 			OnArrive(L0, 2);
 			Line("niveau lineaire recommence apres une mort : reprise, etapes et plus loin atteint inchanges, meme graine",
 				L0.Resume == Before.Resume && L0.Done == Before.Done && L0.Reached == Before.Reached && LevelSeedFor(L0, 2) == LevelSeedFor(Before, 2));
+			// Partie classique fermee pendant une mort en solo : la mort en attente est resolue comme une arrivee au Level 0
+			// (ABRPlayerController::ResolvePendingDeath) ; CONTINUER (ResumePoint) y ramene, les etapes accomplies restent
+			FState Closed = C0;
+			OnArrive(Closed, 0);
+			Line("classique, jeu ferme pendant une mort en solo : CONTINUER ramene au Level 0, etapes et plus loin atteint gardes",
+				ResumePoint(C0, AvailAll, nullptr) == 2 && ResumePoint(Closed, AvailAll, nullptr) == 0 && Closed.Done == C0.Done && Closed.Reached == C0.Reached);
 		}
 
 		// --------------------------------------------------------------------------------------------- Ecriture et migration
