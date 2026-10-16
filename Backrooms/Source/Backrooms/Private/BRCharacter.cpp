@@ -3434,6 +3434,24 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.bOverride_LumenFrontLayerTranslucencyReflections = true;
 	S.LumenFrontLayerTranslucencyReflections = Set.Quality >= 2;
 
+	// v4.15 : Lumen plus fin a partir de la qualite Epique (petits objets dans la scene de Lumen, collecte finale et
+	// eclairage de la scene plus precis) et plus reactif partout : la lumiere indirecte suit les neons qui clignotent et le
+	// retour du courant au lieu de trainer plusieurs secondes. Distance de trace maximale : valeur du moteur
+	const bool bFineLumen = Set.Quality >= 3;
+	S.bOverride_LumenSceneDetail = true;
+	S.LumenSceneDetail = bFineLumen ? 1.5f : 1.f;
+	S.bOverride_LumenFinalGatherQuality = true;
+	S.LumenFinalGatherQuality = bFineLumen ? 1.5f : 1.f;
+	S.bOverride_LumenSceneLightingQuality = true;
+	S.LumenSceneLightingQuality = bFineLumen ? 1.5f : 1.f;
+	S.bOverride_LumenSceneLightingUpdateSpeed = true;
+	S.LumenSceneLightingUpdateSpeed = 2.f;
+	S.bOverride_LumenFinalGatherLightingUpdateSpeed = true;
+	S.LumenFinalGatherLightingUpdateSpeed = 2.f;
+	// Couleur des surfaces dans la lumiere rebondie : sans renfort (le jaune du Level 0 ne deborde pas sur tout)
+	S.bOverride_LumenDiffuseColorBoost = true;
+	S.LumenDiffuseColorBoost = 1.f;
+
 	// v4.15 : OMBRES DE TOUTES LES LAMPES : MegaLights active par la camera du joueur seulement (r.MegaLights.EnableForProject
 	// reste a 0 : autres vues, Linux, macOS et sans ray tracing materiel gardent l'eclairage d'avant)
 	S.bOverride_bMegaLights = true;
