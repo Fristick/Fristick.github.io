@@ -446,6 +446,9 @@ private:
 	int32 DeleteSlot = INDEX_NONE;
 	/** Hote d'une partie en ligne : la sauvegarde est appliquee quand son personnage est pret */
 	bool bApplySaveOnSpawn = false;
+	/** v4.15 : une mort en attente vient d'etre resolue (ResolvePendingDeath, par SelectSave avant CONTINUER) ; lu puis
+	 *  remis a zero par StartSolo (parcours lineaire : le niveau est toujours recharge) */
+	bool bPendingDeathResolved = false;
 	float AutoSaveTimer = 60.f;
 	float PendingSaveDelay = -1.f;
 	float TimeSinceSave = 100.f;

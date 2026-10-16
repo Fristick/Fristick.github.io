@@ -387,8 +387,9 @@ bool ABRWorld::FinishFadeOut()
 
 void ABRWorld::HandlePlayerDeath(EBRDeathCause Cause)
 {
-	// Seul : retour au Niveau 0. En equipe : a terre, un coequipier peut nous relever pendant un delai
-	// propre a la cause (blessure 30 s, noyade 20 s), sinon on se reveille au point de depart du niveau.
+	// Seul : retour au Niveau 0 (v4.15 : parcours lineaire et REJOUER : le niveau recommence, BRStory::DeathRuleFor). En
+	// equipe : a terre, un coequipier peut nous relever pendant un delai propre a la cause (blessure 30 s, noyade 20 s),
+	// sinon on se reveille au point de depart du niveau.
 	// v4.7 : la cause est explicite. Au fond d'une fosse, personne ne peut nous relever.
 	DeathTimer = IsNetGame()
 		? ((HasLivingTeammate() && BRDeath::CanRevive(Cause)) ? BRDeath::ReviveWindow(Cause) : 6.f)
@@ -423,8 +424,28 @@ void ABRWorld::RespawnLocalPlayer()
 	TransState = ETrans::FadingIn;
 	TransTimer = 0.f;
 	Fade = 1.f;
-	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "World.ReveillezPointDepartVotreEquipement", "Vous vous r\u00e9veillez au point de d\u00e9part. Votre \u00e9quipement est rest\u00e9 l\u00e0 o\u00f9 vous \u00eates tomb\u00e9.")), 6.f,
+	// v4.15 : l'equipement repart de zero (ResetStats) : aucun objet ne reste la ou l'on est tombe (l'ancien message le
+	// pretendait)
+	ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "World.ReveilDepartNiveau", "Vous vous r\u00e9veillez au d\u00e9part du niveau avec l'\u00e9quipement de d\u00e9part.")), 6.f,
 		FLinearColor(1.f, 0.85f, 0.6f));
+}
+
+BRStory::EDeathRule ABRWorld::GetDeathRule() const
+{
+	// v4.15 : memes entrees partout (session, parcours du niveau charge, reseau) : le texte du reveil et le niveau ecrit
+	// dans une mort en attente ne peuvent pas annoncer autre chose que ce que fait la mort (ex. : mode developpeur ouvert
+	// sans rechargement dans un niveau lineaire : retour au Level 0, et c'est ce qui est affiche)
+	return BRStory::DeathRuleFor(static_cast<BRStory::ESession>(GetSessionMode()), bLinearLevel, IsNetGame());
+}
+
+void ABRWorld::SetLinearTestOverride(int8 Value)
+{
+#if !UE_BUILD_SHIPPING
+	LinearTestOverride = Value < 0 ? int8(-1) : (Value > 0 ? int8(1) : int8(0));
+	UE_LOG(LogBackrooms, Log, TEXT("[Story] Parcours impose par un test : %d (-1 : regle normale)"), static_cast<int32>(LinearTestOverride));
+#else
+	(void)Value;
+#endif
 }
 
 void ABRWorld::RebuildAllChunks()
@@ -542,6 +563,38 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 			Seed = NetStory.IntroSeed;
 		}
 	}
+	// v4.15 : parcours lineaire : chaque niveau de la partie a sa graine (BRStory::LevelSeedFor), la meme a chaque arrivee
+	// et apres une mort (le niveau recommence a l'identique). Meme regle que le Level 0 : une graine imposee (reprise d'une
+	// session, test) est utilisee telle quelle, -BRSeed ne la remplace pas
+	if (LevelNumber != 0 && HasAuthority() && InSeed == 0 && HostSessionMode() == EBRSessionMode::Story)
+	{
+		EnsureStoryLoaded();
+		if (const uint32 LinearSeed = BRStory::LevelSeedFor(GetStory(), LevelNumber))
+		{
+			Seed = LinearSeed;
+		}
+	}
+	// v4.15 : parcours du niveau, avant tout ce qui en depend (sorties des chunks) : chez l'hote, celui de sa partie
+	// d'histoire (ou celui impose par un test) ; chez un client, celui recu avec le niveau
+	if (HasAuthority())
+	{
+		const bool bStoryHost = HostSessionMode() == EBRSessionMode::Story;
+		if (bStoryHost)
+		{
+			EnsureStoryLoaded(); // premiere construction de la carte (partie hebergee, session reprise) : la sauvegarde fait foi
+		}
+		bLinearLevel = bStoryHost && BRStory::IsLinear(GetStory());
+#if !UE_BUILD_SHIPPING
+		if (LinearTestOverride >= 0)
+		{
+			bLinearLevel = LinearTestOverride == 1;
+		}
+#endif
+	}
+	else
+	{
+		bLinearLevel = (NetLevel.Flags & 1u) != 0;
+	}
 	// v4.6 : salles de fosses et cellules atteignables du niveau fini (avant la construction des chunks)
 	PrepareLevelLayout();
 	// v4.13 : porte de service du Level 0 et chemin balise (apres les portes forcees : chemin garanti sans fosse)
@@ -567,6 +620,7 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		// Le serveur publie le nouveau niveau : les clients le construisent avec la meme graine
 		NetLevel.Level = Current->Number;
 		NetLevel.Seed = Seed;
+		NetLevel.Flags = bLinearLevel ? 1 : 0; // v4.15 : avec le niveau (il change la generation)
 		++NetLevel.Serial;
 		LoadedSerial = NetLevel.Serial;
 		NetBlackout = 0;
@@ -685,7 +739,8 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 		A->SetWaterSim(nullptr, FLinearColor(0.f, 0.f, 1000.f, 0.f));
 	}
 
-	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u)"), Current->Number, *Current->Title.ToString(), Seed);
+	UE_LOG(LogBackrooms, Log, TEXT("Chargement du Niveau %d - %s (graine %u%s)"), Current->Number, *Current->Title.ToString(), Seed,
+		bLinearLevel ? TEXT(", parcours lineaire") : TEXT(""));
 
 	// v4.11 : mission du niveau (plan, placement, cellules reservees) avant la construction des chunks
 	SetupMission();
@@ -1563,15 +1618,21 @@ void ABRWorld::Tick(float DeltaSeconds)
 		if (DeathTimer <= 0.f)
 		{
 			DeathTimer = -1.f;
-			if (IsNetGame())
+			// v4.15 : regle de la mort (BRStory::DeathRuleFor). En reseau : reveil au point de depart du niveau en cours,
+			// quel que soit le parcours. v4.14 : REJOUER : la mort relance le niveau rejoue (la partie de campagne n'est pas
+			// touchee). v4.15 : parcours lineaire en solo : le niveau recommence de zero, meme disposition (graine du niveau,
+			// LoadLevelNow), mission neuve, equipement de depart. Histoire classique et mode libre : retour au Level 0
+			switch (GetDeathRule())
 			{
+			case BRStory::EDeathRule::RespawnInPlace:
 				RespawnLocalPlayer();
-			}
-			else
-			{
-				// v4.14 : REJOUER : la mort relance le niveau rejoue (la partie de campagne n'est pas touchee) ; histoire et
-				// mode libre : retour au Level 0, regle de la campagne
-				RequestTransition(GetSessionMode() == EBRSessionMode::Replay ? GetLevelNumber() : 0, true);
+				break;
+			case BRStory::EDeathRule::RestartLevel:
+				RequestTransition(GetLevelNumber(), true);
+				break;
+			default:
+				RequestTransition(0, true);
+				break;
 			}
 		}
 	}

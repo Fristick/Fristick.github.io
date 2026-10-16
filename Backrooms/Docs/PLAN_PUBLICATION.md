@@ -36,7 +36,9 @@ les lots 2 à 4.
   enregistrée dans la partie (bit du lot) ; l'histoire reprendra au Niveau 3 quand il sera publié (CONTINUER reste au
   Niveau 2 d'ici là). « Continuer l'exploration » tire un niveau déjà atteint.
 - Les sorties de retour (Niveau 2 → Poolrooms par l'échelle, Poolrooms → Niveau 1 par le sol qui glitche) restent ouvertes : un niveau atteint se
-  revisite, sa mission accomplie reste accomplie.
+  revisite, sa mission accomplie reste accomplie. **Parcours classique seulement** (v4.15) : dans une partie au
+  parcours linéaire (toute nouvelle partie), chaque niveau n'a qu'une sortie, celle de sa mission, sans retour
+  ([`HISTOIRE_PROGRESSION_v4.15.md`](HISTOIRE_PROGRESSION_v4.15.md), R-L3).
 - Aucun passage du lot 1 n'est condamné (vérifié par le banc, § 6). La règle des passages condamnés existe pour les lots
   suivants : planches en croix, lumière rouge, invite « pas encore accessible », aucun départ possible.
 

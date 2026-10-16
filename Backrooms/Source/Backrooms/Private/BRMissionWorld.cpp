@@ -1652,6 +1652,42 @@ void ABRWorld::DebugCompleteMissionDevice(int32 Device)
 	PublishMission(Device, static_cast<uint8>(BRM::EFeedback::Done));
 }
 
+uint8 ABRWorld::DebugMissionAct(int32 Device, uint8 Action)
+{
+	// v4.15 (tests) : meme application que ServerMissionAct (mecanisme maintenu : une unite), sans portee ni ligne de vue
+	if (!HasAuthority() || !IsMissionActive() || Device < 0 || Device >= MissionPlan.NumDevices || Action > static_cast<uint8>(BRM::EAction::Hold))
+	{
+		return BRMissionText::NotNow;
+	}
+	const BRM::FDevice& D = MissionPlan.Devices[Device];
+	const bool bHeld = D.Kind == BRM::EKind::Observe || D.Kind == BRM::EKind::Crank;
+	const BRM::FResult R = BRM::Act(MissionPlan, MissionState, GetMissionCampaign(), Device, bHeld ? BRM::EAction::Hold : BRM::EAction::Use, bHeld ? 1 : 0);
+	if (R.bChanged || R.Feedback == BRM::EFeedback::Wrong || R.Feedback == BRM::EFeedback::Dead || R.Feedback == BRM::EFeedback::Order)
+	{
+		PublishMission(Device, static_cast<uint8>(R.Feedback));
+	}
+	return static_cast<uint8>(R.Feedback);
+}
+
+bool ABRWorld::HasGuaranteedForwardExit() const
+{
+	// v4.15 : sortie de progression posee par la mission (salle de la mission, alcove du Level 6, module de secours) ; une
+	// mission absente ou abandonnee (MissionGen 0) n'en a pas : les chunks gardent alors leur sortie gardee (securite)
+	if (MissionGen < 2)
+	{
+		return false;
+	}
+	const int32 Fwd = ForwardTarget(GetLevelNumber());
+	for (const FMissionExitSpot& Spot : MissionExitSpots)
+	{
+		if (Spot.Target == Fwd)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // =====================================================================================================================
 // Sorties
 // =====================================================================================================================

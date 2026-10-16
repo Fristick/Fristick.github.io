@@ -7,7 +7,28 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.14** (parties protégées, scanner LiDAR fiable à toute cadence, kit Blender du Level 0 importé et branché) :
+**Version 4.15** (parcours linéaire) :
+
+- **Où lire** :
+  - ce qui change pour le joueur : [`Docs/GAMEPLAY_v4.15.md`](Docs/GAMEPLAY_v4.15.md) ;
+  - règles du parcours (R-L1 à R-L6), état de la partie, migration : [`Docs/HISTOIRE_PROGRESSION_v4.15.md`](Docs/HISTOIRE_PROGRESSION_v4.15.md) ;
+  - journaux réels des bancs : [`Docs/v415/`](Docs/v415/).
+
+> **Compilé** sous Windows (Unreal 5.8, éditeur et jeu, 0 avertissement du projet) ; bancs hors moteur exécutés.
+> **Préparé, à exécuter dans Unreal** : les tests du jeu `-BRAutoTestV415` et `-BRNetTest`.
+
+- **Parcours linéaire pour toute nouvelle partie** (aucun choix à faire ; pastille LINÉAIRE sur la carte de la partie) :
+  le fil de l'histoire, chaque niveau avec une **disposition fixe pour la partie** (graine tirée une fois), et **une
+  seule sortie**, celle que garde la mission du niveau (aucune sortie de retour). Les parties d'avant la v4.15, REJOUER
+  et le mode développeur restent au parcours classique.
+- **Mort en solo, parcours linéaire** : le niveau recommence de zéro (même disposition, mission à refaire, équipement de
+  départ). Parcours classique : retour au Level 0, y compris quand le jeu a été fermé pendant la mort (avant, CONTINUER
+  reprenait au niveau de la mort). Coopération inchangée ; le message du réveil ne prétend plus que l'équipement est
+  resté là où l'on est tombé.
+- Sauvegarde au format 6 (anciennes parties migrées en parcours classique, copie `_Format5` gardée) ; protocole réseau
+  415, version du projet 4.15.
+
+**Nouveautés de la version 4.14** (parties protégées, scanner LiDAR fiable à toute cadence, kit Blender du Level 0 importé et branché) :
 
 - **Où lire** :
   - constats sur la base : [`Docs/AUDIT_v4.14.md`](Docs/AUDIT_v4.14.md) ;
@@ -1038,8 +1059,13 @@ Les deux fenêtres arrivent directement en partie, sans passer par le menu.
   et appuyez sur **Espace** (ou continuez d'avancer) : le personnage se hisse sur le bord.
 - **Cachettes** (Niveau 0) : placards et trous dans le mur. Une fois caché, les entités perdent votre trace (sauf si
   elles vous ont vu y entrer juste devant elles). Idéal pendant les coupures, quand les Smilers rôdent.
-- **Mort** : vous vous réveillez au Niveau 0 avec l'équipement de départ (caméscope dans le sac, lampe, eau, bandage,
-  piles).
+- **Mort** (seul) : toujours avec l'équipement de départ (caméscope dans le sac, lampe, eau, bandage, piles).
+  - **Parcours linéaire** (toute partie créée depuis la v4.15) : le niveau recommence de zéro, même disposition, mission
+    à refaire. Jeu fermé pendant la mort : CONTINUER recharge ce niveau.
+  - **Parcours classique** (parties d'avant la v4.15) : vous vous réveillez au Niveau 0, y compris après un jeu fermé
+    pendant la mort.
+  - **REJOUER** : le niveau rejoué recommence.
+  - En coopération : à terre, un coéquipier peut vous relever ; sinon réveil au départ du niveau en cours.
 - **Fosses** (Niveau 0, v4.6) : restez sur les passages. Une chute est mortelle et personne ne peut vous relever. La
   galerie qui fait le tour de la salle permet de l'éviter ; le chemin de la porte de service n'y passe jamais.
 
@@ -1550,6 +1576,24 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Mechanisms/test_mechanisms.cpp \
       Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_mechanisms && ./test_mechanisms
   ```
+- **`-BRAutoTestV415`** (v4.15, avec `-BRAutoTest`) lance seules les vérifications du parcours linéaire ; elles sont
+  aussi dans `-BRAutoTest`. **Préparé, à exécuter dans Unreal.** Sauvegardes du test : `BR_AutoTestV415_*` ; partie
+  active, mode, menu et canal de contenu sont rétablis.
+  ```bat
+  UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV415 -BRAutoTestStrict
+  ```
+  - **menu** : NOUVELLE PARTIE → COMMENCER (aucun choix) crée une partie au format 6, linéaire, pastille LINÉAIRE ;
+  - **Niveau 2** d'une partie linéaire : graine du niveau (`BRStory::LevelSeedFor`), drapeau, une seule sortie (celle de
+    la mission), aucune sortie des chunks ;
+  - **mort** : le niveau recommence (même graine, nouveau chargement, mission neuve, équipement de départ) ; jeu fermé
+    pendant la mort, par le chemin du menu (VOS PARTIES, partie, CONTINUER) : le niveau est rechargé avec sa graine ;
+  - **classique** : même graine, sorties des chunks présentes, mort → Level 0 ; jeu fermé pendant la mort → Level 0 ;
+  - **marche** : mission résolue, sortie unique prise, Niveau 3 avec sa graine ; version publiée : fin du chapitre ;
+  - **REJOUER** et **mode développeur** (REJOUER d'un niveau inexploré) depuis la partie linéaire : niveau classique,
+    fichier inchangé ; **migration** 5 → 6 (copie `_Format5`, parcours classique) ; **protocole** 415.
+
+  **`-BRNetTest`, v4.15** : l'hôte impose le parcours linéaire (test seulement) ; drapeau, graine et sortie unique
+  identiques chez l'hôte et le client ; le client tombe et se réveille dans le niveau (règle de la coopération).
 - **`-BRAutoTestV414`** (v4.14, avec `-BRAutoTest`) lance seules les vérifications v4.14 ; elles sont aussi dans
   `-BRAutoTest`. **Préparé, non exécuté.** Sauvegardes du test : `BR_AutoTestV414_*` ; la partie active est rétablie.
   ```bat

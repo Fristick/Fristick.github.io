@@ -2625,8 +2625,21 @@ void ABRHUD::DrawSaveCard(int32 Item, const UBRSaveGame* Save, float X, float Y,
 	const FVector2f LS = TextSize(Save->SaveName, 18.f, EUiWeight::Bold);
 	const float TY = Y + (H - LS.Y - 16.f * U) * 0.5f - 2.f * U;
 	const float RightW = 170.f * U;
-	TextF(Ellipsize(Save->SaveName, W - (TX - CX0) - RightW - 20.f * U, 18.f, EUiWeight::Bold), TX, TY, WithAlpha(LabelC, Ap), 18.f, EUiWeight::Bold,
-		EUiAlign::Left, S < 0.5f);
+	// v4.15 : pastille LINEAIRE apres le nom d'une partie au parcours lineaire (le nom laisse sa place)
+	const bool bLinearSave = BRStory::IsLinear(Save->GetStory());
+	const FString Badge = bLinearSave ? BR_STR(NSLOCTEXT("BR", "Menu.BadgeLineaire", "LINÉAIRE")) : FString();
+	const FVector2f BadgeSize = bLinearSave ? TextSize(Badge, 9.f, EUiWeight::Black) : FVector2f::ZeroVector;
+	const float BadgeW = bLinearSave ? BadgeSize.X + 14.f * U : 0.f;
+	const FString ShownName = Ellipsize(Save->SaveName, W - (TX - CX0) - RightW - 20.f * U - (bLinearSave ? BadgeW + 10.f * U : 0.f), 18.f, EUiWeight::Bold);
+	TextF(ShownName, TX, TY, WithAlpha(LabelC, Ap), 18.f, EUiWeight::Bold, EUiAlign::Left, S < 0.5f);
+	if (bLinearSave)
+	{
+		const float BadgeH = BadgeSize.Y + 4.f * U;
+		const float BadgeX = TX + TextSize(ShownName, 18.f, EUiWeight::Bold).X + 10.f * U;
+		const float BadgeY = TY + (LS.Y - BadgeH) * 0.5f;
+		RoundRect(BadgeX, BadgeY, BadgeW, BadgeH, BadgeH * 0.5f, WithAlpha(Mix(FLinearColor(1.f, 0.82f, 0.22f, 0.16f), FLinearColor(0.07f, 0.055f, 0.02f, 0.9f), S), Ap));
+		TextF(Badge, BadgeX + BadgeW * 0.5f, BadgeY + 2.f * U, WithAlpha(Yellow, Ap), 9.f, EUiWeight::Black, EUiAlign::Center, false);
+	}
 	const FString CardSub = bMovedLevel
 		? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.SaveCardMovedLevel", "Niveau {Number}  \u00b7  {Title}  \u00b7  (Niveau {Saved} pas encore disponible)"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) }, { TEXT("Saved"), BRLoc::Int(Save->CurrentLevel) } })
 		: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauNumberTitle", "Niveau {Number}  \u00b7  {Title}"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } });
@@ -3760,8 +3773,14 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 			GEngine->GetMediumFont(), true);
 	}
 	const float A2 = FMath::Clamp((T - 2.2f) / 1.f, 0.f, 1.f);
-	Txt(BR_STR(NSLOCTEXT("BR", "HUD.ReveillezMoquetteHumideEncore", "Vous vous r\u00e9veillez... sur une moquette humide. Encore.")), CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U,
-		GEngine->GetMediumFont(), true);
+	// v4.15 : le texte suit la regle que la mort va appliquer (ABRWorld::GetDeathRule) : le niveau en cours recommence
+	// (parcours lineaire en solo : meme disposition, equipement de depart ; REJOUER : le niveau rejoue), sinon reveil au
+	// Level 0
+	const ABRWorld* LevelWorld = ABRWorld::Get(this);
+	const FString Wake = LevelWorld && LevelWorld->GetDeathRule() == BRStory::EDeathRule::RestartLevel
+		? BR_STR(NSLOCTEXT("BR", "HUD.NiveauRecommence", "Le niveau recommence."))
+		: BR_STR(NSLOCTEXT("BR", "HUD.ReveillezMoquetteHumideEncore", "Vous vous r\u00e9veillez... sur une moquette humide. Encore."));
+	Txt(Wake, CX, H * 0.56f, FLinearColor(0.9f, 0.85f, 0.6f, A2), 1.f * U, GEngine->GetMediumFont(), true);
 }
 
 void ABRHUD::DrawPause(ABRPlayerController* PC)

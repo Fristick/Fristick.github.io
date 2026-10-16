@@ -1,0 +1,126 @@
+# Banc de l'histoire (fil, acces, migration, parcours lineaire) v4.15 — sortie reelle
+# Commande (depuis Backrooms/, Windows) :
+#   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Story\test_story.cpp Source\Backrooms\Private\BRStoryLogic.cpp Source\Backrooms\Private\BRContentLogic.cpp /Festory.exe && story.exe
+#   (meme sortie avec cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-, MSVC 14.50.35739, 0 avertissement)
+# Compilateur : clang version 22.1.3 (clang-cl de Visual Studio 2026), 0 avertissement
+# Machine : Windows 11, RTX 5050 Laptop, 16 Go
+# Date : 2026-10-16T12:57:46Z
+
+Banc du fil narratif v4.13
+
+A. Ordre de la campagne
+  fil : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai                    OK
+  precedent et position coherents pour les 12 niveaux                                                  OK
+  Poolrooms entre le Niveau 1 et le Niveau 2                                                           OK
+  niveaux hors du fil (7, 1001, 1002) : aucun suivant, acces inconnu                                   OK
+
+B. Campagne neuve dans chaque canal (regles de l'hote)
+  version publiee : 0 -> 1 -> 37 -> 2 -> fin du chapitre                                               OK
+  test interne : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> fin du chapitre                                        OK
+  developpement : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai          OK
+  le chapitre 1 (0 -> 1 -> 37 -> 2) est identique dans les trois canaux                                OK
+
+C. Aucun raccourci (validation de l'hote)
+  Level 0, porte pas ouverte : Niveau 1 refuse                                                         OK
+  Level 0 : Poolrooms refusees                                                                         OK
+  Level 0 : Niveau 2 refuse (Poolrooms obligatoires)                                                   OK
+  porte ouverte : Niveau 1 accepte, Level 0 accompli                                                   OK
+  Niveau 1, mission pas faite : Poolrooms refusees                                                     OK
+  Niveau 1 : Niveaux 2 et 4 refuses (Poolrooms obligatoires)                                           OK
+  Niveau 1 accompli : Poolrooms acceptees ; Niveau 2 toujours refuse                                   OK
+  simple visite des Poolrooms : pas d'etape accomplie                                                  OK
+  sortie des Poolrooms prise : Niveau 2 accepte, etape enregistree                                     OK
+  Niveau 2 : Niveau 3 refuse avant la mission, Niveau 4 refuse                                         OK
+  12 x 12 paires etape/destination : seules les etapes atteintes s'ouvrent (0 ecart)                   OK
+
+D. Retours et detours
+  retour du Niveau 2 vers les Poolrooms puis le Niveau 1 : acceptes                                    OK
+  au retour, les etapes deja accomplies le restent (mission du Niveau 1 non refaite)                   OK
+  depuis le Niveau 1, la suite de l'histoire reste les Poolrooms                                       OK
+  le plus loin atteint ne recule pas (Niveau 2)                                                        OK
+  point de reprise : le niveau ou l'on est revenu (Niveau 1)                                           OK
+
+E. Fin du chapitre 1 et mise a jour suivante
+  fin du chapitre 1 enregistree, Niveau 2 accompli                                                     OK
+  version publiee : Continuer reprend au Niveau 2 (rien de plus a ouvrir)                              OK
+  chapitre 2 publie : Continuer ouvre directement le Niveau 3, sans refaire le Level 0                 OK
+  et l'hote accepte le Niveau 3                                                                        OK
+  nouvelle partie : Continuer = Level 0                                                                OK
+
+F. Migration des anciennes parties
+  format 1 a 3, au Level 0 (cassettes, coupure) : reprise 0, gare -1, Poolrooms a traverser            OK
+  v4.11/v4.12, au Level 0 (cadrans, mission resolue ou non) : reprise 0, gare -1, Poolrooms a traverser OK
+  au Niveau 1 (0, 1 explores) : reprise 1, gare -1, Poolrooms a traverser                              OK
+  dans les Poolrooms par l'ancienne echelle (0, 37) : reprise 37, gare -1, Poolrooms a traverser       OK
+  au Niveau 5 par 0 -> 37 -> 4 -> 5 (Poolrooms traversees) : reprise 5, gare -1, Poolrooms creditees   OK
+  au Niveau 5 par 0 -> 1 -> 4 -> 5 (sans les Poolrooms) : reprise 37, gare 5, Poolrooms a traverser    OK
+  v4.12 publiee, fin du chapitre au Niveau 2 (0 -> 1 -> 2) : reprise 37, gare 2, Poolrooms a traverser OK
+  v4.12 publiee, 0 -> 37 -> 1 -> 2 (redirection : pas une preuve) : reprise 37, gare 2, Poolrooms a traverser OK
+  revenu au Niveau 1 apres le Niveau 4 (sans les Poolrooms) : reprise 1, gare -1, Poolrooms a traverser OK
+  campagne finie par 0 -> 37 -> 4 -> ... -> 11 : reprise 11, gare -1, Poolrooms creditees              OK
+  [0, 1, 37, 4] : 1, retour a 0, 37, retour par 0, ascenseur 1 -> 4 : reprise 37, gare 4, Poolrooms a traverser OK
+  [0, 1, 4, 37] : vraie traversee vers un Niveau 4 deja connu (non prouvable) : reprise 37, gare 4, Poolrooms a traverser OK
+  [0, 37, 1, 4, 5] : revisite, 1 decouvert avant 4 : reprise 37, gare 5, Poolrooms a traverser         OK
+  [0, 37, 2, 3, 4] : 3 (ascenseur -> 4) decouvert avant 4 : reprise 37, gare 4, Poolrooms a traverser  OK
+  [0, 37, 4, 1, 2, 3, 5] : retours et revisites apres une vraie traversee : reprise 5, gare -1, Poolrooms creditees OK
+  [0, 37] arrete dans les Poolrooms (visitees, pas de preuve, rien a garer) : reprise 37, gare -1, Poolrooms a traverser OK
+  [0, 1, 2] jamais visitees (absence prouvee), arrete au Niveau 2 : reprise 37, gare 2, Poolrooms a traverser OK
+  au Niveau 5 sans les Poolrooms : Poolrooms ouvertes, Niveaux 2 et 5 en attente de la traversee       OK
+  sortie du sas : retour au Niveau 5 (progression d'avant), etape enregistree, gare jusqu'a la reprise (v4.14) OK
+  reprise de la session garee confirmee : etape de migration terminee                                  OK
+  les Niveaux 1 et 4 deja depasses restent accomplis                                                   OK
+  meme partie dans la version publiee (Niveau 5 indisponible) : la sortie du sas mene au Niveau 2      OK
+  fin du lot 1 de la v4.12 conservee comme fin de chapitre                                             OK
+
+G. v4.14 : preuve de traversee des Poolrooms
+  [0, 1, 37, 4] (contre-exemple de l'audit) : ambigu, pas de credit, partie garee, detour organise     OK
+  [0, 37, 4, 5] format 4 : prouvee (seul acces au Niveau 4 connu : l'echelle des Poolrooms)            OK
+  [0, 37, 4, 5] format 1 (console v4.1 a v4.3) : ambigu                                                OK
+  [0, 37, 4, 5] format inconnu (0) : ambigu                                                            OK
+  [0, 11, 37, 4] : Niveau 11 (destinations au hasard) connu avant 4 : ambigu                           OK
+  [0, 1] : jamais visitees : absence prouvee                                                           OK
+  courant 37 sans decouverte enregistree : ambigu (visitees)                                           OK
+  ancienne progression conservee : Niveaux 0 et 1 accomplis, plus loin atteint = Niveau 4              OK
+
+H. v4.14 : session garee conservee jusqu'a sa reprise (canaux, ajout d'un chapitre)
+  version publique : sortie des Poolrooms vers le Niveau 2, Poolrooms accomplies, Niveau 5 toujours gare OK
+  fin du chapitre 1 : la progression garee n'est pas videe                                             OK
+  chapitre 2 publie (Niveau 5 encore indisponible) : Continuer au Niveau 3, gare conserve              OK
+  Niveau 5 publie : Continuer reprend la progression garee au Niveau 5                                 OK
+  reprise reussie : l'etape de migration est terminee                                                  OK
+  niveau gare disponible : sortie du sas vers le Niveau 5, gare jusqu'a la confirmation de la reprise  OK
+
+I. v4.14 : REJOUER et mode developpeur n'ecrivent pas la partie de campagne
+  rejeu (consommation, ramassage, mort, fin, fermeture) : equipement, morts, session, niveau, campagne, histoire, temps inchanges OK
+  transfert explicite : le document lu en rejeu complete le journal (union, rien retire)               OK
+  mode developpeur (niveau deja decouvert, mort comprise) : partie identique                           OK
+  CONTINUER apres le rejeu : session du Niveau 2, graine 4242, 5 objets                                OK
+  histoire : l'ecriture suit la session (3 objets)                                                     OK
+
+J. v4.15 : parcours lineaire
+  graine d'un niveau : deterministe (meme parcours, meme niveau, meme graine)                          OK
+  1000 parcours x 11 niveaux : aucune graine nulle (0)                                                 OK
+  1000 parcours : 11 graines distinctes par parcours (0 doublon)                                       OK
+  deux parcours voisins : graines differentes a chaque niveau (0 egalite)                              OK
+  Level 0 : aucune graine imposee (il garde IntroSeed)                                                 OK
+  parcours classique (Flags 0) ou graine du parcours nulle : aucune graine imposee                     OK
+  niveaux hors du fil (7, 1001, 1002, dernier quai) : aucune graine imposee                            OK
+  regle de la mort : table complete (3 sessions x lineaire x reseau, 0 ecart)                          OK
+  histoire lineaire en solo : le niveau recommence (meme graine)                                       OK
+  histoire classique en solo : retour au Level 0                                                       OK
+  REJOUER en solo : le niveau rejoue recommence (lineaire ou non)                                      OK
+  partie en reseau : reveil dans le niveau, quel que soit le parcours ou la session                    OK
+  mode libre en solo : retour au Level 0 (le parcours lineaire ne compte pas hors histoire)            OK
+  sorties des chunks : table des 8 cas (classique : toutes ; lineaire : aucune avec la sortie garantie, sinon la gardee seule) : 0 ecart OK
+  0 -> 1 -> 37 -> 2 : meme plus loin atteint, memes etapes, meme reprise, parcours et graine gardes    OK
+  acces de l'hote et destination de progression identiques en lineaire (12 x 12 paires, 0 ecart)       OK
+  reprise (CONTINUER) identique en lineaire : fin du chapitre 1, puis chapitre 2 publie                OK
+  niveau lineaire recommence apres une mort : reprise, etapes et plus loin atteint inchanges, meme graine OK
+  classique, jeu ferme pendant une mort en solo : CONTINUER ramene au Level 0, etapes et plus loin atteint gardes OK
+  regles d'ecriture inchangees (histoire : tout ; REJOUER : journal par union ; libre : rien)          OK
+  nouvelle partie (histoire) : parcours lineaire et graine du parcours enregistres                     OK
+  REJOUER et mode developpeur dans une partie lineaire : parcours, graine et partie inchanges          OK
+  migration des anciennes parties (7 historiques x formats 0 a 4) : toujours le parcours classique (0 lineaire) OK
+
+Verifications : 94, echecs : 0
+RESULTAT : OK

@@ -34,6 +34,10 @@
 // sans traversee imaginaire, scanner (rechargement 6 -> 6, arret du focus, debit a 30/60/144/240 images/s, HUD
 // contextuel), kit du Level 0 (etat, passages, murs, captures avec et sans). Inclus dans -BRAutoTest ; -BRNetTest y
 // ajoute la porte du client comparee a celle de l'hote.
+// v4.15 : -BRAutoTestV415 : parcours lineaire (NOUVELLE PARTIE par le menu, graine de chaque niveau, sortie unique, mort
+// qui relance le niveau, jeu ferme pendant la mort, contraste classique, marche jusqu'au Niveau 3, fin du chapitre de la
+// version publiee, REJOUER, migration 5 -> 6, protocole 415). Inclus dans -BRAutoTest ; -BRNetTest y ajoute le parcours
+// lineaire impose par l'hote (drapeau, graine, sorties chez chacun) et la mort du client dans le niveau.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -187,6 +191,9 @@ private:
 	 *  (BRAutoTestV414.cpp) ; reseau : porte du client */
 	void AddV414Steps();
 	void AddNetV414Steps(bool bClient);
+	/** v4.15 : parcours lineaire (BRAutoTestV415.cpp) ; reseau : parcours impose par l'hote, mort du client dans le niveau */
+	void AddV415Steps();
+	void AddNetV415Steps(bool bClient);
 	/** v4.8 : une ligne du journal capture (avertissements, erreurs) depuis From contient Needle */
 	bool LogContains(int32 From, const TCHAR* Needle) const;
 	/** Mesure des temps d'image : debut, puis fin (moyenne, percentiles, memoire, chunks, mode de rendu dans le rapport R) */

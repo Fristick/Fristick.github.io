@@ -2699,6 +2699,10 @@ void ABRChunk::PlanExits()
 	{
 		return; // jamais de sortie juste a cote du point d'apparition
 	}
+	// v4.15 : parcours lineaire (drapeau recu avec le niveau, sortie garantie d'apres la mission : le meme resultat chez
+	// tous) : aucune sortie tiree quand la mission pose sa sortie vers l'avant ; sinon seule la sortie gardee reste
+	const bool bLinear = W->IsLinearLevel();
+	const bool bForwardGuaranteed = bLinear && W->HasGuaranteedForwardExit();
 	for (int32 i = 0; i < D.Exits.Num(); ++i)
 	{
 		const FBRExitDef& Ex = D.Exits[i];
@@ -2716,6 +2720,10 @@ void ABRChunk::PlanExits()
 				PlannedExits.Add(Door);
 			}
 			continue;
+		}
+		if (!BRStory::ChunkExitAllowed(bLinear, bForwardGuaranteed, BRMission::IsExitGuarded(D.Number, Ex.Target)))
+		{
+			continue; // les tirages des autres sorties ne changent pas (sels propres a chaque sortie)
 		}
 		// Niveau fini : un nombre garanti de sorties de chaque sorte, tirees parmi les chunks (hors point de depart)
 		const bool bPicked = bBounded

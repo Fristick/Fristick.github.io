@@ -1,4 +1,5 @@
-// v4.13 : fil narratif de la campagne (voir BRStoryLogic.h). C++ pur.
+// v4.13 : fil narratif de la campagne (voir BRStoryLogic.h). C++ pur. v4.15 : parcours lineaire (graines des niveaux,
+// regle de la mort, sorties des chunks).
 #include "BRStoryLogic.h"
 
 namespace BRStory
@@ -160,6 +161,48 @@ namespace BRStory
 		return P;
 	}
 
+	bool IsLinear(const FState& S)
+	{
+		return (S.Flags & Flag::Linear) != 0;
+	}
+
+	uint32_t LevelSeedFor(const FState& S, int Level)
+	{
+		if (!IsLinear(S) || S.RunSeed == 0 || Level == 0 || IndexOf(Level) < 0)
+		{
+			return 0;
+		}
+		// v4.15 : splitmix32 local (le module reste sans moteur : pas de BRHash) ; le meme resultat sur toutes les machines
+		uint32_t Z = S.RunSeed ^ (0x9E3779B9u * static_cast<uint32_t>(Level));
+		Z += 0x9E3779B9u;
+		Z = (Z ^ (Z >> 16)) * 0x85EBCA6Bu;
+		Z = (Z ^ (Z >> 13)) * 0xC2B2AE35u;
+		Z ^= Z >> 16;
+		return Z | 1u;
+	}
+
+	EDeathRule DeathRuleFor(ESession Mode, bool bLinear, bool bNet)
+	{
+		if (bNet)
+		{
+			return EDeathRule::RespawnInPlace;
+		}
+		if (Mode == ESession::Replay || (Mode == ESession::Story && bLinear))
+		{
+			return EDeathRule::RestartLevel;
+		}
+		return EDeathRule::BackToStart;
+	}
+
+	bool ChunkExitAllowed(bool bLinear, bool bForwardGuaranteed, bool bTargetGuarded)
+	{
+		if (!bLinear)
+		{
+			return true;
+		}
+		return !bForwardGuaranteed && bTargetGuarded;
+	}
+
 	EPoolProof PoolroomsProof(const FLegacy& L)
 	{
 		int PoolPos = -1;
@@ -202,6 +245,7 @@ namespace BRStory
 	{
 		FMigration M;
 		FState& S = M.State;
+		// v4.15 : une ancienne partie reste au parcours classique (Flags et RunSeed restent a 0)
 		const int Pool = IndexOf(Poolrooms);
 		int MaxIdx = 0;
 		for (int K = 0; K < L.NumExplored; ++K)

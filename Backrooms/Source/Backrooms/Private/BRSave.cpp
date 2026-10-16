@@ -440,6 +440,14 @@ namespace BRSaves
 				// Formats 1 a 4 (avant la v4.13) : etat narratif deduit de la progression (BRStory::MigrateLegacy)
 				MigrateStory(Save);
 			}
+			if (Save->LoadedVersion < 6)
+			{
+				// v4.15 : formats 1 a 5 (avant la v4.15) : parcours classique (Flags 0, RunSeed 0). Une partie commencee avant
+				// garde ses sorties multiples, ses retours et la mort qui ramene au Level 0
+				Save->StoryFlags = 0;
+				Save->StoryRunSeed = 0;
+				UE_LOG(LogBackrooms, Log, TEXT("%s : partie du format %d : parcours classique"), *SlotName(Slot), Save->LoadedVersion);
+			}
 			Save->Version = UBRSaveGame::CurrentVersion;
 			UE_LOG(LogBackrooms, Log, TEXT("%s : sauvegarde au format %d migree vers le format %d (copie d'origine : %s.sav)"), *SlotName(Slot),
 				Save->LoadedVersion, UBRSaveGame::CurrentVersion, *Legacy);

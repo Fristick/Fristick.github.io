@@ -1,0 +1,95 @@
+# Banc de contenu v4.15 — sortie reelle
+# Commande (depuis Backrooms/, Windows) :
+#   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Content\test_content.cpp Source\Backrooms\Private\BRContentLogic.cpp Source\Backrooms\Private\BRMissionLogic.cpp Source\Backrooms\Private\BRStoryLogic.cpp /Fecontent.exe && content.exe
+#   (meme sortie avec cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-, MSVC 14.50.35739, 0 avertissement)
+# Compilateur : clang version 22.1.3 (clang-cl de Visual Studio 2026), 0 avertissement
+# Machine : Windows 11, RTX 5050 Laptop, 16 Go
+# Date : 2026-10-16T11:48:56Z
+
+Banc de contenu v4.13 (sources lues dans Source/Backrooms/Private)
+  BRLevels.cpp : niveaux et sorties lus                                                            OK
+  BRMissionWorld.cpp : sortie de progression prise dans le fil de la campagne (BRStory::NextOf)    OK
+
+A. Configuration centrale
+  12 niveaux definis dans le projet (12)                                                           OK
+  la table couvre exactement les niveaux definis                                                   OK
+  chaque niveau a un lot (1 a 5)                                                                   OK
+  lot 1 publie : Niveaux 0, 1, 2, 37                                                               OK
+  Niveaux 3 et 4 en test interne (lot 2)                                                           OK
+  lots courants : publiee 1, test interne 2, developpement 5                                       OK
+  Niveau 7 (inexistant) et 1001/1002 (reserves) inconnus et indisponibles                          OK
+  Level 0 : une seule sortie, la porte de service vers le Niveau 1                                 OK
+  aucune sortie ne saute une etape du fil ni ne tire au hasard                                     OK
+  chaque sortie vers l'avant est gardee par la mission (sauf la porte du Level 0) ; les retours sont libres OK
+  sortie gardee indisponible, autre sortie gardee disponible : condamnee                           OK
+  ... et la mission garde l'autre sortie                                                           OK
+  seule sortie gardee indisponible : fin du contenu disponible                                     OK
+  sortie libre (non gardee) indisponible : condamnee                                               OK
+  sortie vers un niveau disponible : inchangee                                                     OK
+  aucune redirection (v4.13) : Poolrooms -> 4 et Niveau 1 -> 4 ne sont pas detournes               OK
+  destination au hasard : jamais condamnee                                                         OK
+  dernier quai demande hors du Niveau 11 : fin du contenu                                          OK
+
+B. Version publiee
+  atteignables par les sorties : 0, 1, 2, 37                                                       OK
+  tous les niveaux disponibles sont atteignables (4)                                               OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du chapitre depuis une nouvelle partie : 0 -> 1 -> 37 -> 2 -> fin du contenu               OK
+  Poolrooms -> echelle du passage sec : Niveau 2                                                   OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 37                                 OK
+  la mission du Niveau 1 garde l'ascenseur vers les Poolrooms                                      OK
+  lot 1 : aucun passage condamne                                                                   OK
+  dernier quai (Niveau 11) : hors de cette version                                                 OK
+  tirages au hasard : 4 niveaux, tous disponibles                                                  OK
+
+B. Version test interne
+  atteignables par les sorties : 0, 1, 2, 3, 4, 37                                                 OK
+  tous les niveaux disponibles sont atteignables (6)                                               OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du chapitre depuis une nouvelle partie : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> fin du contenu     OK
+  Poolrooms -> echelle du passage sec : Niveau 2                                                   OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 37                                 OK
+  la mission du Niveau 1 garde l'ascenseur vers les Poolrooms                                      OK
+  dernier quai (Niveau 11) : hors de cette version                                                 OK
+  tirages au hasard : 6 niveaux, tous disponibles                                                  OK
+
+B. Version developpement
+  atteignables par les sorties : 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37                             OK
+  tous les niveaux disponibles sont atteignables (12)                                              OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du chapitre depuis une nouvelle partie : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai OK
+  Poolrooms -> echelle du passage sec : Niveau 2                                                   OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 37                                 OK
+  la mission du Niveau 1 garde l'ascenseur vers les Poolrooms                                      OK
+  dernier quai (Niveau 11) : fin de la campagne                                                    OK
+  tirages au hasard : 12 niveaux, tous disponibles                                                 OK
+
+C. Reprise des sauvegardes (BRContent::ResumeLevel, utilise par le menu et les cartes de sauvegarde)
+  partie v4.11 au Niveau 5 (0, 1, 4, 5 explores), version publiee : Niveau 1                       OK
+  partie v4.11 au Niveau 5, version de test interne : Niveau 4                                     OK
+  partie v4.11 au Niveau 5, version de developpement : Niveau 5                                    OK
+  partie au Niveau 2, version publiee : Niveau 2 (inchangee)                                       OK
+  partie de test au Niveau 4 (route des Poolrooms), version publiee : Niveau 2                     OK
+  dernier niveau non explore (format 1) : Niveau 0, comme avant                                    OK
+  aucun niveau disponible explore : Niveau 0                                                       OK
+  la liste des niveaux explores n'est pas modifiee (Niveau 4 de nouveau disponible au lot 2)       OK
+
+D. Compatibilite reseau
+  signatures distinctes par canal                                                                  OK
+  signature stable (deux calculs identiques)                                                       OK
+  meme version, meme contenu : accepte                                                             OK
+  autre version (v4.12 : 412) : refus version                                                      OK
+  autre version (v4.13 : 413) : refus version                                                      OK
+  protocole v4.15 : 415                                                                            OK
+  client sans controle (avant v4.12) : refus version                                               OK
+  version de test contre version publiee : refus contenu                                           OK
+  version publiee contre hote de developpement : refus contenu                                     OK
+  signature absente : refus contenu                                                                OK
+
+RESULTAT : OK (69 verifications, 0 echec(s))
