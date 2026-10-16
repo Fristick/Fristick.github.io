@@ -9,6 +9,7 @@
 #include "BRRig.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/LocalFogVolumeComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/RectLightComponent.h"
@@ -965,6 +966,86 @@ void ABRChunk::AddServiceDoorway(bool bAlongY, float Fixed, float Mid, float Out
 	Box(Mid, O0 + Depth * 0.5f, VH + 10.f, VW + 40.f, Depth, 20.f, Concrete, true);
 	// En bas de l'escalier, le noir : un voile sombre devant le mur du fond
 	Box(Mid, O0 + Depth - 4.f, (Bottom + 120.f) * 0.5f, VW - 4.f, 2.f, 120.f - Bottom, Dark, false);
+	// v4.15 : air froid du sas, plus dense en bas de l'escalier (visible dans le faisceau de la lampe)
+	const float FogOut = O0 + Depth * 0.5f;
+	const FVector FogCenter = bAlongY ? FVector(Fixed + OutSign * FogOut, Mid, (Bottom + VH) * 0.5f) : FVector(Mid, Fixed + OutSign * FogOut, (Bottom + VH) * 0.5f);
+	const FVector FogHalf = bAlongY ? FVector(Depth * 0.5f, VW * 0.5f, (VH - Bottom) * 0.5f) : FVector(VW * 0.5f, Depth * 0.5f, (VH - Bottom) * 0.5f);
+	AddFogVolume(FogCenter, FogHalf, 0.f, 0.25f, FLinearColor(0.75f, 0.85f, 1.f));
+}
+
+void ABRChunk::AddFogVolume(const FVector& Center, const FVector& HalfSize, float Radial, float Height, const FLinearColor& Albedo)
+{
+	const ABRWorld* W = World.Get();
+	const float K = W ? W->Def().LocalFogDensity : 0.f;
+	if (K <= 0.f)
+	{
+		return;
+	}
+	// v4.15 : volume de brouillard local (rendu seulement) : rayonnant (bords doux) ou en hauteur (plus dense en bas). Sans
+	// brouillard volumetrique (reglage coupe), le moteur le dessine a part ; avec, il l'y integre (eclaire par les lampes)
+	ULocalFogVolumeComponent* V = NewObject<ULocalFogVolumeComponent>(this);
+	V->SetupAttachment(Root);
+	V->SetRelativeLocation(Center - GetActorLocation());
+	const float Unit = ULocalFogVolumeComponent::GetBaseVolumeSize();
+	V->SetRelativeScale3D(FVector(FMath::Max(HalfSize.X, 10.f) / Unit, FMath::Max(HalfSize.Y, 10.f) / Unit, FMath::Max(HalfSize.Z, 10.f) / Unit));
+	V->SetRadialFogExtinction(Radial * K);
+	V->SetHeightFogExtinction(Height * K);
+	V->SetHeightFogFalloff(200.f);
+	V->SetHeightFogOffset(-1.f);
+	V->SetFogPhaseG(0.35f);
+	V->SetFogAlbedo(Albedo);
+	V->RegisterComponent();
+	Extra.Add(V);
+}
+
+void ABRChunk::BuildFogVolumes()
+{
+	ABRWorld* W = World.Get();
+	if (!W || W->Def().LocalFogDensity <= 0.f || W->Def().Fixture == EBRFixture::None || W->Def().bOutdoor)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float H = D.WallHeight;
+	// Salle de fosses : air humide (les rayons des neons passent entre les fosses)
+	if (bHasPitRoom)
+	{
+		const FVector Center((PitRoom.Min.X + PitRoom.Max.X) * 0.5f * S, (PitRoom.Min.Y + PitRoom.Max.Y) * 0.5f * S, H * 0.5f);
+		const FVector HalfSize((PitRoom.Max.X - PitRoom.Min.X) * 0.5f * S, (PitRoom.Max.Y - PitRoom.Min.Y) * 0.5f * S, H * 0.55f);
+		AddFogVolume(Center, HalfSize, 0.09f, 0.f, FLinearColor(0.85f, 0.82f, 0.72f));
+	}
+	// Zones sans lumiere (blocs de 5 x 5 cellules, ABRWorld::IsDarkZone) : un volume par bloc dans ce chunk, sur les cellules
+	// du bloc qui sont dans le noir
+	const int32 X0 = Coord.X * N;
+	const int32 Y0 = Coord.Y * N;
+	for (int32 BX = BRHash::FloorDiv(X0, 5); BX <= BRHash::FloorDiv(X0 + N - 1, 5); ++BX)
+	{
+		for (int32 BY = BRHash::FloorDiv(Y0, 5); BY <= BRHash::FloorDiv(Y0 + N - 1, 5); ++BY)
+		{
+			FIntPoint Lo(TNumericLimits<int32>::Max(), TNumericLimits<int32>::Max());
+			FIntPoint Hi(TNumericLimits<int32>::Lowest(), TNumericLimits<int32>::Lowest());
+			for (int32 X = FMath::Max(X0, BX * 5); X < FMath::Min(X0 + N, BX * 5 + 5); ++X)
+			{
+				for (int32 Y = FMath::Max(Y0, BY * 5); Y < FMath::Min(Y0 + N, BY * 5 + 5); ++Y)
+				{
+					if (W->IsDarkZone(X, Y) && !W->IsPitRoomCell(X, Y))
+					{
+						Lo = FIntPoint(FMath::Min(Lo.X, X), FMath::Min(Lo.Y, Y));
+						Hi = FIntPoint(FMath::Max(Hi.X, X), FMath::Max(Hi.Y, Y));
+					}
+				}
+			}
+			if (Hi.X < Lo.X)
+			{
+				continue;
+			}
+			const FVector Center((Lo.X + Hi.X + 1) * 0.5f * S, (Lo.Y + Hi.Y + 1) * 0.5f * S, H * 0.5f);
+			const FVector HalfSize((Hi.X - Lo.X + 1) * 0.5f * S, (Hi.Y - Lo.Y + 1) * 0.5f * S, H * 0.55f);
+			AddFogVolume(Center, HalfSize, 0.08f, 0.f, FLinearColor(0.8f, 0.78f, 0.72f));
+		}
+	}
 }
 
 void ABRChunk::AddStroke(const FBRSurface& Surf, const FVector& Origin, const FQuat& WallQ, const FVector2D& A, const FVector2D& B, float Width)
@@ -1947,7 +2028,10 @@ bool ABRChunk::StepPlan()
 		{
 			BuildSkylight();
 		}
-		// Rien n'est encore cree (sauf les quelques lumieres des bassins et verrieres des Poolrooms) : StepBuild s'en charge
+		// v4.15 : volumes de brouillard locaux (quelques composants : salle de fosses, zones sans lumiere)
+		BuildFogVolumes();
+		// Rien n'est encore cree (sauf les quelques lumieres des bassins et verrieres des Poolrooms, et les volumes de
+		// brouillard locaux) : StepBuild s'en charge
 		bDeferLights = false;
 		bPlanned = true;
 		return true;

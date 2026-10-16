@@ -470,6 +470,13 @@ struct FBRLevelDef
 	/** Adaptation de l'exposition (IL par seconde) vers le clair et vers le sombre */
 	float ExposureSpeedUp = 2.f;
 	float ExposureSpeedDown = 1.f;
+	/** Brouillard volumetrique : facteur d'extinction et distance couverte (cm ; plus courte, les tranches pres de la camera
+	 *  sont plus fines : halos des lampes plus nets) */
+	float VolFogExtinction = 1.f;
+	float VolFogDistance = 6000.f;
+	/** Volumes de brouillard locaux (air humide des salles de fosses et des zones sans lumiere, air froid du sas de la porte
+	 *  de service) : densite relative, 0 : aucun. Places d'apres la disposition (la meme chez tous les joueurs) */
+	float LocalFogDensity = 0.f;
 
 	/** v4.15 : couleur apparente des plafonniers a l'ecran (temperature vue a travers la balance des blancs, multipliee par
 	 *  LightColor, maximum 1) : apercus du menu, ou rien n'est rendu par le moteur */

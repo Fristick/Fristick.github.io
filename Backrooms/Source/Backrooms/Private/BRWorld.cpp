@@ -1090,6 +1090,10 @@ void ABRWorld::ApplyEnvironment()
 	Fog->SetVolumetricFog(D.bVolumetricFog);
 	// Diffusion vers l'avant : halos autour des lampes quand on les regarde, rayons dans la poussiere
 	Fog->SetVolumetricFogScatteringDistribution(0.35f);
+	// v4.15 : densite du volume et distance couverte propres au niveau (Level 0 : air plus clair, halos plus nets pres de
+	// la camera)
+	Fog->SetVolumetricFogExtinctionScale(FMath::Max(0.1f, D.VolFogExtinction));
+	Fog->SetVolumetricFogDistance(FMath::Clamp(D.VolFogDistance, 1000.f, 20000.f));
 	{
 		// Albedo teinte par la couleur du brouillard (eclaircie : c'est la lumiere des lampes qui colore le volume)
 		const float M = FMath::Max3(D.FogColor.R, D.FogColor.G, D.FogColor.B);

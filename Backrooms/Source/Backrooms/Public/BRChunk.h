@@ -226,6 +226,10 @@ protected:
 	void PlanExits();
 	/** Plafond du chunk, perce d'une trappe au-dessus d'une echelle, et le conduit sombre qui monte au-dessus */
 	void BuildCeiling();
+	/** v4.15 : volumes de brouillard locaux du chunk (FBRLevelDef::LocalFogDensity) : salle de fosses, zones sans lumiere */
+	void BuildFogVolumes();
+	/** v4.15 : un volume de brouillard local (centre et demi-tailles en cm, densites rayonnante et en hauteur, albedo) */
+	void AddFogVolume(const FVector& Center, const FVector& HalfSize, float Radial, float Height, const FLinearColor& Albedo);
 
 	FBatch& GetBatch(const FString& Key, UStaticMesh* Mesh, UMaterialInterface* Mat, bool bCollision, bool bShadow, float Cull);
 

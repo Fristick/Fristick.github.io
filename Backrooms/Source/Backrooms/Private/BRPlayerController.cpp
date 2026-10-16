@@ -3907,6 +3907,9 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.MaxRoughnessToTrace %.2f"), S.Quality >= 3 ? 0.5f : 0.4f));
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), bRT ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.VolumetricFog %d"), S.bVolumetricFog ? 1 : 0));
+	// v4.15 : volumes de brouillard locaux (salles de fosses, zones sans lumiere, sas) visibles des 3 m (10 m par defaut :
+	// invisibles dans une salle ou l'on se trouve)
+	Cmd(TEXT("r.LocalFogVolume.GlobalStartDistance 300"));
 	Cmd(FString::Printf(TEXT("r.ScreenPercentage %d"), FMath::Clamp(S.RenderScale, 50, 100)));
 	// Image plus nette (filtre de nettete du tonemapper) a partir de la qualite Elevee. v4.15 : nettete discrete (0,5 donnait
 	// un aspect "jeu video" : contours cernes, grain accentue)

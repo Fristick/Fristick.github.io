@@ -63,7 +63,10 @@ namespace
 		// v4.15 : neons blanc chaud (3700 K) vus avec une balance des blancs a 4300 K : le jaune vient du papier peint et de
 		// la moquette eclaires, plus de la teinte de l'image (moins saturee, plus naturelle) ; etalonnage adouci
 		D.LightTemperatureK = 3700.f; D.WhiteTempK = 4300.f;
-		D.FogDensity = 0.08f; D.FogColor = C(0.32f, 0.29f, 0.16f);
+		// v4.15 : air plus clair (brume legere) ; halos des lampes portes par le brouillard volumetrique (extinction 1.5,
+		// 40 m) ; air humide des salles de fosses et des zones sans lumiere, air froid du sas (volumes locaux)
+		D.FogDensity = 0.03f; D.FogColor = C(0.32f, 0.29f, 0.16f);
+		D.VolFogExtinction = 1.5f; D.VolFogDistance = 4000.f; D.LocalFogDensity = 1.f;
 		D.ShadowTint = C(0.98f, 1.f, 0.96f); D.HighlightTint = C(1.02f, 1.f, 0.96f); D.VolumetricScatter = 0.45f;
 		D.SceneTint = C(1.f, 0.99f, 0.95f); D.Saturation = 0.92f; D.Contrast = 1.05f;
 		// v4.15 : plage d'exposition resserree (le noir d'une coupure reste noir, l'image ne "pompe" plus), adaptation plus lente
@@ -153,6 +156,7 @@ namespace
 		// v4.15 : tubes "blanc froid" (4100 K, pointe verte des tubes bon marche), balance des blancs a 3800 K : le parking
 		// reste froid
 		D.LightTemperatureK = 4100.f; D.WhiteTempK = 3800.f;
+		D.VolFogDistance = 5000.f; // v4.15 : grandes travees du parking
 		D.FogDensity = 0.16f; D.FogColor = C(0.22f, 0.24f, 0.27f);
 		D.ShadowTint = C(0.94f, 0.98f, 1.06f); D.HighlightTint = C(1.f, 1.f, 0.98f); D.VolumetricScatter = 0.7f;
 		D.SceneTint = C(0.95f, 0.98f, 1.f); D.Saturation = 0.85f; D.Contrast = 1.08f;
@@ -206,6 +210,7 @@ namespace
 		D.DarkZoneChance = 0.15f; D.ShadowChance = 0.2f;
 		// v4.15 : ampoules a incandescence (2900 K), balance des blancs a 4200 K
 		D.LightTemperatureK = 2900.f; D.WhiteTempK = 4200.f;
+		D.VolFogExtinction = 1.2f; D.VolFogDistance = 3000.f; // v4.15 : couloirs etroits, vapeur des tuyaux
 		D.FogDensity = 0.12f; D.FogColor = C(0.18f, 0.13f, 0.08f);
 		D.ShadowTint = C(0.95f, 1.f, 1.03f); D.HighlightTint = C(1.05f, 0.98f, 0.9f); D.VolumetricScatter = 0.6f;
 		D.SceneTint = C(1.f, 0.93f, 0.85f); D.Saturation = 0.85f; D.Contrast = 1.12f;
@@ -627,6 +632,7 @@ namespace
 		D.LightLumens = 4200.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 1000.f; D.ShadowChance = 0.15f;
 		// v4.15 : plafonniers 5000 K, balance des blancs a 5400 K (la lumiere du jour des verrieres reste un peu plus froide)
 		D.LightTemperatureK = 5000.f; D.WhiteTempK = 5400.f;
+		D.VolFogDistance = 5000.f; // v4.15 : longs couloirs des canaux
 		D.SkylightChance = 0.45f;
 		D.bWater = true; D.WaterHeight = 60.f; // canaux de 60 cm ; trottoirs a 68 cm, marche immergee a 34 cm
 		D.Water = S(TEXT("T_WaterNormal"), C(0.24f, 0.7f, 0.72f), 650.f, 0.02f, 0.f);
