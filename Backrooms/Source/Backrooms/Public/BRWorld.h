@@ -359,6 +359,9 @@ public:
 	void GetMissionEval(BRMission::FEval& Out) const;
 	/** Cellule reservee a un mecanisme ou a une sortie de mission (les chunks n'y posent rien) */
 	bool IsMissionCell(int32 X, int32 Y) const { return MissionCells.Contains(FIntPoint(X, Y)); }
+	/** v4.15 : un volume du decor (rectangle oriente du plan) entrerait dans la zone libre d'un mecanisme ou d'une sortie
+	 *  de la mission : les chunks ne l'y posent pas (rochers des grottes). Meme resultat chez tous (placement replique) */
+	bool IsMissionKeepOut(const BRMech::Clearance::FRect& R) const;
 	/** Mecanisme d'apres son indice (nullptr si absent) */
 	ABRMissionDevice* FindMissionDevice(int32 Index) const;
 	const TArray<TObjectPtr<ABRMissionDevice>>& GetMissionDevices() const { return MissionDevices; }
@@ -373,6 +376,13 @@ public:
 	static constexpr float MissionReachServer = 340.f;
 	/** v4.13 : portee du scan focalise sur la mire et les cages du Level 6 (verifiee par l'hote, en ligne de vue) */
 	static constexpr float MissionScanReachServer = 900.f;
+	/** v4.15 : regle de portee de l'hote (ServerMissionAct), la seule : depuis les yeux Eye, le point d'interaction du
+	 *  mecanisme a portee (normale ou du scan focalise) et en ligne de vue WorldStatic qui n'ignore que By et le mecanisme.
+	 *  Les tests l'appellent aussi (places debout). OutBlock : ce qui coupe la vue */
+	bool CanReachMissionDevice(const FVector& Eye, const ABRMissionDevice* Dev, const AActor* By, FHitResult* OutBlock = nullptr) const;
+	/** v4.15 (tests, diagnostic) : le point d'interaction du mecanisme est dans un volume bloquant (sphere de 5 cm,
+	 *  WorldStatic, sans le mecanisme ni IgnoreAlso) ; OutWhat : acteur et composant */
+	bool FindMissionDeviceObstruction(const ABRMissionDevice* Dev, const AActor* IgnoreAlso, FString& OutWhat) const;
 	/** Une sortie vers Target peut etre prise maintenant (mission du niveau resolue, ou sortie de retour). OutReason :
 	 *  message dans la langue du joueur */
 	bool CanUseExit(int32 Target, FString& OutReason) const;
@@ -926,6 +936,9 @@ private:
 	uint8 ResumeMissionGen = 0;
 	TArray<uint8> ResumeMissionBlob;
 	TSet<FIntPoint> MissionCells;
+	/** v4.15 : zones que le decor laisse libres (rochers des grottes) : chaque mecanisme, son point vise et la place devant,
+	 *  chaque sortie posee par la mission (BRMech::Clearance::KeepOut), calculees avec le placement, les memes chez tous */
+	TArray<BRMech::Clearance::FRect> MissionKeepOuts;
 	/** Mecanisme -> emplacement ; sorties garanties (position, orientation, cible, style) */
 	TArray<FBRMissionSpot> MissionSpots;
 	struct FMissionExitSpot

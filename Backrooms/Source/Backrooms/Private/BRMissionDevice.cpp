@@ -33,8 +33,8 @@ namespace
 		return S;
 	}
 
-	/** Hauteur de travail des commandes murales (cm au-dessus du sol) */
-	constexpr float WorkZ = 120.f;
+	/** Hauteur de travail des commandes murales (cm au-dessus du sol). v4.15 : partagee avec l'emprise (BRMech::Clearance) */
+	constexpr float WorkZ = BRMech::Device::WorkZ;
 }
 
 ABRMissionDevice::ABRMissionDevice()
@@ -213,8 +213,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 
 	const FColor LabelColor(235, 230, 210);
 	const float Z = WorkZ;
-	FVector BoxCenter(8.f, 0.f, Z);
-	FVector BoxExtent(10.f, 22.f, 25.f);
 	USceneComponent* Pivot = nullptr;
 	auto MakePivot = [this](const FVector& Loc)
 	{
@@ -247,8 +245,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			// Carnet ou registre pose sur une tablette
 			AddBoxPart(FVector(14.f, 0.f, Z - 8.f), FVector(28.f, 46.f, 3.f), Wood);
 			AddBoxPart(FVector(14.f, 0.f, Z - 5.f), FVector(20.f, 28.f, 3.f), Device.Role == BRM::R_Register ? RedPaint : Paper);
-			BoxCenter = FVector(14.f, 0.f, Z - 4.f);
-			BoxExtent = FVector(14.f, 18.f, 8.f);
 		}
 		else
 		{
@@ -262,8 +258,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			{
 				AddBoxPart(FVector(3.7f, 18.f, Z + 10.f), FVector(0.5f, 1.2f, 22.f), Hazard);
 			}
-			BoxCenter = FVector(5.f, 0.f, Z + 20.f);
-			BoxExtent = FVector(6.f, 28.f, 28.f);
 		}
 		break;
 	}
@@ -298,8 +292,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			}
 			Blinks = Device.Info[0];
 			bAnimated = true;
-			BoxCenter = FVector(20.f, 0.f, 170.f);
-			BoxExtent = FVector(25.f, 40.f, 70.f);
 			break;
 		}
 		case BRM::R_Gauge:
@@ -316,8 +308,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			Pivot = MakePivot(FVector(13.6f, 0.f, Z));
 			MovingMesh = AddBoxPart(FVector(0.f, 0.f, 5.f), FVector(0.6f, 1.2f, 10.f), RedPaint, Pivot);
 			AddLabel(FString::Printf(TEXT("M%d"), Device.Label + 1), FVector(13.8f, 0.f, Z - 22.f), 8.f, LabelColor);
-			BoxCenter = FVector(10.f, 0.f, Z);
-			BoxExtent = FVector(8.f, 18.f, 18.f);
 			break;
 		}
 		case BRM::R_JunctionBox:
@@ -339,8 +329,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 				AddBoxPart(FVector(22.f, 10.f, Z - 6.f), FVector(1.f, 3.f, 3.f), GlowMID);
 				bAnimated = true;
 			}
-			BoxCenter = FVector(12.f, 0.f, Z + 10.f);
-			BoxExtent = FVector(12.f, 24.f, 32.f);
 			break;
 		}
 		case BRM::R_FenceMark:
@@ -348,8 +336,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddBoxPart(FVector(0.f, 0.f, 70.f), FVector(8.f, 120.f, 14.f), Wood);
 			AddBoxPart(FVector(0.f, 0.f, 110.f), FVector(8.f, 120.f, 14.f), Wood);
 			AddSymbol(Device.Info[0], FVector(4.5f, 20.f, 90.f), 26.f, RedPaint);
-			BoxCenter = FVector(4.f, 0.f, 90.f);
-			BoxExtent = FVector(8.f, 60.f, 30.f);
 			break;
 		}
 		case BRM::R_LidarTarget:
@@ -364,15 +350,14 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddBoxPart(FVector(3.f, 0.f, Z + 54.f), FVector(1.5f, 68.f, 4.f), Hazard);
 			AddBoxPart(FVector(3.f, 0.f, Z - 14.f), FVector(1.5f, 68.f, 4.f), Hazard);
 			AddBoxPart(FVector(3.8f, 26.f, Z + 46.f), FVector(1.f, 4.f, 4.f), LampMID);
-			BoxCenter = FVector(5.f, 0.f, Z + 20.f);
-			BoxExtent = FVector(6.f, 34.f, 34.f);
 			break;
 		}
 		case BRM::R_LidarCage:
 		{
 			// v4.13 : cage de confinement contre le mur : socle, toit, barreaux ; plaque du code et numero sur le montant.
-			// Rien n'est visible a l'oeil dans la cage : la silhouette n'apparait qu'au scan focalise (points du scanner)
-			constexpr float D0 = 12.f, Dep = 110.f, HW = 60.f, HH = 210.f;
+			// Rien n'est visible a l'oeil dans la cage : la silhouette n'apparait qu'au scan focalise (points du scanner).
+			// v4.15 : cotes partagees avec le placement (BRMech::LidarCage : le poste voisin reste hors de la cage)
+			constexpr float D0 = BRMech::LidarCage::Gap, Dep = BRMech::LidarCage::Depth, HW = BRMech::LidarCage::HalfWidth, HH = BRMech::LidarCage::Height;
 			AddBoxPart(FVector(D0 + Dep * 0.5f, 0.f, 4.f), FVector(Dep, HW * 2.f, 8.f), DarkMetal);
 			AddBoxPart(FVector(D0 + Dep * 0.5f, 0.f, HH), FVector(Dep, HW * 2.f, 4.f), DarkMetal);
 			for (int32 I = 0; I <= 6; ++I)
@@ -395,8 +380,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			Blocker->SetBoxExtent(FVector(Dep * 0.5f, HW, HH * 0.5f));
 			Blocker->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 			Blocker->SetCollisionResponseToAllChannels(ECR_Block);
-			BoxCenter = FVector(D0 + Dep + 4.f, 0.f, 120.f);
-			BoxExtent = FVector(8.f, HW, 90.f);
 			break;
 		}
 		default: // BRM::R_Current : fleche flottante au bord du trottoir
@@ -408,8 +391,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddBoxPart(FVector(0.f, 18.f, 0.f), FVector(4.f, 14.f, 4.f), RedPaint, Pivot, FRotator(0.f, -35.f, 0.f));
 			AddLabel(TEXT("A  >  B"), FVector(2.f, 0.f, 100.f), 14.f, LabelColor);
 			bAnimated = true;
-			BoxCenter = FVector(30.f, 0.f, 40.f);
-			BoxExtent = FVector(30.f, 30.f, 60.f);
 			break;
 		}
 		}
@@ -452,7 +433,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			const FString Lbl = Device.Role == BRM::R_Valve ? FString::Printf(TEXT("V%d"), Device.Label + 1)
 				: (Device.Role == BRM::R_Sluice ? BRMissionText::Letter(Device.Label) : FString(TEXT("P")));
 			AddLabel(Lbl, FVector(3.f, 0.f, Z - R - 18.f), 10.f, LabelColor);
-			BoxExtent = FVector(12.f, R + 6.f, R + 6.f);
 		}
 		else
 		{
@@ -477,8 +457,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			{
 				AddLabel(FString::FromInt(Device.Label + 1), FVector(4.f, 0.f, Z + 20.f - R - 10.f), 7.f, LabelColor);
 			}
-			BoxCenter = FVector(6.f, 0.f, Z + 20.f);
-			BoxExtent = FVector(8.f, R + 12.f, R + 14.f);
 		}
 		break;
 	}
@@ -491,7 +469,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddPart(A->Cylinder(), FVector(0.f, 0.f, 6.f), FRotator::ZeroRotator, FVector(10.f, 10.f, 10.f), Metal, Pivot);
 			AddBoxPart(FVector(0.f, 0.f, -6.f), FVector(6.f, 14.f, 14.f), Brass);
 			AddSymbol(Device.Label, FVector(13.5f, 0.f, Z - 6.f), 8.f, InkMat);
-			BoxExtent = FVector(10.f, 16.f, 16.f);
 		}
 		else
 		{
@@ -501,8 +478,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddBoxPart(FVector(9.f, 0.f, Z + 22.f), FVector(2.f, 6.f, 2.f), Brass);
 			ItemMesh = AddPart(A->Cylinder(), FVector(10.f, 0.f, Z + 30.f), FRotator::ZeroRotator, FVector(4.f, 4.f, 16.f), Brass);
 			AddLabel(BRMissionText::Letter(Device.Label), FVector(8.5f, 0.f, Z + 46.f), 7.f, LabelColor);
-			BoxCenter = FVector(8.f, 0.f, Z + 30.f);
-			BoxExtent = FVector(8.f, 10.f, 14.f);
 		}
 		break;
 	case BRM::EKind::Item:
@@ -513,8 +488,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddBoxPart(FVector(5.f, 0.f, Z + 24.f), FVector(6.f, 1.f, 1.f), Brass);
 			ItemMesh = AddBoxPart(FVector(7.f, 0.f, Z + 14.f), FVector(1.f, 2.f, 9.f), Brass);
 			AddLabel(FString::FromInt(100 + Device.Label), FVector(4.3f, 0.f, Z + 30.f), 4.5f, FColor(40, 30, 20));
-			BoxCenter = FVector(5.f, 0.f, Z + 20.f);
-			BoxExtent = FVector(6.f, 8.f, 12.f);
 		}
 		else
 		{
@@ -522,8 +495,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddBoxPart(FVector(18.f, 0.f, 30.f), FVector(36.f, 46.f, 60.f), Wood);
 			ItemMesh = AddPart(A->Cylinder(), FVector(18.f, 0.f, 64.f), FRotator(90.f, 0.f, 0.f), FVector(4.f, 4.f, 16.f), Brass);
 			AddLabel(BRMissionText::Letter(Device.Label), FVector(36.5f, 0.f, 44.f), 12.f, LabelColor);
-			BoxCenter = FVector(18.f, 0.f, 64.f);
-			BoxExtent = FVector(14.f, 14.f, 10.f);
 		}
 		break;
 	case BRM::EKind::Crank:
@@ -551,8 +522,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			{
 				AddBoxPart(FVector(19.5f, 0.f, 140.f), FVector(1.f, 4.f, 4.f), LampMID);
 				bAnimated = true;
-				BoxCenter = FVector(18.f, 0.f, 110.f);
-				BoxExtent = FVector(14.f, 16.f, 60.f);
 				break;
 			}
 			BeaconLight = NewObject<UPointLightComponent>(this);
@@ -565,8 +534,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			BeaconLight->SetCastShadows(false);
 			BeaconLight->RegisterComponent();
 			bAnimated = true;
-			BoxCenter = FVector(18.f, 0.f, 110.f);
-			BoxExtent = FVector(14.f, 16.f, 60.f);
 		}
 		else
 		{
@@ -579,8 +546,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddBoxPart(FVector(5.f, 0.f, 22.f), FVector(10.f, 3.f, 3.f), RedPaint, Pivot);
 			AddLabel(bGen ? FString(TEXT("G")) : BRMissionText::Letter(Device.Label), FVector(36.5f, 0.f, 40.f), 14.f, LabelColor);
 			AddBoxPart(FVector(36.5f, 18.f, 50.f), FVector(1.f, 4.f, 4.f), LampMID);
-			BoxCenter = FVector(26.f, 0.f, 60.f);
-			BoxExtent = FVector(18.f, 30.f, 34.f);
 		}
 		break;
 	case BRM::EKind::Button:
@@ -596,8 +561,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			if (Module == BRMech::Module::LidarDoor)
 			{
 				BuildLidarDoor(Plan);
-				BoxCenter = FVector(BRMech::LidarDoor::LeafThick + 6.f, 0.f, 120.f);
-				BoxExtent = FVector(8.f, BRMech::LidarDoor::Width * 0.5f, 100.f);
 				break;
 			}
 			BuildWallPlate(56.f, 56.f, Metal);
@@ -606,8 +569,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			AddLabel(FString::FromInt(DoorNumber), FVector(3.9f, 0.f, Z + 8.f), 10.f, LabelColor);
 			AddPart(A->Cylinder(), FVector(6.f, 18.f, Z + 8.f), FRotator(90.f, 0.f, 0.f), FVector(10.f, 10.f, 6.f), RedPaint);
 			AddBoxPart(FVector(4.f, -18.f, Z + 8.f), FVector(1.f, 6.f, 3.f), LampMID);
-			BoxCenter = FVector(6.f, 0.f, Z + 20.f);
-			BoxExtent = FVector(8.f, 30.f, 30.f);
 		}
 		else if (Device.Role == BRM::R_HouseMarker)
 		{
@@ -630,16 +591,12 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			GateLight->SetAttenuationRadius(BRLight::LitGateRadius);
 			GateLight->SetCastShadows(false);
 			GateLight->RegisterComponent();
-			BoxCenter = FVector(5.f, 0.f, Z + 24.f);
-			BoxExtent = FVector(6.f, 32.f, 26.f);
 		}
 		else
 		{
 			BuildWallPlate(30.f, 34.f, Device.Role == BRM::R_MillBrake ? Wood : Painted);
 			AddPart(A->Cylinder(), FVector(6.f, 0.f, Z + 20.f), FRotator(90.f, 0.f, 0.f), FVector(12.f, 12.f, 6.f), RedPaint);
 			AddBoxPart(FVector(4.f, 0.f, Z + 33.f), FVector(1.f, 8.f, 3.f), LampMID);
-			BoxCenter = FVector(6.f, 0.f, Z + 20.f);
-			BoxExtent = FVector(8.f, 16.f, 18.f);
 		}
 		break;
 	case BRM::EKind::Gate:
@@ -663,7 +620,6 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			}
 			bAnimated = true;
 			Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			BoxExtent = FVector(1.f, 1.f, 1.f);
 			break;
 		}
 		switch (Device.Role)
@@ -753,13 +709,16 @@ void ABRMissionDevice::Init(int32 InIndex, const BRM::FPlan& Plan, const FBRMiss
 			break;
 		}
 		Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		BoxExtent = FVector(1.f, 1.f, 1.f);
 		break;
 	}
 	}
 
-	Box->SetRelativeLocation(BoxCenter);
-	Box->SetBoxExtent(BoxExtent);
+	// v4.15 : boite visee (point d'interaction) tiree de l'emprise partagee avec le placement, les tests et les bancs
+	// (BRMech::Clearance::Of) : une seule definition par sorte, role et module
+	const ABRWorld* WorldActor = ABRWorld::Get(this);
+	const BRMech::Clearance::FFootprint Print = BRMech::Clearance::Of(Device.Kind, Device.Role, Module, WorldActor ? WorldActor->Def().WallThickness : 60.f);
+	Box->SetRelativeLocation(FVector(Print.Aim.X, Print.Aim.Y, Print.Aim.Z));
+	Box->SetBoxExtent(FVector(Print.AimExtent.X, Print.AimExtent.Y, Print.AimExtent.Z));
 	if (Module == BRMech::Module::PoolTanks)
 	{
 		// v4.12 : la vanne A porte les deux bassins (derriere elle), leurs regles graduees et leurs conduites

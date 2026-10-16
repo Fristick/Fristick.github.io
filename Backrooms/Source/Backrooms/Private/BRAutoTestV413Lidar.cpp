@@ -285,6 +285,39 @@ void ABRAutoTest::AddV413LidarSteps()
 			W->GetMissionNotice(), Oui(E.Steps[0] == BRM::EStep::Done), E.Progress[1], TestCountA), !bOk);
 		return true;
 	});
+	// v4.15 : la meme mission sauvegardee avec le placement 2 (v4.14) : les postes et les cages (et, une graine sur deux, la
+	// salle de l'aile) ont bouge : progression gardee, avis 3 ("mecanismes reamenages")
+	Add(TEXT("v4.15 Level 6 : reprise d'une session du placement 2"), 0.f, [this, LevelSeed]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6)
+		{
+			return StepTime > 30.f;
+		}
+		BRM::FEval E;
+		W->GetMissionEval(E);
+		TestCountA = E.Progress[1];
+		FBRSessionState Session = MakeSession(LevelSeed, W->GetMissionPlan(), W->GetMissionState());
+		Session.PlaceVersion = 2;
+		BRSaves::PendingResume() = Session;
+		TestCountC = W->GetLevelSerial();
+		W->RequestTransition(6, false, LevelSeed);
+		return true;
+	});
+	Add(TEXT("v4.15 Level 6 : reprise d'une session du placement 2, verification"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6 || W->GetLevelSerial() == TestCountC)
+		{
+			return StepTime > 30.f;
+		}
+		BRM::FEval E;
+		W->GetMissionEval(E);
+		const bool bOk = W->GetMissionNotice() == 3 && E.Progress[1] == TestCountA;
+		Note(FString::Printf(TEXT("session du placement 2 (v4.14) : avis %d (attendu 3 : mecanismes reamenages), postes %d/4 (avant : %d)"), W->GetMissionNotice(),
+			E.Progress[1], TestCountA), !bOk);
+		return true;
+	});
 	// Une ancienne session terminee reste terminee : le Level 6 fini ne bloque jamais la sortie vers le Niveau 8
 	Add(TEXT("v4.13 Level 6 : ancienne session terminee"), 0.f, [this, LevelSeed]()
 	{

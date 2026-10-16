@@ -251,4 +251,381 @@ namespace BRMech
 			return false;
 		}
 	}
+
+	namespace Clearance
+	{
+		namespace
+		{
+			FVec3 V3(float X, float Y, float Z)
+			{
+				FVec3 V;
+				V.X = X;
+				V.Y = Y;
+				V.Z = Z;
+				return V;
+			}
+			FBox Box(float X0, float Y0, float Z0, float X1, float Y1, float Z1)
+			{
+				FBox B;
+				B.X0 = X0;
+				B.Y0 = Y0;
+				B.Z0 = Z0;
+				B.X1 = X1;
+				B.Y1 = Y1;
+				B.Z1 = Z1;
+				return B;
+			}
+			float AbsF(float V)
+			{
+				return V < 0.f ? -V : V;
+			}
+			float MaxF(float A, float B)
+			{
+				return A > B ? A : B;
+			}
+			float MinF(float A, float B)
+			{
+				return A < B ? A : B;
+			}
+			/** Lacet arrondi au quart de tour, comme FFrame */
+			float QuarterYaw(float Yaw)
+			{
+				return std::round(Yaw / 90.f) * 90.f;
+			}
+			/** Distance (plan) d'un point local a un rectangle local */
+			float DistToRect(float LX, float LY, const FBox& B)
+			{
+				const float DX = MaxF(MaxF(B.X0 - LX, 0.f), LX - B.X1);
+				const float DY = MaxF(MaxF(B.Y0 - LY, 0.f), LY - B.Y1);
+				return std::sqrt(DX * DX + DY * DY);
+			}
+			/** Me gene par le volume de Other : point vise dedans, ou place debout devant lui coupee */
+			bool Hinders(const FPlaced& Me, const FPlaced& Other)
+			{
+				if (!Other.Print.bSolid)
+				{
+					return false;
+				}
+				const FVec3 P = AimPoint(Me);
+				if (InSolid(Other, P.X, P.Y, P.Z, Margin))
+				{
+					return true;
+				}
+				const FBox& S = Other.Print.Solid;
+				if (S.Z1 - S.Z0 <= StepHeight)
+				{
+					return false;
+				}
+				float SX = 0.f, SY = 0.f, LX = 0.f, LY = 0.f;
+				Me.Frame.ToWorld(Me.Print.Aim.X + StandGap, Me.Print.Aim.Y, SX, SY);
+				Other.Frame.ToLocal(SX, SY, LX, LY);
+				return DistToRect(LX, LY, S) < PlayerRadius;
+			}
+		}
+
+		FFootprint Of(BRMission::EKind Kind, uint8_t Role, uint8_t ModuleId, float WallThickness)
+		{
+			// Memes boites que ABRMissionDevice::Init (aspect de chaque role), en cm, repere du mecanisme
+			using namespace BRMission;
+			constexpr float Z = Device::WorkZ;
+			FFootprint F;
+			F.Aim = V3(8.f, 0.f, Z);
+			F.AimExtent = V3(10.f, 22.f, 25.f);
+			switch (Kind)
+			{
+			case EKind::Clue:
+			{
+				const bool bNotebook = Role == R_ReserveNote || Role == R_DiveLog || Role == R_Register || Role == R_Archive || Role == R_TeamLog;
+				if (Role == R_PassageMarks)
+				{
+					break; // entailles dans la roche : boite par defaut
+				}
+				if (bNotebook)
+				{
+					F.Aim = V3(14.f, 0.f, Z - 4.f);
+					F.AimExtent = V3(14.f, 18.f, 8.f);
+				}
+				else
+				{
+					F.Aim = V3(5.f, 0.f, Z + 20.f);
+					F.AimExtent = V3(6.f, 28.f, 28.f);
+				}
+				break;
+			}
+			case EKind::Observe:
+				switch (Role)
+				{
+				case R_Anomaly:
+					F.Aim = V3(20.f, 0.f, 170.f);
+					F.AimExtent = V3(25.f, 40.f, 70.f);
+					break;
+				case R_Gauge:
+					F.Aim = V3(10.f, 0.f, Z);
+					F.AimExtent = V3(8.f, 18.f, 18.f);
+					break;
+				case R_JunctionBox:
+					F.Aim = V3(12.f, 0.f, Z + 10.f);
+					F.AimExtent = V3(12.f, 24.f, 32.f);
+					break;
+				case R_FenceMark:
+					F.Aim = V3(4.f, 0.f, 90.f);
+					F.AimExtent = V3(8.f, 60.f, 30.f);
+					break;
+				case R_LidarTarget:
+					F.Aim = V3(5.f, 0.f, Z + 20.f);
+					F.AimExtent = V3(6.f, 34.f, 34.f);
+					break;
+				case R_LidarCage:
+					F.Aim = V3(LidarCage::Gap + LidarCage::Depth + 4.f, 0.f, 120.f);
+					F.AimExtent = V3(8.f, LidarCage::HalfWidth, 90.f);
+					F.bSolid = true;
+					F.Solid = Box(LidarCage::Gap, -LidarCage::HalfWidth, 0.f, LidarCage::Gap + LidarCage::Depth, LidarCage::HalfWidth, LidarCage::Height);
+					break;
+				default: // fleche du courant (Poolrooms)
+					F.Aim = V3(30.f, 0.f, 40.f);
+					F.AimExtent = V3(30.f, 30.f, 60.f);
+					break;
+				}
+				break;
+			case EKind::Switch:
+			{
+				const bool bToggle = Role == R_Breaker || Role == R_Relay || Role == R_RouteLever;
+				const bool bWheel = Role == R_Valve || Role == R_Sluice || Role == R_BoilerDial;
+				if (bToggle)
+				{
+					break; // boite par defaut
+				}
+				if (bWheel)
+				{
+					const float R = Role == R_Sluice ? 26.f : 18.f;
+					F.AimExtent = V3(12.f, R + 6.f, R + 6.f);
+					if (ModuleId == Module::PoolTanks)
+					{
+						// Vanne A des Poolrooms : les deux bassins derriere elle
+						F.bSolid = true;
+						F.Solid = Box(-Pool::TankDepth, Pool::AY0 - Pool::Wall, 0.f, 0.f, Pool::BY1 + Pool::Wall, 300.f);
+					}
+					break;
+				}
+				const float R = Role == R_MillDial ? 24.f : 12.f;
+				F.Aim = V3(6.f, 0.f, Z + 20.f);
+				F.AimExtent = V3(8.f, R + 12.f, R + 14.f);
+				break;
+			}
+			case EKind::Socket:
+				if (Role == R_Lock)
+				{
+					F.AimExtent = V3(10.f, 16.f, 16.f);
+				}
+				else
+				{
+					F.Aim = V3(8.f, 0.f, Z + 30.f);
+					F.AimExtent = V3(8.f, 10.f, 14.f);
+				}
+				break;
+			case EKind::Item:
+				if (Role == R_Key)
+				{
+					F.Aim = V3(5.f, 0.f, Z + 20.f);
+					F.AimExtent = V3(6.f, 8.f, 12.f);
+				}
+				else
+				{
+					F.Aim = V3(18.f, 0.f, 64.f);
+					F.AimExtent = V3(14.f, 14.f, 10.f);
+				}
+				break;
+			case EKind::Crank:
+				if (Role == R_Beacon || Role == R_LidarPost)
+				{
+					F.Aim = V3(18.f, 0.f, 110.f);
+					F.AimExtent = V3(14.f, 16.f, 60.f);
+				}
+				else
+				{
+					F.Aim = V3(26.f, 0.f, 60.f);
+					F.AimExtent = V3(18.f, 30.f, 34.f);
+				}
+				break;
+			case EKind::Button:
+				if (Role == R_LidarDoor)
+				{
+					if (ModuleId == Module::LidarDoor)
+					{
+						F.Aim = V3(LidarDoor::LeafThick + 6.f, 0.f, 120.f);
+						F.AimExtent = V3(8.f, LidarDoor::Width * 0.5f, 100.f);
+						// Battant ferme dans l'ouverture (son propre point vise est dans son volume : l'hote ignore le
+						// mecanisme vise)
+						F.bSolid = true;
+						F.Solid = Box(-(WallThickness * 0.5f + 2.f), -LidarDoor::Width * 0.5f, 0.f, WallThickness * 0.5f + 2.f, LidarDoor::Width * 0.5f, LidarDoor::Height);
+					}
+					else
+					{
+						F.Aim = V3(6.f, 0.f, Z + 20.f);
+						F.AimExtent = V3(8.f, 30.f, 30.f);
+					}
+				}
+				else if (Role == R_HouseMarker)
+				{
+					F.Aim = V3(5.f, 0.f, Z + 24.f);
+					F.AimExtent = V3(6.f, 32.f, 26.f);
+				}
+				else
+				{
+					F.Aim = V3(6.f, 0.f, Z + 20.f);
+					F.AimExtent = V3(8.f, 16.f, 18.f);
+				}
+				break;
+			case EKind::Gate:
+			{
+				// Rien a viser ; les portes et passages fermes devant une sortie bloquent le passage
+				F.AimExtent = V3(1.f, 1.f, 1.f);
+				if (ModuleId == Module::Bridge)
+				{
+					F.bSolid = true;
+					F.Solid = Box(-Bridge::FarDepth, -Bridge::HalfWidth, 0.f, Bridge::Gap + Bridge::NearDepth + Bridge::Steps * Bridge::StepDepth, Bridge::HalfWidth,
+						Bridge::FarTop + 230.f);
+					break;
+				}
+				if (ModuleId == Module::PoolLock)
+				{
+					F.bSolid = true;
+					F.Solid = Box(-Pool::ChannelLength, -(Pool::ChannelHalfWidth + Pool::ChannelWall), 0.f, Pool::EntryStepDepth, Pool::ChannelHalfWidth + Pool::ChannelWall, 300.f);
+					break;
+				}
+				if (Role == R_LidarStatic || Role == R_ReserveLights || Role == R_Passage || Role == R_LightsExit)
+				{
+					break;
+				}
+				const bool bBig = Role == R_BarnDoor;
+				const float W = bBig ? 360.f : 170.f;
+				const float H = bBig ? 320.f : 250.f;
+				const float X = Role == R_Bridge ? 30.f : 0.f;
+				F.bSolid = true;
+				F.Solid = Box(X - 15.f, -W * 0.5f, 0.f, X + 15.f, W * 0.5f, H);
+				break;
+			}
+			}
+			return F;
+		}
+
+		FVec3 AimPoint(const FPlaced& P)
+		{
+			FVec3 Out;
+			P.Frame.ToWorld(P.Print.Aim.X, P.Print.Aim.Y, Out.X, Out.Y);
+			Out.Z = P.Frame.Z + P.Print.Aim.Z;
+			return Out;
+		}
+
+		bool InSolid(const FPlaced& P, float X, float Y, float Z, float Grow)
+		{
+			if (!P.Print.bSolid)
+			{
+				return false;
+			}
+			float LX = 0.f, LY = 0.f;
+			P.Frame.ToLocal(X, Y, LX, LY);
+			const float LZ = Z - P.Frame.Z;
+			const FBox& S = P.Print.Solid;
+			return LX >= S.X0 - Grow && LX <= S.X1 + Grow && LY >= S.Y0 - Grow && LY <= S.Y1 + Grow && LZ >= S.Z0 - Grow && LZ <= S.Z1 + Grow;
+		}
+
+		bool Clash(const FPlaced& A, const FPlaced& B)
+		{
+			if (Hinders(A, B) || Hinders(B, A))
+			{
+				return true;
+			}
+			if (!A.Print.bSolid || !B.Print.bSolid)
+			{
+				return false;
+			}
+			const float AZ0 = A.Frame.Z + A.Print.Solid.Z0, AZ1 = A.Frame.Z + A.Print.Solid.Z1;
+			const float BZ0 = B.Frame.Z + B.Print.Solid.Z0, BZ1 = B.Frame.Z + B.Print.Solid.Z1;
+			return AZ0 < BZ1 && BZ0 < AZ1 && Overlap(RectOf(A.Frame, A.Print.Solid), RectOf(B.Frame, B.Print.Solid));
+		}
+
+		bool Overlap(const FRect& A, const FRect& B)
+		{
+			const float RA = MechImpl::Rad(A.Yaw), RB = MechImpl::Rad(B.Yaw);
+			const float Ax[2][2] = { { std::cos(RA), std::sin(RA) }, { -std::sin(RA), std::cos(RA) } };
+			const float Bx[2][2] = { { std::cos(RB), std::sin(RB) }, { -std::sin(RB), std::cos(RB) } };
+			const float DX = B.CX - A.CX, DY = B.CY - A.CY;
+			for (int I = 0; I < 4; ++I)
+			{
+				const float* N = I < 2 ? Ax[I] : Bx[I - 2];
+				const float D = AbsF(DX * N[0] + DY * N[1]);
+				const float PA = A.HX * AbsF(Ax[0][0] * N[0] + Ax[0][1] * N[1]) + A.HY * AbsF(Ax[1][0] * N[0] + Ax[1][1] * N[1]);
+				const float PB = B.HX * AbsF(Bx[0][0] * N[0] + Bx[0][1] * N[1]) + B.HY * AbsF(Bx[1][0] * N[0] + Bx[1][1] * N[1]);
+				if (D > PA + PB)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		FRect RectOf(const FFrame& F, const FBox& B)
+		{
+			FRect R;
+			F.ToWorld((B.X0 + B.X1) * 0.5f, (B.Y0 + B.Y1) * 0.5f, R.CX, R.CY);
+			R.HX = AbsF(B.X1 - B.X0) * 0.5f;
+			R.HY = AbsF(B.Y1 - B.Y0) * 0.5f;
+			R.Yaw = QuarterYaw(F.Yaw);
+			return R;
+		}
+
+		FRect KeepOut(const FPlaced& P)
+		{
+			const FFootprint& F = P.Print;
+			float X0 = -12.f;
+			// Jusqu'a la capsule d'un joueur debout a StandDepth devant le point vise (et au-dela du mecanisme)
+			float X1 = F.Aim.X + (F.AimExtent.X > StandGap ? F.AimExtent.X : StandGap) + StandDepth;
+			float HY = AbsF(F.Aim.Y) + F.AimExtent.Y + StandGap;
+			if (F.bSolid)
+			{
+				X0 = MinF(X0, F.Solid.X0 - StandGap);
+				X1 = MaxF(X1, F.Solid.X1 + StandGap);
+				HY = MaxF(HY, MaxF(AbsF(F.Solid.Y0), AbsF(F.Solid.Y1)) + StandGap);
+			}
+			return RectOf(P.Frame, Box(X0, -HY, 0.f, X1, HY, 0.f));
+		}
+
+		FRect ExitKeepOut(const FFrame& F)
+		{
+			const float HY = LidarDoor::Width * 0.5f + StandGap;
+			return RectOf(F, Box(-12.f, -HY, 0.f, StandDepth + 40.f, HY, 0.f));
+		}
+
+		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf)
+		{
+			const float SolidHalf = Print.bSolid ? MaxF(AbsF(Print.Solid.Y0), AbsF(Print.Solid.Y1)) : 0.f;
+			for (int I = 0; I < NumSlots; ++I)
+			{
+				const FSlot& S = Slots[I];
+				if (!S.bOpen)
+				{
+					continue;
+				}
+				// Un volume mural tient dans sa face (il n'entre pas dans le mur voisin)
+				if (Print.bSolid && S.bWall && AbsF(S.Lateral) + SolidHalf > FaceHalf + 0.01f)
+				{
+					continue;
+				}
+				FPlaced Me;
+				Me.Frame = S.Frame;
+				Me.Print = Print;
+				bool bClash = false;
+				for (int J = 0; J < NumPlaced && !bClash; ++J)
+				{
+					bClash = Clash(Me, Placed[J]);
+				}
+				if (!bClash)
+				{
+					return I;
+				}
+			}
+			return -1;
+		}
+	}
 }

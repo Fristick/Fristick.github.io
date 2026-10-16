@@ -522,7 +522,14 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	{
 		A->TrimCaches(LevelNumber);
 	}
-	Seed = InSeed != 0 ? InSeed : (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(LevelNumber * 7919 + 17));
+	// v4.15 : graine tiree sur 32 bits (FMath::Rand() ne donne que 0..32767 sous Windows : 32768 dispositions par niveau).
+	// FMath::Rand32 compose 31 bits, un tirage de plus donne le dernier ; la graine 0 reste reservee ("au hasard")
+	Seed = InSeed;
+	if (InSeed == 0)
+	{
+		const uint32 Random32 = (static_cast<uint32>(FMath::Rand32()) << 1) | (static_cast<uint32>(FMath::Rand()) & 1u);
+		Seed = (Random32 * 2654435761u) ^ static_cast<uint32>(LevelNumber * 7919 + 17);
+	}
 	// v4.5 : -BRSeed=<n> : meme disposition a chaque lancement (captures avant / apres comparables, tests automatiques)
 	uint32 FixedSeed = 0;
 	if (InSeed == 0 && FParse::Value(FCommandLine::Get(), TEXT("BRSeed="), FixedSeed) && FixedSeed != 0)

@@ -886,6 +886,21 @@ bool HasMission(int Level)
 	}
 }
 
+bool PlacementMoved(int Level, int FromVersion)
+{
+	// v4.15 : version 3 : seul le placement du Level 6 change (postes et cages, salle de l'aile) depuis la 2 ; avant la 2
+	// (v4.11) ou version inconnue (plus recente) : tous les niveaux
+	if (FromVersion == PlaceVersion)
+	{
+		return false;
+	}
+	if (FromVersion < 2 || FromVersion > PlaceVersion)
+	{
+		return true;
+	}
+	return Level == 6;
+}
+
 void BuildFallbackPlan(int Level, uint32_t Seed, FPlan& Out)
 {
 	Out = FPlan();

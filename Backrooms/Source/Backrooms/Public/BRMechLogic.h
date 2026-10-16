@@ -7,6 +7,8 @@
 // Z vers le haut, lacet multiple de 90 degres). Les hauteurs absolues sont en cm, sol des salles a 0.
 #pragma once
 
+#include "BRMissionLogic.h"
+
 #include <cstdint>
 
 namespace BRMech
@@ -199,5 +201,105 @@ namespace BRMech
 		constexpr float JumpRise = 66.f;
 		/** Marche franchie sans sauter (MaxStepHeight) */
 		constexpr float MaxStep = 35.f;
+	}
+
+	// =================================================================================================================
+	// v4.15 : emprise des mecanismes et places libres. Le placement (ABRWorld::PlaceMission), les rochers des grottes
+	// (ABRChunk), les tests du jeu et les bancs (Tools/Mechanisms, Tools/verify_device_clearance.py) partagent ces regles :
+	// le point d'interaction d'un mecanisme (centre de sa boite visee, ABRMissionDevice::GetInteractPoint) n'est jamais
+	// dans le volume bloquant d'un autre (cage, porte fermee, module), et la place devant lui reste libre
+	// =================================================================================================================
+
+	/** Hauteur de travail des commandes murales (cm au-dessus du sol) */
+	namespace Device
+	{
+		constexpr float WorkZ = 120.f;
+	}
+
+	/** v4.13 : cage de confinement du Level 6, contre le mur (repere du mecanisme : X depuis le mur) ; son volume bloquant
+	 *  (tous les canaux) occupe toute la cage : on ne la traverse pas, le scanner la touche */
+	namespace LidarCage
+	{
+		constexpr float Gap = 12.f;
+		constexpr float Depth = 110.f;
+		constexpr float HalfWidth = 60.f;
+		constexpr float Height = 210.f;
+	}
+
+	namespace Clearance
+	{
+		/** Capsule du joueur (ABRCharacter : rayon 34 cm) et marge des tests */
+		constexpr float PlayerRadius = 34.f;
+		constexpr float Margin = 2.f;
+		/** Place debout devant un point vise : centre de la capsule a cette distance devant lui */
+		constexpr float StandGap = PlayerRadius + Margin;
+		/** Profondeur libre devant un mecanisme que le decor (rochers) lui laisse : on s'y tient face a lui, a portee */
+		constexpr float StandDepth = 120.f;
+		/** Un volume plus bas que la marche franchie sans sauter ne gene pas la place debout (on monte dessus) */
+		constexpr float StepHeight = 35.f;
+
+		/** Boite locale (cm) : X vers la salle depuis l'origine du mecanisme, Y lateral (axe droit de l'acteur), Z depuis
+		 *  le sol de l'emplacement */
+		struct FBox
+		{
+			float X0 = 0.f, Y0 = 0.f, Z0 = 0.f, X1 = 0.f, Y1 = 0.f, Z1 = 0.f;
+		};
+
+		struct FFootprint
+		{
+			/** Boite visee (ABRMissionDevice::Box) : centre (point d'interaction) et demi-tailles */
+			FVec3 Aim;
+			FVec3 AimExtent;
+			/** Volume qui bloque le passage et la vue tant que le mecanisme est la (cage, porte fermee, module) */
+			bool bSolid = false;
+			FBox Solid;
+		};
+		/** Emprise d'un mecanisme d'apres sa sorte, son role et son module (BRMech::Module) ; WallThickness : epaisseur des
+		 *  murs du niveau (cadre des portes du Level 6). ABRMissionDevice::Init en tire sa boite visee */
+		FFootprint Of(BRMission::EKind Kind, uint8_t Role, uint8_t ModuleId, float WallThickness);
+
+		/** Mecanisme pose : repere (origine au sol de l'emplacement, lacet multiple de 90 degres) et emprise */
+		struct FPlaced
+		{
+			FFrame Frame;
+			FFootprint Print;
+		};
+		/** Point d'interaction d'un mecanisme pose (monde) */
+		FVec3 AimPoint(const FPlaced& P);
+		/** Point du monde dans le volume d'un mecanisme pose, grossi de Grow (plan et hauteur) */
+		bool InSolid(const FPlaced& P, float X, float Y, float Z, float Grow);
+		/** v4.15 : deux mecanismes se genent : le point vise de l'un dans le volume de l'autre (la ligne de vue de l'hote
+		 *  finit dedans : action toujours refusee), la place debout juste devant lui coupee par ce volume, ou deux volumes
+		 *  qui se chevauchent */
+		bool Clash(const FPlaced& A, const FPlaced& B);
+
+		/** Rectangle oriente (plan) : centre, demi-tailles, lacet quelconque (degres) */
+		struct FRect
+		{
+			float CX = 0.f, CY = 0.f, HX = 0.f, HY = 0.f, Yaw = 0.f;
+		};
+		/** Separation des axes : deux rectangles orientes se chevauchent (contact compris) */
+		bool Overlap(const FRect& A, const FRect& B);
+		/** Rectangle du monde d'une boite locale d'un repere */
+		FRect RectOf(const FFrame& F, const FBox& B);
+		/** Zone que le decor doit laisser libre autour d'un mecanisme pose : son volume, sa boite visee et la place devant
+		 *  (StandDepth), elargie de la capsule */
+		FRect KeepOut(const FPlaced& P);
+		/** Zone libre devant une sortie posee par la mission (echelle, porte) : son pied et la place devant */
+		FRect ExitKeepOut(const FFrame& F);
+
+		/** Emplacement candidat du placement : repere, decalage lateral sur sa face, mural, encore libre (ni pris, ni
+		 *  ecarte par l'appelant : devant une sortie, une porte de l'aile) */
+		struct FSlot
+		{
+			FFrame Frame;
+			float Lateral = 0.f;
+			bool bWall = true;
+			bool bOpen = true;
+		};
+		/** Premier emplacement libre ou un mecanisme d'emprise Print ne gene aucun de ceux deja poses et ou, mural, son
+		 *  volume tient dans la face (|lateral| + demi-largeur <= FaceHalf). -1 si aucun. Sans volume ni voisin a volume,
+		 *  c'est le premier emplacement libre (ordre du placement d'avant la v4.15) */
+		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf);
 	}
 }

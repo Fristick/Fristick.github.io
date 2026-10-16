@@ -1437,6 +1437,37 @@ void ABRAutoTest::AddV412Steps()
 		const bool bKept = RestoredDevice >= 0 && W->IsMissionActive() && W->GetMissionState().Dev[RestoredDevice] != 0;
 		Note(FString::Printf(TEXT("placement d'une autre version : avis %d (attendu 3 : mecanismes replaces), indice lu garde %s"), Notice, YesNo(bKept)), Notice != 3 || !bKept);
 		Shot(TEXT("v412_reprise_mecanismes_replaces"));
+		// v4.15 : placement 3 : une session du placement 2 (v4.14) hors du Level 6 retrouve ses mecanismes a la meme place
+		// (aucun avis "reamenages") ; la sauvegarde de test reste active pour cette reprise
+		const uint32 Seed = ABRWorld::SeedFromUser(4122, 2);
+		BRM::FPlan MPlan;
+		BRM::BuildPlan(2, Seed, MPlan);
+		BRM::FState State;
+		BRM::InitState(MPlan, State);
+		uint8 Buffer[512];
+		const int32 Size = BRM::Serialize(MPlan, State, Buffer, sizeof(Buffer));
+		FBRSessionState Session = PC->ActiveSave ? PC->ActiveSave->Session : FBRSessionState();
+		Session.bValid = true;
+		Session.Level = 2;
+		Session.Seed = Seed;
+		Session.GenVersion = BRM::GenVersion;
+		Session.PlaceVersion = 2;
+		Session.Mission = TArray<uint8>(Buffer, Size);
+		BRSaves::PendingResume() = Session;
+		TestCountC = W->GetLevelSerial();
+		W->RequestTransition(2, false, Seed);
+		return true;
+	});
+	Add(TEXT("v4.15 reprise : placement 2 hors du Level 6"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		if (!W || !PC || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 2 || W->GetLevelSerial() == TestCountC)
+		{
+			return StepTime > 30.f;
+		}
+		const uint8 Notice = W->GetMissionNotice();
+		Note(FString::Printf(TEXT("session du placement 2 (v4.14) au Niveau 2 : avis %d (attendu 0 : mecanismes a la meme place)"), Notice), Notice != 0 || !W->IsMissionActive());
 		BRSaves::Flush();
 		BRSaves::ActiveSlot() = TestOrigSlot;
 		PC->ActiveSave = TestOrigSave;

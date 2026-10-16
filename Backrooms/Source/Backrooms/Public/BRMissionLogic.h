@@ -25,8 +25,13 @@ namespace BRMission
 	constexpr int GenVersion = 2;
 	/** v4.12 : version du placement des mecanismes dans le decor (1 : v4.11 ; 2 : v4.12, module de secours garanti et
 	 *  modules physiques). Le plan (et donc l'etat sauvegarde) ne change pas avec elle : une session reprise garde sa
-	 *  progression, les mecanismes peuvent etre places autrement (le joueur en est averti) */
-	constexpr int PlaceVersion = 2;
+	 *  progression, les mecanismes peuvent etre places autrement (le joueur en est averti). v4.15 : 3 (Level 6 : chaque
+	 *  poste a cote de sa cage, plus dedans ; salle de l'aile atteinte au-dela de 95 m de trajet). Un hote et un client
+	 *  de versions differentes ne jouent pas ensemble (BRContent::NetVersion) */
+	constexpr int PlaceVersion = 3;
+	/** v4.15 : les mecanismes de ce niveau ont pu bouger depuis la version de placement FromVersion (avis "reamenages" a la
+	 *  reprise) : de 2 a 3, seul le Level 6 change ; ailleurs les places sont identiques */
+	bool PlacementMoved(int Level, int FromVersion);
 	constexpr int MaxDevices = 24;
 	constexpr int MaxSteps = 4;
 	constexpr int MaxParams = 24;

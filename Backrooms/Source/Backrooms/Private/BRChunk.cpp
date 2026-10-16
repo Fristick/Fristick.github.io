@@ -200,6 +200,40 @@ void ABRChunk::AddKitPost(int32 VX, int32 VY)
 	AddKitModule(Name, FVector(VX * S, VY * S, 0.f), BRHash::PosMod(Turn, 4) * 90.f, true);
 }
 
+namespace
+{
+	// v4.15 : maison du Level 9 (Tools/Blender/generate_models.py, m_house) : corps de 8 x 7 m et avant-toit jusqu'a
+	// 4,4 m du pivot ; le perron (dalle de 15 cm, de 4,0 a 5,2 m, 2 m de large) depasse du lot de 20 cm sur la route. La
+	// collision suit le corps sur toute sa hauteur, le perron reste une marche basse : avant, la boite des bornes (jusqu'a
+	// 5,2 m, toute la hauteur) enfermait les mecanismes muraux de la route voisine
+	constexpr float GHouseBodyFront = 440.f;
+	constexpr float GHousePorchHalfY = 100.f;
+	constexpr float GHousePorchTop = 15.f;
+
+	/** v4.15 : boite de collision (bornes du modele, comme AddProp) d'un rocher, dans le plan : rectangle oriente */
+	BRMech::Clearance::FRect RockRect(const FBox& Bounds, const FTransform& T)
+	{
+		BRMech::Clearance::FRect R;
+		const FVector C = T.TransformPosition(Bounds.GetCenter());
+		const FVector Scale = T.GetScale3D();
+		R.CX = static_cast<float>(C.X);
+		R.CY = static_cast<float>(C.Y);
+		R.HX = static_cast<float>(Bounds.GetExtent().X * FMath::Abs(Scale.X));
+		R.HY = static_cast<float>(Bounds.GetExtent().Y * FMath::Abs(Scale.Y));
+		R.Yaw = static_cast<float>(T.Rotator().Yaw);
+		return R;
+	}
+
+	/** v4.15 : un rocher (modele SM_Rock, transformation T) entrerait dans la zone libre d'un mecanisme ou d'une sortie de
+	 *  la mission. Sans modele, AddProp ne pose rien (ni rocher, ni collision) */
+	bool RockInMissionKeepOut(const UObject* Context, const ABRWorld* W, const FTransform& T)
+	{
+		UBRAssets* A = UBRAssets::Get(Context);
+		UStaticMesh* M = A ? A->Mesh(TEXT("SM_Rock")) : nullptr;
+		return W && M && W->IsMissionKeepOut(RockRect(M->GetBoundingBox(), T));
+	}
+}
+
 void ABRChunk::AddProp(FName MeshName, const FTransform& T, bool bCollision, const FVector& FallbackSize,
 	const FBRSurface* FallbackSurface, float CullDistance, bool bShadow)
 {
@@ -215,10 +249,23 @@ void ABRChunk::AddProp(FName MeshName, const FTransform& T, bool bCollision, con
 		if (bCollision && A->Cube())
 		{
 			const FBox Bounds = M->GetBoundingBox();
-			const FTransform ColT = FTransform(FQuat::Identity, Bounds.GetCenter(), Bounds.GetExtent() * 0.02f) * Local;
 			FBatch& CB = GetBatch(TEXT("COLLISION"), A->Cube(), nullptr, true, false, 0.f);
 			CB.bHidden = true;
-			CB.Transforms.Add(ColT);
+			auto AddColBox = [&CB, &Local](const FBox& B)
+			{
+				CB.Transforms.Add(FTransform(FQuat::Identity, B.GetCenter(), B.GetExtent() * 0.02f) * Local);
+			};
+			static const FName HouseMesh(TEXT("SM_House"));
+			if (MeshName == HouseMesh && Bounds.Max.X > GHouseBodyFront)
+			{
+				// v4.15 : maison : corps (avant-toit compris) et perron bas, pas la boite des bornes
+				AddColBox(FBox(Bounds.Min, FVector(GHouseBodyFront, Bounds.Max.Y, Bounds.Max.Z)));
+				AddColBox(FBox(FVector(GHouseBodyFront, -GHousePorchHalfY, Bounds.Min.Z), FVector(Bounds.Max.X, GHousePorchHalfY, GHousePorchTop)));
+			}
+			else
+			{
+				AddColBox(Bounds);
+			}
 		}
 	}
 	else if (FallbackSize.X > 0.f && A->Cube())
@@ -1734,8 +1781,13 @@ bool ABRChunk::StepPlan()
 						const float Sc = 1.f + 0.9f * BRHash::Rand(X, Y * 4 + k, 932, Seed);
 						const FVector Perp(-Dir.Y, Dir.X, 0.f);
 						const FVector P = Face + Perp * ((BRHash::Rand(X, Y, 933 + k, Seed) - 0.5f) * S * 0.6f) - FVector(Dir.X, Dir.Y, 0.f) * 30.f;
-						AddProp(TEXT("SM_Rock"), FTransform(FRotator(0.f, BRHash::Rand(X, Y, 937 + k, Seed) * 360.f, 0.f), P, FVector(Sc, Sc, Sc * 1.4f)),
-							true, FVector::ZeroVector);
+						const FTransform RockT(FRotator(0.f, BRHash::Rand(X, Y, 937 + k, Seed) * 360.f, 0.f), P, FVector(Sc, Sc, Sc * 1.4f));
+						// v4.15 : pas de rocher dans la zone libre d'un mecanisme ou d'une sortie de la mission (sa boite de
+						// collision, jusqu'a 2,3 m devant la paroi, enfermait un treuil ou une plaque sur deux)
+						if (!RockInMissionKeepOut(this, InWorld, RockT))
+						{
+							AddProp(TEXT("SM_Rock"), RockT, true, FVector::ZeroVector);
+						}
 					}
 				}
 			}
@@ -2488,7 +2540,12 @@ void ABRChunk::BuildCellProps(int32 X, int32 Y)
 		{
 			const float Sc = 0.35f + R(931) * 0.6f;
 			const FVector P = C + FVector((R(932) - 0.5f) * S * 0.6f, (R(933) - 0.5f) * S * 0.6f, -10.f);
-			AddProp(TEXT("SM_Rock"), FTransform(FRotator(0.f, R(934) * 360.f, 0.f), P, FVector(Sc)), true, FVector::ZeroVector);
+			const FTransform RockT(FRotator(0.f, R(934) * 360.f, 0.f), P, FVector(Sc));
+			// v4.15 : un rocher d'une cellule voisine ne deborde pas dans la zone libre d'un mecanisme de la mission
+			if (!RockInMissionKeepOut(this, W, RockT))
+			{
+				AddProp(TEXT("SM_Rock"), RockT, true, FVector::ZeroVector);
+			}
 		}
 		break;
 	}
