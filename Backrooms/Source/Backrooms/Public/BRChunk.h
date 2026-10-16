@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "BRTypes.h"
+#include "BRFluoLogic.h"
 #include "BRChunk.generated.h"
 
 class ABRWorld;
@@ -31,14 +32,17 @@ struct FBRFlicker
 	FLinearColor GlowColor = FLinearColor::White;
 	FLinearColor LightColor = FLinearColor::White;
 	float BaseIntensity = 1000.f;
-	float Timer = 0.f;
-	float Phase = 0.f;
-	bool bOn = true;
 	/** false : lampe stable (individuelle seulement pour pouvoir rougir) */
 	bool bFlickers = true;
 	float Red = 0.f;
 	float AppliedMod = -1.f;
 	float AppliedRed = -1.f;
+	/** v4.15 : tube qui clignote (amorcage, extinctions, ondulation, fin de vie : BRFluoLogic.h) et rallumage apres une
+	 *  coupure de courant (chaque lampe a son retard) */
+	BRFluo::FTube Tube;
+	BRFluo::FRestrike Restrike;
+	/** v4.15 : dernier bruit de clignement (horloge du chunk, s) */
+	float LastSound = -10.f;
 };
 
 UCLASS()
@@ -72,7 +76,9 @@ public:
 	bool HasTeardownStarted() const { return TeardownStep > 0; }
 	void BeginTeardown() { bTearingDown = true; SetActorTickEnabled(false); }
 	/** Reprise d'un chunk en attente de demontage (le joueur est revenu avant qu'il ne commence) */
-	void CancelTeardown() { bTearingDown = false; SetActorTickEnabled(Flickers.Num() > 0); }
+	void CancelTeardown() { bTearingDown = false; SetActorTickEnabled(WantsTick()); }
+	/** v4.15 : le chunk anime des lampes (neons qui clignotent, lampes qui peuvent rougir, rallumage en cours) */
+	bool WantsTick() const { return Flickers.Num() > 0 || bRestriking; }
 
 	/** v4.8 : le type des lumieres (neons en lumieres surfaciques ou ponctuelles) suit le reglage courant : recree les
 	 *  lumieres dont le type a change. Retourne le nombre de lumieres recreees.
@@ -83,6 +89,22 @@ public:
 	/** v4.8 : ombres des lumieres selon la distance aux joueurs locaux (au-dela de ShadowDistance, plus d'ombre ; marge de
 	 *  10 % pour ne pas basculer sans cesse). Retourne le nombre de lumieres qui projettent une ombre. */
 	int32 UpdateShadowLOD(const TArray<FVector>& Viewers, float ShadowDistance);
+	/** v4.15 : OMBRES DE TOUTES LES LAMPES (ABRWorld::IsMegaLightsActive) : chaque lumiere projette son ombre, a toute la
+	 *  distance de vue ; sinon, retour aux ombres a distance. Retourne le nombre de lumieres modifiees */
+	int32 ApplyMegaLights(bool bOn);
+	/** v4.15 : toutes les lumieres creees de ce chunk sont-elles reglees pour MegaLights actif (bOn) ou non (ombres) ? */
+	bool MegaLightsMatch(bool bOn) const;
+	/** v4.15 : diffusion des lumieres dans le brouillard volumetrique reappliquee (LightScatter : coupure, rallumage) */
+	void RefreshLightScatter();
+	/** v4.15 : rallumage decale en cours apres une coupure (BeginRestrike) */
+	bool IsRestriking() const { return bRestriking; }
+	/** v4.15 : decalques d'usure du chunk : nombre et empreinte (sortes, positions, rotations, taches au sol), les memes
+	 *  chez l'hote et les clients ; 0 avant la planification */
+	int32 GetDecalCount() const { return DecalTotal; }
+	uint32 GetDecalHash() const { return DecalHash; }
+	/** v4.15 : tache d'eau au plafond de la cellule (X, Y) a cote de son plafonnier, tiree avec la graine (sels 7450-7453) :
+	 *  centre (au plafond), rayon et rotation. Regle de BuildDecals (sans la trappe d'une echelle), aussi pour le banc visuel */
+	static bool CeilingStainAt(const ABRWorld* W, int32 X, int32 Y, FVector& OutPos, float& OutRadius, float& OutSpin);
 	/** Tous les composants et objets sont crees */
 	bool IsReady() const { return bReady; }
 	/** Sol et murs (collisions) crees : on peut marcher dessus */
@@ -105,6 +127,19 @@ public:
 
 	/** Alimentation electrique 0..1 (coupures de courant) */
 	void SetPower(float InPower);
+	/** v4.15 : fin de coupure, le courant revient : chaque lampe du chunk se rallume avec son propre retard et quelques
+	 *  clignements (cosmetique, local) */
+	void BeginRestrike();
+	/** v4.15 : plafonnier (bourdonnement spatialise du monde) : position, lumiere (son eclat courant suit coupures et
+	 *  clignements), intensite nominale */
+	struct FHumSource
+	{
+		FVector Pos = FVector::ZeroVector;
+		TWeakObjectPtr<ULocalLightComponent> Light;
+		float BaseLumens = 1.f;
+	};
+	/** v4.15 : plafonniers de ce chunk a moins de Radius de Around */
+	void GatherHumSources(const FVector& Around, float Radius, TArray<FHumSource>& Out) const;
 	/** Cachettes de ce chunk */
 	bool IsInHidingSpot(const FVector& Location, bool bCrouched) const;
 	bool FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const;
@@ -127,6 +162,16 @@ protected:
 		bool bNoRayTracing = false;
 		/** v4.14 : garder les materiaux du maillage (modules du kit du Level 0, habilles a l'import) */
 		bool bMeshMaterials = false;
+		/** v4.15 : decalques sur maillage (taches au sol) : ni ombre, ni ray tracing, ni champ de distance, ni Lumen */
+		bool bDecal = false;
+		/** v4.15 : visuel sans collision cree avec les collisions (sol et plafond du kit, cellule par cellule : ils doivent
+		 *  etre la des que l'on peut marcher dans le chunk) */
+		bool bEarly = false;
+		/** v4.15 : lot cache mais present dans la scene de Lumen logiciel (champs de distance, cartes), habille de Material ;
+		 *  hors du ray tracing (dalle de collision sous le plafond mince du kit) */
+		bool bLumenWhileHidden = false;
+		/** v4.15 : diffuseurs alimentes (bPowered) a la couleur d'une lampe de cette temperature (K) ; 0 : RGB d'origine */
+		float LightTemperatureK = 0.f;
 		TArray<FTransform> Transforms;
 		/** v4.8 : instances deja creees (sous-lots) */
 		int32 Cursor = 0;
@@ -147,6 +192,11 @@ protected:
 	/** v4.14 : poteau du kit au sommet (VX, VY) de la grille : croix, T, angle, droit ou extremite selon les murs et les
 	 *  portes qui y arrivent, oriente en consequence ; rien si aucun mur n'y arrive */
 	void AddKitPost(int32 VX, int32 VY);
+	/** v4.15 : kit : sol (SM_L0_Floor_350) ou plafond (SM_L0_Ceiling_350) cellule par cellule, habille de la surface du niveau
+	 *  (materiau du monde) a la place de la grande dalle du chunk : cartes de Lumen et champs de distance a l'echelle d'une
+	 *  cellule. La collision reste une dalle cachee par chunk (meme surface de marche, un seul corps physique). false : kit
+	 *  absent ou module invalide, le chunk garde sa dalle */
+	bool AddKitCellSlabs(bool bCeiling);
 	/** Segment de mur sur une ligne de la grille (A..B le long de la ligne, ZLo..ZHi en hauteur). v4.14 : avec le kit, un
 	 *  mur plein d'un sommet a l'autre est pose cellule par cellule (SM_L0_Wall_350 ou _Aged_350, plinthes) */
 	void AddWallSegment(bool bAlongY, float Fixed, float A, float B, float ZLo, float ZHi, bool bWithTrim, bool bWithPipes);
@@ -204,6 +254,31 @@ protected:
 	void PlanExits();
 	/** Plafond du chunk, perce d'une trappe au-dessus d'une echelle, et le conduit sombre qui monte au-dessus */
 	void BuildCeiling();
+	/** v4.15 : volumes de brouillard locaux du chunk (FBRLevelDef::LocalFogDensity) : salle de fosses, zones sans lumiere */
+	void BuildFogVolumes();
+	/** v4.15 : un volume de brouillard local (centre et demi-tailles en cm, densites rayonnante et en hauteur, albedo) */
+	void AddFogVolume(const FVector& Center, const FVector& HalfSize, float Radial, float Height, const FLinearColor& Albedo);
+	/** v4.15 : decalques d'usure du chunk (FBRLevelDef::DecalDensity), tires avec la graine : aureoles sous le plafond et
+	 *  eraflures sur les murs, taches pres de certains plafonniers (composants de decalque, crees un par un a la fin de la
+	 *  construction), moquette humide au pied des murs et sous les passages (un lot d'instances, decalques sur maillage) */
+	void BuildDecals();
+	/** v4.15 : decalque projete en attente de creation : sorte, centre, rotation (X : direction de projection, Y : vers le
+	 *  bas de l'image), demi-tailles (profondeur, hauteur de l'image, largeur de l'image) */
+	struct FPendingDecal
+	{
+		EBRDecal Kind = EBRDecal::WaterStain;
+		FVector Pos = FVector::ZeroVector;
+		FRotator Rot = FRotator::ZeroRotator;
+		FVector HalfSize = FVector::OneVector;
+		int32 Sort = 0;
+	};
+	TArray<FPendingDecal> PendingDecals;
+	int32 DecalCursor = 0;
+	/** v4.15 : empreinte et nombre des decalques planifies (GetDecalHash) */
+	uint32 DecalHash = 0;
+	int32 DecalTotal = 0;
+	/** v4.15 : cree le composant d'un decalque en attente (range dans Extra, detruit au demontage) */
+	void CreateDecal(const FPendingDecal& P);
 
 	FBatch& GetBatch(const FString& Key, UStaticMesh* Mesh, UMaterialInterface* Mat, bool bCollision, bool bShadow, float Cull);
 
@@ -227,6 +302,13 @@ protected:
 	TArray<TObjectPtr<ULocalLightComponent>> PoweredLights;
 
 	TArray<float> PoweredBase;
+	/** v4.15 : rallumage des lampes groupees apres une coupure (leur diffuseur suit le courant du niveau) : etat et facteur
+	 *  d'eclat courant de chacune */
+	TArray<BRFluo::FRestrike> PoweredRestrike;
+	TArray<float> PoweredMul;
+	bool bRestriking = false;
+	/** v4.15 : horloge des animations du chunk (bruits de clignement) */
+	float ChunkClock = 0.f;
 
 	struct FHidingSpot
 	{
@@ -295,6 +377,8 @@ protected:
 		/** L'ombre est actuellement projetee (selon la distance aux joueurs) */
 		bool bShadowOn = false;
 		bool bArea = false;
+		/** v4.15 : creee ou reglee pour MegaLights (ombre toujours projetee, distance d'affichage complete) */
+		bool bMega = false;
 		/** Intensite nominale appliquee (lumens, deja reduits pour une lumiere surfacique) */
 		float Lumens = 0.f;
 		int32 FlickerIndex = INDEX_NONE;
@@ -305,6 +389,9 @@ protected:
 	/** Cree le composant de lumiere d'un enregistrement (surfacique ou ponctuel), l'enregistre et le range dans Extra */
 	ULocalLightComponent* CreateLightComponent(FLightRecord& R, bool bArea);
 	static bool IsAreaFixture(EBRFixture Fixture);
+	/** v4.15 : diffusion dans le brouillard volumetrique d'une lumiere (nulle pour un neon qui clignote avec MegaLights :
+	 *  pas de trainees dans le brouillard) */
+	float LightScatter(const FLightRecord& R, bool bMega) const;
 	/** Prochain lot a creer : avec collision d'abord si bCollisionFirst ; vide s'il n'y en a plus de ce type */
 	FString NextBatchKey(bool bCollision) const;
 	TWeakObjectPtr<ABRWorld> World;

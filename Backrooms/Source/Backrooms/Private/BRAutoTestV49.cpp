@@ -35,6 +35,7 @@
 #include "HAL/IConsoleManager.h"
 #include "InputActionValue.h"
 #include "Kismet/GameplayStatics.h"
+#include "UObject/UObjectIterator.h"
 
 namespace
 {
@@ -917,10 +918,26 @@ void ABRAutoTest::AddV49Steps()
 		const bool bRT = S.bHardwareRT && ABRPlayerController::IsHardwareRayTracingAvailable();
 		const bool bHitLighting = bRT && S.bRTHitLighting;
 		const bool bRetrace = bRT && !bHitLighting && S.CreatureReflections == 1 && bRetraceCVar;
-		const int32 WantSk = (bHitLighting || (S.bRTShadows && bRT) || bRetrace) ? 1 : 0;
-		const bool bOk = !bSkCVar || Sk == WantSk;
-		Note(FString::Printf(TEXT("creatures dans les reflets : reglage %d, ray tracing materiel %s, reprise des rayons dans ce moteur : %s (valeur %d), maillages a squelette dans la scene RT : %d (attendu %d)"),
-			S.CreatureReflections, bRT ? TEXT("actif") : TEXT("inactif"), bRetraceCVar ? TEXT("oui") : TEXT("non : ECRAN (MOTEUR)"), Retrace, Sk, WantSk), !bOk);
+		// v4.15 : aussi avec MegaLights (ombres des plafonniers tracees dans la scene RT)
+		const bool bMega = ABRWorld::IsMegaLightsActive();
+		const int32 WantSk = (bHitLighting || (S.bRTShadows && bRT) || bRetrace || bMega) ? 1 : 0;
+		// v4.15 : visibles dans les reflets ray traces seulement s'ils y sont eclaires par les rayons (sinon noirs)
+		const bool bWantRefl = bHitLighting || bRetrace;
+		int32 Skins = 0;
+		int32 WrongRefl = 0;
+		for (TObjectIterator<USkinnedMeshComponent> It; It; ++It)
+		{
+			if (!IsValid(*It) || It->GetWorld() != GetWorld() || It->IsTemplate() || !It->IsRegistered())
+			{
+				continue;
+			}
+			++Skins;
+			WrongRefl += static_cast<bool>(It->bVisibleInReflections) == bWantRefl ? 0 : 1;
+		}
+		const bool bOk = (!bSkCVar || Sk == WantSk) && WrongRefl == 0 && bWantRefl == ABRPlayerController::SkinnedMeshesInRayTracedReflections();
+		Note(FString::Printf(TEXT("creatures dans les reflets : reglage %d, ray tracing materiel %s, MegaLights %s, reprise des rayons dans ce moteur : %s (valeur %d), maillages a squelette dans la scene RT : %d (attendu %d), dans les reflets RT : %s (%d maillage(s), %d autrement)"),
+			S.CreatureReflections, bRT ? TEXT("actif") : TEXT("inactif"), bMega ? TEXT("actif") : TEXT("inactif"), bRetraceCVar ? TEXT("oui") : TEXT("non : ECRAN (MOTEUR)"), Retrace, Sk, WantSk,
+			bWantRefl ? TEXT("oui") : TEXT("non (ecran)"), Skins, WrongRefl), !bOk);
 		return true;
 	});
 	Add(TEXT("v4.9 lumieres : changement de type"), 3.f, [this]()

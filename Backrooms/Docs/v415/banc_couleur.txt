@@ -1,0 +1,31 @@
+# Banc de la couleur des lampes v4.15 (BRColorLogic.h, reglages lus dans BRLevels.cpp) - sortie reelle
+# Commande (depuis Backrooms/) :
+#   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Light\test_color.cpp /Fetest_color.exe && test_color.exe
+#   (aussi : cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive- ... : meme sortie)
+# Compilateur : clang version 22.1.3 (https://github.com/llvm/llvm-project e9846648fd6183ee6d8cbdb4502213fcf902a211)
+# Date : 2026-10-16T21:32:02Z
+
+Banc de la couleur des lampes v4.15 (BRColorLogic.h ; niveaux lus dans Source/Backrooms/Private/BRLevels.cpp)
+Modele (formules du moteur)
+  balance des blancs a 6500 K : neutre (1.001, 1.000, 1.001)                                               OK
+  lampe de 3700 K vue avec une balance a 3700 K (lieu de Planck) : blanche (1.000, 1.000, 1.000)           OK
+  balance a 4300 K (lieu du jour) : la lampe de 3700 K vire a la peche (1.00, 0.81, 0.70), teinte 22       OK
+  BRLevels.cpp : 12 niveaux lus                                                                            OK
+Niveaux
+  Level 0 : lampe 3700 K, balance 3900 K teinte 0.00 : vue (1.00, 0.94, 0.86), teinte 33, saturation 0.14  OK
+  Level 1 : lampe 4100 K, balance 3800 K teinte 0.00 : vue (0.81, 0.92, 1.00), teinte 207, saturation 0.19 OK
+  Level 2 : lampe 2900 K, balance 3700 K teinte 0.00 : vue (1.00, 0.71, 0.45), teinte 29, saturation 0.55  OK
+  Level 3 : couleur RGB (1.00, 0.85, 0.60), balance neutre (6500 K, teinte 0.00)                           OK
+  Level 4 : couleur RGB (0.95, 0.97, 1.00), balance neutre (6500 K, teinte 0.00)                           OK
+  Level 5 : couleur RGB (1.00, 0.70, 0.40), balance neutre (6500 K, teinte 0.00)                           OK
+  Level 6 : couleur RGB (1.00, 1.00, 1.00), balance neutre (6500 K, teinte 0.00)                           OK
+  Level 8 : couleur RGB (1.00, 0.75, 0.50), balance neutre (6500 K, teinte 0.00)                           OK
+  Level 9 : couleur RGB (1.00, 0.72, 0.42), balance neutre (6500 K, teinte 0.00)                           OK
+  Level 10 : couleur RGB (1.00, 1.00, 1.00), balance neutre (6500 K, teinte 0.00)                          OK
+  Level 11 : couleur RGB (1.00, 0.85, 0.60), balance neutre (6500 K, teinte 0.00)                          OK
+  Level 37 : lampe 5000 K, balance 5400 K teinte -0.10 : vue (1.00, 0.96, 0.86), teinte 44, saturation 0.14 OK
+  Level 0 : lampe blanc chaud (teinte 33, saturation 0.14 ; avant 45 / 0.16)                               OK
+  Level 0 : papier peint jaune moins sature (teinte 47, saturation 0.46 ; avant 52 / 0.50)                 OK
+  Level 2 : ampoules de la meme couleur qu'avant (1.00, 0.71, 0.45 ; avant 1, 0,70, 0,45)                  OK
+  Level 37 : plafonniers blanc chaud peu satures (1.00, 0.96, 0.86), teinte 44, saturation 0.14            OK
+RESULTAT : OK (20 verification(s))

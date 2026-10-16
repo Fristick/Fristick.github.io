@@ -363,6 +363,10 @@ void ABRAutoTest::AddV48Steps()
 			// Chunks deja construits : leurs lumieres suivent le reglage (avant : seules les zones chargees ensuite)
 			int32 Ready = 0;
 			int32 Mismatch = 0;
+			// v4.15 : OMBRES DE TOUTES LES LAMPES (MegaLights) appliquees aussi aux lumieres deja creees
+			// (OnGraphicsSettingsChanged -> ApplyMegaLights)
+			const bool bMega = ABRWorld::IsMegaLightsActive();
+			int32 MegaMismatch = 0;
 			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
 			{
 				if (!It->IsReady() || It->IsTearingDown())
@@ -371,6 +375,7 @@ void ABRAutoTest::AddV48Steps()
 				}
 				++Ready;
 				Mismatch += It->LightTypesMatch(S.bAreaLights) ? 0 : 1;
+				MegaMismatch += It->MegaLightsMatch(bMega) ? 0 : 1;
 			}
 			// Hound deja present : modele complet (Cinematique) ou allege
 			FString Hound = TEXT("absent");
@@ -393,14 +398,16 @@ void ABRAutoTest::AddV48Steps()
 					}
 				}
 			}
-			const bool bOk = Mismatch == 0 && bHoundOk;
-			Note(FString::Printf(TEXT("profil %s : %d chunk(s) construits, %d avec des lumieres d'un autre type (%s attendues) ; Hound : %s%s ; ombres locales : %d (jusqu'a %.0f m)"),
-				*Name, Ready, Mismatch, S.bAreaLights ? TEXT("surfaciques") : TEXT("ponctuelles"), *Hound,
+			const bool bOk = Mismatch == 0 && MegaMismatch == 0 && bHoundOk;
+			const FString ShadowReach = bMega ? FString(TEXT("toutes (MegaLights)")) : FString::Printf(TEXT("jusqu'a %.0f m"), ABRWorld::LocalShadowDistance() / 100.f);
+			Note(FString::Printf(TEXT("profil %s : %d chunk(s) construits, %d avec des lumieres d'un autre type (%s attendues), %d avec des ombres d'un autre mode (MegaLights %s) ; Hound : %s%s ; ombres locales : %d (%s)"),
+				*Name, Ready, Mismatch, S.bAreaLights ? TEXT("surfaciques") : TEXT("ponctuelles"), MegaMismatch, bMega ? TEXT("actif") : TEXT("inactif"), *Hound,
 				bHoundOk ? TEXT("") : (S.bFullCreatures ? TEXT(" (ATTENDU : SK_Hound complet)") : TEXT(" (ATTENDU : SK_HoundLite)")), W ? W->GetShadowedLightCount() : 0,
-				ABRWorld::LocalShadowDistance() / 100.f), !bOk);
+				*ShadowReach), !bOk);
 			if (ABRPlayerController* PC = GetPC())
 			{
-				Note(TEXT("  ") + PC->GetRenderModeText(true));
+				// v4.15 : mode de rendu avec l'etat reel de MegaLights
+				Note(TEXT("  ") + PC->GetRenderModeReport());
 			}
 			Shot(TEXT("V48_profil_") + Name);
 			return true;

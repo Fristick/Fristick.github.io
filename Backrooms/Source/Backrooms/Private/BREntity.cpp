@@ -3060,13 +3060,18 @@ void ABREntity::Animate(float Dt)
 		const float ViewDist = Viewer ? static_cast<float>(FVector::Dist(Viewer->GetActorLocation(), GetActorLocation())) : 1000.f;
 		const float Exposure = static_cast<float>(FMath::GetMappedRangeValueClamped(FVector2D(120.0, 650.0), FVector2D(0.5, 1.0), static_cast<double>(ViewDist)));
 		const float G = bBlink ? 0.f : FMath::Min((0.85f + 0.15f * FMath::Sin(Life * 13.f)) * Rage, 1.8f) * Exposure;
+		// v4.15 : yeux et dents etalonnes (v4.5) pour une exposition plancher de 3 IL dans le noir complet ; un niveau dont le
+		// plancher est plus haut (Level 0 : 4,5) assombrit l'image d'autant (x 2^-1,5) : l'emission est relevee d'autant
+		// pour que le sourire perce le noir comme avant (la lumiere qu'il projette, GlowLight, ne change pas)
+		const ABRWorld* EvWorld = World.Get();
+		const float EvComp = EvWorld ? FMath::Pow(2.f, FMath::Clamp(EvWorld->Def().MinEV - 3.f, 0.f, 3.f)) : 1.f;
 		// v4.5 : chaque surface garde son intensite (coeur des yeux, dents, bords et racines plus faibles) :
 		// le visage a du relief au lieu d'un aplat blanc uniforme
 		for (int32 i = 0; i < GlowMIDs.Num(); ++i)
 		{
 			if (UMaterialInstanceDynamic* M = GlowMIDs[i])
 			{
-				M->SetVectorParameterValue(TEXT("Emissive"), (GlowBase.IsValidIndex(i) ? GlowBase[i] : FLinearColor(10.f, 9.6f, 8.6f)) * G);
+				M->SetVectorParameterValue(TEXT("Emissive"), (GlowBase.IsValidIndex(i) ? GlowBase[i] : FLinearColor(10.f, 9.6f, 8.6f)) * (G * EvComp));
 			}
 		}
 		if (GlowLight)

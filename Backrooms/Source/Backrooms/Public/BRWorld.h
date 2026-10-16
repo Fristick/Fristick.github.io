@@ -726,6 +726,9 @@ public:
 	bool ShouldCastLocalShadow(const FVector& LightPos) const;
 	/** v4.8 : distance d'ombre des lumieres locales (cm) pour le profil courant */
 	static float LocalShadowDistance();
+	/** v4.15 : OMBRES DE TOUTES LES LAMPES (MegaLights) en vigueur : reglage, ray tracing materiel demande ET actif, MegaLights
+	 *  permis par le moteur. Faux sous Linux, macOS, DirectX 11 ou sans RT : ombres a distance (LocalShadowDistance) */
+	static bool IsMegaLightsActive();
 	/** v4.8 : reglages graphiques changes : lumieres des chunks deja construits (type, ombres), detail des entites */
 	void OnGraphicsSettingsChanged();
 	/** v4.8 : lumieres projetant une ombre (dernier passage) */
@@ -792,6 +795,13 @@ public:
 	float GetPower() const { return Power; }
 	/** Declenche une coupure tout de suite (console : BRBlackout) */
 	void ForceBlackout();
+	/** v4.15 (tests) : pendant une coupure (hote), le courant revient tout de suite (phase de retour, rallumage decale) */
+	void ForceRestore();
+	/** v4.15 : le courant vacille (debut ou fin d'une coupure) : les lampes changent d'eclat d'une image a l'autre */
+	bool IsPowerFlickering() const { return BlackoutPhase == EBlackout::Failing || BlackoutPhase == EBlackout::Restoring; }
+	/** v4.15 (tests) : decalques d'usure des chunks construits, tries par coordonnees : "(x,y)=nombre/empreinte ..." (le test
+	 *  reseau compare les chunks communs a l'hote et au client) */
+	FString DecalChecksumText() const;
 
 	// ------------------------------------------------------------ v2 : objectifs
 	void GetObjectives(TArray<FBRObjective>& Out) const;
@@ -854,6 +864,11 @@ protected:
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAudioComponent> HumAudio;
+
+	/** v4.15 : bourdonnement spatialise : quelques sources posees sur les plafonniers les plus proches du joueur (le son du
+	 *  niveau, S_LightBuzz au Level 0, reutilise tel quel), au volume de leur eclat ; HumAudio ne garde qu'un fond discret */
+	UPROPERTY()
+	TArray<TObjectPtr<UAudioComponent>> HumPool;
 
 	UPROPERTY()
 	TMap<FIntPoint, TObjectPtr<ABRChunk>> Chunks;
@@ -1133,6 +1148,11 @@ private:
 	void PlacePlayer(bool bKeepServerSpot = false);
 	void UpdatePopulation(float Dt);
 	void UpdateAudio(float Dt);
+	/** v4.15 : sources du bourdonnement attribuees aux plafonniers proches (toutes les 0,25 s), volume a chaque image */
+	void UpdateHumPool(float Dt);
+	TArray<TWeakObjectPtr<class ULocalLightComponent>> HumPoolLights;
+	TArray<float> HumPoolBase;
+	float HumScanTimer = 0.f;
 	void UpdatePhenomena(float Dt);
 	/** Sante mentale basse : une silhouette ou un sourire que seul ce joueur voit */
 	bool SpawnHallucination(ABRCharacter* P);

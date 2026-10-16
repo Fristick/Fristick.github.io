@@ -176,12 +176,22 @@ pose dans cet export ». L'hôte tire d'abord dans la bande 0, puis 1, puis le r
 | `M_L0_PitConcrete` | `T_L0K_Concrete_*` × couleur de sommet `Col` (profondeur du puits) | 2048 |
 | `M_L0_Baseboard` | `T_L0K_Baseboard_*` | 1024 |
 | `M_L0_FixtureMetal` | `T_L0K_FixtureMetal_*` | 1024 |
-| `M_L0_LightDiffuser` | `T_L0K_Diffuser_Emissive` (couleur et émission) ; `_Off` : diffuseur éteint | 512 |
+| `M_L0_LightDiffuser` | `T_L0K_Diffuser_BaseColor` (couleur) et `T_L0K_Diffuser_Emissive` (émission) ; `_Off` : diffuseur éteint | 512 |
 | `M_L0_DoorSteel` | `T_L0K_DoorSteel_*` (porte peinte) | 1024 |
 | `M_L0_DoorHardware` | `T_L0K_Hardware_*` (métal ; ORM et Normal en PNG) | 1024 |
 | `M_L0_DraftGlow` | émissif (0,7 ; 0,85 ; 1) | — |
 | `M_L0_PitDark`, `M_L0_Chalk`, `M_L0_Archive_Glitch` | couleurs unies | — |
 | `M_L0_DecalWall`, `_DecalCeiling`, `_DecalCarpet` | `T_L0K_Decal_*` (RGBA, alpha = masque) | 1024 |
+
+**v4.15 (réalisme)** : `T_L0K_Wallpaper`, `T_L0K_Carpet` et `T_L0K_CeilingTile` reprennent la couleur, la normal map et
+la rugosité des textures du jeu (`Tools/generate_textures.py` : lés de papier peint de 53 cm, moquette bouclée, dalles
+fissurées de 61 cm ; `Tools/Blender/level0_kit_textures.py`, `project_material`). Dans Unreal, `M_L0_Wallpaper`,
+`_Wallpaper_Aged`, `M_L0_Carpet` et `M_L0_CeilingTile` ont pour parent `M_L0K_PbrWorld` : textures projetées dans
+l'espace monde sur l'axe dominant de la face (106, 160 et 122 cm par répétition, comme les surfaces du jeu), normale
+réorientée dans l'espace monde, ligne de marée au pied du papier peint ; la teinte du papier jauni s'estompe vers les bouts
+du module (plus de marche de teinte d'un module à l'autre). Les UV0 des FBX ne servent plus à ces quatre matériaux. Le
+diffuseur a pour parent `M_L0K_ColorTex` (couleur et émission des images). Le jeu pose aussi `SM_L0_Floor_350` et
+`SM_L0_Ceiling_350` cellule par cellule, habillés des surfaces du niveau (matériau du monde).
 
 **Conventions** :
 

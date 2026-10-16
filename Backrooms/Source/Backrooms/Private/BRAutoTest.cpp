@@ -290,6 +290,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Salle de fosses : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestVisual")))
+	{
+		// v4.15 (realisme) : banc visuel seul (poses fixes, profils, captures et mesures a comparer d'un lot a l'autre)
+		AddVisualSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Banc visuel v4.15 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	BuildPlan(Levels);
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Debut : %d etapes, %d niveaux. Captures et rapport : %s"), Plan.Num(), Levels.Num(), *OutDir);
 }
@@ -634,6 +646,73 @@ void ABRAutoTest::NoteNetState(const TCHAR* When)
 			List += FString::Printf(TEXT(" %d,%d->%d,%d motif %d"), R.Min.X, R.Min.Y, R.Max.X - 1, R.Max.Y - 1, H);
 		}
 		Note(FString::Printf(TEXT("  salles de fosses :%s"), *List));
+	}
+	if (W->Def().DecalDensity > 0.f)
+	{
+		// v4.15 : decalques d'usure tires avec la graine : chaque machine ecrit l'empreinte de ses chunks construits
+		// (Decalques.txt de son dossier) et compare ceux qu'elle partage avec le releve de l'autre machine au meme moment
+		// (le second des deux releves fait la comparaison ; une difference est un probleme)
+		const FString Mine = W->DecalChecksumText();
+		const FString Tag = FString::Printf(TEXT("%s|%d|%u|"), When, W->GetLevelNumber(), W->GetSeed());
+		FFileHelper::SaveStringToFile(Tag + Mine + TEXT("\n"), *FPaths::Combine(OutDir, TEXT("Decalques.txt")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,
+			&IFileManager::Get(), FILEWRITE_Append);
+		auto Parse = [](const FString& Text, TMap<FString, FString>& Out)
+		{
+			TArray<FString> Items;
+			Text.ParseIntoArray(Items, TEXT(" "), true);
+			for (const FString& Item : Items)
+			{
+				FString Coord;
+				FString Value;
+				if (Item.Split(TEXT("="), &Coord, &Value))
+				{
+					Out.Add(Coord, Value);
+				}
+			}
+		};
+		TMap<FString, FString> MineMap;
+		Parse(Mine, MineMap);
+		const TCHAR* const Peer = GetNetMode() == NM_Client ? TEXT("NetTest_Hote") : TEXT("NetTest_Client");
+		FString PeerText;
+		FString PeerLine;
+		if (FFileHelper::LoadFileToString(PeerText, *FPaths::Combine(FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()), Peer, TEXT("Decalques.txt"))))
+		{
+			TArray<FString> Lines;
+			PeerText.ParseIntoArrayLines(Lines);
+			for (const FString& Line : Lines)
+			{
+				if (Line.StartsWith(Tag))
+				{
+					PeerLine = Line.RightChop(Tag.Len());
+				}
+			}
+		}
+		if (PeerLine.IsEmpty())
+		{
+			Note(FString::Printf(TEXT("  decalques : %d chunk(s) releves ; pas encore de releve de l'autre machine (%s) : elle comparera"), MineMap.Num(), When));
+		}
+		else
+		{
+			TMap<FString, FString> PeerMap;
+			Parse(PeerLine, PeerMap);
+			int32 Common = 0;
+			TArray<FString> Diff;
+			for (const TPair<FString, FString>& Pair : MineMap)
+			{
+				if (const FString* Other = PeerMap.Find(Pair.Key))
+				{
+					++Common;
+					if (*Other != Pair.Value)
+					{
+						Diff.Add(FString::Printf(TEXT("%s ici %s, la-bas %s"), *Pair.Key, *Pair.Value, **Other));
+					}
+				}
+			}
+			// Aucun chunk en commun (l'une des machines construit encore) : rien a comparer, sans probleme
+			Note(FString::Printf(TEXT("  decalques : %d chunk(s) en commun avec l'autre machine, %d different(s)%s%s"), Common, Diff.Num(),
+				Diff.Num() > 0 ? TEXT(" : ") : TEXT(""), *FString::Join(TArray<FString>(Diff.GetData(), FMath::Min(Diff.Num(), 4)), TEXT(" ; "))),
+				Diff.Num() > 0);
+		}
 	}
 	if (W->Def().bWater)
 	{
@@ -1006,7 +1085,7 @@ void ABRAutoTest::EndMeasure(FLevelReport& R)
 	}
 	if (ABRPlayerController* PC = GetPC())
 	{
-		Note(PC->GetRenderModeText());
+		Note(PC->GetRenderModeReport());
 	}
 	// -BRAutoTestGPU : detail du temps passe par le processeur graphique (dans Saved/Logs/Backrooms.log)
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestGPU")) && GEngine)
@@ -1956,7 +2035,7 @@ void ABRAutoTest::WriteReport()
 	}
 	if (ABRPlayerController* PC = GetPC())
 	{
-		L.Add(PC->GetRenderModeText());
+		L.Add(PC->GetRenderModeReport());
 	}
 	L.Add(TEXT(""));
 	// v4.10 : une verification non faite n'est jamais presentee comme reussie

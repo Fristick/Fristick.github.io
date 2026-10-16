@@ -9,6 +9,10 @@
 /Game/Backrooms/Materials/M_BR_Skin
 /Game/Backrooms/Materials/M_BR_WaterSurface
 /Game/Backrooms/Materials/M_BR_PitShade
+# v4.15 : moquette en tissu et decalques d'usure (leur atlas)
+/Game/Backrooms/Materials/M_BR_WorldCloth
+/Game/Backrooms/Materials/MD_BR_Decal
+/Game/Backrooms/Textures/T_Decal_Atlas
 
 # Joueur : combinaison hazmat, camescope, lampe
 /Game/Backrooms/Meshes/SK_Hazmat

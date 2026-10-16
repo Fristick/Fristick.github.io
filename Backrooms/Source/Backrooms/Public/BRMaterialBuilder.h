@@ -15,7 +15,9 @@ enum class EBRMasterMaterial : uint8
 	Mesh,        // modeles Blender
 	Skin,        // peau / chair (subsurface)
 	WaterSurface, // eau translucide : refraction, absorption selon la profondeur, vagues simulees
-	PitShade      // v4.7 : post-traitement des salles de fosses : ce qui est sous le sol s'assombrit avec la profondeur
+	PitShade,     // v4.7 : post-traitement des salles de fosses : ce qui est sous le sol s'assombrit avec la profondeur
+	WorldCloth,   // v4.15 : meme graphe que World, modele d'eclairage "tissu" (lustre des fibres de la moquette, Sheen)
+	Decal         // v4.15 : decalques d'usure (DBuffer couleur + rugosite, atlas T_Decal_Atlas ; projetes ou sur maillage)
 };
 
 namespace BRMaterialBuilder
@@ -33,6 +35,10 @@ namespace BRMaterialBuilder
 	const FString& CausticsHLSL();
 	/** Flaques et sol mouille (WP, N, T, Amount, Wet, Tex) -> float4(flaque, mouille, pente XY des gouttes) */
 	const FString& PuddlesHLSL();
+	/** v4.15 : normales des trois projections reorientees dans l'espace monde (TX, TY, TZ, VN, W, Strength) -> normale monde */
+	const FString& TriNormalHLSL();
+	/** v4.15 : ligne de maree au pied des murs et bande sous le plafond (WP, NZ, Amount, Top, Noise) -> multiplicateur */
+	const FString& TideLineHLSL();
 
 	/** v4.8 : usages que le materiau maitre doit declarer (instances, maillages a squelette, Nanite selon le materiau).
 	 *  Un usage absent donne le materiau par defaut, gris et sans texture, la ou le moteur ne peut pas recompiler. */

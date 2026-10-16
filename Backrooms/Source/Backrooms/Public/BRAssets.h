@@ -42,6 +42,10 @@ public:
 	static bool IsLevel0KitWanted();
 	/** v4.14 : axe Y des modules non retourne par l'import (lu sur SM_L0_Wall_Corner, voir UseLevel0Kit) */
 	bool IsKitMirrorY() const { return bKitMirrorY; }
+	/** v4.15 : module de sol (SM_L0_Floor_350) ou de plafond (SM_L0_Ceiling_350) du kit, s'il est importe et a la bonne
+	 *  taille (350 x 350 cm centre sur la cellule, dessus du sol a 0, dessous du plafond a 290 cm) ; verifie une fois.
+	 *  nullptr : le chunk garde sa grande dalle */
+	UStaticMesh* KitCellSlab(bool bCeiling);
 	UStaticMesh* Cube();
 	UStaticMesh* Sphere();
 	UStaticMesh* Cylinder();
@@ -51,6 +55,8 @@ public:
 	UTexture* Texture(FName Name);
 	/** Icone d'inventaire : /Game/Backrooms/UI/<Name>, sinon RawAssets/Icons/<Name>.png */
 	UTexture* Icon(FName Name);
+	/** v4.15 : profil photometrique IES /Game/Backrooms/Lights/<Name> (faisceau de la lampe), nullptr s'il n'est pas importe */
+	class UTextureLightProfile* LightProfile(FName Name);
 	USoundBase* Sound(FName Name);
 	/** Attenuation spatialisee. v4.7 : bOcclude : etouffee derriere les murs (entites, bruits du monde) ; les sorties
 	 *  et les objectifs passent false (signal fiable) ; de loin, le son perd ses aigus et gagne de la reverberation */
@@ -76,9 +82,12 @@ public:
 	 * TintOverrides : remplace la couleur de certains slots (ex: "Skin").
 	 * bUniqueGlow : les slots "Glow*" recoivent un materiau unique, retourne dans OutGlow.
 	 * bPowered : les slots "Glow" (neons) s'eteignent pendant les coupures de courant (SetGlowScale).
+	 * LightTemperatureK : v4.15 : > 0, ces slots alimentes prennent la couleur d'une lampe de cette temperature
+	 * (TemperatureGlow), comme les diffuseurs individuels et la lumiere qu'ils projettent.
 	 */
 	void ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColor>* TintOverrides = nullptr,
-		bool bUniqueGlow = false, TArray<UMaterialInstanceDynamic*>* OutGlow = nullptr, float GlowScale = 1.f, bool bPowered = false);
+		bool bUniqueGlow = false, TArray<UMaterialInstanceDynamic*>* OutGlow = nullptr, float GlowScale = 1.f, bool bPowered = false,
+		float LightTemperatureK = 0.f);
 
 	/**
 	 * v4.8 : affectation explicite des slots d'un modele (combinaison du joueur) : nom de slot -> style (SlotStyles).
@@ -100,6 +109,9 @@ public:
 
 	/** Couleur emissive (deja multipliee) d'un slot Glow*, ou noir */
 	static FLinearColor GlowColorForSlot(const FString& SlotName);
+	/** v4.15 : couleur emissive d'un diffuseur eclaire par une lampe de Kelvin K : teinte de la temperature (celle de la
+	 *  lumiere, FLinearColor::MakeFromColorTemperature), meme luminance que Glow (meme eclat a l'ecran) */
+	static FLinearColor TemperatureGlow(const FLinearColor& Glow, float Kelvin);
 
 	/** true si des materiaux texturees sont disponibles (import Python ou construction a la volee) */
 	bool HasContent();
@@ -173,6 +185,9 @@ public:
 	static int32 RawTextureLoads;
 	/** v4.7 : post-traitement des salles de fosses (assombrit ce qui est sous le sol) ; nullptr si indisponible */
 	UMaterialInstanceDynamic* NewPitShade(UObject* Outer);
+	/** v4.15 : decalque d'usure (MD_BR_Decal, case Kind de l'atlas T_Decal_Atlas), partage et mis en cache ; nullptr sans
+	 *  materiau maitre (jeu cuisine sans MD_BR_Decal) : le chunk ne pose alors aucun decalque */
+	UMaterialInterface* DecalMaterial(EBRDecal Kind);
 	static const TArray<FString>& GetFallbacks();
 
 private:
@@ -180,7 +195,8 @@ private:
 	 *  lineaire ; sinon RoughContrast = 0 (rugosite v4.6) */
 	void ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail);
 
-	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, Count };
+	/** v4.15 : WorldCloth : variante "tissu" du monde (moquettes, FBRSurface::Sheen > 0) ; Decal : decalques d'usure */
+	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, WorldCloth, Decal, Count };
 
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);
@@ -203,6 +219,8 @@ private:
 	/** v4.14 : sens de l'axe Y des modules importes, lu sur la boite de SM_L0_Wall_Corner (plinthes du cote +Y d'Unreal
 	 *  quand l'import retourne Y, comme prevu ; du cote -Y sinon). Sert a orienter les poteaux d'angle et en T */
 	bool bKitMirrorY = false;
+	/** v4.15 : etat des modules de sol et de plafond du kit (-1 : pas encore verifie, 0 : refuse, 1 : utilisable) */
+	int32 KitSlabState[2] = { -1, -1 };
 
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UMaterialInterface>> MatCache;

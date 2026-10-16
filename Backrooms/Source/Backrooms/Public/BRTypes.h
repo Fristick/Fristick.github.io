@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BRColorLogic.h"
 
 /** Algorithme de generation de la grille d'un niveau */
 enum class EBRLayout : uint8
@@ -20,6 +21,9 @@ enum class EBRSky : uint8 { None, Overcast, Night, Day };
 enum class EBRStep : uint8 { Carpet, Hard, Water, Grass };
 enum class EBRProps : uint8 { None, Warehouse, Pipes, Electrical, Office, Hotel, Caves, Field, Suburbs, City };
 enum class EBREdge : uint8 { Open, Wall, Door };
+/** v4.15 : decalques d'usure (cases de l'atlas T_Decal_Atlas) : aureole de mur sous le plafond, tache de plafond, zone
+ *  humide au sol, eraflures */
+enum class EBRDecal : uint8 { WaterStain, CeilingStain, Damp, Scuff, Count };
 
 /** Objets d'inventaire */
 enum class EBRItem : uint8
@@ -214,6 +218,11 @@ struct FBRSurface
 	float WaterLine = -1.f;   // v4.5 : hauteur de l'eau (cm) : bande mouillee juste au-dessus (murs, piliers, rebords) ; < 0 : aucune
 	float RoughDetail = 1.f;  // v4.7 : part de la carte de rugosite <Texture>_R appliquee (peinture sur beton : faible)
 	float WallVariation = 0.f; // v4.7 : murs, teinte et aureoles d'humidite a l'echelle du monde (casse la repetition)
+	// v4.15 (realisme) : rendu seulement
+	float Specular = 0.5f;     // reflectance (0,5 = 4 % ; moquette 0,3, papier peint 0,4)
+	float Cavity = 0.f;        // occlusion des creux de la texture (lumiere indirecte et reflet), 0..1
+	float Sheen = 0.f;         // > 0 : lustre des fibres (materiau maitre M_BR_WorldCloth, moquettes)
+	float TideLine = 0.f;      // murs : ligne de maree au-dessus de la plinthe et bande sombre sous le plafond, 0..1
 
 	FBRSurface() {}
 	FBRSurface(FName InTex, const FLinearColor& InTint, float InScale, float InRough = 0.85f, float InGrime = 0.35f)
@@ -221,9 +230,9 @@ struct FBRSurface
 
 	FString Key() const
 	{
-		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.0f|%.2f|%.2f"), *Texture.ToString(),
-			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime, Puddles, Wetness,
-			AntiTile, Stains, WaterLine, RoughDetail, WallVariation);
+		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f"),
+			*Texture.ToString(), Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime,
+			Puddles, Wetness, AntiTile, Stains, WaterLine, RoughDetail, WallVariation, Specular, Cavity, Sheen, TideLine);
 	}
 };
 
@@ -459,6 +468,42 @@ struct FBRLevelDef
 	float EnergyBarChance = 0.1f;
 	float GearChance = 0.03f;        // lampe, frontale, gilet
 	float WallDetailChance = 0.f;    // prises, aerations
+
+	// --- v4.15 (realisme) : rendu seulement (ni generation, ni reseau, ni lumiere de gameplay LightLevelAt) ---
+	/** Temperature de couleur des plafonniers (K) ; 0 : couleur RGB LightColor seule (rendu d'avant). LightColor multiplie
+	 *  la temperature (la teinte rouge pres de la Bacteria reste rouge) */
+	float LightTemperatureK = 0.f;
+	/** Balance des blancs de la camera (K ; 6500 : neutre). Proche de la temperature des lampes : le papier peint garde sa
+	 *  couleur sans virer a l'orange. Attention : a partir de 4000 K, le moteur prend le blanc sur le lieu du jour et non
+	 *  plus sur celui des lampes : une lampe y vire au rose ou a la peche, sauf WhiteTint (BRColorLogic.h, banc
+	 *  Tools/Light/test_color.cpp) */
+	float WhiteTempK = 6500.f;
+	/** Teinte de la balance des blancs (-1..1, 0 : aucune) : compense le rose d'une balance a 4000 K ou plus */
+	float WhiteTint = 0.f;
+	/** Adaptation de l'exposition (IL par seconde) vers le clair et vers le sombre */
+	float ExposureSpeedUp = 2.f;
+	float ExposureSpeedDown = 1.f;
+	/** Brouillard volumetrique : facteur d'extinction et distance couverte (cm ; plus courte, les tranches pres de la camera
+	 *  sont plus fines : halos des lampes plus nets) */
+	float VolFogExtinction = 1.f;
+	float VolFogDistance = 6000.f;
+	/** Volumes de brouillard locaux (air humide des salles de fosses et des zones sans lumiere, air froid du sas de la porte
+	 *  de service) : densite relative, 0 : aucun. Places d'apres la disposition (la meme chez tous les joueurs) */
+	float LocalFogDensity = 0.f;
+	/** Decalques d'usure par chunk (aureoles sous le plafond, taches pres des plafonniers, moquette humide au pied des murs
+	 *  et sous les passages, eraflures) : densite relative, 0 : aucun. Tires avec la graine (les memes chez tous les joueurs) */
+	float DecalDensity = 0.f;
+
+	/** v4.15 : couleur apparente des plafonniers a l'ecran (temperature multipliee par LightColor, vue a travers la balance
+	 *  des blancs du moteur : lieu de Planck sous 4000 K, lieu du jour au-dela, teinte, adaptation Bradford ; maximum 1) :
+	 *  apercus du menu, ou rien n'est rendu par le moteur */
+	FLinearColor ApparentLightColor() const
+	{
+		const float Tint[3] = { LightColor.R, LightColor.G, LightColor.B };
+		float Seen[3] = { 1.f, 1.f, 1.f };
+		BRColor::ApparentLamp(LightTemperatureK, Tint, FMath::Clamp(WhiteTempK, 1500.f, 15000.f), FMath::Clamp(WhiteTint, -1.f, 1.f), Seen);
+		return FLinearColor(Seen[0], Seen[1], Seen[2], 1.f);
+	}
 };
 
 /** Reglages du joueur (onglet Parametres de l'inventaire), sauvegardes dans GameUserSettings.ini */
@@ -478,6 +523,9 @@ struct FBRSettings
 	bool bRTHitLighting = false;
 	/** v4.5 : ombres ray tracees pour la lampe torche (les plafonniers gardent les ombres virtuelles) */
 	bool bRTShadows = false;
+	/** v4.15 : OMBRES DE TOUTES LES LAMPES : chaque plafonnier projette son ombre par MegaLights (rayons). Effectif seulement
+	 *  avec le ray tracing materiel actif (ABRWorld::IsMegaLightsActive) ; coupe dans le profil Performance */
+	bool bMegaLights = true;
 	bool bAreaLights = true;    // neons en lumieres surfaciques
 	bool bVolumetricFog = true;
 	bool bFilmGrain = true;

@@ -8,6 +8,9 @@ piliers de l'etape 3), chunk par chunk et dans l'ordre des etapes, puis controle
   1. chaque arete mur ou porte de l'enceinte et de l'interieur recoit exactement un module (mur, mur jauni, passage,
      mur perce de la porte de service), et aucun mur plein ne retombe sur une boite ;
   2. chaque sommet touche par un mur ou une porte recoit exactement un poteau (un seul chunk le pose), aucun autre ;
+     v4.15 : chaque cellule de l'enceinte recoit exactement un sol du kit (SM_L0_Floor_350) et un plafond du kit
+     (SM_L0_Ceiling_350), cellule par cellule (AddKitCellSlabs), sauf le sol des chunks a salle de fosses (BuildPitRoom :
+     dalles a trous) et le plafond des chunks dont une echelle perce le plafond (BuildCeiling : trappe) ;
   3. graine 9 : memes modules, memes positions et memes lacets que la scene du kit (RawAssets/Level0Kit/L0_Placement.json,
      convertie dans le repere d'Unreal), aux ecarts voulus pres (listes dans le journal) ;
   4. plusieurs graines : 1 et 2 sans exception.
@@ -32,6 +35,8 @@ PLACEMENT = os.path.join(ROOT, "RawAssets", "Level0Kit", "L0_Placement.json")
 
 POSTS = ("SM_L0_Wall_JunctionX", "SM_L0_Wall_JunctionT", "SM_L0_Wall_Straight", "SM_L0_Wall_Corner", "SM_L0_Wall_End")
 WALLS = ("SM_L0_Wall_350", "SM_L0_Wall_Aged_350")
+# v4.15 : sol et plafond du kit, cellule par cellule (BRChunk.cpp : AddKitCellSlabs)
+SLABS = ("SM_L0_Floor_350", "SM_L0_Ceiling_350")
 
 
 class KitPose:
@@ -49,6 +54,9 @@ class KitPose:
         self.boxes = []          # murs pleins retombes sur une boite (doit rester vide)
         self.post_owner = Counter()
         self.edge_hits = Counter()
+        self.slab_hits = Counter()   # v4.15 : (x, y, 0 sol / 1 plafond) -> modules poses
+        self.pit_chunks = set()      # chunks dont le sol reste en dalles (salle de fosses)
+        self.shaft_chunks = set()    # chunks dont le plafond reste en dalles (trappe d'une echelle)
         self.svc = None
         if L.door:
             (cx, cy), (dx, dy) = L.door
@@ -201,6 +209,23 @@ class KitPose:
                             or L.edge_e(x, y) != vp.OPEN)
                     if not busy:
                         self.add("SM_L0_Pillar", (x + 1) * S, (y + 1) * S, 0.0)
+        # v4.15 : etape 0 (sol) et BuildCeiling : sol et plafond du kit cellule par cellule ; le chunk d'une salle de fosses
+        # garde son sol en dalles a trous (BuildPitRoom), celui dont une echelle perce le plafond garde ses dalles autour de
+        # la trappe (PlanExits : premiere sortie Ladder, si le niveau a un plafond)
+        has_pit = (ccx, ccy) in L.pit_rooms
+        shaft = bool(L.P.get("bCeiling", 1.0)) and any(st == "Ladder" for _, st, _, _ in L.exits((ccx, ccy), L.hiding_cells((ccx, ccy))))
+        if has_pit:
+            self.pit_chunks.add((ccx, ccy))
+        if shaft:
+            self.shaft_chunks.add((ccx, ccy))
+        for x in range(x0, x0 + N):
+            for y in range(y0, y0 + N):
+                if not has_pit:
+                    self.add(SLABS[0], (x + 0.5) * S, (y + 0.5) * S, 0.0)
+                    self.slab_hits[(x, y, 0)] += 1
+                if not shaft:
+                    self.add(SLABS[1], (x + 0.5) * S, (y + 0.5) * S, 0.0)
+                    self.slab_hits[(x, y, 1)] += 1
 
     def build(self):
         for ccx in range(-self.B, self.B):
@@ -254,6 +279,18 @@ def check_layout(L, K):
     for v in K.post_owner:
         if v not in verts:
             bad.append("poteau sans mur %s" % (v,))
+    # v4.15 : un sol et un plafond du kit par cellule de l'enceinte (hors chunks a salle de fosses / a trappe)
+    lo, hi = -L.B * L.N, L.B * L.N
+    for x in range(lo, hi):
+        for y in range(lo, hi):
+            ch = L.chunk_of((x, y))
+            for kind, skip in ((0, K.pit_chunks), (1, K.shaft_chunks)):
+                want = 0 if ch in skip else 1
+                if K.slab_hits[(x, y, kind)] != want:
+                    bad.append("cellule (%d, %d) : %d %s du kit au lieu de %d" % (x, y, K.slab_hits[(x, y, kind)], ("sol", "plafond")[kind], want))
+    for x, y, kind in K.slab_hits:
+        if not (lo <= x < hi and lo <= y < hi):
+            bad.append("%s du kit hors de l'enceinte (%d, %d)" % (("sol", "plafond")[kind], x, y))
     return bad
 
 
@@ -268,13 +305,14 @@ def ue_records(path):
 
 def compare_scene(L, K, records, log):
     """Controle 3 : la scene du kit (graine 9) et la pose du jeu"""
-    sym = {"SM_L0_Wall_350": 180.0, "SM_L0_Wall_Aged_350": 180.0, "SM_L0_Doorway": 180.0, "SM_L0_Pillar": 90.0, "SM_L0_Wall_JunctionX": 90.0}
+    sym = {"SM_L0_Wall_350": 180.0, "SM_L0_Wall_Aged_350": 180.0, "SM_L0_Doorway": 180.0, "SM_L0_Pillar": 90.0, "SM_L0_Wall_JunctionX": 90.0,
+           "SM_L0_Floor_350": 90.0, "SM_L0_Ceiling_350": 90.0}
 
     def key(name, x, y, yaw):
         period = sym.get(name, 360.0)
         return (name, round(x), round(y), round(yaw % period, 1) % period)
 
-    names = set(WALLS) | set(POSTS) | {"SM_L0_Doorway", "SM_L0_Pillar", "SM_L0_ServiceDoor_Wall"}
+    names = set(WALLS) | set(POSTS) | set(SLABS) | {"SM_L0_Doorway", "SM_L0_Pillar", "SM_L0_ServiceDoor_Wall"}
     scene = Counter(key(n, x, y, yaw) for n, x, y, yaw, _ in records if n in names)
     game = Counter(key(*m) for m in K.modules)
     only_scene = scene - game
@@ -290,9 +328,17 @@ def compare_scene(L, K, records, log):
         svc_ends = {(vx * K.S, vy * K.S) for vx, vy in ends}
     unexplained = []
     pillars_hidden = 0
+    pit_floors = trap_ceilings = 0
+
+    def chunk_at(x, y):
+        return L.chunk_of((int(x // K.S), int(y // K.S)))
     for k, c in only_scene.items():
         if k[0] == "SM_L0_Pillar":
             pillars_hidden += c
+        elif k[0] == SLABS[0] and chunk_at(k[1], k[2]) in K.pit_chunks:
+            pit_floors += c
+        elif k[0] == SLABS[1] and chunk_at(k[1], k[2]) in K.shaft_chunks:
+            trap_ceilings += c
         elif k[0] in POSTS and (k[1], k[2]) in svc_ends:
             log("  ecart voulu : scene %s en (%d, %d) lacet %.0f (porte de service non comptee comme bras)" % k)
         else:
@@ -303,6 +349,11 @@ def compare_scene(L, K, records, log):
         else:
             unexplained.append(("jeu seulement",) + k)
     log("  ecart voulu : %d pilier(s) de la scene caches dans un poteau, non poses par le jeu" % pillars_hidden)
+    log("  ecart voulu : %d sol(s) du kit de la scene dans le(s) chunk(s) a salle de fosses %s : le jeu y garde les dalles a trous "
+        "(BuildPitRoom)" % (pit_floors, sorted(K.pit_chunks)))
+    if trap_ceilings or K.shaft_chunks:
+        log("  ecart voulu : %d plafond(s) du kit de la scene dans le(s) chunk(s) a trappe %s : le jeu y garde les dalles" % (trap_ceilings,
+                                                                                                                       sorted(K.shaft_chunks)))
     for u in unexplained[:20]:
         log("  ECART : %s %s en (%d, %d) lacet %.1f" % u)
     return len(unexplained)
@@ -320,7 +371,7 @@ def main():
         lines.append(s)
 
     P = vp.read_level0()
-    log("Pose du kit du Level 0 (regles de BRChunk.cpp v4.14), grille de Tools/verify_pitfalls.py")
+    log("Pose du kit du Level 0 (regles de BRChunk.cpp v4.14, sol et plafond cellule par cellule v4.15), grille de Tools/verify_pitfalls.py")
     log("Cotes lues dans BRLevels.cpp : cellule %.0f, mur %.0f x %.0f, chunks %d, enceinte %d" % (P["CellSize"], P["WallThickness"],
                                                                                               P["WallHeight"], P["ChunkCells"], P["BoundsChunks"]))
     failures = 0

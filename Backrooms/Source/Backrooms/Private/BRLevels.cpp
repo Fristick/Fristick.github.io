@@ -49,21 +49,40 @@ namespace
 		D.CellSize = 350.f; D.WallHeight = 290.f; D.WallThickness = 60.f;
 		D.WallLineChance = 0.55f; D.SegmentLength = 4; D.DoorChance = 0.3f; D.DoorWidth = 150.f;
 		D.PillarChance = 0.04f; D.PillarSize = 45.f; D.OpenZoneChance = 0.15f;
-		D.Floor = S(TEXT("T_L0_Carpet"), C(1, 1, 1), 220.f, 0.95f, 0.3f);
+		// v4.15 (realisme) : tailles reelles des textures refaites (Tools/generate_textures.py) : moquette bouclee 160 cm,
+		// papier peint en les de 53 cm (106 cm par repetition), dalles de plafond de 61 cm (122 cm)
+		D.Floor = S(TEXT("T_L0_Carpet"), C(1, 1, 1), 160.f, 0.95f, 0.3f);
 		// v4.3 : moquette sans repetition visible (2e echantillon tourne, teinte variable, taches d'humidite)
 		D.Floor.AntiTile = 1.f; D.Floor.Stains = 0.65f;
-		D.Wall = S(TEXT("T_L0_Wallpaper"), C(1, 1, 1), 120.f, 0.8f, 0.3f);
-		D.Ceiling = S(TEXT("T_L0_Ceiling"), C(1, 1, 1), 120.f, 0.9f, 0.15f);
+		D.Wall = S(TEXT("T_L0_Wallpaper"), C(1, 1, 1), 106.f, 0.8f, 0.3f);
+		D.Ceiling = S(TEXT("T_L0_Ceiling"), C(1, 1, 1), 122.f, 0.9f, 0.15f);
 		D.Trim = S(TEXT("T_L0_Wallpaper"), C(0.55f, 0.48f, 0.32f), 100.f, 0.6f, 0.2f);
+		// v4.15 (realisme) : moquette en tissu (lustre des fibres, peu de reflet), creux entre les boucles ; papier peint un peu
+		// moins reflechissant, ligne de maree au-dessus de la plinthe et bande sous le plafond ; fissures des dalles
+		D.Floor.Specular = 0.3f; D.Floor.Cavity = 1.f; D.Floor.Sheen = 0.8f;
+		D.Wall.Specular = 0.4f; D.Wall.Cavity = 0.5f; D.Wall.TideLine = 1.f;
+		D.Ceiling.Cavity = 0.8f;
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::Panel;
 		D.LightChance = 0.38f; D.BrokenChance = 0.06f; D.FlickerChance = 0.07f;
-		D.LightLumens = 2400.f; D.LightColor = C(1.f, 0.96f, 0.84f); D.LightRadius = 620.f;
+		D.LightLumens = 2400.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 620.f;
 		D.DarkZoneChance = 0.06f; D.ShadowChance = 0.15f;
-		D.FogDensity = 0.08f; D.FogColor = C(0.32f, 0.29f, 0.16f);
-		D.ShadowTint = C(0.97f, 1.f, 0.93f); D.HighlightTint = C(1.04f, 1.f, 0.92f); D.VolumetricScatter = 0.45f;
-		D.SceneTint = C(1.f, 0.98f, 0.9f); D.Saturation = 0.95f; D.Contrast = 1.05f;
-		D.MinEV = 3.f; D.MaxEV = 9.f; D.ExposureBias = 0.3f; D.Vignette = 0.5f; D.Grain = 0.3f;
+		// v4.15 : neons blanc chaud (3700 K) vus avec une balance des blancs a 3900 K : lampe blanc chaud (1, 0,94, 0,86) ; le
+		// jaune vient du papier peint et de la moquette eclaires, plus de la teinte de l'image (moins saturee, plus
+		// naturelle) ; etalonnage adouci. Balance sous 4000 K : au-dela, le moteur prend le blanc sur le lieu du jour et la
+		// lampe virait a la peche (4300 K : (1, 0,81, 0,70)) ; banc Tools/Light/test_color.cpp
+		D.LightTemperatureK = 3700.f; D.WhiteTempK = 3900.f;
+		// v4.15 : air plus clair (brume legere) ; halos des lampes portes par le brouillard volumetrique (extinction 1.5,
+		// 40 m) ; air humide des salles de fosses et des zones sans lumiere, air froid du sas (volumes locaux)
+		D.FogDensity = 0.03f; D.FogColor = C(0.32f, 0.29f, 0.16f);
+		D.VolFogExtinction = 1.5f; D.VolFogDistance = 4000.f; D.LocalFogDensity = 1.f;
+		// v4.15 : usure : aureoles sous le plafond, taches pres des plafonniers, moquette humide, eraflures (decalques)
+		D.DecalDensity = 1.f;
+		D.ShadowTint = C(0.98f, 1.f, 0.96f); D.HighlightTint = C(1.02f, 1.f, 0.96f); D.VolumetricScatter = 0.45f;
+		D.SceneTint = C(1.f, 0.99f, 0.95f); D.Saturation = 0.92f; D.Contrast = 1.05f;
+		// v4.15 : plage d'exposition resserree (le noir d'une coupure reste noir, l'image ne "pompe" plus), adaptation plus lente
+		D.MinEV = 4.5f; D.MaxEV = 8.f; D.ExposureBias = 0.3f; D.Vignette = 0.5f; D.Grain = 0.3f;
+		D.ExposureSpeedUp = 1.5f; D.ExposureSpeedDown = 0.7f;
 		// v4.4 : le vrai bourdonnement des neons (enregistrement fourni) par-dessus l'ambiance
 		D.AmbientSound = TEXT("S_Amb_L0"); D.AmbientVolume = 0.35f;
 		D.HumSound = TEXT("S_LightBuzz"); D.HumVolume = 0.6f;
@@ -141,10 +160,17 @@ namespace
 		D.Wall = S(TEXT("T_Concrete"), C(0.95f, 0.95f, 0.95f), 350.f, 0.85f, 0.4f);
 		D.Ceiling = S(TEXT("T_Concrete"), C(0.6f, 0.6f, 0.6f), 400.f, 0.9f, 0.3f);
 		D.Pillar = S(TEXT("T_Concrete"), C(0.85f, 0.85f, 0.85f), 300.f, 0.85f, 0.5f);
+		// v4.15 (realisme) : pores et fissures du beton dans l'ombre (occlusion de cavite)
+		D.Floor.Cavity = 0.6f; D.Wall.Cavity = 0.6f; D.Ceiling.Cavity = 0.6f; D.Pillar.Cavity = 0.6f;
 		D.Fixture = EBRFixture::Tube;
 		D.LightChance = 0.35f; D.BrokenChance = 0.12f; D.FlickerChance = 0.15f;
-		D.LightLumens = 4500.f; D.LightColor = C(0.88f, 0.94f, 1.f); D.LightRadius = 1100.f;
+		D.LightLumens = 4500.f; D.LightColor = C(0.98f, 1.f, 0.97f); D.LightRadius = 1100.f;
 		D.DarkZoneChance = 0.12f; D.ShadowChance = 0.2f;
+		// v4.15 : tubes "blanc froid" (4100 K, pointe verte des tubes bon marche), balance des blancs a 3800 K : le parking
+		// reste froid
+		D.LightTemperatureK = 4100.f; D.WhiteTempK = 3800.f;
+		D.VolFogDistance = 5000.f; // v4.15 : grandes travees du parking
+		D.DecalDensity = 0.6f;     // v4.15 : coulures, beton humide, traces de pneus et de semelles
 		D.FogDensity = 0.16f; D.FogColor = C(0.22f, 0.24f, 0.27f);
 		D.ShadowTint = C(0.94f, 0.98f, 1.06f); D.HighlightTint = C(1.f, 1.f, 0.98f); D.VolumetricScatter = 0.7f;
 		D.SceneTint = C(0.95f, 0.98f, 1.f); D.Saturation = 0.85f; D.Contrast = 1.08f;
@@ -192,10 +218,17 @@ namespace
 		D.Floor.Puddles = 0.35f; D.Floor.Wetness = 0.1f; // fuites des tuyaux
 		D.Wall = S(TEXT("T_Concrete"), C(0.72f, 0.68f, 0.6f), 250.f, 0.9f, 0.55f);
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
+		// v4.15 (realisme) : pores et fissures du beton dans l'ombre (occlusion de cavite)
+		D.Floor.Cavity = 0.6f; D.Wall.Cavity = 0.6f; D.Ceiling.Cavity = 0.6f;
 		D.Fixture = EBRFixture::Bulb;
 		D.LightChance = 0.22f; D.BrokenChance = 0.2f; D.FlickerChance = 0.15f;
-		D.LightLumens = 1300.f; D.LightColor = C(1.f, 0.7f, 0.45f); D.LightRadius = 560.f;
+		D.LightLumens = 1300.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 560.f;
 		D.DarkZoneChance = 0.15f; D.ShadowChance = 0.2f;
+		// v4.15 : ampoules a incandescence (2900 K), balance des blancs a 3700 K : la meme couleur apparente qu'avant
+		// (1, 0,71, 0,45) ; sous 4000 K (lieu de Planck, pas de reflet rose)
+		D.LightTemperatureK = 2900.f; D.WhiteTempK = 3700.f;
+		D.VolFogExtinction = 1.2f; D.VolFogDistance = 3000.f; // v4.15 : couloirs etroits, vapeur des tuyaux
+		D.DecalDensity = 0.8f;     // v4.15 : fuites des tuyaux, coulures, frottements
 		D.FogDensity = 0.12f; D.FogColor = C(0.18f, 0.13f, 0.08f);
 		D.ShadowTint = C(0.95f, 1.f, 1.03f); D.HighlightTint = C(1.05f, 0.98f, 0.9f); D.VolumetricScatter = 0.6f;
 		D.SceneTint = C(1.f, 0.93f, 0.85f); D.Saturation = 0.85f; D.Contrast = 1.12f;
@@ -243,6 +276,8 @@ namespace
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
 		D.Fixture = EBRFixture::Bulb;
 		D.LightChance = 0.3f; D.BrokenChance = 0.15f; D.FlickerChance = 0.25f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs : niveau hors du banc visuel (-BRAutoTestVisual),
+		// a regler sur captures dans une version suivante
 		D.LightLumens = 1500.f; D.LightColor = C(1.f, 0.85f, 0.6f); D.LightRadius = 620.f;
 		D.DarkZoneChance = 0.15f; D.ShadowChance = 0.2f;
 		D.FogDensity = 0.1f; D.FogColor = C(0.14f, 0.12f, 0.1f);
@@ -294,6 +329,7 @@ namespace
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::Panel;
 		D.LightChance = 0.7f; D.BrokenChance = 0.03f; D.FlickerChance = 0.03f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs (niveau hors du banc visuel)
 		D.LightLumens = 3000.f; D.LightColor = C(0.95f, 0.97f, 1.f); D.LightRadius = 700.f;
 		D.ShadowChance = 0.12f;
 		D.FogDensity = 0.04f; D.FogColor = C(0.3f, 0.3f, 0.32f);
@@ -339,6 +375,7 @@ namespace
 		D.Pillar = D.Trim;
 		D.Fixture = EBRFixture::Sconce;
 		D.LightChance = 0.5f; D.BrokenChance = 0.15f; D.FlickerChance = 0.12f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs (niveau hors du banc visuel)
 		D.LightLumens = 900.f; D.LightColor = C(1.f, 0.7f, 0.4f); D.LightRadius = 520.f;
 		D.DarkZoneChance = 0.1f; D.ShadowChance = 0.2f;
 		D.FogDensity = 0.06f; D.FogColor = C(0.2f, 0.12f, 0.08f);
@@ -435,6 +472,7 @@ namespace
 		D.Ceiling = S(TEXT("T_Rock"), C(0.5f, 0.5f, 0.5f), 300.f, 0.9f, 0.5f);
 		D.Fixture = EBRFixture::Bulb;
 		D.LightChance = 0.12f; D.BrokenChance = 0.3f; D.FlickerChance = 0.2f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs (niveau hors du banc visuel)
 		D.LightLumens = 1600.f; D.LightColor = C(1.f, 0.75f, 0.5f); D.LightRadius = 800.f;
 		D.DarkZoneChance = 0.2f; D.ShadowChance = 0.25f;
 		D.FogDensity = 0.1f; D.FogColor = C(0.08f, 0.08f, 0.08f);
@@ -606,7 +644,12 @@ namespace
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::SkyPanel;
 		D.LightChance = 0.6f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
-		D.LightLumens = 4200.f; D.LightColor = C(1.f, 0.99f, 0.96f); D.LightRadius = 1000.f; D.ShadowChance = 0.15f;
+		D.LightLumens = 4200.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 1000.f; D.ShadowChance = 0.15f;
+		// v4.15 : plafonniers 5000 K, balance des blancs a 5400 K (la lumiere du jour des verrieres reste un peu plus froide).
+		// Au-dela de 4000 K, le blanc de reference est sur le lieu du jour : sans teinte, les lampes viraient au rose (dalles
+		// roses) ; la teinte -0,10 les ramene a un blanc chaud (1, 0,96, 0,86)
+		D.LightTemperatureK = 5000.f; D.WhiteTempK = 5400.f; D.WhiteTint = -0.1f;
+		D.VolFogDistance = 5000.f; // v4.15 : longs couloirs des canaux
 		D.SkylightChance = 0.45f;
 		D.bWater = true; D.WaterHeight = 60.f; // canaux de 60 cm ; trottoirs a 68 cm, marche immergee a 34 cm
 		D.Water = S(TEXT("T_WaterNormal"), C(0.24f, 0.7f, 0.72f), 650.f, 0.02f, 0.f);

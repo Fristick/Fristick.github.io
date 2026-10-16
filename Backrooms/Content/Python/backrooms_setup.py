@@ -17,9 +17,12 @@ Il importe :
   RawAssets/Icons/*.png         -> /Game/Backrooms/UI         (icones de l'inventaire)
   RawAssets/Sounds/*.wav        -> /Game/Backrooms/Sounds     (boucles d'apres loops.txt)
   RawAssets/Meshes/*.fbx        -> /Game/Backrooms/Meshes     (Tools/Blender/generate_models.py + import_user_models.py)
+  RawAssets/Lights/*.ies        -> /Game/Backrooms/Lights     (v4.15 : profils IES de la lampe, Tools/generate_ies.py)
   RawAssets/Level0Kit/FBX/*.fbx -> /Game/Backrooms/Level0Kit/Meshes      (v4.14 : kit Blender du Level 0, dossier separe)
   RawAssets/Level0Kit/Textures/* -> /Game/Backrooms/Level0Kit/Textures   (BaseColor sRGB, ORM lineaire, Normal DirectX)
-puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface) et la carte L_Backrooms.
+puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface, M_BR_PitShade ; v4.15 : M_BR_WorldCloth,
+MD_BR_Decal)
+et la carte L_Backrooms.
 
 v4.14 : le kit du Level 0 a son propre import, rejouable seul (les originaux de RawAssets ne sont jamais modifies) :
 
@@ -32,15 +35,24 @@ import os
 
 import unreal
 
-VERSION = 10
+# v4.15 : 11 : profils photometriques IES de la lampe torche et de la frontale (RawAssets/Lights, /Game/Backrooms/Lights) ;
+# 12 : kit du Level 0 : papier peint, moquette et dalles projetes dans l'espace monde (M_L0K_PbrWorld), diffuseur texture
+# (M_L0K_ColorTex), textures du kit refaites ; atlas des decalques (tout est reimporte une fois) ;
+# 13 : profils IES refaits (Tools/generate_ies.py : faisceau plus large, au moins 70 % de la lumiere du cone d'avant)
+VERSION = 13
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
 # v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles,
 # v4.8 : usages "maillage a squelette" et "Nanite" sur M_BR_Mesh et M_BR_Skin : sans eux, la combinaison du joueur et les
-# entites SK_* recevaient le materiau par defaut, gris et sans texture, en jeu autonome et en paquet)
-MATERIAL_VERSION = 7
+# entites SK_* recevaient le materiau par defaut, gris et sans texture, en jeu autonome et en paquet ;
+# v4.15 : 8 : monde : normales triplanaires reorientees dans l'espace monde, occlusion de cavite, reflectance par surface,
+# ligne de maree ; nouveau M_BR_WorldCloth (moquette en modele d'eclairage "tissu"))
+MATERIAL_VERSION = 8
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
-RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"]}
+# (v4.15 : papier peint en les de 53 cm, moquette bouclee, dalles fissurees de 61 cm, et leurs cartes de rugosite)
+RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"],
+              8: ["T_L0_Wallpaper.jpg", "T_L0_Wallpaper_N.png", "T_L0_Wallpaper_R.png", "T_L0_Carpet.jpg", "T_L0_Carpet_N.png",
+                  "T_L0_Carpet_R.png", "T_L0_Ceiling.jpg", "T_L0_Ceiling_N.png", "T_L0_Ceiling_R.png"]}
 # Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
 RESOUNDED = {4: ["S_Bacteria.wav"]}
 # Modeles refaits (v4.4 : nouveau Smiler)
@@ -52,8 +64,11 @@ UI = ROOT + "/UI"
 SND = ROOT + "/Sounds"
 MESH = ROOT + "/Meshes"
 MAT = ROOT + "/Materials"
+# v4.15 : profils IES (Tools/generate_ies.py) : faisceau de la lampe torche et de la frontale (UTextureLightProfile)
+LIGHTS = ROOT + "/Lights"
+IES_EXT = (".ies",)
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
-MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade")
+MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade", "M_BR_WorldCloth", "MD_BR_Decal")
 # v4.8 : usages que chaque materiau maitre doit declarer (meme liste que BRMaterialBuilder::RequiredUsages en C++)
 _MODEL_USAGES = ("used_with_instanced_static_meshes", "used_with_skeletal_mesh", "used_with_nanite")
 USAGES = {
@@ -62,6 +77,9 @@ USAGES = {
     "M_BR_Skin": _MODEL_USAGES,
     "M_BR_WaterSurface": ("used_with_instanced_static_meshes",),
     "M_BR_PitShade": (),
+    "M_BR_WorldCloth": ("used_with_instanced_static_meshes",),
+    # v4.15 : decalques projetes (UDecalComponent) et taches au sol en instances (decalques sur maillage)
+    "MD_BR_Decal": ("used_with_instanced_static_meshes",),
 }
 # v4.8 : slots attendus apres l'import de chaque maillage a squelette (noms des materiaux du FBX) : la validation
 # signale un slot renomme par l'importeur (le jeu affecte les materiaux par nom, jamais par indice)
@@ -234,6 +252,26 @@ def import_textures(files, dest=TEX, ui=False):
             safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_EFFECTS)
         EAL.save_asset(path, only_if_is_dirty=False)
     log("%d textures importees dans %s" % (len(files), dest))
+
+
+def import_light_profiles(files):
+    """v4.15 : profils photometriques IES (LM-63) -> UTextureLightProfile (faisceau de la lampe torche et de la frontale).
+    Le jeu les lit par leur nom (UBRAssets::LightProfile) ; sans eux, la lampe garde son cone simple."""
+    if not files:
+        return
+    tasks = [make_task(raw("Lights", f), LIGHTS, os.path.splitext(f)[0]) for f in files]
+    tools().import_asset_tasks(tasks)
+    done = 0
+    for f in files:
+        name = os.path.splitext(f)[0]
+        path = LIGHTS + "/" + name
+        profile = unreal.load_asset(path) if exists(path) else None
+        if not isinstance(profile, unreal.TextureLightProfile):
+            warn("Profil IES non importe : %s (%s)" % (name, type(profile).__name__ if profile else "absent"))
+            continue
+        EAL.save_asset(path, only_if_is_dirty=False)
+        done += 1
+    log("%d profil(s) IES importe(s) dans %s" % (done, LIGHTS))
 
 
 def import_sounds(files):
@@ -607,7 +645,7 @@ class Graph(object):
     def uv0(self):
         return self.node(unreal.MaterialExpressionTextureCoordinate)
 
-    def tex(self, name, texture, uv, normal=False, out="RGB"):
+    def tex(self, name, texture, uv, normal=False, out="RGB", mip_bias=0):
         e = self.node(unreal.MaterialExpressionTextureSampleParameter2D)
         e.set_editor_property("parameter_name", name)
         if texture:
@@ -620,6 +658,14 @@ class Graph(object):
         elif texture and not is_srgb(texture):
             st = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR
         e.set_editor_property("sampler_type", st)
+        if mip_bias > 0:
+            # v4.15 : echantillon flou (mip_bias niveaux de mip au-dessus) : moyenne locale de la texture
+            mode = getattr(getattr(unreal, "TextureMipValueMode", None), "TMVM_MIP_BIAS", None)
+            if mode is None:
+                warn("TextureMipValueMode.TMVM_MIP_BIAS absent : echantillon %s non floute (occlusion de cavite nulle)" % name)
+            else:
+                safe_set(e, "mip_value_mode", mode)
+                safe_set(e, "const_mip_value", int(mip_bias))
         self.link(uv, e, "UVs")
         return (e, out)
 
@@ -720,10 +766,19 @@ def finish_material(m):
     EAL.save_loaded_asset(m, only_if_is_dirty=False)
 
 
-def build_world_material():
+def build_world_material(cloth=False):
     """Murs, sols, plafonds : projection triplanaire dans l'espace monde (jamais de texture etiree),
-    normal maps, salete a grande echelle, salete au pied des murs, caustiques animees (Poolrooms)."""
-    m = new_material("M_BR_World")
+    normal maps, salete a grande echelle, salete au pied des murs, caustiques animees (Poolrooms).
+    v4.15 : normales reorientees dans l'espace monde, occlusion de cavite (Cavity), reflectance (Specular), ligne de maree
+    des murs (TideLine) ; cloth=True : M_BR_WorldCloth, meme graphe en modele d'eclairage "tissu" (moquettes, Sheen)."""
+    m = new_material("M_BR_WorldCloth" if cloth else "M_BR_World")
+    # v4.15 : normales calculees dans l'espace monde (meme reglage que BRMaterialBuilder::Build)
+    safe_set(m, "tangent_space_normal", False)
+    if cloth:
+        cloth_model = getattr(unreal.MaterialShadingModel, "MSM_CLOTH", None)
+        if cloth_model is None:
+            raise RuntimeError("MaterialShadingModel.MSM_CLOTH absent")
+        safe_set(m, "shading_model", cloth_model)
     g = Graph(m)
     P = unreal.MaterialProperty
 
@@ -734,7 +789,8 @@ def build_world_material():
     uvy = g.mul(g.mask(d, "rb"), flip)
     uvz = g.mask(d, "rg")
 
-    a = g.abs(g.vertex_normal())
+    vn = g.vertex_normal()
+    a = g.abs(vn)
     a2 = g.mul(a, a)
     w4 = g.mul(a2, a2)
     wn = g.div(w4, g.dot(w4, g.c3(1.0, 1.0, 1.0)))
@@ -750,19 +806,20 @@ def build_world_material():
     mix_noise = g.tex("NoiseTex", noise_tex, g.div(xy, g.const(1300.0)), out="B")
     mixz = g.mul(g.sat(g.div(g.sub(mix_noise, g.const(0.45)), g.const(0.1))), anti)
 
-    def tri(name, texture, normal=False):
+    def tri3(name, texture, normal=False):
+        """Trois projections (X, Y, Z ; Z melange a son 2e echantillon tourne). Normales : pente du 2e echantillon ramenee
+        dans le repere des UV d'origine (rotation inverse)"""
         sx = g.tex(name, texture, uvx, normal)
         sy = g.tex(name, texture, uvy, normal)
         sz1 = g.tex(name, texture, uvz, normal)
         sz2 = g.tex(name, texture, uvz2, normal)
         if normal:
-            # Pente du 2e echantillon ramenee dans le repere des UV d'origine (rotation inverse)
             nxy = g.mask(sz2, "rg")
             sz2 = g.append(g.append(g.dot(nxy, g.c2(0.8, 0.6)), g.dot(nxy, g.c2(-0.6, 0.8))), g.mask(sz2, "b"))
-        sz = g.lerp(sz1, sz2, mixz)
-        return g.add(g.add(g.mul(sx, wx), g.mul(sy, wy)), g.mul(sz, wz))
+        return sx, sy, g.lerp(sz1, sz2, mixz)
 
-    col = tri("BaseTex", load_tex("T_L0_Wallpaper"))
+    cx, cy, cz = tri3("BaseTex", load_tex("T_L0_Wallpaper"))
+    col = g.add(g.add(g.mul(cx, wx), g.mul(cy, wy)), g.mul(cz, wz))
 
     # v4.3 : variation de teinte a grande echelle (sols), et taches d'humidite dessinees a l'echelle du monde (Stains)
     macro_uv = g.div(g.append(g.dot(xy, g.c2(0.6, 0.8)), g.dot(xy, g.c2(-0.8, 0.6))), g.const(2300.0))
@@ -799,6 +856,13 @@ def build_world_material():
     fmod = g.sub(g.const(1.0), g.mul(fg, g.add(g.const(0.45), g.mul(fn, g.const(0.55)))))
     col = g.mul(col, fmod)
 
+    # v4.15 : ligne de maree au-dessus de la plinthe (eau remontee puis sechee) et bande plus sombre sous le plafond, a la
+    # hauteur du monde (la texture, elle, se repete en hauteur) ; TideLine = 0 : rien
+    tide = g.custom("BRTideLine", BR_TIDE_LINE_HLSL, [
+        ("WP", wp), ("NZ", g.mask(vn, "b")), ("Amount", g.scalar("TideLine", 0.0)), ("Top", g.scalar("WallTop", 290.0)),
+        ("Noise", g.texobj("TideNoise", noise_tex))], output="CMOT_FLOAT3")
+    col = g.mul(col, tide)
+
     # Caustiques (reflets de l'eau sur le carrelage), deformees par les vagues simulees autour du joueur
     cm = g.custom("BRCaustics", BR_CAUSTICS_HLSL, [
         ("WP", wp), ("Wz", wz), ("T", g.time()), ("Amount", g.scalar("Caustics", 0.0)),
@@ -810,7 +874,7 @@ def build_world_material():
 
     # v4.1 : flaques et sol mouille (reflets ray traces : rugosite quasi nulle, surface plane, ronds de gouttes)
     pud = g.custom("BRPuddles", BR_PUDDLES_HLSL, [
-        ("WP", wp), ("N", g.vertex_normal()), ("T", g.time()), ("Amount", g.scalar("Puddles", 0.0)),
+        ("WP", wp), ("N", vn), ("T", g.time()), ("Amount", g.scalar("Puddles", 0.0)),
         ("Wet", g.scalar("Wetness", 0.0)), ("Tex", g.texobj("PuddleTex", grime_tex)), ("Noise", g.texobj("PuddleNoise", noise_tex)),
         ("WaterZ", g.scalar("WaterLine", -1.0))],
         output="CMOT_FLOAT4")
@@ -825,18 +889,25 @@ def build_world_material():
     step_x0 = g.sat(g.mul(g.sub(wx, wy), g.const(1000.0)))
     step_z0 = g.sat(g.mul(g.sub(wz, g.const(0.5)), g.const(1000.0)))
     uv_dom = g.lerp(g.lerp(uvy, uvx, step_x0), uvz, step_z0)
-    rt_col = g.mul(g.mul(g.tex("BaseTex", load_tex("T_L0_Wallpaper"), uv_dom), g.lerp(g.const(1.0), gs, g.scalar("Grime", 0.35))),
-                   g.vector("Tint", (1, 1, 1, 1)))
+    dom_sharp = g.tex("BaseTex", load_tex("T_L0_Wallpaper"), uv_dom)
+    rt_col = g.mul(g.mul(dom_sharp, g.lerp(g.const(1.0), gs, g.scalar("Grime", 0.35))), g.vector("Tint", (1, 1, 1, 1)))
     g.output(g.rt_switch(shaded, rt_col), P.MP_BASE_COLOR)
+
+    # v4.15 : occlusion de cavite : la ou la texture est plus sombre que sa moyenne locale (meme echantillon 4 mips plus haut,
+    # ~16 texels) : creux entre les boucles de la moquette, fissures des dalles, joints. La lumiere indirecte (Lumen) et le
+    # reflet y sont attenues. Cavity = 0 : aucune occlusion (rendu d'avant)
+    dom_blur = g.tex("BaseTex", load_tex("T_L0_Wallpaper"), uv_dom, mip_bias=4)
+    lum_w = g.c3(0.3, 0.59, 0.11)
+    lum_sharp = g.dot(dom_sharp, lum_w)
+    lum_blur = g.dot(dom_blur, lum_w)
+    cav = g.mul(g.sat(g.mul(g.div(g.sub(lum_blur, lum_sharp), g.add(lum_blur, g.const(0.03))), g.const(3.0))), g.scalar("Cavity", 0.0))
+    g.output(g.sub(g.const(1.0), g.mul(cav, g.const(0.85))), P.MP_AMBIENT_OCCLUSION)
 
     # Rugosite variable (zones plus lisses / plus mates), puis mouillee, puis miroir dans les flaques
     rv = g.tex("GrimeTex", grime_tex, g.mul(guv, g.const(3.1)), out="B")
     # v4.7 : carte de rugosite de la matiere (<Texture>_R, lineaire, relative a Roughness : 0,5 = valeur nominale),
     # un seul echantillon projete sur l'axe dominant de la face ; RoughContrast = 0 : rugosite v4.6
-    step_x = g.sat(g.mul(g.sub(wx, wy), g.const(1000.0)))
-    step_z = g.sat(g.mul(g.sub(wz, g.const(0.5)), g.const(1000.0)))
-    uvr = g.lerp(g.lerp(uvy, uvx, step_x), uvz, step_z)
-    rmap = g.tex("RoughTex", noise_tex, uvr, out="R")
+    rmap = g.tex("RoughTex", noise_tex, uv_dom, out="R")
     rcon = g.scalar("RoughContrast", 0.0)
     grime_var = g.mul(g.sub(rv, g.const(0.5)), g.sub(g.const(0.3), g.mul(rcon, g.const(0.18))))
     rough = g.sat(g.add(g.add(g.scalar("Roughness", 0.85), grime_var), g.mul(g.sub(rmap, g.const(0.5)), g.mul(rcon, g.const(2.0)))))
@@ -845,12 +916,25 @@ def build_world_material():
     rough = g.lerp(rough, g.const(0.02), puddle)
     g.output(g.rt_switch(rough, g.scalar("Roughness", 0.85)), P.MP_ROUGHNESS)
     g.output(g.mul(g.scalar("Metallic", 0.0), g.sub(g.const(1.0), puddle)), P.MP_METALLIC)
+    # v4.15 : reflectance propre a la surface (Specular : 0,5 = 4 %, moquette 0,3, papier peint 0,4), attenuee dans les
+    # creux ; l'eau d'une flaque reflete comme l'eau (0,35, comme M_BR_WaterSurface)
+    spec = g.mul(g.scalar("Specular", 0.5), g.sub(g.const(1.0), g.mul(cav, g.const(0.5))))
+    g.output(g.lerp(spec, g.const(0.35), puddle), P.MP_SPECULAR)
     g.output(g.add(g.mul(base, g.scalar("SelfIllum", 0.0)), g.vector("Emissive", (0, 0, 0, 1))), P.MP_EMISSIVE_COLOR)
 
-    # Normal maps (espace tangent, melange triplanaire) ; l'eau d'une flaque est plane, seules les gouttes la rident
-    nrm = tri("NormalTex", load_tex("T_FlatNormal"), normal=True)
-    nrm = g.lerp(g.c3(0.0, 0.0, 1.0), nrm, g.scalar("NormalStrength", 1.0))
-    g.output(g.rt_switch(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), g.c3(0.0, 0.0, 1.0)), P.MP_NORMAL)
+    # v4.15 : normales dans l'espace monde : chaque projection a ses propres axes (X -> (Y, -Z), Y -> (X, -Z), Z -> (X, Y)) ;
+    # avant, les trois normales etaient melangees telles quelles dans le repere tangent du cube (relief faux sur certaines
+    # faces). L'eau d'une flaque est plane (normale monde du sol), seules les gouttes la rident
+    nx, ny, nz = tri3("NormalTex", load_tex("T_FlatNormal"), normal=True)
+    nrm = g.custom("BRTriNormal", BR_TRI_NORMAL_HLSL, [
+        ("TX", nx), ("TY", ny), ("TZ", nz), ("VN", vn), ("W", wn), ("Strength", g.scalar("NormalStrength", 1.0))],
+        output="CMOT_FLOAT3")
+    g.output(g.rt_switch(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), vn), P.MP_NORMAL)
+
+    if cloth:
+        # v4.15 : moquette : lustre des fibres (duvet un peu plus clair que la matiere), perdu quand elle est mouillee
+        g.output(g.mul(shaded, g.vector("FuzzTint", (1.3, 1.25, 1.15, 1))), P.MP_SUBSURFACE_COLOR)
+        g.output(g.mul(g.mul(g.scalar("Sheen", 0.8), g.sub(g.const(1.0), wet)), g.sub(g.const(1.0), puddle)), P.MP_CUSTOM_DATA0)
     finish_material(m)
     return m
 
@@ -876,6 +960,31 @@ def build_pit_shade_material():
     ease = g.mul(g.mul(t, g.sub(g.const(2.0), t)), g.scalar("PitShadeAmount", 1.0))
     factor = g.lerp(g.const(1.0), g.scalar("PitShadeFloor", 0.04), ease)
     g.output(g.mul(scene, factor), P.MP_EMISSIVE_COLOR)
+    finish_material(m)
+    return m
+
+
+def build_decal_material():
+    """v4.15 : decalques d'usure (meme graphe que BuildDecal en C++). Domaine "decalque differe", melange translucide :
+    couleur et rugosite ecrites dans le DBuffer (la normale n'est pas remplacee : le relief du papier peint et de la moquette
+    reste visible sous une tache). Une case de l'atlas T_Decal_Atlas (AtlasCell : decalage u, v, echelle u, v) ; les UV sont
+    ceux de la projection (UDecalComponent) ou du maillage (plans des taches au sol, en instances : usage ISM)."""
+    m = new_material("MD_BR_Decal")
+    domain = getattr(unreal.MaterialDomain, "MD_DEFERRED_DECAL", None)
+    if domain is None:
+        raise RuntimeError("MaterialDomain.MD_DEFERRED_DECAL absent")
+    safe_set(m, "material_domain", domain)
+    safe_set(m, "blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    g = Graph(m)
+    P = unreal.MaterialProperty
+    cell = g.vector4("AtlasCell", (0.0, 0.0, 1.0, 1.0))
+    uv = g.add(g.mul(g.uv0(), g.mask(cell, "ba")), g.mask(cell, "rg"))
+    t = g.tex("DecalTex", load_tex("T_Decal_Atlas"), uv, out="RGBA")[0]
+    g.output(g.mul((t, "RGB"), g.vector("DecalTint", (1, 1, 1, 1))), P.MP_BASE_COLOR)
+    g.output(g.mul((t, "A"), g.scalar("DecalOpacity", 1.0)), P.MP_OPACITY)
+    g.output(g.scalar("DecalRough", 0.8), P.MP_ROUGHNESS)
+    g.output(g.scalar("DecalSpecular", 0.4), P.MP_SPECULAR)
+    g.output(g.const(0.0), P.MP_METALLIC)
     finish_material(m)
     return m
 
@@ -989,6 +1098,39 @@ BR_CAUSTICS_HLSL = (
     "float above = WP.z - 45.0;\n"
     "float fade = lerp(above > 0.0 ? 0.75 * saturate(1.0 - above / 200.0) : saturate(1.0 + above / 300.0), 1.0, Wz);\n"
     "return 1.0 + Amount * fade * (k * 1.5 - 0.27);\n")
+
+
+BR_TRI_NORMAL_HLSL = (
+    "// v4.15 : normales de la projection triplanaire dans l'espace monde. Entrees : TX, TY, TZ (normales de la texture,\n"
+    "// espace tangent de chaque projection), VN (normale du sommet), W (poids des projections), Strength (0 : normale du\n"
+    "// sommet). Projection X : U = +Y, V = -Z ; projection Y : U = +X, V = -Z ; projection Z : U = +X, V = +Y.\n"
+    "float sx = VN.x >= 0.0 ? 1.0 : -1.0;\n"
+    "float sy = VN.y >= 0.0 ? 1.0 : -1.0;\n"
+    "float sz = VN.z >= 0.0 ? 1.0 : -1.0;\n"
+    "float3 nx = float3(TX.z * sx, TX.x, -TX.y);\n"
+    "float3 ny = float3(TY.x, TY.z * sy, -TY.y);\n"
+    "float3 nz = float3(TZ.x, TZ.y, TZ.z * sz);\n"
+    "float3 n = nx * W.x + ny * W.y + nz * W.z;\n"
+    "return normalize(lerp(VN, n, saturate(Strength)));\n")
+
+
+BR_TIDE_LINE_HLSL = (
+    "// v4.15 : ligne de maree au pied des murs (eau remontee dans le papier puis sechee : lisere brun, papier plus sombre\n"
+    "// dessous) et bande plus sombre sous le plafond. Entrees : WP (position monde, cm), NZ (normale du sommet, z), Amount\n"
+    "// (0..1), Top (hauteur du plafond, cm), Noise (T_NoiseLF). Sortie : multiplicateur de la couleur (1 hors des murs).\n"
+    "if (Amount <= 0.0) return float3(1.0, 1.0, 1.0);\n"
+    "float wall = saturate(1.0 - abs(NZ) * 1.5);\n"
+    "float u = WP.x + WP.y;\n"
+    "float n1 = Texture2DSample(Noise, NoiseSampler, float2(u / 410.0, 0.37)).r;\n"
+    "float n2 = Texture2DSample(Noise, NoiseSampler, float2(u / 97.0, 0.71)).g;\n"
+    "float h = 13.0 + 15.0 * n1 + 4.0 * (n2 - 0.5);\n"
+    "float z = WP.z;\n"
+    "float below = saturate((h - z) / 4.0 + 0.5) * saturate(z / 2.0 + 1.0);\n"
+    "float edge = exp(-pow((z - h) / 1.2, 2.0));\n"
+    "float3 m = lerp(float3(1.0, 1.0, 1.0), float3(0.9, 0.86, 0.74), below * 0.75);\n"
+    "m *= lerp(float3(1.0, 1.0, 1.0), float3(0.74, 0.65, 0.47), edge * 0.8);\n"
+    "m *= 1.0 - 0.08 * smoothstep(Top - 45.0, Top - 2.0, z);\n"
+    "return lerp(float3(1.0, 1.0, 1.0), m, saturate(Amount) * wall);\n")
 
 
 BR_PUDDLES_HLSL = (
@@ -1117,7 +1259,8 @@ def build_materials():
                 warn("Suppression impossible %s : %s" % (name, e))
     jobs = (("M_BR_World", build_world_material), ("M_BR_Mesh", build_mesh_material),
             ("M_BR_Skin", lambda: build_mesh_material("M_BR_Skin", skin=True)),
-            ("M_BR_WaterSurface", build_water_surface_material), ("M_BR_PitShade", build_pit_shade_material))
+            ("M_BR_WaterSurface", build_water_surface_material), ("M_BR_PitShade", build_pit_shade_material),
+            ("M_BR_WorldCloth", lambda: build_world_material(cloth=True)), ("MD_BR_Decal", build_decal_material))
     for name, fn in jobs:
         try:
             fn()
@@ -1224,6 +1367,8 @@ def validate(verbose=False):
         problems.append(("sound", os.path.splitext(f)[0], "absent"))
     for f in missing_in("Meshes", MESH, (".fbx",)):
         problems.append(("mesh", os.path.splitext(f)[0], "absent"))
+    for f in missing_in("Lights", LIGHTS, IES_EXT):
+        problems.append(("light", os.path.splitext(f)[0], "absent"))
     for name in HAZMAT_TEXTURES:
         tex = load_tex(name)
         if tex is None:
@@ -1308,6 +1453,8 @@ def repair():
         import_sounds([f for f in list_raw("Sounds", (".wav",)) if os.path.splitext(f)[0] in cats["sound"]])
     if "mesh" in cats:
         import_meshes([f for f in list_raw("Meshes", (".fbx",)) if os.path.splitext(f)[0] in cats["mesh"]])
+    if "light" in cats:
+        import_light_profiles([f for f in list_raw("Lights", IES_EXT) if os.path.splitext(f)[0] in cats["light"]])
     if "skeletal" in cats:
         import_skeletal([f for f in list_raw("Skeletal", (".fbx",)) if os.path.splitext(f)[0] in cats["skeletal"]])
     if "map" in cats:
@@ -1331,7 +1478,7 @@ def needs_setup():
         return True
     return bool(materials_missing() or missing_in("Textures", TEX, IMG_EXT) or missing_in("Icons", UI, (".png",))
                 or missing_in("Sounds", SND, (".wav",)) or missing_in("Meshes", MESH, (".fbx",))
-                or missing_in("Skeletal", MESH, (".fbx",)) or not exists(MAP_PATH))
+                or missing_in("Skeletal", MESH, (".fbx",)) or missing_in("Lights", LIGHTS, IES_EXT) or not exists(MAP_PATH))
 
 
 # ---------------------------------------------------------------------------
@@ -1344,17 +1491,20 @@ KIT_MAT = KIT + "/Materials"
 # Materiaux du kit (noms des slots des FBX) : textures T_L0K_<Nom>_BaseColor / _ORM / _Normal, teinte, couleur de sommet
 # (profondeur des puits), emission ; couleur unie ; decal (masque alpha). Meme table que le README du kit (section 7)
 KIT_MATERIALS = {
-    "M_L0_Wallpaper": {"tex": "T_L0K_Wallpaper"},
-    "M_L0_Wallpaper_Aged": {"tex": "T_L0K_Wallpaper", "tint": (0.93, 0.9, 0.82)},
-    "M_L0_Carpet": {"tex": "T_L0K_Carpet"},
-    "M_L0_CeilingTile": {"tex": "T_L0K_CeilingTile"},
+    # v4.15 : "world" : texture projetee dans l'espace monde (M_L0K_PbrWorld, cm par repetition, comme les surfaces du jeu) :
+    # le motif ne recommence plus a chaque module ; "tide" : ligne de maree et bande sous le plafond ; "aged" : la teinte du
+    # papier jauni s'estompe vers les bouts du module ; "spec" : reflectance
+    "M_L0_Wallpaper": {"tex": "T_L0K_Wallpaper", "world": 106.0, "tide": 1.0, "spec": 0.4},
+    "M_L0_Wallpaper_Aged": {"tex": "T_L0K_Wallpaper", "tint": (0.93, 0.9, 0.82), "world": 106.0, "tide": 1.0, "spec": 0.4, "aged": 1.0},
+    "M_L0_Carpet": {"tex": "T_L0K_Carpet", "world": 160.0, "spec": 0.3},
+    "M_L0_CeilingTile": {"tex": "T_L0K_CeilingTile", "world": 122.0},
     "M_L0_Concrete": {"tex": "T_L0K_Concrete"},
     "M_L0_PitConcrete": {"tex": "T_L0K_Concrete", "vertex": 1.0},
     "M_L0_Baseboard": {"tex": "T_L0K_Baseboard"},
     "M_L0_FixtureMetal": {"tex": "T_L0K_FixtureMetal"},
     "M_L0_DoorSteel": {"tex": "T_L0K_DoorSteel"},
     "M_L0_DoorHardware": {"tex": "T_L0K_Hardware"},
-    "M_L0_LightDiffuser": {"color_tex": "T_L0K_Diffuser_Emissive", "emissive": 6.0, "rough": 0.35},
+    "M_L0_LightDiffuser": {"color_tex": "T_L0K_Diffuser_Emissive", "base_tex": "T_L0K_Diffuser_BaseColor", "emissive": 6.0, "rough": 0.35},
     "M_L0_LightDiffuser_Off": {"color": (0.55, 0.56, 0.52), "rough": 0.4},
     "M_L0_DraftGlow": {"color": (0.7, 0.85, 1.0), "emissive": 6.0, "rough": 0.5},
     "M_L0_PitDark": {"color": (0.008, 0.008, 0.007), "rough": 1.0},
@@ -1364,11 +1514,26 @@ KIT_MATERIALS = {
     "M_L0_DecalCeiling": {"decal": "T_L0K_Decal_CeilingStain"},
     "M_L0_DecalCarpet": {"decal": "T_L0K_Decal_CarpetDamp"},
 }
+# Materiaux maitres du kit (sorte -> nom). v4.15 : PbrWorld (textures projetees dans l'espace monde), ColorTex (couleur et
+# emission d'une image : diffuseur des neons)
+KIT_MASTERS = {"pbr": "M_L0K_Pbr", "pbrworld": "M_L0K_PbrWorld", "color": "M_L0K_Color", "colortex": "M_L0K_ColorTex", "decal": "M_L0K_Decal"}
 # Modules que le jeu pose dans le Level 0 genere (ABRChunk, v4.14) : le kit n'est utilise que s'ils sont tous la
 # (meme liste que KitModules dans BRAssets.cpp)
 KIT_REQUIRED = ("SM_L0_Wall_350", "SM_L0_Wall_Aged_350", "SM_L0_Doorway", "SM_L0_DoorCasing", "SM_L0_Baseboard_290", "SM_L0_Baseboard_070",
                 "SM_L0_Wall_Corner", "SM_L0_Wall_JunctionT", "SM_L0_Wall_JunctionX", "SM_L0_Wall_End", "SM_L0_Wall_Straight", "SM_L0_Pillar",
                 "SM_L0_ServiceDoor_Wall")
+
+# v4.15 : normale de la texture projetee sur l'axe dominant de la face, dans l'espace monde (memes axes que la projection
+# triplanaire de M_BR_World : X -> (Y, -Z), Y -> (X, -Z), Z -> (X, Y)) ; materiau maitre M_L0K_PbrWorld
+BR_AXIS_NORMAL_HLSL = (
+    "// v4.15 (kit du Level 0) : normale de la texture projetee sur l'axe dominant de la face, dans l'espace monde (memes axes\n"
+    "// que la projection triplanaire de M_BR_World). Entrees : T (normale de la texture, espace tangent), VN (normale du sommet).\n"
+    "float3 a = abs(VN);\n"
+    "float3 n;\n"
+    "if (a.z >= 0.5) n = float3(T.x, T.y, T.z * (VN.z >= 0.0 ? 1.0 : -1.0));\n"
+    "else if (a.x >= a.y) n = float3(T.z * (VN.x >= 0.0 ? 1.0 : -1.0), T.x, -T.y);\n"
+    "else n = float3(T.x, T.z * (VN.y >= 0.0 ? 1.0 : -1.0), -T.y);\n"
+    "return normalize(n);\n")
 
 
 def kit_raw(*parts):
@@ -1382,8 +1547,52 @@ def _kit_files(sub, exts):
     return [f for f in sorted(os.listdir(folder)) if os.path.splitext(f)[1].lower() in exts]
 
 
+def _kit_world_pbr(g, m, P):
+    """v4.15 : M_L0K_PbrWorld : papier peint, moquette, dalles projetes dans l'espace monde sur l'axe dominant de la face
+    (meme projection et meme echelle, TexScale en cm, que les surfaces du jeu : les motifs des modules et des boites du
+    generateur se raccordent), normale reorientee dans l'espace monde. Ligne de maree (TideLine, meme code que M_BR_World).
+    Papier jauni : la teinte s'estompe vers les bouts du module (position locale) et par plaques (AgedFade) : plus de marche
+    de teinte d'un module a l'autre."""
+    safe_set(m, "tangent_space_normal", False)
+    wp = g.world_pos()
+    d = g.div(wp, g.scalar("TexScale", 120.0))
+    flip = g.c2(1.0, -1.0)
+    uvx = g.mul(g.mask(d, "gb"), flip)
+    uvy = g.mul(g.mask(d, "rb"), flip)
+    uvz = g.mask(d, "rg")
+    vn = g.vertex_normal()
+    a = g.abs(vn)
+    step_x = g.sat(g.mul(g.sub(g.mask(a, "r"), g.mask(a, "g")), g.const(1000.0)))
+    step_z = g.sat(g.mul(g.sub(g.mask(a, "b"), g.const(0.5)), g.const(1000.0)))
+    uv = g.lerp(g.lerp(uvy, uvx, step_x), uvz, step_z)
+    noise_tex = load_tex("T_NoiseLF")
+    lp_cls = getattr(unreal, "MaterialExpressionLocalPosition", None)
+    if lp_cls is not None:
+        # module de mur : 290 cm le long de son X local ; teinte entiere sur les 150 cm du milieu, nulle aux bouts
+        ends = g.sat(g.div(g.sub(g.const(145.0), g.abs(g.mask(g.node(lp_cls), "r"))), g.const(70.0)))
+    else:
+        ends = g.const(1.0)
+    blot_uv = g.div(g.append(g.dot(g.mask(wp, "rg"), g.c2(0.707, 0.707)), g.mask(wp, "b")), g.const(260.0))
+    blot = g.sat(g.sub(g.mul(g.tex("NoiseTex", noise_tex, blot_uv, out="G"), g.const(1.6)), g.const(0.1)))
+    aged = g.lerp(g.const(1.0), g.mul(ends, blot), g.scalar("AgedFade", 0.0))
+    tint = g.lerp(g.c3(1.0, 1.0, 1.0), g.vector("Tint", (1, 1, 1, 1)), aged)
+    base = g.mul(g.tex("BaseColor", load_tex("T_L0K_Wallpaper_BaseColor", KIT_TEX), uv), tint)
+    tide = g.custom("BRTideLine", BR_TIDE_LINE_HLSL, [
+        ("WP", wp), ("NZ", g.mask(vn, "b")), ("Amount", g.scalar("TideLine", 0.0)), ("Top", g.scalar("WallTop", 290.0)),
+        ("Noise", g.texobj("TideNoise", noise_tex))], output="CMOT_FLOAT3")
+    g.output(g.mul(base, tide), P.MP_BASE_COLOR)
+    orm = g.tex("ORM", load_tex("T_L0K_Wallpaper_ORM", KIT_TEX), uv)[0]
+    g.output((orm, "R"), P.MP_AMBIENT_OCCLUSION)
+    g.output((orm, "G"), P.MP_ROUGHNESS)
+    g.output((orm, "B"), P.MP_METALLIC)
+    g.output(g.scalar("Specular", 0.5), P.MP_SPECULAR)
+    nt = g.tex("Normal", load_tex("T_L0K_Wallpaper_Normal", KIT_TEX), uv, normal=True)
+    g.output(g.custom("BRAxisNormal", BR_AXIS_NORMAL_HLSL, [("T", nt), ("VN", vn)], output="CMOT_FLOAT3"), P.MP_NORMAL)
+
+
 def _kit_master(name, kind):
-    """Materiaux maitres du kit : 'pbr' (cartes BaseColor / ORM / Normal), 'color' (couleur unie), 'decal' (masque)"""
+    """Materiaux maitres du kit : 'pbr' (cartes BaseColor / ORM / Normal), 'pbrworld' (v4.15 : memes cartes projetees dans
+    l'espace monde), 'color' (couleur unie), 'colortex' (v4.15 : couleur et emission d'images), 'decal' (masque)"""
     path = KIT_MAT + "/" + name
     if exists(path):
         EAL.delete_asset(path)
@@ -1403,11 +1612,20 @@ def _kit_master(name, kind):
         g.output((orm, "B"), P.MP_METALLIC)
         g.output(g.tex("Normal", load_tex("T_L0K_Wallpaper_Normal", KIT_TEX), uv, normal=True), P.MP_NORMAL)
         g.output(g.mul(g.tex("EmissiveTex", black_tex(), uv), g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
+    elif kind == "pbrworld":
+        _kit_world_pbr(g, m, P)
     elif kind == "color":
         col = g.vector("Color", (0.8, 0.8, 0.8, 1))
         g.output(col, P.MP_BASE_COLOR)
         g.output(g.scalar("Roughness", 0.8), P.MP_ROUGHNESS)
         g.output(g.mul(col, g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
+    elif kind == "colortex":
+        # v4.15 : diffuseur des neons : prismes et bords de l'image (T_L0K_Diffuser_BaseColor / _Emissive) sur toute la face
+        col = g.vector("Color", (1.0, 0.97, 0.88, 1))
+        diffuser = load_tex("T_L0K_Diffuser_Emissive", KIT_TEX)
+        g.output(g.mul(col, g.tex("ColorTex", load_tex("T_L0K_Diffuser_BaseColor", KIT_TEX) or diffuser, uv)), P.MP_BASE_COLOR)
+        g.output(g.scalar("Roughness", 0.35), P.MP_ROUGHNESS)
+        g.output(g.mul(g.mul(col, g.tex("EmissiveTex", diffuser, uv)), g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
     else:
         safe_set(m, "blend_mode", unreal.BlendMode.BLEND_MASKED)
         safe_set(m, "two_sided", True)
@@ -1417,6 +1635,37 @@ def _kit_master(name, kind):
         g.output(g.scalar("Roughness", 0.9), P.MP_ROUGHNESS)
     finish_material(m)
     return m
+
+
+def _kit_kind(spec):
+    """Sorte de materiau maitre d'un materiau du kit (KIT_MATERIALS)"""
+    if "tex" in spec:
+        return "pbrworld" if "world" in spec else "pbr"
+    if "decal" in spec:
+        return "decal"
+    return "colortex" if "color_tex" in spec else "color"
+
+
+def _kit_masters():
+    """Construit les materiaux maitres du kit. v4.15 : un maitre nouveau qui echoue retombe sur son equivalent d'avant
+    (PbrWorld -> Pbr : UV des modules ; ColorTex -> Color : couleur unie) : le kit reste complet"""
+    masters = {}
+    for kind in ("pbr", "color", "decal", "pbrworld", "colortex"):
+        try:
+            masters[kind] = _kit_master(KIT_MASTERS[kind], kind)
+        except Exception as e:
+            warn("Kit : materiau maitre %s non construit (%s)" % (KIT_MASTERS[kind], e))
+            if kind in ("pbr", "color", "decal"):
+                raise
+            path = KIT_MAT + "/" + KIT_MASTERS[kind]
+            if exists(path):
+                try:
+                    EAL.delete_asset(path)
+                except Exception:
+                    pass
+    masters.setdefault("pbrworld", masters["pbr"])
+    masters.setdefault("colortex", masters["color"])
+    return masters
 
 
 def _kit_instance(name, parent, spec):
@@ -1436,17 +1685,26 @@ def _kit_instance(name, parent, spec):
             MEL.set_material_instance_vector_parameter_value(mi, "Tint", unreal.LinearColor(*(tuple(spec["tint"]) + (1.0,))))
         if "vertex" in spec:
             MEL.set_material_instance_scalar_parameter_value(mi, "VertexDark", spec["vertex"])
+        if "world" in spec:
+            # v4.15 : echelle (cm par repetition), ligne de maree, teinte estompee du papier jauni, reflectance
+            MEL.set_material_instance_scalar_parameter_value(mi, "TexScale", spec["world"])
+            MEL.set_material_instance_scalar_parameter_value(mi, "TideLine", spec.get("tide", 0.0))
+            MEL.set_material_instance_scalar_parameter_value(mi, "AgedFade", spec.get("aged", 0.0))
+            MEL.set_material_instance_scalar_parameter_value(mi, "Specular", spec.get("spec", 0.5))
     elif "decal" in spec:
         t = load_tex(spec["decal"], KIT_TEX)
         if t:
             MEL.set_material_instance_texture_parameter_value(mi, "Decal", t)
     else:
         if "color_tex" in spec:
-            # Diffuseur : couleur et emission de la meme image (pas d'ORM ni de normale)
-            t = load_tex(spec["color_tex"], KIT_TEX)
+            # v4.15 : diffuseur texture : couleur de l'image de base, emission de l'image emissive (prismes, bords)
             MEL.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(1.0, 0.97, 0.88, 1.0))
-            if t:
-                warn("Kit : %s : diffuseur en couleur unie (image %s gardee pour une version texturee)" % (name, spec["color_tex"]))
+            for param, tex_name in (("EmissiveTex", spec["color_tex"]), ("ColorTex", spec.get("base_tex", spec["color_tex"]))):
+                t = load_tex(tex_name, KIT_TEX)
+                if t:
+                    MEL.set_material_instance_texture_parameter_value(mi, param, t)
+                else:
+                    warn("Kit : texture %s absente pour %s" % (tex_name, name))
         else:
             MEL.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(*(tuple(spec["color"]) + (1.0,))))
         MEL.set_material_instance_scalar_parameter_value(mi, "Roughness", spec.get("rough", 0.8))
@@ -1514,10 +1772,9 @@ def import_level0_kit(force=False):
                 # echantillonneur "Linear Color" (une compression Masks exigerait un echantillonneur Masks)
                 safe_set(t, "srgb", False)
             EAL.save_asset(KIT_TEX + "/" + name, only_if_is_dirty=False)
-        masters = {k: _kit_master("M_L0K_" + k.capitalize(), k) for k in ("pbr", "color", "decal")}
+        masters = _kit_masters()
         for name, spec in KIT_MATERIALS.items():
-            kind = "pbr" if "tex" in spec else ("decal" if "decal" in spec else "color")
-            _kit_instance(name, masters[kind], spec)
+            _kit_instance(name, masters[_kit_kind(spec)], spec)
         tasks = [make_task(kit_raw("FBX", f), KIT_MESH, os.path.splitext(f)[0], _kit_fbx_options(_fbx_has_ucx(kit_raw("FBX", f)))) for f in fbx]
         tools().import_asset_tasks(tasks)
     # Materiaux par nom de slot (le jeu garde les materiaux du maillage pour le kit)
@@ -1584,12 +1841,15 @@ def run(force=False):
             if installed_material_version() < mv:
                 msh += [f for f in files if f not in msh and os.path.isfile(raw("Meshes", f))]
     mats = list(MATERIALS) if (force or installed_material_version() < MATERIAL_VERSION) else materials_missing()
-    log("Installation v%d : %d textures, %d icones, %d sons, %d modeles, %d materiaux"
-        % (VERSION, len(tex), len(ico), len(snd), len(msh), len(mats)))
-    with unreal.ScopedSlowTask(6, "The Backrooms : import des ressources...") as task:
+    ies = list_raw("Lights", IES_EXT) if force else missing_in("Lights", LIGHTS, IES_EXT)
+    log("Installation v%d : %d textures, %d icones, %d sons, %d modeles, %d materiaux, %d profils IES"
+        % (VERSION, len(tex), len(ico), len(snd), len(msh), len(mats), len(ies)))
+    with unreal.ScopedSlowTask(7, "The Backrooms : import des ressources...") as task:
         task.make_dialog(True)
         task.enter_progress_frame(1, "Textures (%d)" % len(tex))
         import_textures(tex)
+        task.enter_progress_frame(1, "Profils IES (%d)" % len(ies))
+        import_light_profiles(ies)
         task.enter_progress_frame(1, "Icones (%d)" % len(ico))
         import_textures(ico, UI, ui=True)
         task.enter_progress_frame(1, "Sons (%d)" % len(snd))

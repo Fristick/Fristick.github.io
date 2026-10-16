@@ -14,6 +14,7 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureLightProfile.h"
 #include "TextureResource.h"
 #include "ImageCore.h"
 #include "ImageUtils.h"
@@ -400,8 +401,9 @@ namespace
 		TArray<FAssetData> Assets;
 		Registry.GetAssetsByPath(FName(TEXT("/Game/Backrooms")), Assets, true);
 		GCatalogBuilt = true;
+		// v4.15 : profils IES de la lampe (TextureLightProfile) : ensemble commun, prets avant le premier allumage
 		static const FName Classes[] = { FName(TEXT("StaticMesh")), FName(TEXT("SkeletalMesh")), FName(TEXT("Texture2D")), FName(TEXT("SoundWave")),
-			FName(TEXT("Material")) };
+			FName(TEXT("Material")), FName(TEXT("TextureLightProfile")) };
 		for (const FAssetData& Data : Assets)
 		{
 			const FName Class = Data.AssetClassPath.GetAssetName();
@@ -1117,6 +1119,31 @@ bool UBRAssets::UseLevel0Kit()
 	return KitState == 1 && IsLevel0KitWanted();
 }
 
+UStaticMesh* UBRAssets::KitCellSlab(bool bCeiling)
+{
+	const TCHAR* Name = bCeiling ? TEXT("SM_L0_Ceiling_350") : TEXT("SM_L0_Floor_350");
+	UStaticMesh* M = KitMesh(FName(Name));
+	int32& State = KitSlabState[bCeiling ? 1 : 0];
+	if (State < 0)
+	{
+		bool bOk = false;
+		if (M)
+		{
+			// Cellule de 350 x 350 cm centree sur l'origine ; sol : dessus a 0 (dalle de 20 cm) ; plafond : dessous a 290 cm
+			const FBox Bx = M->GetBoundingBox();
+			const bool bXY = FMath::IsNearlyEqual(Bx.Min.X, -175.0, 1.5) && FMath::IsNearlyEqual(Bx.Max.X, 175.0, 1.5)
+				&& FMath::IsNearlyEqual(Bx.Min.Y, -175.0, 1.5) && FMath::IsNearlyEqual(Bx.Max.Y, 175.0, 1.5);
+			const bool bZ = bCeiling ? (FMath::IsNearlyEqual(Bx.Min.Z, 290.0, 1.5) && Bx.Max.Z > Bx.Min.Z + 1.0 && Bx.Max.Z < 320.0)
+				: (FMath::IsNearlyEqual(Bx.Max.Z, 0.0, 1.5) && Bx.Min.Z < -5.0 && Bx.Min.Z > -40.0);
+			bOk = bXY && bZ;
+			UE_LOG(LogBackrooms, Log, TEXT("Kit du Level 0 : %s %s (%.1f..%.1f, %.1f..%.1f, %.1f..%.1f cm)"), Name,
+				bOk ? TEXT("pose cellule par cellule") : TEXT("refuse, dalles du chunk gardees"), Bx.Min.X, Bx.Max.X, Bx.Min.Y, Bx.Max.Y, Bx.Min.Z, Bx.Max.Z);
+		}
+		State = bOk ? 1 : 0;
+	}
+	return State == 1 ? M : nullptr;
+}
+
 namespace
 {
 	TArray<FString>& FallbackList()
@@ -1217,6 +1244,12 @@ UTexture* UBRAssets::Texture(FName Name)
 		Missing.Add(RawKey);
 	}
 	return Raw;
+}
+
+UTextureLightProfile* UBRAssets::LightProfile(FName Name)
+{
+	// v4.15 : importe par backrooms_setup (import_light_profiles) ; precharge avec l'ensemble commun (catalogue)
+	return Cast<UTextureLightProfile>(LoadAsset(TEXT("/Game/Backrooms/Lights"), Name, UTextureLightProfile::StaticClass()));
 }
 
 UTexture* UBRAssets::Icon(FName Name)
@@ -1371,10 +1404,13 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	}
 	ParentResolved[Index] = true;
 
-	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface"), TEXT("M_BR_PitShade") };
+	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface"), TEXT("M_BR_PitShade"),
+		TEXT("M_BR_WorldCloth"), TEXT("MD_BR_Decal") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
-	// (v4.7 : "RoughContrast", la carte de rugosite ; la peau et les modeles l'ont aussi)
-	const TCHAR* V2Params[] = { TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("WaterSim"), TEXT("PitShadeAmount") };
+	// (v4.7 : "RoughContrast", la carte de rugosite ; la peau et les modeles l'ont aussi. v4.15 : "Cavity" pour le monde,
+	// materiaux v8 : normales reorientees, occlusion de cavite, reflectance ; "Sheen" pour la moquette)
+	const TCHAR* V2Params[] = { TEXT("Cavity"), TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("WaterSim"), TEXT("PitShadeAmount"),
+		TEXT("Sheen"), TEXT("DecalOpacity") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -1401,7 +1437,8 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	// v4.8 : usages declares (instances, maillages a squelette, Nanite). Un materiau importe avant la v4.8 n'a que l'usage
 	// "instances" : la combinaison et les entites a squelette recevaient le materiau par defaut hors de l'editeur
 	static const EBRMasterMaterial UsageKinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
-		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade };
+		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade, EBRMasterMaterial::WorldCloth, EBRMasterMaterial::Decal };
+	static_assert(UE_ARRAY_COUNT(UsageKinds) == static_cast<int32>(EParent::Count), "Un type de materiau par EParent");
 	if (M && !EnsureUsages(M, UsageKinds[Index], AssetNames[Index]) && BRMaterialBuilder::IsAvailable())
 	{
 		M = nullptr; // jeu autonome non cuisine : le materiau construit a la volee declare tous ses usages
@@ -1409,9 +1446,7 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 
 	if (!M && BRMaterialBuilder::IsAvailable())
 	{
-		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
-			EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade };
-		M = BRMaterialBuilder::Build(Kinds[Index], this, [this](FName TexName) { return Texture(TexName); });
+		M = BRMaterialBuilder::Build(UsageKinds[Index], this, [this](FName TexName) { return Texture(TexName); });
 		if (M)
 		{
 			bRuntimeContent = true;
@@ -1520,8 +1555,8 @@ bool UBRAssets::IsUsingRuntimeContent()
 FLinearColor UBRAssets::TextureAverage(FName Texture)
 {
 	static const TMap<FName, FLinearColor> Avg = {
-		{ TEXT("T_L0_Wallpaper"), FLinearColor(0.66f, 0.64f, 0.33f) },
-		{ TEXT("T_L0_Carpet"), FLinearColor(0.5f, 0.42f, 0.25f) },
+		{ TEXT("T_L0_Wallpaper"), FLinearColor(0.67f, 0.65f, 0.4f) },
+		{ TEXT("T_L0_Carpet"), FLinearColor(0.46f, 0.4f, 0.26f) },
 		{ TEXT("T_L0_Ceiling"), FLinearColor(0.85f, 0.83f, 0.75f) },
 		{ TEXT("T_Concrete"), FLinearColor(0.5f, 0.5f, 0.48f) },
 		{ TEXT("T_ConcreteFloor"), FLinearColor(0.38f, 0.37f, 0.35f) },
@@ -1563,6 +1598,49 @@ UMaterialInstanceDynamic* UBRAssets::NewPitShade(UObject* Outer)
 {
 	UMaterialInterface* M = Parent(EParent::PitShade);
 	return M ? UMaterialInstanceDynamic::Create(M, Outer ? Outer : this) : nullptr;
+}
+
+UMaterialInterface* UBRAssets::DecalMaterial(EBRDecal Kind)
+{
+	const int32 Index = static_cast<int32>(Kind);
+	if (Index < 0 || Index >= static_cast<int32>(EBRDecal::Count))
+	{
+		return nullptr;
+	}
+	const FString Key = FString::Printf(TEXT("DECAL|%d"), Index);
+	if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
+	{
+		return Found->Get();
+	}
+	UMaterialInterface* ParentMat = Parent(EParent::Decal);
+	if (!ParentMat)
+	{
+		return nullptr;
+	}
+	// v4.15 : une case de l'atlas par sorte (decalage u, v ; echelle 0,5), rugosite et opacite propres : aureole seche (mate),
+	// tache de plafond (fibre minerale, tres mate), zone humide (plus lisse), traces de caoutchouc (un peu lustrees)
+	struct FDecalStyle
+	{
+		float U, V, Rough, Opacity;
+	};
+	static const FDecalStyle Styles[] = {
+		{ 0.f, 0.f, 0.85f, 0.85f },
+		{ 0.5f, 0.f, 0.95f, 0.9f },
+		{ 0.f, 0.5f, 0.55f, 0.75f },
+		{ 0.5f, 0.5f, 0.55f, 0.8f },
+	};
+	static_assert(UE_ARRAY_COUNT(Styles) == static_cast<int32>(EBRDecal::Count), "Un style par sorte de decalque");
+	const FDecalStyle& St = Styles[Index];
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, this);
+	if (UTexture* Atlas = Texture(TEXT("T_Decal_Atlas")))
+	{
+		MID->SetTextureParameterValue(TEXT("DecalTex"), Atlas);
+	}
+	MID->SetVectorParameterValue(TEXT("AtlasCell"), FLinearColor(St.U, St.V, 0.5f, 0.5f));
+	MID->SetScalarParameterValue(TEXT("DecalRough"), St.Rough);
+	MID->SetScalarParameterValue(TEXT("DecalOpacity"), St.Opacity);
+	MatCache.Add(Key, MID);
+	return MID;
 }
 
 void UBRAssets::ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail)
@@ -1608,7 +1686,12 @@ UMaterialInstanceDynamic* UBRAssets::NewSurface(const FBRSurface& S, UObject* Ou
 
 UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject* Outer)
 {
-	UMaterialInterface* ParentMat = Parent(EParent::World);
+	// v4.15 : moquette (Sheen > 0) : variante "tissu" du materiau du monde, sinon le materiau du monde
+	UMaterialInterface* ParentMat = S.Sheen > 0.f ? Parent(EParent::WorldCloth) : nullptr;
+	if (!ParentMat)
+	{
+		ParentMat = Parent(EParent::World);
+	}
 	const bool bCustom = ParentMat != nullptr;
 	if (!ParentMat)
 	{
@@ -1668,6 +1751,11 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 		MID->SetScalarParameterValue(TEXT("Stains"), S.Stains);
 		MID->SetScalarParameterValue(TEXT("WaterLine"), S.WaterLine);
 		MID->SetScalarParameterValue(TEXT("WallVariation"), S.WallVariation);
+		// v4.15 : reflectance, occlusion des creux, lustre des fibres, ligne de maree
+		MID->SetScalarParameterValue(TEXT("Specular"), S.Specular);
+		MID->SetScalarParameterValue(TEXT("Cavity"), S.Cavity);
+		MID->SetScalarParameterValue(TEXT("Sheen"), S.Sheen);
+		MID->SetScalarParameterValue(TEXT("TideLine"), S.TideLine);
 	}
 	else
 	{
@@ -1827,6 +1915,20 @@ FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)
 	return FLinearColor(1.f, 0.96f, 0.86f) * 120.f;
 }
 
+FLinearColor UBRAssets::TemperatureGlow(const FLinearColor& Glow, float Kelvin)
+{
+	// v4.15 : normalise par la luminance (avant : par le canal le plus fort, un diffuseur chaud perdait 30 % de son eclat
+	// au Level 0 alors que la lumiere de la lampe garde le sien)
+	const FLinearColor Lamp = FLinearColor::MakeFromColorTemperature(Kelvin);
+	const float LampLuma = Lamp.GetLuminance();
+	if (Kelvin <= 0.f || LampLuma <= 1e-3f)
+	{
+		return Glow;
+	}
+	const float K = Glow.GetLuminance() / LampLuma;
+	return FLinearColor(Lamp.R * K, Lamp.G * K, Lamp.B * K, 1.f);
+}
+
 bool UBRAssets::IsSkinSlot(const FString& SlotName)
 {
 	return SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase) || SlotName.Contains(TEXT("Flesh"), ESearchCase::IgnoreCase)
@@ -1939,7 +2041,7 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 }
 
 void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColor>* TintOverrides, bool bUniqueGlow,
-	TArray<UMaterialInstanceDynamic*>* OutGlow, float GlowScale, bool bPowered)
+	TArray<UMaterialInstanceDynamic*>* OutGlow, float GlowScale, bool bPowered, float LightTemperatureK)
 {
 	if (!Comp)
 	{
@@ -1956,16 +2058,24 @@ void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColo
 			Slot = FString::Printf(TEXT("Slot%d"), i);
 			ReportMaterialProblem(FString::Printf(TEXT("%s : slot %d sans nom (materiau neutre)"), *GetNameSafe(Comp), i));
 		}
-		const FLinearColor Glow = GlowColorForSlot(Slot);
+		FLinearColor Glow = GlowColorForSlot(Slot);
 		UMaterialInterface* Mat = nullptr;
 		// Les panneaux de sortie (vert), voyants (rouge) et fenetres ne dependent pas du secteur
 		const bool bMains = bPowered && !Glow.IsAlmostBlack() && !Slot.Contains(TEXT("GlowGreen"), ESearchCase::IgnoreCase)
 			&& !Slot.Contains(TEXT("GlowRed"), ESearchCase::IgnoreCase) && !Slot.Contains(TEXT("GlowWindow"), ESearchCase::IgnoreCase);
+		// v4.15 : diffuseurs groupes des plafonniers : la couleur de leur lampe (temperature du niveau), comme les diffuseurs
+		// individuels (ABRChunk::AddLight) ; avant, ils gardaient le RGB d'origine pendant que leur lumiere changeait
+		const bool bLampTint = bMains && LightTemperatureK > 0.f;
+		if (bLampTint)
+		{
+			Glow = TemperatureGlow(Glow, LightTemperatureK);
+		}
 
 		if (bMains && !bUniqueGlow)
 		{
-			// Materiau partage par tous les neons d'un meme type, eteint pendant les coupures
-			const FString Key = FString::Printf(TEXT("P|%s|%.2f"), *Slot, GlowScale);
+			// Materiau partage par tous les neons d'un meme type (et d'une meme temperature), eteint pendant les coupures
+			const FString Key = bLampTint ? FString::Printf(TEXT("P|%s|%.2f|%.0f"), *Slot, GlowScale, LightTemperatureK)
+				: FString::Printf(TEXT("P|%s|%.2f"), *Slot, GlowScale);
 			if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
 			{
 				Mat = Found->Get();

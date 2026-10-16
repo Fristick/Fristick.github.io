@@ -32,6 +32,7 @@
 #include "Components/SkyLightComponent.h"
 #include "Components/VolumetricCloudComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/LocalLightComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -41,9 +42,12 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/ReverbEffect.h"
 #include "HAL/PlatformTime.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Net/UnrealNetwork.h"
+#include "RenderUtils.h"
+#include "RHIShaderPlatform.h"
 #include "Sound/SoundBase.h"
 
 namespace
@@ -1147,6 +1151,10 @@ void ABRWorld::ApplyEnvironment()
 	Fog->SetVolumetricFog(D.bVolumetricFog);
 	// Diffusion vers l'avant : halos autour des lampes quand on les regarde, rayons dans la poussiere
 	Fog->SetVolumetricFogScatteringDistribution(0.35f);
+	// v4.15 : densite du volume et distance couverte propres au niveau (Level 0 : air plus clair, halos plus nets pres de
+	// la camera)
+	Fog->SetVolumetricFogExtinctionScale(FMath::Max(0.1f, D.VolFogExtinction));
+	Fog->SetVolumetricFogDistance(FMath::Clamp(D.VolFogDistance, 1000.f, 20000.f));
 	{
 		// Albedo teinte par la couleur du brouillard (eclaircie : c'est la lumiere des lampes qui colore le volume)
 		const float M = FMath::Max3(D.FogColor.R, D.FogColor.G, D.FogColor.B);
@@ -1188,10 +1196,18 @@ void ABRWorld::ApplyEnvironment()
 	S.AutoExposureMaxBrightness = D.MaxEV;
 	S.bOverride_AutoExposureBias = true;
 	S.AutoExposureBias = D.ExposureBias;
+	// v4.15 : vitesse d'adaptation et balance des blancs propres au niveau (camera "physique" : la couleur vient de la
+	// temperature des lampes et de la balance des blancs, la teinte de l'image ne fait plus qu'affiner)
 	S.bOverride_AutoExposureSpeedUp = true;
-	S.AutoExposureSpeedUp = 2.f;
+	S.AutoExposureSpeedUp = D.ExposureSpeedUp;
 	S.bOverride_AutoExposureSpeedDown = true;
-	S.AutoExposureSpeedDown = 1.f;
+	S.AutoExposureSpeedDown = D.ExposureSpeedDown;
+	S.bOverride_WhiteTemp = true;
+	S.WhiteTemp = FMath::Clamp(D.WhiteTempK, 1500.f, 15000.f);
+	// v4.15 : a partir de 4000 K, le moteur prend le blanc sur le lieu du jour (D) et non plus sur celui des lampes
+	// (Planck) : une teinte (FBRLevelDef::WhiteTint) annule le rose que cela donnerait aux lampes (Level 37)
+	S.bOverride_WhiteTint = true;
+	S.WhiteTint = FMath::Clamp(D.WhiteTint, -1.f, 1.f);
 	S.bOverride_SceneColorTint = true;
 	S.SceneColorTint = D.SceneTint;
 	S.bOverride_ColorSaturation = true;
@@ -1244,6 +1260,17 @@ void ABRWorld::ApplyEnvironment()
 	// --- Audio ---
 	AmbientAudio->Stop();
 	HumAudio->Stop();
+	// v4.15 : sources du bourdonnement des plafonniers : reattribuees dans le nouveau niveau (UpdateHumPool)
+	for (UAudioComponent* HumSource : HumPool)
+	{
+		if (HumSource)
+		{
+			HumSource->Stop();
+		}
+	}
+	HumPoolLights.Reset();
+	HumPoolBase.Reset();
+	HumScanTimer = 0.f;
 	if (A)
 	{
 		AmbientAudio->SetSound(A->Sound(D.AmbientSound));
@@ -2055,6 +2082,19 @@ float ABRWorld::LocalShadowDistance()
 	}
 }
 
+bool ABRWorld::IsMegaLightsActive()
+{
+	// v4.15 : MegaLights trace l'ombre de chaque lumiere (ray tracing materiel) pour un cout presque fixe. Sans RT materiel,
+	// les lumieres MegaLights ne seraient plus ombrees du tout : le chemin d'avant (ombres a distance) reste le repli
+	const FBRSettings& S = FBRSettings::Get();
+	if (!S.bMegaLights || !S.bHardwareRT || !ABRPlayerController::IsHardwareRayTracingAvailable())
+	{
+		return false;
+	}
+	static IConsoleVariable* const Allowed = IConsoleManager::Get().FindConsoleVariable(TEXT("r.MegaLights.Allowed"));
+	return (!Allowed || Allowed->GetInt() != 0) && ShouldCompileMegaLightsShaders(GMaxRHIShaderPlatform);
+}
+
 bool ABRWorld::ShouldCastLocalShadow(const FVector& LightPos) const
 {
 	const ABRCharacter* P = GetPlayer();
@@ -2120,11 +2160,17 @@ void ABRWorld::OnGraphicsSettingsChanged()
 {
 	// v4.8 : les reglages s'appliquent aussi a ce qui est deja construit (avant : seulement aux zones chargees ensuite)
 	const bool bArea = FBRSettings::Get().bAreaLights;
+	// v4.15 : OMBRES DE TOUTES LES LAMPES : ombres, distance d'affichage et diffusion des lumieres deja creees
+	const bool bMega = IsMegaLightsActive();
 	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
 	{
 		if (Pair.Value && !Pair.Value->LightTypesMatch(bArea))
 		{
 			LightRefreshQueue.AddUnique(Pair.Value.Get());
+		}
+		if (Pair.Value)
+		{
+			Pair.Value->ApplyMegaLights(bMega);
 		}
 	}
 	ShadowLODTimer = 0.f;
@@ -2208,6 +2254,7 @@ void ABRWorld::PrewarmModels()
 		Comp->SetSkinnedAssetAndUpdate(Mesh);
 		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Comp->SetCastShadow(true);
+		ABRPlayerController::ApplySkinnedReflections(Comp); // v4.15 : meme regle que les maillages a squelette du jeu
 		const float Lateral = (Slot - 3.5f) * 45.f;
 		Comp->SetWorldLocationAndRotation(Eye + Fwd * 320.f + Side * Lateral - FVector(0.f, 0.f, 60.f), Fwd.Rotation());
 		Comp->SetWorldScale3D(FVector(0.35f));
@@ -2674,9 +2721,142 @@ void ABRWorld::UpdateAudio(float Dt)
 		}
 		const ABRCharacter* P = GetPlayer();
 		const float Light = P ? LightLevelAt(P->GetActorLocation()) : 0.f;
-		HumAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.HumVolume * FMath::Clamp(Light, 0.f, 1.f) * (1.f - Fade)));
+		// v4.15 : fond discret (30 %) : le bourdonnement vient surtout des plafonniers proches (UpdateHumPool)
+		HumAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.HumVolume * 0.3f * FMath::Clamp(Light, 0.f, 1.f) * (1.f - Fade)));
 	}
 	AmbientAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.AmbientVolume * (1.f - Fade * 0.8f)));
+	UpdateHumPool(Dt);
+}
+
+void ABRWorld::UpdateHumPool(float Dt)
+{
+	// v4.15 : bourdonnement spatialise des neons : 8 sources au plus, sur les plafonniers les plus proches du joueur (14 m),
+	// attenuees en 6 m et etouffees par les murs ; hauteur +-3 % et debut de lecture tires pour chacune (pas d'effet de
+	// phase entre des copies du meme son) ; volume a l'eclat courant de la lampe (clignements, coupure : silence)
+	constexpr int32 PoolSize = 8;
+	constexpr float HearRadius = 1400.f;
+	constexpr float SourceGain = 0.6f;
+	const FBRLevelDef& D = Def();
+	UBRAssets* A = UBRAssets::Get(this);
+	USoundBase* Hum = (A && D.HumVolume > 0.f && D.Fixture != EBRFixture::None && !D.bOutdoor) ? A->Sound(D.HumSound) : nullptr;
+	const ABRCharacter* P = GetPlayer();
+	if (!Hum || !P)
+	{
+		for (UAudioComponent* C : HumPool)
+		{
+			if (C && C->IsPlaying())
+			{
+				C->Stop();
+			}
+		}
+		return;
+	}
+	while (HumPool.Num() < PoolSize)
+	{
+		UAudioComponent* C = NewObject<UAudioComponent>(this);
+		C->SetupAttachment(Root);
+		C->bAutoActivate = false;
+		C->bAllowSpatialization = true;
+		C->AttenuationSettings = A->Attenuation(600.f, true);
+		C->RegisterComponent();
+		HumPool.Add(C);
+	}
+	HumPoolLights.SetNum(HumPool.Num());
+	HumPoolBase.SetNum(HumPool.Num());
+	auto StartAt = [Hum]()
+	{
+		return FMath::FRandRange(0.f, FMath::Max(0.f, Hum->Duration - 0.1f));
+	};
+
+	HumScanTimer -= Dt;
+	if (HumScanTimer <= 0.f)
+	{
+		HumScanTimer = 0.25f;
+		const FVector Ear = P->GetActorLocation();
+		TArray<ABRChunk::FHumSource> Found;
+		const FIntPoint Here = CellToChunk(WorldToCell(Ear));
+		for (int32 DX = -1; DX <= 1; ++DX)
+		{
+			for (int32 DY = -1; DY <= 1; ++DY)
+			{
+				if (const TObjectPtr<ABRChunk>* Chunk = Chunks.Find(Here + FIntPoint(DX, DY)))
+				{
+					if (*Chunk)
+					{
+						(*Chunk)->GatherHumSources(Ear, HearRadius, Found);
+					}
+				}
+			}
+		}
+		Found.Sort([&Ear](const ABRChunk::FHumSource& First, const ABRChunk::FHumSource& Second)
+		{
+			return FVector::DistSquared(First.Pos, Ear) < FVector::DistSquared(Second.Pos, Ear);
+		});
+		if (Found.Num() > PoolSize)
+		{
+			Found.SetNum(PoolSize);
+		}
+		// Une source garde sa lampe tant qu'elle reste parmi les plus proches ; les autres prennent les nouvelles
+		TArray<bool> Taken;
+		Taken.Init(false, Found.Num());
+		TArray<bool> Kept;
+		Kept.Init(false, HumPool.Num());
+		for (int32 i = 0; i < HumPool.Num(); ++i)
+		{
+			for (int32 j = 0; j < Found.Num(); ++j)
+			{
+				if (!Taken[j] && HumPoolLights[i].IsValid() && HumPoolLights[i] == Found[j].Light)
+				{
+					Taken[j] = true;
+					Kept[i] = true;
+					break;
+				}
+			}
+		}
+		for (int32 i = 0; i < HumPool.Num(); ++i)
+		{
+			if (Kept[i])
+			{
+				continue;
+			}
+			HumPoolLights[i].Reset();
+			const int32 Pick = Taken.Find(false);
+			UAudioComponent* C = HumPool[i];
+			if (Pick == INDEX_NONE || !C)
+			{
+				continue;
+			}
+			Taken[Pick] = true;
+			HumPoolLights[i] = Found[Pick].Light;
+			HumPoolBase[i] = Found[Pick].BaseLumens;
+			C->SetWorldLocation(Found[Pick].Pos);
+			if (C->Sound != Hum)
+			{
+				C->SetSound(Hum);
+			}
+			C->SetPitchMultiplier(FMath::FRandRange(0.97f, 1.03f));
+			C->SetVolumeMultiplier(0.001f);
+			if (!C->IsPlaying())
+			{
+				C->Play(StartAt());
+			}
+		}
+	}
+	for (int32 i = 0; i < HumPool.Num(); ++i)
+	{
+		UAudioComponent* C = HumPool[i];
+		if (!C)
+		{
+			continue;
+		}
+		const ULocalLightComponent* L = HumPoolLights[i].Get();
+		const float Level = (L && L->IsVisible()) ? FMath::Clamp(L->Intensity / FMath::Max(1.f, HumPoolBase[i]), 0.f, 1.2f) : 0.f;
+		C->SetVolumeMultiplier(FMath::Max(0.001f, D.HumVolume * SourceGain * Level * (1.f - Fade)));
+		if (L && C->Sound && !C->IsPlaying())
+		{
+			C->Play(StartAt());
+		}
+	}
 }
 
 // =====================================================================================
@@ -2694,6 +2874,40 @@ void ABRWorld::ForceBlackout()
 		bBlackoutForced = true;
 		UpdateBlackout(0.f);
 	}
+}
+
+void ABRWorld::ForceRestore()
+{
+	// v4.15 : banc visuel : retour du courant capture a heure fixe (GI, rallumage decale, MegaLights) ; la phase est
+	// repliquee aux clients comme une fin de coupure ordinaire
+	if (HasAuthority() && (BlackoutPhase == EBlackout::Failing || BlackoutPhase == EBlackout::Dark))
+	{
+		EnterBlackoutPhase(static_cast<uint8>(EBlackout::Restoring));
+	}
+}
+
+FString ABRWorld::DecalChecksumText() const
+{
+	TArray<FIntPoint> Coords;
+	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		if (Pair.Value && Pair.Value->IsReady())
+		{
+			Coords.Add(Pair.Key);
+		}
+	}
+	Coords.Sort([](const FIntPoint& First, const FIntPoint& Second)
+	{
+		return First.X != Second.X ? First.X < Second.X : First.Y < Second.Y;
+	});
+	FString Out;
+	for (const FIntPoint& C : Coords)
+	{
+		const ABRChunk* Chunk = Chunks.FindRef(C).Get();
+		Out += FString::Printf(TEXT("%s(%d,%d)=%d/%08x"), Out.IsEmpty() ? TEXT("") : TEXT(" "), C.X, C.Y, Chunk ? Chunk->GetDecalCount() : 0,
+			Chunk ? Chunk->GetDecalHash() : 0u);
+	}
+	return Out;
 }
 
 void ABRWorld::UpdateBlackout(float Dt)
@@ -2747,6 +2961,12 @@ void ABRWorld::UpdateBlackout(float Dt)
 			else if (PowerFlickerTimer <= 0.f)
 			{
 				PowerFlickerTimer = FMath::FRandRange(0.04f, 0.16f) / FMath::Max(FS, 0.25f);
+				// v4.15 : flashs attenues : chaque etat dure au moins 0,17 s, 3 clignements par seconde au plus (comme les neons,
+				// BRFluo::SoftHalfBlinkMin)
+				if (FS < 1.f)
+				{
+					PowerFlickerTimer = FMath::Max(PowerFlickerTimer, 0.17f);
+				}
 				const float Low = FMath::Lerp(0.45f, 0.f, FS);
 				Power = FMath::FRand() < OnChance ? FMath::FRandRange(0.6f, 1.f) : FMath::FRandRange(Low, Low + 0.08f);
 			}
@@ -2843,6 +3063,14 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 	case EBlackout::Restoring:
 		BlackoutTimer = 1.4f;
 		Play(TEXT("S_PowerUp"), 0.9f);
+		// v4.15 : les lampes ne se rallument pas toutes dans la meme image : chacune a son retard et ses clignements
+		for (TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->BeginRestrike();
+			}
+		}
 		if (bAuth)
 		{
 			DismissBlackoutEntities();
@@ -2855,6 +3083,17 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 			BlackoutTimer = FMath::FRandRange(D.BlackoutMinInterval, FMath::Max(D.BlackoutMinInterval, D.BlackoutMaxInterval));
 		}
 		break;
+	}
+	// v4.15 : avec MegaLights, pas de diffusion dans le brouillard tant que le courant vacille (trainees) ; retablie ensuite
+	if (IsMegaLightsActive())
+	{
+		for (TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->RefreshLightScatter();
+			}
+		}
 	}
 	ApplyPower(false);
 }
@@ -4584,7 +4823,14 @@ float ABRWorld::LightLevelAt(const FVector& P) const
 	{
 		return 1.f;
 	}
-	// Plafonniers du niveau (suivent les coupures)
+	// Plafonniers du niveau (suivent les coupures).
+	// v4.15 (connu, non corrige dans cette version : ce serait un changement de gameplay) : les plafonniers comptent a
+	// travers les murs (distance a plat). Avant, l'image s'accordait avec cette regle (85 % des neons sans ombre : leur
+	// lumiere traversait les murs) ; avec OMBRES DE TOUTES LES LAMPES (MegaLights), chaque neon a son ombre et un coin
+	// derriere un mur parait sombre alors qu'il est "eclaire" ici (pas d'apparition de Smiler, dissipation au-dessus de
+	// BRLight::SmilerVanish). Capture du banc visuel : vis_0_<profil>_mur_smiler. Correction possible (a decider) : ignorer
+	// une lampe dont le chemin de cellules jusqu'a P traverse un mur, avec la grille seule (memes resultats chez l'hote et
+	// les clients), et la meme regle dans Tools/verify_pitfalls.py
 	float Acc = 0.f;
 	if (D.Fixture != EBRFixture::None && Power >= 0.05f)
 	{

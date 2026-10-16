@@ -116,6 +116,9 @@ ABRCharacter::ABRCharacter()
 	Flashlight->SetSourceRadius(2.f);
 	Flashlight->SetVolumetricScatteringIntensity(0.6f);
 	Flashlight->SetVisibility(false);
+	// v4.15 : hors de MegaLights (OMBRES DE TOUTES LES LAMPES) : la lampe garde son ombre nette (virtuelle, ou ray tracee dans
+	// le profil Cinematique) et un faisceau sans bruit quand elle bouge vite
+	Flashlight->bAllowMegaLights = false;
 
 	HandMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HandMesh"));
 	HandMesh->SetupAttachment(Camera);
@@ -131,6 +134,7 @@ ABRCharacter::ABRCharacter()
 	InfraredLight->SetAttenuationRadius(2000.f);
 	InfraredLight->SetCastShadows(false);
 	InfraredLight->SetVisibility(false);
+	InfraredLight->bAllowMegaLights = false; // v4.15 : vision nocturne sans bruit d'echantillonnage
 
 	HeartAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("HeartAudio"));
 	HeartAudio->SetupAttachment(RootComponent);
@@ -748,6 +752,14 @@ void ABRCharacter::ApplyLamp(uint8 Lamp)
 	Flashlight->SetRelativeLocation(FlashBase);
 	Flashlight->SetInnerConeAngle(Inner[I]);
 	Flashlight->SetOuterConeAngle(Outer[I]);
+	// v4.15 : faisceau d'une vraie lampe (profil IES : plateau du reflecteur, anneau, halo ; frontale plus large). L'intensite
+	// de la lampe vaut au maximum du profil, qui retire donc un peu de lumiere au cone : au moins 70 % de celle du cone seul
+	// (60 % a la ceinture, cone plus large), 0,8 de l'intensite jusqu'a 12,5 degres (Tools/generate_ies.py --check). Sans le
+	// profil importe : le cone simple d'avant
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		Flashlight->SetIESTexture(A->LightProfile(I == 2 ? FName(TEXT("IES_Headlamp")) : FName(TEXT("IES_Flashlight"))));
+	}
 }
 
 void ABRCharacter::SetHeldVisual(EBRItem InHand)
@@ -3372,16 +3384,26 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	FPostProcessSettings& S = Camera->PostProcessSettings;
 	Camera->PostProcessBlendWeight = 1.f;
 
-	// Effet camescope desactive : ni aberration de l'objectif, ni grain, ni salete, vignettage leger
+	// v4.15 : objectif "reel" meme sans l'effet camescope : aberration, grain, salete et halo legers (plus marques avec
+	// l'effet VHS) ; avant : image sans aucun defaut d'objectif sans l'effet
 	const bool bVHS = Set.bVHSEffect;
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f * Comfort + HitFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f * Comfort + ClimbGlitch * 6.f * Comfort + ScareFringe * 1.5f;
+	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.15f) + Insanity * Insanity * 4.f + Glitch * 8.f * Comfort + HitFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f * Comfort + ClimbGlitch * 6.f * Comfort + ScareFringe * 1.5f;
 
+	// Aberration seulement vers les bords de l'image (40 % du rayon au centre restent nets)
+	S.bOverride_ChromaticAberrationStartOffset = true;
+	S.ChromaticAberrationStartOffset = 0.4f;
+
+	// v4.15 : grain du capteur des que GRAIN DE L'IMAGE est actif (moitie sans l'effet VHS), plus present dans les ombres
 	S.bOverride_FilmGrainIntensity = true;
-	S.FilmGrainIntensity = ((Set.bFilmGrain && bVHS) ? (D ? D->Grain : 0.25f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
+	S.FilmGrainIntensity = (Set.bFilmGrain ? (D ? D->Grain : 0.25f) * (bVHS ? 1.f : 0.5f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
+	S.bOverride_FilmGrainIntensityShadows = true;
+	S.FilmGrainIntensityShadows = 1.2f;
+	S.bOverride_FilmGrainIntensityHighlights = true;
+	S.FilmGrainIntensityHighlights = 0.6f;
 
 	S.bOverride_VignetteIntensity = true;
-	S.VignetteIntensity = (D ? D->Vignette : 0.45f) * (bVHS ? 1.f : 0.4f) + (bHidden ? 0.45f : 0.f) + Insanity * 0.5f + DamageFlash * 0.6f * Comfort + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
+	S.VignetteIntensity = (D ? D->Vignette : 0.45f) * (bVHS ? 1.f : 0.6f) + (bHidden ? 0.45f : 0.f) + Insanity * 0.5f + DamageFlash * 0.6f * Comfort + Dead * 0.8f + (bNV ? 0.5f : 0.f) + UnderBlend * 0.6f
 		+ Choke * 0.9f + ScareFringe * 0.25f + Wound * 0.3f;
 
 	float Sat = (D ? D->Saturation : 1.f) * FMath::Lerp(1.f, 0.45f, FMath::Max(FMath::Max3(Insanity * Insanity, Dead, Choke * 0.6f), Wound * 0.35f));
@@ -3418,7 +3440,7 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.bOverride_BloomIntensity = bNV || UnderBlend > 0.01f;
 	S.BloomIntensity = bNV ? 2.f : FMath::Lerp(D ? D->Bloom : 0.6f, 2.2f, UnderBlend);
 
-	// Salete sur l'objectif du camescope (visible dans les halos des neons)
+	// Salete sur l'objectif du camescope (visible dans les halos des neons). v4.15 : legere aussi sans l'effet VHS
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
 		if (UTexture* Dirt = A->Texture(TEXT("T_LensDirt")))
@@ -3426,9 +3448,12 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 			S.bOverride_BloomDirtMask = true;
 			S.BloomDirtMask = Dirt;
 			S.bOverride_BloomDirtMaskIntensity = true;
-			S.BloomDirtMaskIntensity = bVHS ? 3.f : 0.f;
+			S.BloomDirtMaskIntensity = bVHS ? 3.f : 1.f;
 		}
 	}
+	// v4.15 : reflets d'objectif (halo des neons regardes en face) a peine visibles, plus nets avec l'effet VHS
+	S.bOverride_LensFlareIntensity = true;
+	S.LensFlareIntensity = bVHS ? 0.3f : 0.1f;
 
 	S.bOverride_MotionBlurAmount = true;
 	// v4.7 : flou de mouvement au choix du joueur (desactive par defaut)
@@ -3440,6 +3465,29 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.LumenReflectionQuality = Set.Quality >= 3 ? 2.f : 1.f;
 	S.bOverride_LumenFrontLayerTranslucencyReflections = true;
 	S.LumenFrontLayerTranslucencyReflections = Set.Quality >= 2;
+
+	// v4.15 : Lumen plus fin a partir de la qualite Epique (petits objets dans la scene de Lumen, collecte finale et
+	// eclairage de la scene plus precis) et plus reactif partout : la lumiere indirecte suit les neons qui clignotent et le
+	// retour du courant au lieu de trainer plusieurs secondes. Distance de trace maximale : valeur du moteur
+	const bool bFineLumen = Set.Quality >= 3;
+	S.bOverride_LumenSceneDetail = true;
+	S.LumenSceneDetail = bFineLumen ? 1.5f : 1.f;
+	S.bOverride_LumenFinalGatherQuality = true;
+	S.LumenFinalGatherQuality = bFineLumen ? 1.5f : 1.f;
+	S.bOverride_LumenSceneLightingQuality = true;
+	S.LumenSceneLightingQuality = bFineLumen ? 1.5f : 1.f;
+	S.bOverride_LumenSceneLightingUpdateSpeed = true;
+	S.LumenSceneLightingUpdateSpeed = 2.f;
+	S.bOverride_LumenFinalGatherLightingUpdateSpeed = true;
+	S.LumenFinalGatherLightingUpdateSpeed = 2.f;
+	// Couleur des surfaces dans la lumiere rebondie : sans renfort (le jaune du Level 0 ne deborde pas sur tout)
+	S.bOverride_LumenDiffuseColorBoost = true;
+	S.LumenDiffuseColorBoost = 1.f;
+
+	// v4.15 : OMBRES DE TOUTES LES LAMPES : MegaLights active par la camera du joueur seulement (r.MegaLights.EnableForProject
+	// reste a 0 : autres vues, Linux, macOS et sans ray tracing materiel gardent l'eclairage d'avant)
+	S.bOverride_bMegaLights = true;
+	S.bMegaLights = ABRWorld::IsMegaLightsActive();
 }
 
 // =====================================================================================================================
@@ -3472,6 +3520,8 @@ void ABRCharacter::BuildBody()
 		BodySkin->SetSkinnedAssetAndUpdate(Skin);
 		BodySkin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		BodySkin->SetCastShadow(true);
+		// v4.15 : dans les ombres ray tracees (MegaLights), hors des reflets ray traces sans hit lighting
+		ABRPlayerController::ApplySkinnedReflections(BodySkin);
 		BodySkin->RegisterComponent();
 		// v4.8 : slots de la combinaison affectes explicitement par leur nom : combinaison -> T_Hazmat_Suit, masque ->
 		// T_Hazmat_Mask, visiere -> son propre materiau. Un slot inattendu est signale (materiau d'erreur), il n'est plus

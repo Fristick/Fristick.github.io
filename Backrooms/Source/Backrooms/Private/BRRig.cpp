@@ -1,5 +1,6 @@
 #include "BRRig.h"
 #include "BRAssets.h"
+#include "BRPlayerController.h"
 
 #include "AnimationRuntime.h"
 #include "Components/PoseableMeshComponent.h"
@@ -195,6 +196,8 @@ namespace BRRig
 		Skin->SetSkinnedAssetAndUpdate(Mesh);
 		Skin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Skin->SetCastShadow(bCastShadow);
+		// v4.15 : dans les ombres ray tracees (MegaLights), hors des reflets ray traces sans hit lighting
+		ABRPlayerController::ApplySkinnedReflections(Skin);
 		Skin->RegisterComponent();
 		OutComponents.Add(Skin);
 		if (UBRAssets* A = UBRAssets::Get(Owner))
