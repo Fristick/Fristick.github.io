@@ -16,7 +16,8 @@ enum class EBRMasterMaterial : uint8
 	Skin,        // peau / chair (subsurface)
 	WaterSurface, // eau translucide : refraction, absorption selon la profondeur, vagues simulees
 	PitShade,     // v4.7 : post-traitement des salles de fosses : ce qui est sous le sol s'assombrit avec la profondeur
-	WorldCloth    // v4.15 : meme graphe que World, modele d'eclairage "tissu" (lustre des fibres de la moquette, Sheen)
+	WorldCloth,   // v4.15 : meme graphe que World, modele d'eclairage "tissu" (lustre des fibres de la moquette, Sheen)
+	Decal         // v4.15 : decalques d'usure (DBuffer couleur + rugosite, atlas T_Decal_Atlas ; projetes ou sur maillage)
 };
 
 namespace BRMaterialBuilder

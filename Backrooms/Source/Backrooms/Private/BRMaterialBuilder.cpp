@@ -554,6 +554,27 @@ namespace
 		FGraph::Link(Out->EmissiveColor, G.Mul(Scene, Factor));
 	}
 
+	/** v4.15 : decalques d'usure (meme graphe que build_decal_material() en Python). Domaine "decalque differe", melange
+	 *  translucide : couleur et rugosite ecrites dans le DBuffer (la normale n'est pas remplacee : le relief du papier peint et
+	 *  de la moquette reste visible sous une tache). Une case de l'atlas T_Decal_Atlas (AtlasCell : decalage, echelle) ; les
+	 *  UV sont ceux de la projection (UDecalComponent) ou du maillage (plans des taches au sol, en instances) */
+	void BuildDecal(FGraph& G, UMaterialEditorOnlyData* Out, TFunctionRef<UTexture*(FName)> LoadTexture)
+	{
+		UTexture* Atlas = LoadTexture(TEXT("T_Decal_Atlas"));
+		if (!Atlas)
+		{
+			Atlas = EngineTexture(false);
+		}
+		const FPin Cell{ G.Vector(TEXT("AtlasCell"), FLinearColor(0.f, 0.f, 1.f, 1.f)).Expr, FGraph::VectorRGBA };
+		const FPin UV = G.Add(G.Mul(G.UV0(), G.Mask(Cell, TEXT("ba"))), G.Mask(Cell, TEXT("rg")));
+		const FPin T = G.Tex(TEXT("DecalTex"), Atlas, false, UV);
+		FGraph::Link(Out->BaseColor, G.Mul(T, G.Vector(TEXT("DecalTint"), FLinearColor::White)));
+		FGraph::Link(Out->Opacity, G.Mul(FPin{ T.Expr, 4 }, G.Scalar(TEXT("DecalOpacity"), 1.f)));
+		FGraph::Link(Out->Roughness, G.Scalar(TEXT("DecalRough"), 0.8f));
+		FGraph::Link(Out->Specular, G.Scalar(TEXT("DecalSpecular"), 0.4f));
+		FGraph::Link(Out->Metallic, G.Const(0.f));
+	}
+
 	/** Eau translucide : meme graphe que build_water_surface_material() en Python */
 	void BuildWaterTranslucent(FGraph& G, UMaterialEditorOnlyData* Out)
 	{
@@ -830,6 +851,7 @@ namespace BRMaterialBuilder
 		case EBRMasterMaterial::World:
 		case EBRMasterMaterial::WorldCloth:
 		case EBRMasterMaterial::WaterSurface:
+		case EBRMasterMaterial::Decal: // v4.15 : taches au sol en instances (decalques sur maillage)
 			return { MATUSAGE_InstancedStaticMeshes };
 		default:
 			return {};
@@ -864,7 +886,7 @@ namespace BRMaterialBuilder
 			return nullptr;
 		}
 		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_WaterSurface_Runtime"),
-			TEXT("M_BR_PitShade_Runtime"), TEXT("M_BR_WorldCloth_Runtime") };
+			TEXT("M_BR_PitShade_Runtime"), TEXT("M_BR_WorldCloth_Runtime"), TEXT("MD_BR_Decal_Runtime") };
 		UMaterial* M = NewObject<UMaterial>(Outer ? Outer : GetTransientPackage(), FName(Names[static_cast<int32>(Which)]), RF_Transient);
 		M->MaterialDomain = MD_Surface;
 		M->BlendMode = BLEND_Opaque;
@@ -912,6 +934,12 @@ namespace BRMaterialBuilder
 			M->BlendableLocation = BL_SceneColorBeforeDOF;
 			M->SetShadingModel(MSM_Unlit);
 			BuildPitShade(G, Out);
+			break;
+		case EBRMasterMaterial::Decal:
+			// v4.15 : decalque differe translucide (DBuffer couleur + rugosite)
+			M->MaterialDomain = MD_DeferredDecal;
+			M->BlendMode = BLEND_Translucent;
+			BuildDecal(G, Out, LoadTexture);
 			break;
 		}
 

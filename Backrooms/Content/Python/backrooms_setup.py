@@ -20,7 +20,8 @@ Il importe :
   RawAssets/Lights/*.ies        -> /Game/Backrooms/Lights     (v4.15 : profils IES de la lampe, Tools/generate_ies.py)
   RawAssets/Level0Kit/FBX/*.fbx -> /Game/Backrooms/Level0Kit/Meshes      (v4.14 : kit Blender du Level 0, dossier separe)
   RawAssets/Level0Kit/Textures/* -> /Game/Backrooms/Level0Kit/Textures   (BaseColor sRGB, ORM lineaire, Normal DirectX)
-puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface, M_BR_PitShade ; v4.15 : M_BR_WorldCloth)
+puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface, M_BR_PitShade ; v4.15 : M_BR_WorldCloth,
+MD_BR_Decal)
 et la carte L_Backrooms.
 
 v4.14 : le kit du Level 0 a son propre import, rejouable seul (les originaux de RawAssets ne sont jamais modifies) :
@@ -64,7 +65,7 @@ MAT = ROOT + "/Materials"
 LIGHTS = ROOT + "/Lights"
 IES_EXT = (".ies",)
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
-MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade", "M_BR_WorldCloth")
+MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade", "M_BR_WorldCloth", "MD_BR_Decal")
 # v4.8 : usages que chaque materiau maitre doit declarer (meme liste que BRMaterialBuilder::RequiredUsages en C++)
 _MODEL_USAGES = ("used_with_instanced_static_meshes", "used_with_skeletal_mesh", "used_with_nanite")
 USAGES = {
@@ -74,6 +75,8 @@ USAGES = {
     "M_BR_WaterSurface": ("used_with_instanced_static_meshes",),
     "M_BR_PitShade": (),
     "M_BR_WorldCloth": ("used_with_instanced_static_meshes",),
+    # v4.15 : decalques projetes (UDecalComponent) et taches au sol en instances (decalques sur maillage)
+    "MD_BR_Decal": ("used_with_instanced_static_meshes",),
 }
 # v4.8 : slots attendus apres l'import de chaque maillage a squelette (noms des materiaux du FBX) : la validation
 # signale un slot renomme par l'importeur (le jeu affecte les materiaux par nom, jamais par indice)
@@ -958,6 +961,31 @@ def build_pit_shade_material():
     return m
 
 
+def build_decal_material():
+    """v4.15 : decalques d'usure (meme graphe que BuildDecal en C++). Domaine "decalque differe", melange translucide :
+    couleur et rugosite ecrites dans le DBuffer (la normale n'est pas remplacee : le relief du papier peint et de la moquette
+    reste visible sous une tache). Une case de l'atlas T_Decal_Atlas (AtlasCell : decalage u, v, echelle u, v) ; les UV sont
+    ceux de la projection (UDecalComponent) ou du maillage (plans des taches au sol, en instances : usage ISM)."""
+    m = new_material("MD_BR_Decal")
+    domain = getattr(unreal.MaterialDomain, "MD_DEFERRED_DECAL", None)
+    if domain is None:
+        raise RuntimeError("MaterialDomain.MD_DEFERRED_DECAL absent")
+    safe_set(m, "material_domain", domain)
+    safe_set(m, "blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    g = Graph(m)
+    P = unreal.MaterialProperty
+    cell = g.vector4("AtlasCell", (0.0, 0.0, 1.0, 1.0))
+    uv = g.add(g.mul(g.uv0(), g.mask(cell, "ba")), g.mask(cell, "rg"))
+    t = g.tex("DecalTex", load_tex("T_Decal_Atlas"), uv, out="RGBA")[0]
+    g.output(g.mul((t, "RGB"), g.vector("DecalTint", (1, 1, 1, 1))), P.MP_BASE_COLOR)
+    g.output(g.mul((t, "A"), g.scalar("DecalOpacity", 1.0)), P.MP_OPACITY)
+    g.output(g.scalar("DecalRough", 0.8), P.MP_ROUGHNESS)
+    g.output(g.scalar("DecalSpecular", 0.4), P.MP_SPECULAR)
+    g.output(g.const(0.0), P.MP_METALLIC)
+    finish_material(m)
+    return m
+
+
 def build_mesh_material(name="M_BR_Mesh", skin=False):
     """Modeles Blender (UV en metres). La variante "Skin" utilise le modele d'eclairage Subsurface (peau, chair)."""
     m = new_material(name)
@@ -1229,7 +1257,7 @@ def build_materials():
     jobs = (("M_BR_World", build_world_material), ("M_BR_Mesh", build_mesh_material),
             ("M_BR_Skin", lambda: build_mesh_material("M_BR_Skin", skin=True)),
             ("M_BR_WaterSurface", build_water_surface_material), ("M_BR_PitShade", build_pit_shade_material),
-            ("M_BR_WorldCloth", lambda: build_world_material(cloth=True)))
+            ("M_BR_WorldCloth", lambda: build_world_material(cloth=True)), ("MD_BR_Decal", build_decal_material))
     for name, fn in jobs:
         try:
             fn()

@@ -74,6 +74,8 @@ namespace
 		// 40 m) ; air humide des salles de fosses et des zones sans lumiere, air froid du sas (volumes locaux)
 		D.FogDensity = 0.03f; D.FogColor = C(0.32f, 0.29f, 0.16f);
 		D.VolFogExtinction = 1.5f; D.VolFogDistance = 4000.f; D.LocalFogDensity = 1.f;
+		// v4.15 : usure : aureoles sous le plafond, taches pres des plafonniers, moquette humide, eraflures (decalques)
+		D.DecalDensity = 1.f;
 		D.ShadowTint = C(0.98f, 1.f, 0.96f); D.HighlightTint = C(1.02f, 1.f, 0.96f); D.VolumetricScatter = 0.45f;
 		D.SceneTint = C(1.f, 0.99f, 0.95f); D.Saturation = 0.92f; D.Contrast = 1.05f;
 		// v4.15 : plage d'exposition resserree (le noir d'une coupure reste noir, l'image ne "pompe" plus), adaptation plus lente
@@ -166,6 +168,7 @@ namespace
 		// reste froid
 		D.LightTemperatureK = 4100.f; D.WhiteTempK = 3800.f;
 		D.VolFogDistance = 5000.f; // v4.15 : grandes travees du parking
+		D.DecalDensity = 0.6f;     // v4.15 : coulures, beton humide, traces de pneus et de semelles
 		D.FogDensity = 0.16f; D.FogColor = C(0.22f, 0.24f, 0.27f);
 		D.ShadowTint = C(0.94f, 0.98f, 1.06f); D.HighlightTint = C(1.f, 1.f, 0.98f); D.VolumetricScatter = 0.7f;
 		D.SceneTint = C(0.95f, 0.98f, 1.f); D.Saturation = 0.85f; D.Contrast = 1.08f;
@@ -222,6 +225,7 @@ namespace
 		// v4.15 : ampoules a incandescence (2900 K), balance des blancs a 4200 K
 		D.LightTemperatureK = 2900.f; D.WhiteTempK = 4200.f;
 		D.VolFogExtinction = 1.2f; D.VolFogDistance = 3000.f; // v4.15 : couloirs etroits, vapeur des tuyaux
+		D.DecalDensity = 0.8f;     // v4.15 : fuites des tuyaux, coulures, frottements
 		D.FogDensity = 0.12f; D.FogColor = C(0.18f, 0.13f, 0.08f);
 		D.ShadowTint = C(0.95f, 1.f, 1.03f); D.HighlightTint = C(1.05f, 0.98f, 0.9f); D.VolumetricScatter = 0.6f;
 		D.SceneTint = C(1.f, 0.93f, 0.85f); D.Saturation = 0.85f; D.Contrast = 1.12f;

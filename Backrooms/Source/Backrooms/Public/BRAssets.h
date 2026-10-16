@@ -175,6 +175,9 @@ public:
 	static int32 RawTextureLoads;
 	/** v4.7 : post-traitement des salles de fosses (assombrit ce qui est sous le sol) ; nullptr si indisponible */
 	UMaterialInstanceDynamic* NewPitShade(UObject* Outer);
+	/** v4.15 : decalque d'usure (MD_BR_Decal, case Kind de l'atlas T_Decal_Atlas), partage et mis en cache ; nullptr sans
+	 *  materiau maitre (jeu cuisine sans MD_BR_Decal) : le chunk ne pose alors aucun decalque */
+	UMaterialInterface* DecalMaterial(EBRDecal Kind);
 	static const TArray<FString>& GetFallbacks();
 
 private:
@@ -182,8 +185,8 @@ private:
 	 *  lineaire ; sinon RoughContrast = 0 (rugosite v4.6) */
 	void ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail);
 
-	/** v4.15 : WorldCloth : variante "tissu" du monde (moquettes, FBRSurface::Sheen > 0) */
-	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, WorldCloth, Count };
+	/** v4.15 : WorldCloth : variante "tissu" du monde (moquettes, FBRSurface::Sheen > 0) ; Decal : decalques d'usure */
+	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, WorldCloth, Decal, Count };
 
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);

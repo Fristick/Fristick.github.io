@@ -149,6 +149,8 @@ protected:
 		bool bNoRayTracing = false;
 		/** v4.14 : garder les materiaux du maillage (modules du kit du Level 0, habilles a l'import) */
 		bool bMeshMaterials = false;
+		/** v4.15 : decalques sur maillage (taches au sol) : ni ombre, ni ray tracing, ni champ de distance, ni Lumen */
+		bool bDecal = false;
 		TArray<FTransform> Transforms;
 		/** v4.8 : instances deja creees (sous-lots) */
 		int32 Cursor = 0;
@@ -230,6 +232,24 @@ protected:
 	void BuildFogVolumes();
 	/** v4.15 : un volume de brouillard local (centre et demi-tailles en cm, densites rayonnante et en hauteur, albedo) */
 	void AddFogVolume(const FVector& Center, const FVector& HalfSize, float Radial, float Height, const FLinearColor& Albedo);
+	/** v4.15 : decalques d'usure du chunk (FBRLevelDef::DecalDensity), tires avec la graine : aureoles sous le plafond et
+	 *  eraflures sur les murs, taches pres de certains plafonniers (composants de decalque, crees un par un a la fin de la
+	 *  construction), moquette humide au pied des murs et sous les passages (un lot d'instances, decalques sur maillage) */
+	void BuildDecals();
+	/** v4.15 : decalque projete en attente de creation : sorte, centre, rotation (X : direction de projection, Y : vers le
+	 *  bas de l'image), demi-tailles (profondeur, hauteur de l'image, largeur de l'image) */
+	struct FPendingDecal
+	{
+		EBRDecal Kind = EBRDecal::WaterStain;
+		FVector Pos = FVector::ZeroVector;
+		FRotator Rot = FRotator::ZeroRotator;
+		FVector HalfSize = FVector::OneVector;
+		int32 Sort = 0;
+	};
+	TArray<FPendingDecal> PendingDecals;
+	int32 DecalCursor = 0;
+	/** v4.15 : cree le composant d'un decalque en attente (range dans Extra, detruit au demontage) */
+	void CreateDecal(const FPendingDecal& P);
 
 	FBatch& GetBatch(const FString& Key, UStaticMesh* Mesh, UMaterialInterface* Mat, bool bCollision, bool bShadow, float Cull);
 

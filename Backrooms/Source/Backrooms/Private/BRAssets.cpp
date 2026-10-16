@@ -1380,12 +1380,12 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	ParentResolved[Index] = true;
 
 	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface"), TEXT("M_BR_PitShade"),
-		TEXT("M_BR_WorldCloth") };
+		TEXT("M_BR_WorldCloth"), TEXT("MD_BR_Decal") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
 	// (v4.7 : "RoughContrast", la carte de rugosite ; la peau et les modeles l'ont aussi. v4.15 : "Cavity" pour le monde,
 	// materiaux v8 : normales reorientees, occlusion de cavite, reflectance ; "Sheen" pour la moquette)
 	const TCHAR* V2Params[] = { TEXT("Cavity"), TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("WaterSim"), TEXT("PitShadeAmount"),
-		TEXT("Sheen") };
+		TEXT("Sheen"), TEXT("DecalOpacity") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -1412,7 +1412,7 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	// v4.8 : usages declares (instances, maillages a squelette, Nanite). Un materiau importe avant la v4.8 n'a que l'usage
 	// "instances" : la combinaison et les entites a squelette recevaient le materiau par defaut hors de l'editeur
 	static const EBRMasterMaterial UsageKinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
-		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade, EBRMasterMaterial::WorldCloth };
+		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade, EBRMasterMaterial::WorldCloth, EBRMasterMaterial::Decal };
 	static_assert(UE_ARRAY_COUNT(UsageKinds) == static_cast<int32>(EParent::Count), "Un type de materiau par EParent");
 	if (M && !EnsureUsages(M, UsageKinds[Index], AssetNames[Index]) && BRMaterialBuilder::IsAvailable())
 	{
@@ -1573,6 +1573,49 @@ UMaterialInstanceDynamic* UBRAssets::NewPitShade(UObject* Outer)
 {
 	UMaterialInterface* M = Parent(EParent::PitShade);
 	return M ? UMaterialInstanceDynamic::Create(M, Outer ? Outer : this) : nullptr;
+}
+
+UMaterialInterface* UBRAssets::DecalMaterial(EBRDecal Kind)
+{
+	const int32 Index = static_cast<int32>(Kind);
+	if (Index < 0 || Index >= static_cast<int32>(EBRDecal::Count))
+	{
+		return nullptr;
+	}
+	const FString Key = FString::Printf(TEXT("DECAL|%d"), Index);
+	if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
+	{
+		return Found->Get();
+	}
+	UMaterialInterface* ParentMat = Parent(EParent::Decal);
+	if (!ParentMat)
+	{
+		return nullptr;
+	}
+	// v4.15 : une case de l'atlas par sorte (decalage u, v ; echelle 0,5), rugosite et opacite propres : aureole seche (mate),
+	// tache de plafond (fibre minerale, tres mate), zone humide (plus lisse), traces de caoutchouc (un peu lustrees)
+	struct FDecalStyle
+	{
+		float U, V, Rough, Opacity;
+	};
+	static const FDecalStyle Styles[] = {
+		{ 0.f, 0.f, 0.85f, 0.85f },
+		{ 0.5f, 0.f, 0.95f, 0.9f },
+		{ 0.f, 0.5f, 0.55f, 0.75f },
+		{ 0.5f, 0.5f, 0.55f, 0.8f },
+	};
+	static_assert(UE_ARRAY_COUNT(Styles) == static_cast<int32>(EBRDecal::Count), "Un style par sorte de decalque");
+	const FDecalStyle& St = Styles[Index];
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ParentMat, this);
+	if (UTexture* Atlas = Texture(TEXT("T_Decal_Atlas")))
+	{
+		MID->SetTextureParameterValue(TEXT("DecalTex"), Atlas);
+	}
+	MID->SetVectorParameterValue(TEXT("AtlasCell"), FLinearColor(St.U, St.V, 0.5f, 0.5f));
+	MID->SetScalarParameterValue(TEXT("DecalRough"), St.Rough);
+	MID->SetScalarParameterValue(TEXT("DecalOpacity"), St.Opacity);
+	MatCache.Add(Key, MID);
+	return MID;
 }
 
 void UBRAssets::ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail)

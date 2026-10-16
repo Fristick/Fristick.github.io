@@ -8,6 +8,7 @@
 #include "BRItems.h"
 #include "BRRig.h"
 
+#include "Components/DecalComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/LocalFogVolumeComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -44,6 +45,19 @@ namespace
 		const FLinearColor Lamp = FLinearColor::MakeFromColorTemperature(Kelvin);
 		const float Peak = FMath::Max3(Lamp.R, Lamp.G, Lamp.B);
 		return Peak > 0.001f ? FLinearColor(Lamp.R / Peak * Strength, Lamp.G / Peak * Strength, Lamp.B / Peak * Strength, 1.f) : Glow;
+	}
+
+	/** v4.15 : demi-longueur d'un plafonnier (cm), pour poser une tache de plafond a cote de lui */
+	float FixtureHalfLength(EBRFixture Fixture)
+	{
+		switch (Fixture)
+		{
+		case EBRFixture::Panel: return 61.f;
+		case EBRFixture::SkyPanel: return 92.f;
+		case EBRFixture::Tube: return 65.f;
+		case EBRFixture::Bulb: return 8.f;
+		default: return 30.f;
+		}
 	}
 }
 
@@ -1048,6 +1062,191 @@ void ABRChunk::BuildFogVolumes()
 	}
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// v4.15 : decalques d'usure (rendu seulement ; tires avec la graine du niveau : memes positions chez l'hote et les clients)
+// Sels BRHash : 7410-7417 murs (aureoles, eraflures), 7420-7424 moquette humide au pied des murs, 7430-7435 eraflures des
+// passages, 7440-7443 seuils humides, 7450-7453 taches de plafond. Aucun autre tirage ne les utilise.
+// ---------------------------------------------------------------------------------------------------------------------
+
+void ABRChunk::BuildDecals()
+{
+	ABRWorld* W = World.Get();
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!W || !A)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float K = D.DecalDensity;
+	if (K <= 0.f || D.bOutdoor || !(D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze) || !A->DecalMaterial(EBRDecal::WaterStain))
+	{
+		return;
+	}
+	const uint32 Seed = W->GetSeed();
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float T = D.WallThickness;
+	const float H = D.WallHeight;
+	const float DW = FMath::Min(D.DoorWidth, S - 2.f * T - 20.f);
+	const float Jamb = (S - T - DW) * 0.5f;
+	const int32 X0 = Coord.X * N;
+	const int32 Y0 = Coord.Y * N;
+	const FVector Down(0.f, 0.f, -1.f);
+	TArray<FTransform> FloorPatches;
+	// Decalque projete : X = direction de projection (vers la surface), Y = vers le bas de l'image ; demi-tailles (profondeur,
+	// hauteur de l'image, largeur de l'image)
+	auto AddDecal = [this](EBRDecal Kind, const FVector& Pos, const FVector& XAxis, const FVector& YAxis, const FVector& HalfSize, int32 Sort)
+	{
+		FPendingDecal P;
+		P.Kind = Kind;
+		P.Pos = Pos;
+		P.Rot = FRotationMatrix::MakeFromXY(XAxis, YAxis).Rotator();
+		P.HalfSize = HalfSize;
+		P.Sort = Sort;
+		PendingDecals.Add(P);
+	};
+	// Tache au sol : plan du moteur (100 x 100 cm) a 6 mm au-dessus du sol, X le long de Yaw
+	auto AddPatch = [this, &FloorPatches](const FVector& At, float Yaw, float Length, float Width)
+	{
+		FloorPatches.Add(FTransform(FRotator(0.f, Yaw, 0.f), At + FVector(0.f, 0.f, 0.6f) - GetActorLocation(), FVector(Length / 100.f, Width / 100.f, 1.f)));
+	};
+	for (int32 X = X0; X < X0 + N; ++X)
+	{
+		for (int32 Y = Y0; Y < Y0 + N; ++Y)
+		{
+			const FIntPoint Cell(X, Y);
+			if (!W->IsWalkable(Cell) || W->IsPitRoomCell(X, Y) || W->IsPoolCell(X, Y))
+			{
+				continue;
+			}
+			// Rien sur les murs d'une cachette, devant une sortie ou un mecanisme (ils y sont poses)
+			const bool bQuiet = HidingCells.Contains(Cell) || ExitCells.Contains(Cell) || W->IsMissionCell(X, Y);
+			const FVector Center = W->CellCenter(Cell);
+			for (int32 Side = 0; Side < 4; ++Side)
+			{
+				const FIntPoint Dir = GDirs[Side];
+				const FIntPoint Next(X + Dir.X, Y + Dir.Y);
+				const bool bSolid = W->IsSolid(Next.X, Next.Y);
+				EBREdge Edge = EBREdge::Open;
+				bool bService = false;
+				if (Dir.X != 0)
+				{
+					const int32 EX = Dir.X > 0 ? X : X - 1;
+					Edge = W->EdgeE(EX, Y);
+					bService = W->IsServiceDoorEdge(EX, Y, true);
+				}
+				else
+				{
+					const int32 EY = Dir.Y > 0 ? Y : Y - 1;
+					Edge = W->EdgeN(X, EY);
+					bService = W->IsServiceDoorEdge(X, EY, false);
+				}
+				const FVector Out(Dir.X, Dir.Y, 0.f);    // de la cellule vers le mur
+				const FVector Along(-Dir.Y, Dir.X, 0.f); // le long du mur
+				const float Inset = bSolid ? 0.f : T * 0.5f;
+				const FVector Face = Center + Out * (S * 0.5f - Inset);
+				const float Span = S - 2.f * Inset - 20.f; // longueur utile de la face (sans les poteaux des coins)
+				const float AlongYaw = FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X));
+				auto R = [X, Y, Side, Seed](int32 Salt) { return BRHash::Rand(X * 4 + Side, Y, Salt, Seed); };
+				if ((bSolid || Edge == EBREdge::Wall) && !bService)
+				{
+					const float Roll = R(7410);
+					if (!bQuiet && Roll < 0.06f * K)
+					{
+						// Aureole d'infiltration : l'eau descend du plafond le long du mur (haut de l'image sous le plafond)
+						const float Wd = FMath::Min(70.f + 70.f * R(7411), Span);
+						const float Ht = FMath::Min(50.f + 70.f * R(7412), H - 60.f);
+						const float Off = (R(7413) - 0.5f) * FMath::Max(0.f, Span - Wd);
+						AddDecal(EBRDecal::WaterStain, Face + Along * Off + FVector(0.f, 0.f, H + 0.05f * Ht - Ht * 0.5f), Out, Down,
+							FVector(6.f, Ht * 0.5f, Wd * 0.5f), 0);
+					}
+					else if (!bQuiet && Roll < 0.1f * K)
+					{
+						// Eraflures basses (chariots, semelles), plinthe comprise ; jamais sur le sol (bas de la boite a 6 cm)
+						const float Wd = FMath::Min(40.f + 50.f * R(7414), Span);
+						const float Ht = 18.f + 14.f * R(7415);
+						const float Off = (R(7416) - 0.5f) * FMath::Max(0.f, Span - Wd);
+						AddDecal(EBRDecal::Scuff, Face + Along * Off + FVector(0.f, 0.f, 6.f + Ht * 0.5f + 16.f * R(7417)), Out, Down,
+							FVector(5.f, Ht * 0.5f, Wd * 0.5f), 1);
+					}
+					if (R(7420) < 0.05f * K)
+					{
+						// Sol humide au pied du mur : le plan est centre sur la face, sa moitie est cachee dans le mur
+						const float Len = FMath::Min(100.f + 120.f * R(7421), Span + 20.f);
+						const float Wid = 60.f + 60.f * R(7422);
+						const float Off = (R(7423) - 0.5f) * FMath::Max(0.f, Span + 20.f - Len);
+						AddPatch(Face + Along * Off, AlongYaw + (R(7424) - 0.5f) * 16.f, Len, Wid);
+					}
+				}
+				else if (Edge == EBREdge::Door && !bSolid)
+				{
+					if (!bQuiet && Jamb > 26.f && R(7430) < 0.22f * K)
+					{
+						// Eraflures a cote du passage (hors du chambranle), sur le jambage de cette cellule
+						const float Wd = FMath::Min(25.f + 30.f * R(7431), Jamb - 16.f);
+						const float Sgn = R(7432) < 0.5f ? -1.f : 1.f;
+						const float Off = Sgn * (DW * 0.5f + 12.f + Wd * 0.5f + FMath::Max(0.f, Jamb - 16.f - Wd) * R(7433));
+						const float Ht = 15.f + 15.f * R(7434);
+						AddDecal(EBRDecal::Scuff, Face + Along * Off + FVector(0.f, 0.f, 5.f + Ht * 0.5f + 20.f * R(7435)), Out, Down,
+							FVector(5.f, Ht * 0.5f, Wd * 0.5f), 1);
+					}
+					// Seuil humide sous le passage (une seule fois : depuis la cellule a l'ouest ou au sud du passage)
+					if ((Side == 0 || Side == 2) && !W->IsPitRoomCell(Next.X, Next.Y) && R(7440) < 0.12f * K)
+					{
+						AddPatch(Center + Out * (S * 0.5f), AlongYaw + (R(7443) - 0.5f) * 20.f, DW * (0.9f + 0.3f * R(7441)), T + 80.f + 80.f * R(7442));
+					}
+				}
+			}
+			// Tache d'eau au plafond a cote d'un plafonnier (plus souvent a cote d'un plafonnier mort : l'eau l'a tue)
+			const FBRLightInfo L = W->CellLight(X, Y);
+			if (L.bHas && BRHash::Rand(X, Y, 7450, Seed) < (L.bBroken ? 0.35f : 0.22f) * K)
+			{
+				const float Rad = 35.f + 30.f * BRHash::Rand(X, Y, 7451, Seed);
+				const float Ang = BRHash::Rand(X, Y, 7452, Seed) * 2.f * PI;
+				const float Dist = FixtureHalfLength(D.Fixture) * 0.6f + Rad * 0.7f;
+				const float Lim = FMath::Max(0.f, S * 0.5f - T * 0.5f - Rad * 0.5f);
+				const FVector P = Center + FVector(FMath::Clamp(static_cast<float>(L.Offset.X) + FMath::Cos(Ang) * Dist, -Lim, Lim),
+					FMath::Clamp(static_cast<float>(L.Offset.Y) + FMath::Sin(Ang) * Dist, -Lim, Lim), H + 2.f);
+				const bool bHatch = bShaftHole && P.X > ShaftMin.X - Rad && P.X < ShaftMax.X + Rad && P.Y > ShaftMin.Y - Rad && P.Y < ShaftMax.Y + Rad;
+				if (!bHatch)
+				{
+					// Boite de H - 1 a H + 5 cm : le plafond seulement (le dessous du luminaire, 3,5 cm plus bas, n'est pas touche)
+					const float Spin = BRHash::Rand(X, Y, 7453, Seed) * 2.f * PI;
+					AddDecal(EBRDecal::CeilingStain, P, FVector(0.f, 0.f, 1.f), FVector(FMath::Cos(Spin), FMath::Sin(Spin), 0.f), FVector(3.f, Rad, Rad), 0);
+				}
+			}
+		}
+	}
+	UMaterialInterface* DampMat = A->DecalMaterial(EBRDecal::Damp);
+	if (FloorPatches.Num() > 0 && DampMat && A->Plane())
+	{
+		// Un seul lot d'instances par chunk pour toutes les taches au sol (decalques sur maillage)
+		FBatch& B = GetBatch(TEXT("DECAL|FLOOR"), A->Plane(), DampMat, false, false, 4500.f);
+		B.bDecal = true;
+		B.Transforms.Append(FloorPatches);
+	}
+}
+
+void ABRChunk::CreateDecal(const FPendingDecal& P)
+{
+	UBRAssets* A = UBRAssets::Get(this);
+	UMaterialInterface* Mat = A ? A->DecalMaterial(P.Kind) : nullptr;
+	if (!Mat)
+	{
+		return;
+	}
+	UDecalComponent* Dc = NewObject<UDecalComponent>(this);
+	Dc->SetupAttachment(Root);
+	Dc->SetDecalMaterial(Mat);
+	Dc->DecalSize = P.HalfSize;
+	Dc->SortOrder = P.Sort;
+	// S'efface quand il devient petit a l'ecran (environ 1 % de l'image)
+	Dc->FadeScreenSize = 0.01f;
+	Dc->SetRelativeLocationAndRotation(P.Pos - GetActorLocation(), P.Rot);
+	Dc->RegisterComponent();
+	Extra.Add(Dc);
+}
+
 void ABRChunk::AddStroke(const FBRSurface& Surf, const FVector& Origin, const FQuat& WallQ, const FVector2D& A, const FVector2D& B, float Width)
 {
 	UBRAssets* Assets = UBRAssets::Get(this);
@@ -1607,6 +1806,8 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 	bDeferLights = true;
 	// v4.6 : salle de fosses reservee avant tout le reste (murs, cachettes, sorties, objets et accessoires l'evitent)
 	bHasPitRoom = InWorld->GetPitRoom(Coord, PitRoom);
+	PendingDecals.Reset();
+	DecalCursor = 0;
 }
 
 bool ABRChunk::StepPlan()
@@ -2030,6 +2231,8 @@ bool ABRChunk::StepPlan()
 		}
 		// v4.15 : volumes de brouillard locaux (quelques composants : salle de fosses, zones sans lumiere)
 		BuildFogVolumes();
+		// v4.15 : decalques d'usure (taches au sol en lot d'instances ; les autres, crees un par un apres les objets)
+		BuildDecals();
 		// Rien n'est encore cree (sauf les quelques lumieres des bassins et verrieres des Poolrooms, et les volumes de
 		// brouillard locaux) : StepBuild s'en charge
 		bDeferLights = false;
@@ -2150,6 +2353,11 @@ bool ABRChunk::StepBuild(double BudgetMs, bool bStopAtCollision)
 			else if (ActorCursor < Rolls + PlannedExits.Num())
 			{
 				SpawnPlannedExit(ActorCursor++ - Rolls);
+			}
+			else if (DecalCursor < PendingDecals.Num())
+			{
+				// v4.15 : decalques d'usure un par un (un composant par pas, dans le budget de l'image)
+				CreateDecal(PendingDecals[DecalCursor++]);
 			}
 			else
 			{
@@ -3129,6 +3337,15 @@ int32 ABRChunk::CreateBatchStep(const FString& Key, int32 MaxInstances)
 	if (B.bNoRayTracing)
 	{
 		ISM->bVisibleInRayTracing = false;
+	}
+	if (B.bDecal)
+	{
+		// v4.15 : decalques sur maillage (plans des taches au sol) : ils ne modifient que le DBuffer de ce qu'ils recouvrent ;
+		// hors des rayons, des champs de distance et de la scene Lumen (un plan mince y ferait de l'ombre)
+		ISM->bVisibleInRayTracing = false;
+		ISM->bAffectDistanceFieldLighting = false;
+		ISM->bAffectDynamicIndirectLighting = false;
+		ISM->bReceivesDecals = false;
 	}
 	if (B.bCollision)
 	{

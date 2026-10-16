@@ -20,6 +20,9 @@ enum class EBRSky : uint8 { None, Overcast, Night, Day };
 enum class EBRStep : uint8 { Carpet, Hard, Water, Grass };
 enum class EBRProps : uint8 { None, Warehouse, Pipes, Electrical, Office, Hotel, Caves, Field, Suburbs, City };
 enum class EBREdge : uint8 { Open, Wall, Door };
+/** v4.15 : decalques d'usure (cases de l'atlas T_Decal_Atlas) : aureole de mur sous le plafond, tache de plafond, zone
+ *  humide au sol, eraflures */
+enum class EBRDecal : uint8 { WaterStain, CeilingStain, Damp, Scuff, Count };
 
 /** Objets d'inventaire */
 enum class EBRItem : uint8
@@ -482,6 +485,9 @@ struct FBRLevelDef
 	/** Volumes de brouillard locaux (air humide des salles de fosses et des zones sans lumiere, air froid du sas de la porte
 	 *  de service) : densite relative, 0 : aucun. Places d'apres la disposition (la meme chez tous les joueurs) */
 	float LocalFogDensity = 0.f;
+	/** Decalques d'usure par chunk (aureoles sous le plafond, taches pres des plafonniers, moquette humide au pied des murs
+	 *  et sous les passages, eraflures) : densite relative, 0 : aucun. Tires avec la graine (les memes chez tous les joueurs) */
+	float DecalDensity = 0.f;
 
 	/** v4.15 : couleur apparente des plafonniers a l'ecran (temperature vue a travers la balance des blancs, multipliee par
 	 *  LightColor, maximum 1) : apercus du menu, ou rien n'est rendu par le moteur */
