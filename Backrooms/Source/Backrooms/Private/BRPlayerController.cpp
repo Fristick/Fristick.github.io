@@ -108,12 +108,12 @@ namespace
 	{
 		if (!ABRPlayerController::IsHardwareRayTracingAvailable())
 		{
-			return BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsNoRT", "MegaLights : indisponible (ray tracing matériel requis)"));
+			return BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsNoRT", "MegaLights : indisponible (ray tracing mat\u00e9riel requis)"));
 		}
 		static IConsoleVariable* const ProjectCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.MegaLights.EnableForProject"));
 		const bool bOn = ABRWorld::IsMegaLightsActive() || (ProjectCVar && ProjectCVar->GetInt() != 0);
 		return bOn ? FString(BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsOn", "MegaLights : actif (ombres de toutes les lampes)")))
-			: FString(BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsOff", "MegaLights : désactivé")));
+			: FString(BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsOff", "MegaLights : d\u00e9sactiv\u00e9")));
 	}
 
 	// Ordre d'affichage (deux colonnes) : controles, son, affichage, puis graphismes
@@ -337,7 +337,7 @@ void ABRPlayerController::BeginPlay()
 		// (pas pendant un test automatique : les captures de l'interface restent comparables)
 		if (Chosen != 1 && FBRSettings::Get().GraphicsProfile == Chosen && !ABRAutoTest::IsRequested())
 		{
-			ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.FirstRunProfile", "Premier lancement : profil graphique {Profile} choisi pour cette carte ({Gpu}). Il se change dans PARAMÈTRES > GRAPHISMES."),
+			ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.FirstRunProfile", "Premier lancement : profil graphique {Profile} choisi pour cette carte ({Gpu}). Il se change dans PARAM\u00c8TRES > GRAPHISMES."),
 				{ { TEXT("Profile"), BRLoc::Arg(ProfileNames(Chosen)) }, { TEXT("Gpu"), BRLoc::Arg(GFirstRunGpu) } }), 8.f, FLinearColor(1.f, 0.85f, 0.5f));
 		}
 	}
@@ -3309,7 +3309,7 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 			return BR_STR(NSLOCTEXT("BR", "Menu.Indisponible", "INDISPONIBLE"));
 		}
 		// v4.15 : demande, mais sans effet tant que le ray tracing materiel est coupe dans les reglages
-		return (S.bMegaLights && !S.bHardwareRT) ? FString(BR_STR(NSLOCTEXT("BR", "Menu.MegaLightsNoRT", "SANS RT MATÉRIEL"))) : OnOff(S.bMegaLights);
+		return (S.bMegaLights && !S.bHardwareRT) ? FString(BR_STR(NSLOCTEXT("BR", "Menu.MegaLightsNoRT", "SANS RT MAT\u00c9RIEL"))) : OnOff(S.bMegaLights);
 	case Row_AreaLights:
 		return OnOff(S.bAreaLights);
 	case Row_FullCreatures:
@@ -3850,7 +3850,7 @@ FString ABRPlayerController::GetRenderModeReport() const
 {
 	// v4.15 : ligne du rapport du test : mode de rendu reel, plus l'etat de MegaLights (la ligne affichee dans les
 	// parametres ne change pas)
-	return GetRenderModeText() + TEXT("  ·  ") + MegaLightsReportText();
+	return GetRenderModeText() + TEXT("  \u00b7  ") + MegaLightsReportText();
 }
 
 void ABRPlayerController::SaveSettings() const
