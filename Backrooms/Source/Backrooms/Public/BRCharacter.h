@@ -545,6 +545,8 @@ private:
 	void UpdateCamera(float Dt);
 	void UpdateFocus();
 	void UpdateFlashlight(float Dt);
+	/** v4.15 : couleur de la lampe portee compensee par la balance des blancs du niveau (BRColor::UnbalancedLamp) */
+	void UpdateLampColor();
 	void UpdateAudio(float Dt);
 	void UpdatePostProcess(float Dt);
 	void PlayFootstep();
@@ -754,6 +756,10 @@ private:
 	bool bInteractHeld = false;
 	float ReviveProgress = 0.f;
 	uint8 AppliedLamp = 255;
+	/** v4.15 : balance des blancs (K, teinte) pour laquelle la couleur de la lampe a ete calculee */
+	FVector2f AppliedLampBalance = FVector2f(-1.f, 0.f);
+	/** v4.15 : facteur d'intensite qui rend la luminosite perdue par cette compensation */
+	float LampIntensityScale = 1.f;
 	bool bFlashlightOn = false;
 	bool bNightVision = false;
 	bool bWantsSprint = false;

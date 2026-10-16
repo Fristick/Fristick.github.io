@@ -924,6 +924,32 @@ void ABRCharacter::ToggleCrouch()
 	}
 }
 
+// v4.15 : la lampe portee garde a l'ecran son blanc chaud d'avant (1, 0,93, 0,8) quelle que soit la balance des blancs du
+// niveau. Sans compensation, une balance basse (Level 0 : 3900 K) la faisait paraitre bleu-vert, et le papier peint vert
+// sous son faisceau. Rendu seulement (la lumiere de gameplay ne depend ni de la couleur ni de l'intensite de la lampe)
+void ABRCharacter::UpdateLampColor()
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	if (!Flashlight || !W)
+	{
+		return;
+	}
+	const FBRLevelDef& D = W->Def();
+	const FVector2f Balance(FMath::Clamp(D.WhiteTempK, 1500.f, 15000.f), FMath::Clamp(D.WhiteTint, -1.f, 1.f));
+	if (Balance == AppliedLampBalance)
+	{
+		return;
+	}
+	AppliedLampBalance = Balance;
+	const float Seen[3] = { 1.f, 0.93f, 0.8f };
+	float Lamp[3];
+	float Gain = 1.f;
+	BRColor::UnbalancedLamp(Seen, Balance.X, Balance.Y, Lamp, &Gain);
+	Flashlight->SetLightColor(FLinearColor(Lamp[0], Lamp[1], Lamp[2]));
+	// Couleur ramenee a un maximum de 1 : l'intensite rend la luminosite perdue (Level 0 : 71 %, banc test_color)
+	LampIntensityScale = Gain > 0.2f ? 1.f / Gain : 1.f;
+}
+
 void ABRCharacter::SetFlashlightRayTracedShadows(bool bEnable)
 {
 	if (!Flashlight)
@@ -2809,7 +2835,8 @@ void ABRCharacter::TickRemote(float Dt)
 			const FRotator Aim = GetAimRotation();
 			const FRotator YawOnly(0.f, Aim.Yaw, 0.f);
 			Flashlight->SetWorldLocationAndRotation(GetEyeLocation() + YawOnly.RotateVector(FlashBase + ThirdPersonLightPush), Aim);
-			Flashlight->SetIntensity(FlashCandelas * (NetLamp == 2 ? 0.55f : 1.f));
+			UpdateLampColor();
+			Flashlight->SetIntensity(FlashCandelas * LampIntensityScale * (NetLamp == 2 ? 0.55f : 1.f));
 		}
 	}
 
@@ -3031,6 +3058,7 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 	{
 		return;
 	}
+	UpdateLampColor();
 	const bool bHeadlamp = GetEquipped(EBREquipSlot::Hand) != EBRItem::Flashlight && GetEquipped(EBREquipSlot::Belt) != EBRItem::Flashlight;
 	if (bNightVision && !HasCamcorder())
 	{
@@ -3094,7 +3122,7 @@ void ABRCharacter::UpdateFlashlight(float Dt)
 			Mult *= 0.12f * FlashFlicker;
 		}
 		Flashlight->SetAttenuationRadius(bPerturbed ? 380.f : 2400.f);
-		Flashlight->SetIntensity(FlashCandelas * Mult * (bHeadlamp ? 0.55f : 1.f));
+		Flashlight->SetIntensity(FlashCandelas * LampIntensityScale * Mult * (bHeadlamp ? 0.55f : 1.f));
 		Flashlight->SetVisibility(true);
 		Glow = Mult;
 		if (Battery <= 0.f)

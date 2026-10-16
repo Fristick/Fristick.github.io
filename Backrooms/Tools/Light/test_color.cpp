@@ -250,6 +250,31 @@ int main(int Argc, char** Argv)
 		Line(Buf, Hue >= 30.f && Hue <= 60.f && Sat <= 0.16f);
 	}
 
+	// v4.15 : lampe portee compensee par la balance des blancs du niveau (BRCharacter::UpdateLampColor) : a l'ecran, le blanc
+	// chaud d'avant (1, 0,93, 0,8), sans virer au bleu-vert ; Gain : luminosite gardee
+	std::printf("Lampe portee\n");
+	for (const auto& Pair : GLevels)
+	{
+		const FLevel& L = Pair.second;
+		if (std::fabs(L.WhiteTempK - 6500.f) < 1.f && std::fabs(L.WhiteTint) < 1e-4f)
+		{
+			continue;
+		}
+		const float Torch[3] = { 1.f, 0.93f, 0.8f };
+		float Lamp[3];
+		float Gain = 1.f;
+		BRColor::UnbalancedLamp(Torch, L.WhiteTempK, L.WhiteTint, Lamp, &Gain);
+		float Raw[3];
+		BRColor::WhiteBalance(Lamp, L.WhiteTempK, L.WhiteTint, Raw);
+		const float Peak = Raw[0] > Raw[1] ? (Raw[0] > Raw[2] ? Raw[0] : Raw[2]) : (Raw[1] > Raw[2] ? Raw[1] : Raw[2]);
+		const float Back[3] = { Raw[0] / Peak, Raw[1] / Peak, Raw[2] / Peak };
+		float Plain[3];
+		BRColor::WhiteBalance(Torch, L.WhiteTempK, L.WhiteTint, Plain);
+		std::snprintf(Buf, sizeof(Buf), "Level %d : lampe (%.2f, %.2f, %.2f) vue (%.2f, %.2f, %.2f), luminosite %.0f %% (sans compensation : %.2f, %.2f, %.2f)", Pair.first,
+			Lamp[0], Lamp[1], Lamp[2], Back[0], Back[1], Back[2], Gain * 100.f, Plain[0] / Plain[0], Plain[1] / Plain[0], Plain[2] / Plain[0]);
+		Line(Buf, Near(Back, Torch, 0.01f) && Gain > 0.6f);
+	}
+
 	std::printf("RESULTAT : %s (%d verification(s))\n", GFailures == 0 ? "OK" : "ECHEC", GChecks);
 	return GFailures == 0 ? 0 : 1;
 }

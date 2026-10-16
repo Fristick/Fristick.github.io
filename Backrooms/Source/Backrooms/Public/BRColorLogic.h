@@ -163,6 +163,63 @@ namespace BRColor
 		}
 	}
 
+	/** v4.15 : couleur (LightColor) a donner a une lampe portee (lampe torche, frontale) pour qu'elle garde a l'ecran la
+	 *  couleur Seen qu'elle avait avec une balance des blancs neutre (6500 K). WhiteBalance est lineaire (une matrice 3x3,
+	 *  tiree ici des trois primaires) : on l'inverse. Negatifs ramenes a 0, maximum 1 ; Gain (facultatif) : facteur de la
+	 *  couleur vue obtenue (Seen x Gain), pour juger la perte de luminosite */
+	inline void UnbalancedLamp(const float Seen[3], float WhiteTemp, float WhiteTint, float Out[3], float* Gain = nullptr)
+	{
+		double Mx[3][3];
+		for (int J = 0; J < 3; ++J)
+		{
+			float Unit[3] = { 0.f, 0.f, 0.f };
+			Unit[J] = 1.f;
+			float Col[3];
+			WhiteBalance(Unit, WhiteTemp, WhiteTint, Col);
+			for (int I = 0; I < 3; ++I)
+			{
+				Mx[I][J] = Col[I];
+			}
+		}
+		const double C00 = Mx[1][1] * Mx[2][2] - Mx[1][2] * Mx[2][1];
+		const double C01 = Mx[1][2] * Mx[2][0] - Mx[1][0] * Mx[2][2];
+		const double C02 = Mx[1][0] * Mx[2][1] - Mx[1][1] * Mx[2][0];
+		const double Det = Mx[0][0] * C00 + Mx[0][1] * C01 + Mx[0][2] * C02;
+		if (std::fabs(Det) < 1e-9)
+		{
+			for (int I = 0; I < 3; ++I)
+			{
+				Out[I] = Seen[I];
+			}
+			if (Gain)
+			{
+				*Gain = 1.f;
+			}
+			return;
+		}
+		// Inverse = adjointe / determinant
+		const double Inv[3][3] = {
+			{ C00 / Det, (Mx[0][2] * Mx[2][1] - Mx[0][1] * Mx[2][2]) / Det, (Mx[0][1] * Mx[1][2] - Mx[0][2] * Mx[1][1]) / Det },
+			{ C01 / Det, (Mx[0][0] * Mx[2][2] - Mx[0][2] * Mx[2][0]) / Det, (Mx[0][2] * Mx[1][0] - Mx[0][0] * Mx[1][2]) / Det },
+			{ C02 / Det, (Mx[0][1] * Mx[2][0] - Mx[0][0] * Mx[2][1]) / Det, (Mx[0][0] * Mx[1][1] - Mx[0][1] * Mx[1][0]) / Det } };
+		double Lamp[3];
+		double Peak = 0.0;
+		for (int I = 0; I < 3; ++I)
+		{
+			Lamp[I] = Inv[I][0] * Seen[0] + Inv[I][1] * Seen[1] + Inv[I][2] * Seen[2];
+			Lamp[I] = Lamp[I] > 0.0 ? Lamp[I] : 0.0;
+			Peak = Lamp[I] > Peak ? Lamp[I] : Peak;
+		}
+		for (int I = 0; I < 3; ++I)
+		{
+			Out[I] = Peak > 1e-6 ? static_cast<float>(Lamp[I] / Peak) : Seen[I];
+		}
+		if (Gain)
+		{
+			*Gain = Peak > 1e-6 ? static_cast<float>(1.0 / Peak) : 1.f;
+		}
+	}
+
 	/** Teinte (degres, 0..360) et saturation (0..1) d'une couleur, comme un selecteur TSV */
 	inline void HueSat(const float C[3], float& Hue, float& Sat)
 	{
