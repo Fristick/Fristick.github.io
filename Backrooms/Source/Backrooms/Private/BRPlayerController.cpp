@@ -84,6 +84,25 @@ namespace
 	}
 #endif
 
+	/** v4.15 : profil choisi au premier lancement (-1 : aucun choix a annoncer) et carte qui l'a decide */
+	int32 GFirstRunProfile = -1;
+	FString GFirstRunGpu;
+
+	/** v4.15 : premier lancement (aucun profil enregistre) : RTX FLUIDE (TSR a 67 %, MegaLights a 2 echantillons) pour une
+	 *  carte de 8 Go de memoire video ou moins, ou une carte de portable ; Qualite sinon */
+	int32 FirstRunGraphicsProfile(FString& OutGpu)
+	{
+		FTextureMemoryStats Stats;
+		RHIGetTextureMemoryStats(Stats);
+		const double VramMB = Stats.DedicatedVideoMemory > 0 ? static_cast<double>(Stats.DedicatedVideoMemory) / (1024.0 * 1024.0) : 0.0;
+		const FString Adapter = GRHIAdapterName;
+		const bool bLaptop = Adapter.Contains(TEXT("Laptop")) || Adapter.Contains(TEXT("Mobile")) || Adapter.Contains(TEXT("Max-Q"));
+		// 8 Go annonces par le pilote : un peu moins ou un peu plus de 8192 Mo selon la carte
+		const bool bSmallVram = VramMB > 0.0 && VramMB <= 8704.0;
+		OutGpu = VramMB > 0.0 ? FString::Printf(TEXT("%s, %.0f Mo"), *Adapter, VramMB) : Adapter;
+		return (bLaptop || bSmallVram) ? 4 : 1;
+	}
+
 	/** v4.15 : etat reel de MegaLights (ombres de toutes les lampes), pour le rapport du mode de rendu */
 	FString MegaLightsReportText()
 	{
@@ -309,6 +328,19 @@ void ABRPlayerController::BeginPlay()
 	// v4.9 : affichage : UGameUserSettings seule source, retour a la configuration confirmee si le jeu s'est arrete avant
 	BRDisplay::Startup();
 	ApplySettings();
+	if (GFirstRunProfile >= 0)
+	{
+		// v4.15 : profil choisi au premier lancement : enregistre (il ne sera plus redecide) et annonce s'il differe de Qualite
+		const int32 Chosen = GFirstRunProfile;
+		GFirstRunProfile = -1;
+		SaveSettings();
+		// (pas pendant un test automatique : les captures de l'interface restent comparables)
+		if (Chosen != 1 && FBRSettings::Get().GraphicsProfile == Chosen && !ABRAutoTest::IsRequested())
+		{
+			ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.FirstRunProfile", "Premier lancement : profil graphique {Profile} choisi pour cette carte ({Gpu}). Il se change dans PARAMÈTRES > GRAPHISMES."),
+				{ { TEXT("Profile"), BRLoc::Arg(ProfileNames(Chosen)) }, { TEXT("Gpu"), BRLoc::Arg(GFirstRunGpu) } }), 8.f, FLinearColor(1.f, 0.85f, 0.5f));
+		}
+	}
 	if (BRDisplay::TakeRestoredAtStartup())
 	{
 		ABRHUD::Notify(this, BR_STR(NSLOCTEXT("BR", "Display.RestoredAtStartup", "Affichage r\u00e9tabli : le changement pr\u00e9c\u00e9dent n'avait pas \u00e9t\u00e9 confirm\u00e9.")), 5.f, FLinearColor(1.f, 0.85f, 0.5f));
@@ -3650,7 +3682,16 @@ void ABRPlayerController::LoadSettings()
 	const bool bHadQuality = Cfg.GetInt(SettingsSection, TEXT("Quality"), S.Quality);
 	if (!Cfg.GetInt(SettingsSection, TEXT("GraphicsProfile"), S.GraphicsProfile))
 	{
-		S.GraphicsProfile = bHadQuality ? 3 : 1;
+		// v4.15 : premier lancement : profil selon la carte (RTX FLUIDE pour 8 Go ou moins ou une carte de portable, sinon
+		// Qualite), annonce et enregistre une fois (BeginPlay)
+		FString Gpu;
+		S.GraphicsProfile = bHadQuality ? 3 : FirstRunGraphicsProfile(Gpu);
+		if (!bHadQuality)
+		{
+			GFirstRunProfile = S.GraphicsProfile;
+			GFirstRunGpu = Gpu;
+			UE_LOG(LogBackrooms, Log, TEXT("Premier lancement : profil graphique %d choisi pour %s"), S.GraphicsProfile, *Gpu);
+		}
 	}
 	Cfg.GetBool(SettingsSection, TEXT("RTShadows"), S.bRTShadows);
 	Cfg.GetBool(SettingsSection, TEXT("MegaLights"), S.bMegaLights);
