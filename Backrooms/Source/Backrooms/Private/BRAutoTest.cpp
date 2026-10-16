@@ -1827,8 +1827,20 @@ void ABRAutoTest::WriteReport()
 	L.Add(FString::Printf(TEXT("Date : %s   Duree : %.0f s"), *FDateTime::Now().ToString(), FPlatformTime::Seconds() - StartTime));
 	L.Add(FString::Printf(TEXT("Jeu : %s   Moteur : %s   RHI : %s"), BR_GAME_VERSION, FApp::GetBuildVersion(), *FApp::GetGraphicsRHI()));
 	// v4.5 : machine, profil et mode de rendu reellement actif (a joindre a toute comparaison avant / apres)
+	// v4.15 : carte qui fait le rendu (adaptateur du RHI). Sur un portable a deux cartes (Optimus), GetPrimaryGPUBrand
+	// donne la carte de l'ecran (Intel UHD) alors que le jeu rend sur la carte NVIDIA : les deux sont ecrites si elles different
+	FString RenderGPU = GRHIAdapterName.TrimStartAndEnd();
+	const FString DisplayGPU = FPlatformMisc::GetPrimaryGPUBrand().TrimStartAndEnd();
+	if (RenderGPU.IsEmpty())
+	{
+		RenderGPU = DisplayGPU;
+	}
+	else if (!DisplayGPU.IsEmpty() && DisplayGPU != RenderGPU)
+	{
+		RenderGPU += FString::Printf(TEXT(" (ecran : %s)"), *DisplayGPU);
+	}
 	L.Add(FString::Printf(TEXT("Processeur : %s   Carte graphique : %s   Memoire : %.0f Go"), *FPlatformMisc::GetCPUBrand().TrimStartAndEnd(),
-		*FPlatformMisc::GetPrimaryGPUBrand(), FPlatformMemory::GetConstants().TotalPhysical / (1024.0 * 1024.0 * 1024.0)));
+		*RenderGPU, FPlatformMemory::GetConstants().TotalPhysical / (1024.0 * 1024.0 * 1024.0)));
 	{
 		const FBRSettings& S = FBRSettings::Get();
 		// v4.8 : 4 RTX fluide (avant : borne a 3, il apparaissait comme "Personnalise")
@@ -1925,6 +1937,7 @@ void ABRAutoTest::WriteReport()
 		Root->SetStringField(TEXT("jeu"), BR_GAME_VERSION);
 		Root->SetStringField(TEXT("moteur"), FApp::GetBuildVersion());
 		Root->SetStringField(TEXT("rhi"), FApp::GetGraphicsRHI());
+		Root->SetStringField(TEXT("carte_graphique"), GRHIAdapterName); // v4.15 : carte du rendu (voir Rapport.txt)
 		Root->SetStringField(TEXT("ligne_de_commande"), FCommandLine::Get());
 		auto Strings = [](const TArray<FString>& In)
 		{
