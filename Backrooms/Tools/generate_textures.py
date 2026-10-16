@@ -2,12 +2,15 @@
 Generateur de textures procedurales (toutes "tileables") pour le jeu Backrooms.
 
 Usage :  python generate_textures.py            (necessite numpy + pillow)
+         python generate_textures.py T_L0_Wallpaper T_L0_Carpet     (v4.15 : seulement ces textures)
 Sortie : ../RawAssets/Textures/*.jpg / *.png
 
 Toutes les textures sont construites a partir de bruit filtre dans le domaine
 de Fourier : le resultat est donc periodique (raccord parfait) par construction.
 """
 import os
+import sys
+
 import numpy as np
 from PIL import Image
 
@@ -63,8 +66,9 @@ def colorize(base_rgb, *layers):
 
 
 # Intensite du relief (normal map "<nom>_N.png" generee a partir de la luminance)
+# v4.15 : la moquette et les dalles du Niveau 0 ont leur propre carte de hauteur (boucles, fissures, ossature)
 NORMAL_STRENGTH = {
-    "T_L0_Carpet": 7.0, "T_L0_Ceiling": 5.0, "T_Concrete": 4.0, "T_ConcreteFloor": 5.0,
+    "T_Concrete": 4.0, "T_ConcreteFloor": 5.0,
     "T_ConcreteDark": 4.0, "T_Brick": 8.0, "T_MetalPanel": 4.0, "T_OfficeCarpet": 6.0, "T_OfficeWall": 2.0,
     "T_HotelCarpet": 5.0, "T_HotelWallpaper": 3.0, "T_Wood": 3.0, "T_Rock": 10.0, "T_Dirt": 6.0,
     "T_Asphalt": 5.0, "T_Grass": 6.0, "T_Facade": 4.0, "T_Siding": 7.0, "T_Skin": 4.0, "T_Hazard": 3.0,
@@ -143,22 +147,55 @@ def grid_coords(size):
 # ---------------------------------------------------------------------------
 # Niveau 0
 # ---------------------------------------------------------------------------
+def desaturate(rgb255, k):
+    """v4.15 : couleur (0..255) rapprochee de son gris de la part k (jaune plus naturel, moins sature)"""
+    c = np.array(rgb255, dtype=np.float64) / 255.0
+    g = float(c @ np.array([0.299, 0.587, 0.114]))
+    return c * (1.0 - k) + g * k
+
+
+def wrap_dist(coord_px, period_px):
+    """Distance (px) au multiple de period_px le plus proche (texture periodique)"""
+    m = coord_px % period_px
+    return np.minimum(m, period_px - m)
+
+
+def column_noise(S, seed, beta=2.0, fmax=24.0):
+    """Bruit 1D periodique et doux (une valeur par pixel), ecart-type 1 : spectre en 1/f^beta coupe au-dela de fmax
+    periodes par tuile"""
+    r = np.random.default_rng(seed)
+    F = np.fft.rfft(r.standard_normal(S))
+    f = np.fft.rfftfreq(S) * S
+    f[0] = 1.0
+    F *= (1.0 / f ** (beta / 2.0)) * np.exp(-((f / fmax) ** 2))
+    F[0] = 0
+    n = np.fft.irfft(F, n=S)
+    return (n - n.mean()) / (n.std() + 1e-9)
+
+
 def t_l0_wallpaper():
     """Papier peint du Niveau 0 (modele fourni) : bandes verticales vert-jaune bordees d'un liseré sombre,
     avec des motifs de trois chevrons empiles, decales d'une demi-periode d'une colonne a l'autre.
-    Une repetition = 16 colonnes (120 cm dans le jeu, soit des bandes de 7,5 cm)."""
+    v4.15 (realisme) : une repetition = 106 cm (FBRSurface::Scale du mur), soit deux les de 53 cm (largeur d'un rouleau
+    europeen) de 7 colonnes de 7,6 cm ; raccord droit, le motif continue d'un le a l'autre (4 rangees de 26,5 cm).
+    Raccords des les : joint d'un pixel a peine ouvert et bord du le de droite souleve par endroits (relief de la normal
+    map, 1 px ~ 0,5 mm) ; chaque le a son ton (+-1,2 %), variations douces de +-6 % ; couleurs 20 % moins saturees.
+    Plus de taches dessinees dans la texture (elles se repetaient a chaque tuile) : la ligne de maree au-dessus de la
+    plinthe et la bande sous le plafond sont dans le materiau (hauteur monde), les aureoles sont des decalques."""
     S = 2048
     x, y = grid_coords(S)
-    cols, rows = 16, 5
-    light = np.array([185, 180, 98]) / 255.0
-    mid = np.array([166, 162, 80]) / 255.0
-    dark = np.array([146, 142, 60]) / 255.0
+    rolls, per_roll, rows = 2, 7, 4
+    cols = rolls * per_roll
+    light = desaturate([185, 180, 98], 0.2)
+    mid = desaturate([166, 162, 80], 0.2)
+    dark = desaturate([146, 142, 60], 0.2)
     col = np.floor(x * cols).astype(int)
     u = (x * cols) % 1.0                        # position dans la colonne
     # liseré sombre (bord gauche de chaque colonne), bords adoucis
     border = smoothstep(0.0, 0.03, u) * (1 - smoothstep(0.22, 0.27, u))
     inner_line = np.exp(-((u - 0.125) / 0.025) ** 2)     # trait central un peu plus fonce dans le liseré
-    # motif : 3 chevrons "^" dans la bande claire, une rangee sur deux decalee
+    # motif : 3 chevrons "^" dans la bande claire, une rangee sur deux decalee (7 colonnes par le : la parite
+    # alterne d'un le a l'autre comme dans une seule bande continue)
     shift = (col % 2) * 0.5
     v = (y * rows + shift) % 1.0
     cu = (u - 0.62) / 0.36                     # -1..1 sur la largeur du motif
@@ -183,21 +220,29 @@ def t_l0_wallpaper():
     img *= (1 + 0.025 * weave)[..., None]
     paper = noise(S, beta=0.6, seed=11)
     img *= (1 + 0.03 * paper)[..., None]
-    # decolorations larges et taches d'humidite (discretes : la salete du bas de mur est geree par le materiau)
+    # ton propre a chaque le (rouleaux d'un meme lot, un peu passes) et variations douces (+-6 %), trainees verticales
+    roll = np.floor(x * rolls).astype(int)
+    img *= np.where(roll == 0, 1.012, 0.988)[..., None]
     blot = noise(S, beta=3.0, seed=12)
-    img *= (1 - 0.06 * n01(blot, 2.0))[..., None]
-    stain = noise(S, beta=2.6, seed=13)
-    ring = smoothstep(1.7, 2.0, stain) - smoothstep(2.2, 2.6, stain)
-    inside_st = smoothstep(1.8, 2.6, stain)
-    img = mix(img, img * np.array([0.82, 0.76, 0.55]), np.clip(inside_st * 0.3 + ring * 0.35, 0, 1))
-    # joints des les (tous les 60 cm = 8 colonnes), legerement decolles
-    us = (x * 2) % 1.0
-    seam = np.exp(-((us - 0.0) / 0.0012) ** 2) + np.exp(-((us - 1.0) / 0.0012) ** 2)
-    img *= (1 - 0.15 * seam)[..., None]
+    img *= (1 + 0.06 * np.clip(blot / 2.0, -1.0, 1.0))[..., None]
+    streak = noise(S, beta=2.2, seed=14, aniso=(1.0, 0.06))
+    img *= (1 + 0.02 * np.clip(streak / 2.0, -1.0, 1.0))[..., None]
+    # raccords des les (x = 0 et 0,5) : joint d'un pixel, encrasse ; bord droit souleve sur une partie de la hauteur
+    px = x * S
+    roll_px = S / rolls
+    right = px % roll_px                         # distance au joint, cote droit (le suivant)
+    left = roll_px - right                       # cote gauche
+    gap = np.exp(-(np.minimum(right, left) / 0.7) ** 2)
+    grime = np.exp(-(np.minimum(right, left) / 3.0) ** 2)
+    lift_amount = np.stack([smoothstep(0.3, 1.4, column_noise(S, 15 + k)) for k in range(rolls)], -1)
+    lift_v = lift_amount[np.arange(S)[:, None], roll]          # chaque joint a ses propres decollements
+    lift = np.exp(-right / 5.0) * (right < 40) * lift_v
+    img *= (1 - 0.22 * gap - 0.05 * grime)[..., None]
+    img *= (1 + 0.035 * lift)[..., None]       # le bord souleve accroche un peu la lumiere
     save("T_L0_Wallpaper", img)
-    # relief : motif et bandes legerement embossees, liseré en creux
-    height = 0.6 * motif - 0.5 * border + 0.15 * weave / 3.0 - 0.6 * seam
-    save_normal("T_L0_Wallpaper", height, 6.0, 1024)
+    # relief : motif tres legerement embosse, liseré en creux, joint et bord souleve (en pixels de hauteur)
+    height = 0.35 * motif - 0.3 * border + 0.12 * weave / 3.0 - 0.9 * gap + 0.6 * lift
+    save_normal("T_L0_Wallpaper", height, 2.0, S)
 
 
 def t_noise_lf():
@@ -213,44 +258,196 @@ def t_noise_lf():
 
 
 def t_l0_carpet():
+    """v4.15 (realisme) : moquette bouclee commerciale. Une repetition = 160 cm (FBRSurface::Scale du sol), 1 px ~ 0,8 mm :
+    rangs de touffetage tous les 2,5 mm, boucles tous les 3,6 mm (decalees d'une demi-boucle d'un rang a l'autre), chaque
+    boucle a sa hauteur et son ton (fil chine +-7 %), chaque rang le sien (+-2 %) ; creux entre les boucles plus sombres
+    (occlusion dans la couleur et dans le relief). Zones humides diffuses de 15 a 40 cm (plus sombres, la carte de
+    rugosite les rend plus lisses) : aucune ne domine la repetition, les grandes taches restent dessinees par le materiau
+    a l'echelle du monde (Stains) et par les decalques."""
     S = 2048
-    base = np.array([0.56, 0.47, 0.27])
-    fib = noise(S, beta=0.2, seed=21)
-    fib = blur_wrap(fib, 1)
-    loops = noise(S, beta=1.0, seed=22, fmin=120)
-    g = 1 + 0.10 * fib + 0.06 * loops
+    rows_n, loops_n = 640, 448
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float64)
+    rv = yy * rows_n / S
+    row = np.floor(rv).astype(int)
+    fv = rv - row - 0.5
+    ru = xx * loops_n / S + (row % 2) * 0.5
+    st = np.floor(ru).astype(int)
+    fu = ru - st - 0.5
+    row %= rows_n
+    st %= loops_n
+    rng = np.random.default_rng(25)
+    loop_h = rng.random((rows_n, loops_n))
+    loop_tone = rng.random((rows_n, loops_n))
+    row_tone = rng.random(rows_n)
+    dome = np.clip(1.0 - (fu / 0.5) ** 2 - (fv / 0.5) ** 2, 0.0, 1.0) ** 0.7
+    loop = dome * (0.8 + 0.4 * loop_h[row, st])
+    del yy, xx, rv, ru, fu, fv
+    base = np.array([0.54, 0.47, 0.30])
+    fib = blur_wrap(noise(S, beta=0.2, seed=21), 1)
+    g = (1 + 0.14 * (loop_tone[row, st] - 0.5)) * (1 + 0.04 * (row_tone[row] - 0.5)) * (1 + 0.04 * fib)
+    g *= 0.8 + 0.2 * loop                      # creux entre les boucles
     img = rgb_from(g, base)
-    # v4.3 : plus de grande tache humide dans la texture (elle se repetait tous les 2,2 m) ; les taches sont
-    # maintenant dessinees par le materiau a l'echelle du monde (parametre Stains). Salissures sans basses frequences :
-    # aucun motif ne domine la repetition
+    # Zones humides diffuses : plus sombres, un peu moins saturees
+    damp = smoothstep(1.0, 2.6, noise(S, beta=2.4, seed=23, fmin=5))
+    img = mix(img, img * np.array([0.88, 0.87, 0.85]), damp * 0.6)
+    # v4.3 : salissures sans basses frequences : aucun motif ne domine la repetition
     dirt = noise(S, beta=2.0, seed=24, fmin=6)
     img *= (1 - 0.07 * n01(dirt))[..., None]
     save("T_L0_Carpet", img)
+    # Relief : boucles et fibres (hauteur en pixels ; le creux entre deux boucles fait ~0,6 px de pente)
+    height = 0.9 * loop + 0.15 * fib / 3.0 - 0.25 * damp
+    save_height_normal("T_L0_Carpet", height * 0.9)
 
 
 def t_l0_ceiling():
+    """v4.15 (realisme) : plafond suspendu en dalles de fibre minerale "fissurees" de 61 cm (2 pi). Une repetition = 122 cm
+    (FBRSurface::Scale du plafond) = 2 x 2 dalles, 1 px ~ 0,6 mm. Ossature en T peinte en blanc de 24 mm (15/16 po) aux
+    multiples de 61 cm ; entre le profil et la dalle, un jour d'ombre de 2 mm puis le chant de la dalle legerement
+    arrondi. Dalles : fissures vermiculees (rainures courtes et sinueuses), trous d'aiguille (1 a 2,5 mm), ton propre a
+    chaque dalle (+-2,5 %), pores fins. Les taches d'eau ne sont plus peintes dans la texture (elles se repetaient tous les
+    1,2 m) : ce sont des decalques autour de certains plafonniers. La carte de rugosite reconnait l'ossature (gris clair
+    peu sature) : couleurs des dalles et du profil gardees dans ces plages."""
     S = 2048
-    x, y = grid_coords(S)
-    base = np.array([0.86, 0.84, 0.77])
-    # fissures typiques des dalles acoustiques
-    fiss = noise(S, beta=1.2, seed=31, fmin=60)
-    specks = smoothstep(1.4, 2.2, fiss)
-    g = 1 - 0.28 * specks + 0.03 * noise(S, beta=0.4, seed=32)
-    img = rgb_from(g, base)
-    # taches d'eau jaunes
-    st = noise(S, beta=3.0, seed=33)
-    stain = smoothstep(1.2, 1.9, st)
-    ring = smoothstep(1.15, 1.25, st) - smoothstep(1.3, 1.5, st)
-    img = mix(img, img * np.array([0.88, 0.78, 0.55]), np.clip(stain * 0.5 + ring * 0.5, 0, 1))
-    # ossature en T (2x2 dalles de 60 cm)
-    u = (x * 2) % 1.0
-    v = (y * 2) % 1.0
-    bw = 0.012
-    bar = ((u < bw) | (u > 1 - bw) | (v < bw) | (v > 1 - bw)).astype(np.float32)
-    shadow = (((u > bw) & (u < bw * 2.5)) | ((v > bw) & (v < bw * 2.5))).astype(np.float32)
-    img = mix(img, np.ones_like(img) * np.array([0.80, 0.80, 0.77]), bar)
-    img *= (1 - 0.15 * shadow)[..., None]
+    half = S // 2
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float64)
+    dx = wrap_dist(xx, half)
+    dy = wrap_dist(yy, half)
+    d = np.minimum(dx, dy)                      # distance (px) a l'axe du profil le plus proche
+    bw = 20.0                                   # demi-largeur du profil (12 mm)
+    bar = 1.0 - smoothstep(bw - 0.8, bw + 0.8, d)
+    gap = np.exp(-((d - (bw + 2.0)) / 1.3) ** 2) * (1 - bar)
+    bevel = smoothstep(bw + 2.0, bw + 10.0, d)   # 0 au chant de la dalle, 1 sur sa face
+    tile_id = (np.floor(xx / half).astype(int) % 2) + 2 * (np.floor(yy / half).astype(int) % 2)
+    del xx, yy, dx, dy
+    rng = np.random.default_rng(35)
+    tone = (1 + 0.05 * (rng.random(4) - 0.5))[tile_id]
+    # Fissures vermiculees : lignes de niveau zero d'un bruit a bande etroite (30 a 60 periodes par tuile, traits de 1 a 2 px
+    # longs de 1 a 3 cm), coupees en segments par un second bruit de meme echelle
+    fiss = np.zeros((S, S))
+    for k, (lo, hi) in enumerate(((30, 60), (45, 90))):
+        n1 = noise(S, beta=0.0, seed=31 + 6 * k, fmin=lo, fmax=hi)
+        contour = 1 - smoothstep(0.0, 0.12, np.abs(n1))
+        seg = smoothstep(0.35, 1.1, noise(S, beta=0.0, seed=34 + 6 * k, fmin=hi, fmax=2 * hi))
+        fiss = np.maximum(fiss, contour * seg)
+    # Trous d'aiguille : impulsions aleatoires flouees (1 a 2 mm), serres et discrets
+    imp = np.zeros((S, S))
+    pts = rng.integers(0, S, size=(22000, 2))
+    imp[pts[:, 0], pts[:, 1]] = 0.5 + 0.8 * rng.random(22000)
+    F = np.fft.rfft2(imp)
+    fy = np.fft.fftfreq(S)[:, None]
+    fx = np.fft.rfftfreq(S)[None, :]
+    pins = np.fft.irfft2(F * np.exp(-2.0 * (np.pi ** 2) * (0.8 ** 2) * (fx ** 2 + fy ** 2)), s=(S, S))
+    pins = np.clip(pins / 0.2, 0.0, 1.0)
+    pores = noise(S, beta=0.4, seed=32)
+    face = bevel                                # 1 sur la face de la dalle, 0 sur le chant et le profil
+    # Couleur : dalle (multiplications grises : saturation inchangee) ; profil blanc un peu plus propre
+    g = tone * (1 + 0.03 * pores) * (1 - 0.2 * fiss * face) * (1 - 0.16 * pins * face)
+    g *= 1 - 0.10 * (1 - bevel) * (1 - bar)     # chant de la dalle dans l'ombre du profil
+    g *= 1 - 0.45 * gap
+    tile_c = rgb_from(g, np.array([0.86, 0.84, 0.77]))
+    # Leger voile jaunatre a tres grande echelle (fibre vieillie), discret
+    tint = smoothstep(0.5, 2.5, noise(S, beta=3.0, seed=33))
+    tile_c = mix(tile_c, tile_c * np.array([0.98, 0.96, 0.9]), tint * 0.6)
+    bar_c = rgb_from(1 + 0.02 * noise(S, beta=2.0, seed=36), np.array([0.88, 0.88, 0.86]))
+    img = mix(tile_c, bar_c, bar)
     save("T_L0_Ceiling", img)
+    # Relief (pixels) : profil en saillie, jour d'ombre en creux, chant arrondi, fissures et trous en creux, pores
+    height = 0.8 * bar - 1.2 * gap - 0.8 * (1 - bevel) * (1 - bar) + face * (-0.7 * fiss - 0.9 * pins + 0.04 * pores)
+    save_height_normal("T_L0_Ceiling", height)
+
+
+def t_decal_atlas():
+    """v4.15 (realisme) : atlas des decalques d'usure (MD_BR_Decal, ABRChunk::BuildDecals), RGBA 2048, quatre cases de 1024 :
+      (0, 0) aureole d'infiltration descendant du plafond le long d'un mur (fronts d'eau seches, coulures) ;
+      (1, 0) tache d'eau de plafond (anneaux bruns concentriques) ;
+      (0, 1) zone humide au sol (tache sombre aux bords doux) ;
+      (1, 1) eraflures (traces de semelles et de chariots, frottements sombres).
+    L'alpha est le masque (opacite du decalque) ; la couleur est definie partout (pas de liseré sombre au filtrage).
+    Une marge de 48 px reste transparente autour de chaque case (aucun debordement d'une case sur l'autre dans les mips)."""
+    C = 1024
+    m = 48.0 / C
+    yy, xx = np.mgrid[0:C, 0:C].astype(np.float64)
+    cx, cy = (xx + 0.5) / C, (yy + 0.5) / C
+    inner = smoothstep(m, m + 0.03, cx) * smoothstep(m, m + 0.03, cy) * smoothstep(m, m + 0.03, 1 - cx) * smoothstep(m, m + 0.03, 1 - cy)
+    cells = []
+
+    # (0, 0) aureole de mur : l'eau descend du plafond (haut de la case) ; fronts successifs seches en cernes bruns
+    n_edge = blur_wrap(noise(C, beta=3.4, seed=401), 3)
+    n_fine = noise(C, beta=2.4, seed=402)
+    n_side = noise(C, beta=3.4, seed=405)
+    depth = np.clip(0.5 + 0.18 * np.clip(column_noise(C, 403, beta=2.6), -2.0, 2.0), 0.25, 0.85)[None, :]  # selon x
+    env = smoothstep(0.0, 0.22, cx) * smoothstep(0.0, 0.22, 1 - cx)
+    f = (cy - m) / np.maximum(depth * (0.35 + 0.65 * env), 0.05) + 0.07 * n_edge + 0.004 * n_fine
+    # bords lateraux irreguliers et doux (pas de coin carre sous le plafond)
+    lat = smoothstep(0.0, 0.14, cx - m + 0.05 * n_side) * smoothstep(0.0, 0.14, 1 - m - cx + 0.05 * n_side)
+    wet = 1 - smoothstep(0.92, 1.0, f)
+    rings = np.zeros_like(f)
+    for r, w, a in ((1.0, 0.012, 0.75), (0.82, 0.01, 0.35), (0.63, 0.009, 0.25), (0.45, 0.008, 0.15)):
+        rings = np.maximum(rings, a * np.exp(-((f - r) / w) ** 2))
+    drips = np.zeros_like(f)
+    rng = np.random.default_rng(404)
+    for _ in range(9):
+        x0 = rng.uniform(0.2, 0.8)
+        width = rng.uniform(0.004, 0.01)
+        length = rng.uniform(1.05, 1.35)
+        run = smoothstep(0.7, 0.85, f) * (1 - smoothstep(length - 0.15, length, f))
+        drips = np.maximum(drips, np.exp(-((cx - x0) / width) ** 2) * run * rng.uniform(0.1, 0.2))
+    alpha = np.clip(wet * (0.16 + 0.08 * n01(n_fine)) + rings * (f < 1.03) + drips, 0, 1) * lat * inner * smoothstep(0.0, 0.04, cy - m)
+    col = np.ones((C, C, 3)) * np.array([0.47, 0.36, 0.17])
+    col = mix(col, np.ones_like(col) * np.array([0.33, 0.23, 0.10]), np.clip(rings * 1.3, 0, 1))
+    col *= (0.92 + 0.16 * n01(n_fine))[..., None]
+    cells.append(np.concatenate([col, alpha[..., None]], -1))
+
+    # (1, 0) tache de plafond : anneaux concentriques irreguliers, centre plus clair
+    r = np.sqrt((cx - 0.5) ** 2 + (cy - 0.5) ** 2) / 0.42
+    n_r = blur_wrap(noise(C, beta=3.2, seed=411), 4)
+    r = r * (1 + 0.16 * np.clip(n_r / 2.0, -1, 1)) + 0.002 * noise(C, beta=2.4, seed=412)
+    inside = 1 - smoothstep(0.97, 1.0, r)
+    rings = np.zeros_like(r)
+    for rr, w, a in ((1.0, 0.016, 0.85), (0.86, 0.012, 0.5), (0.7, 0.011, 0.35), (0.5, 0.01, 0.2)):
+        rings = np.maximum(rings, a * np.exp(-((r - rr) / w) ** 2))
+    alpha = np.clip(inside * (0.18 + 0.12 * r) + rings * (r < 1.03), 0, 1) * inner
+    col = np.ones((C, C, 3)) * np.array([0.58, 0.45, 0.24])
+    col = mix(col, np.ones_like(col) * np.array([0.42, 0.30, 0.14]), np.clip(rings * 1.2, 0, 1))
+    cells.append(np.concatenate([col, alpha[..., None]], -1))
+
+    # (0, 1) zone humide : tache sombre, lobes irreguliers, bords tres doux
+    r = np.sqrt((cx - 0.5) ** 2 + (cy - 0.5) ** 2) / 0.43
+    r = r * (1 + 0.28 * np.clip(noise(C, beta=3.2, seed=421) / 2.0, -1, 1))
+    body = 1 - smoothstep(0.4, 1.0, r)
+    alpha = np.clip(body * (0.6 + 0.2 * n01(noise(C, beta=3.0, seed=422))), 0, 1) * inner
+    col = np.ones((C, C, 3)) * np.array([0.21, 0.18, 0.13])
+    cells.append(np.concatenate([col, alpha[..., None]], -1))
+
+    # (1, 1) eraflures : traits horizontaux sombres (semelles, roues), effiles, et quelques frottements
+    alpha = np.zeros((C, C))
+    rng = np.random.default_rng(431)
+    for _ in range(16):
+        y0 = rng.uniform(0.2, 0.8)
+        x0, x1 = sorted(rng.uniform(0.1, 0.9, 2))
+        if x1 - x0 < 0.12:
+            x1 = min(0.9, x0 + 0.12)
+        bend = rng.uniform(-0.012, 0.012)
+        t = np.clip((cx - x0) / (x1 - x0), 0, 1)
+        yc = y0 + bend * np.sin(np.pi * t)
+        th = rng.uniform(0.002, 0.007) * np.sqrt(np.clip(1 - (2 * t - 1) ** 2, 0, 1))
+        stroke = np.exp(-((cy - yc) / np.maximum(th, 1e-4)) ** 2) * ((cx > x0) & (cx < x1))
+        alpha = np.maximum(alpha, stroke * rng.uniform(0.3, 0.7))
+    for _ in range(5):
+        x0, y0 = rng.uniform(0.25, 0.75, 2)
+        sx, sy = rng.uniform(0.04, 0.12), rng.uniform(0.01, 0.03)
+        alpha = np.maximum(alpha, np.exp(-((cx - x0) / sx) ** 2 - ((cy - y0) / sy) ** 2) * rng.uniform(0.12, 0.25))
+    alpha = np.clip(alpha * (0.75 + 0.25 * n01(noise(C, beta=1.0, seed=432))), 0, 1) * inner
+    col = np.ones((C, C, 3)) * np.array([0.075, 0.068, 0.062])
+    cells.append(np.concatenate([col, alpha[..., None]], -1))
+
+    atlas = np.zeros((2 * C, 2 * C, 4))
+    for i, cell in enumerate(cells):
+        u, v = i % 2, i // 2
+        atlas[v * C:(v + 1) * C, u * C:(u + 1) * C] = cell
+    path = os.path.join(OUT, "T_Decal_Atlas.png")
+    Image.fromarray((np.clip(atlas, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA").save(path, optimize=True)
+    print("  ->", os.path.relpath(path))
 
 
 # ---------------------------------------------------------------------------
@@ -654,36 +851,51 @@ def t_flat_normal():
     save("T_FlatNormal", np.ones((64, 64, 3)) * np.array([0.5, 0.5, 1.0]), fmt="png")
 
 
+# v4.15 : nom de texture -> generateur (ligne de commande : ne refaire que certaines textures)
+GENERATORS = [
+    ("T_L0_Wallpaper", t_l0_wallpaper),
+    ("T_L0_Carpet", t_l0_carpet),
+    ("T_NoiseLF", t_noise_lf),
+    ("T_L0_Ceiling", t_l0_ceiling),
+    ("T_Decal_Atlas", t_decal_atlas),
+    ("T_Grime", t_grime),
+    ("T_Concrete", lambda: t_concrete("T_Concrete", 50, (0.52, 0.51, 0.49))),
+    ("T_ConcreteFloor", lambda: t_concrete("T_ConcreteFloor", 55, (0.40, 0.39, 0.37), wet=True, cracks=True)),
+    ("T_ConcreteDark", lambda: t_concrete("T_ConcreteDark", 58, (0.20, 0.20, 0.21), S=512, cracks=True)),
+    ("T_Brick", t_brick),
+    ("T_MetalPanel", t_metal_panel),
+    ("T_OfficeCarpet", t_office_carpet),
+    ("T_OfficeWall", t_office_wall),
+    ("T_HotelCarpet", t_hotel_carpet),
+    ("T_HotelWallpaper", t_hotel_wallpaper),
+    ("T_Wood", t_wood),
+    ("T_PoolTile", t_pool_tile),
+    ("T_Rock", t_rock),
+    ("T_Dirt", t_dirt),
+    ("T_Asphalt", t_asphalt),
+    ("T_Hazard", t_hazard),
+    ("T_Grass", t_grass),
+    ("T_Facade", t_facade),
+    ("T_Siding", t_siding),
+    ("T_Glitch", t_glitch),
+    ("T_Skin", t_skin),
+    ("T_WaterNormal", t_water_normal),
+    ("T_Paper", t_paper),
+    ("T_Caustics", t_caustics),
+    ("T_LensDirt", t_lens_dirt),
+    ("T_FlatNormal", t_flat_normal),
+]
+
+
 if __name__ == "__main__":
+    wanted = sys.argv[1:]
+    known = [n for n, _ in GENERATORS]
+    unknown = [n for n in wanted if n not in known]
+    if unknown:
+        print("Textures inconnues : %s (connues : %s)" % (", ".join(unknown), ", ".join(known)))
+        sys.exit(2)
     print("Generation des textures dans", os.path.abspath(OUT))
-    t_l0_wallpaper()
-    t_l0_carpet()
-    t_noise_lf()
-    t_l0_ceiling()
-    t_grime()
-    t_concrete("T_Concrete", 50, (0.52, 0.51, 0.49))
-    t_concrete("T_ConcreteFloor", 55, (0.40, 0.39, 0.37), wet=True, cracks=True)
-    t_concrete("T_ConcreteDark", 58, (0.20, 0.20, 0.21), S=512, cracks=True)
-    t_brick()
-    t_metal_panel()
-    t_office_carpet()
-    t_office_wall()
-    t_hotel_carpet()
-    t_hotel_wallpaper()
-    t_wood()
-    t_pool_tile()
-    t_rock()
-    t_dirt()
-    t_asphalt()
-    t_hazard()
-    t_grass()
-    t_facade()
-    t_siding()
-    t_glitch()
-    t_skin()
-    t_water_normal()
-    t_paper()
-    t_caustics()
-    t_lens_dirt()
-    t_flat_normal()
+    for name, fn in GENERATORS:
+        if not wanted or name in wanted:
+            fn()
     print("Termine.")

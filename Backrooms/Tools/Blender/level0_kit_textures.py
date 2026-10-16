@@ -16,7 +16,9 @@ Conventions :
    (Tools/generate_textures.py) ; Unreal l'utilise telle quelle ; le materiau Blender inverse le vert ;
  - Decals : RGBA (alpha = masque), PNG ;
  - 2048 px pour les grandes surfaces (papier peint, moquette, dalles, beton), 1024 px pour les petites (plinthe,
-   luminaire, porte, quincaillerie), 512 px pour le diffuseur emissif.
+   luminaire, porte, quincaillerie), 512 px pour le diffuseur emissif ;
+ - v4.15 : papier peint, moquette et dalles reprennent la couleur, la normal map et la rugosite du projet (meme matiere
+   que les surfaces du jeu, voir project_material).
 Les materiaux non metalliques ont un canal metal a 0 ; seule la quincaillerie de la porte est metallique.
 """
 import os
@@ -132,46 +134,37 @@ class Writer:
 
 
 # ----------------------------------------------------------------------------------------------- materiaux
-def wallpaper(w, S=2048):
-    """Papier peint jaune du projet (motif discret), raccords de les tous les 0,6 m (la tuile couvre 1,2 m)"""
-    base = load("T_L0_Wallpaper.jpg", S)
+def load_rough(name, nominal, size):
+    """v4.15 : rugosite absolue d'apres la carte relative du projet (<nom>_R.png de Tools/generate_roughness.py : 0,5 = valeur
+    nominale de la surface, +-0,5 = +-1)"""
+    return nominal + (load(name + "_R.png", size, "L") - 0.5) * 2.0
+
+
+def project_material(w, kit_name, name, nominal, rough_range, S, ao_radius, ao_power, blur_hi):
+    """v4.15 : papier peint, moquette et dalles reprennent la couleur, la normal map et la rugosite du projet
+    (Tools/generate_textures.py, generate_roughness.py) : le kit et les boites du jeu ont la meme matiere (raccords des les
+    de 53 cm, moquette bouclee, dalles fissurees de 61 cm), a la meme echelle (le materiau du kit les projette dans
+    l'espace monde : 106, 160 et 122 cm par repetition). L'occlusion vient du relief de la couleur (creux plus sombres)."""
+    base = load(name + ".jpg", S)
     lum = base.mean(-1)
-    h = blur_wrap(lum, 1.0) - blur_wrap(lum, 24.0)
-    u = np.arange(S)[None, :] / S
-    seam = np.zeros((1, S), np.float32)
-    for c in (0.0, 0.5, 1.0):
-        seam = np.maximum(seam, np.exp(-((u - c) * S / 2.2) ** 2))
-    seam = np.repeat(seam, S, 0)
-    # Raccord : une ligne tres fine un peu plus sombre, le bord du le legerement souleve
-    base = base * (1.0 - 0.10 * seam[..., None])
-    grain = noise(S, 1.2, 3, 11) - 0.5
-    h = h * 0.9 + seam * 0.35 + grain * 0.05
-    rough = np.clip(load("T_L0_Wallpaper_R.png", S, "L") * 0.9 + 0.08 + seam * 0.05, 0.55, 0.95)
-    w.material("T_L0K_Wallpaper", base, rough, normal_from_height(h, 3.5), ao_from_height(h, 6, 1.6))
+    h = blur_wrap(lum, 1.0) - blur_wrap(lum, blur_hi)
+    rough = np.clip(load_rough(name, nominal, S), *rough_range)
+    w.material(kit_name, base, rough, load(name + "_N.png", S), ao_from_height(h, ao_radius, ao_power))
+
+
+def wallpaper(w, S=2048):
+    """Papier peint jaune du projet : deux les de 53 cm par repetition (106 cm), raccords et bords souleves inclus"""
+    project_material(w, "T_L0K_Wallpaper", "T_L0_Wallpaper", 0.80, (0.5, 0.95), S, 6, 1.6, 24.0)
 
 
 def carpet(w, S=2048):
-    """Moquette beige du projet, mate (rugosite >= 0,85) ; l'humidite vient des decals, pas de la tuile"""
-    base = load("T_L0_Carpet.jpg", S)
-    fib = noise(S, 0.8, 3, 21)
-    h = blur_wrap(base.mean(-1), 1.2) * 0.6 + fib * 0.4
-    h -= blur_wrap(h, 16)
-    rough = np.clip(0.9 + (fib - 0.5) * 0.08, 0.85, 0.98)
-    w.material("T_L0K_Carpet", base * (0.96 + 0.08 * fib[..., None]), rough, normal_from_height(h, 4.0), ao_from_height(h, 4, 2.0))
+    """Moquette bouclee du projet (160 cm par repetition), mate ; les grandes taches humides sont des decalques"""
+    project_material(w, "T_L0K_Carpet", "T_L0_Carpet", 0.95, (0.85, 0.99), S, 4, 2.0, 16.0)
 
 
 def ceiling(w, S=2048):
-    """Dalles de plafond suspendu (60 cm, la tuile couvre 1,2 m : 2 x 2 dalles) et leurs profils"""
-    base = load("T_L0_Ceiling.jpg", S)
-    v = (np.arange(S) / S)
-    grid = np.zeros((S, S), np.float32)
-    for c in (0.0, 0.5, 1.0):
-        line = np.exp(-((v - c) * S / 5.0) ** 2)
-        grid = np.maximum(grid, np.maximum(line[None, :], line[:, None]))
-    pores = noise(S, 0.6, 2, 31)
-    h = -grid * 0.6 + (pores - 0.5) * 0.25 + blur_wrap(base.mean(-1), 1.0) * 0.3
-    rough = np.clip(0.88 - grid * 0.3 + (pores - 0.5) * 0.05, 0.5, 0.95)
-    w.material("T_L0K_CeilingTile", base * (1.0 - 0.15 * grid[..., None]), rough, normal_from_height(h, 2.5), ao_from_height(h, 5, 2.0))
+    """Dalles de plafond fissurees de 61 cm du projet (2 x 2 dalles par repetition de 122 cm) et leur ossature en T"""
+    project_material(w, "T_L0K_CeilingTile", "T_L0_Ceiling", 0.90, (0.4, 0.97), S, 5, 2.0, 16.0)
 
 
 def concrete(w, S=2048):

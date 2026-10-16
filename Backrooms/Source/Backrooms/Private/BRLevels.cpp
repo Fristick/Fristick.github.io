@@ -49,11 +49,13 @@ namespace
 		D.CellSize = 350.f; D.WallHeight = 290.f; D.WallThickness = 60.f;
 		D.WallLineChance = 0.55f; D.SegmentLength = 4; D.DoorChance = 0.3f; D.DoorWidth = 150.f;
 		D.PillarChance = 0.04f; D.PillarSize = 45.f; D.OpenZoneChance = 0.15f;
-		D.Floor = S(TEXT("T_L0_Carpet"), C(1, 1, 1), 220.f, 0.95f, 0.3f);
+		// v4.15 (realisme) : tailles reelles des textures refaites (Tools/generate_textures.py) : moquette bouclee 160 cm,
+		// papier peint en les de 53 cm (106 cm par repetition), dalles de plafond de 61 cm (122 cm)
+		D.Floor = S(TEXT("T_L0_Carpet"), C(1, 1, 1), 160.f, 0.95f, 0.3f);
 		// v4.3 : moquette sans repetition visible (2e echantillon tourne, teinte variable, taches d'humidite)
 		D.Floor.AntiTile = 1.f; D.Floor.Stains = 0.65f;
-		D.Wall = S(TEXT("T_L0_Wallpaper"), C(1, 1, 1), 120.f, 0.8f, 0.3f);
-		D.Ceiling = S(TEXT("T_L0_Ceiling"), C(1, 1, 1), 120.f, 0.9f, 0.15f);
+		D.Wall = S(TEXT("T_L0_Wallpaper"), C(1, 1, 1), 106.f, 0.8f, 0.3f);
+		D.Ceiling = S(TEXT("T_L0_Ceiling"), C(1, 1, 1), 122.f, 0.9f, 0.15f);
 		D.Trim = S(TEXT("T_L0_Wallpaper"), C(0.55f, 0.48f, 0.32f), 100.f, 0.6f, 0.2f);
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::Panel;

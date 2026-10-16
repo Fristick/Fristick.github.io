@@ -42,7 +42,10 @@ VERSION = 11
 # entites SK_* recevaient le materiau par defaut, gris et sans texture, en jeu autonome et en paquet)
 MATERIAL_VERSION = 7
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
-RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"]}
+# (v4.15 : papier peint en les de 53 cm, moquette bouclee, dalles fissurees de 61 cm, et leurs cartes de rugosite)
+RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"],
+              8: ["T_L0_Wallpaper.jpg", "T_L0_Wallpaper_N.png", "T_L0_Wallpaper_R.png", "T_L0_Carpet.jpg", "T_L0_Carpet_N.png",
+                  "T_L0_Carpet_R.png", "T_L0_Ceiling.jpg", "T_L0_Ceiling_N.png", "T_L0_Ceiling_R.png"]}
 # Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
 RESOUNDED = {4: ["S_Bacteria.wav"]}
 # Modeles refaits (v4.4 : nouveau Smiler)

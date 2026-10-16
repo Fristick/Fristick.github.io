@@ -1528,8 +1528,8 @@ bool UBRAssets::IsUsingRuntimeContent()
 FLinearColor UBRAssets::TextureAverage(FName Texture)
 {
 	static const TMap<FName, FLinearColor> Avg = {
-		{ TEXT("T_L0_Wallpaper"), FLinearColor(0.66f, 0.64f, 0.33f) },
-		{ TEXT("T_L0_Carpet"), FLinearColor(0.5f, 0.42f, 0.25f) },
+		{ TEXT("T_L0_Wallpaper"), FLinearColor(0.67f, 0.65f, 0.4f) },
+		{ TEXT("T_L0_Carpet"), FLinearColor(0.46f, 0.4f, 0.26f) },
 		{ TEXT("T_L0_Ceiling"), FLinearColor(0.85f, 0.83f, 0.75f) },
 		{ TEXT("T_Concrete"), FLinearColor(0.5f, 0.5f, 0.48f) },
 		{ TEXT("T_ConcreteFloor"), FLinearColor(0.38f, 0.37f, 0.35f) },
