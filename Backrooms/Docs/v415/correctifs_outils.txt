@@ -1,0 +1,87 @@
+# Outils de livraison, de langues, de protection et du kit du Level 0 (correctifs v4.15) - sortie reelle
+# Date : 2026-10-16T17:17:17Z
+# Python : Python 3.14.8 (PYTHONUTF8=1), depuis Backrooms/
+
+## python -m unittest Tools/Build/tests/test_packaging.py
+.........................................s....................
+----------------------------------------------------------------------
+Ran 62 tests in 17.124s
+
+OK (skipped=1)
+
+## python Tools/Localization/loc_extract.py --check
+fr       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+en       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+de       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+es-ES    1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pt-BR    1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ru       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+it       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+tr       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+es-419   1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pl       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+zh-Hans  1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+uk       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ar       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ko       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+fa       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+ja       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+hu       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+cs       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+pt-PT    1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+sv       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+zh-Hant  1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+id       1187 cles  (+0 nouvelles, 0 a revoir, -0 retirees)
+Cles : Source\Backrooms\Private\BRLocKeys.inl
+Verification seule (rien n'est ecrit) : a jour
+
+## python Tools/Localization/loc_build.py --check
+fr       traduits 1187/1187  relus 1187  manquants    0  refuses   0  a revoir   0
+en       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+de       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+es-ES    traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+pt-BR    traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ru       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+it       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+tr       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+es-419   traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+pl       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hans  traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+uk       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ar       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ko       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+fa       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+ja       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+hu       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+cs       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+pt-PT    traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+sv       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+zh-Hant  traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+id       traduits 1187/1187  relus    0  manquants    0  refuses   0  a revoir   0
+
+## python Tools/Localization/loc_review.py
+Relecture ciblee des traductions (gauche/droite, identifiants, nombres, unites)
+verifications : cote 189, identifiants 2730, unites 210 ; nombres en toutes lettres relus a la main : 20
+problemes : 0
+
+
+## python Tools/protect_assets.py check
+(Tools/SourceModels absent : originaux non verifies)
+OK
+
+## python Tools/verify_level0_kit.py --seeds 40
+Pose du kit du Level 0 (regles de BRChunk.cpp v4.14), grille de Tools/verify_pitfalls.py
+Cotes lues dans BRLevels.cpp : cellule 350, mur 60 x 290, chunks 8, enceinte 2
+Graine 9 (scene du kit) : Doorway 416, Pillar 5, ServiceDoor_Wall 1, Wall_350 667, Wall_Aged_350 157, Wall_Corner 26, Wall_End 94, Wall_JunctionT 188, Wall_JunctionX 265, Wall_Straight 356
+  modules compares : 2213 dans la scene, 2175 poses par le jeu, 2173 identiques
+  ecart voulu : scene SM_L0_Wall_End en (-5600, 2100) lacet 270 (porte de service non comptee comme bras)
+  ecart voulu : scene SM_L0_Wall_Corner en (-5600, 2450) lacet 90 (porte de service non comptee comme bras)
+  ecart voulu : jeu   SM_L0_Wall_Straight en (-5600, 2100) lacet 90 (le mur perce est un bras du poteau)
+  ecart voulu : jeu   SM_L0_Wall_JunctionT en (-5600, 2450) lacet 90 (le mur perce est un bras du poteau)
+  ecart voulu : 38 pilier(s) de la scene caches dans un poteau, non poses par le jeu
+  import sans retournement de Y (IsKitMirrorY) : 214 poteau(x) tourne(s), memes positions
+40 graine(s) : 40 sans defaut ; en moyenne Doorway 348, Pillar 12, ServiceDoor_Wall 1, Wall_350 622, Wall_Aged_350 138, Wall_Corner 26, Wall_End 101, Wall_JunctionT 171, Wall_JunctionX 201, Wall_Straight 375
+RESULTAT : OK
+
+## python -m py_compile Content/Python/backrooms_setup.py Tools/verify_level0_kit.py Tools/verify_lidar.py Tools/verify_device_clearance.py
+OK (aucune erreur)

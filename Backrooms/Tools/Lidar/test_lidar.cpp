@@ -13,7 +13,9 @@
 //     atteintes, dont celle de l'echelle, sans jamais sauter (espace libre connexe) ; largeur minimale des passages ;
 //   - le scanner : directions de l'impulsion dans le cone et sans trou de couverture, cone focalise, anneau de points
 //     borne (jamais plus que la capacite), attenuation decroissante, aide de direction des parasites monotone ;
-//   - le budget par image : rayons et points ajoutes bornes.
+//   - le budget par image : rayons et points ajoutes bornes ;
+//   - v4.15 : la longueur du couloir garanti (BRLidar::CorridorLength, plafond du parcours de l'aile dans
+//     ABRWorld::PlaceMission) egale au couloir parcouru, au plus 41 cellules sur les 180 positions possibles de l'aile.
 // Code de sortie 0 si tout passe, 1 sinon. La sortie sert de journal (Docs/v413/banc_lidar.txt).
 #include "BRLidarLogic.h"
 
@@ -612,6 +614,8 @@ int main(int argc, char** argv)
 			ToCell(W, 0, 1, EX, EY);
 			Check(bOk && X == GX && Y == GY && GX == EX + W.OutX && GY == EY + W.OutY && Steps == std::abs(GX) + std::abs(GY), Seed,
 				"couloir garanti interrompu ou dans l'aile");
+			// v4.15 : la longueur que le placement de la mission prend pour plafond de son parcours (ABRWorld::PlaceMission)
+			Check(CorridorLength(W) == Steps, Seed, "CorridorLength differente du couloir parcouru");
 			MaxCorridor = Steps > MaxCorridor ? Steps : MaxCorridor;
 		}
 		Holes6 += NHoles == 6 ? 1 : 0;
@@ -689,6 +693,57 @@ int main(int argc, char** argv)
 			PulseRays, PulseSeconds, PulseMaxPerFrame, PulseHalfYaw * 2.f, PulseHalfPitch * 2.f, WorstGap, FocusRaysPerSecond, FocusMaxPerFrame, FocusHalfAngle * 2.f);
 	}
 	RunScannerChecks();
+	// v4.15 : toutes les positions possibles de l'aile (chunks de l'anneau x places dans le chunk, comme PickWing) : le
+	// couloir garanti mesure au plus 41 cellules ; le plafond du parcours de l'aile (couloir + 2) reste sous la limite de
+	// 6000 cellules du placement (diamant de rayon 43 : 3785 cellules)
+	int WingPositions = 0, CorridorMin = 1 << 30, CorridorMax = 0;
+	{
+		const int RingLo = -WingRing - 1, RingHi = WingRing, Slack = ChunkCells - WingCells - 2;
+		bool bAll = true;
+		for (int CX = RingLo; CX <= RingHi; ++CX)
+		{
+			for (int CY = RingLo; CY <= RingHi; ++CY)
+			{
+				if (CX != RingLo && CX != RingHi && CY != RingLo && CY != RingHi)
+				{
+					continue;
+				}
+				for (int OX = 0; OX <= Slack; ++OX)
+				{
+					for (int OY = 0; OY <= Slack; ++OY)
+					{
+						FWing W;
+						W.bValid = true;
+						W.ChunkX = CX;
+						W.ChunkY = CY;
+						W.MinX = CX * ChunkCells + 1 + OX;
+						W.MinY = CY * ChunkCells + 1 + OY;
+						const int MX = CX * ChunkCells + ChunkCells / 2;
+						const int MY = CY * ChunkCells + ChunkCells / 2;
+						if (std::abs(MX) >= std::abs(MY))
+						{
+							W.OutX = MX > 0 ? -1 : 1;
+							W.OutY = 0;
+						}
+						else
+						{
+							W.OutX = 0;
+							W.OutY = MY > 0 ? -1 : 1;
+						}
+						int GX, GY;
+						CorridorEnd(W, GX, GY);
+						const int Len = CorridorLength(W);
+						bAll = bAll && Len == std::abs(GX) + std::abs(GY) && Len <= 41;
+						CorridorMin = Len < CorridorMin ? Len : CorridorMin;
+						CorridorMax = Len > CorridorMax ? Len : CorridorMax;
+						++WingPositions;
+					}
+				}
+			}
+		}
+		const int Diamond = 2 * (CorridorMax + 2) * (CorridorMax + 2) + 2 * (CorridorMax + 2) + 1;
+		Check(bAll && WingPositions == 180 && Diamond < 6000, 0, "couloir garanti de plus de 41 cellules, ou plafond de l'aile au-dela de la limite du placement");
+	}
 	// Reglages bornes ; aide des parasites monotone
 	{
 		FSettings S;
@@ -712,6 +767,8 @@ int main(int argc, char** argv)
 	std::printf("       passage minimal entre deux trous : %.0f cm ; %zu chunks differents ; entree vers +X %d, -X %d, +Y %d, -Y %d ; echelle dans l'alcove 1..4 : %d, %d, %d, %d\n",
 		MinPassage, Chunks.size(), Sides[0], Sides[1], Sides[2], Sides[3], Ladder[0], Ladder[1], Ladder[2], Ladder[3]);
 	std::printf("       couloir garanti du depart a l'entree : continu, hors de l'aile, %d cellules au plus\n", MaxCorridor);
+	std::printf("       v4.15 : %d positions possibles de l'aile : couloir de %d a %d cellules (au plus 41), plafond du parcours de l'aile %d\n", WingPositions,
+		CorridorMin, CorridorMax, CorridorMax + 2);
 	std::printf("Verifications : %d, echecs : %d\n", Checks, Failures);
 	std::printf("RESULTAT : %s\n", Failures ? "ECHEC" : "OK");
 	return Failures ? 1 : 0;

@@ -15,7 +15,11 @@
 //      sec ;
 //   E. la passerelle : tablier pose sur l'appui, surface continue, pente marchable, palier inaccessible sans elle, marches
 //      franchissables, chute sans danger, contournement au sol, progression des treuils jusqu'a la pose ;
-//   F. le detour des entites : tablier leve (attente au pied), pose (marches, appui, tablier), retour.
+//   F. le detour des entites : tablier leve (attente au pied), pose (marches, appui, tablier), retour ;
+//   G. v4.15 : l'emprise des mecanismes (BRMech::Clearance, regle du placement, des rochers et des tests du jeu) : cage et
+//      poste du Level 6 (point d'interaction du poste dans la cage avec la regle v4.14, a cote d'elle avec PickSlot), cage
+//      tenue dans sa face, premiere place libre sans volume (placement des autres niveaux inchange), rectangles orientes,
+//      zone libre devant un treuil, boites visees de toutes les sortes et de tous les roles, volumes des modules.
 //
 // Le comportement reel (collisions, nage, rendu, reseau, sauvegarde, streaming) se verifie en jeu : -BRAutoTestV412
 // (prepare, non execute ici).
@@ -366,6 +370,115 @@ int main()
 		Local(Out, LX, LY);
 		Line("de l'appui vers la salle : par les marches, pas par-dessus l'interruption", bOk && LX > Near1);
 		Line("loin du module : aucun detour", !BB::Detour(F, true, W(3000.f, 0.f, 50.f), W(3500.f, 100.f, 50.f), Out));
+	}
+
+	// v4.15 : emprise des mecanismes (BRMech::Clearance, la regle du placement, des rochers et des tests du jeu)
+	std::printf("\nG. Emprise des mecanismes et places libres (v4.15)\n");
+	{
+		namespace CL = BRMech::Clearance;
+		namespace LC = BRMech::LidarCage;
+		const CL::FFootprint Cage = CL::Of(BRM::EKind::Observe, BRM::R_LidarCage, BRMech::Module::None, 60.f);
+		const CL::FFootprint Post = CL::Of(BRM::EKind::Crank, BRM::R_LidarPost, BRMech::Module::None, 60.f);
+		Line("cage du Level 6 : volume de " + F1(LC::Gap) + " a " + F1(LC::Gap + LC::Depth) + " cm du mur, +-" + F1(LC::HalfWidth) + ", " + F1(LC::Height) + " cm de haut",
+			Cage.bSolid && Cage.Solid.X0 == LC::Gap && Cage.Solid.X1 == LC::Gap + LC::Depth && Cage.Solid.Y1 == LC::HalfWidth && Cage.Solid.Z1 == LC::Height);
+		Line("poste de confinement : point d'interaction (" + F1(Post.Aim.X) + ", " + F1(Post.Aim.Y) + ", " + F1(Post.Aim.Z) + "), sans volume",
+			!Post.bSolid && Post.Aim.X == 18.f && Post.Aim.Z == 110.f);
+		// Face d'une cellule de 350 cm (Level 6, murs de 60 cm) : places laterales 0, +58, -58, +116, -116 (BRMissionWorld.cpp)
+		const float S = 350.f, Wall = 60.f;
+		const float FaceHalf = S * 0.5f - Wall * 0.5f;
+		const float Laterals[5] = { 0.f, 58.f, -58.f, 116.f, -116.f };
+		CL::FSlot Slots[5];
+		for (int K = 0; K < 5; ++K)
+		{
+			// Mur au nord (Y = 145 depuis le centre), mecanisme tourne vers le sud (lacet -90 : +X local vers -Y)
+			Slots[K].Frame.X = -Laterals[K];
+			Slots[K].Frame.Y = FaceHalf;
+			Slots[K].Frame.Z = 0.f;
+			Slots[K].Frame.Yaw = -90.f;
+			Slots[K].Lateral = Laterals[K];
+		}
+		auto At = [&](int K, const CL::FFootprint& Print)
+		{
+			CL::FPlaced P0;
+			P0.Frame = Slots[K].Frame;
+			P0.Print = Print;
+			return P0;
+		};
+		const CL::FPlaced Cage0 = At(0, Cage);
+		Line("v4.14 : poste a 0, cage a +58 : point d'interaction du poste dans la cage (actions toujours refusees)",
+			CL::Clash(At(0, Post), At(1, Cage)) && CL::InSolid(At(1, Cage), CL::AimPoint(At(0, Post)).X, CL::AimPoint(At(0, Post)).Y, CL::AimPoint(At(0, Post)).Z, 0.f));
+		Line("poste a +-58 d'une cage : refuse ; a +-116 : libre (" + F1(116.f - LC::HalfWidth) + " cm entre le poste et la cage)",
+			CL::Clash(At(1, Post), Cage0) && CL::Clash(At(2, Post), Cage0) && !CL::Clash(At(3, Post), Cage0) && !CL::Clash(At(4, Post), Cage0));
+		// PickSlot : la cage d'abord (premiere place ou elle tient), puis le poste a cote d'elle, hors de son volume
+		const int CageSlot = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf);
+		int PostSlot = -1;
+		if (CageSlot >= 0)
+		{
+			Slots[CageSlot].bOpen = false;
+			const CL::FPlaced Placed[1] = { At(CageSlot, Cage) };
+			PostSlot = CL::PickSlot(Post, Slots, 5, Placed, 1, FaceHalf);
+			Slots[CageSlot].bOpen = true;
+		}
+		Line("placement v4.15 : cage a " + F1(CageSlot >= 0 ? Laterals[CageSlot] : -1.f) + ", poste a " + F1(PostSlot >= 0 ? Laterals[PostSlot] : -1.f) + " (meme face)",
+			CageSlot == 0 && PostSlot == 3);
+		CL::FSlot Edge[2] = { Slots[3], Slots[4] };
+		Edge[0].bOpen = Edge[1].bOpen = true;
+		Line("cage a +-116 : refusee (elle entrerait de " + F1(116.f + LC::HalfWidth - FaceHalf) + " cm dans le mur voisin)", CL::PickSlot(Cage, Edge, 2, nullptr, 0, FaceHalf) == -1);
+		// Sans volume : premiere place libre (placement des autres niveaux inchange)
+		const CL::FFootprint Winch = CL::Of(BRM::EKind::Crank, BRM::R_Winch, BRMech::Module::None, 60.f);
+		CL::FSlot Free[5];
+		for (int K = 0; K < 5; ++K)
+		{
+			Free[K] = Slots[K];
+			Free[K].bOpen = K != 1;
+		}
+		const CL::FPlaced Two[2] = { At(0, Winch), At(2, Post) };
+		Line("sans volume ni voisin a volume : premiere place libre (ordre d'avant la v4.15)", CL::PickSlot(Winch, Free, 5, Two, 2, FaceHalf) == 0);
+		// Separation des axes : rectangles tournes
+		CL::FRect A;
+		A.HX = 100.f;
+		A.HY = 20.f;
+		CL::FRect B = A;
+		B.CX = 0.f;
+		B.CY = 90.f;
+		B.Yaw = 90.f;
+		CL::FRect Cc = A;
+		Cc.CY = 70.f;
+		Cc.Yaw = 45.f;
+		CL::FRect Far = A;
+		Far.CY = 160.f;
+		Far.Yaw = 30.f;
+		Line("rectangles orientes : croisement, rotation de 45 degres, ecart", CL::Overlap(A, B) && CL::Overlap(A, Cc) && !CL::Overlap(A, Far));
+		// Zone libre devant un treuil : le point vise, la place debout devant lui, la largeur de la capsule
+		const CL::FPlaced WinchAt = At(0, Winch);
+		const CL::FRect K0 = CL::KeepOut(WinchAt);
+		const BRMech::FVec3 Aim = CL::AimPoint(WinchAt);
+		CL::FRect Probe;
+		// Un point 1,15 m devant le point vise (vers la salle, -Y ici) est dans la zone libre
+		Probe.CX = Aim.X;
+		Probe.CY = Aim.Y - (CL::StandDepth - 5.f);
+		Probe.HX = Probe.HY = 1.f;
+		// Rectangle tourne d'un quart de tour (mur au nord) : la profondeur est sur Y
+		const float Depth = K0.HX > K0.HY ? K0.HX * 2.f : K0.HY * 2.f;
+		Line("zone libre d'un treuil : " + F1(Depth) + " cm depuis 12 cm derriere le mur, +-" + F1(K0.HX < K0.HY ? K0.HX : K0.HY) + " cm (capsule debout a " +
+			F1(CL::StandDepth) + " cm devant le point vise comprise)",
+			CL::Overlap(K0, Probe) && Depth >= 12.f + Winch.Aim.X + CL::StandDepth + CL::StandGap - 0.01f);
+		// Toutes les sortes et tous les roles : point vise devant le mur, a hauteur de main ou de plaque
+		bool bAll = true;
+		for (int Kind = 0; Kind <= static_cast<int>(BRM::EKind::Gate); ++Kind)
+		{
+			for (int Role = 0; Role < BRM::R_Count; ++Role)
+			{
+				const CL::FFootprint Fp = CL::Of(static_cast<BRM::EKind>(Kind), static_cast<uint8_t>(Role), BRMech::Module::None, 60.f);
+				bAll = bAll && Fp.Aim.X > 0.f && Fp.Aim.X <= 130.f && Fp.Aim.Z >= 40.f && Fp.Aim.Z <= 170.f && Fp.AimExtent.X > 0.f;
+			}
+		}
+		Line("emprise de chaque sorte et role : point vise devant l'origine, entre 40 et 170 cm de haut", bAll);
+		const CL::FFootprint Door = CL::Of(BRM::EKind::Button, BRM::R_LidarDoor, BRMech::Module::LidarDoor, 60.f);
+		const CL::FFootprint Lock = CL::Of(BRM::EKind::Gate, BRM::R_DryPassage, BRMech::Module::PoolLock, 120.f);
+		const CL::FFootprint BridgeF = CL::Of(BRM::EKind::Gate, BRM::R_Bridge, BRMech::Module::Bridge, 60.f);
+		Line("modules : battant de l'aile (" + F1(Door.Solid.X1 - Door.Solid.X0) + " cm, mur de 60), sas (" + F1(Lock.Solid.X1 - Lock.Solid.X0) + " cm), passerelle (" +
+			F1(BridgeF.Solid.X1 - BridgeF.Solid.X0) + " cm)", Door.bSolid && Lock.bSolid && BridgeF.bSolid && BridgeF.Solid.X1 - BridgeF.Solid.X0 == BB::TotalLength);
 	}
 
 	std::printf("\nRESULTAT : %s (%d verifications, %d echec(s))\n", GFailures == 0 ? "OK" : "ECHEC", GChecks, GFailures);

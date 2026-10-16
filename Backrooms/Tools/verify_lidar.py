@@ -6,20 +6,39 @@ Tools/verify_pitfalls.py, memes regles de l'aile que BRLidarLogic.cpp : PickWing
 Unreal, et verifie pour chaque graine :
   - l'aile est posee dans l'anneau prevu, a l'ecart du depart ;
   - l'entree de l'aile (la galerie devant ses quatre portes, salle de la mission) est atteinte a pied depuis le depart
-    sans entrer dans l'aile (parcours en largeur, comme ABRWorld::PlaceMission) ; distance de marche ;
+    sans entrer dans l'aile (parcours en largeur) ; distance de marche ;
   - depuis la galerie, les quatre portes donnent dans l'aile, et l'aile ne communique pas avec le reste du niveau
     autrement que par ses portes (les trois autres cotes sont des murs pleins).
+v4.15 : et le parcours de ABRWorld::PlaceMission lui-meme : plafond de la zone de mission (BaseMaxCells =
+ceil(9500 / CellSize), lu dans BRMissionWorld.cpp ; cellules a ce plafond non developpees ; limite de 6000 cellules).
+  - regle v4.14 : galerie au-dela du plafond -> "repli" (mecanismes du passage dans une salle ordinaire, sans portes ni
+    echelle de l'aile) ; pres d'une graine sur deux ;
+  - regle v4.15 : nouveau parcours avec un plafond releve a la longueur du couloir garanti + 2 (BRLidar::CorridorLength)
+    pour la seule salle de l'aile -> 0 repli attendu ; la distance a pied de la galerie V = 1 est exactement la longueur
+    du couloir (|GX| + |GY|, au plus 41).
 La logique fine de l'aile (trous, passages de 140 cm, alcoves, echelle) est verifiee par Tools/Lidar/test_lidar.cpp.
 
-Usage :  python Tools/verify_lidar.py [--seeds 1-500] [--sheet Docs/v413/lidar_ailes_6_graines.png --sheet-seeds 1-6]
-Code de sortie : 0 si tout passe. La sortie sert de journal (Docs/v413/lidar_aile.txt).
+Graines : --seeds a-b : graines -BRSeed (graine du niveau = SeedFromUser(n, 6) = Mix(n ^ (6 * 7919 + 17))) ;
+--level-seeds : graines du NIVEAU telles que le jeu les journalise ("graine 2702236446"), sans nouveau Mix ;
+--random N --rng-seed K : N graines du niveau tirees sur 32 bits (comme la v4.15, BRWorld.cpp) ;
+--crt : les 32768 graines aleatoires de la v4.14 sous Windows (rand() de 0 a 32767 : r * 2654435761 ^ 47531).
+Chaque ligne donne la graine -BRSeed (ou "-") et la graine du niveau. Les graines de regression (BRSeed 4136, 6, 208,
+159 ; graines du niveau 2702236446, 2878398681, 2600076685, 2622470042) sont toujours verifiees.
+
+Usage :  python Tools/verify_lidar.py [--seeds 1-500] [--level-seeds 2702236446,2878398681] [--random 2000 --rng-seed 7]
+         [--crt] [--jobs 8] [--sheet Docs/v413/lidar_ailes_6_graines.png --sheet-seeds 1-6]
+Code de sortie : 0 si tout passe (structure de l'aile, regression, 0 repli avec la regle v4.15). La sortie sert de
+journal (Docs/v415/correctifs_aile_lidar.txt).
 --sheet : planche vue de dessus (simulation, PAS une capture du jeu) : aile, trous, alcove de l'echelle, couloir garanti.
 """
 import argparse
+import math
 import os
+import random
 import re
 import sys
 from collections import deque
+from multiprocessing import Pool
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import verify_pitfalls as vp  # noqa: E402
@@ -27,6 +46,23 @@ import verify_pitfalls as vp  # noqa: E402
 WING = 4
 RING = 2
 OPEN, WALL, DOOR = vp.OPEN, vp.WALL, vp.DOOR
+MISSION_CPP = os.path.join(vp.ROOT, "Source", "Backrooms", "Private", "BRMissionWorld.cpp")
+# Graines de regression (diag_v413_4) : BRSeed -> regle v4.14 attendue ; graines du niveau journalisees en jeu
+REG_BRSEEDS = {4136: "repli", 6: "repli", 208: "repli", 159: "aile"}
+REG_LEVEL_SEEDS = {2702236446: "repli", 2878398681: "aile", 2600076685: "aile", 2622470042: "aile"}
+
+
+def read_mission_rules(cell_size):
+    """Plafond et limite du parcours de ABRWorld::PlaceMission, et presence de la regle v4.15 (plafond de l'aile)"""
+    src = open(MISSION_CPP, encoding="utf-8").read()
+    body = src[src.index("bool ABRWorld::PlaceMission("):]
+    body = body[:body.index("bool ABRWorld::PlaceMissionModule(")]
+    m = re.search(r"MaxCells\s*=\s*FMath::CeilToInt\(([\d.]+)f\s*/\s*S\)", body)
+    lim = re.search(r"Order\.Num\(\)\s*<\s*(\d+);\s*\+\+Head", body)
+    wing_fix = re.search(r"BRLidar::CorridorLength\(LidarWing\)\s*\+\s*FMath::Abs\(Start\.X\)\s*\+\s*FMath::Abs\(Start\.Y\)\s*\+\s*(\d+)", body)
+    meters = float(m.group(1))
+    return dict(meters=meters, cap=int(math.ceil(meters / cell_size)), limit=int(lim.group(1)) if lim else 6000,
+                wing_margin=int(wing_fix.group(1)) if wing_fix else None)
 
 
 def read_level(n):
@@ -128,11 +164,13 @@ def edge_between(w, a, b):
 class Level6(vp.Level0):
     """Grille du Level 6 : aretes "Rooms" ordinaires, aile LiDAR a la place des salles de fosses"""
 
-    def __init__(self, P, user_seed):
+    def __init__(self, P, user_seed, level_seed=None):
         self.P = P
         self.user_seed = user_seed
-        self.seed = vp.mix(user_seed ^ (6 * 7919 + 17)) or 1  # ABRWorld::SeedFromUser(n, 6)
+        # ABRWorld::SeedFromUser(n, 6) ; v4.15 : ou la graine du niveau telle que le jeu la journalise (sans nouveau Mix)
+        self.seed = level_seed if level_seed is not None else (vp.mix(user_seed ^ (6 * 7919 + 17)) or 1)
         self.N = P["ChunkCells"]
+        self._edges = {}
         self.S = P["CellSize"]
         self.B = 0
         self.pit_rooms = {}
@@ -155,10 +193,15 @@ class Level6(vp.Level0):
 
     def edge(self, x, y, east):
         """ABRWorld::EdgeE / EdgeN : aretes ordinaires, puis le couloir garanti (un mur tire y recoit une porte)"""
+        k = (x, y, east)
+        e = self._edges.get(k)
+        if e is not None:
+            return e
         e = super().edge(x, y, east)
         if e == WALL and not (self.spawn_area(x, y) and self.spawn_area(*((x + 1, y) if east else (x, y + 1)))) \
                 and self.pit_edge(x, y, east) is None and corridor_edge(self.wing, (x, y), (x + 1, y) if east else (x, y + 1)):
-            return DOOR
+            e = DOOR
+        self._edges[k] = e
         return e
 
 
@@ -315,44 +358,194 @@ def check(L, radius=48):
     return res
 
 
+def mission_bfs(L, cap, limit):
+    """Parcours de ABRWorld::PlaceMission (RunBfs) : depuis (0, 0), hors de l'aile, cellules a la distance cap non
+    developpees, au plus limit cellules"""
+    dist = {(0, 0): 0}
+    order = [(0, 0)]
+    head = 0
+    while head < len(order) and len(order) < limit:
+        c = order[head]
+        head += 1
+        cd = dist[c]
+        if cd >= cap:
+            continue
+        for d in vp.DIRS:
+            n = (c[0] + d[0], c[1] + d[1])
+            if n in dist or L.is_pit_cell(*n) or not L.can_step(c, n):
+                continue
+            dist[n] = cd + 1
+            order.append(n)
+    return dist
+
+
+def gallery_cell(w, v):
+    c = to_cell(w, 0, v)
+    return (c[0] + w["out"][0], c[1] + w["out"][1])
+
+
+def gallery(L, dist, cap=None):
+    """Salle de l'aile : premiere galerie atteinte (V = 1, 2, 0, 3), dans le plafond cap s'il est donne"""
+    for v in (1, 2, 0, 3):
+        g = gallery_cell(L.wing, v)
+        if g in dist and (cap is None or dist[g] <= cap):
+            return g, v
+    return None, None
+
+
+def placement(L, rules):
+    """Salle de la mission du Level 6 selon la regle v4.14 (plafond de base) et la regle v4.15 (plafond releve a la longueur
+    du couloir garanti + 2, seulement si la galerie manque). Un seul parcours au plafond releve suffit : ses cellules a
+    BaseMaxCells ou moins sont exactement celles du parcours de base (meme ordre, memes distances)"""
+    base = rules["cap"]
+    gx, gy = corridor_end(L.wing)
+    corr = abs(gx) + abs(gy)
+    margin = rules["wing_margin"] if rules["wing_margin"] is not None else 2
+    cap = max(base, corr + margin)
+    dist = mission_bfs(L, cap, rules["limit"])
+    g_old, v_old = gallery(L, dist, base)
+    g_new, v_new = (g_old, v_old) if g_old is not None else gallery(L, dist)
+    return dict(corr=corr, cap=cap if g_old is None else base, old="aile" if g_old else "repli", new="aile" if g_new else "repli",
+                v_old=v_old, v_new=v_new, room=g_new, d_v1=dist.get((gx, gy), -1), cells=len(dist),
+                gal=[dist.get(gallery_cell(L.wing, v), -1) for v in (1, 2, 0, 3)])
+
+
+def literal_check(L, rules):
+    """Controle du raccourci : le parcours au plafond de base, tel quel, donne le meme verdict v4.14"""
+    d0 = mission_bfs(L, rules["cap"], rules["limit"])
+    return "aile" if gallery(L, d0)[0] else "repli"
+
+
+def evaluate(args):
+    P, rules, user_seed, level_seed, full = args
+    L = Level6(P, user_seed if user_seed is not None else 0, level_seed)
+    r = placement(L, rules)
+    r["seed"] = L.seed
+    r["user"] = user_seed
+    r["chunk"] = L.wing["chunk"]
+    if full:
+        c = check(L)
+        r["ok"] = c["ok"]
+        r["why"] = c["why"]
+        r["walk"] = c["dist"]
+    return r
+
+
+def run_all(jobs, items):
+    if jobs > 1 and len(items) > 50:
+        with Pool(jobs) as pool:
+            return pool.map(evaluate, items, chunksize=8)
+    return [evaluate(it) for it in items]
+
+
+def seed_label(r):
+    return "BRSeed %s / graine du niveau %u" % (r["user"] if r["user"] is not None else "-", r["seed"])
+
+
+def parse_list(text):
+    out = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part[1:]:
+            a, b = part.split("-", 1)
+            out.extend(range(int(a), int(b) + 1))
+        else:
+            out.append(int(part))
+    return out
+
+
+def summary(name, rows):
+    n = len(rows)
+    old = sum(1 for r in rows if r["old"] == "repli")
+    new = sum(1 for r in rows if r["new"] == "repli")
+    viol = sum(1 for r in rows if r["d_v1"] != r["corr"] or r["corr"] > 41)
+    print("%s : %d graines ; regle v4.14 (plafond seul) : %d repli(s) (%.2f %%) ; regle v4.15 : %d repli(s) ; couloir de %d a %d cellules, "
+          "BFS(V=1) different du couloir ou couloir > 41 : %d"
+          % (name, n, old, 100.0 * old / max(1, n), new, min((r["corr"] for r in rows), default=0), max((r["corr"] for r in rows), default=0), viol))
+    return new, viol
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seeds", default="1-500")
+    ap.add_argument("--seeds", default="1-500", help="graines -BRSeed (a-b ou liste)")
+    ap.add_argument("--level-seeds", default="", help="graines du niveau (journal du jeu), sans nouveau Mix")
+    ap.add_argument("--random", type=int, default=0, help="N graines du niveau tirees sur 32 bits")
+    ap.add_argument("--rng-seed", type=int, default=7)
+    ap.add_argument("--crt", action="store_true", help="les 32768 graines aleatoires de la v4.14 sous Windows (rand() 0..32767)")
+    ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     ap.add_argument("--sheet", default=None, help="planche PNG (simulation, pas une capture du jeu)")
     ap.add_argument("--sheet-seeds", default="1-6")
     a = ap.parse_args()
-    lo, hi = (int(x) for x in a.seeds.split("-"))
     P = read_level(6)
+    rules = read_mission_rules(P["CellSize"])
     print("Level 6 (Tools/verify_lidar.py) : parametres lus dans BRLevels.cpp : bLidar=%s, CellSize=%g, PitHoleSize=%g, PitPassage=%g, WallLineChance=%g, DoorChance=%g"
           % (P["bLidar"], P["CellSize"], P.get("PitHoleSize", 0), P.get("PitPassage", 0), P["WallLineChance"], P["DoorChance"]))
+    print("ABRWorld::PlaceMission (BRMissionWorld.cpp) : plafond de base %d cellules (%.0f m / %g cm), limite %d cellules ; regle de l'aile v4.15 dans le source : %s"
+          % (rules["cap"], rules["meters"] / 100.0, P["CellSize"], rules["limit"],
+             ("oui (couloir + %d)" % rules["wing_margin"]) if rules["wing_margin"] is not None else "NON (repli des que la galerie depasse le plafond)"))
     if not P["bLidar"]:
         print("ECHEC : Level6() sans bLidar")
         return 1
     bad = 0
+    # 1. Graines de regression : verdict v4.14 attendu (journaux du jeu), 0 repli en v4.15, parcours litteral identique
+    items = [(P, rules, u, None, True) for u in REG_BRSEEDS] + [(P, rules, None, s, True) for s in REG_LEVEL_SEEDS]
+    print("\nGraines de regression :")
+    for r in run_all(1, items):
+        want = REG_BRSEEDS[r["user"]] if r["user"] is not None else REG_LEVEL_SEEDS[r["seed"]]
+        lit = literal_check(Level6(P, r["user"] or 0, None if r["user"] is not None else r["seed"]), rules)
+        ok = r["old"] == want and lit == want and r["new"] == "aile" and r["d_v1"] == r["corr"] and r["ok"]
+        bad += 0 if ok else 1
+        print("  %s : aile au chunk %s, couloir %d, galeries V=1,2,0,3 a %s ; v4.14 : %s (attendu %s, parcours litteral : %s) ; v4.15 : %s (plafond %d, galerie V=%s) -> %s"
+              % (seed_label(r), r["chunk"], r["corr"], "/".join(str(g) for g in r["gal"]), r["old"], want, lit, r["new"], r["cap"], r["v_new"], "OK" if ok else "ECHEC"))
+    # 2. Graines -BRSeed : structure de l'aile (portes, pourtour, entree atteinte) et placement
+    seeds = parse_list(a.seeds)
+    rows = run_all(a.jobs, [(P, rules, u, None, True) for u in seeds])
     dists = []
-    for s in range(lo, hi + 1):
-        L = Level6(P, s)
-        r = check(L)
+    shown = 0
+    for r in rows:
         if r["ok"]:
-            dists.append(r["dist"])
+            dists.append(r["walk"])
         else:
             bad += 1
-            if bad <= 12:
-                print("ECHEC graine %d : %s (aile au chunk %s)" % (s, ", ".join(r["why"]), L.wing["chunk"]))
-    n = hi - lo + 1
+            shown += 1
+            if shown <= 12:
+                print("ECHEC %s : %s (aile au chunk %s)" % (seed_label(r), ", ".join(r["why"]), r["chunk"]))
     if dists:
         dists.sort()
-        print("Entree de l'aile atteinte depuis le depart : %d/%d graines ; distance de marche (cellules de %g m) : min %d, mediane %d, max %d"
-              % (len(dists), n, P["CellSize"] / 100.0, dists[0], dists[len(dists) // 2], dists[-1]))
+        print("\nEntree de l'aile atteinte depuis le depart : %d/%d graines ; distance de marche (cellules de %g m) : min %d, mediane %d, max %d"
+              % (len(dists), len(rows), P["CellSize"] / 100.0, dists[0], dists[len(dists) // 2], dists[-1]))
     print("Pourtour : 4 portes d'entree et aucun autre passage sur les graines conformes")
+    groups = [("BRSeed %s" % a.seeds, rows)]
+    # 3. Graines du niveau (journal du jeu), tirages 32 bits, graines Windows de la v4.14
+    if a.level_seeds:
+        lrows = run_all(a.jobs, [(P, rules, None, s, False) for s in parse_list(a.level_seeds)])
+        for r in lrows:
+            print("  %s : couloir %d ; v4.14 : %s ; v4.15 : %s (plafond %d)" % (seed_label(r), r["corr"], r["old"], r["new"], r["cap"]))
+        groups.append(("graines du niveau %s" % a.level_seeds, lrows))
+    if a.random > 0:
+        rng = random.Random(a.rng_seed)
+        rs = [(rng.getrandbits(32) or 1) for _ in range(a.random)]
+        groups.append(("%d graines du niveau sur 32 bits (generateur %d)" % (a.random, a.rng_seed), run_all(a.jobs, [(P, rules, None, s, False) for s in rs])))
+    if a.crt:
+        cs = [(((r * 2654435761) & 0xFFFFFFFF) ^ (6 * 7919 + 17)) or 1 for r in range(32768)]
+        groups.append(("32768 graines aleatoires Windows v4.14 (rand() 0..32767)", run_all(a.jobs, [(P, rules, None, s, False) for s in cs])))
+    print()
+    for name, g in groups:
+        new, viol = summary(name, g)
+        bad += new + viol
     if a.sheet:
         slo, shi = (int(x) for x in a.sheet_seeds.split("-"))
-        rows = []
+        sheet_rows = []
         for sd in range(slo, shi + 1):
             L = Level6(P, sd)
-            rows.append((L, check(L)))
-        sheet(rows, a.sheet)
+            sheet_rows.append((L, check(L)))
+        sheet(sheet_rows, a.sheet)
         print("Planche : %s (graines %d a %d ; simulation, pas une capture du jeu)" % (a.sheet, slo, shi))
+    if rules["wing_margin"] is None:
+        print("NOTE : le source n'a pas la regle v4.15 (plafond de l'aile) : le jeu se comporte comme la colonne v4.14")
+        bad += 1
     print("RESULTAT : %s (%d echec(s))" % ("OK" if bad == 0 else "ECHEC", bad))
     return 0 if bad == 0 else 1
 

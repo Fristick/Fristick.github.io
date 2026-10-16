@@ -1,0 +1,432 @@
+# Bancs hors moteur des correctifs v4.15 (branche v415-fixes) - sortie reelle
+# Compilateurs (Windows 11, depuis Backrooms/) : clang-cl 22.1.3 /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow, puis cl 19.51.36260 /std:c++17 /O2 /EHsc /utf-8 /W4
+# Fichiers de chaque banc : ceux des en-tetes de Docs/v414/banc_*.txt ; 0 avertissement avec les deux compilateurs ; sorties identiques (ci-dessous : clang-cl)
+# Date : 2026-10-16T17:17:07Z
+
+## test_lidar : Tools/Lidar/test_lidar.cpp Source/Backrooms/Private/BRLidarLogic.cpp (argument 2000)
+Banc d'essai du Level 6 (LiDAR) : 2000 graines
+Impulsion : 1400 rayons en 0.20 s (260 par image au plus), cone 100 x 64 degres, plus grand vide 1.36 degres ; scan focalise : 1110 rayons/s (48 par image au plus), cone de 14 degres
+Scanner (v4.14, BRLidar::RunFrame : meme logique que ABRLidar::Tick) :
+  focus 30 s,  30 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 37 rayons au plus par image, 14800 points en reserve
+  focus 30 s,  60 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 19 rayons au plus par image, 14615 points en reserve
+  focus 30 s, 144 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 8 rayons au plus par image, 14569 points en reserve
+  focus 30 s, 240 images/s : 33300 points demandes, 100.0 % acceptes, 0 images sans point, 1110 rayons/s, 5 rayons au plus par image, 14569 points en reserve
+  focus 30 s,  30 images/s (irreguliere, saccades de 120 ms) : 30845 points demandes, 100.0 % acceptes, 0 images sans point, 1027 rayons/s, 48 rayons au plus par image, 12995 points en reserve
+  focus 30 s,  60 images/s (irreguliere, saccades de 120 ms) : 32030 points demandes, 100.0 % acceptes, 0 images sans point, 1068 rayons/s, 48 rayons au plus par image, 13839 points en reserve
+  focus 30 s, 144 images/s (irreguliere, saccades de 120 ms) : 31725 points demandes, 100.0 % acceptes, 0 images sans point, 1054 rayons/s, 48 rayons au plus par image, 13677 points en reserve
+  focus 30 s, 240 images/s (irreguliere, saccades de 120 ms) : 31946 points demandes, 100.0 % acceptes, 0 images sans point, 1065 rayons/s, 48 rayons au plus par image, 13747 points en reserve
+  saturation (impulsion a chaque recharge + focus, 90 s, persistance 30 s, 144 images/s) : decor 13737 / 15000 points, 165729 remplaces (les plus anciens), 0 refuses ; trou vise ensuite : 555 bords releves en 0,5 s, 100 % acceptes, eclat 100 %
+  longue image de 13 s, persistance 12 s : 0 points restent, 100 expires
+  persistance 4 s : points encore visibles a 3.95 s, tous expires a 4.15 s apres l'arret
+  persistance 30 s : points encore visibles a 29.95 s, tous expires a 30.15 s apres l'arret
+  persistance ramenee de 30 a 4 s : 0 points restent apres 5 s
+  impulsion + focus a  10 images/s : 6 images (0.600 s), 308 rayons au plus par image
+  impulsion + focus a  30 images/s : 6 images (0.200 s), 271 rayons au plus par image
+  impulsion + focus a  60 images/s : 12 images (0.200 s), 136 rayons au plus par image
+  impulsion + focus a 144 images/s : 29 images (0.201 s), 57 rayons au plus par image
+  impulsion + focus a 240 images/s : 48 images (0.200 s), 35 rayons au plus par image
+  plaque (code a 24 cases) cadree par tous les rayons, 3 s a  30 images/s : 3330 rayons sur la porte -> 90 cibles distinctes, 88 points d'inscription (une passe de 88), releve au carnet 1 fois, au plus 30 points d'inscription et 67 points par image (v4.13 : jusqu'a 1073 par image)
+  plaque (code a 24 cases) cadree par tous les rayons, 3 s a 240 images/s : 3330 rayons sur la porte -> 720 cibles distinctes, 88 points d'inscription (une passe de 88), releve au carnet 1 fois, au plus 4 points d'inscription et 9 points par image (v4.13 : jusqu'a 1073 par image)
+  quatre portes et quatre cages cadrees ensemble (60 images/s) : 8 inscriptions completes en 1.15 s, 1026 points (1026 attendus), 15 au plus par image
+  borne par image (constantes du code) : 260 rayons d'impulsion + 48 rayons focalises + 120 points d'inscription, plus un chevron par repere et par groupe
+  reserve : 24000 points (decor 15000, dangers 3000, mecanismes 1500, menaces 600, reperes 400, inscriptions 3500), 8 groupes d'age par categorie
+Aile : 2000/2000 graines avec six trous ; traversee a pied verifiee (grille de 5 cm, capsule de 42 cm) sur 200 graines : toutes les alcoves atteintes depuis chaque porte
+       passage minimal entre deux trous : 140 cm ; 20 chunks differents ; entree vers +X 586, -X 612, +Y 399, -Y 403 ; echelle dans l'alcove 1..4 : 500, 487, 510, 503
+       couloir garanti du depart a l'entree : continu, hors de l'aile, 41 cellules au plus
+       v4.15 : 180 positions possibles de l'aile : couloir de 18 a 41 cellules (au plus 41), plafond du parcours de l'aile 43
+Verifications : 20229, echecs : 0
+RESULTAT : OK
+
+## test_mechanisms : Tools/Mechanisms/test_mechanisms.cpp Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp
+Banc des mecanismes v4.12
+
+A. Eau locale
+  reperes tournes (0, 90, 180, 270 degres) : aller-retour exact, rectangle du monde correct            OK
+  dans le bassin : surface du bassin (160), fond du bassin (115)                                       OK
+  hors des volumes : eau du niveau (60 cm)                                                             OK
+  sas vide : pas d'eau (l'eau des canaux est sous le dallage), sol = dallage                           OK
+  bien au-dessus d'un bassin : le volume ne s'applique plus                                            OK
+  approche a vitesse constante, sans depasser la cible                                                 OK
+
+B. Bassins des Poolrooms (3000 graines, toutes positions des vannes)
+  plans des 3000 graines : deux vannes et un passage sec (3000)                                        OK
+  surface dans le bassin pour 108000 positions (au-dessus du fond, 10 cm sous le bord)                 OK
+  la regle graduee affiche la marque de la mission (bassin A 0-5, bassin B 0-7)                        OK
+  un cran de vanne = une marque = 15 cm ; A plus haut que B, les deux au-dessus des canaux             OK
+  B deborde exactement quand la mission le signale (4002 positions), a sa marque 7                     OK
+  resolution par actions -> marques voulues lues, mission resolue, passage ouvert (3000/3000)          OK
+
+C. Sas du passage sec
+  dallage au ras des trottoirs et au-dessus des canaux (70.0 cm)                                       OK
+  sas ferme : 100.0 cm d'eau (moins que la nage : 120.0)                                               OK
+  sas vide : surface sous le dallage (passage sec)                                                     OK
+  vidange en 5.2 s, visible                                                                            OK
+  le deversoir retient toujours l'eau (sommet >= surface + 10 cm), puis s'efface au sol                OK
+  deversoir ferme sous le haut des murets (pas de debordement par l'entree)                            OK
+  marche d'entree depuis le canal : 35.0 puis 35.0 cm (<= 35)                                          OK
+  murets a 190.0 cm (du canal) et 122.0 cm (du trottoir) : hors de portee d'un saut (101.0)            OK
+  garde-corps jusqu'a 270.0 cm : on n'entre que par l'entree                                           OK
+  entre deux poteaux : 61.0 cm (< largeur d'un joueur, 68.0)                                           OK
+  passage sous la traverse de l'entree : 199.0 cm (> joueur debout, 176.0)                             OK
+  echelle sur le dallage : sommet 356.0, tete a 444.0 (< plafond 450)                                  OK
+  defaut de la base reproduit : echelle sur un trottoir, sommet vise 424.0 (tete a 512.0 > 450 : inatteignable) OK
+
+D. Acces sans plongee ni creature
+  devant les vannes : hors des bassins, au plus dans l'eau des canaux (sans nager)                     OK
+  volants a portee depuis la place devant les bassins (340.0 cm)                                       OK
+  de l'entree du sas a l'echelle : au sec sur tout le trajet                                           OK
+  Poolrooms : aucune entite dans la definition du niveau (rappel du lot 1, verifie par -BRAutoTestV412) OK
+
+E. Passerelle du Niveau 8
+  tablier pose : bout sur l'appui (X 240.0, axe 96.0)                                                  OK
+  continuite au palier : dessus du tablier a 140.1 (palier 140.0)                                      OK
+  continuite a l'appui : marche de 12.1 cm (<= 35)                                                     OK
+  pente 9.0 degres (marchable : < 44,7)                                                                OK
+  leve : tablier vertical (90.0 degres), mur de 243.0 cm au bord du palier                             OK
+  palier inaccessible du sol (140.0 cm > saut 66.0 + marche 35.0)                                      OK
+  marches de l'appui franchissables sans sauter (<= 35 cm)                                             OK
+  chute du tablier ou du palier : 140.0 cm au plus (aucune mort de chute hors des fosses)              OK
+  contournement au sol des deux cotes (couloir de 400 cm : 90.0 cm > 68.0)                             OK
+  longueur du module 480.0 cm : dans la salle et la cellule d'en face (<= 600)                         OK
+  pendant la descente, le bout du tablier ne passe jamais sous l'appui                                 OK
+  treuils dans l'ordre (500 graines) : la passerelle descend sans jamais remonter                      OK
+  troisieme treuil : mission resolue, tablier pose (progression 1), sortie ouverte                     OK
+
+F. Detour des entites (meme etat que le tablier)
+  tablier leve : l'entite attend au pied du palier (X local 40.0)                                      OK
+  tablier pose, au sol : d'abord le pied des marches (X local 415.0)                                   OK
+  au pied des marches : vers le haut de l'appui                                                        OK
+  sur l'appui : par le tablier jusqu'au palier                                                         OK
+  du palier vers la salle : par le tablier et l'appui                                                  OK
+  de l'appui vers la salle : par les marches, pas par-dessus l'interruption                            OK
+  loin du module : aucun detour                                                                        OK
+
+G. Emprise des mecanismes et places libres (v4.15)
+  cage du Level 6 : volume de 12.0 a 122.0 cm du mur, +-60.0, 210.0 cm de haut                         OK
+  poste de confinement : point d'interaction (18.0, 0.0, 110.0), sans volume                           OK
+  v4.14 : poste a 0, cage a +58 : point d'interaction du poste dans la cage (actions toujours refusees) OK
+  poste a +-58 d'une cage : refuse ; a +-116 : libre (56.0 cm entre le poste et la cage)               OK
+  placement v4.15 : cage a 0.0, poste a 116.0 (meme face)                                              OK
+  cage a +-116 : refusee (elle entrerait de 31.0 cm dans le mur voisin)                                OK
+  sans volume ni voisin a volume : premiere place libre (ordre d'avant la v4.15)                       OK
+  rectangles orientes : croisement, rotation de 45 degres, ecart                                       OK
+  zone libre d'un treuil : 194.0 cm depuis 12 cm derriere le mur, +-66.0 cm (capsule debout a 120.0 cm devant le point vise comprise) OK
+  emprise de chaque sorte et role : point vise devant l'origine, entre 40 et 170 cm de haut            OK
+  modules : battant de l'aile (64.0 cm, mur de 60), sas (320.0 cm), passerelle (480.0 cm)              OK
+
+RESULTAT : OK (60 verifications, 0 echec(s))
+
+## test_missions : Tools/Missions/test_mission_logic.cpp Source/Backrooms/Private/BRMissionLogic.cpp Source/Backrooms/Private/BRMissionSolver.cpp (argument 3000)
+Banc d'essai des missions v4.13 : 3000 graines par niveau, generation 2
+Niveau  0 : introduction sans mission : 3000/3000 graines sans plan, variante de secours vide, aucune sortie gardee, porte vers le Niveau 1
+Ordre : sortie gardee de chaque niveau = suivant dans 0 -> 1 -> 37 -> 2 -> ... -> 11 -> dernier quai : oui ; anciennes sorties gardees retirees : oui
+Niveau  1 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 120 variantes distinctes, 0 variantes de secours, 14.0 actions en moyenne, 6667 erreurs commises au hasard, 800 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 9.0 actions en moyenne, 9 au plus
+Niveau  2 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 384 variantes distinctes, 0 variantes de secours, 10.0 actions en moyenne, 0 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 14.5 actions en moyenne, 19 au plus
+Niveau  3 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 96 variantes distinctes, 0 variantes de secours, 13.0 actions en moyenne, 20352 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 13.0 actions en moyenne, 13 au plus
+Niveau  4 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 3000 variantes distinctes, 0 variantes de secours, 6.0 actions en moyenne, 10670 erreurs commises au hasard, 400 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 16.5 actions en moyenne, 30 au plus
+Niveau  5 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 3000 variantes distinctes, 0 variantes de secours, 9.0 actions en moyenne, 0 erreurs commises au hasard, 800 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 11.0 actions en moyenne, 13 au plus
+Niveau  6 : anciennes sauvegardes (balises v4.12) : 15000 converties, 15000 conformes (etapes gardees, terminee -> terminee), 15000 refusees (autre graine)
+Niveau  6 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 3000 variantes distinctes, 0 variantes de secours, 25.0 actions en moyenne, 0 erreurs commises au hasard, 2000 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 25.0 actions en moyenne, 25 au plus
+Niveau  8 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 120 variantes distinctes, 0 variantes de secours, 13.0 actions en moyenne, 0 erreurs commises au hasard, 600 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 13.0 actions en moyenne, 13 au plus
+Niveau  9 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 288 variantes distinctes, 0 variantes de secours, 5.0 actions en moyenne, 2375 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 6.5 actions en moyenne, 8 au plus
+Niveau 10 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 2969 variantes distinctes, 0 variantes de secours, 6.0 actions en moyenne, 15761 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 9.0 actions en moyenne, 12 au plus
+Niveau 11 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 952 variantes distinctes, 0 variantes de secours, 15.0 actions en moyenne, 862 erreurs commises au hasard, 200 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 25.3 actions en moyenne, 39 au plus
+Niveau 37 : 3000/3000 resolues, 3000/3000 resolues apres actions au hasard, 40 variantes distinctes, 0 variantes de secours, 8.0 actions en moyenne, 0 erreurs commises au hasard, 135 erreurs typiques verifiees
+           mode joueur (appuis du jeu, rejoues a l'identique) : 3000/3000 resolues, 8.8 actions en moyenne, 13 au plus
+Placement v3 : avis "reamenages" depuis la version 2 dans 1 niveau(x) (Level 6)
+Actions jouees : 372000 (solveur) + 1296255 (au hasard)
+RESULTAT : OK
+
+## test_content : Tools/Content/test_content.cpp Source/Backrooms/Private/BRContentLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp Source/Backrooms/Private/BRStoryLogic.cpp
+Banc de contenu v4.13 (sources lues dans Source/Backrooms/Private)
+  BRLevels.cpp : niveaux et sorties lus                                                            OK
+  BRMissionWorld.cpp : sortie de progression prise dans le fil de la campagne (BRStory::NextOf)    OK
+
+A. Configuration centrale
+  12 niveaux definis dans le projet (12)                                                           OK
+  la table couvre exactement les niveaux definis                                                   OK
+  chaque niveau a un lot (1 a 5)                                                                   OK
+  lot 1 publie : Niveaux 0, 1, 2, 37                                                               OK
+  Niveaux 3 et 4 en test interne (lot 2)                                                           OK
+  lots courants : publiee 1, test interne 2, developpement 5                                       OK
+  Niveau 7 (inexistant) et 1001/1002 (reserves) inconnus et indisponibles                          OK
+  Level 0 : une seule sortie, la porte de service vers le Niveau 1                                 OK
+  aucune sortie ne saute une etape du fil ni ne tire au hasard                                     OK
+  chaque sortie vers l'avant est gardee par la mission (sauf la porte du Level 0) ; les retours sont libres OK
+  sortie gardee indisponible, autre sortie gardee disponible : condamnee                           OK
+  ... et la mission garde l'autre sortie                                                           OK
+  seule sortie gardee indisponible : fin du contenu disponible                                     OK
+  sortie libre (non gardee) indisponible : condamnee                                               OK
+  sortie vers un niveau disponible : inchangee                                                     OK
+  aucune redirection (v4.13) : Poolrooms -> 4 et Niveau 1 -> 4 ne sont pas detournes               OK
+  destination au hasard : jamais condamnee                                                         OK
+  dernier quai demande hors du Niveau 11 : fin du contenu                                          OK
+
+B. Version publiee
+  atteignables par les sorties : 0, 1, 2, 37                                                       OK
+  tous les niveaux disponibles sont atteignables (4)                                               OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du chapitre depuis une nouvelle partie : 0 -> 1 -> 37 -> 2 -> fin du contenu               OK
+  Poolrooms -> echelle du passage sec : Niveau 2                                                   OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 37                                 OK
+  la mission du Niveau 1 garde l'ascenseur vers les Poolrooms                                      OK
+  lot 1 : aucun passage condamne                                                                   OK
+  dernier quai (Niveau 11) : hors de cette version                                                 OK
+  tirages au hasard : 4 niveaux, tous disponibles                                                  OK
+
+B. Version test interne
+  atteignables par les sorties : 0, 1, 2, 3, 4, 37                                                 OK
+  tous les niveaux disponibles sont atteignables (6)                                               OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du chapitre depuis une nouvelle partie : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> fin du contenu     OK
+  Poolrooms -> echelle du passage sec : Niveau 2                                                   OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 37                                 OK
+  la mission du Niveau 1 garde l'ascenseur vers les Poolrooms                                      OK
+  dernier quai (Niveau 11) : hors de cette version                                                 OK
+  tirages au hasard : 6 niveaux, tous disponibles                                                  OK
+
+B. Version developpement
+  atteignables par les sorties : 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37                             OK
+  tous les niveaux disponibles sont atteignables (12)                                              OK
+  aucune sortie ne mene a un niveau indisponible                                                   OK
+  la sortie gardee par chaque mission mene quelque part (jamais condamnee)                         OK
+    passages condamnes : aucun
+  route du chapitre depuis une nouvelle partie : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai OK
+  Poolrooms -> echelle du passage sec : Niveau 2                                                   OK
+  Niveau 1 -> ascenseur (sortie gardee par la mission) : Niveau 37                                 OK
+  la mission du Niveau 1 garde l'ascenseur vers les Poolrooms                                      OK
+  dernier quai (Niveau 11) : fin de la campagne                                                    OK
+  tirages au hasard : 12 niveaux, tous disponibles                                                 OK
+
+C. Reprise des sauvegardes (BRContent::ResumeLevel, utilise par le menu et les cartes de sauvegarde)
+  partie v4.11 au Niveau 5 (0, 1, 4, 5 explores), version publiee : Niveau 1                       OK
+  partie v4.11 au Niveau 5, version de test interne : Niveau 4                                     OK
+  partie v4.11 au Niveau 5, version de developpement : Niveau 5                                    OK
+  partie au Niveau 2, version publiee : Niveau 2 (inchangee)                                       OK
+  partie de test au Niveau 4 (route des Poolrooms), version publiee : Niveau 2                     OK
+  dernier niveau non explore (format 1) : Niveau 0, comme avant                                    OK
+  aucun niveau disponible explore : Niveau 0                                                       OK
+  la liste des niveaux explores n'est pas modifiee (Niveau 4 de nouveau disponible au lot 2)       OK
+
+D. Compatibilite reseau
+  signatures distinctes par canal                                                                  OK
+  signature stable (deux calculs identiques)                                                       OK
+  meme version, meme contenu : accepte                                                             OK
+  autre version (v4.12 : 412) : refus version                                                      OK
+  autre version (v4.13 : 413) : refus version                                                      OK
+  protocole v4.15 : 415                                                                            OK
+  client sans controle (avant v4.12) : refus version                                               OK
+  version de test contre version publiee : refus contenu                                           OK
+  version publiee contre hote de developpement : refus contenu                                     OK
+  signature absente : refus contenu                                                                OK
+
+RESULTAT : OK (69 verifications, 0 echec(s))
+
+## test_story : Tools/Story/test_story.cpp Source/Backrooms/Private/BRStoryLogic.cpp Source/Backrooms/Private/BRContentLogic.cpp
+Banc du fil narratif v4.13
+
+A. Ordre de la campagne
+  fil : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai                    OK
+  precedent et position coherents pour les 12 niveaux                                                  OK
+  Poolrooms entre le Niveau 1 et le Niveau 2                                                           OK
+  niveaux hors du fil (7, 1001, 1002) : aucun suivant, acces inconnu                                   OK
+
+B. Campagne neuve dans chaque canal (regles de l'hote)
+  version publiee : 0 -> 1 -> 37 -> 2 -> fin du chapitre                                               OK
+  test interne : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> fin du chapitre                                        OK
+  developpement : 0 -> 1 -> 37 -> 2 -> 3 -> 4 -> 5 -> 6 -> 8 -> 9 -> 10 -> 11 -> dernier quai          OK
+  le chapitre 1 (0 -> 1 -> 37 -> 2) est identique dans les trois canaux                                OK
+
+C. Aucun raccourci (validation de l'hote)
+  Level 0, porte pas ouverte : Niveau 1 refuse                                                         OK
+  Level 0 : Poolrooms refusees                                                                         OK
+  Level 0 : Niveau 2 refuse (Poolrooms obligatoires)                                                   OK
+  porte ouverte : Niveau 1 accepte, Level 0 accompli                                                   OK
+  Niveau 1, mission pas faite : Poolrooms refusees                                                     OK
+  Niveau 1 : Niveaux 2 et 4 refuses (Poolrooms obligatoires)                                           OK
+  Niveau 1 accompli : Poolrooms acceptees ; Niveau 2 toujours refuse                                   OK
+  simple visite des Poolrooms : pas d'etape accomplie                                                  OK
+  sortie des Poolrooms prise : Niveau 2 accepte, etape enregistree                                     OK
+  Niveau 2 : Niveau 3 refuse avant la mission, Niveau 4 refuse                                         OK
+  12 x 12 paires etape/destination : seules les etapes atteintes s'ouvrent (0 ecart)                   OK
+
+D. Retours et detours
+  retour du Niveau 2 vers les Poolrooms puis le Niveau 1 : acceptes                                    OK
+  au retour, les etapes deja accomplies le restent (mission du Niveau 1 non refaite)                   OK
+  depuis le Niveau 1, la suite de l'histoire reste les Poolrooms                                       OK
+  le plus loin atteint ne recule pas (Niveau 2)                                                        OK
+  point de reprise : le niveau ou l'on est revenu (Niveau 1)                                           OK
+
+E. Fin du chapitre 1 et mise a jour suivante
+  fin du chapitre 1 enregistree, Niveau 2 accompli                                                     OK
+  version publiee : Continuer reprend au Niveau 2 (rien de plus a ouvrir)                              OK
+  chapitre 2 publie : Continuer ouvre directement le Niveau 3, sans refaire le Level 0                 OK
+  et l'hote accepte le Niveau 3                                                                        OK
+  nouvelle partie : Continuer = Level 0                                                                OK
+
+F. Migration des anciennes parties
+  format 1 a 3, au Level 0 (cassettes, coupure) : reprise 0, gare -1, Poolrooms a traverser            OK
+  v4.11/v4.12, au Level 0 (cadrans, mission resolue ou non) : reprise 0, gare -1, Poolrooms a traverser OK
+  au Niveau 1 (0, 1 explores) : reprise 1, gare -1, Poolrooms a traverser                              OK
+  dans les Poolrooms par l'ancienne echelle (0, 37) : reprise 37, gare -1, Poolrooms a traverser       OK
+  au Niveau 5 par 0 -> 37 -> 4 -> 5 (Poolrooms traversees) : reprise 5, gare -1, Poolrooms creditees   OK
+  au Niveau 5 par 0 -> 1 -> 4 -> 5 (sans les Poolrooms) : reprise 37, gare 5, Poolrooms a traverser    OK
+  v4.12 publiee, fin du chapitre au Niveau 2 (0 -> 1 -> 2) : reprise 37, gare 2, Poolrooms a traverser OK
+  v4.12 publiee, 0 -> 37 -> 1 -> 2 (redirection : pas une preuve) : reprise 37, gare 2, Poolrooms a traverser OK
+  revenu au Niveau 1 apres le Niveau 4 (sans les Poolrooms) : reprise 1, gare -1, Poolrooms a traverser OK
+  campagne finie par 0 -> 37 -> 4 -> ... -> 11 : reprise 11, gare -1, Poolrooms creditees              OK
+  [0, 1, 37, 4] : 1, retour a 0, 37, retour par 0, ascenseur 1 -> 4 : reprise 37, gare 4, Poolrooms a traverser OK
+  [0, 1, 4, 37] : vraie traversee vers un Niveau 4 deja connu (non prouvable) : reprise 37, gare 4, Poolrooms a traverser OK
+  [0, 37, 1, 4, 5] : revisite, 1 decouvert avant 4 : reprise 37, gare 5, Poolrooms a traverser         OK
+  [0, 37, 2, 3, 4] : 3 (ascenseur -> 4) decouvert avant 4 : reprise 37, gare 4, Poolrooms a traverser  OK
+  [0, 37, 4, 1, 2, 3, 5] : retours et revisites apres une vraie traversee : reprise 5, gare -1, Poolrooms creditees OK
+  [0, 37] arrete dans les Poolrooms (visitees, pas de preuve, rien a garer) : reprise 37, gare -1, Poolrooms a traverser OK
+  [0, 1, 2] jamais visitees (absence prouvee), arrete au Niveau 2 : reprise 37, gare 2, Poolrooms a traverser OK
+  au Niveau 5 sans les Poolrooms : Poolrooms ouvertes, Niveaux 2 et 5 en attente de la traversee       OK
+  sortie du sas : retour au Niveau 5 (progression d'avant), etape enregistree, gare jusqu'a la reprise (v4.14) OK
+  reprise de la session garee confirmee : etape de migration terminee                                  OK
+  les Niveaux 1 et 4 deja depasses restent accomplis                                                   OK
+  meme partie dans la version publiee (Niveau 5 indisponible) : la sortie du sas mene au Niveau 2      OK
+  fin du lot 1 de la v4.12 conservee comme fin de chapitre                                             OK
+
+G. v4.14 : preuve de traversee des Poolrooms
+  [0, 1, 37, 4] (contre-exemple de l'audit) : ambigu, pas de credit, partie garee, detour organise     OK
+  [0, 37, 4, 5] format 4 : prouvee (seul acces au Niveau 4 connu : l'echelle des Poolrooms)            OK
+  [0, 37, 4, 5] format 1 (console v4.1 a v4.3) : ambigu                                                OK
+  [0, 37, 4, 5] format inconnu (0) : ambigu                                                            OK
+  [0, 11, 37, 4] : Niveau 11 (destinations au hasard) connu avant 4 : ambigu                           OK
+  [0, 1] : jamais visitees : absence prouvee                                                           OK
+  courant 37 sans decouverte enregistree : ambigu (visitees)                                           OK
+  ancienne progression conservee : Niveaux 0 et 1 accomplis, plus loin atteint = Niveau 4              OK
+
+H. v4.14 : session garee conservee jusqu'a sa reprise (canaux, ajout d'un chapitre)
+  version publique : sortie des Poolrooms vers le Niveau 2, Poolrooms accomplies, Niveau 5 toujours gare OK
+  fin du chapitre 1 : la progression garee n'est pas videe                                             OK
+  chapitre 2 publie (Niveau 5 encore indisponible) : Continuer au Niveau 3, gare conserve              OK
+  Niveau 5 publie : Continuer reprend la progression garee au Niveau 5                                 OK
+  reprise reussie : l'etape de migration est terminee                                                  OK
+  niveau gare disponible : sortie du sas vers le Niveau 5, gare jusqu'a la confirmation de la reprise  OK
+
+I. v4.14 : REJOUER et mode developpeur n'ecrivent pas la partie de campagne
+  rejeu (consommation, ramassage, mort, fin, fermeture) : equipement, morts, session, niveau, campagne, histoire, temps inchanges OK
+  transfert explicite : le document lu en rejeu complete le journal (union, rien retire)               OK
+  mode developpeur (niveau deja decouvert, mort comprise) : partie identique                           OK
+  CONTINUER apres le rejeu : session du Niveau 2, graine 4242, 5 objets                                OK
+  histoire : l'ecriture suit la session (3 objets)                                                     OK
+
+Verifications : 71, echecs : 0
+RESULTAT : OK
+
+## test_departure : Tools/Departure/test_departure.cpp Source/Backrooms/Private/BRGatherLogic.cpp
+# Banc du depart de groupe v4.12 (BRGatherLogic.cpp)
+
+1. Rassemblement autour de l'echelle choisie
+  Niveau  0, plafond 290, conduit 300 : grimpeur a 440 cm compte (base : non compte) OK
+  Niveau  2, plafond 280, conduit 300 : grimpeur a 430 cm compte (base : non compte) OK
+  Niveau  6, plafond 290, conduit 300 : grimpeur a 440 cm compte (base : non compte) OK
+  Niveau  8, plafond 450, conduit 300 : grimpeur a 600 cm compte (base : non compte) OK
+  Niveau 37, plafond 450, conduit 300 : grimpeur a 600 cm compte (base : non compte) OK
+  Niveau  6, plafond 290, conduit   0 : grimpeur a 196 cm compte (base : compte) OK
+  Niveau  8, plafond 450, conduit   0 : grimpeur a 356 cm compte (base : compte) OK
+  Niveau 37, plafond 450, conduit   0 : grimpeur a 356 cm compte (base : compte) OK
+  Niveau 0 -> 37, 2 joueurs : un au sommet, un au pied : 2/2                     OK
+  Niveau 0 -> 37, 4 joueurs : sommet, pied, 5 m, a mi-hauteur : 4/4              OK
+  grimpeur compte a toute hauteur de la montee (88 a 440 cm)                     OK
+  joueur a l'etage au-dessus (derriere le plafond) : non compte                  OK
+  joueur a l'etage en dessous : non compte                                       OK
+  joueur reparti a 9 m : non compte                                              OK
+  joueur a cote du conduit, a la hauteur du sommet : non compte                  OK
+  demande depuis le sommet : acceptee sans ligne de vue (conduit ferme)          OK
+  demande depuis un autre etage : refusee                                        OK
+  meme point de vue pour la demande et le rassemblement (1 m devant, 90 cm)      OK
+  porte : demande a 3 m, refus a 4 m                                             OK
+  grange : rassemblement devant l'entree (5,2 m)                                 OK
+2. Attente au sommet de l'echelle
+  10 s au sommet en tenant la touche : 1 demande, attente stable, pas plus haut  OK
+  l'initiateur redescend : une annulation, demande rearmee apres 1 m             OK
+  remonte au sommet : une nouvelle demande (2 en tout)                           OK
+  un coequipier redescend : aucune annulation                                    OK
+  refus de l'hote : une demande, puis arret au sommet (aucune demande par image) OK
+  aucune reponse : arret apres 3 s, 1 demande                                    OK
+  depart vers une autre destination : ignore (arret apres 3 s)                   OK
+  depart du groupe : etat Leaving, sommet plus bloque                            OK
+3. Depart du groupe (hote)
+  2 joueurs : le groupe part ensemble (7.8 s), le grimpeur reste au sommet       OK
+  4 joueurs : le groupe part ensemble (9.1 s), le grimpeur reste au sommet       OK
+
+Verifications : 30, echecs : 0
+RESULTAT : OK
+
+## test_light : Tools/Light/test_light.cpp
+# Banc de la lumiere de gameplay v4.12 (BRLightLogic.h)
+
+  balise : Smiler hors poursuite dissipe a moins de 4.5 m ; aucune entite de l'ombre a moins de 6.8 m
+  sortie de secours eclairee / porche : Smiler dissipe a moins de 3.1 m
+  formule de l'indice (R x (1 - racine(seuil / I))) = recherche avec la loi du jeu OK
+  indice du carnet : "a moins de 4 m" ; a 4 m l'effet a toujours lieu (apport 0.62 > 0.50) OK
+  au-dela de la portee visuelle (9 m), aucun apport                                OK
+  apport decroissant avec la distance                                              OK
+  deux balises a 8 m : milieu a 1.23 (somme des apports)                           OK
+  coupure noire : la balise eclaire toujours (source autonome)                     OK
+
+Verifications : 6, echecs : 0
+RESULTAT : OK
+
+## test_transactions : Tools/Transactions/test_transactions.cpp Source/Backrooms/Private/BRTxnLogic.cpp
+# Banc des transactions v4.12 (BRTxnLogic.cpp)
+
+A. Regles de l'inventaire
+  ajout identique a celui de la base : 180000/180000
+  place annoncee = exemplaires reellement ranges : 36000/36000
+  faux "inventaire plein" (place 0, ajout possible) : base 33, v4.12 0
+  sacs pleins, lampe a la ceinture, main libre : lampe       place   1 (attendu   1) OK
+  sacs pleins, lampe en main, ceinture libre : lampe         place   1 (attendu   1) OK
+  sacs pleins, main et ceinture prises : lampe               place   0 (attendu   0) OK
+  sacs pleins, tete libre : frontale                         place   1 (attendu   1) OK
+  sacs pleins, torse pris : gilet                            place   0 (attendu   0) OK
+  sacs pleins, pile de 2 bandages : bandage                  place   2 (attendu   2) OK
+  sacs pleins de cassettes (12/12) : piles                   place   0 (attendu   0) OK
+  inventaire vide : bandage (24 cases x 4)                   place  96 (attendu  96) OK
+  inventaire vide : lampe (2 emplacements + 24 cases)        place  26 (attendu  26) OK
+B. Place reservee pendant l'attente de l'hote
+  16960 demandes, deplacements au hasard pendant l'attente : 49747 faits, 797 refuses (place reservee)
+  objet accepte sans place a la reponse : sans reserve 548, avec reserve 0
+  constat 4.2 : place du bandage 4, lampe rangee dans la derniere case -> deplacement refuse
+C. Reserve "mis de cote"
+  bandage sans place : mis de cote 1, range apres une case liberee : 1, reste 0
+D. Decisions sur les reponses de l'hote
+  constat 4.6 : sante 100 apres un reveil, soin d'avant (35) -> sante 100, objet retire : non
+  decisions : OK
+E. Hote et joueurs (modele de bout en bout)
+  E1 2 joueurs sur le meme bandage : une attribution, objet retire, stocks   OK
+  E1 4 joueurs sur le meme bandage : une attribution, objet retire, stocks   OK
+  E2 inventaire plein des la demande : aucune demande, objet en place        OK
+  E3 derniere case prise pendant l'attente : refus, bandage range            OK
+  E3b place perdue malgre tout : mis de cote, puis range (jamais perdu)      OK
+  E4 mort apres acceptation : parti avec l'ancien inventaire, stocks egaux, accuse OK
+  E5 reponse apres changement de niveau : rangee, aucun effet rejoue, stock  OK
+  E6 reponse repetee et demande renvoyee : un seul bandage, stock            OK
+  E7 deconnexion avant reponse : rendu au monde, decompte, repris par un autre OK
+  E8 soin et changement de niveau : bandage retire une fois, sante 75, sans effet OK
+  E9 soin puis mort et reveil : bandage neuf garde, sante 100, stock         OK
+  E10 soin et coup rapproches (dans l'ordre, et inverses) : sante de l'hote  OK
+  E11 demande de soin renvoyee : un soin, un bandage                         OK
+  E12 reveil sans confirmation (deja vivant) : epoque retablie, ramassage servi OK
+  E13 600 parties au hasard (4 joueurs) : aucun objet perdu ni double, stocks OK
+
+Verifications : 51, echecs : 0
+RESULTAT : OK

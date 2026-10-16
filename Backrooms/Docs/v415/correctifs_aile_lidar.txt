@@ -1,0 +1,32 @@
+# Aile LiDAR du Level 6 et parcours du placement (Tools/verify_lidar.py) - sortie reelle
+# Commande (depuis Backrooms/, PYTHONUTF8=1, Python 3.14.8) :
+#   python Tools/verify_lidar.py --seeds 1-2000 --level-seeds 2702236446,2878398681,2600076685,2622470042,2925637012,3124583934,229355065 --random 2000 --rng-seed 777 --jobs 12
+# Date : 2026-10-16T17:17:07Z
+
+Level 6 (Tools/verify_lidar.py) : parametres lus dans BRLevels.cpp : bLidar=True, CellSize=350, PitHoleSize=210, PitPassage=140, WallLineChance=0.6, DoorChance=0.3
+ABRWorld::PlaceMission (BRMissionWorld.cpp) : plafond de base 28 cellules (95 m / 350 cm), limite 6000 cellules ; regle de l'aile v4.15 dans le source : oui (couloir + 2)
+
+Graines de regression :
+  BRSeed 4136 / graine du niveau 2702236446 : aile au chunk (-3, 1), couloir 29, galeries V=1,2,0,3 a 29/30/30/31 ; v4.14 : repli (attendu repli, parcours litteral : repli) ; v4.15 : aile (plafond 31, galerie V=1) -> OK
+  BRSeed 6 / graine du niveau 3124583934 : aile au chunk (2, 1), couloir 29, galeries V=1,2,0,3 a 29/30/30/31 ; v4.14 : repli (attendu repli, parcours litteral : repli) ; v4.15 : aile (plafond 31, galerie V=1) -> OK
+  BRSeed 208 / graine du niveau 2925637012 : aile au chunk (-3, -3), couloir 41, galeries V=1,2,0,3 a 41/42/42/43 ; v4.14 : repli (attendu repli, parcours litteral : repli) ; v4.15 : aile (plafond 43, galerie V=1) -> OK
+  BRSeed 159 / graine du niveau 3921457400 : aile au chunk (0, 2), couloir 18, galeries V=1,2,0,3 a 18/19/19/20 ; v4.14 : aile (attendu aile, parcours litteral : aile) ; v4.15 : aile (plafond 28, galerie V=1) -> OK
+  BRSeed - / graine du niveau 2702236446 : aile au chunk (-3, 1), couloir 29, galeries V=1,2,0,3 a 29/30/30/31 ; v4.14 : repli (attendu repli, parcours litteral : repli) ; v4.15 : aile (plafond 31, galerie V=1) -> OK
+  BRSeed - / graine du niveau 2878398681 : aile au chunk (0, 2), couloir 19, galeries V=1,2,0,3 a 19/20/20/21 ; v4.14 : aile (attendu aile, parcours litteral : aile) ; v4.15 : aile (plafond 28, galerie V=1) -> OK
+  BRSeed - / graine du niveau 2600076685 : aile au chunk (1, -3), couloir 28, galeries V=1,2,0,3 a 28/29/27/30 ; v4.14 : aile (attendu aile, parcours litteral : aile) ; v4.15 : aile (plafond 28, galerie V=1) -> OK
+  BRSeed - / graine du niveau 2622470042 : aile au chunk (-3, 0), couloir 21, galeries V=1,2,0,3 a 21/22/22/23 ; v4.14 : aile (attendu aile, parcours litteral : aile) ; v4.15 : aile (plafond 28, galerie V=1) -> OK
+
+Entree de l'aile atteinte depuis le depart : 2000/2000 graines ; distance de marche (cellules de 3.5 m) : min 18, mediane 28, max 41
+Pourtour : 4 portes d'entree et aucun autre passage sur les graines conformes
+  BRSeed - / graine du niveau 2702236446 : couloir 29 ; v4.14 : repli ; v4.15 : aile (plafond 31)
+  BRSeed - / graine du niveau 2878398681 : couloir 19 ; v4.14 : aile ; v4.15 : aile (plafond 28)
+  BRSeed - / graine du niveau 2600076685 : couloir 28 ; v4.14 : aile ; v4.15 : aile (plafond 28)
+  BRSeed - / graine du niveau 2622470042 : couloir 21 ; v4.14 : aile ; v4.15 : aile (plafond 28)
+  BRSeed - / graine du niveau 2925637012 : couloir 41 ; v4.14 : repli ; v4.15 : aile (plafond 43)
+  BRSeed - / graine du niveau 3124583934 : couloir 29 ; v4.14 : repli ; v4.15 : aile (plafond 31)
+  BRSeed - / graine du niveau 229355065 : couloir 20 ; v4.14 : aile ; v4.15 : aile (plafond 28)
+
+BRSeed 1-2000 : 2000 graines ; regle v4.14 (plafond seul) : 929 repli(s) (46.45 %) ; regle v4.15 : 0 repli(s) ; couloir de 18 a 41 cellules, BFS(V=1) different du couloir ou couloir > 41 : 0
+graines du niveau 2702236446,2878398681,2600076685,2622470042,2925637012,3124583934,229355065 : 7 graines ; regle v4.14 (plafond seul) : 3 repli(s) (42.86 %) ; regle v4.15 : 0 repli(s) ; couloir de 19 a 41 cellules, BFS(V=1) different du couloir ou couloir > 41 : 0
+2000 graines du niveau sur 32 bits (generateur 777) : 2000 graines ; regle v4.14 (plafond seul) : 972 repli(s) (48.60 %) ; regle v4.15 : 0 repli(s) ; couloir de 18 a 41 cellules, BFS(V=1) different du couloir ou couloir > 41 : 0
+RESULTAT : OK (0 echec(s))
