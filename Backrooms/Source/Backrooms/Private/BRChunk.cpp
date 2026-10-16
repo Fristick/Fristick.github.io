@@ -158,6 +158,47 @@ bool ABRChunk::AddKitModule(FName Name, const FVector& At, float Yaw, bool bColl
 	return true;
 }
 
+bool ABRChunk::AddKitCellSlabs(bool bCeiling)
+{
+	ABRWorld* W = World.Get();
+	UBRAssets* A = UBRAssets::Get(this);
+	if (!W || !A || !A->Cube() || !UsesKit())
+	{
+		return false;
+	}
+	UStaticMesh* Slab = A->KitCellSlab(bCeiling);
+	const FBRLevelDef& D = W->Def();
+	const FBRSurface& Surf = bCeiling ? D.Ceiling : D.Floor;
+	UMaterialInterface* Mat = Slab ? A->Surface(Surf) : nullptr;
+	if (!Mat)
+	{
+		return false;
+	}
+	const int32 N = D.ChunkCells;
+	const float S = D.CellSize;
+	const float ChunkW = N * S;
+	const float WX0 = Coord.X * ChunkW;
+	const float WY0 = Coord.Y * ChunkW;
+	// Modules (repere au centre de la cellule, au niveau du sol) habilles de la surface du niveau : le materiau du monde est
+	// projete dans l'espace monde, le motif ne recommence pas d'une cellule a l'autre ; crees avec les collisions
+	FBatch& B = GetBatch(FString::Printf(TEXT("KITSLAB|%d|%s"), bCeiling ? 1 : 0, *Surf.Key()), Slab, Mat, false, true, 0.f);
+	B.bEarly = true;
+	for (int32 I = 0; I < N; ++I)
+	{
+		for (int32 J = 0; J < N; ++J)
+		{
+			B.Transforms.Add(FTransform(FVector(WX0 + (I + 0.5f) * S, WY0 + (J + 0.5f) * S, 0.f) - GetActorLocation()));
+		}
+	}
+	// Collision : la meme dalle de 20 cm qu'avant, cachee (un corps physique par chunk au lieu d'un par cellule)
+	FBatch& CB = GetBatch(TEXT("COLLISION"), A->Cube(), nullptr, true, false, 0.f);
+	CB.bHidden = true;
+	const float ZC = bCeiling ? D.WallHeight + 10.f : -10.f;
+	CB.Transforms.Add(FTransform(FQuat::Identity, FVector(WX0 + ChunkW * 0.5f, WY0 + ChunkW * 0.5f, ZC) - GetActorLocation(),
+		FVector(ChunkW, ChunkW, 20.f) / 100.f));
+	return true;
+}
+
 void ABRChunk::AddKitPost(int32 VX, int32 VY)
 {
 	ABRWorld* W = World.Get();
@@ -1855,8 +1896,9 @@ bool ABRChunk::StepPlan()
 		{
 			BuildPitRoom(PitRoom);
 		}
-		else
+		else if (!AddKitCellSlabs(false))
 		{
+			// v4.15 : avec le kit du Level 0, sol cellule par cellule (AddKitCellSlabs) ; sinon une dalle par chunk
 			AddBox(D.Floor, FVector(Mid.X, Mid.Y, -10.f), FVector(ChunkW, ChunkW, 20.f));
 		}
 		if (D.DeckHeight > 0.f)
@@ -2246,7 +2288,8 @@ FString ABRChunk::NextBatchKey(bool bCollision) const
 {
 	for (const TPair<FString, FBatch>& Pair : Batches)
 	{
-		if (Pair.Value.bCollision == bCollision)
+		// v4.15 : les visuels "tot" (sol et plafond du kit) sont crees avec les collisions
+		if ((Pair.Value.bCollision || Pair.Value.bEarly) == bCollision)
 		{
 			return Pair.Key;
 		}
@@ -3281,7 +3324,11 @@ void ABRChunk::BuildCeiling()
 	};
 	if (!bShaftHole)
 	{
-		Slab(X0, Y0, X1, Y1);
+		// v4.15 : avec le kit du Level 0, plafond cellule par cellule ; une trappe garde les dalles autour d'elle
+		if (!AddKitCellSlabs(true))
+		{
+			Slab(X0, Y0, X1, Y1);
+		}
 		return;
 	}
 	// Plafond autour de la trappe

@@ -151,6 +151,9 @@ protected:
 		bool bMeshMaterials = false;
 		/** v4.15 : decalques sur maillage (taches au sol) : ni ombre, ni ray tracing, ni champ de distance, ni Lumen */
 		bool bDecal = false;
+		/** v4.15 : visuel sans collision cree avec les collisions (sol et plafond du kit, cellule par cellule : ils doivent
+		 *  etre la des que l'on peut marcher dans le chunk) */
+		bool bEarly = false;
 		TArray<FTransform> Transforms;
 		/** v4.8 : instances deja creees (sous-lots) */
 		int32 Cursor = 0;
@@ -171,6 +174,11 @@ protected:
 	/** v4.14 : poteau du kit au sommet (VX, VY) de la grille : croix, T, angle, droit ou extremite selon les murs et les
 	 *  portes qui y arrivent, oriente en consequence ; rien si aucun mur n'y arrive */
 	void AddKitPost(int32 VX, int32 VY);
+	/** v4.15 : kit : sol (SM_L0_Floor_350) ou plafond (SM_L0_Ceiling_350) cellule par cellule, habille de la surface du niveau
+	 *  (materiau du monde) a la place de la grande dalle du chunk : cartes de Lumen et champs de distance a l'echelle d'une
+	 *  cellule. La collision reste une dalle cachee par chunk (meme surface de marche, un seul corps physique). false : kit
+	 *  absent ou module invalide, le chunk garde sa dalle */
+	bool AddKitCellSlabs(bool bCeiling);
 	/** Segment de mur sur une ligne de la grille (A..B le long de la ligne, ZLo..ZHi en hauteur). v4.14 : avec le kit, un
 	 *  mur plein d'un sommet a l'autre est pose cellule par cellule (SM_L0_Wall_350 ou _Aged_350, plinthes) */
 	void AddWallSegment(bool bAlongY, float Fixed, float A, float B, float ZLo, float ZHi, bool bWithTrim, bool bWithPipes);

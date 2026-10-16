@@ -1119,6 +1119,31 @@ bool UBRAssets::UseLevel0Kit()
 	return KitState == 1 && IsLevel0KitWanted();
 }
 
+UStaticMesh* UBRAssets::KitCellSlab(bool bCeiling)
+{
+	const TCHAR* Name = bCeiling ? TEXT("SM_L0_Ceiling_350") : TEXT("SM_L0_Floor_350");
+	UStaticMesh* M = KitMesh(FName(Name));
+	int32& State = KitSlabState[bCeiling ? 1 : 0];
+	if (State < 0)
+	{
+		bool bOk = false;
+		if (M)
+		{
+			// Cellule de 350 x 350 cm centree sur l'origine ; sol : dessus a 0 (dalle de 20 cm) ; plafond : dessous a 290 cm
+			const FBox Bx = M->GetBoundingBox();
+			const bool bXY = FMath::IsNearlyEqual(Bx.Min.X, -175.0, 1.5) && FMath::IsNearlyEqual(Bx.Max.X, 175.0, 1.5)
+				&& FMath::IsNearlyEqual(Bx.Min.Y, -175.0, 1.5) && FMath::IsNearlyEqual(Bx.Max.Y, 175.0, 1.5);
+			const bool bZ = bCeiling ? (FMath::IsNearlyEqual(Bx.Min.Z, 290.0, 1.5) && Bx.Max.Z > Bx.Min.Z + 1.0 && Bx.Max.Z < 320.0)
+				: (FMath::IsNearlyEqual(Bx.Max.Z, 0.0, 1.5) && Bx.Min.Z < -5.0 && Bx.Min.Z > -40.0);
+			bOk = bXY && bZ;
+			UE_LOG(LogBackrooms, Log, TEXT("Kit du Level 0 : %s %s (%.1f..%.1f, %.1f..%.1f, %.1f..%.1f cm)"), Name,
+				bOk ? TEXT("pose cellule par cellule") : TEXT("refuse, dalles du chunk gardees"), Bx.Min.X, Bx.Max.X, Bx.Min.Y, Bx.Max.Y, Bx.Min.Z, Bx.Max.Z);
+		}
+		State = bOk ? 1 : 0;
+	}
+	return State == 1 ? M : nullptr;
+}
+
 namespace
 {
 	TArray<FString>& FallbackList()

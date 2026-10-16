@@ -42,6 +42,10 @@ public:
 	static bool IsLevel0KitWanted();
 	/** v4.14 : axe Y des modules non retourne par l'import (lu sur SM_L0_Wall_Corner, voir UseLevel0Kit) */
 	bool IsKitMirrorY() const { return bKitMirrorY; }
+	/** v4.15 : module de sol (SM_L0_Floor_350) ou de plafond (SM_L0_Ceiling_350) du kit, s'il est importe et a la bonne
+	 *  taille (350 x 350 cm centre sur la cellule, dessus du sol a 0, dessous du plafond a 290 cm) ; verifie une fois.
+	 *  nullptr : le chunk garde sa grande dalle */
+	UStaticMesh* KitCellSlab(bool bCeiling);
 	UStaticMesh* Cube();
 	UStaticMesh* Sphere();
 	UStaticMesh* Cylinder();
@@ -209,6 +213,8 @@ private:
 	/** v4.14 : sens de l'axe Y des modules importes, lu sur la boite de SM_L0_Wall_Corner (plinthes du cote +Y d'Unreal
 	 *  quand l'import retourne Y, comme prevu ; du cote -Y sinon). Sert a orienter les poteaux d'angle et en T */
 	bool bKitMirrorY = false;
+	/** v4.15 : etat des modules de sol et de plafond du kit (-1 : pas encore verifie, 0 : refuse, 1 : utilisable) */
+	int32 KitSlabState[2] = { -1, -1 };
 
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UMaterialInterface>> MatCache;

@@ -35,8 +35,10 @@ import os
 
 import unreal
 
-# v4.15 : 11 : profils photometriques IES de la lampe torche et de la frontale (RawAssets/Lights, /Game/Backrooms/Lights)
-VERSION = 11
+# v4.15 : 11 : profils photometriques IES de la lampe torche et de la frontale (RawAssets/Lights, /Game/Backrooms/Lights) ;
+# 12 : kit du Level 0 : papier peint, moquette et dalles projetes dans l'espace monde (M_L0K_PbrWorld), diffuseur texture
+# (M_L0K_ColorTex), textures du kit refaites ; atlas des decalques (tout est reimporte une fois)
+VERSION = 12
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
 # v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles,
@@ -1488,17 +1490,20 @@ KIT_MAT = KIT + "/Materials"
 # Materiaux du kit (noms des slots des FBX) : textures T_L0K_<Nom>_BaseColor / _ORM / _Normal, teinte, couleur de sommet
 # (profondeur des puits), emission ; couleur unie ; decal (masque alpha). Meme table que le README du kit (section 7)
 KIT_MATERIALS = {
-    "M_L0_Wallpaper": {"tex": "T_L0K_Wallpaper"},
-    "M_L0_Wallpaper_Aged": {"tex": "T_L0K_Wallpaper", "tint": (0.93, 0.9, 0.82)},
-    "M_L0_Carpet": {"tex": "T_L0K_Carpet"},
-    "M_L0_CeilingTile": {"tex": "T_L0K_CeilingTile"},
+    # v4.15 : "world" : texture projetee dans l'espace monde (M_L0K_PbrWorld, cm par repetition, comme les surfaces du jeu) :
+    # le motif ne recommence plus a chaque module ; "tide" : ligne de maree et bande sous le plafond ; "aged" : la teinte du
+    # papier jauni s'estompe vers les bouts du module ; "spec" : reflectance
+    "M_L0_Wallpaper": {"tex": "T_L0K_Wallpaper", "world": 106.0, "tide": 1.0, "spec": 0.4},
+    "M_L0_Wallpaper_Aged": {"tex": "T_L0K_Wallpaper", "tint": (0.93, 0.9, 0.82), "world": 106.0, "tide": 1.0, "spec": 0.4, "aged": 1.0},
+    "M_L0_Carpet": {"tex": "T_L0K_Carpet", "world": 160.0, "spec": 0.3},
+    "M_L0_CeilingTile": {"tex": "T_L0K_CeilingTile", "world": 122.0},
     "M_L0_Concrete": {"tex": "T_L0K_Concrete"},
     "M_L0_PitConcrete": {"tex": "T_L0K_Concrete", "vertex": 1.0},
     "M_L0_Baseboard": {"tex": "T_L0K_Baseboard"},
     "M_L0_FixtureMetal": {"tex": "T_L0K_FixtureMetal"},
     "M_L0_DoorSteel": {"tex": "T_L0K_DoorSteel"},
     "M_L0_DoorHardware": {"tex": "T_L0K_Hardware"},
-    "M_L0_LightDiffuser": {"color_tex": "T_L0K_Diffuser_Emissive", "emissive": 6.0, "rough": 0.35},
+    "M_L0_LightDiffuser": {"color_tex": "T_L0K_Diffuser_Emissive", "base_tex": "T_L0K_Diffuser_BaseColor", "emissive": 6.0, "rough": 0.35},
     "M_L0_LightDiffuser_Off": {"color": (0.55, 0.56, 0.52), "rough": 0.4},
     "M_L0_DraftGlow": {"color": (0.7, 0.85, 1.0), "emissive": 6.0, "rough": 0.5},
     "M_L0_PitDark": {"color": (0.008, 0.008, 0.007), "rough": 1.0},
@@ -1508,11 +1513,26 @@ KIT_MATERIALS = {
     "M_L0_DecalCeiling": {"decal": "T_L0K_Decal_CeilingStain"},
     "M_L0_DecalCarpet": {"decal": "T_L0K_Decal_CarpetDamp"},
 }
+# Materiaux maitres du kit (sorte -> nom). v4.15 : PbrWorld (textures projetees dans l'espace monde), ColorTex (couleur et
+# emission d'une image : diffuseur des neons)
+KIT_MASTERS = {"pbr": "M_L0K_Pbr", "pbrworld": "M_L0K_PbrWorld", "color": "M_L0K_Color", "colortex": "M_L0K_ColorTex", "decal": "M_L0K_Decal"}
 # Modules que le jeu pose dans le Level 0 genere (ABRChunk, v4.14) : le kit n'est utilise que s'ils sont tous la
 # (meme liste que KitModules dans BRAssets.cpp)
 KIT_REQUIRED = ("SM_L0_Wall_350", "SM_L0_Wall_Aged_350", "SM_L0_Doorway", "SM_L0_DoorCasing", "SM_L0_Baseboard_290", "SM_L0_Baseboard_070",
                 "SM_L0_Wall_Corner", "SM_L0_Wall_JunctionT", "SM_L0_Wall_JunctionX", "SM_L0_Wall_End", "SM_L0_Wall_Straight", "SM_L0_Pillar",
                 "SM_L0_ServiceDoor_Wall")
+
+# v4.15 : normale de la texture projetee sur l'axe dominant de la face, dans l'espace monde (memes axes que la projection
+# triplanaire de M_BR_World : X -> (Y, -Z), Y -> (X, -Z), Z -> (X, Y)) ; materiau maitre M_L0K_PbrWorld
+BR_AXIS_NORMAL_HLSL = (
+    "// v4.15 (kit du Level 0) : normale de la texture projetee sur l'axe dominant de la face, dans l'espace monde (memes axes\n"
+    "// que la projection triplanaire de M_BR_World). Entrees : T (normale de la texture, espace tangent), VN (normale du sommet).\n"
+    "float3 a = abs(VN);\n"
+    "float3 n;\n"
+    "if (a.z >= 0.5) n = float3(T.x, T.y, T.z * (VN.z >= 0.0 ? 1.0 : -1.0));\n"
+    "else if (a.x >= a.y) n = float3(T.z * (VN.x >= 0.0 ? 1.0 : -1.0), T.x, -T.y);\n"
+    "else n = float3(T.x, T.z * (VN.y >= 0.0 ? 1.0 : -1.0), -T.y);\n"
+    "return normalize(n);\n")
 
 
 def kit_raw(*parts):
@@ -1526,8 +1546,52 @@ def _kit_files(sub, exts):
     return [f for f in sorted(os.listdir(folder)) if os.path.splitext(f)[1].lower() in exts]
 
 
+def _kit_world_pbr(g, m, P):
+    """v4.15 : M_L0K_PbrWorld : papier peint, moquette, dalles projetes dans l'espace monde sur l'axe dominant de la face
+    (meme projection et meme echelle, TexScale en cm, que les surfaces du jeu : les motifs des modules et des boites du
+    generateur se raccordent), normale reorientee dans l'espace monde. Ligne de maree (TideLine, meme code que M_BR_World).
+    Papier jauni : la teinte s'estompe vers les bouts du module (position locale) et par plaques (AgedFade) : plus de marche
+    de teinte d'un module a l'autre."""
+    safe_set(m, "tangent_space_normal", False)
+    wp = g.world_pos()
+    d = g.div(wp, g.scalar("TexScale", 120.0))
+    flip = g.c2(1.0, -1.0)
+    uvx = g.mul(g.mask(d, "gb"), flip)
+    uvy = g.mul(g.mask(d, "rb"), flip)
+    uvz = g.mask(d, "rg")
+    vn = g.vertex_normal()
+    a = g.abs(vn)
+    step_x = g.sat(g.mul(g.sub(g.mask(a, "r"), g.mask(a, "g")), g.const(1000.0)))
+    step_z = g.sat(g.mul(g.sub(g.mask(a, "b"), g.const(0.5)), g.const(1000.0)))
+    uv = g.lerp(g.lerp(uvy, uvx, step_x), uvz, step_z)
+    noise_tex = load_tex("T_NoiseLF")
+    lp_cls = getattr(unreal, "MaterialExpressionLocalPosition", None)
+    if lp_cls is not None:
+        # module de mur : 290 cm le long de son X local ; teinte entiere sur les 150 cm du milieu, nulle aux bouts
+        ends = g.sat(g.div(g.sub(g.const(145.0), g.abs(g.mask(g.node(lp_cls), "r"))), g.const(70.0)))
+    else:
+        ends = g.const(1.0)
+    blot_uv = g.div(g.append(g.dot(g.mask(wp, "rg"), g.c2(0.707, 0.707)), g.mask(wp, "b")), g.const(260.0))
+    blot = g.sat(g.sub(g.mul(g.tex("NoiseTex", noise_tex, blot_uv, out="G"), g.const(1.6)), g.const(0.1)))
+    aged = g.lerp(g.const(1.0), g.mul(ends, blot), g.scalar("AgedFade", 0.0))
+    tint = g.lerp(g.c3(1.0, 1.0, 1.0), g.vector("Tint", (1, 1, 1, 1)), aged)
+    base = g.mul(g.tex("BaseColor", load_tex("T_L0K_Wallpaper_BaseColor", KIT_TEX), uv), tint)
+    tide = g.custom("BRTideLine", BR_TIDE_LINE_HLSL, [
+        ("WP", wp), ("NZ", g.mask(vn, "b")), ("Amount", g.scalar("TideLine", 0.0)), ("Top", g.scalar("WallTop", 290.0)),
+        ("Noise", g.texobj("TideNoise", noise_tex))], output="CMOT_FLOAT3")
+    g.output(g.mul(base, tide), P.MP_BASE_COLOR)
+    orm = g.tex("ORM", load_tex("T_L0K_Wallpaper_ORM", KIT_TEX), uv)[0]
+    g.output((orm, "R"), P.MP_AMBIENT_OCCLUSION)
+    g.output((orm, "G"), P.MP_ROUGHNESS)
+    g.output((orm, "B"), P.MP_METALLIC)
+    g.output(g.scalar("Specular", 0.5), P.MP_SPECULAR)
+    nt = g.tex("Normal", load_tex("T_L0K_Wallpaper_Normal", KIT_TEX), uv, normal=True)
+    g.output(g.custom("BRAxisNormal", BR_AXIS_NORMAL_HLSL, [("T", nt), ("VN", vn)], output="CMOT_FLOAT3"), P.MP_NORMAL)
+
+
 def _kit_master(name, kind):
-    """Materiaux maitres du kit : 'pbr' (cartes BaseColor / ORM / Normal), 'color' (couleur unie), 'decal' (masque)"""
+    """Materiaux maitres du kit : 'pbr' (cartes BaseColor / ORM / Normal), 'pbrworld' (v4.15 : memes cartes projetees dans
+    l'espace monde), 'color' (couleur unie), 'colortex' (v4.15 : couleur et emission d'images), 'decal' (masque)"""
     path = KIT_MAT + "/" + name
     if exists(path):
         EAL.delete_asset(path)
@@ -1547,11 +1611,20 @@ def _kit_master(name, kind):
         g.output((orm, "B"), P.MP_METALLIC)
         g.output(g.tex("Normal", load_tex("T_L0K_Wallpaper_Normal", KIT_TEX), uv, normal=True), P.MP_NORMAL)
         g.output(g.mul(g.tex("EmissiveTex", black_tex(), uv), g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
+    elif kind == "pbrworld":
+        _kit_world_pbr(g, m, P)
     elif kind == "color":
         col = g.vector("Color", (0.8, 0.8, 0.8, 1))
         g.output(col, P.MP_BASE_COLOR)
         g.output(g.scalar("Roughness", 0.8), P.MP_ROUGHNESS)
         g.output(g.mul(col, g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
+    elif kind == "colortex":
+        # v4.15 : diffuseur des neons : prismes et bords de l'image (T_L0K_Diffuser_BaseColor / _Emissive) sur toute la face
+        col = g.vector("Color", (1.0, 0.97, 0.88, 1))
+        diffuser = load_tex("T_L0K_Diffuser_Emissive", KIT_TEX)
+        g.output(g.mul(col, g.tex("ColorTex", load_tex("T_L0K_Diffuser_BaseColor", KIT_TEX) or diffuser, uv)), P.MP_BASE_COLOR)
+        g.output(g.scalar("Roughness", 0.35), P.MP_ROUGHNESS)
+        g.output(g.mul(g.mul(col, g.tex("EmissiveTex", diffuser, uv)), g.scalar("Emissive", 0.0)), P.MP_EMISSIVE_COLOR)
     else:
         safe_set(m, "blend_mode", unreal.BlendMode.BLEND_MASKED)
         safe_set(m, "two_sided", True)
@@ -1561,6 +1634,37 @@ def _kit_master(name, kind):
         g.output(g.scalar("Roughness", 0.9), P.MP_ROUGHNESS)
     finish_material(m)
     return m
+
+
+def _kit_kind(spec):
+    """Sorte de materiau maitre d'un materiau du kit (KIT_MATERIALS)"""
+    if "tex" in spec:
+        return "pbrworld" if "world" in spec else "pbr"
+    if "decal" in spec:
+        return "decal"
+    return "colortex" if "color_tex" in spec else "color"
+
+
+def _kit_masters():
+    """Construit les materiaux maitres du kit. v4.15 : un maitre nouveau qui echoue retombe sur son equivalent d'avant
+    (PbrWorld -> Pbr : UV des modules ; ColorTex -> Color : couleur unie) : le kit reste complet"""
+    masters = {}
+    for kind in ("pbr", "color", "decal", "pbrworld", "colortex"):
+        try:
+            masters[kind] = _kit_master(KIT_MASTERS[kind], kind)
+        except Exception as e:
+            warn("Kit : materiau maitre %s non construit (%s)" % (KIT_MASTERS[kind], e))
+            if kind in ("pbr", "color", "decal"):
+                raise
+            path = KIT_MAT + "/" + KIT_MASTERS[kind]
+            if exists(path):
+                try:
+                    EAL.delete_asset(path)
+                except Exception:
+                    pass
+    masters.setdefault("pbrworld", masters["pbr"])
+    masters.setdefault("colortex", masters["color"])
+    return masters
 
 
 def _kit_instance(name, parent, spec):
@@ -1580,17 +1684,26 @@ def _kit_instance(name, parent, spec):
             MEL.set_material_instance_vector_parameter_value(mi, "Tint", unreal.LinearColor(*(tuple(spec["tint"]) + (1.0,))))
         if "vertex" in spec:
             MEL.set_material_instance_scalar_parameter_value(mi, "VertexDark", spec["vertex"])
+        if "world" in spec:
+            # v4.15 : echelle (cm par repetition), ligne de maree, teinte estompee du papier jauni, reflectance
+            MEL.set_material_instance_scalar_parameter_value(mi, "TexScale", spec["world"])
+            MEL.set_material_instance_scalar_parameter_value(mi, "TideLine", spec.get("tide", 0.0))
+            MEL.set_material_instance_scalar_parameter_value(mi, "AgedFade", spec.get("aged", 0.0))
+            MEL.set_material_instance_scalar_parameter_value(mi, "Specular", spec.get("spec", 0.5))
     elif "decal" in spec:
         t = load_tex(spec["decal"], KIT_TEX)
         if t:
             MEL.set_material_instance_texture_parameter_value(mi, "Decal", t)
     else:
         if "color_tex" in spec:
-            # Diffuseur : couleur et emission de la meme image (pas d'ORM ni de normale)
-            t = load_tex(spec["color_tex"], KIT_TEX)
+            # v4.15 : diffuseur texture : couleur de l'image de base, emission de l'image emissive (prismes, bords)
             MEL.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(1.0, 0.97, 0.88, 1.0))
-            if t:
-                warn("Kit : %s : diffuseur en couleur unie (image %s gardee pour une version texturee)" % (name, spec["color_tex"]))
+            for param, tex_name in (("EmissiveTex", spec["color_tex"]), ("ColorTex", spec.get("base_tex", spec["color_tex"]))):
+                t = load_tex(tex_name, KIT_TEX)
+                if t:
+                    MEL.set_material_instance_texture_parameter_value(mi, param, t)
+                else:
+                    warn("Kit : texture %s absente pour %s" % (tex_name, name))
         else:
             MEL.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(*(tuple(spec["color"]) + (1.0,))))
         MEL.set_material_instance_scalar_parameter_value(mi, "Roughness", spec.get("rough", 0.8))
@@ -1658,10 +1771,9 @@ def import_level0_kit(force=False):
                 # echantillonneur "Linear Color" (une compression Masks exigerait un echantillonneur Masks)
                 safe_set(t, "srgb", False)
             EAL.save_asset(KIT_TEX + "/" + name, only_if_is_dirty=False)
-        masters = {k: _kit_master("M_L0K_" + k.capitalize(), k) for k in ("pbr", "color", "decal")}
+        masters = _kit_masters()
         for name, spec in KIT_MATERIALS.items():
-            kind = "pbr" if "tex" in spec else ("decal" if "decal" in spec else "color")
-            _kit_instance(name, masters[kind], spec)
+            _kit_instance(name, masters[_kit_kind(spec)], spec)
         tasks = [make_task(kit_raw("FBX", f), KIT_MESH, os.path.splitext(f)[0], _kit_fbx_options(_fbx_has_ucx(kit_raw("FBX", f)))) for f in fbx]
         tools().import_asset_tasks(tasks)
     # Materiaux par nom de slot (le jeu garde les materiaux du maillage pour le kit)
