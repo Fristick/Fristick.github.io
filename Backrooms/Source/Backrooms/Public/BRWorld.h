@@ -45,6 +45,11 @@ struct FBRNetLevel
 	/** Incremente a chaque chargement (0 = aucun niveau encore) */
 	UPROPERTY()
 	int32 Serial = 0;
+
+	/** v4.15 : bit 0 : niveau du parcours lineaire (aucune sortie tiree par les chunks, ABRChunk::PlanExits). Il change la
+	 *  generation : il arrive avec le niveau, comme la graine */
+	UPROPERTY()
+	uint8 Flags = 0;
 };
 
 /** v4.11 : etat de la mission du niveau, tenu par l'hote. Un client qui rejoint recoit cet instantane avec le niveau
@@ -243,6 +248,14 @@ struct FBRNetStory
 	UPROPERTY()
 	uint8 DoorVersion = 0;
 
+	/** v4.15 : parcours de la partie (BRStory::Flag) ; la graine du parcours reste chez l'hote (les clients recoivent la
+	 *  graine de chaque niveau avec le niveau) */
+	UPROPERTY()
+	uint32 Flags = 0;
+
+	UPROPERTY(NotReplicated)
+	uint32 RunSeed = 0;
+
 	UPROPERTY()
 	uint16 Rev = 0;
 };
@@ -293,7 +306,7 @@ public:
 	bool IsLevelReady() const { return bLevelReady; }
 	/** Tous les joueurs de la partie (le sien et ceux des autres) */
 	void GetPlayers(TArray<ABRCharacter*>& Out) const;
-	/** Multijoueur : apres une mort, on se reveille au point de depart du niveau */
+	/** Multijoueur : apres une mort, on se reveille au point de depart du niveau (equipement de depart) */
 	void RespawnLocalPlayer();
 	/** Place d'un joueur autour du point de depart (0 = l'hote) : rang de son identifiant, le meme chez tous */
 	int32 PlayerSlot(const APlayerState* PS) const;
@@ -387,6 +400,12 @@ public:
 	void DebugCompleteMission();
 	/** v4.13 (tests) : mene un mecanisme maintenu a son terme par les regles ordinaires (hote) */
 	void DebugCompleteMissionDevice(int32 Device);
+	/** v4.15 (tests) : une action de joueur sur un mecanisme, appliquee par l'hote selon les regles de la mission, sans
+	 *  placement ni portee (EAction ; maintenue : une unite). Retour : BRMission::EFeedback */
+	uint8 DebugMissionAct(int32 Device, uint8 Action);
+	/** v4.15 : la mission du niveau a sa sortie garantie vers l'avant (sortie de progression, BRMission::IsExitGuarded) :
+	 *  dans un niveau du parcours lineaire, les chunks ne tirent alors aucune sortie */
+	bool HasGuaranteedForwardExit() const;
 	/** Mecanismes : affichage selon les chunks construits et animation des seuls mecanismes proches */
 	void UpdateMissionDevices(float Dt);
 
@@ -485,6 +504,14 @@ public:
 	int32 StoryDestination(int32 Target) const;
 	/** v4.13 : fin du reveil, appelee a la fin du fondu d'arrivee */
 	void StartPendingIntro();
+	/** v4.15 : le niveau charge appartient au parcours lineaire (hote : partie d'histoire lineaire ; client : recu avec le
+	 *  niveau, FBRNetLevel::Flags). REJOUER, le mode developpeur et les invites d'une partie classique : jamais */
+	bool IsLinearLevel() const { return bLinearLevel; }
+	/** v4.15 : drapeaux du niveau recus ou publies (FBRNetLevel::Flags) */
+	uint8 GetNetLevelFlags() const { return NetLevel.Flags; }
+	/** v4.15 (tests, hors version finale) : impose le parcours des prochains chargements de l'hote (-1 : regle normale,
+	 *  0 classique, 1 lineaire) ; sans effet dans une version finale */
+	void SetLinearTestOverride(int8 Value);
 
 	// ------------------------------------------------------------ Niveaux
 	/** Lance une transition (fondu + effet "noclip") vers un niveau. -1 = niveau aleatoire.
@@ -1179,6 +1206,9 @@ private:
 	bool bStoryLoaded = false;
 	/** Serveur : graine imposee a la prochaine transition (console BRSeed, mode developpeur) */
 	uint32 PendingSeed = 0;
+	/** v4.15 : niveau charge du parcours lineaire ; parcours impose par un test (-1 : aucun) */
+	bool bLinearLevel = false;
+	int8 LinearTestOverride = -1;
 	void UpdateBlackout(float Dt);
 	void ApplyPower(bool bForce);
 	void CompleteTask(const FString& Text);

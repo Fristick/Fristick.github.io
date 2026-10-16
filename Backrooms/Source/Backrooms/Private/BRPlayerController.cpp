@@ -2178,7 +2178,13 @@ void ABRPlayerController::StartNewSave()
 	// Une nouvelle partie commence toujours au Niveau 0 (v4.13 : au debut de l'histoire)
 	S->CurrentLevel = 0;
 	S->MarkExplored(0);
-	S->SetStory(BRStory::FState());
+	// v4.15 : toute nouvelle partie suit le parcours lineaire : une graine de parcours tiree une fois (jamais 0), d'ou la
+	// graine de chaque niveau (BRStory::LevelSeedFor) ; le Level 0 garde sa graine propre (IntroSeed)
+	BRStory::FState St;
+	St.Flags |= BRStory::Flag::Linear;
+	St.RunSeed = (static_cast<uint32>(FMath::Rand()) * 2654435761u ^ static_cast<uint32>(FPlatformTime::Cycles64()) ^ static_cast<uint32>(FDateTime::Now().GetTicks() >> 7)) | 1u;
+	S->SetStory(St);
+	UE_LOG(LogBackrooms, Log, TEXT("[Story] Nouvelle partie (emplacement %d) : parcours lineaire, graine du parcours %u"), Slot + 1, St.RunSeed);
 	BRSaves::Write(Slot, S);
 	BRSaves::ActiveSlot() = Slot;
 	ActiveSave = S;
@@ -2299,9 +2305,10 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 	if (bDeadNow)
 	{
 		// v4.7 : mort en cours : l'inventaire d'avant la mort n'est pas reecrit, et la mort est notee pour le prochain
-		// chargement (seul : retour au Niveau 0 ; en equipe : reveil dans le niveau en cours)
+		// chargement (seul : retour au Niveau 0 ; en equipe : reveil dans le niveau en cours). v4.15 : parcours lineaire :
+		// le niveau en cours, que CONTINUER recharge avec sa graine
 		ActiveSave->bPendingDeath = true;
-		ActiveSave->PendingDeathLevel = (W && IsNetGame()) ? W->GetLevelNumber() : 0;
+		ActiveSave->PendingDeathLevel = (W && (IsNetGame() || W->IsLinearLevel())) ? W->GetLevelNumber() : 0;
 		ActiveSave->Session.bValid = false;
 	}
 	else if (C)
@@ -2644,6 +2651,17 @@ void ABRPlayerController::StartSolo(bool bReplay)
 	{
 		LoadSeed = ActiveSave->StoryIntroSeed;
 		bLoad = bLoad || (bReplay ? (LoadSeed != 0 && LoadSeed != W->GetSeed()) : (LoadSeed == 0 || LoadSeed != W->GetSeed()));
+	}
+	// v4.15 : parcours lineaire : CONTINUER (y compris apres une mort, jeu ferme a terre) charge le niveau avec sa graine
+	// (BRStory::LevelSeedFor) ; le decor du menu, meme s'il montre ce niveau, n'en tient pas lieu, et une mort en attente
+	// fait toujours recommencer le niveau (mission neuve). REJOUER : niveau neuf
+	if (!bResume && !bReplay && Target != 0 && ActiveSave && !bDevSession)
+	{
+		if (const uint32 LinearSeed = BRStory::LevelSeedFor(ActiveSave->GetStory(), Target))
+		{
+			LoadSeed = LinearSeed;
+			bLoad = bLoad || LinearSeed != W->GetSeed() || !W->IsLinearLevel() || ActiveSave->bPendingDeath;
+		}
 	}
 	// Partie choisie : inventaire, sante, journal (nouvelle partie : equipement de depart), histoire et nature de la
 	// session ; l'histoire s'applique a l'arrivee dans le niveau charge, pas au decor du menu

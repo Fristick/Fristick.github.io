@@ -44,6 +44,8 @@ namespace
 		S.DoorDir = N.DoorDir;
 		S.DoorTier = N.DoorTier;
 		S.DoorVersion = N.DoorVersion;
+		S.Flags = N.Flags;
+		S.RunSeed = N.RunSeed;
 		return S;
 	}
 
@@ -61,6 +63,8 @@ namespace
 		N.DoorDir = S.DoorDir;
 		N.DoorTier = static_cast<uint8>(FMath::Clamp(S.DoorTier, 0, 255));
 		N.DoorVersion = static_cast<uint8>(FMath::Clamp(S.DoorVersion, 0, 255));
+		N.Flags = S.Flags;
+		N.RunSeed = S.RunSeed;
 	}
 
 	/** Face de la porte (BRStory::FState::DoorDir) : 0 +X, 1 -X, 2 +Y, 3 -Y */
@@ -124,8 +128,8 @@ void ABRWorld::SetStory(const BRStory::FState& S, EBRSessionMode Mode, bool bLev
 	bStoryLoaded = true;
 	NetStory.Mode = static_cast<uint8>(Mode);
 	SeenStoryEvents = S.Events; // evenements deja vus dans cette partie : seuls les nouveaux auront un effet
-	UE_LOG(LogBackrooms, Log, TEXT("[Story] Partie appliquee : mode %d, atteint %d, etapes 0x%x, evenements 0x%x, fins 0x%x, reprise %d, gare %d"),
-		static_cast<int32>(Mode), S.Reached, S.Done, S.Events, S.ChapterEnds, S.Resume, S.Parked);
+	UE_LOG(LogBackrooms, Log, TEXT("[Story] Partie appliquee : mode %d, atteint %d, etapes 0x%x, evenements 0x%x, fins 0x%x, reprise %d, gare %d, parcours %s"),
+		static_cast<int32>(Mode), S.Reached, S.Done, S.Events, S.ChapterEnds, S.Resume, S.Parked, BRStory::IsLinear(S) ? TEXT("lineaire") : TEXT("classique"));
 	if (bLevelReady && !bLevelChanging && !IsTransitioning())
 	{
 		CopyState(NetStory, S);

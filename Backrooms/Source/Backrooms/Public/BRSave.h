@@ -119,8 +119,8 @@ class BACKROOMS_API UBRSaveGame : public USaveGame
 
 public:
 	/** Format du fichier (1 : v4.1 a v4.6 ; 2 : v4.7, session reprise ; 3 : v4.8, journal par identifiants de notes ;
-	 *  4 : v4.11, missions de niveau et campagne ; 5 : v4.13, etat narratif) */
-	static constexpr int32 CurrentVersion = 5;
+	 *  4 : v4.11, missions de niveau et campagne ; 5 : v4.13, etat narratif ; 6 : v4.15, parcours lineaire) */
+	static constexpr int32 CurrentVersion = 6;
 
 	/** Format du fichier. La valeur par defaut reste 1 : les proprietes egales a celles de l'objet par defaut ne sont
 	 *  pas ecrites, et un fichier v4.1-v4.6 (Version = 1, donc absente du fichier) doit etre reconnu comme tel.
@@ -239,6 +239,14 @@ public:
 	UPROPERTY(SaveGame)
 	int32 StoryDoorVersion = 0;
 
+	/** v4.15 (format 6) : parcours de la partie (BRStory::Flag : bit 0 lineaire ; 0 classique) et graine du parcours
+	 *  lineaire (graine de chaque niveau, BRStory::LevelSeedFor). Une partie d'un format anterieur reste classique */
+	UPROPERTY(SaveGame)
+	uint32 StoryFlags = 0;
+
+	UPROPERTY(SaveGame)
+	uint32 StoryRunSeed = 0;
+
 	/** v4.13 : session d'une ancienne partie allee au-dela des Poolrooms sans les traverser : gardee intacte (graine,
 	 *  objets ramasses, mission), elle reprend a la sortie des Poolrooms */
 	UPROPERTY(SaveGame)
@@ -249,7 +257,8 @@ public:
 	UPROPERTY(SaveGame)
 	bool bPendingDeath = false;
 
-	/** Niveau ou l'on se reveille apres cette mort (seul : Niveau 0 ; en equipe : le niveau en cours) */
+	/** Niveau ou l'on se reveille apres cette mort (seul : Niveau 0 ; en equipe : le niveau en cours ; v4.15 : parcours
+	 *  lineaire : le niveau en cours, recommence avec sa graine) */
 	UPROPERTY(SaveGame)
 	int32 PendingDeathLevel = 0;
 
@@ -279,6 +288,8 @@ public:
 		S.DoorDir = StoryDoorDir;
 		S.DoorTier = StoryDoorTier;
 		S.DoorVersion = StoryDoorVersion;
+		S.Flags = StoryFlags;
+		S.RunSeed = StoryRunSeed;
 		return S;
 	}
 	void SetStory(const BRStory::FState& S)
@@ -295,6 +306,8 @@ public:
 		StoryDoorDir = S.DoorDir;
 		StoryDoorTier = S.DoorTier;
 		StoryDoorVersion = S.DoorVersion;
+		StoryFlags = S.Flags;
+		StoryRunSeed = S.RunSeed;
 	}
 };
 
