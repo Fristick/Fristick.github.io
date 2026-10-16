@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "BRTypes.h"
+#include "BRFluoLogic.h"
 #include "BRChunk.generated.h"
 
 class ABRWorld;
@@ -31,14 +32,17 @@ struct FBRFlicker
 	FLinearColor GlowColor = FLinearColor::White;
 	FLinearColor LightColor = FLinearColor::White;
 	float BaseIntensity = 1000.f;
-	float Timer = 0.f;
-	float Phase = 0.f;
-	bool bOn = true;
 	/** false : lampe stable (individuelle seulement pour pouvoir rougir) */
 	bool bFlickers = true;
 	float Red = 0.f;
 	float AppliedMod = -1.f;
 	float AppliedRed = -1.f;
+	/** v4.15 : tube qui clignote (amorcage, extinctions, ondulation, fin de vie : BRFluoLogic.h) et rallumage apres une
+	 *  coupure de courant (chaque lampe a son retard) */
+	BRFluo::FTube Tube;
+	BRFluo::FRestrike Restrike;
+	/** v4.15 : dernier bruit de clignement (horloge du chunk, s) */
+	float LastSound = -10.f;
 };
 
 UCLASS()
@@ -72,7 +76,9 @@ public:
 	bool HasTeardownStarted() const { return TeardownStep > 0; }
 	void BeginTeardown() { bTearingDown = true; SetActorTickEnabled(false); }
 	/** Reprise d'un chunk en attente de demontage (le joueur est revenu avant qu'il ne commence) */
-	void CancelTeardown() { bTearingDown = false; SetActorTickEnabled(Flickers.Num() > 0); }
+	void CancelTeardown() { bTearingDown = false; SetActorTickEnabled(WantsTick()); }
+	/** v4.15 : le chunk anime des lampes (neons qui clignotent, lampes qui peuvent rougir, rallumage en cours) */
+	bool WantsTick() const { return Flickers.Num() > 0 || bRestriking; }
 
 	/** v4.8 : le type des lumieres (neons en lumieres surfaciques ou ponctuelles) suit le reglage courant : recree les
 	 *  lumieres dont le type a change. Retourne le nombre de lumieres recreees.
@@ -108,6 +114,19 @@ public:
 
 	/** Alimentation electrique 0..1 (coupures de courant) */
 	void SetPower(float InPower);
+	/** v4.15 : fin de coupure, le courant revient : chaque lampe du chunk se rallume avec son propre retard et quelques
+	 *  clignements (cosmetique, local) */
+	void BeginRestrike();
+	/** v4.15 : plafonnier (bourdonnement spatialise du monde) : position, lumiere (son eclat courant suit coupures et
+	 *  clignements), intensite nominale */
+	struct FHumSource
+	{
+		FVector Pos = FVector::ZeroVector;
+		TWeakObjectPtr<ULocalLightComponent> Light;
+		float BaseLumens = 1.f;
+	};
+	/** v4.15 : plafonniers de ce chunk a moins de Radius de Around */
+	void GatherHumSources(const FVector& Around, float Radius, TArray<FHumSource>& Out) const;
 	/** Cachettes de ce chunk */
 	bool IsInHidingSpot(const FVector& Location, bool bCrouched) const;
 	bool FindHidingSpotNear(const FVector& Location, float Radius, bool& bOutNeedsCrouch) const;
@@ -230,6 +249,13 @@ protected:
 	TArray<TObjectPtr<ULocalLightComponent>> PoweredLights;
 
 	TArray<float> PoweredBase;
+	/** v4.15 : rallumage des lampes groupees apres une coupure (leur diffuseur suit le courant du niveau) : etat et facteur
+	 *  d'eclat courant de chacune */
+	TArray<BRFluo::FRestrike> PoweredRestrike;
+	TArray<float> PoweredMul;
+	bool bRestriking = false;
+	/** v4.15 : horloge des animations du chunk (bruits de clignement) */
+	float ChunkClock = 0.f;
 
 	struct FHidingSpot
 	{

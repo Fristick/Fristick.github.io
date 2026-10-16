@@ -1,0 +1,33 @@
+# Banc des neons fluorescents v4.15 (BRFluoLogic.h) - sortie reelle
+# Commande (depuis Backrooms/) :
+#   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Light\test_fluo.cpp /Fetest_fluo.exe && test_fluo.exe
+#   (aussi : cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive- ... : meme sortie)
+# Compilateur : clang version 22.1.3 (https://github.com/llvm/llvm-project e9846648fd6183ee6d8cbdb4502213fcf902a211)
+# Date : 2026-10-16T12:19:39Z
+
+# Banc des neons fluorescents v4.15 (BRFluoLogic.h)
+
+  tube ordinaire (2 h) : 2458 defaillances, 7358 phases eteintes, 7358 bruits ; amorcage 2 a 4 clignements, eteint 30-80 ms, allume 30-80 ms
+  allume entre deux defaillances 0.66-4.56 s, plus longue extinction 600 ms, eclat allume 0.960-1.040, eteint 0.030-0.030
+  des defaillances se produisent (au moins une par minute en moyenne)                              OK
+  amorcage : 2 a 4 clignements (attendu 2 a 4, une extinction comptee comme le premier)            OK
+  clignements d'amorcage de 30 a 80 ms (eteint 30-80, allume 30-80)                                OK
+  tube allume entre deux defaillances de 0,6 a 4,5 s                                               OK
+  extinction avant un nouvel amorcage : 600 ms au plus                                             OK
+  ondulation du tube allume de 3 a 5 % (mesuree : +-4.0 %)                                         OK
+  un bruit a chaque extinction (autant de bruits que de phases eteintes)                           OK
+  tube eteint pendant un clignement : presque noir (3 %)                                           OK
+  tube en fin de vie (2 h) : 4655 defaillances, eclat allume 0.401-0.572
+  fin de vie : plus faible (eclat allume <= 0,62) et defaillances au moins 1,5 fois plus frequentes OK
+  flashs attenues : 1930 defaillances, eteint 85-229 ms, eclat eteint 0.563, ondulation +-1.4 %
+  flashs attenues : creux moins profond (eclat eteint au-dessus de 0,5)                            OK
+  flashs attenues : clignements plus lents (au moins 2,5 fois)                                     OK
+  aucun flash : eclat constant (0.920-0.920), aucune extinction ni bruit (0)                       OK
+  rallumage (2000 lampes) : premier allumage au plus a 899 ms, 1 a 3 allumages, termine en 1.28 s au plus
+  chaque lampe se rallume (rallumage termine)                                                      OK
+  retard propre a chaque lampe : 0,9 s au plus                                                     OK
+  1 a 3 clignements avant de rester allumee                                                        OK
+  rallumage complet en moins de 1,6 s (la phase de retour du courant dure 1,4 s)                   OK
+  aucun flash : rallumage immediat, sans clignement                                                OK
+
+RESULTAT : OK (17 verifications, 0 echec(s))

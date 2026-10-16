@@ -32,6 +32,7 @@
 #include "Components/SkyLightComponent.h"
 #include "Components/VolumetricCloudComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/LocalLightComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -1190,6 +1191,17 @@ void ABRWorld::ApplyEnvironment()
 	// --- Audio ---
 	AmbientAudio->Stop();
 	HumAudio->Stop();
+	// v4.15 : sources du bourdonnement des plafonniers : reattribuees dans le nouveau niveau (UpdateHumPool)
+	for (UAudioComponent* HumSource : HumPool)
+	{
+		if (HumSource)
+		{
+			HumSource->Stop();
+		}
+	}
+	HumPoolLights.Reset();
+	HumPoolBase.Reset();
+	HumScanTimer = 0.f;
 	if (A)
 	{
 		AmbientAudio->SetSound(A->Sound(D.AmbientSound));
@@ -2609,9 +2621,142 @@ void ABRWorld::UpdateAudio(float Dt)
 		}
 		const ABRCharacter* P = GetPlayer();
 		const float Light = P ? LightLevelAt(P->GetActorLocation()) : 0.f;
-		HumAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.HumVolume * FMath::Clamp(Light, 0.f, 1.f) * (1.f - Fade)));
+		// v4.15 : fond discret (30 %) : le bourdonnement vient surtout des plafonniers proches (UpdateHumPool)
+		HumAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.HumVolume * 0.3f * FMath::Clamp(Light, 0.f, 1.f) * (1.f - Fade)));
 	}
 	AmbientAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.AmbientVolume * (1.f - Fade * 0.8f)));
+	UpdateHumPool(Dt);
+}
+
+void ABRWorld::UpdateHumPool(float Dt)
+{
+	// v4.15 : bourdonnement spatialise des neons : 8 sources au plus, sur les plafonniers les plus proches du joueur (14 m),
+	// attenuees en 6 m et etouffees par les murs ; hauteur +-3 % et debut de lecture tires pour chacune (pas d'effet de
+	// phase entre des copies du meme son) ; volume a l'eclat courant de la lampe (clignements, coupure : silence)
+	constexpr int32 PoolSize = 8;
+	constexpr float HearRadius = 1400.f;
+	constexpr float SourceGain = 0.6f;
+	const FBRLevelDef& D = Def();
+	UBRAssets* A = UBRAssets::Get(this);
+	USoundBase* Hum = (A && D.HumVolume > 0.f && D.Fixture != EBRFixture::None && !D.bOutdoor) ? A->Sound(D.HumSound) : nullptr;
+	const ABRCharacter* P = GetPlayer();
+	if (!Hum || !P)
+	{
+		for (UAudioComponent* C : HumPool)
+		{
+			if (C && C->IsPlaying())
+			{
+				C->Stop();
+			}
+		}
+		return;
+	}
+	while (HumPool.Num() < PoolSize)
+	{
+		UAudioComponent* C = NewObject<UAudioComponent>(this);
+		C->SetupAttachment(Root);
+		C->bAutoActivate = false;
+		C->bAllowSpatialization = true;
+		C->AttenuationSettings = A->Attenuation(600.f, true);
+		C->RegisterComponent();
+		HumPool.Add(C);
+	}
+	HumPoolLights.SetNum(HumPool.Num());
+	HumPoolBase.SetNum(HumPool.Num());
+	auto StartAt = [Hum]()
+	{
+		return FMath::FRandRange(0.f, FMath::Max(0.f, Hum->Duration - 0.1f));
+	};
+
+	HumScanTimer -= Dt;
+	if (HumScanTimer <= 0.f)
+	{
+		HumScanTimer = 0.25f;
+		const FVector Ear = P->GetActorLocation();
+		TArray<ABRChunk::FHumSource> Found;
+		const FIntPoint Here = CellToChunk(WorldToCell(Ear));
+		for (int32 DX = -1; DX <= 1; ++DX)
+		{
+			for (int32 DY = -1; DY <= 1; ++DY)
+			{
+				if (const TObjectPtr<ABRChunk>* Chunk = Chunks.Find(Here + FIntPoint(DX, DY)))
+				{
+					if (*Chunk)
+					{
+						(*Chunk)->GatherHumSources(Ear, HearRadius, Found);
+					}
+				}
+			}
+		}
+		Found.Sort([&Ear](const ABRChunk::FHumSource& First, const ABRChunk::FHumSource& Second)
+		{
+			return FVector::DistSquared(First.Pos, Ear) < FVector::DistSquared(Second.Pos, Ear);
+		});
+		if (Found.Num() > PoolSize)
+		{
+			Found.SetNum(PoolSize);
+		}
+		// Une source garde sa lampe tant qu'elle reste parmi les plus proches ; les autres prennent les nouvelles
+		TArray<bool> Taken;
+		Taken.Init(false, Found.Num());
+		TArray<bool> Kept;
+		Kept.Init(false, HumPool.Num());
+		for (int32 i = 0; i < HumPool.Num(); ++i)
+		{
+			for (int32 j = 0; j < Found.Num(); ++j)
+			{
+				if (!Taken[j] && HumPoolLights[i].IsValid() && HumPoolLights[i] == Found[j].Light)
+				{
+					Taken[j] = true;
+					Kept[i] = true;
+					break;
+				}
+			}
+		}
+		for (int32 i = 0; i < HumPool.Num(); ++i)
+		{
+			if (Kept[i])
+			{
+				continue;
+			}
+			HumPoolLights[i].Reset();
+			const int32 Pick = Taken.Find(false);
+			UAudioComponent* C = HumPool[i];
+			if (Pick == INDEX_NONE || !C)
+			{
+				continue;
+			}
+			Taken[Pick] = true;
+			HumPoolLights[i] = Found[Pick].Light;
+			HumPoolBase[i] = Found[Pick].BaseLumens;
+			C->SetWorldLocation(Found[Pick].Pos);
+			if (C->Sound != Hum)
+			{
+				C->SetSound(Hum);
+			}
+			C->SetPitchMultiplier(FMath::FRandRange(0.97f, 1.03f));
+			C->SetVolumeMultiplier(0.001f);
+			if (!C->IsPlaying())
+			{
+				C->Play(StartAt());
+			}
+		}
+	}
+	for (int32 i = 0; i < HumPool.Num(); ++i)
+	{
+		UAudioComponent* C = HumPool[i];
+		if (!C)
+		{
+			continue;
+		}
+		const ULocalLightComponent* L = HumPoolLights[i].Get();
+		const float Level = (L && L->IsVisible()) ? FMath::Clamp(L->Intensity / FMath::Max(1.f, HumPoolBase[i]), 0.f, 1.2f) : 0.f;
+		C->SetVolumeMultiplier(FMath::Max(0.001f, D.HumVolume * SourceGain * Level * (1.f - Fade)));
+		if (L && C->Sound && !C->IsPlaying())
+		{
+			C->Play(StartAt());
+		}
+	}
 }
 
 // =====================================================================================
@@ -2778,6 +2923,14 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 	case EBlackout::Restoring:
 		BlackoutTimer = 1.4f;
 		Play(TEXT("S_PowerUp"), 0.9f);
+		// v4.15 : les lampes ne se rallument pas toutes dans la meme image : chacune a son retard et ses clignements
+		for (TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->BeginRestrike();
+			}
+		}
 		if (bAuth)
 		{
 			DismissBlackoutEntities();

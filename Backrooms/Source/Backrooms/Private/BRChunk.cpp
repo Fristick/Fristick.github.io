@@ -1273,7 +1273,9 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		FBRFlicker& F = Flickers[R.FlickerIndex];
 		F.Light = LC;
 		F.BaseIntensity = R.Lumens;
-		F.Timer = FMath::FRandRange(0.1f, 2.f);
+		// v4.15 : tube qui clignote : premiere defaillance a son propre instant ; un sur quatre en fin de vie (cosmetique)
+		auto Rand = []() { return FMath::FRand(); };
+		BRFluo::Init(F.Tube, FMath::FRand() < BRFluo::DyingShare, Rand);
 	}
 	LightRecords.Add(R);
 }
@@ -2067,7 +2069,7 @@ bool ABRChunk::StepBuild(double BudgetMs, bool bStopAtCollision)
 			}
 			else
 			{
-				SetActorTickEnabled(Flickers.Num() > 0);
+				SetActorTickEnabled(WantsTick());
 				bReady = true;
 			}
 			Bucket = &Stats.ActorMs;
@@ -2122,6 +2124,9 @@ bool ABRChunk::StepTeardown(double BudgetMs)
 			continue;
 		}
 		PoweredLights.Reset();
+		PoweredRestrike.Reset();
+		PoweredMul.Reset();
+		bRestriking = false;
 		Flickers.Reset();
 		LightRecords.Reset();
 		return true;
@@ -3093,29 +3098,47 @@ void ABRChunk::Tick(float DeltaSeconds)
 	const TArray<FVector>* RedSources = W ? &W->GetRedLightSources() : nullptr;
 	const float RedRadius = W ? W->GetRedLightRadius() : 0.f;
 	const FLinearColor RedLight(1.f, 0.05f, 0.03f);
+	// v4.15 : neons fluorescents (BRFluoLogic.h) : amorcages de 2 a 4 clignements, extinctions, ondulation de 3 a 5 %, tubes
+	// en fin de vie ; rallumage de chaque lampe a son propre instant apres une coupure. Cosmetique, local (FMath::FRand).
+	// Reglage FLASHS : clignements moins profonds et plus lents (attenues), aucun (aucun)
+	const float FS = FBRSettings::Get().FlashScale();
+	auto Rand = []() { return FMath::FRand(); };
+	ChunkClock += DeltaSeconds;
+	// Bruit du starter : a chaque extinction (et a certains rallumages), pas plus d'un toutes les 0,15 s par lampe
+	auto Click = [this, A](FBRFlicker& F, float Volume)
+	{
+		if (!A || !F.Light || ChunkClock - F.LastSound < 0.15f)
+		{
+			return;
+		}
+		F.LastSound = ChunkClock;
+		if (USoundBase* Snd = A->Sound(TEXT("S_Flicker")))
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, Snd, F.Light->GetComponentLocation(), Volume, FMath::FRandRange(0.9f, 1.1f), 0.f, A->Attenuation(1500.f));
+		}
+	};
+	bool bStillRestriking = false;
 	for (FBRFlicker& F : Flickers)
 	{
 		float Mod = Power;
 		if (F.bFlickers)
 		{
-			F.Timer -= DeltaSeconds;
-			if (F.Timer <= 0.f)
+			bool bOffEvent = false;
+			Mod *= BRFluo::Step(F.Tube, DeltaSeconds, FS, Rand, bOffEvent);
+			if (bOffEvent && Power > 0.05f)
 			{
-				F.bOn = !F.bOn;
-				F.Timer = F.bOn ? FMath::FRandRange(0.05f, 2.5f) : FMath::FRandRange(0.03f, 0.4f);
-				if (!F.bOn && F.Light && A && FMath::FRand() < 0.2f)
-				{
-					if (USoundBase* Snd = A->Sound(TEXT("S_Flicker")))
-					{
-						UGameplayStatics::PlaySoundAtLocation(this, Snd, F.Light->GetComponentLocation(), 0.5f, FMath::FRandRange(0.9f, 1.1f), 0.f,
-							A->Attenuation(1500.f));
-					}
-				}
+				Click(F, F.Tube.State == BRFluo::FTube::EState::Strike ? 0.35f : 0.5f);
 			}
-			F.Phase += DeltaSeconds * 37.f;
-			// v4.7 : reglage FLASHS : le neon defaillant baisse sans s'eteindre (attenues), ou ne clignote plus (aucun)
-			const float FS = FBRSettings::Get().FlashScale();
-			Mod *= F.bOn ? (1.f - 0.15f * FS + 0.15f * FS * FMath::Sin(F.Phase)) : FMath::Lerp(0.85f, 0.03f, FS);
+		}
+		if (F.Restrike.bActive)
+		{
+			bool bOnEvent = false;
+			Mod *= BRFluo::StepRestrike(F.Restrike, DeltaSeconds, FS, Rand, bOnEvent);
+			bStillRestriking = bStillRestriking || F.Restrike.bActive;
+			if (bOnEvent && FMath::FRand() < 0.35f)
+			{
+				Click(F, 0.3f);
+			}
 		}
 
 		// Niveau 0 : la lampe vire au rouge quand l'entite qui fait des rondes passe a moins de RedRadius
@@ -3152,6 +3175,34 @@ void ABRChunk::Tick(float DeltaSeconds)
 			}
 		}
 	}
+
+	// v4.15 : lampes groupees (niveaux sans teinte rouge) : rallumage decale de leur lumiere ; leur diffuseur suit le courant
+	if (bRestriking)
+	{
+		for (int32 i = 0; i < PoweredLights.Num() && i < PoweredRestrike.Num() && i < PoweredMul.Num(); ++i)
+		{
+			if (!PoweredRestrike[i].bActive)
+			{
+				continue;
+			}
+			bool bOnEvent = false;
+			const float Mul = BRFluo::StepRestrike(PoweredRestrike[i], DeltaSeconds, FS, Rand, bOnEvent);
+			bStillRestriking = bStillRestriking || PoweredRestrike[i].bActive;
+			if (FMath::Abs(Mul - PoweredMul[i]) > 0.004f)
+			{
+				PoweredMul[i] = Mul;
+				if (ULocalLightComponent* L = PoweredLights[i])
+				{
+					L->SetIntensity(PoweredBase.IsValidIndex(i) ? PoweredBase[i] * Power * Mul : 0.f);
+				}
+			}
+		}
+		if (!bStillRestriking)
+		{
+			bRestriking = false;
+			SetActorTickEnabled(WantsTick() && !bTearingDown);
+		}
+	}
 }
 
 void ABRChunk::SetPower(float InPower)
@@ -3161,7 +3212,9 @@ void ABRChunk::SetPower(float InPower)
 	{
 		if (ULocalLightComponent* L = PoweredLights[i])
 		{
-			L->SetIntensity(PoweredBase.IsValidIndex(i) ? PoweredBase[i] * Power : 0.f);
+			// v4.15 : facteur du rallumage decale (1 hors rallumage)
+			const float Mul = (bRestriking && PoweredMul.IsValidIndex(i)) ? PoweredMul[i] : 1.f;
+			L->SetIntensity(PoweredBase.IsValidIndex(i) ? PoweredBase[i] * Power * Mul : 0.f);
 			L->SetVisibility(Power > 0.01f);
 		}
 	}
@@ -3171,5 +3224,48 @@ void ABRChunk::SetPower(float InPower)
 		{
 			F.Light->SetVisibility(Power > 0.01f);
 		}
+	}
+}
+
+void ABRChunk::BeginRestrike()
+{
+	const float FS = FBRSettings::Get().FlashScale();
+	if (bTearingDown || FS <= 0.f)
+	{
+		return;
+	}
+	auto Rand = []() { return FMath::FRand(); };
+	for (FBRFlicker& F : Flickers)
+	{
+		BRFluo::BeginRestrike(F.Restrike, FS, Rand);
+	}
+	PoweredRestrike.SetNum(PoweredLights.Num());
+	PoweredMul.Init(1.f - FS, PoweredLights.Num());
+	for (BRFluo::FRestrike& R : PoweredRestrike)
+	{
+		BRFluo::BeginRestrike(R, FS, Rand);
+	}
+	bRestriking = Flickers.Num() > 0 || PoweredLights.Num() > 0;
+	if (bRestriking)
+	{
+		SetActorTickEnabled(true);
+	}
+}
+
+void ABRChunk::GatherHumSources(const FVector& Around, float Radius, TArray<FHumSource>& Out) const
+{
+	const float R2 = Radius * Radius;
+	for (const FLightRecord& R : LightRecords)
+	{
+		ULocalLightComponent* LC = R.Comp.Get();
+		if (!LC || FVector::DistSquared(R.Pos, Around) > R2)
+		{
+			continue;
+		}
+		FHumSource S;
+		S.Pos = R.Pos;
+		S.Light = LC;
+		S.BaseLumens = FMath::Max(1.f, R.Lumens);
+		Out.Add(S);
 	}
 }

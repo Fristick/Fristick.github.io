@@ -822,6 +822,11 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAudioComponent> HumAudio;
 
+	/** v4.15 : bourdonnement spatialise : quelques sources posees sur les plafonniers les plus proches du joueur (le son du
+	 *  niveau, S_LightBuzz au Level 0, reutilise tel quel), au volume de leur eclat ; HumAudio ne garde qu'un fond discret */
+	UPROPERTY()
+	TArray<TObjectPtr<UAudioComponent>> HumPool;
+
 	UPROPERTY()
 	TMap<FIntPoint, TObjectPtr<ABRChunk>> Chunks;
 
@@ -1100,6 +1105,11 @@ private:
 	void PlacePlayer(bool bKeepServerSpot = false);
 	void UpdatePopulation(float Dt);
 	void UpdateAudio(float Dt);
+	/** v4.15 : sources du bourdonnement attribuees aux plafonniers proches (toutes les 0,25 s), volume a chaque image */
+	void UpdateHumPool(float Dt);
+	TArray<TWeakObjectPtr<class ULocalLightComponent>> HumPoolLights;
+	TArray<float> HumPoolBase;
+	float HumScanTimer = 0.f;
 	void UpdatePhenomena(float Dt);
 	/** Sante mentale basse : une silhouette ou un sourire que seul ce joueur voit */
 	bool SpawnHallucination(ABRCharacter* P);
