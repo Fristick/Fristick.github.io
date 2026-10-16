@@ -3,6 +3,8 @@
 // fin de chapitre puis reprise a la mise a jour suivante, migration des anciennes parties (formats 1 a 4).
 // v4.14 : preuve de traversee des Poolrooms (prouvee, absente, ambigue), session garee conservee jusqu'a sa reprise, regle
 // d'ecriture de la partie (REJOUER et mode developpeur n'ecrivent pas la campagne).
+// v4.15 : parcours lineaire (section J) : graine fixe par niveau (LevelSeedFor), regle de la mort (DeathRuleFor), sorties
+// des chunks (ChunkExitAllowed), fil, acces, reprise et migration inchanges, rien de nouveau ecrit en REJOUER.
 // Le banc compile le code meme du jeu (BRStoryLogic.cpp, BRContentLogic.cpp) ; il ne remplace pas un essai dans Unreal.
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Story/test_story.cpp
@@ -110,13 +112,17 @@ namespace
 		int OptionalFound = 0;
 		int Endings = 0;
 		int StoryDone = 0;
+		/** v4.15 : parcours (BRStory::Flag) et graine du parcours lineaire */
+		unsigned StoryFlags = 0;
+		unsigned RunSeed = 0;
 		double PlayTime = 0.0;
 		std::vector<int> Journal;
 		bool operator==(const FRecord& O) const
 		{
 			return Items == O.Items && Deaths == O.Deaths && bPendingDeath == O.bPendingDeath && bSessionValid == O.bSessionValid && SessionLevel == O.SessionLevel
 				&& SessionSeed == O.SessionSeed && CurrentLevel == O.CurrentLevel && RouteBits == O.RouteBits && OptionalFound == O.OptionalFound
-				&& Endings == O.Endings && StoryDone == O.StoryDone && PlayTime == O.PlayTime && Journal == O.Journal;
+				&& Endings == O.Endings && StoryDone == O.StoryDone && StoryFlags == O.StoryFlags && RunSeed == O.RunSeed && PlayTime == O.PlayTime
+				&& Journal == O.Journal;
 		}
 	};
 
@@ -131,6 +137,8 @@ namespace
 		int OptionalFound = 0;
 		int Endings = 0;
 		int StoryDone = 0;
+		unsigned StoryFlags = 0;
+		unsigned RunSeed = 0;
 		std::vector<int> Journal;
 	};
 
@@ -175,6 +183,8 @@ namespace
 		R.OptionalFound = Play.OptionalFound;
 		R.Endings = Play.Endings;
 		R.StoryDone = Play.StoryDone;
+		R.StoryFlags = Play.StoryFlags;
+		R.RunSeed = Play.RunSeed;
 		R.CurrentLevel = Play.Level;
 	}
 
@@ -425,6 +435,9 @@ int main()
 		Camp.Seed = 4242;
 		Camp.RouteBits = 1;
 		Camp.StoryDone = 0x0B;
+		// v4.15 : partie au parcours lineaire : son parcours et sa graine font partie de ce que le rejeu ne touche pas
+		Camp.StoryFlags = Flag::Linear;
+		Camp.RunSeed = 41500u;
 		Camp.Journal = { 3, 7 };
 		Write(Story, R, Camp);
 		Tick(Story, R, 600.0);
@@ -466,6 +479,195 @@ int main()
 		Next.Items = 3;
 		Write(Story, R3, Next);
 		Line("histoire : l'ecriture suit la session (3 objets)", R3.Items == 3);
+	}
+
+	std::printf("\nJ. v4.15 : parcours lineaire\n");
+	{
+		FState Lin;
+		Lin.Flags = Flag::Linear;
+		Lin.RunSeed = 41500u;
+		// --------------------------------------------------------------------------------------------- Graines des niveaux
+		Line("graine d'un niveau : deterministe (meme parcours, meme niveau, meme graine)", LevelSeedFor(Lin, 2) == LevelSeedFor(Lin, 2) && LevelSeedFor(Lin, 2) != 0);
+		int Zero = 0;
+		int Dup = 0;
+		int SameAcross = 0;
+		int EvenSeeds = 0;
+		for (unsigned Run = 1; Run <= 1000; ++Run)
+		{
+			FState A;
+			A.Flags = Flag::Linear;
+			A.RunSeed = Run * 2654435761u + 7u;
+			FState B = A;
+			B.RunSeed = A.RunSeed + 1u;
+			std::vector<uint32_t> Seen;
+			for (int I = 1; I < NumSteps; ++I)
+			{
+				const uint32_t Sa = LevelSeedFor(A, Order[I]);
+				Zero += Sa == 0 ? 1 : 0;
+				EvenSeeds += (Sa & 1u) == 0 ? 1 : 0;
+				for (const uint32_t Prev : Seen)
+				{
+					Dup += Prev == Sa ? 1 : 0;
+				}
+				Seen.push_back(Sa);
+				SameAcross += Sa == LevelSeedFor(B, Order[I]) ? 1 : 0;
+			}
+		}
+		Line("1000 parcours x 11 niveaux : aucune graine nulle (" + std::to_string(Zero) + ")", Zero == 0 && EvenSeeds == 0);
+		Line("1000 parcours : 11 graines distinctes par parcours (" + std::to_string(Dup) + " doublon)", Dup == 0);
+		Line("deux parcours voisins : graines differentes a chaque niveau (" + std::to_string(SameAcross) + " egalite)", SameAcross == 0);
+		Line("Level 0 : aucune graine imposee (il garde IntroSeed)", LevelSeedFor(Lin, 0) == 0);
+		{
+			FState Classic = Lin;
+			Classic.Flags = 0;
+			FState NoRun = Lin;
+			NoRun.RunSeed = 0;
+			int Any = 0;
+			for (int I = 0; I < NumSteps; ++I)
+			{
+				Any += LevelSeedFor(Classic, Order[I]) != 0 ? 1 : 0;
+				Any += LevelSeedFor(NoRun, Order[I]) != 0 ? 1 : 0;
+			}
+			Line("parcours classique (Flags 0) ou graine du parcours nulle : aucune graine imposee", Any == 0);
+		}
+		Line("niveaux hors du fil (7, 1001, 1002, dernier quai) : aucune graine imposee",
+			LevelSeedFor(Lin, 7) == 0 && LevelSeedFor(Lin, 1001) == 0 && LevelSeedFor(Lin, 1002) == 0 && LevelSeedFor(Lin, Ending) == 0);
+
+		// --------------------------------------------------------------------------------------------- Regle de la mort
+		const ESession Modes[3] = { ESession::Free, ESession::Story, ESession::Replay };
+		int BadDeath = 0;
+		for (const ESession Mode : Modes)
+		{
+			for (int Li = 0; Li < 2; ++Li)
+			{
+				for (int Ne = 0; Ne < 2; ++Ne)
+				{
+					const bool bRestart = Mode == ESession::Replay || (Mode == ESession::Story && Li != 0);
+					const EDeathRule Want = Ne != 0 ? EDeathRule::RespawnInPlace : (bRestart ? EDeathRule::RestartLevel : EDeathRule::BackToStart);
+					BadDeath += DeathRuleFor(Mode, Li != 0, Ne != 0) == Want ? 0 : 1;
+				}
+			}
+		}
+		Line("regle de la mort : table complete (3 sessions x lineaire x reseau, " + std::to_string(BadDeath) + " ecart)", BadDeath == 0);
+		Line("histoire lineaire en solo : le niveau recommence (meme graine)", DeathRuleFor(ESession::Story, true, false) == EDeathRule::RestartLevel);
+		Line("histoire classique en solo : retour au Level 0", DeathRuleFor(ESession::Story, false, false) == EDeathRule::BackToStart);
+		Line("REJOUER en solo : le niveau rejoue recommence (lineaire ou non)",
+			DeathRuleFor(ESession::Replay, false, false) == EDeathRule::RestartLevel && DeathRuleFor(ESession::Replay, true, false) == EDeathRule::RestartLevel);
+		Line("partie en reseau : reveil dans le niveau, quel que soit le parcours ou la session",
+			DeathRuleFor(ESession::Story, true, true) == EDeathRule::RespawnInPlace && DeathRuleFor(ESession::Story, false, true) == EDeathRule::RespawnInPlace
+			&& DeathRuleFor(ESession::Replay, false, true) == EDeathRule::RespawnInPlace && DeathRuleFor(ESession::Free, false, true) == EDeathRule::RespawnInPlace);
+		Line("mode libre en solo : retour au Level 0 (le parcours lineaire ne compte pas hors histoire)",
+			DeathRuleFor(ESession::Free, false, false) == EDeathRule::BackToStart && DeathRuleFor(ESession::Free, true, false) == EDeathRule::BackToStart);
+
+		// --------------------------------------------------------------------------------------------- Sorties des chunks
+		struct FExitRow { bool bLinear; bool bFwd; bool bGuarded; bool bWant; };
+		const FExitRow Rows[8] = {
+			{ false, false, false, true }, { false, false, true, true }, { false, true, false, true }, { false, true, true, true },
+			{ true, false, false, false }, { true, false, true, true }, { true, true, false, false }, { true, true, true, false },
+		};
+		int BadExit = 0;
+		for (const FExitRow& Row : Rows)
+		{
+			BadExit += ChunkExitAllowed(Row.bLinear, Row.bFwd, Row.bGuarded) == Row.bWant ? 0 : 1;
+		}
+		Line("sorties des chunks : table des 8 cas (classique : toutes ; lineaire : aucune avec la sortie garantie, sinon la gardee seule) : "
+			+ std::to_string(BadExit) + " ecart", BadExit == 0);
+
+		// --------------------------------------------------------------------------------------------- Fil inchange
+		{
+			FState C0;
+			FState L0;
+			L0.Flags = Flag::Linear;
+			L0.RunSeed = 41500u;
+			const int Chapter[4] = { 0, 1, 37, 2 };
+			bool bSame = true;
+			for (int K = 0; K + 1 < 4; ++K)
+			{
+				OnProgress(C0, Chapter[K], Chapter[K + 1]);
+				OnProgress(L0, Chapter[K], Chapter[K + 1]);
+				OnArrive(C0, Chapter[K + 1]);
+				OnArrive(L0, Chapter[K + 1]);
+				bSame = bSame && C0.Reached == L0.Reached && C0.Done == L0.Done && C0.Resume == L0.Resume;
+			}
+			Line("0 -> 1 -> 37 -> 2 : meme plus loin atteint, memes etapes, meme reprise, parcours et graine gardes",
+				bSame && L0.Flags == Flag::Linear && L0.RunSeed == 41500u && L0.Resume == 2);
+			int BadAccess = 0;
+			FState Ca;
+			FState La;
+			La.Flags = Flag::Linear;
+			La.RunSeed = 77u;
+			for (int I = 0; I + 1 < NumSteps; ++I)
+			{
+				for (int J = 0; J < NumSteps; ++J)
+				{
+					BadAccess += CanEnter(Ca, Order[J]) == CanEnter(La, Order[J]) ? 0 : 1;
+				}
+				BadAccess += ProgressTarget(Ca, Order[I], AvailAll, nullptr) == ProgressTarget(La, Order[I], AvailAll, nullptr) ? 0 : 1;
+				OnProgress(Ca, Order[I], Order[I + 1]);
+				OnProgress(La, Order[I], Order[I + 1]);
+			}
+			Line("acces de l'hote et destination de progression identiques en lineaire (12 x 12 paires, " + std::to_string(BadAccess) + " ecart)", BadAccess == 0);
+			BRContent::EChannel Pub = BRContent::EChannel::Public;
+			BRContent::EChannel Int = BRContent::EChannel::Internal;
+			FState Cp;
+			FState Lp;
+			Lp.Flags = Flag::Linear;
+			Lp.RunSeed = 41500u;
+			PlayCampaign(Pub, Cp);
+			PlayCampaign(Pub, Lp);
+			Line("reprise (CONTINUER) identique en lineaire : fin du chapitre 1, puis chapitre 2 publie",
+				ResumePoint(Cp, AvailIn, &Pub) == ResumePoint(Lp, AvailIn, &Pub) && ResumePoint(Cp, AvailIn, &Int) == ResumePoint(Lp, AvailIn, &Int)
+				&& ResumePoint(Lp, AvailIn, &Int) == 3 && Cp.ChapterEnds == Lp.ChapterEnds);
+			// Mort en solo dans un niveau lineaire : le niveau recommence ; l'arrivee dans le meme niveau ne change pas l'histoire
+			FState Before = L0;
+			OnArrive(L0, 2);
+			Line("niveau lineaire recommence apres une mort : reprise, etapes et plus loin atteint inchanges, meme graine",
+				L0.Resume == Before.Resume && L0.Done == Before.Done && L0.Reached == Before.Reached && LevelSeedFor(L0, 2) == LevelSeedFor(Before, 2));
+		}
+
+		// --------------------------------------------------------------------------------------------- Ecriture et migration
+		{
+			const FWritePolicy Pst = WritePolicyFor(ESession::Story);
+			const FWritePolicy Prp = WritePolicyFor(ESession::Replay);
+			const FWritePolicy Pfr = WritePolicyFor(ESession::Free);
+			const bool bStory = Pst.bCharacter && Pst.bDeath && Pst.bSession && Pst.bCampaign && Pst.bStory && Pst.bPlayTime && Pst.bJournal && !Pst.bJournalUnion;
+			const bool bReplay = !Prp.bCharacter && !Prp.bDeath && !Prp.bSession && !Prp.bCampaign && !Prp.bStory && !Prp.bPlayTime && !Prp.bJournal && Prp.bJournalUnion;
+			const bool bFree = !Pfr.bCharacter && !Pfr.bDeath && !Pfr.bSession && !Pfr.bCampaign && !Pfr.bStory && !Pfr.bPlayTime && !Pfr.bJournal && !Pfr.bJournalUnion;
+			Line("regles d'ecriture inchangees (histoire : tout ; REJOUER : journal par union ; libre : rien)", bStory && bReplay && bFree);
+			// Partie lineaire : REJOUER et le mode developpeur n'ecrivent ni parcours ni graine (ni rien d'autre)
+			FRecord Rec;
+			FPlay Camp;
+			Camp.Items = 5;
+			Camp.Level = 2;
+			Camp.Seed = LevelSeedFor(Lin, 2);
+			Camp.StoryFlags = Flag::Linear;
+			Camp.RunSeed = 41500u;
+			Write(Pst, Rec, Camp);
+			const FRecord Kept = Rec;
+			Line("nouvelle partie (histoire) : parcours lineaire et graine du parcours enregistres", Rec.StoryFlags == Flag::Linear && Rec.RunSeed == 41500u);
+			FPlay Rep;
+			Rep.Level = 1;
+			Rep.Seed = 99u;
+			Write(Prp, Rec, Rep);
+			Death(Prp, Rec, Rep);
+			FPlay Dev = Rep;
+			Dev.bDead = false;
+			Write(Pfr, Rec, Dev);
+			Death(Pfr, Rec, Dev);
+			Line("REJOUER et mode developpeur dans une partie lineaire : parcours, graine et partie inchanges", Rec == Kept && Rec.StoryFlags == Flag::Linear && Rec.RunSeed == 41500u);
+			int NumLinear = 0;
+			const std::vector<std::vector<int>> Histories = { { 0 }, { 0, 1 }, { 0, 37 }, { 0, 1, 37, 2 }, { 0, 1, 4, 5 }, { 0, 37, 4, 5, 6, 8, 9, 10, 11 }, { 0, 1, 37, 4 } };
+			for (const std::vector<int>& H : Histories)
+			{
+				for (int Fmt = 0; Fmt <= 4; ++Fmt)
+				{
+					const FMigration M = Migrate(H, H.back(), 0, Fmt);
+					NumLinear += (IsLinear(M.State) || M.State.Flags != 0 || M.State.RunSeed != 0) ? 1 : 0;
+				}
+			}
+			Line("migration des anciennes parties (7 historiques x formats 0 a 4) : toujours le parcours classique (" + std::to_string(NumLinear) + " lineaire)",
+				NumLinear == 0);
+		}
 	}
 
 	std::printf("\nVerifications : %d, echecs : %d\nRESULTAT : %s\n", Checks, Failures, Failures == 0 ? "OK" : "ECHEC");

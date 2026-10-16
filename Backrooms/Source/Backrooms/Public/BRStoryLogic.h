@@ -6,6 +6,11 @@
 // -> 9 -> 10 -> 11 -> dernier quai. La disponibilite des niveaux (BRContent) ne change pas cet ordre : elle dit seulement
 // ou s'arrete le chapitre publie. Les Poolrooms sont une etape obligatoire : rien au-dela ne s'ouvre tant que leur sortie
 // n'a pas ete prise.
+//
+// v4.15 : parcours lineaire (Flag::Linear, choisi a la NOUVELLE PARTIE) : meme fil, une graine fixe par niveau tiree de la
+// graine du parcours (LevelSeedFor), une seule sortie par niveau (celle de la mission : ChunkExitAllowed), une mort en solo
+// relance le niveau en cours depuis zero (DeathRuleFor). Les anciennes parties, REJOUER et le mode developpeur restent
+// au parcours classique.
 #pragma once
 
 #include <cstdint>
@@ -45,6 +50,13 @@ namespace BRStory
 		constexpr uint32_t ServiceLink = 1u << 6;
 	}
 
+	/** v4.15 : nature du parcours de la partie (FState::Flags) */
+	namespace Flag
+	{
+		/** Parcours lineaire : graine fixe par niveau, une seule sortie par niveau, mort solo = niveau recommence */
+		constexpr uint32_t Linear = 1u << 0;
+	}
+
 	/** Etat narratif d'une partie (tenu par l'hote, replique, sauvegarde) */
 	struct FState
 	{
@@ -70,6 +82,10 @@ namespace BRStory
 		int DoorDir = -1;
 		int DoorTier = 0;
 		int DoorVersion = 0;
+		/** v4.15 : parcours de la partie (bits Flag::) ; 0 : classique (anciennes parties, migration) */
+		uint32_t Flags = 0;
+		/** v4.15 : graine du parcours lineaire, tiree a la nouvelle partie (0 : aucune) : graine de chaque niveau */
+		uint32_t RunSeed = 0;
 	};
 
 	/** Version du placement de la porte de service (bande visee, bande elargie, secours). Une porte sauvegardee reste
@@ -152,6 +168,32 @@ namespace BRStory
 	};
 	FWritePolicy WritePolicyFor(ESession Mode);
 
+	/** v4.15 : la partie suit le parcours lineaire */
+	bool IsLinear(const FState& S);
+	/** v4.15 : graine fixe d'un niveau du parcours lineaire (melange de RunSeed et du niveau, jamais 0). 0 (pas de graine
+	 *  imposee) : partie classique, RunSeed nul, Level 0 (il garde IntroSeed) ou niveau hors du fil */
+	uint32_t LevelSeedFor(const FState& S, int Level);
+
+	/** v4.15 : ce que devient une mort */
+	enum class EDeathRule : uint8_t
+	{
+		/** Retour au Level 0 (histoire classique en solo, mode libre) */
+		BackToStart,
+		/** Le niveau en cours recommence de zero (REJOUER ; parcours lineaire en solo : meme graine, mission neuve,
+		 *  equipement de depart) */
+		RestartLevel,
+		/** Reveil au point de depart du niveau en cours, apres la fenetre de reanimation (partie en reseau) */
+		RespawnInPlace
+	};
+	/** v4.15 : regle de la mort : reseau -> RespawnInPlace (quel que soit le parcours) ; REJOUER, ou histoire lineaire en
+	 *  solo -> RestartLevel ; sinon BackToStart. bLinear ne compte que pour une session d'histoire */
+	EDeathRule DeathRuleFor(ESession Mode, bool bLinear, bool bNet);
+
+	/** v4.15 : une sortie tiree par un chunk est-elle posee ? Classique : toujours. Lineaire : jamais quand la mission du
+	 *  niveau a sa sortie garantie vers l'avant ; sans elle (securite), seules les sorties gardees par la mission (sortie de
+	 *  progression) restent, les sorties de retour disparaissent */
+	bool ChunkExitAllowed(bool bLinear, bool bForwardGuaranteed, bool bTargetGuarded);
+
 	/** Ancienne partie (formats 1 a 4) : ce qu'elle sait de sa progression */
 	struct FLegacy
 	{
@@ -191,6 +233,7 @@ namespace BRStory
 	};
 	/** Migration d'une ancienne partie : etapes depassees creditees, point de reprise coherent. Poolrooms : creditees
 	 *  seulement sur preuve ; absentes ou ambigues avec une partie allee au-dela, la traversee est organisee (la
-	 *  progression ancienne est garee intacte, pas perdue ni effacee) */
+	 *  progression ancienne est garee intacte, pas perdue ni effacee). v4.15 : toujours le parcours classique (Flags 0,
+	 *  RunSeed 0) */
 	FMigration MigrateLegacy(const FLegacy& L);
 }
