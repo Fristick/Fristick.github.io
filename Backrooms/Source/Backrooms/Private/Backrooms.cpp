@@ -11,7 +11,8 @@ class FBackroomsModule : public FDefaultGameModuleImpl
 public:
 	virtual void StartupModule() override
 	{
-		FCoreDelegates::OnPostEngineInit.AddLambda([]() { BRLoc::ApplyStartupLanguage(); });
+		// v4.15 : OnPostEngineInit est deprecie en 5.8 (GetOnPostEngineInit)
+		FCoreDelegates::GetOnPostEngineInit().AddLambda([]() { BRLoc::ApplyStartupLanguage(); });
 	}
 };
 

@@ -1482,10 +1482,10 @@ bool UBRAssets::EnsureUsages(UMaterialInterface* M, EBRMasterMaterial Kind, cons
 	if (GIsEditor)
 	{
 		// Editeur (PIE) : l'usage est ajoute en memoire et le materiau recompile ; il reste a l'enregistrer
+		// v4.15 : surcharge virtuelle de la 5.8 (l'ancienne, depreciee, ne faisait que la rappeler)
 		for (const EMaterialUsage Usage : Absent)
 		{
-			bool bNeedsRecompile = false;
-			Base->SetMaterialUsage(bNeedsRecompile, Usage);
+			Base->SetMaterialUsage(Usage);
 		}
 		UE_LOG(LogBackrooms, Warning, TEXT("%s : usage(s) %s ajoute(s) en memoire. Pour l'enregistrer : backrooms_setup.repair() ")
 			TEXT("(Fenetre > Journal de sortie > Python)."), AssetName, *Names);

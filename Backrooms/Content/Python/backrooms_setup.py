@@ -70,8 +70,10 @@ EXPECTED_SLOTS = {
     "SK_Faceling": ("FacelingTex",),
     "SK_Partygoer": ("PartygoerTex",),
     "SK_SkinStealer": ("SkinStealerFlesh", "EyeDark", "StealerEye", "StealerClaw"),
-    "SK_Hound": ("HoundSkin", "HoundMouth", "HoundTeeth", "HoundHair", "HoundFace", "GlowAmberEye", "EyeDark", "HoundTongue"),
-    "SK_HoundLite": ("HoundSkin", "HoundMouth", "HoundTeeth", "HoundHair", "HoundFace", "GlowAmberEye", "EyeDark", "HoundTongue"),
+    # v4.15 : pas de HoundTeeth. Ce slot a 0 polygone dans les FBX (verifie dans Blender) : l'import Interchange d'Unreal
+    # 5.8 ne garde pas les slots vides, l'ancien importeur FBX les gardait. Le jeu ne l'affecte pas (BRAssets.cpp).
+    "SK_Hound": ("HoundSkin", "HoundMouth", "HoundHair", "HoundFace", "GlowAmberEye", "EyeDark", "HoundTongue"),
+    "SK_HoundLite": ("HoundSkin", "HoundMouth", "HoundHair", "HoundFace", "GlowAmberEye", "EyeDark", "HoundTongue"),
     "SK_Wretch": ("WretchSkin", "WretchTeeth", "WretchEye"),
     "SK_Clump": ("ClumpSkin", "ClumpTeeth"),
 }
@@ -1185,6 +1187,28 @@ def _skeletal_slot_names(sk):
     return names
 
 
+def _imported_size(tex, path):
+    """v4.15 : plus petit cote de la texture importee, lu dans le registre (tag Dimensions, taille de l'image source).
+    Au demarrage de l'editeur, Unreal 5.8 compile les textures en tache de fond : blueprint_get_size_x() rend alors 32
+    (texture de remplacement) pendant quelques centaines d'images. Une limite d'import (max_texture_size) compte aussi."""
+    size = 0
+    try:
+        tag = EAL.find_asset_data(path).get_tag_value("Dimensions")
+        if tag:
+            size = min(int(v) for v in str(tag).lower().split("x")[:2])
+    except Exception:
+        size = 0
+    if size <= 0:
+        size = min(tex.blueprint_get_size_x(), tex.blueprint_get_size_y())
+    try:
+        cap = int(tex.get_editor_property("max_texture_size"))
+        if cap > 0:
+            size = min(size, cap)
+    except Exception:
+        pass
+    return size
+
+
 def validate(verbose=False):
     """Verifie ce que l'installation doit produire : textures, maillages (statiques et a squelette), slots des maillages
     a squelette, usages des materiaux maitres, carte. Retourne la liste des problemes (categorie, nom, detail) et ecrit
@@ -1205,7 +1229,7 @@ def validate(verbose=False):
         if tex is None:
             continue  # deja signalee absente
         try:
-            size = min(tex.blueprint_get_size_x(), tex.blueprint_get_size_y())
+            size = _imported_size(tex, TEX + "/" + name)
             if size < 1024:
                 problems.append(("texture", name, "taille %d (attendu 4096)" % size))
             if not is_srgb(tex):
