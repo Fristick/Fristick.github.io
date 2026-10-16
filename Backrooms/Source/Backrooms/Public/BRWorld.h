@@ -759,6 +759,13 @@ public:
 	float GetPower() const { return Power; }
 	/** Declenche une coupure tout de suite (console : BRBlackout) */
 	void ForceBlackout();
+	/** v4.15 (tests) : pendant une coupure (hote), le courant revient tout de suite (phase de retour, rallumage decale) */
+	void ForceRestore();
+	/** v4.15 : le courant vacille (debut ou fin d'une coupure) : les lampes changent d'eclat d'une image a l'autre */
+	bool IsPowerFlickering() const { return BlackoutPhase == EBlackout::Failing || BlackoutPhase == EBlackout::Restoring; }
+	/** v4.15 (tests) : decalques d'usure des chunks construits, tries par coordonnees : "(x,y)=nombre/empreinte ..." (le test
+	 *  reseau compare les chunks communs a l'hote et au client) */
+	FString DecalChecksumText() const;
 
 	// ------------------------------------------------------------ v2 : objectifs
 	void GetObjectives(TArray<FBRObjective>& Out) const;

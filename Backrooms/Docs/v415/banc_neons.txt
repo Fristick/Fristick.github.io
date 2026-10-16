@@ -3,7 +3,7 @@
 #   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Light\test_fluo.cpp /Fetest_fluo.exe && test_fluo.exe
 #   (aussi : cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive- ... : meme sortie)
 # Compilateur : clang version 22.1.3 (https://github.com/llvm/llvm-project e9846648fd6183ee6d8cbdb4502213fcf902a211)
-# Date : 2026-10-16T12:19:39Z
+# Date : 2026-10-16T21:31:54Z
 
 # Banc des neons fluorescents v4.15 (BRFluoLogic.h)
 
@@ -19,15 +19,18 @@
   tube eteint pendant un clignement : presque noir (3 %)                                           OK
   tube en fin de vie (2 h) : 4655 defaillances, eclat allume 0.401-0.572
   fin de vie : plus faible (eclat allume <= 0,62) et defaillances au moins 1,5 fois plus frequentes OK
-  flashs attenues : 1930 defaillances, eteint 85-229 ms, eclat eteint 0.563, ondulation +-1.4 %
+  flashs attenues : 1861 defaillances, eteint 170-229 ms, eclat eteint 0.563, ondulation +-1.4 %
   flashs attenues : creux moins profond (eclat eteint au-dessus de 0,5)                            OK
   flashs attenues : clignements plus lents (au moins 2,5 fois)                                     OK
+  flashs attenues : demi-clignements de 169 ms au moins (eteint 170-229, allume 169-229) : 3 par seconde au plus OK
+  flashs attenues, tube en fin de vie : demi-clignements de 169 ms au moins                        OK
   aucun flash : eclat constant (0.920-0.920), aucune extinction ni bruit (0)                       OK
   rallumage (2000 lampes) : premier allumage au plus a 899 ms, 1 a 3 allumages, termine en 1.28 s au plus
   chaque lampe se rallume (rallumage termine)                                                      OK
   retard propre a chaque lampe : 0,9 s au plus                                                     OK
   1 a 3 clignements avant de rester allumee                                                        OK
   rallumage complet en moins de 1,6 s (la phase de retour du courant dure 1,4 s)                   OK
+  flashs attenues : rallumage sans clignement (1 allumage(s) au plus, termine en 1.15 s au plus)   OK
   aucun flash : rallumage immediat, sans clignement                                                OK
 
-RESULTAT : OK (17 verifications, 0 echec(s))
+RESULTAT : OK (20 verifications, 0 echec(s))

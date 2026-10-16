@@ -82,9 +82,12 @@ public:
 	 * TintOverrides : remplace la couleur de certains slots (ex: "Skin").
 	 * bUniqueGlow : les slots "Glow*" recoivent un materiau unique, retourne dans OutGlow.
 	 * bPowered : les slots "Glow" (neons) s'eteignent pendant les coupures de courant (SetGlowScale).
+	 * LightTemperatureK : v4.15 : > 0, ces slots alimentes prennent la couleur d'une lampe de cette temperature
+	 * (TemperatureGlow), comme les diffuseurs individuels et la lumiere qu'ils projettent.
 	 */
 	void ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColor>* TintOverrides = nullptr,
-		bool bUniqueGlow = false, TArray<UMaterialInstanceDynamic*>* OutGlow = nullptr, float GlowScale = 1.f, bool bPowered = false);
+		bool bUniqueGlow = false, TArray<UMaterialInstanceDynamic*>* OutGlow = nullptr, float GlowScale = 1.f, bool bPowered = false,
+		float LightTemperatureK = 0.f);
 
 	/**
 	 * v4.8 : affectation explicite des slots d'un modele (combinaison du joueur) : nom de slot -> style (SlotStyles).
@@ -106,6 +109,9 @@ public:
 
 	/** Couleur emissive (deja multipliee) d'un slot Glow*, ou noir */
 	static FLinearColor GlowColorForSlot(const FString& SlotName);
+	/** v4.15 : couleur emissive d'un diffuseur eclaire par une lampe de Kelvin K : teinte de la temperature (celle de la
+	 *  lumiere, FLinearColor::MakeFromColorTemperature), meme luminance que Glow (meme eclat a l'ecran) */
+	static FLinearColor TemperatureGlow(const FLinearColor& Glow, float Kelvin);
 
 	/** true si des materiaux texturees sont disponibles (import Python ou construction a la volee) */
 	bool HasContent();

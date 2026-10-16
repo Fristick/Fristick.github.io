@@ -1143,6 +1143,10 @@ void ABRWorld::ApplyEnvironment()
 	S.AutoExposureSpeedDown = D.ExposureSpeedDown;
 	S.bOverride_WhiteTemp = true;
 	S.WhiteTemp = FMath::Clamp(D.WhiteTempK, 1500.f, 15000.f);
+	// v4.15 : a partir de 4000 K, le moteur prend le blanc sur le lieu du jour (D) et non plus sur celui des lampes
+	// (Planck) : une teinte (FBRLevelDef::WhiteTint) annule le rose que cela donnerait aux lampes (Level 37)
+	S.bOverride_WhiteTint = true;
+	S.WhiteTint = FMath::Clamp(D.WhiteTint, -1.f, 1.f);
 	S.bOverride_SceneColorTint = true;
 	S.SceneColorTint = D.SceneTint;
 	S.bOverride_ColorSaturation = true;
@@ -2159,6 +2163,7 @@ void ABRWorld::PrewarmModels()
 		Comp->SetSkinnedAssetAndUpdate(Mesh);
 		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Comp->SetCastShadow(true);
+		ABRPlayerController::ApplySkinnedReflections(Comp); // v4.15 : meme regle que les maillages a squelette du jeu
 		const float Lateral = (Slot - 3.5f) * 45.f;
 		Comp->SetWorldLocationAndRotation(Eye + Fwd * 320.f + Side * Lateral - FVector(0.f, 0.f, 60.f), Fwd.Rotation());
 		Comp->SetWorldScale3D(FVector(0.35f));
@@ -2780,6 +2785,40 @@ void ABRWorld::ForceBlackout()
 	}
 }
 
+void ABRWorld::ForceRestore()
+{
+	// v4.15 : banc visuel : retour du courant capture a heure fixe (GI, rallumage decale, MegaLights) ; la phase est
+	// repliquee aux clients comme une fin de coupure ordinaire
+	if (HasAuthority() && (BlackoutPhase == EBlackout::Failing || BlackoutPhase == EBlackout::Dark))
+	{
+		EnterBlackoutPhase(static_cast<uint8>(EBlackout::Restoring));
+	}
+}
+
+FString ABRWorld::DecalChecksumText() const
+{
+	TArray<FIntPoint> Coords;
+	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+	{
+		if (Pair.Value && Pair.Value->IsReady())
+		{
+			Coords.Add(Pair.Key);
+		}
+	}
+	Coords.Sort([](const FIntPoint& First, const FIntPoint& Second)
+	{
+		return First.X != Second.X ? First.X < Second.X : First.Y < Second.Y;
+	});
+	FString Out;
+	for (const FIntPoint& C : Coords)
+	{
+		const ABRChunk* Chunk = Chunks.FindRef(C).Get();
+		Out += FString::Printf(TEXT("%s(%d,%d)=%d/%08x"), Out.IsEmpty() ? TEXT("") : TEXT(" "), C.X, C.Y, Chunk ? Chunk->GetDecalCount() : 0,
+			Chunk ? Chunk->GetDecalHash() : 0u);
+	}
+	return Out;
+}
+
 void ABRWorld::UpdateBlackout(float Dt)
 {
 	const FBRLevelDef& D = Def();
@@ -2831,6 +2870,12 @@ void ABRWorld::UpdateBlackout(float Dt)
 			else if (PowerFlickerTimer <= 0.f)
 			{
 				PowerFlickerTimer = FMath::FRandRange(0.04f, 0.16f) / FMath::Max(FS, 0.25f);
+				// v4.15 : flashs attenues : chaque etat dure au moins 0,17 s, 3 clignements par seconde au plus (comme les neons,
+				// BRFluo::SoftHalfBlinkMin)
+				if (FS < 1.f)
+				{
+					PowerFlickerTimer = FMath::Max(PowerFlickerTimer, 0.17f);
+				}
 				const float Low = FMath::Lerp(0.45f, 0.f, FS);
 				Power = FMath::FRand() < OnChance ? FMath::FRandRange(0.6f, 1.f) : FMath::FRandRange(Low, Low + 0.08f);
 			}
@@ -2947,6 +2992,17 @@ void ABRWorld::EnterBlackoutPhase(uint8 Phase, bool bSilent)
 			BlackoutTimer = FMath::FRandRange(D.BlackoutMinInterval, FMath::Max(D.BlackoutMinInterval, D.BlackoutMaxInterval));
 		}
 		break;
+	}
+	// v4.15 : avec MegaLights, pas de diffusion dans le brouillard tant que le courant vacille (trainees) ; retablie ensuite
+	if (IsMegaLightsActive())
+	{
+		for (TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->RefreshLightScatter();
+			}
+		}
 	}
 	ApplyPower(false);
 }
@@ -4667,7 +4723,14 @@ float ABRWorld::LightLevelAt(const FVector& P) const
 	{
 		return 1.f;
 	}
-	// Plafonniers du niveau (suivent les coupures)
+	// Plafonniers du niveau (suivent les coupures).
+	// v4.15 (connu, non corrige dans cette version : ce serait un changement de gameplay) : les plafonniers comptent a
+	// travers les murs (distance a plat). Avant, l'image s'accordait avec cette regle (85 % des neons sans ombre : leur
+	// lumiere traversait les murs) ; avec OMBRES DE TOUTES LES LAMPES (MegaLights), chaque neon a son ombre et un coin
+	// derriere un mur parait sombre alors qu'il est "eclaire" ici (pas d'apparition de Smiler, dissipation au-dessus de
+	// BRLight::SmilerVanish). Capture du banc visuel : vis_0_<profil>_mur_smiler. Correction possible (a decider) : ignorer
+	// une lampe dont le chemin de cellules jusqu'a P traverse un mur, avec la grille seule (memes resultats chez l'hote et
+	// les clients), et la meme regle dans Tools/verify_pitfalls.py
 	float Acc = 0.f;
 	if (D.Fixture != EBRFixture::None && Power >= 0.05f)
 	{

@@ -8,6 +8,12 @@
 // meme sequence. Un tube en fin de vie est plus faible, pulse lentement et rate plus souvent. Apres une coupure, chaque
 // lampe se rallume avec son propre retard (au plus 0,9 s) et 1 a 3 clignements : pas toutes dans la meme image.
 // Reglage FLASHS (FS : 1 normaux, 0,35 attenues, 0 aucun) : clignements moins profonds et plus lents, aucun a 0.
+// v4.15 : flashs attenues : chaque demi-clignement dure au moins 0,17 s (3 clignements par seconde au plus, la limite
+// usuelle pour les personnes sensibles aux flashs) et le rallumage apres une coupure se fait sans clignement (retard
+// propre a chaque lampe, puis allumee).
+// Reporte a la v4.16 : l'extremite sombre d'un tube en fin de vie (degrade emissif le long du tube) : il faut un parametre
+// dans M_BR_Mesh, partage par tous les modeles (squelettes compris), donc une reconstruction de tous les materiaux ; ici,
+// un tube en fin de vie est seulement plus faible et pulse lentement.
 #pragma once
 
 #include <cmath>
@@ -53,10 +59,22 @@ namespace BRFluo
 		return 1.f / (FS > 0.25f ? FS : 0.25f);
 	}
 
+	/** v4.15 : flashs attenues (FS < 1) : duree minimale d'un demi-clignement (allume ou eteint) : 3 clignements par seconde
+	 *  au plus */
+	constexpr float SoftHalfBlinkMin = 0.17f;
+
 	template <typename RandT>
 	inline float Range(RandT& Rand, float A, float B)
 	{
 		return A + (B - A) * Rand();
+	}
+
+	/** v4.15 : duree d'un demi-clignement tire dans [A, B], ralentie selon FLASHS ; au moins SoftHalfBlinkMin si attenues */
+	template <typename RandT>
+	inline float Blink(RandT& Rand, float A, float B, float FS)
+	{
+		const float Time = Range(Rand, A, B) * Slow(FS);
+		return (FS < 1.f && Time < SoftHalfBlinkMin) ? SoftHalfBlinkMin : Time;
 	}
 
 	template <typename RandT>
@@ -118,14 +136,14 @@ namespace BRFluo
 				if (Rand() < (T.bDying ? 0.55f : 0.4f))
 				{
 					T.State = FTube::EState::Out;
-					T.Timer += Range(Rand, OutMin, T.bDying ? OutMax * 2.f : OutMax) * Slow(FS);
+					T.Timer += Blink(Rand, OutMin, T.bDying ? OutMax * 2.f : OutMax, FS);
 				}
 				else
 				{
 					// Eteint, puis (2 x clignements - 1) changements jusqu'au dernier allumage
 					T.State = FTube::EState::Strike;
 					T.StrikeSteps = 2 * RangeInt(Rand, StrikeBlinksMin, StrikeBlinksMax) - 1;
-					T.Timer += Range(Rand, BlinkMin, BlinkMax) * Slow(FS);
+					T.Timer += Blink(Rand, BlinkMin, BlinkMax, FS);
 				}
 				break;
 			case FTube::EState::Out:
@@ -133,7 +151,7 @@ namespace BRFluo
 				T.State = FTube::EState::Strike;
 				T.StrikeSteps = 2 * RangeInt(Rand, StrikeBlinksMin, StrikeBlinksMax) - 2;
 				T.bLit = true;
-				T.Timer += Range(Rand, BlinkMin, BlinkMax) * Slow(FS);
+				T.Timer += Blink(Rand, BlinkMin, BlinkMax, FS);
 				break;
 			default: // Strike
 				if (T.StrikeSteps <= 0)
@@ -146,7 +164,7 @@ namespace BRFluo
 				--T.StrikeSteps;
 				T.bLit = !T.bLit;
 				bOffEvent = bOffEvent || !T.bLit;
-				T.Timer += Range(Rand, BlinkMin, BlinkMax) * Slow(FS);
+				T.Timer += Blink(Rand, BlinkMin, BlinkMax, FS);
 				break;
 			}
 		}
@@ -172,7 +190,8 @@ namespace BRFluo
 		bool bLit = false;
 	};
 
-	/** Le courant revient : retard et clignements propres a cette lampe (FS = 0 : rallumage immediat, sans clignement) */
+	/** Le courant revient : retard et clignements propres a cette lampe (FS = 0 : rallumage immediat, sans clignement ;
+	 *  v4.15 : flashs attenues : retard propre, puis allumee, sans clignement) */
 	template <typename RandT>
 	inline void BeginRestrike(FRestrike& R, float FS, RandT& Rand)
 	{
@@ -183,7 +202,8 @@ namespace BRFluo
 		}
 		R.bActive = true;
 		R.Delay = Range(Rand, 0.f, RestrikeDelayMax);
-		R.Steps = 2 * RangeInt(Rand, RestrikeBlinksMin, RestrikeBlinksMax) - 1;
+		// v4.15 : flashs attenues : aucun clignement (retard, puis allumee) ; normaux : 1 a 3 clignements
+		R.Steps = FS >= 1.f ? 2 * RangeInt(Rand, RestrikeBlinksMin, RestrikeBlinksMax) - 1 : 0;
 		R.bLit = false;
 		R.Timer = 0.f;
 	}
@@ -207,7 +227,7 @@ namespace BRFluo
 			}
 			R.bLit = true;
 			bOnEvent = true;
-			R.Timer = Range(Rand, RestrikeOnMin, RestrikeOnMax) * Slow(FS);
+			R.Timer = Blink(Rand, RestrikeOnMin, RestrikeOnMax, FS);
 			return 1.f;
 		}
 		R.Timer -= Dt;
@@ -223,7 +243,7 @@ namespace BRFluo
 			--R.Steps;
 			R.bLit = !R.bLit;
 			bOnEvent = bOnEvent || R.bLit;
-			R.Timer += (R.bLit ? Range(Rand, RestrikeOnMin, RestrikeOnMax) : Range(Rand, RestrikeOffMin, RestrikeOffMax)) * Slow(FS);
+			R.Timer += R.bLit ? Blink(Rand, RestrikeOnMin, RestrikeOnMax, FS) : Blink(Rand, RestrikeOffMin, RestrikeOffMax, FS);
 		}
 		// Eteinte : sans courant (FS = 1) ; flashs attenues : creux moins profond
 		return R.bLit ? 1.f : 1.f - FS;

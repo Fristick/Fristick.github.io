@@ -181,6 +181,14 @@ public:
 	FString GetRenderModeReport() const;
 	/** true si le ray tracing materiel est actif (decide au demarrage : DirectX 12, carte compatible, r.RayTracing) */
 	static bool IsHardwareRayTracingAvailable();
+	/** v4.15 : les maillages a squelette sont-ils visibles dans les reflets ray traces ? Seulement s'ils y sont eclaires par
+	 *  les rayons (hit lighting, relance des impacts) : sinon ils y seraient noirs (pas de cache de surfaces) ; ils restent
+	 *  dans la scene ray tracee pour les ombres (MegaLights) */
+	static bool SkinnedMeshesInRayTracedReflections();
+	/** v4.15 : applique cette regle aux maillages a squelette deja crees de ce monde ; retourne le nombre de changements */
+	static int32 RefreshSkinnedReflections(UWorld* InWorld);
+	/** v4.15 : applique cette regle a un maillage a squelette avant son enregistrement */
+	static void ApplySkinnedReflections(class USkinnedMeshComponent* Skin);
 	/** Profils : 0 Performance, 1 Qualite, 2 Cinematique */
 	static void ApplyGraphicsProfile(int32 Profile);
 	/** v4.8 : choisit la langue (indice dans BRLoc::Languages()), l'applique tout de suite et l'enregistre ; propre a

@@ -67,9 +67,11 @@ namespace
 		D.LightChance = 0.38f; D.BrokenChance = 0.06f; D.FlickerChance = 0.07f;
 		D.LightLumens = 2400.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 620.f;
 		D.DarkZoneChance = 0.06f; D.ShadowChance = 0.15f;
-		// v4.15 : neons blanc chaud (3700 K) vus avec une balance des blancs a 4300 K : le jaune vient du papier peint et de
-		// la moquette eclaires, plus de la teinte de l'image (moins saturee, plus naturelle) ; etalonnage adouci
-		D.LightTemperatureK = 3700.f; D.WhiteTempK = 4300.f;
+		// v4.15 : neons blanc chaud (3700 K) vus avec une balance des blancs a 3900 K : lampe blanc chaud (1, 0,94, 0,86) ; le
+		// jaune vient du papier peint et de la moquette eclaires, plus de la teinte de l'image (moins saturee, plus
+		// naturelle) ; etalonnage adouci. Balance sous 4000 K : au-dela, le moteur prend le blanc sur le lieu du jour et la
+		// lampe virait a la peche (4300 K : (1, 0,81, 0,70)) ; banc Tools/Light/test_color.cpp
+		D.LightTemperatureK = 3700.f; D.WhiteTempK = 3900.f;
 		// v4.15 : air plus clair (brume legere) ; halos des lampes portes par le brouillard volumetrique (extinction 1.5,
 		// 40 m) ; air humide des salles de fosses et des zones sans lumiere, air froid du sas (volumes locaux)
 		D.FogDensity = 0.03f; D.FogColor = C(0.32f, 0.29f, 0.16f);
@@ -222,8 +224,9 @@ namespace
 		D.LightChance = 0.22f; D.BrokenChance = 0.2f; D.FlickerChance = 0.15f;
 		D.LightLumens = 1300.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 560.f;
 		D.DarkZoneChance = 0.15f; D.ShadowChance = 0.2f;
-		// v4.15 : ampoules a incandescence (2900 K), balance des blancs a 4200 K
-		D.LightTemperatureK = 2900.f; D.WhiteTempK = 4200.f;
+		// v4.15 : ampoules a incandescence (2900 K), balance des blancs a 3700 K : la meme couleur apparente qu'avant
+		// (1, 0,71, 0,45) ; sous 4000 K (lieu de Planck, pas de reflet rose)
+		D.LightTemperatureK = 2900.f; D.WhiteTempK = 3700.f;
 		D.VolFogExtinction = 1.2f; D.VolFogDistance = 3000.f; // v4.15 : couloirs etroits, vapeur des tuyaux
 		D.DecalDensity = 0.8f;     // v4.15 : fuites des tuyaux, coulures, frottements
 		D.FogDensity = 0.12f; D.FogColor = C(0.18f, 0.13f, 0.08f);
@@ -273,10 +276,10 @@ namespace
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
 		D.Fixture = EBRFixture::Bulb;
 		D.LightChance = 0.3f; D.BrokenChance = 0.15f; D.FlickerChance = 0.25f;
-		D.LightLumens = 1500.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 620.f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs : niveau hors du banc visuel (-BRAutoTestVisual),
+		// a regler sur captures dans une version suivante
+		D.LightLumens = 1500.f; D.LightColor = C(1.f, 0.85f, 0.6f); D.LightRadius = 620.f;
 		D.DarkZoneChance = 0.15f; D.ShadowChance = 0.2f;
-		// v4.15 : ampoules industrielles (3200 K), balance des blancs a 4300 K
-		D.LightTemperatureK = 3200.f; D.WhiteTempK = 4300.f;
 		D.FogDensity = 0.1f; D.FogColor = C(0.14f, 0.12f, 0.1f);
 		D.ShadowTint = C(0.97f, 0.98f, 1.03f); D.HighlightTint = C(1.04f, 0.98f, 0.92f); D.VolumetricScatter = 0.6f;
 		D.SceneTint = C(1.f, 0.95f, 0.88f); D.Saturation = 0.8f; D.Contrast = 1.15f;
@@ -326,10 +329,9 @@ namespace
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::Panel;
 		D.LightChance = 0.7f; D.BrokenChance = 0.03f; D.FlickerChance = 0.03f;
-		D.LightLumens = 3000.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 700.f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs (niveau hors du banc visuel)
+		D.LightLumens = 3000.f; D.LightColor = C(0.95f, 0.97f, 1.f); D.LightRadius = 700.f;
 		D.ShadowChance = 0.12f;
-		// v4.15 : dalles de bureau (4000 K), balance des blancs a 3900 K : bureau blanc, legerement froid
-		D.LightTemperatureK = 4000.f; D.WhiteTempK = 3900.f;
 		D.FogDensity = 0.04f; D.FogColor = C(0.3f, 0.3f, 0.32f);
 		D.ShadowTint = C(0.96f, 0.98f, 1.04f); D.HighlightTint = C(1.f, 1.f, 1.f); D.VolumetricScatter = 0.3f;
 		D.MinEV = 3.f; D.MaxEV = 9.f;
@@ -373,10 +375,9 @@ namespace
 		D.Pillar = D.Trim;
 		D.Fixture = EBRFixture::Sconce;
 		D.LightChance = 0.5f; D.BrokenChance = 0.15f; D.FlickerChance = 0.12f;
-		D.LightLumens = 900.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 520.f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs (niveau hors du banc visuel)
+		D.LightLumens = 900.f; D.LightColor = C(1.f, 0.7f, 0.4f); D.LightRadius = 520.f;
 		D.DarkZoneChance = 0.1f; D.ShadowChance = 0.2f;
-		// v4.15 : appliques a incandescence (2700 K), balance des blancs a 4000 K
-		D.LightTemperatureK = 2700.f; D.WhiteTempK = 4000.f;
 		D.FogDensity = 0.06f; D.FogColor = C(0.2f, 0.12f, 0.08f);
 		D.ShadowTint = C(0.97f, 0.94f, 1.01f); D.HighlightTint = C(1.05f, 0.97f, 0.9f); D.VolumetricScatter = 0.5f;
 		D.SceneTint = C(1.f, 0.92f, 0.85f); D.Saturation = 0.9f; D.Contrast = 1.1f;
@@ -471,10 +472,9 @@ namespace
 		D.Ceiling = S(TEXT("T_Rock"), C(0.5f, 0.5f, 0.5f), 300.f, 0.9f, 0.5f);
 		D.Fixture = EBRFixture::Bulb;
 		D.LightChance = 0.12f; D.BrokenChance = 0.3f; D.FlickerChance = 0.2f;
-		D.LightLumens = 1600.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 800.f;
+		// v4.15 : couleur RGB d'avant, sans temperature ni balance des blancs (niveau hors du banc visuel)
+		D.LightLumens = 1600.f; D.LightColor = C(1.f, 0.75f, 0.5f); D.LightRadius = 800.f;
 		D.DarkZoneChance = 0.2f; D.ShadowChance = 0.25f;
-		// v4.15 : vieilles lampes de mine (2800 K), balance des blancs a 3900 K
-		D.LightTemperatureK = 2800.f; D.WhiteTempK = 3900.f;
 		D.FogDensity = 0.1f; D.FogColor = C(0.08f, 0.08f, 0.08f);
 		D.ShadowTint = C(0.95f, 0.98f, 1.03f); D.HighlightTint = C(1.05f, 0.98f, 0.9f); D.VolumetricScatter = 0.7f;
 		D.Saturation = 0.85f;
@@ -645,8 +645,10 @@ namespace
 		D.Fixture = EBRFixture::SkyPanel;
 		D.LightChance = 0.6f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
 		D.LightLumens = 4200.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 1000.f; D.ShadowChance = 0.15f;
-		// v4.15 : plafonniers 5000 K, balance des blancs a 5400 K (la lumiere du jour des verrieres reste un peu plus froide)
-		D.LightTemperatureK = 5000.f; D.WhiteTempK = 5400.f;
+		// v4.15 : plafonniers 5000 K, balance des blancs a 5400 K (la lumiere du jour des verrieres reste un peu plus froide).
+		// Au-dela de 4000 K, le blanc de reference est sur le lieu du jour : sans teinte, les lampes viraient au rose (dalles
+		// roses) ; la teinte -0,10 les ramene a un blanc chaud (1, 0,96, 0,86)
+		D.LightTemperatureK = 5000.f; D.WhiteTempK = 5400.f; D.WhiteTint = -0.1f;
 		D.VolFogDistance = 5000.f; // v4.15 : longs couloirs des canaux
 		D.SkylightChance = 0.45f;
 		D.bWater = true; D.WaterHeight = 60.f; // canaux de 60 cm ; trottoirs a 68 cm, marche immergee a 34 cm

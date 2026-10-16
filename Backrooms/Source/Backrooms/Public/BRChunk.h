@@ -92,6 +92,19 @@ public:
 	/** v4.15 : OMBRES DE TOUTES LES LAMPES (ABRWorld::IsMegaLightsActive) : chaque lumiere projette son ombre, a toute la
 	 *  distance de vue ; sinon, retour aux ombres a distance. Retourne le nombre de lumieres modifiees */
 	int32 ApplyMegaLights(bool bOn);
+	/** v4.15 : toutes les lumieres creees de ce chunk sont-elles reglees pour MegaLights actif (bOn) ou non (ombres) ? */
+	bool MegaLightsMatch(bool bOn) const;
+	/** v4.15 : diffusion des lumieres dans le brouillard volumetrique reappliquee (LightScatter : coupure, rallumage) */
+	void RefreshLightScatter();
+	/** v4.15 : rallumage decale en cours apres une coupure (BeginRestrike) */
+	bool IsRestriking() const { return bRestriking; }
+	/** v4.15 : decalques d'usure du chunk : nombre et empreinte (sortes, positions, rotations, taches au sol), les memes
+	 *  chez l'hote et les clients ; 0 avant la planification */
+	int32 GetDecalCount() const { return DecalTotal; }
+	uint32 GetDecalHash() const { return DecalHash; }
+	/** v4.15 : tache d'eau au plafond de la cellule (X, Y) a cote de son plafonnier, tiree avec la graine (sels 7450-7453) :
+	 *  centre (au plafond), rayon et rotation. Regle de BuildDecals (sans la trappe d'une echelle), aussi pour le banc visuel */
+	static bool CeilingStainAt(const ABRWorld* W, int32 X, int32 Y, FVector& OutPos, float& OutRadius, float& OutSpin);
 	/** Tous les composants et objets sont crees */
 	bool IsReady() const { return bReady; }
 	/** Sol et murs (collisions) crees : on peut marcher dessus */
@@ -154,6 +167,11 @@ protected:
 		/** v4.15 : visuel sans collision cree avec les collisions (sol et plafond du kit, cellule par cellule : ils doivent
 		 *  etre la des que l'on peut marcher dans le chunk) */
 		bool bEarly = false;
+		/** v4.15 : lot cache mais present dans la scene de Lumen logiciel (champs de distance, cartes), habille de Material ;
+		 *  hors du ray tracing (dalle de collision sous le plafond mince du kit) */
+		bool bLumenWhileHidden = false;
+		/** v4.15 : diffuseurs alimentes (bPowered) a la couleur d'une lampe de cette temperature (K) ; 0 : RGB d'origine */
+		float LightTemperatureK = 0.f;
 		TArray<FTransform> Transforms;
 		/** v4.8 : instances deja creees (sous-lots) */
 		int32 Cursor = 0;
@@ -256,6 +274,9 @@ protected:
 	};
 	TArray<FPendingDecal> PendingDecals;
 	int32 DecalCursor = 0;
+	/** v4.15 : empreinte et nombre des decalques planifies (GetDecalHash) */
+	uint32 DecalHash = 0;
+	int32 DecalTotal = 0;
 	/** v4.15 : cree le composant d'un decalque en attente (range dans Extra, detruit au demontage) */
 	void CreateDecal(const FPendingDecal& P);
 

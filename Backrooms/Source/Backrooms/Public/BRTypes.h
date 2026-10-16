@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BRColorLogic.h"
 
 /** Algorithme de generation de la grille d'un niveau */
 enum class EBRLayout : uint8
@@ -473,8 +474,12 @@ struct FBRLevelDef
 	 *  la temperature (la teinte rouge pres de la Bacteria reste rouge) */
 	float LightTemperatureK = 0.f;
 	/** Balance des blancs de la camera (K ; 6500 : neutre). Proche de la temperature des lampes : le papier peint garde sa
-	 *  couleur sans virer a l'orange */
+	 *  couleur sans virer a l'orange. Attention : a partir de 4000 K, le moteur prend le blanc sur le lieu du jour et non
+	 *  plus sur celui des lampes : une lampe y vire au rose ou a la peche, sauf WhiteTint (BRColorLogic.h, banc
+	 *  Tools/Light/test_color.cpp) */
 	float WhiteTempK = 6500.f;
+	/** Teinte de la balance des blancs (-1..1, 0 : aucune) : compense le rose d'une balance a 4000 K ou plus */
+	float WhiteTint = 0.f;
 	/** Adaptation de l'exposition (IL par seconde) vers le clair et vers le sombre */
 	float ExposureSpeedUp = 2.f;
 	float ExposureSpeedDown = 1.f;
@@ -489,20 +494,15 @@ struct FBRLevelDef
 	 *  et sous les passages, eraflures) : densite relative, 0 : aucun. Tires avec la graine (les memes chez tous les joueurs) */
 	float DecalDensity = 0.f;
 
-	/** v4.15 : couleur apparente des plafonniers a l'ecran (temperature vue a travers la balance des blancs, multipliee par
-	 *  LightColor, maximum 1) : apercus du menu, ou rien n'est rendu par le moteur */
+	/** v4.15 : couleur apparente des plafonniers a l'ecran (temperature multipliee par LightColor, vue a travers la balance
+	 *  des blancs du moteur : lieu de Planck sous 4000 K, lieu du jour au-dela, teinte, adaptation Bradford ; maximum 1) :
+	 *  apercus du menu, ou rien n'est rendu par le moteur */
 	FLinearColor ApparentLightColor() const
 	{
-		if (LightTemperatureK <= 0.f)
-		{
-			return LightColor;
-		}
-		const FLinearColor Lamp = FLinearColor::MakeFromColorTemperature(LightTemperatureK);
-		const FLinearColor WhiteRef = FLinearColor::MakeFromColorTemperature(FMath::Clamp(WhiteTempK, 1500.f, 15000.f));
-		const FLinearColor Seen(Lamp.R / FMath::Max(WhiteRef.R, 0.001f) * LightColor.R, Lamp.G / FMath::Max(WhiteRef.G, 0.001f) * LightColor.G,
-			Lamp.B / FMath::Max(WhiteRef.B, 0.001f) * LightColor.B, 1.f);
-		const float Peak = FMath::Max3(Seen.R, Seen.G, Seen.B);
-		return Peak > 0.001f ? FLinearColor(Seen.R / Peak, Seen.G / Peak, Seen.B / Peak, 1.f) : LightColor;
+		const float Tint[3] = { LightColor.R, LightColor.G, LightColor.B };
+		float Seen[3] = { 1.f, 1.f, 1.f };
+		BRColor::ApparentLamp(LightTemperatureK, Tint, FMath::Clamp(WhiteTempK, 1500.f, 15000.f), FMath::Clamp(WhiteTint, -1.f, 1.f), Seen);
+		return FLinearColor(Seen[0], Seen[1], Seen[2], 1.f);
 	}
 };
 

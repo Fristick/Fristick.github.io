@@ -34,7 +34,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkinnedMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "UObject/UObjectIterator.h"
 #include "DynamicRHI.h"
 #include "Engine/GameViewportClient.h"
 #include "HAL/IConsoleManager.h"
@@ -84,13 +86,17 @@ namespace
 	}
 #endif
 
-	/** v4.15 : profil choisi au premier lancement (-1 : aucun choix a annoncer) et carte qui l'a decide */
+	/** v4.15 : profil choisi au premier lancement (-1 : aucun choix a annoncer), carte qui l'a decide et sa memoire (Mo, 0 :
+	 *  inconnue) */
 	int32 GFirstRunProfile = -1;
 	FString GFirstRunGpu;
+	int32 GFirstRunVramMB = 0;
 
-	/** v4.15 : premier lancement (aucun profil enregistre) : RTX FLUIDE (TSR a 67 %, MegaLights a 2 echantillons) pour une
-	 *  carte de 8 Go de memoire video ou moins, ou une carte de portable ; Qualite sinon */
-	int32 FirstRunGraphicsProfile(FString& OutGpu)
+	/** v4.15 : premier lancement (aucun profil enregistre) : une carte de 8 Go de memoire video ou moins, ou une carte de
+	 *  portable, prend le profil leger qui lui convient : RTX FLUIDE (TSR a 67 %, MegaLights a 2 echantillons) avec le ray
+	 *  tracing materiel, PERFORMANCE sans lui (carte sans RT, Linux et macOS, graphique integre : RTX FLUIDE y retomberait
+	 *  sur Lumen logiciel en qualite Epique) ; Qualite sinon */
+	int32 FirstRunGraphicsProfile(FString& OutGpu, int32& OutVramMB)
 	{
 		FTextureMemoryStats Stats;
 		RHIGetTextureMemoryStats(Stats);
@@ -99,7 +105,13 @@ namespace
 		const bool bLaptop = Adapter.Contains(TEXT("Laptop")) || Adapter.Contains(TEXT("Mobile")) || Adapter.Contains(TEXT("Max-Q"));
 		// 8 Go annonces par le pilote : un peu moins ou un peu plus de 8192 Mo selon la carte
 		const bool bSmallVram = VramMB > 0.0 && VramMB <= 8704.0;
-		OutGpu = VramMB > 0.0 ? FString::Printf(TEXT("%s, %.0f Mo"), *Adapter, VramMB) : Adapter;
+		// Nom de la carte seul : l'unite de la memoire est dans le texte traduit (Menu.GpuVram)
+		OutGpu = Adapter;
+		OutVramMB = FMath::RoundToInt(VramMB);
+		if (!ABRPlayerController::IsHardwareRayTracingAvailable())
+		{
+			return (bLaptop || bSmallVram) ? 0 : 1;
+		}
 		return (bLaptop || bSmallVram) ? 4 : 1;
 	}
 
@@ -337,8 +349,12 @@ void ABRPlayerController::BeginPlay()
 		// (pas pendant un test automatique : les captures de l'interface restent comparables)
 		if (Chosen != 1 && FBRSettings::Get().GraphicsProfile == Chosen && !ABRAutoTest::IsRequested())
 		{
+			// v4.15 : la memoire de la carte avec l'unite de la langue (Mo, MB, \u041c\u0411...) ; le nom seul si elle est inconnue
+			const FString Gpu = GFirstRunVramMB > 0
+				? BRLoc::Fmt(NSLOCTEXT("BR", "Menu.GpuVram", "{Gpu}, {Vram} Mo"), { { TEXT("Gpu"), BRLoc::Arg(GFirstRunGpu) }, { TEXT("Vram"), FFormatArgumentValue(GFirstRunVramMB) } })
+				: GFirstRunGpu;
 			ABRHUD::Notify(this, BRLoc::Fmt(NSLOCTEXT("BR", "Menu.FirstRunProfile", "Premier lancement : profil graphique {Profile} choisi pour cette carte ({Gpu}). Il se change dans PARAM\u00c8TRES > GRAPHISMES."),
-				{ { TEXT("Profile"), BRLoc::Arg(ProfileNames(Chosen)) }, { TEXT("Gpu"), BRLoc::Arg(GFirstRunGpu) } }), 8.f, FLinearColor(1.f, 0.85f, 0.5f));
+				{ { TEXT("Profile"), BRLoc::Arg(ProfileNames(Chosen)) }, { TEXT("Gpu"), BRLoc::Arg(Gpu) } }), 8.f, FLinearColor(1.f, 0.85f, 0.5f));
 		}
 	}
 	if (BRDisplay::TakeRestoredAtStartup())
@@ -3682,15 +3698,27 @@ void ABRPlayerController::LoadSettings()
 	const bool bHadQuality = Cfg.GetInt(SettingsSection, TEXT("Quality"), S.Quality);
 	if (!Cfg.GetInt(SettingsSection, TEXT("GraphicsProfile"), S.GraphicsProfile))
 	{
-		// v4.15 : premier lancement : profil selon la carte (RTX FLUIDE pour 8 Go ou moins ou une carte de portable, sinon
-		// Qualite), annonce et enregistre une fois (BeginPlay)
-		FString Gpu;
-		S.GraphicsProfile = bHadQuality ? 3 : FirstRunGraphicsProfile(Gpu);
-		if (!bHadQuality)
+		// v4.15 : premier lancement : profil selon la carte (FirstRunGraphicsProfile), annonce et enregistre une fois (BeginPlay).
+		// Pendant un test automatique : Qualite, le defaut d'avant, jamais enregistre (les mesures restent comparables d'une
+		// version a l'autre, BackroomsPlayer.ini supprime ou non ; -BRProfile choisit un autre profil)
+		if (bHadQuality)
 		{
+			S.GraphicsProfile = 3;
+		}
+		else if (ABRAutoTest::IsRequested())
+		{
+			S.GraphicsProfile = 1;
+		}
+		else
+		{
+			FString Gpu;
+			int32 VramMB = 0;
+			S.GraphicsProfile = FirstRunGraphicsProfile(Gpu, VramMB);
 			GFirstRunProfile = S.GraphicsProfile;
 			GFirstRunGpu = Gpu;
-			UE_LOG(LogBackrooms, Log, TEXT("Premier lancement : profil graphique %d choisi pour %s"), S.GraphicsProfile, *Gpu);
+			GFirstRunVramMB = VramMB;
+			UE_LOG(LogBackrooms, Log, TEXT("Premier lancement : profil graphique %d choisi pour %s (%d Mo, ray tracing materiel %s)"), S.GraphicsProfile, *Gpu,
+				VramMB, IsHardwareRayTracingAvailable() ? TEXT("disponible") : TEXT("indisponible"));
 		}
 	}
 	Cfg.GetBool(SettingsSection, TEXT("RTShadows"), S.bRTShadows);
@@ -3798,6 +3826,50 @@ bool ABRPlayerController::IsHardwareRayTracingAvailable()
 	// Le ray tracing ne s'active qu'au demarrage, selon les capacites reelles : RHI (DirectX 12, Vulkan, Metal), carte et
 	// pilote, r.RayTracing de la configuration de la plateforme (Config/Linux, Config/Mac : desactive dans le profil de base)
 	return IsRayTracingEnabled();
+}
+
+bool ABRPlayerController::SkinnedMeshesInRayTracedReflections()
+{
+	// v4.15 : meme regle que ApplySettings : un maillage a squelette n'a pas de cache de surfaces ; dans un reflet ray trace il
+	// n'est eclaire que par le hit lighting (Cinematique) ou la relance des impacts (selon la version du moteur)
+	const FBRSettings& S = FBRSettings::Get();
+	const bool bRT = S.bHardwareRT && IsHardwareRayTracingAvailable();
+	const bool bHitLighting = bRT && S.bRTHitLighting;
+	const bool bRetrace = bRT && !bHitLighting && S.CreatureReflections == 1 && RetraceSupported();
+	return bHitLighting || bRetrace;
+}
+
+int32 ABRPlayerController::RefreshSkinnedReflections(UWorld* InWorld)
+{
+	// v4.15 : maillages a squelette deja crees (combinaisons, creatures) : visibles ou non dans les reflets ray traces ; les
+	// nouveaux prennent la regle a leur creation (ApplySkinnedReflections). Les ombres ray tracees (MegaLights, lampe) et
+	// les traces d'ecran des reflets ne dependent pas de ce drapeau
+	if (!InWorld)
+	{
+		return 0;
+	}
+	const bool bWant = SkinnedMeshesInRayTracedReflections();
+	int32 Changed = 0;
+	for (TObjectIterator<USkinnedMeshComponent> It; It; ++It)
+	{
+		USkinnedMeshComponent* Skin = *It;
+		if (!IsValid(Skin) || Skin->GetWorld() != InWorld || Skin->IsTemplate() || static_cast<bool>(Skin->bVisibleInReflections) == bWant)
+		{
+			continue;
+		}
+		Skin->bVisibleInReflections = bWant;
+		Skin->MarkRenderStateDirty();
+		++Changed;
+	}
+	return Changed;
+}
+
+void ABRPlayerController::ApplySkinnedReflections(USkinnedMeshComponent* Skin)
+{
+	if (Skin)
+	{
+		Skin->bVisibleInReflections = SkinnedMeshesInRayTracedReflections();
+	}
 }
 
 FString ABRPlayerController::GetRenderModeText(bool bShort) const
@@ -3968,7 +4040,12 @@ void ABRPlayerController::ApplySettings()
 	{
 		Retrace->Set(bRetrace ? 1 : 0, ECVF_SetByGameSetting);
 	}
-	Cmd(FString::Printf(TEXT("r.RayTracing.Geometry.SkeletalMeshes %d"), (bHitLighting || (S.bRTShadows && bRT) || bRetrace) ? 1 : 0));
+	// v4.15 : OMBRES DE TOUTES LES LAMPES (MegaLights) : les ombres des plafonniers sont tracees dans la scene ray tracee
+	// (r.MegaLights.DefaultShadowMethod 0) ; sans les maillages a squelette, coequipiers et creatures n'auraient d'ombre
+	// d'aucune lampe. Ils y restent alors pour les ombres seulement : hors des reflets ray traces sans hit lighting
+	// (SkinnedMeshesInRayTracedReflections), ou ils seraient noirs (compromis v4.8 garde : reflets pris a l'ecran)
+	Cmd(FString::Printf(TEXT("r.RayTracing.Geometry.SkeletalMeshes %d"), (bHitLighting || (S.bRTShadows && bRT) || bRetrace || ABRWorld::IsMegaLightsActive()) ? 1 : 0));
+	RefreshSkinnedReflections(W);
 	// v4.8 : TSR : historique a 100 % (au lieu de 200 % en qualite Cinematique) hors profil Cinematique : a 1440p et
 	// au-dela, c'est l'un des postes les plus chers du TSR, pour un gain de nettete faible
 	Cmd(FString::Printf(TEXT("r.TSR.History.ScreenPercentage %d"), S.GraphicsProfile == 2 ? 200 : 100));

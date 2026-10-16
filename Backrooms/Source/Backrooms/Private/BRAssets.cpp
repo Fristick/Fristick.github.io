@@ -1915,6 +1915,20 @@ FLinearColor UBRAssets::GlowColorForSlot(const FString& SlotName)
 	return FLinearColor(1.f, 0.96f, 0.86f) * 120.f;
 }
 
+FLinearColor UBRAssets::TemperatureGlow(const FLinearColor& Glow, float Kelvin)
+{
+	// v4.15 : normalise par la luminance (avant : par le canal le plus fort, un diffuseur chaud perdait 30 % de son eclat
+	// au Level 0 alors que la lumiere de la lampe garde le sien)
+	const FLinearColor Lamp = FLinearColor::MakeFromColorTemperature(Kelvin);
+	const float LampLuma = Lamp.GetLuminance();
+	if (Kelvin <= 0.f || LampLuma <= 1e-3f)
+	{
+		return Glow;
+	}
+	const float K = Glow.GetLuminance() / LampLuma;
+	return FLinearColor(Lamp.R * K, Lamp.G * K, Lamp.B * K, 1.f);
+}
+
 bool UBRAssets::IsSkinSlot(const FString& SlotName)
 {
 	return SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase) || SlotName.Contains(TEXT("Flesh"), ESearchCase::IgnoreCase)
@@ -2027,7 +2041,7 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 }
 
 void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColor>* TintOverrides, bool bUniqueGlow,
-	TArray<UMaterialInstanceDynamic*>* OutGlow, float GlowScale, bool bPowered)
+	TArray<UMaterialInstanceDynamic*>* OutGlow, float GlowScale, bool bPowered, float LightTemperatureK)
 {
 	if (!Comp)
 	{
@@ -2044,16 +2058,24 @@ void UBRAssets::ApplySlots(UMeshComponent* Comp, const TMap<FString, FLinearColo
 			Slot = FString::Printf(TEXT("Slot%d"), i);
 			ReportMaterialProblem(FString::Printf(TEXT("%s : slot %d sans nom (materiau neutre)"), *GetNameSafe(Comp), i));
 		}
-		const FLinearColor Glow = GlowColorForSlot(Slot);
+		FLinearColor Glow = GlowColorForSlot(Slot);
 		UMaterialInterface* Mat = nullptr;
 		// Les panneaux de sortie (vert), voyants (rouge) et fenetres ne dependent pas du secteur
 		const bool bMains = bPowered && !Glow.IsAlmostBlack() && !Slot.Contains(TEXT("GlowGreen"), ESearchCase::IgnoreCase)
 			&& !Slot.Contains(TEXT("GlowRed"), ESearchCase::IgnoreCase) && !Slot.Contains(TEXT("GlowWindow"), ESearchCase::IgnoreCase);
+		// v4.15 : diffuseurs groupes des plafonniers : la couleur de leur lampe (temperature du niveau), comme les diffuseurs
+		// individuels (ABRChunk::AddLight) ; avant, ils gardaient le RGB d'origine pendant que leur lumiere changeait
+		const bool bLampTint = bMains && LightTemperatureK > 0.f;
+		if (bLampTint)
+		{
+			Glow = TemperatureGlow(Glow, LightTemperatureK);
+		}
 
 		if (bMains && !bUniqueGlow)
 		{
-			// Materiau partage par tous les neons d'un meme type, eteint pendant les coupures
-			const FString Key = FString::Printf(TEXT("P|%s|%.2f"), *Slot, GlowScale);
+			// Materiau partage par tous les neons d'un meme type (et d'une meme temperature), eteint pendant les coupures
+			const FString Key = bLampTint ? FString::Printf(TEXT("P|%s|%.2f|%.0f"), *Slot, GlowScale, LightTemperatureK)
+				: FString::Printf(TEXT("P|%s|%.2f"), *Slot, GlowScale);
 			if (TObjectPtr<UMaterialInterface>* Found = MatCache.Find(Key))
 			{
 				Mat = Found->Get();

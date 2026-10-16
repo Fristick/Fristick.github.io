@@ -38,15 +38,6 @@ namespace
 		return FMath::RadiansToDegrees(FMath::Atan2(DY, DX));
 	}
 
-	/** v4.15 : couleur emissive d'un diffuseur eclaire par une lampe de Kelvin K (meme eclat que Glow) */
-	FLinearColor TemperatureGlow(const FLinearColor& Glow, float Kelvin)
-	{
-		const float Strength = FMath::Max3(Glow.R, Glow.G, Glow.B);
-		const FLinearColor Lamp = FLinearColor::MakeFromColorTemperature(Kelvin);
-		const float Peak = FMath::Max3(Lamp.R, Lamp.G, Lamp.B);
-		return Peak > 0.001f ? FLinearColor(Lamp.R / Peak * Strength, Lamp.G / Peak * Strength, Lamp.B / Peak * Strength, 1.f) : Glow;
-	}
-
 	/** v4.15 : demi-longueur d'un plafonnier (cm), pour poser une tache de plafond a cote de lui */
 	float FixtureHalfLength(EBRFixture Fixture)
 	{
@@ -190,9 +181,14 @@ bool ABRChunk::AddKitCellSlabs(bool bCeiling)
 			B.Transforms.Add(FTransform(FVector(WX0 + (I + 0.5f) * S, WY0 + (J + 0.5f) * S, 0.f) - GetActorLocation()));
 		}
 	}
-	// Collision : la meme dalle de 20 cm qu'avant, cachee (un corps physique par chunk au lieu d'un par cellule)
-	FBatch& CB = GetBatch(TEXT("COLLISION"), A->Cube(), nullptr, true, false, 0.f);
+	// Collision : la meme dalle de 20 cm qu'avant, cachee (un corps physique par chunk au lieu d'un par cellule).
+	// v4.15 : plafond : le module du kit n'a que 5 cm d'epaisseur, trop mince pour les champs de distance de Lumen logiciel
+	// (Performance, Linux, macOS : rayons qui traversent, rebond du plafond affaibli). La dalle cachee y reste donc presente
+	// (eclairage indirect meme cachee), habillee de la meme surface ; hors du ray tracing materiel, qui voit le module lui-meme
+	FBatch& CB = bCeiling ? GetBatch(TEXT("COLLISION|KITCEILING|") + Surf.Key(), A->Cube(), Mat, true, false, 0.f)
+		: GetBatch(TEXT("COLLISION"), A->Cube(), nullptr, true, false, 0.f);
 	CB.bHidden = true;
+	CB.bLumenWhileHidden = bCeiling;
 	const float ZC = bCeiling ? D.WallHeight + 10.f : -10.f;
 	CB.Transforms.Add(FTransform(FQuat::Identity, FVector(WX0 + ChunkW * 0.5f, WY0 + ChunkW * 0.5f, ZC) - GetActorLocation(),
 		FVector(ChunkW, ChunkW, 20.f) / 100.f));
@@ -1106,8 +1102,42 @@ void ABRChunk::BuildFogVolumes()
 // ---------------------------------------------------------------------------------------------------------------------
 // v4.15 : decalques d'usure (rendu seulement ; tires avec la graine du niveau : memes positions chez l'hote et les clients)
 // Sels BRHash : 7410-7417 murs (aureoles, eraflures), 7420-7424 moquette humide au pied des murs, 7430-7435 eraflures des
-// passages, 7440-7443 seuils humides, 7450-7453 taches de plafond. Aucun autre tirage ne les utilise.
+// passages, 7440-7443 seuils humides, 7450-7453 taches de plafond ; 7460 tubes en fin de vie (AddLight). Aucun autre tirage
+// ne les utilise.
 // ---------------------------------------------------------------------------------------------------------------------
+
+bool ABRChunk::CeilingStainAt(const ABRWorld* W, int32 X, int32 Y, FVector& OutPos, float& OutRadius, float& OutSpin)
+{
+	if (!W)
+	{
+		return false;
+	}
+	const FBRLevelDef& D = W->Def();
+	const float K = D.DecalDensity;
+	const FIntPoint Cell(X, Y);
+	if (K <= 0.f || D.bOutdoor || !(D.Layout == EBRLayout::Rooms || D.Layout == EBRLayout::Maze) || !W->IsWalkable(Cell) || W->IsPitRoomCell(X, Y)
+		|| W->IsPoolCell(X, Y))
+	{
+		return false;
+	}
+	// Tache d'eau au plafond a cote d'un plafonnier (plus souvent a cote d'un plafonnier mort : l'eau l'a tue)
+	const uint32 Seed = W->GetSeed();
+	const FBRLightInfo L = W->CellLight(X, Y);
+	if (!L.bHas || BRHash::Rand(X, Y, 7450, Seed) >= (L.bBroken ? 0.35f : 0.22f) * K)
+	{
+		return false;
+	}
+	const float S = D.CellSize;
+	const float Rad = 35.f + 30.f * BRHash::Rand(X, Y, 7451, Seed);
+	const float Ang = BRHash::Rand(X, Y, 7452, Seed) * 2.f * PI;
+	const float Dist = FixtureHalfLength(D.Fixture) * 0.6f + Rad * 0.7f;
+	const float Lim = FMath::Max(0.f, S * 0.5f - D.WallThickness * 0.5f - Rad * 0.5f);
+	OutPos = W->CellCenter(Cell) + FVector(FMath::Clamp(static_cast<float>(L.Offset.X) + FMath::Cos(Ang) * Dist, -Lim, Lim),
+		FMath::Clamp(static_cast<float>(L.Offset.Y) + FMath::Sin(Ang) * Dist, -Lim, Lim), D.WallHeight + 2.f);
+	OutRadius = Rad;
+	OutSpin = BRHash::Rand(X, Y, 7453, Seed) * 2.f * PI;
+	return true;
+}
 
 void ABRChunk::BuildDecals()
 {
@@ -1210,13 +1240,19 @@ void ABRChunk::BuildDecals()
 						AddDecal(EBRDecal::Scuff, Face + Along * Off + FVector(0.f, 0.f, 6.f + Ht * 0.5f + 16.f * R(7417)), Out, Down,
 							FVector(5.f, Ht * 0.5f, Wd * 0.5f), 1);
 					}
-					if (R(7420) < 0.05f * K)
+					if (!bQuiet && R(7420) < 0.05f * K)
 					{
-						// Sol humide au pied du mur : le plan est centre sur la face, sa moitie est cachee dans le mur
+						// Sol humide au pied du mur : une partie du plan passe sous le mur (le bord se perd sous la plinthe).
+						// v4.15 : cette partie reste dans l'epaisseur du mur, lacet compris (5 cm de marge) : avant, le plan
+						// le plus large depassait jusqu'a 15 cm sur la moquette de la piece d'a cote. Le reste avance dans la piece
 						const float Len = FMath::Min(100.f + 120.f * R(7421), Span + 20.f);
 						const float Wid = 60.f + 60.f * R(7422);
 						const float Off = (R(7423) - 0.5f) * FMath::Max(0.f, Span + 20.f - Len);
-						AddPatch(Face + Along * Off, AlongYaw + (R(7424) - 0.5f) * 16.f, Len, Wid);
+						constexpr float MaxJitter = 8.f;
+						const float Behind = bSolid ? S : T; // matiere derriere la face
+						const float MaxIn = FMath::Max(0.f, Behind - 0.5f * Len * FMath::Sin(FMath::DegreesToRadians(MaxJitter)) - 5.f);
+						const float In = FMath::Min(0.5f * Wid, MaxIn);
+						AddPatch(Face + Along * Off - Out * (0.5f * Wid - In), AlongYaw + (R(7424) - 0.5f) * 2.f * MaxJitter, Len, Wid);
 					}
 				}
 				else if (Edge == EBREdge::Door && !bSolid)
@@ -1238,25 +1274,52 @@ void ABRChunk::BuildDecals()
 					}
 				}
 			}
-			// Tache d'eau au plafond a cote d'un plafonnier (plus souvent a cote d'un plafonnier mort : l'eau l'a tue)
-			const FBRLightInfo L = W->CellLight(X, Y);
-			if (L.bHas && BRHash::Rand(X, Y, 7450, Seed) < (L.bBroken ? 0.35f : 0.22f) * K)
+			// Tache d'eau au plafond a cote d'un plafonnier (CeilingStainAt : la meme regle sert au banc visuel)
+			FVector P = FVector::ZeroVector;
+			float Rad = 0.f;
+			float Spin = 0.f;
+			if (CeilingStainAt(W, X, Y, P, Rad, Spin))
 			{
-				const float Rad = 35.f + 30.f * BRHash::Rand(X, Y, 7451, Seed);
-				const float Ang = BRHash::Rand(X, Y, 7452, Seed) * 2.f * PI;
-				const float Dist = FixtureHalfLength(D.Fixture) * 0.6f + Rad * 0.7f;
-				const float Lim = FMath::Max(0.f, S * 0.5f - T * 0.5f - Rad * 0.5f);
-				const FVector P = Center + FVector(FMath::Clamp(static_cast<float>(L.Offset.X) + FMath::Cos(Ang) * Dist, -Lim, Lim),
-					FMath::Clamp(static_cast<float>(L.Offset.Y) + FMath::Sin(Ang) * Dist, -Lim, Lim), H + 2.f);
 				const bool bHatch = bShaftHole && P.X > ShaftMin.X - Rad && P.X < ShaftMax.X + Rad && P.Y > ShaftMin.Y - Rad && P.Y < ShaftMax.Y + Rad;
 				if (!bHatch)
 				{
 					// Boite de H - 1 a H + 5 cm : le plafond seulement (le dessous du luminaire, 3,5 cm plus bas, n'est pas touche)
-					const float Spin = BRHash::Rand(X, Y, 7453, Seed) * 2.f * PI;
 					AddDecal(EBRDecal::CeilingStain, P, FVector(0.f, 0.f, 1.f), FVector(FMath::Cos(Spin), FMath::Sin(Spin), 0.f), FVector(3.f, Rad, Rad), 0);
 				}
 			}
 		}
+	}
+	// v4.15 : empreinte des decalques du chunk (sortes, positions et rotations au centimetre et au degre pres, taches au
+	// sol) : le test reseau la compare entre l'hote et les clients (ABRWorld::DecalChecksumText)
+	{
+		uint32 Hash = 0x2545F491u;
+		auto Feed = [&Hash](int32 Value)
+		{
+			Hash = BRHash::Mix(Hash ^ (static_cast<uint32>(Value) + 0x9E3779B9u + (Hash << 6) + (Hash >> 2)));
+		};
+		for (const FPendingDecal& PD : PendingDecals)
+		{
+			Feed(static_cast<int32>(PD.Kind));
+			Feed(FMath::RoundToInt(PD.Pos.X));
+			Feed(FMath::RoundToInt(PD.Pos.Y));
+			Feed(FMath::RoundToInt(PD.Pos.Z));
+			Feed(FMath::RoundToInt(PD.Rot.Pitch));
+			Feed(FMath::RoundToInt(PD.Rot.Yaw));
+			Feed(FMath::RoundToInt(PD.Rot.Roll));
+			Feed(FMath::RoundToInt(PD.HalfSize.Y));
+			Feed(FMath::RoundToInt(PD.HalfSize.Z));
+		}
+		for (const FTransform& Tr : FloorPatches)
+		{
+			const FVector At = Tr.GetLocation() + GetActorLocation();
+			Feed(FMath::RoundToInt(At.X));
+			Feed(FMath::RoundToInt(At.Y));
+			Feed(FMath::RoundToInt(Tr.Rotator().Yaw));
+			Feed(FMath::RoundToInt(Tr.GetScale3D().X * 100.f));
+			Feed(FMath::RoundToInt(Tr.GetScale3D().Y * 100.f));
+		}
+		DecalHash = Hash;
+		DecalTotal = PendingDecals.Num() + FloorPatches.Num();
 	}
 	UMaterialInterface* DampMat = A->DecalMaterial(EBRDecal::Damp);
 	if (FloorPatches.Num() > 0 && DampMat && A->Plane())
@@ -1510,11 +1573,11 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		Comp->SetCastShadow(bFixtureShadow);
 		FBRFlicker F;
 		F.GlowColor = UBRAssets::GlowColorForSlot(bWarm ? TEXT("GlowWarm") : TEXT("Glow"));
-		// v4.15 : le diffuseur prend la couleur de sa lampe (temperature), avec le meme eclat ; la balance des blancs de la
-		// camera s'applique a l'un comme a l'autre
+		// v4.15 : le diffuseur prend la couleur de sa lampe (temperature), avec la meme luminance ; la balance des blancs de
+		// la camera s'applique a l'un comme a l'autre
 		if (D.LightTemperatureK > 0.f)
 		{
-			F.GlowColor = TemperatureGlow(F.GlowColor, D.LightTemperatureK);
+			F.GlowColor = UBRAssets::TemperatureGlow(F.GlowColor, D.LightTemperatureK);
 		}
 		if (Mesh)
 		{
@@ -1549,6 +1612,8 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		FBatch& B = GetBatch(Key, Mesh, nullptr, false, bFixtureShadow, 0.f);
 		B.GlowScale = L.bBroken ? 0.f : 1.f;
 		B.bPowered = !L.bBroken;
+		// v4.15 : diffuseurs groupes : meme couleur que leur lumiere (et que les diffuseurs individuels du niveau)
+		B.LightTemperatureK = D.LightTemperatureK;
 		B.Transforms.Add(Local);
 	}
 	else
@@ -1557,6 +1622,10 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		if (!L.bBroken)
 		{
 			Fb.Emissive = UBRAssets::GlowColorForSlot(bWarm ? TEXT("GlowWarm") : TEXT("Glow"));
+			if (D.LightTemperatureK > 0.f)
+			{
+				Fb.Emissive = UBRAssets::TemperatureGlow(Fb.Emissive, D.LightTemperatureK);
+			}
 		}
 		FBatch& B = GetBatch(TEXT("FIXTUREBOX|") + Fb.Key(), A->Cube(), A->Surface(Fb), false, false, 0.f);
 		B.Transforms.Add(FTransform(FQuat::Identity, FVector(0.f, 0.f, FallbackZ + FallbackSize.Z * 0.5f), FallbackSize / 100.f) * Local);
@@ -1594,9 +1663,11 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		FBRFlicker& F = Flickers[R.FlickerIndex];
 		F.Light = LC;
 		F.BaseIntensity = R.Lumens;
-		// v4.15 : tube qui clignote : premiere defaillance a son propre instant ; un sur quatre en fin de vie (cosmetique)
+		// v4.15 : tube qui clignote : premiere defaillance a son propre instant (cosmetique, local) ; un sur quatre en fin de
+		// vie, tire avec la graine (sel 7460) : un aspect durable de la lampe, le meme chez tous les joueurs et a chaque
+		// reconstruction du chunk
 		auto Rand = []() { return FMath::FRand(); };
-		BRFluo::Init(F.Tube, FMath::FRand() < BRFluo::DyingShare, Rand);
+		BRFluo::Init(F.Tube, BRHash::Rand(X, Y, 7460, W->GetSeed()) < BRFluo::DyingShare, Rand);
 	}
 	LightRecords.Add(R);
 }
@@ -1745,9 +1816,45 @@ float ABRChunk::LightScatter(const FLightRecord& R, bool bMega) const
 		return 0.f;
 	}
 	// v4.15 : avec MegaLights, le brouillard volumetrique est eclaire par echantillons (historique d'une image a l'autre) :
-	// un neon qui clignote y laissait des trainees ; il n'eclaire plus le brouillard
+	// un neon qui clignote y laissait des trainees ; il n'eclaire plus le brouillard. De meme pour toutes les lampes tant que
+	// le courant vacille (debut et fin d'une coupure) et pendant leur rallumage decale
 	const bool bFlickers = Flickers.IsValidIndex(R.FlickerIndex) && Flickers[R.FlickerIndex].bFlickers;
-	return (bMega && bFlickers) ? 0.f : W->Def().VolumetricScatter;
+	const bool bUnsteady = bRestriking || W->IsPowerFlickering();
+	return (bMega && (bFlickers || bUnsteady)) ? 0.f : W->Def().VolumetricScatter;
+}
+
+void ABRChunk::RefreshLightScatter()
+{
+	for (const FLightRecord& R : LightRecords)
+	{
+		if (ULocalLightComponent* LC = R.Comp.Get())
+		{
+			const float Scatter = LightScatter(R, R.bMega);
+			if (!FMath::IsNearlyEqual(LC->VolumetricScatteringIntensity, Scatter))
+			{
+				LC->SetVolumetricScatteringIntensity(Scatter);
+			}
+		}
+	}
+}
+
+bool ABRChunk::MegaLightsMatch(bool bOn) const
+{
+	// v4.15 : lumieres deja creees reglees pour l'etat demande (OnGraphicsSettingsChanged -> ApplyMegaLights) : ombre
+	// toujours projetee avec MegaLights, sinon celle du tirage et de la distance (UpdateShadowLOD)
+	for (const FLightRecord& R : LightRecords)
+	{
+		const ULocalLightComponent* LC = R.Comp.Get();
+		if (!LC)
+		{
+			continue;
+		}
+		if (R.bMega != bOn || LC->CastShadows != (bOn || (R.bShadow && R.bShadowOn)))
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 int32 ABRChunk::ApplyMegaLights(bool bOn)
@@ -1849,6 +1956,8 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 	bHasPitRoom = InWorld->GetPitRoom(Coord, PitRoom);
 	PendingDecals.Reset();
 	DecalCursor = 0;
+	DecalHash = 0;
+	DecalTotal = 0;
 }
 
 bool ABRChunk::StepPlan()
@@ -3408,6 +3517,13 @@ int32 ABRChunk::CreateBatchStep(const FString& Key, int32 MaxInstances)
 		ISM->SetVisibility(false);
 		ISM->SetHiddenInGame(true);
 	}
+	if (B.bLumenWhileHidden)
+	{
+		// v4.15 : cachee mais dans la scene de Lumen logiciel (champs de distance, cartes) ; jamais dans le ray tracing
+		ISM->bAffectIndirectLightingWhileHidden = true;
+		ISM->bAffectDistanceFieldLighting = true;
+		ISM->bVisibleInRayTracing = false;
+	}
 	if (B.CullDistance > 0.f)
 	{
 		ISM->SetCullDistances(FMath::RoundToInt(B.CullDistance * 0.8f), FMath::RoundToInt(B.CullDistance));
@@ -3415,7 +3531,7 @@ int32 ABRChunk::CreateBatchStep(const FString& Key, int32 MaxInstances)
 	TArray<FTransform> Part;
 	Part.Append(B.Transforms.GetData() + First, Count);
 	ISM->AddInstances(Part, false);
-	if (!B.bHidden && !B.bMeshMaterials)
+	if ((!B.bHidden || (B.bLumenWhileHidden && B.Material)) && !B.bMeshMaterials)
 	{
 		if (B.Material)
 		{
@@ -3426,7 +3542,8 @@ int32 ABRChunk::CreateBatchStep(const FString& Key, int32 MaxInstances)
 		}
 		else
 		{
-			A->ApplySlots(ISM, nullptr, false, nullptr, B.GlowScale, B.bPowered);
+			// v4.15 : diffuseurs groupes a la temperature des lampes du niveau
+			A->ApplySlots(ISM, nullptr, false, nullptr, B.GlowScale, B.bPowered, B.LightTemperatureK);
 		}
 	}
 	ISM->RegisterComponent();
@@ -3548,6 +3665,8 @@ void ABRChunk::Tick(float DeltaSeconds)
 		if (!bStillRestriking)
 		{
 			bRestriking = false;
+			// v4.15 : les lampes de nouveau stables eclairent de nouveau le brouillard (MegaLights)
+			RefreshLightScatter();
 			SetActorTickEnabled(WantsTick() && !bTearingDown);
 		}
 	}
@@ -3596,6 +3715,8 @@ void ABRChunk::BeginRestrike()
 	bRestriking = Flickers.Num() > 0 || PoweredLights.Num() > 0;
 	if (bRestriking)
 	{
+		// v4.15 : pendant le rallumage, pas de diffusion dans le brouillard avec MegaLights (trainees)
+		RefreshLightScatter();
 		SetActorTickEnabled(true);
 	}
 }

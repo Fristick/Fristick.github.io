@@ -1,4 +1,4 @@
-// Genere par Tools/Localization/loc_extract.py : ne pas modifier a la main (1196 cles du namespace BR)
+// Genere par Tools/Localization/loc_extract.py : ne pas modifier a la main (1197 cles du namespace BR)
 TEXT("Assets.WrongScale"),
 TEXT("Caption.Ahead"),
 TEXT("Caption.Bacteria"),
@@ -608,6 +608,7 @@ TEXT("Menu.FirstRunProfile"),
 TEXT("Menu.FlashsClignotements"),
 TEXT("Menu.FlouMouvement"),
 TEXT("Menu.FlouMouvementsRapidesCameraDesactive"),
+TEXT("Menu.GpuVram"),
 TEXT("Menu.GrainImage"),
 TEXT("Menu.HalosLumiereAirHumide"),
 TEXT("Menu.Heberger"),

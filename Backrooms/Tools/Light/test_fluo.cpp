@@ -46,6 +46,7 @@ namespace
 		float MaxOut = 0.f;                         // plus longue phase eteinte
 		float MinLit = 2.f, MaxLit = 0.f;           // eclat du tube allume (hors amorcage)
 		float MinDark = 2.f, MaxDark = 0.f;         // eclat du tube eteint
+		float MinPhase = 1e9f;                      // v4.15 : plus courte phase (allumee ou eteinte), hors debut de vie
 	};
 
 	FTubeStats Simulate(bool bDying, float FS, float Seconds)
@@ -77,6 +78,10 @@ namespace
 			if (T.bLit != bWasLit)
 			{
 				// Fin d'une phase : sa duree
+				if (S.Sequences > 0 && !(bWasLit && S.Sequences == 1 && PrevState == BRFluo::FTube::EState::Steady))
+				{
+					S.MinPhase = PhaseTime < S.MinPhase ? PhaseTime : S.MinPhase;
+				}
 				const bool bStrikePhase = PrevState == BRFluo::FTube::EState::Strike || T.State == BRFluo::FTube::EState::Strike;
 				if (bWasLit)
 				{
@@ -164,6 +169,15 @@ int main()
 		Soft.MaxOff * 1000.f, Soft.MaxDark, (Soft.MaxLit - Soft.MinLit) * 50.f);
 	Line("flashs attenues : creux moins profond (eclat eteint au-dessus de 0,5)", Soft.MinDark > 0.5f);
 	Line("flashs attenues : clignements plus lents (au moins 2,5 fois)", Soft.MinOff >= BRFluo::BlinkMin * 2.5f);
+	// v4.15 : 3 clignements par seconde au plus (chaque demi-clignement dure au moins 0,17 s)
+	std::snprintf(Buf, sizeof(Buf), "flashs attenues : demi-clignements de %.0f ms au moins (eteint %.0f-%.0f, allume %.0f-%.0f) : 3 par seconde au plus",
+		Soft.MinPhase * 1000.f, Soft.MinOff * 1000.f, Soft.MaxOff * 1000.f, Soft.MinOn * 1000.f, Soft.MaxOn * 1000.f);
+	Line(Buf, Soft.MinPhase >= BRFluo::SoftHalfBlinkMin - Slack && Soft.MinPhase * 2.f >= 1.f / 3.f - Slack);
+	{
+		const FTubeStats SoftDying = Simulate(true, 0.35f, Hours);
+		std::snprintf(Buf, sizeof(Buf), "flashs attenues, tube en fin de vie : demi-clignements de %.0f ms au moins", SoftDying.MinPhase * 1000.f);
+		Line(Buf, SoftDying.MinPhase >= BRFluo::SoftHalfBlinkMin - Slack);
+	}
 	const FTubeStats None = Simulate(false, 0.f, 600.f);
 	std::snprintf(Buf, sizeof(Buf), "aucun flash : eclat constant (%.3f-%.3f), aucune extinction ni bruit (%d)", None.MinLit, None.MaxLit, None.OffEvents);
 	Line(Buf, None.OffEvents == 0 && None.Blinks == 0 && std::fabs(None.MaxLit - None.MinLit) < 1e-6f);
@@ -204,6 +218,30 @@ int main()
 		Line("retard propre a chaque lampe : 0,9 s au plus", MaxDelay <= BRFluo::RestrikeDelayMax + Slack);
 		Line("1 a 3 clignements avant de rester allumee", MinBlinks >= BRFluo::RestrikeBlinksMin && MaxBlinks <= BRFluo::RestrikeBlinksMax);
 		Line("rallumage complet en moins de 1,6 s (la phase de retour du courant dure 1,4 s)", MaxTotal < 1.6f);
+		// v4.15 : flashs attenues : retard propre a chaque lampe, puis allumee, sans clignement
+		int SoftMaxOns = 0, SoftUnfinished = 0;
+		float SoftMaxTotal = 0.f;
+		bool bSoftLevels = true;
+		for (int L = 0; L < Lamps; ++L)
+		{
+			BRFluo::FRestrike R;
+			BRFluo::BeginRestrike(R, 0.35f, Rand);
+			float Time = 0.f;
+			int Ons = 0;
+			while (R.bActive && Time < 5.f)
+			{
+				bool bOn = false;
+				const float Mul = BRFluo::StepRestrike(R, 0.001f, 0.35f, Rand, bOn);
+				Ons += bOn ? 1 : 0;
+				bSoftLevels = bSoftLevels && (std::fabs(Mul - 1.f) < 1e-6f || std::fabs(Mul - 0.65f) < 1e-6f);
+				Time += 0.001f;
+			}
+			SoftUnfinished += R.bActive ? 1 : 0;
+			SoftMaxOns = Ons > SoftMaxOns ? Ons : SoftMaxOns;
+			SoftMaxTotal = Time > SoftMaxTotal ? Time : SoftMaxTotal;
+		}
+		std::snprintf(Buf, sizeof(Buf), "flashs attenues : rallumage sans clignement (%d allumage(s) au plus, termine en %.2f s au plus)", SoftMaxOns, SoftMaxTotal);
+		Line(Buf, SoftUnfinished == 0 && SoftMaxOns <= 1 && bSoftLevels && SoftMaxTotal < 1.6f);
 		BRFluo::FRestrike Off;
 		BRFluo::BeginRestrike(Off, 0.f, Rand);
 		bool bOn = false;

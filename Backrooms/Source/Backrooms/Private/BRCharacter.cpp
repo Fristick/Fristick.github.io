@@ -736,8 +736,10 @@ void ABRCharacter::ApplyLamp(uint8 Lamp)
 	Flashlight->SetRelativeLocation(FlashBase);
 	Flashlight->SetInnerConeAngle(Inner[I]);
 	Flashlight->SetOuterConeAngle(Outer[I]);
-	// v4.15 : faisceau d'une vraie lampe (profil IES : point chaud, anneau du reflecteur, halo ; frontale plus large) ;
-	// l'intensite reste celle de la lampe. Sans le profil importe : le cone simple d'avant
+	// v4.15 : faisceau d'une vraie lampe (profil IES : plateau du reflecteur, anneau, halo ; frontale plus large). L'intensite
+	// de la lampe vaut au maximum du profil, qui retire donc un peu de lumiere au cone : au moins 70 % de celle du cone seul
+	// (60 % a la ceinture, cone plus large), 0,8 de l'intensite jusqu'a 12,5 degres (Tools/generate_ies.py --check). Sans le
+	// profil importe : le cone simple d'avant
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
 		Flashlight->SetIESTexture(A->LightProfile(I == 2 ? FName(TEXT("IES_Headlamp")) : FName(TEXT("IES_Flashlight"))));
@@ -3494,6 +3496,8 @@ void ABRCharacter::BuildBody()
 		BodySkin->SetSkinnedAssetAndUpdate(Skin);
 		BodySkin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		BodySkin->SetCastShadow(true);
+		// v4.15 : dans les ombres ray tracees (MegaLights), hors des reflets ray traces sans hit lighting
+		ABRPlayerController::ApplySkinnedReflections(BodySkin);
 		BodySkin->RegisterComponent();
 		// v4.8 : slots de la combinaison affectes explicitement par leur nom : combinaison -> T_Hazmat_Suit, masque ->
 		// T_Hazmat_Mask, visiere -> son propre materiau. Un slot inattendu est signale (materiau d'erreur), il n'est plus

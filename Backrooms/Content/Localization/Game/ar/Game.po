@@ -14,8 +14,8 @@ msgstr ""
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
 
 #. Key:	Assets.WrongScale
-#. SourceLocation:	Source/Backrooms/Private/BRAssets.cpp(1781)
-#: Source/Backrooms/Private/BRAssets.cpp(1781)
+#. SourceLocation:	Source/Backrooms/Private/BRAssets.cpp(1861)
+#: Source/Backrooms/Private/BRAssets.cpp(1861)
 #, fuzzy
 msgctxt "BR,Assets.WrongScale"
 msgid "Modèles 3D importés à la mauvaise échelle ({Mesh} : {Size} cm au lieu de {Expected}) : ils sont invisibles. Relancez l'import : Fenêtre > Journal de sortie > Python : import backrooms_setup; backrooms_setup.run(force=True)"
@@ -446,64 +446,64 @@ msgid "Vous êtes caché : les entités ne vous voient plus. Restez immobile et 
 msgstr "أنت مختبئ: لم تعد الكيانات تراك. ابقَ ساكنًا وانتظر حتى تبتعد."
 
 #. Key:	Player.Vue3ePersonne
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(3591)
-#: Source/Backrooms/Private/BRCharacter.cpp(3591)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(3593)
+#: Source/Backrooms/Private/BRCharacter.cpp(3593)
 #, fuzzy
 msgctxt "BR,Player.Vue3ePersonne"
 msgid "Vue à la 3e personne"
 msgstr "منظور الشخص الثالث"
 
 #. Key:	Player.Vue1rePersonne
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(3591)
-#: Source/Backrooms/Private/BRCharacter.cpp(3591)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(3593)
+#: Source/Backrooms/Private/BRCharacter.cpp(3593)
 #, fuzzy
 msgctxt "BR,Player.Vue1rePersonne"
 msgid "Vue à la 1re personne"
 msgstr "منظور الشخص الأول"
 
 #. Key:	Player.NagezRegardGuideNageJump
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4001)
-#: Source/Backrooms/Private/BRCharacter.cpp(4001)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4003)
+#: Source/Backrooms/Private/BRCharacter.cpp(4003)
 #, fuzzy
 msgctxt "BR,Player.NagezRegardGuideNageJump"
 msgid "Vous nagez : le regard guide la nage.  {Jump} remonter / sortir au bord  -  {Crouch} plonger  -  {Sprint} nager vite"
 msgstr "أنت تسبح: نظرك يحدد الاتجاه.  {Jump} الصعود / الخروج من الحافة  -  {Crouch} الغوص  -  {Sprint} السباحة بسرعة"
 
 #. Key:	Player.NoteIllisibleEncreCoule
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4232)
-#: Source/Backrooms/Private/BRCharacter.cpp(4232)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4234)
+#: Source/Backrooms/Private/BRCharacter.cpp(4234)
 #, fuzzy
 msgctxt "BR,Player.NoteIllisibleEncreCoule"
 msgid "(La note est illisible, l'encre a coulé.)"
 msgstr "(الملاحظة غير مقروءة، فقد سال الحبر.)"
 
 #. Key:	Lidar.Airlock
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4433)
-#: Source/Backrooms/Private/BRCharacter.cpp(4433)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4435)
+#: Source/Backrooms/Private/BRCharacter.cpp(4435)
 #, fuzzy
 msgctxt "BR,Lidar.Airlock"
 msgid "Sas d'entrée : ici, les appareils sont perturbés. La lampe ne donne qu'une lueur, la vision nocturne ne voit que de la neige. Le scanner LiDAR de l'équipe de L. marche : {LidarPulse} impulsion, {LidarFocus} scan focalisé (maintenir)."
 msgstr "حجرة الدخول: الأجهزة هنا مضطربة. المصباح لا يعطي إلا بصيصًا، والرؤية الليلية لا ترى إلا التشويش. ماسح LiDAR لفريق L. يعمل: {LidarPulse} نبضة، {LidarFocus} مسح مركّز (مع الضغط المستمر)."
 
 #. Key:	Mission.Depart.RefusedLocked
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4616)
-#: Source/Backrooms/Private/BRCharacter.cpp(4616)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4618)
+#: Source/Backrooms/Private/BRCharacter.cpp(4618)
 #, fuzzy
 msgctxt "BR,Mission.Depart.RefusedLocked"
 msgid "Cette sortie est encore verrouillée."
 msgstr "هذا المخرج لا يزال مقفلًا."
 
 #. Key:	Mission.Depart.RefusedFar
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4619)
-#: Source/Backrooms/Private/BRCharacter.cpp(4619)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4621)
+#: Source/Backrooms/Private/BRCharacter.cpp(4621)
 #, fuzzy
 msgctxt "BR,Mission.Depart.RefusedFar"
 msgid "Approchez-vous de la sortie."
 msgstr "اقترب أكثر من المخرج."
 
 #. Key:	Mission.Depart.RefusedOther
-#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4622)
-#: Source/Backrooms/Private/BRCharacter.cpp(4622)
+#. SourceLocation:	Source/Backrooms/Private/BRCharacter.cpp(4624)
+#: Source/Backrooms/Private/BRCharacter.cpp(4624)
 #, fuzzy
 msgctxt "BR,Mission.Depart.RefusedOther"
 msgid "Un autre départ est déjà prévu : rejoignez le groupe."
@@ -4295,24 +4295,24 @@ msgid "Classe 1 : Sûr - Stable - Entités quasi absentes"
 msgstr "الفئة 1: آمن - مستقر - شبه خالٍ من الكيانات"
 
 #. Key:	Note.L0.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(118)
-#: Source/Backrooms/Private/BRLevels.cpp(118)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(129)
+#: Source/Backrooms/Private/BRLevels.cpp(129)
 #, fuzzy
 msgctxt "BR,Note.L0.1"
 msgid "Si tu lis ceci, tu as \"noclippé\" hors de la réalité. Ne panique pas. Les murs ne bougent pas : c'est toi qui te perds."
 msgstr "إن كنت تقرأ هذا فقد \"خرجت\" من الواقع. لا تذعر. الجدران لا تتحرك: أنت من يضلّ الطريق."
 
 #. Key:	Note.L0.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(119)
-#: Source/Backrooms/Private/BRLevels.cpp(119)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(130)
+#: Source/Backrooms/Private/BRLevels.cpp(130)
 #, fuzzy
 msgctxt "BR,Note.L0.2"
 msgid "Le bourdonnement ne s'arrête jamais. J'ai compte plus de six cents salles. Toujours la même moquette humide. Toujours la même odeur."
 msgstr "الطنين لا يتوقف أبدًا. عددت أكثر من ستمئة غرفة. السجاد الرطب نفسه دائمًا. الرائحة نفسها دائمًا."
 
 #. Key:	Note.L0.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(120)
-#: Source/Backrooms/Private/BRLevels.cpp(120)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(131)
+#: Source/Backrooms/Private/BRLevels.cpp(131)
 #, fuzzy
 #| msgid "Certains murs ont l'air FAUX, comme une image qui se brouille. Touche-les. C'est comme ça que j'ai quitté cet endroit."
 msgctxt "BR,Note.L0.3"
@@ -4320,32 +4320,32 @@ msgid "Ne cherche pas un mur qui s'efface. La seule sortie que nous ayons trouv�
 msgstr "لا تبحث عن جدار يتلاشى. المخرج الوحيد الذي وجدناه باب خدمة، باب حقيقي بمقبض. حيث يصبح الهواء باردًا. - L."
 
 #. Key:	Note.L0.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(121)
-#: Source/Backrooms/Private/BRLevels.cpp(121)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(132)
+#: Source/Backrooms/Private/BRLevels.cpp(132)
 #, fuzzy
 msgctxt "BR,Note.L0.4"
 msgid "L'eau d'amande calme l'esprit. Garde toujours une bouteille sur toi. {Drink} pour boire."
 msgstr "ماء اللوز يهدّئ العقل. احمل زجاجة معك دائمًا. {Drink} للشرب."
 
 #. Key:	Note.L0.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(122)
-#: Source/Backrooms/Private/BRLevels.cpp(122)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(133)
+#: Source/Backrooms/Private/BRLevels.cpp(133)
 #, fuzzy
 msgctxt "BR,Note.L0.5"
 msgid "Si les lumières sont mortes dans une zone, n'y entre pas. Quelque chose y sourit dans le noir."
 msgstr "إذا كانت الأضواء ميتة في منطقة ما فلا تدخلها. هناك شيء يبتسم في الظلام."
 
 #. Key:	Note.L0.6
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(123)
-#: Source/Backrooms/Private/BRLevels.cpp(123)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(134)
+#: Source/Backrooms/Private/BRLevels.cpp(134)
 #, fuzzy
 msgctxt "BR,Note.L0.6"
 msgid "Jour 3 (je crois). J'ai entendu des pas derrière moi. Quand je me suis retourné, il n'y avait que le bourdonnement."
 msgstr "اليوم الثالث (على ما أظن). سمعت خطوات خلفي. عندما التفتّ، لم يكن هناك سوى الطنين."
 
 #. Key:	Note.L0.7
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(124)
-#: Source/Backrooms/Private/BRLevels.cpp(124)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(135)
+#: Source/Backrooms/Private/BRLevels.cpp(135)
 #, fuzzy
 #| msgid "Il y a une échelle contre un mur, elle monte dans une trappe du plafond. Une lueur violette là-haut. Monte, et ne regarde pas en bas."
 msgctxt "BR,Note.L0.7"
@@ -4353,8 +4353,8 @@ msgid "Nous marquons notre passage à la craie : un cercle barré et un L. Si tu
 msgstr "نعلّم طريقنا بالطباشير: دائرة مشطوبة وحرف L. إذا رأيت العلامة فأنت على طريقنا. نحن متجهون إلى المحطة التي يسمونها الرصيف الأخير. - L."
 
 #. Key:	Note.L0.8
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(125)
-#: Source/Backrooms/Private/BRLevels.cpp(125)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(136)
+#: Source/Backrooms/Private/BRLevels.cpp(136)
 #, fuzzy
 #| msgid "Les sorties ne tiennent pas. Il faut récupérer les six cassettes et filmer le noir pendant une coupure. Après, les murs cèdent."
 msgctxt "BR,Note.L0.8"
@@ -4362,64 +4362,64 @@ msgid "Inutile de tout fouiller : rien ici n'ouvre rien. La porte de service s'o
 msgstr "لا داعي لتفتيش كل شيء: لا شيء هنا يفتح شيئًا. باب الخدمة يُفتح باليد. المهم أن تجده قبل أن تنطفئ الأضواء. - L."
 
 #. Key:	Note.L0.9
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(126)
-#: Source/Backrooms/Private/BRLevels.cpp(126)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(137)
+#: Source/Backrooms/Private/BRLevels.cpp(137)
 #, fuzzy
 msgctxt "BR,Note.L0.9"
 msgid "Quand les néons s'éteignent, allume la vision nocturne du caméscope ({NightVision}). La grande chose maigre fait du bruit quand elle approche. Ne cours pas vers elle."
 msgstr "عندما تنطفئ المصابيح، شغّل الرؤية الليلية لكاميرا الفيديو ({NightVision}). ذلك الشيء الكبير النحيل يُحدث ضجيجًا عندما يقترب. لا تركض نحوه."
 
 #. Key:	Level.1.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(136)
-#: Source/Backrooms/Private/BRLevels.cpp(136)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(147)
+#: Source/Backrooms/Private/BRLevels.cpp(147)
 #, fuzzy
 msgctxt "BR,Level.1.Title"
 msgid "Habitable Zone"
 msgstr "Habitable Zone"
 
 #. Key:	Level.1.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(137)
-#: Source/Backrooms/Private/BRLevels.cpp(137)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(148)
+#: Source/Backrooms/Private/BRLevels.cpp(148)
 #, fuzzy
 msgctxt "BR,Level.1.Nickname"
 msgid "Zone habitable"
 msgstr "المنطقة الصالحة للسكن"
 
 #. Key:	Level.1.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(138)
-#: Source/Backrooms/Private/BRLevels.cpp(138)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(149)
+#: Source/Backrooms/Private/BRLevels.cpp(149)
 #, fuzzy
 msgctxt "BR,Level.1.Description"
 msgid "Un parking souterrain de béton, immense et brumeux : piliers, places peintes, flaques qui reflètent les néons. Des caisses de ravitaillement apparaissent parfois. Quand les néons s'éteignent, quelque chose se met à rôder."
 msgstr "موقف سيارات تحت الأرض من الخرسانة، شاسع ومغطّى بالضباب: أعمدة، أماكن مرسومة، برك تعكس المصابيح. تظهر أحيانًا صناديق مؤن. عندما تنطفئ المصابيح، يبدأ شيء ما بالتجوال."
 
 #. Key:	Level.1.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(140)
-#: Source/Backrooms/Private/BRLevels.cpp(140)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(151)
+#: Source/Backrooms/Private/BRLevels.cpp(151)
 #, fuzzy
 msgctxt "BR,Level.1.ClassText"
 msgid "Classe 1 : Sûr - Stable - Peu d'entités"
 msgstr "الفئة 1: آمن - مستقر - كيانات قليلة"
 
 #. Key:	Note.L1.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(176)
-#: Source/Backrooms/Private/BRLevels.cpp(176)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(190)
+#: Source/Backrooms/Private/BRLevels.cpp(190)
 #, fuzzy
 msgctxt "BR,Note.L1.1"
 msgid "Les caisses contiennent parfois de l'eau d'amande et des piles. Fouille-les. Ici, on peut presque survivre."
 msgstr "تحتوي الصناديق أحيانًا على ماء اللوز وبطاريات. فتّشها. هنا يمكن النجاة تقريبًا."
 
 #. Key:	Note.L1.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(177)
-#: Source/Backrooms/Private/BRLevels.cpp(177)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(191)
+#: Source/Backrooms/Private/BRLevels.cpp(191)
 #, fuzzy
 msgctxt "BR,Note.L1.2"
 msgid "Quand les tubes au plafond clignotent, eloigne-toi. Quand ils s'éteignent, cours."
 msgstr "عندما تومض الأنابيب في السقف، ابتعد. وعندما تنطفئ، اركض."
 
 #. Key:	Note.L1.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(178)
-#: Source/Backrooms/Private/BRLevels.cpp(178)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(192)
+#: Source/Backrooms/Private/BRLevels.cpp(192)
 #, fuzzy
 #| msgid "Les portes de service mènent plus bas. Plus bas, c'est pire. Mais c'est peut-etre la seule sortie."
 msgctxt "BR,Note.L1.3"
@@ -4427,472 +4427,472 @@ msgid "L'ascenseur du parking descend vers l'eau. Il faut d'abord remettre la li
 msgstr "مصعد موقف السيارات ينزل نحو الماء. يجب أولًا إعادة الكهرباء إلى خط الخدمة: المخطط قرب المدخل. - L."
 
 #. Key:	Note.L1.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(179)
-#: Source/Backrooms/Private/BRLevels.cpp(179)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(193)
+#: Source/Backrooms/Private/BRLevels.cpp(193)
 #, fuzzy
 msgctxt "BR,Note.L1.4"
 msgid "Les Facelings ne sont pas méchants. La plupart. Ne les regarde pas trop longtemps."
 msgstr "الـ Facelings ليسوا أشرارًا. معظمهم. لا تحدّق فيهم طويلًا."
 
 #. Key:	Note.L1.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(180)
-#: Source/Backrooms/Private/BRLevels.cpp(180)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(194)
+#: Source/Backrooms/Private/BRLevels.cpp(194)
 #, fuzzy
 msgctxt "BR,Note.L1.5"
 msgid "Le parking répond encore : quand la liaison a repris, les néons se sont rallumés un par un. On a cru que c'était fini. Ce n'était que le début de la route. - L."
 msgstr "موقف السيارات ما زال يستجيب: حين عاد الخط، اشتعلت الأضواء واحدًا تلو الآخر. ظننا أن الأمر انتهى. لم يكن سوى بداية الطريق. - L."
 
 #. Key:	Level.2.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(194)
-#: Source/Backrooms/Private/BRLevels.cpp(194)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(208)
+#: Source/Backrooms/Private/BRLevels.cpp(208)
 #, fuzzy
 msgctxt "BR,Level.2.Title"
 msgid "Abandoned Utility Halls"
 msgstr "Abandoned Utility Halls"
 
 #. Key:	Level.2.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(195)
-#: Source/Backrooms/Private/BRLevels.cpp(195)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(209)
+#: Source/Backrooms/Private/BRLevels.cpp(209)
 #, fuzzy
 msgctxt "BR,Level.2.Nickname"
 msgid "Couloirs techniques abandonnés - \"Pipe Dreams\""
 msgstr "ممرات المرافق المهجورة - \"Pipe Dreams\""
 
 #. Key:	Level.2.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(196)
-#: Source/Backrooms/Private/BRLevels.cpp(196)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(210)
+#: Source/Backrooms/Private/BRLevels.cpp(210)
 #, fuzzy
 msgctxt "BR,Level.2.Description"
 msgid "Un réseau sans fin de tunnels de maintenance étroits, en béton sale, couverts de tuyaux. La chaleur y est étouffante et l'éclairage rare."
 msgstr "شبكة لا نهائية من أنفاق الصيانة الضيقة، من خرسانة قذرة مغطاة بالأنابيب. الحرّ خانق والضوء شحيح."
 
 #. Key:	Level.2.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(198)
-#: Source/Backrooms/Private/BRLevels.cpp(198)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(212)
+#: Source/Backrooms/Private/BRLevels.cpp(212)
 #, fuzzy
 msgctxt "BR,Level.2.ClassText"
 msgid "Classe 2 : Instable - Entités présentes"
 msgstr "الفئة 2: غير مستقر - توجد كيانات"
 
 #. Key:	Note.L2.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(229)
-#: Source/Backrooms/Private/BRLevels.cpp(229)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(247)
+#: Source/Backrooms/Private/BRLevels.cpp(247)
 #, fuzzy
 msgctxt "BR,Note.L2.1"
 msgid "Il fait si chaud. Les tuyaux sifflent. Ne touche pas ceux qui fument."
 msgstr "الجو حار جدًا. الأنابيب تفحّ. لا تلمس ما يتصاعد منها الدخان."
 
 #. Key:	Note.L2.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(230)
-#: Source/Backrooms/Private/BRLevels.cpp(230)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(248)
+#: Source/Backrooms/Private/BRLevels.cpp(248)
 #, fuzzy
 msgctxt "BR,Note.L2.2"
 msgid "Les Wretches étaient des gens comme nous. Ils sont lents. Ne les laisse pas s'approcher."
 msgstr "الـ Wretches كانوا بشرًا مثلنا. إنهم بطيئون. لا تدعهم يقتربون."
 
 #. Key:	Note.L2.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(231)
-#: Source/Backrooms/Private/BRLevels.cpp(231)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(249)
+#: Source/Backrooms/Private/BRLevels.cpp(249)
 #, fuzzy
 msgctxt "BR,Note.L2.3"
 msgid "Une porte de secours plus loin. On dit qu'elle mène à la Station électrique. Prépare-toi."
 msgstr "هناك باب طوارئ أبعد قليلًا. يقال إنه يؤدي إلى محطة الكهرباء. استعدّ."
 
 #. Key:	Note.L2.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(232)
-#: Source/Backrooms/Private/BRLevels.cpp(232)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(250)
+#: Source/Backrooms/Private/BRLevels.cpp(250)
 #, fuzzy
 msgctxt "BR,Note.L2.4"
 msgid "La vapeur garde la porte de la station. Règle les pressions, pas les vannes. Quand elle s'ouvrira, on la marquera pour ceux qui suivent. - L."
 msgstr "البخار يحرس باب المحطة. اضبط الضغوط لا الصمامات. حين ينفتح، سنعلّمه لمن يأتي بعدنا. - L."
 
 #. Key:	Level.3.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(245)
-#: Source/Backrooms/Private/BRLevels.cpp(245)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(263)
+#: Source/Backrooms/Private/BRLevels.cpp(263)
 #, fuzzy
 msgctxt "BR,Level.3.Title"
 msgid "Electrical Station"
 msgstr "Electrical Station"
 
 #. Key:	Level.3.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(246)
-#: Source/Backrooms/Private/BRLevels.cpp(246)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(264)
+#: Source/Backrooms/Private/BRLevels.cpp(264)
 #, fuzzy
 msgctxt "BR,Level.3.Nickname"
 msgid "Station électrique"
 msgstr "محطة الكهرباء"
 
 #. Key:	Level.3.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(247)
-#: Source/Backrooms/Private/BRLevels.cpp(247)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(265)
+#: Source/Backrooms/Private/BRLevels.cpp(265)
 #, fuzzy
 msgctxt "BR,Level.3.Description"
 msgid "Un dédale assourdissant de briques, de grilles et de machines électriques. L'un des niveaux les plus hostiles connus : les entités y sont nombreuses."
 msgstr "متاهة صاخبة من الطوب والشبكات والآلات الكهربائية. من أكثر المستويات المعروفة عدائية: الكيانات في كل مكان."
 
 #. Key:	Level.3.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(249)
-#: Source/Backrooms/Private/BRLevels.cpp(249)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(267)
+#: Source/Backrooms/Private/BRLevels.cpp(267)
 #, fuzzy
 msgctxt "BR,Level.3.ClassText"
 msgid "Classe 4 : Dangereux - Infesté d'entités"
 msgstr "الفئة 4: خطير - مليء بالكيانات"
 
 #. Key:	Note.L3.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(280)
-#: Source/Backrooms/Private/BRLevels.cpp(280)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(298)
+#: Source/Backrooms/Private/BRLevels.cpp(298)
 #, fuzzy
 msgctxt "BR,Note.L3.1"
 msgid "LES HOUNDS SENTENT LA PEUR. Ne cours pas devant eux. Regarde-les dans les yeux et recule."
 msgstr "الـ HOUNDS تشمّ الخوف. لا تركض أمامها. انظر في عينيها وتراجع."
 
 #. Key:	Note.L3.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(281)
-#: Source/Backrooms/Private/BRLevels.cpp(281)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(299)
+#: Source/Backrooms/Private/BRLevels.cpp(299)
 #, fuzzy
 msgctxt "BR,Note.L3.2"
 msgid "Si quelqu'un t'appelle par ton nom dans ces couloirs, ce n'est pas un humain. Ne réponds pas."
 msgstr "إذا ناداك أحد باسمك في هذه الممرات، فهو ليس إنسانًا. لا تجب."
 
 #. Key:	Note.L3.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(282)
-#: Source/Backrooms/Private/BRLevels.cpp(282)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(300)
+#: Source/Backrooms/Private/BRLevels.cpp(300)
 #, fuzzy
 msgctxt "BR,Note.L3.3"
 msgid "Les ascenseurs fonctionnent encore. Ils mènent à un bureau. Un endroit calme. Trouve-les."
 msgstr "المصاعد ما زالت تعمل. إنها تؤدي إلى مكتب. مكان هادئ. ابحث عنها."
 
 #. Key:	Level.4.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(295)
-#: Source/Backrooms/Private/BRLevels.cpp(295)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(313)
+#: Source/Backrooms/Private/BRLevels.cpp(313)
 #, fuzzy
 msgctxt "BR,Level.4.Title"
 msgid "Abandoned Office"
 msgstr "Abandoned Office"
 
 #. Key:	Level.4.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(296)
-#: Source/Backrooms/Private/BRLevels.cpp(296)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(314)
+#: Source/Backrooms/Private/BRLevels.cpp(314)
 #, fuzzy
 msgctxt "BR,Level.4.Nickname"
 msgid "Bureau abandonné"
 msgstr "المكتب المهجور"
 
 #. Key:	Level.4.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(297)
-#: Source/Backrooms/Private/BRLevels.cpp(297)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(315)
+#: Source/Backrooms/Private/BRLevels.cpp(315)
 #, fuzzy
 msgctxt "BR,Level.4.Description"
 msgid "Des rangées de petits bureaux cloisonnés, vides, propres et bien éclairés : un vieil ordinateur beige, une chaise, parfois une fontaine à eau d'amande. Un rare moment de répit... si l'on ignore qu'ils sont tous identiques."
 msgstr "صفوف من مقصورات مكتبية صغيرة فارغة ونظيفة ومضاءة جيدًا: حاسوب بيج قديم، كرسي، وأحيانًا موزّع ماء لوز. لحظة راحة نادرة... إن تجاهلت أنها كلها متطابقة."
 
 #. Key:	Level.4.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(299)
-#: Source/Backrooms/Private/BRLevels.cpp(299)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(317)
+#: Source/Backrooms/Private/BRLevels.cpp(317)
 #, fuzzy
 msgctxt "BR,Level.4.ClassText"
 msgid "Classe 1 : Sûr - Stable - Peu d'entités"
 msgstr "الفئة 1: آمن - مستقر - كيانات قليلة"
 
 #. Key:	Note.L4.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(332)
-#: Source/Backrooms/Private/BRLevels.cpp(332)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(349)
+#: Source/Backrooms/Private/BRLevels.cpp(349)
 #, fuzzy
 msgctxt "BR,Note.L4.1"
 msgid "Les fontaines distribuent de l'eau d'amande. Remplis tes bouteilles ici."
 msgstr "الموزّعات تعطي ماء اللوز. املأ زجاجاتك هنا."
 
 #. Key:	Note.L4.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(333)
-#: Source/Backrooms/Private/BRLevels.cpp(333)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(350)
+#: Source/Backrooms/Private/BRLevels.cpp(350)
 #, fuzzy
 msgctxt "BR,Note.L4.2"
 msgid "La cage d'escalier descend vers un hôtel. Ne t'y attarde pas."
 msgstr "بيت الدرج ينزل نحو فندق. لا تتأخر هناك."
 
 #. Key:	Note.L4.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(334)
-#: Source/Backrooms/Private/BRLevels.cpp(334)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(351)
+#: Source/Backrooms/Private/BRLevels.cpp(351)
 #, fuzzy
 msgctxt "BR,Note.L4.3"
 msgid "Si tu vois quelqu'un de jaune qui sourit, NE LE QUITTE PAS DES YEUX."
 msgstr "إن رأيت شخصًا أصفر يبتسم، فلا ترفع عينيك عنه أبدًا."
 
 #. Key:	Level.5.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(346)
-#: Source/Backrooms/Private/BRLevels.cpp(346)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(363)
+#: Source/Backrooms/Private/BRLevels.cpp(363)
 #, fuzzy
 msgctxt "BR,Level.5.Title"
 msgid "Terror Hotel"
 msgstr "Terror Hotel"
 
 #. Key:	Level.5.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(347)
-#: Source/Backrooms/Private/BRLevels.cpp(347)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(364)
+#: Source/Backrooms/Private/BRLevels.cpp(364)
 #, fuzzy
 msgctxt "BR,Level.5.Nickname"
 msgid "L'hôtel de la terreur"
 msgstr "فندق الرعب"
 
 #. Key:	Level.5.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(348)
-#: Source/Backrooms/Private/BRLevels.cpp(348)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(365)
+#: Source/Backrooms/Private/BRLevels.cpp(365)
 #, fuzzy
 msgctxt "BR,Level.5.Description"
 msgid "Un hôtel des années 1920 qui ne finit jamais : couloirs feutrés, moquette rouge, portes numérotées qui ne s'ouvrent pas. Une musique lointaine. L'impression d'être observé."
 msgstr "فندق من عشرينيات القرن الماضي لا ينتهي: ممرات مكتومة، سجاد أحمر، أبواب مرقّمة لا تُفتح. موسيقى بعيدة. إحساس بأن أحدًا يراقبك."
 
 #. Key:	Level.5.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(350)
-#: Source/Backrooms/Private/BRLevels.cpp(350)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(367)
+#: Source/Backrooms/Private/BRLevels.cpp(367)
 #, fuzzy
 msgctxt "BR,Level.5.ClassText"
 msgid "Classe 2 : Instable - Entités présentes"
 msgstr "الفئة 2: غير مستقر - توجد كيانات"
 
 #. Key:	Note.L5.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(378)
-#: Source/Backrooms/Private/BRLevels.cpp(378)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(394)
+#: Source/Backrooms/Private/BRLevels.cpp(394)
 #, fuzzy
 msgctxt "BR,Note.L5.1"
 msgid "Chambre 1508... ou était-ce 5108 ? Les numéros changent quand on ne regarde pas."
 msgstr "الغرفة 1508... أم كانت 5108؟ تتغيّر الأرقام عندما لا تنظر."
 
 #. Key:	Note.L5.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(379)
-#: Source/Backrooms/Private/BRLevels.cpp(379)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(395)
+#: Source/Backrooms/Private/BRLevels.cpp(395)
 #, fuzzy
 msgctxt "BR,Note.L5.2"
 msgid "La chaufferie est au bout du couloir. Après elle, il n'y a plus de lumière du tout."
 msgstr "غرفة المراجل في آخر الممر. بعدها لا يوجد أي ضوء على الإطلاق."
 
 #. Key:	Note.L5.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(380)
-#: Source/Backrooms/Private/BRLevels.cpp(380)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(396)
+#: Source/Backrooms/Private/BRLevels.cpp(396)
 #, fuzzy
 msgctxt "BR,Note.L5.3"
 msgid "Quelqu'un frappe aux portes la nuit. N'ouvre jamais."
 msgstr "أحدهم يطرق الأبواب ليلًا. لا تفتح أبدًا."
 
 #. Key:	Level.6.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(393)
-#: Source/Backrooms/Private/BRLevels.cpp(393)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(409)
+#: Source/Backrooms/Private/BRLevels.cpp(409)
 #, fuzzy
 msgctxt "BR,Level.6.Title"
 msgid "Lights Out"
 msgstr "Lights Out"
 
 #. Key:	Level.6.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(394)
-#: Source/Backrooms/Private/BRLevels.cpp(394)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(410)
+#: Source/Backrooms/Private/BRLevels.cpp(410)
 #, fuzzy
 msgctxt "BR,Level.6.Nickname"
 msgid "Lumières éteintes"
 msgstr "الأضواء مطفأة"
 
 #. Key:	Level.6.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(395)
-#: Source/Backrooms/Private/BRLevels.cpp(395)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(411)
+#: Source/Backrooms/Private/BRLevels.cpp(411)
 #, fuzzy
 msgctxt "BR,Level.6.Description"
 msgid "Une obscurité totale. Aucune source de lumière ne fonctionne, sauf celle que l'on apporte. Des bruits étranges, des murmures... et des sourires dans le noir."
 msgstr "ظلام دامس. لا يعمل أي مصدر للضوء سوى ما تحمله معك. أصوات غريبة، همسات... وابتسامات في الظلام."
 
 #. Key:	Level.6.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(397)
-#: Source/Backrooms/Private/BRLevels.cpp(397)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(413)
+#: Source/Backrooms/Private/BRLevels.cpp(413)
 #, fuzzy
 msgctxt "BR,Level.6.ClassText"
 msgid "Classe 4 : Dangereux - Obscurité totale"
 msgstr "الفئة 4: خطير - ظلام دامس"
 
 #. Key:	Note.L6.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(432)
-#: Source/Backrooms/Private/BRLevels.cpp(432)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(448)
+#: Source/Backrooms/Private/BRLevels.cpp(448)
 #, fuzzy
 msgctxt "BR,Note.L6.4"
 msgid "Ici, les lampes meurent et la vision nocturne ne voit que de la neige. Le scanner, lui, marche : une impulsion pour la pièce, un faisceau maintenu pour le détail. - L."
 msgstr "هنا تنطفئ المصابيح ولا ترى الرؤية الليلية إلا التشويش. أما الماسح فيعمل: نبضة للغرفة، وشعاع مستمر للتفاصيل. - L."
 
 #. Key:	Note.L6.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(433)
-#: Source/Backrooms/Private/BRLevels.cpp(433)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(449)
+#: Source/Backrooms/Private/BRLevels.cpp(449)
 #, fuzzy
 msgctxt "BR,Note.L6.5"
 msgid "Les sourires entendent les impulsions. Le faisceau maintenu du scanner les fait reculer ; la lampe, elle, les met en colère. - L."
 msgstr "الابتسامات تسمع النبضات. شعاع الماسح المستمر يجعلها تتراجع؛ أما المصباح فلا يزيدها إلا غضبًا. - L."
 
 #. Key:	Note.L6.6
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(434)
-#: Source/Backrooms/Private/BRLevels.cpp(434)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(450)
+#: Source/Backrooms/Private/BRLevels.cpp(450)
 #, fuzzy
 msgctxt "BR,Note.L6.6"
 msgid "Les flèches bleues au sol sont de nous. Elles mènent à l'aile d'essai. Au-delà des portes, le sol est percé : regardez avant de marcher. - L."
 msgstr "الأسهم الزرقاء على الأرض من صنعنا. إنها تقود إلى جناح الاختبار. بعد الأبواب الأرض مثقوبة: انظر قبل أن تخطو. - L."
 
 #. Key:	Level.8.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(444)
-#: Source/Backrooms/Private/BRLevels.cpp(444)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(460)
+#: Source/Backrooms/Private/BRLevels.cpp(460)
 #, fuzzy
 msgctxt "BR,Level.8.Title"
 msgid "Cave System"
 msgstr "Cave System"
 
 #. Key:	Level.8.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(445)
-#: Source/Backrooms/Private/BRLevels.cpp(445)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(461)
+#: Source/Backrooms/Private/BRLevels.cpp(461)
 #, fuzzy
 msgctxt "BR,Level.8.Nickname"
 msgid "Le réseau de grottes"
 msgstr "شبكة الكهوف"
 
 #. Key:	Level.8.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(446)
-#: Source/Backrooms/Private/BRLevels.cpp(446)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(462)
+#: Source/Backrooms/Private/BRLevels.cpp(462)
 #, fuzzy
 msgctxt "BR,Level.8.Description"
 msgid "Un enchevêtrement de grottes humides, éclairées çà et là par de vieilles lampes de mine. Des Deathmoths nichent au plafond, attirées par la moindre lumière."
 msgstr "متاهة متشابكة من الكهوف الرطبة، تضيئها هنا وهناك مصابيح مناجم قديمة. تعشّش Deathmoths في السقف، ويجذبها أدنى ضوء."
 
 #. Key:	Level.8.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(448)
-#: Source/Backrooms/Private/BRLevels.cpp(448)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(464)
+#: Source/Backrooms/Private/BRLevels.cpp(464)
 #, fuzzy
 msgctxt "BR,Level.8.ClassText"
 msgid "Classe 4 : Dangereux - Entités nombreuses"
 msgstr "الفئة 4: خطير - كيانات كثيرة"
 
 #. Key:	Note.L8.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(476)
-#: Source/Backrooms/Private/BRLevels.cpp(476)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(491)
+#: Source/Backrooms/Private/BRLevels.cpp(491)
 #, fuzzy
 msgctxt "BR,Note.L8.1"
 msgid "Les papillons. Énormes. Ils viennent vers la lumière. Éteins ta lampe quand tu entends les ailes."
 msgstr "العثّ. ضخم. يأتي نحو الضوء. أطفئ مصباحك عندما تسمع الأجنحة."
 
 #. Key:	Note.L8.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(477)
-#: Source/Backrooms/Private/BRLevels.cpp(477)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(492)
+#: Source/Backrooms/Private/BRLevels.cpp(492)
 #, fuzzy
 msgctxt "BR,Note.L8.2"
 msgid "Une échelle remonte vers la surface. Il fait nuit là-haut. Toujours nuit."
 msgstr "سلّم يصعد عائدًا إلى السطح. في الأعلى ليل. ليل دائمًا."
 
 #. Key:	Level.9.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(487)
-#: Source/Backrooms/Private/BRLevels.cpp(487)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(502)
+#: Source/Backrooms/Private/BRLevels.cpp(502)
 #, fuzzy
 msgctxt "BR,Level.9.Title"
 msgid "The Suburbs"
 msgstr "The Suburbs"
 
 #. Key:	Level.9.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(488)
-#: Source/Backrooms/Private/BRLevels.cpp(488)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(503)
+#: Source/Backrooms/Private/BRLevels.cpp(503)
 #, fuzzy
 msgctxt "BR,Level.9.Nickname"
 msgid "La banlieue"
 msgstr "الضواحي"
 
 #. Key:	Level.9.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(489)
-#: Source/Backrooms/Private/BRLevels.cpp(489)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(504)
+#: Source/Backrooms/Private/BRLevels.cpp(504)
 #, fuzzy
 msgctxt "BR,Level.9.Description"
 msgid "Un quartier résidentiel sans fin, plongé dans une nuit éternelle. Les lampadaires grésillent, les maisons sont vides. Ne restez pas dans la rue."
 msgstr "حي سكني لا نهاية له غارق في ليل أبدي. أعمدة الإنارة تطقطق والبيوت فارغة. لا تبقَ في الشارع."
 
 #. Key:	Level.9.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(491)
-#: Source/Backrooms/Private/BRLevels.cpp(491)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(506)
+#: Source/Backrooms/Private/BRLevels.cpp(506)
 #, fuzzy
 msgctxt "BR,Level.9.ClassText"
 msgid "Classe 4 : Dangereux la nuit"
 msgstr "الفئة 4: خطير ليلًا"
 
 #. Key:	Note.L9.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(517)
-#: Source/Backrooms/Private/BRLevels.cpp(517)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(532)
+#: Source/Backrooms/Private/BRLevels.cpp(532)
 #, fuzzy
 msgctxt "BR,Note.L9.1"
 msgid "Certaines maisons ont la porte entrouverte. Derrière l'une d'elles, j'ai vu un champ de blé en plein jour."
 msgstr "بعض البيوت أبوابها مواربة. خلف أحدها رأيت حقل قمح في وضح النهار."
 
 #. Key:	Note.L9.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(518)
-#: Source/Backrooms/Private/BRLevels.cpp(518)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(533)
+#: Source/Backrooms/Private/BRLevels.cpp(533)
 #, fuzzy
 msgctxt "BR,Note.L9.2"
 msgid "Les lampadaires ne te protègent pas. Ils te rendent juste plus visible."
 msgstr "أعمدة الإنارة لا تحميك. إنها تجعلك أكثر ظهورًا فقط."
 
 #. Key:	Level.10.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(528)
-#: Source/Backrooms/Private/BRLevels.cpp(528)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(543)
+#: Source/Backrooms/Private/BRLevels.cpp(543)
 #, fuzzy
 msgctxt "BR,Level.10.Title"
 msgid "Field of Wheat"
 msgstr "Field of Wheat"
 
 #. Key:	Level.10.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(529)
-#: Source/Backrooms/Private/BRLevels.cpp(529)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(544)
+#: Source/Backrooms/Private/BRLevels.cpp(544)
 #, fuzzy
 msgctxt "BR,Level.10.Nickname"
 msgid "Le champ de blé"
 msgstr "حقل القمح"
 
 #. Key:	Level.10.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(530)
-#: Source/Backrooms/Private/BRLevels.cpp(530)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(545)
+#: Source/Backrooms/Private/BRLevels.cpp(545)
 #, fuzzy
 msgctxt "BR,Level.10.Description"
 msgid "Un champ de blé infini sous un ciel couvert. Le vent, le bruissement des épis, quelques granges isolées. Un endroit étrangement paisible."
 msgstr "حقل قمح لا نهاية له تحت سماء ملبّدة. الريح، حفيف السنابل، بضع حظائر منعزلة. مكان هادئ على نحو غريب."
 
 #. Key:	Level.10.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(532)
-#: Source/Backrooms/Private/BRLevels.cpp(532)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(547)
+#: Source/Backrooms/Private/BRLevels.cpp(547)
 #, fuzzy
 msgctxt "BR,Level.10.ClassText"
 msgid "Classe 1 : Sûr - Stable"
 msgstr "الفئة 1: آمن - مستقر"
 
 #. Key:	Note.L10.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(555)
-#: Source/Backrooms/Private/BRLevels.cpp(555)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(570)
+#: Source/Backrooms/Private/BRLevels.cpp(570)
 #, fuzzy
 msgctxt "BR,Note.L10.1"
 msgid "Les granges ont toujours une porte. L'une d'elles s'ouvre sur une ville."
 msgstr "للحظائر باب دائمًا. أحدها ينفتح على مدينة."
 
 #. Key:	Note.L10.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(556)
-#: Source/Backrooms/Private/BRLevels.cpp(556)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(571)
+#: Source/Backrooms/Private/BRLevels.cpp(571)
 #, fuzzy
 msgctxt "BR,Note.L10.2"
 msgid "Pour la premiere fois depuis des semaines, j'ai dormi."
 msgstr "لأول مرة منذ أسابيع، نمت."
 
 #. Key:	Level.11.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(566)
-#: Source/Backrooms/Private/BRLevels.cpp(566)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(581)
+#: Source/Backrooms/Private/BRLevels.cpp(581)
 #, fuzzy
 msgctxt "BR,Level.11.Title"
 msgid "The Endless City"
 msgstr "The Endless City"
 
 #. Key:	Level.11.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(567)
-#: Source/Backrooms/Private/BRLevels.cpp(567)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(582)
+#: Source/Backrooms/Private/BRLevels.cpp(582)
 #, fuzzy
 msgctxt "BR,Level.11.Nickname"
 msgid "La ville sans fin"
 msgstr "المدينة التي لا تنتهي"
 
 #. Key:	Level.11.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(568)
-#: Source/Backrooms/Private/BRLevels.cpp(568)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(583)
+#: Source/Backrooms/Private/BRLevels.cpp(583)
 #, fuzzy
 #| msgid "Une métropole infinie de gratte-ciel et d'avenues désertes, baignée de soleil. Des Facelings y vivent paisiblement. Ses immeubles mènent un peu partout."
 msgctxt "BR,Level.11.Description"
@@ -4900,16 +4900,16 @@ msgid "Une métropole infinie de gratte-ciel et d'avenues désertes, baignée de
 msgstr "مدينة لا نهائية من ناطحات السحاب والشوارع الخالية، يغمرها ضوء الشمس. يعيش فيها الفيسلينغ بسلام. في مكان ما، تنتظر محطة آخر مسافريها."
 
 #. Key:	Level.11.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(570)
-#: Source/Backrooms/Private/BRLevels.cpp(570)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(585)
+#: Source/Backrooms/Private/BRLevels.cpp(585)
 #, fuzzy
 msgctxt "BR,Level.11.ClassText"
 msgid "Classe 1 : Sûr - Stable - Habité"
 msgstr "الفئة 1: آمن - مستقر - مأهول"
 
 #. Key:	Note.L11.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(600)
-#: Source/Backrooms/Private/BRLevels.cpp(600)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(615)
+#: Source/Backrooms/Private/BRLevels.cpp(615)
 #, fuzzy
 #| msgid "Les portes des immeubles mènent n'importe où. Vraiment n'importe où."
 msgctxt "BR,Note.L11.1"
@@ -4917,168 +4917,168 @@ msgid "Les portes des immeubles sont murées. La seule route qui reste passe sou
 msgstr "أبواب المباني مسدودة بالطوب. الطريق الوحيد الباقي يمر تحت المدينة، عبر المحطة. - L."
 
 #. Key:	Note.L11.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(601)
-#: Source/Backrooms/Private/BRLevels.cpp(601)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(616)
+#: Source/Backrooms/Private/BRLevels.cpp(616)
 #, fuzzy
 msgctxt "BR,Note.L11.2"
 msgid "Les Facelings d'ici sont gentils. Ils ne parlent pas, mais ils ne font pas de mal."
 msgstr "الـ Facelings هنا لطفاء. لا يتكلمون، لكنهم لا يؤذون أحدًا."
 
 #. Key:	Level.37.Title
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(611)
-#: Source/Backrooms/Private/BRLevels.cpp(611)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(626)
+#: Source/Backrooms/Private/BRLevels.cpp(626)
 #, fuzzy
 msgctxt "BR,Level.37.Title"
 msgid "Sublimity"
 msgstr "Sublimity"
 
 #. Key:	Level.37.Nickname
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(612)
-#: Source/Backrooms/Private/BRLevels.cpp(612)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(627)
+#: Source/Backrooms/Private/BRLevels.cpp(627)
 #, fuzzy
 msgctxt "BR,Level.37.Nickname"
 msgid "Les Poolrooms"
 msgstr "غرف المسابح"
 
 #. Key:	Level.37.Description
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(613)
-#: Source/Backrooms/Private/BRLevels.cpp(613)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(628)
+#: Source/Backrooms/Private/BRLevels.cpp(628)
 #, fuzzy
 msgctxt "BR,Level.37.Description"
 msgid "Un dédale de couloirs carrelés bordés de canaux, d'arches et de salles inondées d'une eau tiède et claire. La lumière est douce, l'écho infini. Un calme presque réconfortant... presque."
 msgstr "متاهة من ممرات مبلّطة تحفّها قنوات وأقواس وقاعات غمرتها مياه فاترة صافية. الضوء ناعم والصدى بلا نهاية. هدوء يكاد يكون مطمئنًا... يكاد."
 
 #. Key:	Level.37.ClassText
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(615)
-#: Source/Backrooms/Private/BRLevels.cpp(615)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(630)
+#: Source/Backrooms/Private/BRLevels.cpp(630)
 #, fuzzy
 msgctxt "BR,Level.37.ClassText"
 msgid "Classe 1 : Sûr - Stable - Aucune entité"
 msgstr "الفئة 1: آمن - مستقر - بلا كيانات"
 
 #. Key:	Note.L37.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(654)
-#: Source/Backrooms/Private/BRLevels.cpp(654)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(671)
+#: Source/Backrooms/Private/BRLevels.cpp(671)
 #, fuzzy
 msgctxt "BR,Note.L37.1"
 msgid "L'eau est tiède. Elle n'a pas de fond, a certains endroits. N'y plonge pas."
 msgstr "الماء فاتر. في بعض الأماكن ليس له قاع. لا تغطس."
 
 #. Key:	Note.L37.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(655)
-#: Source/Backrooms/Private/BRLevels.cpp(655)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(672)
+#: Source/Backrooms/Private/BRLevels.cpp(672)
 #, fuzzy
 msgctxt "BR,Note.L37.2"
 msgid "C'est beau ici. Trop beau. Je crois que je n'ai plus envie de partir. C'est ça, le piège."
 msgstr "المكان جميل هنا. جميل أكثر من اللازم. أظن أنني لم أعد أرغب في الرحيل. هذا هو الفخ."
 
 #. Key:	Note.L37.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(656)
-#: Source/Backrooms/Private/BRLevels.cpp(656)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(673)
+#: Source/Backrooms/Private/BRLevels.cpp(673)
 #, fuzzy
 msgctxt "BR,Note.L37.3"
 msgid "Nous sommes restés trop longtemps au bord de l'eau. M. voulait attendre ici. Nous sommes repartis sans elle, par l'échelle. Je reviendrai. - L."
 msgstr "بقينا طويلًا جدًا عند الماء. أرادت M. أن تنتظر هنا. رحلنا من دونها، عبر السلّم. سأعود. - L."
 
 #. Key:	Content.ChannelPublic
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(880)
-#: Source/Backrooms/Private/BRLevels.cpp(880)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(897)
+#: Source/Backrooms/Private/BRLevels.cpp(897)
 #, fuzzy
 msgctxt "BR,Content.ChannelPublic"
 msgid "version publiée"
 msgstr "النسخة المنشورة"
 
 #. Key:	Content.ChannelInternal
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(881)
-#: Source/Backrooms/Private/BRLevels.cpp(881)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(898)
+#: Source/Backrooms/Private/BRLevels.cpp(898)
 #, fuzzy
 msgctxt "BR,Content.ChannelInternal"
 msgid "version de test interne"
 msgstr "نسخة الاختبار الداخلي"
 
 #. Key:	Content.ChannelAll
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(882)
-#: Source/Backrooms/Private/BRLevels.cpp(882)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(899)
+#: Source/Backrooms/Private/BRLevels.cpp(899)
 #, fuzzy
 msgctxt "BR,Content.ChannelAll"
 msgid "version de développement"
 msgstr "نسخة التطوير"
 
 #. Key:	Content.Lot1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(905)
-#: Source/Backrooms/Private/BRLevels.cpp(905)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(922)
+#: Source/Backrooms/Private/BRLevels.cpp(922)
 #, fuzzy
 msgctxt "BR,Content.Lot1"
 msgid "Le Seuil"
 msgstr "العتبة"
 
 #. Key:	Content.Lot2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(906)
-#: Source/Backrooms/Private/BRLevels.cpp(906)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(923)
+#: Source/Backrooms/Private/BRLevels.cpp(923)
 #, fuzzy
 msgctxt "BR,Content.Lot2"
 msgid "La Station et les Bureaux"
 msgstr "المحطة والمكاتب"
 
 #. Key:	Content.Lot3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(907)
-#: Source/Backrooms/Private/BRLevels.cpp(907)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(924)
+#: Source/Backrooms/Private/BRLevels.cpp(924)
 #, fuzzy
 msgctxt "BR,Content.Lot3"
 msgid "L'Hôtel et le Noir"
 msgstr "الفندق والظلام"
 
 #. Key:	Content.Lot4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(908)
-#: Source/Backrooms/Private/BRLevels.cpp(908)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(925)
+#: Source/Backrooms/Private/BRLevels.cpp(925)
 #, fuzzy
 msgctxt "BR,Content.Lot4"
 msgid "Les Grottes, la Banlieue et le Champ"
 msgstr "الكهوف والضاحية والحقل"
 
 #. Key:	Content.Lot5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(909)
-#: Source/Backrooms/Private/BRLevels.cpp(909)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(926)
+#: Source/Backrooms/Private/BRLevels.cpp(926)
 #, fuzzy
 msgctxt "BR,Content.Lot5"
 msgid "La Ville"
 msgstr "المدينة"
 
 #. Key:	Note.Common.1
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(916)
-#: Source/Backrooms/Private/BRLevels.cpp(916)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(933)
+#: Source/Backrooms/Private/BRLevels.cpp(933)
 #, fuzzy
 msgctxt "BR,Note.Common.1"
 msgid "RÈGLE N°1 : ne cours pas si tu n'y es pas obligé. Le bruit attire les choses."
 msgstr "القاعدة رقم 1: لا تركض إلا إذا اضطررت. الضجيج يجذب الأشياء."
 
 #. Key:	Note.Common.2
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(917)
-#: Source/Backrooms/Private/BRLevels.cpp(917)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(934)
+#: Source/Backrooms/Private/BRLevels.cpp(934)
 #, fuzzy
 msgctxt "BR,Note.Common.2"
 msgid "RÈGLE N°2 : bois de l'eau d'amande quand ta tête commence à tourner. La folie tue aussi sûrement que les entites."
 msgstr "القاعدة رقم 2: اشرب ماء اللوز حين يبدأ رأسك بالدوران. الجنون يقتل بثقة الكيانات نفسها."
 
 #. Key:	Note.Common.3
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(918)
-#: Source/Backrooms/Private/BRLevels.cpp(918)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(935)
+#: Source/Backrooms/Private/BRLevels.cpp(935)
 #, fuzzy
 msgctxt "BR,Note.Common.3"
 msgid "RÈGLE N°3 : une lampe allumée se voit de loin. Parfois, il vaut mieux rester dans le noir."
 msgstr "القاعدة رقم 3: المصباح المضاء يُرى من بعيد. أحيانًا من الأفضل البقاء في الظلام."
 
 #. Key:	Note.Common.4
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(919)
-#: Source/Backrooms/Private/BRLevels.cpp(919)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(936)
+#: Source/Backrooms/Private/BRLevels.cpp(936)
 #, fuzzy
 msgctxt "BR,Note.Common.4"
 msgid "Ils l'appellent le \"Front\" - la réalité d'où nous venons. Je ne suis plus sûr qu'elle ait existé."
 msgstr "يسمّونه \"Frontrooms\"، الواقع الذي جئنا منه. لم أعد متأكدًا أنه وُجد أصلًا."
 
 #. Key:	Note.Common.5
-#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(920)
-#: Source/Backrooms/Private/BRLevels.cpp(920)
+#. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(937)
+#: Source/Backrooms/Private/BRLevels.cpp(937)
 #, fuzzy
 msgctxt "BR,Note.Common.5"
 msgid "Note pour moi-même : {Inventory} pour ouvrir le journal. Ne pas oublier ce que j'ai vu."
@@ -7464,1752 +7464,1760 @@ msgid "Niveau {N}"
 msgstr "المستوى {N}"
 
 #. Key:	Menu.RenderMegaLightsNoRT
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(111)
-#: Source/Backrooms/Private/BRPlayerController.cpp(111)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(123)
+#: Source/Backrooms/Private/BRPlayerController.cpp(123)
 #, fuzzy
 msgctxt "BR,Menu.RenderMegaLightsNoRT"
 msgid "MegaLights : indisponible (ray tracing matériel requis)"
 msgstr "MegaLights: غير متاح (يتطلب تتبع الأشعة بالعتاد)"
 
 #. Key:	Menu.RenderMegaLightsOn
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(115)
-#: Source/Backrooms/Private/BRPlayerController.cpp(115)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(127)
+#: Source/Backrooms/Private/BRPlayerController.cpp(127)
 #, fuzzy
 msgctxt "BR,Menu.RenderMegaLightsOn"
 msgid "MegaLights : actif (ombres de toutes les lampes)"
 msgstr "MegaLights: مفعّل (ظلال كل المصابيح)"
 
 #. Key:	Menu.RenderMegaLightsOff
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(116)
-#: Source/Backrooms/Private/BRPlayerController.cpp(116)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(128)
+#: Source/Backrooms/Private/BRPlayerController.cpp(128)
 #, fuzzy
 msgctxt "BR,Menu.RenderMegaLightsOff"
 msgid "MegaLights : désactivé"
 msgstr "MegaLights: معطّل"
 
 #. Key:	Menu.Performance
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(169)
-#: Source/Backrooms/Private/BRPlayerController.cpp(169)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
+#: Source/Backrooms/Private/BRPlayerController.cpp(181)
 #, fuzzy
 msgctxt "BR,Menu.Performance"
 msgid "PERFORMANCE"
 msgstr "الأداء"
 
 #. Key:	Menu.Qualite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(169)
-#: Source/Backrooms/Private/BRPlayerController.cpp(169)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
+#: Source/Backrooms/Private/BRPlayerController.cpp(181)
 #, fuzzy
 msgctxt "BR,Menu.Qualite"
 msgid "QUALITÉ"
 msgstr "الجودة"
 
 #. Key:	Menu.Cinematique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(169)
-#: Source/Backrooms/Private/BRPlayerController.cpp(169) Source/Backrooms/Private/BRPlayerController.cpp(176)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
+#: Source/Backrooms/Private/BRPlayerController.cpp(181) Source/Backrooms/Private/BRPlayerController.cpp(188)
 #, fuzzy
 msgctxt "BR,Menu.Cinematique"
 msgid "CINÉMATIQUE"
 msgstr "سينمائي"
 
 #. Key:	Menu.Personnalise
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(169)
-#: Source/Backrooms/Private/BRPlayerController.cpp(169)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
+#: Source/Backrooms/Private/BRPlayerController.cpp(181)
 #, fuzzy
 msgctxt "BR,Menu.Personnalise"
 msgid "PERSONNALISÉ"
 msgstr "مخصّص"
 
 #. Key:	Menu.RtxFluide
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(169)
-#: Source/Backrooms/Private/BRPlayerController.cpp(169)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
+#: Source/Backrooms/Private/BRPlayerController.cpp(181)
 #, fuzzy
 msgctxt "BR,Menu.RtxFluide"
 msgid "RTX FLUIDE"
 msgstr "RTX سلس"
 
 #. Key:	Menu.Bas
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(176)
-#: Source/Backrooms/Private/BRPlayerController.cpp(176)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(188)
+#: Source/Backrooms/Private/BRPlayerController.cpp(188)
 #, fuzzy
 msgctxt "BR,Menu.Bas"
 msgid "BAS"
 msgstr "منخفضة"
 
 #. Key:	Menu.Moyen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(176)
-#: Source/Backrooms/Private/BRPlayerController.cpp(176)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(188)
+#: Source/Backrooms/Private/BRPlayerController.cpp(188)
 #, fuzzy
 msgctxt "BR,Menu.Moyen"
 msgid "MOYEN"
 msgstr "متوسطة"
 
 #. Key:	Menu.Eleve
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(176)
-#: Source/Backrooms/Private/BRPlayerController.cpp(176)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(188)
+#: Source/Backrooms/Private/BRPlayerController.cpp(188)
 #, fuzzy
 msgctxt "BR,Menu.Eleve"
 msgid "ÉLEVÉ"
 msgstr "عالية"
 
 #. Key:	Menu.Epique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(176)
-#: Source/Backrooms/Private/BRPlayerController.cpp(176)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(188)
+#: Source/Backrooms/Private/BRPlayerController.cpp(188)
 #, fuzzy
 msgctxt "BR,Menu.Epique"
 msgid "ÉPIQUE"
 msgstr "ملحمية"
 
 #. Key:	Menu.VoixOuverte
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
-#: Source/Backrooms/Private/BRPlayerController.cpp(181)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(193)
+#: Source/Backrooms/Private/BRPlayerController.cpp(193)
 #, fuzzy
 msgctxt "BR,Menu.VoixOuverte"
 msgid "VOIX OUVERTE"
 msgstr "ميكروفون مفتوح"
 
 #. Key:	Menu.AppuyerParler
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
-#: Source/Backrooms/Private/BRPlayerController.cpp(181)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(193)
+#: Source/Backrooms/Private/BRPlayerController.cpp(193)
 #, fuzzy
 msgctxt "BR,Menu.AppuyerParler"
 msgid "APPUYER POUR PARLER"
 msgstr "اضغط للتحدث"
 
 #. Key:	Menu.MicroCoupe
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(181)
-#: Source/Backrooms/Private/BRPlayerController.cpp(181)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(193)
+#: Source/Backrooms/Private/BRPlayerController.cpp(193)
 #, fuzzy
 msgctxt "BR,Menu.MicroCoupe"
 msgid "MICRO COUPÉ"
 msgstr "الميكروفون مكتوم"
 
 #. Key:	Menu.PleinEcran
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(186)
-#: Source/Backrooms/Private/BRPlayerController.cpp(186)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(198)
+#: Source/Backrooms/Private/BRPlayerController.cpp(198)
 #, fuzzy
 msgctxt "BR,Menu.PleinEcran"
 msgid "PLEIN ÉCRAN"
 msgstr "ملء الشاشة"
 
 #. Key:	Menu.FenetreSansBordure
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(186)
-#: Source/Backrooms/Private/BRPlayerController.cpp(186)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(198)
+#: Source/Backrooms/Private/BRPlayerController.cpp(198)
 #, fuzzy
 msgctxt "BR,Menu.FenetreSansBordure"
 msgid "FENÊTRÉ SANS BORDURE"
 msgstr "نافذة بلا حواف"
 
 #. Key:	Menu.Fenetre
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(186)
-#: Source/Backrooms/Private/BRPlayerController.cpp(186)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(198)
+#: Source/Backrooms/Private/BRPlayerController.cpp(198)
 #, fuzzy
 msgctxt "BR,Menu.Fenetre"
 msgid "FENÊTRÉ"
 msgstr "نافذة"
 
 #. Key:	Menu.ShowContextual
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(192)
-#: Source/Backrooms/Private/BRPlayerController.cpp(192)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(204)
+#: Source/Backrooms/Private/BRPlayerController.cpp(204)
 #, fuzzy
 msgctxt "BR,Menu.ShowContextual"
 msgid "BRIÈVEMENT"
 msgstr "لفترة قصيرة"
 
 #. Key:	Menu.ShowAlways
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(192)
-#: Source/Backrooms/Private/BRPlayerController.cpp(192)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(204)
+#: Source/Backrooms/Private/BRPlayerController.cpp(204)
 #, fuzzy
 msgctxt "BR,Menu.ShowAlways"
 msgid "TOUJOURS"
 msgstr "دائمًا"
 
 #. Key:	Menu.ShowHidden
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(192)
-#: Source/Backrooms/Private/BRPlayerController.cpp(192)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(204)
+#: Source/Backrooms/Private/BRPlayerController.cpp(204)
 #, fuzzy
 msgctxt "BR,Menu.ShowHidden"
 msgid "MASQUÉS"
 msgstr "مخفية"
 
 #. Key:	Menu.CrosshairDot
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(197)
-#: Source/Backrooms/Private/BRPlayerController.cpp(197)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(209)
+#: Source/Backrooms/Private/BRPlayerController.cpp(209)
 #, fuzzy
 msgctxt "BR,Menu.CrosshairDot"
 msgid "POINT"
 msgstr "نقطة"
 
 #. Key:	Menu.CrosshairFocus
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(197)
-#: Source/Backrooms/Private/BRPlayerController.cpp(197)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(209)
+#: Source/Backrooms/Private/BRPlayerController.cpp(209)
 #, fuzzy
 msgctxt "BR,Menu.CrosshairFocus"
 msgid "SUR LES OBJETS"
 msgstr "على الأشياء"
 
 #. Key:	Menu.Aucun
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(197)
-#: Source/Backrooms/Private/BRPlayerController.cpp(197) Source/Backrooms/Private/BRPlayerController.cpp(3217) Source/Backrooms/Private/BRPlayerController.cpp(3219)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(209)
+#: Source/Backrooms/Private/BRPlayerController.cpp(209) Source/Backrooms/Private/BRPlayerController.cpp(3233) Source/Backrooms/Private/BRPlayerController.cpp(3235)
 #, fuzzy
 msgctxt "BR,Menu.Aucun"
 msgid "AUCUN"
 msgstr "بلا"
 
 #. Key:	Menu.Active
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(212)
-#: Source/Backrooms/Private/BRPlayerController.cpp(212)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(224)
+#: Source/Backrooms/Private/BRPlayerController.cpp(224)
 #, fuzzy
 msgctxt "BR,Menu.Active"
 msgid "ACTIVÉ"
 msgstr "تشغيل"
 
 #. Key:	Menu.Desactive
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(212)
-#: Source/Backrooms/Private/BRPlayerController.cpp(212)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(224)
+#: Source/Backrooms/Private/BRPlayerController.cpp(224)
 #, fuzzy
 msgctxt "BR,Menu.Desactive"
 msgid "DÉSACTIVÉ"
 msgstr "إيقاف"
 
 #. Key:	Menu.JoinRefusedVersion
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(230)
-#: Source/Backrooms/Private/BRPlayerController.cpp(230)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(242)
+#: Source/Backrooms/Private/BRPlayerController.cpp(242)
 #, fuzzy
 msgctxt "BR,Menu.JoinRefusedVersion"
 msgid "Impossible de rejoindre : l'hôte a la version {Host} du jeu, vous avez la version {Local}. Installez la même version des deux côtés."
 msgstr "تعذّر الانضمام: لدى المضيف النسخة {Host} من اللعبة، ولديك النسخة {Local}. ثبّتوا النسخة نفسها على الجانبين."
 
 #. Key:	Menu.JoinRefusedContent
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(234)
-#: Source/Backrooms/Private/BRPlayerController.cpp(234)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(246)
+#: Source/Backrooms/Private/BRPlayerController.cpp(246)
 #, fuzzy
 msgctxt "BR,Menu.JoinRefusedContent"
 msgid "Impossible de rejoindre : l'hôte joue avec la {HostChannel} (contenu jusqu'au chapitre {HostLot}), vous avez la {LocalChannel} (chapitre {LocalLot}). Les deux joueurs doivent avoir le même contenu."
 msgstr "تعذّر الانضمام: المضيف: {HostChannel} (المحتوى حتى الفصل {HostLot})؛ أنت: {LocalChannel} (الفصل {LocalLot}). يحتاج اللاعبان إلى المحتوى نفسه."
 
 #. Key:	Menu.JoinOtherVersion
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(253)
-#: Source/Backrooms/Private/BRPlayerController.cpp(253)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(265)
+#: Source/Backrooms/Private/BRPlayerController.cpp(265)
 #, fuzzy
 msgctxt "BR,Menu.JoinOtherVersion"
 msgid "Impossible de rejoindre : l'hôte a une autre version du jeu (vous avez la version {Local}). Installez la même version des deux côtés."
 msgstr "تعذّر الانضمام: لدى المضيف نسخة أخرى من اللعبة (لديك النسخة {Local}). ثبّتوا النسخة نفسها على الجانبين."
 
 #. Key:	Menu.JoinServerFull
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(259)
-#: Source/Backrooms/Private/BRPlayerController.cpp(259)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(271)
+#: Source/Backrooms/Private/BRPlayerController.cpp(271)
 #, fuzzy
 msgctxt "BR,Menu.JoinServerFull"
 msgid "Impossible de rejoindre : la partie est complète (4 joueurs)."
 msgstr "تعذّر الانضمام: اللعبة ممتلئة (4 لاعبين)."
 
 #. Key:	Menu.ImpossibleRejoindrePartieVerifiezAdresse
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(262)
-#: Source/Backrooms/Private/BRPlayerController.cpp(262)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(274)
+#: Source/Backrooms/Private/BRPlayerController.cpp(274)
 #, fuzzy
 msgctxt "BR,Menu.ImpossibleRejoindrePartieVerifiezAdresse"
 msgid "Impossible de rejoindre la partie : vérifiez l'adresse, le port 7777 (UDP) et le pare-feu de l'hôte."
 msgstr "تعذّر الانضمام إلى اللعبة: تحقّق من العنوان والمنفذ 7777 (UDP) وجدار الحماية لدى المضيف."
 
 #. Key:	Menu.ConnexionPerdueHote
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(266)
-#: Source/Backrooms/Private/BRPlayerController.cpp(266)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(278)
+#: Source/Backrooms/Private/BRPlayerController.cpp(278)
 #, fuzzy
 msgctxt "BR,Menu.ConnexionPerdueHote"
 msgid "Connexion perdue avec l'hôte."
 msgstr "انقطع الاتصال بالمضيف."
 
 #. Key:	Menu.ImpossibleHebergerPort7777Peut
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(269)
-#: Source/Backrooms/Private/BRPlayerController.cpp(269)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(281)
+#: Source/Backrooms/Private/BRPlayerController.cpp(281)
 #, fuzzy
 msgctxt "BR,Menu.ImpossibleHebergerPort7777Peut"
 msgid "Impossible d'héberger : le port 7777 est peut-être déjà utilisé."
 msgstr "تعذّرت الاستضافة: قد يكون المنفذ 7777 مستخدمًا بالفعل."
 
 #. Key:	Menu.ErreurReseau
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(272)
-#: Source/Backrooms/Private/BRPlayerController.cpp(272)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(284)
+#: Source/Backrooms/Private/BRPlayerController.cpp(284)
 #, fuzzy
 msgctxt "BR,Menu.ErreurReseau"
 msgid "Erreur réseau : "
 msgstr "خطأ في الشبكة: "
 
 #. Key:	Menu.ImpossibleRejoindrePartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(279)
-#: Source/Backrooms/Private/BRPlayerController.cpp(279)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(291)
+#: Source/Backrooms/Private/BRPlayerController.cpp(291)
 #, fuzzy
 msgctxt "BR,Menu.ImpossibleRejoindrePartie"
 msgid "Impossible de rejoindre la partie : "
 msgstr "تعذّر الانضمام إلى اللعبة: "
 
+#. Key:	Menu.GpuVram
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(354)
+#: Source/Backrooms/Private/BRPlayerController.cpp(354)
+#, fuzzy
+msgctxt "BR,Menu.GpuVram"
+msgid "{Gpu}, {Vram} Mo"
+msgstr "{Gpu}، {Vram} ميغابايت"
+
 #. Key:	Menu.FirstRunProfile
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(340)
-#: Source/Backrooms/Private/BRPlayerController.cpp(340)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(356)
+#: Source/Backrooms/Private/BRPlayerController.cpp(356)
 #, fuzzy
 msgctxt "BR,Menu.FirstRunProfile"
 msgid "Premier lancement : profil graphique {Profile} choisi pour cette carte ({Gpu}). Il se change dans PARAMÈTRES > GRAPHISMES."
 msgstr "التشغيل الأول: اختير ملف الرسوميات {Profile} لهذه البطاقة ({Gpu}). يمكنك تغييره من الإعدادات > الرسوميات."
 
 #. Key:	Display.RestoredAtStartup
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(346)
-#: Source/Backrooms/Private/BRPlayerController.cpp(346)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(362)
+#: Source/Backrooms/Private/BRPlayerController.cpp(362)
 #, fuzzy
 msgctxt "BR,Display.RestoredAtStartup"
 msgid "Affichage rétabli : le changement précédent n'avait pas été confirmé."
 msgstr "تمت استعادة العرض: لم يُؤكَّد التغيير السابق."
 
 #. Key:	Display.Reverted
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(712)
-#: Source/Backrooms/Private/BRPlayerController.cpp(712)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(728)
+#: Source/Backrooms/Private/BRPlayerController.cpp(728)
 #, fuzzy
 msgctxt "BR,Display.Reverted"
 msgid "Affichage rétabli (pas de confirmation)."
 msgstr "تمت استعادة العرض (دون تأكيد)."
 
 #. Key:	Menu.HebergezPartieVotrePcFait
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(827)
-#: Source/Backrooms/Private/BRPlayerController.cpp(827)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(843)
+#: Source/Backrooms/Private/BRPlayerController.cpp(843)
 #, fuzzy
 msgctxt "BR,Menu.HebergezPartieVotrePcFait"
 msgid "Vous hébergez la partie : votre PC fait tourner le monde et les entités pour tout le groupe. Gardez le jeu ouvert jusqu'à la fin."
 msgstr "أنت تستضيف اللعبة: حاسوبك يشغّل العالم والكيانات للمجموعة كلها. أبقِ اللعبة مفتوحة حتى النهاية."
 
 #. Key:	Menu.ConnectePartieHoteRestezGroupes
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(832)
-#: Source/Backrooms/Private/BRPlayerController.cpp(832)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(848)
+#: Source/Backrooms/Private/BRPlayerController.cpp(848)
 #, fuzzy
 msgctxt "BR,Menu.ConnectePartieHoteRestezGroupes"
 msgid "Connecté à la partie de l'hôte. Restez groupés : on s'entend mieux de près."
 msgstr "تم الاتصال بلعبة المضيف. ابقوا معًا: تسمعون بعضكم أفضل عن قرب."
 
 #. Key:	Menu.ChatVocalProximiteMaintenezPushtotalk
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(837)
-#: Source/Backrooms/Private/BRPlayerController.cpp(837)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(853)
+#: Source/Backrooms/Private/BRPlayerController.cpp(853)
 #, fuzzy
 msgctxt "BR,Menu.ChatVocalProximiteMaintenezPushtotalk"
 msgid "Chat vocal de proximité : maintenez {PushToTalk} pour parler."
 msgstr "الدردشة الصوتية حسب القرب: اضغط مطوّلًا على {PushToTalk} للتحدث."
 
 #. Key:	Menu.TouchesDefautRetablies
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(949)
-#: Source/Backrooms/Private/BRPlayerController.cpp(949)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(965)
+#: Source/Backrooms/Private/BRPlayerController.cpp(965)
 #, fuzzy
 msgctxt "BR,Menu.TouchesDefautRetablies"
 msgid "Touches par défaut rétablies."
 msgstr "تمت استعادة التحكم الافتراضي."
 
 #. Key:	Menu.KRetireeRemoved
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(993)
-#: Source/Backrooms/Private/BRPlayerController.cpp(993)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1009)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1009)
 #, fuzzy
 msgctxt "BR,Menu.KRetireeRemoved"
 msgid "{K} retirée de : {Removed}"
 msgstr "أُزيل {K} من: {Removed}"
 
 #. Key:	Menu.CommandeTestDesactiveeModeDeveloppeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1586)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1586)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1602)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1602)
 #, fuzzy
 msgctxt "BR,Menu.CommandeTestDesactiveeModeDeveloppeur"
 msgid "Commande de test désactivée (mode développeur requis, absent des versions publiées)."
 msgstr "أمر الاختبار معطّل (يتطلب وضع المطوّر، غير الموجود في الإصدارات المنشورة)."
 
 #. Key:	Menu.ModeDevNiveauNumberTitle
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1605)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1605)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1621)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1621)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevNiveauNumberTitle"
 msgid "MODE DÉV : Niveau {Number} - {Title}"
 msgstr "وضع المطوّر: المستوى {Number} - {Title}"
 
 #. Key:	Menu.ModeDevObjectifsRemplis
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1636)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1636)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1652)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1652)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevObjectifsRemplis"
 msgid "MODE DÉV : objectifs remplis"
 msgstr "وضع المطوّر: الأهداف مكتملة"
 
 #. Key:	Menu.ModeDevVolLibreTravers
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1649)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1649)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1665)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1665)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevVolLibreTravers"
 msgid "MODE DÉV : vol libre (à travers les murs, Espace pour monter, Maj pour accélérer)"
 msgstr "وضع المطوّر: طيران حر (عبر الجدران، المسافة للصعود، Shift للتسريع)"
 
 #. Key:	Menu.ModeDevVolLibreCoupe
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1650)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1650)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1666)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1666)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevVolLibreCoupe"
 msgid "MODE DÉV : vol libre coupé"
 msgstr "وضع المطوّر: أُوقف الطيران الحر"
 
 #. Key:	Menu.Solo
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1678)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1678)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1694)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1694)
 #, fuzzy
 msgctxt "BR,Menu.Solo"
 msgid "SOLO"
 msgstr "لعب فردي"
 
 #. Key:	Menu.Multijoueur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1678)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1678)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1694)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1694)
 #, fuzzy
 msgctxt "BR,Menu.Multijoueur"
 msgid "MULTIJOUEUR"
 msgstr "اللعب الجماعي"
 
 #. Key:	Menu.Parametres
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1678)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1678)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1694)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1694)
 #, fuzzy
 msgctxt "BR,Menu.Parametres"
 msgid "PARAMÈTRES"
 msgstr "الإعدادات"
 
 #. Key:	Menu.Language
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1678)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1678)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1694)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1694)
 #, fuzzy
 msgctxt "BR,Menu.Language"
 msgid "LANGUE"
 msgstr "اللغة"
 
 #. Key:	Menu.Quitter
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1678)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1678)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1694)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1694)
 #, fuzzy
 msgctxt "BR,Menu.Quitter"
 msgid "QUITTER"
 msgstr "خروج"
 
 #. Key:	Menu.HebergerPartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1679)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1679)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1695)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1695)
 #, fuzzy
 msgctxt "BR,Menu.HebergerPartie"
 msgid "HÉBERGER UNE PARTIE"
 msgstr "استضافة لعبة"
 
 #. Key:	Menu.RejoindrePartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1679)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1679)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1695)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1695)
 #, fuzzy
 msgctxt "BR,Menu.RejoindrePartie"
 msgid "REJOINDRE UNE PARTIE"
 msgstr "الانضمام إلى لعبة"
 
 #. Key:	Menu.Retour
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1679)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1679) Source/Backrooms/Private/BRPlayerController.cpp(1686) Source/Backrooms/Private/BRPlayerController.cpp(1690) Source/Backrooms/Private/BRPlayerController.cpp(1692)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1695)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1695) Source/Backrooms/Private/BRPlayerController.cpp(1702) Source/Backrooms/Private/BRPlayerController.cpp(1706) Source/Backrooms/Private/BRPlayerController.cpp(1708)
 #, fuzzy
 msgctxt "BR,Menu.Retour"
 msgid "RETOUR"
 msgstr "رجوع"
 
 #. Key:	Menu.Connecter
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1690)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1690)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1706)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1706)
 #, fuzzy
 msgctxt "BR,Menu.Connecter"
 msgid "SE CONNECTER"
 msgstr "اتصال"
 
 #. Key:	Menu.Heberger
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1692)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1692)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1708)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1708)
 #, fuzzy
 msgctxt "BR,Menu.Heberger"
 msgid "HÉBERGER"
 msgstr "استضافة"
 
 #. Key:	Menu.Commencer
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1692)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1692)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1708)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1708)
 #, fuzzy
 msgctxt "BR,Menu.Commencer"
 msgid "COMMENCER"
 msgstr "ابدأ"
 
 #. Key:	Menu.HostContinue
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1702)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1702)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1718)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1718)
 #, fuzzy
 msgctxt "BR,Menu.HostContinue"
 msgid "HÉBERGER : CONTINUER"
 msgstr "استضافة: متابعة"
 
 #. Key:	Menu.Continue
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1702)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1702)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1718)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1718)
 #, fuzzy
 msgctxt "BR,Menu.Continue"
 msgid "CONTINUER"
 msgstr "متابعة"
 
 #. Key:	Menu.Verrouille
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1708)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1708)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1724)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1724)
 #, fuzzy
 msgctxt "BR,Menu.Verrouille"
 msgid "VERROUILLÉ"
 msgstr "مقفل"
 
 #. Key:	Menu.HostReplay
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1710)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1710)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1726)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1726)
 #, fuzzy
 msgctxt "BR,Menu.HostReplay"
 msgid "HÉBERGER : REJOUER"
 msgstr "استضافة: إعادة اللعب"
 
 #. Key:	Menu.Replay
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1710)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1710)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1726)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1726)
 #, fuzzy
 msgctxt "BR,Menu.Replay"
 msgid "REJOUER"
 msgstr "إعادة اللعب"
 
 #. Key:	Menu.OuiSupprimer
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1716)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1716)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1732)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1732)
 #, fuzzy
 msgctxt "BR,Menu.OuiSupprimer"
 msgid "OUI, SUPPRIMER"
 msgstr "نعم، احذف"
 
 #. Key:	Menu.Annuler
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1716)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1716)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1732)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1732)
 #, fuzzy
 msgctxt "BR,Menu.Annuler"
 msgid "ANNULER"
 msgstr "إلغاء"
 
 #. Key:	Menu.NouvellePartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1724)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1724)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1740)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1740)
 #, fuzzy
 msgctxt "BR,Menu.NouvellePartie"
 msgid "NOUVELLE PARTIE"
 msgstr "لعبة جديدة"
 
 #. Key:	Menu.PartieFree
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1828)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1828)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1844)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1844)
 #, fuzzy
 msgctxt "BR,Menu.PartieFree"
 msgid "Partie {Free}"
 msgstr "اللعبة {Free}"
 
 #. Key:	Menu.LanguageChanged
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1892)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1892)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1908)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1908)
 #, fuzzy
 msgctxt "BR,Menu.LanguageChanged"
 msgid "Langue : {Language}"
 msgstr "اللغة: {Language}"
 
 #. Key:	Menu.NiveauNumberEncoreExploreCette
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1916)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1916)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1932)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1932)
 #, fuzzy
 msgctxt "BR,Menu.NiveauNumberEncoreExploreCette"
 msgid "Niveau {Number} : pas encore exploré dans cette partie. Trouvez une sortie qui y mène."
 msgstr "المستوى {Number}: لم يُستكشف بعد في هذه اللعبة. اعثر على مخرج يؤدي إليه."
 
 #. Key:	Menu.PartieNameSupprimee
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1973)
-#: Source/Backrooms/Private/BRPlayerController.cpp(1973)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(1989)
+#: Source/Backrooms/Private/BRPlayerController.cpp(1989)
 #, fuzzy
 msgctxt "BR,Menu.PartieNameSupprimee"
 msgid "Partie « {Name} » supprimée."
 msgstr "حُذف الحفظ \"{Name}\"."
 
 #. Key:	Save.Error.Replace
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2092)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2092)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2108)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2108)
 #, fuzzy
 msgctxt "BR,Save.Error.Replace"
 msgid "le fichier {File}.sav n'a pas pu être remplacé (ouvert par un autre programme ?)"
 msgstr "تعذّر استبدال الملف {File}.sav (هل هو مفتوح في برنامج آخر؟)"
 
 #. Key:	Save.Error.FutureFormat
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2096)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2096)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2112)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2112)
 #, fuzzy
 msgctxt "BR,Save.Error.FutureFormat"
 msgid "partie d'une version plus récente du jeu (format {Format}) : réécriture refusée, fichier préservé"
 msgstr "حفظ من إصدار أحدث من اللعبة (الصيغة {Format}): رُفضت الكتابة فوقه، والملف محفوظ"
 
 #. Key:	Save.Error.TempWrite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2100)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2100)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2116)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2116)
 #, fuzzy
 msgctxt "BR,Save.Error.TempWrite"
 msgid "écriture impossible de {File} (disque plein ou dossier protégé ?)"
 msgstr "تتعذّر الكتابة في {File} (القرص ممتلئ أو المجلد محمي؟)"
 
 #. Key:	Save.Error.Notice
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2104)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2104)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2120)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2120)
 #, fuzzy
 msgctxt "BR,Save.Error.Notice"
 msgid "Échec de la sauvegarde (emplacement {Slot}, demande n° {Request}) : {Cause}. La partie continue ; nouvel essai à la prochaine sauvegarde."
 msgstr "فشل الحفظ (الخانة {Slot}، الطلب رقم {Request}): {Cause}. تستمر اللعبة؛ وستُعاد المحاولة عند الحفظ التالي."
 
 #. Key:	Menu.DerniereSessionArreteePendantMort
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2133)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2133)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2149)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2149)
 #, fuzzy
 msgctxt "BR,Menu.DerniereSessionArreteePendantMort"
 msgid "La dernière session s'est arrêtée pendant une mort : vous repartez avec l'équipement de départ."
 msgstr "انتهت الجلسة الأخيرة أثناء موت: تبدأ من جديد بمعدات البداية."
 
 #. Key:	Menu.CettePartieVientVersionRecente
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2147)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2147)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2163)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2163)
 #, fuzzy
 msgctxt "BR,Menu.CettePartieVientVersionRecente"
 msgid "Cette partie vient d'une version plus récente du jeu (format {LoadedVersion}) : elle reste intacte et ne peut pas être reprise ici."
 msgstr "هذا الحفظ من إصدار أحدث من اللعبة (الصيغة {LoadedVersion}): يبقى كما هو ولا يمكن متابعته هنا."
 
 #. Key:	Menu.SaveLevelNotAvailableCopy
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2163)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2163)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2179)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2179)
 #, fuzzy
 msgctxt "BR,Menu.SaveLevelNotAvailableCopy"
 msgid "Le Niveau {Level} de cette partie n'est pas encore disponible dans cette version : reprise au Niveau {Resume}. Vos niveaux, découvertes et fins sont conservés, et une copie de la partie est gardée."
 msgstr "المستوى {Level} من هذا الحفظ غير متاح بعد في هذه النسخة: المتابعة من المستوى {Resume}. مستوياتك واكتشافاتك ونهاياتك محفوظة، وتُحفظ نسخة من الحفظ."
 
 #. Key:	Menu.SaveLevelNotAvailable
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2164)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2164)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2180)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2180)
 #, fuzzy
 msgctxt "BR,Menu.SaveLevelNotAvailable"
 msgid "Le Niveau {Level} de cette partie n'est pas encore disponible dans cette version : reprise au Niveau {Resume}. Vos niveaux, découvertes et fins sont conservés."
 msgstr "المستوى {Level} من هذا الحفظ غير متاح بعد في هذه النسخة: المتابعة من المستوى {Resume}. مستوياتك واكتشافاتك ونهاياتك محفوظة."
 
 #. Key:	Menu.ParkedWaiting
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2180)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2180)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2196)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2196)
 #, fuzzy
 msgctxt "BR,Menu.ParkedWaiting"
 msgid "Votre ancienne progression au Niveau {Level} est conservée : elle reprendra quand ce niveau sera disponible."
 msgstr "تقدمك القديم في المستوى {Level} محفوظ: سيُستأنف عندما يصبح هذا المستوى متاحًا."
 
 #. Key:	Menu.ParkedSaveV414
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2181)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2181)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2197)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2197)
 #, fuzzy
 msgctxt "BR,Menu.ParkedSaveV414"
 msgid "Ancienne partie : la traversée des Poolrooms n'est pas enregistrée dans cette sauvegarde. Traversez-les : votre progression au Niveau {Level} reprendra ensuite, rien n'est perdu."
 msgstr "حفظ قديم: عبور غرف المسابح غير مسجَّل في هذا الحفظ. اعبرها: سيُستأنف تقدمك في المستوى {Level} بعد ذلك، ولن يضيع شيء."
 
 #. Key:	Menu.ParkedRestored
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2227)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2227)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2243)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2243)
 #, fuzzy
 msgctxt "BR,Menu.ParkedRestored"
 msgid "Les Poolrooms sont traversées : votre ancienne progression reprend au Niveau {Level}, là où vous l'aviez laissée."
 msgstr "تم عبور غرف المسابح: يُستأنف تقدمك السابق في المستوى {Level}، حيث تركته."
 
 #. Key:	Menu.6EmplacementsSontOccupesSupprimez
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2237)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2237)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2253)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2253)
 #, fuzzy
 msgctxt "BR,Menu.6EmplacementsSontOccupesSupprimez"
 msgid "Les 6 emplacements sont occupés : supprimez une partie (touche Suppr)."
 msgstr "الخانات الست كلها مشغولة: احذف حفظًا (مفتاح Delete)."
 
 #. Key:	Menu.PartieSlot
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2248)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2248)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2264)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2264)
 #, fuzzy
 msgctxt "BR,Menu.PartieSlot"
 msgid "Partie {Slot}"
 msgstr "اللعبة {Slot}"
 
 #. Key:	Menu.ModeDeveloppeurNiveauLevelnumberVisite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2305)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2305)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2321)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2321)
 #, fuzzy
 msgctxt "BR,Menu.ModeDeveloppeurNiveauLevelnumberVisite"
 msgid "MODE DÉVELOPPEUR : Niveau {LevelNumber} visité sans l'ajouter à la partie « {SaveName} »."
 msgstr "وضع المطوّر: زُر المستوى {LevelNumber} دون إضافته إلى الحفظ \"{SaveName}\"."
 
 #. Key:	Menu.NiveauLevelnumberAjouteVosNiveaux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2318)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2318)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2334)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2334)
 #, fuzzy
 msgctxt "BR,Menu.NiveauLevelnumberAjouteVosNiveaux"
 msgid "Niveau {LevelNumber} ajouté à vos niveaux explorés ({Explored} / {All}) : vous pourrez y revenir depuis le menu."
 msgstr "أُضيف المستوى {LevelNumber} إلى مستوياتك المستكشفة ({Explored} / {All}): يمكنك العودة إليه من القائمة."
 
 #. Key:	Menu.CreationPartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2459)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2459)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2475)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2475)
 #, fuzzy
 msgctxt "BR,Menu.CreationPartie"
 msgid "Création de la partie..."
 msgstr "جارٍ إنشاء اللعبة..."
 
 #. Key:	Menu.EntrezAdresseIpHoteEx
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2490)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2490)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2506)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2506)
 #, fuzzy
 msgctxt "BR,Menu.EntrezAdresseIpHoteEx"
 msgid "Entrez l'adresse IP de l'hôte (ex. 192.168.1.20)."
 msgstr "أدخل عنوان IP للمضيف (مثل 192.168.1.20)."
 
 #. Key:	Menu.ConnexionAddress
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2495)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2495)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2511)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2511)
 #, fuzzy
 msgctxt "BR,Menu.ConnexionAddress"
 msgid "Connexion à {Address}..."
 msgstr "جارٍ الاتصال بـ {Address}..."
 
 #. Key:	Menu.AdresseIpHoteEx192
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2524)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2524)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2540)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2540)
 #, fuzzy
 msgctxt "BR,Menu.AdresseIpHoteEx192"
 msgid "Adresse IP de l'hôte, ex. 192.168.1.20"
 msgstr "عنوان IP للمضيف، مثل 192.168.1.20"
 
 #. Key:	Menu.NomPartie
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2582)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2582)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2598)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2598)
 #, fuzzy
 msgctxt "BR,Menu.NomPartie"
 msgid "Nom de la partie"
 msgstr "اسم الحفظ"
 
 #. Key:	Menu.ReprisePartieSavenameNiveauTarget
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2728)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2728)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2744)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2744)
 #, fuzzy
 msgctxt "BR,Menu.ReprisePartieSavenameNiveauTarget"
 msgid "Reprise de la partie « {SaveName} » : Niveau {Target}, là où vous l'aviez laissé."
 msgstr "متابعة الحفظ \"{SaveName}\": المستوى {Target}، حيث توقفت تمامًا."
 
 #. Key:	Menu.ModeDevSalleFossesNiveau
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2783)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2783)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2799)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2799)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevSalleFossesNiveau"
 msgid "MODE DÉV : salle de fosses (Niveau {LevelNumber}, graine {Seed}). Attention au bord."
 msgstr "وضع المطوّر: قاعة الحفر (المستوى {LevelNumber}، البذرة {Seed}). احذر الحافة."
 
 #. Key:	Menu.SalleFossesNiveauHotePeut
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2788)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2788)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2804)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2804)
 #, fuzzy
 msgctxt "BR,Menu.SalleFossesNiveauHotePeut"
 msgid "Pas de salle de fosses dans ce niveau (l'hôte peut charger le Niveau 0 : BRPits)."
 msgstr "لا توجد قاعة حفر في هذا المستوى (يمكن للمضيف تحميل المستوى 0: BRPits)."
 
 #. Key:	Menu.ModeDevNiveau0Graine
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2797)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2797)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2813)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2813)
 #, fuzzy
 msgctxt "BR,Menu.ModeDevNiveau0Graine"
 msgid "MODE DÉV : Niveau 0, graine de démonstration {DemoSeed}"
 msgstr "وضع المطوّر: المستوى 0، بذرة العرض {DemoSeed}"
 
 #. Key:	Menu.SeedHostOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2815)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2815)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2831)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2831)
 #, fuzzy
 msgctxt "BR,Menu.SeedHostOnly"
 msgid "BRSeed : réservé à l'hôte de la partie."
 msgstr "BRSeed: مخصّص لمضيف اللعبة."
 
 #. Key:	Menu.NiveauLevelGraineNumber
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2820)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2820)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2836)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2836)
 #, fuzzy
 msgctxt "BR,Menu.NiveauLevelGraineNumber"
 msgid "Niveau {Level}, graine {Number}"
 msgstr "المستوى {Level}، البذرة {Number}"
 
 #. Key:	Menu.ModeInvincible
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2918)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2918)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2934)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2934)
 #, fuzzy
 msgctxt "BR,Menu.ModeInvincible"
 msgid "Mode invincible : ON"
 msgstr "وضع عدم القهر: تشغيل"
 
 #. Key:	Menu.ModeInvincibleOff
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2918)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2918)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2934)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2934)
 #, fuzzy
 msgctxt "BR,Menu.ModeInvincibleOff"
 msgid "Mode invincible : OFF"
 msgstr "وضع عدم القهر: إيقاف"
 
 #. Key:	Menu.SensibiliteSensitivity
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2955)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2955)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2971)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2971)
 #, fuzzy
 msgctxt "BR,Menu.SensibiliteSensitivity"
 msgid "Sensibilité : {Sensitivity}"
 msgstr "الحساسية: {Sensitivity}"
 
 #. Key:	Menu.AxeInverse
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2962)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2962)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2978)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2978)
 #, fuzzy
 msgctxt "BR,Menu.AxeInverse"
 msgid "Axe Y inversé"
 msgstr "المحور Y معكوس"
 
 #. Key:	Menu.AxeNormal
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2962)
-#: Source/Backrooms/Private/BRPlayerController.cpp(2962)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(2978)
+#: Source/Backrooms/Private/BRPlayerController.cpp(2978)
 #, fuzzy
 msgctxt "BR,Menu.AxeNormal"
 msgid "Axe Y normal"
 msgstr "المحور Y عادي"
 
 #. Key:	Menu.RtUnavailableMac
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3102)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3102)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3118)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3118)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableMac"
 msgid "Indisponible sur macOS dans cette version ({RHI}) : Lumen logiciel est utilisé. Le ray tracing matériel Metal d'Unreal est expérimental, limité à certains Mac Apple Silicon, et n'est pas validé pour ce jeu."
 msgstr "غير متاح على macOS في هذا الإصدار ({RHI}): يُستخدم Lumen البرمجي. تتبع الأشعة بالعتاد عبر Metal في Unreal تجريبي، ومقتصر على بعض أجهزة Mac بشرائح Apple، ولم يُعتمد لهذه اللعبة."
 
 #. Key:	Menu.RtUnavailableLinux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3104)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3104)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3120)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3120)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableLinux"
 msgid "Indisponible sur Linux dans cette version ({RHI}) : Lumen logiciel est utilisé. Le ray tracing Vulkan d'Unreal dépend du pilote et n'est pas validé pour ce jeu."
 msgstr "غير متاح على Linux في هذا الإصدار ({RHI}): يُستخدم Lumen البرمجي. تتبع الأشعة عبر Vulkan في Unreal يعتمد على برنامج التشغيل ولم يُعتمد لهذه اللعبة."
 
 #. Key:	Menu.RtUnavailableWindows
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3106)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3106)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3122)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3122)
 #, fuzzy
 msgctxt "BR,Menu.RtUnavailableWindows"
 msgid "Indisponible : le jeu a démarré sans ray tracing matériel ({RHI}). Il faut DirectX 12 et une carte qui le prend en charge. Lumen logiciel est utilisé ; un changement de carte ou de RHI demande un redémarrage."
 msgstr "غير متاح: بدأت اللعبة دون تتبع الأشعة بالعتاد ({RHI}). يلزم DirectX 12 وبطاقة رسوميات تدعمه. يُستخدم Lumen البرمجي؛ تغيير البطاقة أو RHI يتطلب إعادة التشغيل."
 
 #. Key:	Menu.LanguageRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3115)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3115)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3131)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3131)
 #, fuzzy
 msgctxt "BR,Menu.LanguageRow"
 msgid "LANGUE"
 msgstr "اللغة"
 
 #. Key:	Menu.SensibiliteSouris
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3117)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3117)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3133)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3133)
 #, fuzzy
 msgctxt "BR,Menu.SensibiliteSouris"
 msgid "SENSIBILITÉ DE LA SOURIS"
 msgstr "حساسية الفأرة"
 
 #. Key:	Menu.InverserAxeVertical
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3119)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3119)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3135)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3135)
 #, fuzzy
 msgctxt "BR,Menu.InverserAxeVertical"
 msgid "INVERSER L'AXE VERTICAL"
 msgstr "عكس المحور الرأسي"
 
 #. Key:	Menu.ChampVision
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3121)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3121)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3137)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3137)
 #, fuzzy
 msgctxt "BR,Menu.ChampVision"
 msgid "CHAMP DE VISION"
 msgstr "مجال الرؤية"
 
 #. Key:	Menu.BalancementCamera
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3123)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3123)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3139)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3139)
 #, fuzzy
 msgctxt "BR,Menu.BalancementCamera"
 msgid "BALANCEMENT DE LA CAMÉRA"
 msgstr "تمايل الكاميرا"
 
 #. Key:	Menu.TremblementsCamera
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3125)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3125)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3141)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3141)
 #, fuzzy
 msgctxt "BR,Menu.TremblementsCamera"
 msgid "TREMBLEMENTS DE LA CAMÉRA"
 msgstr "اهتزاز الكاميرا"
 
 #. Key:	Menu.FlashsClignotements
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3127)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3127)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3143)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3143)
 #, fuzzy
 msgctxt "BR,Menu.FlashsClignotements"
 msgid "FLASHS ET CLIGNOTEMENTS"
 msgstr "الومضات والوميض"
 
 #. Key:	Menu.FlouMouvement
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3129)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3129)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3145)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3145)
 #, fuzzy
 msgctxt "BR,Menu.FlouMouvement"
 msgid "FLOU DE MOUVEMENT"
 msgstr "ضبابية الحركة"
 
 #. Key:	Menu.VolumeGeneral
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3131)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3131)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3147)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3147)
 #, fuzzy
 msgctxt "BR,Menu.VolumeGeneral"
 msgid "VOLUME GÉNÉRAL"
 msgstr "مستوى الصوت العام"
 
 #. Key:	Menu.EffectsVolume
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3133)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3133)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3149)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3149)
 #, fuzzy
 msgctxt "BR,Menu.EffectsVolume"
 msgid "VOLUME DES EFFETS ET AMBIANCES"
 msgstr "مستوى صوت المؤثرات والأجواء"
 
 #. Key:	Menu.VoiceVolume
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3135)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3135)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3151)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3151)
 #, fuzzy
 msgctxt "BR,Menu.VoiceVolume"
 msgid "VOLUME DES VOIX"
 msgstr "مستوى صوت الكلام"
 
 #. Key:	Menu.Subtitles
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3137)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3137)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3153)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3153)
 #, fuzzy
 msgctxt "BR,Menu.Subtitles"
 msgid "SOUS-TITRES DES SONS"
 msgstr "ترجمة الأصوات"
 
 #. Key:	Menu.ChatVocalProximite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3139)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3139)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3155)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3155)
 #, fuzzy
 msgctxt "BR,Menu.ChatVocalProximite"
 msgid "CHAT VOCAL (PROXIMITÉ)"
 msgstr "الدردشة الصوتية (حسب القرب)"
 
 #. Key:	Menu.Luminosite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3141)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3141)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3157)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3157)
 #, fuzzy
 msgctxt "BR,Menu.Luminosite"
 msgid "LUMINOSITÉ"
 msgstr "السطوع"
 
 #. Key:	Menu.ModeAffichage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3143)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3143)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3159)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3159)
 #, fuzzy
 msgctxt "BR,Menu.ModeAffichage"
 msgid "MODE D'AFFICHAGE"
 msgstr "وضع العرض"
 
 #. Key:	Menu.ResolutionFenetre
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3145)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3145)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3161)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3161)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionFenetre"
 msgid "RÉSOLUTION"
 msgstr "الدقة"
 
 #. Key:	Menu.CreatureReflections
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3147)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3147)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3163)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3163)
 #, fuzzy
 msgctxt "BR,Menu.CreatureReflections"
 msgid "CRÉATURES DANS LES REFLETS"
 msgstr "المخلوقات في الانعكاسات"
 
 #. Key:	Menu.UiScale
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3149)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3149)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3165)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3165)
 #, fuzzy
 msgctxt "BR,Menu.UiScale"
 msgid "TAILLE DE L'INTERFACE"
 msgstr "حجم الواجهة"
 
 #. Key:	Menu.HudOpacity
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3151)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3151)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3167)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3167)
 #, fuzzy
 msgctxt "BR,Menu.HudOpacity"
 msgid "OPACITÉ DE L'INTERFACE"
 msgstr "عتامة الواجهة"
 
 #. Key:	Menu.Crosshair
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3153)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3153)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3169)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3169)
 #, fuzzy
 msgctxt "BR,Menu.Crosshair"
 msgid "RÉTICULE"
 msgstr "علامة التصويب"
 
 #. Key:	Menu.QuickBarRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3155)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3155)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3171)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3171)
 #, fuzzy
 msgctxt "BR,Menu.QuickBarRow"
 msgid "OBJETS RAPIDES"
 msgstr "الأغراض السريعة"
 
 #. Key:	Menu.LidarSize
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3157)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3157)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3173)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3173)
 #, fuzzy
 msgctxt "BR,Menu.LidarSize"
 msgid "SCANNER : TAILLE DES POINTS"
 msgstr "الماسح: حجم النقاط"
 
 #. Key:	Menu.LidarContrast
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3159)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3159)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3175)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3175)
 #, fuzzy
 msgctxt "BR,Menu.LidarContrast"
 msgid "SCANNER : CONTRASTE DES POINTS"
 msgstr "الماسح: تباين النقاط"
 
 #. Key:	Menu.LidarPersistence
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3161)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3161)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3177)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3177)
 #, fuzzy
 msgctxt "BR,Menu.LidarPersistence"
 msgid "SCANNER : PERSISTANCE DES POINTS"
 msgstr "الماسح: مدة بقاء النقاط"
 
 #. Key:	Menu.LidarStaticAid
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3163)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3163)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
 #, fuzzy
 msgctxt "BR,Menu.LidarStaticAid"
 msgid "SCANNER : AIDE VISUELLE DES PARASITES"
 msgstr "الماسح: مساعدة مرئية للتداخل"
 
 #. Key:	Menu.ObjectivesRow
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3165)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3165)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3181)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3181)
 #, fuzzy
 msgctxt "BR,Menu.ObjectivesRow"
 msgid "OBJECTIFS À L'ÉCRAN"
 msgstr "الأهداف على الشاشة"
 
 #. Key:	Menu.ResolutionRendu
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3167)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3167)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3183)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3183)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionRendu"
 msgid "RÉSOLUTION DE RENDU"
 msgstr "دقة التصيير"
 
 #. Key:	Menu.SynchroVerticaleVSync
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3169)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3169)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3185)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3185)
 #, fuzzy
 msgctxt "BR,Menu.SynchroVerticaleVSync"
 msgid "SYNCHRO VERTICALE (V-SYNC)"
 msgstr "المزامنة الرأسية (V-SYNC)"
 
 #. Key:	Menu.ImagesSecondeMax
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3171)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3171)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3187)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3187)
 #, fuzzy
 msgctxt "BR,Menu.ImagesSecondeMax"
 msgid "IMAGES PAR SECONDE MAX."
 msgstr "الحد الأقصى للإطارات في الثانية"
 
 #. Key:	Menu.ProfilGraphique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3173)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3173)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3189)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3189)
 #, fuzzy
 msgctxt "BR,Menu.ProfilGraphique"
 msgid "PROFIL GRAPHIQUE"
 msgstr "ملف الرسومات"
 
 #. Key:	Menu.QualiteGraphique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3175)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3175)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3191)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3191)
 #, fuzzy
 msgctxt "BR,Menu.QualiteGraphique"
 msgid "QUALITÉ GRAPHIQUE"
 msgstr "جودة الرسومات"
 
 #. Key:	Menu.RayTracingMaterielRtx
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3177)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3177)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3193)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3193)
 #, fuzzy
 msgctxt "BR,Menu.RayTracingMaterielRtx"
 msgid "RAY TRACING MATÉRIEL (RTX)"
 msgstr "تتبع الأشعة بالعتاد (RTX)"
 
 #. Key:	Menu.RefletsRayTracesHauteQualite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3179)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3179)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3195)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3195)
 #, fuzzy
 msgctxt "BR,Menu.RefletsRayTracesHauteQualite"
 msgid "REFLETS RAY TRACÉS HAUTE QUALITÉ"
 msgstr "انعكاسات عالية الجودة بتتبع الأشعة"
 
 #. Key:	Menu.OmbresRayTraceesLampe
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3181)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3181)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3197)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3197)
 #, fuzzy
 msgctxt "BR,Menu.OmbresRayTraceesLampe"
 msgid "OMBRES RAY TRACÉES (LAMPE)"
 msgstr "ظلال بتتبع الأشعة (المصباح)"
 
 #. Key:	Menu.MegaLights
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3183)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3183)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3199)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3199)
 #, fuzzy
 msgctxt "BR,Menu.MegaLights"
 msgid "OMBRES DE TOUTES LES LAMPES"
 msgstr "ظلال كل المصابيح"
 
 #. Key:	Menu.NeonsLumieresSurfaciques
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3185)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3185)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3201)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3201)
 #, fuzzy
 msgctxt "BR,Menu.NeonsLumieresSurfaciques"
 msgid "NÉONS EN LUMIÈRES SURFACIQUES"
 msgstr "المصابيح الفلورية كأضواء مساحية"
 
 #. Key:	Menu.ModelesCompletsEntites
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3187)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3187)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3203)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3203)
 #, fuzzy
 msgctxt "BR,Menu.ModelesCompletsEntites"
 msgid "MODÈLES COMPLETS DES ENTITÉS"
 msgstr "نماذج الكيانات الكاملة"
 
 #. Key:	Menu.VolumetricFog
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3189)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3189)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3205)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3205)
 #, fuzzy
 msgctxt "BR,Menu.VolumetricFog"
 msgid "BROUILLARD VOLUMÉTRIQUE"
 msgstr "الضباب الحجمي"
 
 #. Key:	Menu.GrainImage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3191)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3191)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3207)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3207)
 #, fuzzy
 msgctxt "BR,Menu.GrainImage"
 msgid "GRAIN DE L'IMAGE"
 msgstr "حبيبات الصورة"
 
 #. Key:	Menu.EffetVhs
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3193)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3193)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3209)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3209)
 #, fuzzy
 msgctxt "BR,Menu.EffetVhs"
 msgid "EFFET VHS"
 msgstr "تأثير VHS"
 
 #. Key:	Menu.ModeDeveloppeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3195)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3195)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3211)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3211)
 #, fuzzy
 msgctxt "BR,Menu.ModeDeveloppeur"
 msgid "MODE DÉVELOPPEUR"
 msgstr "وضع المطوّر"
 
 #. Key:	Menu.Normaux
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3219)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3219)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3235)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3235)
 #, fuzzy
 msgctxt "BR,Menu.Normaux"
 msgid "NORMAUX"
 msgstr "عادية"
 
 #. Key:	Menu.Attenues
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3219)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3219)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3235)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3235)
 #, fuzzy
 msgctxt "BR,Menu.Attenues"
 msgid "ATTÉNUÉS"
 msgstr "مخفّفة"
 
 #. Key:	Menu.WindowModeEffective
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3239)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3239)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3255)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3255)
 #, fuzzy
 msgctxt "BR,Menu.WindowModeEffective"
 msgid "{Want} → {Got}"
 msgstr "{Want} (الفعلي: {Got})"
 
 #. Key:	Menu.ResolutionScreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3246)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3246)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3262)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3262)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionScreen"
 msgid "{Res} (écran)"
 msgstr "{Res} (الشاشة)"
 
 #. Key:	Menu.ReflectScreenOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3252)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3252) Source/Backrooms/Private/BRPlayerController.cpp(3262)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3268)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3268) Source/Backrooms/Private/BRPlayerController.cpp(3278)
 #, fuzzy
 msgctxt "BR,Menu.ReflectScreenOnly"
 msgid "ÉCRAN SEULEMENT"
 msgstr "الشاشة فقط"
 
 #. Key:	Menu.ReflectFullHit
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3256)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3256)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3272)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3272)
 #, fuzzy
 msgctxt "BR,Menu.ReflectFullHit"
 msgid "COMPLETS (RAYONS)"
 msgstr "كاملة (الأشعة)"
 
 #. Key:	Menu.ReflectNotInEngine
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3260)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3260)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3276)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3276)
 #, fuzzy
 msgctxt "BR,Menu.ReflectNotInEngine"
 msgid "ÉCRAN (MOTEUR)"
 msgstr "الشاشة (المحرك)"
 
 #. Key:	Menu.ReflectRetrace
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3262)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3262)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3278)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3278)
 #, fuzzy
 msgctxt "BR,Menu.ReflectRetrace"
 msgid "RAYONS"
 msgstr "الأشعة"
 
 #. Key:	Menu.StaticAidStandard
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3280)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3280)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3296)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3296)
 #, fuzzy
 msgctxt "BR,Menu.StaticAidStandard"
 msgid "STANDARD"
 msgstr "قياسي"
 
 #. Key:	Menu.StaticAidLarge
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3280)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3280)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3296)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3296)
 #, fuzzy
 msgctxt "BR,Menu.StaticAidLarge"
 msgid "GRANDE"
 msgstr "كبير"
 
 #. Key:	Menu.StaticAidEdges
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3281)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3281)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3297)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3297)
 #, fuzzy
 msgctxt "BR,Menu.StaticAidEdges"
 msgid "GRANDE + BORDS"
 msgstr "كبير + الحواف"
 
 #. Key:	Menu.RenderscaleX
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3290)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3290)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3306)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3306)
 #, fuzzy
 msgctxt "BR,Menu.RenderscaleX"
 msgid "{RenderScale} %  ({X}×{Y})"
 msgstr "{RenderScale}%  ({X}×{Y})"
 
 #. Key:	Menu.Illimite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3295)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3295)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3311)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3311)
 #, fuzzy
 msgctxt "BR,Menu.Illimite"
 msgid "ILLIMITÉ"
 msgstr "غير محدود"
 
 #. Key:	Menu.Indisponible
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3301)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3301) Source/Backrooms/Private/BRPlayerController.cpp(3303) Source/Backrooms/Private/BRPlayerController.cpp(3305) Source/Backrooms/Private/BRPlayerController.cpp(3309)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3317)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3317) Source/Backrooms/Private/BRPlayerController.cpp(3319) Source/Backrooms/Private/BRPlayerController.cpp(3321) Source/Backrooms/Private/BRPlayerController.cpp(3325)
 #, fuzzy
 msgctxt "BR,Menu.Indisponible"
 msgid "INDISPONIBLE"
 msgstr "غير متاح"
 
 #. Key:	Menu.MegaLightsNoRT
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3312)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3312)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3328)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3328)
 #, fuzzy
 msgctxt "BR,Menu.MegaLightsNoRT"
 msgid "SANS RT MATÉRIEL"
 msgstr "دون RT بالعتاد"
 
 #. Key:	Menu.LanguageHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3335)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3335)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3351)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3351)
 #, fuzzy
 msgctxt "BR,Menu.LanguageHint"
 msgid "Langue des textes, des nombres et des dates. S'applique tout de suite et reste enregistrée. En coop, chaque joueur garde la sienne. Les voix et les sons ne changent pas (pas de doublage)."
 msgstr "لغة النصوص والأرقام والتواريخ. تُطبَّق فورًا وتُحفظ. في اللعب التعاوني يحتفظ كل لاعب بلغته. الأصوات لا تتغيّر (لا دبلجة)."
 
 #. Key:	Menu.DesactivezMouvementCameraPendantMarche
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3337)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3337)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3353)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3353)
 #, fuzzy
 msgctxt "BR,Menu.DesactivezMouvementCameraPendantMarche"
 msgid "Désactivez-le si le mouvement de la caméra pendant la marche vous incommode."
 msgstr "عطّله إذا كانت حركة الكاميرا أثناء المشي تزعجك."
 
 #. Key:	Menu.SecoussesCameraQuandFrappePendant
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3339)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3339)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3355)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3355)
 #, fuzzy
 msgctxt "BR,Menu.SecoussesCameraQuandFrappePendant"
 msgid "Secousses de la caméra quand on est frappé et pendant les jumpscares. Les coups et leurs dégâts ne changent pas."
 msgstr "اهتزاز الكاميرا عند تلقي الضربات وأثناء المفاجآت المرعبة. الضربات وضررها لا تتغيّر."
 
 #. Key:	Menu.EclairsJumpscaresImageMortNeons
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3341)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3341)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3357)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3357)
 #, fuzzy
 msgctxt "BR,Menu.EclairsJumpscaresImageMortNeons"
 msgid "Éclairs des jumpscares, image de la mort, néons qui clignotent. Atténués ou supprimés si les lumières vives qui clignotent vous gênent ; les coupures de courant restent annoncées par le son."
 msgstr "ومضات المفاجآت المرعبة، صورة الموت، المصابيح الوامضة. تُخفَّف أو تُزال إذا كانت الأضواء الساطعة الوامضة تزعجك؛ ويبقى انقطاع الكهرباء معلنًا بالصوت."
 
 #. Key:	Menu.FlouMouvementsRapidesCameraDesactive
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3343)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3343)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3359)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3359)
 #, fuzzy
 msgctxt "BR,Menu.FlouMouvementsRapidesCameraDesactive"
 msgid "Flou des mouvements rapides de la caméra. Désactivé par défaut."
 msgstr "ضبابية عند الحركات السريعة للكاميرا. معطّلة افتراضيًا."
 
 #. Key:	Menu.VolumeToutJeuAmbianceEntites
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3345)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3345)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3361)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3361)
 #, fuzzy
 msgctxt "BR,Menu.VolumeToutJeuAmbianceEntites"
 msgid "Volume de tout le jeu (ambiance, entités, voix des coéquipiers)."
 msgstr "مستوى صوت اللعبة كلها (الأجواء، الكيانات، أصوات الزملاء)."
 
 #. Key:	Menu.EffectsVolumeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3347)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3347)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3363)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3363)
 #, fuzzy
 msgctxt "BR,Menu.EffectsVolumeHint"
 msgid "Entités, mécanismes, pas, ambiances et interface, sans changer les voix. Chaque son utile a aussi un signe visible ou un sous-titre."
 msgstr "الكيانات والآليات والخطوات والأجواء والواجهة، دون تغيير الأصوات البشرية. لكل صوت مفيد أيضًا علامة مرئية أو ترجمة نصية."
 
 #. Key:	Menu.VoiceVolumeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3349)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3349)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3365)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3365)
 #, fuzzy
 msgctxt "BR,Menu.VoiceVolumeHint"
 msgid "Voix des coéquipiers, sans changer les effets. Pour ne plus les entendre du tout : CHAT VOCAL. Aucune énigme ne demande le micro."
 msgstr "أصوات زملاء الفريق، دون تغيير المؤثرات. لكي لا تسمعهم أبدًا: الدردشة الصوتية. لا يتطلب أي لغز ميكروفونًا."
 
 #. Key:	Menu.SubtitlesHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3351)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3351)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3367)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3367)
 #, fuzzy
 msgctxt "BR,Menu.SubtitlesHint"
 msgid "Écrit en bas de l'écran ce que l'on entend d'utile : entité proche et sa direction, mécanisme qui réagit, coupure de courant."
 msgstr "تكتب أسفل الشاشة ما يُسمع من أصوات مفيدة: كيان قريب واتجاهه، آلية تستجيب، انقطاع الكهرباء."
 
 #. Key:	Menu.EntendAutresJoueursPresLeur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3353)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3353)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3369)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3369)
 #, fuzzy
 msgctxt "BR,Menu.EntendAutresJoueursPresLeur"
 msgid "On entend les autres joueurs près de leur personnage, étouffés par les murs. Appuyer pour parler : touche {PushToTalk}. Voix ouverte : le micro transmet en permanence. Micro coupé : vous entendez toujours les autres."
 msgstr "تسمع اللاعبين الآخرين قرب شخصياتهم، ويكتم الجدران أصواتهم. اضغط للتحدث: المفتاح {PushToTalk}. ميكروفون مفتوح: يبث الميكروفون باستمرار. الميكروفون مكتوم: ما زلت تسمع الآخرين."
 
 #. Key:	Menu.RendImageClaireSombreZones
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3355)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3355)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3371)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3371)
 #, fuzzy
 msgctxt "BR,Menu.RendImageClaireSombreZones"
 msgid "Rend l'image plus claire ou plus sombre (les zones sans lumière restent noires)."
 msgstr "يجعل الصورة أفتح أو أغمق (تبقى المناطق غير المضاءة سوداء)."
 
 #. Key:	Menu.WindowModeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3359)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3359)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3375)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3375)
 #, fuzzy
 msgctxt "BR,Menu.WindowModeHint"
 msgid "Plein écran, plein écran fenêtré (sans bordures, à la taille de l'écran, Alt+Tab instantané) ou fenêtre. Chaque changement est à confirmer dans les 15 secondes, sinon l'affichage précédent revient. Sans effet dans l'éditeur."
 msgstr "ملء الشاشة، أو ملء الشاشة بنافذة بلا حواف (بحجم الشاشة، Alt+Tab فوري)، أو نافذة. يجب تأكيد كل تغيير خلال 15 ثانية، وإلا يعود العرض السابق. لا تأثير له في المحرر."
 
 #. Key:	Menu.NoExclusiveFullscreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3362)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3362)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3378)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3378)
 #, fuzzy
 msgctxt "BR,Menu.NoExclusiveFullscreen"
 msgid "Sur ce système, le plein écran est une fenêtre sans bordures à la taille de l'écran : le mode réellement obtenu est indiqué après la flèche."
 msgstr "في هذا النظام، ملء الشاشة نافذة بلا حواف بحجم الشاشة: الوضع الذي تم الحصول عليه فعلًا مذكور بين قوسين."
 
 #. Key:	Menu.ResolutionHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3367)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3367)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3383)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3383)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionHint"
 msgid "Taille de la fenêtre, ou définition de l'écran en plein écran. Le plein écran fenêtré prend toujours celle de l'écran. À confirmer dans les 15 secondes. L'échelle de rendu (RÉSOLUTION DE RENDU) est un réglage à part."
 msgstr "حجم النافذة، أو دقة الشاشة في وضع ملء الشاشة. ملء الشاشة بنافذة بلا حواف يستخدم دائمًا دقة الشاشة. يجب التأكيد خلال 15 ثانية. مقياس التصيير (دقة التصيير) إعداد منفصل."
 
 #. Key:	Menu.CreatureReflectionsHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3369)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3369)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3385)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3385)
 #, fuzzy
 msgctxt "BR,Menu.CreatureReflectionsHint"
 msgid "ÉCRAN SEULEMENT : les reflets montrent une créature seulement si elle est à l'écran ; hors champ, elle n'y apparaît pas. RAYONS : les créatures sont dans la scène ray tracée et éclairées par les rayons là où le cache de surfaces de Lumen ne les couvre pas, y compris hors champ ; plus coûteux. Demande le ray tracing matériel et une version du moteur qui le permet (sinon : ÉCRAN (MOTEUR)). Les reflets HAUTE QUALITÉ les montrent toujours."
 msgstr "الشاشة فقط: لا تُظهر الانعكاسات المخلوق إلا وهو على الشاشة؛ خارج الإطار لا يظهر فيها. الأشعة: المخلوقات جزء من المشهد المتتبَّع بالأشعة وتضيئها الأشعة حيث لا تغطيها ذاكرة أسطح Lumen، حتى خارج الإطار؛ أعلى كلفة. يتطلب تتبع الأشعة بالعتاد وإصدارًا من المحرك يسمح به (وإلا: الشاشة (المحرك)). الانعكاسات عالية الجودة تُظهرها دائمًا."
 
 #. Key:	Menu.UiScaleHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3371)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3371)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3387)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3387)
 #, fuzzy
 msgctxt "BR,Menu.UiScaleHint"
 msgid "Taille des textes et des panneaux, pour tous les écrans (de 1280×720 à l'ultra large et aux écrans Retina)."
 msgstr "حجم النصوص واللوحات، لكل الشاشات (من 1280×720 إلى الشاشات فائقة العرض وشاشات Retina)."
 
 #. Key:	Menu.HudOpacityHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3373)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3373)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3389)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3389)
 #, fuzzy
 msgctxt "BR,Menu.HudOpacityHint"
 msgid "Opacité des informations affichées pendant l'exploration (objets rapides, objectifs, réticule). Les messages importants restent lisibles."
 msgstr "عتامة المعلومات المعروضة أثناء الاستكشاف (الأغراض السريعة، الأهداف، علامة التصويب). تبقى الرسائل المهمة مقروءة."
 
 #. Key:	Menu.CrosshairHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3375)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3375)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3391)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3391)
 #, fuzzy
 msgctxt "BR,Menu.CrosshairHint"
 msgid "Point au centre de l'écran : toujours, seulement sur un objet utilisable, ou jamais. Les consignes d'interaction et la réanimation restent affichées."
 msgstr "نقطة في وسط الشاشة: دائمًا، أو فقط فوق شيء قابل للاستخدام، أو أبدًا. تبقى تعليمات التفاعل والإنعاش ظاهرة."
 
 #. Key:	Menu.QuickBarHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3377)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3377)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3393)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3393)
 #, fuzzy
 msgctxt "BR,Menu.QuickBarHint"
 msgid "Poches 1 à 4 en bas de l'écran : brièvement après un changement (ramassage, utilisation), toujours, ou masquées. Elles restent dans l'inventaire."
 msgstr "الجيوب من 1 إلى 4 أسفل الشاشة: لفترة قصيرة بعد تغيير (التقاط، استخدام)، أو دائمًا، أو مخفية. تبقى في المخزون."
 
 #. Key:	Menu.LidarSizeHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3379)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3379)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3395)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3395)
 #, fuzzy
 msgctxt "BR,Menu.LidarSizeHint"
 msgid "Level 6 : taille des points du scanner LiDAR. Les catégories gardent leur forme (carré : décor, triangle : danger, losange : mécanisme, croix : menace, chevron : repère de L.)."
 msgstr "Level 6: حجم نقاط ماسح LiDAR. تحتفظ الفئات بأشكالها (مربع: المحيط، مثلث: خطر، معين: آلية، صليب: تهديد، زاوية: علامة L.)."
 
 #. Key:	Menu.LidarContrastHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3381)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3381)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3397)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3397)
 #, fuzzy
 msgctxt "BR,Menu.LidarContrastHint"
 msgid "Level 6 : éclat des points du scanner sur le noir. Ne change aucun réglage graphique."
 msgstr "Level 6: سطوع نقاط الماسح في الظلام. لا يغيّر أي إعداد رسومي."
 
 #. Key:	Menu.LidarPersistenceHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3383)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3383)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3399)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3399)
 #, fuzzy
 msgctxt "BR,Menu.LidarPersistenceHint"
 msgid "Level 6 : durée pendant laquelle un relevé reste visible avant de s'éteindre."
 msgstr "Level 6: المدة التي يبقى فيها القياس ظاهرًا قبل أن ينطفئ."
 
 #. Key:	Menu.LidarStaticAidHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3385)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3385)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3401)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3401)
 #, fuzzy
 msgctxt "BR,Menu.LidarStaticAidHint"
 msgid "Level 6 : repère des parasites lisible sans le son (intensité et direction). Grande : plus grand et toujours opaque. Bords : chevrons au bord de l'écran du côté des parasites. Il n'est jamais masqué."
 msgstr "Level 6: مؤشر التداخل مقروء دون صوت (الشدة والاتجاه). كبير: أكبر وغير شفاف دائمًا. الحواف: علامات على حافة الشاشة في جهة التداخل. لا يُخفى أبدًا."
 
 #. Key:	Menu.ObjectivesHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3387)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3387)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3403)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3403)
 #, fuzzy
 msgctxt "BR,Menu.ObjectivesHint"
 msgid "Objectifs en haut à droite : brièvement à l'arrivée et à chaque progrès, toujours, ou masqués. Ils restent dans l'inventaire (onglet Personnage)."
 msgstr "الأهداف أعلى اليمين: لفترة قصيرة عند الوصول ومع كل تقدّم، أو دائمًا، أو مخفية. تبقى في المخزون (تبويب الشخصية)."
 
 #. Key:	Menu.Dessous100ImageCalculeePetite
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3389)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3389)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3405)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3405)
 #, fuzzy
 msgctxt "BR,Menu.Dessous100ImageCalculeePetite"
 msgid "En dessous de 100 %, l'image est calculée plus petite puis agrandie par TSR : beaucoup plus fluide, légèrement plus floue."
 msgstr "تحت 100%، تُحسب الصورة بحجم أصغر ثم يكبّرها TSR: أكثر سلاسة بكثير، وأقل وضوحًا قليلًا."
 
 #. Key:	Menu.SupprimeDechiruresImageAjoutePeu
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3391)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3391)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3407)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3407)
 #, fuzzy
 msgctxt "BR,Menu.SupprimeDechiruresImageAjoutePeu"
 msgid "Supprime les déchirures d'image, ajoute un peu de latence."
 msgstr "يزيل تمزّق الصورة، ويضيف قليلًا من زمن الاستجابة."
 
 #. Key:	Menu.LimiterImagesSecondeReduitChaleur
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3393)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3393)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3409)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3409)
 #, fuzzy
 msgctxt "BR,Menu.LimiterImagesSecondeReduitChaleur"
 msgid "Limiter les images par seconde réduit la chaleur et le bruit de la carte graphique. Sans effet dans l'éditeur."
 msgstr "تحديد عدد الإطارات في الثانية يقلّل حرارة بطاقة الرسومات وضجيجها. لا تأثير له في المحرر."
 
 #. Key:	Menu.PerformanceQualiteEleveeLumenLogiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3396)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3396)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3412)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3412)
 #, fuzzy
 msgctxt "BR,Menu.PerformanceQualiteEleveeLumenLogiciel"
 msgid "PERFORMANCE : qualité Élevée, Lumen logiciel, rendu à 67 % (TSR). QUALITÉ : Épique, Lumen en ray tracing matériel (cache de surfaces), rendu à 80 %. RTX FLUIDE : ray tracing matériel, rendu à 67 % agrandi par TSR, ombres des néons jusqu'à 25 m, Hound allégé : vise 60 images/s stables avec une carte RTX. CINÉMATIQUE : reflets éclairés par les rayons, ombres ray tracées de la lampe, modèles complets, rendu à 100 %. Modifier un réglage ci-dessous passe en PERSONNALISÉ. S'applique tout de suite, aussi aux zones déjà chargées."
 msgstr "الأداء: جودة عالية، Lumen برمجي، تصيير بنسبة 67% (TSR). الجودة: ملحمية، Lumen بتتبع الأشعة بالعتاد (ذاكرة الأسطح المؤقتة)، تصيير بنسبة 80%. RTX سلس: تتبع الأشعة بالعتاد، تصيير بنسبة 67% يكبّره TSR، ظلال المصابيح حتى 25 م، Hound مخفّف: يستهدف 60 إطارًا في الثانية بثبات مع بطاقة RTX. سينمائي: انعكاسات تضيئها الأشعة، ظلال المصباح بتتبع الأشعة، نماذج كاملة، تصيير بنسبة 100%. تغيير أي إعداد أدناه ينقلك إلى مخصّص. يُطبَّق فورًا، حتى على المناطق المحمّلة."
 
 #. Key:	Menu.ProfileMegaLightsNote
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3400)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3400)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3416)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3416)
 #, fuzzy
 msgctxt "BR,Menu.ProfileMegaLightsNote"
 msgid "QUALITÉ, RTX FLUIDE et CINÉMATIQUE activent aussi OMBRES DE TOUTES LES LAMPES : chaque plafonnier a son ombre, à toute distance."
 msgstr "تفعّل الجودة وRTX سلس وسينمائي أيضًا ظلال كل المصابيح: لكل مصباح سقف ظله، على أي مسافة."
 
 #. Key:	Menu.OmbresLumenTexturesAntiCrenelage
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3405)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3405)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3421)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3421)
 #, fuzzy
 msgctxt "BR,Menu.OmbresLumenTexturesAntiCrenelage"
 msgid "Ombres, Lumen, textures, anti-crénelage (scalability). S'applique tout de suite."
 msgstr "الظلال، Lumen، الخامات، تنعيم الحواف (قابلية التوسّع). يُطبَّق فورًا."
 
 #. Key:	Menu.LumenRayTracingMaterielReflets
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3408)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3408)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3424)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3424)
 #, fuzzy
 msgctxt "BR,Menu.LumenRayTracingMaterielReflets"
 msgid "Lumen en ray tracing matériel : reflets et lumière indirecte bien plus précis (carte RTX / RX 6000+). S'applique tout de suite."
 msgstr "Lumen بتتبع الأشعة بالعتاد: انعكاسات وإضاءة غير مباشرة أدق بكثير (بطاقة RTX / RX 6000 فما فوق). يُطبَّق فورًا."
 
 #. Key:	Menu.RefletsEclairesRayonsEuxMemes
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3411)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3411)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3427)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3427)
 #, fuzzy
 msgctxt "BR,Menu.RefletsEclairesRayonsEuxMemes"
 msgid "Reflets éclairés par les rayons eux-mêmes (eau, flaques, carrelage, métal) au lieu du cache de surfaces de Lumen. Le plus coûteux des réglages : seul le profil CINÉMATIQUE l'active."
 msgstr "انعكاسات تضيئها الأشعة نفسها (الماء، البرك، البلاط، المعدن) بدلًا من ذاكرة الأسطح المؤقتة في Lumen. أثقل الإعدادات: لا يفعّله إلا ملف سينمائي."
 
 #. Key:	Menu.OmbresLampeTorcheRayTracees
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3414)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3414)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3430)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3430)
 #, fuzzy
 msgctxt "BR,Menu.OmbresLampeTorcheRayTracees"
 msgid "Ombres de la lampe torche ray tracées (contact net, pas de recalcul des ombres virtuelles à chaque mouvement de la lampe). Les plafonniers gardent les ombres virtuelles (VSM), moins chères pour des dizaines de lumières fixes."
 msgstr "ظلال المصباح اليدوي بتتبع الأشعة (تلامس حاد، دون إعادة حساب الظلال الافتراضية عند كل حركة للمصباح). تحتفظ أضواء السقف بالظلال الافتراضية (VSM)، وهي أرخص لعشرات الأضواء الثابتة."
 
 #. Key:	Menu.RTShadowsMegaLightsNote
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3418)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3418)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3434)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3434)
 #, fuzzy
 msgctxt "BR,Menu.RTShadowsMegaLightsNote"
 msgid "Avec OMBRES DE TOUTES LES LAMPES, les plafonniers ont eux aussi des ombres ray tracées (MegaLights)."
 msgstr "مع ظلال كل المصابيح، تحصل أضواء السقف أيضًا على ظلال بتتبع الأشعة (MegaLights)."
 
 #. Key:	Menu.MegaLightsHint
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3424)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3424)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3440)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3440)
 #, fuzzy
 msgctxt "BR,Menu.MegaLightsHint"
 msgid "Chaque plafonnier projette son ombre (MegaLights, ombres ray tracées) : la lumière ne traverse plus les murs, les coins et les pièces voisines restent dans l'ombre. Demande le ray tracing matériel ; un léger grain peut apparaître quand les néons clignotent. Coupé dans le profil PERFORMANCE, actif dans QUALITÉ, RTX FLUIDE et CINÉMATIQUE. S'applique tout de suite."
 msgstr "يُلقي كل مصباح سقف ظله الخاص (MegaLights، ظلال بتتبع الأشعة): لم يعد الضوء يخترق الجدران، وتبقى الزوايا والغرف المجاورة في الظل. يتطلب تتبع الأشعة بالعتاد؛ قد تظهر حبيبات خفيفة عندما ترمش المصابيح الفلورية. معطّل في ملف الأداء، ومفعّل في الجودة وRTX سلس وسينمائي. يُطبَّق فورًا."
 
 #. Key:	Menu.OmbresDoucesNeonsAppliqueTout
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3427)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3427)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3443)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3443)
 #, fuzzy
 msgctxt "BR,Menu.OmbresDoucesNeonsAppliqueTout"
 msgid "Ombres douces des néons. S'applique tout de suite, zones déjà chargées comprises (quelques lumières par image)."
 msgstr "ظلال ناعمة للمصابيح الفلورية. يُطبَّق فورًا، حتى على المناطق المحمّلة (بضعة أضواء في كل إطار)."
 
 #. Key:	Menu.HoundOrigine175000Sommets
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3429)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3429)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3445)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3445)
 #, fuzzy
 msgctxt "BR,Menu.HoundOrigine175000Sommets"
 msgid "Hound d'origine (175 000 sommets, pelage complet) au lieu du dérivé allégé. Très coûteux en ray tracing. S'applique aussi aux entités présentes."
 msgstr "الـ Hound الأصلي (175000 رأس، فراء كامل) بدلًا من النسخة المخفّفة. مكلف جدًا مع تتبع الأشعة. يُطبَّق أيضًا على الكيانات الموجودة."
 
 #. Key:	Menu.HalosLumiereAirHumide
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3431)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3431)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3447)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3447)
 #, fuzzy
 msgctxt "BR,Menu.HalosLumiereAirHumide"
 msgid "Halos de lumière dans l'air humide."
 msgstr "هالات ضوء في الهواء الرطب."
 
 #. Key:	Menu.LignesBalayageLegereAberrationSalete
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3433)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3433)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3449)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3449)
 #, fuzzy
 msgctxt "BR,Menu.LignesBalayageLegereAberrationSalete"
 msgid "Lignes de balayage, légère aberration et saleté d'objectif. Désactivé : image nette."
 msgstr "خطوط المسح، زيغ طفيف واتساخ العدسة. معطّل: صورة نظيفة."
 
 #. Key:	Menu.TousNiveauxJouablesDepuisChoix
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3435)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3435)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3451)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3451)
 #, fuzzy
 msgctxt "BR,Menu.TousNiveauxJouablesDepuisChoix"
 msgid "Tous les niveaux jouables depuis le choix des niveaux (non ajoutés à la partie). En jeu : Page préc. / suiv. niveau, Début nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares."
 msgstr "كل المستويات قابلة للعب من اختيار المستويات (دون إضافتها إلى الحفظ). داخل اللعبة: Page Up / Down للمستوى، Home لتخطيط جديد، End للأهداف، Insert لانقطاع الكهرباء، F6 للطيران الحر، F7 لعدم القهر، F10 للمفاجآت المرعبة."
 
 #. Key:	Display.EditorOnly
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3498)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3498)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3514)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3514)
 #, fuzzy
 msgctxt "BR,Display.EditorOnly"
 msgid "Mode d'affichage : sans effet dans l'éditeur (lancez le jeu seul)."
 msgstr "وضع العرض: لا تأثير له في المحرر (شغّل اللعبة وحدها)."
 
 #. Key:	Display.BorderlessFollowsScreen
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3512)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3512)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3528)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3528)
 #, fuzzy
 msgctxt "BR,Display.BorderlessFollowsScreen"
 msgid "Le plein écran fenêtré prend la définition de l'écran. Changez le mode pour choisir une résolution."
 msgstr "ملء الشاشة بنافذة بلا حواف يستخدم دقة الشاشة. غيّر الوضع لاختيار دقة."
 
 #. Key:	Menu.RhinameHitXXX2
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3844)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3844)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3916)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3916)
 #, fuzzy
 msgctxt "BR,Menu.RhinameHitXXX2"
 msgid "{RHIName}  ·  {Hit}  ·  {X}x{Y} → {X2}x{Y2} {Upscaler}{DynRes}"
 msgstr "{RHIName}  ·  {Hit}  ·  {X}x{Y} → {X2}x{Y2} {Upscaler}{DynRes}"
 
 #. Key:	Menu.RtHitLighting
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3844)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3844)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3916)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3916)
 #, fuzzy
 msgctxt "BR,Menu.RtHitLighting"
 msgid "RT + HIT LIGHTING"
 msgstr "RT + HIT LIGHTING"
 
 #. Key:	Menu.LumenRt
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3844)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3844)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3916)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3916)
 #, fuzzy
 msgctxt "BR,Menu.LumenRt"
 msgid "LUMEN RT"
 msgstr "LUMEN RT"
 
 #. Key:	Menu.LumenLogiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3844)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3844)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3916)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3916)
 #, fuzzy
 msgctxt "BR,Menu.LumenLogiciel"
 msgid "LUMEN LOGICIEL"
 msgstr "LUMEN برمجي"
 
 #. Key:	Menu.Dyn
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3844)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3844)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3916)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3916)
 #, fuzzy
 msgctxt "BR,Menu.Dyn"
 msgid " dyn."
 msgstr " ديناميكي"
 
 #. Key:	Menu.ModeReelRhinameSm6Ray
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.ModeReelRhinameSm6Ray"
 msgid "Mode réel : {RHIName} {SM6}  ·  ray tracing matériel {RTOn}  ·  Lumen {LumenHW} (reflets : {Hit})  ·  ombres : {VSM}{LampRT}  ·  rendu {X}x{Y} → {X2}x{Y2} ({SP} %, {Upscaler}{DynRes})"
 msgstr "الوضع الفعلي: {RHIName} {SM6}  ·  تتبع الأشعة بالعتاد {RTOn}  ·  Lumen {LumenHW} (الانعكاسات: {Hit})  ·  الظلال: {VSM}{LampRT}  ·  التصيير {X}x{Y} → {X2}x{Y2} ({SP}%، {Upscaler}{DynRes})"
 
 #. Key:	Menu.Actif
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.Actif"
 msgid "actif"
 msgstr "مفعّل"
 
 #. Key:	Menu.Indisponible2
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.Indisponible2"
 msgid "indisponible"
 msgstr "غير متاح"
 
 #. Key:	Menu.Materiel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.Materiel"
 msgid "matériel"
 msgstr "بالعتاد"
 
 #. Key:	Menu.Logiciel
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.Logiciel"
 msgid "logiciel"
 msgstr "برمجي"
 
 #. Key:	Menu.EclairesRayons
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.EclairesRayons"
 msgid "éclairés par les rayons"
 msgstr "تضيئها الأشعة"
 
 #. Key:	Menu.CacheSurfaces
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.CacheSurfaces"
 msgid "cache de surfaces"
 msgstr "ذاكرة الأسطح المؤقتة"
 
 #. Key:	Menu.VirtuellesVsm
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.VirtuellesVsm"
 msgid "virtuelles (VSM)"
 msgstr "افتراضية (VSM)"
 
 #. Key:	Menu.CartesClassiques
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.CartesClassiques"
 msgid "cartes classiques"
 msgstr "خرائط ظلال تقليدية"
 
 #. Key:	Menu.LampeRayTracee
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.LampeRayTracee"
 msgid ", lampe ray tracée"
 msgstr "، مصباح بتتبع الأشعة"
 
 #. Key:	Menu.ResolutionDynamique
-#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3846)
-#: Source/Backrooms/Private/BRPlayerController.cpp(3846)
+#. SourceLocation:	Source/Backrooms/Private/BRPlayerController.cpp(3918)
+#: Source/Backrooms/Private/BRPlayerController.cpp(3918)
 #, fuzzy
 msgctxt "BR,Menu.ResolutionDynamique"
 msgid ", résolution dynamique"
@@ -9361,7 +9369,7 @@ msgstr "تستيقظ عند نقطة البداية. بقيت معداتك حي�
 
 #. Key:	World.FilmerPendantCoupure
 #. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(888)
-#: Source/Backrooms/Private/BRWorld.cpp(888) Source/Backrooms/Private/BRWorld.cpp(1026) Source/Backrooms/Private/BRWorld.cpp(3054)
+#: Source/Backrooms/Private/BRWorld.cpp(888) Source/Backrooms/Private/BRWorld.cpp(1026) Source/Backrooms/Private/BRWorld.cpp(3110)
 #, fuzzy
 msgctxt "BR,World.FilmerPendantCoupure"
 msgid "FILMER PENDANT UNE COUPURE"
@@ -9369,223 +9377,223 @@ msgstr "التصوير أثناء انقطاع الكهرباء"
 
 #. Key:	World.FilmerEntite
 #. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(892)
-#: Source/Backrooms/Private/BRWorld.cpp(892) Source/Backrooms/Private/BRWorld.cpp(1031) Source/Backrooms/Private/BRWorld.cpp(3034) Source/Backrooms/Private/BRWorld.cpp(3063)
+#: Source/Backrooms/Private/BRWorld.cpp(892) Source/Backrooms/Private/BRWorld.cpp(1031) Source/Backrooms/Private/BRWorld.cpp(3090) Source/Backrooms/Private/BRWorld.cpp(3119)
 #, fuzzy
 msgctxt "BR,World.FilmerEntite"
 msgid "FILMER UNE ENTITÉ"
 msgstr "تصوير كيان"
 
 #. Key:	World.NouvelleEntreeJournalNumberName
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1464)
-#: Source/Backrooms/Private/BRWorld.cpp(1464)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1468)
+#: Source/Backrooms/Private/BRWorld.cpp(1468)
 #, fuzzy
 msgctxt "BR,World.NouvelleEntreeJournalNumberName"
 msgid "Nouvelle entrée du journal : {Number} - {Name}  {Inventory}"
 msgstr "مدخل جديد في المذكرات: {Number} - {Name}  {Inventory}"
 
 #. Key:	World.ObjectifsTrouverVhsrequiredCassettesVhs
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1675)
-#: Source/Backrooms/Private/BRWorld.cpp(1675)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1679)
+#: Source/Backrooms/Private/BRWorld.cpp(1679)
 #, fuzzy
 msgctxt "BR,World.ObjectifsTrouverVhsrequiredCassettesVhs"
 msgid "OBJECTIFS : trouver {VHSRequired} cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  {Inventory}"
 msgstr "الأهداف: اعثر على أشرطة VHS ({VHSRequired}) وصوّر أثناء انقطاع الكهرباء لتثبيت المخرج.  {Inventory}"
 
 #. Key:	World.StickGaucheDeplacerClicStick
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2366)
-#: Source/Backrooms/Private/BRWorld.cpp(2366)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2371)
+#: Source/Backrooms/Private/BRWorld.cpp(2371)
 #, fuzzy
 msgctxt "BR,World.StickGaucheDeplacerClicStick"
 msgid "Stick gauche : se déplacer  ·  clic du stick : courir  ·  Y : lampe  ·  B : s'accroupir"
 msgstr "العصا اليسرى: التحرك  ·  ضغط العصا: الركض  ·  Y: المصباح  ·  B: الانحناء"
 
 #. Key:	World.MoveforwardMoveleftMovebackwardMoveright
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2367)
-#: Source/Backrooms/Private/BRWorld.cpp(2367)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2372)
+#: Source/Backrooms/Private/BRWorld.cpp(2372)
 #, fuzzy
 msgctxt "BR,World.MoveforwardMoveleftMovebackwardMoveright"
 msgid "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight} : se déplacer  ·  {Sprint} : courir  ·  {Flashlight} : lampe  ·  {Crouch} : s'accroupir"
 msgstr "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}: التحرك  ·  {Sprint}: الركض  ·  {Flashlight}: المصباح  ·  {Crouch}: الانحناء"
 
 #. Key:	World.BoutonVueInventaireObjectifsJournal
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2370)
-#: Source/Backrooms/Private/BRWorld.cpp(2370)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2375)
+#: Source/Backrooms/Private/BRWorld.cpp(2375)
 #, fuzzy
 msgctxt "BR,World.BoutonVueInventaireObjectifsJournal"
 msgid "Bouton Vue : inventaire, objectifs et journal  ·  X : interagir"
 msgstr "زر العرض: المخزون والأهداف والمذكرات  ·  X: التفاعل"
 
 #. Key:	World.InventoryInventaireObjectifsJournalInter
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2371)
-#: Source/Backrooms/Private/BRWorld.cpp(2371)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2376)
+#: Source/Backrooms/Private/BRWorld.cpp(2376)
 #, fuzzy
 msgctxt "BR,World.InventoryInventaireObjectifsJournalInter"
 msgid "{Inventory} : inventaire, objectifs et journal  ·  {Interact} : interagir"
 msgstr "{Inventory}: المخزون والأهداف والمذكرات  ·  {Interact}: التفاعل"
 
 #. Key:	World.CamescopeSacSortezFilmerCroix
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2375)
-#: Source/Backrooms/Private/BRWorld.cpp(2375)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2380)
+#: Source/Backrooms/Private/BRWorld.cpp(2380)
 #, fuzzy
 msgctxt "BR,World.CamescopeSacSortezFilmerCroix"
 msgid "Le caméscope est dans le sac : sortez-le pour filmer. Croix haut : vision nocturne dans le noir."
 msgstr "كاميرا الفيديو في الحقيبة: أخرجها للتصوير. أعلى لوحة الاتجاهات: الرؤية الليلية في الظلام."
 
 #. Key:	World.CamescopeSacSortezFilmerNightvision
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2376)
-#: Source/Backrooms/Private/BRWorld.cpp(2376)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2381)
+#: Source/Backrooms/Private/BRWorld.cpp(2381)
 #, fuzzy
 msgctxt "BR,World.CamescopeSacSortezFilmerNightvision"
 msgid "Le caméscope est dans le sac : sortez-le pour filmer. {NightVision} : vision nocturne dans le noir."
 msgstr "كاميرا الفيديو في الحقيبة: أخرجها للتصوير. {NightVision}: الرؤية الليلية في الظلام."
 
 #. Key:	World.SortiesBourdonnentEcoutezGuide
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2377)
-#: Source/Backrooms/Private/BRWorld.cpp(2377)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2382)
+#: Source/Backrooms/Private/BRWorld.cpp(2382)
 #, fuzzy
 msgctxt "BR,World.SortiesBourdonnentEcoutezGuide"
 msgid "Les sorties bourdonnent : écoutez, le son vous guide."
 msgstr "المخارج تطنّ: أنصت، فالصوت يرشدك."
 
 #. Key:	World.RepereCassezLigneVuePortes
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2380)
-#: Source/Backrooms/Private/BRWorld.cpp(2380)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2385)
+#: Source/Backrooms/Private/BRWorld.cpp(2385)
 #, fuzzy
 msgctxt "BR,World.RepereCassezLigneVuePortes"
 msgid "Repéré ? Cassez la ligne de vue (portes, virages). Les placards cachent ; les trous dans les murs se prennent accroupi."
 msgstr "هل رُصدت؟ اقطع خط الرؤية (أبواب، منعطفات). الخزائن تخبّئك؛ وتُدخل الثقوب في الجدران منحنيًا."
 
 #. Key:	Caption.Blackout
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2909)
-#: Source/Backrooms/Private/BRWorld.cpp(2909)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2954)
+#: Source/Backrooms/Private/BRWorld.cpp(2954)
 #, fuzzy
 msgctxt "BR,Caption.Blackout"
 msgid "[Les néons grésillent : coupure de courant]"
 msgstr "[أزيز مصابيح النيون: انقطاع الكهرباء]"
 
 #. Key:	World.CoupureCourant
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2920)
-#: Source/Backrooms/Private/BRWorld.cpp(2920) Source/Backrooms/Private/BRWorld.cpp(3199)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2965)
+#: Source/Backrooms/Private/BRWorld.cpp(2965) Source/Backrooms/Private/BRWorld.cpp(3255)
 #, fuzzy
 msgctxt "BR,World.CoupureCourant"
 msgid "COUPURE DE COURANT"
 msgstr "انقطاع الكهرباء"
 
 #. Key:	World.FilmezPendantCoupureGardezCamescope
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2923)
-#: Source/Backrooms/Private/BRWorld.cpp(2923)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2968)
+#: Source/Backrooms/Private/BRWorld.cpp(2968)
 #, fuzzy
 msgctxt "BR,World.FilmezPendantCoupureGardezCamescope"
 msgid "Filmez pendant la coupure : gardez le caméscope sur vous et regardez autour de vous."
 msgstr "صوّر أثناء الانقطاع: احمل كاميرا الفيديو معك وانظر حولك."
 
 #. Key:	World.TrouverCassettesVhs
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3045)
-#: Source/Backrooms/Private/BRWorld.cpp(3045)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3101)
+#: Source/Backrooms/Private/BRWorld.cpp(3101)
 #, fuzzy
 msgctxt "BR,World.TrouverCassettesVhs"
 msgid "TROUVER LES CASSETTES VHS"
 msgstr "اعثر على أشرطة VHS"
 
 #. Key:	World.StabiliserPrendreSortie
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3069)
-#: Source/Backrooms/Private/BRWorld.cpp(3069)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3125)
+#: Source/Backrooms/Private/BRWorld.cpp(3125)
 #, fuzzy
 msgctxt "BR,World.StabiliserPrendreSortie"
 msgid "STABILISER ET PRENDRE LA SORTIE"
 msgstr "ثبّت المخرج واعبره"
 
 #. Key:	World.TrouverSortie
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3069)
-#: Source/Backrooms/Private/BRWorld.cpp(3069)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3125)
+#: Source/Backrooms/Private/BRWorld.cpp(3125)
 #, fuzzy
 msgctxt "BR,World.TrouverSortie"
 msgid "TROUVER UNE SORTIE"
 msgstr "اعثر على مخرج"
 
 #. Key:	World.ExitUnstableTapes
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3097)
-#: Source/Backrooms/Private/BRWorld.cpp(3097)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3153)
+#: Source/Backrooms/Private/BRWorld.cpp(3153)
 #, fuzzy
 msgctxt "BR,World.ExitUnstableTapes"
 msgid "La sortie est instable... Cassettes VHS {Found}/{Required}"
 msgstr "المخرج غير مستقر... أشرطة VHS {Found}/{Required}"
 
 #. Key:	World.FilmerPendantCoupureBlackoutrecorded1
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3100)
-#: Source/Backrooms/Private/BRWorld.cpp(3100)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3156)
+#: Source/Backrooms/Private/BRWorld.cpp(3156)
 #, fuzzy
 msgctxt "BR,World.FilmerPendantCoupureBlackoutrecorded1"
 msgid ", filmer pendant une coupure {BlackoutRecorded}/1"
 msgstr "، التصوير أثناء انقطاع الكهرباء {BlackoutRecorded}/1"
 
 #. Key:	World.TacheAccomplieText
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3108)
-#: Source/Backrooms/Private/BRWorld.cpp(3108)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3164)
+#: Source/Backrooms/Private/BRWorld.cpp(3164)
 #, fuzzy
 msgctxt "BR,World.TacheAccomplieText"
 msgid "TÂCHE ACCOMPLIE : {Text}"
 msgstr "اكتملت المهمة: {Text}"
 
 #. Key:	World.SortiesSontStabiliseesTrouvezPassage
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3118)
-#: Source/Backrooms/Private/BRWorld.cpp(3118)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3174)
+#: Source/Backrooms/Private/BRWorld.cpp(3174)
 #, fuzzy
 msgctxt "BR,World.SortiesSontStabiliseesTrouvezPassage"
 msgid "Les sorties se sont stabilisées. Trouvez un passage (noclip) pour quitter le Niveau."
 msgstr "استقرت المخارج. اعثر على ممر (noclip) لمغادرة المستوى."
 
 #. Key:	World.1CassetteVhsVhsfound
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3128)
-#: Source/Backrooms/Private/BRWorld.cpp(3128)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3184)
+#: Source/Backrooms/Private/BRWorld.cpp(3184)
 #, fuzzy
 msgctxt "BR,World.1CassetteVhsVhsfound"
 msgid "+1 Cassette VHS  ({VHSFound})"
 msgstr "+1 شريط VHS  ({VHSFound})"
 
 #. Key:	World.TapesTaskDone
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3133)
-#: Source/Backrooms/Private/BRWorld.cpp(3133)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3189)
+#: Source/Backrooms/Private/BRWorld.cpp(3189)
 #, fuzzy
 msgctxt "BR,World.TapesTaskDone"
 msgid "CASSETTES VHS {Found}/{Required}"
 msgstr "أشرطة VHS {Found}/{Required}"
 
 #. Key:	World.CassetteVhsVhsfoundVhsrequired
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3137)
-#: Source/Backrooms/Private/BRWorld.cpp(3137)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3193)
+#: Source/Backrooms/Private/BRWorld.cpp(3193)
 #, fuzzy
 msgctxt "BR,World.CassetteVhsVhsfoundVhsrequired"
 msgid "Cassette VHS  {VHSFound}/{VHSRequired}"
 msgstr "شريط VHS  {VHSFound}/{VHSRequired}"
 
 #. Key:	Death.Teammate.Drowning
-#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(186)
-#: Source/Backrooms/Public/BRTypes.h(186)
+#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(190)
+#: Source/Backrooms/Public/BRTypes.h(190)
 #, fuzzy
 msgctxt "BR,Death.Teammate.Drowning"
 msgid "{Name} se noie : remontez-le !"
 msgstr "{Name} يغرق: اسحبه إلى الأعلى!"
 
 #. Key:	Death.Teammate.Fall
-#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(188)
-#: Source/Backrooms/Public/BRTypes.h(188)
+#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(192)
+#: Source/Backrooms/Public/BRTypes.h(192)
 #, fuzzy
 msgctxt "BR,Death.Teammate.Fall"
 msgid "{Name} est tombé dans une fosse."
 msgstr "سقط {Name} في حفرة."
 
 #. Key:	Death.Teammate.Madness
-#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(190)
-#: Source/Backrooms/Public/BRTypes.h(190)
+#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(194)
+#: Source/Backrooms/Public/BRTypes.h(194)
 #, fuzzy
 msgctxt "BR,Death.Teammate.Madness"
 msgid "{Name} a perdu la raison : il est à terre."
 msgstr "فقد {Name} عقله: إنه ساقط أرضًا."
 
 #. Key:	Death.Teammate.Injury
-#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(192)
-#: Source/Backrooms/Public/BRTypes.h(192)
+#. SourceLocation:	Source/Backrooms/Public/BRTypes.h(196)
+#: Source/Backrooms/Public/BRTypes.h(196)
 #, fuzzy
 msgctxt "BR,Death.Teammate.Injury"
 msgid "{Name} est à terre."

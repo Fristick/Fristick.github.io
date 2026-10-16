@@ -37,8 +37,9 @@ import unreal
 
 # v4.15 : 11 : profils photometriques IES de la lampe torche et de la frontale (RawAssets/Lights, /Game/Backrooms/Lights) ;
 # 12 : kit du Level 0 : papier peint, moquette et dalles projetes dans l'espace monde (M_L0K_PbrWorld), diffuseur texture
-# (M_L0K_ColorTex), textures du kit refaites ; atlas des decalques (tout est reimporte une fois)
-VERSION = 12
+# (M_L0K_ColorTex), textures du kit refaites ; atlas des decalques (tout est reimporte une fois) ;
+# 13 : profils IES refaits (Tools/generate_ies.py : faisceau plus large, au moins 70 % de la lumiere du cone d'avant)
+VERSION = 13
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
 # v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles,
