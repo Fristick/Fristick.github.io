@@ -123,6 +123,9 @@ public:
 	 *  ne l'ignore plus. */
 	void SetLevelLoading(bool bLoading);
 	bool IsLevelLoading() const;
+	/** v4.15 : serveur, joueur distant : la fin de son chargement est arrivee, mais aucun mouvement envoye depuis : la
+	 *  position que le serveur connait est encore celle d'avant son placement (pas de chute a en deduire) */
+	bool HasStaleServerPosition() const;
 	/** Touche Interagir maintenue (relever un coequipier a terre) */
 	void SetInteractHeld(bool bHeld) { bInteractHeld = bHeld; }
 	/** Reanimation d'un coequipier en cours (0..1) */
@@ -375,6 +378,8 @@ protected:
 	UPROPERTY(Replicated)
 	bool bLevelLoading = false;
 	float LevelLoadingSince = 0.f;
+	/** v4.15 : serveur : instant (temps du monde) ou ce joueur distant a signale la fin de son chargement (-1 : jamais) */
+	double ServerLoadedAt = -1.0;
 	UFUNCTION(Server, Reliable)
 	void ServerSetLevelLoading(bool bLoading);
 

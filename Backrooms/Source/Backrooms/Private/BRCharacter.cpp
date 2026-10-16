@@ -208,6 +208,20 @@ void ABRCharacter::ServerSetLevelLoading_Implementation(bool bLoading)
 {
 	bLevelLoading = bLoading;
 	LevelLoadingSince = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.f;
+	// v4.15 : fin du chargement : la position connue reste celle d'avant le placement jusqu'au prochain mouvement recu
+	ServerLoadedAt = (!bLoading && GetWorld()) ? GetWorld()->GetTimeSeconds() : -1.0;
+}
+
+bool ABRCharacter::HasStaleServerPosition() const
+{
+	if (!HasAuthority() || IsLocallyControlled() || ServerLoadedAt < 0.0)
+	{
+		return false;
+	}
+	// Un vrai mouvement du client (pas une mise a jour forcee par le serveur) arrive apres la fin de son chargement
+	const UCharacterMovementComponent* M = GetCharacterMovement();
+	const FNetworkPredictionData_Server_Character* SD = (M && M->HasPredictionData_Server()) ? M->GetPredictionData_Server_Character() : nullptr;
+	return !SD || SD->ServerTimeStampLastServerMove <= ServerLoadedAt;
 }
 
 void ABRCharacter::SetupLoopAudio(UAudioComponent* Comp, FName SoundName)
