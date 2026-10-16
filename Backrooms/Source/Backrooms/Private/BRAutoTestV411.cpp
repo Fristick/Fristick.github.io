@@ -21,6 +21,7 @@
 #include "BRHUD.h"
 #include "BRInteractables.h"
 #include "BRLevels.h"
+#include "BRLidarLogic.h"
 #include "BRLoc.h"
 #include "BRMission.h"
 #include "BRMissionSolver.h"
@@ -1004,13 +1005,16 @@ void ABRAutoTest::AddV411Steps()
 		}
 		const FVector Here = C->GetActorLocation();
 		// A 5 m en vue directe (un mur entre les deux reduit la portee a 55 % : 4,95 m pour un bruit de 9 m, regle voulue) :
-		// une direction degagee autour du joueur
+		// une direction degagee autour du joueur. v4.15 : degagee au sens de la regle du jeu (ABRWorld::FindRecentNoise : seuls
+		// les murs comptent, pas les capsules)
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestNoise), false, C);
+		FCollisionResponseParams WallsOnly;
+		WallsOnly.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
 		FVector Dir = FVector::ZeroVector;
 		for (int32 Turn = 0; Turn < 8 && Dir.IsZero(); ++Turn)
 		{
 			const FVector Try = FVector(1.f, 0.f, 0.f).RotateAngleAxis(Turn * 45.f, FVector::UpVector);
-			if (!GetWorld()->LineTraceTestByChannel(Here + Try * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Q))
+			if (!GetWorld()->LineTraceTestByChannel(Here + Try * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Q, WallsOnly))
 			{
 				Dir = Try;
 			}
@@ -1020,12 +1024,103 @@ void ABRAutoTest::AddV411Steps()
 			Skip(TEXT("bruit de mecanisme : aucune direction degagee sur 5 m autour du joueur"));
 			return true;
 		}
+		// v4.15 : diagnostic : ce qui coupe le segment du test, capsules comprises (avant la v4.15 : la capsule du joueur qui
+		// fait le bruit, toujours), puis avec la regle du jeu (seuls les murs absorbent le bruit : rien attendu)
+		{
+			const FCollisionQueryParams Raw(SCENE_QUERY_STAT(BRTestNoiseRaw), false);
+			FHitResult Hit;
+			const bool bRaw = GetWorld()->LineTraceSingleByChannel(Hit, Here + Dir * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Raw);
+			FHitResult WallHit;
+			const bool bWallHit = GetWorld()->LineTraceSingleByChannel(WallHit, Here + Dir * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Raw, WallsOnly);
+			Note(FString::Printf(TEXT("bruit : segment du test (5 m) : capsules comprises %s ; murs seulement (regle du jeu) %s"),
+				bRaw ? *FString::Printf(TEXT("coupe par %s (%s) a %.0f cm"), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), Hit.Distance) : TEXT("libre"),
+				bWallHit ? *FString::Printf(TEXT("coupe par %s (%s)"), *GetNameSafe(WallHit.GetActor()), *GetNameSafe(WallHit.GetComponent())) : TEXT("libre")));
+		}
 		W->ReportNoise(Here, 900.f);
 		FVector Heard;
 		const bool bNear = W->FindRecentNoise(Here + Dir * 500.f, Heard) && FVector::Dist(Heard, Here) < 50.f;
 		FVector Unused;
 		const bool bFar = W->FindRecentNoise(Here + Dir * 5000.f, Unused);
 		Note(FString::Printf(TEXT("bruit de mecanisme : entendu a 5 m en vue %s, a 50 m %s (attendu oui, non)"), YesNo(bNear), bFar ? TEXT("oui") : TEXT("non")), !bNear || bFar);
+
+		// v4.15 : derriere un mur, le meme bruit (9 m) n'est plus entendu a 5-8,8 m (portee 55 % : 4,95 m) : les murs
+		// absorbent toujours. Verifie avant les bruits suivants (plus forts, ils seraient entendus de la)
+		{
+			FCollisionQueryParams QW(SCENE_QUERY_STAT(BRTestNoiseWall), false, C);
+			FVector Behind = FVector::ZeroVector;
+			for (const float Dist : { 500.f, 600.f, 700.f, 800.f })
+			{
+				for (int32 Turn = 0; Turn < 16 && Behind.IsZero(); ++Turn)
+				{
+					const FVector Try = Here + FVector(1.f, 0.f, 0.f).RotateAngleAxis(Turn * 22.5f, FVector::UpVector) * Dist;
+					if (GetWorld()->LineTraceTestByChannel(Try + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, QW, WallsOnly))
+					{
+						Behind = Try;
+					}
+				}
+			}
+			if (Behind.IsZero())
+			{
+				Skip(TEXT("bruit derriere un mur : aucun mur entre 5 et 8 m autour du joueur"));
+			}
+			else
+			{
+				FVector WallHeard;
+				const bool bHeardThrough = W->FindRecentNoise(Behind, WallHeard) && FVector::Dist(WallHeard, Here) < 50.f;
+				Note(FString::Printf(TEXT("bruit de mecanisme derriere un mur a %.1f m : entendu %s (attendu non : portee 55 %%, 4,95 m)"), FVector::Dist2D(Behind, Here) / 100.f,
+					bHeardThrough ? TEXT("OUI") : TEXT("non")), bHeardThrough);
+			}
+		}
+
+		// v4.15 : ecouteur grand (Wretch, demi-hauteur 80 : son trace partait du haut de sa propre capsule, toujours coupe) :
+		// un bruit de 6 m a 4 m de lui, en vue, au niveau du centre du joueur (sous le depart du trace du Wretch), est entendu
+		{
+			const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Wretch);
+			const float FloorZ = static_cast<float>(Here.Z) - C->GetSimpleCollisionHalfHeight();
+			const FVector At = Here + Dir * 500.f;
+			ABREntity* E = W->SpawnEntity(EBREntityKind::Wretch, FVector(At.X, At.Y, FloorZ + Info.HalfHeight + 5.f));
+			if (!E)
+			{
+				Skip(TEXT("bruit entendu par un Wretch : creature non creee"));
+			}
+			else
+			{
+				const FVector Source = Here + Dir * 100.f;
+				W->ReportNoise(Source, 600.f);
+				FVector WretchHeard;
+				const bool bWretch = W->FindRecentNoise(E->GetActorLocation(), WretchHeard) && FVector::Dist(WretchHeard, Source) < 50.f;
+				Note(FString::Printf(TEXT("bruit de 6 m a %.1f m d'un Wretch, en vue : entendu %s (attendu oui ; avant la v4.15 sa propre capsule coupait la ligne : 3,3 m)"),
+					FVector::Dist(E->GetActorLocation(), Source) / 100.f, YesNo(bWretch)), !bWretch);
+				E->Destroy();
+			}
+		}
+
+		// v4.15 : impulsion LiDAR (18 m, emise aux yeux du joueur) entendue a 12 m sans mur ; avant, la capsule du joueur qui
+		// l'emettait coupait toujours la ligne (9,9 m)
+		{
+			const FVector Eye = C->GetEyeLocation();
+			FVector Far = FVector::ZeroVector;
+			for (int32 Turn = 0; Turn < 8 && Far.IsZero(); ++Turn)
+			{
+				const FVector Try = Here + FVector(1.f, 0.f, 0.f).RotateAngleAxis(Turn * 45.f, FVector::UpVector) * 1200.f;
+				if (!GetWorld()->LineTraceTestByChannel(Try + FVector(0.f, 0.f, 80.f), Eye, ECC_WorldStatic, Q, WallsOnly))
+				{
+					Far = Try;
+				}
+			}
+			if (Far.IsZero())
+			{
+				Skip(TEXT("impulsion LiDAR entendue a 12 m : aucune direction degagee sur 12 m autour du joueur"));
+			}
+			else
+			{
+				W->ReportNoise(Eye, BRLidar::PulseNoiseRadius);
+				FVector PulseHeard;
+				const bool bPulse = W->FindRecentNoise(Far, PulseHeard) && FVector::Dist(PulseHeard, Eye) < 50.f;
+				Note(FString::Printf(TEXT("impulsion LiDAR (%.0f m) entendue a %.1f m en vue : %s (attendu oui)"), BRLidar::PulseNoiseRadius / 100.f, FVector::Dist(Far, Eye) / 100.f,
+					YesNo(bPulse)), !bPulse);
+			}
+		}
 		return true;
 	});
 	Add(TEXT("v4.11 creatures : budget de menace"), 0.5f, [this]()

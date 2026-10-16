@@ -2270,7 +2270,12 @@ bool ABRWorld::FindRecentNoise(const FVector& From, FVector& OutLocation) const
 		// Sans ligne de vue, les murs absorbent une partie du bruit
 		const float D = static_cast<float>(FVector::Dist(From, E.Location));
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRNoiseLos), false);
-		const bool bWall = GetWorld() && GetWorld()->LineTraceTestByChannel(From + FVector(0.f, 0.f, 80.f), E.Location, ECC_WorldStatic, Q);
+		// v4.15 : seuls les murs absorbent le bruit : les capsules (joueur qui fait le bruit, creature qui ecoute,
+		// coequipier entre les deux) ne comptent pas. Avant, la capsule du joueur qui faisait le bruit (impulsion LiDAR,
+		// test) ou celle d'un ecouteur grand (Wretch) coupait toujours la ligne : portee divisee par deux en vue directe.
+		FCollisionResponseParams R;
+		R.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+		const bool bWall = GetWorld() && GetWorld()->LineTraceTestByChannel(From + FVector(0.f, 0.f, 80.f), E.Location, ECC_WorldStatic, Q, R);
 		if (D <= E.Radius * (bWall ? 0.55f : 1.f) && D < Best)
 		{
 			Best = D;
