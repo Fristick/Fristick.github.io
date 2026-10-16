@@ -3,7 +3,8 @@
 Les règles de la v4.13 et de la v4.14 ([`GAMEPLAY_v4.13.md`](GAMEPLAY_v4.13.md), [`GAMEPLAY_v4.14.md`](GAMEPLAY_v4.14.md))
 restent valables : Level 0 sans énigme, porte de service tirée par partie, fil `0 → 1 → Poolrooms → 2 → 3 → …`, Level 6
 sans lumière au scanner, REJOUER sans écriture de la campagne. Ce document décrit seulement ce que la v4.15 change pour
-le joueur. Rien de ceci n'a encore été joué dans Unreal : les tests du jeu sont préparés (`-BRAutoTestV415`).
+le joueur. Rien de ceci n'a encore été joué dans Unreal : les tests du jeu sont préparés (`-BRAutoTestV415`). Les
+règles détaillées (R-L1 à R-L6) : [`HISTOIRE_PROGRESSION_v4.15.md`](HISTOIRE_PROGRESSION_v4.15.md).
 
 ## 1. Toute nouvelle partie suit le parcours linéaire
 
@@ -13,7 +14,8 @@ le joueur. Rien de ceci n'a encore été joué dans Unreal : les tests du jeu so
 - Les parties commencées avant la v4.15 (et toute partie migrée d'un format ancien) restent au **parcours classique** :
   rien ne change pour elles.
 - REJOUER un niveau découvert, le mode développeur et une partie rejointe en invité d'une partie classique jouent
-  toujours selon les règles classiques.
+  toujours selon les règles classiques. Une mort en REJOUER relance le niveau rejoué (règle de la v4.14) ; l'écran de
+  mort l'annonce désormais par « Le niveau recommence. ». Le texte de l'écran de mort suit toujours la règle appliquée.
 
 ## 2. Ce qui change dans une partie linéaire
 
@@ -24,7 +26,7 @@ le joueur. Rien de ceci n'a encore été joué dans Unreal : les tests du jeu so
 | Sorties | **une seule** : celle que garde la mission du niveau (porte, échelle, grange…) ; aucune sortie de retour, aucune autre sortie vers l'avant | sorties multiples, retours possibles |
 | Mort en solo | **le niveau recommence de zéro** : même disposition, mission à refaire, équipement de départ ; texte « Le niveau recommence. » | retour au Level 0 |
 | Mort en coopération | à terre, un coéquipier peut relever ; sinon réveil au départ du niveau avec l'équipement de départ (comme avant) | identique |
-| Jeu fermé pendant une mort | CONTINUER recharge **le même niveau**, avec sa disposition, mission neuve, équipement de départ | retour au Level 0 |
+| Jeu fermé pendant une mort | CONTINUER recharge **le même niveau**, avec sa disposition, mission neuve, équipement de départ | CONTINUER ramène au Level 0, équipement de départ (corrigé en v4.15 : avant, CONTINUER reprenait au niveau de la mort) |
 
 - La reprise d'une session (CONTINUER après une fermeture normale) garde comme avant la disposition, la mission en
   cours, les objets ramassés et le dernier point sûr.
