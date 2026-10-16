@@ -1360,7 +1360,14 @@ void ABRAutoTest::AddV412Steps()
 		ABRPlayerController* PC = GetPC();
 		if (!W || !PC || W->IsTransitioning())
 		{
-			return StepTime > 10.f;
+			if (StepTime <= 10.f)
+			{
+				return false;
+			}
+			// v4.15 : un delai depasse est un probleme (avant : etape terminee sans rien dire, et toutes les verifications de
+			// reprise disparaissaient du rapport)
+			Note(TEXT("reprise : changement de niveau en cours depuis 10 s, reprise non preparee"), true);
+			return true;
 		}
 		BRSaves::SetTestPrefix(SavePrefix);
 		DeleteSaveFiles();
@@ -1413,7 +1420,7 @@ void ABRAutoTest::AddV412Steps()
 		ABRPlayerController* PC = GetPC();
 		if (!bRepriseSession)
 		{
-			return true; // reprise non preparee (etape precedente bloquee)
+			return true; // reprise non preparee : deja signale par l'etape precedente
 		}
 		if (!W || !PC || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 2 || W->GetLevelSerial() == TestCountC)
 		{
@@ -1495,6 +1502,7 @@ void ABRAutoTest::AddV412Steps()
 				return false;
 			}
 			Note(FString::Printf(TEXT("reprise d'un placement d'une autre version : Niveau 2 non recharge en 30 s (niveau %d)"), W ? W->GetLevelNumber() : -1), true);
+			bRepriseFailed = true; // v4.15 : une etape de reprise qui suivrait celle-ci est sautee (deja signale)
 			return true;
 		}
 		const uint8 Notice = W->GetMissionNotice();
@@ -1505,7 +1513,9 @@ void ABRAutoTest::AddV412Steps()
 	});
 	// v4.15 : la session de test (partie active, emplacement, mode, histoire, prefixe des fichiers) est retablie quelle que
 	// soit l'issue des etapes de reprise (avant : seulement apres une reprise reussie ; un refus laissait le test en session
-	// d'histoire avec la partie de test, et les chargements suivants etaient refuses ou faits sans leur graine)
+	// d'histoire avec la partie de test, et les chargements suivants etaient refuses ou faits sans leur graine). Seul endroit
+	// qui la retablit : une etape de reprise ajoutee avant celle-ci commence par "if (!bRepriseSession || bRepriseFailed)
+	// return true;", met bRepriseFailed a true sur un delai depasse (note PROBLEME) et ne retablit rien elle-meme
 	Add(TEXT("v4.12 reprise : retour a la session de test"), 0.f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();
@@ -1654,6 +1664,15 @@ void ABRAutoTest::AddV412Steps()
 	// ---------------------------------------------------------------------------------------------- Bilan
 	Add(TEXT("v4.12 : bilan"), 0.f, [this]()
 	{
+		// v4.15 : section propre au bilan : ses problemes ne sont plus ranges sous le dernier niveau charge (le Niveau 4 du
+		// carnet, avant lui le Niveau 6)
+		{
+			FLevelReport R;
+			R.Title = TEXT("v4.12 : bilan (placements des missions, acces par deplacement reel)");
+			R.Scene = TEXT("v4.12");
+			R.FirstLogLine = LogLineCount();
+			Reports.Add(R);
+		}
 		BRLevels::SetChannelOverride(-1);
 		for (const FString& L : PlacementLines)
 		{
@@ -1758,28 +1777,29 @@ namespace BRTestV412Net
 			Dist / 100.f, DZ, Dep.Ready, Dep.Needed, W->GetDepartureRemaining());
 	}
 
-	/** Client : une place a 9-12 m du point de rassemblement d'une echelle (hors de la zone de 8 m), au meme etage, d'ou le
-	 *  point se voit : la marche vers le point est courte et sans detour */
-	bool FarStandInSight(UWorld* World, const ABRWorld* W, const ABRCharacter* C, const ABRExit* Exit, const FVector& Gather, FVector& Out)
+	/** Client : une place libre autour de Around (rayons R0, R0 + 100, R0 + 200, R0 - 50 cm ; au moins MinDist a
+	 *  l'horizontale) : cellule praticable, sol a FootZ (60 cm pres), capsule libre (murs seuls), Aim visible a hauteur des
+	 *  yeux. Ignore (sortie, mecanisme) ne compte pas */
+	bool FarStandAround(UWorld* World, const ABRWorld* W, const ABRCharacter* C, const AActor* Ignore, const FVector& Around, const FVector& Aim, float FootZ, float R0,
+		float MinDist, FVector& Out)
 	{
 		const float Half = C->GetSimpleCollisionHalfHeight();
-		const float FootZ = static_cast<float>(Exit->GetActorLocation().Z);
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestFarStand), false, C);
-		Q.AddIgnoredActor(Exit);
+		Q.AddIgnoredActor(Ignore);
 		FCollisionResponseParams WallsOnly;
 		WallsOnly.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
-		for (const float R : { 1000.f, 1100.f, 1200.f, 950.f })
+		for (const float R : { R0, R0 + 100.f, R0 + 200.f, R0 - 50.f })
 		{
 			for (int32 K = 0; K < 16; ++K)
 			{
-				const FVector P = Gather + FVector(1.f, 0.f, 0.f).RotateAngleAxis(K * 22.5f, FVector::UpVector) * R;
+				const FVector P = Around + FVector(1.f, 0.f, 0.f).RotateAngleAxis(K * 22.5f, FVector::UpVector) * R;
 				const FIntPoint Cell = W->WorldToCell(P);
 				if (!W->IsWalkable(Cell))
 				{
 					continue;
 				}
 				const FVector Center = W->CellCenter(Cell, FootZ);
-				if (FVector::Dist2D(Center, Gather) < 900.f)
+				if (FVector::Dist2D(Center, Around) < MinDist)
 				{
 					continue;
 				}
@@ -1794,7 +1814,7 @@ namespace BRTestV412Net
 				{
 					continue;
 				}
-				if (World->LineTraceTestByChannel(Stand + FVector(0.f, 0.f, Half * 0.75f), Gather + FVector(0.f, 0.f, BRGather::ViewHeight), ECC_WorldStatic, Q, WallsOnly))
+				if (World->LineTraceTestByChannel(Stand + FVector(0.f, 0.f, Half * 0.75f), Aim, ECC_WorldStatic, Q, WallsOnly))
 				{
 					continue;
 				}
@@ -1803,6 +1823,13 @@ namespace BRTestV412Net
 			}
 		}
 		return false;
+	}
+
+	/** Client : une place a 9-12 m du point de rassemblement d'une echelle (hors de la zone de 8 m), au meme etage, d'ou le
+	 *  point se voit : la marche vers le point est courte et sans detour */
+	bool FarStandInSight(UWorld* World, const ABRWorld* W, const ABRCharacter* C, const ABRExit* Exit, const FVector& Gather, FVector& Out)
+	{
+		return FarStandAround(World, W, C, Exit, Gather, Gather + FVector(0.f, 0.f, BRGather::ViewHeight), static_cast<float>(Exit->GetActorLocation().Z), 1000.f, 900.f, Out);
 	}
 }
 
@@ -1966,8 +1993,17 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 			{
 				return false;
 			}
-			const FVector Far = Dev->GetInteractPoint() + Dev->GetActorForwardVector().GetSafeNormal2D() * 900.f;
-			Place.Start(C, FVector(Far.X, Far.Y, C->GetActorLocation().Z), nullptr, Now);
+			// v4.15 : une vraie place a 9-10 m de l'indice (cellule praticable, sol au meme etage, capsule libre, indice en vue,
+			// bien au-dela de la portee de l'hote) ; a defaut, 9 m devant lui (la tenue de la place est verifiee ensuite)
+			const FVector Aim = Dev->GetInteractPoint();
+			const float Half = C->GetSimpleCollisionHalfHeight();
+			FVector Stand;
+			if (!FarStandAround(GetWorld(), W, C, Dev, Aim, Aim, static_cast<float>(C->GetActorLocation().Z) - Half, 900.f, 850.f, Stand))
+			{
+				const FVector Far = Aim + Dev->GetActorForwardVector().GetSafeNormal2D() * 900.f;
+				Stand = FVector(Far.X, Far.Y, C->GetActorLocation().Z);
+			}
+			Place.Start(C, Stand, &Aim, Now);
 			TestTimer = Now;
 			TestCountB = 2;
 			return false;
@@ -1975,17 +2011,31 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		if (TestCountB == 2)
 		{
 			// Demande une fois la nouvelle position recue par l'hote : le personnage est reste a sa place 0,6 s
-			if (!Place.Update(C, Now) && Now - TestTimer < 10.0)
+			const bool bHeld = Place.Update(C, Now);
+			if (!bHeld && Now - TestTimer < 10.0)
 			{
 				return false;
 			}
 			RequestDist = static_cast<float>(FVector::Dist(C->GetEyeLocation(), Dev->GetInteractPoint()));
+			if (!bHeld || RequestDist < 800.f)
+			{
+				// v4.15 : faute du test, pas de l'hote : sans place tenue loin de l'indice, la demande ne juge pas sa
+				// verification de distance (avant : demande faite quand meme, et le refus attendu manquait)
+				TestCountB = 0;
+				Note(FString::Printf(TEXT("client : demande a 9 m non faite : client pas tenu a 9 m (place %s en 10 s, %.1f m de l'indice, %d replacement(s))"), bHeld ? TEXT("tenue") : TEXT("NON tenue"),
+					RequestDist / 100.f, Place.Reapplied), true);
+				BRTestNet::SendMark(GetPC(), BRTestNet::MarkV412Refused);
+				return true;
+			}
 			TestCountA = C->MissionResultsReceived;
 			C->RequestMissionAction(TestMissionDevice, static_cast<uint8>(BRM::EAction::Use));
+			// v4.15 : la reponse est attendue 10 s a partir de la demande (avant : depuis le debut de l'etape, placement
+			// compris : il pouvait ne rester aucune image pour la reponse)
+			TestTimer = Now;
 			TestCountB = 1;
 			return false;
 		}
-		if (C->MissionResultsReceived == TestCountA && StepTime < 10.f)
+		if (C->MissionResultsReceived == TestCountA && Now - TestTimer < 10.0)
 		{
 			return false;
 		}
@@ -2177,8 +2227,15 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 			}
 			if (bDone)
 			{
+				const bool bLaunched = W->IsTransitioning() || W->GetLevelSerial() != TestCountA;
+				// v4.15 : depart non lance : le seul probleme de l'hote (l'etape du depart par l'echelle, qui en depend, est
+				// sautee au lieu d'ajouter un ECHEC 40 s plus tard)
 				Note(FString::Printf(TEXT("hote : client compte comme rassemble pendant %.1f s, %d changement(s) d'etat ; depart %s"), CountedSeconds, GatherChanges,
-					W->IsTransitioning() || W->GetLevelSerial() != TestCountA ? TEXT("lance") : TEXT("NON lance en 90 s")));
+					bLaunched ? TEXT("lance") : TEXT("NON lance en 90 s")), !bLaunched);
+				if (!bLaunched)
+				{
+					TestLevel = -1;
+				}
 				GatherState.Reset();
 				GatherChanges = 0;
 				CountedSeconds = 0.f;
@@ -2265,6 +2322,8 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 			Note(FString::Printf(TEXT("client : point de rassemblement non atteint a pied (%s ; %s ; en (%.0f, %.0f, %.0f))"), *WalkStats(), *DepInfo, C->GetActorLocation().X,
 				C->GetActorLocation().Y, C->GetActorLocation().Z), true);
 		}
+		// v4.15 : un seul probleme : l'etape du depart par l'echelle, qui en depend, est sautee (avant : ECHEC 40 s plus tard)
+		TestLevel = -1;
 		return true;
 	});
 	LimitLastStep(120.f);

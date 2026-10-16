@@ -58,9 +58,12 @@ règles détaillées (R-L1 à R-L6) : [`HISTOIRE_PROGRESSION_v4.15.md`](HISTOIRE
 - **Rejoindre une partie** : le personnage d'un joueur qui rejoint reste immobile tant que son niveau se prépare
   (aucun sol chez lui) ; l'hôte ne déduit plus de chute d'un joueur en chargement, ni de sa position d'avant le
   placement. Avant, un joueur qui rejoignait une partie au Level 0 tombait dans le vide pendant le chargement et
-  l'hôte le tuait d'une chute juste après son arrivée. Partie seule : inchangé.
+  l'hôte le tuait d'une chute juste après son arrivée. De même, un joueur réveillé au point de départ après une chute
+  dans une fosse n'est plus tué une seconde fois : l'hôte attend son premier mouvement parti de sa nouvelle place.
+  Partie seule : inchangé.
 - **Départ de groupe devant une porte** (ascenseur, porte d'hôtel, porte de la mission) : la porte est posée sur la
   face du mur ; le point visé par la vue (demande et rassemblement) était exactement sur la surface du mur, et le
   départ pouvait être refusé devant la porte selon l'arrondi. Il est désormais 50 cm devant la porte, dans la pièce ;
   le point de rassemblement (zone de 8 m) et la portée de la porte (3,6 m) ne changent pas. En développement, une
-  sortie dont le point visé serait pris dans un obstacle le signale dans le journal.
+  sortie dont le point visé serait pris dans un obstacle le signale dans le journal (vérifié quand la sortie devient
+  visible et quand la mission l'ouvre ; pas tant que la porte de la mission la ferme).

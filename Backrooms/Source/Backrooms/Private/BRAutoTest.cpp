@@ -725,15 +725,18 @@ void ABRAutoTest::BuildNetPlan()
 			Note(TEXT("le second joueur n'a pas rejoint la partie"), true);
 		}
 		// v4.15 : le serveur ne doit avoir change l'etat de mort du client pendant son arrivee (avant : tue d'une chute pendant
-		// qu'il preparait son niveau, puis reveille au placement)
+		// qu'il preparait son niveau, puis reveille au placement), ni constate de chute : le mode invincible du test change une
+		// chute en remontee au bord sans toucher a l'etat de mort (la chute sur une position perimee, juste apres le placement,
+		// ne se voyait qu'au compte des chutes)
 		if (GetNetMode() != NM_Client)
 		{
 			if (const ABRCharacter* M = BRTestNet::RemoteMate(GetBRWorld()))
 			{
 				const FBRDeathState& DS = M->GetDeathState();
-				Note(FString::Printf(TEXT("v4.15 arrivee du client : etat de mort tenu par le serveur %s (%d evenement(s), dernier %d, cause %d)"),
-					DS.Serial == 0 && !DS.bDead ? TEXT("inchange") : TEXT("CHANGE"), static_cast<int32>(DS.Serial), static_cast<int32>(DS.Event), static_cast<int32>(DS.Cause)),
-					DS.Serial != 0 || DS.bDead);
+				const bool bSame = DS.Serial == 0 && !DS.bDead;
+				Note(FString::Printf(TEXT("v4.15 arrivee du client : etat de mort tenu par le serveur %s (%d evenement(s), dernier %d, cause %d), %d chute(s) constatee(s) par le serveur (attendu 0)"),
+					bSame ? TEXT("inchange") : TEXT("CHANGE"), static_cast<int32>(DS.Serial), static_cast<int32>(DS.Event), static_cast<int32>(DS.Cause), M->GetServerPitFalls()),
+					!bSame || M->GetServerPitFalls() != 0);
 			}
 		}
 		Shot(TEXT("Net_debut"));
@@ -876,6 +879,12 @@ void ABRAutoTest::BuildNetPlan()
 		if (bClient)
 		{
 			return true;
+		}
+		// v4.15 : premier appel de l'etape (StepTime ne compte encore qu'une image) : le delai de grace ne part pas de l'heure
+		// laissee dans TestTimer par une etape precedente (fin du client deja signalee : partie fermee sans attendre)
+		if (StepTime <= static_cast<float>(FApp::GetDeltaTime()))
+		{
+			TestTimer = 0.0;
 		}
 		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
 		if (!GS || GS->PlayerArray.Num() < 2)

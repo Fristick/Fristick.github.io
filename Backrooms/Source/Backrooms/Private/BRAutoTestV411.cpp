@@ -1538,17 +1538,16 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		}
 		W->DebugCompleteMission();
 		ABRExit* Exit = FindExit(GetWorld(), TestLevel);
+		// v4.15 : de face d'abord (1,2 m devant la sortie, sur son axe), la premiere place libre autour sinon (avant : la place
+		// de face n'etait essayee qu'apres une place trouvee autour, et perdue sans elle)
 		FVector Stand;
-		if (!Exit || !StandNear(GetWorld(), Exit->GetActorLocation() + FVector(0.f, 0.f, 100.f), Exit->GetActorForwardVector(), C->GetSimpleCollisionHalfHeight(), Exit, C, Stand))
+		if (!Exit || (!StandInFront(GetWorld(), Exit, C, Stand)
+			&& !StandNear(GetWorld(), Exit->GetActorLocation() + FVector(0.f, 0.f, 100.f), Exit->GetActorForwardVector(), C->GetSimpleCollisionHalfHeight(), Exit, C, Stand)))
 		{
 			Note(FString::Printf(TEXT("depart de groupe : sortie vers %d introuvable ou sans place"), TestLevel), true);
+			// Un seul probleme : les etapes qui dependent du depart sont sautees (comme apres un refus)
+			TestLevel = -1;
 			return true;
-		}
-		// v4.15 : de face d'abord (1,2 m devant la sortie, sur son axe), la premiere place libre autour sinon
-		FVector Front;
-		if (StandInFront(GetWorld(), Exit, C, Front))
-		{
-			Stand = Front;
 		}
 		TestExitSpot = Stand;
 		PlaceAndFace(C, Stand, Exit->GetActorLocation());

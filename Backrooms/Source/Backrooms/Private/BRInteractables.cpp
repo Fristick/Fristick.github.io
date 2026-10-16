@@ -261,14 +261,9 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 		return;
 	}
 	const FBRLevelDef& D = W->Def();
-#if !UE_BUILD_SHIPPING
 	// v4.15 (developpement) : point vise par le depart de groupe verifie une fois le niveau construit autour (murs du chunk
 	// et de ses voisins) : un point pris dans un mur se voit dans le journal, pas au hasard d'un refus
-	if (IsInteractable())
-	{
-		GetWorldTimerManager().SetTimer(ViewCheckTimer, this, &ABRExit::CheckDepartureViewPoint, 1.f, false);
-	}
-#endif
+	ScheduleDepartureViewCheck();
 
 	auto SetupInteractBox = [this](const FVector& Center, const FVector& Extent)
 	{
@@ -443,6 +438,10 @@ void ABRExit::SetMissionOpen(bool bOpen, bool bAnimate)
 	}
 	const bool bFirst = MissionOpen < 0;
 	MissionOpen = Want;
+	if (bOpen)
+	{
+		ScheduleDepartureViewCheck(); // v4.15 : la porte de la mission devant la sortie s'ouvre : la vue doit etre libre
+	}
 	UBRAssets* A = UBRAssets::Get(this);
 	if (Light && Style != EBRExitStyle::HouseDoor)
 	{
@@ -511,11 +510,24 @@ void ABRExit::Tick(float DeltaSeconds)
 	}
 }
 
+void ABRExit::ScheduleDepartureViewCheck()
+{
+#if !UE_BUILD_SHIPPING
+	if (IsInteractable() && GetWorld() && !IsActorBeingDestroyed())
+	{
+		GetWorldTimerManager().SetTimer(ViewCheckTimer, this, &ABRExit::CheckDepartureViewPoint, 1.f, false);
+	}
+#endif
+}
+
 void ABRExit::CheckDepartureViewPoint()
 {
 #if !UE_BUILD_SHIPPING
 	UWorld* World = GetWorld();
-	if (!World || IsHidden() || IsActorBeingDestroyed())
+	// Sortie masquee (zone de la mission pas encore construite) : verifiee quand elle devient visible. Sortie gardee encore
+	// fermee : la porte de la mission devant elle coupe la vue par construction (barriere bloquante tant qu'elle est
+	// fermee) ; verifiee a son ouverture (SetMissionOpen)
+	if (!World || IsHidden() || IsActorBeingDestroyed() || MissionOpen == 0)
 	{
 		return;
 	}

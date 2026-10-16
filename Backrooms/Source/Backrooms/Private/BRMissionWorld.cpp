@@ -1348,6 +1348,10 @@ void ABRWorld::UpdateMissionDevices(float Dt)
 				E->SetActorEnableCollision(bShow);
 				// v4.12 : une sortie masquee (zone dechargee) ne s'anime plus (lueur du conduit d'une echelle)
 				E->SetActorTickEnabled(bShow && E->IsClimbable());
+				if (bShow)
+				{
+					E->ScheduleDepartureViewCheck(); // v4.15 (developpement) : point vise par le depart, decor construit
+				}
 			}
 		}
 	}

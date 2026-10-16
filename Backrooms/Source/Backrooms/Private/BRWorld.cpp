@@ -418,6 +418,12 @@ void ABRWorld::RespawnLocalPlayer()
 	{
 		return;
 	}
+	// v4.15 : client : le mouvement en attente (parti de la ou l'on est mort) part avant le signal du reveil ; ceux qui
+	// suivent partent de la place de depart (le serveur attend l'un d'eux avant de juger une chute)
+	if (UCharacterMovementComponent* M = P->GetCharacterMovement())
+	{
+		M->FlushServerMoves();
+	}
 	P->ResetStats();
 	PlacePlayer();
 	P->SetInputLocked(true);
@@ -3670,9 +3676,10 @@ void ABRWorld::UpdatePitFalls()
 			continue;
 		}
 		// v4.15 : un coequipier qui prepare ou construit son niveau n'a pas encore de sol chez lui, et sa position connue du
-		// serveur reste celle d'avant son placement tant qu'aucun mouvement recent n'est arrive : ni l'une ni l'autre n'est
-		// une chute (un joueur qui rejoignait la partie etait tue d'une chute pendant son chargement). Joueur local (partie
-		// seule, hote) : inchange
+		// serveur reste celle d'avant son placement (fin du chargement, reveil au point de depart) tant qu'aucun mouvement
+		// recent n'est arrive : ni l'une ni l'autre n'est une chute (un joueur qui rejoignait la partie etait tue d'une chute
+		// pendant son chargement ; un joueur reveille apres une chute l'etait de nouveau). Joueur local (partie seule,
+		// hote) : inchange
 		if (!P->IsLocallyControlled() && (P->IsLevelLoading() || P->HasStaleServerPosition()))
 		{
 			continue;
