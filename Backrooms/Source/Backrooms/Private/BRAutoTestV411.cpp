@@ -14,6 +14,7 @@
 // gagnant), soin perime refuse sans rien consommer, depart de groupe (attente du coequipier, puis depart commun).
 // Une verification qui ne peut pas etre faite ici est notee "NON VERIFIE", jamais comptee comme reussie.
 #include "BRAutoTest.h"
+#include "BRAutoTestNet.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
 #include "BRCharacter.h"
@@ -21,6 +22,7 @@
 #include "BRHUD.h"
 #include "BRInteractables.h"
 #include "BRLevels.h"
+#include "BRLidarLogic.h"
 #include "BRLoc.h"
 #include "BRMission.h"
 #include "BRMissionSolver.h"
@@ -46,6 +48,10 @@ namespace BRTestV411
 	constexpr int32 LegacySlot = 0;
 	/** Reglage des sous-titres du joueur, retabli a la fin des etapes de sous-titres */
 	bool bPlayerSubtitles = true;
+	/** v4.15 : niveau d'aide en cours de verification dans le carnet (compteur propre a ces etapes : TestCountA venait de
+	 *  l'etape de ramassage, l'aide commencait au niveau 1) ; capture prise avant le changement suivant */
+	int32 NotebookStep = 0;
+	bool bNotebookShot = false;
 
 	const TCHAR* YesNo(bool b)
 	{
@@ -855,6 +861,8 @@ void ABRAutoTest::AddV411Steps()
 			return StepTime > 10.f;
 		}
 		PC->SetInventoryOpen(true, static_cast<int32>(ABRHUD::ETab::Notebook));
+		NotebookStep = 0;
+		bNotebookShot = false;
 		return true;
 	});
 	Add(TEXT("v4.11 carnet : aide progressive"), 0.3f, [this]()
@@ -867,7 +875,7 @@ void ABRAutoTest::AddV411Steps()
 		}
 		// Le bouton AIDE fait passer l'etape en cours de 0 a 1 puis 2 (indice, puis rappel des indices trouves) ; ici, le
 		// niveau d'aide est regle comme le ferait un clic, et l'image suivante doit l'afficher
-		const int32 Step = TestCountA;
+		const int32 Step = NotebookStep;
 		// L'aide est rangee par etape du carnet de ce niveau (cle et graine fixees au dessin du carnet) : on attend que le
 		// carnet de ce niveau ait ete dessine, sinon l'aide demandee irait a une cle perimee et serait effacee
 		const ABRWorld* W = GetBRWorld();
@@ -876,27 +884,35 @@ void ABRAutoTest::AddV411Steps()
 		{
 			return false;
 		}
-		if (Step == 0)
+		if (!bNotebookShot)
 		{
-			const bool bTab = H->Tab == ABRHUD::ETab::Notebook && H->LastNotebookHintLevel == 0;
-			Note(FString::Printf(TEXT("carnet ouvert : onglet %s, aide au depart %d"), YesNo(H->Tab == ABRHUD::ETab::Notebook), H->LastNotebookHintLevel), !bTab);
-			Shot(TEXT("v411_carnet_aide0"));
+			if (Step == 0)
+			{
+				const bool bTab = H->Tab == ABRHUD::ETab::Notebook && H->LastNotebookHintLevel == 0;
+				Note(FString::Printf(TEXT("carnet ouvert : onglet %s, aide au depart %d"), YesNo(H->Tab == ABRHUD::ETab::Notebook), H->LastNotebookHintLevel), !bTab);
+				Shot(TEXT("v411_carnet_aide0"));
+			}
+			else
+			{
+				const bool bLevel = H->LastNotebookHintLevel == Step;
+				Note(FString::Printf(TEXT("aide de niveau %d affichee : %s"), Step, YesNo(bLevel)), !bLevel);
+				Shot(FString::Printf(TEXT("v411_carnet_aide%d"), Step));
+			}
+			// v4.15 : la capture se fait a la fin de cette image : l'aide (ou la fermeture) change a l'image suivante, sinon
+			// la capture montrait deja l'etat suivant
+			bNotebookShot = true;
+			return false;
 		}
-		else
-		{
-			const bool bLevel = H->LastNotebookHintLevel == Step;
-			Note(FString::Printf(TEXT("aide de niveau %d affichee : %s"), Step, YesNo(bLevel)), !bLevel);
-			Shot(FString::Printf(TEXT("v411_carnet_aide%d"), Step));
-		}
+		bNotebookShot = false;
 		if (Step >= 2)
 		{
 			H->NotebookHint.Reset();
-			TestCountA = 0;
+			NotebookStep = 0;
 			PC->SetInventoryOpen(false);
 			return true;
 		}
 		H->NotebookHint.FindOrAdd(H->NotebookHintStep) = Step + 1;
-		++TestCountA;
+		++NotebookStep;
 		return false;
 	});
 
@@ -1004,13 +1020,16 @@ void ABRAutoTest::AddV411Steps()
 		}
 		const FVector Here = C->GetActorLocation();
 		// A 5 m en vue directe (un mur entre les deux reduit la portee a 55 % : 4,95 m pour un bruit de 9 m, regle voulue) :
-		// une direction degagee autour du joueur
+		// une direction degagee autour du joueur. v4.15 : degagee au sens de la regle du jeu (ABRWorld::FindRecentNoise : seuls
+		// les murs comptent, pas les capsules)
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestNoise), false, C);
+		FCollisionResponseParams WallsOnly;
+		WallsOnly.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
 		FVector Dir = FVector::ZeroVector;
 		for (int32 Turn = 0; Turn < 8 && Dir.IsZero(); ++Turn)
 		{
 			const FVector Try = FVector(1.f, 0.f, 0.f).RotateAngleAxis(Turn * 45.f, FVector::UpVector);
-			if (!GetWorld()->LineTraceTestByChannel(Here + Try * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Q))
+			if (!GetWorld()->LineTraceTestByChannel(Here + Try * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Q, WallsOnly))
 			{
 				Dir = Try;
 			}
@@ -1020,12 +1039,103 @@ void ABRAutoTest::AddV411Steps()
 			Skip(TEXT("bruit de mecanisme : aucune direction degagee sur 5 m autour du joueur"));
 			return true;
 		}
+		// v4.15 : diagnostic : ce qui coupe le segment du test, capsules comprises (avant la v4.15 : la capsule du joueur qui
+		// fait le bruit, toujours), puis avec la regle du jeu (seuls les murs absorbent le bruit : rien attendu)
+		{
+			const FCollisionQueryParams Raw(SCENE_QUERY_STAT(BRTestNoiseRaw), false);
+			FHitResult Hit;
+			const bool bRaw = GetWorld()->LineTraceSingleByChannel(Hit, Here + Dir * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Raw);
+			FHitResult WallHit;
+			const bool bWallHit = GetWorld()->LineTraceSingleByChannel(WallHit, Here + Dir * 500.f + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, Raw, WallsOnly);
+			Note(FString::Printf(TEXT("bruit : segment du test (5 m) : capsules comprises %s ; murs seulement (regle du jeu) %s"),
+				bRaw ? *FString::Printf(TEXT("coupe par %s (%s) a %.0f cm"), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), Hit.Distance) : TEXT("libre"),
+				bWallHit ? *FString::Printf(TEXT("coupe par %s (%s)"), *GetNameSafe(WallHit.GetActor()), *GetNameSafe(WallHit.GetComponent())) : TEXT("libre")));
+		}
 		W->ReportNoise(Here, 900.f);
 		FVector Heard;
 		const bool bNear = W->FindRecentNoise(Here + Dir * 500.f, Heard) && FVector::Dist(Heard, Here) < 50.f;
 		FVector Unused;
 		const bool bFar = W->FindRecentNoise(Here + Dir * 5000.f, Unused);
 		Note(FString::Printf(TEXT("bruit de mecanisme : entendu a 5 m en vue %s, a 50 m %s (attendu oui, non)"), YesNo(bNear), bFar ? TEXT("oui") : TEXT("non")), !bNear || bFar);
+
+		// v4.15 : derriere un mur, le meme bruit (9 m) n'est plus entendu a 5-8,8 m (portee 55 % : 4,95 m) : les murs
+		// absorbent toujours. Verifie avant les bruits suivants (plus forts, ils seraient entendus de la)
+		{
+			FCollisionQueryParams QW(SCENE_QUERY_STAT(BRTestNoiseWall), false, C);
+			FVector Behind = FVector::ZeroVector;
+			for (const float Dist : { 500.f, 600.f, 700.f, 800.f })
+			{
+				for (int32 Turn = 0; Turn < 16 && Behind.IsZero(); ++Turn)
+				{
+					const FVector Try = Here + FVector(1.f, 0.f, 0.f).RotateAngleAxis(Turn * 22.5f, FVector::UpVector) * Dist;
+					if (GetWorld()->LineTraceTestByChannel(Try + FVector(0.f, 0.f, 80.f), Here, ECC_WorldStatic, QW, WallsOnly))
+					{
+						Behind = Try;
+					}
+				}
+			}
+			if (Behind.IsZero())
+			{
+				Skip(TEXT("bruit derriere un mur : aucun mur entre 5 et 8 m autour du joueur"));
+			}
+			else
+			{
+				FVector WallHeard;
+				const bool bHeardThrough = W->FindRecentNoise(Behind, WallHeard) && FVector::Dist(WallHeard, Here) < 50.f;
+				Note(FString::Printf(TEXT("bruit de mecanisme derriere un mur a %.1f m : entendu %s (attendu non : portee 55 %%, 4,95 m)"), FVector::Dist2D(Behind, Here) / 100.f,
+					bHeardThrough ? TEXT("OUI") : TEXT("non")), bHeardThrough);
+			}
+		}
+
+		// v4.15 : ecouteur grand (Wretch, demi-hauteur 80 : son trace partait du haut de sa propre capsule, toujours coupe) :
+		// un bruit de 6 m a 4 m de lui, en vue, au niveau du centre du joueur (sous le depart du trace du Wretch), est entendu
+		{
+			const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Wretch);
+			const float FloorZ = static_cast<float>(Here.Z) - C->GetSimpleCollisionHalfHeight();
+			const FVector At = Here + Dir * 500.f;
+			ABREntity* E = W->SpawnEntity(EBREntityKind::Wretch, FVector(At.X, At.Y, FloorZ + Info.HalfHeight + 5.f));
+			if (!E)
+			{
+				Skip(TEXT("bruit entendu par un Wretch : creature non creee"));
+			}
+			else
+			{
+				const FVector Source = Here + Dir * 100.f;
+				W->ReportNoise(Source, 600.f);
+				FVector WretchHeard;
+				const bool bWretch = W->FindRecentNoise(E->GetActorLocation(), WretchHeard) && FVector::Dist(WretchHeard, Source) < 50.f;
+				Note(FString::Printf(TEXT("bruit de 6 m a %.1f m d'un Wretch, en vue : entendu %s (attendu oui ; avant la v4.15 sa propre capsule coupait la ligne : 3,3 m)"),
+					FVector::Dist(E->GetActorLocation(), Source) / 100.f, YesNo(bWretch)), !bWretch);
+				E->Destroy();
+			}
+		}
+
+		// v4.15 : impulsion LiDAR (18 m, emise aux yeux du joueur) entendue a 12 m sans mur ; avant, la capsule du joueur qui
+		// l'emettait coupait toujours la ligne (9,9 m)
+		{
+			const FVector Eye = C->GetEyeLocation();
+			FVector Far = FVector::ZeroVector;
+			for (int32 Turn = 0; Turn < 8 && Far.IsZero(); ++Turn)
+			{
+				const FVector Try = Here + FVector(1.f, 0.f, 0.f).RotateAngleAxis(Turn * 45.f, FVector::UpVector) * 1200.f;
+				if (!GetWorld()->LineTraceTestByChannel(Try + FVector(0.f, 0.f, 80.f), Eye, ECC_WorldStatic, Q, WallsOnly))
+				{
+					Far = Try;
+				}
+			}
+			if (Far.IsZero())
+			{
+				Skip(TEXT("impulsion LiDAR entendue a 12 m : aucune direction degagee sur 12 m autour du joueur"));
+			}
+			else
+			{
+				W->ReportNoise(Eye, BRLidar::PulseNoiseRadius);
+				FVector PulseHeard;
+				const bool bPulse = W->FindRecentNoise(Far, PulseHeard) && FVector::Dist(PulseHeard, Eye) < 50.f;
+				Note(FString::Printf(TEXT("impulsion LiDAR (%.0f m) entendue a %.1f m en vue : %s (attendu oui)"), BRLidar::PulseNoiseRadius / 100.f, FVector::Dist(Far, Eye) / 100.f,
+					YesNo(bPulse)), !bPulse);
+			}
+		}
 		return true;
 	});
 	Add(TEXT("v4.11 creatures : budget de menace"), 0.5f, [this]()
@@ -1065,9 +1175,61 @@ void ABRAutoTest::AddV411Steps()
 	});
 }
 
+namespace BRTestV411Net
+{
+	/** v4.15 : deplacement instantane du client suivi jusqu'a ce que le serveur l'ait recu (BRTestNet) */
+	BRTestNet::FPlacement Place;
+
+	/** v4.15 : hote juste devant la sortie (1,2 m sur son axe, sol trouve, capsule libre) : la vue vers la sortie est celle
+	 *  d'un joueur qui s'y presente de face ; StandNear (premiere place libre autour) reste le repli */
+	bool StandInFront(UWorld* World, const ABRExit* Exit, const ABRCharacter* C, FVector& Out)
+	{
+		if (!World || !Exit || !C)
+		{
+			return false;
+		}
+		const float Half = C->GetSimpleCollisionHalfHeight();
+		const FVector Foot = Exit->GetActorLocation();
+		const FVector P = Foot + FRotator(0.f, Exit->GetActorRotation().Yaw, 0.f).Vector() * 120.f;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestFront), false, C);
+		Q.AddIgnoredActor(Exit);
+		FHitResult Floor;
+		if (!World->LineTraceSingleByChannel(Floor, FVector(P.X, P.Y, Foot.Z + 100.f), FVector(P.X, P.Y, Foot.Z - 200.f), ECC_WorldStatic, Q))
+		{
+			return false;
+		}
+		const FVector Stand(P.X, P.Y, Floor.ImpactPoint.Z + Half + 5.f);
+		if (World->OverlapAnyTestByChannel(Stand, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(36.f, Half - 4.f), Q))
+		{
+			return false;
+		}
+		Out = Stand;
+		return true;
+	}
+
+	/** v4.15 : vue vers le point vise par le depart de groupe (ABRWorld::DepartureViewPoint), comme ReachInfo : libre ou
+	 *  coupee par quoi, a quelle distance */
+	FString DepartureViewInfo(UWorld* World, const ABRCharacter* C, const ABRExit* Exit)
+	{
+		if (!World || !C || !Exit)
+		{
+			return TEXT("sortie ou joueur absent");
+		}
+		const FVector Eye = C->GetEyeLocation();
+		const FVector Aim = ABRWorld::DepartureViewPoint(Exit);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestDepartView), false, C);
+		Q.AddIgnoredActor(Exit);
+		FHitResult Hit;
+		const bool bBlocked = World->LineTraceSingleByChannel(Hit, Eye, Aim, ECC_WorldStatic, Q);
+		return FString::Printf(TEXT("yeux (%.0f, %.0f, %.0f) vers (%.0f, %.0f, %.0f), %.0f cm, vue %s"), Eye.X, Eye.Y, Eye.Z, Aim.X, Aim.Y, Aim.Z, FVector::Dist(Eye, Aim),
+			bBlocked ? *FString::Printf(TEXT("BLOQUEE par %s (%s) a %.0f cm"), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), Hit.Distance) : TEXT("libre"));
+	}
+}
+
 void ABRAutoTest::AddNetV411Steps(bool bClient)
 {
 	using namespace BRTestV411;
+	using namespace BRTestV411Net;
 
 	// v4.13 : le Level 0 n'a plus de mission (sa porte de service mene au Niveau 1) : l'hote emmene le groupe au Niveau 1
 	Add(TEXT("v4.11 reseau : niveau a mission"), 0.f, [this, bClient]()
@@ -1171,13 +1333,14 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 				return true;
 			}
 			// La position du client part a l'hote avec ses mouvements, pas avec la demande : la demande attend que l'hote
-			// l'ait recue
-			PlaceAndFace(C, Stand, Dev->GetInteractPoint());
+			// l'ait recue. v4.15 : mouvements en attente envoyes avant le deplacement, place verifiee sur plusieurs images
+			const FVector Aim = Dev->GetInteractPoint();
+			Place.Start(C, Stand, &Aim, FPlatformTime::Seconds());
 			TestMissionPhase = 4111;
 			TestTimer = FPlatformTime::Seconds();
 			return false;
 		}
-		if (FPlatformTime::Seconds() - TestTimer < 0.6)
+		if (!Place.Update(C, FPlatformTime::Seconds()) && FPlatformTime::Seconds() - TestTimer < 10.0)
 		{
 			return false;
 		}
@@ -1375,10 +1538,15 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		}
 		W->DebugCompleteMission();
 		ABRExit* Exit = FindExit(GetWorld(), TestLevel);
+		// v4.15 : de face d'abord (1,2 m devant la sortie, sur son axe), la premiere place libre autour sinon (avant : la place
+		// de face n'etait essayee qu'apres une place trouvee autour, et perdue sans elle)
 		FVector Stand;
-		if (!Exit || !StandNear(GetWorld(), Exit->GetActorLocation() + FVector(0.f, 0.f, 100.f), Exit->GetActorForwardVector(), C->GetSimpleCollisionHalfHeight(), Exit, C, Stand))
+		if (!Exit || (!StandInFront(GetWorld(), Exit, C, Stand)
+			&& !StandNear(GetWorld(), Exit->GetActorLocation() + FVector(0.f, 0.f, 100.f), Exit->GetActorForwardVector(), C->GetSimpleCollisionHalfHeight(), Exit, C, Stand)))
 		{
 			Note(FString::Printf(TEXT("depart de groupe : sortie vers %d introuvable ou sans place"), TestLevel), true);
+			// Un seul probleme : les etapes qui dependent du depart sont sautees (comme apres un refus)
+			TestLevel = -1;
 			return true;
 		}
 		TestExitSpot = Stand;
@@ -1390,8 +1558,11 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 			FString Why;
 			W->CanUseExit(TestLevel, Why);
 			Note(FString::Printf(TEXT("depart de groupe vers %d refuse a l'hote : raison %d (1 sortie fermee, 2 hors de portee ou sans vue, 3 autre depart, 4 niveau, 5 a terre) ; "
-				"hote en (%.0f, %.0f, %.0f), sortie en (%.0f, %.0f, %.0f), %.0f cm ; %s"), TestLevel, Reason, Stand.X, Stand.Y, Stand.Z, Exit->GetActorLocation().X,
-				Exit->GetActorLocation().Y, Exit->GetActorLocation().Z, FVector::Dist(Stand, Exit->GetActorLocation()), Why.IsEmpty() ? TEXT("sortie utilisable") : *Why), true);
+				"hote en (%.0f, %.0f, %.0f), sortie en (%.0f, %.0f, %.0f), %.0f cm ; %s ; vue : %s%s"), TestLevel, Reason, Stand.X, Stand.Y, Stand.Z, Exit->GetActorLocation().X,
+				Exit->GetActorLocation().Y, Exit->GetActorLocation().Z, FVector::Dist(Stand, Exit->GetActorLocation()), Why.IsEmpty() ? TEXT("sortie utilisable") : *Why,
+				*DepartureViewInfo(GetWorld(), C, Exit), W->GetLastDepartureBlock().IsEmpty() ? TEXT("") : *(TEXT(" ; jeu : ") + W->GetLastDepartureBlock())), true);
+			// v4.15 : un seul probleme : les etapes qui dependent du depart sont sautees (avant : trois PROBLEMES de plus)
+			TestLevel = -1;
 		}
 		TestTimer = FPlatformTime::Seconds();
 		return true;
@@ -1407,6 +1578,14 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		if (Dep.Phase != 1 && StepTime < 15.f)
 		{
 			return false; // client : depart pas encore recu
+		}
+		if (bClient && Dep.Phase != 1)
+		{
+			// v4.15 : un seul probleme (le client ne distingue pas un refus de l'hote d'une replication perdue) ; les etapes
+			// qui dependent du depart sont sautees
+			Note(FString::Printf(TEXT("client : depart de groupe non recu en 15 s (phase %d)"), static_cast<int32>(Dep.Phase)), true);
+			TestLevel = -1;
+			return true;
 		}
 		if (StepTime < 4.f)
 		{
@@ -1430,12 +1609,30 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		{
 			// Le client rejoint le point de depart (moins de 8 m, meme etage, a vue)
 			const FVector Loc = W->GetDeparture().Location;
-			FVector Stand;
-			if (!StandNear(GetWorld(), Loc + FVector(0.f, 0.f, 90.f), FVector(-1.f, 0.f, 0.f), C->GetSimpleCollisionHalfHeight(), nullptr, C, Stand))
+			if (TestMissionPhase != 4112)
 			{
-				Stand = Loc + FVector(150.f, 0.f, C->GetSimpleCollisionHalfHeight() + 5.f);
+				// v4.15 : jamais vers un point de depart par defaut : seulement vers celui d'un depart recu
+				if (W->GetDeparture().Phase != 1)
+				{
+					Note(FString::Printf(TEXT("client : rassemblement impossible, plus de depart en rassemblement (phase %d)"), static_cast<int32>(W->GetDeparture().Phase)), true);
+					TestLevel = -1;
+					return true;
+				}
+				FVector Stand;
+				if (!StandNear(GetWorld(), Loc + FVector(0.f, 0.f, 90.f), FVector(-1.f, 0.f, 0.f), C->GetSimpleCollisionHalfHeight(), nullptr, C, Stand))
+				{
+					Stand = Loc + FVector(150.f, 0.f, C->GetSimpleCollisionHalfHeight() + 5.f);
+				}
+				Place.Start(C, Stand, &Loc, FPlatformTime::Seconds());
+				TestMissionPhase = 4112;
+				return false;
 			}
-			PlaceAndFace(C, Stand, Loc);
+			// La place doit etre recue par l'hote (sinon il compte le client ou il etait) ; le depart peut deja partir
+			if (W->GetDeparture().Phase == 1 && !Place.Update(C, FPlatformTime::Seconds(), 0.3) && StepTime < 5.f)
+			{
+				return false;
+			}
+			TestMissionPhase = 0;
 		}
 		TestTimer = FPlatformTime::Seconds();
 		return true;
@@ -1453,8 +1650,10 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 			return false;
 		}
 		const bool bOk = W->GetLevelNumber() == TestLevel && W->IsLevelReady();
-		Note(FString::Printf(TEXT("%s : depart de groupe vers le Niveau %d %s (%.1f s apres le rassemblement)"), bClient ? TEXT("client") : TEXT("hote"), TestLevel,
-			bOk ? TEXT("effectue") : TEXT("ECHEC"), Elapsed), !bOk);
+		const FBRNetDeparture& Dep = W->GetDeparture();
+		Note(FString::Printf(TEXT("%s : depart de groupe vers le Niveau %d %s (%.1f s apres le rassemblement)%s"), bClient ? TEXT("client") : TEXT("hote"), TestLevel,
+			bOk ? TEXT("effectue") : TEXT("ECHEC"), Elapsed, bOk ? TEXT("") : *FString::Printf(TEXT(" ; depart : phase %d, raison %d, %d/%d rassembles"), static_cast<int32>(Dep.Phase),
+			static_cast<int32>(Dep.Reason), Dep.Ready, Dep.Needed)), !bOk);
 		return true;
 	});
 }

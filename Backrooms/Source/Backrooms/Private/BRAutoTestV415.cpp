@@ -19,6 +19,7 @@
 // Prepare, non execute dans l'environnement de developpement (pas d'Unreal) : une verification qui ne peut pas etre
 // faite est notee "NON VERIFIE", jamais comptee comme reussie.
 #include "BRAutoTest.h"
+#include "BRAutoTestNet.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
 #include "BRChunk.h"
@@ -1210,6 +1211,9 @@ void ABRAutoTest::AddV415Steps()
 void ABRAutoTest::AddNetV415Steps(bool bClient)
 {
 	using namespace BRTestV415;
+	// v4.15 : barriere : l'hote ne lance le changement de niveau qu'une fois le client arrive a cette etape (il signale son
+	// arrivee, BRTestNet). Avant, le client, plus lent, y entrait apres le debut de la transition : il relevait le numero du
+	// Niveau 2 deja en chargement et ne voyait jamais "un autre chargement" (ses verifications v4.15 ne se faisaient pas)
 	Add(TEXT("v4.15 reseau : parcours lineaire impose par l'hote"), 0.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
@@ -1217,15 +1221,29 @@ void ABRAutoTest::AddNetV415Steps(bool bClient)
 		{
 			return false;
 		}
+		if (bClient)
+		{
+			SerialMark = W->GetLevelSerial();
+			StepPhase = 0;
+			BRTestNet::SendMark(GetPC(), BRTestNet::MarkV415Start);
+			return true;
+		}
+		const int32 Mark = BRTestNet::RemoteMark(W);
+		if (Mark != BRTestNet::MarkV415Start && Mark != BRTestNet::MarkFinished && BRTestNet::RemoteMate(W))
+		{
+			if (StepTime < 90.f)
+			{
+				return false;
+			}
+			Note(FString::Printf(TEXT("hote : le client n'est pas arrive a l'etape v4.15 en 90 s (derniere etape signalee %d) : niveau change quand meme"), Mark), true);
+		}
 		SerialMark = W->GetLevelSerial();
 		StepPhase = 0;
-		if (!bClient)
-		{
-			W->SetLinearTestOverride(1);
-			W->RequestTransition(2, false, ABRWorld::SeedFromUser(NetUserSeed, 2));
-		}
+		W->SetLinearTestOverride(1);
+		W->RequestTransition(2, false, ABRWorld::SeedFromUser(NetUserSeed, 2));
 		return true;
 	});
+	LimitLastStep(100.f);
 	Add(TEXT("v4.15 reseau : Niveau 2 lineaire chez chacun"), 0.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
@@ -1288,12 +1306,22 @@ void ABRAutoTest::AddNetV415Steps(bool bClient)
 				{
 					return false;
 				}
+				if ((Other->NetFlags & 16) != 0 || Other->IsLevelLoading())
+				{
+					// v4.15 : client pas pret : un coup ne lui ferait rien (invincible) et la suite noterait a tort "pas vu a
+					// terre" : un seul probleme, la verification du reveil est sautee
+					Note(FString::Printf(TEXT("hote : client pas pret apres 30 s (%s) : mort et reveil du client non verifies"),
+						Other->IsLevelLoading() ? TEXT("encore en chargement") : TEXT("toujours invincible")), true);
+					NetMate.Reset();
+					return true;
+				}
 				Other->bGodMode = false;
 				Other->ReceiveAttack(500.f, 0.f, nullptr);
 				NetMate = Other;
 				return true;
 			}
 		}
+		NetMate.Reset();
 		Note(TEXT("v4.15 reseau : aucun client a mettre a terre"), true);
 		return true;
 	});

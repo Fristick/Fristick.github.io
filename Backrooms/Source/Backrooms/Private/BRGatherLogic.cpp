@@ -47,7 +47,9 @@ namespace BRGather
 
 	FVec ViewPoint(const FExitShape& Shape)
 	{
-		FVec P = GatherPoint(Shape);
+		// v4.15 : porte posee sur la face du mur : le point vise est dans la piece, pas sur la surface du mur (sinon la
+		// vue touchait le mur a distance nulle et le depart etait refuse selon l'arrondi)
+		FVec P = Shape.Style == EStyle::Door ? GatherImpl::Ahead(Shape, DoorViewInset) : GatherPoint(Shape);
 		P.Z += ViewHeight;
 		return P;
 	}

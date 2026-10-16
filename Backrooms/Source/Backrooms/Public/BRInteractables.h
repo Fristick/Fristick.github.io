@@ -91,6 +91,9 @@ public:
 	void SetMissionOpen(bool bOpen, bool bAnimate);
 	/** v4.12 : voyant affiche (-1 : sortie libre, 0 : rouge, 1 : vert) */
 	int8 GetMissionOpen() const { return MissionOpen; }
+	/** v4.15 (developpement seulement) : verification du point vise par le depart de groupe, une seconde plus tard (le decor
+	 *  voisin se construit) : a la construction, quand la sortie d'une mission devient visible, quand la mission l'ouvre */
+	void ScheduleDepartureViewCheck();
 	/** v4.13 : porte de service du Level 0 : ouverte ou fermee selon l'etat de l'hote ; bAnimate : le battant pivote
 	 *  sur ses charnieres (son), sinon il est mis en place (arrivee, chunk reconstruit) */
 	void SetServiceDoorOpen(bool bOpen, bool bAnimate);
@@ -162,4 +165,9 @@ protected:
 	TWeakObjectPtr<ABRCharacter> LeaveBy;
 	void LeaveAfterDoor();
 	void BuildServiceDoor();
+	/** v4.15 (developpement seulement) : le point vise par les tests de vue du depart de groupe
+	 *  (ABRWorld::DepartureViewPoint) d'une sortie visible et utilisable doit etre libre ; sinon un avertissement nomme
+	 *  l'obstacle (voir ScheduleDepartureViewCheck) */
+	FTimerHandle ViewCheckTimer;
+	void CheckDepartureViewPoint();
 };

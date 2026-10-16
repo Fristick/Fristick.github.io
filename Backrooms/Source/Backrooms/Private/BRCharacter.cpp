@@ -208,6 +208,22 @@ void ABRCharacter::ServerSetLevelLoading_Implementation(bool bLoading)
 {
 	bLevelLoading = bLoading;
 	LevelLoadingSince = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.f;
+	// v4.15 : fin du chargement : la position connue reste celle d'avant le placement jusqu'au prochain mouvement recu
+	ServerPlacedAt = (!bLoading && GetWorld()) ? static_cast<float>(GetWorld()->GetTimeSeconds()) : -1.f;
+}
+
+bool ABRCharacter::HasStaleServerPosition() const
+{
+	if (!HasAuthority() || IsLocallyControlled() || ServerPlacedAt < 0.f)
+	{
+		return false;
+	}
+	// Un vrai mouvement du client (pas une mise a jour forcee par le serveur) arrive apres son placement (fin du chargement,
+	// reveil au point de depart). Meme precision des deux cotes (float) : un mouvement traite dans l'image du placement,
+	// parti avant lui, reste ancien
+	const UCharacterMovementComponent* M = GetCharacterMovement();
+	const FNetworkPredictionData_Server_Character* SD = (M && M->HasPredictionData_Server()) ? M->GetPredictionData_Server_Character() : nullptr;
+	return !SD || SD->ServerTimeStampLastServerMove <= ServerPlacedAt;
 }
 
 void ABRCharacter::SetupLoopAudio(UAudioComponent* Comp, FName SoundName)
@@ -1932,6 +1948,13 @@ void ABRCharacter::ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint
 	if (!bInDead && Event == 3)
 	{
 		DeathState.WakeCount = static_cast<uint8>(DeathState.WakeCount + 1);
+		if (!IsLocallyControlled() && GetWorld())
+		{
+			// v4.15 : coequipier reveille au point de depart (ServerReportRespawn, nouveau niveau) : sa position connue reste
+			// celle de sa mort (fond de la fosse) jusqu'au premier mouvement parti de sa nouvelle place. Avant, la chute etait
+			// constatee une seconde fois dans l'image du reveil et le joueur a peine replace etait tue de nouveau
+			ServerPlacedAt = static_cast<float>(GetWorld()->GetTimeSeconds());
+		}
 	}
 	if (IsLocallyControlled())
 	{
@@ -2141,6 +2164,7 @@ void ABRCharacter::NotifyFellIntoPit()
 		return;
 	}
 	LastFallNotify = Now;
+	++ServerPitFalls; // v4.15 : compte (tests : aucune chute a l'arrivee d'un client, mode invincible compris)
 	UE_LOG(LogBackrooms, Log, TEXT("Chute dans une fosse : %s a %s"), *GetName(), *GetActorLocation().ToString());
 	// v4.7 : le serveur decide : etat de mort officiel tout de suite (replique a tous), puis la RPC donne au joueur
 	// l'effet immediat. Mode developpeur invincible (autorise par l'hote) : seulement la remontee au bord

@@ -123,6 +123,12 @@ public:
 	 *  ne l'ignore plus. */
 	void SetLevelLoading(bool bLoading);
 	bool IsLevelLoading() const;
+	/** v4.15 : serveur, joueur distant : la fin de son chargement ou son reveil au point de depart est arrive, mais aucun
+	 *  mouvement envoye depuis : la position que le serveur connait est encore celle d'avant son placement (pas de chute a
+	 *  en deduire) */
+	bool HasStaleServerPosition() const;
+	/** v4.15 : serveur : chutes dans une fosse constatees par le serveur pour ce joueur (tests : aucune a l'arrivee) */
+	int32 GetServerPitFalls() const { return ServerPitFalls; }
 	/** Touche Interagir maintenue (relever un coequipier a terre) */
 	void SetInteractHeld(bool bHeld) { bInteractHeld = bHeld; }
 	/** Reanimation d'un coequipier en cours (0..1) */
@@ -375,6 +381,12 @@ protected:
 	UPROPERTY(Replicated)
 	bool bLevelLoading = false;
 	float LevelLoadingSince = 0.f;
+	/** v4.15 : serveur : instant (temps du monde) ou ce joueur distant a ete place : fin de son chargement signalee, ou
+	 *  reveil au point de depart (-1 : jamais). En float, comme l'heure du dernier mouvement recu
+	 *  (ServerTimeStampLastServerMove) : un mouvement traite dans la meme image compte comme ancien */
+	float ServerPlacedAt = -1.f;
+	/** v4.15 : serveur : chutes dans une fosse constatees (voir GetServerPitFalls) */
+	int32 ServerPitFalls = 0;
 	UFUNCTION(Server, Reliable)
 	void ServerSetLevelLoading(bool bLoading);
 

@@ -1348,6 +1348,10 @@ void ABRWorld::UpdateMissionDevices(float Dt)
 				E->SetActorEnableCollision(bShow);
 				// v4.12 : une sortie masquee (zone dechargee) ne s'anime plus (lueur du conduit d'une echelle)
 				E->SetActorTickEnabled(bShow && E->IsClimbable());
+				if (bShow)
+				{
+					E->ScheduleDepartureViewCheck(); // v4.15 (developpement) : point vise par le depart, decor construit
+				}
 			}
 		}
 	}
@@ -1781,6 +1785,8 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 	const ABRExit* Found = nullptr;
 	BRGather::FExitShape FoundShape;
 	const BRGather::FVec PL = ToGather(By->GetActorLocation());
+	// v4.15 : la vue coupee est relevee (obstacle, composant, distance) : un refus devant une sortie se diagnostique
+	FString Blocked;
 	for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
 	{
 		if (It->Target != Target || It->IsHidden())
@@ -1797,8 +1803,13 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 		{
 			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRDepartLos), false, By);
 			Q.AddIgnoredActor(*It);
-			if (GetWorld()->LineTraceTestByChannel(By->GetEyeLocation(), FromGather(BRGather::ViewPoint(Shape)), ECC_WorldStatic, Q))
+			const FVector Eye = By->GetEyeLocation();
+			const FVector Aim = FromGather(BRGather::ViewPoint(Shape));
+			FHitResult Hit;
+			if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Aim, ECC_WorldStatic, Q))
 			{
+				Blocked = FString::Printf(TEXT("sortie %s, vue des yeux (%.0f, %.0f, %.0f) vers (%.0f, %.0f, %.0f) coupee par %s (%s) a %.0f cm sur %.0f cm"), *It->GetName(),
+					Eye.X, Eye.Y, Eye.Z, Aim.X, Aim.Y, Aim.Z, *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), Hit.Distance, FVector::Dist(Eye, Aim));
 				continue;
 			}
 		}
@@ -1809,8 +1820,14 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 	if (!Found)
 	{
 		OutReason = 2;
+		LastDepartureBlock = Blocked;
+		if (!Blocked.IsEmpty())
+		{
+			UE_LOG(LogBackrooms, Log, TEXT("Depart de groupe vers %d refuse a %s : %s"), Target, *GetNameSafe(By), *Blocked);
+		}
 		return false;
 	}
+	LastDepartureBlock.Reset();
 	if (NetDeparture.Phase == 1 && NetDeparture.Serial == LoadedSerial)
 	{
 		if (NetDeparture.Target == Target)
@@ -1861,6 +1878,11 @@ void ABRWorld::ServerCancelDeparture(ABRCharacter* By)
 	{
 		CancelDeparture(3);
 	}
+}
+
+FVector ABRWorld::DepartureViewPoint(const ABRExit* Exit)
+{
+	return Exit ? FromGather(BRGather::ViewPoint(GatherShapeOf(Exit))) : FVector::ZeroVector;
 }
 
 bool ABRWorld::IsGatheredForDeparture(const ABRCharacter* C) const
@@ -2270,7 +2292,12 @@ bool ABRWorld::FindRecentNoise(const FVector& From, FVector& OutLocation) const
 		// Sans ligne de vue, les murs absorbent une partie du bruit
 		const float D = static_cast<float>(FVector::Dist(From, E.Location));
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRNoiseLos), false);
-		const bool bWall = GetWorld() && GetWorld()->LineTraceTestByChannel(From + FVector(0.f, 0.f, 80.f), E.Location, ECC_WorldStatic, Q);
+		// v4.15 : seuls les murs absorbent le bruit : les capsules (joueur qui fait le bruit, creature qui ecoute,
+		// coequipier entre les deux) ne comptent pas. Avant, la capsule du joueur qui faisait le bruit (impulsion LiDAR,
+		// test) ou celle d'un ecouteur grand (Wretch) coupait toujours la ligne : portee divisee par deux en vue directe.
+		FCollisionResponseParams R;
+		R.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+		const bool bWall = GetWorld() && GetWorld()->LineTraceTestByChannel(From + FVector(0.f, 0.f, 80.f), E.Location, ECC_WorldStatic, Q, R);
 		if (D <= E.Radius * (bWall ? 0.55f : 1.f) && D < Best)
 		{
 			Best = D;

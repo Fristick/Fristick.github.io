@@ -2627,6 +2627,10 @@ void ABRPlayerController::ServerCheat_Implementation(uint8 Command, int32 Value)
 	case 3:
 		SpawnInFront(Value);
 		break;
+	case 4:
+		// v4.15 : test reseau : etape atteinte par ce client (barriere de l'hote ; rien d'autre ne change)
+		NetTestMark = Value;
+		break;
 	default:
 		break;
 	}

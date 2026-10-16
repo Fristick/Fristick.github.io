@@ -16,6 +16,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -260,6 +261,9 @@ void ABRExit::Init(int32 InTarget, EBRExitStyle InStyle)
 		return;
 	}
 	const FBRLevelDef& D = W->Def();
+	// v4.15 (developpement) : point vise par le depart de groupe verifie une fois le niveau construit autour (murs du chunk
+	// et de ses voisins) : un point pris dans un mur se voit dans le journal, pas au hasard d'un refus
+	ScheduleDepartureViewCheck();
 
 	auto SetupInteractBox = [this](const FVector& Center, const FVector& Extent)
 	{
@@ -434,6 +438,10 @@ void ABRExit::SetMissionOpen(bool bOpen, bool bAnimate)
 	}
 	const bool bFirst = MissionOpen < 0;
 	MissionOpen = Want;
+	if (bOpen)
+	{
+		ScheduleDepartureViewCheck(); // v4.15 : la porte de la mission devant la sortie s'ouvre : la vue doit etre libre
+	}
 	UBRAssets* A = UBRAssets::Get(this);
 	if (Light && Style != EBRExitStyle::HouseDoor)
 	{
@@ -500,6 +508,48 @@ void ABRExit::Tick(float DeltaSeconds)
 	{
 		Mesh->SetRelativeLocation(FVector(1.f + FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-4.f, 4.f), Mesh->GetRelativeLocation().Z));
 	}
+}
+
+void ABRExit::ScheduleDepartureViewCheck()
+{
+#if !UE_BUILD_SHIPPING
+	if (IsInteractable() && GetWorld() && !IsActorBeingDestroyed())
+	{
+		GetWorldTimerManager().SetTimer(ViewCheckTimer, this, &ABRExit::CheckDepartureViewPoint, 1.f, false);
+	}
+#endif
+}
+
+void ABRExit::CheckDepartureViewPoint()
+{
+#if !UE_BUILD_SHIPPING
+	UWorld* World = GetWorld();
+	// Sortie masquee (zone de la mission pas encore construite) : verifiee quand elle devient visible. Sortie gardee encore
+	// fermee : la porte de la mission devant elle coupe la vue par construction (barriere bloquante tant qu'elle est
+	// fermee) ; verifiee a son ouverture (SetMissionOpen)
+	if (!World || IsHidden() || IsActorBeingDestroyed() || MissionOpen == 0)
+	{
+		return;
+	}
+	// Meme canal que les tests de vue du depart (ABRWorld::ServerStartDeparture, ::IsGatheredForDeparture) ; les joueurs et
+	// les creatures ne comptent pas (ils passent), la sortie elle-meme non plus (ignoree par ces tests)
+	const FVector Aim = ABRWorld::DepartureViewPoint(this);
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRExitViewCheck), false, this);
+	FCollisionResponseParams R;
+	R.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByChannel(Overlaps, Aim, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(10.f), Q, R);
+	for (const FOverlapResult& O : Overlaps)
+	{
+		if (O.bBlockingHit)
+		{
+			const FVector L = GetActorLocation();
+			UE_LOG(LogBackrooms, Warning, TEXT("Sortie vers le Niveau %d (%s) en (%.0f, %.0f, %.0f) : point vise par le depart de groupe (%.0f, %.0f, %.0f) pris dans %s (%s) : "
+				"la vue du rassemblement y serait coupee"), Target, *GetName(), L.X, L.Y, L.Z, Aim.X, Aim.Y, Aim.Z, *GetNameSafe(O.GetActor()), *GetNameSafe(O.GetComponent()));
+			return;
+		}
+	}
+#endif
 }
 
 void ABRExit::NotifyActorBeginOverlap(AActor* OtherActor)

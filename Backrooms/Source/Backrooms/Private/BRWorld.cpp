@@ -418,6 +418,12 @@ void ABRWorld::RespawnLocalPlayer()
 	{
 		return;
 	}
+	// v4.15 : client : le mouvement en attente (parti de la ou l'on est mort) part avant le signal du reveil ; ceux qui
+	// suivent partent de la place de depart (le serveur attend l'un d'eux avant de juger une chute)
+	if (UCharacterMovementComponent* M = P->GetCharacterMovement())
+	{
+		M->FlushServerMoves();
+	}
 	P->ResetStats();
 	PlacePlayer();
 	P->SetInputLocked(true);
@@ -1382,6 +1388,18 @@ void ABRWorld::PlacePlayer(bool bKeepServerSpot)
 			UE_LOG(LogBackrooms, Warning, TEXT("Reprise : point %s invalide (mur, fosse, sol absent) : point de depart"), *ResumeSpot.ToString());
 		}
 	}
+	if (bServerPlaced && !bResumePlaced)
+	{
+		// v4.15 : client qui rejoint : la place (XY) reste celle donnee par le serveur, a la hauteur de son sol (comme
+		// SpawnSpot) : immobilise pendant la preparation, le personnage a pu descendre d'une image dans le vide avant
+		FVector Loc = P->GetActorLocation();
+		Loc.Z = Half + 5.f;
+		Loc.Z += FloorZAt(Loc);
+		if (FMath::Abs(Loc.Z - P->GetActorLocation().Z) > 1.0)
+		{
+			P->SetActorLocation(Loc, false, nullptr, ETeleportType::TeleportPhysics);
+		}
+	}
 	if (!bServerPlaced && !bResumePlaced)
 	{
 		const int32 Slot = IsNetGame() ? PlayerSlot(P->GetPlayerState()) : 0;
@@ -1508,6 +1526,18 @@ void ABRWorld::Tick(float DeltaSeconds)
 	if (!HasAuthority() && !SyncNetLevel())
 	{
 		Fade = 1.f; // en attente du niveau du serveur
+		// v4.15 : client qui rejoint la partie : tant que son niveau n'est pas construit (aucun sol chez lui), son personnage
+		// ne bouge pas. Avant, il tombait dans le vide pendant la preparation, et l'hote (qui reprend la position du client)
+		// le tuait d'une chute. PlacePlayer (ABRCharacter::OnEnteredLevel) le remet en marche une fois le niveau construit
+		if (ABRCharacter* P = GetPlayer())
+		{
+			UCharacterMovementComponent* M = P->GetCharacterMovement();
+			if (M && P->IsLocallyControlled() && M->MovementMode != MOVE_None)
+			{
+				M->StopMovementImmediately();
+				M->DisableMovement();
+			}
+		}
 		return;
 	}
 	LevelTime += Dt;
@@ -3642,6 +3672,15 @@ void ABRWorld::UpdatePitFalls()
 	for (ABRCharacter* P : Players)
 	{
 		if (!IsValid(P) || P->IsDead() || P->IsDevFlying())
+		{
+			continue;
+		}
+		// v4.15 : un coequipier qui prepare ou construit son niveau n'a pas encore de sol chez lui, et sa position connue du
+		// serveur reste celle d'avant son placement (fin du chargement, reveil au point de depart) tant qu'aucun mouvement
+		// recent n'est arrive : ni l'une ni l'autre n'est une chute (un joueur qui rejoignait la partie etait tue d'une chute
+		// pendant son chargement ; un joueur reveille apres une chute l'etait de nouveau). Joueur local (partie seule,
+		// hote) : inchange
+		if (!P->IsLocallyControlled() && (P->IsLevelLoading() || P->HasStaleServerPosition()))
 		{
 			continue;
 		}

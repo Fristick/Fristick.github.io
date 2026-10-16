@@ -1,4 +1,5 @@
 #include "BRAutoTest.h"
+#include "BRAutoTestNet.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
 #include "BRCharacter.h"
@@ -295,10 +296,12 @@ void ABRAutoTest::BeginPlay()
 
 void ABRAutoTest::EndPlay(const EEndPlayReason::Type Reason)
 {
-	// Multijoueur : l'hote a ferme la partie avant la fin (le client revient au menu) : on conclut quand meme
+	// Multijoueur : l'hote a ferme la partie avant la fin (le client revient au menu) : on conclut quand meme. v4.15 : avec
+	// l'etape en cours (le rapport dit ou le client en etait)
 	if (bNetTest && !bFinished && Reason != EEndPlayReason::Quit)
 	{
-		Note(TEXT("la partie s'est terminee avant la fin du test (connexion perdue ?)"), true);
+		Note(FString::Printf(TEXT("la partie s'est terminee avant la fin du test (connexion perdue ?) pendant l'etape \"%s\" (%d/%d, %.0f s)"),
+			Plan.IsValidIndex(StepIndex) ? *Plan[StepIndex].Name : TEXT("fin du plan"), StepIndex + 1, Plan.Num(), StepTime), true);
 		Finish();
 	}
 	if (Capture.IsValid() && GLog)
@@ -359,7 +362,7 @@ void ABRAutoTest::Note(const FString& Text, bool bProblem)
 	Report().Notes.Add((bProblem ? TEXT("PROBLEME : ") : TEXT("")) + Text);
 	if (bProblem)
 	{
-		Problems.Add(FString::Printf(TEXT("Niveau %d : %s"), Report().Level, *Text));
+		Problems.Add(FString::Printf(TEXT("Niveau %d : %s"), NoteLevel(), *Text));
 	}
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] %s%s"), bProblem ? TEXT("PROBLEME : ") : TEXT(""), *Text);
 }
@@ -367,8 +370,22 @@ void ABRAutoTest::Note(const FString& Text, bool bProblem)
 void ABRAutoTest::Skip(const FString& Text)
 {
 	Report().Notes.Add(TEXT("NON VERIFIE : ") + Text);
-	Skipped.Add(FString::Printf(TEXT("Niveau %d : %s"), Report().Level, *Text));
+	Skipped.Add(FString::Printf(TEXT("Niveau %d : %s"), NoteLevel(), *Text));
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] NON VERIFIE : %s"), *Text);
+}
+
+int32 ABRAutoTest::NoteLevel()
+{
+	// v4.15 : le test reseau n'a qu'une section de rapport (niveau 0 par defaut) alors que le groupe change de niveau : le
+	// niveau ou se trouve la machine au moment de la note
+	if (bNetTest)
+	{
+		if (const ABRWorld* W = GetBRWorld())
+		{
+			return W->GetLevelNumber();
+		}
+	}
+	return Report().Level;
 }
 
 void ABRAutoTest::Shot(const FString& Name)
@@ -677,9 +694,24 @@ void ABRAutoTest::BuildNetPlan()
 		{
 			return false;
 		}
+		// v4.15 : ... et que son personnage soit place dans le niveau (fin de son chargement signalee au serveur) : avant, les
+		// premieres etapes commencaient pendant que le client preparait encore son niveau
+		if (!bClient)
+		{
+			const ABRCharacter* M = BRTestNet::RemoteMate(W);
+			if (M && M->IsLevelLoading())
+			{
+				if (StepTime < 90.f)
+				{
+					return false;
+				}
+				Note(TEXT("le coequipier est encore en chargement apres 90 s"), true);
+			}
+		}
 		GetPlayer()->bGodMode = true;
 		return true;
 	});
+	LimitLastStep(100.f);
 	Add(TEXT("Etat initial"), 0.5f, [this]()
 	{
 		NoteNetState(TEXT("debut"));
@@ -691,6 +723,21 @@ void ABRAutoTest::BuildNetPlan()
 		if (!GS || GS->PlayerArray.Num() < 2)
 		{
 			Note(TEXT("le second joueur n'a pas rejoint la partie"), true);
+		}
+		// v4.15 : le serveur ne doit avoir change l'etat de mort du client pendant son arrivee (avant : tue d'une chute pendant
+		// qu'il preparait son niveau, puis reveille au placement), ni constate de chute : le mode invincible du test change une
+		// chute en remontee au bord sans toucher a l'etat de mort (la chute sur une position perimee, juste apres le placement,
+		// ne se voyait qu'au compte des chutes)
+		if (GetNetMode() != NM_Client)
+		{
+			if (const ABRCharacter* M = BRTestNet::RemoteMate(GetBRWorld()))
+			{
+				const FBRDeathState& DS = M->GetDeathState();
+				const bool bSame = DS.Serial == 0 && !DS.bDead;
+				Note(FString::Printf(TEXT("v4.15 arrivee du client : etat de mort tenu par le serveur %s (%d evenement(s), dernier %d, cause %d), %d chute(s) constatee(s) par le serveur (attendu 0)"),
+					bSame ? TEXT("inchange") : TEXT("CHANGE"), static_cast<int32>(DS.Serial), static_cast<int32>(DS.Event), static_cast<int32>(DS.Cause), M->GetServerPitFalls()),
+					!bSame || M->GetServerPitFalls() != 0);
+			}
 		}
 		Shot(TEXT("Net_debut"));
 		return true;
@@ -825,13 +872,49 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetV413LidarSteps(bClient);
 	AddNetV414Steps(bClient); // v4.14
 	AddNetV415Steps(bClient); // v4.15
-	// Le client part le premier ; l'hote attend un peu avant de fermer la partie
-	Add(TEXT("Fin"), bClient ? 6.f : 12.f, []()
+	// Le client part le premier. v4.15 : l'hote attend que le client ait quitte la partie (ou signale la fin de son plan),
+	// 120 s au plus : avant, il fermait la partie au bout de 12 s, pendant que le client finissait encore ses etapes
+	Add(TEXT("Fin"), bClient ? 1.f : 2.f, [this, bClient]()
 	{
-		return true;
+		if (bClient)
+		{
+			return true;
+		}
+		// v4.15 : premier appel de l'etape (StepTime ne compte encore qu'une image) : le delai de grace ne part pas de l'heure
+		// laissee dans TestTimer par une etape precedente (fin du client deja signalee : partie fermee sans attendre)
+		if (StepTime <= static_cast<float>(FApp::GetDeltaTime()))
+		{
+			TestTimer = 0.0;
+		}
+		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+		if (!GS || GS->PlayerArray.Num() < 2)
+		{
+			return true;
+		}
+		if (BRTestNet::RemoteMark(GetBRWorld()) == BRTestNet::MarkFinished)
+		{
+			// Rapport du client ecrit : il quitte la partie (sauf -BRAutoTestStay) ; quelques secondes pour le laisser partir
+			if (TestTimer <= 0.0)
+			{
+				TestTimer = FPlatformTime::Seconds();
+			}
+			return FPlatformTime::Seconds() - TestTimer > 5.0;
+		}
+		if (StepTime > 120.f)
+		{
+			Note(TEXT("hote : le client n'a pas termine son plan 120 s apres celui de l'hote (voir son rapport)"));
+			return true;
+		}
+		TestTimer = 0.0;
+		return false;
 	});
-	Add(TEXT("Fermeture"), 0.f, [this]()
+	LimitLastStep(130.f);
+	Add(TEXT("Fermeture"), 0.f, [this, bClient]()
 	{
+		if (bClient)
+		{
+			BRTestNet::SendMark(GetPC(), BRTestNet::MarkFinished);
+		}
 		Finish();
 		return true;
 	});
@@ -1030,13 +1113,20 @@ void ABRAutoTest::AddLevelSteps(int32 Level)
 			Shot(FString::Printf(TEXT("L%02d_lampe"), Level));
 			return true;
 		});
-		Add(FString::Printf(TEXT("Niveau %d : vision nocturne"), Level), 1.f, [this]()
+		// v4.15 : niveau LiDAR (Level 6, v4.13) : la vision nocturne est refusee par conception (les parasites brouillent le
+		// capteur, ABRCharacter::ToggleNightVision) : la demande doit etre refusee, et non acceptee comme ailleurs
+		const bool bLidar = D.bLidar;
+		Add(FString::Printf(TEXT("Niveau %d : vision nocturne"), Level), 1.f, [this, bLidar]()
 		{
 			if (ABRCharacter* C = GetPlayer())
 			{
 				C->ToggleFlashlight();
 				C->ToggleNightVision();
-				if (!C->IsNightVision())
+				if (bLidar)
+				{
+					Note(FString::Printf(TEXT("vision nocturne refusee (niveau LiDAR) : %s"), C->IsNightVision() ? TEXT("NON") : TEXT("oui")), C->IsNightVision());
+				}
+				else if (!C->IsNightVision())
 				{
 					Note(TEXT("la vision nocturne ne s'active pas"), true);
 				}
