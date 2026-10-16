@@ -175,6 +175,19 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Session longue de %.0f min : %d etapes. Rapport : %s"), SoakMinutes, Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV414")))
+	{
+		AddV414Steps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.14 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
+	// v4.15 (correctifs) : apres le choix -BRAutoTestV414 (le parcours lineaire ajoute -BRAutoTestV415 avant lui : fusion sans
+	// conflit). FParse::Param exige un separateur apres le nom : -BRAutoTestV415 ne prend pas -BRAutoTestV415Fix
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV415Fix")))
 	{
 		// v4.15 (correctifs) : les seules etapes de non-regression des correctifs des places et des tests de marche. Elles font
@@ -186,17 +199,6 @@ void ABRAutoTest::BeginPlay()
 			return true;
 		});
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications des correctifs v4.15 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
-		return;
-	}
-	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV414")))
-	{
-		AddV414Steps();
-		Add(TEXT("Fin"), 0.f, [this]()
-		{
-			Finish();
-			return true;
-		});
-		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.14 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV413")))

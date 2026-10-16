@@ -551,8 +551,10 @@ void ABRAutoTest::AddMissionSteps(int32 Level, uint32 UserSeed, bool bDepart)
 // volume bloquant (rochers, maison, cage ou porte voisine : ABRWorld::FindMissionDeviceObstruction), une place debout a
 // portee de la visee du client et selon la regle de l'hote (StandNear -> BRTestV412::FindMissionStand), puis l'essai a
 // blanc de l'hote depuis cette place (joueur pose, ses vrais yeux : ABRWorld::CanReachMissionDevice, la verification de
-// ServerMissionAct). bLidarOnly : postes et cages du Level 6. Phases 10 a 12 ; TestCountA : mecanismes verifies,
-// TestCountB : en defaut
+// ServerMissionAct) et la visee reelle du client (ABRCharacter::UpdateFocus). bLidarOnly : postes et cages du Level 6.
+// v4.15 (correctifs) : etat remis a zero par une etape d'entree (avant : phases 10 a 12, partagees avec la marche vers la
+// sortie, dont l'etat restait : balayage "reussi" sans rien verifier) ; phases 150 a 152 ; TestCountA : mecanismes
+// verifies, TestCountB : en defaut, TestCountC : non verifies (decor voisin pas construit)
 // =====================================================================================================================
 
 void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
@@ -560,6 +562,17 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 	using namespace BRTestV411;
 	const FString StepName = bLidarOnly ? FString::Printf(TEXT("v4.15 Level %d : postes et cages, places et essai de l'hote"), Level)
 		: FString::Printf(TEXT("v4.15 mission %d : places des mecanismes"), Level);
+	Add(StepName + TEXT(" (debut)"), 0.f, [this]()
+	{
+		TestMissionStep = 0;
+		TestMissionPhase = 0;
+		TestMissionDevice = -1;
+		TestMissionRetries = 0;
+		TestCountA = 0;
+		TestCountB = 0;
+		TestCountC = 0;
+		return true;
+	});
 	Add(StepName, 0.f, [this, Level, bLidarOnly]()
 	{
 		ABRWorld* W = GetBRWorld();
@@ -573,19 +586,24 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 		const double Now = FPlatformTime::Seconds();
 		// La folie ignore le mode invincible : le balayage du Level 6 se fait dans le noir
 		C->Sanity = 100.f;
-		if (TestMissionPhase < 10 || TestMissionPhase > 12)
+		if (TestMissionPhase < 150 || TestMissionPhase > 152)
 		{
-			TestMissionStep = 0;
-			TestMissionPhase = 10;
-			TestCountA = 0;
-			TestCountB = 0;
+			TestMissionPhase = 150;
 		}
 		auto EndSweep = [&]()
 		{
 			SetHover(C, false);
-			Note(FString::Printf(TEXT("Niveau %d (graine du niveau %u) : %d/%d %s degages et atteignables (point d'interaction hors des volumes, place a portee de la visee "
-				"et selon la regle de l'hote, action acceptee depuis cette place)"), Level, W->GetSeed(), TestCountA - TestCountB, TestCountA,
-				bLidarOnly ? TEXT("postes et cages") : TEXT("mecanismes")), TestCountB > 0 || TestCountA == 0);
+			const FString Line = FString::Printf(TEXT("Niveau %d (graine du niveau %u) : %d/%d %s degages et atteignables (point d'interaction hors des volumes, place a portee de la "
+				"visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)%s"), Level, W->GetSeed(), TestCountA - TestCountB, TestCountA,
+				bLidarOnly ? TEXT("postes et cages") : TEXT("mecanismes"), TestCountC > 0 ? *FString::Printf(TEXT(" ; %d non verifie(s), decor voisin pas construit"), TestCountC) : TEXT(""));
+			if (TestCountA == 0 && TestCountC > 0)
+			{
+				Skip(Line);
+			}
+			else
+			{
+				Note(Line, TestCountB > 0 || TestCountA == 0);
+			}
 			TestMissionStep = 0;
 			TestMissionPhase = 0;
 			TestMissionDevice = -1;
@@ -618,7 +636,7 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 			++TestCountB;
 			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d absent du monde"), Level, D), true);
 			++TestMissionStep;
-			TestMissionPhase = 10;
+			TestMissionPhase = 150;
 			return false;
 		}
 		const FVector Aim = Dev->GetInteractPoint();
@@ -628,7 +646,25 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s), point (%.0f, %.0f, %.0f) : %s (graine du niveau %u)"), Level, D, *BRMissionText::DeviceName(P, D),
 				Aim.X, Aim.Y, Aim.Z, *Why, W->GetSeed()), true);
 		};
-		if (TestMissionPhase == 10)
+		// v4.15 (correctifs) : chunks du decor autour du point (rochers d'une cellule voisine : jusqu'a 3,35 m le long de la paroi,
+		// diag_interchange) ; ceux hors des limites du niveau n'existent jamais
+		auto MissingChunks = [W, &Aim]()
+		{
+			constexpr float Around = 400.f;
+			const FIntPoint Lo = W->CellToChunk(W->WorldToCell(Aim - FVector(Around, Around, 0.f)));
+			const FIntPoint Hi = W->CellToChunk(W->WorldToCell(Aim + FVector(Around, Around, 0.f)));
+			int32 Missing = 0;
+			for (int32 X = Lo.X; X <= Hi.X; ++X)
+			{
+				for (int32 Y = Lo.Y; Y <= Hi.Y; ++Y)
+				{
+					const FIntPoint Ch(X, Y);
+					Missing += (W->IsChunkInBounds(Ch) && !W->HasChunkFloor(Ch)) ? 1 : 0;
+				}
+			}
+			return Missing;
+		};
+		if (TestMissionPhase == 150)
 		{
 			// Approche : la cellule du mecanisme et ses voisines se construisent autour du joueur
 			SetHover(C, true);
@@ -639,22 +675,33 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 			}
 			PlaceAndFace(C, Stand, Aim);
 			TestMissionClock = Now;
-			TestMissionPhase = 11;
+			TestMissionPhase = 151;
 			return false;
 		}
-		if (TestMissionPhase == 11)
+		if (TestMissionPhase == 151)
 		{
-			// Attente : mecanisme affiche (sol et collisions de son chunk) et chunks voisins prets (rochers qui debordent)
+			// Attente : mecanisme affiche (sol et collisions de son chunk), chunks prets et ceux autour du point construits
 			const bool bWaited = Now - TestMissionClock > 8.0;
-			if (!Dev->IsShown() || Now - TestMissionClock < 0.5 || (W->GetPreparingChunkCount() > 0 && !bWaited))
+			const int32 Missing = MissingChunks();
+			if (!Dev->IsShown() || Now - TestMissionClock < 0.5 || ((W->GetPreparingChunkCount() > 0 || Missing > 0) && !bWaited))
 			{
 				if (Now - TestMissionClock > 20.0)
 				{
 					++TestCountA;
 					Fail(TEXT("chunk du mecanisme pas construit apres 20 s"));
 					++TestMissionStep;
-					TestMissionPhase = 10;
+					TestMissionPhase = 150;
 				}
+				return false;
+			}
+			if (Missing > 0)
+			{
+				// Decor voisin toujours absent : rien n'est conclu pour ce mecanisme (avant : compte comme degage)
+				++TestCountC;
+				Skip(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) : %d chunk(s) a moins de 4 m du point pas construit(s) apres 8 s : place non verifiee"), Level, D,
+					*BRMissionText::DeviceName(P, D), Missing));
+				++TestMissionStep;
+				TestMissionPhase = 150;
 				return false;
 			}
 			++TestCountA;
@@ -668,16 +715,19 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 				Fail(FString::Printf(TEXT("%s%s%s"), bBuried ? *FString::Printf(TEXT("point d'interaction dans %s"), *What) : TEXT(""), bBuried && !bStand ? TEXT(", ") : TEXT(""),
 					bStand ? TEXT("") : *FString::Printf(TEXT("aucune place debout a portee de la visee et selon la regle de l'hote (%s)"), *Why)));
 				++TestMissionStep;
-				TestMissionPhase = 10;
+				TestMissionPhase = 150;
 				return false;
 			}
 			// Essai a blanc : le joueur pose a cette place, regard vers le point
 			PlaceAndFace(C, Stand, Aim);
 			TestMissionClock = Now;
-			TestMissionPhase = 12;
+			TestMissionPhase = 152;
 			return false;
 		}
-		if (Now - TestMissionClock < 0.2)
+		// v4.15 (correctifs) : la visee reelle du client (ABRCharacter::UpdateFocus : balayage de 7 cm, puis tolerance) doit
+		// prendre ce mecanisme, pas un voisin (cage) ni rien ; 1,5 s pour qu'elle se fasse, comme la marche (phase 3)
+		const AActor* Seen = C->FocusActor.Get();
+		if (Now - TestMissionClock < 0.2 || (Seen != Dev && Now - TestMissionClock < 1.5))
 		{
 			return false;
 		}
@@ -686,13 +736,16 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 		const FVector Eye = C->GetEyeLocation();
 		const bool bServer = W->CanReachMissionDevice(Eye, Dev, C, &Block);
 		const float EyeDist = static_cast<float>(FVector::Dist(Eye, Aim));
-		if (!bServer || EyeDist > BRTestV412::ClientFocusReach + 10.f)
+		if (!bServer || EyeDist > BRTestV412::ClientFocusReach + 10.f || Seen != Dev)
 		{
-			Fail(FString::Printf(TEXT("depuis la place trouvee (yeux a %.0f cm du point), action %s"), EyeDist, bServer ? TEXT("acceptee par l'hote mais hors de la visee du client")
-				: *FString::Printf(TEXT("REFUSEE par l'hote (vue coupee par %s, %s)"), *GetNameSafe(Block.GetActor()), *GetNameSafe(Block.GetComponent()))));
+			const FString Host = bServer ? FString(TEXT("acceptee par l'hote")) : FString::Printf(TEXT("REFUSEE par l'hote (vue coupee par %s, %s)"), *GetNameSafe(Block.GetActor()),
+				*GetNameSafe(Block.GetComponent()));
+			const FString Client = Seen == Dev ? (EyeDist > BRTestV412::ClientFocusReach + 10.f ? FString(TEXT(", hors de la portee de la visee du client")) : FString())
+				: FString::Printf(TEXT(", PAS VISE par le client (vise : %s)"), Seen ? *Seen->GetName() : TEXT("rien"));
+			Fail(FString::Printf(TEXT("depuis la place trouvee (yeux a %.0f cm du point), action %s%s"), EyeDist, *Host, *Client));
 		}
 		++TestMissionStep;
-		TestMissionPhase = 10;
+		TestMissionPhase = 150;
 		return false;
 	});
 	LimitLastStep(220.f);

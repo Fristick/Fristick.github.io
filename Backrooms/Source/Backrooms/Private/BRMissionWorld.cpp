@@ -105,6 +105,40 @@ namespace
 	{
 		return (static_cast<uint64>(reinterpret_cast<UPTRINT>(By)) << 8) ^ static_cast<uint64>(Device & 0xFF);
 	}
+
+	/** v4.15 : mecanisme pose (repere de son emplacement, emprise de sa sorte, de son role et de son module) */
+	BRMech::Clearance::FPlaced PlacedMissionDevice(const BRM::FPlan& Plan, const TArray<FBRMissionSpot>& Spots, int32 I, float WallThickness)
+	{
+		BRMech::Clearance::FPlaced P;
+		P.Frame.X = static_cast<float>(Spots[I].Pos.X);
+		P.Frame.Y = static_cast<float>(Spots[I].Pos.Y);
+		P.Frame.Z = static_cast<float>(Spots[I].Pos.Z);
+		P.Frame.Yaw = Spots[I].Yaw;
+		P.Print = BRMech::Clearance::Of(Plan.Devices[I].Kind, Plan.Devices[I].Role, Spots[I].Module, WallThickness);
+		return P;
+	}
+
+	/** v4.15 : invariant du placement (journal ; les tests du jeu le verifient aussi dans le decor construit) : aucun point
+	 *  d'interaction dans le volume bloquant d'un autre mecanisme. v4.15 (correctifs) : aussi pour le module de secours */
+	void LogMissionVolumeInvariant(const BRM::FPlan& Plan, const TArray<FBRMissionSpot>& Spots, float WallThickness, const TCHAR* Tier)
+	{
+		for (int32 I = 0; I < Plan.NumDevices && I < Spots.Num(); ++I)
+		{
+			if (Plan.Devices[I].Kind == BRM::EKind::Gate)
+			{
+				continue;
+			}
+			const BRMech::FVec3 Aim = BRMech::Clearance::AimPoint(PlacedMissionDevice(Plan, Spots, I, WallThickness));
+			for (int32 J = 0; J < Plan.NumDevices && J < Spots.Num(); ++J)
+			{
+				if (J != I && BRMech::Clearance::InSolid(PlacedMissionDevice(Plan, Spots, J, WallThickness), Aim.X, Aim.Y, Aim.Z, BRMech::Clearance::Margin))
+				{
+					UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d%s : point d'interaction du mecanisme %d dans le volume du mecanisme %d (graine %u)"), Plan.Level, Tier, I, J,
+						Plan.Seed);
+				}
+			}
+		}
+	}
 }
 
 // =====================================================================================================================
@@ -1169,29 +1203,8 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		}
 		OutCells.Add(Spot.Cell);
 	}
-	// v4.15 : invariant du placement (journal ; les tests du jeu le verifient aussi dans le decor construit) : aucun point
-	// d'interaction dans le volume bloquant d'un autre mecanisme
-	for (int32 I = 0; I < Plan.NumDevices; ++I)
-	{
-		if (Plan.Devices[I].Kind == BRM::EKind::Gate)
-		{
-			continue;
-		}
-		BRMech::Clearance::FPlaced Me;
-		Me.Frame = FrameOf(OutSpots[I]);
-		Me.Print = BRMech::Clearance::Of(Plan.Devices[I].Kind, Plan.Devices[I].Role, OutSpots[I].Module, D.WallThickness);
-		const BRMech::FVec3 Aim = BRMech::Clearance::AimPoint(Me);
-		for (int32 J = 0; J < Plan.NumDevices; ++J)
-		{
-			BRMech::Clearance::FPlaced Other;
-			Other.Frame = FrameOf(OutSpots[J]);
-			Other.Print = BRMech::Clearance::Of(Plan.Devices[J].Kind, Plan.Devices[J].Role, OutSpots[J].Module, D.WallThickness);
-			if (J != I && BRMech::Clearance::InSolid(Other, Aim.X, Aim.Y, Aim.Z, BRMech::Clearance::Margin))
-			{
-				UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d : point d'interaction du mecanisme %d dans le volume du mecanisme %d (graine %u)"), Plan.Level, I, J, Plan.Seed);
-			}
-		}
-	}
+	// v4.15 : invariant du placement : aucun point d'interaction dans le volume bloquant d'un autre mecanisme (journal)
+	LogMissionVolumeInvariant(Plan, OutSpots, D.WallThickness, TEXT(""));
 	return true;
 }
 
@@ -1414,8 +1427,9 @@ bool ABRWorld::PlaceMissionModule(const BRM::FPlan& Plan, TArray<FBRMissionSpot>
 		}
 		if (Idx < 0)
 		{
-			// La porte s'ouvre devant la sortie : rien a moins de 1,4 m
-			while (Next < Slots.Num() - 1 && OutExits.Num() > 0 && FVector::Dist2D(Slots[Next].Pos, OutExits[0].Pos) < 140.f)
+			// La porte s'ouvre devant la sortie : rien a moins de 1,4 m. v4.15 (correctifs) : ni sur une place deja prise par
+			// PickSlot (le curseur n'avance pas pour elle) ; sans volume, rien n'est pris devant le curseur : ordre d'avant
+			while (Next < Slots.Num() - 1 && (Taken[Next] || (OutExits.Num() > 0 && FVector::Dist2D(Slots[Next].Pos, OutExits[0].Pos) < 140.f)))
 			{
 				++Next;
 			}
@@ -1430,6 +1444,7 @@ bool ABRWorld::PlaceMissionModule(const BRM::FPlan& Plan, TArray<FBRMissionSpot>
 		P.Print = Print;
 		bAnyVolume |= Print.bSolid;
 	}
+	LogMissionVolumeInvariant(Plan, OutSpots, D.WallThickness, TEXT(" (module de secours)"));
 	return true;
 }
 

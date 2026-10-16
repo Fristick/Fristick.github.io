@@ -1,24 +1,53 @@
-# Places des mecanismes : point d'interaction hors des collisions, place debout a portee et a vue (Tools/verify_device_clearance.py) - sortie reelle
+# Places des mecanismes : point d'interaction hors des collisions, place debout et marche des tests du jeu, visee du client (Tools/verify_device_clearance.py) - sortie reelle
 # Commande (depuis Backrooms/, PYTHONUTF8=1, Python 3.14.8) : python Tools/verify_device_clearance.py --seeds 120
-# L'ancienne regle (v4.14) doit ECHOUER (le defaut des journaux du jeu est reproduit), la regle du jeu (v4.15) PASSER
-# Date : 2026-10-16T17:17:07Z
+# L'ancienne regle (v4.14) doit ECHOUER (le defaut des journaux du jeu est reproduit), la regle du jeu (v4.15) PASSER et etre dans les sources
+# v4.15 (correctifs, relecture) : cas A juge comme les tests du jeu (FindMissionStand, marches, visee du client, murs voisins), cage au bout de sa face ; B et C avec FindMissionStand ; cas D (sorties du Level 8)
+# Date : 2026-10-16T21:57:09Z
 
 Banc des places des mecanismes (v4.15, Tools/verify_device_clearance.py)
 Constantes lues : capsule 34 x 88, yeux a 74 cm au-dessus du centre, portee de l'hote 340 cm ; marge 2, place debout a 36 cm, profondeur libre 120 ; poste (18.0, 0.0, 110.0) ; treuil (26.0, 0.0, 60.0) ; plaque (5.0, 0.0, 140.0)
 
-A. Level 6 : poste et cage d'un groupe (cellule de 350 cm, murs de 60, face utile +-145 ; places -0/+58/-58/+116/-116 ; cage 12..122 cm du mur, +-60)
-  regle v4.14 : poste a -0, cage a +58 ; point du poste dans la cage : OUI ; places a portee 1692, ligne de vue de l'hote libre 0 ; but de marche 110 cm (rayon 70) a 30 cm, relance 60 cm (rayon 35) a 39 cm ; cage dans la face : oui -> ECHOUE
-  regle v4.15 : poste a +116, cage a -0 ; point du poste dans la cage : non ; places a portee 1490, ligne de vue de l'hote libre 755 ; but de marche 110 cm (rayon 70) a 5 cm, relance 60 cm (rayon 35) a 5 cm ; cage dans la face : oui -> PASSE
+A. Level 6 : poste et cage d'un groupe (cellule de 350 cm, murs de 60, face utile +-145 ; places (axe droit) +0/-58/+58/-116/+116 ; cage 12..122 cm du mur, +-60, boite visee (126.0, 0.0, 120.0) ; place devant a 110 cm, marche : rayon 70 (devant) ou 35 (autour), reprise a 60 cm, rayon 35 ; cercles 110/160/210/75/240, 16 directions ; visee du client : balayage de 7 cm, portee 250, tolerance 208)
+  regle v4.14 : poste a +0, cage a -58 (axe droit) ; cage dans la face : oui ; 0/8 dispositions des murs reussies -> ECHOUE
+    murs voisins non/non, fond non : point du poste DANS la cage -> ECHOUE
+  regle v4.15 avant correctifs (pour information) : poste a -116, cage a +0 (axe droit) ; cage dans la face : oui ; 4/8 dispositions des murs reussies -> ECHOUE
+    murs voisins non/non, fond non : place devant (110 cm) libre ; premiere place (128, -116) (cercle 110, direction 0) ; marche vers (128, -116) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, -116) rayon 35 : 132/0/0 -> PASSE
+    murs voisins non/non, fond oui : place devant (110 cm) libre ; premiere place (128, -116) (cercle 110, direction 0) ; marche vers (128, -116) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, -116) rayon 35 : 132/0/0 -> PASSE
+    murs voisins non/oui, fond non : place devant (110 cm) capsule ; premiere place (166, -55) (cercle 160, direction 1) ; marche vers (166, -55) rayon 35 : 99 arrivees, vue de l'hote coupee 12, visee prise ou ratee 26 (balayage a 0 cm de la cage au plus pres) ; reprise vers (166, -55) rayon 35 : 99/12/26 -> ECHOUE
+    murs voisins non/oui, fond oui : place devant (110 cm) capsule ; premiere place (166, -55) (cercle 160, direction 1) ; marche vers (166, -55) rayon 35 : 99 arrivees, vue de l'hote coupee 12, visee prise ou ratee 26 (balayage a 0 cm de la cage au plus pres) ; reprise vers (166, -55) rayon 35 : 99/12/26 -> ECHOUE
+    murs voisins oui/non, fond non : place devant (110 cm) libre ; premiere place (128, -116) (cercle 110, direction 0) ; marche vers (128, -116) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, -116) rayon 35 : 132/0/0 -> PASSE
+    murs voisins oui/non, fond oui : place devant (110 cm) libre ; premiere place (128, -116) (cercle 110, direction 0) ; marche vers (128, -116) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, -116) rayon 35 : 132/0/0 -> PASSE
+    murs voisins oui/oui, fond non : place devant (110 cm) capsule ; premiere place (166, -55) (cercle 160, direction 1) ; marche vers (166, -55) rayon 35 : 99 arrivees, vue de l'hote coupee 12, visee prise ou ratee 26 (balayage a 0 cm de la cage au plus pres) ; reprise vers (166, -55) rayon 35 : 99/12/26 -> ECHOUE
+    murs voisins oui/oui, fond oui : place devant (110 cm) capsule ; premiere place (166, -55) (cercle 160, direction 1) ; marche vers (166, -55) rayon 35 : 99 arrivees, vue de l'hote coupee 12, visee prise ou ratee 26 (balayage a 0 cm de la cage au plus pres) ; reprise vers (166, -55) rayon 35 : 99/12/26 -> ECHOUE
+  regle v4.15 : poste a +58, cage a -58 (axe droit) ; cage dans la face : oui ; 8/8 dispositions des murs reussies -> PASSE
+    murs voisins non/non, fond non : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
+    murs voisins non/non, fond oui : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
+    murs voisins non/oui, fond non : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
+    murs voisins non/oui, fond oui : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 477 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
+    murs voisins oui/non, fond non : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 433 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
+    murs voisins oui/non, fond oui : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 433 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
+    murs voisins oui/oui, fond non : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 433 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
+    murs voisins oui/oui, fond oui : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 433 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
 
 B. Level 8 : rochers (SM_Rock (-112.9, -80.8, -36.4)..(100.9, 79.5, 115.9) cm ; paroi : 55 % des faces, echelle 1.0 a 1.9, z x1.4 ; cellule : densite 0.30 x 0.4, echelle 0.35 a 0.95) ; 120 graines, places laterales -0/+58/-58/+116/-116/+174
-  regle v4.14 : treuil : 10560 places, point dans un rocher 4643 (44.0 %), sans place debout a portee et a vue 4762 (45.1 %) ; entailles : 10560 places, point dans un rocher 4864 (46.1 %), sans place debout a portee et a vue 4987 (47.2 %) -> ECHOUE
-    (pour information, place au coin +174 : 4224 cas, point dans un rocher 1399, sans place debout 1564)
-  regle v4.15 : treuil : 10560 places, point dans un rocher 0 (0.0 %), sans place debout a portee et a vue 0 (0.0 %) ; entailles : 10560 places, point dans un rocher 0 (0.0 %), sans place debout a portee et a vue 0 (0.0 %) -> PASSE
-    (pour information, place au coin +174 : 4224 cas, point dans un rocher 0, sans place debout 24)
+  regle v4.14 : treuil : 10560 places, point dans un rocher 4643 (44.0 %), sans place debout (FindMissionStand) 4686 (44.4 %) ; entailles : 10560 places, point dans un rocher 4864 (46.1 %), sans place debout (FindMissionStand) 4903 (46.4 %) -> ECHOUE
+    (pour information, place au coin +174 : 4224 cas, point dans un rocher 1399, sans place debout 1458)
+  regle v4.15 : treuil : 10560 places, point dans un rocher 0 (0.0 %), sans place debout (FindMissionStand) 0 (0.0 %) ; entailles : 10560 places, point dans un rocher 0 (0.0 %), sans place debout (FindMissionStand) 0 (0.0 %) -> PASSE
+    (pour information, place au coin +174 : 4224 cas, point dans un rocher 0, sans place debout 0)
   regle v4.15 : rochers retires autour d'un treuil (zone libre) : 10576 sur 274722 voisins (3.8 %) ; dans le jeu : oui (RockInMissionKeepOut)
 
 C. Level 9 : maisons (SM_House (-440.0, -373.0, 0.0)..(520.0, 373.0, 595.0) cm ; v4.15 : corps jusqu'a 440.0 cm, perron +-100.0 cm, 15.0 cm de haut) ; lots de 1000 cm ; 120 graines
-  regle v4.14 : plan de maison : 164458 places, point dans la maison 58308 (35.5 %), sans place debout a portee et a vue 58308 ; boitier de rue : 164458 places, point dans la maison 58308 (35.5 %), sans place debout a portee et a vue 58308 ; plaque de facade : 164458 places, point dans la maison 58308 (35.5 %), sans place debout a portee et a vue 58308 -> ECHOUE
-  regle v4.15 : plan de maison : 164458 places, point dans la maison 0 (0.0 %), sans place debout a portee et a vue 0 ; boitier de rue : 164458 places, point dans la maison 0 (0.0 %), sans place debout a portee et a vue 0 ; plaque de facade : 164458 places, point dans la maison 0 (0.0 %), sans place debout a portee et a vue 0 -> PASSE
+  regle v4.14 : plan de maison : 164458 places, point dans la maison 58308 (35.5 %), sans place debout (FindMissionStand) 58308 ; boitier de rue : 164458 places, point dans la maison 58308 (35.5 %), sans place debout (FindMissionStand) 58308 ; plaque de facade : 164458 places, point dans la maison 58308 (35.5 %), sans place debout (FindMissionStand) 58308 -> ECHOUE
+  regle v4.15 : plan de maison : 164458 places, point dans la maison 0 (0.0 %), sans place debout (FindMissionStand) 0 ; boitier de rue : 164458 places, point dans la maison 0 (0.0 %), sans place debout (FindMissionStand) 0 ; plaque de facade : 164458 places, point dans la maison 0 (0.0 %), sans place debout (FindMissionStand) 0 -> PASSE
 
-RESULTAT : OK (A v4.14 echoue / v4.15 passe, B v4.14 echoue / v4.15 passe, C v4.14 echoue / v4.15 passe)
+D. Level 8 : sorties de la mission (echelle : capsule de 34 cm a 52 cm du pied, approche jusqu'a 142 cm) ; zone libre v4.15 de 12 cm dans la paroi a 160 cm devant le pied, +-106 cm ; 120 graines
+  regle v4.14 : 2112 sorties, echelle ou approche dans un rocher 1207 (57.1 %) -> ECHOUE
+  regle v4.15 : 2112 sorties, echelle ou approche dans un rocher 0 (0.0 %) -> PASSE
+
+Regle du jeu dans les sources :
+  ABRWorld::PlaceMission : volumes d'abord (StableSort), puis BRMech::Clearance::PickSlot : oui
+  ABRWorld::PlaceMissionModule : PickSlot, curseur hors des places prises : oui
+  BRMech::Clearance::PickSlot : volume mural au bout de sa face : oui
+  ABRWorld::SetupMission : zone libre des sorties de la mission : oui
+
+RESULTAT : OK (A v4.14 echoue / v4.15 passe, B v4.14 echoue / v4.15 passe, C v4.14 echoue / v4.15 passe, D v4.14 echoue / v4.15 passe)

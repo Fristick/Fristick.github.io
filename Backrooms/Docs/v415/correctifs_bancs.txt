@@ -1,7 +1,7 @@
 # Bancs hors moteur des correctifs v4.15 (branche v415-fixes) - sortie reelle
 # Compilateurs (Windows 11, depuis Backrooms/) : clang-cl 22.1.3 /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow, puis cl 19.51.36260 /std:c++17 /O2 /EHsc /utf-8 /W4
 # Fichiers de chaque banc : ceux des en-tetes de Docs/v414/banc_*.txt ; 0 avertissement avec les deux compilateurs ; sorties identiques (ci-dessous : clang-cl)
-# Date : 2026-10-16T17:17:07Z
+# Date : 2026-10-16T21:57:09Z
 
 ## test_lidar : Tools/Lidar/test_lidar.cpp Source/Backrooms/Private/BRLidarLogic.cpp (argument 2000)
 Banc d'essai du Level 6 (LiDAR) : 2000 graines
@@ -106,15 +106,18 @@ G. Emprise des mecanismes et places libres (v4.15)
   poste de confinement : point d'interaction (18.0, 0.0, 110.0), sans volume                           OK
   v4.14 : poste a 0, cage a +58 : point d'interaction du poste dans la cage (actions toujours refusees) OK
   poste a +-58 d'une cage : refuse ; a +-116 : libre (56.0 cm entre le poste et la cage)               OK
-  placement v4.15 : cage a 0.0, poste a 116.0 (meme face)                                              OK
+  placement v4.15 : cage a 58.0, poste a -58.0 (meme face, la cage au bout de sa face, comme diag_v413_4) OK
+  place ordinaire du poste : 87.0 cm du mur voisin, 56.0 cm de la cage (capsule de 34.0 cm libre ; poste a +-116 : 29.0 cm du mur) OK
+  cage, place +58 prise : a -58.0 ; +58 et -58 prises : au centre                                      OK
   cage a +-116 : refusee (elle entrerait de 31.0 cm dans le mur voisin)                                OK
   sans volume ni voisin a volume : premiere place libre (ordre d'avant la v4.15)                       OK
   rectangles orientes : croisement, rotation de 45 degres, ecart                                       OK
   zone libre d'un treuil : 194.0 cm depuis 12 cm derriere le mur, +-66.0 cm (capsule debout a 120.0 cm devant le point vise comprise) OK
+  zone libre d'une sortie : de 12 cm dans le mur a 160.0 cm devant le pied, +-106.0 cm (capsule de l'echelle a 52.0 cm et place debout a 120.0 cm comprises) OK
   emprise de chaque sorte et role : point vise devant l'origine, entre 40 et 170 cm de haut            OK
   modules : battant de l'aile (64.0 cm, mur de 60), sas (320.0 cm), passerelle (480.0 cm)              OK
 
-RESULTAT : OK (60 verifications, 0 echec(s))
+RESULTAT : OK (63 verifications, 0 echec(s))
 
 ## test_missions : Tools/Missions/test_mission_logic.cpp Source/Backrooms/Private/BRMissionLogic.cpp Source/Backrooms/Private/BRMissionSolver.cpp (argument 3000)
 Banc d'essai des missions v4.13 : 3000 graines par niveau, generation 2

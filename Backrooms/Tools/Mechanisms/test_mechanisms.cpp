@@ -17,9 +17,10 @@
 //      franchissables, chute sans danger, contournement au sol, progression des treuils jusqu'a la pose ;
 //   F. le detour des entites : tablier leve (attente au pied), pose (marches, appui, tablier), retour ;
 //   G. v4.15 : l'emprise des mecanismes (BRMech::Clearance, regle du placement, des rochers et des tests du jeu) : cage et
-//      poste du Level 6 (point d'interaction du poste dans la cage avec la regle v4.14, a cote d'elle avec PickSlot), cage
-//      tenue dans sa face, premiere place libre sans volume (placement des autres niveaux inchange), rectangles orientes,
-//      zone libre devant un treuil, boites visees de toutes les sortes et de tous les roles, volumes des modules.
+//      poste du Level 6 (point d'interaction du poste dans la cage avec la regle v4.14, a cote d'elle avec PickSlot ; cage
+//      au bout de sa face, place ordinaire du poste libre du mur voisin), cage tenue dans sa face, premiere place libre
+//      sans volume (placement des autres niveaux inchange), rectangles orientes, zone libre devant un treuil et devant une
+//      sortie (echelle), boites visees de toutes les sortes et de tous les roles, volumes des modules.
 //
 // Le comportement reel (collisions, nage, rendu, reseau, sauvegarde, streaming) se verifie en jeu : -BRAutoTestV412
 // (prepare, non execute ici).
@@ -390,8 +391,9 @@ int main()
 		CL::FSlot Slots[5];
 		for (int K = 0; K < 5; ++K)
 		{
-			// Mur au nord (Y = 145 depuis le centre), mecanisme tourne vers le sud (lacet -90 : +X local vers -Y)
-			Slots[K].Frame.X = -Laterals[K];
+			// Mur au nord (Y = 145 depuis le centre), mecanisme tourne vers le sud (lacet -90 : +X local vers -Y, +Y local
+			// vers +X). v4.15 (correctifs) : decalage lateral le long du Y local, comme LateralOf du placement
+			Slots[K].Frame.X = Laterals[K];
 			Slots[K].Frame.Y = FaceHalf;
 			Slots[K].Frame.Z = 0.f;
 			Slots[K].Frame.Yaw = -90.f;
@@ -409,7 +411,8 @@ int main()
 			CL::Clash(At(0, Post), At(1, Cage)) && CL::InSolid(At(1, Cage), CL::AimPoint(At(0, Post)).X, CL::AimPoint(At(0, Post)).Y, CL::AimPoint(At(0, Post)).Z, 0.f));
 		Line("poste a +-58 d'une cage : refuse ; a +-116 : libre (" + F1(116.f - LC::HalfWidth) + " cm entre le poste et la cage)",
 			CL::Clash(At(1, Post), Cage0) && CL::Clash(At(2, Post), Cage0) && !CL::Clash(At(3, Post), Cage0) && !CL::Clash(At(4, Post), Cage0));
-		// PickSlot : la cage d'abord (premiere place ou elle tient), puis le poste a cote d'elle, hors de son volume
+		// PickSlot : la cage d'abord, au bout de sa face ou elle tient (v4.15 correctifs), puis le poste a cote d'elle, hors de
+		// son volume, a sa place ordinaire
 		const int CageSlot = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf);
 		int PostSlot = -1;
 		if (CageSlot >= 0)
@@ -419,8 +422,25 @@ int main()
 			PostSlot = CL::PickSlot(Post, Slots, 5, Placed, 1, FaceHalf);
 			Slots[CageSlot].bOpen = true;
 		}
-		Line("placement v4.15 : cage a " + F1(CageSlot >= 0 ? Laterals[CageSlot] : -1.f) + ", poste a " + F1(PostSlot >= 0 ? Laterals[PostSlot] : -1.f) + " (meme face)",
-			CageSlot == 0 && PostSlot == 3);
+		Line("placement v4.15 : cage a " + F1(CageSlot >= 0 ? Laterals[CageSlot] : -1.f) + ", poste a " + F1(PostSlot >= 0 ? Laterals[PostSlot] : -1.f) +
+			" (meme face, la cage au bout de sa face, comme diag_v413_4)", CageSlot == 1 && PostSlot == 2);
+		if (CageSlot >= 0 && PostSlot >= 0)
+		{
+			// Place ordinaire du poste (110 cm devant lui) : capsule libre du mur voisin et de la cage
+			const float PostLat = Laterals[PostSlot];
+			const float CageLat = Laterals[CageSlot];
+			const float ToWall = FaceHalf - std::fabs(PostLat);
+			const float ToCage = std::fabs(PostLat - CageLat) - LC::HalfWidth;
+			Line("place ordinaire du poste : " + F1(ToWall) + " cm du mur voisin, " + F1(ToCage) + " cm de la cage (capsule de " + F1(CL::PlayerRadius) + " cm libre ; poste a +-116 : " +
+				F1(FaceHalf - 116.f) + " cm du mur)", ToWall >= CL::StandGap && ToCage >= CL::StandGap);
+		}
+		// Bout de face pris : l'autre bout ; aucun bout libre : le centre
+		Slots[1].bOpen = false;
+		const int CageOther = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf);
+		Slots[2].bOpen = false;
+		const int CageMid = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf);
+		Slots[1].bOpen = Slots[2].bOpen = true;
+		Line("cage, place +58 prise : a " + F1(CageOther >= 0 ? Laterals[CageOther] : -1.f) + " ; +58 et -58 prises : au centre", CageOther == 2 && CageMid == 0);
 		CL::FSlot Edge[2] = { Slots[3], Slots[4] };
 		Edge[0].bOpen = Edge[1].bOpen = true;
 		Line("cage a +-116 : refusee (elle entrerait de " + F1(116.f + LC::HalfWidth - FaceHalf) + " cm dans le mur voisin)", CL::PickSlot(Cage, Edge, 2, nullptr, 0, FaceHalf) == -1);
@@ -463,6 +483,25 @@ int main()
 		Line("zone libre d'un treuil : " + F1(Depth) + " cm depuis 12 cm derriere le mur, +-" + F1(K0.HX < K0.HY ? K0.HX : K0.HY) + " cm (capsule debout a " +
 			F1(CL::StandDepth) + " cm devant le point vise comprise)",
 			CL::Overlap(K0, Probe) && Depth >= 12.f + Winch.Aim.X + CL::StandDepth + CL::StandGap - 0.01f);
+		// v4.15 (correctifs) : zone libre d'une sortie de la mission (rochers du Level 8) : la capsule qui monte a l'echelle
+		// (ABRExit::GetClimbAnchor : 52 cm devant le pied) et la place devant elle (StandDepth) y sont entieres
+		{
+			BRMech::FFrame ExitF;
+			ExitF.Y = FaceHalf;
+			ExitF.Yaw = -90.f;
+			const CL::FRect KE = CL::ExitKeepOut(ExitF);
+			constexpr float ClimbAnchor = 52.f;
+			// HX : demi-profondeur (X local, depuis 12 cm dans le mur), HY : demi-largeur (RectOf)
+			const float HalfWide = KE.HY;
+			const float Front = 2.f * KE.HX - 12.f;
+			CL::FRect Climb;
+			Climb.CX = 0.f;
+			Climb.CY = FaceHalf - ClimbAnchor;
+			Climb.HX = Climb.HY = CL::PlayerRadius;
+			Line("zone libre d'une sortie : de 12 cm dans le mur a " + F1(Front) + " cm devant le pied, +-" + F1(HalfWide) + " cm (capsule de l'echelle a " + F1(ClimbAnchor) +
+				" cm et place debout a " + F1(CL::StandDepth) + " cm comprises)",
+				CL::Overlap(KE, Climb) && Front >= ClimbAnchor + CL::PlayerRadius && Front >= CL::StandDepth + CL::StandGap && HalfWide >= CL::StandGap);
+		}
 		// Toutes les sortes et tous les roles : point vise devant le mur, a hauteur de main ou de plaque
 		bool bAll = true;
 		for (int Kind = 0; Kind <= static_cast<int>(BRM::EKind::Gate); ++Kind)

@@ -299,7 +299,10 @@ namespace BRMech
 		};
 		/** Premier emplacement libre ou un mecanisme d'emprise Print ne gene aucun de ceux deja poses et ou, mural, son
 		 *  volume tient dans la face (|lateral| + demi-largeur <= FaceHalf). -1 si aucun. Sans volume ni voisin a volume,
-		 *  c'est le premier emplacement libre (ordre du placement d'avant la v4.15) */
+		 *  c'est le premier emplacement libre (ordre du placement d'avant la v4.15). v4.15 (correctifs) : un volume mural
+		 *  prend ensuite, sur la face de ce premier emplacement (meme lacet, meme point devant le centre de la cellule),
+		 *  l'emplacement libre de plus grand |Lateral| ou il tient et ne gene personne (le premier a egalite) : le reste de la
+		 *  face reste d'un seul tenant pour ses voisins (Level 6 : cage a +-58, poste a -+58) */
 		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf);
 	}
 }

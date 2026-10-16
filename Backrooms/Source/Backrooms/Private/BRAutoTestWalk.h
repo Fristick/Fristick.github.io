@@ -26,7 +26,8 @@ namespace BRTestV412
 		bool bDetour = true;
 		/** Chemin de grille trouve (sinon : tout droit vers le but) */
 		bool bPath = false;
-		/** v4.15 : chemin de grille du monde (ABRWorld::FindPath) pris faute de chemin sans bassin profond (Niveau 37) */
+		/** v4.15 : chemin de grille du monde (ABRWorld::FindPath) pris faute de chemin sans bassin profond (Niveau 37), au
+		 *  depart ou a un nouveau chemin de la marche (v4.15 correctifs : reste vrai jusqu'a la marche suivante) */
 		bool bPoolFallback = false;
 		/** v4.15 : nature de la marche dans les notes (approche, reprise) ; vide pour une marche ordinaire */
 		FString Tag;
@@ -95,7 +96,8 @@ namespace BRTestV412
 	 *  (ABRWorld::CanReachMissionDevice : distance des yeux, ligne de vue qui n'ignore que le joueur et le mecanisme).
 	 *  OutStand : centre de la capsule a poser (5 cm au-dessus du sol) */
 	EStand CheckMissionStand(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, const FVector& P, bool bNoSwim, FVector& OutStand);
-	/** v4.15 : la premiere place debout valable (CheckMissionStand) sur des cercles de 110, 160, 210 et 260 cm autour du point
-	 *  d'interaction, 16 directions a partir de l'avant du mecanisme. OutWhy : causes des refus (nombre par cause) */
+	/** v4.15 : la premiere place debout valable (CheckMissionStand) sur des cercles de 110, 160 et 210 cm, puis 75 cm (place
+	 *  etroite) et 240 cm autour du point d'interaction, 16 directions a partir de l'avant du mecanisme (miroir :
+	 *  Tools/verify_device_clearance.py, qui lit les cercles dans le code). OutWhy : causes des refus (nombre par cause) */
 	bool FindMissionStand(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, bool bNoSwim, FVector& OutStand, FString* OutWhy = nullptr);
 }

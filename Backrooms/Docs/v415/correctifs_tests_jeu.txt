@@ -1,24 +1,27 @@
 # Tests du jeu, correctifs v4.15 (branche v415-fixes) : compilation et verifications hors moteur - sortie reelle
 # Machine : Windows 11, Unreal 5.8, Visual Studio 2026 (MSVC 14.50.35739) ; depuis Backrooms/
-# Date : 2026-10-16T18:05:12Z
+# Date : 2026-10-16T21:59:39Z (corrections de relecture ; premiere passe : 2026-10-16T18:05:12Z)
 # Le jeu n'a pas ete lance ici : les etapes en jeu sont preparees (commandes en fin de fichier), non executees
 
 ## Build.bat BackroomsEditor Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
-[Adaptive Build] Excluded from Backrooms unity file: BRAutoTest.cpp, BRAutoTestV410.cpp, BRAutoTestV411.cpp, BRAutoTestV412.cpp, BRAutoTestV413.cpp, BRAutoTestV413Lidar.cpp, BRAutoTestV414.cpp, BRAutoTestV415Fix.cpp, BRAutoTestV47.cpp, BRAutoTestV48.cpp, BRAutoTestV49.cpp
+[Adaptive Build] Excluded from Backrooms unity file: BRAutoTest.cpp, BRAutoTestV411.cpp, BRAutoTestV412.cpp, BRMechLogic.cpp, BRMissionLogic.cpp, BRMissionWorld.cpp
 Result: Succeeded (0 avertissement, 0 erreur)
 
 ## Build.bat BackroomsEditor Win64 Development ... -DisableAdaptiveUnity (compilation regroupee, comme apres le commit)
-[1/5] Compile [x64] Module.Backrooms.2.cpp
-[2/5] Compile [x64] Module.Backrooms.1.cpp
+[1/6] Compile [x64] Module.Backrooms.4.cpp
+[2/6] Compile [x64] Module.Backrooms.5.cpp
+[3/6] Compile [x64] Module.Backrooms.1.cpp
 Result: Succeeded (0 avertissement, 0 erreur)
 
 ## Build.bat Backrooms Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
-[17/18] Link [x64] Backrooms.exe
+[Adaptive Build] Excluded from Backrooms unity file: BRAutoTest.cpp, BRAutoTestV411.cpp, BRAutoTestV412.cpp, BRMechLogic.cpp, BRMissionLogic.cpp, BRMissionWorld.cpp
+[12/13] Link [x64] Backrooms.exe
 Result: Succeeded (0 avertissement, 0 erreur)
 
 ## Bancs hors moteur (fichiers des en-tetes de Docs/v414/banc_*.txt ; missions 3000, lidar 2000)
 # clang-cl 22.1.3 /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow, puis cl 19.51.36260 /std:c++17 /O2 /EHsc /utf-8 /W4
-# Sorties identiques entre les deux compilateurs et a celles de Docs/v415/correctifs_bancs.txt (logique pure inchangee)
+# Sorties identiques entre les deux compilateurs ; identiques a la premiere passe sauf test_mechanisms (G : cage au bout de
+# sa face, zone libre d'une sortie), recopie dans Docs/v415/correctifs_bancs.txt
 test_content [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (69 verifications, 0 echec(s))
 test_content [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (69 verifications, 0 echec(s))
 test_departure [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
@@ -29,8 +32,8 @@ test_lidar [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTA
 test_lidar [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
 test_light [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
 test_light [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
-test_mechanisms [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (60 verifications, 0 echec(s))
-test_mechanisms [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (60 verifications, 0 echec(s))
+test_mechanisms [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (63 verifications, 0 echec(s))
+test_mechanisms [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (63 verifications, 0 echec(s))
 test_missions [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
 test_missions [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
 test_transactions [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
@@ -43,11 +46,40 @@ python Tools/Localization/loc_build.py --check : traduits 1187/1187, a revoir 0
 python Tools/Localization/loc_review.py : problemes : 0
 python Tools/protect_assets.py check : OK
 python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTAT : OK
+python Tools/verify_device_clearance.py --seeds 120 : RESULTAT : OK (A, B, C, D : v4.14 echoue / v4.15 passe ; regle dans les sources) -> Docs/v415/correctifs_places.txt
+python Tools/verify_lidar.py (commande de Docs/v415/correctifs_aile_lidar.txt) : RESULTAT : OK, sortie identique au document
+(Docs/v415/correctifs_outils.txt : memes resultats qu'a la premiere passe, non recopie)
+
+## Corrections de relecture (cette passe)
+# Jeu
+#   - Level 6 : la cage se pose au bout de sa face (BRMech::Clearance::PickSlot : le plus grand decalage ou elle tient sur la
+#     face de son premier emplacement), le poste de l'autre cote : cage a +-58, poste a -+58 (diag_v413_4). Avant : cage au
+#     centre, poste a +-116, a 29 cm du mur voisin : la place devant le poste etait coupee par ce mur et la place de biais
+#     frolait la cage (vue de l'hote ou visee du client prises). Placement 3 (pas encore distribue) : pas de nouvelle version ;
+#     seul le Level 6 change (seules ses cages ont un volume dans PickSlot)
+#   - Module de secours : le curseur ne reprend plus une place prise par PickSlot ; invariant journalise aussi pour lui
+#   - Rochers du Level 8 hors de la zone libre des SORTIES de la mission gardes et prouves (cas D du banc : 57,1 % des sorties
+#     contre une paroi ont l'echelle ou son approche dans un rocher avec la regle v4.14 ; test_mechanisms G)
+# Tests du jeu
+#   - Balayage des places (AddMissionPlaceSweep) : etape d'entree qui remet l'etat a zero, phases 150 a 152 (avant : 10 a 12,
+#     partagees avec la marche vers la sortie : balayage "reussi" sans rien verifier) ; decor a moins de 4 m construit, sinon
+#     NON VERIFIE ; la visee reelle du client (FocusActor) doit prendre le mecanisme
+#   - Marche vers la sortie : phase remise a zero a la fin de l'etape ; marche vers une place autour d'un mecanisme : rayon
+#     d'arrivee 35 cm (70 devant lui) ; "chemin du monde par un bassin" garde pour toute la marche
+#   - -BRAutoTestV415Fix teste apres -BRAutoTestV414 (fusion sans conflit avec -BRAutoTestV415 du parcours lineaire)
 
 ## Etapes en jeu (a lancer ; editeur ou jeu, -game)
 # Seules les etapes de non-regression des correctifs (environ 10 a 15 min) :
 #   UnrealEditor.exe Backrooms.uproject -game -BRAutoTest -BRAutoTestV415Fix -BRAutoTestStrict
+# Attendu :
+#   Niveaux 8 et 9 (graine 4111) : "N/N mecanismes degages et atteignables" (aucune ligne PROBLEME "point d'interaction dans",
+#   "aucune place debout", "REFUSEE par l'hote", "PAS VISE par le client") ;
+#   Level 6, graines 4136, 4126, 6, 208 : aile valide, 4 portes dans l'aile, aucun avertissement, "N/N postes et cages degages et
+#   atteignables" (premier nombre egal au second), poste 1 : postes 1/4, refus "trop loin" 0 ;
+#   Poolrooms, graine 1217121623 : vanne B actionnee sans nager, 0 image a la nage, 0 chemin par un bassin, sortie par le sas
 # Les memes, dans leurs suites :
 #   -BRAutoTest -BRAutoTestV411   (v4.15 mission 8 / 9 : places des mecanismes, graine 4111 = niveaux 643828852 / 774538619)
-#   -BRAutoTest -BRAutoTestV412   (v4.15 Poolrooms : graine 1217121623 = niveau 125584919, vanne B et sas sans nager)
-#   -BRAutoTest -BRAutoTestV413   (v4.15 Level 6, graines 4136, 4126, 6, 208 : aile, postes et cages, poste 1)
+#   -BRAutoTest -BRAutoTestV412   (v4.15 Poolrooms : graine 1217121623 = niveau 125584919, vanne B et sas sans nager ; reprise
+#                                  du placement 2 au Niveau 2 : avis 0 ; marche du Level 6 graine 4126 : aucun "PAS VISE")
+#   -BRAutoTest -BRAutoTestV413   (v4.15 Level 6, graines 4136, 4126, 6, 208 : aile, postes et cages, poste 1 ; reprise du
+#                                  placement 2 : avis 3 ; marche du Level 6 graine 4136 : aucun "PAS VISE" ni "action refusee")

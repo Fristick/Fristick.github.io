@@ -284,8 +284,8 @@ namespace BRTestV412
 		const FIntPoint From = W->WorldToCell(C->GetActorLocation());
 		const FIntPoint To = W->WorldToCell(Walk.Goal);
 		// v4.15 : sans bassin profond d'abord (le chemin du monde peut en traverser un : le marcheur y nageait sans fin) ; le
-		// chemin du monde (ABRWorld::FindPath, inchange) seulement faute de mieux
-		Walk.bPoolFallback = false;
+		// chemin du monde (ABRWorld::FindPath, inchange) seulement faute de mieux. v4.15 (correctifs) : bPoolFallback reste vrai
+		// pour toute la marche (remis a zero par BeginWalk seulement) : un nouveau chemin sans bassin ne l'efface plus
 		if (!FindPoolFreePath(W, From, To, Path, 20000))
 		{
 			if (!W->FindPath(From, To, Path, 20000))
@@ -777,7 +777,9 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 				}
 			}
 			WalkMission.FirstGoal = Goal;
-			BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), 70.f, true);
+			// v4.15 (correctifs) : une place autour du mecanisme (de biais, pres d'un voisin ou d'un mur) est atteinte a 35 cm
+			// pres, comme la marche de reprise (avant : 70 cm, ou la vue pouvait deja etre coupee) ; la place devant lui a 70 cm
+			BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), Front == EStand::Ok ? 70.f : 35.f, true);
 			Walk.Tag = Front == EStand::Ok ? FString() : FString::Printf(TEXT(" (place autour du mecanisme : devant lui, %s)"), StandName(Front));
 			WalkMission.Kind = EWalkKind::Normal;
 			TestMissionPhase = 2;
@@ -950,7 +952,9 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 void ABRAutoTest::AddWalkExitSteps(int32 Level)
 {
 	using namespace BRTestV412;
-	Add(FString::Printf(TEXT("v4.12 acces %d : sortie prise a pied"), Level), 0.f, [this, Level]()
+	// v4.15 (correctifs) : phases 11 a 14 remises a zero a la fin de l'etape, quelle qu'en soit l'issue (avant : une marche
+	// arretee laissait 11 ou 12, reprises par l'etape suivante qui utilisait les memes numeros)
+	auto Body = [this, Level]() -> bool
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
@@ -1140,6 +1144,15 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			return true;
 		}
 		}
+	};
+	Add(FString::Printf(TEXT("v4.12 acces %d : sortie prise a pied"), Level), 0.f, [this, Body]()
+	{
+		const bool bDone = Body();
+		if (bDone)
+		{
+			TestMissionPhase = 0;
+		}
+		return bDone;
 	});
 	LimitLastStep(330.f);
 }

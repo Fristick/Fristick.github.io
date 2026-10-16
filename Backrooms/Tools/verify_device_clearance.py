@@ -4,26 +4,38 @@ visee, ABRMissionDevice::GetInteractPoint) n'est dans aucune collision que le je
 a portee de l'hote (340 cm des yeux) le voit (ligne de vue de ABRWorld::ServerMissionAct, qui n'ignore que le joueur et le
 mecanisme).
 
-Trois cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
+Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
   A. Level 6 : poste de confinement et sa cage sur la meme face (groupes 10 a 13). v4.14 : poste a la place 0 (lateral 0),
      cage a la place 1 (+58 cm) : le point du poste est DANS le volume bloquant de la cage -> ligne de vue toujours coupee
-     (actions refusees), but de marche de la relance (60 cm, rayon 35) hors d'atteinte. v4.15 (BRMech::Clearance::PickSlot,
-     miroir ici) : la cage d'abord, le poste a cote, hors de son volume.
+     (actions refusees). v4.15 (BRMech::Clearance::PickSlot, miroir ici) : la cage d'abord, au bout de sa face ou elle
+     tient (correctifs : cage a +-58, poste a -+58, comme diag_v413_4), le poste a cote, hors de son volume. Jugee comme les
+     tests du jeu (v4.15 correctifs) : place de BRTestV412::FindMissionStand (cercles et portees lus dans le code), marche
+     vers elle (rayons d'arrivee lus dans le code), regle de l'hote (ligne de vue) et visee reelle du client
+     (ABRCharacter::UpdateFocus : balayage de 7 cm qui prend la cage si elle est frolee) depuis CHAQUE point d'arrivee
+     possible, puis la marche de reprise ; murs voisins presents ou non aux deux bouts de la face, fond de la cellule ou
+     non. La premiere disposition v4.15 (cage au centre, poste a +-116 : 29 cm du mur voisin) est montree pour information.
   B. Level 8 : rochers des parois et des cellules (ABRChunk : boite de collision = bornes de SM_Rock a l'echelle du rocher).
      Grille des grottes rejouee (BRHash, ABRWorld::IsSolid), chaque face de paroi d'une cellule libre comme place d'un treuil
      ou d'une plaque, a chaque decalage lateral du placement. v4.14 : tous les rochers ; v4.15 : pas de rocher dont la boite
      entre dans la zone libre du mecanisme (BRMech::Clearance::KeepOut, miroir ici).
   C. Level 9 : maisons (boite de collision de SM_House). v4.14 : bornes completes (jusqu'a 5,2 m, perron compris) ;
      v4.15 : corps jusqu'a GHouseBodyFront et perron bas (BRChunk.cpp). Faces des lots de maisons vues de la route.
+  D. Level 8 : sorties de la mission (echelle contre une paroi, ABRWorld::PlaceMission : FaceSpot au decalage 0). v4.14 : la
+     capsule qui monte a l'echelle (ABRExit::GetClimbAnchor) et son approche sont dans un rocher ; v4.15 : pas de rocher dans
+     la zone libre de la sortie (BRMech::Clearance::ExitKeepOut, miroir ici).
+En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
+BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote).
 
 Les constantes sont lues dans les sources (BRMechLogic.h/.cpp, BRMissionWorld.cpp, BRChunk.cpp, BRLevels.cpp, BRWorld.h,
-BRCharacter.cpp) et les bornes des modeles dans RawAssets/Meshes/SM_Rock.fbx et SM_House.fbx (comme l'importeur : X = X,
-Y = Z du fichier, Z = Y du fichier). Le banc verifie que l'ancienne regle ECHOUE (le defaut est reproduit) et que la regle du
-jeu PASSE ; il ne remplace pas la verification dans le decor construit (-BRAutoTestV411 : "v4.15 mission N : places des
-mecanismes").
+BRCharacter.cpp, BRInteractables.cpp, BRAutoTestV412.cpp, BRAutoTestWalk.h) et les bornes des modeles dans
+RawAssets/Meshes/SM_Rock.fbx et SM_House.fbx (comme l'importeur : X = X, Y = Z du fichier, Z = Y du fichier). Le banc verifie
+que l'ancienne regle ECHOUE (le defaut est reproduit), que la regle du jeu PASSE et qu'elle est bien dans les sources (sinon
+ECHEC) ; il ne remplace pas la verification dans le decor construit (-BRAutoTestV411 : "v4.15 mission N : places des
+mecanismes" ; -BRAutoTestV413 : postes et cages du Level 6).
 
 Usage : python Tools/verify_device_clearance.py [--seeds 120] [--rules both|old|new]
-Code de sortie : 0 si la regle v4.15 passe partout ET la regle v4.14 echoue la ou les journaux du jeu l'ont vue echouer.
+Code de sortie : 0 si la regle v4.15 passe partout ET la regle v4.14 echoue la ou les journaux du jeu l'ont vue echouer ET la regle v4.15
+est dans les sources (cas A et D). Sortie : Docs/v415/correctifs_places.txt.
 """
 import argparse
 import math
@@ -108,6 +120,48 @@ def read_constants():
         vals = dict((k, float(v)) for k, v in re.findall(r"D\.(\w+)\s*=\s*(-?[\d.]+)f?\s*;", body))
         K["L%d" % n] = vals
     K["WallThicknessDefault"] = num(r"float WallThickness = ([\d.]+)f;", read("Public/BRTypes.h"), "WallThickness")[0]
+    # Places debout des tests du jeu (BRTestV412::CheckMissionStand / FindMissionStand) et marches vers elles
+    walk = read("Private/BRAutoTestV412.cpp")
+    walk_h = read("Private/BRAutoTestWalk.h")
+    rings = re.search(r"for \(const float Dist : \{ ([^}]*) \}\)", walk)
+    if not rings:
+        raise SystemExit("cercles de BRTestV412::FindMissionStand introuvables (BRAutoTestV412.cpp)")
+    K["rings"] = [float(v.strip().rstrip("f")) for v in rings.group(1).split(",")]
+    t = num(r"for \(int32 Turn = 0; Turn < (\d+); \+\+Turn\)\s*\{\s*const FVector P = Aim \+ Fwd\.RotateAngleAxis\(Turn \* ([\d.]+)f", walk, "directions")
+    K["turns"], K["turn_deg"] = int(t[0]), t[1]
+    K["stand_cap"] = num(r"FCollisionShape::MakeCapsule\(([\d.]+)f, Half - ([\d.]+)f\)", walk, "capsule de la place")
+    K["stand_lift"] = num(r"const FVector Stand\(P\.X, P\.Y, FloorZ \+ Half \+ ([\d.]+)f\);", walk, "capsule au-dessus du sol")[0]
+    K["ClientFocusReach"] = num(r"constexpr float ClientFocusReach = ([\d.]+)f;", walk_h, "ClientFocusReach")[0]
+    K["front_ahead"] = num(r"CheckMissionStand\(W, C, Dev, Aim \+ Fwd \* ([\d.]+)f, true, Goal\)", walk, "place devant le mecanisme")[0]
+    K["walk_radius"] = num(r"Front == EStand::Ok \? ([\d.]+)f : ([\d.]+)f, true\)", walk, "rayons d'arrivee de la marche")
+    K["retry"] = num(r"CheckMissionStand\(W, C, Dev, Aim \+ Fwd \* ([\d.]+)f, true, Closer\);.*?BeginWalk\(W, C, FVector\(Goal\.X, Goal\.Y, C->GetActorLocation\(\)\.Z\), "
+                     r"([\d.]+)f, true\);", walk, "marche de reprise")
+    # Visee du client (ABRCharacter::UpdateFocus) : balayage precis, portee, tolerance
+    K["focus_sweep"] = num(r"ECC_Visibility, FCollisionShape::MakeSphere\(([\d.]+)f\), Q\)", char, "balayage de la visee")[0]
+    K["InteractReach"] = num(r"constexpr float InteractReach = ([\d.]+)f;", char, "InteractReach")[0]
+    K["tolerance"] = num(r"MakeSphere\(InteractReach \* ([\d.]+)f\)", char, "tolerance de la visee")[0]
+    # Cage : boite visee (BRMech::Clearance::Of, R_LidarCage ; bloque la visee du client comme son volume)
+    ca = num(r"case R_LidarCage:\s*F\.Aim = V3\(LidarCage::Gap \+ LidarCage::Depth \+ ([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*"
+             r"F\.AimExtent = V3\(([\d.]+)f, LidarCage::HalfWidth, ([\d.]+)f\);", mech, "boite visee de la cage")
+    K["cage_aim"] = [K["LidarCage.Gap"] + K["LidarCage.Depth"] + ca[0], ca[1], ca[2], ca[3], K["LidarCage.HalfWidth"], ca[4]]
+    # Sorties : zone libre (BRMech::Clearance::ExitKeepOut) et capsule de l'echelle (ABRExit::GetClimbAnchor)
+    K["exit_keepout"] = num(r"FRect ExitKeepOut\(const FFrame& F\)\s*\{\s*const float HY = LidarDoor::Width \* 0\.5f \+ StandGap;\s*"
+                            r"return RectOf\(F, Box\(-([\d.]+)f, -HY, 0\.f, StandDepth \+ ([\d.]+)f, HY, 0\.f\)\);", mech, "ExitKeepOut")
+    K["LidarDoor.Width"] = num(r"constexpr float Width = ([\d.]+)f;", ns("LidarDoor"), "LidarDoor.Width")[0]
+    K["climb_anchor"] = num(r"FVector ABRExit::GetClimbAnchor\(\) const\s*\{[^}]*?GetActorForwardVector\(\) \* ([\d.]+)f;", read("Private/BRInteractables.cpp"),
+                            "GetClimbAnchor")[0]
+    # Regle du jeu dans les sources : le banc echoue si elle n'y est plus (le miroir passerait seul)
+    place = world[world.index("bool ABRWorld::PlaceMission("):world.index("bool ABRWorld::PlaceMissionModule(")]
+    module = world[world.index("bool ABRWorld::PlaceMissionModule("):world.index("void ABRWorld::SpawnMissionActors()")]
+    pick = mech[mech.index("int PickSlot("):]
+    K["src_A"] = {
+        "ABRWorld::PlaceMission : volumes d'abord (StableSort), puis BRMech::Clearance::PickSlot": "Ordered.StableSort(" in place
+        and "BRMech::Clearance::PickSlot(Print, Cand.GetData()" in place,
+        "ABRWorld::PlaceMissionModule : PickSlot, curseur hors des places prises": "BRMech::Clearance::PickSlot(Print, Cand.GetData()" in module
+        and "Taken[Next]" in module,
+        "BRMech::Clearance::PickSlot : volume mural au bout de sa face": "FaceCenter(" in pick and "AbsF(T.Lateral) <= AbsF(Slots[Best].Lateral)" in pick,
+    }
+    K["src_D"] = {"ABRWorld::SetupMission : zone libre des sorties de la mission": "MissionKeepOuts.Add(BRMech::Clearance::ExitKeepOut(F))" in world}
     return K
 
 
@@ -317,13 +371,20 @@ def forward(fr):
     return round(c), round(s)
 
 
-def stand_near(K, fr, aim, boxes, solid_cells=None, S=0.0):
-    """Miroir de BRTestV411::StandNear avec la regle de l'hote : places a 120, 170, 230 et 300 cm du point vise dans huit
-    directions (d'abord devant), capsule de 36 cm libre (boites plus hautes qu'une marche, cellules pleines), yeux du
-    joueur debout a portee (340 cm) et ligne de vue WorldStatic libre (boites, cellules pleines)"""
+def find_mission_stand(K, fr, aim, boxes, solid_cells=None, S=0.0):
+    """v4.15 (correctifs) : miroir de BRTestV412::FindMissionStand (StandNear des tests du jeu lui delegue) : cercles et
+    directions lus dans BRAutoTestV412.cpp (110, 160, 210, puis 75 et 240 cm ; 16 directions depuis l'avant du mecanisme, vers
+    son axe droit), et pour chaque place CheckMissionStand : sol (plat ici), capsule de 36 cm (hauteur Half - 4, posee 5 cm
+    au-dessus du sol) libre des boites et des cellules pleines, yeux du joueur debout (centre + 74 cm), point a portee de la
+    visee du client (ClientFocusReach, 250 cm) puis regle de l'hote (340 cm, ligne de vue WorldStatic : boites, cellules
+    pleines). Avant : cercles de 120 a 300 cm, 8 directions, yeux jusqu'a 340 cm (l'ancien StandNear)"""
     ip = aim_point(fr, aim)
     f = forward(fr)
-    eye_z = fr[2] + K["Capsule"][1] + K["EyeZ"]
+    half = K["Capsule"][1]
+    cap_r, cap_shrink = K["stand_cap"]
+    cap_lo = fr[2] + K["stand_lift"] + cap_shrink
+    cap_hi = fr[2] + K["stand_lift"] + 2.0 * half - cap_shrink
+    eye_z = fr[2] + half + K["EyeZ"]
 
     def near_solid(x, y, r):
         if not solid_cells:
@@ -349,45 +410,230 @@ def stand_near(K, fr, aim, boxes, solid_cells=None, S=0.0):
                 return True
         return False
 
-    for dist in (120.0, 170.0, 230.0, 300.0):
-        for turn in range(8):
-            ang = math.radians(turn * 45.0)
+    for dist in K["rings"]:
+        for turn in range(K["turns"]):
+            ang = math.radians(turn * K["turn_deg"])
             dx, dy = f[0] * math.cos(ang) - f[1] * math.sin(ang), f[0] * math.sin(ang) + f[1] * math.cos(ang)
             sx, sy = ip[0] + dx * dist, ip[1] + dy * dist
-            if near_solid(sx, sy, 36.0):
+            if near_solid(sx, sy, cap_r):
                 continue
-            if any(b.z1 - b.z0 > K["Clearance.StepHeight"] and b.dist2d(sx, sy) < 36.0 for b in boxes):
+            if any(b.z1 > cap_lo and b.z0 < cap_hi and b.dist2d(sx, sy) < cap_r for b in boxes):
                 continue
             eye = (sx, sy, eye_z)
-            if math.dist(eye, ip) > K["Reach"]:
+            if math.dist(eye, ip) > K["ClientFocusReach"]:
                 continue
-            if any(b.hits(eye, ip) for b in boxes) or los_solid(eye, ip):
+            if math.dist(eye, ip) > K["Reach"] or any(b.hits(eye, ip) for b in boxes) or los_solid(eye, ip):
                 continue
             return True
     return False
 
 
 # ------------------------------------------------------------------------------------------------ A. Level 6
-def pick_slot_mirror(K, prints, frames_lat, face_half):
-    """BRMech::Clearance::PickSlot (miroir) pour un groupe : les membres a volume d'abord, chacun a la premiere place libre
-    sans gene avec ceux deja poses ; un volume mural tient dans la face"""
+def pick_slot_mirror(K, prints, frames_lat, face_half, end_of_face=True):
+    """BRMech::Clearance::PickSlot (miroir) pour un groupe : les membres a volume d'abord (tri stable, comme StableSort),
+    chacun a la premiere place libre sans gene avec ceux deja poses ; un volume mural tient dans la face. v4.15 (correctifs,
+    end_of_face) : un volume prend ensuite, sur cette face, la place libre de plus grand |lateral| ou il tient (la premiere a
+    egalite). frames_lat : (repere, lateral le long de l'axe droit du mecanisme), une seule face ici"""
     order = sorted(range(len(prints)), key=lambda i: 0 if prints[i]["solid"] else 1)
     taken = [False] * len(frames_lat)
     placed = []
     out = [None] * len(prints)
+
+    def usable(pr, j):
+        fr, lat = frames_lat[j]
+        if taken[j]:
+            return False
+        if pr["solid"] and abs(lat) + max(abs(pr["solid"][1]), abs(pr["solid"][4])) > face_half + 0.01:
+            return False
+        return not any(clash(K, (fr, pr), q) for q in placed)
+
     for i in order:
         pr = prints[i]
-        for j, (fr, lat) in enumerate(frames_lat):
-            if taken[j]:
+        for j in range(len(frames_lat)):
+            if not usable(pr, j):
                 continue
-            if pr["solid"] and abs(lat) + max(abs(pr["solid"][1]), abs(pr["solid"][4])) > face_half + 0.01:
-                continue
-            if any(clash(K, (fr, pr), q) for q in placed):
-                continue
-            taken[j] = True
-            placed.append((fr, pr))
-            out[i] = j
+            best = j
+            if pr["solid"] and end_of_face:
+                for k in range(j + 1, len(frames_lat)):
+                    if abs(frames_lat[k][1]) > abs(frames_lat[best][1]) + 0.01 and usable(pr, k):
+                        best = k
+            taken[best] = True
+            placed.append((frames_lat[best][0], pr))
+            out[i] = best
             break
+    return out
+
+
+def seg_box_dist(a, b, box):
+    """Distance 3D minimale d'un segment a une boite alignee (x0, y0, z0, x1, y1, z1), echantillonnee tous les 2 cm"""
+    n = max(2, int(math.dist(a, b) / 2.0))
+    best = 1e9
+    for i in range(n + 1):
+        t = i / n
+        p = [a[k] + (b[k] - a[k]) * t for k in range(3)]
+        dx = max(box[0] - p[0], 0.0, p[0] - box[3])
+        dy = max(box[1] - p[1], 0.0, p[1] - box[4])
+        dz = max(box[2] - p[2], 0.0, p[2] - box[5])
+        best = min(best, math.sqrt(dx * dx + dy * dy + dz * dz))
+    return best
+
+
+def seg_hits_box(a, b, box):
+    """Segment contre boite alignee (slabs)"""
+    t0, t1 = 0.0, 1.0
+    for i in range(3):
+        d = b[i] - a[i]
+        lo, hi = box[i], box[i + 3]
+        if abs(d) < 1e-9:
+            if a[i] < lo or a[i] > hi:
+                return False
+            continue
+        u0, u1 = (lo - a[i]) / d, (hi - a[i]) / d
+        if u0 > u1:
+            u0, u1 = u1, u0
+        t0, t1 = max(t0, u0), min(t1, u1)
+        if t0 > t1:
+            return False
+    return True
+
+
+class Level6Face:
+    """Une face du Level 6 dans le repere du mecanisme : u depuis le mur vers la salle, v le long de l'axe droit (Lateral du
+    placement). Mur du fond de la face en u = 0 ; murs voisins (bouts de la face) en v = +-face_half s'ils existent ; mur d'en
+    face (fond de la cellule) en u = S - T s'il existe. Cage (volume bloquant, toutes les collisions ; boite visee, visee du
+    client) et poste (point d'interaction et boite visee) aux decalages donnes"""
+
+    def __init__(self, K, face_half, cage_v, post_v, wall_plus, wall_minus, far):
+        self.K = K
+        self.fh = face_half
+        g, dep, hw, h = K["LidarCage.Gap"], K["LidarCage.Depth"], K["LidarCage.HalfWidth"], K["LidarCage.Height"]
+        self.cage = (g, cage_v - hw, 0.0, g + dep, cage_v + hw, h)
+        ca = K["cage_aim"]
+        self.cage_box = (ca[0] - ca[3], cage_v + ca[1] - ca[4], ca[2] - ca[5], ca[0] + ca[3], cage_v + ca[1] + ca[4], ca[2] + ca[5])
+        pa = K["post"]
+        self.aim = (pa[0], post_v + pa[1], pa[2])
+        self.post_box = (pa[0] - pa[3], post_v + pa[1] - pa[4], pa[2] - pa[5], pa[0] + pa[3], post_v + pa[1] + pa[4], pa[2] + pa[5])
+        self.wp, self.wm, self.far = wall_plus, wall_minus, far
+        self.cap = K["stand_cap"][0]
+        self.eye_z = K["Capsule"][1] + K["EyeZ"]
+
+    def wall_dist(self, u, v):
+        d = [u]
+        if self.wp:
+            d.append(self.fh - v)
+        if self.wm:
+            d.append(v + self.fh)
+        if self.far:
+            d.append(self.far - u)
+        return min(d)
+
+    def capsule_free(self, u, v):
+        if self.wall_dist(u, v) < self.cap:
+            return False
+        dx = max(self.cage[0] - u, 0.0, u - self.cage[3])
+        dy = max(self.cage[1] - v, 0.0, v - self.cage[4])
+        return math.hypot(dx, dy) >= self.cap
+
+    def host(self, u, v):
+        """ABRWorld::CanReachMissionDevice : yeux a portee, ligne de vue qui n'ignore que le joueur et le poste (la cage bloque)"""
+        eye = (u, v, self.eye_z)
+        return math.dist(eye, self.aim) <= self.K["Reach"] and not seg_hits_box(eye, self.aim, self.cage)
+
+    def check(self, u, v):
+        """BRTestV412::CheckMissionStand (sol plat, pas d'eau au Level 6)"""
+        if not self.capsule_free(u, v):
+            return "capsule"
+        if math.dist((u, v, self.eye_z), self.aim) > self.K["ClientFocusReach"]:
+            return "loin"
+        if not self.host(u, v):
+            return "vue"
+        return "ok"
+
+    def client(self, u, v):
+        """ABRCharacter::UpdateFocus, regard sur le point du poste : balayage de 7 cm jusqu'a la boite du poste (la cage frolee
+        la prend : visee prise), un mur frole fait echouer le balayage -> tolerance (boite a 208 cm, ligne de vue). Rend
+        (vise, ecart a la cage)"""
+        K = self.K
+        r = K["focus_sweep"]
+        eye = (u, v, self.eye_z)
+        g = tuple(self.post_box[k] - r for k in range(3)) + tuple(self.post_box[k] + r for k in range(3, 6))
+        n = max(2, int(math.dist(eye, self.aim) / 2.0))
+        stop = 1.0
+        for i in range(n + 1):
+            t = i / n
+            p = [eye[k] + (self.aim[k] - eye[k]) * t for k in range(3)]
+            if g[0] <= p[0] <= g[3] and g[1] <= p[1] <= g[4] and g[2] <= p[2] <= g[5]:
+                stop = t
+                break
+        end = tuple(eye[k] + (self.aim[k] - eye[k]) * stop for k in range(3))
+        gap = min(seg_box_dist(eye, end, self.cage), seg_box_dist(eye, end, self.cage_box))
+        if gap < r:
+            return False, gap
+        side = min(self.wall_dist(eye[0] + (end[0] - eye[0]) * t / 10.0, eye[1] + (end[1] - eye[1]) * t / 10.0) for t in range(11))
+        if side < r or math.dist(eye, end) > K["InteractReach"]:
+            near = math.dist(eye, (min(max(eye[0], self.post_box[0]), self.post_box[3]), min(max(eye[1], self.post_box[1]), self.post_box[4]),
+                                   min(max(eye[2], self.post_box[2]), self.post_box[5])))
+            return near <= K["InteractReach"] * K["tolerance"] and self.host(u, v), gap
+        return True, gap
+
+    def find(self):
+        """BRTestV412::FindMissionStand (cercles et directions du code)"""
+        K = self.K
+        for dist in K["rings"]:
+            for turn in range(K["turns"]):
+                a = math.radians(turn * K["turn_deg"])
+                u, v = self.aim[0] + math.cos(a) * dist, self.aim[1] + math.sin(a) * dist
+                if self.check(u, v) == "ok":
+                    return (u, v), dist, turn
+        return None, None, None
+
+    def disc(self, c, radius):
+        """Points d'arrivee possibles d'une marche (centre de la capsule libre a moins de radius du but) : nombre, vue de
+        l'hote coupee, visee prise par la cage (ou ratee), ecart minimal du balayage a la cage"""
+        n = bad_h = bad_c = 0
+        gap_min = 1e9
+        u = c[0] - radius
+        while u <= c[0] + radius:
+            v = c[1] - radius
+            while v <= c[1] + radius:
+                if math.hypot(u - c[0], v - c[1]) <= radius and self.capsule_free(u, v):
+                    n += 1
+                    if not self.host(u, v):
+                        bad_h += 1
+                    else:
+                        ok, gap = self.client(u, v)
+                        bad_c += 0 if ok else 1
+                        gap_min = min(gap_min, gap)
+                v += 5.0
+            u += 5.0
+        return n, bad_h, bad_c, gap_min
+
+
+def level6_walk(K, face):
+    """Marche des tests du jeu (AddWalkMissionSteps) vers le poste : la place devant lui (110 cm) si elle est bonne, rayon
+    d'arrivee 70 cm, sinon la place de FindMissionStand, rayon 35 cm ; puis, si la visee rate, la marche de reprise (but a
+    60 cm si c'est une place, sinon le premier but ; rayon 35). Rend un dict de mesures et le verdict"""
+    a = face.aim
+    out = {"inside": seg_box_dist(a, a, face.cage) <= K["Clearance.Margin"]}
+    front = (a[0] + K["front_ahead"], a[1])
+    out["front"] = face.check(*front)
+    st, dist, turn = face.find()
+    out["stand"] = (st, dist, turn)
+    if out["front"] == "ok":
+        goal, radius = front, K["walk_radius"][0]
+    else:
+        goal, radius = st, K["walk_radius"][1]
+    out["goal"], out["radius"] = goal, radius
+    out["ok"] = False
+    if out["inside"] or goal is None:
+        return out
+    out["d1"] = face.disc(goal, radius)
+    closer = (a[0] + K["retry"][0], a[1])
+    goal2 = closer if face.check(*closer) == "ok" else goal
+    out["goal2"] = goal2
+    out["d2"] = face.disc(goal2, K["retry"][1])
+    d1, d2 = out["d1"], out["d2"]
+    out["ok"] = d1[0] > 0 and d1[1] == 0 and (d1[2] == 0 or (d2[0] > 0 and d2[1] == 0 and d2[2] == 0))
     return out
 
 
@@ -425,58 +671,62 @@ def case_level6(K, rules):
     T = K["L6"].get("WallThickness", K["WallThicknessDefault"])
     face_half = S * 0.5 - T * 0.5
     lats = laterals(K, S)
-    R = K["Capsule"][0]
     post = {"aim": K["post"], "solid": None}
-    cage = {"aim": None, "solid": (K["LidarCage.Gap"], -K["LidarCage.HalfWidth"], 0.0, K["LidarCage.Gap"] + K["LidarCage.Depth"], K["LidarCage.HalfWidth"], K["LidarCage.Height"])}
-    cage["aim"] = [K["LidarCage.Gap"] + K["LidarCage.Depth"] + 4.0, 0.0, 120.0, 8.0, K["LidarCage.HalfWidth"], 90.0]
-    # Face nord d'une cellule centree en (0, 0) : d = (0, 1), mur bord a bord (Inset = epaisseur / 2)
-    cell = (0, 0)
-    d = (0, 1)
-    frames = [(face_frame(S, cell, d, lat, T * 0.5), lat) for lat in lats]
-    print("A. Level 6 : poste et cage d'un groupe (cellule de %g cm, murs de %g, face utile +-%g ; places %s ; cage %g..%g cm du mur, +-%g)"
-          % (S, T, face_half, "/".join("%+g" % v for v in lats), K["LidarCage.Gap"], K["LidarCage.Gap"] + K["LidarCage.Depth"], K["LidarCage.HalfWidth"]))
-    results = {}
+    cage = {"aim": K["cage_aim"], "solid": (K["LidarCage.Gap"], -K["LidarCage.HalfWidth"], 0.0, K["LidarCage.Gap"] + K["LidarCage.Depth"], K["LidarCage.HalfWidth"],
+                                           K["LidarCage.Height"])}
+    # Repere de la face : mecanisme tourne vers +u (lacet 0), decalage le long de son axe droit. FaceSpot(C, Dir, Lateral(K))
+    # decale le long de (-Dir.Y, Dir.X), l'oppose de l'axe droit : Lateral du placement (LateralOf) = -Lateral(K)
+    slots = [((0.0, -lat, 0.0, 0.0), -lat) for lat in lats]
+    print("A. Level 6 : poste et cage d'un groupe (cellule de %g cm, murs de %g, face utile +-%g ; places (axe droit) %s ; cage %g..%g cm du mur, +-%g, boite visee %s ; "
+          "place devant a %g cm, marche : rayon %g (devant) ou %g (autour), reprise a %g cm, rayon %g ; cercles %s, %d directions ; visee du client : balayage de %g cm, "
+          "portee %g, tolerance %g)"
+          % (S, T, face_half, "/".join("%+g" % s[1] for s in slots), K["LidarCage.Gap"], K["LidarCage.Gap"] + K["LidarCage.Depth"], K["LidarCage.HalfWidth"],
+             tuple(K["cage_aim"][:3]), K["front_ahead"], K["walk_radius"][0], K["walk_radius"][1], K["retry"][0], K["retry"][1], "/".join("%g" % r for r in K["rings"]),
+             K["turns"], K["focus_sweep"], K["ClientFocusReach"], K["InteractReach"] * K["tolerance"]))
+    variants = [(wp, wm, far) for wp in (False, True) for wm in (False, True) for far in (None, S - T)]
+    plans = []
     for name in rules:
         if name == "old":
-            slots = [0, 1]  # membres dans l'ordre du plan (poste 1+K puis cage 5+K), places 0 puis 1
+            plans.append(("old", "v4.14", [0, 1]))  # membres dans l'ordre du plan (poste 1+K puis cage 5+K), places 0 puis 1
         else:
-            slots = pick_slot_mirror(K, [post, cage], frames, face_half)
-        if None in slots:
-            print("  %s : aucune place (placement impossible)" % name)
-            results[name] = False
+            plans.append(("first", "v4.15 avant correctifs (pour information)", pick_slot_mirror(K, [post, cage], slots, face_half, end_of_face=False)))
+            plans.append(("new", "v4.15", pick_slot_mirror(K, [post, cage], slots, face_half, end_of_face=True)))
+    results = {}
+    for key, label, where in plans:
+        if None in where:
+            print("  regle %s : aucune place (placement impossible) -> ECHOUE" % label)
+            results[key] = False
             continue
-        pf, plat = frames[slots[0]]
-        cf, clat = frames[slots[1]]
-        cbox = solid_box(cf, cage["solid"])
-        ip = aim_point(pf, post["aim"])
-        inside = cbox.contains(ip)
-        # Murs de la cellule (face nord et murs lateraux aux bouts de la face) : distance d'un point au mur
-        cx0, cy0 = (cell[0] + 0.5) * S, (cell[1] + 0.5) * S
-        walls = [lambda x, y: (cy0 + face_half) - y, lambda x, y: x - (cx0 - face_half), lambda x, y: (cx0 + face_half) - x]
-        free = []
-        x = cx0 - face_half + R
-        while x <= cx0 + face_half - R:
-            y = cy0 + face_half - R
-            while y >= cy0 + face_half - 300.0:
-                if all(w(x, y) >= R for w in walls) and cbox.dist2d(x, y) >= R:
-                    free.append((x, y))
-                y -= 5.0
-            x += 5.0
-        eye_z = K["Capsule"][1] + K["EyeZ"]
-        reach = [p for p in free if math.dist((p[0], p[1], eye_z), ip) <= K["Reach"]]
-        los = [p for p in reach if not cbox.hits((p[0], p[1], eye_z), ip)]
-        f = forward(pf)
-        g1 = (ip[0] + f[0] * 110.0, ip[1] + f[1] * 110.0)
-        g2 = (ip[0] + f[0] * 60.0, ip[1] + f[1] * 60.0)
-        m1 = min(math.hypot(p[0] - g1[0], p[1] - g1[1]) for p in free)
-        m2 = min(math.hypot(p[0] - g2[0], p[1] - g2[1]) for p in free)
-        fits = abs(clat) + K["LidarCage.HalfWidth"] <= face_half
-        ok = not inside and len(los) > 0 and m1 <= 70.0 and m2 <= 35.0 and fits
-        results[name] = ok
-        print("  regle %s : poste a %+g, cage a %+g ; point du poste dans la cage : %s ; places a portee %d, ligne de vue de l'hote libre %d ; "
-              "but de marche 110 cm (rayon 70) a %.0f cm, relance 60 cm (rayon 35) a %.0f cm ; cage dans la face : %s -> %s"
-              % ("v4.14" if name == "old" else "v4.15", plat, clat, "OUI" if inside else "non", len(reach), len(los), m1, m2, "oui" if fits else "NON",
-                 "PASSE" if ok else "ECHOUE"))
+        pv, cv = slots[where[0]][1], slots[where[1]][1]
+        fits = abs(cv) + K["LidarCage.HalfWidth"] <= face_half
+        n_ok = 0
+        lines = []
+        for wp, wm, far in variants:
+            face = Level6Face(K, face_half, cv, pv, wp, wm, far)
+            w = level6_walk(K, face)
+            ok = w["ok"] and fits
+            n_ok += 1 if ok else 0
+            where_txt = "murs voisins %s/%s, fond %s" % ("oui" if wp else "non", "oui" if wm else "non", "oui" if far else "non")
+            if w["inside"]:
+                lines.append("    %s : point du poste DANS la cage -> ECHOUE" % where_txt)
+                continue
+            st = w["stand"]
+            if w["goal"] is None:
+                lines.append("    %s : place devant %s, aucune place (FindMissionStand) -> ECHOUE" % (where_txt, w["front"]))
+                continue
+            d1, d2 = w["d1"], w["d2"]
+            lines.append("    %s : place devant (%g cm) %s ; premiere place %s (cercle %g, direction %d) ; marche vers (%.0f, %.0f) rayon %g : %d arrivees, vue de l'hote coupee %d, "
+                         "visee prise ou ratee %d (balayage a %.0f cm de la cage au plus pres) ; reprise vers (%.0f, %.0f) rayon %g : %d/%d/%d -> %s"
+                         % (where_txt, K["front_ahead"], "libre" if w["front"] == "ok" else w["front"], "(%.0f, %.0f)" % st[0] if st[0] else "aucune", st[1] or 0,
+                            st[2] or 0, w["goal"][0], w["goal"][1], w["radius"], d1[0], d1[1], d1[2], d1[3], w["goal2"][0], w["goal2"][1], K["retry"][1], d2[0], d2[1], d2[2],
+                            "PASSE" if ok else "ECHOUE"))
+        ok_all = n_ok == len(variants)
+        results[key] = ok_all
+        print("  regle %s : poste a %+g, cage a %+g (axe droit) ; cage dans la face : %s ; %d/%d dispositions des murs reussies -> %s"
+              % (label, pv, cv, "oui" if fits else "NON", n_ok, len(variants), "PASSE" if ok_all else "ECHOUE"))
+        shown = lines if key != "old" else lines[:1]
+        for ln in shown:
+            print(ln)
     return results
 
 
@@ -573,12 +823,12 @@ def case_level8(K, rules, bounds, seeds):
                                 st[0] += 1
                                 buried = any(b.contains(ip) for b in kept)
                                 st[1] += 1 if buried else 0
-                                st[2] += 0 if (not buried and stand_near(K, fr, aim, kept, W.solid, S)) else 1
+                                st[2] += 0 if (not buried and find_mission_stand(K, fr, aim, kept, W.solid, S)) else 1
     results = {}
     for rname in rules:
         ok = all(st[1] == 0 and st[2] == 0 for st in stats[rname].values())
         results[rname] = ok
-        parts = ["%s : %d places, point dans un rocher %d (%.1f %%), sans place debout a portee et a vue %d (%.1f %%)"
+        parts = ["%s : %d places, point dans un rocher %d (%.1f %%), sans place debout (FindMissionStand) %d (%.1f %%)"
                  % (k, st[0], st[1], 100.0 * st[1] / max(1, st[0]), st[2], 100.0 * st[2] / max(1, st[0])) for k, st in stats[rname].items()]
         print("  regle %s : %s -> %s" % ("v4.14" if rname == "old" else "v4.15", " ; ".join(parts), "PASSE" if ok else "ECHOUE"))
         c = corner[rname]
@@ -647,14 +897,58 @@ def case_level9(K, rules, bounds, seeds):
                                 st[0] += 1
                                 buried = any(b.contains(ip) for b in boxes)
                                 st[1] += 1 if buried else 0
-                                st[2] += 0 if (not buried and stand_near(K, fr, aim, boxes)) else 1
+                                st[2] += 0 if (not buried and find_mission_stand(K, fr, aim, boxes)) else 1
     results = {}
     for rname in rules:
         ok = all(st[1] == 0 and st[2] == 0 for st in stats[rname].values())
         results[rname] = ok
-        parts = ["%s : %d places, point dans la maison %d (%.1f %%), sans place debout a portee et a vue %d" % (k, st[0], st[1], 100.0 * st[1] / max(1, st[0]), st[2])
+        parts = ["%s : %d places, point dans la maison %d (%.1f %%), sans place debout (FindMissionStand) %d" % (k, st[0], st[1], 100.0 * st[1] / max(1, st[0]), st[2])
                  for k, st in stats[rname].items()]
         print("  regle %s : %s -> %s" % ("v4.14" if rname == "old" else "v4.15", " ; ".join(parts), "PASSE" if ok else "ECHOUE"))
+    return results
+
+
+# ------------------------------------------------------------------------------------------- D. Level 8 : sorties
+def case_level8_exits(K, rules, bounds, seeds):
+    """Sortie de la mission contre une paroi (FaceSpot au decalage 0, comme ABRWorld::PlaceMission) : la capsule qui monte a
+    l'echelle (ABRExit::GetClimbAnchor) et l'approche de la marche des tests jusqu'a 90 cm de plus ne touchent aucun rocher
+    plus haut qu'une marche"""
+    S = K["L8"]["CellSize"]
+    back, extra = K["exit_keepout"]
+    hy = K["LidarDoor.Width"] * 0.5 + K["Clearance.StandGap"]
+    anchor = K["climb_anchor"]
+    R = K["Capsule"][0]
+    print("D. Level 8 : sorties de la mission (echelle : capsule de %g cm a %g cm du pied, approche jusqu'a %g cm) ; zone libre v4.15 de %g cm dans la paroi a %g cm "
+          "devant le pied, +-%g cm ; %d graines" % (R, anchor, anchor + 90.0, back, K["Clearance.StandDepth"] + extra, hy, seeds))
+    stats = {r: [0, 0] for r in rules}
+    for si in range(seeds):
+        seed = vp.mix((si + 1) * 2654435761 & M32) or 1
+        W = Caves(K, seed)
+        for cxi in range(-6, 7, 3):
+            for cyi in range(-6, 7, 3):
+                c = (cxi, cyi)
+                if W.solid(*c) or (abs(c[0]) <= 1 and abs(c[1]) <= 1):
+                    continue
+                rocks = rocks_near(K, W, c, bounds)
+                for d in vp.DIRS:
+                    if not W.solid(c[0] + d[0], c[1] + d[1]):
+                        continue
+                    fr = face_frame(S, c, d, 0.0, 0.0)
+                    ko = rect_of(fr, -back, -hy, K["Clearance.StandDepth"] + extra, hy)
+                    f = forward(fr)
+                    pts = [(fr[0] + f[0] * x, fr[1] + f[1] * x) for x in range(int(anchor), int(anchor + 90.0) + 1, 10)]
+                    for rname in rules:
+                        kept = rocks if rname == "old" else [b for b in rocks if not rect_overlap(ko, b.rect())]
+                        tall = [b for b in kept if b.z1 - fr[2] > K["Clearance.StepHeight"]]
+                        st = stats[rname]
+                        st[0] += 1
+                        st[1] += 1 if any(b.dist2d(px, py) < R for b in tall for (px, py) in pts) else 0
+    results = {}
+    for rname in rules:
+        st = stats[rname]
+        results[rname] = st[1] == 0
+        print("  regle %s : %d sorties, echelle ou approche dans un rocher %d (%.1f %%) -> %s" % ("v4.14" if rname == "old" else "v4.15", st[0], st[1],
+                                                                                         100.0 * st[1] / max(1, st[0]), "PASSE" if st[1] == 0 else "ECHOUE"))
     return results
 
 
@@ -682,6 +976,12 @@ def main():
     print()
     res["C"] = case_level9(K, rules, house, a.seeds)
     print()
+    res["D"] = case_level8_exits(K, rules, rock, a.seeds)
+    print()
+    print("Regle du jeu dans les sources :")
+    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()):
+        print("  %s : %s" % (what, "oui" if ok else "NON"))
+    print()
     bad = 0
     for case, r in res.items():
         if "old" in r and r["old"]:
@@ -690,6 +990,10 @@ def main():
         if "new" in r and not r["new"]:
             print("ECHEC : cas %s : la regle du jeu echoue" % case)
             bad += 1
+    for case, checks in (("A", K["src_A"]), ("D", K["src_D"])):
+        if "new" in rules and not all(checks.values()):
+            print("ECHEC : cas %s : la regle v4.15 n'est plus dans les sources (%s)" % (case, ", ".join(w for w, ok in checks.items() if not ok)))
+            bad += 1
     if "new" in rules and not K["rock_keepout_in_game"]:
         print("ECHEC : BRChunk.cpp ne retire pas les rochers de la zone libre des mecanismes")
         bad += 1
@@ -697,6 +1001,8 @@ def main():
         print("ECHEC : BRChunk.cpp n'a pas la boite du corps de la maison (GHouseBodyFront)")
         bad += 1
     word = lambda r, k: ("passe" if r[k] else "echoue") if k in r else "non jouee"
+    for r in res.values():
+        r.pop("first", None)  # premiere disposition v4.15 du cas A : pour information
     print("RESULTAT : %s (%s)" % ("OK" if bad == 0 else "ECHEC", ", ".join("%s v4.14 %s / v4.15 %s" % (c, word(r, "old"), word(r, "new")) for c, r in res.items())))
     return 0 if bad == 0 else 1
 

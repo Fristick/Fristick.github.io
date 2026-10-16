@@ -600,30 +600,69 @@ namespace BRMech
 		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf)
 		{
 			const float SolidHalf = Print.bSolid ? MaxF(AbsF(Print.Solid.Y0), AbsF(Print.Solid.Y1)) : 0.f;
-			for (int I = 0; I < NumSlots; ++I)
+			auto Usable = [&](int I)
 			{
 				const FSlot& S = Slots[I];
 				if (!S.bOpen)
 				{
-					continue;
+					return false;
 				}
 				// Un volume mural tient dans sa face (il n'entre pas dans le mur voisin)
 				if (Print.bSolid && S.bWall && AbsF(S.Lateral) + SolidHalf > FaceHalf + 0.01f)
 				{
-					continue;
+					return false;
 				}
 				FPlaced Me;
 				Me.Frame = S.Frame;
 				Me.Print = Print;
-				bool bClash = false;
-				for (int J = 0; J < NumPlaced && !bClash; ++J)
+				for (int J = 0; J < NumPlaced; ++J)
 				{
-					bClash = Clash(Me, Placed[J]);
+					if (Clash(Me, Placed[J]))
+					{
+						return false;
+					}
 				}
-				if (!bClash)
+				return true;
+			};
+			// Point de la face devant le centre de la cellule (decalage lateral retire) : meme point, meme face
+			auto FaceCenter = [](const FSlot& S, float& OutX, float& OutY)
+			{
+				S.Frame.ToWorld(0.f, -S.Lateral, OutX, OutY);
+			};
+			for (int I = 0; I < NumSlots; ++I)
+			{
+				if (!Usable(I))
+				{
+					continue;
+				}
+				if (!Print.bSolid || !Slots[I].bWall)
 				{
 					return I;
 				}
+				// v4.15 (correctifs) : un volume mural se pose au bout de sa face ou il tient (le plus grand decalage lateral,
+				// le premier dans l'ordre a egalite) : le reste de la face est d'un seul tenant. Au Level 6, la cage a +-58 et
+				// son poste a -+58 (diag_v413_4) : sa place ordinaire, 110 cm devant lui, est a 87 cm du mur voisin. Avant :
+				// cage au centre, poste a +-116, a 29 cm du mur voisin : place ordinaire coupee par ce mur, place de biais qui
+				// frolait la cage (vue de l'hote ou visee du client prises par elle)
+				float CX = 0.f, CY = 0.f;
+				FaceCenter(Slots[I], CX, CY);
+				const float Turn = QuarterYaw(Slots[I].Frame.Yaw);
+				int Best = I;
+				for (int J = I + 1; J < NumSlots; ++J)
+				{
+					const FSlot& T = Slots[J];
+					if (!T.bWall || QuarterYaw(T.Frame.Yaw) != Turn || AbsF(T.Lateral) <= AbsF(Slots[Best].Lateral) + 0.01f)
+					{
+						continue;
+					}
+					float TX = 0.f, TY = 0.f;
+					FaceCenter(T, TX, TY);
+					if (AbsF(TX - CX) < 1.f && AbsF(TY - CY) < 1.f && Usable(J))
+					{
+						Best = J;
+					}
+				}
+				return Best;
 			}
 			return -1;
 		}
