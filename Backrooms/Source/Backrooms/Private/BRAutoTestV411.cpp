@@ -14,6 +14,7 @@
 // gagnant), soin perime refuse sans rien consommer, depart de groupe (attente du coequipier, puis depart commun).
 // Une verification qui ne peut pas etre faite ici est notee "NON VERIFIE", jamais comptee comme reussie.
 #include "BRAutoTest.h"
+#include "BRAutoTestNet.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
 #include "BRCharacter.h"
@@ -1174,9 +1175,61 @@ void ABRAutoTest::AddV411Steps()
 	});
 }
 
+namespace BRTestV411Net
+{
+	/** v4.15 : deplacement instantane du client suivi jusqu'a ce que le serveur l'ait recu (BRTestNet) */
+	BRTestNet::FPlacement Place;
+
+	/** v4.15 : hote juste devant la sortie (1,2 m sur son axe, sol trouve, capsule libre) : la vue vers la sortie est celle
+	 *  d'un joueur qui s'y presente de face ; StandNear (premiere place libre autour) reste le repli */
+	bool StandInFront(UWorld* World, const ABRExit* Exit, const ABRCharacter* C, FVector& Out)
+	{
+		if (!World || !Exit || !C)
+		{
+			return false;
+		}
+		const float Half = C->GetSimpleCollisionHalfHeight();
+		const FVector Foot = Exit->GetActorLocation();
+		const FVector P = Foot + FRotator(0.f, Exit->GetActorRotation().Yaw, 0.f).Vector() * 120.f;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestFront), false, C);
+		Q.AddIgnoredActor(Exit);
+		FHitResult Floor;
+		if (!World->LineTraceSingleByChannel(Floor, FVector(P.X, P.Y, Foot.Z + 100.f), FVector(P.X, P.Y, Foot.Z - 200.f), ECC_WorldStatic, Q))
+		{
+			return false;
+		}
+		const FVector Stand(P.X, P.Y, Floor.ImpactPoint.Z + Half + 5.f);
+		if (World->OverlapAnyTestByChannel(Stand, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(36.f, Half - 4.f), Q))
+		{
+			return false;
+		}
+		Out = Stand;
+		return true;
+	}
+
+	/** v4.15 : vue vers le point vise par le depart de groupe (ABRWorld::DepartureViewPoint), comme ReachInfo : libre ou
+	 *  coupee par quoi, a quelle distance */
+	FString DepartureViewInfo(UWorld* World, const ABRCharacter* C, const ABRExit* Exit)
+	{
+		if (!World || !C || !Exit)
+		{
+			return TEXT("sortie ou joueur absent");
+		}
+		const FVector Eye = C->GetEyeLocation();
+		const FVector Aim = ABRWorld::DepartureViewPoint(Exit);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestDepartView), false, C);
+		Q.AddIgnoredActor(Exit);
+		FHitResult Hit;
+		const bool bBlocked = World->LineTraceSingleByChannel(Hit, Eye, Aim, ECC_WorldStatic, Q);
+		return FString::Printf(TEXT("yeux (%.0f, %.0f, %.0f) vers (%.0f, %.0f, %.0f), %.0f cm, vue %s"), Eye.X, Eye.Y, Eye.Z, Aim.X, Aim.Y, Aim.Z, FVector::Dist(Eye, Aim),
+			bBlocked ? *FString::Printf(TEXT("BLOQUEE par %s (%s) a %.0f cm"), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), Hit.Distance) : TEXT("libre"));
+	}
+}
+
 void ABRAutoTest::AddNetV411Steps(bool bClient)
 {
 	using namespace BRTestV411;
+	using namespace BRTestV411Net;
 
 	// v4.13 : le Level 0 n'a plus de mission (sa porte de service mene au Niveau 1) : l'hote emmene le groupe au Niveau 1
 	Add(TEXT("v4.11 reseau : niveau a mission"), 0.f, [this, bClient]()
@@ -1280,13 +1333,14 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 				return true;
 			}
 			// La position du client part a l'hote avec ses mouvements, pas avec la demande : la demande attend que l'hote
-			// l'ait recue
-			PlaceAndFace(C, Stand, Dev->GetInteractPoint());
+			// l'ait recue. v4.15 : mouvements en attente envoyes avant le deplacement, place verifiee sur plusieurs images
+			const FVector Aim = Dev->GetInteractPoint();
+			Place.Start(C, Stand, &Aim, FPlatformTime::Seconds());
 			TestMissionPhase = 4111;
 			TestTimer = FPlatformTime::Seconds();
 			return false;
 		}
-		if (FPlatformTime::Seconds() - TestTimer < 0.6)
+		if (!Place.Update(C, FPlatformTime::Seconds()) && FPlatformTime::Seconds() - TestTimer < 10.0)
 		{
 			return false;
 		}
@@ -1490,6 +1544,12 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 			Note(FString::Printf(TEXT("depart de groupe : sortie vers %d introuvable ou sans place"), TestLevel), true);
 			return true;
 		}
+		// v4.15 : de face d'abord (1,2 m devant la sortie, sur son axe), la premiere place libre autour sinon
+		FVector Front;
+		if (StandInFront(GetWorld(), Exit, C, Front))
+		{
+			Stand = Front;
+		}
 		TestExitSpot = Stand;
 		PlaceAndFace(C, Stand, Exit->GetActorLocation());
 		// La demande de l'hote en partie en ligne (ce que fait RequestDeparture), avec la raison d'un refus
@@ -1499,8 +1559,11 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 			FString Why;
 			W->CanUseExit(TestLevel, Why);
 			Note(FString::Printf(TEXT("depart de groupe vers %d refuse a l'hote : raison %d (1 sortie fermee, 2 hors de portee ou sans vue, 3 autre depart, 4 niveau, 5 a terre) ; "
-				"hote en (%.0f, %.0f, %.0f), sortie en (%.0f, %.0f, %.0f), %.0f cm ; %s"), TestLevel, Reason, Stand.X, Stand.Y, Stand.Z, Exit->GetActorLocation().X,
-				Exit->GetActorLocation().Y, Exit->GetActorLocation().Z, FVector::Dist(Stand, Exit->GetActorLocation()), Why.IsEmpty() ? TEXT("sortie utilisable") : *Why), true);
+				"hote en (%.0f, %.0f, %.0f), sortie en (%.0f, %.0f, %.0f), %.0f cm ; %s ; vue : %s%s"), TestLevel, Reason, Stand.X, Stand.Y, Stand.Z, Exit->GetActorLocation().X,
+				Exit->GetActorLocation().Y, Exit->GetActorLocation().Z, FVector::Dist(Stand, Exit->GetActorLocation()), Why.IsEmpty() ? TEXT("sortie utilisable") : *Why,
+				*DepartureViewInfo(GetWorld(), C, Exit), W->GetLastDepartureBlock().IsEmpty() ? TEXT("") : *(TEXT(" ; jeu : ") + W->GetLastDepartureBlock())), true);
+			// v4.15 : un seul probleme : les etapes qui dependent du depart sont sautees (avant : trois PROBLEMES de plus)
+			TestLevel = -1;
 		}
 		TestTimer = FPlatformTime::Seconds();
 		return true;
@@ -1516,6 +1579,14 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		if (Dep.Phase != 1 && StepTime < 15.f)
 		{
 			return false; // client : depart pas encore recu
+		}
+		if (bClient && Dep.Phase != 1)
+		{
+			// v4.15 : un seul probleme (le client ne distingue pas un refus de l'hote d'une replication perdue) ; les etapes
+			// qui dependent du depart sont sautees
+			Note(FString::Printf(TEXT("client : depart de groupe non recu en 15 s (phase %d)"), static_cast<int32>(Dep.Phase)), true);
+			TestLevel = -1;
+			return true;
 		}
 		if (StepTime < 4.f)
 		{
@@ -1539,12 +1610,30 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 		{
 			// Le client rejoint le point de depart (moins de 8 m, meme etage, a vue)
 			const FVector Loc = W->GetDeparture().Location;
-			FVector Stand;
-			if (!StandNear(GetWorld(), Loc + FVector(0.f, 0.f, 90.f), FVector(-1.f, 0.f, 0.f), C->GetSimpleCollisionHalfHeight(), nullptr, C, Stand))
+			if (TestMissionPhase != 4112)
 			{
-				Stand = Loc + FVector(150.f, 0.f, C->GetSimpleCollisionHalfHeight() + 5.f);
+				// v4.15 : jamais vers un point de depart par defaut : seulement vers celui d'un depart recu
+				if (W->GetDeparture().Phase != 1)
+				{
+					Note(FString::Printf(TEXT("client : rassemblement impossible, plus de depart en rassemblement (phase %d)"), static_cast<int32>(W->GetDeparture().Phase)), true);
+					TestLevel = -1;
+					return true;
+				}
+				FVector Stand;
+				if (!StandNear(GetWorld(), Loc + FVector(0.f, 0.f, 90.f), FVector(-1.f, 0.f, 0.f), C->GetSimpleCollisionHalfHeight(), nullptr, C, Stand))
+				{
+					Stand = Loc + FVector(150.f, 0.f, C->GetSimpleCollisionHalfHeight() + 5.f);
+				}
+				Place.Start(C, Stand, &Loc, FPlatformTime::Seconds());
+				TestMissionPhase = 4112;
+				return false;
 			}
-			PlaceAndFace(C, Stand, Loc);
+			// La place doit etre recue par l'hote (sinon il compte le client ou il etait) ; le depart peut deja partir
+			if (W->GetDeparture().Phase == 1 && !Place.Update(C, FPlatformTime::Seconds(), 0.3) && StepTime < 5.f)
+			{
+				return false;
+			}
+			TestMissionPhase = 0;
 		}
 		TestTimer = FPlatformTime::Seconds();
 		return true;
@@ -1562,8 +1651,10 @@ void ABRAutoTest::AddNetV411Steps(bool bClient)
 			return false;
 		}
 		const bool bOk = W->GetLevelNumber() == TestLevel && W->IsLevelReady();
-		Note(FString::Printf(TEXT("%s : depart de groupe vers le Niveau %d %s (%.1f s apres le rassemblement)"), bClient ? TEXT("client") : TEXT("hote"), TestLevel,
-			bOk ? TEXT("effectue") : TEXT("ECHEC"), Elapsed), !bOk);
+		const FBRNetDeparture& Dep = W->GetDeparture();
+		Note(FString::Printf(TEXT("%s : depart de groupe vers le Niveau %d %s (%.1f s apres le rassemblement)%s"), bClient ? TEXT("client") : TEXT("hote"), TestLevel,
+			bOk ? TEXT("effectue") : TEXT("ECHEC"), Elapsed, bOk ? TEXT("") : *FString::Printf(TEXT(" ; depart : phase %d, raison %d, %d/%d rassembles"), static_cast<int32>(Dep.Phase),
+			static_cast<int32>(Dep.Reason), Dep.Ready, Dep.Needed)), !bOk);
 		return true;
 	});
 }

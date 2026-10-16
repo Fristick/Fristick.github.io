@@ -206,6 +206,8 @@ private:
 	ABRCharacter* GetPlayer() const;
 	ABRPlayerController* GetPC() const;
 	FLevelReport& Report();
+	/** v4.15 : niveau d'une note dans la liste des problemes (test reseau : niveau ou se trouve la machine) */
+	int32 NoteLevel();
 	void Note(const FString& Text, bool bProblem = false);
 	/** v4.10 : verification qui n'a pas pu etre faite (ressource absente, plateforme) : jamais comptee comme une reussite */
 	void Skip(const FString& Text);

@@ -20,9 +20,11 @@
 // echelle (une seule demande au sommet, grimpeur compte comme rassemble, coequipier qui arrive a pied).
 // Une verification qui ne peut pas etre faite ici est notee "NON VERIFIE", jamais comptee comme reussie.
 #include "BRAutoTest.h"
+#include "BRAutoTestNet.h"
 #include "BRAutoTestWalk.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
+#include "BRGatherLogic.h"
 #include "BRHUD.h"
 #include "BRInteractables.h"
 #include "BRItems.h"
@@ -1671,9 +1673,143 @@ void ABRAutoTest::AddV412Steps()
 // Etapes v4.12 (reseau) : au Niveau 37, les deux machines
 // =====================================================================================================================
 
+namespace BRTestV412Net
+{
+	/** v4.15 : deplacement instantane du client suivi jusqu'a ce que le serveur l'ait recu (BRTestNet) */
+	BRTestNet::FPlacement Place;
+	/** v4.15 : demande a 9 m : distance des yeux du client a l'indice au moment de la demande */
+	float RequestDist = 0.f;
+	/** v4.15 : hote : demandes du client deja servies (numeros vus dans l'historique du serveur) */
+	TSet<uint16> SeenRequests;
+	bool bHostWatch = false;
+	/** v4.15 : coequipier a pied : debut de la marche et arrivee (temps de l'etape ; -1 : pas encore), place a l'arrivee,
+	 *  budget de marche (sous le temps restant du depart) */
+	float WalkT0 = 0.f;
+	float ArrivedAt = -1.f;
+	FVector ArrivedPos = FVector(0.0, 0.0, 0.0);
+	float WalkBudget = 0.f;
+	/** v4.15 : hote : rassemblement du client vu par le serveur (etat, changements notes, temps compte) */
+	FString GatherState;
+	int32 GatherChanges = 0;
+	float CountedSeconds = 0.f;
+
+	/** Portee d'un mecanisme telle que la juge l'hote (ABRWorld::ServerMissionAct) : distance des yeux, ligne de vue */
+	FString ReachInfo(UWorld* World, const ABRCharacter* C, const ABRMissionDevice* Dev)
+	{
+		if (!World || !C || !Dev)
+		{
+			return TEXT("mecanisme ou joueur absent");
+		}
+		const FVector Eye = C->GetEyeLocation();
+		const FVector Target = Dev->GetInteractPoint();
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestReach412), false, C);
+		Q.AddIgnoredActor(Dev);
+		FHitResult Hit;
+		const bool bBlocked = World->LineTraceSingleByChannel(Hit, Eye, Target, ECC_WorldStatic, Q);
+		return FString::Printf(TEXT("yeux (%.0f, %.0f, %.0f), %.0f cm du point (portee %.0f), vue %s"), Eye.X, Eye.Y, Eye.Z, FVector::Dist(Eye, Target), ABRWorld::MissionReachServer,
+			bBlocked ? *FString::Printf(TEXT("BLOQUEE par %s a %.0f cm"), *GetNameSafe(Hit.GetActor()), Hit.Distance) : TEXT("libre"));
+	}
+
+	/** Hote : le client est-il compte comme rassemble, et sinon quelle condition manque (zone de 8 m, etage, vue). Category :
+	 *  la condition seule (sans les distances), pour ne noter que les changements */
+	FString GatherInfo(UWorld* World, const ABRWorld* W, const ABRCharacter* M, FString& Category, bool& bCounted)
+	{
+		const FBRNetDeparture& Dep = W->GetDeparture();
+		bCounted = W->IsGatheredForDeparture(M);
+		if (Dep.Phase != 1)
+		{
+			Category = FString::Printf(TEXT("plus de depart en cours (phase %d)"), static_cast<int32>(Dep.Phase));
+			return Category;
+		}
+		BRGather::FExitShape S;
+		S.Style = static_cast<BRGather::EStyle>(FMath::Min<uint8>(Dep.Style, 2));
+		S.Foot = { static_cast<float>(Dep.Foot.X), static_cast<float>(Dep.Foot.Y), static_cast<float>(Dep.Foot.Z) };
+		S.Forward = { static_cast<float>(Dep.Forward.X), static_cast<float>(Dep.Forward.Y), static_cast<float>(Dep.Forward.Z) };
+		S.Anchor = { static_cast<float>(Dep.Anchor.X), static_cast<float>(Dep.Anchor.Y), static_cast<float>(Dep.Anchor.Z) };
+		S.TopZ = Dep.TopZ;
+		const FVector L = M->GetActorLocation();
+		const BRGather::FVec Pos = { static_cast<float>(L.X), static_cast<float>(L.Y), static_cast<float>(L.Z) };
+		const BRGather::FVec VP = BRGather::ViewPoint(S);
+		const float Dist = static_cast<float>(FVector::Dist2D(L, Dep.Location));
+		const float DZ = static_cast<float>(L.Z) - (S.Foot.Z + BRGather::CapsuleHalf);
+		const BRGather::EGather G = BRGather::Classify(S, Pos);
+		if (bCounted)
+		{
+			Category = TEXT("compte comme rassemble");
+		}
+		else if (G == BRGather::EGather::No)
+		{
+			Category = Dist >= BRGather::Radius ? TEXT("hors de la zone (plus de 8 m)") : TEXT("autre etage");
+		}
+		else
+		{
+			// Meme vue que l'hote (ABRWorld::IsGatheredForDeparture) : la sortie elle-meme ne compte pas
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestGatherView), false, M);
+			if (const ABRExit* Exit = BRTestV412::FindExit(World, Dep.Target))
+			{
+				Q.AddIgnoredActor(Exit);
+			}
+			FHitResult Hit;
+			const bool bBlocked = World->LineTraceSingleByChannel(Hit, M->GetEyeLocation(), FVector(VP.X, VP.Y, VP.Z), ECC_WorldStatic, Q);
+			Category = bBlocked ? FString::Printf(TEXT("dans la zone, vue coupee par %s (%s)"), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()))
+				: FString(TEXT("dans la zone, vue libre, mais non compte"));
+		}
+		return FString::Printf(TEXT("%s (en (%.0f, %.0f, %.0f), %.1f m du point, ecart vertical %.0f cm ; %d/%d rassembles, %.0f s restantes)"), *Category, L.X, L.Y, L.Z,
+			Dist / 100.f, DZ, Dep.Ready, Dep.Needed, W->GetDepartureRemaining());
+	}
+
+	/** Client : une place a 9-12 m du point de rassemblement d'une echelle (hors de la zone de 8 m), au meme etage, d'ou le
+	 *  point se voit : la marche vers le point est courte et sans detour */
+	bool FarStandInSight(UWorld* World, const ABRWorld* W, const ABRCharacter* C, const ABRExit* Exit, const FVector& Gather, FVector& Out)
+	{
+		const float Half = C->GetSimpleCollisionHalfHeight();
+		const float FootZ = static_cast<float>(Exit->GetActorLocation().Z);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestFarStand), false, C);
+		Q.AddIgnoredActor(Exit);
+		FCollisionResponseParams WallsOnly;
+		WallsOnly.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+		for (const float R : { 1000.f, 1100.f, 1200.f, 950.f })
+		{
+			for (int32 K = 0; K < 16; ++K)
+			{
+				const FVector P = Gather + FVector(1.f, 0.f, 0.f).RotateAngleAxis(K * 22.5f, FVector::UpVector) * R;
+				const FIntPoint Cell = W->WorldToCell(P);
+				if (!W->IsWalkable(Cell))
+				{
+					continue;
+				}
+				const FVector Center = W->CellCenter(Cell, FootZ);
+				if (FVector::Dist2D(Center, Gather) < 900.f)
+				{
+					continue;
+				}
+				FHitResult Floor;
+				if (!World->LineTraceSingleByChannel(Floor, Center + FVector(0.f, 0.f, 120.f), Center - FVector(0.f, 0.f, 120.f), ECC_WorldStatic, Q, WallsOnly)
+					|| FMath::Abs(Floor.ImpactPoint.Z - FootZ) > 60.f)
+				{
+					continue;
+				}
+				const FVector Stand(Center.X, Center.Y, Floor.ImpactPoint.Z + Half + 5.f);
+				if (World->OverlapAnyTestByChannel(Stand, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(36.f, Half - 4.f), Q, WallsOnly))
+				{
+					continue;
+				}
+				if (World->LineTraceTestByChannel(Stand + FVector(0.f, 0.f, Half * 0.75f), Gather + FVector(0.f, 0.f, BRGather::ViewHeight), ECC_WorldStatic, Q, WallsOnly))
+				{
+					continue;
+				}
+				Out = Stand;
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
 void ABRAutoTest::AddNetV412Steps(bool bClient)
 {
 	using namespace BRTestV412;
+	using namespace BRTestV412Net;
 
 	Add(TEXT("v4.12 reseau : compatibilite"), 0.f, [this, bClient]()
 	{
@@ -1722,13 +1858,14 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		if (TestMissionPhase != 412)
 		{
 			// La position du client part a l'hote avec ses mouvements, pas avec la demande : apres un deplacement instantane,
-			// la demande attend que l'hote ait recu la nouvelle position (sinon il juge la distance d'ou etait le client)
-			PlaceAndFace(C, FVector(Aim.X, Aim.Y, C->GetActorLocation().Z) + Dev->GetActorForwardVector().GetSafeNormal2D() * 120.f, Aim);
+			// la demande attend que l'hote ait recu la nouvelle position (sinon il juge la distance d'ou etait le client).
+			// v4.15 : mouvements en attente envoyes avant le deplacement, place verifiee sur plusieurs images (BRTestNet)
+			Place.Start(C, FVector(Aim.X, Aim.Y, C->GetActorLocation().Z) + Dev->GetActorForwardVector().GetSafeNormal2D() * 120.f, &Aim, FPlatformTime::Seconds());
 			TestMissionPhase = 412;
 			TestTimer = FPlatformTime::Seconds();
 			return false;
 		}
-		if (FPlatformTime::Seconds() - TestTimer < 0.6)
+		if (!Place.Update(C, FPlatformTime::Seconds()) && FPlatformTime::Seconds() - TestTimer < 10.0)
 		{
 			return false;
 		}
@@ -1764,35 +1901,85 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		Shot(TEXT("v412_reseau_acceptee"));
 		return true;
 	});
-	// Une demande refusee par l'hote (trop loin) : "refuse", avec la raison
+	// Une demande refusee par l'hote (trop loin) : "refuse", avec la raison. v4.15 : le client reste vraiment a 9 m (place
+	// verifiee, deplacement recu par le serveur) ; l'hote note chaque demande du client qu'il sert et d'ou il voit le client
 	Add(TEXT("v4.12 reseau : demande refusee"), 0.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
-		if (!bClient || !W || !C || TestMissionDevice == INDEX_NONE)
+		if (!bClient)
 		{
-			return true;
-		}
-		if (TestCountB == 0)
-		{
-			ABRMissionDevice* Dev = W->FindMissionDevice(TestMissionDevice);
-			if (!Dev)
+			ABRCharacter* M = W ? BRTestNet::RemoteMate(W) : nullptr;
+			if (!W || !M || !W->IsMissionActive())
 			{
+				bHostWatch = false;
 				return true;
 			}
+			const BRM::FPlan& P = W->GetMissionPlan();
+			int32 D = INDEX_NONE;
+			for (int32 I = 0; I < P.NumDevices && D == INDEX_NONE; ++I)
+			{
+				D = P.Devices[I].Kind == BRM::EKind::Clue ? I : INDEX_NONE;
+			}
+			if (!bHostWatch)
+			{
+				SeenRequests.Reset();
+				for (const ABRCharacter::FBRTxnRecord& R : M->ServerMissionHistory)
+				{
+					SeenRequests.Add(R.RequestId);
+				}
+				bHostWatch = true;
+			}
+			for (const ABRCharacter::FBRTxnRecord& R : M->ServerMissionHistory)
+			{
+				if (R.RequestId != 0 && !SeenRequests.Contains(R.RequestId))
+				{
+					SeenRequests.Add(R.RequestId);
+					Note(FString::Printf(TEXT("hote : demande %d du client servie, retour %d%s ; client vu par l'hote : %s"), static_cast<int32>(R.RequestId), static_cast<int32>(R.Item),
+						R.Item == BRMissionText::TooFar ? TEXT(" (trop loin)") : TEXT(""), *ReachInfo(GetWorld(), M, D != INDEX_NONE ? W->FindMissionDevice(D) : nullptr)));
+				}
+			}
+			if (BRTestNet::RemoteMark(W) < BRTestNet::MarkV412Refused && StepTime < 40.f)
+			{
+				return false;
+			}
+			bHostWatch = false;
+			return true;
+		}
+		if (!W || !C || TestMissionDevice == INDEX_NONE)
+		{
+			BRTestNet::SendMark(GetPC(), BRTestNet::MarkV412Refused);
+			return true;
+		}
+		ABRMissionDevice* Dev = W->FindMissionDevice(TestMissionDevice);
+		if (!Dev)
+		{
+			BRTestNet::SendMark(GetPC(), BRTestNet::MarkV412Refused);
+			return true;
+		}
+		const double Now = FPlatformTime::Seconds();
+		if (TestCountB == 0)
+		{
+			// v4.15 : jamais dans l'image qui suit une capture (saccade : le deplacement pouvait etre defait par la fusion des
+			// mouvements du client)
+			if (StepTime < 0.2f)
+			{
+				return false;
+			}
 			const FVector Far = Dev->GetInteractPoint() + Dev->GetActorForwardVector().GetSafeNormal2D() * 900.f;
-			C->SetActorLocation(FVector(Far.X, Far.Y, C->GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
-			TestTimer = FPlatformTime::Seconds();
+			Place.Start(C, FVector(Far.X, Far.Y, C->GetActorLocation().Z), nullptr, Now);
+			TestTimer = Now;
 			TestCountB = 2;
 			return false;
 		}
 		if (TestCountB == 2)
 		{
-			// Demande une fois la nouvelle position recue par l'hote (voir plus haut)
-			if (FPlatformTime::Seconds() - TestTimer < 0.6)
+			// Demande une fois la nouvelle position recue par l'hote : le personnage est reste a sa place 0,6 s
+			if (!Place.Update(C, Now) && Now - TestTimer < 10.0)
 			{
 				return false;
 			}
+			RequestDist = static_cast<float>(FVector::Dist(C->GetEyeLocation(), Dev->GetInteractPoint()));
 			TestCountA = C->MissionResultsReceived;
 			C->RequestMissionAction(TestMissionDevice, static_cast<uint8>(BRM::EAction::Use));
 			TestCountB = 1;
@@ -1807,8 +1994,11 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		float Age = 0.f;
 		const EBRActionStatus S = C->GetActionStatus(Detail, Age);
 		const bool bOk = S == EBRActionStatus::Refused && !Detail.IsEmpty();
-		Note(FString::Printf(TEXT("client : demande a 9 m : etat affiche %d (attendu : refuse), raison \"%s\""), static_cast<int32>(S), *Detail), !bOk);
+		// Le client etait verifie loin : une demande acceptee serait une vraie faute de l'hote (distance non verifiee)
+		Note(FString::Printf(TEXT("client : demande a 9 m : etat affiche %d (attendu : refuse), raison \"%s\" ; client a %.1f m de l'indice a la demande (%d replacement(s)), %.1f m a la reponse"),
+			static_cast<int32>(S), *Detail, RequestDist / 100.f, Place.Reapplied, FVector::Dist(C->GetEyeLocation(), Dev->GetInteractPoint()) / 100.f), !bOk);
 		Shot(TEXT("v412_reseau_refusee"));
+		BRTestNet::SendMark(GetPC(), BRTestNet::MarkV412Refused);
 		return true;
 	});
 
@@ -1841,9 +2031,34 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		const float Half = C->GetSimpleCollisionHalfHeight();
 		if (bClient)
 		{
-			// Le client s'eloigne (plus de 8 m du point de rassemblement) sur une cellule libre
-			const FIntPoint Base = W->WorldToCell(Exit->GetActorLocation() + Fwd * 1400.f);
-			PlaceAndFace(C, W->CellCenter(Base, static_cast<float>(Exit->GetActorLocation().Z) + Half + 40.f), Exit->GetActorLocation());
+			// Le client s'eloigne (plus de 8 m du point de rassemblement). v4.15 : a 9-12 m, au meme etage, a vue du point
+			// (la marche qui suit est courte), place verifiee et recue par l'hote ; jamais dans l'image qui suit une capture
+			const double Now = FPlatformTime::Seconds();
+			const FVector ExitLoc = Exit->GetActorLocation();
+			const FVector Gather = ExitLoc + Fwd * 100.f; // point de rassemblement d'une echelle (BRGather::GatherPoint)
+			if (TestMissionPhase != 4120)
+			{
+				if (StepTime < 0.2f)
+				{
+					return false;
+				}
+				FVector Stand;
+				if (!FarStandInSight(GetWorld(), W, C, Exit, Gather, Stand))
+				{
+					const FIntPoint Base = W->WorldToCell(ExitLoc + Fwd * 1400.f);
+					Stand = W->CellCenter(Base, static_cast<float>(ExitLoc.Z) + Half + 40.f);
+				}
+				Place.Start(C, Stand, &ExitLoc, Now);
+				TestMissionPhase = 4120;
+				return false;
+			}
+			if (!Place.Update(C, Now, 0.3) && StepTime < 5.f)
+			{
+				return false;
+			}
+			TestMissionPhase = 0;
+			Note(FString::Printf(TEXT("client : place a %.1f m du point de rassemblement de l'echelle (attendu : plus de 8 m), %d replacement(s)"),
+				FVector::Dist2D(C->GetActorLocation(), Gather) / 100.f, Place.Reapplied));
 			return true;
 		}
 		W->DebugCompleteMission();
@@ -1869,6 +2084,10 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 				return false;
 			}
 			Note(FString::Printf(TEXT("client : depart en rassemblement recu %s (%d/%d)"), YesNo(Dep.Phase == 1), Dep.Ready, Dep.Needed), Dep.Phase != 1);
+			if (Dep.Phase != 1)
+			{
+				TestLevel = -1; // v4.15 : un seul probleme, les etapes qui en dependent sont sautees
+			}
 			TestTimer = FPlatformTime::Seconds();
 			return true;
 		}
@@ -1934,65 +2153,121 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		{
 			return true;
 		}
+		const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
+		const FBRNetDeparture& Dep = W->GetDeparture();
 		if (!bClient)
 		{
-			return W->IsTransitioning() || W->GetLevelSerial() != TestCountA || StepTime > 90.f;
+			// v4.15 : l'hote note si (et pourquoi pas) il compte le client comme rassemble, a chaque changement
+			const bool bDone = W->IsTransitioning() || W->GetLevelSerial() != TestCountA || StepTime > 90.f;
+			if (ABRCharacter* M = BRTestNet::RemoteMate(W))
+			{
+				FString Category;
+				bool bCounted = false;
+				const FString Info = GatherInfo(GetWorld(), W, M, Category, bCounted);
+				CountedSeconds += bCounted ? Dt : 0.f;
+				if (Category != GatherState)
+				{
+					if (GatherChanges < 12)
+					{
+						Note(FString::Printf(TEXT("hote : client %s, a %.1f s"), *Info, StepTime));
+					}
+					++GatherChanges;
+					GatherState = Category;
+				}
+			}
+			if (bDone)
+			{
+				Note(FString::Printf(TEXT("hote : client compte comme rassemble pendant %.1f s, %d changement(s) d'etat ; depart %s"), CountedSeconds, GatherChanges,
+					W->IsTransitioning() || W->GetLevelSerial() != TestCountA ? TEXT("lance") : TEXT("NON lance en 90 s")));
+				GatherState.Reset();
+				GatherChanges = 0;
+				CountedSeconds = 0.f;
+			}
+			return bDone;
 		}
-		const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
 		if (TestMissionPhase != 31)
 		{
-			// Les deux machines avancent a leur rythme : l'hote mesure son attente 4 s apres etre arrive au sommet. Le client ne
-			// part a pied qu'une fois l'hote monte (plus haut qu'au depart) et immobile depuis 6 s ; sinon le groupe partirait
-			// avant la mesure (2/2 rassembles, depart lance)
-			TArray<ABRCharacter*> Players;
-			W->GetPlayers(Players);
-			const ABRCharacter* Host = nullptr;
-			for (const ABRCharacter* P : Players)
+			// Les deux machines avancent a leur rythme : l'hote mesure son attente 4 s apres etre arrive au sommet (le depart
+			// est demande a son arrivee). v4.15 : le client part a pied d'apres l'age du depart vu par l'hote (replique), sans
+			// reference prise a l'entree de l'etape : depart en rassemblement depuis 6 s au moins (84 s restantes sur 90),
+			// grimpeur compte. Avant : "hote monte et immobile depuis 6 s", jamais vrai si l'hote etait deja en haut (45 s
+			// perdues sur les 90 du depart)
+			if (Dep.Phase == 2)
 			{
-				Host = P && !P->IsLocallyControlled() ? P : Host;
+				return true; // le groupe part deja : l'etape suivante verifie l'arrivee
 			}
-			const double Now = FPlatformTime::Seconds();
-			if (Host && StepTime < 45.f)
+			if (Dep.Phase != 1)
 			{
-				const FVector HostLoc = Host->GetActorLocation();
-				if (TestMissionPhase != 30)
-				{
-					TestMissionPhase = 30;
-					TestExitSpot = HostLoc;
-					FallStart = HostLoc.Z;
-					TestTimer = Now;
-					return false;
-				}
-				if (FVector::Dist(HostLoc, TestExitSpot) > 5.f)
-				{
-					TestExitSpot = HostLoc;
-					TestTimer = Now;
-				}
-				if (HostLoc.Z < FallStart + 100.f || Now - TestTimer < 6.0)
+				if (StepTime < 10.f)
 				{
 					return false;
 				}
+				Note(FString::Printf(TEXT("client : plus de depart en cours avant la marche (phase %d, raison %d)"), static_cast<int32>(Dep.Phase), static_cast<int32>(Dep.Reason)), true);
+				TestLevel = -1;
+				return true;
 			}
-			const FVector Loc = W->GetDeparture().Location;
+			if (Dep.Ready < 1 || W->GetDepartureRemaining() > 84.f)
+			{
+				if (StepTime < 45.f)
+				{
+					return false;
+				}
+				Note(FString::Printf(TEXT("client : depart pas pret pour la marche en 45 s (%d/%d rassembles, %.0f s restantes)"), Dep.Ready, Dep.Needed, W->GetDepartureRemaining()), true);
+				TestLevel = -1;
+				return true;
+			}
+			const FVector Loc = Dep.Location;
 			BeginWalk(W, C, FVector(Loc.X, Loc.Y, C->GetActorLocation().Z), 250.f, true);
+			// La marche tient dans le temps restant du depart
+			WalkBudget = FMath::Max(10.f, W->GetDepartureRemaining() - 3.f);
+			WalkT0 = StepTime;
+			ArrivedAt = -1.f;
+			Note(FString::Printf(TEXT("client : marche vers le point de rassemblement depuis (%.0f, %.0f, %.0f), a %.1f m, depart : %d/%d rassembles, %.0f s restantes"),
+				C->GetActorLocation().X, C->GetActorLocation().Y, C->GetActorLocation().Z, FVector::Dist2D(C->GetActorLocation(), Loc) / 100.f, Dep.Ready, Dep.Needed,
+				W->GetDepartureRemaining()));
 			TestMissionPhase = 31;
 			return false;
 		}
 		if (W->IsTransitioning() || W->GetLevelSerial() != TestCountA)
 		{
 			TestMissionPhase = 0;
+			Note(FString::Printf(TEXT("client : depart lance %.1f s apres le debut de la marche (arrive au point en %s)"), StepTime - WalkT0,
+				ArrivedAt >= 0.f ? *FString::Printf(TEXT("%.1f s"), ArrivedAt) : TEXT("cours de marche")));
 			return true;
 		}
-		const EWalk R = StepWalk(W, C, Dt, 75.0, C->GetScareKind() >= 0 || C->IsInputLocked());
-		if ((R == EWalk::Moving || R == EWalk::Arrived) && StepTime < 90.f)
+		const EWalk R = StepWalk(W, C, Dt, WalkBudget, C->GetScareKind() >= 0 || C->IsInputLocked());
+		if (R == EWalk::Arrived && ArrivedAt < 0.f)
+		{
+			ArrivedAt = StepTime - WalkT0;
+			ArrivedPos = C->GetActorLocation();
+		}
+		// Depart lance (phase 2) : on attend la transition ; annule, expire ou disparu : fin de la marche
+		if (Dep.Phase == 2 && StepTime - WalkT0 < WalkBudget + 15.f)
+		{
+			return false;
+		}
+		const bool bExpired = Dep.Phase != 1 || W->GetDepartureRemaining() <= 0.f;
+		if ((R == EWalk::Moving || R == EWalk::Arrived) && !bExpired && StepTime - WalkT0 < WalkBudget + 2.f)
 		{
 			return false; // une fois rassemble, l'hote lance le depart
 		}
 		TestMissionPhase = 0;
-		Note(FString::Printf(TEXT("client : point de rassemblement non atteint a pied (%s)"), *WalkStats()), true);
+		const FString DepInfo = FString::Printf(TEXT("depart : phase %d, %d/%d rassembles, %.0f s restantes"), static_cast<int32>(Dep.Phase), Dep.Ready, Dep.Needed,
+			W->GetDepartureRemaining());
+		if (ArrivedAt >= 0.f)
+		{
+			// Arrive mais le groupe n'est pas parti : l'hote ne l'a pas compte (voir ses notes "hote : client ...")
+			Note(FString::Printf(TEXT("client : arrive au point de rassemblement a pied en %.1f s (en (%.0f, %.0f, %.0f), a %.1f m du point) mais non compte par l'hote (%s ; %s)"),
+				ArrivedAt, ArrivedPos.X, ArrivedPos.Y, ArrivedPos.Z, FVector::Dist2D(ArrivedPos, Dep.Location) / 100.f, *DepInfo, *WalkStats()), true);
+		}
+		else
+		{
+			Note(FString::Printf(TEXT("client : point de rassemblement non atteint a pied (%s ; %s ; en (%.0f, %.0f, %.0f))"), *WalkStats(), *DepInfo, C->GetActorLocation().X,
+				C->GetActorLocation().Y, C->GetActorLocation().Z), true);
+		}
 		return true;
 	});
-	LimitLastStep(110.f);
+	LimitLastStep(120.f);
 	Add(TEXT("v4.12 reseau : depart par l'echelle"), 1.f, [this, bClient]()
 	{
 		ABRWorld* W = GetBRWorld();
@@ -2006,7 +2281,10 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 			return false;
 		}
 		const bool bOk = W->GetLevelNumber() == Res.Target && W->IsLevelReady();
-		Note(FString::Printf(TEXT("%s : depart de groupe par l'echelle vers le Niveau %d %s"), bClient ? TEXT("client") : TEXT("hote"), Res.Target, bOk ? TEXT("effectue") : TEXT("ECHEC")), !bOk);
+		const FBRNetDeparture& Dep = W->GetDeparture();
+		Note(FString::Printf(TEXT("%s : depart de groupe par l'echelle vers le Niveau %d %s%s"), bClient ? TEXT("client") : TEXT("hote"), Res.Target, bOk ? TEXT("effectue") : TEXT("ECHEC"),
+			bOk ? TEXT("") : *FString::Printf(TEXT(" (depart : phase %d, raison %d, %d/%d rassembles)"), static_cast<int32>(Dep.Phase), static_cast<int32>(Dep.Reason), Dep.Ready,
+			Dep.Needed)), !bOk);
 		return true;
 	});
 }

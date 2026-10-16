@@ -129,10 +129,14 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerCompleteObjective(uint8 Which);
 
-	/** Commandes console d'un client executees par l'hote (1 coupure, 2 objectifs, 3 entite).
+	/** Commandes console d'un client executees par l'hote (1 coupure, 2 objectifs, 3 entite ; v4.15 : 4 etape du test
+	 *  reseau atteinte par ce client, voir NetTestMark).
 	 *  v4.7 : refusees par le serveur si AreCheatsAllowed() est faux chez lui. */
 	UFUNCTION(Server, Reliable)
 	void ServerCheat(uint8 Command, int32 Value);
+	/** v4.15 (test reseau -BRNetTest, developpement) : derniere etape du plan signalee par ce client (copie de son controleur
+	 *  chez l'hote) : l'hote s'en sert de barriere (changement de niveau, fin du test) */
+	int32 NetTestMark = 0;
 
 	bool IsInMenu() const { return bInMenu; }
 	/** Le joueur vient d'etre place : la camera du menu repart de sa nouvelle orientation */
