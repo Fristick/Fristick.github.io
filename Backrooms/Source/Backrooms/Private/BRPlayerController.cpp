@@ -70,6 +70,18 @@ namespace
 		}();
 		return Parsed;
 	}
+
+	/** v4.15 : -BRMegaLights=<0|1> (mesures, banc visuel) : OMBRES DE TOUTES LES LAMPES imposees pour la session (profils
+	 *  compris), jamais enregistrees */
+	int32 ForcedMegaLights()
+	{
+		static const int32 Parsed = []()
+		{
+			int32 Value = -1;
+			return (FParse::Value(FCommandLine::Get(), TEXT("BRMegaLights="), Value) && (Value == 0 || Value == 1)) ? Value : -1;
+		}();
+		return Parsed;
+	}
 #endif
 
 	/** v4.15 : etat reel de MegaLights (ombres de toutes les lampes), pour le rapport du mode de rendu */
@@ -80,7 +92,7 @@ namespace
 			return BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsNoRT", "MegaLights : indisponible (ray tracing matériel requis)"));
 		}
 		static IConsoleVariable* const ProjectCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.MegaLights.EnableForProject"));
-		const bool bOn = ProjectCVar && ProjectCVar->GetInt() != 0;
+		const bool bOn = ABRWorld::IsMegaLightsActive() || (ProjectCVar && ProjectCVar->GetInt() != 0);
 		return bOn ? FString(BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsOn", "MegaLights : actif (ombres de toutes les lampes)")))
 			: FString(BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsOff", "MegaLights : désactivé")));
 	}
@@ -113,6 +125,7 @@ namespace
 		Row_RTHitLighting,
 		Row_CreatureReflections, // v4.9 : creatures dans les reflets ray traces
 		Row_RTShadows,
+		Row_MegaLights,     // v4.15 : ombres de toutes les lampes (MegaLights)
 		Row_AreaLights,
 		Row_FullCreatures,
 		Row_VolumetricFog,
@@ -2995,6 +3008,7 @@ int32 ABRPlayerController::FindSettingRow(const FString& Name)
 	static const FNamedRow Rows[] = { { TEXT("WindowMode"), Row_WindowMode }, { TEXT("Resolution"), Row_Resolution }, { TEXT("RenderScale"), Row_RenderScale },
 		{ TEXT("Profile"), Row_Profile }, { TEXT("HardwareRT"), Row_HardwareRT }, { TEXT("RTHitLighting"), Row_RTHitLighting },
 		{ TEXT("CreatureReflections"), Row_CreatureReflections }, { TEXT("RTShadows"), Row_RTShadows }, { TEXT("AreaLights"), Row_AreaLights },
+		{ TEXT("MegaLights"), Row_MegaLights },
 		{ TEXT("UiScale"), Row_UiScale }, { TEXT("HudOpacity"), Row_HudOpacity }, { TEXT("Crosshair"), Row_Crosshair }, { TEXT("QuickBar"), Row_QuickBar },
 		{ TEXT("Objectives"), Row_Objectives }, { TEXT("EffectsVolume"), Row_EffectsVolume }, { TEXT("VoiceVolume"), Row_VoiceVolume },
 		{ TEXT("Subtitles"), Row_Subtitles }, { TEXT("LidarSize"), Row_LidarSize }, { TEXT("LidarContrast"), Row_LidarContrast },
@@ -3036,6 +3050,7 @@ int32 ABRPlayerController::GetSettingCategory(int32 Index) const
 	case Row_RTHitLighting:
 	case Row_CreatureReflections:
 	case Row_RTShadows:
+	case Row_MegaLights:
 	case Row_AreaLights:
 	case Row_FullCreatures:
 	case Row_VolumetricFog:
@@ -3132,6 +3147,8 @@ FString ABRPlayerController::GetSettingLabel(int32 Index) const
 		return BR_STR(NSLOCTEXT("BR", "Menu.RefletsRayTracesHauteQualite", "REFLETS RAY TRAC\u00c9S HAUTE QUALIT\u00c9"));
 	case Row_RTShadows:
 		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresRayTraceesLampe", "OMBRES RAY TRAC\u00c9ES (LAMPE)"));
+	case Row_MegaLights:
+		return BR_STR(NSLOCTEXT("BR", "Menu.MegaLights", "OMBRES DE TOUTES LES LAMPES"));
 	case Row_AreaLights:
 		return BR_STR(NSLOCTEXT("BR", "Menu.NeonsLumieresSurfaciques", "N\u00c9ONS EN LUMI\u00c8RES SURFACIQUES"));
 	case Row_FullCreatures:
@@ -3254,6 +3271,13 @@ FString ABRPlayerController::GetSettingValue(int32 Index) const
 		return !IsHardwareRayTracingAvailable() ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Indisponible", "INDISPONIBLE"))) : OnOff(S.bRTHitLighting);
 	case Row_RTShadows:
 		return !IsHardwareRayTracingAvailable() ? FString(BR_STR(NSLOCTEXT("BR", "Menu.Indisponible", "INDISPONIBLE"))) : OnOff(S.bRTShadows);
+	case Row_MegaLights:
+		if (!IsHardwareRayTracingAvailable())
+		{
+			return BR_STR(NSLOCTEXT("BR", "Menu.Indisponible", "INDISPONIBLE"));
+		}
+		// v4.15 : demande, mais sans effet tant que le ray tracing materiel est coupe dans les reglages
+		return (S.bMegaLights && !S.bHardwareRT) ? FString(BR_STR(NSLOCTEXT("BR", "Menu.MegaLightsNoRT", "SANS RT MATÉRIEL"))) : OnOff(S.bMegaLights);
 	case Row_AreaLights:
 		return OnOff(S.bAreaLights);
 	case Row_FullCreatures:
@@ -3336,7 +3360,15 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_MaxFPS:
 		return BR_STR(NSLOCTEXT("BR", "Menu.LimiterImagesSecondeReduitChaleur", "Limiter les images par seconde r\u00e9duit la chaleur et le bruit de la carte graphique. Sans effet dans l'\u00e9diteur."));
 	case Row_Profile:
-		return BR_STR(NSLOCTEXT("BR", "Menu.PerformanceQualiteEleveeLumenLogiciel", "PERFORMANCE : qualit\u00e9 \u00c9lev\u00e9e, Lumen logiciel, rendu \u00e0 67 % (TSR). QUALIT\u00c9 : \u00c9pique, Lumen en ray tracing mat\u00e9riel (cache de surfaces), rendu \u00e0 80 %. RTX FLUIDE : ray tracing mat\u00e9riel, rendu \u00e0 67 % agrandi par TSR, ombres des n\u00e9ons jusqu'\u00e0 25 m, Hound all\u00e9g\u00e9 : vise 60 images/s stables avec une carte RTX. CIN\u00c9MATIQUE : reflets \u00e9clair\u00e9s par les rayons, ombres ray trac\u00e9es de la lampe, mod\u00e8les complets, rendu \u00e0 100 %. Modifier un r\u00e9glage ci-dessous passe en PERSONNALIS\u00c9. S'applique tout de suite, aussi aux zones d\u00e9j\u00e0 charg\u00e9es."));
+	{
+		FString Hint = BR_STR(NSLOCTEXT("BR", "Menu.PerformanceQualiteEleveeLumenLogiciel", "PERFORMANCE : qualit\u00e9 \u00c9lev\u00e9e, Lumen logiciel, rendu \u00e0 67 % (TSR). QUALIT\u00c9 : \u00c9pique, Lumen en ray tracing mat\u00e9riel (cache de surfaces), rendu \u00e0 80 %. RTX FLUIDE : ray tracing mat\u00e9riel, rendu \u00e0 67 % agrandi par TSR, ombres des n\u00e9ons jusqu'\u00e0 25 m, Hound all\u00e9g\u00e9 : vise 60 images/s stables avec une carte RTX. CIN\u00c9MATIQUE : reflets \u00e9clair\u00e9s par les rayons, ombres ray trac\u00e9es de la lampe, mod\u00e8les complets, rendu \u00e0 100 %. Modifier un r\u00e9glage ci-dessous passe en PERSONNALIS\u00c9. S'applique tout de suite, aussi aux zones d\u00e9j\u00e0 charg\u00e9es."));
+		if (IsHardwareRayTracingAvailable())
+		{
+			// v4.15 : avec MegaLights, la limite de 25 m ne vaut plus pour les plafonniers
+			Hint += TEXT(" ") + FString(BR_STR(NSLOCTEXT("BR", "Menu.ProfileMegaLightsNote", "QUALIT\u00c9, RTX FLUIDE et CIN\u00c9MATIQUE activent aussi OMBRES DE TOUTES LES LAMPES : chaque plafonnier a son ombre, \u00e0 toute distance.")));
+		}
+		return Hint;
+	}
 	case Row_Quality:
 		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresLumenTexturesAntiCrenelage", "Ombres, Lumen, textures, anti-cr\u00e9nelage (scalability). S'applique tout de suite."));
 	case Row_HardwareRT:
@@ -3346,7 +3378,19 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_RTHitLighting:
 		return BR_STR(NSLOCTEXT("BR", "Menu.RefletsEclairesRayonsEuxMemes", "Reflets \u00e9clair\u00e9s par les rayons eux-m\u00eames (eau, flaques, carrelage, m\u00e9tal) au lieu du cache de surfaces de Lumen. Le plus co\u00fbteux des r\u00e9glages : seul le profil CIN\u00c9MATIQUE l'active."));
 	case Row_RTShadows:
-		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresLampeTorcheRayTracees", "Ombres de la lampe torche ray trac\u00e9es (contact net, pas de recalcul des ombres virtuelles \u00e0 chaque mouvement de la lampe). Les plafonniers gardent les ombres virtuelles (VSM), moins ch\u00e8res pour des dizaines de lumi\u00e8res fixes."));
+	{
+		FString Hint = BR_STR(NSLOCTEXT("BR", "Menu.OmbresLampeTorcheRayTracees", "Ombres de la lampe torche ray trac\u00e9es (contact net, pas de recalcul des ombres virtuelles \u00e0 chaque mouvement de la lampe). Les plafonniers gardent les ombres virtuelles (VSM), moins ch\u00e8res pour des dizaines de lumi\u00e8res fixes."));
+		if (ABRWorld::IsMegaLightsActive())
+		{
+			// v4.15 : la phrase sur les plafonniers ne vaut plus avec MegaLights
+			Hint += TEXT(" ") + FString(BR_STR(NSLOCTEXT("BR", "Menu.RTShadowsMegaLightsNote", "Avec OMBRES DE TOUTES LES LAMPES, les plafonniers ont eux aussi des ombres ray trac\u00e9es (MegaLights).")));
+		}
+		return Hint;
+	}
+	case Row_MegaLights:
+		return IsHardwareRayTracingAvailable()
+			? FString(BR_STR(NSLOCTEXT("BR", "Menu.MegaLightsHint", "Chaque plafonnier projette son ombre (MegaLights, ombres ray trac\u00e9es) : la lumi\u00e8re ne traverse plus les murs, les coins et les pi\u00e8ces voisines restent dans l'ombre. Demande le ray tracing mat\u00e9riel ; un l\u00e9ger grain peut appara\u00eetre quand les n\u00e9ons clignotent. Coup\u00e9 dans le profil PERFORMANCE, actif dans QUALIT\u00c9, RTX FLUIDE et CIN\u00c9MATIQUE. S'applique tout de suite.")))
+			: RayTracingUnavailableReason();
 	case Row_AreaLights:
 		return BR_STR(NSLOCTEXT("BR", "Menu.OmbresDoucesNeonsAppliqueTout", "Ombres douces des n\u00e9ons. S'applique tout de suite, zones d\u00e9j\u00e0 charg\u00e9es comprises (quelques lumi\u00e8res par image)."));
 	case Row_FullCreatures:
@@ -3538,6 +3582,7 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 	case Row_HardwareRT:
 	case Row_RTHitLighting:
 	case Row_RTShadows:
+	case Row_MegaLights:
 		if (!IsHardwareRayTracingAvailable())
 		{
 			// v4.9 : option indisponible sur cette machine (plateforme, RHI, carte) : expliquee, pas basculee pour rien
@@ -3551,6 +3596,10 @@ void ABRPlayerController::AdjustSetting(int32 Index, int32 Direction)
 		else if (Index == Row_RTHitLighting)
 		{
 			S.bRTHitLighting = !S.bRTHitLighting;
+		}
+		else if (Index == Row_MegaLights)
+		{
+			S.bMegaLights = !S.bMegaLights;
 		}
 		else
 		{
@@ -3604,6 +3653,7 @@ void ABRPlayerController::LoadSettings()
 		S.GraphicsProfile = bHadQuality ? 3 : 1;
 	}
 	Cfg.GetBool(SettingsSection, TEXT("RTShadows"), S.bRTShadows);
+	Cfg.GetBool(SettingsSection, TEXT("MegaLights"), S.bMegaLights);
 	Cfg.GetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
 	Cfg.GetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
 	Cfg.GetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
@@ -3662,6 +3712,12 @@ void ABRPlayerController::LoadSettings()
 		ApplyGraphicsProfile(ForcedGraphicsProfile());
 		UE_LOG(LogBackrooms, Log, TEXT("Profil graphique impose par -BRProfile=%d (non enregistre)"), ForcedGraphicsProfile());
 	}
+	// v4.15 : -BRMegaLights=<0|1> : ombres de toutes les lampes imposees (aussi apres un changement de profil : ApplySettings)
+	if (ForcedMegaLights() >= 0)
+	{
+		S.bMegaLights = ForcedMegaLights() == 1;
+		UE_LOG(LogBackrooms, Log, TEXT("OMBRES DE TOUTES LES LAMPES imposees par -BRMegaLights=%d (non enregistre)"), ForcedMegaLights());
+	}
 #endif
 }
 
@@ -3690,6 +3746,9 @@ void ABRPlayerController::ApplyGraphicsProfile(int32 Profile)
 		S.bVolumetricFog = true; S.bFullCreatures = false; S.CreatureReflections = 1;
 		break;
 	}
+	// v4.15 : OMBRES DE TOUTES LES LAMPES (MegaLights) : coupees en Performance (Lumen logiciel, pas de ray tracing), actives
+	// dans les profils en ray tracing materiel
+	S.bMegaLights = Profile != 0;
 	S.GraphicsProfile = (Profile == 4 || (Profile >= 0 && Profile <= 2)) ? Profile : 1;
 }
 
@@ -3762,9 +3821,15 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetFloat(SettingsSection, TEXT("FOV"), S.FOV);
 	// v4.15 : profil impose par -BRProfile=<n> (tests) : les lignes du profil ne sont pas ecrites, celles du joueur restent
 	bool bKeepProfile = false;
+	bool bKeepMegaLights = false;
 #if !UE_BUILD_SHIPPING
 	bKeepProfile = ForcedGraphicsProfile() >= 0;
+	bKeepMegaLights = bKeepProfile || ForcedMegaLights() >= 0;
 #endif
+	if (!bKeepMegaLights)
+	{
+		Cfg.SetBool(SettingsSection, TEXT("MegaLights"), S.bMegaLights);
+	}
 	if (!bKeepProfile)
 	{
 		Cfg.SetInt64(SettingsSection, TEXT("Quality"), S.Quality);
@@ -3804,6 +3869,13 @@ void ABRPlayerController::SaveSettings() const
 
 void ABRPlayerController::ApplySettings()
 {
+#if !UE_BUILD_SHIPPING
+	// v4.15 : -BRMegaLights=<0|1> garde la main apres un changement de profil (tests, banc visuel)
+	if (ForcedMegaLights() >= 0)
+	{
+		FBRSettings::Get().bMegaLights = ForcedMegaLights() == 1;
+	}
+#endif
 	const FBRSettings& S = FBRSettings::Get();
 	UWorld* W = GetWorld();
 	if (!GEngine || !W)
@@ -3856,6 +3928,10 @@ void ABRPlayerController::ApplySettings()
 	// v4.8 : TSR : historique a 100 % (au lieu de 200 % en qualite Cinematique) hors profil Cinematique : a 1440p et
 	// au-dela, c'est l'un des postes les plus chers du TSR, pour un gain de nettete faible
 	Cmd(FString::Printf(TEXT("r.TSR.History.ScreenPercentage %d"), S.GraphicsProfile == 2 ? 200 : 100));
+	// v4.15 : MegaLights (OMBRES DE TOUTES LES LAMPES, active par le post-process de la camera) : echantillons par pixel.
+	// RTX fluide : 2 (vise 60 images/s avec une carte de 8 Go) ; sinon 4 a partir de la qualite Elevee, 2 en dessous (comme
+	// BaseScalability). Toujours fixe ici : une valeur donnee par la console l'emporte ensuite sur la scalability
+	Cmd(FString::Printf(TEXT("r.MegaLights.NumSamplesPerPixel %d"), (S.GraphicsProfile == 4 || S.Quality < 2) ? 2 : 4));
 
 	// Volume general. v4.11 : effets et voix separes. Le volume principal de l'appareil porte general x voix (il agit aussi
 	// sur le chat vocal) ; les sons du jeu sont multiplies par effets / voix (au plus 4, voix au moins 25 %) : chacun obtient

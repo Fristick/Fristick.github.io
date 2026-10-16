@@ -1343,10 +1343,17 @@ ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea
 		LC->SetTemperature(D.LightTemperatureK);
 	}
 	LC->SetAttenuationRadius(D.LightRadius);
-	LC->SetCastShadows(R.bShadow && R.bShadowOn);
-	LC->SetVolumetricScatteringIntensity(D.bVolumetricFog ? D.VolumetricScatter : 0.f);
-	LC->MaxDrawDistance = D.ViewDistance * 0.75f;
+	// v4.15 : OMBRES DE TOUTES LES LAMPES (MegaLights, ray tracing materiel) : chaque plafonnier projette son ombre (la lumiere
+	// et l'eclairage global ne traversent plus les murs), sans distance d'ombre ni tirage ; affichee jusqu'au bout de la vue.
+	// Sinon (Performance, Linux, macOS, sans RT) : ombres tirees (ShadowChance) et coupees au loin, comme avant
+	const bool bMega = ABRWorld::IsMegaLightsActive();
+	LC->bAllowMegaLights = true;
+	LC->MegaLightsShadowMethod = EMegaLightsShadowMethod::Default;
+	LC->SetCastShadows(bMega || (R.bShadow && R.bShadowOn));
+	LC->SetVolumetricScatteringIntensity(LightScatter(R, bMega));
+	LC->MaxDrawDistance = D.ViewDistance * (bMega ? 1.f : 0.75f);
 	LC->MaxDistanceFadeRange = 800.f;
+	R.bMega = bMega;
 	LC->SetVisibility(Power > 0.01f);
 	LC->RegisterComponent();
 	Extra.Add(LC);
@@ -1407,9 +1414,58 @@ int32 ABRChunk::RefreshLightTypes(bool bArea, double BudgetMs)
 	return Count;
 }
 
+float ABRChunk::LightScatter(const FLightRecord& R, bool bMega) const
+{
+	const ABRWorld* W = World.Get();
+	if (!W || !W->Def().bVolumetricFog)
+	{
+		return 0.f;
+	}
+	// v4.15 : avec MegaLights, le brouillard volumetrique est eclaire par echantillons (historique d'une image a l'autre) :
+	// un neon qui clignote y laissait des trainees ; il n'eclaire plus le brouillard
+	const bool bFlickers = Flickers.IsValidIndex(R.FlickerIndex) && Flickers[R.FlickerIndex].bFlickers;
+	return (bMega && bFlickers) ? 0.f : W->Def().VolumetricScatter;
+}
+
+int32 ABRChunk::ApplyMegaLights(bool bOn)
+{
+	const ABRWorld* W = World.Get();
+	if (!W)
+	{
+		return 0;
+	}
+	const float View = W->Def().ViewDistance;
+	int32 Changed = 0;
+	for (FLightRecord& R : LightRecords)
+	{
+		ULocalLightComponent* LC = R.Comp.Get();
+		if (!LC || R.bMega == bOn)
+		{
+			continue;
+		}
+		R.bMega = bOn;
+		// Retour sans MegaLights : l'ombre suit de nouveau la distance (UpdateShadowLOD, au prochain passage)
+		LC->SetCastShadows(bOn || (R.bShadow && R.bShadowOn));
+		LC->SetVolumetricScatteringIntensity(LightScatter(R, bOn));
+		LC->MaxDrawDistance = View * (bOn ? 1.f : 0.75f);
+		LC->MarkRenderStateDirty();
+		++Changed;
+	}
+	return Changed;
+}
+
 int32 ABRChunk::UpdateShadowLOD(const TArray<FVector>& Viewers, float ShadowDistance)
 {
 	int32 Shadowed = 0;
+	if (ABRWorld::IsMegaLightsActive())
+	{
+		// v4.15 : MegaLights : toutes les lumieres projettent leur ombre, quelle que soit la distance (rien a couper)
+		for (const FLightRecord& R : LightRecords)
+		{
+			Shadowed += R.bMega ? 1 : 0;
+		}
+		return Shadowed;
+	}
 	for (FLightRecord& R : LightRecords)
 	{
 		if (!R.bShadow)

@@ -83,6 +83,9 @@ public:
 	/** v4.8 : ombres des lumieres selon la distance aux joueurs locaux (au-dela de ShadowDistance, plus d'ombre ; marge de
 	 *  10 % pour ne pas basculer sans cesse). Retourne le nombre de lumieres qui projettent une ombre. */
 	int32 UpdateShadowLOD(const TArray<FVector>& Viewers, float ShadowDistance);
+	/** v4.15 : OMBRES DE TOUTES LES LAMPES (ABRWorld::IsMegaLightsActive) : chaque lumiere projette son ombre, a toute la
+	 *  distance de vue ; sinon, retour aux ombres a distance. Retourne le nombre de lumieres modifiees */
+	int32 ApplyMegaLights(bool bOn);
 	/** Tous les composants et objets sont crees */
 	bool IsReady() const { return bReady; }
 	/** Sol et murs (collisions) crees : on peut marcher dessus */
@@ -295,6 +298,8 @@ protected:
 		/** L'ombre est actuellement projetee (selon la distance aux joueurs) */
 		bool bShadowOn = false;
 		bool bArea = false;
+		/** v4.15 : creee ou reglee pour MegaLights (ombre toujours projetee, distance d'affichage complete) */
+		bool bMega = false;
 		/** Intensite nominale appliquee (lumens, deja reduits pour une lumiere surfacique) */
 		float Lumens = 0.f;
 		int32 FlickerIndex = INDEX_NONE;
@@ -305,6 +310,9 @@ protected:
 	/** Cree le composant de lumiere d'un enregistrement (surfacique ou ponctuel), l'enregistre et le range dans Extra */
 	ULocalLightComponent* CreateLightComponent(FLightRecord& R, bool bArea);
 	static bool IsAreaFixture(EBRFixture Fixture);
+	/** v4.15 : diffusion dans le brouillard volumetrique d'une lumiere (nulle pour un neon qui clignote avec MegaLights :
+	 *  pas de trainees dans le brouillard) */
+	float LightScatter(const FLightRecord& R, bool bMega) const;
 	/** Prochain lot a creer : avec collision d'abord si bCollisionFirst ; vide s'il n'y en a plus de ce type */
 	FString NextBatchKey(bool bCollision) const;
 	TWeakObjectPtr<ABRWorld> World;

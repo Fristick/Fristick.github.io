@@ -505,6 +505,9 @@ struct FBRSettings
 	bool bRTHitLighting = false;
 	/** v4.5 : ombres ray tracees pour la lampe torche (les plafonniers gardent les ombres virtuelles) */
 	bool bRTShadows = false;
+	/** v4.15 : OMBRES DE TOUTES LES LAMPES : chaque plafonnier projette son ombre par MegaLights (rayons). Effectif seulement
+	 *  avec le ray tracing materiel actif (ABRWorld::IsMegaLightsActive) ; coupe dans le profil Performance */
+	bool bMegaLights = true;
 	bool bAreaLights = true;    // neons en lumieres surfaciques
 	bool bVolumetricFog = true;
 	bool bFilmGrain = true;

@@ -41,9 +41,12 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/ReverbEffect.h"
 #include "HAL/PlatformTime.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Net/UnrealNetwork.h"
+#include "RenderUtils.h"
+#include "RHIShaderPlatform.h"
 #include "Sound/SoundBase.h"
 
 namespace
@@ -1968,6 +1971,19 @@ float ABRWorld::LocalShadowDistance()
 	}
 }
 
+bool ABRWorld::IsMegaLightsActive()
+{
+	// v4.15 : MegaLights trace l'ombre de chaque lumiere (ray tracing materiel) pour un cout presque fixe. Sans RT materiel,
+	// les lumieres MegaLights ne seraient plus ombrees du tout : le chemin d'avant (ombres a distance) reste le repli
+	const FBRSettings& S = FBRSettings::Get();
+	if (!S.bMegaLights || !S.bHardwareRT || !ABRPlayerController::IsHardwareRayTracingAvailable())
+	{
+		return false;
+	}
+	static IConsoleVariable* const Allowed = IConsoleManager::Get().FindConsoleVariable(TEXT("r.MegaLights.Allowed"));
+	return (!Allowed || Allowed->GetInt() != 0) && ShouldCompileMegaLightsShaders(GMaxRHIShaderPlatform);
+}
+
 bool ABRWorld::ShouldCastLocalShadow(const FVector& LightPos) const
 {
 	const ABRCharacter* P = GetPlayer();
@@ -2033,11 +2049,17 @@ void ABRWorld::OnGraphicsSettingsChanged()
 {
 	// v4.8 : les reglages s'appliquent aussi a ce qui est deja construit (avant : seulement aux zones chargees ensuite)
 	const bool bArea = FBRSettings::Get().bAreaLights;
+	// v4.15 : OMBRES DE TOUTES LES LAMPES : ombres, distance d'affichage et diffusion des lumieres deja creees
+	const bool bMega = IsMegaLightsActive();
 	for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
 	{
 		if (Pair.Value && !Pair.Value->LightTypesMatch(bArea))
 		{
 			LightRefreshQueue.AddUnique(Pair.Value.Get());
+		}
+		if (Pair.Value)
+		{
+			Pair.Value->ApplyMegaLights(bMega);
 		}
 	}
 	ShadowLODTimer = 0.f;

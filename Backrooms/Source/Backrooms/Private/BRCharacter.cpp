@@ -116,6 +116,9 @@ ABRCharacter::ABRCharacter()
 	Flashlight->SetSourceRadius(2.f);
 	Flashlight->SetVolumetricScatteringIntensity(0.6f);
 	Flashlight->SetVisibility(false);
+	// v4.15 : hors de MegaLights (OMBRES DE TOUTES LES LAMPES) : la lampe garde son ombre nette (virtuelle, ou ray tracee dans
+	// le profil Cinematique) et un faisceau sans bruit quand elle bouge vite
+	Flashlight->bAllowMegaLights = false;
 
 	HandMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HandMesh"));
 	HandMesh->SetupAttachment(Camera);
@@ -131,6 +134,7 @@ ABRCharacter::ABRCharacter()
 	InfraredLight->SetAttenuationRadius(2000.f);
 	InfraredLight->SetCastShadows(false);
 	InfraredLight->SetVisibility(false);
+	InfraredLight->bAllowMegaLights = false; // v4.15 : vision nocturne sans bruit d'echantillonnage
 
 	HeartAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("HeartAudio"));
 	HeartAudio->SetupAttachment(RootComponent);
@@ -3429,6 +3433,11 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.LumenReflectionQuality = Set.Quality >= 3 ? 2.f : 1.f;
 	S.bOverride_LumenFrontLayerTranslucencyReflections = true;
 	S.LumenFrontLayerTranslucencyReflections = Set.Quality >= 2;
+
+	// v4.15 : OMBRES DE TOUTES LES LAMPES : MegaLights active par la camera du joueur seulement (r.MegaLights.EnableForProject
+	// reste a 0 : autres vues, Linux, macOS et sans ray tracing materiel gardent l'eclairage d'avant)
+	S.bOverride_bMegaLights = true;
+	S.bMegaLights = ABRWorld::IsMegaLightsActive();
 }
 
 // =====================================================================================================================

@@ -11,6 +11,8 @@
 //     rester lisible et les yeux du Smiler visibles dans le noir.
 // Le niveau est recharge pour chaque profil : meme etat de depart (chunks, lumieres, exposition). Les reglages du joueur
 // sont retablis a la fin (rien n'est enregistre). Duree : 10 a 15 minutes.
+// -BRMegaLights=<0|1> (hors version finale) impose OMBRES DE TOUTES LES LAMPES dans tous les profils (deux passages a
+// comparer) ; l'etat reel de MegaLights est ecrit avec le mode de rendu de chaque mesure.
 #include "BRAutoTest.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
@@ -105,6 +107,11 @@ void ABRAutoTest::AddVisualSteps()
 		R.Scene = TEXT("vis");
 		R.FirstLogLine = LogLineCount();
 		Reports.Add(R);
+		int32 ForcedMega = -1;
+		FParse::Value(FCommandLine::Get(), TEXT("BRMegaLights="), ForcedMega);
+		Note(FString::Printf(TEXT("banc visuel : OMBRES DE TOUTES LES LAMPES %s ; ray tracing materiel %s"),
+			ForcedMega == 0 ? TEXT("imposees a 0 (-BRMegaLights=0)") : (ForcedMega == 1 ? TEXT("imposees a 1 (-BRMegaLights=1)") : TEXT("selon chaque profil")),
+			ABRPlayerController::IsHardwareRayTracingAvailable() ? TEXT("actif") : TEXT("indisponible")));
 		return true;
 	});
 
