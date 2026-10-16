@@ -278,6 +278,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Salle de fosses : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestVisual")))
+	{
+		// v4.15 (realisme) : banc visuel seul (poses fixes, profils, captures et mesures a comparer d'un lot a l'autre)
+		AddVisualSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Banc visuel v4.15 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	BuildPlan(Levels);
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Debut : %d etapes, %d niveaux. Captures et rapport : %s"), Plan.Num(), Levels.Num(), *OutDir);
 }
@@ -910,7 +922,7 @@ void ABRAutoTest::EndMeasure(FLevelReport& R)
 	}
 	if (ABRPlayerController* PC = GetPC())
 	{
-		Note(PC->GetRenderModeText());
+		Note(PC->GetRenderModeReport());
 	}
 	// -BRAutoTestGPU : detail du temps passe par le processeur graphique (dans Saved/Logs/Backrooms.log)
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestGPU")) && GEngine)
@@ -1841,7 +1853,7 @@ void ABRAutoTest::WriteReport()
 	}
 	if (ABRPlayerController* PC = GetPC())
 	{
-		L.Add(PC->GetRenderModeText());
+		L.Add(PC->GetRenderModeReport());
 	}
 	L.Add(TEXT(""));
 	// v4.10 : une verification non faite n'est jamais presentee comme reussie

@@ -364,4 +364,8 @@ private:
 	float PitStartDist = 0.f;
 	/** Chute : instant ou le joueur commence a marcher vers la fosse */
 	double FallStart = 0.0;
+
+	/** v4.15 (realisme) : banc visuel -BRAutoTestVisual (BRAutoTestVisual.cpp) : poses fixes par niveau et par profil,
+	 *  captures vis_<niveau>_<profil>_<pose> et mesures (Mesures.csv), coupure et lampe au Level 0 */
+	void AddVisualSteps();
 };

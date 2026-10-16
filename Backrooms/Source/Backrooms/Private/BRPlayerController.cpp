@@ -42,6 +42,8 @@
 #include "RHI.h"
 #include "UnrealClient.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Net/VoiceConfig.h"
 #include "BRAssets.h"
 #include "BRDisplay.h"
@@ -55,6 +57,33 @@
 namespace
 {
 	const TCHAR* SettingsSection = TEXT("/Script/Backrooms.BRSettings");
+
+#if !UE_BUILD_SHIPPING
+	/** v4.15 : profil graphique impose par la ligne de commande (-BRProfile=<0|1|2|4> : mesures, banc visuel), applique a
+	 *  chaque lecture des reglages et jamais enregistre (le profil du joueur reste tel quel dans BackroomsPlayer.ini) */
+	int32 ForcedGraphicsProfile()
+	{
+		static const int32 Parsed = []()
+		{
+			int32 Value = -1;
+			return (FParse::Value(FCommandLine::Get(), TEXT("BRProfile="), Value) && (Value == 0 || Value == 1 || Value == 2 || Value == 4)) ? Value : -1;
+		}();
+		return Parsed;
+	}
+#endif
+
+	/** v4.15 : etat reel de MegaLights (ombres de toutes les lampes), pour le rapport du mode de rendu */
+	FString MegaLightsReportText()
+	{
+		if (!ABRPlayerController::IsHardwareRayTracingAvailable())
+		{
+			return BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsNoRT", "MegaLights : indisponible (ray tracing matériel requis)"));
+		}
+		static IConsoleVariable* const ProjectCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.MegaLights.EnableForProject"));
+		const bool bOn = ProjectCVar && ProjectCVar->GetInt() != 0;
+		return bOn ? FString(BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsOn", "MegaLights : actif (ombres de toutes les lampes)")))
+			: FString(BR_STR(NSLOCTEXT("BR", "Menu.RenderMegaLightsOff", "MegaLights : désactivé")));
+	}
 
 	// Ordre d'affichage (deux colonnes) : controles, son, affichage, puis graphismes
 	enum ESettingRow
@@ -3626,6 +3655,14 @@ void ABRPlayerController::LoadSettings()
 	{
 		ApplyGraphicsProfile(S.GraphicsProfile);
 	}
+#if !UE_BUILD_SHIPPING
+	// v4.15 : -BRProfile=<n> (mesures, banc visuel) : ce profil pour cette session, jamais enregistre (SaveSettings)
+	if (ForcedGraphicsProfile() >= 0)
+	{
+		ApplyGraphicsProfile(ForcedGraphicsProfile());
+		UE_LOG(LogBackrooms, Log, TEXT("Profil graphique impose par -BRProfile=%d (non enregistre)"), ForcedGraphicsProfile());
+	}
+#endif
 }
 
 void ABRPlayerController::ApplyGraphicsProfile(int32 Profile)
@@ -3709,6 +3746,13 @@ FString ABRPlayerController::GetRenderModeText(bool bShort) const
 	return BRLoc::Fmt(NSLOCTEXT("BR", "Menu.ModeReelRhinameSm6Ray", "Mode r\u00e9el : {RHIName} {SM6}  \u00b7  ray tracing mat\u00e9riel {RTOn}  \u00b7  Lumen {LumenHW} (reflets : {Hit})  \u00b7  ombres : {VSM}{LampRT}  \u00b7  rendu {X}x{Y} \u2192 {X2}x{Y2} ({SP} %, {Upscaler}{DynRes})"), { { TEXT("RHIName"), BRLoc::Arg(RHIName) }, { TEXT("SM6"), BRLoc::Arg(bSM6 ? TEXT("SM6") : TEXT("SM5")) }, { TEXT("RTOn"), BRLoc::Arg(bRTOn ? BR_STR(NSLOCTEXT("BR", "Menu.Actif", "actif")) : BR_STR(NSLOCTEXT("BR", "Menu.Indisponible2", "indisponible"))) }, { TEXT("LumenHW"), BRLoc::Arg(bLumenHW ? BR_STR(NSLOCTEXT("BR", "Menu.Materiel", "mat\u00e9riel")) : BR_STR(NSLOCTEXT("BR", "Menu.Logiciel", "logiciel"))) }, { TEXT("Hit"), BRLoc::Arg(bHit ? BR_STR(NSLOCTEXT("BR", "Menu.EclairesRayons", "\u00e9clair\u00e9s par les rayons")) : BR_STR(NSLOCTEXT("BR", "Menu.CacheSurfaces", "cache de surfaces"))) }, { TEXT("VSM"), BRLoc::Arg(bVSM ? BR_STR(NSLOCTEXT("BR", "Menu.VirtuellesVsm", "virtuelles (VSM)")) : BR_STR(NSLOCTEXT("BR", "Menu.CartesClassiques", "cartes classiques"))) }, { TEXT("LampRT"), BRLoc::Arg(bLampRT ? BR_STR(NSLOCTEXT("BR", "Menu.LampeRayTracee", ", lampe ray trac\u00e9e")) : TEXT("")) }, { TEXT("X"), BRLoc::Int(In.X) }, { TEXT("Y"), BRLoc::Int(In.Y) }, { TEXT("X2"), BRLoc::Int(VP.X) }, { TEXT("Y2"), BRLoc::Int(VP.Y) }, { TEXT("SP"), BRLoc::Int(FMath::RoundToInt(SP)) }, { TEXT("Upscaler"), BRLoc::Arg(Upscaler) }, { TEXT("DynRes"), BRLoc::Arg(bDynRes ? BR_STR(NSLOCTEXT("BR", "Menu.ResolutionDynamique", ", r\u00e9solution dynamique")) : TEXT("")) } });
 }
 
+FString ABRPlayerController::GetRenderModeReport() const
+{
+	// v4.15 : ligne du rapport du test : mode de rendu reel, plus l'etat de MegaLights (la ligne affichee dans les
+	// parametres ne change pas)
+	return GetRenderModeText() + TEXT("  ·  ") + MegaLightsReportText();
+}
+
 void ABRPlayerController::SaveSettings() const
 {
 	FConfigFile& Cfg = BRConfig::Get();
@@ -3716,14 +3760,24 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetFloat(SettingsSection, TEXT("Sensitivity"), S.Sensitivity);
 	Cfg.SetBool(SettingsSection, TEXT("InvertY"), S.bInvertY);
 	Cfg.SetFloat(SettingsSection, TEXT("FOV"), S.FOV);
-	Cfg.SetInt64(SettingsSection, TEXT("Quality"), S.Quality);
-	Cfg.SetInt64(SettingsSection, TEXT("GraphicsProfile"), S.GraphicsProfile);
-	Cfg.SetBool(SettingsSection, TEXT("RTShadows"), S.bRTShadows);
-	Cfg.SetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
-	Cfg.SetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
-	Cfg.SetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
-	Cfg.SetBool(SettingsSection, TEXT("FullCreatures"), S.bFullCreatures);
-	Cfg.SetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
+	// v4.15 : profil impose par -BRProfile=<n> (tests) : les lignes du profil ne sont pas ecrites, celles du joueur restent
+	bool bKeepProfile = false;
+#if !UE_BUILD_SHIPPING
+	bKeepProfile = ForcedGraphicsProfile() >= 0;
+#endif
+	if (!bKeepProfile)
+	{
+		Cfg.SetInt64(SettingsSection, TEXT("Quality"), S.Quality);
+		Cfg.SetInt64(SettingsSection, TEXT("GraphicsProfile"), S.GraphicsProfile);
+		Cfg.SetBool(SettingsSection, TEXT("RTShadows"), S.bRTShadows);
+		Cfg.SetBool(SettingsSection, TEXT("HardwareRT"), S.bHardwareRT);
+		Cfg.SetBool(SettingsSection, TEXT("RTHitLighting"), S.bRTHitLighting);
+		Cfg.SetBool(SettingsSection, TEXT("AreaLights"), S.bAreaLights);
+		Cfg.SetBool(SettingsSection, TEXT("FullCreatures"), S.bFullCreatures);
+		Cfg.SetBool(SettingsSection, TEXT("VolumetricFog"), S.bVolumetricFog);
+		Cfg.SetInt64(SettingsSection, TEXT("CreatureReflections"), S.CreatureReflections);
+		Cfg.SetInt64(SettingsSection, TEXT("RenderScale"), S.RenderScale);
+	}
 	Cfg.SetBool(SettingsSection, TEXT("FilmGrain"), S.bFilmGrain);
 	Cfg.SetBool(SettingsSection, TEXT("VHSEffect"), S.bVHSEffect);
 	Cfg.SetBool(SettingsSection, TEXT("DevMode"), S.bDevMode);
@@ -3739,8 +3793,6 @@ void ABRPlayerController::SaveSettings() const
 	Cfg.SetInt64(SettingsSection, TEXT("Crosshair"), S.CrosshairMode);
 	Cfg.SetInt64(SettingsSection, TEXT("QuickBar"), S.QuickBarMode);
 	Cfg.SetInt64(SettingsSection, TEXT("Objectives"), S.ObjectivesMode);
-	Cfg.SetInt64(SettingsSection, TEXT("CreatureReflections"), S.CreatureReflections);
-	Cfg.SetInt64(SettingsSection, TEXT("RenderScale"), S.RenderScale);
 	Cfg.SetBool(SettingsSection, TEXT("VSync"), S.bVSync);
 	Cfg.SetInt64(SettingsSection, TEXT("MaxFPS"), S.MaxFPS);
 	Cfg.SetBool(SettingsSection, TEXT("HeadBob"), S.bHeadBob);

@@ -177,6 +177,8 @@ public:
 	FString GetSettingHint(int32 Index) const;
 	/** v4.5 : mode de rendu reellement actif (RHI, ray tracing, Lumen, ombres, resolution interne) */
 	FString GetRenderModeText(bool bShort = false) const;
+	/** v4.15 : mode de rendu du rapport du test automatique : GetRenderModeText et l'etat de MegaLights */
+	FString GetRenderModeReport() const;
 	/** true si le ray tracing materiel est actif (decide au demarrage : DirectX 12, carte compatible, r.RayTracing) */
 	static bool IsHardwareRayTracingAvailable();
 	/** Profils : 0 Performance, 1 Qualite, 2 Cinematique */
