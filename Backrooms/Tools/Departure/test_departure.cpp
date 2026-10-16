@@ -8,6 +8,8 @@
 //   - l'attente au sommet : une demande par arrivee, aucune demande repetee a chaque image, pas de montee au-dela du
 //     sommet, annulation par l'initiateur qui redescend, refus, expiration, rearmement apres une descente d'un metre.
 // Les lignes de vue (murs) sont du ressort du moteur : ici, elles sont supposees libres au meme etage.
+// v4.15 : une porte posee sur la face d'un mur vise un point dans la piece (30 cm au moins devant le plan du mur), et non
+// plus la surface du mur (depart refuse devant l'ascenseur du Niveau 1 dans le test reseau).
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Departure/test_departure.cpp
 //       Source/Backrooms/Private/BRGatherLogic.cpp -o test_departure && ./test_departure
@@ -126,6 +128,42 @@ namespace
 		FExitShape Door;
 		Door.Foot = { 0.f, 0.f, 0.f };
 		Line("porte : demande a 3 m, refus a 4 m", CanRequest(Door, At(300.f, 0.f, CapsuleHalf)) == EGather::FloorNeedsView && CanRequest(Door, At(400.f, 0.f, CapsuleHalf)) == EGather::No);
+		// v4.15 : porte posee sur la face d'un mur (ascenseur, porte d'hotel, porte de la mission : le pied est sur le plan du
+		// mur, Forward vers la piece). Le point vise par la vue doit etre dans la piece, a 30 cm au moins du plan du mur (avant :
+		// sur le plan, a distance nulle de la boite de collision) ; le point de rassemblement et la portee ne changent pas
+		{
+			bool bAll = true;
+			const FVec Fwds[4] = { { 1.f, 0.f, 0.f }, { 0.f, 1.f, 0.f }, { -1.f, 0.f, 0.f }, { 0.f, -1.f, 0.f } };
+			for (const FVec& F : Fwds)
+			{
+				FExitShape Wall;
+				Wall.Style = EStyle::Door;
+				Wall.Foot = { -900.f, -1860.f, 0.f };
+				Wall.Forward = F;
+				const FVec WallView = ViewPoint(Wall);
+				const FVec WallGather = GatherPoint(Wall);
+				const float Front = (WallView.X - Wall.Foot.X) * F.X + (WallView.Y - Wall.Foot.Y) * F.Y;
+				const float Side = std::fabs((WallView.X - Wall.Foot.X) * F.Y - (WallView.Y - Wall.Foot.Y) * F.X);
+				bAll &= Front >= 30.f && Side < 0.01f && std::fabs(WallView.Z - (Wall.Foot.Z + ViewHeight)) < 0.01f;
+				bAll &= std::fabs(WallGather.X - Wall.Foot.X) < 0.01f && std::fabs(WallGather.Y - Wall.Foot.Y) < 0.01f && std::fabs(WallGather.Z - Wall.Foot.Z) < 0.01f;
+				const FVec Near = At(Wall.Foot.X + F.X * 300.f, Wall.Foot.Y + F.Y * 300.f, CapsuleHalf);
+				const FVec Far = At(Wall.Foot.X + F.X * 400.f, Wall.Foot.Y + F.Y * 400.f, CapsuleHalf);
+				bAll &= CanRequest(Wall, Near) == EGather::FloorNeedsView && CanRequest(Wall, Far) == EGather::No;
+			}
+			Line("porte sur la face d'un mur (4 sens) : vue visee 30 cm au moins dans la piece, rassemblement au pied", bAll);
+			// Niveau 1 du test reseau v4.15 : ascenseur sur la face y = -1860 (piece vers -Y), hote en (-815, -1945, 105) :
+			// toute la ligne de vue reste devant le mur, a 50 cm de lui au point vise
+			FExitShape Lift;
+			Lift.Style = EStyle::Door;
+			Lift.Foot = { -900.f, -1860.f, 0.f };
+			Lift.Forward = { 0.f, -1.f, 0.f };
+			const FVec LiftView = ViewPoint(Lift);
+			const FVec Eye = At(-815.f, -1945.f, 105.f + 66.f);
+			const float Clear = std::fmin(Lift.Foot.Y - LiftView.Y, Lift.Foot.Y - Eye.Y);
+			char Buf[128];
+			std::snprintf(Buf, sizeof(Buf), "Niveau 1, ascenseur du test reseau : demande a portee, vue a %.0f cm du mur au point vise (avant : 0)", Clear);
+			Line(Buf, CanRequest(Lift, At(-815.f, -1945.f, 105.f)) == EGather::FloorNeedsView && Clear >= 30.f);
+		}
 		FExitShape Barn;
 		Barn.Style = EStyle::Barn;
 		Barn.Foot = { 0.f, 0.f, 0.f };

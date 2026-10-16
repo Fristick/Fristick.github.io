@@ -11,6 +11,10 @@
 //   - la tolerance verticale reste celle d'un etage (260 cm autour du centre d'un joueur debout au pied) : un joueur
 //     separe par un plafond n'est jamais compte, la regle n'est pas elargie ;
 //   - les tests de vue de la demande et du rassemblement visent le meme point (point de rassemblement + 90 cm).
+// v4.15 : une porte (ascenseur, porte d'hotel, porte de la mission) est posee sur la face meme du mur : le point vise etait
+// exactement sur la surface de la boite de collision du mur, et l'arrondi decidait si la vue etait coupee (depart refuse
+// devant la porte). Le point vise par la vue est desormais 50 cm devant le pied, dans la piece ; le point de
+// rassemblement (zone de 8 m, position repliquee) et la portee de la porte ne changent pas.
 #pragma once
 
 #include <cstdint>
@@ -36,6 +40,8 @@ namespace BRGather
 	constexpr float ViewHeight = 90.f;
 	/** Portee d'une porte pour la demander (3D, depuis le centre du joueur) */
 	constexpr float DoorReach = 360.f;
+	/** v4.15 : recul (cm, vers la piece) du point vise par la vue devant une porte posee sur la face d'un mur */
+	constexpr float DoorViewInset = 50.f;
 
 	enum class EStyle : uint8_t
 	{
@@ -59,7 +65,8 @@ namespace BRGather
 
 	/** Point de rassemblement : dans la piece devant une echelle (1 m), a l'entree d'une grange (5,2 m), a la porte */
 	FVec GatherPoint(const FExitShape& Shape);
-	/** Point vise par les tests de vue (rassemblement et demande) */
+	/** Point vise par les tests de vue (rassemblement et demande) : point de rassemblement + 90 cm ; v4.15 : porte, 50 cm
+	 *  devant le pied (le pied est sur la face du mur) */
 	FVec ViewPoint(const FExitShape& Shape);
 	/** Sur l'echelle : dans la colonne de son conduit, entre le pied et un peu au-dessus du sommet de la montee */
 	bool OnLadder(const FExitShape& Shape, const FVec& Pos);

@@ -420,6 +420,11 @@ public:
 	/** v4.12 : un joueur est-il rassemble pour le depart en cours (sur l'echelle, ou au meme etage a vue du point de
 	 *  rassemblement) ? Regle partagee BRGather, meme point de vue que la demande */
 	bool IsGatheredForDeparture(const ABRCharacter* C) const;
+	/** v4.15 : point vise par les tests de vue du depart de groupe (demande et rassemblement) pour cette sortie
+	 *  (BRGather::ViewPoint : porte, 50 cm devant le pied, dans la piece) */
+	static FVector DepartureViewPoint(const ABRExit* Exit);
+	/** v4.15 : derniere vue coupee lors d'un refus de depart (raison 2) : obstacle, composant, distance (journal, tests) */
+	const FString& GetLastDepartureBlock() const { return LastDepartureBlock; }
 	const FBRNetDeparture& GetDeparture() const { return NetDeparture; }
 	/** Secondes restantes avant l'annulation automatique du depart */
 	float GetDepartureRemaining() const;
@@ -1213,6 +1218,8 @@ private:
 	/** v4.15 : niveau charge du parcours lineaire ; parcours impose par un test (-1 : aucun) */
 	bool bLinearLevel = false;
 	int8 LinearTestOverride = -1;
+	/** v4.15 : obstacle de la derniere vue coupee lors d'un refus de depart (voir GetLastDepartureBlock) */
+	FString LastDepartureBlock;
 	void UpdateBlackout(float Dt);
 	void ApplyPower(bool bForce);
 	void CompleteTask(const FString& Text);

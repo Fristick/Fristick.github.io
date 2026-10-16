@@ -1781,6 +1781,8 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 	const ABRExit* Found = nullptr;
 	BRGather::FExitShape FoundShape;
 	const BRGather::FVec PL = ToGather(By->GetActorLocation());
+	// v4.15 : la vue coupee est relevee (obstacle, composant, distance) : un refus devant une sortie se diagnostique
+	FString Blocked;
 	for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
 	{
 		if (It->Target != Target || It->IsHidden())
@@ -1797,8 +1799,13 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 		{
 			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRDepartLos), false, By);
 			Q.AddIgnoredActor(*It);
-			if (GetWorld()->LineTraceTestByChannel(By->GetEyeLocation(), FromGather(BRGather::ViewPoint(Shape)), ECC_WorldStatic, Q))
+			const FVector Eye = By->GetEyeLocation();
+			const FVector Aim = FromGather(BRGather::ViewPoint(Shape));
+			FHitResult Hit;
+			if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Aim, ECC_WorldStatic, Q))
 			{
+				Blocked = FString::Printf(TEXT("sortie %s, vue des yeux (%.0f, %.0f, %.0f) vers (%.0f, %.0f, %.0f) coupee par %s (%s) a %.0f cm sur %.0f cm"), *It->GetName(),
+					Eye.X, Eye.Y, Eye.Z, Aim.X, Aim.Y, Aim.Z, *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), Hit.Distance, FVector::Dist(Eye, Aim));
 				continue;
 			}
 		}
@@ -1809,8 +1816,14 @@ bool ABRWorld::ServerStartDeparture(ABRCharacter* By, int32 Target, int32 LevelS
 	if (!Found)
 	{
 		OutReason = 2;
+		LastDepartureBlock = Blocked;
+		if (!Blocked.IsEmpty())
+		{
+			UE_LOG(LogBackrooms, Log, TEXT("Depart de groupe vers %d refuse a %s : %s"), Target, *GetNameSafe(By), *Blocked);
+		}
 		return false;
 	}
+	LastDepartureBlock.Reset();
 	if (NetDeparture.Phase == 1 && NetDeparture.Serial == LoadedSerial)
 	{
 		if (NetDeparture.Target == Target)
@@ -1861,6 +1874,11 @@ void ABRWorld::ServerCancelDeparture(ABRCharacter* By)
 	{
 		CancelDeparture(3);
 	}
+}
+
+FVector ABRWorld::DepartureViewPoint(const ABRExit* Exit)
+{
+	return Exit ? FromGather(BRGather::ViewPoint(GatherShapeOf(Exit))) : FVector::ZeroVector;
 }
 
 bool ABRWorld::IsGatheredForDeparture(const ABRCharacter* C) const

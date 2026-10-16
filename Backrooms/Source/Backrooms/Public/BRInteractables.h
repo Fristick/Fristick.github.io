@@ -162,4 +162,8 @@ protected:
 	TWeakObjectPtr<ABRCharacter> LeaveBy;
 	void LeaveAfterDoor();
 	void BuildServiceDoor();
+	/** v4.15 (developpement seulement) : une seconde apres la construction, le point vise par les tests de vue du depart de
+	 *  groupe (ABRWorld::DepartureViewPoint) doit etre libre ; sinon un avertissement nomme l'obstacle */
+	FTimerHandle ViewCheckTimer;
+	void CheckDepartureViewPoint();
 };
