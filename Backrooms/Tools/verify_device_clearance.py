@@ -1,0 +1,1011 @@
+"""
+v4.15 : banc hors moteur des places des mecanismes de mission : le point d'interaction d'un mecanisme (centre de sa boite
+visee, ABRMissionDevice::GetInteractPoint) n'est dans aucune collision que le jeu pose autour de lui, et une place debout
+a portee de l'hote (340 cm des yeux) le voit (ligne de vue de ABRWorld::ServerMissionAct, qui n'ignore que le joueur et le
+mecanisme).
+
+Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
+  A. Level 6 : poste de confinement et sa cage sur la meme face (groupes 10 a 13). v4.14 : poste a la place 0 (lateral 0),
+     cage a la place 1 (+58 cm) : le point du poste est DANS le volume bloquant de la cage -> ligne de vue toujours coupee
+     (actions refusees). v4.15 (BRMech::Clearance::PickSlot, miroir ici) : la cage d'abord, au bout de sa face ou elle
+     tient (correctifs : cage a +-58, poste a -+58, comme diag_v413_4), le poste a cote, hors de son volume. Jugee comme les
+     tests du jeu (v4.15 correctifs) : place de BRTestV412::FindMissionStand (cercles et portees lus dans le code), marche
+     vers elle (rayons d'arrivee lus dans le code), regle de l'hote (ligne de vue) et visee reelle du client
+     (ABRCharacter::UpdateFocus : balayage de 7 cm qui prend la cage si elle est frolee) depuis CHAQUE point d'arrivee
+     possible, puis la marche de reprise ; murs voisins presents ou non aux deux bouts de la face, fond de la cellule ou
+     non. La premiere disposition v4.15 (cage au centre, poste a +-116 : 29 cm du mur voisin) est montree pour information.
+  B. Level 8 : rochers des parois et des cellules (ABRChunk : boite de collision = bornes de SM_Rock a l'echelle du rocher).
+     Grille des grottes rejouee (BRHash, ABRWorld::IsSolid), chaque face de paroi d'une cellule libre comme place d'un treuil
+     ou d'une plaque, a chaque decalage lateral du placement. v4.14 : tous les rochers ; v4.15 : pas de rocher dont la boite
+     entre dans la zone libre du mecanisme (BRMech::Clearance::KeepOut, miroir ici).
+  C. Level 9 : maisons (boite de collision de SM_House). v4.14 : bornes completes (jusqu'a 5,2 m, perron compris) ;
+     v4.15 : corps jusqu'a GHouseBodyFront et perron bas (BRChunk.cpp). Faces des lots de maisons vues de la route.
+  D. Level 8 : sorties de la mission (echelle contre une paroi, ABRWorld::PlaceMission : FaceSpot au decalage 0). v4.14 : la
+     capsule qui monte a l'echelle (ABRExit::GetClimbAnchor) et son approche sont dans un rocher ; v4.15 : pas de rocher dans
+     la zone libre de la sortie (BRMech::Clearance::ExitKeepOut, miroir ici).
+En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
+BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote).
+
+Les constantes sont lues dans les sources (BRMechLogic.h/.cpp, BRMissionWorld.cpp, BRChunk.cpp, BRLevels.cpp, BRWorld.h,
+BRCharacter.cpp, BRInteractables.cpp, BRAutoTestV412.cpp, BRAutoTestWalk.h) et les bornes des modeles dans
+RawAssets/Meshes/SM_Rock.fbx et SM_House.fbx (comme l'importeur : X = X, Y = Z du fichier, Z = Y du fichier). Le banc verifie
+que l'ancienne regle ECHOUE (le defaut est reproduit), que la regle du jeu PASSE et qu'elle est bien dans les sources (sinon
+ECHEC) ; il ne remplace pas la verification dans le decor construit (-BRAutoTestV411 : "v4.15 mission N : places des
+mecanismes" ; -BRAutoTestV413 : postes et cages du Level 6).
+
+Usage : python Tools/verify_device_clearance.py [--seeds 120] [--rules both|old|new]
+Code de sortie : 0 si la regle v4.15 passe partout ET la regle v4.14 echoue la ou les journaux du jeu l'ont vue echouer ET la regle v4.15
+est dans les sources (cas A et D). Sortie : Docs/v415/correctifs_places.txt.
+"""
+import argparse
+import math
+import os
+import re
+import struct
+import sys
+import zlib
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, ".."))
+SRC = os.path.join(ROOT, "Source", "Backrooms")
+sys.path.insert(0, HERE)
+import verify_pitfalls as vp  # noqa: E402
+
+M32 = 0xFFFFFFFF
+
+
+def read(rel):
+    with open(os.path.join(SRC, rel), encoding="utf-8") as f:
+        return f.read()
+
+
+def num(pattern, text, what):
+    m = re.search(pattern, text, re.S)
+    if not m:
+        raise SystemExit("constante introuvable (%s) : %s" % (what, pattern))
+    return [float(g) for g in m.groups()]
+
+
+# ------------------------------------------------------------------------------------------------- constantes du jeu
+def read_constants():
+    mech_h = read("Public/BRMechLogic.h")
+    mech = read("Private/BRMechLogic.cpp")
+    world = read("Private/BRMissionWorld.cpp")
+    chunk = read("Private/BRChunk.cpp")
+    world_h = read("Public/BRWorld.h")
+    char = read("Private/BRCharacter.cpp")
+    K = {}
+    ns = lambda name: mech_h[mech_h.index("namespace %s" % name):]
+    for name, keys in (("LidarCage", ("Gap", "Depth", "HalfWidth", "Height")),
+                       ("Clearance", ("PlayerRadius", "Margin", "StandDepth", "StepHeight")),
+                       ("Device", ("WorkZ",))):
+        body = ns(name)
+        for k in keys:
+            K[name + "." + k] = num(r"constexpr float %s = ([\d.]+)f;" % k, body, name + "." + k)[0]
+    K["Clearance.StandGap"] = K["Clearance.PlayerRadius"] + K["Clearance.Margin"]
+    Z = K["Device.WorkZ"]
+    # Boites visees (BRMech::Clearance::Of) : poste, treuil, plaque murale, entailles (defaut), boitier de rue, marqueur
+    K["post"] = num(r"Role == R_Beacon \|\| Role == R_LidarPost\)\s*\{\s*F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*F\.AimExtent = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);", mech, "poste")
+    K["winch"] = num(r"F\.AimExtent = V3\(14\.f, 16\.f, 60\.f\);\s*\}\s*else\s*\{\s*F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*F\.AimExtent = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);", mech, "treuil")
+    d = num(r"F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, Z\);\s*F\.AimExtent = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*switch \(Kind\)", mech, "boite par defaut")
+    K["default"] = [d[0], d[1], Z, d[2], d[3], d[4]]
+    p = num(r"else\s*\{\s*F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, Z \+ ([\d.]+)f\);\s*F\.AimExtent = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*\}\s*break;\s*\}\s*case EKind::Observe", mech, "plaque")
+    K["plate"] = [p[0], p[1], Z + p[2], p[3], p[4], p[5]]
+    m = num(r"Role == R_HouseMarker\)\s*\{\s*F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, Z \+ ([\d.]+)f\);\s*F\.AimExtent = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);", mech, "marqueur")
+    K["marker"] = [m[0], m[1], Z + m[2], m[3], m[4], m[5]]
+    sb = num(r"const float R = Role == R_MillDial \? [\d.]+f : ([\d.]+)f;\s*F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, Z \+ ([\d.]+)f\);\s*F\.AimExtent = V3\(([\d.]+)f, R \+ ([\d.]+)f, R \+ ([\d.]+)f\);", mech, "boitier")
+    K["streetbox"] = [sb[1], sb[2], Z + sb[3], sb[4], sb[0] + sb[5], sb[0] + sb[6]]
+    # Placement (BRMissionWorld.cpp) : ecart des places d'une face, nombre par face
+    K["Spacing"] = num(r"const float Spacing = ([\d.]+)f;", world, "Spacing")[0]
+    K["PerFaceMargin"] = num(r"FloorToInt\(\(S - ([\d.]+)f\) / Spacing\) \+ 1, 1, (\d+)\)", world, "PerFace")
+    K["Reach"] = num(r"MissionReachServer = ([\d.]+)f;", world_h, "MissionReachServer")[0]
+    K["Capsule"] = num(r"InitCapsuleSize\(([\d.]+)f, ([\d.]+)f\)", char, "capsule")
+    K["EyeZ"] = num(r"constexpr float StandEyeZ = ([\d.]+)f;", char, "StandEyeZ")[0]
+    # Rochers (ABRChunk::StepPlan, etape 5 ; BuildCellProps, grottes)
+    wr = num(r"BRHash::Rand\(X \* 4 \+ k, Y, 931, Seed\) < ([\d.]+)f\)\s*\{\s*const float Sc = ([\d.]+)f \+ ([\d.]+)f \* BRHash::Rand\(X, Y \* 4 \+ k, 932, Seed\);"
+             r".*?\* S \* ([\d.]+)f\) - FVector\(Dir\.X, Dir\.Y, 0\.f\) \* ([\d.]+)f;.*?FVector\(Sc, Sc, Sc \* ([\d.]+)f\)", chunk, "rocher de paroi")
+    K["wall_rock"] = dict(chance=wr[0], sc0=wr[1], sc1=wr[2], spread=wr[3], inset=wr[4], zs=wr[5])
+    cr = num(r"R\(930\) < D\.PropDensity \* ([\d.]+)f\)\s*\{\s*const float Sc = ([\d.]+)f \+ R\(931\) \* ([\d.]+)f;\s*const FVector P = C \+ FVector\(\(R\(932\) - 0\.5f\) \* S \* ([\d.]+)f, "
+             r"\(R\(933\) - 0\.5f\) \* S \* [\d.]+f, (-?[\d.]+)f\);", chunk, "rocher de cellule")
+    K["cell_rock"] = dict(density=cr[0], sc0=cr[1], sc1=cr[2], spread=cr[3], z=cr[4])
+    K["rock_keepout_in_game"] = "RockInMissionKeepOut(this, InWorld, RockT)" in chunk and "RockInMissionKeepOut(this, W, RockT)" in chunk
+    # Maison (BRChunk.cpp)
+    hb = re.search(r"constexpr float GHouseBodyFront = ([\d.]+)f;\s*constexpr float GHousePorchHalfY = ([\d.]+)f;\s*constexpr float GHousePorchTop = ([\d.]+)f;", chunk)
+    K["house_body"] = [float(g) for g in hb.groups()] if hb else None
+    # Niveaux (BRLevels.cpp)
+    levels = open(vp.LEVELS_CPP, encoding="utf-8").read()
+    for n in (6, 8, 9):
+        body = levels[levels.index("FBRLevelDef Level%d()" % n):]
+        body = body[:body.index("return D;")]
+        vals = dict((k, float(v)) for k, v in re.findall(r"D\.(\w+)\s*=\s*(-?[\d.]+)f?\s*;", body))
+        K["L%d" % n] = vals
+    K["WallThicknessDefault"] = num(r"float WallThickness = ([\d.]+)f;", read("Public/BRTypes.h"), "WallThickness")[0]
+    # Places debout des tests du jeu (BRTestV412::CheckMissionStand / FindMissionStand) et marches vers elles
+    walk = read("Private/BRAutoTestV412.cpp")
+    walk_h = read("Private/BRAutoTestWalk.h")
+    rings = re.search(r"for \(const float Dist : \{ ([^}]*) \}\)", walk)
+    if not rings:
+        raise SystemExit("cercles de BRTestV412::FindMissionStand introuvables (BRAutoTestV412.cpp)")
+    K["rings"] = [float(v.strip().rstrip("f")) for v in rings.group(1).split(",")]
+    t = num(r"for \(int32 Turn = 0; Turn < (\d+); \+\+Turn\)\s*\{\s*const FVector P = Aim \+ Fwd\.RotateAngleAxis\(Turn \* ([\d.]+)f", walk, "directions")
+    K["turns"], K["turn_deg"] = int(t[0]), t[1]
+    K["stand_cap"] = num(r"FCollisionShape::MakeCapsule\(([\d.]+)f, Half - ([\d.]+)f\)", walk, "capsule de la place")
+    K["stand_lift"] = num(r"const FVector Stand\(P\.X, P\.Y, FloorZ \+ Half \+ ([\d.]+)f\);", walk, "capsule au-dessus du sol")[0]
+    K["ClientFocusReach"] = num(r"constexpr float ClientFocusReach = ([\d.]+)f;", walk_h, "ClientFocusReach")[0]
+    K["front_ahead"] = num(r"CheckMissionStand\(W, C, Dev, Aim \+ Fwd \* ([\d.]+)f, true, Goal\)", walk, "place devant le mecanisme")[0]
+    K["walk_radius"] = num(r"Front == EStand::Ok \? ([\d.]+)f : ([\d.]+)f, true\)", walk, "rayons d'arrivee de la marche")
+    K["retry"] = num(r"CheckMissionStand\(W, C, Dev, Aim \+ Fwd \* ([\d.]+)f, true, Closer\);.*?BeginWalk\(W, C, FVector\(Goal\.X, Goal\.Y, C->GetActorLocation\(\)\.Z\), "
+                     r"([\d.]+)f, true\);", walk, "marche de reprise")
+    # Visee du client (ABRCharacter::UpdateFocus) : balayage precis, portee, tolerance
+    K["focus_sweep"] = num(r"ECC_Visibility, FCollisionShape::MakeSphere\(([\d.]+)f\), Q\)", char, "balayage de la visee")[0]
+    K["InteractReach"] = num(r"constexpr float InteractReach = ([\d.]+)f;", char, "InteractReach")[0]
+    K["tolerance"] = num(r"MakeSphere\(InteractReach \* ([\d.]+)f\)", char, "tolerance de la visee")[0]
+    # Cage : boite visee (BRMech::Clearance::Of, R_LidarCage ; bloque la visee du client comme son volume)
+    ca = num(r"case R_LidarCage:\s*F\.Aim = V3\(LidarCage::Gap \+ LidarCage::Depth \+ ([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*"
+             r"F\.AimExtent = V3\(([\d.]+)f, LidarCage::HalfWidth, ([\d.]+)f\);", mech, "boite visee de la cage")
+    K["cage_aim"] = [K["LidarCage.Gap"] + K["LidarCage.Depth"] + ca[0], ca[1], ca[2], ca[3], K["LidarCage.HalfWidth"], ca[4]]
+    # Sorties : zone libre (BRMech::Clearance::ExitKeepOut) et capsule de l'echelle (ABRExit::GetClimbAnchor)
+    K["exit_keepout"] = num(r"FRect ExitKeepOut\(const FFrame& F\)\s*\{\s*const float HY = LidarDoor::Width \* 0\.5f \+ StandGap;\s*"
+                            r"return RectOf\(F, Box\(-([\d.]+)f, -HY, 0\.f, StandDepth \+ ([\d.]+)f, HY, 0\.f\)\);", mech, "ExitKeepOut")
+    K["LidarDoor.Width"] = num(r"constexpr float Width = ([\d.]+)f;", ns("LidarDoor"), "LidarDoor.Width")[0]
+    K["climb_anchor"] = num(r"FVector ABRExit::GetClimbAnchor\(\) const\s*\{[^}]*?GetActorForwardVector\(\) \* ([\d.]+)f;", read("Private/BRInteractables.cpp"),
+                            "GetClimbAnchor")[0]
+    # Regle du jeu dans les sources : le banc echoue si elle n'y est plus (le miroir passerait seul)
+    place = world[world.index("bool ABRWorld::PlaceMission("):world.index("bool ABRWorld::PlaceMissionModule(")]
+    module = world[world.index("bool ABRWorld::PlaceMissionModule("):world.index("void ABRWorld::SpawnMissionActors()")]
+    pick = mech[mech.index("int PickSlot("):]
+    K["src_A"] = {
+        "ABRWorld::PlaceMission : volumes d'abord (StableSort), puis BRMech::Clearance::PickSlot": "Ordered.StableSort(" in place
+        and "BRMech::Clearance::PickSlot(Print, Cand.GetData()" in place,
+        "ABRWorld::PlaceMissionModule : PickSlot, curseur hors des places prises": "BRMech::Clearance::PickSlot(Print, Cand.GetData()" in module
+        and "Taken[Next]" in module,
+        "BRMech::Clearance::PickSlot : volume mural au bout de sa face": "FaceCenter(" in pick and "AbsF(T.Lateral) <= AbsF(Slots[Best].Lateral)" in pick,
+    }
+    K["src_D"] = {"ABRWorld::SetupMission : zone libre des sorties de la mission": "MissionKeepOuts.Add(BRMech::Clearance::ExitKeepOut(F))" in world}
+    return K
+
+
+# ------------------------------------------------------------------------------------------- bornes des modeles (FBX)
+def _props(d, o, n):
+    out = []
+    for _ in range(n):
+        t = chr(d[o])
+        o += 1
+        if t == "Y":
+            out.append(struct.unpack_from("<h", d, o)[0])
+            o += 2
+        elif t == "C":
+            out.append(d[o] != 0)
+            o += 1
+        elif t in "IF":
+            out.append(struct.unpack_from("<" + ("i" if t == "I" else "f"), d, o)[0])
+            o += 4
+        elif t in "DL":
+            out.append(struct.unpack_from("<" + ("d" if t == "D" else "q"), d, o)[0])
+            o += 8
+        elif t in "fdlib":
+            ln, enc, cl = struct.unpack_from("<III", d, o)
+            o += 12
+            raw = d[o:o + cl]
+            o += cl
+            if enc == 1:
+                raw = zlib.decompress(raw)
+            fmt = {"f": "f", "d": "d", "l": "q", "i": "i", "b": "B"}[t]
+            out.append(list(struct.unpack("<%d%s" % (ln, fmt), raw[:ln * struct.calcsize(fmt)])))
+        elif t in "SR":
+            ln = struct.unpack_from("<I", d, o)[0]
+            o += 4
+            out.append(d[o:o + ln])
+            o += ln
+        else:
+            raise ValueError("FBX : type %r" % t)
+    return out, o
+
+
+def _nodes(d, o, end, ver):
+    nodes = []
+    while o < end:
+        if ver >= 7500:
+            eo, np_, pl = struct.unpack_from("<QQQ", d, o)
+            o += 24
+        else:
+            eo, np_, pl = struct.unpack_from("<III", d, o)
+            o += 12
+        nl = d[o]
+        o += 1
+        if eo == 0:
+            break
+        name = d[o:o + nl].decode("latin-1")
+        o += nl
+        props, _ = _props(d, o, np_)
+        o2 = o + pl
+        nodes.append((name, props, _nodes(d, o2, eo, ver) if o2 < eo else []))
+        o = eo
+    return nodes
+
+
+def fbx_bounds(path):
+    """Bornes des sommets dans Unreal (X = X, Y = Z, Z = Y du fichier ; fichier Y haut, unite 1 cm, noeud identite)"""
+    d = open(path, "rb").read()
+    assert d[:20] == b"Kaydara FBX Binary  ", path
+    ver = struct.unpack_from("<I", d, 23)[0]
+    nodes = _nodes(d, 27, len(d), ver)
+    objs = next(n for n in nodes if n[0] == "Objects")[2]
+    xs, ys, zs = [], [], []
+    for g in objs:
+        if g[0] != "Geometry":
+            continue
+        for c in g[2]:
+            if c[0] == "Vertices":
+                v = c[1][0]
+                xs += v[0::3]
+                ys += v[1::3]
+                zs += v[2::3]
+    return (min(xs), min(zs), min(ys)), (max(xs), max(zs), max(ys))
+
+
+# ------------------------------------------------------------------------------------------------------- geometrie
+def rot(yaw):
+    r = math.radians(yaw)
+    return math.cos(r), math.sin(r)
+
+
+def to_world(fr, lx, ly):
+    """FFrame::ToWorld (lacet arrondi au quart de tour) : Y local = (-FY, FX)"""
+    fx, fy = rot(fr[3])
+    fx, fy = round(fx), round(fy)
+    return fr[0] + fx * lx - fy * ly, fr[1] + fy * lx + fx * ly
+
+
+def to_local(fr, wx, wy):
+    fx, fy = rot(fr[3])
+    fx, fy = round(fx), round(fy)
+    dx, dy = wx - fr[0], wy - fr[1]
+    return dx * fx + dy * fy, -dx * fy + dy * fx
+
+
+def rect_overlap(a, b):
+    """BRMech::Clearance::Overlap : rectangles orientes (cx, cy, hx, hy, yaw), separation des axes"""
+    axes = []
+    for r in (a, b):
+        c, s = rot(r[4])
+        axes.append(((c, s), (-s, c)))
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    for n in (axes[0][0], axes[0][1], axes[1][0], axes[1][1]):
+        dist = abs(dx * n[0] + dy * n[1])
+        pa = a[2] * abs(axes[0][0][0] * n[0] + axes[0][0][1] * n[1]) + a[3] * abs(axes[0][1][0] * n[0] + axes[0][1][1] * n[1])
+        pb = b[2] * abs(axes[1][0][0] * n[0] + axes[1][0][1] * n[1]) + b[3] * abs(axes[1][1][0] * n[0] + axes[1][1][1] * n[1])
+        if dist > pa + pb:
+            return False
+    return True
+
+
+def rect_of(fr, x0, y0, x1, y1):
+    cx, cy = to_world(fr, (x0 + x1) * 0.5, (y0 + y1) * 0.5)
+    return (cx, cy, abs(x1 - x0) * 0.5, abs(y1 - y0) * 0.5, round(fr[3] / 90.0) * 90.0)
+
+
+def keep_out(K, fr, aim):
+    """BRMech::Clearance::KeepOut (mecanisme sans volume)"""
+    hy = abs(aim[1]) + aim[4] + K["Clearance.StandGap"]
+    return rect_of(fr, -12.0, -hy, aim[0] + max(aim[3], K["Clearance.StandGap"]) + K["Clearance.StandDepth"], hy)
+
+
+class OBox:
+    """Boite orientee (lacet quelconque) : centre, demi-tailles, lacet, hauteur"""
+
+    def __init__(self, cx, cy, hx, hy, yaw, z0, z1):
+        self.cx, self.cy, self.hx, self.hy, self.yaw, self.z0, self.z1 = cx, cy, hx, hy, yaw, z0, z1
+        self.c, self.s = rot(yaw)
+
+    def local(self, x, y):
+        dx, dy = x - self.cx, y - self.cy
+        return dx * self.c + dy * self.s, -dx * self.s + dy * self.c
+
+    def contains(self, p, grow=0.0):
+        lx, ly = self.local(p[0], p[1])
+        return abs(lx) <= self.hx + grow and abs(ly) <= self.hy + grow and self.z0 - grow <= p[2] <= self.z1 + grow
+
+    def dist2d(self, x, y):
+        lx, ly = self.local(x, y)
+        ex, ey = max(abs(lx) - self.hx, 0.0), max(abs(ly) - self.hy, 0.0)
+        return math.hypot(ex, ey)
+
+    def hits(self, a, b):
+        """Segment a -> b (3D) contre la boite (slabs dans le repere de la boite)"""
+        la = self.local(a[0], a[1]) + (a[2],)
+        lb = self.local(b[0], b[1]) + (b[2],)
+        lo = (-self.hx, -self.hy, self.z0)
+        hi = (self.hx, self.hy, self.z1)
+        t0, t1 = 0.0, 1.0
+        for i in range(3):
+            dd = lb[i] - la[i]
+            if abs(dd) < 1e-9:
+                if la[i] < lo[i] or la[i] > hi[i]:
+                    return False
+                continue
+            u0, u1 = (lo[i] - la[i]) / dd, (hi[i] - la[i]) / dd
+            if u0 > u1:
+                u0, u1 = u1, u0
+            t0, t1 = max(t0, u0), min(t1, u1)
+            if t0 > t1:
+                return False
+        return True
+
+    def rect(self):
+        return (self.cx, self.cy, self.hx, self.hy, self.yaw)
+
+
+def prop_box(bounds, px, py, pz, yaw, sx, sy, sz):
+    """Boite de collision de ABRChunk::AddProp : bornes du modele a l'echelle, tournees, centre transforme"""
+    (x0, y0, z0), (x1, y1, z1) = bounds
+    c, s = rot(yaw)
+    bcx, bcy = (x0 + x1) * 0.5 * sx, (y0 + y1) * 0.5 * sy
+    return OBox(px + bcx * c - bcy * s, py + bcx * s + bcy * c, (x1 - x0) * 0.5 * sx, (y1 - y0) * 0.5 * sy, yaw, pz + z0 * sz, pz + z1 * sz)
+
+
+def laterals(K, S):
+    per = int(max(1, min(int(K["PerFaceMargin"][1]), math.floor((S - K["PerFaceMargin"][0]) / K["Spacing"]) + 1)))
+    out = []
+    for k in range(per):
+        step = (k + 1) // 2
+        out.append((1.0 if k % 2 == 1 else -1.0) * step * K["Spacing"])
+    return out
+
+
+def face_frame(S, c, d, lat, inset):
+    """FaceSpot : cellule c, face d, decalage lateral (Side = (-d.y, d.x)), mecanisme tourne vers la cellule"""
+    cx, cy = (c[0] + 0.5) * S, (c[1] + 0.5) * S
+    sx, sy = -d[1], d[0]
+    yaw = math.degrees(math.atan2(-d[1], -d[0]))
+    return (cx + d[0] * (S * 0.5 - inset) + sx * lat, cy + d[1] * (S * 0.5 - inset) + sy * lat, 0.0, yaw)
+
+
+def aim_point(fr, aim):
+    x, y = to_world(fr, aim[0], aim[1])
+    return (x, y, fr[2] + aim[2])
+
+
+def forward(fr):
+    c, s = rot(fr[3])
+    return round(c), round(s)
+
+
+def find_mission_stand(K, fr, aim, boxes, solid_cells=None, S=0.0):
+    """v4.15 (correctifs) : miroir de BRTestV412::FindMissionStand (StandNear des tests du jeu lui delegue) : cercles et
+    directions lus dans BRAutoTestV412.cpp (110, 160, 210, puis 75 et 240 cm ; 16 directions depuis l'avant du mecanisme, vers
+    son axe droit), et pour chaque place CheckMissionStand : sol (plat ici), capsule de 36 cm (hauteur Half - 4, posee 5 cm
+    au-dessus du sol) libre des boites et des cellules pleines, yeux du joueur debout (centre + 74 cm), point a portee de la
+    visee du client (ClientFocusReach, 250 cm) puis regle de l'hote (340 cm, ligne de vue WorldStatic : boites, cellules
+    pleines). Avant : cercles de 120 a 300 cm, 8 directions, yeux jusqu'a 340 cm (l'ancien StandNear)"""
+    ip = aim_point(fr, aim)
+    f = forward(fr)
+    half = K["Capsule"][1]
+    cap_r, cap_shrink = K["stand_cap"]
+    cap_lo = fr[2] + K["stand_lift"] + cap_shrink
+    cap_hi = fr[2] + K["stand_lift"] + 2.0 * half - cap_shrink
+    eye_z = fr[2] + half + K["EyeZ"]
+
+    def near_solid(x, y, r):
+        if not solid_cells:
+            return False
+        cx, cy = math.floor(x / S), math.floor(y / S)
+        for X in range(cx - 1, cx + 2):
+            for Y in range(cy - 1, cy + 2):
+                if solid_cells(X, Y):
+                    dx = max(X * S - x, 0.0, x - (X + 1) * S)
+                    dy = max(Y * S - y, 0.0, y - (Y + 1) * S)
+                    if math.hypot(dx, dy) < r:
+                        return True
+        return False
+
+    def los_solid(a, b):
+        if not solid_cells:
+            return False
+        n = max(2, int(math.dist(a, b) / 10.0))
+        for i in range(1, n):
+            t = i / n
+            x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+            if solid_cells(math.floor(x / S), math.floor(y / S)):
+                return True
+        return False
+
+    for dist in K["rings"]:
+        for turn in range(K["turns"]):
+            ang = math.radians(turn * K["turn_deg"])
+            dx, dy = f[0] * math.cos(ang) - f[1] * math.sin(ang), f[0] * math.sin(ang) + f[1] * math.cos(ang)
+            sx, sy = ip[0] + dx * dist, ip[1] + dy * dist
+            if near_solid(sx, sy, cap_r):
+                continue
+            if any(b.z1 > cap_lo and b.z0 < cap_hi and b.dist2d(sx, sy) < cap_r for b in boxes):
+                continue
+            eye = (sx, sy, eye_z)
+            if math.dist(eye, ip) > K["ClientFocusReach"]:
+                continue
+            if math.dist(eye, ip) > K["Reach"] or any(b.hits(eye, ip) for b in boxes) or los_solid(eye, ip):
+                continue
+            return True
+    return False
+
+
+# ------------------------------------------------------------------------------------------------ A. Level 6
+def pick_slot_mirror(K, prints, frames_lat, face_half, end_of_face=True):
+    """BRMech::Clearance::PickSlot (miroir) pour un groupe : les membres a volume d'abord (tri stable, comme StableSort),
+    chacun a la premiere place libre sans gene avec ceux deja poses ; un volume mural tient dans la face. v4.15 (correctifs,
+    end_of_face) : un volume prend ensuite, sur cette face, la place libre de plus grand |lateral| ou il tient (la premiere a
+    egalite). frames_lat : (repere, lateral le long de l'axe droit du mecanisme), une seule face ici"""
+    order = sorted(range(len(prints)), key=lambda i: 0 if prints[i]["solid"] else 1)
+    taken = [False] * len(frames_lat)
+    placed = []
+    out = [None] * len(prints)
+
+    def usable(pr, j):
+        fr, lat = frames_lat[j]
+        if taken[j]:
+            return False
+        if pr["solid"] and abs(lat) + max(abs(pr["solid"][1]), abs(pr["solid"][4])) > face_half + 0.01:
+            return False
+        return not any(clash(K, (fr, pr), q) for q in placed)
+
+    for i in order:
+        pr = prints[i]
+        for j in range(len(frames_lat)):
+            if not usable(pr, j):
+                continue
+            best = j
+            if pr["solid"] and end_of_face:
+                for k in range(j + 1, len(frames_lat)):
+                    if abs(frames_lat[k][1]) > abs(frames_lat[best][1]) + 0.01 and usable(pr, k):
+                        best = k
+            taken[best] = True
+            placed.append((frames_lat[best][0], pr))
+            out[i] = best
+            break
+    return out
+
+
+def seg_box_dist(a, b, box):
+    """Distance 3D minimale d'un segment a une boite alignee (x0, y0, z0, x1, y1, z1), echantillonnee tous les 2 cm"""
+    n = max(2, int(math.dist(a, b) / 2.0))
+    best = 1e9
+    for i in range(n + 1):
+        t = i / n
+        p = [a[k] + (b[k] - a[k]) * t for k in range(3)]
+        dx = max(box[0] - p[0], 0.0, p[0] - box[3])
+        dy = max(box[1] - p[1], 0.0, p[1] - box[4])
+        dz = max(box[2] - p[2], 0.0, p[2] - box[5])
+        best = min(best, math.sqrt(dx * dx + dy * dy + dz * dz))
+    return best
+
+
+def seg_hits_box(a, b, box):
+    """Segment contre boite alignee (slabs)"""
+    t0, t1 = 0.0, 1.0
+    for i in range(3):
+        d = b[i] - a[i]
+        lo, hi = box[i], box[i + 3]
+        if abs(d) < 1e-9:
+            if a[i] < lo or a[i] > hi:
+                return False
+            continue
+        u0, u1 = (lo - a[i]) / d, (hi - a[i]) / d
+        if u0 > u1:
+            u0, u1 = u1, u0
+        t0, t1 = max(t0, u0), min(t1, u1)
+        if t0 > t1:
+            return False
+    return True
+
+
+class Level6Face:
+    """Une face du Level 6 dans le repere du mecanisme : u depuis le mur vers la salle, v le long de l'axe droit (Lateral du
+    placement). Mur du fond de la face en u = 0 ; murs voisins (bouts de la face) en v = +-face_half s'ils existent ; mur d'en
+    face (fond de la cellule) en u = S - T s'il existe. Cage (volume bloquant, toutes les collisions ; boite visee, visee du
+    client) et poste (point d'interaction et boite visee) aux decalages donnes"""
+
+    def __init__(self, K, face_half, cage_v, post_v, wall_plus, wall_minus, far):
+        self.K = K
+        self.fh = face_half
+        g, dep, hw, h = K["LidarCage.Gap"], K["LidarCage.Depth"], K["LidarCage.HalfWidth"], K["LidarCage.Height"]
+        self.cage = (g, cage_v - hw, 0.0, g + dep, cage_v + hw, h)
+        ca = K["cage_aim"]
+        self.cage_box = (ca[0] - ca[3], cage_v + ca[1] - ca[4], ca[2] - ca[5], ca[0] + ca[3], cage_v + ca[1] + ca[4], ca[2] + ca[5])
+        pa = K["post"]
+        self.aim = (pa[0], post_v + pa[1], pa[2])
+        self.post_box = (pa[0] - pa[3], post_v + pa[1] - pa[4], pa[2] - pa[5], pa[0] + pa[3], post_v + pa[1] + pa[4], pa[2] + pa[5])
+        self.wp, self.wm, self.far = wall_plus, wall_minus, far
+        self.cap = K["stand_cap"][0]
+        self.eye_z = K["Capsule"][1] + K["EyeZ"]
+
+    def wall_dist(self, u, v):
+        d = [u]
+        if self.wp:
+            d.append(self.fh - v)
+        if self.wm:
+            d.append(v + self.fh)
+        if self.far:
+            d.append(self.far - u)
+        return min(d)
+
+    def capsule_free(self, u, v):
+        if self.wall_dist(u, v) < self.cap:
+            return False
+        dx = max(self.cage[0] - u, 0.0, u - self.cage[3])
+        dy = max(self.cage[1] - v, 0.0, v - self.cage[4])
+        return math.hypot(dx, dy) >= self.cap
+
+    def host(self, u, v):
+        """ABRWorld::CanReachMissionDevice : yeux a portee, ligne de vue qui n'ignore que le joueur et le poste (la cage bloque)"""
+        eye = (u, v, self.eye_z)
+        return math.dist(eye, self.aim) <= self.K["Reach"] and not seg_hits_box(eye, self.aim, self.cage)
+
+    def check(self, u, v):
+        """BRTestV412::CheckMissionStand (sol plat, pas d'eau au Level 6)"""
+        if not self.capsule_free(u, v):
+            return "capsule"
+        if math.dist((u, v, self.eye_z), self.aim) > self.K["ClientFocusReach"]:
+            return "loin"
+        if not self.host(u, v):
+            return "vue"
+        return "ok"
+
+    def client(self, u, v):
+        """ABRCharacter::UpdateFocus, regard sur le point du poste : balayage de 7 cm jusqu'a la boite du poste (la cage frolee
+        la prend : visee prise), un mur frole fait echouer le balayage -> tolerance (boite a 208 cm, ligne de vue). Rend
+        (vise, ecart a la cage)"""
+        K = self.K
+        r = K["focus_sweep"]
+        eye = (u, v, self.eye_z)
+        g = tuple(self.post_box[k] - r for k in range(3)) + tuple(self.post_box[k] + r for k in range(3, 6))
+        n = max(2, int(math.dist(eye, self.aim) / 2.0))
+        stop = 1.0
+        for i in range(n + 1):
+            t = i / n
+            p = [eye[k] + (self.aim[k] - eye[k]) * t for k in range(3)]
+            if g[0] <= p[0] <= g[3] and g[1] <= p[1] <= g[4] and g[2] <= p[2] <= g[5]:
+                stop = t
+                break
+        end = tuple(eye[k] + (self.aim[k] - eye[k]) * stop for k in range(3))
+        gap = min(seg_box_dist(eye, end, self.cage), seg_box_dist(eye, end, self.cage_box))
+        if gap < r:
+            return False, gap
+        side = min(self.wall_dist(eye[0] + (end[0] - eye[0]) * t / 10.0, eye[1] + (end[1] - eye[1]) * t / 10.0) for t in range(11))
+        if side < r or math.dist(eye, end) > K["InteractReach"]:
+            near = math.dist(eye, (min(max(eye[0], self.post_box[0]), self.post_box[3]), min(max(eye[1], self.post_box[1]), self.post_box[4]),
+                                   min(max(eye[2], self.post_box[2]), self.post_box[5])))
+            return near <= K["InteractReach"] * K["tolerance"] and self.host(u, v), gap
+        return True, gap
+
+    def find(self):
+        """BRTestV412::FindMissionStand (cercles et directions du code)"""
+        K = self.K
+        for dist in K["rings"]:
+            for turn in range(K["turns"]):
+                a = math.radians(turn * K["turn_deg"])
+                u, v = self.aim[0] + math.cos(a) * dist, self.aim[1] + math.sin(a) * dist
+                if self.check(u, v) == "ok":
+                    return (u, v), dist, turn
+        return None, None, None
+
+    def disc(self, c, radius):
+        """Points d'arrivee possibles d'une marche (centre de la capsule libre a moins de radius du but) : nombre, vue de
+        l'hote coupee, visee prise par la cage (ou ratee), ecart minimal du balayage a la cage"""
+        n = bad_h = bad_c = 0
+        gap_min = 1e9
+        u = c[0] - radius
+        while u <= c[0] + radius:
+            v = c[1] - radius
+            while v <= c[1] + radius:
+                if math.hypot(u - c[0], v - c[1]) <= radius and self.capsule_free(u, v):
+                    n += 1
+                    if not self.host(u, v):
+                        bad_h += 1
+                    else:
+                        ok, gap = self.client(u, v)
+                        bad_c += 0 if ok else 1
+                        gap_min = min(gap_min, gap)
+                v += 5.0
+            u += 5.0
+        return n, bad_h, bad_c, gap_min
+
+
+def level6_walk(K, face):
+    """Marche des tests du jeu (AddWalkMissionSteps) vers le poste : la place devant lui (110 cm) si elle est bonne, rayon
+    d'arrivee 70 cm, sinon la place de FindMissionStand, rayon 35 cm ; puis, si la visee rate, la marche de reprise (but a
+    60 cm si c'est une place, sinon le premier but ; rayon 35). Rend un dict de mesures et le verdict"""
+    a = face.aim
+    out = {"inside": seg_box_dist(a, a, face.cage) <= K["Clearance.Margin"]}
+    front = (a[0] + K["front_ahead"], a[1])
+    out["front"] = face.check(*front)
+    st, dist, turn = face.find()
+    out["stand"] = (st, dist, turn)
+    if out["front"] == "ok":
+        goal, radius = front, K["walk_radius"][0]
+    else:
+        goal, radius = st, K["walk_radius"][1]
+    out["goal"], out["radius"] = goal, radius
+    out["ok"] = False
+    if out["inside"] or goal is None:
+        return out
+    out["d1"] = face.disc(goal, radius)
+    closer = (a[0] + K["retry"][0], a[1])
+    goal2 = closer if face.check(*closer) == "ok" else goal
+    out["goal2"] = goal2
+    out["d2"] = face.disc(goal2, K["retry"][1])
+    d1, d2 = out["d1"], out["d2"]
+    out["ok"] = d1[0] > 0 and d1[1] == 0 and (d1[2] == 0 or (d2[0] > 0 and d2[1] == 0 and d2[2] == 0))
+    return out
+
+
+def solid_box(fr, sol):
+    x0, y0, z0, x1, y1, z1 = sol
+    r = rect_of(fr, x0, y0, x1, y1)
+    return OBox(r[0], r[1], r[2], r[3], r[4], fr[2] + z0, fr[2] + z1)
+
+
+def hinders(K, me, other):
+    fr, pr = me
+    ofr, opr = other
+    if not opr["solid"]:
+        return False
+    box = solid_box(ofr, opr["solid"])
+    ip = aim_point(fr, pr["aim"])
+    if box.contains(ip, K["Clearance.Margin"]):
+        return True
+    if opr["solid"][5] - opr["solid"][2] <= K["Clearance.StepHeight"]:
+        return False
+    sx, sy = to_world(fr, pr["aim"][0] + K["Clearance.StandGap"], pr["aim"][1])
+    return box.dist2d(sx, sy) < K["Clearance.PlayerRadius"]
+
+
+def clash(K, a, b):
+    if hinders(K, a, b) or hinders(K, b, a):
+        return True
+    if a[1]["solid"] and b[1]["solid"]:
+        return rect_overlap(solid_box(a[0], a[1]["solid"]).rect(), solid_box(b[0], b[1]["solid"]).rect())
+    return False
+
+
+def case_level6(K, rules):
+    S = K["L6"].get("CellSize", 350.0)
+    T = K["L6"].get("WallThickness", K["WallThicknessDefault"])
+    face_half = S * 0.5 - T * 0.5
+    lats = laterals(K, S)
+    post = {"aim": K["post"], "solid": None}
+    cage = {"aim": K["cage_aim"], "solid": (K["LidarCage.Gap"], -K["LidarCage.HalfWidth"], 0.0, K["LidarCage.Gap"] + K["LidarCage.Depth"], K["LidarCage.HalfWidth"],
+                                           K["LidarCage.Height"])}
+    # Repere de la face : mecanisme tourne vers +u (lacet 0), decalage le long de son axe droit. FaceSpot(C, Dir, Lateral(K))
+    # decale le long de (-Dir.Y, Dir.X), l'oppose de l'axe droit : Lateral du placement (LateralOf) = -Lateral(K)
+    slots = [((0.0, -lat, 0.0, 0.0), -lat) for lat in lats]
+    print("A. Level 6 : poste et cage d'un groupe (cellule de %g cm, murs de %g, face utile +-%g ; places (axe droit) %s ; cage %g..%g cm du mur, +-%g, boite visee %s ; "
+          "place devant a %g cm, marche : rayon %g (devant) ou %g (autour), reprise a %g cm, rayon %g ; cercles %s, %d directions ; visee du client : balayage de %g cm, "
+          "portee %g, tolerance %g)"
+          % (S, T, face_half, "/".join("%+g" % s[1] for s in slots), K["LidarCage.Gap"], K["LidarCage.Gap"] + K["LidarCage.Depth"], K["LidarCage.HalfWidth"],
+             tuple(K["cage_aim"][:3]), K["front_ahead"], K["walk_radius"][0], K["walk_radius"][1], K["retry"][0], K["retry"][1], "/".join("%g" % r for r in K["rings"]),
+             K["turns"], K["focus_sweep"], K["ClientFocusReach"], K["InteractReach"] * K["tolerance"]))
+    variants = [(wp, wm, far) for wp in (False, True) for wm in (False, True) for far in (None, S - T)]
+    plans = []
+    for name in rules:
+        if name == "old":
+            plans.append(("old", "v4.14", [0, 1]))  # membres dans l'ordre du plan (poste 1+K puis cage 5+K), places 0 puis 1
+        else:
+            plans.append(("first", "v4.15 avant correctifs (pour information)", pick_slot_mirror(K, [post, cage], slots, face_half, end_of_face=False)))
+            plans.append(("new", "v4.15", pick_slot_mirror(K, [post, cage], slots, face_half, end_of_face=True)))
+    results = {}
+    for key, label, where in plans:
+        if None in where:
+            print("  regle %s : aucune place (placement impossible) -> ECHOUE" % label)
+            results[key] = False
+            continue
+        pv, cv = slots[where[0]][1], slots[where[1]][1]
+        fits = abs(cv) + K["LidarCage.HalfWidth"] <= face_half
+        n_ok = 0
+        lines = []
+        for wp, wm, far in variants:
+            face = Level6Face(K, face_half, cv, pv, wp, wm, far)
+            w = level6_walk(K, face)
+            ok = w["ok"] and fits
+            n_ok += 1 if ok else 0
+            where_txt = "murs voisins %s/%s, fond %s" % ("oui" if wp else "non", "oui" if wm else "non", "oui" if far else "non")
+            if w["inside"]:
+                lines.append("    %s : point du poste DANS la cage -> ECHOUE" % where_txt)
+                continue
+            st = w["stand"]
+            if w["goal"] is None:
+                lines.append("    %s : place devant %s, aucune place (FindMissionStand) -> ECHOUE" % (where_txt, w["front"]))
+                continue
+            d1, d2 = w["d1"], w["d2"]
+            lines.append("    %s : place devant (%g cm) %s ; premiere place %s (cercle %g, direction %d) ; marche vers (%.0f, %.0f) rayon %g : %d arrivees, vue de l'hote coupee %d, "
+                         "visee prise ou ratee %d (balayage a %.0f cm de la cage au plus pres) ; reprise vers (%.0f, %.0f) rayon %g : %d/%d/%d -> %s"
+                         % (where_txt, K["front_ahead"], "libre" if w["front"] == "ok" else w["front"], "(%.0f, %.0f)" % st[0] if st[0] else "aucune", st[1] or 0,
+                            st[2] or 0, w["goal"][0], w["goal"][1], w["radius"], d1[0], d1[1], d1[2], d1[3], w["goal2"][0], w["goal2"][1], K["retry"][1], d2[0], d2[1], d2[2],
+                            "PASSE" if ok else "ECHOUE"))
+        ok_all = n_ok == len(variants)
+        results[key] = ok_all
+        print("  regle %s : poste a %+g, cage a %+g (axe droit) ; cage dans la face : %s ; %d/%d dispositions des murs reussies -> %s"
+              % (label, pv, cv, "oui" if fits else "NON", n_ok, len(variants), "PASSE" if ok_all else "ECHOUE"))
+        shown = lines if key != "old" else lines[:1]
+        for ln in shown:
+            print(ln)
+    return results
+
+
+# ------------------------------------------------------------------------------------------------ B. Level 8
+class Caves:
+    def __init__(self, K, seed):
+        L = K["L8"]
+        self.S = L["CellSize"]
+        self.solid_chance = vp.F32(L["SolidChance"])
+        self.density = L.get("PropDensity", 0.0)
+        self.seed = seed
+        self._solid = {}
+
+    def solid(self, x, y):
+        k = (x, y)
+        v = self._solid.get(k)
+        if v is None:
+            if abs(x) <= 1 and abs(y) <= 1:
+                v = False
+            else:
+                r = vp.F32(0.55) * vp.rand(x, y, 601, self.seed) + vp.F32(0.45) * vp.rand(vp.floordiv(x, 3), vp.floordiv(y, 3), 602, self.seed)
+                v = bool(r < self.solid_chance)
+            self._solid[k] = v
+        return v
+
+
+def rocks_near(K, W, c, bounds, radius=3):
+    """Rochers que ABRChunk pose autour de la cellule c : parois des cellules pleines (etape 5) et centre des cellules
+    libres voisines (BuildCellProps ; pas dans la cellule du mecanisme, reservee a la mission)"""
+    S = W.S
+    wr, cr = K["wall_rock"], K["cell_rock"]
+    out = []
+    for X in range(c[0] - radius, c[0] + radius + 1):
+        for Y in range(c[1] - radius, c[1] + radius + 1):
+            if W.solid(X, Y):
+                for k, d in enumerate(vp.DIRS):
+                    if W.solid(X + d[0], Y + d[1]):
+                        continue
+                    if not vp.rand(X * 4 + k, Y, 931, W.seed) < vp.F32(wr["chance"]):
+                        continue
+                    sc = wr["sc0"] + wr["sc1"] * float(vp.rand(X, Y * 4 + k, 932, W.seed))
+                    fx, fy = (X + 0.5) * S + d[0] * S * 0.5, (Y + 0.5) * S + d[1] * S * 0.5
+                    off = (float(vp.rand(X, Y, 933 + k, W.seed)) - 0.5) * S * wr["spread"]
+                    px, py = fx - d[1] * off - d[0] * wr["inset"], fy + d[0] * off - d[1] * wr["inset"]
+                    yaw = float(vp.rand(X, Y, 937 + k, W.seed)) * 360.0
+                    out.append(prop_box(bounds, px, py, 0.0, yaw, sc, sc, sc * wr["zs"]))
+            elif (X, Y) != c and not (abs(X) <= 1 and abs(Y) <= 1) and abs(X - c[0]) <= 2 and abs(Y - c[1]) <= 2:
+                R = lambda salt: float(vp.rand(X, Y, salt, W.seed))
+                if R(930) < W.density * cr["density"]:
+                    sc = cr["sc0"] + R(931) * cr["sc1"]
+                    px = (X + 0.5) * S + (R(932) - 0.5) * S * cr["spread"]
+                    py = (Y + 0.5) * S + (R(933) - 0.5) * S * cr["spread"]
+                    out.append(prop_box(bounds, px, py, cr["z"], R(934) * 360.0, sc, sc, sc))
+    return out
+
+
+def case_level8(K, rules, bounds, seeds):
+    S = K["L8"]["CellSize"]
+    lats = laterals(K, S)
+    kinds = (("treuil", K["winch"]), ("entailles", K["default"]))
+    print("B. Level 8 : rochers (SM_Rock %s..%s cm ; paroi : %.0f %% des faces, echelle %.1f a %.1f, z x%.1f ; cellule : densite %.2f x %.1f, echelle %.2f a %.2f) ; "
+          "%d graines, places laterales %s"
+          % (tuple(round(v, 1) for v in bounds[0]), tuple(round(v, 1) for v in bounds[1]), 100 * K["wall_rock"]["chance"], K["wall_rock"]["sc0"],
+             K["wall_rock"]["sc0"] + K["wall_rock"]["sc1"], K["wall_rock"]["zs"], K["L8"].get("PropDensity", 0), K["cell_rock"]["density"],
+             K["cell_rock"]["sc0"], K["cell_rock"]["sc0"] + K["cell_rock"]["sc1"], seeds, "/".join("%+g" % v for v in lats)))
+    stats = {r: {k: [0, 0, 0] for k, _ in kinds} for r in rules}  # places, point dans un rocher, sans place debout
+    # Place 6 d'une face de 400 cm (+174 cm, a 26 cm du coin) : jamais prise au Level 8 (un seul mecanisme de groupe, a la
+    # premiere place libre de la salle ; les mecanismes seuls sont a 0) : comptee a part, pour information
+    corner = {r: [0, 0, 0] for r in rules}
+    removed = [0, 0]
+    for si in range(seeds):
+        seed = vp.mix((si + 1) * 2654435761 & M32) or 1
+        W = Caves(K, seed)
+        for cxi in range(-6, 7, 3):
+            for cyi in range(-6, 7, 3):
+                c = (cxi, cyi)
+                if W.solid(*c) or (abs(c[0]) <= 1 and abs(c[1]) <= 1):
+                    continue
+                rocks = rocks_near(K, W, c, bounds)
+                for d in vp.DIRS:
+                    if not W.solid(c[0] + d[0], c[1] + d[1]):
+                        continue
+                    for lat in lats:
+                        fr = face_frame(S, c, d, lat, 0.0)
+                        for kname, aim in kinds:
+                            ko = keep_out(K, fr, aim)
+                            for rname in rules:
+                                kept = rocks if rname == "old" else [b for b in rocks if not rect_overlap(ko, b.rect())]
+                                if rname == "new" and kname == "treuil":
+                                    removed[0] += len(rocks) - len(kept)
+                                    removed[1] += len(rocks)
+                                ip = aim_point(fr, aim)
+                                st = stats[rname][kname] if abs(lat) < S * 0.5 - 40.0 else corner[rname]
+                                st[0] += 1
+                                buried = any(b.contains(ip) for b in kept)
+                                st[1] += 1 if buried else 0
+                                st[2] += 0 if (not buried and find_mission_stand(K, fr, aim, kept, W.solid, S)) else 1
+    results = {}
+    for rname in rules:
+        ok = all(st[1] == 0 and st[2] == 0 for st in stats[rname].values())
+        results[rname] = ok
+        parts = ["%s : %d places, point dans un rocher %d (%.1f %%), sans place debout (FindMissionStand) %d (%.1f %%)"
+                 % (k, st[0], st[1], 100.0 * st[1] / max(1, st[0]), st[2], 100.0 * st[2] / max(1, st[0])) for k, st in stats[rname].items()]
+        print("  regle %s : %s -> %s" % ("v4.14" if rname == "old" else "v4.15", " ; ".join(parts), "PASSE" if ok else "ECHOUE"))
+        c = corner[rname]
+        print("    (pour information, place au coin %+g : %d cas, point dans un rocher %d, sans place debout %d)" % (lats[-1], c[0], c[1], c[2]))
+    if "new" in rules:
+        print("  regle v4.15 : rochers retires autour d'un treuil (zone libre) : %d sur %d voisins (%.1f %%) ; dans le jeu : %s"
+              % (removed[0], removed[1], 100.0 * removed[0] / max(1, removed[1]), "oui (RockInMissionKeepOut)" if K["rock_keepout_in_game"] else "NON"))
+    return results
+
+
+# ------------------------------------------------------------------------------------------------ C. Level 9
+def case_level9(K, rules, bounds, seeds):
+    L = K["L9"]
+    S, sp = L["CellSize"], int(L["Spacing"])
+    lats = laterals(K, S)
+    kinds = (("plan de maison", K["plate"]), ("boitier de rue", K["streetbox"]), ("plaque de facade", K["marker"]))
+    body = K["house_body"]
+    print("C. Level 9 : maisons (SM_House %s..%s cm ; v4.15 : corps jusqu'a %s cm, perron +-%s cm, %s cm de haut) ; lots de %g cm ; %d graines"
+          % (tuple(round(v, 1) for v in bounds[0]), tuple(round(v, 1) for v in bounds[1]), body[0] if body else "?", body[1] if body else "?", body[2] if body else "?",
+             2 * S, seeds))
+    (x0, y0, z0), (x1, y1, z1) = bounds
+
+    def house_boxes(X, Y, yaw, rname):
+        hx, hy = (X + 1) * S, (Y + 1) * S
+        if rname == "old" or not body or x1 <= body[0]:
+            return [prop_box(((x0, y0, z0), (x1, y1, z1)), hx, hy, 0.0, yaw, 1, 1, 1)]
+        return [prop_box(((x0, y0, z0), (body[0], y1, z1)), hx, hy, 0.0, yaw, 1, 1, 1),
+                prop_box(((body[0], -body[1], z0), (x1, body[1], body[2])), hx, hy, 0.0, yaw, 1, 1, 1)]
+
+    stats = {r: {k: [0, 0, 0] for k, _ in kinds} for r in rules}
+    for si in range(seeds):
+        seed = vp.mix((si + 1) * 2246822519 & M32) or 1
+        has = lambda lx, ly: bool(vp.rand(lx, ly, 801, seed) < vp.F32(0.85))
+
+        def lot_solid(x, y):
+            if vp.posmod(x, sp) == 0 or vp.posmod(y, sp) == 0:
+                return False
+            return has(vp.floordiv(x, sp) * 2 + (vp.posmod(x, sp) - 1) // 2, vp.floordiv(y, sp) * 2 + (vp.posmod(y, sp) - 1) // 2)
+
+        houses = {}
+        for X in range(-12, 13):
+            for Y in range(-12, 13):
+                LX, LY = vp.posmod(X, sp), vp.posmod(Y, sp)
+                if LX in (1, 3) and LY in (1, 3):
+                    lot = (vp.floordiv(X, sp) * 2 + (LX - 1) // 2, vp.floordiv(Y, sp) * 2 + (LY - 1) // 2)
+                    if has(*lot):
+                        houses[(X, Y)] = 180.0 if LX == 1 else 0.0
+        for X in range(-9, 10):
+            for Y in range(-9, 10):
+                c = (X, Y)
+                if lot_solid(*c):
+                    continue
+                for d in vp.DIRS:
+                    if not lot_solid(c[0] + d[0], c[1] + d[1]):
+                        continue
+                    for lat in lats:
+                        fr = face_frame(S, c, d, lat, 0.0)
+                        for kname, aim in kinds:
+                            ip = aim_point(fr, aim)
+                            for rname in rules:
+                                boxes = []
+                                for (hxc, hyc), yaw in houses.items():
+                                    if abs((hxc + 1) * S - ip[0]) < 1200 and abs((hyc + 1) * S - ip[1]) < 1200:
+                                        boxes += house_boxes(hxc, hyc, yaw, rname)
+                                st = stats[rname][kname]
+                                st[0] += 1
+                                buried = any(b.contains(ip) for b in boxes)
+                                st[1] += 1 if buried else 0
+                                st[2] += 0 if (not buried and find_mission_stand(K, fr, aim, boxes)) else 1
+    results = {}
+    for rname in rules:
+        ok = all(st[1] == 0 and st[2] == 0 for st in stats[rname].values())
+        results[rname] = ok
+        parts = ["%s : %d places, point dans la maison %d (%.1f %%), sans place debout (FindMissionStand) %d" % (k, st[0], st[1], 100.0 * st[1] / max(1, st[0]), st[2])
+                 for k, st in stats[rname].items()]
+        print("  regle %s : %s -> %s" % ("v4.14" if rname == "old" else "v4.15", " ; ".join(parts), "PASSE" if ok else "ECHOUE"))
+    return results
+
+
+# ------------------------------------------------------------------------------------------- D. Level 8 : sorties
+def case_level8_exits(K, rules, bounds, seeds):
+    """Sortie de la mission contre une paroi (FaceSpot au decalage 0, comme ABRWorld::PlaceMission) : la capsule qui monte a
+    l'echelle (ABRExit::GetClimbAnchor) et l'approche de la marche des tests jusqu'a 90 cm de plus ne touchent aucun rocher
+    plus haut qu'une marche"""
+    S = K["L8"]["CellSize"]
+    back, extra = K["exit_keepout"]
+    hy = K["LidarDoor.Width"] * 0.5 + K["Clearance.StandGap"]
+    anchor = K["climb_anchor"]
+    R = K["Capsule"][0]
+    print("D. Level 8 : sorties de la mission (echelle : capsule de %g cm a %g cm du pied, approche jusqu'a %g cm) ; zone libre v4.15 de %g cm dans la paroi a %g cm "
+          "devant le pied, +-%g cm ; %d graines" % (R, anchor, anchor + 90.0, back, K["Clearance.StandDepth"] + extra, hy, seeds))
+    stats = {r: [0, 0] for r in rules}
+    for si in range(seeds):
+        seed = vp.mix((si + 1) * 2654435761 & M32) or 1
+        W = Caves(K, seed)
+        for cxi in range(-6, 7, 3):
+            for cyi in range(-6, 7, 3):
+                c = (cxi, cyi)
+                if W.solid(*c) or (abs(c[0]) <= 1 and abs(c[1]) <= 1):
+                    continue
+                rocks = rocks_near(K, W, c, bounds)
+                for d in vp.DIRS:
+                    if not W.solid(c[0] + d[0], c[1] + d[1]):
+                        continue
+                    fr = face_frame(S, c, d, 0.0, 0.0)
+                    ko = rect_of(fr, -back, -hy, K["Clearance.StandDepth"] + extra, hy)
+                    f = forward(fr)
+                    pts = [(fr[0] + f[0] * x, fr[1] + f[1] * x) for x in range(int(anchor), int(anchor + 90.0) + 1, 10)]
+                    for rname in rules:
+                        kept = rocks if rname == "old" else [b for b in rocks if not rect_overlap(ko, b.rect())]
+                        tall = [b for b in kept if b.z1 - fr[2] > K["Clearance.StepHeight"]]
+                        st = stats[rname]
+                        st[0] += 1
+                        st[1] += 1 if any(b.dist2d(px, py) < R for b in tall for (px, py) in pts) else 0
+    results = {}
+    for rname in rules:
+        st = stats[rname]
+        results[rname] = st[1] == 0
+        print("  regle %s : %d sorties, echelle ou approche dans un rocher %d (%.1f %%) -> %s" % ("v4.14" if rname == "old" else "v4.15", st[0], st[1],
+                                                                                         100.0 * st[1] / max(1, st[0]), "PASSE" if st[1] == 0 else "ECHOUE"))
+    return results
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--seeds", type=int, default=120, help="graines par niveau (grottes, banlieue)")
+    ap.add_argument("--rules", default="both", choices=("both", "old", "new"))
+    a = ap.parse_args()
+    K = read_constants()
+    rock = fbx_bounds(os.path.join(ROOT, "RawAssets", "Meshes", "SM_Rock.fbx"))
+    house = fbx_bounds(os.path.join(ROOT, "RawAssets", "Meshes", "SM_House.fbx"))
+    rules = ("old", "new") if a.rules == "both" else (a.rules,)
+    print("Banc des places des mecanismes (v4.15, Tools/verify_device_clearance.py)")
+    print("Constantes lues : capsule %g x %g, yeux a %g cm au-dessus du centre, portee de l'hote %g cm ; marge %g, place debout a %g cm, profondeur libre %g ; "
+          "poste %s ; treuil %s ; plaque %s"
+          % (K["Capsule"][0], K["Capsule"][1], K["EyeZ"], K["Reach"], K["Clearance.Margin"], K["Clearance.StandGap"], K["Clearance.StandDepth"],
+             tuple(K["post"][:3]), tuple(K["winch"][:3]), tuple(K["plate"][:3])))
+    if K["Capsule"][0] != K["Clearance.PlayerRadius"]:
+        print("ECHEC : BRMech::Clearance::PlayerRadius (%g) differe de la capsule de ABRCharacter (%g)" % (K["Clearance.PlayerRadius"], K["Capsule"][0]))
+        return 1
+    print()
+    res = {"A": case_level6(K, rules)}
+    print()
+    res["B"] = case_level8(K, rules, rock, a.seeds)
+    print()
+    res["C"] = case_level9(K, rules, house, a.seeds)
+    print()
+    res["D"] = case_level8_exits(K, rules, rock, a.seeds)
+    print()
+    print("Regle du jeu dans les sources :")
+    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()):
+        print("  %s : %s" % (what, "oui" if ok else "NON"))
+    print()
+    bad = 0
+    for case, r in res.items():
+        if "old" in r and r["old"]:
+            print("ECHEC : cas %s : l'ancienne regle passe (le defaut n'est plus reproduit par le banc)" % case)
+            bad += 1
+        if "new" in r and not r["new"]:
+            print("ECHEC : cas %s : la regle du jeu echoue" % case)
+            bad += 1
+    for case, checks in (("A", K["src_A"]), ("D", K["src_D"])):
+        if "new" in rules and not all(checks.values()):
+            print("ECHEC : cas %s : la regle v4.15 n'est plus dans les sources (%s)" % (case, ", ".join(w for w, ok in checks.items() if not ok)))
+            bad += 1
+    if "new" in rules and not K["rock_keepout_in_game"]:
+        print("ECHEC : BRChunk.cpp ne retire pas les rochers de la zone libre des mecanismes")
+        bad += 1
+    if "new" in rules and not K["house_body"]:
+        print("ECHEC : BRChunk.cpp n'a pas la boite du corps de la maison (GHouseBodyFront)")
+        bad += 1
+    word = lambda r, k: ("passe" if r[k] else "echoue") if k in r else "non jouee"
+    for r in res.values():
+        r.pop("first", None)  # premiere disposition v4.15 du cas A : pour information
+    print("RESULTAT : %s (%s)" % ("OK" if bad == 0 else "ECHEC", ", ".join("%s v4.14 %s / v4.15 %s" % (c, word(r, "old"), word(r, "new")) for c, r in res.items())))
+    return 0 if bad == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

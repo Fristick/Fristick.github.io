@@ -16,6 +16,7 @@
 #include "BRKeys.h"
 #include "Backrooms.h"
 
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/GameStateBase.h"
@@ -103,6 +104,40 @@ namespace
 	uint64 HoldKey(const ABRCharacter* By, int32 Device)
 	{
 		return (static_cast<uint64>(reinterpret_cast<UPTRINT>(By)) << 8) ^ static_cast<uint64>(Device & 0xFF);
+	}
+
+	/** v4.15 : mecanisme pose (repere de son emplacement, emprise de sa sorte, de son role et de son module) */
+	BRMech::Clearance::FPlaced PlacedMissionDevice(const BRM::FPlan& Plan, const TArray<FBRMissionSpot>& Spots, int32 I, float WallThickness)
+	{
+		BRMech::Clearance::FPlaced P;
+		P.Frame.X = static_cast<float>(Spots[I].Pos.X);
+		P.Frame.Y = static_cast<float>(Spots[I].Pos.Y);
+		P.Frame.Z = static_cast<float>(Spots[I].Pos.Z);
+		P.Frame.Yaw = Spots[I].Yaw;
+		P.Print = BRMech::Clearance::Of(Plan.Devices[I].Kind, Plan.Devices[I].Role, Spots[I].Module, WallThickness);
+		return P;
+	}
+
+	/** v4.15 : invariant du placement (journal ; les tests du jeu le verifient aussi dans le decor construit) : aucun point
+	 *  d'interaction dans le volume bloquant d'un autre mecanisme. v4.15 (correctifs) : aussi pour le module de secours */
+	void LogMissionVolumeInvariant(const BRM::FPlan& Plan, const TArray<FBRMissionSpot>& Spots, float WallThickness, const TCHAR* Tier)
+	{
+		for (int32 I = 0; I < Plan.NumDevices && I < Spots.Num(); ++I)
+		{
+			if (Plan.Devices[I].Kind == BRM::EKind::Gate)
+			{
+				continue;
+			}
+			const BRMech::FVec3 Aim = BRMech::Clearance::AimPoint(PlacedMissionDevice(Plan, Spots, I, WallThickness));
+			for (int32 J = 0; J < Plan.NumDevices && J < Spots.Num(); ++J)
+			{
+				if (J != I && BRMech::Clearance::InSolid(PlacedMissionDevice(Plan, Spots, J, WallThickness), Aim.X, Aim.Y, Aim.Z, BRMech::Clearance::Margin))
+				{
+					UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d%s : point d'interaction du mecanisme %d dans le volume du mecanisme %d (graine %u)"), Plan.Level, Tier, I, J,
+						Plan.Seed);
+				}
+			}
+		}
 	}
 }
 
@@ -193,6 +228,7 @@ void ABRWorld::ClearMission()
 	MissionSpots.Reset();
 	MissionExitSpots.Reset();
 	MissionCells.Reset();
+	MissionKeepOuts.Reset();
 	MissionHoldTimes.Reset();
 	MissionCooldowns.Reset();
 	MissionPlan = BRM::FPlan();
@@ -291,6 +327,26 @@ void ABRWorld::SetupMission()
 			MissionSpots = MoveTemp(Spots);
 			MissionExitSpots = MoveTemp(Exits);
 			MissionCells = MoveTemp(Cells);
+			// v4.15 : zones libres des mecanismes et des sorties de la mission, avant la construction des chunks (rochers)
+			for (int32 I = 0; I < MissionPlan.NumDevices && I < MissionSpots.Num(); ++I)
+			{
+				BRMech::Clearance::FPlaced P;
+				P.Frame.X = static_cast<float>(MissionSpots[I].Pos.X);
+				P.Frame.Y = static_cast<float>(MissionSpots[I].Pos.Y);
+				P.Frame.Z = static_cast<float>(MissionSpots[I].Pos.Z);
+				P.Frame.Yaw = MissionSpots[I].Yaw;
+				P.Print = BRMech::Clearance::Of(MissionPlan.Devices[I].Kind, MissionPlan.Devices[I].Role, MissionSpots[I].Module, Def().WallThickness);
+				MissionKeepOuts.Add(BRMech::Clearance::KeepOut(P));
+			}
+			for (const FMissionExitSpot& E : MissionExitSpots)
+			{
+				BRMech::FFrame F;
+				F.X = static_cast<float>(E.Pos.X);
+				F.Y = static_cast<float>(E.Pos.Y);
+				F.Z = static_cast<float>(E.Pos.Z);
+				F.Yaw = E.Yaw;
+				MissionKeepOuts.Add(BRMech::Clearance::ExitKeepOut(F));
+			}
 			BRM::InitState(MissionPlan, MissionState);
 			if (HasAuthority())
 			{
@@ -301,8 +357,9 @@ void ABRWorld::SetupMission()
 					{
 						MissionState = Restored;
 						UE_LOG(LogBackrooms, Log, TEXT("Reprise : mission du Niveau %d restauree (%s)"), Level, (MissionState.Solved & 1) ? TEXT("resolue") : TEXT("en cours"));
-						// v4.12 : placement d'une autre version : la progression est gardee, les mecanismes peuvent avoir bouge
-						if (ResumePlaceVersion != BRM::PlaceVersion && MissionNotice == 0)
+						// v4.12 : placement d'une autre version : la progression est gardee, les mecanismes peuvent avoir bouge.
+						// v4.15 : avis seulement dans les niveaux dont le placement a change (version 3 : le Level 6)
+						if (ResumePlaceVersion != BRM::PlaceVersion && MissionNotice == 0 && BRM::PlacementMoved(Level, ResumePlaceVersion))
 						{
 							MissionNotice = 3;
 						}
@@ -430,7 +487,9 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	const FBRLevelDef& D = Def();
 	const float S = D.CellSize;
 	const bool bBounded = D.BoundsChunks > 0;
-	const int32 MaxCells = FMath::CeilToInt(9500.f / S);
+	// v4.15 : plafond de la zone de mission (95 m de trajet). Seule l'entree de l'aile LiDAR du Level 6 peut le depasser
+	// (voir 3.) ; tout le reste du placement reste dans ce plafond
+	const int32 BaseMaxCells = FMath::CeilToInt(9500.f / S);
 
 	// 1. Zone de mission finie : parcours en largeur depuis le depart, au sec, hors des salles de fosses
 	auto Allowed = [&](const FIntPoint& C)
@@ -462,31 +521,45 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	}
 	TMap<FIntPoint, int32> Dist;
 	TArray<FIntPoint> Order;
-	Dist.Add(Start, 0);
-	Order.Add(Start);
-	for (int32 Head = 0; Head < Order.Num() && Order.Num() < 6000; ++Head)
+	// v4.15 : parcours pour un plafond donne. Un plafond plus haut garde le meme debut d'ordre (cellules a BaseMaxCells
+	// ou moins, dans le meme ordre) : filtrees au plafond de base, les cellules donnent les memes choix
+	auto RunBfs = [&](int32 Cap)
 	{
-		const FIntPoint Cur = Order[Head];
-		const int32 CD = Dist[Cur];
-		if (CD >= MaxCells)
+		Dist.Reset();
+		Order.Reset();
+		Dist.Add(Start, 0);
+		Order.Add(Start);
+		for (int32 Head = 0; Head < Order.Num() && Order.Num() < 6000; ++Head)
 		{
-			continue;
-		}
-		for (const FIntPoint& Dir : GMissionDirs)
-		{
-			const FIntPoint N = Cur + Dir;
-			if (Dist.Contains(N) || !Allowed(N) || !CanStep(Cur, N))
+			const FIntPoint Cur = Order[Head];
+			const int32 CD = Dist[Cur];
+			if (CD >= Cap)
 			{
 				continue;
 			}
-			Dist.Add(N, CD + 1);
-			Order.Add(N);
+			for (const FIntPoint& Dir : GMissionDirs)
+			{
+				const FIntPoint N = Cur + Dir;
+				if (Dist.Contains(N) || !Allowed(N) || !CanStep(Cur, N))
+				{
+					continue;
+				}
+				Dist.Add(N, CD + 1);
+				Order.Add(N);
+			}
 		}
-	}
+	};
+	RunBfs(BaseMaxCells);
 	if (Order.Num() < 24)
 	{
 		return false;
 	}
+	// Cellule atteinte dans le plafond de base (zone ordinaire des mecanismes)
+	auto InBaseZone = [&](const FIntPoint& C)
+	{
+		const int32* DC = Dist.Find(C);
+		return DC && *DC <= BaseMaxCells;
+	};
 
 	// 2. Emplacements d'une cellule : faces de mur (decalees le long du mur), ou poteau au centre (exterieur)
 	auto Faces = [&](const FIntPoint& C, TArray<FIntPoint>& OutDirs)
@@ -577,7 +650,8 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 			for (const FIntPoint& C : Order)
 			{
 				const float M = Dist[C] * S / 100.f;
-				if (M < L || M > H || IsSpawnArea(C.X, C.Y) || OutCells.Contains(C) || !FarFromUsed(C, Zone == 4 ? 3 : 2))
+				// v4.15 : hors de la salle de l'aile, rien au-dela du plafond de base (parcours etendu du Level 6)
+				if (Dist[C] > BaseMaxCells || M < L || M > H || IsSpawnArea(C.X, C.Y) || OutCells.Contains(C) || !FarFromUsed(C, Zone == 4 ? 3 : 2))
 				{
 					continue;
 				}
@@ -603,8 +677,9 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	// Les niveaux exterieurs (rues, champs) ont peu de murs : poteaux quand une cellule n'a pas de face
 	const bool bOutdoor = D.bOutdoor;
 
-	// Places libres d'une piece (cellule centrale et voisines) : faces de mur, sinon poteaux
-	auto RoomSlots = [&](const FIntPoint& Room, TArray<FBRMissionSpot>& Slots, const FIntPoint* SkipFace)
+	// Places libres d'une piece (cellule centrale et voisines) : faces de mur, sinon poteaux. v4.15 : voisines dans le
+	// plafond de base, sauf pour la salle de l'aile du Level 6 (bBeyondCap : au-dela, par le parcours etendu)
+	auto RoomSlots = [&](const FIntPoint& Room, TArray<FBRMissionSpot>& Slots, const FIntPoint* SkipFace, bool bBeyondCap)
 	{
 		Slots.Reset();
 		TArray<FIntPoint> RoomCells;
@@ -612,7 +687,7 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		for (const FIntPoint& Dir : GMissionDirs)
 		{
 			const FIntPoint N = Room + Dir;
-			if (Dist.Contains(N) && CanStep(Room, N) && !IsSpawnArea(N.X, N.Y))
+			if (Dist.Contains(N) && (bBeyondCap || InBaseZone(N)) && CanStep(Room, N) && !IsSpawnArea(N.X, N.Y))
 			{
 				RoomCells.Add(N);
 			}
@@ -651,24 +726,45 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	// 3. Salle de la mission et sortie garantie (niveaux infinis : on ne marche pas sans fin en attendant une sortie)
 	FIntPoint Room(0, 0);
 	// v4.13 : Level 6 : la salle de la mission est la galerie devant l'entree de l'aile LiDAR (portes du passage dans
-	// ses quatre ouvertures, echelle au fond d'une alcove). Entree hors d'atteinte (rare) : placement ordinaire
+	// ses quatre ouvertures, echelle au fond d'une alcove)
 	const FIntPoint WingOut(LidarWing.OutX, LidarWing.OutY);
 	bool bWingRoom = false;
 	if (Plan.Level == 6 && IsLidarLevel() && LidarWing.bValid)
 	{
-		for (const int32 V : { 1, 2, 0, 3 })
+		auto FindGallery = [&]()
 		{
-			const FIntPoint G = LidarCell(0, V) + WingOut;
-			if (Dist.Contains(G))
+			for (const int32 V : { 1, 2, 0, 3 })
 			{
-				Room = G;
-				bWingRoom = true;
-				break;
+				const FIntPoint G = LidarCell(0, V) + WingOut;
+				if (Dist.Contains(G))
+				{
+					Room = G;
+					return true;
+				}
+			}
+			return false;
+		};
+		bWingRoom = FindGallery();
+		if (!bWingRoom)
+		{
+			// v4.15 : galerie au-dela du plafond de 95 m (pres d'un chargement sur deux : le couloir garanti mesure de 18 a 41
+			// cellules) : nouveau parcours, plafond releve a la longueur du couloir (diamant de rayon 43 au plus, sous la
+			// limite de 6000 cellules), pour la seule salle de l'aile
+			const int32 WingCap = FMath::Max(BaseMaxCells, BRLidar::CorridorLength(LidarWing) + FMath::Abs(Start.X) + FMath::Abs(Start.Y) + 2);
+			if (WingCap > BaseMaxCells)
+			{
+				RunBfs(WingCap);
+				bWingRoom = FindGallery();
+				if (!bWingRoom)
+				{
+					RunBfs(BaseMaxCells);
+				}
 			}
 		}
 		if (!bWingRoom)
 		{
-			UE_LOG(LogBackrooms, Warning, TEXT("[Lidar] Entree de l'aile non atteinte depuis le depart (graine %u) : mecanismes du passage places dans une salle ordinaire"), Plan.Seed);
+			// Ne devrait jamais arriver (le couloir garanti y mene toujours) : placement ordinaire
+			UE_LOG(LogBackrooms, Error, TEXT("[Lidar] Entree de l'aile non atteinte depuis le depart, meme par le couloir garanti (graine %u) : mecanismes du passage places dans une salle ordinaire"), Plan.Seed);
 		}
 	}
 	if (!bWingRoom && !PickCell(4, 0x5A11u, !bOutdoor, bOutdoor ? 0 : 2, Room) && !PickCell(4, 0x5A12u, false, 0, Room))
@@ -689,7 +785,7 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		{
 			const FIntPoint Dir = Ds[(CellHash(C, 0xB41Du) + static_cast<uint32>(K)) % static_cast<uint32>(N)];
 			const FIntPoint Front = C - Dir;
-			if (Dist.Contains(Front) && CanStep(C, Front) && !IsSpawnArea(Front.X, Front.Y) && !OutCells.Contains(Front))
+			if (InBaseZone(Front) && CanStep(C, Front) && !IsSpawnArea(Front.X, Front.Y) && !OutCells.Contains(Front))
 			{
 				OutDir = Dir;
 				return true;
@@ -788,7 +884,7 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 				for (const FIntPoint& Dir : GMissionDirs)
 				{
 					const FIntPoint N = Room + Dir;
-					if (Dist.Contains(N) && CanStep(Room, N) && !OutCells.Contains(N) && !IsSpawnArea(N.X, N.Y))
+					if (InBaseZone(N) && CanStep(Room, N) && !OutCells.Contains(N) && !IsSpawnArea(N.X, N.Y))
 					{
 						Cell = N;
 						bFound = true;
@@ -944,6 +1040,37 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 	Groups.GetKeys(GroupKeys);
 	GroupKeys.Sort();
 	TArray<FBRMissionSpot> Slots;
+	// v4.15 : places prises dans chaque piece (deux groupes de la meme salle ne prennent plus la meme place) et
+	// mecanismes deja poses dans chaque piece : aucun point d'interaction dans la cage d'un voisin (BRMech::Clearance)
+	TMap<FIntPoint, TArray<bool>> TakenByRoom;
+	TMap<FIntPoint, TArray<int32>> PlacedByRoom;
+	const float FaceHalf = S * 0.5f - D.WallThickness * 0.5f;
+	auto FrameOf = [](const FBRMissionSpot& Sp)
+	{
+		BRMech::FFrame F;
+		F.X = static_cast<float>(Sp.Pos.X);
+		F.Y = static_cast<float>(Sp.Pos.Y);
+		F.Z = static_cast<float>(Sp.Pos.Z);
+		F.Yaw = Sp.Yaw;
+		return F;
+	};
+	auto LateralOf = [this](const FBRMissionSpot& Sp)
+	{
+		const FVector Fwd = FRotator(0.f, Sp.Yaw, 0.f).Vector();
+		const FVector Right(-Fwd.Y, Fwd.X, 0.f);
+		return static_cast<float>(FVector::DotProduct(Sp.Pos - CellCenter(Sp.Cell, 0.f), Right));
+	};
+	auto NearWingDoor = [&WingDoors](const FVector& P)
+	{
+		for (const FVector& Dw : WingDoors)
+		{
+			if (FVector::Dist2D(P, Dw) < 150.f)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
 	for (const int32 Key : GroupKeys)
 	{
 		const TArray<int32>& Members = Groups[Key];
@@ -957,32 +1084,51 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 			}
 			Used.Add(GroupRoom);
 		}
-		const TArray<FIntPoint> RoomCells = RoomSlots(GroupRoom, Slots, (GroupRoom == Room && bHasExitFace) ? &ExitFace : nullptr);
-		// Les places voisines de la sortie restent libres (la porte s'ouvre devant)
-		int32 SlotIdx = 0;
-		for (const int32 Dev : Members)
+		const TArray<FIntPoint> RoomCells = RoomSlots(GroupRoom, Slots, (GroupRoom == Room && bHasExitFace) ? &ExitFace : nullptr, bWingRoom && GroupRoom == Room);
+		TArray<bool>& Taken = TakenByRoom.FindOrAdd(GroupRoom);
+		Taken.SetNumZeroed(Slots.Num());
+		TArray<int32>& InRoom = PlacedByRoom.FindOrAdd(GroupRoom);
+		// v4.15 : les mecanismes qui occupent de la place (cage du Level 6) d'abord, les autres autour d'eux, sans entrer
+		// dans leur volume (le poste d'une cage n'est plus dans sa cage) ; sans volume : premiere place libre, comme avant
+		auto HasVolume = [&Plan, &D](int32 I)
 		{
-			auto NearWingDoor = [&WingDoors](const FVector& P)
+			return BRMech::Clearance::Of(Plan.Devices[I].Kind, Plan.Devices[I].Role, BRMech::Module::None, D.WallThickness).bSolid;
+		};
+		TArray<int32> Ordered = Members;
+		Ordered.StableSort([&HasVolume](int32 A, int32 B) { return HasVolume(A) && !HasVolume(B); });
+		TArray<BRMech::Clearance::FSlot> Cand;
+		Cand.SetNum(Slots.Num());
+		for (int32 J = 0; J < Slots.Num(); ++J)
+		{
+			Cand[J].Frame = FrameOf(Slots[J]);
+			Cand[J].Lateral = LateralOf(Slots[J]);
+			Cand[J].bWall = Slots[J].bWall;
+		}
+		for (const int32 Dev : Ordered)
+		{
+			// Les places voisines de la sortie restent libres (la porte s'ouvre devant), ainsi que celles devant les portes
+			// de l'aile
+			for (int32 J = 0; J < Slots.Num(); ++J)
 			{
-				for (const FVector& Dw : WingDoors)
-				{
-					if (FVector::Dist2D(P, Dw) < 150.f)
-					{
-						return true;
-					}
-				}
-				return false;
-			};
-			while (SlotIdx < Slots.Num() && GroupRoom == Room && OutExits.Num() > 0
-				&& (FVector::Dist2D(Slots[SlotIdx].Pos, OutExits[0].Pos) < 140.f || NearWingDoor(Slots[SlotIdx].Pos)))
-			{
-				++SlotIdx;
+				Cand[J].bOpen = !Taken[J] && !(GroupRoom == Room && OutExits.Num() > 0
+					&& (FVector::Dist2D(Slots[J].Pos, OutExits[0].Pos) < 140.f || NearWingDoor(Slots[J].Pos)));
 			}
-			if (SlotIdx >= Slots.Num())
+			TArray<BRMech::Clearance::FPlaced> Near;
+			for (const int32 Other : InRoom)
+			{
+				BRMech::Clearance::FPlaced& P = Near.AddDefaulted_GetRef();
+				P.Frame = FrameOf(OutSpots[Other]);
+				P.Print = BRMech::Clearance::Of(Plan.Devices[Other].Kind, Plan.Devices[Other].Role, OutSpots[Other].Module, D.WallThickness);
+			}
+			const BRMech::Clearance::FFootprint Print = BRMech::Clearance::Of(Plan.Devices[Dev].Kind, Plan.Devices[Dev].Role, BRMech::Module::None, D.WallThickness);
+			const int32 J = BRMech::Clearance::PickSlot(Print, Cand.GetData(), Cand.Num(), Near.GetData(), Near.Num(), FaceHalf);
+			if (J < 0)
 			{
 				return false;
 			}
-			OutSpots[Dev] = Slots[SlotIdx++];
+			Taken[J] = true;
+			OutSpots[Dev] = Slots[J];
+			InRoom.Add(Dev);
 		}
 		for (const FIntPoint& C : RoomCells)
 		{
@@ -1057,6 +1203,8 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		}
 		OutCells.Add(Spot.Cell);
 	}
+	// v4.15 : invariant du placement : aucun point d'interaction dans le volume bloquant d'un autre mecanisme (journal)
+	LogMissionVolumeInvariant(Plan, OutSpots, D.WallThickness, TEXT(""));
 	return true;
 }
 
@@ -1233,6 +1381,24 @@ bool ABRWorld::PlaceMissionModule(const BRM::FPlan& Plan, TArray<FBRMissionSpot>
 	}
 	OutSpots.SetNum(Plan.NumDevices);
 	int32 Next = 0;
+	// v4.15 : meme regle que le placement normal (BRMech::Clearance) des qu'un mecanisme occupe de la place (cage du
+	// Level 6) : aucun point d'interaction dans son volume. Sans volume, l'ordre d'avant (curseur) est garde
+	TArray<bool> Taken;
+	Taken.SetNumZeroed(Slots.Num());
+	TArray<BRMech::Clearance::FSlot> Cand;
+	Cand.SetNum(Slots.Num());
+	for (int32 J = 0; J < Slots.Num(); ++J)
+	{
+		const FVector Fwd = FRotator(0.f, Slots[J].Yaw, 0.f).Vector();
+		Cand[J].Frame.X = static_cast<float>(Slots[J].Pos.X);
+		Cand[J].Frame.Y = static_cast<float>(Slots[J].Pos.Y);
+		Cand[J].Frame.Z = static_cast<float>(Slots[J].Pos.Z);
+		Cand[J].Frame.Yaw = Slots[J].Yaw;
+		Cand[J].Lateral = static_cast<float>(FVector::DotProduct(Slots[J].Pos - CellCenter(Slots[J].Cell, 0.f), FVector(-Fwd.Y, Fwd.X, 0.f)));
+		Cand[J].bWall = Slots[J].bWall;
+	}
+	TArray<BRMech::Clearance::FPlaced> Placed;
+	bool bAnyVolume = false;
 	for (int32 I = 0; I < Plan.NumDevices; ++I)
 	{
 		if (I == GateDevice && OutExits.Num() > 0)
@@ -1249,15 +1415,36 @@ bool ABRWorld::PlaceMissionModule(const BRM::FPlan& Plan, TArray<FBRMissionSpot>
 			OutSpots[I] = G;
 			continue;
 		}
-		// La porte s'ouvre devant la sortie : rien a moins de 1,4 m
-		while (Next < Slots.Num() - 1 && OutExits.Num() > 0 && FVector::Dist2D(Slots[Next].Pos, OutExits[0].Pos) < 140.f)
+		const BRMech::Clearance::FFootprint Print = BRMech::Clearance::Of(Plan.Devices[I].Kind, Plan.Devices[I].Role, BRMech::Module::None, D.WallThickness);
+		int32 Idx = -1;
+		if (Print.bSolid || bAnyVolume)
 		{
+			for (int32 J = 0; J < Slots.Num(); ++J)
+			{
+				Cand[J].bOpen = !Taken[J] && !(OutExits.Num() > 0 && FVector::Dist2D(Slots[J].Pos, OutExits[0].Pos) < 140.f);
+			}
+			Idx = BRMech::Clearance::PickSlot(Print, Cand.GetData(), Cand.Num(), Placed.GetData(), Placed.Num(), S * 0.5f - D.WallThickness * 0.5f);
+		}
+		if (Idx < 0)
+		{
+			// La porte s'ouvre devant la sortie : rien a moins de 1,4 m. v4.15 (correctifs) : ni sur une place deja prise par
+			// PickSlot (le curseur n'avance pas pour elle) ; sans volume, rien n'est pris devant le curseur : ordre d'avant
+			while (Next < Slots.Num() - 1 && (Taken[Next] || (OutExits.Num() > 0 && FVector::Dist2D(Slots[Next].Pos, OutExits[0].Pos) < 140.f)))
+			{
+				++Next;
+			}
+			Idx = FMath::Min(Next, Slots.Num() - 1);
 			++Next;
 		}
-		OutSpots[I] = Slots[FMath::Min(Next, Slots.Num() - 1)];
-		++Next;
+		Taken[Idx] = true;
+		OutSpots[I] = Slots[Idx];
 		OutCells.Add(OutSpots[I].Cell);
+		BRMech::Clearance::FPlaced& P = Placed.AddDefaulted_GetRef();
+		P.Frame = Cand[Idx].Frame;
+		P.Print = Print;
+		bAnyVolume |= Print.bSolid;
 	}
+	LogMissionVolumeInvariant(Plan, OutSpots, D.WallThickness, TEXT(" (module de secours)"));
 	return true;
 }
 
@@ -1361,6 +1548,75 @@ void ABRWorld::UpdateMissionDevices(float Dt)
 // Actions (serveur)
 // =====================================================================================================================
 
+bool ABRWorld::CanReachMissionDevice(const FVector& Eye, const ABRMissionDevice* Dev, const AActor* By, FHitResult* OutBlock) const
+{
+	UWorld* World = GetWorld();
+	if (!World || !Dev || !IsMissionActive())
+	{
+		return false;
+	}
+	const int32 Device = Dev->GetIndex();
+	if (Device < 0 || Device >= MissionPlan.NumDevices)
+	{
+		return false;
+	}
+	const FVector Target = Dev->GetInteractPoint();
+	// v4.13 : la mire et les cages du Level 6 se relevent au scan focalise, de plus loin (toujours en ligne de vue)
+	const BRM::EKind KindAt = MissionPlan.Devices[Device].Kind;
+	const uint8 RoleAt = MissionPlan.Devices[Device].Role;
+	const bool bScanned = KindAt == BRM::EKind::Observe && (RoleAt == BRM::R_LidarTarget || RoleAt == BRM::R_LidarCage);
+	const float Reach = bScanned ? MissionScanReachServer : MissionReachServer;
+	if (FVector::DistSquared(Eye, Target) > FMath::Square(Reach))
+	{
+		return false;
+	}
+	// Ligne de vue : seuls le joueur et le mecanisme vise sont ignores (pas les portes fermees, cages, bassins voisins)
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRMissionLos), false, By);
+	Q.AddIgnoredActor(Dev);
+	if (OutBlock)
+	{
+		return !World->LineTraceSingleByChannel(*OutBlock, Eye, Target, ECC_WorldStatic, Q);
+	}
+	return !World->LineTraceTestByChannel(Eye, Target, ECC_WorldStatic, Q);
+}
+
+bool ABRWorld::FindMissionDeviceObstruction(const ABRMissionDevice* Dev, const AActor* IgnoreAlso, FString& OutWhat) const
+{
+	UWorld* World = GetWorld();
+	if (!World || !Dev)
+	{
+		return false;
+	}
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRMissionPoint), false, Dev);
+	if (IgnoreAlso)
+	{
+		Q.AddIgnoredActor(IgnoreAlso);
+	}
+	TArray<FOverlapResult> Hits;
+	World->OverlapMultiByChannel(Hits, Dev->GetInteractPoint(), FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(5.f), Q);
+	for (const FOverlapResult& H : Hits)
+	{
+		if (H.bBlockingHit)
+		{
+			OutWhat = FString::Printf(TEXT("%s (%s)"), *GetNameSafe(H.GetActor()), *GetNameSafe(H.GetComponent()));
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ABRWorld::IsMissionKeepOut(const BRMech::Clearance::FRect& R) const
+{
+	for (const BRMech::Clearance::FRect& K : MissionKeepOuts)
+	{
+		if (BRMech::Clearance::Overlap(K, R))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 uint8 ABRWorld::ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, int32 LevelSerial, uint8& OutRelated, uint8& OutCount)
 {
 	OutRelated = 255;
@@ -1379,21 +1635,9 @@ uint8 ABRWorld::ServerMissionAct(ABRCharacter* By, int32 Device, uint8 Action, i
 	{
 		return BRMissionText::NotNow;
 	}
-	// Distance 3D depuis les yeux et ligne de vue (pas a travers un mur, pas depuis un autre etage)
-	const FVector Eye = By->GetEyeLocation();
-	const FVector Target = Dev->GetInteractPoint();
-	// v4.13 : la mire et les cages du Level 6 se relevent au scan focalise, de plus loin (toujours en ligne de vue)
-	const BRM::EKind KindAt = MissionPlan.Devices[Device].Kind;
-	const uint8 RoleAt = MissionPlan.Devices[Device].Role;
-	const bool bScanned = KindAt == BRM::EKind::Observe && (RoleAt == BRM::R_LidarTarget || RoleAt == BRM::R_LidarCage);
-	const float Reach = bScanned ? MissionScanReachServer : MissionReachServer;
-	if (FVector::DistSquared(Eye, Target) > FMath::Square(Reach))
-	{
-		return BRMissionText::TooFar;
-	}
-	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRMissionLos), false, By);
-	Q.AddIgnoredActor(Dev);
-	if (GetWorld()->LineTraceTestByChannel(Eye, Target, ECC_WorldStatic, Q))
+	// Distance 3D depuis les yeux et ligne de vue (pas a travers un mur, pas depuis un autre etage). v4.15 : la regle
+	// partagee avec les tests (CanReachMissionDevice)
+	if (!CanReachMissionDevice(By->GetEyeLocation(), Dev, By))
 	{
 		return BRMissionText::TooFar;
 	}

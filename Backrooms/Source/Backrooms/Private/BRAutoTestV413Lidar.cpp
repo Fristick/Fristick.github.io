@@ -4,6 +4,7 @@
 // LiDAR en cours, et en reseau : meme aile et meme etat chez l'hote et le client, points locaux a chaque machine.
 // Prepare, non execute ici (pas d'Unreal dans l'environnement de developpement) : lancer -BRAutoTestV413 ou -BRNetTest.
 #include "BRAutoTest.h"
+#include "BRAutoTestWalk.h"
 #include "BRWorld.h"
 #include "BRCharacter.h"
 #include "BRPlayerController.h"
@@ -15,6 +16,8 @@
 #include "Backrooms.h"
 
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "HAL/PlatformTime.h"
 
 namespace BRM = BRMission;
 
@@ -22,6 +25,24 @@ namespace BRTestLidar
 {
 	/** Graine du test (-BRSeed equivalente) */
 	constexpr uint32 LidarSeed = 4136;
+	/** v4.15 : graines des correctifs du placement (diag_v413_4) : 4136 et 6 (galerie de l'aile au-dela du plafond de 95 m),
+	 *  208 (couloir garanti de 41 cellules, le plus long), 4126 (aile atteinte sans plafond releve) */
+	const uint32 PlaceSeeds[] = { 4136u, 4126u, 6u, 208u };
+
+	/** v4.15 : joueur pose sans vitesse (regard vers Target) ; bHover : sans chute pendant la construction d'un chunk */
+	void PlaceAt(ABRCharacter* C, const FVector& Stand, const FVector& Target, bool bHover)
+	{
+		C->SetActorLocation(Stand, false, nullptr, ETeleportType::TeleportPhysics);
+		if (UCharacterMovementComponent* M = C->GetCharacterMovement())
+		{
+			M->StopMovementImmediately();
+			M->SetMovementMode(bHover ? MOVE_Flying : MOVE_Walking);
+		}
+		if (AController* Ctrl = C->GetController())
+		{
+			Ctrl->SetControlRotation((Target - C->GetEyeLocation()).Rotation());
+		}
+	}
 
 	const TCHAR* Oui(bool b)
 	{
@@ -285,6 +306,39 @@ void ABRAutoTest::AddV413LidarSteps()
 			W->GetMissionNotice(), Oui(E.Steps[0] == BRM::EStep::Done), E.Progress[1], TestCountA), !bOk);
 		return true;
 	});
+	// v4.15 : la meme mission sauvegardee avec le placement 2 (v4.14) : les postes et les cages (et, une graine sur deux, la
+	// salle de l'aile) ont bouge : progression gardee, avis 3 ("mecanismes reamenages")
+	Add(TEXT("v4.15 Level 6 : reprise d'une session du placement 2"), 0.f, [this, LevelSeed]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6)
+		{
+			return StepTime > 30.f;
+		}
+		BRM::FEval E;
+		W->GetMissionEval(E);
+		TestCountA = E.Progress[1];
+		FBRSessionState Session = MakeSession(LevelSeed, W->GetMissionPlan(), W->GetMissionState());
+		Session.PlaceVersion = 2;
+		BRSaves::PendingResume() = Session;
+		TestCountC = W->GetLevelSerial();
+		W->RequestTransition(6, false, LevelSeed);
+		return true;
+	});
+	Add(TEXT("v4.15 Level 6 : reprise d'une session du placement 2, verification"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6 || W->GetLevelSerial() == TestCountC)
+		{
+			return StepTime > 30.f;
+		}
+		BRM::FEval E;
+		W->GetMissionEval(E);
+		const bool bOk = W->GetMissionNotice() == 3 && E.Progress[1] == TestCountA;
+		Note(FString::Printf(TEXT("session du placement 2 (v4.14) : avis %d (attendu 3 : mecanismes reamenages), postes %d/4 (avant : %d)"), W->GetMissionNotice(),
+			E.Progress[1], TestCountA), !bOk);
+		return true;
+	});
 	// Une ancienne session terminee reste terminee : le Level 6 fini ne bloque jamais la sortie vers le Niveau 8
 	Add(TEXT("v4.13 Level 6 : ancienne session terminee"), 0.f, [this, LevelSeed]()
 	{
@@ -314,6 +368,164 @@ void ABRAutoTest::AddV413LidarSteps()
 			Oui(E.bSolved)), !bOk);
 		return true;
 	});
+	// v4.15 : correctifs du placement du Level 6 sur plusieurs graines (salle de l'aile, postes hors de leur cage)
+	AddV415LidarPlaceSteps();
+}
+
+// =====================================================================================================================
+// v4.15 : Level 6, correctifs du placement (diag_v413_4), sur chaque graine de BRTestLidar::PlaceSeeds : la salle de la
+// mission est la galerie de l'aile (quatre portes du passage dans l'aile), sans l'avertissement "entree de l'aile non
+// atteinte" ni point vise dans le volume d'un autre mecanisme ; chaque poste et chaque cage a une place d'ou l'hote accepte
+// l'action (AddMissionPlaceSweep) ; le poste 1 tourne vraiment depuis sa place (postes 1/4)
+// =====================================================================================================================
+
+void ABRAutoTest::AddV415LidarPlaceSteps()
+{
+	using namespace BRTestLidar;
+	for (const uint32 UserSeed : PlaceSeeds)
+	{
+		AddSeedLoad(6, UserSeed, FString::Printf(TEXT("v4.15 Level 6, graine %u : aile, postes et cages"), UserSeed));
+		Add(FString::Printf(TEXT("v4.15 Level 6 (graine %u) : salle de l'aile"), UserSeed), 0.5f, [this, UserSeed]()
+		{
+			ABRWorld* W = GetBRWorld();
+			if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 6 || (!W->IsMissionActive() && StepTime < 10.f))
+			{
+				if (StepTime > 30.f)
+				{
+					Note(FString::Printf(TEXT("Level 6 (graine %u) non pret apres 30 s"), UserSeed), true);
+					return true;
+				}
+				return false;
+			}
+			const BRLidar::FWing& Wing = W->GetLidarWing();
+			int32 Doors = 0, DoorModules = 0;
+			for (const ABRMissionDevice* D : W->GetMissionDevices())
+			{
+				if (D && D->GetDeviceDef().Role == BRM::R_LidarDoor)
+				{
+					++Doors;
+					DoorModules += D->GetModule() == BRMech::Module::LidarDoor ? 1 : 0;
+				}
+			}
+			// Journal depuis le chargement : placement de secours (salle ordinaire) et invariant du placement
+			const int32 From = Report().FirstLogLine;
+			const bool bWarn = LogContains(From, TEXT("Entree de l'aile non atteinte"));
+			const bool bInside = LogContains(From, TEXT("dans le volume du mecanisme"));
+			const bool bWingRoom = Doors == 4 && DoorModules == 4;
+			const bool bOk = W->IsLidarLevel() && Wing.bValid && W->IsMissionActive() && bWingRoom && !bWarn && !bInside;
+			Note(FString::Printf(TEXT("Level 6, graine %u (graine du niveau %u) : aile au chunk (%d, %d) %s, mission %s, portes %d dont %d dans l'aile (salle de l'aile %s), "
+				"avertissement \"entree de l'aile non atteinte\" %s, point vise dans le volume d'un autre mecanisme %s"), UserSeed, W->GetSeed(), Wing.ChunkX, Wing.ChunkY,
+				Wing.bValid ? TEXT("valide") : TEXT("ABSENTE"), Oui(W->IsMissionActive()), Doors, DoorModules, Oui(bWingRoom), bWarn ? TEXT("OUI") : TEXT("non"),
+				bInside ? TEXT("OUI") : TEXT("non")), !bOk);
+			return true;
+		});
+		AddMissionPlaceSweep(6, true);
+		// Le poste 1 tourne par de vraies demandes depuis sa place (calibrage fait par les regles ordinaires de l'hote : il n'est
+		// pas ce qui est verifie ici). Phases 70 a 72 ; TestCountA : demandes, TestCountB : refus "trop loin", TestCountC : dernier retour
+		Add(FString::Printf(TEXT("v4.15 Level 6 (graine %u) : poste 1 tourne depuis sa place"), UserSeed), 0.f, [this, UserSeed]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			if (!W || !C || W->GetLevelNumber() != 6 || !W->IsMissionActive())
+			{
+				Skip(FString::Printf(TEXT("Level 6 (graine %u) absent ou sans mission : poste 1 non tourne"), UserSeed));
+				TestMissionPhase = 0;
+				return true;
+			}
+			const BRM::FPlan& P = W->GetMissionPlan();
+			const int32 Post = FindRoleIndex(P, BRM::R_LidarPost);
+			ABRMissionDevice* Dev = Post >= 0 ? W->FindMissionDevice(Post) : nullptr;
+			if (!Dev)
+			{
+				Note(FString::Printf(TEXT("Level 6 (graine %u) : poste 1 absent du monde"), UserSeed), true);
+				TestMissionPhase = 0;
+				return true;
+			}
+			const double Now = FPlatformTime::Seconds();
+			const FVector Aim = Dev->GetInteractPoint();
+			C->Sanity = 100.f; // la folie ignore le mode invincible (regle du jeu)
+			if (TestMissionPhase < 70 || TestMissionPhase > 72)
+			{
+				const int32 Calib = FindRoleIndex(P, BRM::R_LidarTarget);
+				if (!W->IsLidarCalibrated() && Calib >= 0)
+				{
+					W->DebugCompleteMissionDevice(Calib);
+				}
+				FVector Stand;
+				if (!BRTestV412::FindMissionStand(W, C, Dev, false, Stand))
+				{
+					Stand = W->CellCenter(Dev->GetCell(), static_cast<float>(Aim.Z));
+				}
+				PlaceAt(C, Stand, Aim, true);
+				TestCountA = 0;
+				TestCountB = 0;
+				TestCountC = -1;
+				TestMissionLastHold = 0.0;
+				TestMissionClock = Now;
+				TestMissionPhase = 70;
+				return false;
+			}
+			if (TestMissionPhase == 70)
+			{
+				// Chunk du poste construit, puis sa place dans le decor construit ; le joueur s'y pose (marche)
+				if (!Dev->IsShown() || Now - TestMissionClock < 0.5)
+				{
+					if (Now - TestMissionClock > 20.0)
+					{
+						Note(FString::Printf(TEXT("Level 6 (graine %u) : le chunk du poste 1 n'est pas construit apres 20 s"), UserSeed), true);
+						PlaceAt(C, C->GetActorLocation(), Aim, false);
+						TestMissionPhase = 0;
+						return true;
+					}
+					return false;
+				}
+				FVector Stand;
+				FString Why;
+				if (!BRTestV412::FindMissionStand(W, C, Dev, false, Stand, &Why))
+				{
+					Note(FString::Printf(TEXT("Level 6 (graine %u) : poste 1 (mecanisme %d) sans place debout a portee et a vue (%s)"), UserSeed, Post, *Why), true);
+					PlaceAt(C, C->GetActorLocation(), Aim, false);
+					TestMissionPhase = 0;
+					return true;
+				}
+				PlaceAt(C, Stand, Aim, false);
+				TestMissionClock = Now;
+				TestMissionPhase = 71;
+				return false;
+			}
+			FaceAt(C, Aim);
+			BRM::FEval E;
+			W->GetMissionEval(E);
+			if (E.Progress[1] >= 1 || TestCountA >= 12 || Now - TestMissionClock > 30.0)
+			{
+				FHitResult Block;
+				const bool bServer = W->CanReachMissionDevice(C->GetEyeLocation(), Dev, C, &Block);
+				const bool bOk = E.Progress[1] == 1 && TestCountB == 0;
+				Note(FString::Printf(TEXT("Level 6, graine %u : poste 1 (mecanisme %d) tourne depuis sa place : postes %d/4 (attendu 1) apres %d demande(s), refus \"trop loin\" %d, "
+					"dernier retour %d ; yeux a %.0f cm du point, regle de l'hote %s"), UserSeed, Post, E.Progress[1], TestCountA, TestCountB, TestCountC,
+					FVector::Dist(C->GetEyeLocation(), Aim), bServer ? TEXT("action acceptee") : *FString::Printf(TEXT("REFUSEE (%s)"), *GetNameSafe(Block.GetComponent()))), !bOk);
+				Shot(FString::Printf(TEXT("v415_level6_%u_poste1"), UserSeed));
+				TestMissionPhase = 0;
+				return true;
+			}
+			// Une unite par 0,4 s au plus chez l'hote ; le joueur se pose d'abord
+			if (Now - TestMissionClock < 0.3 || Now - TestMissionLastHold < 0.45)
+			{
+				return false;
+			}
+			const int32 Before = C->MissionResultsReceived;
+			C->RequestMissionAction(Post, static_cast<uint8>(BRM::EAction::Hold));
+			TestMissionLastHold = Now;
+			++TestCountA;
+			if (C->MissionResultsReceived != Before)
+			{
+				TestCountC = C->LastMissionFeedback;
+				TestCountB += C->LastMissionFeedback == BRMissionText::TooFar ? 1 : 0;
+			}
+			return false;
+		});
+		LimitLastStep(60.f);
+	}
 }
 
 void ABRAutoTest::AddNetV413LidarSteps(bool bClient)

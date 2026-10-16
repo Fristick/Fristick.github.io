@@ -60,6 +60,9 @@ namespace BRLidar
 	bool CorridorEdge(const FWing& W, int AX, int AY, int BX, int BY);
 	/** Cellule de la galerie devant la porte V = 1 (fin du couloir, salle de la mission) */
 	void CorridorEnd(const FWing& W, int& OutX, int& OutY);
+	/** v4.15 : longueur du couloir garanti depuis la cellule (0, 0), en cellules (|GX| + |GY| : le chemin a pied le plus
+	 *  court jusqu'a la galerie ne la depasse jamais). Le placement de la mission en tire le plafond du parcours de l'aile */
+	int CorridorLength(const FWing& W);
 
 	// ---------------------------------------------------------------------------------------------------- Scanner
 	/** Categories de points : couleur ET forme (lisibles sans distinguer les couleurs) */

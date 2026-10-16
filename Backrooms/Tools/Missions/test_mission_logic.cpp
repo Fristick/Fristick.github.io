@@ -624,6 +624,22 @@ int main(int argc, char** argv)
 			Fail(1, 5, "fusible attribue deux fois");
 		}
 	}
+	// v4.15 : version de placement 3 : l'avis "mecanismes reamenages" a la reprise ne concerne que le Level 6 (postes et
+	// cages, salle de l'aile) ; une sauvegarde d'avant la v4.12 (1) ou d'une version inconnue le donne partout
+	{
+		bool bOk = PlaceVersion == 3;
+		int Moved = 0;
+		for (const int L : { 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37 })
+		{
+			bOk = bOk && PlacementMoved(L, 2) == (L == 6) && PlacementMoved(L, 1) && !PlacementMoved(L, PlaceVersion) && PlacementMoved(L, PlaceVersion + 1);
+			Moved += PlacementMoved(L, 2) ? 1 : 0;
+		}
+		if (!bOk)
+		{
+			Fail(6, 0, "avis de placement : niveaux concernes par la version 3");
+		}
+		std::printf("Placement v%d : avis \"reamenages\" depuis la version 2 dans %d niveau(x) (Level 6)\n", PlaceVersion, Moved);
+	}
 	std::printf("Actions jouees : %ld (solveur) + %ld (au hasard)\n", TotalActions, TotalFuzz);
 	if (Failures)
 	{

@@ -195,6 +195,13 @@ void CorridorEnd(const FWing& W, int& OutX, int& OutY)
 	OutY += W.OutY;
 }
 
+int CorridorLength(const FWing& W)
+{
+	int GX = 0, GY = 0;
+	CorridorEnd(W, GX, GY);
+	return (GX < 0 ? -GX : GX) + (GY < 0 ? -GY : GY);
+}
+
 bool CorridorEdge(const FWing& W, int AX, int AY, int BX, int BY)
 {
 	if (!W.bValid || (AX - BX) * (AX - BX) + (AY - BY) * (AY - BY) != 1)
