@@ -1379,10 +1379,13 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	}
 	ParentResolved[Index] = true;
 
-	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface"), TEXT("M_BR_PitShade") };
+	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface"), TEXT("M_BR_PitShade"),
+		TEXT("M_BR_WorldCloth") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
-	// (v4.7 : "RoughContrast", la carte de rugosite ; la peau et les modeles l'ont aussi)
-	const TCHAR* V2Params[] = { TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("WaterSim"), TEXT("PitShadeAmount") };
+	// (v4.7 : "RoughContrast", la carte de rugosite ; la peau et les modeles l'ont aussi. v4.15 : "Cavity" pour le monde,
+	// materiaux v8 : normales reorientees, occlusion de cavite, reflectance ; "Sheen" pour la moquette)
+	const TCHAR* V2Params[] = { TEXT("Cavity"), TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("WaterSim"), TEXT("PitShadeAmount"),
+		TEXT("Sheen") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -1409,7 +1412,8 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	// v4.8 : usages declares (instances, maillages a squelette, Nanite). Un materiau importe avant la v4.8 n'a que l'usage
 	// "instances" : la combinaison et les entites a squelette recevaient le materiau par defaut hors de l'editeur
 	static const EBRMasterMaterial UsageKinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
-		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade };
+		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade, EBRMasterMaterial::WorldCloth };
+	static_assert(UE_ARRAY_COUNT(UsageKinds) == static_cast<int32>(EParent::Count), "Un type de materiau par EParent");
 	if (M && !EnsureUsages(M, UsageKinds[Index], AssetNames[Index]) && BRMaterialBuilder::IsAvailable())
 	{
 		M = nullptr; // jeu autonome non cuisine : le materiau construit a la volee declare tous ses usages
@@ -1417,9 +1421,7 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 
 	if (!M && BRMaterialBuilder::IsAvailable())
 	{
-		static const EBRMasterMaterial Kinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
-			EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade };
-		M = BRMaterialBuilder::Build(Kinds[Index], this, [this](FName TexName) { return Texture(TexName); });
+		M = BRMaterialBuilder::Build(UsageKinds[Index], this, [this](FName TexName) { return Texture(TexName); });
 		if (M)
 		{
 			bRuntimeContent = true;
@@ -1616,7 +1618,12 @@ UMaterialInstanceDynamic* UBRAssets::NewSurface(const FBRSurface& S, UObject* Ou
 
 UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject* Outer)
 {
-	UMaterialInterface* ParentMat = Parent(EParent::World);
+	// v4.15 : moquette (Sheen > 0) : variante "tissu" du materiau du monde, sinon le materiau du monde
+	UMaterialInterface* ParentMat = S.Sheen > 0.f ? Parent(EParent::WorldCloth) : nullptr;
+	if (!ParentMat)
+	{
+		ParentMat = Parent(EParent::World);
+	}
 	const bool bCustom = ParentMat != nullptr;
 	if (!ParentMat)
 	{
@@ -1676,6 +1683,11 @@ UMaterialInstanceDynamic* UBRAssets::CreateSurface(const FBRSurface& S, UObject*
 		MID->SetScalarParameterValue(TEXT("Stains"), S.Stains);
 		MID->SetScalarParameterValue(TEXT("WaterLine"), S.WaterLine);
 		MID->SetScalarParameterValue(TEXT("WallVariation"), S.WallVariation);
+		// v4.15 : reflectance, occlusion des creux, lustre des fibres, ligne de maree
+		MID->SetScalarParameterValue(TEXT("Specular"), S.Specular);
+		MID->SetScalarParameterValue(TEXT("Cavity"), S.Cavity);
+		MID->SetScalarParameterValue(TEXT("Sheen"), S.Sheen);
+		MID->SetScalarParameterValue(TEXT("TideLine"), S.TideLine);
 	}
 	else
 	{

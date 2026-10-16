@@ -57,6 +57,11 @@ namespace
 		D.Wall = S(TEXT("T_L0_Wallpaper"), C(1, 1, 1), 106.f, 0.8f, 0.3f);
 		D.Ceiling = S(TEXT("T_L0_Ceiling"), C(1, 1, 1), 122.f, 0.9f, 0.15f);
 		D.Trim = S(TEXT("T_L0_Wallpaper"), C(0.55f, 0.48f, 0.32f), 100.f, 0.6f, 0.2f);
+		// v4.15 (realisme) : moquette en tissu (lustre des fibres, peu de reflet), creux entre les boucles ; papier peint un peu
+		// moins reflechissant, ligne de maree au-dessus de la plinthe et bande sous le plafond ; fissures des dalles
+		D.Floor.Specular = 0.3f; D.Floor.Cavity = 1.f; D.Floor.Sheen = 0.8f;
+		D.Wall.Specular = 0.4f; D.Wall.Cavity = 0.5f; D.Wall.TideLine = 1.f;
+		D.Ceiling.Cavity = 0.8f;
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::Panel;
 		D.LightChance = 0.38f; D.BrokenChance = 0.06f; D.FlickerChance = 0.07f;
@@ -151,6 +156,8 @@ namespace
 		D.Wall = S(TEXT("T_Concrete"), C(0.95f, 0.95f, 0.95f), 350.f, 0.85f, 0.4f);
 		D.Ceiling = S(TEXT("T_Concrete"), C(0.6f, 0.6f, 0.6f), 400.f, 0.9f, 0.3f);
 		D.Pillar = S(TEXT("T_Concrete"), C(0.85f, 0.85f, 0.85f), 300.f, 0.85f, 0.5f);
+		// v4.15 (realisme) : pores et fissures du beton dans l'ombre (occlusion de cavite)
+		D.Floor.Cavity = 0.6f; D.Wall.Cavity = 0.6f; D.Ceiling.Cavity = 0.6f; D.Pillar.Cavity = 0.6f;
 		D.Fixture = EBRFixture::Tube;
 		D.LightChance = 0.35f; D.BrokenChance = 0.12f; D.FlickerChance = 0.15f;
 		D.LightLumens = 4500.f; D.LightColor = C(0.98f, 1.f, 0.97f); D.LightRadius = 1100.f;
@@ -206,6 +213,8 @@ namespace
 		D.Floor.Puddles = 0.35f; D.Floor.Wetness = 0.1f; // fuites des tuyaux
 		D.Wall = S(TEXT("T_Concrete"), C(0.72f, 0.68f, 0.6f), 250.f, 0.9f, 0.55f);
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
+		// v4.15 (realisme) : pores et fissures du beton dans l'ombre (occlusion de cavite)
+		D.Floor.Cavity = 0.6f; D.Wall.Cavity = 0.6f; D.Ceiling.Cavity = 0.6f;
 		D.Fixture = EBRFixture::Bulb;
 		D.LightChance = 0.22f; D.BrokenChance = 0.2f; D.FlickerChance = 0.15f;
 		D.LightLumens = 1300.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 560.f;

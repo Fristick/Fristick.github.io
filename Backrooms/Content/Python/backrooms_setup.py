@@ -20,7 +20,8 @@ Il importe :
   RawAssets/Lights/*.ies        -> /Game/Backrooms/Lights     (v4.15 : profils IES de la lampe, Tools/generate_ies.py)
   RawAssets/Level0Kit/FBX/*.fbx -> /Game/Backrooms/Level0Kit/Meshes      (v4.14 : kit Blender du Level 0, dossier separe)
   RawAssets/Level0Kit/Textures/* -> /Game/Backrooms/Level0Kit/Textures   (BaseColor sRGB, ORM lineaire, Normal DirectX)
-puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface) et la carte L_Backrooms.
+puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface, M_BR_PitShade ; v4.15 : M_BR_WorldCloth)
+et la carte L_Backrooms.
 
 v4.14 : le kit du Level 0 a son propre import, rejouable seul (les originaux de RawAssets ne sont jamais modifies) :
 
@@ -39,8 +40,10 @@ VERSION = 11
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
 # v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles,
 # v4.8 : usages "maillage a squelette" et "Nanite" sur M_BR_Mesh et M_BR_Skin : sans eux, la combinaison du joueur et les
-# entites SK_* recevaient le materiau par defaut, gris et sans texture, en jeu autonome et en paquet)
-MATERIAL_VERSION = 7
+# entites SK_* recevaient le materiau par defaut, gris et sans texture, en jeu autonome et en paquet ;
+# v4.15 : 8 : monde : normales triplanaires reorientees dans l'espace monde, occlusion de cavite, reflectance par surface,
+# ligne de maree ; nouveau M_BR_WorldCloth (moquette en modele d'eclairage "tissu"))
+MATERIAL_VERSION = 8
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 # (v4.15 : papier peint en les de 53 cm, moquette bouclee, dalles fissurees de 61 cm, et leurs cartes de rugosite)
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"],
@@ -61,7 +64,7 @@ MAT = ROOT + "/Materials"
 LIGHTS = ROOT + "/Lights"
 IES_EXT = (".ies",)
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
-MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade")
+MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade", "M_BR_WorldCloth")
 # v4.8 : usages que chaque materiau maitre doit declarer (meme liste que BRMaterialBuilder::RequiredUsages en C++)
 _MODEL_USAGES = ("used_with_instanced_static_meshes", "used_with_skeletal_mesh", "used_with_nanite")
 USAGES = {
@@ -70,6 +73,7 @@ USAGES = {
     "M_BR_Skin": _MODEL_USAGES,
     "M_BR_WaterSurface": ("used_with_instanced_static_meshes",),
     "M_BR_PitShade": (),
+    "M_BR_WorldCloth": ("used_with_instanced_static_meshes",),
 }
 # v4.8 : slots attendus apres l'import de chaque maillage a squelette (noms des materiaux du FBX) : la validation
 # signale un slot renomme par l'importeur (le jeu affecte les materiaux par nom, jamais par indice)
@@ -635,7 +639,7 @@ class Graph(object):
     def uv0(self):
         return self.node(unreal.MaterialExpressionTextureCoordinate)
 
-    def tex(self, name, texture, uv, normal=False, out="RGB"):
+    def tex(self, name, texture, uv, normal=False, out="RGB", mip_bias=0):
         e = self.node(unreal.MaterialExpressionTextureSampleParameter2D)
         e.set_editor_property("parameter_name", name)
         if texture:
@@ -648,6 +652,14 @@ class Graph(object):
         elif texture and not is_srgb(texture):
             st = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR
         e.set_editor_property("sampler_type", st)
+        if mip_bias > 0:
+            # v4.15 : echantillon flou (mip_bias niveaux de mip au-dessus) : moyenne locale de la texture
+            mode = getattr(getattr(unreal, "TextureMipValueMode", None), "TMVM_MIP_BIAS", None)
+            if mode is None:
+                warn("TextureMipValueMode.TMVM_MIP_BIAS absent : echantillon %s non floute (occlusion de cavite nulle)" % name)
+            else:
+                safe_set(e, "mip_value_mode", mode)
+                safe_set(e, "const_mip_value", int(mip_bias))
         self.link(uv, e, "UVs")
         return (e, out)
 
@@ -748,10 +760,19 @@ def finish_material(m):
     EAL.save_loaded_asset(m, only_if_is_dirty=False)
 
 
-def build_world_material():
+def build_world_material(cloth=False):
     """Murs, sols, plafonds : projection triplanaire dans l'espace monde (jamais de texture etiree),
-    normal maps, salete a grande echelle, salete au pied des murs, caustiques animees (Poolrooms)."""
-    m = new_material("M_BR_World")
+    normal maps, salete a grande echelle, salete au pied des murs, caustiques animees (Poolrooms).
+    v4.15 : normales reorientees dans l'espace monde, occlusion de cavite (Cavity), reflectance (Specular), ligne de maree
+    des murs (TideLine) ; cloth=True : M_BR_WorldCloth, meme graphe en modele d'eclairage "tissu" (moquettes, Sheen)."""
+    m = new_material("M_BR_WorldCloth" if cloth else "M_BR_World")
+    # v4.15 : normales calculees dans l'espace monde (meme reglage que BRMaterialBuilder::Build)
+    safe_set(m, "tangent_space_normal", False)
+    if cloth:
+        cloth_model = getattr(unreal.MaterialShadingModel, "MSM_CLOTH", None)
+        if cloth_model is None:
+            raise RuntimeError("MaterialShadingModel.MSM_CLOTH absent")
+        safe_set(m, "shading_model", cloth_model)
     g = Graph(m)
     P = unreal.MaterialProperty
 
@@ -762,7 +783,8 @@ def build_world_material():
     uvy = g.mul(g.mask(d, "rb"), flip)
     uvz = g.mask(d, "rg")
 
-    a = g.abs(g.vertex_normal())
+    vn = g.vertex_normal()
+    a = g.abs(vn)
     a2 = g.mul(a, a)
     w4 = g.mul(a2, a2)
     wn = g.div(w4, g.dot(w4, g.c3(1.0, 1.0, 1.0)))
@@ -778,19 +800,20 @@ def build_world_material():
     mix_noise = g.tex("NoiseTex", noise_tex, g.div(xy, g.const(1300.0)), out="B")
     mixz = g.mul(g.sat(g.div(g.sub(mix_noise, g.const(0.45)), g.const(0.1))), anti)
 
-    def tri(name, texture, normal=False):
+    def tri3(name, texture, normal=False):
+        """Trois projections (X, Y, Z ; Z melange a son 2e echantillon tourne). Normales : pente du 2e echantillon ramenee
+        dans le repere des UV d'origine (rotation inverse)"""
         sx = g.tex(name, texture, uvx, normal)
         sy = g.tex(name, texture, uvy, normal)
         sz1 = g.tex(name, texture, uvz, normal)
         sz2 = g.tex(name, texture, uvz2, normal)
         if normal:
-            # Pente du 2e echantillon ramenee dans le repere des UV d'origine (rotation inverse)
             nxy = g.mask(sz2, "rg")
             sz2 = g.append(g.append(g.dot(nxy, g.c2(0.8, 0.6)), g.dot(nxy, g.c2(-0.6, 0.8))), g.mask(sz2, "b"))
-        sz = g.lerp(sz1, sz2, mixz)
-        return g.add(g.add(g.mul(sx, wx), g.mul(sy, wy)), g.mul(sz, wz))
+        return sx, sy, g.lerp(sz1, sz2, mixz)
 
-    col = tri("BaseTex", load_tex("T_L0_Wallpaper"))
+    cx, cy, cz = tri3("BaseTex", load_tex("T_L0_Wallpaper"))
+    col = g.add(g.add(g.mul(cx, wx), g.mul(cy, wy)), g.mul(cz, wz))
 
     # v4.3 : variation de teinte a grande echelle (sols), et taches d'humidite dessinees a l'echelle du monde (Stains)
     macro_uv = g.div(g.append(g.dot(xy, g.c2(0.6, 0.8)), g.dot(xy, g.c2(-0.8, 0.6))), g.const(2300.0))
@@ -827,6 +850,13 @@ def build_world_material():
     fmod = g.sub(g.const(1.0), g.mul(fg, g.add(g.const(0.45), g.mul(fn, g.const(0.55)))))
     col = g.mul(col, fmod)
 
+    # v4.15 : ligne de maree au-dessus de la plinthe (eau remontee puis sechee) et bande plus sombre sous le plafond, a la
+    # hauteur du monde (la texture, elle, se repete en hauteur) ; TideLine = 0 : rien
+    tide = g.custom("BRTideLine", BR_TIDE_LINE_HLSL, [
+        ("WP", wp), ("NZ", g.mask(vn, "b")), ("Amount", g.scalar("TideLine", 0.0)), ("Top", g.scalar("WallTop", 290.0)),
+        ("Noise", g.texobj("TideNoise", noise_tex))], output="CMOT_FLOAT3")
+    col = g.mul(col, tide)
+
     # Caustiques (reflets de l'eau sur le carrelage), deformees par les vagues simulees autour du joueur
     cm = g.custom("BRCaustics", BR_CAUSTICS_HLSL, [
         ("WP", wp), ("Wz", wz), ("T", g.time()), ("Amount", g.scalar("Caustics", 0.0)),
@@ -838,7 +868,7 @@ def build_world_material():
 
     # v4.1 : flaques et sol mouille (reflets ray traces : rugosite quasi nulle, surface plane, ronds de gouttes)
     pud = g.custom("BRPuddles", BR_PUDDLES_HLSL, [
-        ("WP", wp), ("N", g.vertex_normal()), ("T", g.time()), ("Amount", g.scalar("Puddles", 0.0)),
+        ("WP", wp), ("N", vn), ("T", g.time()), ("Amount", g.scalar("Puddles", 0.0)),
         ("Wet", g.scalar("Wetness", 0.0)), ("Tex", g.texobj("PuddleTex", grime_tex)), ("Noise", g.texobj("PuddleNoise", noise_tex)),
         ("WaterZ", g.scalar("WaterLine", -1.0))],
         output="CMOT_FLOAT4")
@@ -853,18 +883,25 @@ def build_world_material():
     step_x0 = g.sat(g.mul(g.sub(wx, wy), g.const(1000.0)))
     step_z0 = g.sat(g.mul(g.sub(wz, g.const(0.5)), g.const(1000.0)))
     uv_dom = g.lerp(g.lerp(uvy, uvx, step_x0), uvz, step_z0)
-    rt_col = g.mul(g.mul(g.tex("BaseTex", load_tex("T_L0_Wallpaper"), uv_dom), g.lerp(g.const(1.0), gs, g.scalar("Grime", 0.35))),
-                   g.vector("Tint", (1, 1, 1, 1)))
+    dom_sharp = g.tex("BaseTex", load_tex("T_L0_Wallpaper"), uv_dom)
+    rt_col = g.mul(g.mul(dom_sharp, g.lerp(g.const(1.0), gs, g.scalar("Grime", 0.35))), g.vector("Tint", (1, 1, 1, 1)))
     g.output(g.rt_switch(shaded, rt_col), P.MP_BASE_COLOR)
+
+    # v4.15 : occlusion de cavite : la ou la texture est plus sombre que sa moyenne locale (meme echantillon 4 mips plus haut,
+    # ~16 texels) : creux entre les boucles de la moquette, fissures des dalles, joints. La lumiere indirecte (Lumen) et le
+    # reflet y sont attenues. Cavity = 0 : aucune occlusion (rendu d'avant)
+    dom_blur = g.tex("BaseTex", load_tex("T_L0_Wallpaper"), uv_dom, mip_bias=4)
+    lum_w = g.c3(0.3, 0.59, 0.11)
+    lum_sharp = g.dot(dom_sharp, lum_w)
+    lum_blur = g.dot(dom_blur, lum_w)
+    cav = g.mul(g.sat(g.mul(g.div(g.sub(lum_blur, lum_sharp), g.add(lum_blur, g.const(0.03))), g.const(3.0))), g.scalar("Cavity", 0.0))
+    g.output(g.sub(g.const(1.0), g.mul(cav, g.const(0.85))), P.MP_AMBIENT_OCCLUSION)
 
     # Rugosite variable (zones plus lisses / plus mates), puis mouillee, puis miroir dans les flaques
     rv = g.tex("GrimeTex", grime_tex, g.mul(guv, g.const(3.1)), out="B")
     # v4.7 : carte de rugosite de la matiere (<Texture>_R, lineaire, relative a Roughness : 0,5 = valeur nominale),
     # un seul echantillon projete sur l'axe dominant de la face ; RoughContrast = 0 : rugosite v4.6
-    step_x = g.sat(g.mul(g.sub(wx, wy), g.const(1000.0)))
-    step_z = g.sat(g.mul(g.sub(wz, g.const(0.5)), g.const(1000.0)))
-    uvr = g.lerp(g.lerp(uvy, uvx, step_x), uvz, step_z)
-    rmap = g.tex("RoughTex", noise_tex, uvr, out="R")
+    rmap = g.tex("RoughTex", noise_tex, uv_dom, out="R")
     rcon = g.scalar("RoughContrast", 0.0)
     grime_var = g.mul(g.sub(rv, g.const(0.5)), g.sub(g.const(0.3), g.mul(rcon, g.const(0.18))))
     rough = g.sat(g.add(g.add(g.scalar("Roughness", 0.85), grime_var), g.mul(g.sub(rmap, g.const(0.5)), g.mul(rcon, g.const(2.0)))))
@@ -873,12 +910,25 @@ def build_world_material():
     rough = g.lerp(rough, g.const(0.02), puddle)
     g.output(g.rt_switch(rough, g.scalar("Roughness", 0.85)), P.MP_ROUGHNESS)
     g.output(g.mul(g.scalar("Metallic", 0.0), g.sub(g.const(1.0), puddle)), P.MP_METALLIC)
+    # v4.15 : reflectance propre a la surface (Specular : 0,5 = 4 %, moquette 0,3, papier peint 0,4), attenuee dans les
+    # creux ; l'eau d'une flaque reflete comme l'eau (0,35, comme M_BR_WaterSurface)
+    spec = g.mul(g.scalar("Specular", 0.5), g.sub(g.const(1.0), g.mul(cav, g.const(0.5))))
+    g.output(g.lerp(spec, g.const(0.35), puddle), P.MP_SPECULAR)
     g.output(g.add(g.mul(base, g.scalar("SelfIllum", 0.0)), g.vector("Emissive", (0, 0, 0, 1))), P.MP_EMISSIVE_COLOR)
 
-    # Normal maps (espace tangent, melange triplanaire) ; l'eau d'une flaque est plane, seules les gouttes la rident
-    nrm = tri("NormalTex", load_tex("T_FlatNormal"), normal=True)
-    nrm = g.lerp(g.c3(0.0, 0.0, 1.0), nrm, g.scalar("NormalStrength", 1.0))
-    g.output(g.rt_switch(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), g.c3(0.0, 0.0, 1.0)), P.MP_NORMAL)
+    # v4.15 : normales dans l'espace monde : chaque projection a ses propres axes (X -> (Y, -Z), Y -> (X, -Z), Z -> (X, Y)) ;
+    # avant, les trois normales etaient melangees telles quelles dans le repere tangent du cube (relief faux sur certaines
+    # faces). L'eau d'une flaque est plane (normale monde du sol), seules les gouttes la rident
+    nx, ny, nz = tri3("NormalTex", load_tex("T_FlatNormal"), normal=True)
+    nrm = g.custom("BRTriNormal", BR_TRI_NORMAL_HLSL, [
+        ("TX", nx), ("TY", ny), ("TZ", nz), ("VN", vn), ("W", wn), ("Strength", g.scalar("NormalStrength", 1.0))],
+        output="CMOT_FLOAT3")
+    g.output(g.rt_switch(g.lerp(nrm, g.append(ripple, g.const(1.0)), puddle), vn), P.MP_NORMAL)
+
+    if cloth:
+        # v4.15 : moquette : lustre des fibres (duvet un peu plus clair que la matiere), perdu quand elle est mouillee
+        g.output(g.mul(shaded, g.vector("FuzzTint", (1.3, 1.25, 1.15, 1))), P.MP_SUBSURFACE_COLOR)
+        g.output(g.mul(g.mul(g.scalar("Sheen", 0.8), g.sub(g.const(1.0), wet)), g.sub(g.const(1.0), puddle)), P.MP_CUSTOM_DATA0)
     finish_material(m)
     return m
 
@@ -1019,6 +1069,39 @@ BR_CAUSTICS_HLSL = (
     "return 1.0 + Amount * fade * (k * 1.5 - 0.27);\n")
 
 
+BR_TRI_NORMAL_HLSL = (
+    "// v4.15 : normales de la projection triplanaire dans l'espace monde. Entrees : TX, TY, TZ (normales de la texture,\n"
+    "// espace tangent de chaque projection), VN (normale du sommet), W (poids des projections), Strength (0 : normale du\n"
+    "// sommet). Projection X : U = +Y, V = -Z ; projection Y : U = +X, V = -Z ; projection Z : U = +X, V = +Y.\n"
+    "float sx = VN.x >= 0.0 ? 1.0 : -1.0;\n"
+    "float sy = VN.y >= 0.0 ? 1.0 : -1.0;\n"
+    "float sz = VN.z >= 0.0 ? 1.0 : -1.0;\n"
+    "float3 nx = float3(TX.z * sx, TX.x, -TX.y);\n"
+    "float3 ny = float3(TY.x, TY.z * sy, -TY.y);\n"
+    "float3 nz = float3(TZ.x, TZ.y, TZ.z * sz);\n"
+    "float3 n = nx * W.x + ny * W.y + nz * W.z;\n"
+    "return normalize(lerp(VN, n, saturate(Strength)));\n")
+
+
+BR_TIDE_LINE_HLSL = (
+    "// v4.15 : ligne de maree au pied des murs (eau remontee dans le papier puis sechee : lisere brun, papier plus sombre\n"
+    "// dessous) et bande plus sombre sous le plafond. Entrees : WP (position monde, cm), NZ (normale du sommet, z), Amount\n"
+    "// (0..1), Top (hauteur du plafond, cm), Noise (T_NoiseLF). Sortie : multiplicateur de la couleur (1 hors des murs).\n"
+    "if (Amount <= 0.0) return float3(1.0, 1.0, 1.0);\n"
+    "float wall = saturate(1.0 - abs(NZ) * 1.5);\n"
+    "float u = WP.x + WP.y;\n"
+    "float n1 = Texture2DSample(Noise, NoiseSampler, float2(u / 410.0, 0.37)).r;\n"
+    "float n2 = Texture2DSample(Noise, NoiseSampler, float2(u / 97.0, 0.71)).g;\n"
+    "float h = 13.0 + 15.0 * n1 + 4.0 * (n2 - 0.5);\n"
+    "float z = WP.z;\n"
+    "float below = saturate((h - z) / 4.0 + 0.5) * saturate(z / 2.0 + 1.0);\n"
+    "float edge = exp(-pow((z - h) / 1.2, 2.0));\n"
+    "float3 m = lerp(float3(1.0, 1.0, 1.0), float3(0.9, 0.86, 0.74), below * 0.75);\n"
+    "m *= lerp(float3(1.0, 1.0, 1.0), float3(0.74, 0.65, 0.47), edge * 0.8);\n"
+    "m *= 1.0 - 0.08 * smoothstep(Top - 45.0, Top - 2.0, z);\n"
+    "return lerp(float3(1.0, 1.0, 1.0), m, saturate(Amount) * wall);\n")
+
+
 BR_PUDDLES_HLSL = (
     "// Flaques, sol mouille et ligne d'eau (v4.5). Entrees : WP (position monde, cm), N (normale du sommet), T (temps, s),\n"
     "// Amount (part du sol couverte de flaques, 0..1), Wet (humidite generale, 0..1), Tex (T_Grime), Noise (T_NoiseLF),\n"
@@ -1145,7 +1228,8 @@ def build_materials():
                 warn("Suppression impossible %s : %s" % (name, e))
     jobs = (("M_BR_World", build_world_material), ("M_BR_Mesh", build_mesh_material),
             ("M_BR_Skin", lambda: build_mesh_material("M_BR_Skin", skin=True)),
-            ("M_BR_WaterSurface", build_water_surface_material), ("M_BR_PitShade", build_pit_shade_material))
+            ("M_BR_WaterSurface", build_water_surface_material), ("M_BR_PitShade", build_pit_shade_material),
+            ("M_BR_WorldCloth", lambda: build_world_material(cloth=True)))
     for name, fn in jobs:
         try:
             fn()

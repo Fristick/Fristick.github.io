@@ -5,6 +5,7 @@
 #include "Materials/Material.h"
 
 #if WITH_EDITOR
+#include "Engine/EngineTypes.h"
 #include "Materials/MaterialExpressionAbs.h"
 #include "Materials/MaterialExpressionRayTracingQualitySwitch.h"
 #include "Materials/MaterialExpressionAdd.h"
@@ -174,7 +175,7 @@ namespace
 			return FPin{ E, 0 };
 		}
 
-		FPin Tex(const TCHAR* Name, UTexture* Default, bool bNormal, const FPin& UV, int32 Out = 0)
+		FPin Tex(const TCHAR* Name, UTexture* Default, bool bNormal, const FPin& UV, int32 Out = 0, int32 MipBias = 0)
 		{
 			UMaterialExpressionTextureSampleParameter2D* E = New<UMaterialExpressionTextureSampleParameter2D>();
 			E->ParameterName = FName(Name);
@@ -182,6 +183,12 @@ namespace
 			// Le type d'echantillonneur doit suivre la texture : une texture lineaire (bruits, donnees) lue en "Color"
 			// empeche le materiau de compiler (v4.3 : plus aucune texture a l'ecran)
 			E->SamplerType = bNormal ? SAMPLERTYPE_Normal : ((Default && !Default->SRGB) ? SAMPLERTYPE_LinearColor : SAMPLERTYPE_Color);
+			if (MipBias > 0)
+			{
+				// v4.15 : echantillon flou (MipBias niveaux de mip au-dessus) : moyenne locale de la texture
+				E->MipValueMode = TMVM_MipBias;
+				E->ConstMipValue = MipBias;
+			}
 			Link(E->Coordinates, UV);
 			return FPin{ E, Out };
 		}
@@ -292,7 +299,8 @@ namespace
 		return Black ? Black : EngineTexture(false);
 	}
 
-	void BuildWorld(FGraph& G, UMaterialEditorOnlyData* Out, TFunctionRef<UTexture*(FName)> LoadTexture)
+	/** v4.15 : bCloth : variante "tissu" (M_BR_WorldCloth, moquette) : meme graphe, lustre des fibres (Fuzz Color, Cloth) */
+	void BuildWorld(FGraph& G, UMaterialEditorOnlyData* Out, TFunctionRef<UTexture*(FName)> LoadTexture, bool bCloth)
 	{
 		UTexture* Grime = LoadTexture(TEXT("T_Grime"));
 		UTexture* Caustics = LoadTexture(TEXT("T_Caustics"));
@@ -314,7 +322,8 @@ namespace
 		const FPin UvY = G.Mul(G.Mask(D, TEXT("rb")), Flip);
 		const FPin UvZ = G.Mask(D, TEXT("rg"));
 
-		const FPin A = G.Abs(G.VertexNormal());
+		const FPin VN = G.VertexNormal();
+		const FPin A = G.Abs(VN);
 		const FPin A2 = G.Mul(A, A);
 		const FPin W4 = G.Mul(A2, A2);
 		const FPin Wn = G.Div(W4, G.Dot(W4, G.C3(1.f, 1.f, 1.f)));
@@ -335,23 +344,29 @@ namespace
 		const FPin MixNoise = G.Tex(TEXT("NoiseTex"), NoiseLF, false, G.Div(XY, G.Const(1300.f)), 3);
 		const FPin MixZ = G.Mul(G.Sat(G.Div(G.Sub(MixNoise, G.Const(0.45f)), G.Const(0.1f))), AntiTile);
 
-		auto Tri = [&](const TCHAR* Name, UTexture* Tex, bool bNormal)
+		// Trois projections (X, Y, Z ; Z melange a son 2e echantillon tourne). Pour les normales, la pente du 2e echantillon
+		// est ramenee dans le repere des UV d'origine (rotation inverse)
+		struct FTri
 		{
-			const FPin Sx = G.Tex(Name, Tex, bNormal, UvX);
-			const FPin Sy = G.Tex(Name, Tex, bNormal, UvY);
+			FPin X, Y, Z;
+		};
+		auto Tri3 = [&](const TCHAR* Name, UTexture* Tex, bool bNormal)
+		{
+			FTri T;
+			T.X = G.Tex(Name, Tex, bNormal, UvX);
+			T.Y = G.Tex(Name, Tex, bNormal, UvY);
 			const FPin Sz1 = G.Tex(Name, Tex, bNormal, UvZ);
 			FPin Sz2 = G.Tex(Name, Tex, bNormal, UvZ2);
 			if (bNormal)
 			{
-				// Pente du 2e echantillon ramenee dans le repere des UV d'origine (rotation inverse)
 				const FPin Nxy = G.Mask(Sz2, TEXT("rg"));
 				Sz2 = G.Append(G.Append(G.Dot(Nxy, G.C2(0.8f, 0.6f)), G.Dot(Nxy, G.C2(-0.6f, 0.8f))), G.Mask(Sz2, TEXT("b")));
 			}
-			const FPin Sz = G.Lerp(Sz1, Sz2, MixZ);
-			return G.Add(G.Add(G.Mul(Sx, Wx), G.Mul(Sy, Wy)), G.Mul(Sz, Wz));
+			T.Z = G.Lerp(Sz1, Sz2, MixZ);
+			return T;
 		};
-
-		FPin Col = Tri(TEXT("BaseTex"), BaseDefault, false);
+		const FTri ColT = Tri3(TEXT("BaseTex"), BaseDefault, false);
+		FPin Col = G.Add(G.Add(G.Mul(ColT.X, Wx), G.Mul(ColT.Y, Wy)), G.Mul(ColT.Z, Wz));
 
 		// v4.3 : variation de teinte a grande echelle (sols), et taches d'humidite dessinees a l'echelle du monde (Stains)
 		const FPin MacroUv = G.Div(G.Append(G.Dot(XY, G.C2(0.6f, 0.8f)), G.Dot(XY, G.C2(-0.8f, 0.6f))), G.Const(2300.f));
@@ -387,6 +402,16 @@ namespace
 		const FPin Fg = G.Mul(G.Mul(G.Scalar(TEXT("FloorGrime"), 0.f), Wall), G.Mul(H, H));
 		Col = G.Mul(Col, G.Sub(G.Const(1.f), G.Mul(Fg, G.Add(G.Const(0.45f), G.Mul(Fn, G.Const(0.55f))))));
 
+		// v4.15 : ligne de maree au-dessus de la plinthe (eau remontee puis sechee) et bande plus sombre sous le plafond, a la
+		// hauteur du monde (la texture, elle, se repete en hauteur) ; TideLine = 0 : rien
+		TArray<TPair<FName, FPin>> TideIn;
+		TideIn.Add(TPair<FName, FPin>(TEXT("WP"), WP));
+		TideIn.Add(TPair<FName, FPin>(TEXT("NZ"), G.Mask(VN, TEXT("b"))));
+		TideIn.Add(TPair<FName, FPin>(TEXT("Amount"), G.Scalar(TEXT("TideLine"), 0.f)));
+		TideIn.Add(TPair<FName, FPin>(TEXT("Top"), G.Scalar(TEXT("WallTop"), 290.f)));
+		TideIn.Add(TPair<FName, FPin>(TEXT("Noise"), G.TexObj(TEXT("TideNoise"), NoiseLF)));
+		Col = G.Mul(Col, G.Custom(TEXT("BRTideLine"), BRMaterialBuilder::TideLineHLSL(), CMOT_Float3, TideIn));
+
 		// Caustiques (reflets de l'eau sur le carrelage), deformees par les vagues simulees autour du joueur
 		TArray<TPair<FName, FPin>> CausticIn;
 		CausticIn.Add(TPair<FName, FPin>(TEXT("WP"), WP));
@@ -403,7 +428,7 @@ namespace
 		// v4.1 : flaques et sol mouille (reflets ray traces : rugosite quasi nulle, surface plane, ronds de gouttes)
 		TArray<TPair<FName, FPin>> PuddleIn;
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("WP"), WP));
-		PuddleIn.Add(TPair<FName, FPin>(TEXT("N"), G.VertexNormal()));
+		PuddleIn.Add(TPair<FName, FPin>(TEXT("N"), VN));
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("T"), G.Time()));
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("Amount"), G.Scalar(TEXT("Puddles"), 0.f)));
 		PuddleIn.Add(TPair<FName, FPin>(TEXT("Wet"), G.Scalar(TEXT("Wetness"), 0.f)));
@@ -420,19 +445,26 @@ namespace
 		const FPin StepX0 = G.Sat(G.Mul(G.Sub(Wx, Wy), G.Const(1000.f)));
 		const FPin StepZ0 = G.Sat(G.Mul(G.Sub(Wz, G.Const(0.5f)), G.Const(1000.f)));
 		const FPin UvDom = G.Lerp(G.Lerp(UvY, UvX, StepX0), UvZ, StepZ0);
-		const FPin RTCol = G.Mul(G.Mul(G.Tex(TEXT("BaseTex"), BaseDefault, false, UvDom), G.Lerp(G.Const(1.f), Gs, G.Scalar(TEXT("Grime"), 0.35f))),
-			G.Vector(TEXT("Tint"), FLinearColor::White));
+		const FPin DomSharp = G.Tex(TEXT("BaseTex"), BaseDefault, false, UvDom);
+		const FPin RTCol = G.Mul(G.Mul(DomSharp, G.Lerp(G.Const(1.f), Gs, G.Scalar(TEXT("Grime"), 0.35f))), G.Vector(TEXT("Tint"), FLinearColor::White));
 		FGraph::Link(Out->BaseColor, G.RTSwitch(Shaded, RTCol));
+
+		// v4.15 : occlusion de cavite : la ou la texture est plus sombre que sa moyenne locale (meme echantillon 4 mips plus
+		// haut, ~16 texels) : creux entre les boucles de la moquette, fissures des dalles, joints. La lumiere indirecte (Lumen)
+		// et le reflet y sont attenues. Cavity = 0 : aucune occlusion (rendu d'avant)
+		const FPin DomBlur = G.Tex(TEXT("BaseTex"), BaseDefault, false, UvDom, 0, 4);
+		const FPin LumW = G.C3(0.3f, 0.59f, 0.11f);
+		const FPin LumSharp = G.Dot(DomSharp, LumW);
+		const FPin LumBlur = G.Dot(DomBlur, LumW);
+		const FPin Cav = G.Mul(G.Sat(G.Mul(G.Div(G.Sub(LumBlur, LumSharp), G.Add(LumBlur, G.Const(0.03f))), G.Const(3.f))), G.Scalar(TEXT("Cavity"), 0.f));
+		FGraph::Link(Out->AmbientOcclusion, G.Sub(G.Const(1.f), G.Mul(Cav, G.Const(0.85f))));
 
 		const FPin Rv = G.Tex(TEXT("GrimeTex"), Grime, false, G.Mul(GUv, G.Const(3.1f)), 3);
 		// v4.7 : carte de rugosite de la matiere (<Texture>_R, lineaire, relative a Roughness : 0,5 = valeur nominale).
 		// Un seul echantillon, projete sur l'axe dominant de la face (les murs et sols sont alignes sur les axes) :
 		// joints de carrelage, ossature du plafond, taches d'huile et d'humidite repondent a la lumiere autrement que
 		// leur support. RoughContrast = 0 (pas de carte) : rugosite v4.6 inchangee.
-		const FPin StepX = G.Sat(G.Mul(G.Sub(Wx, Wy), G.Const(1000.f)));
-		const FPin StepZ = G.Sat(G.Mul(G.Sub(Wz, G.Const(0.5f)), G.Const(1000.f)));
-		const FPin UvR = G.Lerp(G.Lerp(UvY, UvX, StepX), UvZ, StepZ);
-		const FPin RMap = G.Tex(TEXT("RoughTex"), NoiseLF, false, UvR, 1);
+		const FPin RMap = G.Tex(TEXT("RoughTex"), NoiseLF, false, UvDom, 1);
 		const FPin RContrast = G.Scalar(TEXT("RoughContrast"), 0.f);
 		// La salete commune garde un peu de variation, moins quand la carte decrit deja la matiere
 		const FPin GrimeVar = G.Mul(G.Sub(Rv, G.Const(0.5f)), G.Sub(G.Const(0.3f), G.Mul(RContrast, G.Const(0.18f))));
@@ -442,10 +474,33 @@ namespace
 		Rough = G.Lerp(Rough, G.Const(0.02f), Puddle);
 		FGraph::Link(Out->Roughness, G.RTSwitch(Rough, G.Scalar(TEXT("Roughness"), 0.85f)));
 		FGraph::Link(Out->Metallic, G.Mul(G.Scalar(TEXT("Metallic"), 0.f), G.Sub(G.Const(1.f), Puddle)));
+		// v4.15 : reflectance propre a la surface (Specular : 0,5 = 4 %, moquette 0,3, papier peint 0,4), attenuee dans les
+		// creux ; l'eau d'une flaque reflete comme l'eau (0,35, comme M_BR_WaterSurface)
+		const FPin Spec = G.Mul(G.Scalar(TEXT("Specular"), 0.5f), G.Sub(G.Const(1.f), G.Mul(Cav, G.Const(0.5f))));
+		FGraph::Link(Out->Specular, G.Lerp(Spec, G.Const(0.35f), Puddle));
 		FGraph::Link(Out->EmissiveColor, G.Add(G.Mul(Base, G.Scalar(TEXT("SelfIllum"), 0.f)), G.Vector(TEXT("Emissive"), FLinearColor::Black)));
 
-		const FPin Nrm = G.Lerp(G.C3(0.f, 0.f, 1.f), Tri(TEXT("NormalTex"), NormalDefault, true), G.Scalar(TEXT("NormalStrength"), 1.f));
-		FGraph::Link(Out->Normal, G.RTSwitch(G.Lerp(Nrm, G.Append(Ripple, G.Const(1.f)), Puddle), G.C3(0.f, 0.f, 1.f)));
+		// v4.15 : normales dans l'espace monde : chaque projection a ses propres axes (X -> (Y, -Z), Y -> (X, -Z), Z -> (X, Y)) ;
+		// avant, les trois normales etaient melangees telles quelles dans le repere tangent du cube (relief faux sur certaines
+		// faces). L'eau d'une flaque est plane (normale monde du sol), seules les gouttes la rident
+		const FTri NrmT = Tri3(TEXT("NormalTex"), NormalDefault, true);
+		TArray<TPair<FName, FPin>> TriIn;
+		TriIn.Add(TPair<FName, FPin>(TEXT("TX"), NrmT.X));
+		TriIn.Add(TPair<FName, FPin>(TEXT("TY"), NrmT.Y));
+		TriIn.Add(TPair<FName, FPin>(TEXT("TZ"), NrmT.Z));
+		TriIn.Add(TPair<FName, FPin>(TEXT("VN"), VN));
+		TriIn.Add(TPair<FName, FPin>(TEXT("W"), Wn));
+		TriIn.Add(TPair<FName, FPin>(TEXT("Strength"), G.Scalar(TEXT("NormalStrength"), 1.f)));
+		const FPin Nrm = G.Custom(TEXT("BRTriNormal"), BRMaterialBuilder::TriNormalHLSL(), CMOT_Float3, TriIn);
+		FGraph::Link(Out->Normal, G.RTSwitch(G.Lerp(Nrm, G.Append(Ripple, G.Const(1.f)), Puddle), VN));
+
+		if (bCloth)
+		{
+			// v4.15 : moquette : lustre des fibres (duvet un peu plus clair que la matiere), perdu quand elle est mouillee
+			FGraph::Link(Out->SubsurfaceColor, G.Mul(Shaded, G.Vector(TEXT("FuzzTint"), FLinearColor(1.3f, 1.25f, 1.15f))));
+			// "Cloth" du modele tissu = entree Custom Data 0, stockee dans ClearCoat (MP_CustomData0 cote Python)
+			FGraph::Link(Out->ClearCoat, G.Mul(G.Mul(G.Scalar(TEXT("Sheen"), 0.8f), G.Sub(G.Const(1.f), Wet)), G.Sub(G.Const(1.f), Puddle)));
+		}
 	}
 
 	void BuildMesh(FGraph& G, UMaterialEditorOnlyData* Out, bool bSkin, TFunctionRef<UTexture*(FName)> LoadTexture)
@@ -699,6 +754,47 @@ namespace BRMaterialBuilder
 		return Code;
 	}
 
+	const FString& TriNormalHLSL()
+	{
+		// Meme code que BR_TRI_NORMAL_HLSL (backrooms_setup.py)
+		static const FString Code = TEXT(
+			"// v4.15 : normales de la projection triplanaire dans l'espace monde. Entrees : TX, TY, TZ (normales de la texture,\n"
+			"// espace tangent de chaque projection), VN (normale du sommet), W (poids des projections), Strength (0 : normale du\n"
+			"// sommet). Projection X : U = +Y, V = -Z ; projection Y : U = +X, V = -Z ; projection Z : U = +X, V = +Y.\n"
+			"float sx = VN.x >= 0.0 ? 1.0 : -1.0;\n"
+			"float sy = VN.y >= 0.0 ? 1.0 : -1.0;\n"
+			"float sz = VN.z >= 0.0 ? 1.0 : -1.0;\n"
+			"float3 nx = float3(TX.z * sx, TX.x, -TX.y);\n"
+			"float3 ny = float3(TY.x, TY.z * sy, -TY.y);\n"
+			"float3 nz = float3(TZ.x, TZ.y, TZ.z * sz);\n"
+			"float3 n = nx * W.x + ny * W.y + nz * W.z;\n"
+			"return normalize(lerp(VN, n, saturate(Strength)));\n");
+		return Code;
+	}
+
+	const FString& TideLineHLSL()
+	{
+		// Meme code que BR_TIDE_LINE_HLSL (backrooms_setup.py)
+		static const FString Code = TEXT(
+			"// v4.15 : ligne de maree au pied des murs (eau remontee dans le papier puis sechee : lisere brun, papier plus sombre\n"
+			"// dessous) et bande plus sombre sous le plafond. Entrees : WP (position monde, cm), NZ (normale du sommet, z), Amount\n"
+			"// (0..1), Top (hauteur du plafond, cm), Noise (T_NoiseLF). Sortie : multiplicateur de la couleur (1 hors des murs).\n"
+			"if (Amount <= 0.0) return float3(1.0, 1.0, 1.0);\n"
+			"float wall = saturate(1.0 - abs(NZ) * 1.5);\n"
+			"float u = WP.x + WP.y;\n"
+			"float n1 = Texture2DSample(Noise, NoiseSampler, float2(u / 410.0, 0.37)).r;\n"
+			"float n2 = Texture2DSample(Noise, NoiseSampler, float2(u / 97.0, 0.71)).g;\n"
+			"float h = 13.0 + 15.0 * n1 + 4.0 * (n2 - 0.5);\n"
+			"float z = WP.z;\n"
+			"float below = saturate((h - z) / 4.0 + 0.5) * saturate(z / 2.0 + 1.0);\n"
+			"float edge = exp(-pow((z - h) / 1.2, 2.0));\n"
+			"float3 m = lerp(float3(1.0, 1.0, 1.0), float3(0.9, 0.86, 0.74), below * 0.75);\n"
+			"m *= lerp(float3(1.0, 1.0, 1.0), float3(0.74, 0.65, 0.47), edge * 0.8);\n"
+			"m *= 1.0 - 0.08 * smoothstep(Top - 45.0, Top - 2.0, z);\n"
+			"return lerp(float3(1.0, 1.0, 1.0), m, saturate(Amount) * wall);\n");
+		return Code;
+	}
+
 	const FString& CausticsHLSL()
 	{
 		// Entrees : WP (position monde), Wz (poids des faces horizontales), T (temps), Amount (reglage de la surface),
@@ -732,6 +828,7 @@ namespace BRMaterialBuilder
 			// Modeles Blender en instances, modeles fournis en Nanite, combinaison et entites a squelette
 			return { MATUSAGE_InstancedStaticMeshes, MATUSAGE_SkeletalMesh, MATUSAGE_Nanite };
 		case EBRMasterMaterial::World:
+		case EBRMasterMaterial::WorldCloth:
 		case EBRMasterMaterial::WaterSurface:
 			return { MATUSAGE_InstancedStaticMeshes };
 		default:
@@ -767,7 +864,7 @@ namespace BRMaterialBuilder
 			return nullptr;
 		}
 		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_WaterSurface_Runtime"),
-			TEXT("M_BR_PitShade_Runtime") };
+			TEXT("M_BR_PitShade_Runtime"), TEXT("M_BR_WorldCloth_Runtime") };
 		UMaterial* M = NewObject<UMaterial>(Outer ? Outer : GetTransientPackage(), FName(Names[static_cast<int32>(Which)]), RF_Transient);
 		M->MaterialDomain = MD_Surface;
 		M->BlendMode = BLEND_Opaque;
@@ -778,7 +875,8 @@ namespace BRMaterialBuilder
 		{
 			M->SetUsageByFlag(Usage, true);
 		}
-		M->bTangentSpaceNormal = true;
+		// v4.15 : le monde projette ses normales dans l'espace monde (projection triplanaire reorientee)
+		M->bTangentSpaceNormal = !(Which == EBRMasterMaterial::World || Which == EBRMasterMaterial::WorldCloth);
 
 		UMaterialEditorOnlyData* Out = M->GetEditorOnlyData();
 		if (!Out)
@@ -789,7 +887,12 @@ namespace BRMaterialBuilder
 		switch (Which)
 		{
 		case EBRMasterMaterial::World:
-			BuildWorld(G, Out, LoadTexture);
+			BuildWorld(G, Out, LoadTexture, false);
+			break;
+		case EBRMasterMaterial::WorldCloth:
+			// v4.15 : moquette : modele d'eclairage "tissu" (Fuzz Color = Subsurface Color, Cloth = Custom Data 0)
+			M->SetShadingModel(MSM_Cloth);
+			BuildWorld(G, Out, LoadTexture, true);
 			break;
 		case EBRMasterMaterial::Mesh:
 			BuildMesh(G, Out, false, LoadTexture);

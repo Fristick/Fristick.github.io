@@ -182,7 +182,8 @@ private:
 	 *  lineaire ; sinon RoughContrast = 0 (rugosite v4.6) */
 	void ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail);
 
-	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, Count };
+	/** v4.15 : WorldCloth : variante "tissu" du monde (moquettes, FBRSurface::Sheen > 0) */
+	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, WorldCloth, Count };
 
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);

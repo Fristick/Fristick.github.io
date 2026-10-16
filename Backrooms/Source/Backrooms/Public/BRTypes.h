@@ -214,6 +214,11 @@ struct FBRSurface
 	float WaterLine = -1.f;   // v4.5 : hauteur de l'eau (cm) : bande mouillee juste au-dessus (murs, piliers, rebords) ; < 0 : aucune
 	float RoughDetail = 1.f;  // v4.7 : part de la carte de rugosite <Texture>_R appliquee (peinture sur beton : faible)
 	float WallVariation = 0.f; // v4.7 : murs, teinte et aureoles d'humidite a l'echelle du monde (casse la repetition)
+	// v4.15 (realisme) : rendu seulement
+	float Specular = 0.5f;     // reflectance (0,5 = 4 % ; moquette 0,3, papier peint 0,4)
+	float Cavity = 0.f;        // occlusion des creux de la texture (lumiere indirecte et reflet), 0..1
+	float Sheen = 0.f;         // > 0 : lustre des fibres (materiau maitre M_BR_WorldCloth, moquettes)
+	float TideLine = 0.f;      // murs : ligne de maree au-dessus de la plinthe et bande sombre sous le plafond, 0..1
 
 	FBRSurface() {}
 	FBRSurface(FName InTex, const FLinearColor& InTint, float InScale, float InRough = 0.85f, float InGrime = 0.35f)
@@ -221,9 +226,9 @@ struct FBRSurface
 
 	FString Key() const
 	{
-		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.0f|%.2f|%.2f"), *Texture.ToString(),
-			Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime, Puddles, Wetness,
-			AntiTile, Stains, WaterLine, RoughDetail, WallVariation);
+		return FString::Printf(TEXT("%s|%.3f,%.3f,%.3f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f,%.2f,%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.0f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f"),
+			*Texture.ToString(), Tint.R, Tint.G, Tint.B, Scale, Roughness, Metallic, Grime, SelfIllum, Emissive.R, Emissive.G, Emissive.B, Caustics, FloorGrime,
+			Puddles, Wetness, AntiTile, Stains, WaterLine, RoughDetail, WallVariation, Specular, Cavity, Sheen, TideLine);
 	}
 };
 
