@@ -14,6 +14,7 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureLightProfile.h"
 #include "TextureResource.h"
 #include "ImageCore.h"
 #include "ImageUtils.h"
@@ -400,8 +401,9 @@ namespace
 		TArray<FAssetData> Assets;
 		Registry.GetAssetsByPath(FName(TEXT("/Game/Backrooms")), Assets, true);
 		GCatalogBuilt = true;
+		// v4.15 : profils IES de la lampe (TextureLightProfile) : ensemble commun, prets avant le premier allumage
 		static const FName Classes[] = { FName(TEXT("StaticMesh")), FName(TEXT("SkeletalMesh")), FName(TEXT("Texture2D")), FName(TEXT("SoundWave")),
-			FName(TEXT("Material")) };
+			FName(TEXT("Material")), FName(TEXT("TextureLightProfile")) };
 		for (const FAssetData& Data : Assets)
 		{
 			const FName Class = Data.AssetClassPath.GetAssetName();
@@ -1217,6 +1219,12 @@ UTexture* UBRAssets::Texture(FName Name)
 		Missing.Add(RawKey);
 	}
 	return Raw;
+}
+
+UTextureLightProfile* UBRAssets::LightProfile(FName Name)
+{
+	// v4.15 : importe par backrooms_setup (import_light_profiles) ; precharge avec l'ensemble commun (catalogue)
+	return Cast<UTextureLightProfile>(LoadAsset(TEXT("/Game/Backrooms/Lights"), Name, UTextureLightProfile::StaticClass()));
 }
 
 UTexture* UBRAssets::Icon(FName Name)

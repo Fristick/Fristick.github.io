@@ -17,6 +17,7 @@ Il importe :
   RawAssets/Icons/*.png         -> /Game/Backrooms/UI         (icones de l'inventaire)
   RawAssets/Sounds/*.wav        -> /Game/Backrooms/Sounds     (boucles d'apres loops.txt)
   RawAssets/Meshes/*.fbx        -> /Game/Backrooms/Meshes     (Tools/Blender/generate_models.py + import_user_models.py)
+  RawAssets/Lights/*.ies        -> /Game/Backrooms/Lights     (v4.15 : profils IES de la lampe, Tools/generate_ies.py)
   RawAssets/Level0Kit/FBX/*.fbx -> /Game/Backrooms/Level0Kit/Meshes      (v4.14 : kit Blender du Level 0, dossier separe)
   RawAssets/Level0Kit/Textures/* -> /Game/Backrooms/Level0Kit/Textures   (BaseColor sRGB, ORM lineaire, Normal DirectX)
 puis cree les materiaux maitres (M_BR_World, M_BR_Mesh, M_BR_Skin, M_BR_WaterSurface) et la carte L_Backrooms.
@@ -32,7 +33,8 @@ import os
 
 import unreal
 
-VERSION = 10
+# v4.15 : 11 : profils photometriques IES de la lampe torche et de la frontale (RawAssets/Lights, /Game/Backrooms/Lights)
+VERSION = 11
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
 # v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles,
@@ -52,6 +54,9 @@ UI = ROOT + "/UI"
 SND = ROOT + "/Sounds"
 MESH = ROOT + "/Meshes"
 MAT = ROOT + "/Materials"
+# v4.15 : profils IES (Tools/generate_ies.py) : faisceau de la lampe torche et de la frontale (UTextureLightProfile)
+LIGHTS = ROOT + "/Lights"
+IES_EXT = (".ies",)
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
 MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade")
 # v4.8 : usages que chaque materiau maitre doit declarer (meme liste que BRMaterialBuilder::RequiredUsages en C++)
@@ -234,6 +239,26 @@ def import_textures(files, dest=TEX, ui=False):
             safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_EFFECTS)
         EAL.save_asset(path, only_if_is_dirty=False)
     log("%d textures importees dans %s" % (len(files), dest))
+
+
+def import_light_profiles(files):
+    """v4.15 : profils photometriques IES (LM-63) -> UTextureLightProfile (faisceau de la lampe torche et de la frontale).
+    Le jeu les lit par leur nom (UBRAssets::LightProfile) ; sans eux, la lampe garde son cone simple."""
+    if not files:
+        return
+    tasks = [make_task(raw("Lights", f), LIGHTS, os.path.splitext(f)[0]) for f in files]
+    tools().import_asset_tasks(tasks)
+    done = 0
+    for f in files:
+        name = os.path.splitext(f)[0]
+        path = LIGHTS + "/" + name
+        profile = unreal.load_asset(path) if exists(path) else None
+        if not isinstance(profile, unreal.TextureLightProfile):
+            warn("Profil IES non importe : %s (%s)" % (name, type(profile).__name__ if profile else "absent"))
+            continue
+        EAL.save_asset(path, only_if_is_dirty=False)
+        done += 1
+    log("%d profil(s) IES importe(s) dans %s" % (done, LIGHTS))
 
 
 def import_sounds(files):
@@ -1224,6 +1249,8 @@ def validate(verbose=False):
         problems.append(("sound", os.path.splitext(f)[0], "absent"))
     for f in missing_in("Meshes", MESH, (".fbx",)):
         problems.append(("mesh", os.path.splitext(f)[0], "absent"))
+    for f in missing_in("Lights", LIGHTS, IES_EXT):
+        problems.append(("light", os.path.splitext(f)[0], "absent"))
     for name in HAZMAT_TEXTURES:
         tex = load_tex(name)
         if tex is None:
@@ -1308,6 +1335,8 @@ def repair():
         import_sounds([f for f in list_raw("Sounds", (".wav",)) if os.path.splitext(f)[0] in cats["sound"]])
     if "mesh" in cats:
         import_meshes([f for f in list_raw("Meshes", (".fbx",)) if os.path.splitext(f)[0] in cats["mesh"]])
+    if "light" in cats:
+        import_light_profiles([f for f in list_raw("Lights", IES_EXT) if os.path.splitext(f)[0] in cats["light"]])
     if "skeletal" in cats:
         import_skeletal([f for f in list_raw("Skeletal", (".fbx",)) if os.path.splitext(f)[0] in cats["skeletal"]])
     if "map" in cats:
@@ -1331,7 +1360,7 @@ def needs_setup():
         return True
     return bool(materials_missing() or missing_in("Textures", TEX, IMG_EXT) or missing_in("Icons", UI, (".png",))
                 or missing_in("Sounds", SND, (".wav",)) or missing_in("Meshes", MESH, (".fbx",))
-                or missing_in("Skeletal", MESH, (".fbx",)) or not exists(MAP_PATH))
+                or missing_in("Skeletal", MESH, (".fbx",)) or missing_in("Lights", LIGHTS, IES_EXT) or not exists(MAP_PATH))
 
 
 # ---------------------------------------------------------------------------
@@ -1584,12 +1613,15 @@ def run(force=False):
             if installed_material_version() < mv:
                 msh += [f for f in files if f not in msh and os.path.isfile(raw("Meshes", f))]
     mats = list(MATERIALS) if (force or installed_material_version() < MATERIAL_VERSION) else materials_missing()
-    log("Installation v%d : %d textures, %d icones, %d sons, %d modeles, %d materiaux"
-        % (VERSION, len(tex), len(ico), len(snd), len(msh), len(mats)))
-    with unreal.ScopedSlowTask(6, "The Backrooms : import des ressources...") as task:
+    ies = list_raw("Lights", IES_EXT) if force else missing_in("Lights", LIGHTS, IES_EXT)
+    log("Installation v%d : %d textures, %d icones, %d sons, %d modeles, %d materiaux, %d profils IES"
+        % (VERSION, len(tex), len(ico), len(snd), len(msh), len(mats), len(ies)))
+    with unreal.ScopedSlowTask(7, "The Backrooms : import des ressources...") as task:
         task.make_dialog(True)
         task.enter_progress_frame(1, "Textures (%d)" % len(tex))
         import_textures(tex)
+        task.enter_progress_frame(1, "Profils IES (%d)" % len(ies))
+        import_light_profiles(ies)
         task.enter_progress_frame(1, "Icones (%d)" % len(ico))
         import_textures(ico, UI, ui=True)
         task.enter_progress_frame(1, "Sons (%d)" % len(snd))

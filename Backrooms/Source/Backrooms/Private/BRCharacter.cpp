@@ -736,6 +736,12 @@ void ABRCharacter::ApplyLamp(uint8 Lamp)
 	Flashlight->SetRelativeLocation(FlashBase);
 	Flashlight->SetInnerConeAngle(Inner[I]);
 	Flashlight->SetOuterConeAngle(Outer[I]);
+	// v4.15 : faisceau d'une vraie lampe (profil IES : point chaud, anneau du reflecteur, halo ; frontale plus large) ;
+	// l'intensite reste celle de la lampe. Sans le profil importe : le cone simple d'avant
+	if (UBRAssets* A = UBRAssets::Get(this))
+	{
+		Flashlight->SetIESTexture(A->LightProfile(I == 2 ? FName(TEXT("IES_Headlamp")) : FName(TEXT("IES_Flashlight"))));
+	}
 }
 
 void ABRCharacter::SetHeldVisual(EBRItem InHand)

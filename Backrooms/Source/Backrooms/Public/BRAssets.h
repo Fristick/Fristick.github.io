@@ -51,6 +51,8 @@ public:
 	UTexture* Texture(FName Name);
 	/** Icone d'inventaire : /Game/Backrooms/UI/<Name>, sinon RawAssets/Icons/<Name>.png */
 	UTexture* Icon(FName Name);
+	/** v4.15 : profil photometrique IES /Game/Backrooms/Lights/<Name> (faisceau de la lampe), nullptr s'il n'est pas importe */
+	class UTextureLightProfile* LightProfile(FName Name);
 	USoundBase* Sound(FName Name);
 	/** Attenuation spatialisee. v4.7 : bOcclude : etouffee derriere les murs (entites, bruits du monde) ; les sorties
 	 *  et les objectifs passent false (signal fiable) ; de loin, le son perd ses aigus et gagne de la reverberation */
