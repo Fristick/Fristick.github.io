@@ -1,4 +1,4 @@
-// Genere par Tools/Localization/loc_extract.py : ne pas modifier a la main (1189 cles du namespace BR)
+// Genere par Tools/Localization/loc_extract.py : ne pas modifier a la main (1191 cles du namespace BR)
 TEXT("Assets.WrongScale"),
 TEXT("Caption.Ahead"),
 TEXT("Caption.Bacteria"),
@@ -350,6 +350,8 @@ TEXT("HUD.ReprendreSavenameNiveauCurrentlevelNouve"),
 TEXT("HUD.ReprenezPartieCommencezNouvelleNiveau"),
 TEXT("HUD.RepriseDerniereSessionArreteePendant"),
 TEXT("HUD.RepriseIdentiqueMemeDispositionVhsfound"),
+TEXT("HUD.RepriseMemeDispositionNeuf"),
+TEXT("HUD.RepriseMortMemeDisposition"),
 TEXT("HUD.RepriseNouvelleDispositionNiveauPartie"),
 TEXT("HUD.Retirer"),
 TEXT("HUD.Retour"),

@@ -2783,14 +2783,22 @@ void ABRHUD::DrawMenuSaves(ABRPlayerController* PC, bool bInteractive)
 		float LY = PY + 62.f * U;
 		// v4.7 : ce que donnera "Reprendre" (meme disposition et objectifs, ou niveau neuf)
 		const FBRSessionState& Ses = Shown->Session;
+		// v4.15 : sans session a reprendre, le Level 0 de la partie (graine IntroSeed, v4.13) et chaque niveau d'un parcours
+		// lineaire (BRStory::LevelSeedFor) gardent leur disposition : seuls la mission et les objets repartent a neuf
+		const BRStory::FState ShownStory = Shown->GetStory();
+		const bool bSameLayout = (D.Number == 0 && ShownStory.IntroSeed != 0) || BRStory::LevelSeedFor(ShownStory, D.Number) != 0;
 		const FString Resume = Shown->bFutureFormat
 			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.VersionRecenteJeuFormatLoadedversion", "Version plus r\u00e9cente du jeu (format {LoadedVersion}) : partie conserv\u00e9e intacte, lecture seule"), { { TEXT("LoadedVersion"), BRLoc::Int(Shown->LoadedVersion) } })
 			: bMovedLevel
 			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.SaveMovedResume", "Le Niveau {Saved} n'est pas encore disponible dans cette version : reprise au Niveau {Number} (la partie est copi\u00e9e avant la reprise, sa progression est conserv\u00e9e)"), { { TEXT("Saved"), BRLoc::Int(Shown->CurrentLevel) }, { TEXT("Number"), BRLoc::Int(D.Number) } })
 			: Shown->bPendingDeath
-			? FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseDerniereSessionArreteePendant", "Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, niveau neuf)")))
+			? (bSameLayout
+				? FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseMortMemeDisposition", "Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, le niveau recommence avec la m\u00eame disposition)")))
+				: FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseDerniereSessionArreteePendant", "Reprise : la derni\u00e8re session s'est arr\u00eat\u00e9e pendant une mort (\u00e9quipement de d\u00e9part, niveau neuf)"))))
 			: (Ses.bValid && Ses.Level == D.Number
 				? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.RepriseIdentiqueMemeDispositionVhsfound", "Reprise \u00e0 l'identique : m\u00eame disposition, {VHSFound} cassette(s), {Collected} objet(s) ramass\u00e9(s){HasSpot}"), { { TEXT("VHSFound"), BRLoc::Int(Ses.VHSFound) }, { TEXT("Collected"), BRLoc::Int(Ses.Collected.Num()) }, { TEXT("HasSpot"), BRLoc::Arg(Ses.bHasSpot ? BR_STR(NSLOCTEXT("BR", "HUD.DernierePosition2", ", derni\u00e8re position")) : BR_STR(NSLOCTEXT("BR", "HUD.PointDepart", ", point de d\u00e9part"))) } })
+				: bSameLayout
+				? FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseMemeDispositionNeuf", "Reprise : m\u00eame disposition du niveau, mission et objets remis \u00e0 neuf")))
 				: FString(BR_STR(NSLOCTEXT("BR", "HUD.RepriseNouvelleDispositionNiveauPartie", "Reprise : nouvelle disposition du niveau (partie d'une version ant\u00e9rieure ou apr\u00e8s une mort)"))));
 		const FString Lines[] = {
 			BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DernierePositionNiveauNumberTitle", "Derni\u00e8re position : Niveau {Number}  \u00b7  {Title}"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } }),
