@@ -159,6 +159,10 @@ private:
 	 *  visibles (BRMissionSolver), rejouee action par action (placement devant le mecanisme, validation de l'hote), sortie
 	 *  ouverte ; bDepart : quitte ensuite le niveau par la sortie ouverte */
 	void AddMissionSteps(int32 Level, uint32 UserSeed, bool bDepart);
+	/** v4.15 : places des mecanismes du niveau charge (point d'interaction hors des volumes du decor construit, place debout a
+	 *  portee de la visee du client et selon la regle de l'hote, essai a blanc de l'hote depuis cette place) ; bLidarOnly :
+	 *  postes et cages du Level 6 seulement (BRAutoTestV411.cpp) */
+	void AddMissionPlaceSweep(int32 Level, bool bLidarOnly);
 	/** v4.11 : multijoueur : etat de mission a la connexion, action d'un client validee par l'hote, ramassage dispute (un
 	 *  seul gagnant), soin perime refuse sans rien consommer, depart de groupe (attente, rassemblement, depart commun) */
 	void AddNetV411Steps(bool bClient);
@@ -170,6 +174,9 @@ private:
 	void AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad = true);
 	/** v4.12 : sortie ouverte atteinte a pied, prise par la touche d'interaction (echelle : on grimpe), arrivee verifiee */
 	void AddWalkExitSteps(int32 Level);
+	/** v4.15 : Poolrooms de la graine 1217121623 (niveau 125584919) : mission a pied, vanne B actionnee depuis l'eau des canaux
+	 *  (120 cm au plus), sortie par le sas, sans nager (BRAutoTestV412.cpp) */
+	void AddV415PoolroomsSteps();
 	/** v4.12 : multijoueur : compatibilite, etat d'une demande d'un client (en attente, accepte, refuse), depart de groupe
 	 *  par une echelle (une seule demande au sommet, grimpeur rassemble, coequipier qui arrive a pied) */
 	void AddNetV412Steps(bool bClient);
@@ -183,6 +190,12 @@ private:
 	/** v4.13 : Level 6 sans lumiere (BRAutoTestV413Lidar.cpp) : solo et reseau */
 	void AddV413LidarSteps();
 	void AddNetV413LidarSteps(bool bClient);
+	/** v4.15 : Level 6 sur les graines des correctifs (4136, 4126, 6, 208) : salle de l'aile sans avertissement, postes et cages
+	 *  atteignables selon l'hote, poste 1 tourne depuis sa place (BRAutoTestV413Lidar.cpp) */
+	void AddV415LidarPlaceSteps();
+	/** v4.15 (correctifs) : -BRAutoTestV415Fix : les seules etapes de non-regression des correctifs (places des Niveaux 8 et 9,
+	 *  Level 6, Poolrooms), deja comprises dans -BRAutoTestV411, -BRAutoTestV412 et -BRAutoTestV413 (BRAutoTestV415Fix.cpp) */
+	void AddV415FixSteps();
 	/** v4.14 : REJOUER isole, migration ambigue, scanner (rechargement, arret, cadences, HUD), kit du Level 0
 	 *  (BRAutoTestV414.cpp) ; reseau : porte du client */
 	void AddV414Steps();

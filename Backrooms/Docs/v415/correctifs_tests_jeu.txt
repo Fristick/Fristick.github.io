@@ -1,0 +1,53 @@
+# Tests du jeu, correctifs v4.15 (branche v415-fixes) : compilation et verifications hors moteur - sortie reelle
+# Machine : Windows 11, Unreal 5.8, Visual Studio 2026 (MSVC 14.50.35739) ; depuis Backrooms/
+# Date : 2026-10-16T18:05:12Z
+# Le jeu n'a pas ete lance ici : les etapes en jeu sont preparees (commandes en fin de fichier), non executees
+
+## Build.bat BackroomsEditor Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
+[Adaptive Build] Excluded from Backrooms unity file: BRAutoTest.cpp, BRAutoTestV410.cpp, BRAutoTestV411.cpp, BRAutoTestV412.cpp, BRAutoTestV413.cpp, BRAutoTestV413Lidar.cpp, BRAutoTestV414.cpp, BRAutoTestV415Fix.cpp, BRAutoTestV47.cpp, BRAutoTestV48.cpp, BRAutoTestV49.cpp
+Result: Succeeded (0 avertissement, 0 erreur)
+
+## Build.bat BackroomsEditor Win64 Development ... -DisableAdaptiveUnity (compilation regroupee, comme apres le commit)
+[1/5] Compile [x64] Module.Backrooms.2.cpp
+[2/5] Compile [x64] Module.Backrooms.1.cpp
+Result: Succeeded (0 avertissement, 0 erreur)
+
+## Build.bat Backrooms Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
+[17/18] Link [x64] Backrooms.exe
+Result: Succeeded (0 avertissement, 0 erreur)
+
+## Bancs hors moteur (fichiers des en-tetes de Docs/v414/banc_*.txt ; missions 3000, lidar 2000)
+# clang-cl 22.1.3 /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow, puis cl 19.51.36260 /std:c++17 /O2 /EHsc /utf-8 /W4
+# Sorties identiques entre les deux compilateurs et a celles de Docs/v415/correctifs_bancs.txt (logique pure inchangee)
+test_content [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (69 verifications, 0 echec(s))
+test_content [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (69 verifications, 0 echec(s))
+test_departure [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_departure [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_story [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_story [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_lidar [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_lidar [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_light [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_light [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_mechanisms [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (60 verifications, 0 echec(s))
+test_mechanisms [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK (60 verifications, 0 echec(s))
+test_missions [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_missions [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_transactions [clang] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+test_transactions [cl] : compile rc 0 (0 avertissement(s)), execution rc 0 : RESULTAT : OK
+
+## Python 3.14.8 (PYTHONUTF8=1)
+python -m unittest Tools/Build/tests/test_packaging.py : Ran 62 tests, OK (skipped=1)
+python Tools/Localization/loc_extract.py --check : 1187 cles dans les 22 langues, a jour (aucun texte visible ajoute)
+python Tools/Localization/loc_build.py --check : traduits 1187/1187, a revoir 0
+python Tools/Localization/loc_review.py : problemes : 0
+python Tools/protect_assets.py check : OK
+python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTAT : OK
+
+## Etapes en jeu (a lancer ; editeur ou jeu, -game)
+# Seules les etapes de non-regression des correctifs (environ 10 a 15 min) :
+#   UnrealEditor.exe Backrooms.uproject -game -BRAutoTest -BRAutoTestV415Fix -BRAutoTestStrict
+# Les memes, dans leurs suites :
+#   -BRAutoTest -BRAutoTestV411   (v4.15 mission 8 / 9 : places des mecanismes, graine 4111 = niveaux 643828852 / 774538619)
+#   -BRAutoTest -BRAutoTestV412   (v4.15 Poolrooms : graine 1217121623 = niveau 125584919, vanne B et sas sans nager)
+#   -BRAutoTest -BRAutoTestV413   (v4.15 Level 6, graines 4136, 4126, 6, 208 : aile, postes et cages, poste 1)

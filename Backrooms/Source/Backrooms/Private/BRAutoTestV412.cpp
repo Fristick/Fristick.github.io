@@ -8,7 +8,9 @@
 //     jamais deplace directement. Un chemin est calcule sur la grille (A* du monde, celui des entites) et suivi avec les
 //     seules entrees du joueur (avancer, sauter, pas de cote) ; chaque mecanisme doit etre vise par le trace
 //     d'interaction depuis la place atteinte ; la sortie est prise par la touche d'interaction (echelle : on grimpe en
-//     avancant) ; l'arrivee (niveau suivant, redirection ou fin du contenu disponible) est verifiee ;
+//     avancant) ; l'arrivee (niveau suivant, redirection ou fin du contenu disponible) est verifiee. v4.15 : chemin des
+//     tests sans bassin profond (le chemin du monde faute de mieux), places jugees comme le jeu (nage au-dela de 120 cm,
+//     visee du client, regle de l'hote), niveau attendu verifie, mort signalee, sante mentale gardee a 100 en marchant ;
 //   - Poolrooms : surface des bassins = graduation de l'etat de mission (rendu, regle et eau du personnage lisent la
 //     meme valeur) ; sas plein avant, vide apres ; traversee du sas a pied, sans nager ;
 //   - Niveau 8 : tablier leve, le palier est hors d'atteinte meme en sautant ; treuils, tablier pose ; traversee a pied ;
@@ -34,6 +36,7 @@
 #include "BRSave.h"
 #include "BRStoryLogic.h"
 #include "BRWorld.h"
+#include "Algo/Reverse.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -156,16 +159,141 @@ namespace BRTestV412
 	// =================================================================================================================
 	FWalk Walk;
 
+	/** v4.15 : marche en cours d'une mission a pied : ordinaire, approche (chunk du mecanisme pas encore construit), reprise */
+	enum class EWalkKind : uint8 { Normal, Approach, Retry };
+
+	/** v4.15 : etat de la derniere mission a pied (notes, etapes de non-regression) */
+	struct FWalkMission
+	{
+		int32 Level = -1;
+		uint32 LevelSeed = 0;
+		/** Niveau attendu absent au depart (cascade) : mission et sortie non testees */
+		bool bNotReached = false;
+		/** Toutes les actions du solveur faites */
+		bool bComplete = false;
+		int32 Planned = 0;
+		int32 Actions = 0;
+		int32 Walks = 0;
+		int32 Approaches = 0;
+		int32 Retries = 0;
+		/** Images a la nage et chemins de grille passant par un bassin, toutes marches de la mission comprises */
+		int32 SwimFrames = 0;
+		int32 PoolFallbacks = 0;
+		EWalkKind Kind = EWalkKind::Normal;
+		/** Mecanisme deja approche : sa place est choisie dans le decor construit */
+		int32 Approached = -1;
+		/** But de la premiere marche vers le mecanisme en cours (repli de la marche de reprise) */
+		FVector FirstGoal = FVector::ZeroVector;
+		/** Par mecanisme : action faite, eau sous le joueur a ce moment (surface - fond, comme ABRCharacter::UpdateWater), nage */
+		bool ActDone[BRM::MaxDevices] = {};
+		float ActDepth[BRM::MaxDevices] = {};
+		bool ActSwim[BRM::MaxDevices] = {};
+	};
+	FWalkMission WalkMission;
+
+	/** v4.15 : derniere sortie prise a pied (etapes de non-regression) */
+	struct FWalkExit
+	{
+		int32 Level = -1;
+		bool bReached = false;
+		bool bArrived = false;
+		int32 SwimFrames = 0;
+		int32 LocalSwimFrames = 0;
+		float LocalMaxDepth = 0.f;
+	};
+	FWalkExit LastExit;
+
+	/** v4.15 : graine des Poolrooms dont la vanne B ne s'actionne que depuis l'eau des canaux (niveau 125584919, diag_v413_3) */
+	constexpr uint32 ValveSeed = 1217121623u;
+
+	bool FindPoolFreePath(const ABRWorld* W, const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes)
+	{
+		OutPath.Reset();
+		if (From == To)
+		{
+			OutPath.Add(To);
+			return true;
+		}
+		if (!W->IsWalkable(To))
+		{
+			return false;
+		}
+		// Copie de l'A* du monde (ABRWorld::FindPath) : memes noeuds, couts et ordre ; seul le filtre des bassins s'y ajoute
+		struct FNode
+		{
+			FIntPoint Cell;
+			float F;
+		};
+		auto ByCost = [](const FNode& A, const FNode& B) { return A.F < B.F; };
+		auto Estimate = [&To](const FIntPoint& Q) { return static_cast<float>(FMath::Abs(Q.X - To.X) + FMath::Abs(Q.Y - To.Y)); };
+		TArray<FNode> OpenSet;
+		TMap<FIntPoint, FIntPoint> CameFrom;
+		TMap<FIntPoint, float> PathCost;
+		OpenSet.HeapPush(FNode{ From, Estimate(From) }, ByCost);
+		PathCost.Add(From, 0.f);
+		const FIntPoint Steps4[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+		const bool bPits = W->HasPits();
+		int32 NumExpanded = 0;
+		while (OpenSet.Num() > 0 && NumExpanded < MaxNodes)
+		{
+			FNode Best{ FIntPoint(0, 0), 0.f };
+			OpenSet.HeapPop(Best, ByCost);
+			if (Best.Cell == To)
+			{
+				FIntPoint Walker = To;
+				OutPath.Add(Walker);
+				while (Walker != From)
+				{
+					Walker = CameFrom.FindChecked(Walker);
+					OutPath.Add(Walker);
+				}
+				Algo::Reverse(OutPath);
+				return true;
+			}
+			++NumExpanded;
+			const float CurCost = PathCost.FindRef(Best.Cell);
+			for (const FIntPoint& Dir : Steps4)
+			{
+				const FIntPoint N = Best.Cell + Dir;
+				// Un bassin profond (Niveau 37) n'est traverse que s'il est l'arrivee
+				if (!W->CanStep(Best.Cell, N) || (N != To && W->IsPoolCell(N.X, N.Y)))
+				{
+					continue;
+				}
+				const float NewCost = CurCost + ((bPits && W->IsPitRoomCell(N.X, N.Y)) ? 3.f : 1.f);
+				if (const float* Known = PathCost.Find(N))
+				{
+					if (*Known <= NewCost)
+					{
+						continue;
+					}
+				}
+				PathCost.Add(N, NewCost);
+				CameFrom.Add(N, Best.Cell);
+				OpenSet.HeapPush(FNode{ N, NewCost + Estimate(N) }, ByCost);
+			}
+		}
+		return false;
+	}
 
 	bool Replan(const ABRWorld* W, const ABRCharacter* C)
 	{
 		Walk.Points.Reset();
 		Walk.Next = 0;
 		TArray<FIntPoint> Path;
-		if (!W->FindPath(W->WorldToCell(C->GetActorLocation()), W->WorldToCell(Walk.Goal), Path, 20000))
+		const FIntPoint From = W->WorldToCell(C->GetActorLocation());
+		const FIntPoint To = W->WorldToCell(Walk.Goal);
+		// v4.15 : sans bassin profond d'abord (le chemin du monde peut en traverser un : le marcheur y nageait sans fin) ; le
+		// chemin du monde (ABRWorld::FindPath, inchange) seulement faute de mieux
+		Walk.bPoolFallback = false;
+		if (!FindPoolFreePath(W, From, To, Path, 20000))
 		{
-			Walk.Points.Add(Walk.Goal);
-			return false;
+			if (!W->FindPath(From, To, Path, 20000))
+			{
+				Walk.Points.Add(Walk.Goal);
+				return false;
+			}
+			Walk.bPoolFallback = true;
 		}
 		for (int32 I = 1; I < Path.Num(); ++I)
 		{
@@ -200,15 +328,18 @@ namespace BRTestV412
 
 	FString WalkStats()
 	{
-		return FString::Printf(TEXT("%.1f m en %.0f s, %d saut(s), %d nouveau(x) chemin(s), %d image(s) a la nage, %d deplacement(s) direct(s)%s"),
+		return FString::Printf(TEXT("%.1f m en %.0f s, %d saut(s), %d nouveau(x) chemin(s), %d image(s) a la nage, %d deplacement(s) direct(s)%s%s"),
 			Walk.Travelled / 100.f, FPlatformTime::Seconds() - Walk.Start, Walk.Jumps, Walk.Replans, Walk.SwimFrames, Walk.Teleports,
-			Walk.bPath ? TEXT("") : TEXT(", sans chemin de grille (tout droit)"));
+			Walk.bPath ? TEXT("") : TEXT(", sans chemin de grille (tout droit)"), Walk.bPoolFallback ? TEXT(", chemin du monde par un bassin (aucun chemin sans bassin)") : TEXT(""));
 	}
 
 	/** Une image de marche. bBusy : frayeur, entree bloquee, chargement (le temps ne compte pas pour le blocage) */
 	EWalk StepWalk(const ABRWorld* W, ABRCharacter* C, float Dt, double Timeout, bool bBusy)
 	{
 		const double Now = FPlatformTime::Seconds();
+		// v4.15 : la folie ignore le mode invincible (regle du jeu, inchangee) : dans le noir, lampe eteinte, elle tuait le marcheur
+		// apres 260 s environ (Level 6, Niveau 8). Le test garde sa sante mentale a 100 pendant la marche
+		C->Sanity = 100.f;
 		const FVector Pos = C->GetActorLocation();
 		const float FeetZ = static_cast<float>(Pos.Z) - C->GetSimpleCollisionHalfHeight();
 		const float Moved = static_cast<float>(FVector::Dist(Pos, Walk.LastPos));
@@ -316,61 +447,128 @@ namespace BRTestV412
 		return EWalk::Moving;
 	}
 
-	/** Sol sous (X, Y) dans l'eau (fond sous la surface) : le joueur y nagerait */
-	bool IsWetSpot(const ABRWorld* W, const FVector& P, float FromZ, const AActor* Ignore, const AActor* Self, float* OutFloorZ = nullptr)
+	float EyeHeight(const ABRCharacter* C)
 	{
-		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestWet), false, Self);
-		Q.AddIgnoredActor(Ignore);
-		FHitResult Floor;
-		if (!W->GetWorld()->LineTraceSingleByChannel(Floor, FVector(P.X, P.Y, FromZ + 150.f), FVector(P.X, P.Y, FromZ - 450.f), ECC_WorldStatic, Q))
-		{
-			return true; // pas de sol : pas une place
-		}
-		const float FloorZ = static_cast<float>(Floor.ImpactPoint.Z);
-		if (OutFloorZ)
-		{
-			*OutFloorZ = FloorZ;
-		}
-		const BRMech::FWaterQuery WQ = W->WaterAt(FVector(P.X, P.Y, FloorZ + 5.f));
-		return WQ.bWater && WQ.Surface > FloorZ + 10.f;
+		return C ? static_cast<float>(C->GetEyeLocation().Z - C->GetActorLocation().Z) : 74.f;
 	}
 
-	/** Place au sec pres d'un mecanisme pose au bord de l'eau (fleche du courant des Poolrooms) : un joueur l'observe depuis
-	 *  le trottoir, pas a la nage. A portee de l'hote (ABRWorld::MissionReachServer depuis les yeux) et a vue, la plus proche */
-	bool DryStandNear(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, FVector& Out)
+	const TCHAR* StandName(EStand S)
 	{
-		UWorld* World = W->GetWorld();
+		switch (S)
+		{
+		case EStand::Ok: return TEXT("libre");
+		case EStand::NoFloor: return TEXT("sans sol");
+		case EStand::Swim: return TEXT("a la nage");
+		case EStand::Blocked: return TEXT("capsule genee");
+		case EStand::TooFar: return TEXT("hors de portee de la visee");
+		case EStand::NoSight: return TEXT("refusee par l'hote (vue coupee)");
+		}
+		return TEXT("?");
+	}
+
+	bool FloorUnder(const ABRWorld* W, const FVector& P, float FromZ, const AActor* Self, float& OutFloorZ)
+	{
+		// v4.15 : n'ignore que le joueur (avant : aussi le mecanisme vise, dont les volumes, cuves des vannes ou cage, etaient
+		// traverses par la place choisie)
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestFloor), false, Self);
+		FHitResult Floor;
+		if (!W->GetWorld()->LineTraceSingleByChannel(Floor, FVector(P.X, P.Y, FromZ + 60.f), FVector(P.X, P.Y, FromZ - 450.f), ECC_WorldStatic, Q))
+		{
+			return false;
+		}
+		OutFloorZ = static_cast<float>(Floor.ImpactPoint.Z);
+		return true;
+	}
+
+	bool IsSwimSpot(const ABRWorld* W, const FVector& P, float FloorZ)
+	{
+		// v4.15 : la regle de nage du jeu (avant : plus de 10 cm d'eau, alors qu'on marche dans les canaux de 60 cm) ; l'eau d'un
+		// bassin ou du sas (volume local) n'est jamais une place
+		const BRMech::FWaterQuery WQ = W->WaterAt(FVector(P.X, P.Y, FloorZ + 5.f));
+		return WQ.bWater && (WQ.bLocal || WQ.Surface - WQ.Floor > BRMech::SwimDepth);
+	}
+
+	EStand CheckMissionStand(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, const FVector& P, bool bNoSwim, FVector& OutStand)
+	{
+		UWorld* World = W ? W->GetWorld() : nullptr;
+		if (!World || !C || !Dev)
+		{
+			return EStand::NoFloor;
+		}
 		const FVector Aim = Dev->GetInteractPoint();
-		const FVector Fwd = Dev->GetActorForwardVector().GetSafeNormal2D().IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Dev->GetActorForwardVector().GetSafeNormal2D();
+		float FloorZ = 0.f;
+		if (!FloorUnder(W, P, static_cast<float>(Aim.Z), C, FloorZ))
+		{
+			return EStand::NoFloor;
+		}
+		if (bNoSwim && IsSwimSpot(W, P, FloorZ))
+		{
+			return EStand::Swim;
+		}
+		// Capsule du joueur (rayon 34 cm, marge 2 cm) posee 5 cm au-dessus du sol ; seul le joueur est ignore
 		const float Half = C->GetSimpleCollisionHalfHeight();
-		const float EyeUp = static_cast<float>(C->GetEyeLocation().Z - C->GetActorLocation().Z);
-		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestDryStand), false, C);
-		Q.AddIgnoredActor(Dev);
-		for (const float Dist : { 110.f, 160.f, 210.f, 260.f })
+		const FVector Stand(P.X, P.Y, FloorZ + Half + 5.f);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestStand), false, C);
+		if (World->OverlapAnyTestByChannel(Stand, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(36.f, Half - 4.f), Q))
+		{
+			return EStand::Blocked;
+		}
+		// Yeux du joueur debout sur ce sol ; la visee du client d'abord, puis la regle de l'hote (la seule, partagee)
+		const FVector Eye(P.X, P.Y, FloorZ + Half + EyeHeight(C));
+		if (FVector::Dist(Eye, Aim) > ClientFocusReach)
+		{
+			return EStand::TooFar;
+		}
+		if (!W->CanReachMissionDevice(Eye, Dev, C))
+		{
+			return EStand::NoSight;
+		}
+		OutStand = Stand;
+		return EStand::Ok;
+	}
+
+	bool FindMissionStand(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, bool bNoSwim, FVector& OutStand, FString* OutWhy)
+	{
+		if (!W || !C || !Dev)
+		{
+			return false;
+		}
+		const FVector Aim = Dev->GetInteractPoint();
+		const FVector Ahead = Dev->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Fwd = Ahead.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Ahead;
+		// Cercles : 110 cm (place ordinaire), plus loin, puis tout pres (place etroite) ; 16 directions depuis l'avant
+		int32 Refused[6] = { 0, 0, 0, 0, 0, 0 };
+		int32 Tried = 0;
+		for (const float Dist : { 110.f, 160.f, 210.f, 75.f, 240.f })
 		{
 			for (int32 Turn = 0; Turn < 16; ++Turn)
 			{
 				const FVector P = Aim + Fwd.RotateAngleAxis(Turn * 22.5f, FVector::UpVector) * Dist;
-				float FloorZ = 0.f;
-				if (IsWetSpot(W, P, static_cast<float>(Aim.Z), Dev, C, &FloorZ))
+				const EStand S = CheckMissionStand(W, C, Dev, P, bNoSwim, OutStand);
+				if (S == EStand::Ok)
 				{
-					continue;
+					return true;
 				}
-				const FVector Stand(P.X, P.Y, FloorZ + Half + 5.f);
-				if (World->OverlapAnyTestByChannel(Stand, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(36.f, Half - 4.f), Q))
-				{
-					continue;
-				}
-				const FVector Eye = Stand + FVector(0.f, 0.f, EyeUp);
-				if (FVector::Dist(Eye, Aim) > ABRWorld::MissionReachServer - 40.f || World->LineTraceTestByChannel(Eye, Aim, ECC_WorldStatic, Q))
-				{
-					continue;
-				}
-				Out = Stand;
-				return true;
+				++Refused[static_cast<int32>(S)];
+				++Tried;
 			}
 		}
+		if (OutWhy)
+		{
+			*OutWhy = FString::Printf(TEXT("%d places essayees : %d sans sol, %d a la nage, %d capsule genee, %d hors de portee de la visee (%.0f cm), %d refusees par l'hote"), Tried,
+				Refused[static_cast<int32>(EStand::NoFloor)], Refused[static_cast<int32>(EStand::Swim)], Refused[static_cast<int32>(EStand::Blocked)],
+				Refused[static_cast<int32>(EStand::TooFar)], ClientFocusReach, Refused[static_cast<int32>(EStand::NoSight)]);
+		}
 		return false;
+	}
+
+	/** v4.15 : yeux du joueur au point d'interaction, et ce que la regle de l'hote en dit depuis la place actuelle */
+	FString ReachFromHere(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev)
+	{
+		FHitResult Block;
+		const bool bServer = W->CanReachMissionDevice(C->GetEyeLocation(), Dev, C, &Block);
+		return FString::Printf(TEXT("yeux a %.0f cm du point, regle de l'hote : %s"), FVector::Dist(C->GetEyeLocation(), Dev->GetInteractPoint()),
+			bServer ? TEXT("action acceptee") : *FString::Printf(TEXT("REFUSEE (%s, %s)"), *GetNameSafe(Block.GetActor()), *GetNameSafe(Block.GetComponent())));
 	}
 
 	/** Point au centre d'un volume local (repere d'un module) */
@@ -400,13 +598,35 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 		{
 			return false;
 		}
+		if ((W->IsTransitioning() || !W->IsLevelReady()) && StepTime < 30.f)
+		{
+			return false;
+		}
+		TestMission.Reset();
+		TestMissionStep = 0;
+		TestMissionPhase = 0;
+		TestMissionRetries = 0;
+		TestMissionDevice = -1;
+		TestMissionLastHold = 0.0;
+		TestMissionClock = 0.0;
+		WalkMission = FWalkMission();
+		WalkMission.Level = Level;
+		WalkMission.LevelSeed = W->GetSeed();
+		// v4.15 : en cascade (sortie du niveau precedent pas prise, mort), le niveau attendu n'est pas la : rien n'est teste (avant :
+		// la mission du niveau courant etait rejouee sous le nom de celui-ci)
+		if (W->GetLevelNumber() != Level)
+		{
+			WalkMission.bNotReached = true;
+			Skip(FString::Printf(TEXT("Niveau %d non atteint (niveau actuel %d) : mission non testee"), Level, W->GetLevelNumber()));
+			return true;
+		}
 		if (!W->IsMissionActive() && StepTime < 10.f)
 		{
 			return false;
 		}
 		const uint8 Tier = W->GetMissionTier();
 		ModulePlacements += Tier == 2 ? 1 : 0;
-		PlacementLines.Add(FString::Printf(TEXT("Niveau %2d, graine %u : placement %s, avis %d, mission %s"), Level, UserSeed,
+		PlacementLines.Add(FString::Printf(TEXT("Niveau %2d, graine %u (niveau %u) : placement %s, avis %d, mission %s"), Level, UserSeed, W->GetSeed(),
 			Tier == 0 ? TEXT("normal") : (Tier == 1 ? TEXT("variante de secours") : TEXT("MODULE DE SECOURS")), W->GetMissionNotice(),
 			W->IsMissionActive() ? TEXT("active") : TEXT("ABSENTE")));
 		// Sorties de ce niveau dans cette version : passages condamnes, voyants des sorties gardees (rouge = 0 avant la mission)
@@ -419,16 +639,9 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 		}
 		// v4.13 : le Level 0 n'a pas de mission (sa porte de service est libre) ; les autres niveaux en ont une
 		const bool bWantMission = Level != 0;
-		Note(FString::Printf(TEXT("Niveau %d (canal %d) : mission %s, placement %d, passages condamnes %d, voyants rouges %d, verts %d"), Level,
-			static_cast<int32>(BRLevels::Channel()), W->IsMissionActive() ? TEXT("active") : (bWantMission ? TEXT("ABSENTE") : TEXT("aucune (Level 0, v4.13)")), Tier, Sealed,
-			Red, Green), W->IsMissionActive() != bWantMission);
-		TestMission.Reset();
-		TestMissionStep = 0;
-		TestMissionPhase = 0;
-		TestMissionRetries = 0;
-		TestMissionDevice = -1;
-		TestMissionLastHold = 0.0;
-		TestMissionClock = 0.0;
+		Note(FString::Printf(TEXT("Niveau %d (canal %d, graine du niveau %u) : mission %s, placement %d, passages condamnes %d, voyants rouges %d, verts %d"), Level,
+			static_cast<int32>(BRLevels::Channel()), W->GetSeed(), W->IsMissionActive() ? TEXT("active") : (bWantMission ? TEXT("ABSENTE") : TEXT("aucune (Level 0, v4.13)")), Tier,
+			Sealed, Red, Green), W->IsMissionActive() != bWantMission);
 		Shot(FString::Printf(TEXT("v412_acces_%d_depart"), Level));
 		return true;
 	});
@@ -437,18 +650,46 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
-		if (!W || !C || !W->IsMissionActive())
+		if (WalkMission.Level == Level && WalkMission.bNotReached)
 		{
-			return true; // deja note
+			return true; // niveau non atteint : NON VERIFIE au depart
+		}
+		if (!W || !C)
+		{
+			if (StepTime > 30.f)
+			{
+				Note(FString::Printf(TEXT("Niveau %d : monde ou joueur absent pendant la mission a pied"), Level), true);
+				return true;
+			}
+			return false;
+		}
+		// v4.15 : mort ou niveau quitte pendant la mission : signale ici (avant : fin silencieuse, "deja note", et la sortie etait
+		// cherchee au Level 0)
+		if (C->IsDead() || W->GetLevelNumber() != Level || W->IsTransitioning())
+		{
+			ReleaseJump(C);
+			const FString What = C->IsDead() ? FString::Printf(TEXT("MORT (cause %s, sante mentale %.0f, sante %.0f)"), BRDeath::CauseId(C->GetDeathCause()), C->Sanity, C->Health)
+				: FString::Printf(TEXT("NIVEAU QUITTE (niveau %d%s)"), W->GetLevelNumber(), W->IsTransitioning() ? TEXT(", changement de niveau en cours") : TEXT(""));
+			const FIntPoint Cell = W->WorldToCell(C->GetActorLocation());
+			Note(FString::Printf(TEXT("Niveau %d (graine du niveau %u) : %s pendant la mission a pied, action %d/%d, mecanisme %d, cellule (%d, %d)%s"), Level, WalkMission.LevelSeed,
+				*What, TestMissionStep + 1, TestMission.Num() / 3, TestMissionDevice, Cell.X, Cell.Y, TestMissionPhase == 2 ? *(FString(TEXT(" ; marche en cours")) + Walk.Tag + TEXT(" : ")
+				+ WalkStats()) : TEXT("")), true);
+			Shot(FString::Printf(TEXT("v412_acces_%d_interrompu"), Level));
+			return true;
+		}
+		if (!W->IsMissionActive())
+		{
+			return true; // Level 0 : aucune mission (notee au depart)
 		}
 		const BRM::FPlan& P = W->GetMissionPlan();
 		const double Now = FPlatformTime::Seconds();
 		const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
-		const bool bBusy = C->GetScareKind() >= 0 || C->IsInputLocked() || C->IsDead() || W->IsTransitioning();
+		const bool bBusy = C->GetScareKind() >= 0 || C->IsInputLocked();
 		if (StepTime > 900.f)
 		{
 			ReleaseJump(C);
-			Note(FString::Printf(TEXT("Niveau %d : mission interrompue apres 900 s (action %d/%d)"), Level, TestMissionStep, TestMission.Num() / 3), true);
+			Note(FString::Printf(TEXT("Niveau %d : mission interrompue apres 900 s (action %d/%d, graine du niveau %u)"), Level, TestMissionStep, TestMission.Num() / 3,
+				WalkMission.LevelSeed), true);
 			return true;
 		}
 		switch (TestMissionPhase)
@@ -471,7 +712,9 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 				TestMission.Add(Solver.Steps[I].Action);
 				TestMission.Add(Solver.Steps[I].Feedback);
 			}
+			WalkMission.Planned = Solver.NumSteps;
 			TestCountA = 0; // metres parcourus pour la mission
+			TestCountB = 0; // nouvelles marches apres un refus "trop loin" pour l'action en cours
 			TestTimer = Now;
 			TestMissionPhase = 1;
 			return false;
@@ -481,8 +724,10 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			// Mecanisme suivant : deja vise depuis la place actuelle (meme mecanisme), sinon on y marche
 			if (TestMissionStep * 3 >= TestMission.Num())
 			{
-				Note(FString::Printf(TEXT("Niveau %d : %d actions faites en marchant (%d m, %.0f s)"), Level, TestMission.Num() / 3, TestCountA,
-					Now - TestTimer));
+				WalkMission.bComplete = true;
+				Note(FString::Printf(TEXT("Niveau %d : %d actions faites en marchant (%d m, %.0f s ; %d marche(s) dont %d approche(s) et %d reprise(s), %d image(s) a la nage, "
+					"%d chemin(s) par un bassin ; graine du niveau %u)"), Level, TestMission.Num() / 3, TestCountA, Now - TestTimer, WalkMission.Walks, WalkMission.Approaches,
+					WalkMission.Retries, WalkMission.SwimFrames, WalkMission.PoolFallbacks, WalkMission.LevelSeed));
 				return true;
 			}
 			const int32 D = TestMission[TestMissionStep * 3];
@@ -499,41 +744,79 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			}
 			TestMissionDevice = D;
 			TestMissionRetries = 0;
-			const FVector Aim = Dev->GetInteractPoint();
-			FVector Goal = Aim + Dev->GetActorForwardVector().GetSafeNormal2D() * 110.f;
-			// Devant le mecanisme, c'est l'eau (fleche du courant au bord du trottoir) : place au sec a portee
-			FVector Dry;
-			if (IsWetSpot(W, Goal, static_cast<float>(Aim.Z), Dev, C))
+			// v4.15 : chunk du mecanisme pas encore construit (loin du joueur) : marche vers sa cellule d'abord ; sa place est
+			// choisie a l'arrivee, dans le decor construit (avant : sans sol sous la place, le mecanisme etait juge sans place)
+			if (!Dev->IsShown() && WalkMission.Approached != D)
 			{
-				if (!DryStandNear(W, C, Dev, Dry))
+				BeginWalk(W, C, W->CellCenter(Dev->GetCell(), static_cast<float>(C->GetActorLocation().Z)), 200.f, true);
+				Walk.Tag = TEXT(" (approche : chunk du mecanisme pas encore construit)");
+				WalkMission.Kind = EWalkKind::Approach;
+				TestMissionPhase = 2;
+				return false;
+			}
+			if ((!Dev->IsShown() || W->GetPreparingChunkCount() > 0) && Now - TestMissionClock < 10.0)
+			{
+				return false; // approche faite : chunks en construction
+			}
+			// v4.15 : la place devant le mecanisme (110 cm) jugee comme le jeu (sol, capsule, pas a la nage, visee du client, regle de
+			// l'hote), sinon la premiere place valable autour de lui
+			const FVector Aim = Dev->GetInteractPoint();
+			const FVector Ahead = Dev->GetActorForwardVector().GetSafeNormal2D();
+			const FVector Fwd = Ahead.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Ahead;
+			FVector Goal = FVector::ZeroVector;
+			const EStand Front = CheckMissionStand(W, C, Dev, Aim + Fwd * 110.f, true, Goal);
+			if (Front != EStand::Ok)
+			{
+				FString Why;
+				if (!FindMissionStand(W, C, Dev, true, Goal, &Why))
 				{
-					Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) au bord de l'eau : aucune place au sec a portee et a vue"), Level, D,
-						*BRMissionText::DeviceName(P, D)), true);
+					Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) : aucune place sans nager a portee et a vue (graine du niveau %u ; devant lui a 110 cm : %s ; "
+						"autour : %s)"), Level, D, *BRMissionText::DeviceName(P, D), WalkMission.LevelSeed, StandName(Front), *Why), true);
+					Shot(FString::Printf(TEXT("v412_acces_%d_sans_place"), Level));
 					return true;
 				}
-				Goal = Dry;
 			}
+			WalkMission.FirstGoal = Goal;
 			BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), 70.f, true);
+			Walk.Tag = Front == EStand::Ok ? FString() : FString::Printf(TEXT(" (place autour du mecanisme : devant lui, %s)"), StandName(Front));
+			WalkMission.Kind = EWalkKind::Normal;
 			TestMissionPhase = 2;
 			return false;
 		}
 		case 2:
 		{
-			const EWalk R = StepWalk(W, C, Dt, 240.0, bBusy);
+			// v4.15 : une approche s'arrete des que le mecanisme est affiche (son chunk est construit)
+			const ABRMissionDevice* Near = W->FindMissionDevice(TestMissionDevice);
+			const bool bShownNow = WalkMission.Kind == EWalkKind::Approach && Near && Near->IsShown() && Now - Walk.Start > 0.5;
+			const EWalk R = bShownNow ? EWalk::Arrived : StepWalk(W, C, Dt, 240.0, bBusy);
 			if (R == EWalk::Moving)
 			{
 				return false;
 			}
+			ReleaseJump(C);
 			TestCountA += FMath::RoundToInt(Walk.Travelled / 100.f);
+			++WalkMission.Walks;
+			WalkMission.SwimFrames += Walk.SwimFrames;
+			WalkMission.PoolFallbacks += Walk.bPoolFallback ? 1 : 0;
 			if (R == EWalk::Stuck)
 			{
-				Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) NON ATTEINT a pied : bloque a la cellule (%d, %d), %s"), Level, TestMissionDevice,
-					*BRMissionText::DeviceName(P, TestMissionDevice), W->WorldToCell(C->GetActorLocation()).X, W->WorldToCell(C->GetActorLocation()).Y,
-					*WalkStats()), true);
+				Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) NON ATTEINT a pied%s : bloque a la cellule (%d, %d), %s (graine du niveau %u)"), Level, TestMissionDevice,
+					*BRMissionText::DeviceName(P, TestMissionDevice), *Walk.Tag, W->WorldToCell(C->GetActorLocation()).X, W->WorldToCell(C->GetActorLocation()).Y, *WalkStats(),
+					WalkMission.LevelSeed), true);
 				Shot(FString::Printf(TEXT("v412_acces_%d_bloque"), Level));
 				return true;
 			}
+			// v4.15 : chaque marche dans le rapport (nage comprise)
+			Note(FString::Printf(TEXT("Niveau %d : marche vers le mecanisme %d (%s)%s : %s"), Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), *Walk.Tag,
+				*WalkStats()));
 			TestMissionClock = Now;
+			if (WalkMission.Kind == EWalkKind::Approach)
+			{
+				WalkMission.Approached = TestMissionDevice;
+				++WalkMission.Approaches;
+				TestMissionPhase = 1;
+				return false;
+			}
 			TestMissionPhase = 3;
 			return false;
 		}
@@ -543,6 +826,7 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			ABRMissionDevice* Dev = W->FindMissionDevice(TestMissionDevice);
 			if (!Dev)
 			{
+				Note(FString::Printf(TEXT("Niveau %d : mecanisme %d absent du monde"), Level, TestMissionDevice), true);
 				return true;
 			}
 			Face(C, Dev->GetInteractPoint());
@@ -562,18 +846,27 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			}
 			if (TestMissionRetries++ == 0)
 			{
-				// Un pas plus pres (pas dans l'eau), puis on vise a nouveau
-				const FVector Goal = Dev->GetInteractPoint() + Dev->GetActorForwardVector().GetSafeNormal2D() * 60.f;
-				if (!IsWetSpot(W, Goal, static_cast<float>(Dev->GetInteractPoint().Z), Dev, C))
-				{
-					BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), 35.f, true);
-					TestMissionPhase = 2;
-					return false;
-				}
+				// Un pas plus pres, puis on vise a nouveau. v4.15 : le but a 60 cm est verifie comme une place (sol, capsule libre, pas a
+				// la nage, portee et vue) ; sinon le but de la premiere marche, atteint de plus pres (avant : un but a 60 cm dans la
+				// cage du Level 6 n'etait jamais atteint, 240 s de marche). La marche de reprise est nommee dans les notes
+				const FVector Aim = Dev->GetInteractPoint();
+				const FVector Ahead = Dev->GetActorForwardVector().GetSafeNormal2D();
+				const FVector Fwd = Ahead.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Ahead;
+				FVector Closer = FVector::ZeroVector;
+				const EStand Near = CheckMissionStand(W, C, Dev, Aim + Fwd * 60.f, true, Closer);
+				const FVector Goal = Near == EStand::Ok ? Closer : WalkMission.FirstGoal;
+				BeginWalk(W, C, FVector(Goal.X, Goal.Y, C->GetActorLocation().Z), 35.f, true);
+				Walk.Tag = Near == EStand::Ok ? FString(TEXT(" (marche de reprise : but a 60 cm)"))
+					: FString::Printf(TEXT(" (marche de reprise : but a 60 cm refuse, %s : but de la premiere marche)"), StandName(Near));
+				WalkMission.Kind = EWalkKind::Retry;
+				++WalkMission.Retries;
+				TestMissionPhase = 2;
+				return false;
 			}
 			const AActor* Seen = C->FocusActor.Get();
-			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) atteint mais PAS VISE par l'interaction (vise : %s)"), Level, TestMissionDevice,
-				*BRMissionText::DeviceName(P, TestMissionDevice), Seen ? *Seen->GetName() : TEXT("rien")), true);
+			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) atteint mais PAS VISE par l'interaction (vise : %s ; %s ; apres la marche de reprise ; graine du niveau %u)"),
+				Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), Seen ? *Seen->GetName() : TEXT("rien"), *ReachFromHere(W, C, Dev), WalkMission.LevelSeed),
+				true);
 			Shot(FString::Printf(TEXT("v412_acces_%d_pas_vise"), Level));
 			return true;
 		}
@@ -584,7 +877,8 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			const uint8 Action = TestMission[TestMissionStep * 3 + 1];
 			const uint8 Expected = TestMission[TestMissionStep * 3 + 2];
 			const bool bHold = P.Devices[D].Kind == BRM::EKind::Observe || P.Devices[D].Kind == BRM::EKind::Crank;
-			if (ABRMissionDevice* Dev = W->FindMissionDevice(D))
+			ABRMissionDevice* Dev = W->FindMissionDevice(D);
+			if (Dev)
 			{
 				Face(C, Dev->GetInteractPoint());
 			}
@@ -608,9 +902,13 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			const bool bItemTaken = P.Devices[D].Kind == BRM::EKind::Item && Expected == static_cast<uint8>(BRM::EFeedback::AlreadyDone) && Got == BRMissionText::Taken;
 			if (Got == BRMissionText::Cooldown || Got == BRMissionText::NotNow || Got == BRMissionText::TooFar)
 			{
-				if (++TestMissionRetries > 8)
+				// v4.15 : un refus "trop loin" relance la marche ; au-dela de trois, la place n'est pas bonne : signale (avant : le
+				// compteur des refus etait remis a zero a chaque marche)
+				TestCountB += Got == BRMissionText::TooFar ? 1 : 0;
+				if (++TestMissionRetries > 8 || TestCountB > 3)
 				{
-					Note(FString::Printf(TEXT("Niveau %d : action %d refusee %d fois (retour %d)"), Level, TestMissionStep, TestMissionRetries, Got), true);
+					Note(FString::Printf(TEXT("Niveau %d : action %d refusee %d fois (retour %d, %d nouvelle(s) marche(s) apres \"trop loin\" ; %s ; graine du niveau %u)"), Level,
+						TestMissionStep, TestMissionRetries, Got, TestCountB, Dev ? *ReachFromHere(W, C, Dev) : TEXT("mecanisme absent"), WalkMission.LevelSeed), true);
 					return true;
 				}
 				TestMissionClock = Now + (Got == BRMissionText::Cooldown ? 1.0 : 0.3);
@@ -627,8 +925,18 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 					*BRMissionText::DeviceName(P, D), Got, Expected), true);
 				return true;
 			}
+			// v4.15 : eau sous le joueur au moment de l'action (surface - fond, la profondeur qui fait nager) et nage
+			if (D >= 0 && D < BRM::MaxDevices)
+			{
+				const BRMech::FWaterQuery Q = W->WaterAt(C->GetActorLocation() - FVector(0.f, 0.f, C->GetSimpleCollisionHalfHeight()));
+				WalkMission.ActDone[D] = true;
+				WalkMission.ActDepth[D] = FMath::Max(WalkMission.ActDepth[D], Q.bWater ? Q.Surface - Q.Floor : 0.f);
+				WalkMission.ActSwim[D] = WalkMission.ActSwim[D] || C->IsSwimming();
+			}
 			TestMissionRetries = 0;
+			TestCountB = 0;
 			++TestMissionStep;
+			WalkMission.Actions = TestMissionStep;
 			TestMissionPhase = 1;
 			return false;
 		}
@@ -658,16 +966,31 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 		{
 		default:
 		{
+			if ((W->IsTransitioning() || !W->IsLevelReady()) && StepTime < 30.f)
+			{
+				return false;
+			}
+			LastExit = FWalkExit();
+			LastExit.Level = Level;
+			// v4.15 : niveau attendu absent (cascade, mort pendant la mission) : la sortie n'est pas cherchee dans un autre niveau
+			// (avant : "mission resolue oui" au Level 0, ou la sortie du niveau courant prise sous le nom de celui-ci)
+			if (W->GetLevelNumber() != Level || C->IsDead())
+			{
+				Skip(FString::Printf(TEXT("Niveau %d non atteint (niveau actuel %d%s) : sortie non testee"), Level, W->GetLevelNumber(), C->IsDead() ? TEXT(", joueur mort") : TEXT("")));
+				return true;
+			}
 			// Mission resolue, sortie ouverte (voyant vert), place devant la sortie
 			BRM::FEval E;
 			W->GetMissionEval(E);
-			// v4.13 : sans mission (Level 0), la sortie est libre : la porte de service
-			const bool bSolved = E.bSolved || !W->IsMissionActive();
+			// v4.13 : sans mission (Level 0), la sortie est libre : la porte de service. v4.15 : seulement au Level 0 (une mission
+			// absente ailleurs n'est pas une mission resolue)
+			const bool bSolved = E.bSolved || (Level == 0 && !W->IsMissionActive());
 			TestLevel = OpenForwardTarget(W, Level);
 			ABRExit* Exit = TestLevel >= 0 ? FindExit(GetWorld(), TestLevel) : nullptr;
 			if (!bSolved || !Exit)
 			{
-				Note(FString::Printf(TEXT("Niveau %d : mission resolue %s, sortie ouverte trouvee %s : sortie non testee"), Level, YesNo(bSolved), YesNo(Exit != nullptr)), true);
+				Note(FString::Printf(TEXT("Niveau %d : mission resolue %s, sortie ouverte trouvee %s : sortie non testee (graine du niveau %u)"), Level, YesNo(bSolved),
+					YesNo(Exit != nullptr), W->GetSeed()), true);
 				return true;
 			}
 			const FVector Fwd = FRotator(0.f, Exit->GetActorRotation().Yaw, 0.f).Vector();
@@ -687,11 +1010,24 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 		}
 		case 11:
 		{
+			// v4.15 : mort ou niveau quitte pendant la marche vers la sortie : signale
+			if (C->IsDead() || W->GetLevelNumber() != Level || W->IsTransitioning())
+			{
+				ReleaseJump(C);
+				Note(FString::Printf(TEXT("Niveau %d : %s pendant la marche vers la sortie vers %d (graine du niveau %u) : %s"), Level, C->IsDead()
+					? *FString::Printf(TEXT("MORT (cause %s)"), BRDeath::CauseId(C->GetDeathCause())) : *FString::Printf(TEXT("NIVEAU QUITTE (niveau %d)"), W->GetLevelNumber()),
+					TestLevel, W->GetSeed(), *WalkStats()), true);
+				return true;
+			}
 			const EWalk R = StepWalk(W, C, Dt, 300.0, bBusy);
 			if (R == EWalk::Moving)
 			{
 				return false;
 			}
+			LastExit.SwimFrames = Walk.SwimFrames;
+			LastExit.LocalSwimFrames = Walk.LocalSwimFrames;
+			LastExit.LocalMaxDepth = Walk.LocalMaxDepth;
+			LastExit.bReached = R == EWalk::Arrived;
 			const FString Stats = WalkStats();
 			FString Water;
 			if (Walk.LocalFrames > 0)
@@ -783,6 +1119,7 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 				}
 				const bool bOk = W->IsChapterEnd() && W->GetChapterEndLot() == BRContent::CurrentLot(BRLevels::Channel());
 				const FString Line = FString::Printf(TEXT("Niveau %2d -> fin du contenu disponible (chapitre %d) : %s"), Level, W->GetChapterEndLot(), YesNo(bOk));
+				LastExit.bArrived = bOk;
 				AccessLines.Add(Line);
 				Note(Line, !bOk);
 				Shot(FString::Printf(TEXT("v412_fin_du_contenu_%d"), Level));
@@ -795,6 +1132,7 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			}
 			const bool bArrived = W->GetLevelNumber() == Res.Target && W->IsLevelReady();
 			const bool bOneRequest = !bLadder || Requests == 1;
+			LastExit.bArrived = bArrived && bOneRequest;
 			const FString Line = FString::Printf(TEXT("Niveau %2d -> Niveau %d%s : arrivee %s%s"), Level, Res.Target, Res.bRedirected ? TEXT(" (redirige)") : TEXT(""),
 				YesNo(bArrived), bLadder ? *FString::Printf(TEXT(", demandes de depart au sommet de l'echelle : %d (attendu 1)"), Requests) : TEXT(""));
 			AccessLines.Add(Line);
@@ -804,6 +1142,59 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 		}
 	});
 	LimitLastStep(330.f);
+}
+
+// =====================================================================================================================
+// v4.15 : Poolrooms de la graine 1217121623 (niveau 125584919, diag_v413_3) : devant la vanne B il n'y a que la marche
+// immergee ou le canal (60 cm d'eau) ; la regle "au sec" des tests (plus de 10 cm d'eau) la declarait sans place alors que
+// le jeu la laisse actionner en marchant dans le canal. Mission a pied, vanne B actionnee sans nager, sortie par le sas
+// =====================================================================================================================
+
+void ABRAutoTest::AddV415PoolroomsSteps()
+{
+	using namespace BRTestV412;
+	AddSeedLoad(37, ValveSeed, FString::Printf(TEXT("v4.15 Poolrooms : vanne B depuis l'eau des canaux (graine %u)"), ValveSeed));
+	AddWalkMissionSteps(37, ValveSeed, false);
+	Add(TEXT("v4.15 Poolrooms : vanne B actionnee sans nager"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W)
+		{
+			return false;
+		}
+		if (W->GetLevelNumber() != 37 || !W->IsMissionActive() || WalkMission.Level != 37 || WalkMission.bNotReached)
+		{
+			Skip(FString::Printf(TEXT("Poolrooms (graine %u) non atteintes ou sans mission : vanne B non verifiee"), ValveSeed));
+			return true;
+		}
+		const BRM::FPlan& P = W->GetMissionPlan();
+		int32 ValveB = -1;
+		for (int32 I = 0; I < P.NumDevices; ++I)
+		{
+			ValveB = (P.Devices[I].Role == BRM::R_Sluice && P.Devices[I].Label == 1) ? I : ValveB;
+		}
+		const bool bAct = ValveB >= 0 && WalkMission.ActDone[ValveB];
+		const float Depth = ValveB >= 0 ? WalkMission.ActDepth[ValveB] : 0.f;
+		const bool bSwam = ValveB >= 0 && WalkMission.ActSwim[ValveB];
+		const bool bOk = WalkMission.bComplete && bAct && Depth <= BRMech::SwimDepth && !bSwam && WalkMission.SwimFrames == 0 && WalkMission.PoolFallbacks == 0;
+		Note(FString::Printf(TEXT("Poolrooms, graine %u (niveau %u) : %d/%d actions faites a pied ; vanne B (mecanisme %d) actionnee %s, dans %.0f cm d'eau (on nage au-dela de "
+			"%.0f cm), a la nage %s ; mission : %d image(s) a la nage, %d chemin(s) par un bassin"), ValveSeed, WalkMission.LevelSeed, WalkMission.Actions, WalkMission.Planned,
+			ValveB, YesNo(bAct), Depth, BRMech::SwimDepth, bSwam ? TEXT("OUI") : TEXT("non"), WalkMission.SwimFrames, WalkMission.PoolFallbacks), !bOk);
+		return true;
+	});
+	AddWalkExitSteps(37);
+	Add(TEXT("v4.15 Poolrooms : sortie par le sas sans nager"), 0.f, [this]()
+	{
+		if (LastExit.Level != 37 || WalkMission.bNotReached)
+		{
+			Skip(FString::Printf(TEXT("Poolrooms (graine %u) : sortie non testee"), ValveSeed));
+			return true;
+		}
+		const bool bOk = LastExit.bReached && LastExit.bArrived && LastExit.SwimFrames == 0 && LastExit.LocalSwimFrames == 0;
+		Note(FString::Printf(TEXT("Poolrooms, graine %u : sortie atteinte a pied %s, %d image(s) a la nage (dans le sas : %d, eau au plus %.0f cm), arrivee au niveau suivant %s"),
+			ValveSeed, YesNo(LastExit.bReached), LastExit.SwimFrames, LastExit.LocalSwimFrames, LastExit.LocalMaxDepth, YesNo(LastExit.bArrived)), !bOk);
+		return true;
+	});
 }
 
 // =====================================================================================================================
@@ -1114,6 +1505,8 @@ void ABRAutoTest::AddV412Steps()
 		return true;
 	});
 	AddWalkExitSteps(37);
+	// v4.15 : la graine dont la vanne B n'a de place que dans l'eau des canaux (diag_v413_3)
+	AddV415PoolroomsSteps();
 
 	// ---------------------------------------------------------------------------------------------- Lot 1 a pied
 	AddWalkMissionSteps(0, 4120);
@@ -1886,6 +2279,8 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 		}
 		if (W->IsTransitioning() || W->GetLevelSerial() != TestCountA)
 		{
+			// v4.15 : la marche du coequipier dans le rapport (nage comprise)
+			Note(FString::Printf(TEXT("client : marche vers le point de rassemblement jusqu'au depart : %s"), *WalkStats()));
 			TestMissionPhase = 0;
 			return true;
 		}

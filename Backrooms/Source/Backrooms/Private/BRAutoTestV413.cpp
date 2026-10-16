@@ -208,7 +208,17 @@ void ABRAutoTest::AddServiceDoorWalkSteps(const FString& Tag, bool bUse)
 			return true;
 		}
 		const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
-		const bool bBusy = C->GetScareKind() >= 0 || C->IsInputLocked() || C->IsDead() || W->IsTransitioning();
+		// v4.15 : mort ou niveau quitte pendant la marche : signale (avant : attente jusqu'a la limite de la marche)
+		if (C->IsDead() || W->GetLevelNumber() != 0)
+		{
+			BRTestV412::ReleaseJump(C);
+			Note(FString::Printf(TEXT("%s : %s pendant la marche vers la porte (graine du niveau %u) : %s"), *Tag, C->IsDead()
+				? *FString::Printf(TEXT("MORT (cause %s)"), BRDeath::CauseId(C->GetDeathCause())) : *FString::Printf(TEXT("NIVEAU QUITTE (niveau %d)"), W->GetLevelNumber()),
+				W->GetSeed(), *BRTestV412::WalkStats()), true);
+			TestLevel = -1;
+			return true;
+		}
+		const bool bBusy = C->GetScareKind() >= 0 || C->IsInputLocked() || W->IsTransitioning();
 		const BRTestV412::EWalk R = BRTestV412::StepWalk(W, C, Dt, 300.0, bBusy);
 		if (R == BRTestV412::EWalk::Moving)
 		{
@@ -827,6 +837,8 @@ void ABRAutoTest::AddNetV413Steps(bool bClient)
 		}
 		if (W->IsTransitioning() || W->GetLevelSerial() != SerialAtOpen)
 		{
+			// v4.15 : la marche du coequipier dans le rapport (nage comprise)
+			Note(FString::Printf(TEXT("client : marche vers le rassemblement de la porte jusqu'au depart : %s"), *BRTestV412::WalkStats()));
 			TestMissionPhase = 0;
 			return true;
 		}
