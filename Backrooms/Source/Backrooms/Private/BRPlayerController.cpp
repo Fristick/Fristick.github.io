@@ -3836,8 +3836,9 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction %d"), bRT ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.VolumetricFog %d"), S.bVolumetricFog ? 1 : 0));
 	Cmd(FString::Printf(TEXT("r.ScreenPercentage %d"), FMath::Clamp(S.RenderScale, 50, 100)));
-	// Image plus nette (filtre de nettete du tonemapper) a partir de la qualite Elevee
-	Cmd(FString::Printf(TEXT("r.Tonemapper.Sharpen %.2f"), S.Quality >= 2 ? 0.5f : 0.25f));
+	// Image plus nette (filtre de nettete du tonemapper) a partir de la qualite Elevee. v4.15 : nettete discrete (0,5 donnait
+	// un aspect "jeu video" : contours cernes, grain accentue)
+	Cmd(FString::Printf(TEXT("r.Tonemapper.Sharpen %.2f"), S.Quality >= 2 ? 0.2f : 0.1f));
 	// v4.8 : sans hit lighting, le cache de surfaces de Lumen n'eclaire pas les maillages a squelette : dans les reflets
 	// ray traces, les entites et la combinaison devenaient noires. Ils ne sont dans la scene ray tracee que si les
 	// reflets sont eclaires par les rayons, ou pour les ombres ray tracees de la lampe ; sinon les reflets les prennent a

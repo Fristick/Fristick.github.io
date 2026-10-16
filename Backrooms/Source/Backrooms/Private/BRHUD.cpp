@@ -2014,7 +2014,9 @@ void ABRHUD::DrawLevelScene(const FBRLevelDef& D, float X, float Y, float W, flo
 	const bool bOpen = D.bOutdoor || !D.bCeiling;
 	const bool bDark = D.Fixture == EBRFixture::None && !bOpen;
 	const float Lum = bDark ? 0.16f : 1.f;
-	const FLinearColor Light(D.LightColor.R, D.LightColor.G, D.LightColor.B, 1.f);
+	// v4.15 : couleur des lampes telle qu'elle apparait en jeu (temperature et balance des blancs du niveau)
+	const FLinearColor LampColor = D.ApparentLightColor();
+	const FLinearColor Light(LampColor.R, LampColor.G, LampColor.B, 1.f);
 	auto Surface = [&](const FBRSurface& Surf, float SX, float SY, float SW, float SH, float Rep, float Bright)
 	{
 		if (SW < 1.f || SH < 1.f)

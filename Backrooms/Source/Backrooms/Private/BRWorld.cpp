@@ -1127,10 +1127,14 @@ void ABRWorld::ApplyEnvironment()
 	S.AutoExposureMaxBrightness = D.MaxEV;
 	S.bOverride_AutoExposureBias = true;
 	S.AutoExposureBias = D.ExposureBias;
+	// v4.15 : vitesse d'adaptation et balance des blancs propres au niveau (camera "physique" : la couleur vient de la
+	// temperature des lampes et de la balance des blancs, la teinte de l'image ne fait plus qu'affiner)
 	S.bOverride_AutoExposureSpeedUp = true;
-	S.AutoExposureSpeedUp = 2.f;
+	S.AutoExposureSpeedUp = D.ExposureSpeedUp;
 	S.bOverride_AutoExposureSpeedDown = true;
-	S.AutoExposureSpeedDown = 1.f;
+	S.AutoExposureSpeedDown = D.ExposureSpeedDown;
+	S.bOverride_WhiteTemp = true;
+	S.WhiteTemp = FMath::Clamp(D.WhiteTempK, 1500.f, 15000.f);
 	S.bOverride_SceneColorTint = true;
 	S.SceneColorTint = D.SceneTint;
 	S.bOverride_ColorSaturation = true;

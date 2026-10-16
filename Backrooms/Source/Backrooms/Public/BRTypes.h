@@ -459,6 +459,33 @@ struct FBRLevelDef
 	float EnergyBarChance = 0.1f;
 	float GearChance = 0.03f;        // lampe, frontale, gilet
 	float WallDetailChance = 0.f;    // prises, aerations
+
+	// --- v4.15 (realisme) : rendu seulement (ni generation, ni reseau, ni lumiere de gameplay LightLevelAt) ---
+	/** Temperature de couleur des plafonniers (K) ; 0 : couleur RGB LightColor seule (rendu d'avant). LightColor multiplie
+	 *  la temperature (la teinte rouge pres de la Bacteria reste rouge) */
+	float LightTemperatureK = 0.f;
+	/** Balance des blancs de la camera (K ; 6500 : neutre). Proche de la temperature des lampes : le papier peint garde sa
+	 *  couleur sans virer a l'orange */
+	float WhiteTempK = 6500.f;
+	/** Adaptation de l'exposition (IL par seconde) vers le clair et vers le sombre */
+	float ExposureSpeedUp = 2.f;
+	float ExposureSpeedDown = 1.f;
+
+	/** v4.15 : couleur apparente des plafonniers a l'ecran (temperature vue a travers la balance des blancs, multipliee par
+	 *  LightColor, maximum 1) : apercus du menu, ou rien n'est rendu par le moteur */
+	FLinearColor ApparentLightColor() const
+	{
+		if (LightTemperatureK <= 0.f)
+		{
+			return LightColor;
+		}
+		const FLinearColor Lamp = FLinearColor::MakeFromColorTemperature(LightTemperatureK);
+		const FLinearColor WhiteRef = FLinearColor::MakeFromColorTemperature(FMath::Clamp(WhiteTempK, 1500.f, 15000.f));
+		const FLinearColor Seen(Lamp.R / FMath::Max(WhiteRef.R, 0.001f) * LightColor.R, Lamp.G / FMath::Max(WhiteRef.G, 0.001f) * LightColor.G,
+			Lamp.B / FMath::Max(WhiteRef.B, 0.001f) * LightColor.B, 1.f);
+		const float Peak = FMath::Max3(Seen.R, Seen.G, Seen.B);
+		return Peak > 0.001f ? FLinearColor(Seen.R / Peak, Seen.G / Peak, Seen.B / Peak, 1.f) : LightColor;
+	}
 };
 
 /** Reglages du joueur (onglet Parametres de l'inventaire), sauvegardes dans GameUserSettings.ini */

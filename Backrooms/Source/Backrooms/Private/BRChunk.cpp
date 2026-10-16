@@ -35,6 +35,15 @@ namespace
 	{
 		return FMath::RadiansToDegrees(FMath::Atan2(DY, DX));
 	}
+
+	/** v4.15 : couleur emissive d'un diffuseur eclaire par une lampe de Kelvin K (meme eclat que Glow) */
+	FLinearColor TemperatureGlow(const FLinearColor& Glow, float Kelvin)
+	{
+		const float Strength = FMath::Max3(Glow.R, Glow.G, Glow.B);
+		const FLinearColor Lamp = FLinearColor::MakeFromColorTemperature(Kelvin);
+		const float Peak = FMath::Max3(Lamp.R, Lamp.G, Lamp.B);
+		return Peak > 0.001f ? FLinearColor(Lamp.R / Peak * Strength, Lamp.G / Peak * Strength, Lamp.B / Peak * Strength, 1.f) : Glow;
+	}
 }
 
 ABRChunk::ABRChunk()
@@ -1180,6 +1189,12 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		Comp->SetCastShadow(bFixtureShadow);
 		FBRFlicker F;
 		F.GlowColor = UBRAssets::GlowColorForSlot(bWarm ? TEXT("GlowWarm") : TEXT("Glow"));
+		// v4.15 : le diffuseur prend la couleur de sa lampe (temperature), avec le meme eclat ; la balance des blancs de la
+		// camera s'applique a l'un comme a l'autre
+		if (D.LightTemperatureK > 0.f)
+		{
+			F.GlowColor = TemperatureGlow(F.GlowColor, D.LightTemperatureK);
+		}
 		if (Mesh)
 		{
 			Comp->SetStaticMesh(Mesh);
@@ -1320,6 +1335,13 @@ ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea
 	LC->SetIntensityUnits(ELightUnits::Lumens);
 	LC->SetIntensity(Lumens * Power);
 	LC->SetLightColor(D.LightColor);
+	// v4.15 : temperature de couleur des plafonniers (rendu seulement) ; LightColor la multiplie, la teinte rouge pres de
+	// la Bacteria (ABRChunk::Tick) reste rouge
+	if (D.LightTemperatureK > 0.f)
+	{
+		LC->SetUseTemperature(true);
+		LC->SetTemperature(D.LightTemperatureK);
+	}
 	LC->SetAttenuationRadius(D.LightRadius);
 	LC->SetCastShadows(R.bShadow && R.bShadowOn);
 	LC->SetVolumetricScatteringIntensity(D.bVolumetricFog ? D.VolumetricScatter : 0.f);
