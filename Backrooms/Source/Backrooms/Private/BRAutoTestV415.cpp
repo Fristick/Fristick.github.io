@@ -6,12 +6,14 @@
 //   - CONTINUER d'une partie lineaire arretee au Niveau 2 : graine du niveau = BRStory::LevelSeedFor, drapeau du niveau,
 //     aucune sortie tiree par les chunks, une seule sortie (celle de la mission, vers le Niveau 3) ;
 //   - mort en solo : le niveau recommence de zero (meme graine, nouveau chargement, mission neuve, equipement de depart,
-//     reprise inchangee, mort comptee) ; jeu ferme pendant la mort : CONTINUER recharge le niveau avec sa graine ;
-//   - partie classique, meme graine : sorties des chunks presentes, mort -> Level 0 (regle inchangee) ;
+//     reprise inchangee, mort comptee) ; jeu ferme pendant la mort : par le chemin du menu (VOS PARTIES, choix de la
+//     partie, CONTINUER), le niveau est recharge avec sa graine, mission neuve ;
+//   - partie classique, meme graine : sorties des chunks presentes, mort -> Level 0 (regle inchangee) ; jeu ferme
+//     pendant une mort classique : CONTINUER ramene au Level 0 ;
 //   - marche reelle : mission resolue a pied, sortie unique prise, Niveau 3 avec sa graine ; version publiee : fin du
 //     chapitre ;
-//   - REJOUER dans une partie lineaire : niveau classique, partie intacte ; migration 5 -> 6 (copie _Format5, parcours
-//     classique) ; protocole 415.
+//   - REJOUER et mode developpeur (REJOUER d'un niveau inexplore) dans une partie lineaire : niveau classique, partie
+//     intacte ; migration 5 -> 6 (copie _Format5, parcours classique) ; protocole 415.
 // Reseau : l'hote impose le parcours lineaire (SetLinearTestOverride, hors version finale) ; drapeau, graine et sorties
 // identiques chez chacun ; le client tombe et se reveille dans le niveau (regle de la cooperation).
 // Prepare, non execute dans l'environnement de developpement (pas d'Unreal) : une verification qui ne peut pas etre
@@ -57,6 +59,10 @@ namespace BRTestV415
 	EBRMenuPage MenuPageMark = EBRMenuPage::Main;
 	bool bInMenuMark = false;
 	bool bReplayMark = false;
+	bool bHostFlowMark = false;
+	int32 MenuIndexMark = 0;
+	/** Niveau pas encore explore de la partie lineaire, visite en mode developpeur (REJOUER d'un niveau inexplore) */
+	int32 DevLevel = 3;
 	float ClockMark = 0.f;
 	int32 StepPhase = 0;
 
@@ -217,6 +223,8 @@ void ABRAutoTest::AddV415Steps()
 		bInMenuMark = PC->bInMenu;
 		MenuPageMark = PC->MenuPage;
 		bReplayMark = BRSaves::ReplaySession();
+		bHostFlowMark = PC->bHostFlow;
+		MenuIndexMark = PC->MenuIndex;
 		BRSaves::SetTestPrefix(SavePrefix);
 		DeleteV415Saves();
 		BRLevels::SetChannelOverride(static_cast<int32>(BRContent::EChannel::All));
@@ -371,10 +379,18 @@ void ABRAutoTest::AddV415Steps()
 		{
 			return false;
 		}
-		// Tous les chunks de la vue construits (streaming au repos)
-		if ((!Settled(W) || StepTime < 4.f) && StepTime < 45.f)
+		// Tous les chunks de la vue construits (streaming au repos) ; sinon rien n'est compte : un anneau a moitie construit
+		// peut n'avoir encore aucune sortie, ce ne serait pas une preuve
+		const bool bSettled = Settled(W);
+		if ((!bSettled || StepTime < 4.f) && StepTime < 45.f)
 		{
 			return false;
+		}
+		if (!bSettled)
+		{
+			Note(FString::Printf(TEXT("parcours lineaire, Niveau 2 : streaming pas au repos en 45 s (%d chunk(s) en preparation) : sorties non comptees"),
+				W->GetPreparingChunkCount()), true);
+			return true;
 		}
 		const FExitTally Tally = TallyExits(GetWorld(), W, BRStory::NextOf(2));
 		const bool bOk = Tally.Chunk == 0 && Tally.Mission == 1 && Tally.MissionForward == 1;
@@ -427,7 +443,7 @@ void ABRAutoTest::AddV415Steps()
 		{
 			return false; // texte du reveil affiche (apres 2,2 s), avant le fondu (4,5 s)
 		}
-		const BRStory::EDeathRule Rule = BRStory::DeathRuleFor(static_cast<BRStory::ESession>(W->GetSessionMode()), W->IsLinearLevel(), W->IsNetGame());
+		const BRStory::EDeathRule Rule = W->GetDeathRule(); // la regle appliquee par le monde et le texte du HUD
 		BRSaves::Flush();
 		const UBRSaveGame* L = BRSaves::Load(StorySlot);
 		const bool bOk = Rule == BRStory::EDeathRule::RestartLevel && L && L->bPendingDeath && L->PendingDeathLevel == 2 && !L->Session.bValid && L->Deaths == DeathsMark + 1;
@@ -554,13 +570,22 @@ void ABRAutoTest::AddV415Steps()
 		C->bGodMode = true;
 		BRSaves::Flush();
 		const bool bRestored = DeathFileBytes.Num() > 0 && FFileHelper::SaveArrayToFile(DeathFileBytes, *BRSaves::FilePath(BRSaves::SlotName(StorySlot)));
-		PC->ActiveSave = BRSaves::Load(StorySlot);
-		const bool bPending = PC->ActiveSave && PC->ActiveSave->bPendingDeath && PC->ActiveSave->PendingDeathLevel == 2;
-		SerialMark = W->GetLevelSerial();
+		// Le chemin du joueur au lancement du jeu : VOS PARTIES (parties relues du disque), choix de la partie (SelectSave
+		// resout la mort en attente), puis CONTINUER. Le monde montre deja le Niveau 2 avec sa graine : seule la mort
+		// resolue doit en forcer le rechargement (mission neuve)
 		PC->bInMenu = true;
-		PC->StartSolo(false); // CONTINUER (ResolvePendingDeath)
-		Note(FString::Printf(TEXT("relance : fichier d'avant la fermeture remis %s, mort en attente au Niveau 2 relue %s ; CONTINUER"), Oui(bRestored), Oui(bPending)),
-			!bRestored || !bPending);
+		PC->SetMenuPage(EBRMenuPage::Saves);
+		const UBRSaveGame* Card = PC->GetSaveInSlot(StorySlot);
+		const bool bPending = Card && Card->bPendingDeath && Card->PendingDeathLevel == 2;
+		PC->SelectSave(StorySlot);
+		const int32 Cont = PC->GetContinueLevel();
+		const bool bResolved = PC->ActiveSave && PC->ActiveSave.Get() == Card && !PC->ActiveSave->bPendingDeath && Cont == 2;
+		const bool bSameWorld = W->GetLevelNumber() == 2 && W->GetSeed() == LinearSeed2;
+		SerialMark = W->GetLevelSerial();
+		PC->StartSolo(false); // CONTINUER
+		Note(FString::Printf(TEXT("relance : fichier d'avant la fermeture remis %s, mort en attente au Niveau 2 relue par la page des parties %s ; partie choisie : mort resolue %s, "
+			"CONTINUER vers le Niveau %d (attendu 2) ; le monde montrait deja ce niveau et sa graine %s"), Oui(bRestored), Oui(bPending), Oui(bResolved), Cont, Oui(bSameWorld)),
+			!bRestored || !bPending || !bResolved);
 		return true;
 	});
 	LimitLastStep(70.f);
@@ -673,6 +698,146 @@ void ABRAutoTest::AddV415Steps()
 		Note(FString::Printf(TEXT("partie classique, mort en solo au Niveau 2 : reveil au Niveau %d (attendu 0, regle inchangee)"), W->GetLevelNumber()), !bOk);
 		return true;
 	});
+
+	// ---------------------------------------------------------------------------------------------- 8 bis Classique, jeu ferme a terre
+	// Partie classique fermee pendant une mort en solo : la mort va a son terme comme en jeu, CONTINUER ramene au Level 0
+	// (avant la v4.15, CONTINUER suivait la reprise de l'histoire, restee au niveau de la mort)
+	Add(TEXT("v4.15 classique ferme a terre : CONTINUER au Niveau 2"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		if (!W || !PC || W->IsTransitioning())
+		{
+			return false;
+		}
+		const bool bWritten = BRSaves::Write(ClassicSlot, MakeStorySave(TEXT("Parcours classique v4.15"), false));
+		BRSaves::Flush();
+		BRSaves::ActiveSlot() = ClassicSlot;
+		BRSaves::ReplaySession() = false;
+		PC->ActiveSave = BRSaves::Load(ClassicSlot);
+		PC->bDevSession = false;
+		PC->bInMenu = true;
+		SerialMark = W->GetLevelSerial();
+		StepPhase = 0;
+		PC->StartSolo(false); // CONTINUER : reprise de l'histoire au Niveau 2
+		Note(FString::Printf(TEXT("partie classique de test reecrite %s : reprise au Niveau 2, CONTINUER"), Oui(bWritten)), !bWritten);
+		return true;
+	});
+	Add(TEXT("v4.15 classique ferme a terre : mort et ecriture"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		ABRCharacter* C = GetPlayer();
+		if (StepPhase == 0)
+		{
+			if (!W || !PC || !C || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelSerial() == SerialMark || W->GetLevelNumber() != 2)
+			{
+				if (StepTime > 80.f)
+				{
+					Note(TEXT("partie classique : Niveau 2 non charge par CONTINUER en 80 s"), true);
+					return true;
+				}
+				return false;
+			}
+			SerialMark = W->GetLevelSerial();
+			C->bGodMode = false;
+			C->ReceiveAttack(500.f, 0.f, nullptr);
+			StepPhase = 1;
+			ClockMark = StepTime;
+			return false;
+		}
+		if (!W || !PC || !C || !C->IsDead())
+		{
+			if (StepTime - ClockMark > 6.f)
+			{
+				StepPhase = 0;
+				Note(TEXT("partie classique : le joueur n'est pas tombe"), true);
+				return true;
+			}
+			return false;
+		}
+		StepPhase = 0;
+		// Fermeture du jeu a terre (meme ecriture bloquante que la sortie du jeu) ; le fichier est garde tel quel
+		PC->WriteActiveSave(true);
+		BRSaves::Flush();
+		DeathFileBytes.Reset();
+		FFileHelper::LoadFileToArray(DeathFileBytes, *BRSaves::FilePath(BRSaves::SlotName(ClassicSlot)));
+		const UBRSaveGame* L = BRSaves::Load(ClassicSlot);
+		const bool bOk = L && L->bPendingDeath && L->PendingDeathLevel == 0 && L->StoryResume == 2 && !L->Session.bValid && DeathFileBytes.Num() > 0;
+		Note(FString::Printf(TEXT("partie classique, fichier ecrit a terre : mort en attente %s, niveau de reveil %d (attendu 0), reprise de l'histoire encore %d, session effacee %s"),
+			Oui(L && L->bPendingDeath), L ? L->PendingDeathLevel : -1, L ? L->StoryResume : -1, Oui(L && !L->Session.bValid)), !bOk);
+		return true;
+	});
+	LimitLastStep(90.f);
+	Add(TEXT("v4.15 classique ferme a terre : CONTINUER apres la fermeture"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !PC || !C)
+		{
+			return false;
+		}
+		// La mort va a son terme dans ce jeu (Level 0), puis le fichier ecrit a terre est remis tel quel et la partie est
+		// reprise par le chemin du menu
+		if (W->IsTransitioning() || !W->IsLevelReady() || C->IsDead() || W->GetLevelSerial() == SerialMark)
+		{
+			if (StepTime > 45.f)
+			{
+				Note(TEXT("partie classique fermee a terre : aucun reveil en 45 s"), true);
+				return true;
+			}
+			return false;
+		}
+		if (StepPhase == 0)
+		{
+			StepPhase = 1;
+			ClockMark = StepTime;
+			return false;
+		}
+		if (StepTime - ClockMark < 3.5f)
+		{
+			return false; // l'ecriture d'apres le reveil (2 s) est passee
+		}
+		StepPhase = 0;
+		C->bGodMode = true;
+		BRSaves::Flush();
+		const bool bRestored = DeathFileBytes.Num() > 0 && FFileHelper::SaveArrayToFile(DeathFileBytes, *BRSaves::FilePath(BRSaves::SlotName(ClassicSlot)));
+		PC->bInMenu = true;
+		PC->SetMenuPage(EBRMenuPage::Saves);
+		const UBRSaveGame* Card = PC->GetSaveInSlot(ClassicSlot);
+		const bool bPending = Card && Card->bPendingDeath && Card->PendingDeathLevel == 0 && Card->StoryResume == 2;
+		PC->SelectSave(ClassicSlot);
+		const int32 Cont = PC->GetContinueLevel();
+		const bool bResolved = PC->ActiveSave && PC->ActiveSave.Get() == Card && !PC->ActiveSave->bPendingDeath && PC->ActiveSave->GetStory().Resume == 0 && Cont == 0;
+		SerialMark = W->GetLevelSerial();
+		PC->StartSolo(false); // CONTINUER
+		Note(FString::Printf(TEXT("partie classique relancee : fichier d'avant la fermeture remis %s, mort en attente relue %s ; partie choisie : mort resolue %s, CONTINUER vers "
+			"le Niveau %d (attendu 0, la regle de la mort en solo)"), Oui(bRestored), Oui(bPending), Oui(bResolved), Cont), !bRestored || !bPending || !bResolved);
+		return true;
+	});
+	LimitLastStep(70.f);
+	Add(TEXT("v4.15 classique ferme a terre : reprise au Level 0"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !PC || !C || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelSerial() == SerialMark)
+		{
+			if (StepTime > 80.f)
+			{
+				Note(TEXT("partie classique fermee a terre : aucun niveau charge par CONTINUER en 80 s"), true);
+				return true;
+			}
+			return false;
+		}
+		C->bGodMode = true;
+		const bool bOk = W->GetLevelNumber() == 0 && !C->IsDead() && !W->IsLinearLevel() && W->IsStorySession() && C->CountItem(EBRItem::Battery) == 1;
+		Note(FString::Printf(TEXT("partie classique fermee a terre, CONTINUER : Niveau %d (attendu 0), niveau classique %s, session d'histoire %s, equipement de depart %s"),
+			W->GetLevelNumber(), Oui(!W->IsLinearLevel()), Oui(W->IsStorySession()), Oui(C->CountItem(EBRItem::Battery) == 1)), !bOk);
+		return true;
+	});
+	LimitLastStep(90.f);
 
 	// ---------------------------------------------------------------------------------------------- 7 Marche et sortie unique
 	Add(TEXT("v4.15 marche : retour au parcours lineaire"), 0.f, [this]()
@@ -870,6 +1035,78 @@ void ABRAutoTest::AddV415Steps()
 	});
 	LimitLastStep(90.f);
 
+	// ---------------------------------------------------------------------------------------------- 10 bis Mode developpeur
+	// REJOUER d'un niveau pas encore explore (le chemin du menu vers le mode developpeur, StartSolo) depuis la partie
+	// lineaire : session libre, niveau classique (ni drapeau ni graine du parcours), rien d'ecrit
+	Add(TEXT("v4.15 mode developpeur dans une partie lineaire"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		if (!W || !PC || W->IsTransitioning())
+		{
+			return false;
+		}
+		BRSaves::Flush();
+		BRSaves::ActiveSlot() = StorySlot;
+		PC->ActiveSave = BRSaves::Load(StorySlot);
+		DevLevel = INDEX_NONE;
+		for (const int32 Lv : { 3, 4, 5, 6, 7 })
+		{
+			if (DevLevel == INDEX_NONE && BRLevels::Exists(Lv) && PC->ActiveSave && !PC->ActiveSave->IsExplored(Lv))
+			{
+				DevLevel = Lv;
+			}
+		}
+		if (DevLevel == INDEX_NONE)
+		{
+			Note(TEXT("mode developpeur : aucun niveau inexplore disponible dans la partie lineaire de test"), true);
+			return true;
+		}
+		PC->bDevSession = false;
+		PC->bInMenu = true;
+		PC->MenuIndex = FMath::Max(0, BRLevels::IndexOf(DevLevel));
+		SerialMark = W->GetLevelSerial();
+		PC->StartSolo(true); // REJOUER d'un niveau inexplore : mode developpeur
+		Note(FString::Printf(TEXT("mode developpeur : REJOUER du Niveau %d (inexplore) depuis la partie lineaire, session du mode developpeur %s"), DevLevel,
+			Oui(PC->bDevSession)), !PC->bDevSession);
+		return true;
+	});
+	Add(TEXT("v4.15 mode developpeur : niveau classique, partie intacte"), 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRPlayerController* PC = GetPC();
+		if (DevLevel == INDEX_NONE)
+		{
+			return true;
+		}
+		if (!W || !PC || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelSerial() == SerialMark || W->GetLevelNumber() != DevLevel)
+		{
+			if (StepTime > 80.f)
+			{
+				Note(FString::Printf(TEXT("mode developpeur : Niveau %d non charge en 80 s"), DevLevel), true);
+				return true;
+			}
+			return false;
+		}
+		if (ABRCharacter* C = GetPlayer())
+		{
+			C->bGodMode = true;
+		}
+		const uint32 Derived = PC->ActiveSave ? BRStory::LevelSeedFor(PC->ActiveSave->GetStory(), DevLevel) : 0u;
+		const bool bDev = PC->bDevSession && W->GetSessionMode() == EBRSessionMode::Free && !PC->WritesCampaign();
+		const bool bClassic = !W->IsLinearLevel() && W->GetNetLevelFlags() == 0 && Derived != 0 && W->GetSeed() != Derived
+			&& W->GetDeathRule() == BRStory::EDeathRule::BackToStart;
+		PC->WriteActiveSave(true);
+		BRSaves::Flush();
+		const FString After = DurableOf(BRSaves::Load(StorySlot));
+		Note(FString::Printf(TEXT("mode developpeur dans une partie lineaire : session libre %s ; niveau classique %s (drapeaux %d, graine %u, graine du parcours %u non utilisee, "
+			"mort : regle %d) ; partie du fichier inchangee %s%s"), Oui(bDev), Oui(bClassic), static_cast<int32>(W->GetNetLevelFlags()), W->GetSeed(), Derived,
+			static_cast<int32>(W->GetDeathRule()), Oui(After == DurableMark), After == DurableMark ? TEXT("") : *(TEXT(" ; maintenant : ") + After)),
+			!bDev || !bClassic || After != DurableMark);
+		return true;
+	});
+	LimitLastStep(90.f);
+
 	// ---------------------------------------------------------------------------------------------- 9 Migration 5 -> 6
 	Add(TEXT("v4.15 migration : format 5 -> 6"), 0.f, [this]()
 	{
@@ -933,8 +1170,8 @@ void ABRAutoTest::AddV415Steps()
 			PC->bDevSession = bTestDevSession;
 			PC->ActiveSave = TestOrigSave;
 			PC->bInMenu = bInMenuMark;
-			PC->SetMenuPage(MenuPageMark);
-			PC->UpdateInputMode();
+			PC->bHostFlow = bHostFlowMark;
+			PC->bPendingDeathResolved = false;
 		}
 		TestOrigSave = nullptr;
 		BRSaves::ActiveSlot() = TestOrigSlot;
@@ -953,7 +1190,15 @@ void ABRAutoTest::AddV415Steps()
 		TestMissionPhase = 0;
 		DeleteV415Saves();
 		BRSaves::SetTestPrefix(FString());
-		Note(TEXT("v4.15 : partie active, mode, menu, canal de contenu et parties de test retablis"));
+		// La page du menu est remise apres les parties de test et leur prefixe : la page VOS PARTIES relit alors les parties
+		// du joueur, pas celles du test qui viennent d'etre effacees
+		if (PC)
+		{
+			PC->SetMenuPage(MenuPageMark);
+			PC->MenuIndex = MenuIndexMark;
+			PC->UpdateInputMode();
+		}
+		Note(TEXT("v4.15 : partie active, mode, menu (page, niveau choisi, hebergement), canal de contenu et parties de test retablis"));
 		return true;
 	});
 }
