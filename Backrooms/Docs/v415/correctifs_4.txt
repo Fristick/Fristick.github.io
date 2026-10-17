@@ -76,7 +76,7 @@ python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTA
 #    sans progres, chez l'hote, au plus 3 fois par marche : ABREntity::Dismiss (dissipation du jeu), la marche reprend ; note
 #    "N entite(s) ecartee(s) par le test (...) ; intervention du test, pas une regle du jeu)" dans WalkStats et le bilan de la
 #    mission. Au-dela, ou chez un client : NON VERIFIE ("une entite seule barre le passage"), jamais PROBLEME. Sortie apres une
-#    mission non faite a pied : NON VERIFIE au lieu d'un second PROBLEME. Les entites des niveaux restent tirees au hasard
+#    mission non faite a pied : NON VERIFIE au lieu d'un second PROBLEME (relecture : et les etapes qui en dependent, voir la fin). Les entites des niveaux restent tirees au hasard
 #    (une Bacterie de patrouille du Level 0 reapparait 4 a 15 s apres). -BRAutoTestV415Fix : Niveau 2, graine 4120 : places
 #    des mecanismes, classement d'un blocage (creature seule ; la meme devant un mur), marche vers le mecanisme 4 avec un
 #    Smiler immobile pose dans un couloir sombre du chemin
@@ -116,10 +116,59 @@ python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTA
 #     NON, sortie ouverte trouvee ... : sortie non testee" apres une mission non faite a pied (NON VERIFIE "mission non resolue a
 #     pied plus haut")
 #   -BRAutoTestV413 (Level 6 puis Niveau 8, graine du niveau 233637237, partie classique) : aucun avertissement "point vise par
-#     le depart de groupe ... pris dans" ni "echelle prise dans" ; a BRExit_42 (4000, -5400, 0), un rocher de moins sur la paroi
-#     de la cellule (9, -14), l'echelle se vise et se monte (sommet a 600 cm, une demande)
-#   Reseau, 2 joueurs, cette graine : hote au sommet de BRExit_42, client a 3 m devant : "Ready 2/2" puis depart (phase 2), pas de
-#     fin de delai (raison 1)
+#     le depart de groupe ... pris dans" ni "echelle prise dans" (signal faible : la suite ne reste qu'environ 2,6 s au Niveau 8 ;
+#     relecture : la visee et la montee de BRExit_42 ne sont PAS jugees par -BRAutoTestV413, voir ci-dessous)
+#   v4.15 (correctifs 4, relecture) : -BRAutoTest -BRAutoTestV415Fix -BRAutoTestStrict, Niveau 8 charge a la graine du niveau
+#     233637237 en partie classique imposee (ABRWorld::SetLinearTestOverride(0)) :
+#     "Niveau 8 (graine du niveau 233637237, partie classique), chunk (1, -2) : echelle vers le Niveau 9 (BRExit_N) en (4000, -5400,
+#     0), paroi de la cellule (9, -14), sommet de la montee a N cm du pied ; point vise par le depart de groupe (4100, -5400, 90)
+#     libre ; capsule du grimpeur a l'accroche libre" ; "echelle BRExit_42 : pied de l'echelle atteint a pied depuis 4 cellule(s)
+#     de la grille : ..." ; "echelle BRExit_42 visee et montee : centre du grimpeur au plus haut a N cm du pied (sommet de la
+#     montee a N cm) atteint, demandes de depart au sommet 1 (attendu 1), arrivee au Niveau 9 oui". Echelle introuvable a 50 cm
+#     de (4000, -5400) en 30 s : NON VERIFIE, jamais OK ; avant 55974b4 : "point vise ... PRIS dans BRChunk_N (...)", PROBLEME
+#   v4.15 (correctifs 4, relecture) : -BRNetTest (2 joueurs, apres les etapes v4.15) : "hote : Niveau 8, graine 233637237 (attendue
+#     233637237), partie classique oui" et la meme ligne du client ; "hote : echelle vers le Niveau 9 ... libre ; ... libre" et la
+#     meme chez le client (ses propres chunks) ; "client : place a 3.0 m devant le pied de l'echelle ..." ; "hote au sommet de
+#     l'echelle BRExit_42 : 1 demande(s) (attendu 1), ... ; rassembles au plus 2/2 (attendu 2/2), depart (phase 2) oui" ;
+#     "client : depart de groupe par l'echelle BRExit_42 lance (depart vu oui, rassembles au plus 2/2, ...)" ; "hote/client :
+#     depart de groupe par l'echelle BRExit_42 vers le Niveau 9 effectue". Un depart annule (raison 1 : fin du delai) est un
+#     PROBLEME chez les deux
 #   Manuel (concepteur, non requis par ces correctifs) : un Smiler a moins de 3 m ne bouge pas et sa capsule bloque le joueur
 #     dans un couloir d'une cellule du Niveau 2 ; verifier si l'on passe dessous accroupi (estimation hors moteur : 10 a 60 cm
 #     de marge), sinon decider d'une capsule qui ne bloque pas les joueurs ou d'une dissipation au contact prolonge
+
+## Relecture des correctifs 4 (commit "v4.15 (correctifs 4) : corrections de relecture", tests seulement ; jeu, placement,
+## PlaceVersion 3, NetVersion, ProjectVersion et sauvegarde inchanges ; aucun texte visible ajoute)
+# 1. (majeur, retenu) Aucune etape ne jugeait en jeu le seul correctif du jeu (55974b4, BRExit_42) : -BRAutoTestV413 ne reste
+#    qu'environ 2,6 s au Niveau 8 (final2/v413/game.log, lignes 2104 a 2117) ; l'absence d'avertissement ne prouvait rien.
+#    Ajoute : -BRAutoTestV415Fix : partie classique imposee, Niveau 8 a la graine du niveau 233637237 (AddLevelSeedLoad, la graine
+#    du niveau elle-meme), echelle vers le Niveau 9 retrouvee a 50 cm de (4000, -5400) dans son chunk construit (sinon NON
+#    VERIFIE), les deux requetes d'ABRExit::CheckDepartureViewPoint jugees (point vise, capsule du grimpeur), approche a pied
+#    depuis 4 cellules de la grille (BeginWalk / StepWalk), visee (FocusActor == l'echelle), Interact, montee jusqu'au sommet avec
+#    une seule demande, arrivee au Niveau 9 ; -BRNetTest (AddNetV415FixSteps, apres AddNetV415Steps, barrieres 4154 / 4155 /
+#    4156) : hote au sommet, client a 3 m devant, rassemblement 2/2 et phase 2 avant la fin du delai. Lignes attendues plus haut
+# 2. (mineur, retenu) BRTestV412::FocusFirstHit refusait toute place ou le balayage touchait d'abord autre chose que le
+#    mecanisme (mur frole, rocher, porte fermee devant un voisin), sous le nom "voisin", alors qu'ABRCharacter::UpdateFocus vise
+#    alors par sa tolerance. Remplace par BRTestV412::FocusVerdict, miroir d'UpdateFocus (Accept : mecanisme actionnable avec une
+#    invite, objet a ramasser, sortie utilisable ; puis tolerance : sphere de 208 cm, centre du composant a plus de 0,86 de l'axe,
+#    ligne WorldStatic) ; nouvelle cause "visee du client arretee par le decor" (EStand::FocusDecor). Miroir :
+#    verify_device_clearance.py (focus_tolerance, Level6Face.check par client()) ; regle v4.15 inchangee, regle v4.14 du cas B :
+#    4695 -> 4686 et 4926 -> 4904 places sans place debout (places que la tolerance du jeu vise), cas A inchange
+# 3. (mineur, retenu) La marche avec un Smiler pose passait sur toute entite ecartee : BRTestV412::FWalk::Cleared (cles des
+#    objets ecartes, comparables apres leur destruction) ; OK seulement si le Smiler pose est parmi elles, sinon NON VERIFIE avec
+#    les entites ecartees ; bloque par une entite seule (plafond atteint par d'autres) : NON VERIFIE
+# 4. (mineur, retenu) Une mission a pied NON VERIFIEE (entite seule) ou une sortie non testee laissait des PROBLEMES en cascade :
+#    WalkMission.bNotVerified et LastExit.bNotVerified (BRTestV412::MissionNotVerified, ExitNotVerified) ; sautes (NON VERIFIE) :
+#    "tablier pose" (Niveau 8), "vanne B actionnee sans nager" (Poolrooms), Level 6 "plaques et cages relevees" et "arrivee au
+#    Niveau 8", et aussi "marche : Niveau 3 par la sortie unique" (-BRAutoTestV415) et "traversee des Poolrooms enregistree"
+#    (-BRAutoTestV413). Restent en cascade (non changes, plus de 3 entites ecartees dans une marche de l'hote) : la suite de
+#    l'histoire de -BRAutoTestV413 apres la sortie du Niveau 1 (inscription de L., retour au Niveau 1), qui change de niveau et
+#    restaure la partie de test ; et une mission bloquee par le decor (PROBLEME deja note) garde ses etapes dependantes
+# Compilation (arbre de travail wt/r4) : BackroomsEditor Win64 Development : Result: Succeeded (0 avertissement) ; puis
+#   -DisableAdaptiveUnity : Result: Succeeded (0 avertissement) ; Backrooms Win64 Development : Result: Succeeded (0 avertissement)
+# Bancs (10, clang-cl /W4 /WX -Wshadow et cl /W4, sorties dans %TEMP%\brr4) : tous RESULTAT : OK, sorties identiques, 0 avertissement
+#   (aucun banc ne couvre les tests du jeu ; la logique sans moteur n'a pas change)
+# Python : loc_extract --check a jour ; loc_build --check 1201/1201, a revoir 0 ; loc_review problemes 0 ; protect_assets OK ;
+#   verify_device_clearance --seeds 120 RESULTAT : OK (Docs/v415/correctifs_places.txt) ; verify_pitfalls --doors 1-500 0 probleme ;
+#   verify_lidar --seeds 1-200 OK ; verify_level0_kit --seeds 40 OK
+# Le jeu n'a pas ete lance : les etapes ajoutees sont preparees, non executees

@@ -978,6 +978,7 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetV413LidarSteps(bClient);
 	AddNetV414Steps(bClient); // v4.14
 	AddNetV415Steps(bClient); // v4.15
+	AddNetV415FixSteps(bClient); // v4.15 (correctifs 4, relecture) : depart de groupe par l'echelle BRExit_42 du Niveau 8
 	// Le client part le premier. v4.15 : l'hote attend que le client ait quitte la partie (ou signale la fin de son plan),
 	// 120 s au plus : avant, il fermait la partie au bout de 12 s, pendant que le client finissait encore ses etapes
 	Add(TEXT("Fin"), bClient ? 1.f : 2.f, [this, bClient]()

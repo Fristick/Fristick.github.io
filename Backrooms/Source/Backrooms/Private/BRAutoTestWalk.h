@@ -2,9 +2,12 @@
 // BRAutoTestV412.cpp et partagee avec BRAutoTestV413.cpp (porte de service du Level 0, depart de groupe).
 // v4.15 : places debout devant un mecanisme de la mission jugees comme le jeu (partagees avec BRAutoTestV411.cpp et
 // BRAutoTestV413Lidar.cpp) et chemin de grille des tests sans bassin profond.
+// v4.15 (correctifs 4, relecture) : visee du client jugee comme ABRCharacter::UpdateFocus (balayage puis tolerance), entites
+// ecartees par une marche nommees, mission ou sortie a pied NON VERIFIEE lue par les etapes qui en dependent.
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/ObjectKey.h"
 
 class AActor;
 class ABRWorld;
@@ -68,6 +71,10 @@ namespace BRTestV412
 		 *  passage ; ABREntity::Dismiss, chez l'hote seulement, au plus MaxEntityClears) et leur description pour WalkStats */
 		int32 EntityClears = 0;
 		FString EntityClearText;
+		/** v4.15 (correctifs 4, relecture) : les entites ecartees elles-memes (cle de l'objet : comparable apres leur destruction,
+		 *  contrairement a deux TWeakObjectPtr perimes, egaux entre eux) ; une etape qui pose sa creature verifie que c'est bien
+		 *  elle que la marche a ecartee (un chasseur peut l'etre a sa place) */
+		TArray<FObjectKey> Cleared;
 		/** v4.15 (correctifs 4) : blocage final (EWalk::Stuck) cause par une entite seule : la marche n'a rien appris du decor
 		 *  (NON VERIFIE chez l'appelant, jamais PROBLEME) ; BlockerText : l'entite, son espece, la cellule et pourquoi elle reste */
 		bool bEntityBlock = false;
@@ -136,15 +143,36 @@ namespace BRTestV412
 	FString MovedFrom2Text(const ABRWorld* W);
 
 	/** v4.15 : place debout devant un mecanisme de la mission. v4.15 (correctifs 4) : FocusTaken : depuis cette place, la
-	 *  visee du client (premier temps d'ABRCharacter::UpdateFocus) touche d'abord autre chose que ce mecanisme */
-	enum class EStand : uint8 { Ok, NoFloor, Swim, Blocked, TooFar, NoSight, FocusTaken };
+	 *  visee du client prend un autre objet que ce mecanisme. v4.15 (correctifs 4, relecture) : FocusDecor : elle ne prend
+	 *  rien (balayage arrete par le decor, puis aucun objet retenu par la tolerance) */
+	enum class EStand : uint8 { Ok, NoFloor, Swim, Blocked, TooFar, NoSight, FocusTaken, FocusDecor };
 	const TCHAR* StandName(EStand S);
 	/** v4.15 (correctifs 4) : longueur du balayage de la visee du client (ABRCharacter::UpdateFocus, InteractReach) */
 	constexpr float ClientFocusSweep = 260.f;
-	/** v4.15 (correctifs 4) : la visee du client depuis ces yeux, dirigee sur le point d'interaction de Dev (sphere de
-	 *  BRMech::Clearance::FocusSweep, canal Visibility, seul Self ignore, ClientFocusSweep de long) : ce qu'elle touche en
-	 *  premier (nullptr : rien) */
-	const AActor* FocusFirstHit(const ABRWorld* W, const AActor* Self, const FVector& Eye, const ABRMissionDevice* Dev);
+	/** v4.15 (correctifs 4, relecture) : second temps d'ABRCharacter::UpdateFocus (tolerance) : objets a moins de
+	 *  ClientFocusSweep * ClientFocusTolerance des yeux (sphere, canal Visibility), centre de la boite du composant a plus de
+	 *  ClientFocusDot de l'axe du regard (cosinus), ligne WorldStatic libre jusqu'a lui (l'objet ignore) ; le mieux aligne */
+	constexpr float ClientFocusTolerance = 0.8f;
+	constexpr float ClientFocusDot = 0.86f;
+	/** v4.15 (correctifs 4, relecture) : ce que prend la visee du client depuis ces yeux, regard sur le point d'interaction de Dev */
+	enum class EFocus : uint8 { Dev, Other, None };
+	struct FFocus
+	{
+		EFocus Kind = EFocus::None;
+		/** Premier objet touche par le balayage (nullptr : rien) */
+		const AActor* Hit = nullptr;
+		/** Objet pris par la visee (Dev, un voisin) ; nullptr : rien */
+		const AActor* Taken = nullptr;
+		/** Pris par la tolerance (le balayage touchait le decor, ou rien) */
+		bool bTolerance = false;
+	};
+	/** v4.15 (correctifs 4, relecture) : miroir d'ABRCharacter::UpdateFocus a la 1re personne (Accept compris) : 1) sphere de
+	 *  BRMech::Clearance::FocusSweep lancee des yeux vers le point d'interaction de Dev, canal Visibility, seul Self ignore,
+	 *  ClientFocusSweep de long : un objet que la visee prend (mecanisme de la mission qu'on peut actionner, objet a ramasser,
+	 *  sortie utilisable ; Dev toujours) decide ; 2) sinon (decor, mecanisme inactif, rien) la tolerance. Avant (correctifs 4) :
+	 *  FocusFirstHit, toute autre chose que Dev en premier refusait la place, alors que le jeu la vise par sa tolerance (mur
+	 *  frole, rocher, porte fermee devant un voisin) */
+	FFocus FocusVerdict(const ABRWorld* W, const AActor* Self, const FVector& Eye, const ABRMissionDevice* Dev);
 	/** v4.15 : le sol sous (X, Y) (trace WorldStatic depuis FromZ + 60 cm jusqu'a FromZ - 450 cm, qui n'ignore que Self) ;
 	 *  false : pas de sol (chunk pas construit, vide) */
 	bool FloorUnder(const ABRWorld* W, const FVector& P, float FromZ, const AActor* Self, float& OutFloorZ);
@@ -155,7 +183,8 @@ namespace BRTestV412
 	 *  qui n'ignorent que le joueur : les volumes du mecanisme vise genent comme les autres), pas a la nage si bNoSwim, yeux a
 	 *  leur hauteur reelle, point d'interaction a portee de la visee du client (ClientFocusReach) et selon la regle de l'hote
 	 *  (ABRWorld::CanReachMissionDevice : distance des yeux, ligne de vue qui n'ignore que le joueur et le mecanisme).
-	 *  v4.15 (correctifs 4) : puis la visee du client depuis ces yeux (FocusFirstHit) touche ce mecanisme en premier. Avant :
+	 *  v4.15 (correctifs 4) : puis la visee du client depuis ces yeux prend ce mecanisme (v4.15 correctifs 4, relecture :
+	 *  FocusVerdict, balayage puis tolerance comme le jeu ; un voisin pris : FocusTaken, rien de pris : FocusDecor). Avant :
 	 *  vannes du Niveau 2 face a la porte de la vapeur (graine du niveau 554144564) : place ordinaire dans la porte, premiere
 	 *  place des cercles de biais (110 cm, 67,5 degres) d'ou la visee prenait la vanne voisine ; la marche ne s'en sortait que
 	 *  par sa reprise a 60 cm, et le balayage des places (sans reprise) pouvait echouer.
@@ -165,4 +194,13 @@ namespace BRTestV412
 	 *  etroite) et 240 cm autour du point d'interaction, 16 directions a partir de l'avant du mecanisme (miroir :
 	 *  Tools/verify_device_clearance.py, qui lit les cercles dans le code). OutWhy : causes des refus (nombre par cause) */
 	bool FindMissionStand(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, bool bNoSwim, FVector& OutStand, FString* OutWhy = nullptr);
+
+	/** v4.15 (correctifs 4, relecture) : la mission a pied du Niveau Level, dans le chargement en cours, a ete NON VERIFIEE
+	 *  (AddWalkMissionSteps : une entite seule barrait le passage) : la cause, a citer par une etape qui juge la mission
+	 *  resolue (elle note alors NON VERIFIE au lieu d'un PROBLEME en cascade) ; vide sinon */
+	FString MissionNotVerified(const ABRWorld* W, int32 Level);
+	/** v4.15 (correctifs 4, relecture) : la derniere sortie a pied (AddWalkExitSteps) partait du Niveau FromLevel et n'a pas ete
+	 *  testee (NON VERIFIE : niveau non atteint, mission pas faite a pied plus haut, entite seule sur le passage) : la cause, a
+	 *  citer par une etape qui juge l'arrivee ; vide sinon */
+	FString ExitNotVerified(int32 FromLevel);
 }

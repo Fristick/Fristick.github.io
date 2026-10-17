@@ -132,6 +132,8 @@ private:
 	void AddRegressionSteps();
 	/** v4.7 : charge un niveau avec une graine choisie (meme calcul que -BRSeed) et attend qu'il soit pret */
 	void AddSeedLoad(int32 Level, uint32 UserSeed, const FString& Title);
+	/** v4.15 (correctifs 4, relecture) : la meme chose avec la graine du niveau elle-meme (relevee dans un journal du jeu) */
+	void AddLevelSeedLoad(int32 Level, uint32 LevelSeed, const FString& Title);
 	/** Lignes du journal deja recopiees (debut du rapport d'une scene) */
 	int32 LogLineCount() const;
 	/** v4.7 : multijoueur : mort d'un coequipier (blessure), reanimation par l'hote, etats sur les deux machines */
@@ -200,6 +202,9 @@ private:
 	/** v4.15 (correctifs) : -BRAutoTestV415Fix : les seules etapes de non-regression des correctifs (places des Niveaux 8 et 9,
 	 *  Level 6, Poolrooms), deja comprises dans -BRAutoTestV411, -BRAutoTestV412 et -BRAutoTestV413 (BRAutoTestV415Fix.cpp) */
 	void AddV415FixSteps();
+	/** v4.15 (correctifs 4, relecture) : multijoueur : Niveau 8 en partie classique (graine du niveau 233637237), hote au sommet de
+	 *  l'echelle BRExit_42, client devant elle : rassemblement 2/2 puis depart (BRAutoTestV415Fix.cpp) */
+	void AddNetV415FixSteps(bool bClient);
 	/** v4.14 : REJOUER isole, migration ambigue, scanner (rechargement, arret, cadences, HUD), kit du Level 0
 	 *  (BRAutoTestV414.cpp) ; reseau : porte du client */
 	void AddV414Steps();

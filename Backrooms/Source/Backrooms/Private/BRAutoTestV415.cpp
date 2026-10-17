@@ -20,6 +20,7 @@
 // faite est notee "NON VERIFIE", jamais comptee comme reussie.
 #include "BRAutoTest.h"
 #include "BRAutoTestNet.h"
+#include "BRAutoTestWalk.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
 #include "BRChunk.h"
@@ -883,6 +884,14 @@ void ABRAutoTest::AddV415Steps()
 		if (!W)
 		{
 			return false;
+		}
+		// v4.15 (correctifs 4, relecture) : sortie du Niveau 2 NON VERIFIEE a pied plus haut (mission pas faite a pied, entite seule
+		// sur le passage) : l'arrivee n'est pas jugee (avant : PROBLEME "Niveau 3 non atteint" en cascade)
+		const FString NotVerified = BRTestV412::ExitNotVerified(2);
+		if (!NotVerified.IsEmpty())
+		{
+			Skip(FString::Printf(TEXT("marche : %s : Niveau 3 par la sortie unique non verifie"), *NotVerified));
+			return true;
 		}
 		const bool bThere = Settled(W) && W->GetLevelNumber() == 3;
 		if ((!bThere || StepTime < 4.f) && StepTime < 45.f)

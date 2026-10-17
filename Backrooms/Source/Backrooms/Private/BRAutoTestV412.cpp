@@ -41,6 +41,7 @@
 #include "BRWorld.h"
 #include "Algo/Reverse.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -194,6 +195,10 @@ namespace BRTestV412
 		int32 EntityClears = 0;
 		/** v4.15 (correctifs 4) : serie du niveau charge au depart (la sortie de ce chargement-la juge la cascade) */
 		int32 LevelSerial = -1;
+		/** v4.15 (correctifs 4, relecture) : mission NON VERIFIEE (une entite seule barrait le passage) et sa cause : les etapes
+		 *  qui jugent la mission resolue la sautent (MissionNotVerified) au lieu d'un PROBLEME en cascade */
+		bool bNotVerified = false;
+		FString NotVerifiedWhy;
 		EWalkKind Kind = EWalkKind::Normal;
 		/** Mecanisme deja approche : sa place est choisie dans le decor construit */
 		int32 Approached = -1;
@@ -213,6 +218,10 @@ namespace BRTestV412
 		/** v4.15 (correctifs 4) : la marche vers la sortie a conclu (atteinte, ou bloquee par le decor) ; faux : pas testee
 		 *  (mission non resolue plus haut, entite seule sur le passage) */
 		bool bTested = false;
+		/** v4.15 (correctifs 4, relecture) : sortie NON VERIFIEE (niveau non atteint, mission pas faite a pied plus haut, entite seule
+		 *  sur le passage) et sa cause : les etapes qui jugent l'arrivee la sautent (ExitNotVerified) */
+		bool bNotVerified = false;
+		FString NotVerifiedWhy;
 		bool bReached = false;
 		bool bArrived = false;
 		int32 SwimFrames = 0;
@@ -220,6 +229,17 @@ namespace BRTestV412
 		float LocalMaxDepth = 0.f;
 	};
 	FWalkExit LastExit;
+
+	FString MissionNotVerified(const ABRWorld* W, int32 Level)
+	{
+		const bool bThis = W && WalkMission.Level == Level && WalkMission.LevelSerial == W->GetLevelSerial() && WalkMission.bNotVerified;
+		return bThis ? WalkMission.NotVerifiedWhy : FString();
+	}
+
+	FString ExitNotVerified(int32 FromLevel)
+	{
+		return (LastExit.Level == FromLevel && LastExit.bNotVerified) ? LastExit.NotVerifiedWhy : FString();
+	}
 
 	/** v4.15 : graine des Poolrooms dont la vanne B ne s'actionne que depuis l'eau des canaux (niveau 125584919, diag_v413_3) */
 	constexpr uint32 ValveSeed = 1217121623u;
@@ -542,6 +562,7 @@ namespace BRTestV412
 		E->Dismiss();
 		++Walk.EntityClears;
 		Walk.EntityClearText += (Walk.EntityClearText.IsEmpty() ? TEXT("") : TEXT(" ; ")) + B.What;
+		Walk.Cleared.Add(FObjectKey(E)); // v4.15 (correctifs 4, relecture) : laquelle (etape du Smiler pose)
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] marche : entite ecartee par le test (elle seule barrait le passage) : %s"), *B.What);
 		return true;
 	}
@@ -759,32 +780,101 @@ namespace BRTestV412
 		case EStand::TooFar: return TEXT("hors de portee de la visee");
 		case EStand::NoSight: return TEXT("refusee par l'hote (vue coupee)");
 		case EStand::FocusTaken: return TEXT("visee du client prise par un voisin");
+		case EStand::FocusDecor: return TEXT("visee du client arretee par le decor");
 		}
 		return TEXT("?");
 	}
 
-	const AActor* FocusFirstHit(const ABRWorld* W, const AActor* Self, const FVector& Eye, const ABRMissionDevice* Dev)
+	/** v4.15 (correctifs 4, relecture) : ce que prendrait la visee du client (Accept d'ABRCharacter::UpdateFocus : mecanisme de la
+	 *  mission qu'on peut actionner et qui a une invite, objet a ramasser, sortie utilisable). Dev compte toujours : sa place est
+	 *  jugee pour le moment ou il sera actionne */
+	bool FocusTakes(const AActor* A, const ABRMissionDevice* Dev)
 	{
+		if (!A)
+		{
+			return false;
+		}
+		if (A == Dev)
+		{
+			return true;
+		}
+		if (const ABRMissionDevice* D = Cast<ABRMissionDevice>(A))
+		{
+			return D->IsInteractable() && !D->GetPrompt().IsEmpty();
+		}
+		if (Cast<ABRPickup>(A))
+		{
+			return true;
+		}
+		const ABRExit* E = Cast<ABRExit>(A);
+		return E && E->IsInteractable();
+	}
+
+	FFocus FocusVerdict(const ABRWorld* W, const AActor* Self, const FVector& Eye, const ABRMissionDevice* Dev)
+	{
+		FFocus Out;
 		UWorld* World = W ? W->GetWorld() : nullptr;
 		if (!World || !Dev)
 		{
-			return nullptr;
+			return Out;
 		}
-		// Premier temps d'ABRCharacter::UpdateFocus (a la 1re personne, depuis les yeux) : sphere de BRMech::Clearance::FocusSweep
-		// lancee dans l'axe du regard, canal Visibility, seul le joueur ignore (les capsules des joueurs et des entites
-		// ignorent ce canal)
+		// 1) Visee precise d'ABRCharacter::UpdateFocus (a la 1re personne, depuis les yeux) : sphere de BRMech::Clearance::FocusSweep
+		// lancee dans l'axe du regard, canal Visibility, seul le joueur ignore (les capsules des joueurs et des entites ignorent
+		// ce canal) ; l'impact est toujours a moins de InteractReach + 30 cm des yeux (balayage de InteractReach)
 		const FVector Dir = (Dev->GetInteractPoint() - Eye).GetSafeNormal();
 		if (Dir.IsNearlyZero())
 		{
-			return nullptr;
+			return Out;
 		}
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestStandFocus), false, Self);
 		FHitResult Hit;
-		if (!World->SweepSingleByChannel(Hit, Eye, Eye + Dir * ClientFocusSweep, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q))
+		if (World->SweepSingleByChannel(Hit, Eye, Eye + Dir * ClientFocusSweep, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q))
 		{
-			return nullptr;
+			Out.Hit = Hit.GetActor();
+			if (FocusTakes(Out.Hit, Dev))
+			{
+				Out.Taken = Out.Hit;
+				Out.Kind = Out.Hit == Dev ? EFocus::Dev : EFocus::Other;
+				return Out;
+			}
 		}
-		return Hit.GetActor();
+		// 2) Tolerance (decor touche, mecanisme inactif ou rien) : l'objet le plus proche de l'axe du regard, a portee et a vue
+		// (ligne WorldStatic libre jusqu'au centre de la boite du composant, l'objet ignore), comme UpdateFocus
+		TArray<FOverlapResult> Overlaps;
+		World->OverlapMultiByChannel(Overlaps, Eye, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(ClientFocusSweep * ClientFocusTolerance), Q);
+		const AActor* Best = nullptr;
+		float BestDot = ClientFocusDot;
+		for (const FOverlapResult& O : Overlaps)
+		{
+			const AActor* A = O.GetActor();
+			const UPrimitiveComponent* Comp = O.GetComponent();
+			const ABRMissionDevice* MD = Cast<ABRMissionDevice>(A);
+			const ABRExit* E = Cast<ABRExit>(A);
+			if (!A || !Comp || (A != Dev && !Cast<ABRPickup>(A) && !(E && E->IsInteractable()) && !(MD && MD->IsInteractable())))
+			{
+				continue;
+			}
+			const FVector Target = Comp->Bounds.Origin;
+			const float Dot = static_cast<float>(FVector::DotProduct((Target - Eye).GetSafeNormal(), Dir));
+			if (Dot <= BestDot)
+			{
+				continue;
+			}
+			FCollisionQueryParams LosQ(SCENE_QUERY_STAT(BRTestStandFocusLos), false, Self);
+			LosQ.AddIgnoredActor(A);
+			if (!World->LineTraceTestByChannel(Eye, Target, ECC_WorldStatic, LosQ))
+			{
+				Best = A;
+				BestDot = Dot;
+			}
+		}
+		if (Best && FocusTakes(Best, Dev))
+		{
+			Out.Taken = Best;
+			Out.bTolerance = true;
+			Out.Kind = Best == Dev ? EFocus::Dev : EFocus::Other;
+		}
+		return Out;
 	}
 
 	bool FloorUnder(const ABRWorld* W, const FVector& P, float FromZ, const AActor* Self, float& OutFloorZ)
@@ -844,11 +934,13 @@ namespace BRTestV412
 		{
 			return EStand::NoSight;
 		}
-		// v4.15 (correctifs 4) : la visee du client depuis ces yeux touche ce mecanisme en premier (pas un voisin, ni un mur
-		// frole : le balayage s'arreterait avant lui)
-		if (FocusFirstHit(W, C, Eye, Dev) != Dev)
+		// v4.15 (correctifs 4) : la visee du client depuis ces yeux prend ce mecanisme, pas un voisin. v4.15 (correctifs 4,
+		// relecture) : jugee comme le jeu, balayage puis tolerance (avant : tout decor touche en premier, mur frole, rocher ou
+		// porte fermee, refusait la place sous le nom "voisin", alors que la tolerance d'UpdateFocus la vise)
+		const FFocus Focus = FocusVerdict(W, C, Eye, Dev);
+		if (Focus.Kind != EFocus::Dev)
 		{
-			return EStand::FocusTaken;
+			return Focus.Kind == EFocus::Other ? EStand::FocusTaken : EStand::FocusDecor;
 		}
 		OutStand = Stand;
 		return EStand::Ok;
@@ -865,7 +957,7 @@ namespace BRTestV412
 		const FVector Fwd = Ahead.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Ahead;
 		// Cercles : 110 cm (place ordinaire), plus loin, puis tout pres (place etroite) ; 16 directions depuis l'avant.
 		// v4.15 (correctifs 3) : la place ordinaire est celle du couloir de visee du placement (BRMech::Clearance::StandRange)
-		int32 Refused[7] = { 0, 0, 0, 0, 0, 0, 0 };
+		int32 Refused[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 		int32 Tried = 0;
 		for (const float Dist : { BRMech::Clearance::StandRange, 160.f, 210.f, 75.f, 240.f })
 		{
@@ -884,9 +976,9 @@ namespace BRTestV412
 		if (OutWhy)
 		{
 			*OutWhy = FString::Printf(TEXT("%d places essayees : %d sans sol, %d a la nage, %d capsule genee, %d hors de portee de la visee (%.0f cm), %d refusees par l'hote, "
-				"%d visee du client prise par un voisin"), Tried, Refused[static_cast<int32>(EStand::NoFloor)], Refused[static_cast<int32>(EStand::Swim)],
-				Refused[static_cast<int32>(EStand::Blocked)], Refused[static_cast<int32>(EStand::TooFar)], ClientFocusReach, Refused[static_cast<int32>(EStand::NoSight)],
-				Refused[static_cast<int32>(EStand::FocusTaken)]);
+				"%d visee du client prise par un voisin, %d visee du client arretee par le decor"), Tried, Refused[static_cast<int32>(EStand::NoFloor)],
+				Refused[static_cast<int32>(EStand::Swim)], Refused[static_cast<int32>(EStand::Blocked)], Refused[static_cast<int32>(EStand::TooFar)], ClientFocusReach,
+				Refused[static_cast<int32>(EStand::NoSight)], Refused[static_cast<int32>(EStand::FocusTaken)], Refused[static_cast<int32>(EStand::FocusDecor)]);
 		}
 		return false;
 	}
@@ -1169,6 +1261,10 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 					Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), *Walk.Tag, W->WorldToCell(C->GetActorLocation()).X,
 					W->WorldToCell(C->GetActorLocation()).Y, *WalkStats(), WalkMission.LevelSeed));
 				Shot(FString::Printf(TEXT("v412_acces_%d_entite"), Level));
+				// v4.15 (correctifs 4, relecture) : les etapes qui jugent cette mission resolue (tablier, plaques, vanne B) la sautent
+				WalkMission.bNotVerified = true;
+				WalkMission.NotVerifiedWhy = FString::Printf(TEXT("mission du Niveau %d NON VERIFIEE a pied plus haut (mecanisme %d, %d/%d actions : une entite seule barrait "
+					"le passage)"), Level, TestMissionDevice, WalkMission.Actions, WalkMission.Planned);
 				return true;
 			}
 			if (R == EWalk::Stuck)
@@ -1351,6 +1447,8 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			if (W->GetLevelNumber() != Level || C->IsDead())
 			{
 				Skip(FString::Printf(TEXT("Niveau %d non atteint (niveau actuel %d%s) : sortie non testee"), Level, W->GetLevelNumber(), C->IsDead() ? TEXT(", joueur mort") : TEXT("")));
+				LastExit.bNotVerified = true; // v4.15 (correctifs 4, relecture)
+				LastExit.NotVerifiedWhy = FString::Printf(TEXT("sortie du Niveau %d non testee plus haut (Niveau %d non atteint)"), Level, Level);
 				return true;
 			}
 			// Mission resolue, sortie ouverte (voyant vert), place devant la sortie
@@ -1367,6 +1465,10 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			{
 				Skip(FString::Printf(TEXT("Niveau %d : mission non resolue a pied plus haut (%d/%d actions) : sortie non testee (graine du niveau %u)"), Level, WalkMission.Actions,
 					WalkMission.Planned, W->GetSeed()));
+				// v4.15 (correctifs 4, relecture) : l'arrivee qui suit est sautee elle aussi (ExitNotVerified)
+				LastExit.bNotVerified = true;
+				LastExit.NotVerifiedWhy = FString::Printf(TEXT("sortie du Niveau %d non testee plus haut (mission non resolue a pied, %d/%d actions)"), Level,
+					WalkMission.Actions, WalkMission.Planned);
 				return true;
 			}
 			if (!bSolved || !Exit)
@@ -1424,6 +1526,8 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 				Skip(FString::Printf(TEXT("Niveau %d : sortie vers %d NON VERIFIEE a pied (cellule %d, %d) : une entite seule barre le passage : %s%s"), Level, TestLevel,
 					W->WorldToCell(C->GetActorLocation()).X, W->WorldToCell(C->GetActorLocation()).Y, *Stats, *Water));
 				Shot(FString::Printf(TEXT("v412_acces_%d_sortie_entite"), Level));
+				LastExit.bNotVerified = true; // v4.15 (correctifs 4, relecture)
+				LastExit.NotVerifiedWhy = FString::Printf(TEXT("sortie du Niveau %d vers %d NON VERIFIEE a pied plus haut (une entite seule barrait le passage)"), Level, TestLevel);
 				return true;
 			}
 			if (R == EWalk::Stuck)
@@ -1575,6 +1679,14 @@ void ABRAutoTest::AddV415PoolroomsSteps()
 		if (W->GetLevelNumber() != 37 || !W->IsMissionActive() || WalkMission.Level != 37 || WalkMission.bNotReached)
 		{
 			Skip(FString::Printf(TEXT("Poolrooms (graine %u) non atteintes ou sans mission : vanne B non verifiee"), ValveSeed));
+			return true;
+		}
+		// v4.15 (correctifs 4, relecture) : mission NON VERIFIEE a pied plus haut (entite seule sur le passage) : pas de PROBLEME en
+		// cascade (avant : "actions faites a pied" incompletes, PROBLEME)
+		const FString NotVerified = MissionNotVerified(W, 37);
+		if (!NotVerified.IsEmpty())
+		{
+			Skip(FString::Printf(TEXT("Poolrooms (graine %u) : %s : vanne B non verifiee"), ValveSeed, *NotVerified));
 			return true;
 		}
 		const BRM::FPlan& P = W->GetMissionPlan();
@@ -1994,6 +2106,14 @@ void ABRAutoTest::AddV412Steps()
 		ABRMissionDevice* Bridge = W ? FindModule(W, BRMech::Module::Bridge) : nullptr;
 		if (!Bridge)
 		{
+			return true;
+		}
+		// v4.15 (correctifs 4, relecture) : treuils pas faits a pied plus haut, NON VERIFIE (entite seule sur le passage) : pas de
+		// PROBLEME en cascade (avant : "tablier pose NON")
+		const FString NotVerified = MissionNotVerified(W, 8);
+		if (!NotVerified.IsEmpty())
+		{
+			Skip(FString::Printf(TEXT("passerelle : %s : tablier pose non verifie"), *NotVerified));
 			return true;
 		}
 		if (Bridge->GetModuleProgress() < 0.99f && StepTime < 8.f)

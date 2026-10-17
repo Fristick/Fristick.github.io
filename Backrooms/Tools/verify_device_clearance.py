@@ -37,7 +37,8 @@ Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
      (ABRWorld::IsChunkExitKeepOut).
 En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
 BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote ; v4.15
-correctifs 4 : puis la visee du client, BRTestV412::FocusFirstHit, touche le mecanisme avant tout decor).
+correctifs 4 : puis la visee du client prend le mecanisme, BRTestV412::FocusVerdict : balayage, puis tolerance d'UpdateFocus si
+le decor l'arrete).
 
 Les constantes sont lues dans les sources (BRMechLogic.h/.cpp, BRMissionWorld.cpp, BRChunk.cpp, BRLevels.cpp, BRWorld.h,
 BRCharacter.cpp, BRInteractables.cpp, BRAutoTestV412.cpp, BRAutoTestWalk.h) et les bornes des modeles dans
@@ -188,6 +189,12 @@ def read_constants():
     K["focus_sweep_shared"] = fs.group(1) == "BRMech::Clearance::FocusSweep"
     K["InteractReach"] = num(r"constexpr float InteractReach = ([\d.]+)f;", char, "InteractReach")[0]
     K["tolerance"] = num(r"MakeSphere\(InteractReach \* ([\d.]+)f\)", char, "tolerance de la visee")[0]
+    # v4.15 (correctifs 4, relecture) : alignement minimal de la tolerance (cosinus) ; le miroir des tests du jeu (BRAutoTestWalk.h)
+    # doit avoir les memes valeurs
+    K["focus_dot"] = num(r"MakeSphere\(InteractReach \* [\d.]+f\), Q\)\)\s*\{\s*AActor\* Best = nullptr;\s*float BestDot = ([\d.]+)f;", char,
+                         "alignement de la tolerance")[0]
+    K["tolerance_shared"] = ("constexpr float ClientFocusTolerance = %gf;" % K["tolerance"] in walk_h
+                             and "constexpr float ClientFocusDot = %gf;" % K["focus_dot"] in walk_h)
     # Cage : boite visee (BRMech::Clearance::Of, R_LidarCage ; bloque la visee du client comme son volume)
     ca = num(r"case R_LidarCage:\s*F\.Aim = V3\(LidarCage::Gap \+ LidarCage::Depth \+ ([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*"
              r"F\.AimExtent = V3\(([\d.]+)f, LidarCage::HalfWidth, ([\d.]+)f\);", mech, "boite visee de la cage")
@@ -208,6 +215,9 @@ def read_constants():
         "ABRWorld::PlaceMissionModule : PickSlot, curseur hors des places prises": "BRMech::Clearance::PickSlot(Print, Cand.GetData()" in module
         and "Taken[Next]" in module,
         "BRMech::Clearance::PickSlot : volume mural au bout de sa face": "FaceCenter(" in pick and "AbsF(T.Lateral) <= AbsF(Slots[Best].Lateral)" in pick,
+        # v4.15 (correctifs 4, relecture) : la place des tests du jeu se juge avec la tolerance de la visee, comme ce miroir
+        "BRTestV412::CheckMissionStand : visee du client par FocusVerdict, tolerance d'ABRCharacter::UpdateFocus": K["tolerance_shared"]
+        and "const FFocus Focus = FocusVerdict(W, C, Eye, Dev);" in walk,
     }
     K["src_D"] = {"ABRWorld::SetupMission : zone libre des sorties de la mission": "MissionKeepOuts.Add(BRMech::Clearance::ExitKeepOut(F))" in world}
     # v4.15 (correctifs 3) : cas E : poteaux (PostSpot, RoomSlots), boites du moulin et du frein, regle des couloirs
@@ -496,7 +506,7 @@ def find_mission_stand(K, fr, aim, boxes, solid_cells=None, S=0.0):
                 continue
             if math.dist(eye, ip) > K["Reach"] or any(b.hits(eye, ip) for b in boxes) or los_solid(eye, ip):
                 continue
-            # v4.15 (correctifs 4) : la visee du client depuis ces yeux touche le mecanisme avant le decor (FocusFirstHit)
+            # v4.15 (correctifs 4) : la visee du client depuis ces yeux prend le mecanisme (FocusVerdict : balayage, puis tolerance)
             if not focus_first(K, eye, fr, aim, boxes, solid_cells, S):
                 continue
             return True
@@ -504,12 +514,21 @@ def find_mission_stand(K, fr, aim, boxes, solid_cells=None, S=0.0):
 
 
 def focus_first(K, eye, fr, aim, boxes, solid_cells=None, S=0.0):
-    """v4.15 (correctifs 4) : miroir de BRTestV412::FocusFirstHit (premier temps d'ABRCharacter::UpdateFocus) : la sphere de
-    FocusSweep lancee des yeux vers le point vise touche la boite visee du mecanisme avant toute boite du decor (rocher, maison)
-    et toute cellule pleine (contact avec la boite visee : entree du segment dans la boite grossie du rayon)"""
+    """v4.15 (correctifs 4) : miroir de la visee du client des tests du jeu (ABRCharacter::UpdateFocus) : la sphere de FocusSweep
+    lancee des yeux vers le point vise touche la boite visee du mecanisme avant toute boite du decor (rocher, maison) et toute
+    cellule pleine (contact avec la boite visee : entree du segment dans la boite grossie du rayon). v4.15 (correctifs 4,
+    relecture) : sinon la tolerance (BRTestV412::FocusVerdict, second temps d'UpdateFocus). Avant : le decor touche en premier
+    refusait la place"""
     r = K["focus_sweep"]
     ip = aim_point(fr, aim)
     c, e = world_aim_box(fr, aim)
+    if focus_sweep_first(eye, ip, c, e, r, boxes, solid_cells, S):
+        return True
+    return focus_tolerance(K, eye, ip, c, e, boxes, solid_cells, S)
+
+
+def focus_sweep_first(eye, ip, c, e, r, boxes, solid_cells, S):
+    """Premier temps : le balayage atteint la boite visee (grossie du rayon) sans froler le decor"""
     t0, t1 = 0.0, 1.0
     for i in range(3):
         d = ip[i] - eye[i]
@@ -536,6 +555,30 @@ def focus_first(K, eye, fr, aim, boxes, solid_cells=None, S=0.0):
                 for Y in range(cy - 1, cy + 2):
                     if solid_cells(X, Y) and math.hypot(max(X * S - x, 0.0, x - (X + 1) * S), max(Y * S - y, 0.0, y - (Y + 1) * S)) < r:
                         return False
+    return True
+
+
+def focus_tolerance(K, eye, ip, c, e, boxes, solid_cells, S):
+    """v4.15 (correctifs 4, relecture) : second temps d'UpdateFocus (miroir de BRTestV412::FocusVerdict) pour le seul mecanisme
+    vise (pas de voisin dans les cas B et C) : sphere de InteractReach * tolerance autour des yeux qui touche sa boite visee,
+    centre de la boite dans l'axe du regard (cosinus > focus_dot), ligne WorldStatic libre jusqu'au centre (boites du decor,
+    cellules pleines)"""
+    near = math.sqrt(sum(max(abs(eye[k] - c[k]) - e[k], 0.0) ** 2 for k in range(3)))
+    if near > K["InteractReach"] * K["tolerance"]:
+        return False
+    look = tuple(ip[k] - eye[k] for k in range(3))
+    to_c = tuple(c[k] - eye[k] for k in range(3))
+    nl, nc = math.sqrt(sum(v * v for v in look)), math.sqrt(sum(v * v for v in to_c))
+    if nl < 1e-6 or nc < 1e-6 or sum(look[k] * to_c[k] for k in range(3)) / (nl * nc) <= K["focus_dot"]:
+        return False
+    if any(b.hits(eye, c) for b in boxes):
+        return False
+    if solid_cells:
+        n = max(2, int(math.dist(eye, c) / 10.0))
+        for i in range(1, n):
+            x, y = eye[0] + (c[0] - eye[0]) * i / n, eye[1] + (c[1] - eye[1]) * i / n
+            if solid_cells(math.floor(x / S), math.floor(y / S)):
+                return False
     return True
 
 
@@ -660,36 +703,18 @@ class Level6Face:
         return math.dist(eye, self.aim) <= self.K["Reach"] and not seg_hits_box(eye, self.aim, self.cage)
 
     def check(self, u, v):
-        """BRTestV412::CheckMissionStand (sol plat, pas d'eau au Level 6) ; v4.15 (correctifs 4) : puis la visee du client touche le
-        poste en premier (FocusFirstHit)"""
+        """BRTestV412::CheckMissionStand (sol plat, pas d'eau au Level 6) ; v4.15 (correctifs 4) : puis la visee du client prend le
+        poste (v4.15 correctifs 4, relecture : BRTestV412::FocusVerdict, miroir client() : la cage frolee la prend, un mur frole
+        laisse jouer la tolerance ; avant : tout contact refusait la place, sans la tolerance)"""
         if not self.capsule_free(u, v):
             return "capsule"
         if math.dist((u, v, self.eye_z), self.aim) > self.K["ClientFocusReach"]:
             return "loin"
         if not self.host(u, v):
             return "vue"
-        if not self.first(u, v):
+        if not self.client(u, v)[0]:
             return "visee"
         return "ok"
-
-    def first(self, u, v):
-        """v4.15 (correctifs 4) : BRTestV412::FocusFirstHit (miroir) : le balayage de la visee touche le poste avant la cage et les
-        murs (sans la tolerance de la visee)"""
-        r = self.K["focus_sweep"]
-        eye = (u, v, self.eye_z)
-        g = tuple(self.post_box[k] - r for k in range(3)) + tuple(self.post_box[k] + r for k in range(3, 6))
-        n = max(2, int(math.dist(eye, self.aim) / 2.0))
-        stop = 1.0
-        for i in range(n + 1):
-            t = i / n
-            p = [eye[k] + (self.aim[k] - eye[k]) * t for k in range(3)]
-            if g[0] <= p[0] <= g[3] and g[1] <= p[1] <= g[4] and g[2] <= p[2] <= g[5]:
-                stop = t
-                break
-        end = tuple(eye[k] + (self.aim[k] - eye[k]) * stop for k in range(3))
-        gap = min(seg_box_dist(eye, end, self.cage), seg_box_dist(eye, end, self.cage_box))
-        side = min(self.wall_dist(eye[0] + (end[0] - eye[0]) * t / 10.0, eye[1] + (end[1] - eye[1]) * t / 10.0) for t in range(11))
-        return gap >= r and side >= r and math.dist(eye, end) <= self.K["InteractReach"]
 
     def client(self, u, v):
         """ABRCharacter::UpdateFocus, regard sur le point du poste : balayage de 7 cm jusqu'a la boite du poste (la cage frolee

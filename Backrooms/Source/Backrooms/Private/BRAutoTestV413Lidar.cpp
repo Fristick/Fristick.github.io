@@ -220,6 +220,14 @@ void ABRAutoTest::AddV413LidarSteps()
 		{
 			return true;
 		}
+		// v4.15 (correctifs 4, relecture) : mission NON VERIFIEE a pied plus haut (entite seule sur le passage) : pas de PROBLEME en
+		// cascade (avant : "resolue NON")
+		const FString NotVerified = BRTestV412::MissionNotVerified(W, 6);
+		if (!NotVerified.IsEmpty())
+		{
+			Skip(FString::Printf(TEXT("Level 6 : %s : plaques et cages non verifiees"), *NotVerified));
+			return true;
+		}
 		BRM::FEval E;
 		W->GetMissionEval(E);
 		FVector Static;
@@ -235,6 +243,14 @@ void ABRAutoTest::AddV413LidarSteps()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
+		// v4.15 (correctifs 4, relecture) : sortie du Level 6 NON VERIFIEE plus haut (mission pas faite a pied, entite seule sur le
+		// passage) : l'arrivee n'est pas jugee (avant : PROBLEME "ECHEC" en cascade, 40 s plus tard)
+		const FString NotVerified = BRTestV412::ExitNotVerified(6);
+		if (!NotVerified.IsEmpty())
+		{
+			Skip(FString::Printf(TEXT("Level 6 : %s : arrivee au Niveau 8 non verifiee"), *NotVerified));
+			return true;
+		}
 		if ((!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 8) && StepTime < 40.f)
 		{
 			return false;

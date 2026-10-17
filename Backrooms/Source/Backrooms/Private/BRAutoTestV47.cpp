@@ -58,7 +58,11 @@ namespace
 
 void ABRAutoTest::AddSeedLoad(int32 Level, uint32 UserSeed, const FString& Title)
 {
-	const uint32 LevelSeed = ABRWorld::SeedFromUser(UserSeed, Level);
+	AddLevelSeedLoad(Level, ABRWorld::SeedFromUser(UserSeed, Level), Title);
+}
+
+void ABRAutoTest::AddLevelSeedLoad(int32 Level, uint32 LevelSeed, const FString& Title)
+{
 	Add(FString::Printf(TEXT("%s : chargement"), *Title), 0.f, [this, Level, LevelSeed, Title]()
 	{
 		ABRPlayerController* PC = GetPC();

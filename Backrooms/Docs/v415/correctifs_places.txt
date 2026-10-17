@@ -4,7 +4,8 @@
 # v4.15 (correctifs, relecture) : cas A juge comme les tests du jeu (FindMissionStand, marches, visee du client, murs voisins), cage au bout de sa face ; B et C avec FindMissionStand ; cas D (sorties du Level 8)
 # v4.15 (correctifs 3) : cas E (Niveau 10 : groupe du moulin sur poteaux ; poteaux en rang et couloirs de visee, BRMech::Clearance::CutsFocusLane) ; couloirs dans le miroir de PickSlot (cas A inchange)
 # v4.15 (correctifs 4) : cas F (Level 8 : echelles tirees par les chunks, rochers hors de leur zone libre, ABRWorld::IsChunkExitKeepOut) ; B et C : place gardee seulement si la visee du client touche le mecanisme avant le decor (BRTestV412::FocusFirstHit) ; A : idem (cage, murs)
-# Date : 2026-10-17T07:44:46Z
+# v4.15 (correctifs 4, relecture) : la visee du client des places de B, C (et A) est jugee comme le jeu (BRTestV412::FocusVerdict : balayage, puis tolerance d'ABRCharacter::UpdateFocus quand le decor l'arrete : boite a moins de 208 cm, centre a plus de 0,86 de l'axe, ligne de vue) ; avant : tout decor touche en premier refusait la place. Regle v4.15 inchangee (0 partout) ; regle v4.14 du cas B : 4695 -> 4686 et 4926 -> 4904 sans place debout (places que la tolerance du jeu vise)
+# Date : 2026-10-17T09:11:36Z
 Banc des places des mecanismes (v4.15, Tools/verify_device_clearance.py)
 Constantes lues : capsule 34 x 88, yeux a 74 cm au-dessus du centre, portee de l'hote 340 cm ; marge 2, place debout a 36 cm, profondeur libre 120 ; poste (18.0, 0.0, 110.0) ; treuil (26.0, 0.0, 60.0) ; plaque (5.0, 0.0, 140.0)
 
@@ -31,8 +32,8 @@ A. Level 6 : poste et cage d'un groupe (cellule de 350 cm, murs de 60, face util
     murs voisins oui/oui, fond oui : place devant (110 cm) libre ; premiere place (128, 58) (cercle 110, direction 0) ; marche vers (128, 58) rayon 70 : 433 arrivees, vue de l'hote coupee 0, visee prise ou ratee 1 (balayage a 6 cm de la cage au plus pres) ; reprise vers (78, 58) rayon 35 : 132/0/0 -> PASSE
 
 B. Level 8 : rochers (SM_Rock (-112.9, -80.8, -36.4)..(100.9, 79.5, 115.9) cm ; paroi : 55 % des faces, echelle 1.0 a 1.9, z x1.4 ; cellule : densite 0.30 x 0.4, echelle 0.35 a 0.95) ; 120 graines, places laterales -0/+58/-58/+116/-116/+174
-  regle v4.14 : treuil : 10560 places, point dans un rocher 4643 (44.0 %), sans place debout (FindMissionStand) 4695 (44.5 %) ; entailles : 10560 places, point dans un rocher 4864 (46.1 %), sans place debout (FindMissionStand) 4926 (46.6 %) -> ECHOUE
-    (pour information, place au coin +174 : 4224 cas, point dans un rocher 1399, sans place debout 1507)
+  regle v4.14 : treuil : 10560 places, point dans un rocher 4643 (44.0 %), sans place debout (FindMissionStand) 4686 (44.4 %) ; entailles : 10560 places, point dans un rocher 4864 (46.1 %), sans place debout (FindMissionStand) 4904 (46.4 %) -> ECHOUE
+    (pour information, place au coin +174 : 4224 cas, point dans un rocher 1399, sans place debout 1459)
   regle v4.15 : treuil : 10560 places, point dans un rocher 0 (0.0 %), sans place debout (FindMissionStand) 0 (0.0 %) ; entailles : 10560 places, point dans un rocher 0 (0.0 %), sans place debout (FindMissionStand) 0 (0.0 %) -> PASSE
     (pour information, place au coin +174 : 4224 cas, point dans un rocher 0, sans place debout 0)
   regle v4.15 : rochers retires autour d'un treuil (zone libre) : 10576 sur 274722 voisins (3.8 %) ; dans le jeu : oui (RockInKeepOut)
@@ -60,6 +61,7 @@ Regle du jeu dans les sources :
   ABRWorld::PlaceMission : volumes d'abord (StableSort), puis BRMech::Clearance::PickSlot : oui
   ABRWorld::PlaceMissionModule : PickSlot, curseur hors des places prises : oui
   BRMech::Clearance::PickSlot : volume mural au bout de sa face : oui
+  BRTestV412::CheckMissionStand : visee du client par FocusVerdict, tolerance d'ABRCharacter::UpdateFocus : oui
   ABRWorld::SetupMission : zone libre des sorties de la mission : oui
   ABRWorld::PlaceMission : poteaux d'une cellule en rang (meme lacet) : oui
   ABRWorld::PlaceMission : PickSlot avec les couloirs de visee : oui

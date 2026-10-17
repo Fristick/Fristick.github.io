@@ -586,6 +586,14 @@ void ABRAutoTest::AddV413Steps()
 	Add(TEXT("v4.13 histoire : traversee des Poolrooms enregistree"), 0.5f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();
+		// v4.15 (correctifs 4, relecture) : sortie des Poolrooms NON VERIFIEE a pied plus haut (mission pas faite a pied, entite seule
+		// sur le passage) : l'arrivee au Niveau 2 n'est pas jugee (avant : PROBLEME "Niveau 2 non atteint" en cascade)
+		const FString NotVerified = BRTestV412::ExitNotVerified(BRStory::Poolrooms);
+		if (!NotVerified.IsEmpty())
+		{
+			Skip(FString::Printf(TEXT("histoire : %s : traversee des Poolrooms non verifiee"), *NotVerified));
+			return true;
+		}
 		if (!W || W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 2)
 		{
 			if (StepTime > 30.f)
