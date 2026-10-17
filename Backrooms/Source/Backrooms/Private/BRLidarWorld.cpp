@@ -23,6 +23,32 @@ FIntPoint ABRWorld::LidarCell(int32 U, int32 V) const
 	return FIntPoint(X, Y);
 }
 
+void ABRWorld::GetClosedMissionEdges(TArray<TPair<FIntPoint, FIntPoint>>& Out) const
+{
+	Out.Reset();
+	if (!IsLidarLevel() || !IsMissionActive() || MissionPlan.Level != 6 || !LidarWing.bValid || MissionSpots.Num() != MissionPlan.NumDevices)
+	{
+		return;
+	}
+	BRM::FEval E;
+	GetMissionEval(E);
+	const FIntPoint WingOut(LidarWing.OutX, LidarWing.OutY);
+	for (int32 I = 0; I < MissionPlan.NumDevices; ++I)
+	{
+		// Une porte posee ailleurs (variante ou module de secours : bouton ordinaire) ne ferme aucun passage
+		const FBRMissionSpot& Spot = MissionSpots[I];
+		if (MissionPlan.Devices[I].Role != BRM::R_LidarDoor || Spot.Module != BRMech::Module::LidarDoor || E.Gate[I] >= 255)
+		{
+			continue;
+		}
+		const FIntPoint Inside = Spot.Cell - WingOut;
+		if (BRLidar::Contains(LidarWing, Inside.X, Inside.Y) && !BRLidar::Contains(LidarWing, Spot.Cell.X, Spot.Cell.Y))
+		{
+			Out.Add(TPair<FIntPoint, FIntPoint>(Spot.Cell, Inside));
+		}
+	}
+}
+
 void ABRWorld::ComputeLidarMarks()
 {
 	LidarMarks.Reset();

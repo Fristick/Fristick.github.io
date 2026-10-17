@@ -26,6 +26,7 @@
 #include "BRAutoTestWalk.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
+#include "BREntity.h"
 #include "BRGatherLogic.h"
 #include "BRHUD.h"
 #include "BRInteractables.h"
@@ -39,6 +40,7 @@
 #include "BRStoryLogic.h"
 #include "BRWorld.h"
 #include "Algo/Reverse.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -225,7 +227,8 @@ namespace BRTestV412
 		{
 			return false;
 		}
-		// Copie de l'A* du monde (ABRWorld::FindPath) : memes noeuds, couts et ordre ; seul le filtre des bassins s'y ajoute
+		// Copie de l'A* du monde (ABRWorld::FindPath) : memes noeuds, couts, ordre et portes fermees de l'aile (v4.15 correctifs
+		// 3) ; seul le filtre des bassins s'y ajoute
 		struct FNode
 		{
 			FIntPoint Cell;
@@ -240,6 +243,22 @@ namespace BRTestV412
 		PathCost.Add(From, 0.f);
 		const FIntPoint Steps4[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
 		const bool bPits = W->HasPits();
+		// v4.15 (correctifs 3) : Level 6 : pas par une ouverture de l'aile dont la porte du passage reste fermee (comme le chemin du
+		// monde). Avant : CanStep seul ; le marcheur entrait par la porte de la voie de l'echelle, fermee dans 3 cas sur 4, et
+		// poussait le battant 300 s (Niveau 6, graine du niveau 2702236446)
+		TArray<TPair<FIntPoint, FIntPoint>> Closed;
+		W->GetClosedMissionEdges(Closed);
+		auto IsClosed = [&Closed](const FIntPoint& A, const FIntPoint& B)
+		{
+			for (const TPair<FIntPoint, FIntPoint>& Edge : Closed)
+			{
+				if ((Edge.Key == A && Edge.Value == B) || (Edge.Key == B && Edge.Value == A))
+				{
+					return true;
+				}
+			}
+			return false;
+		};
 		int32 NumExpanded = 0;
 		while (OpenSet.Num() > 0 && NumExpanded < MaxNodes)
 		{
@@ -263,7 +282,7 @@ namespace BRTestV412
 			{
 				const FIntPoint N = Best.Cell + Dir;
 				// Un bassin profond (Niveau 37) n'est traverse que s'il est l'arrivee
-				if (!W->CanStep(Best.Cell, N) || (N != To && W->IsPoolCell(N.X, N.Y)))
+				if (!W->CanStep(Best.Cell, N) || IsClosed(Best.Cell, N) || (N != To && W->IsPoolCell(N.X, N.Y)))
 				{
 					continue;
 				}
@@ -335,9 +354,96 @@ namespace BRTestV412
 
 	FString WalkStats()
 	{
-		return FString::Printf(TEXT("%.1f m en %.0f s, %d saut(s), %d nouveau(x) chemin(s), %d image(s) a la nage, %d deplacement(s) direct(s)%s%s"),
+		// v4.15 (correctifs 3) : images pres d'une entite et cause d'un blocage
+		FString Extra;
+		if (Walk.EntityFrames > 0)
+		{
+			Extra += FString::Printf(TEXT(", %d image(s) a moins de 1,5 m d'une entite"), Walk.EntityFrames);
+		}
+		if (!Walk.StuckWhy.IsEmpty())
+		{
+			Extra += TEXT(" ; bloque : ") + Walk.StuckWhy;
+		}
+		return FString::Printf(TEXT("%.1f m en %.0f s, %d saut(s), %d nouveau(x) chemin(s), %d image(s) a la nage, %d deplacement(s) direct(s)%s%s%s"),
 			Walk.Travelled / 100.f, FPlatformTime::Seconds() - Walk.Start, Walk.Jumps, Walk.Replans, Walk.SwimFrames, Walk.Teleports,
-			Walk.bPath ? TEXT("") : TEXT(", sans chemin de grille (tout droit)"), Walk.bPoolFallback ? TEXT(", chemin du monde par un bassin (aucun chemin sans bassin)") : TEXT(""));
+			Walk.bPath ? TEXT("") : TEXT(", sans chemin de grille (tout droit)"), Walk.bPoolFallback ? TEXT(", chemin du monde par un bassin (aucun chemin sans bassin)") : TEXT(""),
+			*Extra);
+	}
+
+	/** v4.15 (correctifs 3) : entite la plus proche du point (nullptr sans entite) */
+	const ABREntity* NearestEntity(const UWorld* World, const FVector& P, float& OutDist)
+	{
+		const ABREntity* Best = nullptr;
+		OutDist = 1.0e9f;
+		for (TActorIterator<ABREntity> It(World); It; ++It)
+		{
+			const float D = static_cast<float>(FVector::Dist(It->GetActorLocation(), P));
+			if (D < OutDist)
+			{
+				OutDist = D;
+				Best = *It;
+			}
+		}
+		return Best;
+	}
+
+	/** v4.15 (correctifs 3) : cause d'un blocage : ce que la capsule du marcheur touche 60 cm devant elle vers sa cible (porte du
+	 *  passage fermee, cage, entite...), l'entite la plus proche, le point de passage vise */
+	FString StuckReport(const ABRWorld* W, const ABRCharacter* C, const FVector& Target)
+	{
+		UWorld* World = W->GetWorld();
+		const FVector Pos = C->GetActorLocation();
+		FVector Dir = (Target - Pos).GetSafeNormal2D();
+		if (Dir.IsNearlyZero())
+		{
+			Dir = C->GetActorForwardVector().GetSafeNormal2D();
+		}
+		FString Ahead = TEXT("rien a moins de 60 cm devant");
+		const UCapsuleComponent* Cap = C->GetCapsuleComponent();
+		if (World && Cap)
+		{
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestStuck), false, C);
+			FCollisionResponseParams R;
+			Cap->InitSweepCollisionParams(Q, R);
+			FHitResult Hit;
+			if (World->SweepSingleByChannel(Hit, Pos, Pos + Dir * 60.f, Cap->GetComponentQuat(), Cap->GetCollisionObjectType(), Cap->GetCollisionShape(), Q, R))
+			{
+				const ABRMissionDevice* MD = Cast<ABRMissionDevice>(Hit.GetActor());
+				Ahead = FString::Printf(TEXT("devant (%.0f cm) : %s, %s%s"), Hit.Distance, *FocusName(W, Hit.GetActor()), *GetNameSafe(Hit.GetComponent()),
+					(MD && MD->GetModule() == BRMech::Module::LidarDoor) ? TEXT(" (porte du passage fermee)") : (Cast<ABREntity>(Hit.GetActor()) ? TEXT(" (entite)") : TEXT("")));
+			}
+		}
+		float EntityDist = 0.f;
+		const ABREntity* E = World ? NearestEntity(World, Pos, EntityDist) : nullptr;
+		const FString Entity = E ? FString::Printf(TEXT("entite la plus proche : %s (%s) a %.0f cm"), *E->MyInfo().Name.ToString(), *E->GetName(), EntityDist)
+			: FString(TEXT("aucune entite"));
+		const FVector Way = Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal;
+		const FIntPoint Cell = W->WorldToCell(Way);
+		return FString::Printf(TEXT("%s ; %s ; point de passage %d/%d (cellule %d, %d)"), *Ahead, *Entity, Walk.Next + 1, Walk.Points.Num(), Cell.X, Cell.Y);
+	}
+
+	/** v4.15 (correctifs 3) : un point de passage est atteint a 35 cm dans une salle de fosses (aile du Level 6 : la capsule ne
+	 *  coupe pas le coin d'un trou en tournant), a 70 cm ailleurs */
+	float WaypointReach(const ABRWorld* W, const FVector& P)
+	{
+		const FIntPoint Cell = W->WorldToCell(P);
+		return (W->HasPits() && W->IsPitRoomCell(Cell.X, Cell.Y)) ? 35.f : 70.f;
+	}
+
+	/** v4.15 (correctifs 3) : chemin restant (plan) : jusqu'a la cible, puis les points de passage suivants (detour : jusqu'au
+	 *  but) */
+	float RemainingRoute(const FVector& Pos, const FVector& Target, bool bDetourNow)
+	{
+		float Remaining = static_cast<float>(FVector::Dist2D(Pos, Target));
+		if (bDetourNow)
+		{
+			return Remaining + static_cast<float>(FVector::Dist2D(Target, Walk.Goal));
+		}
+		for (int32 I = Walk.Next; I + 1 < Walk.Points.Num(); ++I)
+		{
+			Remaining += static_cast<float>(FVector::Dist2D(Walk.Points[I], Walk.Points[I + 1]));
+		}
+		return Remaining;
 	}
 
 	/** Une image de marche. bBusy : frayeur, entree bloquee, chargement (le temps ne compte pas pour le blocage) */
@@ -371,31 +477,54 @@ namespace BRTestV412
 			ReleaseJump(C);
 			return EWalk::Arrived;
 		}
+		// v4.15 (correctifs 3) : entites proches (rapport : confirme ou ecarte une entite qui barre le passage)
+		{
+			float EntityDist = 0.f;
+			Walk.EntityFrames += (NearestEntity(W->GetWorld(), Pos, EntityDist) && EntityDist < 150.f) ? 1 : 0;
+		}
 		if (bBusy)
 		{
 			Walk.CheckAt = Now;
 			Walk.CheckPos = Pos;
-			return Now - Walk.Start > Timeout ? EWalk::Stuck : EWalk::Moving;
+			if (Now - Walk.Start > Timeout)
+			{
+				Walk.StuckWhy = StuckReport(W, C, Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal);
+				return EWalk::Stuck;
+			}
+			return EWalk::Moving;
 		}
-		while (Walk.Next < Walk.Points.Num() - 1 && FVector::Dist2D(Pos, Walk.Points[Walk.Next]) < 70.f)
+		while (Walk.Next < Walk.Points.Num() - 1 && FVector::Dist2D(Pos, Walk.Points[Walk.Next]) < WaypointReach(W, Walk.Points[Walk.Next]))
 		{
 			++Walk.Next;
 		}
 		FVector Target = Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal;
 		FVector Detour;
+		bool bDetourNow = false;
 		if (Walk.bDetour && W->MissionNavDetour(Pos, Walk.Goal, Detour))
 		{
 			Target = Detour;
+			bDetourNow = true;
 		}
-		// Progression : moins de 40 cm (ni 30 cm de montee) en 1,2 s -> saut, puis pas de cote, puis nouveau chemin
+		// Progression, toutes les 1,2 s : chemin restant raccourci d'au moins 40 cm depuis le plus court atteint, nouveau point de
+		// passage, nouvelle etape du detour (passerelle du Niveau 8) ou 30 cm de montee au-dessus du plus haut atteint. Sinon :
+		// saut, puis pas de cote, nouveau chemin a 4, blocage a 8 (environ 10 s). v4.15 (correctifs 3) : avant, 40 cm de
+		// deplacement suffisaient : le pas de cote de 0,6 s contre une porte fermee comptait, et le marcheur sautait 300 s sans
+		// nouveau chemin (Level 6, 62 sauts, 270 m)
 		if (Now - Walk.CheckAt > 1.2)
 		{
-			const bool bProgress = FVector::Dist2D(Pos, Walk.CheckPos) >= 40.f || FMath::Abs(Pos.Z - Walk.CheckPos.Z) >= 30.f;
+			const float Remaining = RemainingRoute(Pos, Target, bDetourNow);
+			const bool bNewStage = Walk.Next > Walk.BestNext || bDetourNow != Walk.bCheckDetour || (bDetourNow && FVector::Dist2D(Target, Walk.CheckTarget) > 50.f);
+			const bool bProgress = bNewStage || Remaining <= Walk.BestRemaining - 40.f || Pos.Z >= Walk.BestZ + 30.f;
 			Walk.CheckAt = Now;
 			Walk.CheckPos = Pos;
+			Walk.bCheckDetour = bDetourNow;
+			Walk.CheckTarget = Target;
 			if (bProgress)
 			{
 				Walk.StuckChecks = 0;
+				Walk.BestRemaining = Remaining;
+				Walk.BestNext = FMath::Max(Walk.BestNext, Walk.Next);
+				Walk.BestZ = FMath::Max(Walk.BestZ, static_cast<float>(Pos.Z));
 			}
 			else
 			{
@@ -413,12 +542,21 @@ namespace BRTestV412
 				{
 					Replan(W, C);
 					++Walk.Replans;
+					// Le nouveau chemin part d'ici : ses premiers points deja atteints et sa longueur ne sont pas une progression
+					while (Walk.Next < Walk.Points.Num() - 1 && FVector::Dist2D(Pos, Walk.Points[Walk.Next]) < WaypointReach(W, Walk.Points[Walk.Next]))
+					{
+						++Walk.Next;
+					}
+					Walk.BestNext = Walk.Next;
+					Walk.BestRemaining = RemainingRoute(Pos, Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal, false);
+					Target = Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal;
 				}
 			}
 		}
 		if (Walk.StuckChecks >= 8 || Now - Walk.Start > Timeout)
 		{
 			ReleaseJump(C);
+			Walk.StuckWhy = StuckReport(W, C, Target);
 			return EWalk::Stuck;
 		}
 		// Regard vers le point suivant (a la nage : vers sa hauteur), puis les entrees du joueur
@@ -1706,29 +1844,63 @@ void ABRAutoTest::AddV412Steps()
 			TestCountA = -1;
 			return true;
 		}
-		// Le plus loin possible des mecanismes (dans l'enceinte) : leurs chunks sont retires, ils sont masques
+		// Le plus loin possible des mecanismes (dans l'enceinte) : leurs chunks sont retires, ils sont masques. v4.15 (correctifs
+		// 3) : la cellule la plus loin du chunk le plus proche d'un mecanisme, au-dela de la distance de retrait des chunks
+		// (ViewDistance + 1,6 chunk, ABRWorld::UpdateStreaming) plus un chunk de marge. Avant : 40 cellules du centre des
+		// mecanismes ; le poste et la cage d'un bout de la zone restaient a 75 m de leur chunk, sous les 94,8 m du retrait
+		// (Level 6 : "2 encore affiches")
+		const FBRLevelDef& LD = W->Def();
+		const float ChunkWorld = LD.ChunkCells * LD.CellSize;
+		const float Needed = LD.ViewDistance + ChunkWorld * 2.6f;
 		FVector Center = FVector::ZeroVector;
+		TArray<FVector> ChunkCenters;
 		for (const ABRMissionDevice* D : W->GetMissionDevices())
 		{
 			Center += D ? D->GetActorLocation() : FVector::ZeroVector;
+			if (D)
+			{
+				const FIntPoint Ch = W->CellToChunk(D->GetCell());
+				ChunkCenters.AddUnique(FVector((Ch.X + 0.5f) * ChunkWorld, (Ch.Y + 0.5f) * ChunkWorld, 0.f));
+			}
 		}
 		Center /= static_cast<double>(W->GetMissionDevices().Num());
 		const FIntPoint C0 = W->WorldToCell(Center);
-		for (const int32 R : { 40, 32, 24, 16 })
+		FIntPoint BestCell(0, 0);
+		float BestGap = -1.f;
+		for (const int32 R : { 40, 48, 56, 64 })
 		{
 			for (int32 K = 0; K < 16; ++K)
 			{
 				const float A = K * PI / 8.f;
 				const FIntPoint Cell(C0.X + FMath::RoundToInt(R * FMath::Cos(A)), C0.Y + FMath::RoundToInt(R * FMath::Sin(A)));
-				if (W->IsCellInBounds(Cell.X, Cell.Y) && W->IsWalkable(Cell))
+				if (!W->IsCellInBounds(Cell.X, Cell.Y) || !W->IsWalkable(Cell))
 				{
-					PlaceAndFace(C, W->CellCenter(Cell, static_cast<float>(C->GetActorLocation().Z) + 40.f), Center);
-					TestExitSpot = Center;
-					return true;
+					continue;
+				}
+				const FVector P = W->CellCenter(Cell, 0.f);
+				float Gap = 1.0e9f;
+				for (const FVector& CC : ChunkCenters)
+				{
+					Gap = FMath::Min(Gap, static_cast<float>(FVector::Dist2D(P, CC)));
+				}
+				if (Gap > BestGap)
+				{
+					BestGap = Gap;
+					BestCell = Cell;
 				}
 			}
 		}
-		Skip(TEXT("Tick des mecanismes masques : aucune cellule libre loin des mecanismes"));
+		if (BestGap <= Needed)
+		{
+			Skip(FString::Printf(TEXT("Tick des mecanismes masques : aucune cellule libre assez loin des mecanismes (la plus loin a %.0f m du chunk d'un mecanisme, %.0f m voulus)"),
+				BestGap / 100.f, Needed / 100.f));
+			TestCountA = -1;
+			return true;
+		}
+		PlaceAndFace(C, W->CellCenter(BestCell, static_cast<float>(C->GetActorLocation().Z) + 40.f), Center);
+		TestExitSpot = Center;
+		Note(FString::Printf(TEXT("Tick des mecanismes masques : joueur pose a la cellule (%d, %d), a %.0f m du chunk le plus proche d'un mecanisme (retrait au-dela de %.0f m)"),
+			BestCell.X, BestCell.Y, BestGap / 100.f, (LD.ViewDistance + ChunkWorld * 1.6f) / 100.f));
 		return true;
 	});
 	Add(TEXT("v4.12 Tick : mecanismes masques"), 0.f, [this]()

@@ -52,6 +52,18 @@ namespace BRTestV412
 		float MaxFeetZ = -1.0e6f;
 		/** Deplacements de plus de 3 m en une image (le personnage ne doit jamais etre deplace pendant la marche) */
 		int32 Teleports = 0;
+		/** v4.15 (correctifs 3) : progression mesuree sur le chemin restant (plus court atteint), les points de passage atteints,
+		 *  les etapes du detour et la montee (plus haut atteint) : un pas de cote contre un obstacle ne compte plus (avant : 40 cm
+		 *  de deplacement suffisaient, et le marcheur poussait une porte fermee 300 s sans nouveau chemin) */
+		float BestRemaining = 1.0e9f;
+		float BestZ = -1.0e9f;
+		int32 BestNext = -1;
+		bool bCheckDetour = false;
+		FVector CheckTarget = FVector::ZeroVector;
+		/** v4.15 (correctifs 3) : images a moins de 1,5 m d'une entite ; cause d'un blocage (ce qui est devant le marcheur,
+		 *  l'entite la plus proche, le point de passage), ajoutee a WalkStats */
+		int32 EntityFrames = 0;
+		FString StuckWhy;
 	};
 	extern FWalk Walk;
 
@@ -63,15 +75,19 @@ namespace BRTestV412
 	/** Debut d'une marche vers Goal (rayon d'arrivee Radius) ; false : pas de chemin de grille (tout droit) */
 	bool BeginWalk(const ABRWorld* W, const ABRCharacter* C, const FVector& Goal, float Radius, bool bDetour, bool bCheckZ = false, float GoalFeetZ = 0.f);
 	void ReleaseJump(ABRCharacter* C);
-	/** Distance, duree, sauts, nouveaux chemins, nage, deplacements directs */
+	/** Distance, duree, sauts, nouveaux chemins, nage, deplacements directs ; v4.15 (correctifs 3) : images pres d'une entite et
+	 *  cause d'un blocage */
 	FString WalkStats();
 	/** Une image de marche. bBusy : frayeur, entree bloquee, chargement (le temps ne compte pas pour le blocage).
-	 *  v4.15 : la sante mentale du marcheur reste a 100 (la folie ignore le mode invincible : regle du jeu inchangee) */
+	 *  v4.15 : la sante mentale du marcheur reste a 100 (la folie ignore le mode invincible : regle du jeu inchangee).
+	 *  v4.15 (correctifs 3) : progression sur le chemin restant (pas sur le deplacement) : nouveau chemin a 4 controles sans
+	 *  progres, blocage a 8 (environ 10 s, cause dans Walk.StuckWhy) ; points de passage a 35 cm dans une salle de fosses */
 	EWalk StepWalk(const ABRWorld* W, ABRCharacter* C, float Dt, double Timeout, bool bBusy);
 
 	/** v4.15 : A* de la grille des tests, le meme qu'ABRWorld::FindPath (couts, heuristique, ordre des voisins) sans entrer dans
 	 *  un bassin profond (ABRWorld::IsPoolCell ; depart et arrivee permis). Le placement de la mission garantit un tel chemin
-	 *  vers chaque mecanisme et la salle de la sortie (parcours "au sec" d'ABRWorld::PlaceMission) */
+	 *  vers chaque mecanisme et la salle de la sortie (parcours "au sec" d'ABRWorld::PlaceMission). v4.15 (correctifs 3) : ni
+	 *  par une ouverture de l'aile du Level 6 dont la porte reste fermee (ABRWorld::GetClosedMissionEdges, comme FindPath) */
 	bool FindPoolFreePath(const ABRWorld* W, const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes);
 
 	/** v4.15 : portee de la visee du client (ABRCharacter::UpdateFocus : balayage de 260 cm, impact a moins de 290 cm des yeux) :

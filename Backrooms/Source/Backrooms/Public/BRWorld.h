@@ -642,7 +642,9 @@ public:
 	/** Etape suivante d'une entite au sol vers Goal quand l'un des deux est sur le module de la passerelle (marches, appui,
 	 *  tablier, palier) ; false : rien a contourner */
 	bool MissionNavDetour(const FVector& From, const FVector& Goal, FVector& OutWaypoint) const;
-	/** A* sur la grille (v4.6 : les cellules d'une salle de fosses coutent plus cher : on passe par la galerie si possible) */
+	/** A* sur la grille (v4.6 : les cellules d'une salle de fosses coutent plus cher : on passe par la galerie si possible).
+	 *  v4.15 (correctifs 3) : pas par une ouverture de l'aile du Level 6 dont la porte du passage est fermee
+	 *  (GetClosedMissionEdges) */
 	bool FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes = 1500) const;
 
 	// ------------------------------------------------------------ v4.6 : salles de fosses ("Hole Variation")
@@ -670,6 +672,11 @@ public:
 	const BRLidar::FWing& GetLidarWing() const { return LidarWing; }
 	/** Cellule de l'aile (repere local U profondeur depuis l'entree, V lateral) */
 	FIntPoint LidarCell(int32 U, int32 V) const;
+	/** v4.15 (correctifs 3) : Level 6 : ouvertures d'entree de l'aile fermees par leur porte du passage (battant ferme : Gate
+	 *  < 255, la regle d'ABRMissionDevice::ApplyModuleState) : paires (cellule de la galerie, cellule de l'aile). Seulement
+	 *  les portes posees dans l'aile (module LidarDoor). CanStep les ignore (placement, reperes, decor : independants de la
+	 *  mission) ; les chemins des entites (FindPath) et des marches des tests les evitent. Etat replique : meme liste chez tous */
+	void GetClosedMissionEdges(TArray<TPair<FIntPoint, FIntPoint>>& Out) const;
 	/** Reperes de l'equipe de L. au sol (chemin de la mire de calibrage a l'entree de l'aile) : position, direction */
 	const TArray<FVector>& GetLidarMarks() const { return LidarMarks; }
 	const TArray<FVector>& GetLidarMarkDirs() const { return LidarMarkDirs; }

@@ -4938,6 +4938,21 @@ bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntP
 
 	const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
 	const bool bPits = HasPits();
+	// v4.15 (correctifs 3) : Level 6 : les ouvertures de l'aile dont la porte du passage reste fermee ne se traversent pas (avant :
+	// CanStep seul, les entites marchaient vers un battant ferme)
+	TArray<TPair<FIntPoint, FIntPoint>> Closed;
+	GetClosedMissionEdges(Closed);
+	auto IsClosed = [&Closed](const FIntPoint& A, const FIntPoint& B)
+	{
+		for (const TPair<FIntPoint, FIntPoint>& Edge : Closed)
+		{
+			if ((Edge.Key == A && Edge.Value == B) || (Edge.Key == B && Edge.Value == A))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
 	int32 Expanded = 0;
 	while (Open.Num() > 0 && Expanded < MaxNodes)
 	{
@@ -4960,7 +4975,7 @@ bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntP
 		for (const FIntPoint& Dir : Dirs)
 		{
 			const FIntPoint N = Cur.P + Dir;
-			if (!CanStep(Cur.P, N))
+			if (!CanStep(Cur.P, N) || IsClosed(Cur.P, N))
 			{
 				continue;
 			}
