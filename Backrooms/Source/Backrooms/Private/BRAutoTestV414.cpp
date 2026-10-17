@@ -158,8 +158,7 @@ void ABRAutoTest::AddV414Steps()
 		// REJOUER le Niveau 1 depuis cette partie, par le meme chemin que le bouton du menu (StartSolo) : partie choisie,
 		// niveau du carrousel, menu ferme. Avant : le test imitait le menu sans le fermer ; la session restait "libre"
 		// (GetSessionMode : menu ouvert) et le test concluait a tort que REJOUER ne marchait pas
-		BRSaves::ActiveSlot() = CampaignSlot;
-		PC->ActiveSave = BRSaves::Load(CampaignSlot);
+		SwapTestSave(PC, BRSaves::Load(CampaignSlot), CampaignSlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		PC->bDevSession = false;
 		PC->bInMenu = true;
 		PC->MenuIndex = BRLevels::IndexOf(1);
@@ -264,9 +263,8 @@ void ABRAutoTest::AddV414Steps()
 			Now == Snapshot ? TEXT("") : *(TEXT(" ; maintenant : ") + Now)), Now != Snapshot);
 		// Retour a l'etat d'avant le test (partie active, mode du joueur, session du monde hors histoire)
 		PC->bDevSession = bTestDevSession;
-		PC->ActiveSave = TestOrigSave;
+		SwapTestSave(PC, TestOrigSave, TestOrigSlot);
 		TestOrigSave = nullptr;
-		BRSaves::ActiveSlot() = TestOrigSlot;
 		BRSaves::ReplaySession() = false;
 		W->SetStory(BRStory::FState(), EBRSessionMode::Free);
 		DeleteV414Saves();

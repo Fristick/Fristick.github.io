@@ -224,6 +224,12 @@ private:
 	void Note(const FString& Text, bool bProblem = false);
 	/** v4.10 : verification qui n'a pas pu etre faite (ressource absente, plateforme) : jamais comptee comme une reussite */
 	void Skip(const FString& Text);
+	/** v4.15 (correctifs 3) : change la partie active du joueur pour une etape de test (Save, emplacement Slot ; nullptr et
+	 *  INDEX_NONE : aucune) : ecritures en cours terminees, puis ni ecriture differee ni enregistrement automatique herites de
+	 *  la partie d'avant. Le controleur ne decompte PendingSaveDelay (2 s apres un chargement) et AutoSaveTimer que tant qu'une
+	 *  partie est active : arretes par un echange, ils reprenaient sur la partie suivante et la reecrivaient (suite complete :
+	 *  0,45 s gele au Niveau 1 de V411, 24 min plus tot, reecrivait la partie de reprise de V412 avant sa copie de recuperation) */
+	void SwapTestSave(ABRPlayerController* PC, UBRSaveGame* Save, int32 Slot);
 	void Shot(const FString& Name);
 	/** Un point degage, visible, a Dist cm devant le joueur (ou autour s'il n'y a pas de place) */
 	bool FindSpotInFront(float Dist, float Z, FVector& Out) const;

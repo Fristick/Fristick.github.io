@@ -3897,6 +3897,7 @@ void ABRCharacter::StartClimb(ABRExit* Ladder)
 	ClimbLadder = Ladder;
 	ClimbInput = 0.f;
 	ClimbStepAcc = 0.f;
+	ClimbBlocker.Reset();
 	ClimbWait.Reset();
 	Move->StopMovementImmediately();
 	Move->SetMovementMode(MOVE_Flying);
@@ -3988,11 +3989,29 @@ void ABRCharacter::UpdateClimb(float Dt)
 		DZ = FMath::Max(0.f, TopZ - static_cast<float>(Pos.Z)); // le sommet de la montee, pas au-dela
 	}
 	const FVector Delta((Anchor.X - Pos.X) * Pull, (Anchor.Y - Pos.Y) * Pull, DZ);
+	// v4.15 (correctifs 3) : deplacement balaye qui glisse sur un sol touche. Sur le tablier incline du Niveau 8 (9 degres) loin de
+	// l'ancre, la traction vers l'echelle est plus forte que la montee d'une image (la premiere est meme sans montee) : le
+	// grimpeur touche la pente et la remonte jusqu'au palier, puis l'echelle. Avant : SetActorLocation balaye sans glissement,
+	// arrete au premier contact : colle au tablier sans bouger, jamais au sommet, aucune demande de depart. Un mur, un flanc ou
+	// un plafond arretent toujours (pas de glissement le long d'une paroi)
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		Move->Velocity = FVector::ZeroVector;
+		FHitResult Hit;
+		Move->SafeMoveUpdatedComponent(Delta, GetActorQuat(), true, Hit);
+		if (Hit.IsValidBlockingHit() && Hit.Normal.Z >= Move->GetWalkableFloorZ())
+		{
+			// UMovementComponent::SlideAlongSurface (publique ; la version du mouvement du personnage, protegee, glisse comme
+			// elle hors de la marche au sol) : le reste du deplacement le long du sol, sans impact
+			UMovementComponent* Base = Move;
+			Base->SlideAlongSurface(Delta, 1.f - Hit.Time, Hit.Normal, Hit, false);
+		}
+		ClimbBlocker = Hit.IsValidBlockingHit() ? Hit.GetComponent() : nullptr;
 	}
-	SetActorLocation(Pos + Delta, true);
+	else
+	{
+		SetActorLocation(Pos + Delta, true);
+	}
 	// Les barreaux sous les mains et les pieds
 	ClimbStepAcc += FMath::Abs(Up) * 140.f * Dt;
 	if (ClimbStepAcc > 30.f)

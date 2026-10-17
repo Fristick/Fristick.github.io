@@ -977,8 +977,8 @@ void ABRAutoTest::AddV411Steps()
 		TestOrigSlot = BRSaves::ActiveSlot();
 		TestOrigSave = PC->ActiveSave;
 		bTestDevSession = PC->bDevSession;
-		BRSaves::ActiveSlot() = LegacySlot;
-		PC->ActiveSave = L;
+		// v4.15 (correctifs 3) : sans ecriture differee heritee de la partie d'avant
+		SwapTestSave(PC, L, LegacySlot);
 		PC->bDevSession = false;
 		BRSaves::PendingResume() = L->Session;
 		W->RequestTransition(L->Session.Level, false, L->Session.Seed);
@@ -1077,9 +1077,9 @@ void ABRAutoTest::AddV411Steps()
 		Note(FString::Printf(TEXT("niveau suivant : generation %d, mission %s, sauvegarde : generation %d, etat de mission %d octets, Level 0 accompli %s, reprise %d"),
 			W->GetMissionGen(), W->IsMissionActive() ? TEXT("active") : TEXT("ABSENTE"), L ? L->Session.GenVersion : -1, L ? L->Session.Mission.Num() : -1,
 			YesNo(L && BRStory::IsDone(L->GetStory(), 0)), L ? L->StoryResume : -1), !bOk);
-		// Retour a la session de test d'avant (partie active, mode)
-		BRSaves::ActiveSlot() = TestOrigSlot;
-		PC->ActiveSave = TestOrigSave;
+		// Retour a la session de test d'avant (partie active, mode). v4.15 (correctifs 3) : l'ecriture differee du chargement du
+		// Niveau 1 (2 s, 0,45 s restantes) ne reste plus armee : elle reecrivait, 24 min plus tard, la partie de reprise de V412
+		SwapTestSave(PC, TestOrigSave, TestOrigSlot);
 		PC->bDevSession = bTestDevSession;
 		TestOrigSave = nullptr;
 		DeleteSaveFiles();

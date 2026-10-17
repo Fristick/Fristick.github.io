@@ -725,6 +725,8 @@ private:
 	bool bDevFly = false;
 	float ClimbInput = 0.f;
 	float ClimbStepAcc = 0.f;
+	/** v4.15 (correctifs 3) : dernier obstacle du deplacement sur l'echelle (diagnostic des tests : tablier, palier, mur) */
+	TWeakObjectPtr<UPrimitiveComponent> ClimbBlocker;
 	/** Dechirure de la realite en haut du conduit (aberration chromatique), 0..1 */
 	float ClimbGlitch = 0.f;
 

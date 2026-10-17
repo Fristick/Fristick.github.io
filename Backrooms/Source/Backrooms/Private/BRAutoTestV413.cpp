@@ -355,9 +355,8 @@ void ABRAutoTest::AddV413Steps()
 		TestOrigSlot = BRSaves::ActiveSlot();
 		TestOrigSave = PC->ActiveSave;
 		bTestDevSession = PC->bDevSession;
-		BRSaves::ActiveSlot() = StorySlot;
+		SwapTestSave(PC, S, StorySlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		BRSaves::ReplaySession() = false;
-		PC->ActiveSave = S;
 		PC->bDevSession = false;
 		W->SetStory(S->GetStory(), EBRSessionMode::Story, true);
 		W->RequestTransition(0, false, ABRWorld::SeedFromUser(StorySeed, 0));
@@ -622,8 +621,7 @@ void ABRAutoTest::AddV413Steps()
 		Note(FString::Printf(TEXT("fin du chapitre %d : %s ; sauvegarde a jour %s ; CONTINUER reprend au Niveau %d ; exploration apres la fin : %s (hors histoire : %d)"), Lot,
 			*StoryText(S), Oui(L && L->StoryChapterEnds == S.ChapterEnds), Cont, *List, Beyond), !bOk);
 		// Retour a la session de test d'avant (partie active, mode)
-		BRSaves::ActiveSlot() = TestOrigSlot;
-		PC->ActiveSave = TestOrigSave;
+		SwapTestSave(PC, TestOrigSave, TestOrigSlot);
 		PC->bDevSession = bTestDevSession;
 		TestOrigSave = nullptr;
 		DeleteV413Saves();

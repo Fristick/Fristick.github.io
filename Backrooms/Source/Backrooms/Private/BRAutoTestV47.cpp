@@ -197,8 +197,7 @@ void ABRAutoTest::AddRegressionSteps()
 		S->Created = FDateTime::Now();
 		S->MarkExplored(0);
 		BRSaves::Write(4, S);
-		BRSaves::ActiveSlot() = 4;
-		PC->ActiveSave = S;
+		SwapTestSave(PC, S, 4); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		PC->bDevSession = false;
 		return true;
 	});
@@ -342,11 +341,9 @@ void ABRAutoTest::AddRegressionSteps()
 			bOk ? TEXT("OK") : TEXT("ECHEC"), W->GetLevelNumber(), W->GetSeed(), PartySeed, W->GetSeed() == PartySeed ? TEXT("oui") : TEXT("NON"),
 			W->IsResumedSession() ? TEXT("OUI") : TEXT("non"), C->GetDeathState().bDead ? TEXT("non") : TEXT("oui")), !bOk);
 		C->bGodMode = true;
-		if (ABRPlayerController* PC = GetPC())
-		{
-			PC->ActiveSave = nullptr;
-		}
-		BRSaves::ActiveSlot() = INDEX_NONE;
+		// v4.15 (correctifs 3) : plus de partie active, et plus d'ecriture differee en attente (gelee sans partie, elle reprenait
+		// sur la suivante)
+		SwapTestSave(GetPC(), nullptr, INDEX_NONE);
 		return true;
 	});
 

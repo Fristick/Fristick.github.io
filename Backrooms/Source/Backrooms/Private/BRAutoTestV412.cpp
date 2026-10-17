@@ -1257,8 +1257,16 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			C->InputMove(FVector2D(0.f, 1.f));
 			if (Now - TestTimer > 30.0)
 			{
-				Note(FString::Printf(TEXT("Niveau %d : pas de depart apres 30 s sur l'echelle (attente %d, demandes %d)"), Level,
-					static_cast<int32>(C->GetClimbWaitState()), C->ClimbRequestsSent - TestCountB), true);
+				// v4.15 (correctifs 3) : ou est le grimpeur (pieds par rapport au pied de l'echelle, distance a l'ancre, sommet) et ce
+				// qui l'arrete (dernier obstacle du deplacement sur l'echelle)
+				const ABRExit* Ladder = FindExit(GetWorld(), TestLevel);
+				const FVector P = C->GetActorLocation();
+				const UPrimitiveComponent* Block = C->ClimbBlocker.Get();
+				const FString Where = Ladder ? FString::Printf(TEXT("grimpeur en (%.0f, %.0f, %.0f), pieds a %.0f cm du pied de l'echelle, %.0f cm de l'ancre, sommet a %.0f cm ; "
+					"dernier obstacle : %s"), P.X, P.Y, P.Z, P.Z - Half - Ladder->GetActorLocation().Z, FVector::Dist2D(P, Ladder->GetClimbAnchor()), Ladder->GetClimbTopZ() - P.Z,
+					Block ? *FString::Printf(TEXT("%s (%s)"), *GetNameSafe(Block->GetOwner()), *Block->GetName()) : TEXT("aucun")) : FString(TEXT("echelle introuvable"));
+				Note(FString::Printf(TEXT("Niveau %d : pas de depart apres 30 s sur l'echelle (attente %d, demandes %d ; %s)"), Level,
+					static_cast<int32>(C->GetClimbWaitState()), C->ClimbRequestsSent - TestCountB, *Where), true);
 				return true;
 			}
 			return false;
@@ -1993,8 +2001,9 @@ void ABRAutoTest::AddV412Steps()
 		StoryMark = W->GetStory();
 		bRepriseSession = true;
 		bRepriseFailed = false;
-		BRSaves::ActiveSlot() = TestSlot;
-		PC->ActiveSave = S;
+		// v4.15 (correctifs 3) : ni ecriture differee ni enregistrement automatique herites (suite complete : une ecriture armee
+		// par V411 reecrivait cette partie avant sa copie de recuperation : "copie intacte NON")
+		SwapTestSave(PC, S, TestSlot);
 		PC->bDevSession = false;
 		W->SetStory(S->GetStory(), EBRSessionMode::Story, true);
 		BRSaves::PendingResume() = S->Session;
@@ -2157,11 +2166,9 @@ void ABRAutoTest::AddV412Steps()
 		ABRPlayerController* PC = GetPC();
 		if (bRepriseSession)
 		{
-			BRSaves::Flush();
-			BRSaves::ActiveSlot() = TestOrigSlot;
+			SwapTestSave(PC, TestOrigSave, TestOrigSlot);
 			if (PC)
 			{
-				PC->ActiveSave = TestOrigSave;
 				PC->bDevSession = bTestDevSession;
 			}
 			TestOrigSave = nullptr;

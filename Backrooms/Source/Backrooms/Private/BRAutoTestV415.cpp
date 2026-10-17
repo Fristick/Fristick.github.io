@@ -338,9 +338,8 @@ void ABRAutoTest::AddV415Steps()
 		}
 		const bool bWritten = BRSaves::Write(StorySlot, MakeStorySave(TEXT("Parcours lineaire v4.15"), true));
 		BRSaves::Flush();
-		BRSaves::ActiveSlot() = StorySlot;
+		SwapTestSave(PC, BRSaves::Load(StorySlot), StorySlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		BRSaves::ReplaySession() = false;
-		PC->ActiveSave = BRSaves::Load(StorySlot);
 		PC->bDevSession = false;
 		PC->bInMenu = true;
 		SerialMark = W->GetLevelSerial();
@@ -625,9 +624,8 @@ void ABRAutoTest::AddV415Steps()
 		}
 		const bool bWritten = BRSaves::Write(ClassicSlot, MakeStorySave(TEXT("Parcours classique v4.15"), false));
 		BRSaves::Flush();
-		BRSaves::ActiveSlot() = ClassicSlot;
+		SwapTestSave(PC, BRSaves::Load(ClassicSlot), ClassicSlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		BRSaves::ReplaySession() = false;
-		PC->ActiveSave = BRSaves::Load(ClassicSlot);
 		PC->bInMenu = false;
 		PC->bDevSession = false;
 		W->SetStory(PC->ActiveSave ? PC->ActiveSave->GetStory() : BRStory::FState(), EBRSessionMode::Story, true);
@@ -713,9 +711,8 @@ void ABRAutoTest::AddV415Steps()
 		}
 		const bool bWritten = BRSaves::Write(ClassicSlot, MakeStorySave(TEXT("Parcours classique v4.15"), false));
 		BRSaves::Flush();
-		BRSaves::ActiveSlot() = ClassicSlot;
+		SwapTestSave(PC, BRSaves::Load(ClassicSlot), ClassicSlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		BRSaves::ReplaySession() = false;
-		PC->ActiveSave = BRSaves::Load(ClassicSlot);
 		PC->bDevSession = false;
 		PC->bInMenu = true;
 		SerialMark = W->GetLevelSerial();
@@ -850,9 +847,8 @@ void ABRAutoTest::AddV415Steps()
 			return false;
 		}
 		BRSaves::Flush();
-		BRSaves::ActiveSlot() = StorySlot;
+		SwapTestSave(PC, BRSaves::Load(StorySlot), StorySlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		BRSaves::ReplaySession() = false;
-		PC->ActiveSave = BRSaves::Load(StorySlot);
 		PC->bDevSession = false;
 		PC->bInMenu = true;
 		SerialMark = W->GetLevelSerial();
@@ -924,9 +920,8 @@ void ABRAutoTest::AddV415Steps()
 		BRLevels::SetChannelOverride(static_cast<int32>(BRContent::EChannel::Public));
 		const bool bWritten = BRSaves::Write(StorySlot, MakeStorySave(TEXT("Parcours lineaire v4.15 (version publiee)"), true));
 		BRSaves::Flush();
-		BRSaves::ActiveSlot() = StorySlot;
+		SwapTestSave(PC, BRSaves::Load(StorySlot), StorySlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		BRSaves::ReplaySession() = false;
-		PC->ActiveSave = BRSaves::Load(StorySlot);
 		PC->bDevSession = false;
 		PC->bInMenu = true;
 		SerialMark = W->GetLevelSerial();
@@ -998,8 +993,7 @@ void ABRAutoTest::AddV415Steps()
 		PC->WriteActiveSave(true);
 		BRSaves::Flush();
 		DurableMark = DurableOf(BRSaves::Load(StorySlot));
-		BRSaves::ActiveSlot() = StorySlot;
-		PC->ActiveSave = BRSaves::Load(StorySlot);
+		SwapTestSave(PC, BRSaves::Load(StorySlot), StorySlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		PC->bDevSession = false;
 		PC->bInMenu = true;
 		PC->MenuIndex = FMath::Max(0, BRLevels::IndexOf(1));
@@ -1048,8 +1042,7 @@ void ABRAutoTest::AddV415Steps()
 			return false;
 		}
 		BRSaves::Flush();
-		BRSaves::ActiveSlot() = StorySlot;
-		PC->ActiveSave = BRSaves::Load(StorySlot);
+		SwapTestSave(PC, BRSaves::Load(StorySlot), StorySlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 		DevLevel = INDEX_NONE;
 		for (const int32 Lv : { 3, 4, 5, 6, 7 })
 		{
@@ -1169,7 +1162,7 @@ void ABRAutoTest::AddV415Steps()
 		if (PC)
 		{
 			PC->bDevSession = bTestDevSession;
-			PC->ActiveSave = TestOrigSave;
+			SwapTestSave(PC, TestOrigSave, TestOrigSlot); // v4.15 (correctifs 3) : sans ecriture differee heritee
 			PC->bInMenu = bInMenuMark;
 			PC->bHostFlow = bHostFlowMark;
 			PC->bPendingDeathResolved = false;

@@ -394,6 +394,18 @@ void ABRAutoTest::Note(const FString& Text, bool bProblem)
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] %s%s"), bProblem ? TEXT("PROBLEME : ") : TEXT(""), *Text);
 }
 
+void ABRAutoTest::SwapTestSave(ABRPlayerController* PC, UBRSaveGame* Save, int32 Slot)
+{
+	BRSaves::Flush();
+	BRSaves::ActiveSlot() = Slot;
+	if (PC)
+	{
+		PC->ActiveSave = Save;
+		PC->PendingSaveDelay = -1.f;
+		PC->AutoSaveTimer = 60.f;
+	}
+}
+
 void ABRAutoTest::Skip(const FString& Text)
 {
 	Report().Notes.Add(TEXT("NON VERIFIE : ") + Text);
