@@ -140,8 +140,11 @@ namespace
 						Plan.Seed);
 				}
 				// v4.15 (correctifs 3) : couloir de visee (place ordinaire devant le mecanisme) coupe par la boite visee ou le volume
-				// d'un autre : le client viserait l'autre (PickSlot ne garde un tel choix que faute de place au couloir degage)
-				if (J != I && BRMech::Clearance::CutsFocusLane(PlacedMissionDevice(Plan, Spots, I, WallThickness), PlacedMissionDevice(Plan, Spots, J, WallThickness)))
+				// d'un autre : le client viserait l'autre (PickSlot ne garde un tel choix que faute de place au couloir degage).
+				// Pas pour la vanne B des Poolrooms devant les bassins de la vanne A (BRMech::Clearance::LaneCutLogged : posees
+				// ensemble par leur module, la visee prend la vanne B ; avant : avertissement a chaque chargement avec bassins)
+				if (J != I && BRMech::Clearance::LaneCutLogged(PlacedMissionDevice(Plan, Spots, I, WallThickness), Spots[I].Module, PlacedMissionDevice(Plan, Spots, J, WallThickness),
+					Spots[J].Module))
 				{
 					UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d%s : couloir de visee du mecanisme %d coupe par le mecanisme %d (graine %u)"), Plan.Level, Tier, I, J, Plan.Seed);
 				}
@@ -244,6 +247,7 @@ void ABRWorld::ClearMission()
 	MissionState = BRM::FState();
 	MissionGen = 0;
 	MissionMovedFrom2 = -1;
+	MissionMovedDevices.Reset();
 	bMissionSolvedSeen = false;
 }
 
@@ -342,6 +346,7 @@ void ABRWorld::SetupMission()
 			// ("reamenages") que si ce nombre n'est pas nul ; journalise pour les tests. Level 6 (deja reamenage par le placement
 			// 3) et module de secours (inchange hors du Level 6) : pas compare
 			MissionMovedFrom2 = -1;
+			MissionMovedDevices.Reset();
 			if (HasAuthority() && MissionTier < 2 && Level != 6)
 			{
 				TArray<FBRMissionSpot> Before;
@@ -356,6 +361,7 @@ void ABRWorld::SetupMission()
 						if (FVector::Dist(Before[I].Pos, MissionSpots[I].Pos) > 1.f || FMath::Abs(FRotator::NormalizeAxis(Before[I].Yaw - MissionSpots[I].Yaw)) > 1.f)
 						{
 							++MissionMovedFrom2;
+							MissionMovedDevices.Add(I);
 							Which += FString::Printf(TEXT("%s%d"), Which.IsEmpty() ? TEXT("") : TEXT(", "), I);
 						}
 					}
@@ -404,9 +410,8 @@ void ABRWorld::SetupMission()
 						// v4.12 : placement d'une autre version : la progression est gardee, les mecanismes peuvent avoir bouge.
 						// v4.15 : avis seulement dans les niveaux dont le placement a change (version 3 : le Level 6). v4.15
 						// (correctifs 3) : depuis le placement 2, ailleurs, seulement si cette graine a des mecanismes deplaces
-						// par les couloirs de visee ou les poteaux en rang (comparaison ci-dessus)
-						const bool bMovedHere = ResumePlaceVersion == 2 && MissionMovedFrom2 > 0;
-						if (ResumePlaceVersion != BRM::PlaceVersion && MissionNotice == 0 && (BRM::PlacementMoved(Level, ResumePlaceVersion) || bMovedHere))
+						// par les couloirs de visee ou les poteaux en rang (comparaison ci-dessus ; BRM::ResumeMoved)
+						if (MissionNotice == 0 && BRM::ResumeMoved(Level, ResumePlaceVersion, MissionMovedFrom2))
 						{
 							MissionNotice = 3;
 						}

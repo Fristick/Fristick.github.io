@@ -296,6 +296,13 @@ namespace BRMech
 		bool CutsFocusLane(const FPlaced& Me, const FPlaced& Other);
 		/** v4.15 (correctifs 3) : l'un des deux couloirs de visee coupe par l'autre mecanisme */
 		bool FocusClash(const FPlaced& A, const FPlaced& B);
+		/** v4.15 (correctifs 3) : couloir coupe que l'invariant du placement journalise (ABRWorld::PlaceMission) : CutsFocusLane,
+		 *  sauf pour la vanne B des Poolrooms (MeModule Module::PoolWheelB) devant les bassins de la vanne A (OtherModule
+		 *  Module::PoolTanks). Le module les assemble apres PickSlot, qui ne les a jamais juges (vanne B fixee sur l'avant du
+		 *  bassin B) : son point vise est a 8 cm du volume des bassins (moins que FocusSweep + Margin), mais sa boite visee
+		 *  depasse de 20 cm l'avant des bassins : depuis la place devant elle, la visee du client la touche avant eux. Avant
+		 *  (relecture des correctifs 3) : avertissement a chaque chargement des Poolrooms avec bassins, chez l'hote et le client */
+		bool LaneCutLogged(const FPlaced& Me, uint8_t MeModule, const FPlaced& Other, uint8_t OtherModule);
 
 		/** Rectangle oriente (plan) : centre, demi-tailles, lacet quelconque (degres) */
 		struct FRect

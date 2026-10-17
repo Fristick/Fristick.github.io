@@ -640,6 +640,49 @@ int main(int argc, char** argv)
 		}
 		std::printf("Placement v%d : avis \"reamenages\" depuis la version 2 dans %d niveau(x) (Level 6)\n", PlaceVersion, Moved);
 	}
+	// v4.15 (correctifs 3, relecture) : avis a la reprise (ResumeMoved, ABRWorld::SetupMission) : depuis le placement 2 hors du
+	// Level 6, seulement si l'hote a trouve des mecanismes de la graine a une autre place (couloirs de visee, poteaux en rang)
+	{
+		struct FCase
+		{
+			int Level, From, Moved;
+			bool bWant;
+		};
+		const FCase Cases[] = {
+			{ 2, 2, 0, false },               // Niveau 2, graine de -BRAutoTestV412 : rien de deplace
+			{ 10, 2, 2, true },               // Niveau 10, graine 4111 : orientation et frein du moulin
+			{ 2, 2, -1, false },              // pas compare (client, module de secours)
+			{ 6, 2, -1, true },               // Level 6 : placement 3 en entier
+			{ 6, 2, 0, true },
+			{ 10, 1, 0, true },               // avant la v4.12 : partout
+			{ 10, PlaceVersion, 2, false },   // version courante : jamais
+			{ 2, PlaceVersion + 1, 0, true }, // version inconnue : partout
+		};
+		int Bad = 0;
+		for (const FCase& K : Cases)
+		{
+			Bad += ResumeMoved(K.Level, K.From, K.Moved) == K.bWant ? 0 : 1;
+		}
+		bool bSame = true;
+		for (const int L : { 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37 })
+		{
+			for (const int From : { 0, 1, 2, PlaceVersion, PlaceVersion + 1 })
+			{
+				for (const int Count : { 3, 1, 0, -1 })
+				{
+					// Regle d'avant la relecture (ABRWorld::SetupMission), a l'identique
+					const bool bOld = From != PlaceVersion && (PlacementMoved(L, From) || (From == 2 && Count > 0));
+					bSame = bSame && ResumeMoved(L, From, Count) == bOld;
+				}
+			}
+		}
+		if (Bad > 0 || !bSame)
+		{
+			Fail(6, 0, "avis de placement : reprise du placement 2 selon les mecanismes deplaces");
+		}
+		std::printf("Reprise : avis \"reamenages\" selon les mecanismes deplaces : %d/%d cas conformes, meme decision que la regle d'avant : %s\n",
+			static_cast<int>(sizeof(Cases) / sizeof(Cases[0])) - Bad, static_cast<int>(sizeof(Cases) / sizeof(Cases[0])), bSame ? "oui" : "NON");
+	}
 	std::printf("Actions jouees : %ld (solveur) + %ld (au hasard)\n", TotalActions, TotalFuzz);
 	if (Failures)
 	{

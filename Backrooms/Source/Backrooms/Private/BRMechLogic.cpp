@@ -621,6 +621,16 @@ namespace BRMech
 			return CutsFocusLane(A, B) || CutsFocusLane(B, A);
 		}
 
+		bool LaneCutLogged(const FPlaced& Me, uint8_t MeModule, const FPlaced& Other, uint8_t OtherModule)
+		{
+			// v4.15 (correctifs 3) : la vanne B et les bassins de la vanne A sont poses ensemble par leur module (apres PickSlot)
+			if (MeModule == Module::PoolWheelB && OtherModule == Module::PoolTanks)
+			{
+				return false;
+			}
+			return CutsFocusLane(Me, Other);
+		}
+
 		bool Overlap(const FRect& A, const FRect& B)
 		{
 			const float RA = MechImpl::Rad(A.Yaw), RB = MechImpl::Rad(B.Yaw);

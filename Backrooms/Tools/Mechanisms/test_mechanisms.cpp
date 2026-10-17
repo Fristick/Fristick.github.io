@@ -658,6 +658,40 @@ int main()
 			&& !CL::FocusClash(Wall(-58.f, LPost), Wall(58.f, Cage)));
 		Line("porte ou passage de la mission (boite sans collision) : ne prend pas la visee, n'a pas de couloir", !Gate.bAimable && !CL::FocusClash(Wall(0.f, Gate), Wall(0.f, Board))
 			&& CL::FocusClash(Wall(0.f, Board), Wall(0.f, Dial)));
+		// v4.15 (correctifs 3, relecture) : Poolrooms : vanne B fixee sur l'avant des bassins de la vanne A (ABRWorld::PlaceMission,
+		// module pose apres PickSlot : vanne A avancee de TankDepth, vanne B a WheelLateralB sur le cote, meme lacet). Son point
+		// vise est a 8 cm du volume des bassins (CutsFocusLane le compte), sa boite visee 20 cm devant eux (la visee la prend
+		// d'abord) : l'invariant du placement ne journalise rien (LaneCutLogged) ; il journalise toujours le Niveau 10
+		int PoolCounted = 0, PoolLogged = 0, PoolInside = 0;
+		float PoolFront = 1.0e6f;
+		for (const float Yaw : { 0.f, 90.f, 180.f, 270.f })
+		{
+			const float R = Yaw * 3.14159265f / 180.f;
+			const float FX = std::round(std::cos(R)), FY = std::round(std::sin(R));
+			CL::FPlaced TanksA;
+			TanksA.Frame.X = 500.f + FX * P::TankDepth;
+			TanksA.Frame.Y = -300.f + FY * P::TankDepth;
+			TanksA.Frame.Yaw = Yaw;
+			TanksA.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolTanks, 60.f);
+			CL::FPlaced WheelB;
+			WheelB.Frame = TanksA.Frame;
+			TanksA.Frame.ToWorld(0.f, P::WheelLateralB, WheelB.Frame.X, WheelB.Frame.Y);
+			WheelB.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolWheelB, 60.f);
+			const BRMech::FVec3 BAim = CL::AimPoint(WheelB);
+			PoolCounted += CL::CutsFocusLane(WheelB, TanksA) ? 1 : 0;
+			PoolLogged += (CL::LaneCutLogged(WheelB, BRMech::Module::PoolWheelB, TanksA, BRMech::Module::PoolTanks)
+				|| CL::LaneCutLogged(TanksA, BRMech::Module::PoolTanks, WheelB, BRMech::Module::PoolWheelB)) ? 1 : 0;
+			PoolInside += (CL::InSolid(TanksA, BAim.X, BAim.Y, BAim.Z, CL::Margin) || CL::Clash(TanksA, WheelB)) ? 1 : 0;
+			// Avant de la boite visee de la vanne B, dans le repere des bassins (meme lacet), devant leur face avant
+			float LX = 0.f, LY = 0.f;
+			TanksA.Frame.ToLocal(BAim.X, BAim.Y, LX, LY);
+			const float Front = LX + WheelB.Print.AimExtent.X - TanksA.Print.Solid.X1;
+			PoolFront = Front < PoolFront ? Front : PoolFront;
+		}
+		Line("Poolrooms, vanne B sur l'avant des bassins (4 lacets) : couloir compte " + std::to_string(PoolCounted) + "/4 par CutsFocusLane, journalise " +
+			std::to_string(PoolLogged) + " (attendu 0), boite visee " + F1(PoolFront) + " cm devant les bassins ; Niveau 10 toujours journalise",
+			PoolLogged == 0 && PoolInside == 0 && PoolFront > CL::FocusSweep + CL::Margin
+			&& CL::LaneCutLogged(OldDial, BRMech::Module::None, OldBoard, BRMech::Module::None) && CL::LaneCutLogged(OldBrake, BRMech::Module::None, OldBoard, BRMech::Module::None));
 	}
 
 	std::printf("\nRESULTAT : %s (%d verifications, %d echec(s))\n", GFailures == 0 ? "OK" : "ECHEC", GChecks, GFailures);

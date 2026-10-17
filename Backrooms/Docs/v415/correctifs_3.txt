@@ -21,8 +21,11 @@ test_departure    : RESULTAT : OK
 test_light        : RESULTAT : OK
 test_color        : RESULTAT : OK (24 verification(s))
 test_fluo         : RESULTAT : OK (20 verifications, 0 echec(s))
-test_mechanisms   : RESULTAT : OK (71 verifications, 0 echec(s)) (G : sonde du point d'interaction ; H : couloirs de visee)
-test_missions     : RESULTAT : OK
+test_mechanisms   : RESULTAT : OK (72 verifications, 0 echec(s)) (G : sonde du point d'interaction ; H : couloirs de visee ;
+                    relecture : "Poolrooms, vanne B sur l'avant des bassins (4 lacets) : couloir compte 4/4 par CutsFocusLane,
+                    journalise 0 (attendu 0), boite visee 20.0 cm devant les bassins ; Niveau 10 toujours journalise OK")
+test_missions     : RESULTAT : OK (relecture : "Reprise : avis "reamenages" selon les mecanismes deplaces : 8/8 cas conformes,
+                    meme decision que la regle d'avant : oui")
 test_transactions : RESULTAT : OK
 
 ## Python 3.14.8 (PYTHONUTF8=1)
@@ -52,6 +55,20 @@ python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTA
 # 4. Echelle (jeu) : UpdateClimb glisse sur un sol touche (tablier du Niveau 8 remonte jusqu'au palier) ; tests : partie
 #    active changee par ABRAutoTest::SwapTestSave (ni ecriture differee ni enregistrement automatique herites)
 
+## Corrections de relecture (meme branche ; compilations, bancs et verifications ci-dessus refaits apres elles : memes resultats)
+# R1. Invariant du placement (journal) : a chaque chargement des Poolrooms avec bassins, hote et client, "couloir de visee du
+#     mecanisme <vanne B> coupe par le mecanisme <vanne A>" : la vanne B est fixee sur l'avant des bassins par leur module,
+#     apres PickSlot (point vise a 8 cm du volume des bassins, sous FocusSweep + Margin). Sa boite visee depasse de 20 cm
+#     l'avant des bassins : la visee du client la prend (final/v412 : bassins construits, vanne B actionnee en marchant a
+#     1,8 m de la vanne A). BRMech::Clearance::
+#     LaneCutLogged ecarte cette seule paire ; PickSlot et le placement inchanges (aucune disposition ne change)
+# R2. Reprise du placement 2 au Niveau 2 (-BRAutoTestV412) : l'attendu etait tire du nombre que l'hote compare (l'etape
+#     passait toujours) : attendu fixe (graine 3169030047 : 0 mecanisme deplace, avis 0). Comparaison verifiee sur un cas
+#     deplace : -BRAutoTestV411, "v4.15 mission 10 : comparaison au placement 2" (mecanismes 2 et 3), et notee pour les autres
+#     niveaux ; decision de l'avis dans BRMission::ResumeMoved (testee hors moteur, meme decision qu'avant)
+# R3. Marche des tests : apres un nouveau chemin, le detour de la passerelle du Niveau 8 reste la cible et la mesure du
+#     chemin restant (avant : mesure du chemin de grille, faux progres a chaque nouveau chemin, blocage jamais conclu)
+
 ## Etapes en jeu (a lancer : Saved/TestRuns/run_autotests.ps1 sur la compilation de cet arbre)
 #   -BRAutoTest -BRAutoTestV411 -BRAutoTestStrict et la suite complete (-BRAutoTest -BRAutoTestStrict -BRSeed=4242) :
 #     aucune ligne "point d'interaction dans BRChunk_..." ; "Niveau 1 ... 16/16", "Niveau 2 ... 7/7", "Niveau 3 ... 10/10",
@@ -59,12 +76,18 @@ python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTA
 #     1697132605) : 4/4 mecanismes degages et atteignables" ; moulin et frein a cote du tableau, vers (-130, -5326, 140) et
 #     (-270, -5326, 140) ; "actions rejouees ... mission resolue oui" inchanges. Une ligne "REFUSEE par l'hote", "PAS VISE par
 #     le client" ou "aucune place debout" sur l'un des 14 mecanismes de la sonde serait un nouveau constat (ces controles
-#     n'avaient jamais tourne pour eux)
+#     n'avaient jamais tourne pour eux). Relecture : "Niveau 10 (graine du niveau 1697132605, attendue 1697132605) : 2
+#     mecanisme(s) a une autre place qu'au placement 2 : 2, 3 (attendu 2 ...)" ; pour les autres niveaux, la ligne "Niveau N
+#     (graine du niveau ...) : K mecanisme(s) a une autre place qu'au placement 2 : ..." donne l'attendu a fixer ; "Level 6 :
+#     placement non compare au placement 2 (-1, attendu -1 ...)" ; aucune ligne "couloir de visee du mecanisme ... coupe"
+#     aux Poolrooms (game.log, hote et client)
 #   -BRAutoTest -BRAutoTestV413 -BRAutoTestStrict et la suite complete : "Niveau 6 : sortie atteinte a pied" (graine du niveau
 #     2702236446 : entree par la porte V=2, environ 18 m, 0 saut), puis "traversee ... faite, ... scanner retire ... oui" ;
 #     tout blocage d'une marche dit ce qui est devant ("bloque : devant (...)", entite la plus proche, point de passage)
 #   -BRAutoTest -BRAutoTestV412 -BRAutoTestStrict et la suite complete : "Niveau  8 -> Niveau 9 : arrivee oui, demandes de
 #     depart au sommet de l'echelle : 1 (attendu 1)" ; Tick des mecanismes masques : "0 Tick(s) de mecanisme en 3 s" ;
-#     reprise du placement 2 au Niveau 2 : avis egal a l'attendu (3 si des mecanismes de cette graine ont change, 0 sinon) ;
+#     reprise du placement 2 au Niveau 2 : "session du placement 2 (v4.14) au Niveau 2 (graine 3169030047) : avis 0 (attendu
+#     0 ...), 0 mecanisme(s) a une autre place qu'au placement 2 (attendu 0) : aucun" (relecture : attendu fixe ; un autre
+#     nombre serait un nouveau constat : la liste dit lesquels) ;
 #     suite complete : "copie intacte de la sauvegarde avant reecriture oui"
 #   -BRAutoTest -BRAutoTestV415Fix -BRAutoTestStrict : inchangee (Niveaux 8 et 9, postes et cages du Level 6)

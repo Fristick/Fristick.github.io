@@ -100,6 +100,9 @@ namespace BRTestV412
 	/** v4.15 (correctifs 3) : ce que la visee du client a pris, pour les notes : un mecanisme de la mission par son indice et
 	 *  son nom (avant : le nom de l'acteur seul, BRMissionDevice_97), sinon le nom de l'acteur, ou "rien" */
 	FString FocusName(const ABRWorld* W, const AActor* A);
+	/** v4.15 (correctifs 3, relecture) : mecanismes que l'hote a trouves a une autre place qu'au placement 2
+	 *  (ABRWorld::GetMissionMovedDevices) : "2, 3", "aucun", "placement 2 impossible" ou "comparaison NON FAITE" */
+	FString MovedFrom2Text(const ABRWorld* W);
 
 	/** v4.15 : place debout devant un mecanisme de la mission */
 	enum class EStand : uint8 { Ok, NoFloor, Swim, Blocked, TooFar, NoSight };

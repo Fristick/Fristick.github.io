@@ -302,6 +302,39 @@ void ABRAutoTest::AddMissionSteps(int32 Level, uint32 UserSeed, bool bDepart)
 		return true;
 	});
 
+	// v4.15 (correctifs 3, relecture) : comparaison de l'hote au placement 2 (ABRWorld::SetupMission, MissionMovedFrom2 : elle
+	// decide l'avis "reamenages" d'une reprise du placement 2). Cas deplace connu : Niveau 10, graine 4111 (niveau 1697132605) :
+	// l'orientation et le frein du moulin (2 et 3), mis en rang a cote du tableau des granges (Docs/v415/correctifs_places.txt,
+	// cas E). Level 6 : jamais compare (placement 3 du Level 6). Ailleurs : nombre et liste notes (attendus a fixer d'apres eux)
+	Add(FString::Printf(TEXT("v4.15 mission %d : comparaison au placement 2"), Level), 0.f, [this, Level, UserSeed]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->GetLevelNumber() != Level || !W->IsMissionActive())
+		{
+			return true; // deja note par l'etape precedente
+		}
+		const int32 Moved = W->GetMissionMovedFrom2();
+		const FString Which = BRTestV412::MovedFrom2Text(W);
+		if (Level == 10 && UserSeed == 4111)
+		{
+			const TArray<int32>& List = W->GetMissionMovedDevices();
+			const bool bOk = W->GetSeed() == 1697132605u && Moved == 2 && List.Num() == 2 && List[0] == 2 && List[1] == 3;
+			Note(FString::Printf(TEXT("Niveau 10 (graine du niveau %u, attendue 1697132605) : %d mecanisme(s) a une autre place qu'au placement 2 : %s (attendu 2 : 2, 3, orientation et "
+				"frein du moulin mis en rang)"), W->GetSeed(), Moved, *Which), !bOk);
+		}
+		else if (Level == 6)
+		{
+			Note(FString::Printf(TEXT("Level 6 : placement non compare au placement 2 (%d, attendu -1 : placement 3 du Level 6)"), Moved), Moved != -1);
+		}
+		else
+		{
+			// Comparaison toujours faite chez l'hote hors du module de secours
+			Note(FString::Printf(TEXT("Niveau %d (graine du niveau %u) : %d mecanisme(s) a une autre place qu'au placement 2 : %s"), Level, W->GetSeed(), Moved, *Which),
+				Moved < 0 && W->GetMissionTier() < 2);
+		}
+		return true;
+	});
+
 	// v4.15 : places des mecanismes dans le decor construit, essai a blanc de l'hote (AddMissionPlaceSweep)
 	AddMissionPlaceSweep(Level, false);
 

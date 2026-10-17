@@ -902,6 +902,17 @@ bool PlacementMoved(int Level, int FromVersion)
 	return Level == 6;
 }
 
+bool ResumeMoved(int Level, int FromVersion, int MovedFrom2)
+{
+	// v4.15 (correctifs 3, relecture) : la decision de l'avis, testee hors moteur (test_mission_logic) ; la comparaison de
+	// l'hote est verifiee en jeu sur un cas deplace (-BRAutoTestV411 : Niveau 10, graine 4111)
+	if (FromVersion == PlaceVersion)
+	{
+		return false;
+	}
+	return PlacementMoved(Level, FromVersion) || (FromVersion == 2 && MovedFrom2 > 0);
+}
+
 void BuildFallbackPlan(int Level, uint32_t Seed, FPlan& Out)
 {
 	Out = FPlan();

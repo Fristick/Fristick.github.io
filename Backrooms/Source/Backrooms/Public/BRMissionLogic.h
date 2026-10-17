@@ -42,6 +42,11 @@ namespace BRMission
 	 *  visee, poteaux en rang) : l'hote compare le placement (ABRWorld::SetupMission, MissionMovedFrom2), cette fonction
 	 *  repond faux */
 	bool PlacementMoved(int Level, int FromVersion);
+	/** v4.15 (correctifs 3) : avis "reamenages" a la reprise d'une session du placement FromVersion (ABRWorld::SetupMission) :
+	 *  PlacementMoved, ou, depuis le placement 2, MovedFrom2 > 0 : mecanismes de cette graine a une autre place qu'au
+	 *  placement 2 (couloirs de visee, poteaux en rang), compares par l'hote (-1 : pas compare : client, module de secours,
+	 *  Level 6). Jamais depuis la version courante */
+	bool ResumeMoved(int Level, int FromVersion, int MovedFrom2);
 	constexpr int MaxDevices = 24;
 	constexpr int MaxSteps = 4;
 	constexpr int MaxParams = 24;

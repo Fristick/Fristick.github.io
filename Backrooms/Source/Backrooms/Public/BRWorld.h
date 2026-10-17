@@ -360,6 +360,8 @@ public:
 	uint8 GetMissionNotice() const { return MissionNotice; }
 	/** v4.15 (correctifs 3) : hote : mecanismes deplaces par rapport au placement 2 pour cette graine (-1 : pas compare) */
 	int32 GetMissionMovedFrom2() const { return MissionMovedFrom2; }
+	/** v4.15 (correctifs 3) : hote : indices de ces mecanismes, croissants (vide : aucun, pas compare, placement 2 impossible) */
+	const TArray<int32>& GetMissionMovedDevices() const { return MissionMovedDevices; }
 	/** v4.12 : l'hote doit copier la sauvegarde avant de la reecrire (mission non restauree) ; remis a faux */
 	bool ConsumeSaveBackupRequest()
 	{
@@ -1043,6 +1045,8 @@ private:
 	/** v4.15 (correctifs 3) : hote : mecanismes a une autre place qu'au placement 2 pour cette graine (couloirs de visee,
 	 *  poteaux en rang) ; -1 : pas compare (client, module de secours, Level 6) */
 	int32 MissionMovedFrom2 = -1;
+	/** v4.15 (correctifs 3) : leurs indices (tests du jeu : comparaison verifiee sur un cas deplace) */
+	TArray<int32> MissionMovedDevices;
 	/** v4.12 : la sauvegarde doit etre copiee avant sa prochaine ecriture (mission non restauree) */
 	bool bSaveBackupRequested = false;
 	void ShowMissionNotice(uint8 Notice);

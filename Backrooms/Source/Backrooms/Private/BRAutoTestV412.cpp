@@ -548,8 +548,16 @@ namespace BRTestV412
 						++Walk.Next;
 					}
 					Walk.BestNext = Walk.Next;
-					Walk.BestRemaining = RemainingRoute(Pos, Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal, false);
-					Target = Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal;
+					// v4.15 (correctifs 3, relecture) : le detour de la passerelle (Niveau 8) ne depend que de la position et du
+					// but : toujours actif apres le nouveau chemin, il reste la cible et la mesure du chemin restant (avant : mesure
+					// sur le chemin de grille, comparee ensuite a celle du detour : faux progres a chaque nouveau chemin, blocage
+					// jamais conclu avant le delai de la marche)
+					if (!bDetourNow)
+					{
+						Target = Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal;
+					}
+					Walk.BestRemaining = RemainingRoute(Pos, Target, bDetourNow);
+					Walk.CheckTarget = Target;
 				}
 			}
 		}
@@ -716,6 +724,26 @@ namespace BRTestV412
 			return FString::Printf(TEXT("mecanisme %d (%s, %s)"), MD->GetIndex(), *BRMissionText::DeviceName(W->GetMissionPlan(), MD->GetIndex()), *MD->GetName());
 		}
 		return A ? A->GetName() : FString(TEXT("rien"));
+	}
+
+	FString MovedFrom2Text(const ABRWorld* W)
+	{
+		const int32 Moved = W ? W->GetMissionMovedFrom2() : -1;
+		if (Moved < 0)
+		{
+			return FString(TEXT("comparaison NON FAITE"));
+		}
+		const TArray<int32>& Which = W->GetMissionMovedDevices();
+		if (Moved > 0 && Which.Num() == 0)
+		{
+			return FString(TEXT("placement 2 impossible"));
+		}
+		FString Out;
+		for (const int32 I : Which)
+		{
+			Out += FString::Printf(TEXT("%s%d"), Out.IsEmpty() ? TEXT("") : TEXT(", "), I);
+		}
+		return Out.IsEmpty() ? FString(TEXT("aucun")) : Out;
 	}
 
 	/** v4.15 : yeux du joueur au point d'interaction, et ce que la regle de l'hote en dit depuis la place actuelle */
@@ -2147,12 +2175,15 @@ void ABRAutoTest::AddV412Steps()
 			return true;
 		}
 		// v4.15 (correctifs 3) : hors du Level 6, l'avis depend de la graine : l'hote compare ce placement au placement 2
-		// (couloirs de visee, poteaux en rang) ; avis 3 seulement si des mecanismes ont change de place, 0 sinon
+		// (couloirs de visee, poteaux en rang) ; avis 3 seulement si des mecanismes ont change de place, 0 sinon. Relecture :
+		// attendu fixe pour cette graine (3169030047 : groupes du Niveau 2 sur une face, rien de deplace), plus tire du nombre
+		// que l'hote compare (l'etape passait quel que soit le resultat) ; la comparaison elle-meme est verifiee sur un cas
+		// deplace par -BRAutoTestV411 ("v4.15 mission 10 : comparaison au placement 2" : mecanismes 2 et 3)
+		constexpr int32 WantMoved = 0;
 		const uint8 Notice = W->GetMissionNotice();
 		const int32 Moved = W->GetMissionMovedFrom2();
-		const uint8 Want = Moved > 0 ? 3 : 0;
-		Note(FString::Printf(TEXT("session du placement 2 (v4.14) au Niveau 2 : avis %d (attendu %d : %d mecanisme(s) a une autre place qu'au placement 2%s)"), Notice, Want, Moved,
-			Moved < 0 ? TEXT(", comparaison NON FAITE") : TEXT("")), Notice != Want || Moved < 0 || !W->IsMissionActive());
+		Note(FString::Printf(TEXT("session du placement 2 (v4.14) au Niveau 2 (graine %u) : avis %d (attendu 0 : mecanismes a la meme place), %d mecanisme(s) a une autre place qu'au "
+			"placement 2 (attendu %d) : %s"), W->GetSeed(), Notice, Moved, WantMoved, *MovedFrom2Text(W)), Notice != 0 || Moved != WantMoved || !W->IsMissionActive());
 		return true;
 	});
 	// v4.15 : la session de test (partie active, emplacement, mode, histoire, prefixe des fichiers) est retablie quelle que
