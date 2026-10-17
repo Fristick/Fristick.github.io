@@ -190,6 +190,10 @@ namespace BRTestV412
 		/** Images a la nage et chemins de grille passant par un bassin, toutes marches de la mission comprises */
 		int32 SwimFrames = 0;
 		int32 PoolFallbacks = 0;
+		/** v4.15 (correctifs 4) : entites ecartees par le test, toutes marches de la mission comprises */
+		int32 EntityClears = 0;
+		/** v4.15 (correctifs 4) : serie du niveau charge au depart (la sortie de ce chargement-la juge la cascade) */
+		int32 LevelSerial = -1;
 		EWalkKind Kind = EWalkKind::Normal;
 		/** Mecanisme deja approche : sa place est choisie dans le decor construit */
 		int32 Approached = -1;
@@ -206,6 +210,9 @@ namespace BRTestV412
 	struct FWalkExit
 	{
 		int32 Level = -1;
+		/** v4.15 (correctifs 4) : la marche vers la sortie a conclu (atteinte, ou bloquee par le decor) ; faux : pas testee
+		 *  (mission non resolue plus haut, entite seule sur le passage) */
+		bool bTested = false;
 		bool bReached = false;
 		bool bArrived = false;
 		int32 SwimFrames = 0;
@@ -362,9 +369,19 @@ namespace BRTestV412
 		{
 			Extra += FString::Printf(TEXT(", %d image(s) a moins de 1,5 m d'une entite"), Walk.EntityFrames);
 		}
+		// v4.15 (correctifs 4) : entites ecartees par le test (le taux de rencontres reste visible)
+		if (Walk.EntityClears > 0)
+		{
+			Extra += FString::Printf(TEXT(", %d entite(s) ecartee(s) par le test (%s ; elles seules barraient le passage : intervention du test, pas une regle du jeu)"),
+				Walk.EntityClears, *Walk.EntityClearText);
+		}
 		if (!Walk.StuckWhy.IsEmpty())
 		{
 			Extra += TEXT(" ; bloque : ") + Walk.StuckWhy;
+		}
+		if (Walk.bEntityBlock)
+		{
+			Extra += TEXT(" ; passage barre par une entite seule : ") + Walk.BlockerText;
 		}
 		return FString::Printf(TEXT("%.1f m en %.0f s, %d saut(s), %d nouveau(x) chemin(s), %d image(s) a la nage, %d deplacement(s) direct(s)%s%s%s"),
 			Walk.Travelled / 100.f, FPlatformTime::Seconds() - Walk.Start, Walk.Jumps, Walk.Replans, Walk.SwimFrames, Walk.Teleports,
@@ -422,6 +439,111 @@ namespace BRTestV412
 		const FVector Way = Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal;
 		const FIntPoint Cell = W->WorldToCell(Way);
 		return FString::Printf(TEXT("%s ; %s ; point de passage %d/%d (cellule %d, %d)"), *Ahead, *Entity, Walk.Next + 1, Walk.Points.Num(), Cell.X, Cell.Y);
+	}
+
+	FBlock ClassifyBlock(const ABRWorld* W, const ABRCharacter* C, const FVector& Target, const FVector& After)
+	{
+		FBlock Out;
+		UWorld* World = W ? W->GetWorld() : nullptr;
+		const UCapsuleComponent* Cap = C ? C->GetCapsuleComponent() : nullptr;
+		if (!World || !Cap)
+		{
+			return Out;
+		}
+		// Chemin du marcheur sur 150 cm : vers Target, puis vers After (plan, a la hauteur du marcheur)
+		constexpr float Look = 150.f;
+		constexpr float Lift = 15.f;
+		const FVector Pos = C->GetActorLocation();
+		TArray<FVector, TInlineAllocator<3>> Legs;
+		Legs.Add(Pos);
+		float Left = Look;
+		for (const FVector& Way : { Target, After })
+		{
+			const FVector From = Legs.Last();
+			const FVector To(Way.X, Way.Y, Pos.Z);
+			const float D = static_cast<float>(FVector::Dist2D(From, To));
+			if (D < 1.f || Left < 1.f)
+			{
+				continue;
+			}
+			const float Step = FMath::Min(D, Left);
+			Legs.Add(From + (To - From).GetSafeNormal2D() * Step);
+			Left -= Step;
+		}
+		if (Legs.Num() < 2)
+		{
+			Legs.Add(Pos + C->GetActorForwardVector().GetSafeNormal2D() * Look);
+		}
+		// Capsule du marcheur, rayon moins 2 cm, raccourcie de 2 x 15 cm et relevee de 15 cm (haut inchange, bas 30 cm plus haut)
+		const FCollisionShape Shape = FCollisionShape::MakeCapsule(Cap->GetScaledCapsuleRadius() - BRMech::Clearance::Margin, Cap->GetScaledCapsuleHalfHeight() - Lift);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestBlock), false, C);
+		FCollisionResponseParams R;
+		Cap->InitSweepCollisionParams(Q, R);
+		const ECollisionChannel Channel = Cap->GetCollisionObjectType();
+		auto Sweep = [&](const FCollisionQueryParams& Params, FHitResult& OutHit)
+		{
+			for (int32 I = 0; I + 1 < Legs.Num(); ++I)
+			{
+				if (World->SweepSingleByChannel(OutHit, Legs[I] + FVector(0.f, 0.f, Lift), Legs[I + 1] + FVector(0.f, 0.f, Lift), FQuat::Identity, Channel, Shape, Params, R))
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+		FHitResult First;
+		if (!Sweep(Q, First))
+		{
+			return Out;
+		}
+		Out.bBlocked = true;
+		Out.First = First.GetActor();
+		// Le meme balayage sans aucune entite : libre seulement si les entites barraient seules le passage
+		FCollisionQueryParams NoEntities = Q;
+		for (TActorIterator<ABREntity> It(World); It; ++It)
+		{
+			NoEntities.AddIgnoredActor(*It);
+		}
+		FHitResult Behind;
+		if (Sweep(NoEntities, Behind))
+		{
+			Out.Static = Behind.GetActor();
+		}
+		const ABREntity* E = Cast<ABREntity>(Out.First);
+		Out.bEntity = E != nullptr && Out.Static == nullptr;
+		const FIntPoint Cell = W->WorldToCell(First.ImpactPoint);
+		Out.What = FString::Printf(TEXT("%s (%s, %s) a %.0f cm, cellule (%d, %d)%s"), E ? *E->MyInfo().Name.ToString() : *FocusName(W, Out.First), *GetNameSafe(Out.First),
+			*GetNameSafe(First.GetComponent()), First.Distance, Cell.X, Cell.Y, Out.Static ? *FString::Printf(TEXT(" ; sans les entites, toujours bloque par %s (%s)"),
+			*FocusName(W, Out.Static), *GetNameSafe(Behind.GetComponent())) : TEXT(""));
+		return Out;
+	}
+
+	/** v4.15 (correctifs 4) : point de la marche apres la cible actuelle (detour : le but) */
+	FVector WayAfter(const FVector& Target, bool bDetourNow)
+	{
+		if (!bDetourNow && Walk.Points.IsValidIndex(Walk.Next + 1))
+		{
+			return Walk.Points[Walk.Next + 1];
+		}
+		return bDetourNow ? Walk.Goal : Target;
+	}
+
+	/** v4.15 (correctifs 4) : une entite barre seule le passage (ClassifyBlock) : chez l'hote, au plus MaxEntityClears fois par
+	 *  marche, elle est ecartee par la dissipation du jeu (ABREntity::Dismiss : collision coupee, fondu). Ni attente (un Smiler
+	 *  a moins de 3 m ne bouge pas), ni poussee, ni deplacement direct. true : ecartee, la marche reprend */
+	bool ClearEntityBlock(const ABRWorld* W, const ABRCharacter* C, const FVector& Target, bool bDetourNow)
+	{
+		const FBlock B = ClassifyBlock(W, C, Target, WayAfter(Target, bDetourNow));
+		ABREntity* E = Cast<ABREntity>(B.First);
+		if (!B.bEntity || !E || !W->HasAuthority() || Walk.EntityClears >= MaxEntityClears)
+		{
+			return false;
+		}
+		E->Dismiss();
+		++Walk.EntityClears;
+		Walk.EntityClearText += (Walk.EntityClearText.IsEmpty() ? TEXT("") : TEXT(" ; ")) + B.What;
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] marche : entite ecartee par le test (elle seule barrait le passage) : %s"), *B.What);
+		return true;
 	}
 
 	/** v4.15 (correctifs 3) : un point de passage est atteint a 35 cm dans une salle de fosses (aile du Level 6 : la capsule ne
@@ -540,7 +662,17 @@ namespace BRTestV412
 					Walk.SideLeft = 0.6f;
 					Walk.SideSign = -Walk.SideSign;
 				}
-				if (Walk.StuckChecks == 4)
+				// v4.15 (correctifs 4) : a 4 et a 8 controles sans progres, une entite qui barre seule le passage est ecartee (hote) : la
+				// marche reprend d'ici, sans nouveau chemin (avant : nouveau chemin identique sur la grille, puis PROBLEME "NON ATTEINT
+				// a pied" devant un Smiler immobile, Niveau 2, graine du niveau 554144564, final2/full)
+				if ((Walk.StuckChecks == 4 || Walk.StuckChecks >= 8) && ClearEntityBlock(W, C, Target, bDetourNow))
+				{
+					Walk.StuckChecks = 0;
+					Walk.bWantJump = false;
+					Walk.SideLeft = 0.f;
+					Walk.BestRemaining = RemainingRoute(Pos, Target, bDetourNow);
+				}
+				else if (Walk.StuckChecks == 4)
 				{
 					Replan(W, C);
 					++Walk.Replans;
@@ -567,6 +699,15 @@ namespace BRTestV412
 		{
 			ReleaseJump(C);
 			Walk.StuckWhy = StuckReport(W, C, Target);
+			// v4.15 (correctifs 4) : chaque blocage est classe a nouveau (une entite ecartee plus tot n'excuse pas un mur) ; une
+			// entite seule (plafond des entites ecartees atteint, ou client) : rendu avec bEntityBlock
+			if (Walk.StuckChecks >= 4)
+			{
+				const FBlock B = ClassifyBlock(W, C, Target, WayAfter(Target, bDetourNow));
+				Walk.bEntityBlock = B.bEntity;
+				Walk.BlockerText = B.bEntity ? FString::Printf(TEXT("%s (%s)"), *B.What, W->HasAuthority() ? *FString::Printf(TEXT("deja %d entite(s) ecartee(s) dans cette marche"),
+					Walk.EntityClears) : TEXT("client : seul l'hote peut l'ecarter")) : FString();
+			}
 			return EWalk::Stuck;
 		}
 		// Regard vers le point suivant (a la nage : vers sa hauteur), puis les entrees du joueur
@@ -830,6 +971,7 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 		WalkMission = FWalkMission();
 		WalkMission.Level = Level;
 		WalkMission.LevelSeed = W->GetSeed();
+		WalkMission.LevelSerial = W->GetLevelSerial();
 		// v4.15 : en cascade (sortie du niveau precedent pas prise, mort), le niveau attendu n'est pas la : rien n'est teste (avant :
 		// la mission du niveau courant etait rejouee sous le nom de celui-ci)
 		if (W->GetLevelNumber() != Level)
@@ -944,8 +1086,8 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			{
 				WalkMission.bComplete = true;
 				Note(FString::Printf(TEXT("Niveau %d : %d actions faites en marchant (%d m, %.0f s ; %d marche(s) dont %d approche(s) et %d reprise(s), %d image(s) a la nage, "
-					"%d chemin(s) par un bassin ; graine du niveau %u)"), Level, TestMission.Num() / 3, TestCountA, Now - TestTimer, WalkMission.Walks, WalkMission.Approaches,
-					WalkMission.Retries, WalkMission.SwimFrames, WalkMission.PoolFallbacks, WalkMission.LevelSeed));
+					"%d chemin(s) par un bassin, %d entite(s) ecartee(s) par le test ; graine du niveau %u)"), Level, TestMission.Num() / 3, TestCountA, Now - TestTimer,
+					WalkMission.Walks, WalkMission.Approaches, WalkMission.Retries, WalkMission.SwimFrames, WalkMission.PoolFallbacks, WalkMission.EntityClears, WalkMission.LevelSeed));
 				return true;
 			}
 			const int32 D = TestMission[TestMissionStep * 3];
@@ -1018,6 +1160,17 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			++WalkMission.Walks;
 			WalkMission.SwimFrames += Walk.SwimFrames;
 			WalkMission.PoolFallbacks += Walk.bPoolFallback ? 1 : 0;
+			WalkMission.EntityClears += Walk.EntityClears;
+			if (R == EWalk::Stuck && Walk.bEntityBlock)
+			{
+				// v4.15 (correctifs 4) : une entite seule barre le passage (plafond des entites ecartees, ou client) : rien n'est appris
+				// du decor ni du placement (avant : PROBLEME "NON ATTEINT a pied" devant un Smiler immobile, Niveau 2, final2/full)
+				Skip(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) NON VERIFIE a pied%s : une entite seule barre le passage a la cellule (%d, %d), %s (graine du niveau %u)"),
+					Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), *Walk.Tag, W->WorldToCell(C->GetActorLocation()).X,
+					W->WorldToCell(C->GetActorLocation()).Y, *WalkStats(), WalkMission.LevelSeed));
+				Shot(FString::Printf(TEXT("v412_acces_%d_entite"), Level));
+				return true;
+			}
 			if (R == EWalk::Stuck)
 			{
 				Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) NON ATTEINT a pied%s : bloque a la cellule (%d, %d), %s (graine du niveau %u)"), Level, TestMissionDevice,
@@ -1208,6 +1361,14 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			const bool bSolved = E.bSolved || (Level == 0 && !W->IsMissionActive());
 			TestLevel = OpenForwardTarget(W, Level);
 			ABRExit* Exit = TestLevel >= 0 ? FindExit(GetWorld(), TestLevel) : nullptr;
+			// v4.15 (correctifs 4) : mission de ce chargement-la pas faite a pied plus haut (echec deja note, ou NON VERIFIE) : la
+			// sortie n'est pas testee, sans second PROBLEME en cascade. Mission faite mais pas resolue, ou sortie absente : PROBLEME
+			if (!bSolved && WalkMission.Level == Level && WalkMission.LevelSerial == W->GetLevelSerial() && !WalkMission.bComplete)
+			{
+				Skip(FString::Printf(TEXT("Niveau %d : mission non resolue a pied plus haut (%d/%d actions) : sortie non testee (graine du niveau %u)"), Level, WalkMission.Actions,
+					WalkMission.Planned, W->GetSeed()));
+				return true;
+			}
 			if (!bSolved || !Exit)
 			{
 				Note(FString::Printf(TEXT("Niveau %d : mission resolue %s, sortie ouverte trouvee %s : sortie non testee (graine du niveau %u)"), Level, YesNo(bSolved),
@@ -1249,12 +1410,21 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			LastExit.LocalSwimFrames = Walk.LocalSwimFrames;
 			LastExit.LocalMaxDepth = Walk.LocalMaxDepth;
 			LastExit.bReached = R == EWalk::Arrived;
+			LastExit.bTested = !(R == EWalk::Stuck && Walk.bEntityBlock);
 			const FString Stats = WalkStats();
 			FString Water;
 			if (Walk.LocalFrames > 0)
 			{
 				Water = FString::Printf(TEXT(" ; volume d'eau local traverse : %d image(s), %d a la nage, profondeur maximale %.0f cm"), Walk.LocalFrames,
 					Walk.LocalSwimFrames, Walk.LocalMaxDepth);
+			}
+			if (R == EWalk::Stuck && Walk.bEntityBlock)
+			{
+				// v4.15 (correctifs 4) : une entite seule barre le passage : NON VERIFIE (le decor n'est pas en cause)
+				Skip(FString::Printf(TEXT("Niveau %d : sortie vers %d NON VERIFIEE a pied (cellule %d, %d) : une entite seule barre le passage : %s%s"), Level, TestLevel,
+					W->WorldToCell(C->GetActorLocation()).X, W->WorldToCell(C->GetActorLocation()).Y, *Stats, *Water));
+				Shot(FString::Printf(TEXT("v412_acces_%d_sortie_entite"), Level));
+				return true;
 			}
 			if (R == EWalk::Stuck)
 			{
@@ -1425,7 +1595,7 @@ void ABRAutoTest::AddV415PoolroomsSteps()
 	AddWalkExitSteps(37);
 	Add(TEXT("v4.15 Poolrooms : sortie par le sas sans nager"), 0.f, [this]()
 	{
-		if (LastExit.Level != 37 || WalkMission.bNotReached)
+		if (LastExit.Level != 37 || WalkMission.bNotReached || !LastExit.bTested)
 		{
 			Skip(FString::Printf(TEXT("Poolrooms (graine %u) : sortie non testee"), ValveSeed));
 			return true;
@@ -3029,6 +3199,12 @@ void ABRAutoTest::AddNetV412Steps(bool bClient)
 			// Arrive mais le groupe n'est pas parti : l'hote ne l'a pas compte (voir ses notes "hote : client ...")
 			Note(FString::Printf(TEXT("client : arrive au point de rassemblement a pied en %.1f s (en (%.0f, %.0f, %.0f), a %.1f m du point) mais non compte par l'hote (%s ; %s)"),
 				ArrivedAt, ArrivedPos.X, ArrivedPos.Y, ArrivedPos.Z, FVector::Dist2D(ArrivedPos, Dep.Location) / 100.f, *DepInfo, *WalkStats()), true);
+		}
+		else if (R == EWalk::Stuck && Walk.bEntityBlock)
+		{
+			// v4.15 (correctifs 4) : une entite seule barre le passage du client (seul l'hote peut l'ecarter) : NON VERIFIE
+			Skip(FString::Printf(TEXT("client : point de rassemblement NON VERIFIE a pied, une entite seule barre le passage (%s ; %s ; en (%.0f, %.0f, %.0f))"), *WalkStats(),
+				*DepInfo, C->GetActorLocation().X, C->GetActorLocation().Y, C->GetActorLocation().Z));
 		}
 		else
 		{

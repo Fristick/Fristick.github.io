@@ -225,6 +225,15 @@ void ABRAutoTest::AddServiceDoorWalkSteps(const FString& Tag, bool bUse)
 			return false;
 		}
 		const FString Stats = BRTestV412::WalkStats();
+		if (R == BRTestV412::EWalk::Stuck && BRTestV412::Walk.bEntityBlock)
+		{
+			// v4.15 (correctifs 4) : une entite seule barre le passage : NON VERIFIE (le decor n'est pas en cause)
+			const FIntPoint Cell = W->WorldToCell(C->GetActorLocation());
+			Skip(FString::Printf(TEXT("%s : porte NON VERIFIEE a pied (cellule %d, %d) : une entite seule barre le passage : %s"), *Tag, Cell.X, Cell.Y, *Stats));
+			Shot(FString::Printf(TEXT("v413_%s_entite"), *Tag.Replace(TEXT(" "), TEXT("_"))));
+			TestLevel = -1;
+			return true;
+		}
 		if (R == BRTestV412::EWalk::Stuck)
 		{
 			const FIntPoint Cell = W->WorldToCell(C->GetActorLocation());
@@ -857,6 +866,12 @@ void ABRAutoTest::AddNetV413Steps(bool bClient)
 			return false; // une fois rassemble, l'hote lance le depart
 		}
 		TestMissionPhase = 0;
+		if (R == BRTestV412::EWalk::Stuck && BRTestV412::Walk.bEntityBlock)
+		{
+			// v4.15 (correctifs 4) : une entite seule barre le passage du client (seul l'hote peut l'ecarter) : NON VERIFIE
+			Skip(FString::Printf(TEXT("client : point de rassemblement de la porte NON VERIFIE a pied, une entite seule barre le passage (%s)"), *BRTestV412::WalkStats()));
+			return true;
+		}
 		Note(FString::Printf(TEXT("client : point de rassemblement de la porte non atteint a pied (%s)"), *BRTestV412::WalkStats()), true);
 		return true;
 	});

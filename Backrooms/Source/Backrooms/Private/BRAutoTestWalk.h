@@ -64,10 +64,36 @@ namespace BRTestV412
 		 *  l'entite la plus proche, le point de passage), ajoutee a WalkStats */
 		int32 EntityFrames = 0;
 		FString StuckWhy;
+		/** v4.15 (correctifs 4) : entites ecartees par le test pendant cette marche (ClassifyBlock : elles seules barraient le
+		 *  passage ; ABREntity::Dismiss, chez l'hote seulement, au plus MaxEntityClears) et leur description pour WalkStats */
+		int32 EntityClears = 0;
+		FString EntityClearText;
+		/** v4.15 (correctifs 4) : blocage final (EWalk::Stuck) cause par une entite seule : la marche n'a rien appris du decor
+		 *  (NON VERIFIE chez l'appelant, jamais PROBLEME) ; BlockerText : l'entite, son espece, la cellule et pourquoi elle reste */
+		bool bEntityBlock = false;
+		FString BlockerText;
 	};
 	extern FWalk Walk;
 
 	enum class EWalk : uint8 { Moving, Arrived, Stuck };
+
+	/** v4.15 (correctifs 4) : entites ecartees au plus par marche */
+	constexpr int32 MaxEntityClears = 3;
+	/** v4.15 (correctifs 4) : ce qui barre le passage du marcheur vers Target puis After : capsule du marcheur (raccourcie de
+	 *  30 cm par le bas : une marche franchie sans sauter ne compte pas, rayon moins 2 cm : le mur qu'il longe non plus)
+	 *  balayee sur 150 cm de son chemin, telle quelle puis en ignorant toutes les entites. Une entite barre le passage
+	 *  (bEntity) seulement si la premiere chose touchee est une entite ET si le meme balayage sans entite est libre : un mur,
+	 *  une porte fermee ou une cage reste un blocage du decor, meme avec une creature collee au marcheur */
+	struct FBlock
+	{
+		bool bBlocked = false;
+		bool bEntity = false;
+		AActor* First = nullptr;
+		/** Ce qui bloque encore sans les entites (decor) */
+		AActor* Static = nullptr;
+		FString What;
+	};
+	FBlock ClassifyBlock(const ABRWorld* W, const ABRCharacter* C, const FVector& Target, const FVector& After);
 
 	/** Nouveau chemin de grille de la place du personnage au but. v4.15 : sans entrer dans un bassin profond (FindPoolFreePath),
 	 *  sinon le chemin du monde (ABRWorld::FindPath, celui des entites) */
@@ -76,12 +102,17 @@ namespace BRTestV412
 	bool BeginWalk(const ABRWorld* W, const ABRCharacter* C, const FVector& Goal, float Radius, bool bDetour, bool bCheckZ = false, float GoalFeetZ = 0.f);
 	void ReleaseJump(ABRCharacter* C);
 	/** Distance, duree, sauts, nouveaux chemins, nage, deplacements directs ; v4.15 (correctifs 3) : images pres d'une entite et
-	 *  cause d'un blocage */
+	 *  cause d'un blocage ; v4.15 (correctifs 4) : entites ecartees par le test */
 	FString WalkStats();
 	/** Une image de marche. bBusy : frayeur, entree bloquee, chargement (le temps ne compte pas pour le blocage).
 	 *  v4.15 : la sante mentale du marcheur reste a 100 (la folie ignore le mode invincible : regle du jeu inchangee).
 	 *  v4.15 (correctifs 3) : progression sur le chemin restant (pas sur le deplacement) : nouveau chemin a 4 controles sans
-	 *  progres, blocage a 8 (environ 10 s, cause dans Walk.StuckWhy) ; points de passage a 35 cm dans une salle de fosses */
+	 *  progres, blocage a 8 (environ 10 s, cause dans Walk.StuckWhy) ; points de passage a 35 cm dans une salle de fosses.
+	 *  v4.15 (correctifs 4) : a 4 et a 8 controles sans progres, une entite qui barre seule le passage (ClassifyBlock) est
+	 *  ecartee chez l'hote (ABREntity::Dismiss : la dissipation du jeu, collision coupee) et la marche reprend ; un Smiler a
+	 *  moins de 3 m ne bouge jamais et un chasseur suit le marcheur invincible : attendre ne sert a rien. Au-dela de
+	 *  MaxEntityClears, ou chez un client (l'entite de l'hote bloque toujours sa simulation), le blocage est rendu avec
+	 *  Walk.bEntityBlock */
 	EWalk StepWalk(const ABRWorld* W, ABRCharacter* C, float Dt, double Timeout, bool bBusy);
 
 	/** v4.15 : A* de la grille des tests, le meme qu'ABRWorld::FindPath (couts, heuristique, ordre des voisins) sans entrer dans
