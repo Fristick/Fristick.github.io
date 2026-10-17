@@ -581,6 +581,9 @@ private:
 	float ServerLastHitTime = -100.f;
 	/** v4.8, serveur : un coequipier vivant existait-il a la mort (le delai de reanimation s'applique alors) ? */
 	bool bServerTeammateAtDeath = false;
+	/** v4.16, serveur : a terre, premier instant (temps du monde) ou aucun coequipier n'etait debout (-1 : jamais depuis la
+	 *  mort). Le joueur ramene alors son delai a 6 s : l'hote en tient compte (MinRespawnDelay, BRTxn::ServerMinWake) */
+	float ServerAloneSince = -1.f;
 
 	// ---- v4.8 : sante decidee par le serveur ----
 	/** v4.12 : revision de la sante officielle (serveur), commune aux coups, soins, morts, releves et reveils (avant :

@@ -404,4 +404,9 @@ private:
 	/** v4.15 (realisme) : banc visuel -BRAutoTestVisual (BRAutoTestVisual.cpp) : poses fixes par niveau et par profil,
 	 *  captures vis_<niveau>_<profil>_<pose> et mesures (Mesures.csv), coupure et lampe au Level 0 */
 	void AddVisualSteps();
+
+	/** v4.16 (cooperation) : -BRNetTest -BRAutoTestV416Net : 2 a 4 joueurs, client tardif (porte du Level 0, Level 6),
+	 *  reconnexion pendant un chargement, morts et reveils, mecanismes loin de l'hote, interactions simultanees, focus,
+	 *  pause, inventaire et touches pendant une action maintenue (BRAutoTestV416Net.cpp ; lanceur Tools/Tests/run_nettest.ps1) */
+	void AddNetV416Plan();
 };

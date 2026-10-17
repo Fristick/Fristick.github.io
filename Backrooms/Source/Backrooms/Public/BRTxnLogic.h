@@ -269,4 +269,29 @@ namespace BRTxn
 		/** Attributions sans accuse dans ce niveau ; retour : nombre ecrit dans Out */
 		int Unacked(int32_t LevelSerial, FLedgerEntry* Out, int Max) const;
 	};
+
+	// --------------------------------------------------------------------------------------- v4.16 : reveil en cooperation
+	// v4.16 : le joueur a terre choisit son delai (ABRWorld::HandlePlayerDeath, puis chaque image dans ABRWorld::Tick) et
+	// l'hote refuse un reveil signale plus tot que sa regle (ABRCharacter::MinRespawnDelay). Les deux jugent maintenant avec
+	// la meme information ; en v4.15, deux cas faisaient refuser le reveil (le joueur retombait a terre au point de depart,
+	// l'equipement de depart deja repris, puis recommencait toutes les 6 s jusqu'a la fin de la fenetre) :
+	//   - un coequipier vivant hors de portee de replication (plus de 150 m) n'existait pas chez le client : 6 s chez lui,
+	//     la fenetre entiere chez l'hote ;
+	//   - le dernier coequipier vivant tombait apres : le client ramenait son delai a 6 s, l'hote exigeait toujours la
+	//     fenetre entiere (regle fixee a la mort).
+	/** Delai a terre quand plus personne ne peut relever */
+	constexpr float DownedAloneSeconds = 6.f;
+	/** Marge de l'hote (latence, ecart des horloges) */
+	constexpr float WakeServerMargin = 1.5f;
+	/** Un coequipier peut venir relever : le personnage vivant d'un autre joueur, ou (client seulement) un joueur de la
+	 *  partie dont le personnage n'est pas replique ici (hors de portee de replication : suppose vivant, l'hote le voit) */
+	bool MateKnownAlive(int VisibleAliveMates, int UnseenMates, bool bAuthority);
+	/** Delai a terre choisi a la mort (fenetre de la cause si quelqu'un peut relever, sinon 6 s) */
+	float DownedDelay(bool bMateAlive, bool bRevivable, float Window);
+	/** Delai restant, a chaque image : ramene a 6 s des que plus aucun coequipier n'est connu vivant (jamais rallonge) */
+	float ClampDowned(float Remaining, bool bMateAlive);
+	/** Minimum de l'hote entre la mort et un reveil signale. AloneAfter : secondes entre la mort et le premier instant ou
+	 *  l'hote n'a vu aucun coequipier vivant (< 0 : jamais) ; le joueur ramene son delai a 6 s a cet instant, plus tard
+	 *  que l'hote (il l'apprend par la replication) */
+	float ServerMinWake(bool bRevivable, bool bMateAtDeath, float AloneAfter, float Window);
 }

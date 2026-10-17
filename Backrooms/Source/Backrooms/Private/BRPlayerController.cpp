@@ -50,6 +50,7 @@
 #include "BRAssets.h"
 #include "BRDisplay.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerInput.h"
 #include "GameFramework/PlayerState.h"
 #include "SocketSubsystem.h"
 #include "Styling/CoreStyle.h"
@@ -542,6 +543,10 @@ void ABRPlayerController::StopHeldActions()
 	{
 		C->LidarFocus(false);
 		C->SetSprinting(false);
+		// v4.16 : Interagir maintenu aussi (manivelle, treuil, poste, observation, relever un coequipier). La pause ne purge
+		// pas les touches (en ligne le monde continue) : la manivelle tournait et la reanimation avancait sous le menu pause,
+		// et reprenaient a sa fermeture sans nouvel appui
+		C->SetInteractHeld(false);
 	}
 }
 
@@ -703,6 +708,19 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(MenuUpAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuUp);
 	EIC->BindAction(MenuDownAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuDown);
 	EIC->BindAction(MenuDeleteAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuDelete);
+}
+
+bool ABRPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+	// v4.16 : repetition du clavier (ou d'un bouton de manette) pour une touche purgee : la touche est encore tenue depuis avant
+	// la purge (Alt+Tab, inventaire, dialogue, touches changees). Unreal en faisait un nouvel appui ; elle reste ignoree jusqu'a
+	// son relachement (une vraie touche tenue pendant le jeu est enfoncee pour l'entree du joueur : ses repetitions passent)
+	if (Params.Event == IE_Repeat && !Params.Key.IsAnalog() && PlayerInput && !PlayerInput->IsPressed(Params.Key))
+	{
+		++IgnoredStaleRepeats;
+		return true;
+	}
+	return Super::InputKey(Params);
 }
 
 void ABRPlayerController::PlayerTick(float DeltaTime)

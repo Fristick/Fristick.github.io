@@ -1261,6 +1261,20 @@ void ABRCharacter::ApplyHitFeedback(float Damage, float SanityDamage, AActor* So
 
 void ABRCharacter::TickServerVitals(float Dt)
 {
+	// v4.16 : a terre, l'hote note le premier instant ou plus aucun coequipier n'est debout (meme regle que le joueur, qui
+	// ramene alors son delai a 6 s ; voir MinRespawnDelay)
+	if (DeathState.bDead && ServerAloneSince < 0.f && GetWorld())
+	{
+		bool bMateUp = false;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It && !bMateUp; ++It)
+		{
+			bMateUp = *It != this && IsValid(*It) && !It->IsActorBeingDestroyed() && !It->DeathState.bDead;
+		}
+		if (!bMateUp)
+		{
+			ServerAloneSince = GetWorld()->GetTimeSeconds();
+		}
+	}
 	if (!bServerDying)
 	{
 		return;
@@ -2005,6 +2019,8 @@ void ABRCharacter::ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint
 	{
 		ServerDeathTime = GetWorld()->GetTimeSeconds();
 	}
+	// v4.16 : nouvelle mort : seul des maintenant si personne n'etait debout ; releve, reveille : plus a terre
+	ServerAloneSince = (bInDead && !bServerTeammateAtDeath && GetWorld()) ? static_cast<float>(GetWorld()->GetTimeSeconds()) : -1.f;
 	UE_LOG(LogBackrooms, Log, TEXT("Etat de mort (serveur) : %s %s, cause %d, evenement %d"), *GetName(), bInDead ? TEXT("mort") : TEXT("vivant"),
 		static_cast<int32>(Cause), static_cast<int32>(Event));
 	OnRep_DeathState(); // l'hote applique aussi (pions de ses invites, et le sien)
@@ -2058,10 +2074,12 @@ void ABRCharacter::ServerReportDeath_Implementation(uint8 InCause)
 float ABRCharacter::MinRespawnDelay() const
 {
 	// Meme regle que ABRWorld::HandlePlayerDeath cote client (delai de reanimation si un coequipier vivant pouvait venir,
-	// sinon 6 s), moins une marge pour la latence et l'ecart des horloges
+	// sinon 6 s), moins une marge pour la latence et l'ecart des horloges. v4.16 : et le meme raccourci a 6 s quand plus
+	// aucun coequipier n'est debout (ABRWorld::Tick) ; avant, l'hote gardait la fenetre fixee a la mort et refusait le
+	// reveil : le joueur retombait a terre au point de depart, puis recommencait toutes les 6 s (BRTxn::ServerMinWake)
 	const EBRDeathCause Cause = static_cast<EBRDeathCause>(DeathState.Cause);
-	const float Rule = (DeathState.bRevivable && bServerTeammateAtDeath) ? BRDeath::ReviveWindow(Cause) : 6.f;
-	return FMath::Max(1.5f, Rule - 1.5f);
+	const float AloneAfter = ServerAloneSince >= 0.f ? FMath::Max(0.f, ServerAloneSince - ServerDeathTime) : -1.f;
+	return BRTxn::ServerMinWake(DeathState.bRevivable, bServerTeammateAtDeath, AloneAfter, BRDeath::ReviveWindow(Cause));
 }
 
 bool ABRCharacter::ServerCanStillRevive() const
