@@ -869,7 +869,34 @@ namespace BRMech
 			return static_cast<float>(Hash(A, B, C, Seed) & 0xFFFFFFu) / 16777216.f;
 		}
 
-		bool PickWallFace(int32_t ChunkX, int32_t ChunkY, int ExitIndex, uint32_t Seed, int ChunkCells, bool bBounded, const FFaceQuery& Q, FWallFace& Out)
+		bool StandFlat(const FWallFace& Face, float CellSize, float WallThickness, const FFaceQuery& Q)
+		{
+			// Axes entiers de la face (pas de trigonometrie : memes points chez l'hote et les clients) : X vers la cellule, Y lateral
+			const FFrame F = WallFaceFrame(Face, CellSize, WallThickness, 0.f);
+			const float FX = static_cast<float>(-DirX[Face.Dir & 3]);
+			const float FY = static_cast<float>(-DirY[Face.Dir & 3]);
+			const float SX = -FY;
+			const float SY = FX;
+			const float Foot = Q.FloorAt(F.X + FX * FootProbe, F.Y + FY * FootProbe);
+			constexpr float R = Clearance::PlayerRadius + Clearance::Margin;
+			const float Depths[4] = { ClimbAnchor - R, ClimbAnchor, ClimbAnchor + R, StandAhead };
+			const float Lats[3] = { -R, 0.f, R };
+			for (const float D : Depths)
+			{
+				for (const float L : Lats)
+				{
+					const float Z = Q.FloorAt(F.X + FX * D + SX * L, F.Y + FY * D + SY * L);
+					if (Z - Foot > StandFlatTol || Foot - Z > StandFlatTol)
+					{
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+
+		bool PickWallFace(int32_t ChunkX, int32_t ChunkY, int ExitIndex, uint32_t Seed, int ChunkCells, bool bBounded, float CellSize, float WallThickness, const FFaceQuery& Q,
+			FWallFace& Out)
 		{
 			// Meme ordre que la branche murale d'ABRChunk::PlanExits (v4.6 : niveau fini, nombre de sorties garanti : apres les 24
 			// essais tires, toutes les cellules et directions du chunk dans un ordre tire)
@@ -904,10 +931,17 @@ namespace BRMech
 				{
 					continue;
 				}
-				Out.CellX = CX;
-				Out.CellY = CY;
-				Out.Dir = Dir;
-				Out.bSolid = bSolid;
+				FWallFace Face;
+				Face.CellX = CX;
+				Face.CellY = CY;
+				Face.Dir = Dir;
+				Face.bSolid = bSolid;
+				// v4.15 (correctifs 5) : le grimpeur tient a plat sur le sol du pied (sinon l'essai suivant)
+				if (!StandFlat(Face, CellSize, WallThickness, Q))
+				{
+					continue;
+				}
+				Out = Face;
 				return true;
 			}
 			return false;

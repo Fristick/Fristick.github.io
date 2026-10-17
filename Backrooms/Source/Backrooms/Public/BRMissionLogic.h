@@ -35,7 +35,9 @@ namespace BRMission
 	 *  (BRMech::Clearance::CutsFocusLane dans PickSlot) et les poteaux d'une cellule en rang : quelques graines changent
 	 *  ailleurs qu'au Level 6 (groupes sur poteaux des Niveaux 9 a 11, mecanismes en coin) ; l'hote compare chaque placement
 	 *  au placement 2 (ABRWorld::PlaceMission, bPlacement2) et previent une reprise du placement 2 seulement si cette graine
-	 *  a change. NetVersion 415 inchange : meme placement pour l'hote et le client d'une meme version */
+	 *  a change. NetVersion 415 inchange : meme placement pour l'hote et le client d'une meme version. v4.15 (correctifs 5) :
+	 *  toujours 3 : les echelles des chunks du Niveau 37 tirees ailleurs (BRMech::Grid::StandFlat) ne touchent ni le plan,
+	 *  ni le placement des mecanismes, ni la sauvegarde ; NetVersion 415 (pas encore distribuee) */
 	constexpr int PlaceVersion = 3;
 	/** v4.15 : les mecanismes de ce niveau ont pu bouger depuis la version de placement FromVersion (avis "reamenages" a la
 	 *  reprise) : de 2 a 3, tout le Level 6 change ; ailleurs, v4.15 (correctifs 3), cela depend de la graine (couloirs de

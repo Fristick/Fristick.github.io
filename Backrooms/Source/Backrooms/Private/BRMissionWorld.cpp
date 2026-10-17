@@ -1750,6 +1750,13 @@ namespace
 			}
 			return W->EdgeN(Next.X, Next.Y) == EBREdge::Wall;
 		}
+
+		/** v4.15 (correctifs 5) : trottoirs et marches du Niveau 37 (ABRWorld::DeckZAt : la grille seule, ni volumes d'eau locaux
+		 *  ni fosses : le meme sol chez l'hote et les clients) ; 0 sur les autres niveaux */
+		virtual float FloorAt(float X, float Y) const override
+		{
+			return W->DeckZAt(FVector(X, Y, 0.f));
+		}
 	};
 }
 
@@ -1793,7 +1800,8 @@ bool ABRWorld::PickChunkWallFace(const FIntPoint& Chunk, int32 ExitIndex, const 
 	Q.W = this;
 	Q.Hiding = Hiding;
 	const FBRLevelDef& D = Def();
-	return BRMech::Grid::PickWallFace(Chunk.X, Chunk.Y, ExitIndex, GetSeed(), D.ChunkCells, D.BoundsChunks > 0, Q, Out);
+	// v4.15 (correctifs 5) : cellule et mur fin du niveau pour la place du grimpeur (BRMech::Grid::StandFlat)
+	return BRMech::Grid::PickWallFace(Chunk.X, Chunk.Y, ExitIndex, GetSeed(), D.ChunkCells, D.BoundsChunks > 0, D.CellSize, D.WallThickness, Q, Out);
 }
 
 bool ABRWorld::IsChunkExitKeepOut(const BRMech::Clearance::FRect& Rock) const

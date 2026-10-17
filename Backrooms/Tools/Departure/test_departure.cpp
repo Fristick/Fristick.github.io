@@ -15,6 +15,12 @@
 // l'echelle BRExit_42 de la graine 233637237 (journal final2/v413) est rejouee : le rocher de sa paroi enterre son point vise,
 // son accroche et la colonne du grimpeur (regle d'avant), la regle du jeu (BRMech::Cave::InExitKeepOut, ABRWorld::IsChunkExitKeepOut)
 // ne pose pas ce rocher ; sur 200 graines, aucun rocher garde ne touche le point vise, la colonne ni l'approche.
+// v4.15 (correctifs 5) : echelles du Niveau 37 tirees par les chunks (partie classique) : avec le tirage du jeu (BRMech::Grid::
+// PickWallFace et StandFlat, BRMechLogic.cpp) et un miroir de la grille et des trottoirs (ABRWorld::EdgeE, EdgeN, IsPoolCell,
+// HasDeck, DeckZAt ; ABRChunk::BuildDecks), les trois echelles signalees par le controle du developpeur (final3, net_final3)
+// sont rejouees : pied au fond du canal, la marche immergee d'un trottoir lateral entre de 1,19 cm dans la capsule du
+// controle (regle d'avant) ; la regle du jeu refuse ces faces et pose l'echelle ailleurs, capsule libre ; sur 2000 graines,
+// plus aucune capsule prise et aucune echelle libre deplacee ; sans trottoirs, aucun tirage ne change.
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Departure/test_departure.cpp
 //       Source/Backrooms/Private/BRGatherLogic.cpp Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp
@@ -419,7 +425,7 @@ namespace
 		}
 		FCaveQuery Q;
 		Q.Seed = Seed;
-		if (!BRMech::Grid::PickWallFace(CX, CY, 0, Seed, CaveChunk, false, Q, OutFace))
+		if (!BRMech::Grid::PickWallFace(CX, CY, 0, Seed, CaveChunk, false, CaveCell, CaveWall, Q, OutFace))
 		{
 			return false;
 		}
@@ -667,6 +673,386 @@ namespace
 	}
 }
 
+namespace
+{
+	// =================================================================================================================
+	// 5. v4.15 (correctifs 5) : echelles des chunks du Niveau 37 et marches immergees des trottoirs lateraux
+	// =================================================================================================================
+
+	// Donnees du jeu reprises par le banc (entrees, pas des regles) : Niveau 37 (BRLevels.cpp, Level37 : cellules de 500 cm, murs
+	// de 120 cm, 8 cellules par chunk, lignes de murs 0,62 par troncons de 6, portes 0,55, zones ouvertes 0,3, bassins 0,15 ;
+	// trottoirs de 68 cm sur 120 cm, marche immergee de 34 cm sur 40 cm, 60 % des murs ; echelle vers le Niveau 2 : sortie 1,
+	// 6 % des chunks), capsule du controle du developpeur (ABRExit::CheckDepartureViewPoint : rayon 34 - 2, demi-hauteur
+	// 88 - 4, centre a pied + 5 + 4 + 84) et du joueur debout au fond du canal (rayon 34, demi-hauteur 88)
+	namespace Pool37
+	{
+		constexpr float Cell = 500.f;
+		constexpr float Wall = 120.f;
+		constexpr int Chunk = 8;
+		constexpr float WallLine = 0.62f;
+		constexpr int Segment = 6;
+		constexpr float Door = 0.55f;
+		constexpr float OpenZone = 0.3f;
+		constexpr float Pool = 0.15f;
+		constexpr float DeckZ = 68.f;
+		constexpr float DeckW = 120.f;
+		constexpr float StepZ = 34.f;
+		constexpr float StepW = 40.f;
+		constexpr float DeckChance = 0.6f;
+		constexpr float Chance = 0.06f;
+		constexpr int ExitIndex = 1;
+
+		enum class EEdge { Open, Wall, Door };
+
+		/** Grille du Niveau 37 (ABRWorld::EdgeE, EdgeN, ZoneDensity, IsPoolCell, HasDeck, DeckZAt ; niveau ouvert, sans fosses,
+		 *  bureaux, portes forcees ni cellules pleines ; les cellules de la mission ne sont pas rejouees) */
+		struct FGrid
+		{
+			uint32_t Seed = 0;
+
+			static bool Spawn(int X, int Y) { return std::abs(X) <= 1 && std::abs(Y) <= 1; }
+			float Density(int X, int Y) const
+			{
+				const float R = BRMech::Grid::Rand(FloorDiv(X, 6), FloorDiv(Y, 6), 104, Seed);
+				return R < OpenZone ? 0.25f : (R > 0.85f ? 1.35f : 1.f);
+			}
+			EEdge EdgeE(int X, int Y) const
+			{
+				if (Spawn(X, Y) && Spawn(X + 1, Y))
+				{
+					return EEdge::Open;
+				}
+				const int Off = static_cast<int>(BRMech::Grid::Hash(X, 0, 101, Seed) % static_cast<uint32_t>(Segment));
+				if (BRMech::Grid::Rand(X, FloorDiv(Y + Off, Segment), 102, Seed) >= WallLine * Density(X, Y))
+				{
+					return EEdge::Open;
+				}
+				return BRMech::Grid::Rand(X, Y, 103, Seed) < Door ? EEdge::Door : EEdge::Wall;
+			}
+			EEdge EdgeN(int X, int Y) const
+			{
+				if (Spawn(X, Y) && Spawn(X, Y + 1))
+				{
+					return EEdge::Open;
+				}
+				const int Off = static_cast<int>(BRMech::Grid::Hash(0, Y, 111, Seed) % static_cast<uint32_t>(Segment));
+				if (BRMech::Grid::Rand(FloorDiv(X + Off, Segment), Y, 112, Seed) >= WallLine * Density(X, Y))
+				{
+					return EEdge::Open;
+				}
+				return BRMech::Grid::Rand(X, Y, 113, Seed) < Door ? EEdge::Door : EEdge::Wall;
+			}
+			bool IsPool(int X, int Y) const
+			{
+				if (std::abs(X) <= 2 && std::abs(Y) <= 2)
+				{
+					return false;
+				}
+				return BRMech::Grid::Rand(FloorDiv(X, 2), FloorDiv(Y, 2), 1700, Seed) < Pool;
+			}
+			bool HasDeck(int X, int Y, int Side) const
+			{
+				if (IsPool(X, Y))
+				{
+					return false;
+				}
+				const int DX = BRMech::Grid::DirX[Side], DY = BRMech::Grid::DirY[Side];
+				const int NX = X + DX, NY = Y + DY;
+				const bool bAlongY = DX != 0;
+				const EEdge E = bAlongY ? EdgeE(DX > 0 ? X : NX, Y) : EdgeN(X, DY > 0 ? Y : NY);
+				if (E == EEdge::Open)
+				{
+					return false;
+				}
+				if (E == EEdge::Door)
+				{
+					if (IsPool(NX, NY))
+					{
+						return false;
+					}
+					return BRMech::Grid::Rand(bAlongY ? (X < NX ? X : NX) : X, bAlongY ? Y : (Y < NY ? Y : NY), bAlongY ? 1803 : 1804, Seed) < DeckChance;
+				}
+				const int LineIdx = bAlongY ? (DX > 0 ? X + 1 : X) : (DY > 0 ? Y + 1 : Y);
+				const int SideOfLine = (bAlongY ? DX : DY) > 0 ? 0 : 1;
+				return BRMech::Grid::Rand(LineIdx * 2 + SideOfLine, FloorDiv(bAlongY ? Y : X, 3), bAlongY ? 1801 : 1802, Seed) < DeckChance;
+			}
+			/** ABRWorld::DeckZAt (l'estrade du depart n'est jamais sous une sortie : cellules du depart refusees) */
+			float DeckZAt(float PX, float PY) const
+			{
+				const int CX = static_cast<int>(std::floor(static_cast<double>(PX) / Cell));
+				const int CY = static_cast<int>(std::floor(static_cast<double>(PY) / Cell));
+				if (IsPool(CX, CY))
+				{
+					return 0.f;
+				}
+				const float LX = PX - static_cast<float>(CX) * Cell, LY = PY - static_cast<float>(CY) * Cell;
+				const float Reach = Wall * 0.5f + DeckW;
+				const float Dist[4] = { Cell - LX, LX, Cell - LY, LY };
+				float Z = 0.f;
+				for (int K = 0; K < 4; ++K)
+				{
+					if (Dist[K] >= Reach + StepW || !HasDeck(CX, CY, K))
+					{
+						continue;
+					}
+					Z = std::fmax(Z, Dist[K] < Reach ? DeckZ : StepZ);
+				}
+				return Z;
+			}
+		};
+
+		/** Le monde vu par PickWallFace (ABRWorld FWorldFaceQuery : cellule hors du depart et des bassins, mur fin) ; bDecks : sol
+		 *  du jeu (FloorAt = ABRWorld::DeckZAt, v4.15 correctifs 5), sinon le tirage d'avant (sol plat, FloorAt par defaut) */
+		struct FQuery final : BRMech::Grid::FFaceQuery
+		{
+			const FGrid* G = nullptr;
+			bool bDecks = true;
+			virtual bool CellOk(int32_t X, int32_t Y) const override
+			{
+				return !FGrid::Spawn(X, Y) && !G->IsPool(X, Y);
+			}
+			virtual bool IsFace(int32_t X, int32_t Y, int32_t DX, int32_t DY, bool& bOutSolid) const override
+			{
+				bOutSolid = false;
+				return DX == 1 ? G->EdgeE(X, Y) == EEdge::Wall : DX == -1 ? G->EdgeE(X - 1, Y) == EEdge::Wall : DY == 1 ? G->EdgeN(X, Y) == EEdge::Wall
+					: G->EdgeN(X, Y - 1) == EEdge::Wall;
+			}
+			virtual float FloorAt(float X, float Y) const override
+			{
+				return bDecks ? G->DeckZAt(X, Y) : 0.f;
+			}
+		};
+
+		/** Boite de collision d'un trottoir ou de sa marche (ABRChunk::BuildDecks : bande le long du mur, sur toute la cellule) */
+		struct FDeckBox
+		{
+			float X0, Y0, Z0, X1, Y1, Z1;
+			bool bStep;
+		};
+
+		void DeckBoxes(const FGrid& G, int X, int Y, std::vector<FDeckBox>& Out)
+		{
+			Out.clear();
+			const float Depth = Wall * 0.5f + DeckW;
+			for (int CX = X - 1; CX <= X + 1; ++CX)
+			{
+				for (int CY = Y - 1; CY <= Y + 1; ++CY)
+				{
+					for (int K = 0; K < 4; ++K)
+					{
+						if (!G.HasDeck(CX, CY, K))
+						{
+							continue;
+						}
+						const float DX = static_cast<float>(BRMech::Grid::DirX[K]), DY = static_cast<float>(BRMech::Grid::DirY[K]);
+						const float LineX = (static_cast<float>(CX) + 0.5f) * Cell + DX * Cell * 0.5f, LineY = (static_cast<float>(CY) + 0.5f) * Cell + DY * Cell * 0.5f;
+						const float From[2] = { 0.f, Depth }, To[2] = { Depth, Depth + StepW }, H[2] = { DeckZ, StepZ };
+						for (int B = 0; B < 2; ++B)
+						{
+							FDeckBox Box;
+							if (DX != 0.f)
+							{
+								const float A = LineX - DX * From[B], C = LineX - DX * To[B];
+								Box = { std::fmin(A, C), static_cast<float>(CY) * Cell, 0.f, std::fmax(A, C), static_cast<float>(CY + 1) * Cell, H[B], B == 1 };
+							}
+							else
+							{
+								const float A = LineY - DY * From[B], C = LineY - DY * To[B];
+								Box = { static_cast<float>(CX) * Cell, std::fmin(A, C), 0.f, static_cast<float>(CX + 1) * Cell, std::fmax(A, C), H[B], B == 1 };
+							}
+							Out.push_back(Box);
+						}
+					}
+				}
+			}
+		}
+
+		/** Recouvrement (cm, > 0 : la capsule entre dans la boite ; 0 : contact, le joueur debout sur un trottoir) d'une capsule
+		 *  verticale (centre, rayon, demi-hauteur) */
+		float Penetration(float CX, float CY, float CZ, float Rad, float Half, const FDeckBox& B)
+		{
+			const float Z0 = CZ - (Half - Rad), Z1 = CZ + (Half - Rad);
+			const float DX = std::fmax(std::fmax(B.X0 - CX, 0.f), CX - B.X1);
+			const float DY = std::fmax(std::fmax(B.Y0 - CY, 0.f), CY - B.Y1);
+			const float DZ = std::fmax(std::fmax(B.Z0 - Z1, 0.f), Z0 - B.Z1);
+			return Rad - std::sqrt(DX * DX + DY * DY + DZ * DZ);
+		}
+
+		struct FLadder
+		{
+			bool bFound = false;
+			BRMech::Grid::FWallFace Face;
+			float X = 0.f, Y = 0.f, Z = 0.f;
+			/** Plus grand recouvrement des trottoirs et marches : capsule du controle a l'accroche, capsule du joueur au sol */
+			float Dev = -1.0e9f, Player = -1.0e9f;
+			bool bDevStep = false;
+			bool bOwnDeck = false;
+			int SideDecks = 0;
+		};
+
+		/** Echelle vers le Niveau 2 tiree par le chunk (ABRChunk::PlanExits, branche murale ; pied : DeckZAt a 30 cm devant) */
+		FLadder Draw(const FGrid& G, int CX, int CY, bool bDecks)
+		{
+			FLadder L;
+			FQuery Q;
+			Q.G = &G;
+			Q.bDecks = bDecks;
+			if (!BRMech::Grid::PickWallFace(CX, CY, ExitIndex, G.Seed, Chunk, false, Cell, Wall, Q, L.Face))
+			{
+				return L;
+			}
+			L.bFound = true;
+			const BRMech::FFrame F = BRMech::Grid::WallFaceFrame(L.Face, Cell, Wall, 0.f);
+			const float FX = static_cast<float>(-BRMech::Grid::DirX[L.Face.Dir]), FY = static_cast<float>(-BRMech::Grid::DirY[L.Face.Dir]);
+			L.X = F.X;
+			L.Y = F.Y;
+			L.Z = G.DeckZAt(F.X + FX * BRMech::Grid::FootProbe, F.Y + FY * BRMech::Grid::FootProbe);
+			const float AX = F.X + FX * BRMech::Grid::ClimbAnchor, AY = F.Y + FY * BRMech::Grid::ClimbAnchor;
+			std::vector<FDeckBox> Boxes;
+			DeckBoxes(G, L.Face.CellX, L.Face.CellY, Boxes);
+			for (const FDeckBox& B : Boxes)
+			{
+				const float P = Penetration(AX, AY, L.Z + 93.f, 32.f, 84.f, B);
+				if (P > L.Dev)
+				{
+					L.Dev = P;
+					L.bDevStep = B.bStep;
+				}
+				L.Player = std::fmax(L.Player, Penetration(AX, AY, L.Z + 88.f, 34.f, 88.f, B));
+			}
+			L.bOwnDeck = G.HasDeck(L.Face.CellX, L.Face.CellY, L.Face.Dir);
+			for (int K = 0; K < 4; ++K)
+			{
+				const bool bSide = (BRMech::Grid::DirX[K] != 0) != (BRMech::Grid::DirX[L.Face.Dir] != 0);
+				L.SideDecks += (bSide && G.HasDeck(L.Face.CellX, L.Face.CellY, K)) ? 1 : 0;
+			}
+			return L;
+		}
+
+		bool SameFace(const FLadder& A, const FLadder& B)
+		{
+			return A.Face.CellX == B.Face.CellX && A.Face.CellY == B.Face.CellY && A.Face.Dir == B.Face.Dir;
+		}
+	}
+
+	void TestPoolLadders()
+	{
+		using namespace Pool37;
+		std::printf("5. Echelles des chunks du Niveau 37 et marches immergees des trottoirs lateraux (v4.15 correctifs 5)\n");
+		char Buf[400];
+		// Les trois echelles signalees par le controle du developpeur (final3 v412 et full, net_final3 hote et client) : regle d'avant
+		// (sol plat pour le tirage), puis regle du jeu (BRMech::Grid::StandFlat, sol ABRWorld::DeckZAt)
+		struct FCase
+		{
+			uint32_t Seed;
+			int CX, CY;
+			float OldX, OldY, NewX, NewY, NewZ;
+			const char* Log;
+		};
+		const FCase Cases[] = {
+			{ 115083815u, -1, -1, -3250.f, -1560.f, -1250.f, -1560.f, 68.f, "v412 BRExit_2, full BRExit_244" },
+			{ 2303284074u, -2, 1, -7750.f, 4560.f, -7560.f, 6750.f, 68.f, "reseau, hote et client BRExit_9" },
+			{ 2303284074u, 2, -1, 11750.f, -2060.f, 11750.f, -1560.f, 0.f, "reseau, hote BRExit_10, client BRExit_8" },
+		};
+		for (const FCase& C : Cases)
+		{
+			FGrid G;
+			G.Seed = C.Seed;
+			const bool bDrawn = BRMech::Grid::Rand(C.CX, C.CY, 1100 + ExitIndex, C.Seed) < Chance;
+			const FLadder Old = Draw(G, C.CX, C.CY, false);
+			std::snprintf(Buf, sizeof(Buf), "graine %u, chunk (%d, %d), regle d'avant : pied (%.0f, %.0f, %.0f), sans trottoir a son mur, %d trottoir(s) lateral(aux) (journal %s : (%.0f, %.0f, 0))",
+				C.Seed, C.CX, C.CY, Old.X, Old.Y, Old.Z, Old.SideDecks, C.Log, C.OldX, C.OldY);
+			Line(Buf, bDrawn && Old.bFound && Old.X == C.OldX && Old.Y == C.OldY && Old.Z == 0.f && !Old.bOwnDeck && Old.SideDecks > 0);
+			std::snprintf(Buf, sizeof(Buf), "  capsule du controle dans la marche laterale de %.2f cm (attendu 1,19), capsule du joueur au fond du canal de %.2f cm (attendu 4)", Old.Dev,
+				Old.Player);
+			Line(Buf, Old.bDevStep && std::fabs(Old.Dev - 1.19f) < 0.01f && std::fabs(Old.Player - 4.f) < 0.01f);
+			FQuery Q;
+			Q.G = &G;
+			const bool bOldFlat = BRMech::Grid::StandFlat(Old.Face, Cell, Wall, Q);
+			const FLadder New = Draw(G, C.CX, C.CY, true);
+			const bool bNewFlat = New.bFound && BRMech::Grid::StandFlat(New.Face, Cell, Wall, Q);
+			std::snprintf(Buf, sizeof(Buf), "  regle du jeu : StandFlat refuse cette face %s ; face (%d, %d) dir %d, pied (%.0f, %.0f, %.0f) (attendu (%.0f, %.0f, %.0f)), capsule du controle a %.1f cm des trottoirs et marches",
+				bOldFlat ? "NON" : "oui", New.Face.CellX, New.Face.CellY, New.Face.Dir, New.X, New.Y, New.Z, C.NewX, C.NewY, C.NewZ, -New.Dev);
+			Line(Buf, !bOldFlat && bNewFlat && !SameFace(Old, New) && New.X == C.NewX && New.Y == C.NewY && New.Z == C.NewZ && New.Dev < 0.f && New.Player <= 0.01f);
+		}
+
+		// Balayage : graines 1..2000 (graine du niveau : ABRWorld::SeedFromUser, Mix(n ^ (37 * 7919 + 17))), chunks -5..5 hors (0, 0)
+		int Drawn = 0, OldFound = 0, OldHit = 0, OldPlayerHit = 0, OldHitShape = 0, OneSide = 0, TwoSides = 0, NewFound = 0, NewHit = 0, NewPlayerHit = 0, Moved = 0, Same = 0,
+			ClearMoved = 0, OnDeck = 0;
+		for (uint32_t N = 1; N <= 2000; ++N)
+		{
+			FGrid G;
+			G.Seed = SeedMix(N ^ static_cast<uint32_t>(37 * 7919 + 17));
+			for (int CX = -5; CX <= 5; ++CX)
+			{
+				for (int CY = -5; CY <= 5; ++CY)
+				{
+					if ((CX == 0 && CY == 0) || !(BRMech::Grid::Rand(CX, CY, 1100 + ExitIndex, G.Seed) < Chance))
+					{
+						continue;
+					}
+					++Drawn;
+					const FLadder Old = Draw(G, CX, CY, false);
+					const FLadder New = Draw(G, CX, CY, true);
+					const bool bOldHit = Old.bFound && Old.Dev > 0.01f;
+					OldFound += Old.bFound ? 1 : 0;
+					OldHit += bOldHit ? 1 : 0;
+					OldPlayerHit += (Old.bFound && Old.Player > 0.01f) ? 1 : 0;
+					OldHitShape += (bOldHit && !Old.bOwnDeck && Old.SideDecks > 0) ? 1 : 0;
+					OneSide += (bOldHit && Old.SideDecks == 1) ? 1 : 0;
+					TwoSides += (bOldHit && Old.SideDecks == 2) ? 1 : 0;
+					NewFound += New.bFound ? 1 : 0;
+					NewHit += (New.bFound && New.Dev > 0.01f) ? 1 : 0;
+					NewPlayerHit += (New.bFound && New.Player > 0.01f) ? 1 : 0;
+					OnDeck += (New.bFound && New.Z == DeckZ) ? 1 : 0;
+					if (Old.bFound && New.bFound)
+					{
+						const bool bSame = SameFace(Old, New);
+						Same += bSame ? 1 : 0;
+						Moved += bSame ? 0 : 1;
+						ClearMoved += (!bSame && !bOldHit) ? 1 : 0;
+					}
+				}
+			}
+		}
+		std::snprintf(Buf, sizeof(Buf), "regle d'avant, %d chunks tires (2000 graines) : %d echelles, capsule du controle prise %d (%.2f %%), du joueur %d ; mur sans trottoir a cote d'un "
+			"trottoir lateral : %d (un : %d, deux : %d)", Drawn, OldFound, OldHit, 100.0 * OldHit / (OldFound > 0 ? OldFound : 1), OldPlayerHit, OldHitShape, OneSide, TwoSides);
+		Line(Buf, Drawn > 10000 && OldHit > 0 && OldHitShape == OldHit && OneSide + TwoSides == OldHit && OldPlayerHit >= OldHit);
+		std::snprintf(Buf, sizeof(Buf), "regle du jeu : %d echelles (%.1f %% des chunks tires, avant %.1f %%), dont %d sur un trottoir ; capsule du controle prise %d, du joueur %d (attendu 0)",
+			NewFound, 100.0 * NewFound / (Drawn > 0 ? Drawn : 1), 100.0 * OldFound / (Drawn > 0 ? Drawn : 1), OnDeck, NewHit, NewPlayerHit);
+		Line(Buf, NewHit == 0 && NewPlayerHit == 0 && NewFound * 100 >= Drawn * 90);
+		std::snprintf(Buf, sizeof(Buf), "regle du jeu : %d echelles deplacees, %d inchangees, %d chunks sans echelle de plus ; echelles libres deplacees %d (attendu 0)", Moved, Same,
+			OldFound - NewFound, ClearMoved);
+		Line(Buf, ClearMoved == 0 && Moved + (OldFound - NewFound) == OldHit);
+
+		// Sans trottoirs (FloorAt par defaut : tous les autres niveaux), StandFlat accepte toute face : aucun tirage ne change
+		{
+			FGrid G;
+			G.Seed = 115083815u;
+			FQuery Flat;
+			Flat.G = &G;
+			Flat.bDecks = false;
+			bool bAll = true;
+			for (int X = -12; X <= 12; ++X)
+			{
+				for (int Y = -12; Y <= 12; ++Y)
+				{
+					for (int K = 0; K < 4; ++K)
+					{
+						BRMech::Grid::FWallFace Face;
+						Face.CellX = X;
+						Face.CellY = Y;
+						Face.Dir = K;
+						Face.bSolid = ((X + Y + K) & 1) == 0;
+						bAll = bAll && BRMech::Grid::StandFlat(Face, Cell, Wall, Flat);
+					}
+				}
+			}
+			Line("sol plat (FloorAt par defaut, niveaux sans trottoirs) : StandFlat accepte les 2500 faces (mur fin et paroi pleine)", bAll);
+		}
+	}
+}
+
 int main()
 {
 	std::printf("# Banc du depart de groupe v4.12 (BRGatherLogic.cpp)\n\n");
@@ -674,6 +1060,7 @@ int main()
 	TestClimbWait();
 	TestGroup();
 	TestChunkLadderView();
+	TestPoolLadders();
 	std::printf("\nVerifications : %d, echecs : %d\nRESULTAT : %s\n", GChecks, GFailures, GFailures == 0 ? "OK" : "ECHEC");
 	return GFailures == 0 ? 0 : 1;
 }

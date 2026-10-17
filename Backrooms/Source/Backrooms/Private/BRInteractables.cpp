@@ -565,10 +565,22 @@ void ABRExit::CheckDepartureViewPoint()
 		{
 			if (O.bBlockingHit)
 			{
+				// v4.15 (correctifs 5) : la meme capsule levee de 40 cm libre : l'obstacle est bas, sous l'accroche (marche immergee
+				// d'un trottoir du Niveau 37, avant BRMech::Grid::StandFlat) : la montee depuis le sol s'y arrete et la descente
+				// au-dessus de lui ; la visee (ABRCharacter::UpdateFocus) ne passe pas par cette capsule. Sinon (rocher, mur) : ni
+				// visee ni montee
+				constexpr float Lift = 40.f;
+				TArray<FOverlapResult> High;
+				World->OverlapMultiByChannel(High, Center + FVector(0.f, 0.f, Lift), FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(Radius, Half), Q, R);
+				bool bLow = true;
+				for (const FOverlapResult& H : High)
+				{
+					bLow = bLow && !H.bBlockingHit;
+				}
 				const FVector L = GetActorLocation();
 				UE_LOG(LogBackrooms, Warning, TEXT("Sortie vers le Niveau %d (%s) en (%.0f, %.0f, %.0f) : echelle prise dans %s (%s) : la capsule du grimpeur en (%.0f, %.0f, %.0f) "
-					"n'y tient pas (ni visee ni montee)"), Target, *GetName(), L.X, L.Y, L.Z, *GetNameSafe(O.GetActor()), *GetNameSafe(O.GetComponent()), Center.X, Center.Y,
-					Center.Z);
+					"n'y tient pas (%s)"), Target, *GetName(), L.X, L.Y, L.Z, *GetNameSafe(O.GetActor()), *GetNameSafe(O.GetComponent()), Center.X, Center.Y, Center.Z,
+					bLow ? TEXT("obstacle bas sous l'accroche : montee bloquee depuis le sol, descente arretee au-dessus de lui ; visee non genee") : TEXT("ni visee ni montee"));
 				return;
 			}
 		}
@@ -922,7 +934,9 @@ void ABRExit::FinishClimb(ABRCharacter* By)
 
 FVector ABRExit::GetClimbAnchor() const
 {
-	// Montants a 14 cm du mur, capsule de 34 cm de rayon
+	// Montants a 14 cm du mur, capsule de 34 cm de rayon. v4.15 (correctifs 5) : la valeur que le tirage des sorties murales
+	// garde a plat (BRMech::Grid::ClimbAnchor, StandFlat) ; le litteral reste lu par Tools/verify_device_clearance.py
+	static_assert(BRMech::Grid::ClimbAnchor == 52.f, "accroche du grimpeur : BRMech::Grid::ClimbAnchor");
 	return GetActorLocation() + GetActorForwardVector() * 52.f;
 }
 

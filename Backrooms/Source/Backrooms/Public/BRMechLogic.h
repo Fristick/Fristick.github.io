@@ -377,7 +377,8 @@ namespace BRMech
 	// ABRChunk::StepPlan etape 5, ABRChunk::BuildCellProps, ABRWorld::IsChunkExitKeepOut) et le banc
 	// Tools/Departure/test_departure.cpp partagent ces tirages : un rocher n'entre plus dans la zone libre (Clearance::ExitKeepOut)
 	// d'une echelle tiree par un chunk (Niveau 8, partie classique : echelle enterree dans la boite de collision d'un rocher,
-	// point vise par le depart de groupe, accroche et colonne du grimpeur compris ; ni visee, ni montee)
+	// point vise par le depart de groupe, accroche et colonne du grimpeur compris ; ni visee, ni montee). v4.15 (correctifs 5) :
+	// la face tiree laisse le grimpeur a plat sur le sol du pied (Grid::StandFlat : marches des trottoirs du Niveau 37)
 	// =================================================================================================================
 	namespace Grid
 	{
@@ -397,6 +398,9 @@ namespace BRMech
 			virtual bool CellOk(int32_t X, int32_t Y) const = 0;
 			/** La face (DX, DY) de la cellule est une paroi : cellule voisine pleine (bOutSolid) ou mur fin */
 			virtual bool IsFace(int32_t X, int32_t Y, int32_t DX, int32_t DY, bool& bOutSolid) const = 0;
+			/** v4.15 (correctifs 5) : hauteur du sol de marche en (X, Y) qui ne depend que de la grille (ABRWorld::DeckZAt :
+			 *  trottoirs du Niveau 37 et leur marche immergee) ; 0 sans trottoirs (tous les autres niveaux) */
+			virtual float FloorAt(float /*X*/, float /*Y*/) const { return 0.f; }
 		};
 		/** Face tiree : cellule, direction (DirX/DirY), cellule voisine pleine (sinon mur fin) */
 		struct FWallFace
@@ -406,10 +410,31 @@ namespace BRMech
 			int Dir = 0;
 			bool bSolid = false;
 		};
+
+		/** v4.15 (correctifs 5) : accroche du grimpeur devant le pied d'une echelle (ABRExit::GetClimbAnchor : montants a 14 cm
+		 *  du mur, capsule de 34 cm de rayon) */
+		constexpr float ClimbAnchor = 52.f;
+		/** v4.15 (correctifs 5) : sol du pied d'une sortie murale, pris a cette distance devant sa face (ABRChunk::PlanExits) */
+		constexpr float FootProbe = 30.f;
+		/** v4.15 (correctifs 5) : place debout devant une sortie (point vise par le depart de groupe a 1 m, BRGather::ViewPoint) */
+		constexpr float StandAhead = 100.f;
+		/** v4.15 (correctifs 5) : ecart de hauteur du sol admis sous le grimpeur et devant la sortie (cm) */
+		constexpr float StandFlatTol = 1.f;
+		/** v4.15 (correctifs 5) : le sol sous l'empreinte de la capsule du grimpeur (accroche ClimbAnchor, rayon du joueur et
+		 *  marge des tests : profondeurs ClimbAnchor - 36, ClimbAnchor, ClimbAnchor + 36 et StandAhead, laterales -36, 0, +36)
+		 *  est a la hauteur du pied (Q.FloorAt a FootProbe devant la face), a StandFlatTol pres. Avant : Niveau 37 (Poolrooms,
+		 *  partie classique), echelle sur un mur sans trottoir, au fond du canal, a cote du trottoir d'un mur lateral : sa
+		 *  marche immergee (40 x 34 cm, jusqu'a 220 cm de sa ligne) entrait de 1,19 cm dans la capsule du controle du
+		 *  developpeur et de 4 cm dans celle du joueur (montee bloquee depuis le canal, descente arretee au-dessus du fond).
+		 *  Sans trottoirs, le sol est plat partout : toujours vrai */
+		bool StandFlat(const FWallFace& Face, float CellSize, float WallThickness, const FFaceQuery& Q);
 		/** Face de paroi de la sortie ExitIndex (indice dans les sorties du niveau) du chunk (branche murale d'ABRChunk::PlanExits) :
 		 *  24 essais tires (sels 1500 + ExitIndex * 64 + essai), puis, niveau fini (bBounded), toutes les faces du chunk dans un
-		 *  ordre tire (sel 1500 + ExitIndex * 64 + 63). false : aucune face */
-		bool PickWallFace(int32_t ChunkX, int32_t ChunkY, int ExitIndex, uint32_t Seed, int ChunkCells, bool bBounded, const FFaceQuery& Q, FWallFace& Out);
+		 *  ordre tire (sel 1500 + ExitIndex * 64 + 63). false : aucune face. v4.15 (correctifs 5) : une face ou le grimpeur ne
+		 *  tient pas a plat (StandFlat, cellule CellSize, mur fin WallThickness) passe a l'essai suivant (memes sels, memes
+		 *  essais : seules les faces refusees changent ; aucun tirage ne change sans trottoirs) */
+		bool PickWallFace(int32_t ChunkX, int32_t ChunkY, int ExitIndex, uint32_t Seed, int ChunkCells, bool bBounded, float CellSize, float WallThickness, const FFaceQuery& Q,
+			FWallFace& Out);
 		/** Repere de la sortie posee sur cette face : pied sur la face (devant un mur fin : en retrait de la moitie de son
 		 *  epaisseur), au sol FloorZ, X vers la cellule (lacet multiple de 90 degres) */
 		FFrame WallFaceFrame(const FWallFace& Face, float CellSize, float WallThickness, float FloorZ);

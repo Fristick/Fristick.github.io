@@ -385,7 +385,9 @@ public:
 	bool IsChunkExitDrawn(const FIntPoint& Chunk, int32 ExitIndex) const;
 	/** v4.15 (correctifs 4) : face de paroi de cette sortie (BRMech::Grid::PickWallFace avec les regles du monde : cellule
 	 *  marchable hors du depart, des bassins, des salles de fosses et de la mission, atteignable ; paroi pleine ou mur fin) ;
-	 *  Hiding : cachettes du chunk (nullptr : aucune). Meme tirage que la branche murale d'ABRChunk::PlanExits */
+	 *  Hiding : cachettes du chunk (nullptr : aucune). Meme tirage que la branche murale d'ABRChunk::PlanExits. v4.15
+	 *  (correctifs 5) : le grimpeur tient a plat sur le sol du pied (BRMech::Grid::StandFlat, sol DeckZAt : marches des
+	 *  trottoirs du Niveau 37) */
 	bool PickChunkWallFace(const FIntPoint& Chunk, int32 ExitIndex, const TSet<FIntPoint>* Hiding, BRMech::Grid::FWallFace& Out) const;
 	/** v4.15 (correctifs 4) : un rocher (rectangle de sa boite de collision) entrerait dans la zone libre
 	 *  (BRMech::Clearance::ExitKeepOut) d'une sortie murale tiree par l'un des 3 x 3 chunks autour de lui. Les rochers d'une paroi

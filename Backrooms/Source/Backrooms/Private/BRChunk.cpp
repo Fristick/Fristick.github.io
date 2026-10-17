@@ -3389,7 +3389,9 @@ void ABRChunk::PlanExits()
 			// Sur une face de mur (mur fin ou cellule pleine). v4.6 : niveau fini (nombre de sorties garanti) : apres les 24
 			// essais tires, on balaie toutes les cellules et directions du chunk dans un ordre tire ; jamais dans une salle de
 			// fosses, niveau fini : atteignable sans la traverser. v4.15 (correctifs 4) : meme tirage, partage avec la zone libre
-			// des rochers (BRMech::Grid::PickWallFace par ABRWorld::PickChunkWallFace, cachettes de ce chunk comprises)
+			// des rochers (BRMech::Grid::PickWallFace par ABRWorld::PickChunkWallFace, cachettes de ce chunk comprises).
+			// v4.15 (correctifs 5) : face refusee si le grimpeur n'y tient pas a plat sur le sol du pied (BRMech::Grid::StandFlat :
+			// Niveau 37, echelle au fond du canal contre la marche immergee du trottoir d'un mur lateral)
 			BRMech::Grid::FWallFace Face;
 			if (W->PickChunkWallFace(Coord, i, &HidingCells, Face))
 			{
@@ -3397,7 +3399,7 @@ void ABRChunk::PlanExits()
 				const FIntPoint Dir = GDirs[Face.Dir];
 				const float Inset = Face.bSolid ? 0.f : D.WallThickness * 0.5f;
 				Pos = W->CellCenter(Cell, 0.f) + FVector(Dir.X, Dir.Y, 0.f) * (S * 0.5f - Inset);
-				Pos.Z = W->FloorZAt(Pos - FVector(Dir.X, Dir.Y, 0.f) * 30.f); // pied de la sortie sur le trottoir
+				Pos.Z = W->FloorZAt(Pos - FVector(Dir.X, Dir.Y, 0.f) * BRMech::Grid::FootProbe); // pied de la sortie sur le trottoir
 				Yaw = YawFromDir(-Dir.X, -Dir.Y);
 				bFound = true;
 			}
