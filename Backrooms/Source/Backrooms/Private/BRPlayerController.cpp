@@ -2398,6 +2398,20 @@ void ABRPlayerController::WriteActiveSave(bool bBlocking)
 				}
 			}
 		}
+		// v4.16 : les notes lues en rejeu completent aussi le carnet de la partie (union, jamais de retrait), comme le dit la
+		// regle (GAMEPLAY_v4.14 : "un document ou une entite decouverts en rejeu restent au carnet"). Avant : seules les entites
+		// passaient ; une note lue en REJOUER disparaissait du carnet au retour dans la campagne
+		if (Policy.bJournalUnion && C)
+		{
+			for (const FString& NoteId : C->ReadNotes)
+			{
+				if (!NoteId.IsEmpty() && !ActiveSave->Notes.Contains(NoteId))
+				{
+					ActiveSave->Notes.Add(NoteId);
+					++Added;
+				}
+			}
+		}
 		const bool bQueuedShared = Added > 0 && (bBlocking ? BRSaves::Write(BRSaves::ActiveSlot(), ActiveSave) : BRSaves::WriteAsync(BRSaves::ActiveSlot(), ActiveSave));
 		if (!bQueuedShared && bBlocking)
 		{

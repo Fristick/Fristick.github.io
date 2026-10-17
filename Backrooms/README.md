@@ -1675,6 +1675,19 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   - architecture : x86_64 ; sur Mac, arm64 et x86_64 pour chaque binaire du bundle ;
   - dépendances : bibliothèques importées présentes dans le paquet ou fournies par le système ;
   - lancement : `--launch`, sur un hôte du même système. Le paquet est lancé avec `-BRAutoTest -BRSmokeTest`.
+  - **v4.16** chapitre : `--chapter` (`--require-chapter` pour l'exiger), sur un hôte du même système. Le paquet joue
+    lui-même la traversée du premier chapitre publié, `0 → 1 → 37 → 2 → fin du chapitre` : nouvelle partie par le menu,
+    missions résolues et sorties prises en marchant, sur des parties de test (`BR_AutoTestChapitre_*`, les parties du
+    joueur ne sont pas touchées). Par défaut, trois lancements séparés par de vraies fermetures du jeu (reprise aux
+    Poolrooms, fin du chapitre enregistrée, relance après la fin) ; `--chapter-mode single` : un lancement ;
+    `--chapter-out <dossier>` : rapports des phases. `build_windows.ps1 -Chapter` construit puis vérifie ainsi le paquet.
+    Une version publiée n'accepte que ces deux essais (`-BRSmokeTest`, `-BRAutoTestChapter`) et se ferme toujours à
+    leur fin. Dans l'éditeur lancé en jeu (canal publié imposé) : `-BRAutoTest -BRAutoTestChapter -BRAutoTestStrict`
+    (un lancement), ou `-BRChapterPhase=1`, puis `2`, puis `3` ; `-BRChapterSeed=<graine du parcours>
+    -BRChapterIntro=<graine du Level 0>` rejoue une disposition donnée par le rapport. **v4.16** `-BRAutoTest
+    -BRAutoTestV416Ship -BRAutoTestStrict` : REJOUER et sauvegardes (consommation, dégâts, document lu, entité vue, mort,
+    fermeture, reprise, migration 5 → 6) sur des parties `BR_AutoTestV416Ship_*` : seuls le document et l'entité du
+    rejeu s'ajoutent à la partie (union), tout le reste du fichier relu est identique.
 
   `--mode release` (par défaut) exige les quatre premières vérifications. `--mode structure` ne vérifie que la
   structure et le dit (« CONTRÔLE STRUCTUREL SEULEMENT »). Codes : 0 complet, 1 problème, 2 inspection incomplète,

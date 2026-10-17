@@ -4,15 +4,25 @@
 #   ... -Platform Linux             construction croisee Linux (LINUX_MULTIARCH_ROOT : chaine clang d'Epic pour UE 5.8)
 #   ... -NoUnityCheck               compile d'abord l'editeur sans build unity (inclusions manquantes revelees)
 #   ... -Content internal           v4.12 : version de test interne (niveaux en test inclus ; public par defaut)
+#   ... -Launch                     v4.16 : puis le test de demarrage du paquet (check_package.py --launch)
+#   ... -Chapter                    v4.16 : puis la traversee du premier chapitre dans le paquet (check_package.py --chapter :
+#                                   trois lancements separes par de vraies fermetures, parties de test BR_AutoTestChapitre_ ;
+#                                   version publiee seulement) ; -ChapterOut <dossier> : rapports des phases
 # Resultat : Build\<Plateforme>\<Config>[-internal]\ (paquet) et build_manifest.txt ; controle par check_package.py.
 param(
 	[Parameter(Mandatory = $true)][string]$UERoot,
 	[ValidateSet("Shipping", "Development")][string]$Config = "Shipping",
 	[ValidateSet("Win64", "Linux")][string]$Platform = "Win64",
 	[switch]$NoUnityCheck,
-	[ValidateSet("public", "internal")][string]$Content = "public"
+	[ValidateSet("public", "internal")][string]$Content = "public",
+	[switch]$Launch,
+	[switch]$Chapter,
+	[string]$ChapterOut = ""
 )
 $ErrorActionPreference = "Stop"
+# v4.16 : -Chapter refuse avant la construction (une heure de cuisson pour rien sinon)
+if ($Chapter -and $Content -ne "public") { throw "-Chapter : la traversee du premier chapitre publie demande -Content public" }
+if ($Chapter -and $Platform -ne "Win64") { throw "-Chapter : traversee possible seulement sur un paquet Windows lance sur cet hote" }
 $Tools = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Resolve-Path (Join-Path $Tools "..\..")
 $Project = Join-Path $ProjectDir "Backrooms.uproject"
@@ -71,5 +81,12 @@ $Tree = if ($Dirty) { "modifie" } else { "propre" }
 	"hote : Windows $([Environment]::OSVersion.VersionString)"
 ) | Set-Content -Encoding UTF8 (Join-Path $Out "build_manifest.txt")
 
-& python (Join-Path $Tools "check_package.py") --platform $PlatformDir --dir $Out --ue $UERoot
-if ($LASTEXITCODE -ne 0) { throw "Paquet incomplet (check_package.py)" }
+# v4.16 : -Launch : test de demarrage ; -Chapter : traversee du premier chapitre (version publiee, Windows seulement)
+$CheckArgs = @("--platform", $PlatformDir, "--dir", $Out, "--ue", $UERoot)
+if ($Launch -or $Chapter) { $CheckArgs += "--launch" }
+if ($Chapter) {
+	$CheckArgs += @("--require-chapter", "--json", (Join-Path $Out "..\check_package_$Config$Suffix.json"))
+	if ($ChapterOut) { $CheckArgs += @("--chapter-out", $ChapterOut) }
+}
+& python (Join-Path $Tools "check_package.py") @CheckArgs
+if ($LASTEXITCODE -ne 0) { throw "Paquet incomplet (check_package.py, code $LASTEXITCODE)" }

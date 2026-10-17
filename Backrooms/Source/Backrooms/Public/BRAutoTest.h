@@ -152,6 +152,14 @@ private:
 	void AddNetV410Steps(bool bClient);
 	/** v4.10 : test de lancement d'un paquet (-BRSmokeTest) : carte, polices, langues, niveau construit ; rapport JSON */
 	void AddSmokeSteps();
+	/** v4.16 (paquet) : -BRAutoTestChapter : traversee du premier chapitre publie 0 -> 1 -> 37 -> 2 -> fin du chapitre, aussi dans le
+	 *  paquet Shipping : NOUVELLE PARTIE par le menu, porte de service, missions resolues et sorties prises en marchant, partie
+	 *  relue du disque, fermeture et reprise, fin du chapitre enregistree. -BRChapterPhase=1|2|3 : coupee par deux vraies
+	 *  fermetures du jeu (Tools/Build/check_package.py --chapter) ; 0 : un seul lancement (BRAutoTestV416Ship.cpp) */
+	void AddChapterSteps();
+	/** v4.16 (paquet) : -BRAutoTestV416Ship : REJOUER et sauvegardes : consommation, degats, document et entite, mort, fermeture
+	 *  et reprise sans alterer la campagne (seule l'union du journal), migration 5 -> 6 avec copie (BRAutoTestV416Ship.cpp) */
+	void AddV416ShipSteps();
 	/** v4.10 : session longue (-BRAutoTestSoak=<minutes>) : allers-retours entre le Niveau 0 et les 11 autres niveaux,
 	 *  promenade a chaque arrivee ; memoire, objets, caches et images par seconde releves (SessionLongue.csv) */
 	void AddSoakSteps(float Minutes);

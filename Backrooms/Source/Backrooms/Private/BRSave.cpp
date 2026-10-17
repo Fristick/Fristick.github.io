@@ -7,9 +7,11 @@
 #include "Async/Async.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "Misc/CommandLine.h"
 #include "Misc/Crc.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
 #include "Serialization/CustomVersion.h"
@@ -458,7 +460,11 @@ namespace BRSaves
 	{
 		FString& Prefix()
 		{
-			static FString Value = TEXT("BR_Partie_");
+			// v4.16 (paquet) : traversee du chapitre (-BRAutoTest -BRAutoTestChapter, aussi dans le paquet Shipping) : parties de
+			// test des le lancement (prefixe de BRAutoTestV416Ship.cpp). Les parties du joueur ne sont ni lues ni ecrites, pas
+			// meme par la liste du menu au demarrage (BRSaves::Load peut reprendre une copie de secours ou mettre un fichier de cote)
+			static FString Value = (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTest")) && FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestChapter")))
+				? FString(TEXT("BR_AutoTestChapitre_")) : FString(TEXT("BR_Partie_"));
 			return Value;
 		}
 	}

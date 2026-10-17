@@ -1,6 +1,8 @@
 """v4.10 : tests de check_package.py et de make_steam_vdf.py sur des paquets fabriques (aucun moteur, aucun envoi).
 v4.11 : droits d'execution poses par la fixture sur POSIX (et cas sans droits), lancement simule (echec, incomplet,
 rapport absent, vide, d'un autre essai, incoherent), binaires PE / ELF / Mach-O tronques ou a offsets hors limites.
+v4.16 : traversee du chapitre simulee (--chapter : trois phases ou un lancement, phase incomplete qui arrete la suite,
+echec, etat absent ou d'un autre essai, niveaux inattendus, fin non enregistree, canal interne, demarrage en echec).
 
   python -m unittest discover -s Tools/Build/tests -v
 
@@ -171,6 +173,37 @@ if rep is not None:
         else:
             json.dump(rep, fh)
 sys.exit(scenario.get("code", 0))
+'''
+
+
+# v4.16 : jeu simule pour la traversee du chapitre : chaque phase (-BRChapterPhase) ecrit son rapport (-BRSmokeOut) et son
+# etat (-BRChapterOut) selon le scenario ; sans -BRAutoTestChapter, le test de demarrage ("demarrage" du scenario)
+FAKE_CHAPTER_GAME = r'''
+import json, os, sys
+scenario = json.loads(os.environ["BR_FAKE_GAME"])
+args = sys.argv[1:]
+def opt(name):
+    found = [a for a in args if a.startswith(name)]
+    return found[0][len(name):] if found else None
+out = opt("-BRSmokeOut=")
+with open(os.environ["BR_FAKE_ARGS"], "a") as fh:
+    fh.write(" ".join(args) + "\n")
+if "-BRAutoTestChapter" not in args:
+    case = scenario.get("demarrage", {"code": 0, "rapport": {"etat": "reussi", "jeu": "v4.16", "problemes": [], "non_verifies": []}})
+    state = None
+else:
+    case = scenario["phases"].get(opt("-BRChapterPhase="), {"code": 0})
+    state = opt("-BRChapterOut=")
+rep = case.get("rapport")
+if rep is not None:
+    rep = dict(rep)
+    rep.setdefault("ligne_de_commande", " ".join(args) if case.get("meme_essai", True) else "Backrooms -BRSmokeOut=/ailleurs/x.json")
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(rep, fh)
+if state is not None and case.get("etat") is not None:
+    with open(state, "w", encoding="utf-8") as fh:
+        json.dump(case["etat"], fh)
+sys.exit(case.get("code", 0))
 '''
 
 
@@ -401,6 +434,161 @@ class CheckPackageTests(unittest.TestCase):
         code, out, rep = self.check(self.f.make("Linux"), "--require-launch", platform="Linux")
         self.assertEqual(code, 2, out)
         self.assertEqual(rep["verifications"]["lancement"]["etat"], "NON VERIFIE")
+
+
+    # ----------------------------------------------------------------------------------------------------- v4.16 : chapitre
+    OK_CHAPTER = {"etat": "reussi", "jeu": "v4.16", "problemes": [], "non_verifies": []}
+
+    @staticmethod
+    def chapter_state(phase, **over):
+        st = {"phase": phase, "canal": "public", "niveaux": [], "fermeture": False, "reprise": False, "fin_du_chapitre": False,
+              "fin_enregistree": False, "apres_relance": False, "continuer": -1, "nettoyage": False, "valide": True}
+        if phase in (0, 1):
+            st.update(niveaux=[0, 1, 37], fermeture=True)
+        if phase in (0, 2):
+            st.update(reprise=True, fin_du_chapitre=True, fin_enregistree=True)
+            st["niveaux"] = st["niveaux"] + [2]
+        if phase in (0, 3):
+            st.update(apres_relance=True, continuer=2, nettoyage=True)
+        st.update(over)
+        return st
+
+    def chapter_phases(self, **phase_over):
+        phases = {}
+        for ph in (1, 2, 3):
+            phases[str(ph)] = {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(ph)}
+        phases.update(phase_over)
+        return phases
+
+    def chapter(self, scenario, *flags, platform="Windows"):
+        """Controle avec la traversee du chapitre simulee ; rend aussi les lignes de commande des lancements"""
+        game = os.path.join(self.tmp, "fake_chapter_game.py")
+        write(game, FAKE_CHAPTER_GAME)
+        args_file = os.path.join(self.tmp, "chapter_args.txt")
+        os.environ["BR_FAKE_GAME"] = json.dumps(scenario)
+        os.environ["BR_FAKE_ARGS"] = args_file
+        saved = check_package.launch_command, check_package.host_platform
+        check_package.launch_command = lambda plat, root, launcher: [sys.executable, game]
+        check_package.host_platform = lambda: platform
+        try:
+            # Rapports des phases dans le dossier du test (efface a la fin), pas dans un dossier temporaire laisse derriere
+            code, out, rep = self.check(self.f.make(platform), *(list(flags) + ["--chapter-out", os.path.join(self.tmp, "chapitre")]), platform=platform)
+        finally:
+            check_package.launch_command, check_package.host_platform = saved
+        runs = []
+        if os.path.exists(args_file):
+            with open(args_file) as fh:
+                runs = [line.split(" ") for line in fh.read().splitlines() if line]
+        return code, out, rep, runs
+
+    @staticmethod
+    def phases_run(runs):
+        return [next((a.split("=", 1)[1] for a in r if a.startswith("-BRChapterPhase=")), None) for r in runs if "-BRAutoTestChapter" in r]
+
+    def test_chapitre_trois_phases(self):
+        code, out, rep, runs = self.chapter({"phases": self.chapter_phases()}, "--chapter")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(rep["verifications"]["chapitre"]["etat"], "OK")
+        self.assertIn("CHAPITRE TRAVERSE", out)
+        self.assertEqual(self.phases_run(runs), ["1", "2", "3"])
+        self.assertTrue(all("-BRAutoTestStrict" in r and "-BRAutoTest" in r for r in runs))
+        self.assertIn("0 -> 1 -> 37 -> 2 -> fin du chapitre", out)
+
+    def test_chapitre_un_lancement(self):
+        scenario = {"phases": {"0": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(0)}}}
+        code, out, rep, runs = self.chapter(scenario, "--chapter", "--chapter-mode", "single")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.phases_run(runs), ["0"])
+
+    def test_chapitre_apres_demarrage(self):
+        # --launch puis --chapter : le demarrage d'abord, puis les trois phases
+        code, out, rep, runs = self.chapter({"phases": self.chapter_phases()}, "--launch", "--chapter")
+        self.assertEqual(code, 0, out)
+        self.assertIn("ET LANCE, CHAPITRE TRAVERSE", out)
+        self.assertIn("-BRSmokeTest", runs[0])
+        self.assertEqual(self.phases_run(runs), ["1", "2", "3"])
+
+    def test_chapitre_demarrage_en_echec(self):
+        scenario = {"demarrage": {"code": 1, "rapport": dict(self.OK_CHAPTER, etat="echec", problemes=["carte absente"])}, "phases": self.chapter_phases()}
+        code, out, rep, runs = self.chapter(scenario, "--launch", "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(rep["verifications"]["chapitre"]["etat"], "ECHEC")
+        self.assertEqual(self.phases_run(runs), [])
+
+    def test_chapitre_phase_incomplete_arrete(self):
+        # Une entite seule a barre une marche (NON VERIFIE) : phase 1 incomplete, phases 2 et 3 non lancees, jamais un succes
+        incomplet = {"code": 2, "rapport": dict(self.OK_CHAPTER, etat="incomplet", non_verifies=["Niveau 1 : mecanisme 3 NON VERIFIE a pied"]),
+                     "etat": self.chapter_state(1, valide=False)}
+        code, out, rep, runs = self.chapter({"phases": self.chapter_phases(**{"1": incomplet})}, "--chapter")
+        self.assertEqual(code, 2, out)
+        self.assertEqual(rep["verifications"]["chapitre"]["etat"], "INCOMPLET")
+        self.assertIn("traversee du chapitre incomplete", rep["resultat"])
+        self.assertEqual(self.phases_run(runs), ["1"])
+
+    def test_chapitre_phase_en_echec(self):
+        echec = {"code": 1, "rapport": dict(self.OK_CHAPTER, etat="echec", problemes=["Niveau 2 : sortie vers 3 NON ATTEINTE a pied"]),
+                 "etat": self.chapter_state(2, valide=False, fin_du_chapitre=False, fin_enregistree=False, niveaux=[2])}
+        code, out, rep, runs = self.chapter({"phases": self.chapter_phases(**{"2": echec})}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(rep["verifications"]["chapitre"]["etat"], "ECHEC")
+        self.assertIn("NON ATTEINTE", out)
+        self.assertEqual(self.phases_run(runs), ["1", "2"])
+
+    def test_chapitre_etat_absent(self):
+        phases = self.chapter_phases(**{"1": {"code": 0, "rapport": self.OK_CHAPTER}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("aucun etat", out)
+
+    def test_chapitre_rapport_d_un_autre_essai(self):
+        phases = self.chapter_phases(**{"1": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(1), "meme_essai": False}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("ne correspond pas", out)
+
+    def test_chapitre_etat_d_une_autre_phase(self):
+        phases = self.chapter_phases(**{"2": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(1)}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("autre phase", out)
+
+    def test_chapitre_niveaux_inattendus(self):
+        # Un saut d'etape (Poolrooms absentes) ne passe jamais, meme si chaque phase se dit valide
+        phases = self.chapter_phases(**{"1": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(1, niveaux=[0, 1])}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("niveaux traverses", out)
+
+    def test_chapitre_fin_non_enregistree(self):
+        phases = self.chapter_phases(**{"2": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(2, fin_enregistree=False)}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("fin du chapitre enregistree NON", out)
+
+    def test_chapitre_reussi_mais_non_valide(self):
+        phases = self.chapter_phases(**{"3": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(3, valide=False)}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("non validee", out)
+
+    def test_chapitre_canal_interne(self):
+        phases = self.chapter_phases(**{"1": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(1, canal="internal")}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("version publiee", out)
+
+    def test_chapitre_exige_hors_hote(self):
+        if sys.platform.startswith("linux"):
+            self.skipTest("hote Linux")
+        code, out, rep = self.check(self.f.make("Linux"), "--require-chapter", platform="Linux")
+        self.assertEqual(code, 2, out)
+        self.assertEqual(rep["verifications"]["chapitre"]["etat"], "NON VERIFIE")
+
+    def test_chapitre_non_demande(self):
+        code, out, rep = self.check(self.f.make())
+        self.assertEqual(code, 0, out)
+        self.assertEqual(rep["verifications"]["chapitre"]["etat"], "NON VERIFIE")
+        self.assertNotIn("chapitre", rep["obligatoires"])
 
 
 class SteamVdfTests(unittest.TestCase):
