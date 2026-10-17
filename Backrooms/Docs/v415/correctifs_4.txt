@@ -1,0 +1,125 @@
+# Correctifs 4 de la v4.15 (branche v415-round4, depuis 7ef3f38) : compilation, bancs hors moteur et verifications - sortie reelle
+# Machine : Windows 11, Unreal 5.8, Visual Studio 2026 ; depuis Backrooms/ (arbre de travail wt/r4)
+# Date : 2026-10-17
+# Le jeu n'a pas ete lance ici : les etapes en jeu sont preparees (commandes et lignes attendues en fin de fichier), non executees
+# Diagnostics : Saved/TestRuns/diag4 (lane_warnings, entity_blocks_walk, level8_departure_view) de l'arbre principal
+
+## Build.bat BackroomsEditor Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
+# apres les correctifs (compilation non regroupee des fichiers modifies), puis -DisableAdaptiveUnity (compilation regroupee)
+Result: Succeeded (0 avertissement, 0 erreur) ; -DisableAdaptiveUnity : Compile Module.Backrooms.1..6.cpp, Result: Succeeded (0 avertissement)
+
+## Build.bat Backrooms Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
+Result: Succeeded (0 avertissement, 0 erreur)
+
+## Bancs hors moteur (commandes de Saved/TestRuns/run_cpp_benches.bat, projet = l'arbre de travail, sorties dans %TEMP%\brr4)
+# clang-cl 22.1.3 /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow, puis cl /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-
+# 0 avertissement pour les 20 compilations ; sorties identiques entre les deux compilateurs
+# v4.15 (correctifs 4) : la ligne "departure" compile aussi BRMechLogic.cpp et BRMissionLogic.cpp :
+#   call :bench departure Tools\Departure\test_departure.cpp %P%\BRGatherLogic.cpp %P%\BRMechLogic.cpp %P%\BRMissionLogic.cpp
+#   (Saved/TestRuns/run_cpp_benches.bat n'est pas dans le depot : a mettre a jour a la main)
+test_story        : RESULTAT : OK
+test_lidar        : RESULTAT : OK
+test_content      : RESULTAT : OK (69 verifications, 0 echec(s))
+test_departure    : RESULTAT : OK (40 verifications ; 4 : echelles des chunks du Niveau 8, voir Docs/v415/banc_depart.txt :
+                    "regle d'avant, 1981 echelles (200 graines) : point vise dans un rocher 669, colonne prise 1111, approche
+                    prise 1148, point vise seul (colonne libre) 2" ; "regle du jeu : 2083 rochers retires sur 42981 voisins ;
+                    point vise 0, colonne 0, approche 0 (attendu 0)")
+test_light        : RESULTAT : OK
+test_color        : RESULTAT : OK (24 verification(s))
+test_fluo         : RESULTAT : OK (20 verifications, 0 echec(s))
+test_mechanisms   : RESULTAT : OK (78 verifications, 0 echec(s)) (I : porte de la mission dans l'invariant des couloirs :
+                    Niveau 2 "couloir compte 3/3, place de 110 cm dans la porte 3/3, place de 60 cm libre 3/3 ; ... journalise 0",
+                    Niveau 4 "journalise non", Niveau 8 "degage des 9 pieces ; journalise non", palier, dalle entre une vanne et
+                    sa place libre et cage du Level 6 toujours journalises)
+test_missions     : RESULTAT : OK
+test_transactions : RESULTAT : OK
+
+## Sonde hors moteur de l'invariant des couloirs (diag4/lane_warnings/verify/lane_probe.cpp liee aux sources de cet arbre)
+lane_probe 2 sweep 2000 : graines avec avertissement de couloir : 0 (0.0 %) (avant : 891, 44.5 %)
+lane_probe 4 sweep 2000 : graines avec avertissement de couloir : 0 (0.0 %) (avant : 579, 28.9 %)
+lane_probe 8 sweep 2000 : graines avec avertissement de couloir : 0 (0.0 %) (avant : 1998, 100 %) ; placement identique (PickSlot inchange)
+
+## Python 3.14.8 (PYTHONUTF8=1)
+python Tools/Localization/loc_extract.py --check : a jour (aucun texte visible ajoute)
+python Tools/Localization/loc_build.py --check : traduits 1201/1201 dans chaque langue, a revoir 0
+python Tools/Localization/loc_review.py : problemes : 0
+python Tools/protect_assets.py check : OK
+python Tools/verify_device_clearance.py --seeds 120 : RESULTAT : OK (A, B, C, D, E, F : v4.14 echoue / v4.15 passe ; regle dans les sources)
+  -> Docs/v415/correctifs_places.txt ; F : "regle v4.14 : 1208 echelles, point vise dans un rocher 415 (34.4 %), colonne du
+  grimpeur prise 674 (55.8 %), approche prise 696 (57.6 %) ... -> ECHOUE" ; "regle v4.15 : ... 0 ... -> PASSE"
+python Tools/verify_pitfalls.py --doors 1-500 : 500 graine(s), 0 avec probleme(s)
+python Tools/verify_lidar.py --seeds 1-200 : RESULTAT : OK (0 echec(s))
+python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTAT : OK
+
+## Commits (branche v415-round4)
+# 228778f v4.15 (correctifs 4) : couloirs de visee devant la porte de la mission, place des tests visee par le client
+# 8670165 v4.15 (correctifs 4) : marche des tests devant une entite qui barre seule le passage
+# 55974b4 v4.15 (correctifs 4) : echelles des chunks du Niveau 8 hors des rochers de leur paroi
+# chaque commit compile seul (BackroomsEditor) ; bancs et verifications Python refaits sur le dernier ; 228778f : test_mechanisms
+# et verify_device_clearance.py OK
+
+## Correctifs
+# 1. Couloirs de visee devant la porte de la mission (journal et test ; aucun joueur bloque). Niveaux 2, 4 et 8 : "couloir de
+#    visee du mecanisme X coupe par le mecanisme 7/6" a 44,5 %, 28,9 % et 100 % des graines : l'autre est toujours la porte de
+#    la mission, posee avant les groupes devant la sortie gardee et jamais vue par PickSlot ; sa boite n'a pas de collision.
+#    BRMech::Clearance::LaneCut (journal) : une dalle de porte qui contient la place ordinaire (grossie de la capsule) et
+#    l'enveloppe de la passerelle dont les vraies pieces (BridgeParts : palier, appui, marches, poteaux, tablier leve) laissent
+#    le couloir degage sont notees au journal (Log), sans avertissement ; une dalle entre un mecanisme et une place libre, une
+#    piece de la passerelle, le sas des Poolrooms, la cage du Level 6 et le tableau du Niveau 10 restent des avertissements.
+#    Placement inchange (PickSlot, PlaceVersion 3, MissionMovedFrom2). Test : BRTestV412::CheckMissionStand garde une place
+#    seulement si la visee du client depuis ses yeux touche le mecanisme en premier (FocusFirstHit : sphere de FocusSweep,
+#    Visibility) ; nouvelle cause "visee du client prise par un voisin" (Niveau 2, graine du niveau 554144564 : la place de biais
+#    prenait la vanne voisine, la marche ne s'en sortait que par sa reprise a 60 cm). Miroir dans verify_device_clearance.py
+# 2. Marche des tests devant une entite (test seulement). BRTestV412::ClassifyBlock : balayage de la capsule du marcheur sur
+#    150 cm de son chemin, tel quel puis sans aucune entite ; une entite barre seule le passage si elle est touchee en premier
+#    ET si le decor est libre derriere elle (un mur, une porte fermee ou une cage reste un blocage du decor). A 4 et 8 controles
+#    sans progres, chez l'hote, au plus 3 fois par marche : ABREntity::Dismiss (dissipation du jeu), la marche reprend ; note
+#    "N entite(s) ecartee(s) par le test (...) ; intervention du test, pas une regle du jeu)" dans WalkStats et le bilan de la
+#    mission. Au-dela, ou chez un client : NON VERIFIE ("une entite seule barre le passage"), jamais PROBLEME. Sortie apres une
+#    mission non faite a pied : NON VERIFIE au lieu d'un second PROBLEME. Les entites des niveaux restent tirees au hasard
+#    (une Bacterie de patrouille du Level 0 reapparait 4 a 15 s apres). -BRAutoTestV415Fix : Niveau 2, graine 4120 : places
+#    des mecanismes, classement d'un blocage (creature seule ; la meme devant un mur), marche vers le mecanisme 4 avec un
+#    Smiler immobile pose dans un couloir sombre du chemin
+# 3. Echelles des chunks du Niveau 8 (jeu, partie classique seulement). BRExit_42 (graine 233637237) etait enterree dans la
+#    boite de collision du rocher de sa paroi (point vise, accroche, colonne du grimpeur, approche) : ni visee ni montee ;
+#    environ 56 % des echelles des chunks avaient la colonne du grimpeur prise. Tirages partages sans moteur (BRMech::Grid::
+#    PickWallFace, BRMech::Cave::WallRock, CellRock, RockRect, InExitKeepOut) ; ABRWorld::IsChunkExitKeepOut : un rocher de
+#    paroi ou de cellule n'entre plus dans la zone libre (BRMech::Clearance::ExitKeepOut) d'une sortie murale tiree par les
+#    3 x 3 chunks autour de lui (tirage en cache, vide a ClearMission). ABRChunk::PlanExits fait le meme tirage
+#    (ABRWorld::PickChunkWallFace, ABRWorld::IsChunkExitDrawn) : aucune sortie ne bouge. Dispositions changees : rochers du
+#    Niveau 8 pres des sorties tirees par les chunks (parties classiques : ancienne sauvegarde, Rejouer, mode dev, tests), environ
+#    un rocher de moins par echelle concernee ; le parcours lineaire ne tire aucune sortie au Niveau 8 (inchange) ; placement des
+#    missions, NetVersion, ProjectVersion et sauvegarde inchanges. Verification du developpeur (hors Shipping) : la capsule du
+#    grimpeur d'une echelle est testee a son accroche ("echelle prise dans ..."). BRGather::ViewPoint inchange (le point vise a
+#    1 m est dans la zone libre une fois les rochers retires)
+
+## Etapes en jeu (a lancer : Saved/TestRuns/run_autotests.ps1 sur la compilation de cet arbre)
+#   -BRAutoTest -BRAutoTestV415Fix -BRAutoTestStrict :
+#     "Niveau 2 (graine du niveau 554144564) : 7/7 mecanismes degages et atteignables (...)" (une ligne "aucune place debout ...
+#     N visee du client prise par un voisin" serait un nouveau constat : la place se juge comme la visee du client) ;
+#     "classement d'un blocage, cellule (x, y) : creature devant le marcheur dans le couloir libre : creature seule (Hounds ...) ;
+#     la meme devant un mur a 140 cm : decor (...)" ; "marche vers le mecanisme 4 (graine du niveau 554144564), Smiler immobile
+#     pose a la cellule (x, y) : ecarte par le test, mecanisme atteint ; ... 1 entite(s) ecartee(s) par le test (Smilers
+#     (BREntity_N, CollisionCylinder) a N cm, cellule (x, y) ; ...)". NON VERIFIE seulement si aucun couloir droit et sombre
+#     n'est sur le chemin, ou si le Smiler n'a pas barre le passage
+#   -BRAutoTest -BRAutoTestV411 -BRAutoTestStrict et la suite complete (-BRSeed=4242), -BRAutoTestV412, -BRAutoTestV413,
+#   -BRAutoTestV415, -BRAutoTestV415Fix et le test reseau : aucune ligne "Mission du Niveau 2/4/8 : couloir de visee du
+#     mecanisme ... coupe par le mecanisme 7/6" (game.log, hote et client) ; a la place, au journal (Log) : "Mission du Niveau 2 :
+#     place ordinaire du mecanisme 4 dans la porte 7 fermee (couloir non juge : la place se prend autour) (graine 554144564)",
+#     "Mission du Niveau 8 : couloir de visee du mecanisme 1 dans l'enveloppe de la passerelle 6, degage de ses pieces (graine
+#     643828852)" ; inchanges : "0 mecanisme(s) a une autre place qu'au placement 2" pour 547610713, 791493923 et 643828852,
+#     "Niveau 4 ... 7/7", "Niveau 8 ... 6/6", "Niveau 10 (graine du niveau 1697132605) : 4/4 mecanismes degages et atteignables"
+#   -BRAutoTestV412 et la suite complete (Niveau 2, graine 4120) : vanne V2 (mecanisme 5) atteinte et visee sans "marche de
+#     reprise" (premiere place "devant lui, visee du client prise par un voisin" ou "capsule genee" puis une place autour d'ou la
+#     visee la prend) ; une entite sur un chemin : "... N entite(s) ecartee(s) par le test ..." dans la marche, ou NON VERIFIE
+#     "une entite seule barre le passage", jamais "NON ATTEINT a pied ... (entite)" ; plus de second PROBLEME "mission resolue
+#     NON, sortie ouverte trouvee ... : sortie non testee" apres une mission non faite a pied (NON VERIFIE "mission non resolue a
+#     pied plus haut")
+#   -BRAutoTestV413 (Level 6 puis Niveau 8, graine du niveau 233637237, partie classique) : aucun avertissement "point vise par
+#     le depart de groupe ... pris dans" ni "echelle prise dans" ; a BRExit_42 (4000, -5400, 0), un rocher de moins sur la paroi
+#     de la cellule (9, -14), l'echelle se vise et se monte (sommet a 600 cm, une demande)
+#   Reseau, 2 joueurs, cette graine : hote au sommet de BRExit_42, client a 3 m devant : "Ready 2/2" puis depart (phase 2), pas de
+#     fin de delai (raison 1)
+#   Manuel (concepteur, non requis par ces correctifs) : un Smiler a moins de 3 m ne bouge pas et sa capsule bloque le joueur
+#     dans un couloir d'une cellule du Niveau 2 ; verifier si l'on passe dessous accroupi (estimation hors moteur : 10 a 60 cm
+#     de marge), sinon decider d'une capsule qui ne bloque pas les joueurs ou d'une dissipation au contact prolonge
