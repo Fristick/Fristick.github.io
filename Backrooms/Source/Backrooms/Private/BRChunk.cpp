@@ -1,5 +1,6 @@
 #include "BRChunk.h"
 #include "HAL/PlatformTime.h"
+#include "BRDecalLogic.h"
 #include "Backrooms.h"
 #include "BRWorld.h"
 #include "BRAssets.h"
@@ -1158,7 +1159,7 @@ void ABRChunk::BuildFogVolumes()
 // v4.15 : decalques d'usure (rendu seulement ; tires avec la graine du niveau : memes positions chez l'hote et les clients)
 // Sels BRHash : 7410-7417 murs (aureoles, eraflures), 7420-7424 moquette humide au pied des murs, 7430-7435 eraflures des
 // passages, 7440-7443 seuils humides, 7450-7453 taches de plafond ; 7460 tubes en fin de vie (AddLight). Aucun autre tirage
-// ne les utilise.
+// ne les utilise. v4.16 : 7418 et 7436 (eraflure retournee) ; dimensions et places : BRDecalLogic.h (banc test_decals).
 // ---------------------------------------------------------------------------------------------------------------------
 
 bool ABRChunk::CeilingStainAt(const ABRWorld* W, int32 X, int32 Y, FVector& OutPos, float& OutRadius, float& OutSpin)
@@ -1182,15 +1183,12 @@ bool ABRChunk::CeilingStainAt(const ABRWorld* W, int32 X, int32 Y, FVector& OutP
 	{
 		return false;
 	}
-	const float S = D.CellSize;
-	const float Rad = 35.f + 30.f * BRHash::Rand(X, Y, 7451, Seed);
-	const float Ang = BRHash::Rand(X, Y, 7452, Seed) * 2.f * PI;
-	const float Dist = FixtureHalfLength(D.Fixture) * 0.6f + Rad * 0.7f;
-	const float Lim = FMath::Max(0.f, S * 0.5f - D.WallThickness * 0.5f - Rad * 0.5f);
-	OutPos = W->CellCenter(Cell) + FVector(FMath::Clamp(static_cast<float>(L.Offset.X) + FMath::Cos(Ang) * Dist, -Lim, Lim),
-		FMath::Clamp(static_cast<float>(L.Offset.Y) + FMath::Sin(Ang) * Dist, -Lim, Lim), D.WallHeight + 2.f);
-	OutRadius = Rad;
-	OutSpin = BRHash::Rand(X, Y, 7453, Seed) * 2.f * PI;
+	// v4.16 : regle en C++ pur (BRDecalLogic.h, banc Tools/Visual/test_decals.cpp), memes tirages
+	const BRDecal::FCeilingStain St = BRDecal::CeilingStain(BRHash::Rand(X, Y, 7451, Seed), BRHash::Rand(X, Y, 7452, Seed), BRHash::Rand(X, Y, 7453, Seed),
+		static_cast<float>(L.Offset.X), static_cast<float>(L.Offset.Y), FixtureHalfLength(D.Fixture), D.CellSize, D.WallThickness);
+	OutPos = W->CellCenter(Cell) + FVector(St.X, St.Y, D.WallHeight + 2.f);
+	OutRadius = St.Radius;
+	OutSpin = St.SpinRad;
 	return true;
 }
 
@@ -1214,15 +1212,21 @@ void ABRChunk::BuildDecals()
 	const float T = D.WallThickness;
 	const float H = D.WallHeight;
 	const float DW = FMath::Min(D.DoorWidth, S - 2.f * T - 20.f);
-	const float Jamb = (S - T - DW) * 0.5f;
+	const float Jamb = BRDecal::JambLength(S, T, DW);
 	const int32 X0 = Coord.X * N;
 	const int32 Y0 = Coord.Y * N;
 	const FVector Down(0.f, 0.f, -1.f);
 	TArray<FTransform> FloorPatches;
 	// Decalque projete : X = direction de projection (vers la surface), Y = vers le bas de l'image ; demi-tailles (profondeur,
 	// hauteur de l'image, largeur de l'image)
+	// v4.16 : au plus BRDecal::MaxProjectedPerChunk decalques projetes et MaxFloorPatchesPerChunk taches au sol par chunk (les
+	// premiers tires, dans l'ordre des cellules : les memes chez tous)
 	auto AddDecal = [this](EBRDecal Kind, const FVector& Pos, const FVector& XAxis, const FVector& YAxis, const FVector& HalfSize, int32 Sort)
 	{
+		if (PendingDecals.Num() >= BRDecal::MaxProjectedPerChunk)
+		{
+			return;
+		}
 		FPendingDecal P;
 		P.Kind = Kind;
 		P.Pos = Pos;
@@ -1234,6 +1238,10 @@ void ABRChunk::BuildDecals()
 	// Tache au sol : plan du moteur (100 x 100 cm) a 6 mm au-dessus du sol, X le long de Yaw
 	auto AddPatch = [this, &FloorPatches](const FVector& At, float Yaw, float Length, float Width)
 	{
+		if (FloorPatches.Num() >= BRDecal::MaxFloorPatchesPerChunk)
+		{
+			return;
+		}
 		FloorPatches.Add(FTransform(FRotator(0.f, Yaw, 0.f), At + FVector(0.f, 0.f, 0.6f) - GetActorLocation(), FVector(Length / 100.f, Width / 100.f, 1.f)));
 	};
 	for (int32 X = X0; X < X0 + N; ++X)
@@ -1271,7 +1279,7 @@ void ABRChunk::BuildDecals()
 				const FVector Along(-Dir.Y, Dir.X, 0.f); // le long du mur
 				const float Inset = bSolid ? 0.f : T * 0.5f;
 				const FVector Face = Center + Out * (S * 0.5f - Inset);
-				const float Span = S - 2.f * Inset - 20.f; // longueur utile de la face (sans les poteaux des coins)
+				const float Span = BRDecal::FaceSpan(S, Inset); // longueur utile de la face (sans les poteaux des coins)
 				const float AlongYaw = FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X));
 				auto R = [X, Y, Side, Seed](int32 Salt) { return BRHash::Rand(X * 4 + Side, Y, Salt, Seed); };
 				if ((bSolid || Edge == EBREdge::Wall) && !bService)
@@ -1280,52 +1288,41 @@ void ABRChunk::BuildDecals()
 					if (!bQuiet && Roll < 0.06f * K)
 					{
 						// Aureole d'infiltration : l'eau descend du plafond le long du mur (haut de l'image sous le plafond)
-						const float Wd = FMath::Min(70.f + 70.f * R(7411), Span);
-						const float Ht = FMath::Min(50.f + 70.f * R(7412), H - 60.f);
-						const float Off = (R(7413) - 0.5f) * FMath::Max(0.f, Span - Wd);
-						AddDecal(EBRDecal::WaterStain, Face + Along * Off + FVector(0.f, 0.f, H + 0.05f * Ht - Ht * 0.5f), Out, Down,
-							FVector(6.f, Ht * 0.5f, Wd * 0.5f), 0);
+						const BRDecal::FWallDecal WD = BRDecal::WaterStain(R(7411), R(7412), R(7413), Span, H);
+						AddDecal(EBRDecal::WaterStain, Face + Along * WD.Along + FVector(0.f, 0.f, WD.Z), Out, Down, FVector(WD.HalfDepth, WD.HalfHeight, WD.HalfWidth), 0);
 					}
 					else if (!bQuiet && Roll < 0.1f * K)
 					{
-						// Eraflures basses (chariots, semelles), plinthe comprise ; jamais sur le sol (bas de la boite a 6 cm)
-						const float Wd = FMath::Min(40.f + 50.f * R(7414), Span);
-						const float Ht = 18.f + 14.f * R(7415);
-						const float Off = (R(7416) - 0.5f) * FMath::Max(0.f, Span - Wd);
-						AddDecal(EBRDecal::Scuff, Face + Along * Off + FVector(0.f, 0.f, 6.f + Ht * 0.5f + 16.f * R(7417)), Out, Down,
-							FVector(5.f, Ht * 0.5f, Wd * 0.5f), 1);
+						// Eraflures basses (chariots, semelles), plinthe comprise ; jamais sur le sol (bas de la boite a 6 cm). v4.16 :
+						// une sur deux retournee (demi-tour autour de l'axe de projection : traits horizontaux, autre dessin)
+						const BRDecal::FWallDecal WD = BRDecal::WallScuff(R(7414), R(7415), R(7416), R(7417), R(7418), Span);
+						AddDecal(EBRDecal::Scuff, Face + Along * WD.Along + FVector(0.f, 0.f, WD.Z), Out, WD.bFlipped ? -Down : Down,
+							FVector(WD.HalfDepth, WD.HalfHeight, WD.HalfWidth), 1);
 					}
 					if (!bQuiet && R(7420) < 0.05f * K)
 					{
 						// Sol humide au pied du mur : une partie du plan passe sous le mur (le bord se perd sous la plinthe).
 						// v4.15 : cette partie reste dans l'epaisseur du mur, lacet compris (5 cm de marge) : avant, le plan
 						// le plus large depassait jusqu'a 15 cm sur la moquette de la piece d'a cote. Le reste avance dans la piece
-						const float Len = FMath::Min(100.f + 120.f * R(7421), Span + 20.f);
-						const float Wid = 60.f + 60.f * R(7422);
-						const float Off = (R(7423) - 0.5f) * FMath::Max(0.f, Span + 20.f - Len);
-						constexpr float MaxJitter = 8.f;
-						const float Behind = bSolid ? S : T; // matiere derriere la face
-						const float MaxIn = FMath::Max(0.f, Behind - 0.5f * Len * FMath::Sin(FMath::DegreesToRadians(MaxJitter)) - 5.f);
-						const float In = FMath::Min(0.5f * Wid, MaxIn);
-						AddPatch(Face + Along * Off - Out * (0.5f * Wid - In), AlongYaw + (R(7424) - 0.5f) * 2.f * MaxJitter, Len, Wid);
+						const BRDecal::FFloorPatch FP = BRDecal::WallFootPatch(R(7421), R(7422), R(7423), R(7424), Span, bSolid ? S : T);
+						AddPatch(Face + Along * FP.Along - Out * FP.Out, AlongYaw + FP.YawJitterDeg, FP.Length, FP.Width);
 					}
 				}
 				else if (Edge == EBREdge::Door && !bSolid)
 				{
-					if (!bQuiet && Jamb > 26.f && R(7430) < 0.22f * K)
+					if (!bQuiet && BRDecal::JambTakesScuff(Jamb) && R(7430) < 0.22f * K)
 					{
-						// Eraflures a cote du passage (hors du chambranle), sur le jambage de cette cellule
-						const float Wd = FMath::Min(25.f + 30.f * R(7431), Jamb - 16.f);
-						const float Sgn = R(7432) < 0.5f ? -1.f : 1.f;
-						const float Off = Sgn * (DW * 0.5f + 12.f + Wd * 0.5f + FMath::Max(0.f, Jamb - 16.f - Wd) * R(7433));
-						const float Ht = 15.f + 15.f * R(7434);
-						AddDecal(EBRDecal::Scuff, Face + Along * Off + FVector(0.f, 0.f, 5.f + Ht * 0.5f + 20.f * R(7435)), Out, Down,
-							FVector(5.f, Ht * 0.5f, Wd * 0.5f), 1);
+						// Eraflures a cote du passage (hors du chambranle), sur le jambage de cette cellule ; v4.16 : une sur deux retournee
+						const BRDecal::FWallDecal WD = BRDecal::JambScuff(R(7431), R(7432), R(7433), R(7434), R(7435), R(7436), DW, Jamb);
+						AddDecal(EBRDecal::Scuff, Face + Along * WD.Along + FVector(0.f, 0.f, WD.Z), Out, WD.bFlipped ? -Down : Down,
+							FVector(WD.HalfDepth, WD.HalfHeight, WD.HalfWidth), 1);
 					}
-					// Seuil humide sous le passage (une seule fois : depuis la cellule a l'ouest ou au sud du passage)
-					if ((Side == 0 || Side == 2) && !W->IsPitRoomCell(Next.X, Next.Y) && R(7440) < 0.12f * K)
+					// Seuil humide sous le passage (une seule fois : depuis la cellule a l'ouest ou au sud du passage). v4.16 : jamais
+					// au-dessus d'un bassin voisin (sol plus bas : la tache y flotterait)
+					if ((Side == 0 || Side == 2) && !W->IsPitRoomCell(Next.X, Next.Y) && !W->IsPoolCell(Next.X, Next.Y) && R(7440) < 0.12f * K)
 					{
-						AddPatch(Center + Out * (S * 0.5f), AlongYaw + (R(7443) - 0.5f) * 20.f, DW * (0.9f + 0.3f * R(7441)), T + 80.f + 80.f * R(7442));
+						const BRDecal::FFloorPatch FP = BRDecal::ThresholdPatch(R(7441), R(7442), R(7443), DW, T);
+						AddPatch(Center + Out * (S * 0.5f), AlongYaw + FP.YawJitterDeg, FP.Length, FP.Width);
 					}
 				}
 			}
@@ -1380,7 +1377,7 @@ void ABRChunk::BuildDecals()
 	if (FloorPatches.Num() > 0 && DampMat && A->Plane())
 	{
 		// Un seul lot d'instances par chunk pour toutes les taches au sol (decalques sur maillage)
-		FBatch& B = GetBatch(TEXT("DECAL|FLOOR"), A->Plane(), DampMat, false, false, 4500.f);
+		FBatch& B = GetBatch(TEXT("DECAL|FLOOR"), A->Plane(), DampMat, false, false, BRDecal::FloorPatchCull); // v4.16 : 35 m (avant 45)
 		B.bDecal = true;
 		B.Transforms.Append(FloorPatches);
 	}
@@ -1399,8 +1396,9 @@ void ABRChunk::CreateDecal(const FPendingDecal& P)
 	Dc->SetDecalMaterial(Mat);
 	Dc->DecalSize = P.HalfSize;
 	Dc->SortOrder = P.Sort;
-	// S'efface quand il devient petit a l'ecran (environ 1 % de l'image)
-	Dc->FadeScreenSize = 0.01f;
+	// v4.16 : s'efface au plus tard a sa distance utile (BRDecal::UsefulDistance : 35 m en 1920 px de large) ; un petit decalque
+	// plus tot, comme avant. Avant : 0,01 pour tous (une grande aureole restait dessinee jusqu'a 116 m)
+	Dc->FadeScreenSize = BRDecal::FadeScreenSizeFor(static_cast<float>(FMath::Max3(P.HalfSize.X, P.HalfSize.Y, P.HalfSize.Z)));
 	Dc->SetRelativeLocationAndRotation(P.Pos - GetActorLocation(), P.Rot);
 	Dc->RegisterComponent();
 	Extra.Add(Dc);

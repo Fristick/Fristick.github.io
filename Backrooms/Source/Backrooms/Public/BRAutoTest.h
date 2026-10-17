@@ -404,4 +404,7 @@ private:
 	/** v4.15 (realisme) : banc visuel -BRAutoTestVisual (BRAutoTestVisual.cpp) : poses fixes par niveau et par profil,
 	 *  captures vis_<niveau>_<profil>_<pose> et mesures (Mesures.csv), coupure et lampe au Level 0 */
 	void AddVisualSteps();
+	/** v4.16 (vis) : -BRAutoTestV416Visual (BRAutoTestV416Visual.cpp) : HUD aux trois tailles et dans les 22 langues (textes
+	 *  controles), vraies fenetres, modes d'affichage, manette, HUD du scanner, neuf entites, raccords du kit, decalques */
+	void AddV416VisualSteps();
 };

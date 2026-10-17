@@ -59,4 +59,16 @@ namespace BRKeys
 	bool IsBindable(const FKey& Key);
 	/** Incremente a chaque modification (le controleur reconstruit alors ses entrees) */
 	int32 Revision();
+
+	/** v4.16 : invites a la manette. Quand la manette a servi en dernier (ABRPlayerController::IsUsingGamepad, mis a jour
+	 *  a chaque image), Primary, Tag et Expand nomment le bouton fixe de l'action (GamepadKey) au lieu de la touche du
+	 *  clavier ; une action sans bouton (poches, chat vocal) garde sa touche. Avant : toujours le clavier ("[E] Ramasser"
+	 *  devant un joueur a la manette) */
+	void SetGamepadPrompts(bool bPad);
+	bool UsesGamepadPrompts();
+	/** Bouton de la manette lie a l'action par ABRPlayerController::RebuildMappings (FKey invalide : aucun ; les quatre
+	 *  actions du deplacement : stick gauche, nomme une seule fois par Expand quand elles se suivent) */
+	FKey GamepadKey(EBRAction Action);
+	/** Nom court d'un bouton de la manette (A, B, X, Y, LB, RB, LT, RT, LS, RS, VUE, MENU, CROIX...) */
+	FString GamepadName(const FKey& Key);
 }

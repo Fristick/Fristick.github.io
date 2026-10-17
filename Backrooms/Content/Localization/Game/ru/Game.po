@@ -2669,6 +2669,22 @@ msgctxt "BR,HUD.1992ThresholdSystems"
 msgid "© 1992 THRESHOLD SYSTEMS"
 msgstr "© 1992 THRESHOLD SYSTEMS"
 
+#. Key:	HUD.PadInventoryFooter
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4211)
+#: Source/Backrooms/Private/BRHUD.cpp(4211)
+#, fuzzy
+msgctxt "BR,HUD.PadInventoryFooter"
+msgid "[{Prev}] [{Next}]  ONGLETS     [{Up}] [{Down}]  FAIRE DÉFILER     [{Close}]  FERMER"
+msgstr "[{Prev}] [{Next}]  ВКЛАДКИ     [{Up}] [{Down}]  ПРОКРУТКА     [{Close}]  ЗАКРЫТЬ"
+
+#. Key:	HUD.PadNotebookHint
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4217)
+#: Source/Backrooms/Private/BRHUD.cpp(4217)
+#, fuzzy
+msgctxt "BR,HUD.PadNotebookHint"
+msgid "[{Hint}]  AIDE"
+msgstr "[{Hint}]  ПОМОЩЬ"
+
 #. Key:	HUD.GlisserDeplacerDoubleClicUtiliser
 #. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4113)
 #: Source/Backrooms/Private/BRHUD.cpp(4113)
@@ -4292,6 +4308,62 @@ msgstr "СКАНЕР: ИМПУЛЬС"
 msgctxt "BR,Key.Action.LidarFocus"
 msgid "SCANNER : SCAN FOCALISÉ (MAINTENIR)"
 msgstr "СКАНЕР: ФОКУСНОЕ СКАНИРОВАНИЕ (УДЕРЖИВАТЬ)"
+
+#. Key:	Key.Pad.View
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(378)
+#: Source/Backrooms/Private/BRKeys.cpp(378)
+#, fuzzy
+msgctxt "BR,Key.Pad.View"
+msgid "VUE"
+msgstr "ПРОСМОТР"
+
+#. Key:	Key.Pad.Menu
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(382)
+#: Source/Backrooms/Private/BRKeys.cpp(382)
+#, fuzzy
+msgctxt "BR,Key.Pad.Menu"
+msgid "MENU"
+msgstr "МЕНЮ"
+
+#. Key:	Key.Pad.DpadUp
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(386)
+#: Source/Backrooms/Private/BRKeys.cpp(386)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadUp"
+msgid "CROIX HAUT"
+msgstr "КРЕСТОВИНА ВВЕРХ"
+
+#. Key:	Key.Pad.DpadDown
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(390)
+#: Source/Backrooms/Private/BRKeys.cpp(390)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadDown"
+msgid "CROIX BAS"
+msgstr "КРЕСТОВИНА ВНИЗ"
+
+#. Key:	Key.Pad.DpadLeft
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(394)
+#: Source/Backrooms/Private/BRKeys.cpp(394)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadLeft"
+msgid "CROIX GAUCHE"
+msgstr "КРЕСТОВИНА ВЛЕВО"
+
+#. Key:	Key.Pad.DpadRight
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(398)
+#: Source/Backrooms/Private/BRKeys.cpp(398)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadRight"
+msgid "CROIX DROITE"
+msgstr "КРЕСТОВИНА ВПРАВО"
+
+#. Key:	Key.Pad.LeftStick
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(402)
+#: Source/Backrooms/Private/BRKeys.cpp(402)
+#, fuzzy
+msgctxt "BR,Key.Pad.LeftStick"
+msgid "STICK GAUCHE"
+msgstr "ЛЕВЫЙ СТИК"
 
 #. Key:	Level.0.Title
 #. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(43)

@@ -42,6 +42,33 @@ public:
 	/** Direction d'une position par rapport au regard du joueur local (texte localise) */
 	static FString DirectionWord(const UObject* WorldContext, const FVector& Source);
 	void AddMessage(const FString& Text, float Duration, const FLinearColor& Color);
+	/** v4.16 : manette dans l'inventaire (ABRPlayerController : croix, LB / RB, Y) : onglet precedent ou suivant (TabStep),
+	 *  defilement des listes de l'onglet a la prochaine image (ScrollStep, en pas de molette), aide du carnet (bHint). Avant :
+	 *  souris seulement (le carnet n'etait pas atteignable a la manette) */
+	void PadInventory(int32 TabStep, int32 ScrollStep, bool bHint);
+
+private:
+	/** v4.16 (tests, -BRAutoTestV416Visual) : releve des textes dessines pendant une image (bTestRecordTexts) : rectangle
+	 *  (X, Y, largeur, hauteur), panneau en cours (Panel ; inventaire : sa bande), largeur permise par l'appelant (TextFit,
+	 *  TxtLine ; 0 : aucune), taille effective (points), texte raccourci par des points de suspension */
+	struct FTestText
+	{
+		FString Text;
+		FVector4f Rect = FVector4f(0.f, 0.f, 0.f, 0.f);
+		FVector4f Panel = FVector4f(0.f, 0.f, 0.f, 0.f);
+		float MaxW = 0.f;
+		float Points = 0.f;
+		bool bCut = false;
+	};
+	bool bTestRecordTexts = false;
+	TArray<FTestText> TestTexts;
+	FVector4f TestPanel = FVector4f(0.f, 0.f, 0.f, 0.f);
+	float TestTextMaxW = 0.f;
+	bool bTestTextCut = false;
+	int32 TestTextDepth = 0;
+	void RecordTestText(const FString& S, float X, float Y, const FVector2f& Size, float Points);
+	/** v4.16 : defilement demande a la manette (pixels a 1080p), applique par ScrollArea a la prochaine image de l'inventaire */
+	float PadScroll = 0.f;
 
 private:
 	struct FCaption

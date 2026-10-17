@@ -705,6 +705,47 @@ void ABRPlayerController::SetupInputComponent()
 	EIC->BindAction(MenuDeleteAction, ETriggerEvent::Started, this, &ABRPlayerController::OnMenuDelete);
 }
 
+namespace BRPadInput
+{
+	/** v4.16 : un bouton de la manette est enfonce (croix, epaules, gachettes, Vue, Menu, B, Y, sticks cliques) : la manette
+	 *  a servi (avant : seuls les sticks, A et X comptaient ; la croix ou Vue laissaient les invites du clavier) */
+	bool AnyButtonDown(const APlayerController* PC)
+	{
+		static const FKey Buttons[] = { EKeys::Gamepad_FaceButton_Right, EKeys::Gamepad_FaceButton_Top, EKeys::Gamepad_DPad_Up, EKeys::Gamepad_DPad_Down,
+			EKeys::Gamepad_DPad_Left, EKeys::Gamepad_DPad_Right, EKeys::Gamepad_LeftShoulder, EKeys::Gamepad_RightShoulder, EKeys::Gamepad_LeftTrigger,
+			EKeys::Gamepad_RightTrigger, EKeys::Gamepad_Special_Left, EKeys::Gamepad_Special_Right, EKeys::Gamepad_LeftThumbstick, EKeys::Gamepad_RightThumbstick };
+		for (const FKey& K : Buttons)
+		{
+			if (PC->IsInputKeyDown(K))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** v4.16 : manette dans l'inventaire (bOpen : inventaire ouvert, sans dialogue ni reaffectation en cours) : l'appui de Key
+	 *  change d'onglet (TabStep), fait defiler les listes de l'onglet (ScrollStep), demande l'aide du carnet (bHint) ou ferme
+	 *  l'inventaire (bClose). false : ce n'est pas ce bouton (clavier : rien ne change) */
+	bool Inventory(ABRPlayerController* PC, bool bOpen, const FKey& Key, int32 TabStep, int32 ScrollStep, bool bHint = false, bool bClose = false)
+	{
+		if (!bOpen || !PC->IsInputKeyDown(Key))
+		{
+			return false;
+		}
+		if (bClose)
+		{
+			PC->SetInventoryOpen(false);
+			return true;
+		}
+		if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
+		{
+			H->PadInventory(TabStep, ScrollStep, bHint);
+		}
+		return true;
+	}
+}
+
 void ABRPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
@@ -769,7 +810,7 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	{
 		const float Pad = FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_LeftX)) + FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_LeftY))
 			+ FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_RightX)) + FMath::Abs(GetInputAnalogKeyState(EKeys::Gamepad_RightY));
-		if (Pad > 0.4f || IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom) || IsInputKeyDown(EKeys::Gamepad_FaceButton_Left))
+		if (Pad > 0.4f || IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom) || IsInputKeyDown(EKeys::Gamepad_FaceButton_Left) || BRPadInput::AnyButtonDown(this))
 		{
 			bPadActive = true;
 		}
@@ -780,6 +821,8 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 		{
 			bPadActive = false;
 		}
+		// v4.16 : les invites (HUD, carnet, scanner) nomment les boutons de la manette quand elle a servi en dernier
+		BRKeys::SetGamepadPrompts(bPadActive);
 	}
 
 	// Sauvegarde automatique de la partie en cours : a chaque niveau, puis toutes les minutes
@@ -1159,6 +1202,11 @@ void ABRPlayerController::OnSprintCompleted(const FInputActionValue& Value)
 
 void ABRPlayerController::OnCrouch(const FInputActionValue& Value)
 {
+	// v4.16 : B ferme l'inventaire (retour, comme dans les menus d'une console)
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Right, 0, 0, false, true))
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1170,6 +1218,11 @@ void ABRPlayerController::OnCrouch(const FInputActionValue& Value)
 
 void ABRPlayerController::OnFlash(const FInputActionValue& Value)
 {
+	// v4.16 : Y dans l'inventaire : aide progressive du carnet
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Top, 0, 0, true))
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1201,6 +1254,11 @@ void ABRPlayerController::OnInteractCompleted(const FInputActionValue& Value)
 
 void ABRPlayerController::OnDrink(const FInputActionValue& Value)
 {
+	// v4.16 : LB dans l'inventaire : onglet precedent
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_LeftShoulder, -1, 0))
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1212,6 +1270,11 @@ void ABRPlayerController::OnDrink(const FInputActionValue& Value)
 
 void ABRPlayerController::OnReload(const FInputActionValue& Value)
 {
+	// v4.16 : RB dans l'inventaire : onglet suivant
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_RightShoulder, 1, 0))
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1459,6 +1522,11 @@ void ABRPlayerController::OnQuit(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 {
+	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Left, -1, 0))
+	{
+		return;
+	}
 	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		if (MenuPage == EBRMenuPage::Language)
@@ -1474,6 +1542,11 @@ void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 {
+	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Right, 1, 0))
+	{
+		return;
+	}
 	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		if (MenuPage == EBRMenuPage::Language)
@@ -1488,6 +1561,11 @@ void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuUp(const FInputActionValue& Value)
 {
+	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Up, 0, -1))
+	{
+		return;
+	}
 	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		SetMenuCursor((MenuCursor + GetMenuItemCount() - 1) % FMath::Max(1, GetMenuItemCount()));
@@ -1496,6 +1574,11 @@ void ABRPlayerController::OnMenuUp(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuDown(const FInputActionValue& Value)
 {
+	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
+	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Down, 0, 1))
+	{
+		return;
+	}
 	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		SetMenuCursor((MenuCursor + 1) % FMath::Max(1, GetMenuItemCount()));

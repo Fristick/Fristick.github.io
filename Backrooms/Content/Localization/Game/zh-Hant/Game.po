@@ -2669,6 +2669,22 @@ msgctxt "BR,HUD.1992ThresholdSystems"
 msgid "© 1992 THRESHOLD SYSTEMS"
 msgstr "© 1992 THRESHOLD SYSTEMS"
 
+#. Key:	HUD.PadInventoryFooter
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4211)
+#: Source/Backrooms/Private/BRHUD.cpp(4211)
+#, fuzzy
+msgctxt "BR,HUD.PadInventoryFooter"
+msgid "[{Prev}] [{Next}]  ONGLETS     [{Up}] [{Down}]  FAIRE DÉFILER     [{Close}]  FERMER"
+msgstr "[{Prev}] [{Next}]  切換分頁     [{Up}] [{Down}]  捲動     [{Close}]  關閉"
+
+#. Key:	HUD.PadNotebookHint
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4217)
+#: Source/Backrooms/Private/BRHUD.cpp(4217)
+#, fuzzy
+msgctxt "BR,HUD.PadNotebookHint"
+msgid "[{Hint}]  AIDE"
+msgstr "[{Hint}]  說明"
+
 #. Key:	HUD.GlisserDeplacerDoubleClicUtiliser
 #. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4113)
 #: Source/Backrooms/Private/BRHUD.cpp(4113)
@@ -4292,6 +4308,62 @@ msgstr "掃描器：脈衝"
 msgctxt "BR,Key.Action.LidarFocus"
 msgid "SCANNER : SCAN FOCALISÉ (MAINTENIR)"
 msgstr "掃描器：聚焦掃描（按住）"
+
+#. Key:	Key.Pad.View
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(378)
+#: Source/Backrooms/Private/BRKeys.cpp(378)
+#, fuzzy
+msgctxt "BR,Key.Pad.View"
+msgid "VUE"
+msgstr "檢視"
+
+#. Key:	Key.Pad.Menu
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(382)
+#: Source/Backrooms/Private/BRKeys.cpp(382)
+#, fuzzy
+msgctxt "BR,Key.Pad.Menu"
+msgid "MENU"
+msgstr "選單"
+
+#. Key:	Key.Pad.DpadUp
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(386)
+#: Source/Backrooms/Private/BRKeys.cpp(386)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadUp"
+msgid "CROIX HAUT"
+msgstr "十字鍵上"
+
+#. Key:	Key.Pad.DpadDown
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(390)
+#: Source/Backrooms/Private/BRKeys.cpp(390)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadDown"
+msgid "CROIX BAS"
+msgstr "十字鍵下"
+
+#. Key:	Key.Pad.DpadLeft
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(394)
+#: Source/Backrooms/Private/BRKeys.cpp(394)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadLeft"
+msgid "CROIX GAUCHE"
+msgstr "十字鍵左"
+
+#. Key:	Key.Pad.DpadRight
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(398)
+#: Source/Backrooms/Private/BRKeys.cpp(398)
+#, fuzzy
+msgctxt "BR,Key.Pad.DpadRight"
+msgid "CROIX DROITE"
+msgstr "十字鍵右"
+
+#. Key:	Key.Pad.LeftStick
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(402)
+#: Source/Backrooms/Private/BRKeys.cpp(402)
+#, fuzzy
+msgctxt "BR,Key.Pad.LeftStick"
+msgid "STICK GAUCHE"
+msgstr "左搖桿"
 
 #. Key:	Level.0.Title
 #. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(43)

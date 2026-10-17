@@ -481,7 +481,9 @@ FString ABRHUD::ControlsLine(int32 Line) const
 	using namespace BRKeys;
 	if (Line == 0)
 	{
-		return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MoveforwardMoveleftMovebackwardMoveright", "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}  se d\u00e9placer     {Sprint}  courir     {Crouch}  s'accroupir     {Jump}  sauter     {Interact}  interagir     {ThirdPerson}  vue 3e personne"), { { TEXT("MoveForward"), BRLoc::Arg(Primary(EBRAction::MoveForward)) }, { TEXT("MoveLeft"), BRLoc::Arg(Primary(EBRAction::MoveLeft)) }, { TEXT("MoveBackward"), BRLoc::Arg(Primary(EBRAction::MoveBackward)) }, { TEXT("MoveRight"), BRLoc::Arg(Primary(EBRAction::MoveRight)) }, { TEXT("Sprint"), BRLoc::Arg(Primary(EBRAction::Sprint)) }, { TEXT("Crouch"), BRLoc::Arg(Primary(EBRAction::Crouch)) }, { TEXT("Jump"), BRLoc::Arg(Primary(EBRAction::Jump)) }, { TEXT("Interact"), BRLoc::Arg(Primary(EBRAction::Interact)) }, { TEXT("ThirdPerson"), BRLoc::Arg(Primary(EBRAction::ThirdPerson)) } });
+		// v4.16 : manette : le stick gauche nomme une fois (les quatre directions)
+		const bool bPad = UsesGamepadPrompts();
+		return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MoveforwardMoveleftMovebackwardMoveright", "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}  se d\u00e9placer     {Sprint}  courir     {Crouch}  s'accroupir     {Jump}  sauter     {Interact}  interagir     {ThirdPerson}  vue 3e personne"), { { TEXT("MoveForward"), BRLoc::Arg(Primary(EBRAction::MoveForward)) }, { TEXT("MoveLeft"), BRLoc::Arg(bPad ? FString() : Primary(EBRAction::MoveLeft)) }, { TEXT("MoveBackward"), BRLoc::Arg(bPad ? FString() : Primary(EBRAction::MoveBackward)) }, { TEXT("MoveRight"), BRLoc::Arg(bPad ? FString() : Primary(EBRAction::MoveRight)) }, { TEXT("Sprint"), BRLoc::Arg(Primary(EBRAction::Sprint)) }, { TEXT("Crouch"), BRLoc::Arg(Primary(EBRAction::Crouch)) }, { TEXT("Jump"), BRLoc::Arg(Primary(EBRAction::Jump)) }, { TEXT("Interact"), BRLoc::Arg(Primary(EBRAction::Interact)) }, { TEXT("ThirdPerson"), BRLoc::Arg(Primary(EBRAction::ThirdPerson)) } });
 	}
 	return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.FlashlightLampeNightvisionVisionNocturne", "{Flashlight}  lampe     {NightVision}  vision nocturne     {Pocket1}-{Pocket4}  poches     {Drink}  eau d'amande     {Bandage}  bandage     {Battery}  piles     {Inventory}  inventaire     {Pause}  pause"), { { TEXT("Flashlight"), BRLoc::Arg(Primary(EBRAction::Flashlight)) }, { TEXT("NightVision"), BRLoc::Arg(Primary(EBRAction::NightVision)) }, { TEXT("Pocket1"), BRLoc::Arg(Primary(EBRAction::Pocket1)) }, { TEXT("Pocket4"), BRLoc::Arg(Primary(EBRAction::Pocket4)) }, { TEXT("Drink"), BRLoc::Arg(Primary(EBRAction::Drink)) }, { TEXT("Bandage"), BRLoc::Arg(Primary(EBRAction::Bandage)) }, { TEXT("Battery"), BRLoc::Arg(Primary(EBRAction::Battery)) }, { TEXT("Inventory"), BRLoc::Arg(Primary(EBRAction::Inventory)) }, { TEXT("Pause"), BRLoc::Arg(Primary(EBRAction::Pause)) } });
 }
@@ -520,6 +522,8 @@ float ABRHUD::ScrollArea(float& Scroll, float X, float Y, float W, float H, floa
 			Scroll -= 60.f;
 		}
 	}
+	// v4.16 : croix de la manette (PadInventory) : toutes les listes de l'onglet, chacune bornee a son contenu
+	Scroll += PadScroll;
 	Scroll = FMath::Clamp(Scroll, 0.f, MaxOffset / FMath::Max(U, 0.01f));
 	const float Offset = Scroll * U;
 	const float AX = X + W - 14.f * U;
@@ -651,6 +655,57 @@ void ABRHUD::AddMessage(const FString& Text, float Duration, const FLinearColor&
 	}
 }
 
+void ABRHUD::PadInventory(int32 TabStep, int32 ScrollStep, bool bHint)
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	ABRCharacter* C = PC && !PC->IsInMenu() ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (TabStep != 0)
+	{
+		// Ordre des onglets a l'ecran (DrawInventory) ; depuis le menu titre, sans personnage : PARAMETRES et TOUCHES
+		static const ETab Order[] = { ETab::Character, ETab::Notebook, ETab::Journal, ETab::Settings, ETab::Keys };
+		const int32 First = C ? 0 : 3;
+		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(Order)) - First;
+		int32 Cur = 0;
+		for (int32 i = 0; i < Count; ++i)
+		{
+			if (Order[First + i] == Tab)
+			{
+				Cur = i;
+			}
+		}
+		Tab = Order[First + ((Cur + TabStep) % Count + Count) % Count];
+		Inspecting = FSlotRef();
+		Dragging = FSlotRef();
+		if (PC)
+		{
+			PC->CancelKeyCapture();
+		}
+	}
+	PadScroll += ScrollStep * 60.f;
+	if (bHint && Tab == ETab::Notebook && NotebookHintStep >= 0)
+	{
+		// Meme effet qu'un clic sur le bouton d'aide (DrawNotebookTab) : aucune, indice, rappel des indices trouves
+		int32& Level = NotebookHint.FindOrAdd(NotebookHintStep);
+		Level = (Level + 1) % 3;
+	}
+	if (C && (TabStep != 0 || bHint))
+	{
+		C->PlayUISound(TEXT("S_UIClick"), 0.5f);
+	}
+}
+
+void ABRHUD::RecordTestText(const FString& S, float X, float Y, const FVector2f& Size, float Points)
+{
+	FTestText T;
+	T.Text = S;
+	T.Rect = FVector4f(X, Y, Size.X, Size.Y);
+	T.Panel = TestPanel;
+	T.MaxW = TestTextMaxW;
+	T.Points = Points;
+	T.bCut = bTestTextCut;
+	TestTexts.Add(MoveTemp(T));
+}
+
 // =====================================================================================================================
 // Primitives
 // =====================================================================================================================
@@ -676,7 +731,9 @@ void ABRHUD::TxtLine(const FString& S, float X, float Y, float W, const FLinearC
 {
 	// Ligne d'un paragraphe coupe par Wrap : alignee a droite du bloc dans une langue ecrite de droite a gauche
 	const bool bRtl = BRLoc::IsRightToLeft();
+	TestTextMaxW = W; // v4.16 (tests) : largeur du bloc
 	TextF(S, bRtl ? X + W : X, Y, C, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular, bRtl ? EUiAlign::Right : EUiAlign::Left, false);
+	TestTextMaxW = 0.f;
 }
 
 TArray<FString> ABRHUD::Wrap(const FString& S, float MaxWidth, UFont* Font, float Scale)
@@ -708,6 +765,7 @@ void ABRHUD::Frame(float X, float Y, float W, float H, const FLinearColor& C, fl
 void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
 {
 	const float U = Ui();
+	TestPanel = FVector4f(X, Y, W, H); // v4.16 (tests) : textes suivants dans ce panneau
 	RoundRect(X, Y, W, H, 14.f * U, PanelBg);
 	RoundRect(X, Y, W, H, 14.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.22f), true);
 	if (!Title.IsEmpty())
@@ -888,6 +946,11 @@ void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, fl
 				const float W = static_cast<float>(Shaped.GetValue()->GetMeasuredWidth());
 				X -= Align == EUiAlign::Center ? W * 0.5f : W;
 			}
+			if (bTestRecordTexts && TestTextDepth == 0)
+			{
+				RecordTestText(S, X, Y, FVector2f(static_cast<float>(Shaped.GetValue()->GetMeasuredWidth()), static_cast<float>(Shaped.GetValue()->GetMaxTextHeight())),
+					static_cast<float>(Font.Size));
+			}
 			FCanvasShapedTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), Shaped.GetValue(), C);
 			if (bShadow)
 			{
@@ -901,6 +964,10 @@ void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, fl
 	{
 		const float W = TextSize(S, Size, Weight).X;
 		X -= Align == EUiAlign::Center ? W * 0.5f : W;
+	}
+	if (bTestRecordTexts && TestTextDepth == 0)
+	{
+		RecordTestText(S, X, Y, TextSize(S, Size, Weight), static_cast<float>(Font.Size)); // v4.16 (tests)
 	}
 	FCanvasTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), FText::FromString(S), Font, C);
 	if (bShadow)
@@ -940,6 +1007,12 @@ float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor&
 	{
 		X -= Align == EUiAlign::Center ? Total * 0.5f : Total;
 	}
+	if (bTestRecordTexts && TestTextDepth == 0)
+	{
+		// v4.16 (tests) : le titre espace est releve d'un bloc (pas lettre par lettre)
+		RecordTestText(S, X, Y, FVector2f(Total, TextSize(S, Size, Weight).Y), static_cast<float>(UiFontInfo(Size, static_cast<int32>(Weight), Ui()).Size));
+	}
+	++TestTextDepth;
 	Prev = 0;
 	for (int32 i = 0; i < Ends.Num(); ++i)
 	{
@@ -947,6 +1020,7 @@ float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor&
 		X += Widths[i] + Spacing;
 		Prev = Ends[i];
 	}
+	--TestTextDepth;
 	return Total;
 }
 
@@ -1017,7 +1091,13 @@ void ABRHUD::TextFit(const FString& S, float X, float Y, float MaxWidth, const F
 	const float Fitted = FitSize(S, MaxWidth, Size, Weight);
 	// Hauteur gardee : le texte reduit reste centre sur la ligne prevue
 	const float DY = (TextSize(S, Size, Weight).Y - TextSize(S, Fitted, Weight).Y) * 0.5f;
-	TextF(Ellipsize(S, MaxWidth, Fitted, Weight), X, Y + DY, C, Fitted, Weight, Align, bShadow);
+	const FString Shown = Ellipsize(S, MaxWidth, Fitted, Weight);
+	// v4.16 (tests) : largeur permise et texte raccourci
+	TestTextMaxW = MaxWidth;
+	bTestTextCut = Shown != S;
+	TextF(Shown, X, Y + DY, C, Fitted, Weight, Align, bShadow);
+	TestTextMaxW = 0.f;
+	bTestTextCut = false;
 }
 
 void ABRHUD::DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight)
@@ -1227,6 +1307,12 @@ void ABRHUD::DrawHUD()
 	LastTime = Now;
 	Clock += Dt;
 	UiDt = Dt;
+	if (bTestRecordTexts)
+	{
+		// v4.16 (tests) : releve des textes de cette image seulement ; hors panneau : l'ecran entier
+		TestTexts.Reset();
+		TestPanel = FVector4f(0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	}
 
 	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
 	ABRCharacter* C = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
@@ -3864,8 +3950,15 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 	Hints.Emplace(BRKeys::Primary(EBRAction::Inventory), BR_STR(NSLOCTEXT("BR", "HUD.ParametresTouches", "Param\u00e8tres et touches")));
 	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Fin", "FIN")), BR_STR(NSLOCTEXT("BR", "HUD.Quitter", "Quitter")));
 	KeyHints(CX, H - 84.f * U, Hints, In, true);
-	TextF(BR_STR(NSLOCTEXT("BR", "HUD.ConsoleTouche2Brlevel37", "Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives")), CX, H - 38.f * U,
-		WithAlpha(InkDim, 0.5f * In), 9.5f, EUiWeight::Light, EUiAlign::Center, false);
+#if !UE_BUILD_SHIPPING
+	// v4.16 : commandes de la console (outils de developpement) : en mode developpeur seulement. Avant : sous la pause de
+	// tout joueur, y compris dans la version publiee (ou la console n'existe pas)
+	if (PC && PC->IsDevMode())
+	{
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.ConsoleTouche2Brlevel37", "Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives")), CX, H - 38.f * U,
+			WithAlpha(InkDim, 0.5f * In), 9.5f, EUiWeight::Light, EUiAlign::Center, false);
+	}
+#endif
 }
 
 void ABRHUD::HandlePauseMouse(ABRPlayerController* PC)
@@ -4023,6 +4116,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	ColX[0] = IX;
 	ColX[1] = ColX[0] + ColW[0] + Gap;
 	ColX[2] = ColX[1] + ColW[1] + Gap;
+	TestPanel = FVector4f(IX, 0.f, IW, Canvas->ClipY); // v4.16 (tests) : en-tete et pied dans la bande de l'inventaire
 
 	// En-tete "MENU >" et onglets
 	Txt(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), IX, 44.f * U, Yellow, 1.25f * U, Large, false, false);
@@ -4098,6 +4192,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 		bTestDisplayRequestDone = BRDisplay::Request(2, TestDisplayRequestInDraw);
 		TestDisplayRequestInDraw = FIntPoint::ZeroValue;
 	}
+	PadScroll = 0.f; // v4.16 : defilement de la manette applique aux listes de cette image
 	HandleInventoryMouse(PC, C);
 	if (!Canvas)
 	{
@@ -4106,18 +4201,38 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 
 	// Pied de page
 	const float FY = Canvas->ClipY - 70.f * U;
+	TestPanel = FVector4f(IX, 0.f, IW, Canvas->ClipY); // v4.16 (tests)
 	DrawRect(YellowDim, IX, FY - 14.f * U, IW, 1.f * U);
-	Txt(BR_STR(NSLOCTEXT("BR", "HUD.1992ThresholdSystems", "\u00a9 1992 THRESHOLD SYSTEMS")), IX, FY, InkDim, 0.8f * U, Small, false, false);
-	if (Tab == ETab::Character)
+	const FString Copyright(BR_STR(NSLOCTEXT("BR", "HUD.1992ThresholdSystems", "\u00a9 1992 THRESHOLD SYSTEMS")));
+	Txt(Copyright, IX, FY, InkDim, 0.8f * U, Small, false, false);
+	FString FootHints;
+	if (BRKeys::UsesGamepadPrompts())
 	{
-		TxtRight(BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.GlisserDeplacerDoubleClicUtiliser", "[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER"))), IX + IW, FY,
-			InkDim, 0.8f * U, Small);
+		// v4.16 : manette : ses boutons dans l'inventaire (onglets, defilement, aide du carnet, fermeture) ; avant : les gestes
+		// de la souris seulement
+		FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadInventoryFooter", "[{Prev}] [{Next}]  ONGLETS     [{Up}] [{Down}]  FAIRE D\u00c9FILER     [{Close}]  FERMER"),
+			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
+				{ TEXT("Up"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Up)) }, { TEXT("Down"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Down)) },
+				{ TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
+		if (Tab == ETab::Notebook)
+		{
+			FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadNotebookHint", "[{Hint}]  AIDE"), { { TEXT("Hint"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } })
+				+ TEXT("     ") + FootHints;
+		}
+	}
+	else if (Tab == ETab::Character)
+	{
+		FootHints = BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.GlisserDeplacerDoubleClicUtiliser", "[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER")));
 	}
 	else
 	{
-		TxtRight(Tab == ETab::Keys ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChangerClicDroitEffacer", "[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [\u00c9CHAP]  ANNULER / FERMER")))
-			: FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChoisirEchapFermer", "[CLIC]  CHOISIR     [\u00c9CHAP]  FERMER"))), IX + IW, FY, InkDim, 0.8f * U, Small);
+		FootHints = Tab == ETab::Keys ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChangerClicDroitEffacer", "[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [\u00c9CHAP]  ANNULER / FERMER")))
+			: FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChoisirEchapFermer", "[CLIC]  CHOISIR     [\u00c9CHAP]  FERMER")));
 	}
+	// v4.16 : les aides tiennent entre le copyright et le bord droit (langues longues, petites fenetres) : taille reduite, puis
+	// points de suspension ; avant, rien ne les bornait
+	const float FootSize = LegacySize(Small, 0.8f * U, U);
+	TextFit(FootHints, IX + IW, FY, IW - TextSize(Copyright, FootSize, EUiWeight::Regular).X - 30.f * U, InkDim, FootSize, EUiWeight::Regular, EUiAlign::Right, true);
 
 	// Infobulle et objet en cours de deplacement (au-dessus de tout)
 	if (Tab == ETab::Character && !Inspecting.IsValid())
