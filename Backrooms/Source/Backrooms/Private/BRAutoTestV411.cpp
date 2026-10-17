@@ -554,7 +554,9 @@ void ABRAutoTest::AddMissionSteps(int32 Level, uint32 UserSeed, bool bDepart)
 
 // =====================================================================================================================
 // v4.15 : places des mecanismes du niveau charge, dans le decor construit autour d'eux : point d'interaction hors de tout
-// volume bloquant (rochers, maison, cage ou porte voisine : ABRWorld::FindMissionDeviceObstruction), une place debout a
+// volume bloquant (rochers, maison, cage ou porte voisine : ABRWorld::FindMissionDeviceObstruction ; v4.15 correctifs 3 :
+// sonde de 1 cm, BRMech::Clearance::AimProbe : le mur qui porte un indice ou une cle a 5 cm n'est plus pris pour un volume
+// qui l'enterre, et ces mecanismes passent enfin l'essai de l'hote et la visee du client), une place debout a
 // portee de la visee du client et selon la regle de l'hote (StandNear -> BRTestV412::FindMissionStand), puis l'essai a
 // blanc de l'hote depuis cette place (joueur pose, ses vrais yeux : ABRWorld::CanReachMissionDevice, la verification de
 // ServerMissionAct) et la visee reelle du client (ABRCharacter::UpdateFocus). bLidarOnly : postes et cages du Level 6.

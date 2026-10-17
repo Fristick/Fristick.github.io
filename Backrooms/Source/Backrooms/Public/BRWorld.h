@@ -393,8 +393,9 @@ public:
 	 *  mecanisme a portee (normale ou du scan focalise) et en ligne de vue WorldStatic qui n'ignore que By et le mecanisme.
 	 *  Les tests l'appellent aussi (places debout). OutBlock : ce qui coupe la vue */
 	bool CanReachMissionDevice(const FVector& Eye, const ABRMissionDevice* Dev, const AActor* By, FHitResult* OutBlock = nullptr) const;
-	/** v4.15 (tests, diagnostic) : le point d'interaction du mecanisme est dans un volume bloquant (sphere de 5 cm,
-	 *  WorldStatic, sans le mecanisme ni IgnoreAlso) ; OutWhat : acteur et composant */
+	/** v4.15 (tests, diagnostic) : le point d'interaction du mecanisme est dans un volume bloquant (sphere de
+	 *  BRMech::Clearance::AimProbe, 1 cm depuis les correctifs 3, WorldStatic, sans le mecanisme ni IgnoreAlso) ; OutWhat :
+	 *  acteur et composant */
 	bool FindMissionDeviceObstruction(const ABRMissionDevice* Dev, const AActor* IgnoreAlso, FString& OutWhat) const;
 	/** Une sortie vers Target peut etre prise maintenant (mission du niveau resolue, ou sortie de retour). OutReason :
 	 *  message dans la langue du joueur */

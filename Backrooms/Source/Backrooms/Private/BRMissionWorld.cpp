@@ -16,7 +16,9 @@
 #include "BRKeys.h"
 #include "Backrooms.h"
 
+#include "Components/StaticMeshComponent.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/GameStateBase.h"
@@ -1593,12 +1595,18 @@ bool ABRWorld::FindMissionDeviceObstruction(const ABRMissionDevice* Dev, const A
 		Q.AddIgnoredActor(IgnoreAlso);
 	}
 	TArray<FOverlapResult> Hits;
-	World->OverlapMultiByChannel(Hits, Dev->GetInteractPoint(), FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(5.f), Q);
+	// v4.15 (correctifs 3) : sonde de 1 cm (BRMech::Clearance::AimProbe). Avant : 5 cm, exactement tangente au mur d'un
+	// mecanisme dont le point vise est a 5 cm de son origine murale (indices, cles, mire du Level 6) : Chaos compte ce contact,
+	// et 14 mecanismes atteignables etaient notes "point d'interaction dans BRChunk_..." (le mur qui les porte)
+	World->OverlapMultiByChannel(Hits, Dev->GetInteractPoint(), FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(BRMech::Clearance::AimProbe), Q);
 	for (const FOverlapResult& H : Hits)
 	{
 		if (H.bBlockingHit)
 		{
-			OutWhat = FString::Printf(TEXT("%s (%s)"), *GetNameSafe(H.GetActor()), *GetNameSafe(H.GetComponent()));
+			// v4.15 (correctifs 3) : modele du composant touche et visibilite (lot de collision invisible ou decor rendu)
+			const UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(H.GetComponent());
+			OutWhat = FString::Printf(TEXT("%s (%s%s)"), *GetNameSafe(H.GetActor()), *GetNameSafe(H.GetComponent()),
+				Mesh ? *FString::Printf(TEXT(", %s, %s"), *GetNameSafe(Mesh->GetStaticMesh()), Mesh->IsVisible() ? TEXT("visible") : TEXT("invisible")) : TEXT(""));
 			return true;
 		}
 	}

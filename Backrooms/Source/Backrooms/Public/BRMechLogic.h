@@ -237,6 +237,11 @@ namespace BRMech
 		constexpr float StandDepth = 120.f;
 		/** Un volume plus bas que la marche franchie sans sauter ne gene pas la place debout (on monte dessus) */
 		constexpr float StepHeight = 35.f;
+		/** v4.15 (correctifs 3) : sonde du point d'interaction des tests (ABRWorld::FindMissionDeviceObstruction) : un point
+		 *  vraiment dans un volume la touche, un point devant un mur ne la touche pas. Rayon toujours sous le plus petit ecart
+		 *  entre l'origine murale d'un mecanisme et son point vise (Aim.X : marques de la cloture 4 cm ; indices, cles, mire
+		 *  5 cm ; cadrans et boutons 6 cm). Avant : 5 cm, tangente au mur pour les mecanismes a 5 cm (Chaos compte le contact) */
+		constexpr float AimProbe = 1.f;
 
 		/** Boite locale (cm) : X vers la salle depuis l'origine du mecanisme, Y lateral (axe droit de l'acteur), Z depuis
 		 *  le sol de l'emplacement */

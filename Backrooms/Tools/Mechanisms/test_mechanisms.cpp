@@ -513,6 +513,23 @@ int main()
 			}
 		}
 		Line("emprise de chaque sorte et role : point vise devant l'origine, entre 40 et 170 cm de haut", bAll);
+		// v4.15 (correctifs 3) : la sonde des tests du jeu (ABRWorld::FindMissionDeviceObstruction, rayon AimProbe) ne touche
+		// pas le mur qui porte un mecanisme : son point vise est a au moins AimProbe + 2 cm de l'origine murale (avant : sonde
+		// de 5 cm, tangente au mur des indices, cles et mire a 5 cm, comptee comme un contact par Chaos)
+		float MinAimX = 1e9f;
+		for (int Kind = 0; Kind <= static_cast<int>(BRM::EKind::Gate); ++Kind)
+		{
+			for (int Role = 0; Role < BRM::R_Count; ++Role)
+			{
+				for (const uint8_t ModuleId : { BRMech::Module::None, BRMech::Module::LidarDoor, BRMech::Module::PoolTanks })
+				{
+					const CL::FFootprint Fp = CL::Of(static_cast<BRM::EKind>(Kind), static_cast<uint8_t>(Role), ModuleId, 60.f);
+					MinAimX = Fp.Aim.X < MinAimX ? Fp.Aim.X : MinAimX;
+				}
+			}
+		}
+		Line("sonde du point d'interaction (" + F1(CL::AimProbe) + " cm) : plus petit ecart point vise - mur " + F1(MinAimX) + " cm, au moins sonde + 2 cm (sonde de 5 cm "
+			"d'avant : jusqu'au mur)", MinAimX - CL::AimProbe >= 2.f && MinAimX <= 5.f);
 		const CL::FFootprint Door = CL::Of(BRM::EKind::Button, BRM::R_LidarDoor, BRMech::Module::LidarDoor, 60.f);
 		const CL::FFootprint Lock = CL::Of(BRM::EKind::Gate, BRM::R_DryPassage, BRMech::Module::PoolLock, 120.f);
 		const CL::FFootprint BridgeF = CL::Of(BRM::EKind::Gate, BRM::R_Bridge, BRMech::Module::Bridge, 60.f);
