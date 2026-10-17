@@ -1,0 +1,71 @@
+v4.16 (perf) : instrumentation des mesures de performance (section 7, premiere partie : mesurer, sans optimiser)
+==================================================================================================================
+
+But : une base de mesures reproductibles avant toute optimisation, puis les memes mesures apres (plusieurs executions,
+plusieurs graines). Aucun seuil d'images par seconde n'est juge : ce sont des mesures, pas des verifications. Les
+resultats du portable (RTX 5050 Laptop) ne predisent pas ceux de la machine de reference (RTX 4080 + 7800X3D).
+
+1. Test du jeu : -BRAutoTest -BRAutoTestPerf  (Source/Backrooms/Private/BRAutoTestV416Perf.cpp ; -BRAutoTestV416Perf aussi)
+----------------------------------------------------------------------------------------------------------------------
+Scenes (graines fixes) :
+  fosses   Level 0, graine 9 (-BRSeed=9 de -BRAutoTestPits), point de vue de la commande BRPits
+  bassins  Poolrooms (Niveau 37), graine du niveau 178662963 (celle de la mesure RTX fluide de -BRAutoTestV48), depart
+  marche0  Level 0, graine 9 : course (4,7 m/s) sur un chemin de grille fixe vers le coin le plus eloigne, aller-retour
+  marche1  Niveau 1 (infini), graine 4242 : meme marche vers une cellule a 40 cellules (chunks construits et demontes)
+  lidar6   Level 6, graine 4136 : scan focalise maintenu + impulsions, rotation 30 deg/s, 6 s de pre-remplissage
+Profils : Performance, Qualite, RTX fluide, Cinematique, appliques avant le chargement de chaque scene (comme le banc
+  visuel) ; -BRProfile=<0|1|4|2> : ce profil seul (un profil par lancement : memoire video sans heritage des autres).
+Pendant ces mesures seulement (ABRWorld::bPerfQuiet) : ni apparition d'entite, ni ronde, ni phenomene, ni coupure tires
+  au hasard ; apparence aux valeurs par defaut, synchro coupee, images non limitees ; tout est retabli a la fin.
+Pour chaque scene x profil :
+  - chargement (duree ; attente des shaders derriere l'ecran noir de l'arrivee : colonne attente_shaders_arrivee_s) ;
+  - prechauffage : au moins 8 s, aucun shader ni PSO en preparation depuis 1 s (shaders de l'editeur, precompilation du
+    cache de PSO, precache des PSO a l'execution), aucun chunk en preparation, temps d'image stabilises (trois fenetres de
+    30 images) ; 45 s au plus, sinon mesure gardee et marquee instable (NON VERIFIE ; exclue des medianes par
+    perf_summary.py sauf --include-unstable) ;
+  - fenetre fixe (10 s ; marches 20 s ; LiDAR 12 s ; -BRPerfSeconds=<s>) : temps de chaque image (mediane, 95 %, 99 %,
+    pire, 1 % le plus lent, longues images > 33,3 / 50 / 100 ms), threads du jeu, du rendu et du RHI, processeur graphique,
+    memoire video (usage, budget, retrogradee, textures, tampons), RAM, chunks construits / demontes (ms, pire image),
+    composants ajoutes aux chunks, chargements synchrones, PSO crees a la demande et creations trop longues ; LiDAR :
+    rayons, visees, points, instances, inscriptions et materiaux par seconde, temps du scanner (traces, envoi) ;
+  - hors fenetre : 3 releves ProfileGPU (-BRPerfGpu=<k>, 0 : aucun) lus dans le journal (format compact du moteur),
+    ramenes a des postes : megalights, lumen, scene_rt, ombres, brouillard, translucidite_eau, post, base, eclairage,
+    effets_ecran, scene_gpu, interface, autre. Chaque evenement apporte son temps propre a son poste ; sous un poste
+    "contenant" (RenderDeferredLighting, Lights, DiffuseIndirectAndAO) Lumen, MegaLights et les ombres projetees gardent
+    le leur. Files de calcul asynchrone a part (type poste_async). La marche et le scan continuent pendant les releves.
+Toujours notes : fenetre, resolution interne, pourcentage de rendu, agrandissement (TSR...), profil, RT demande / actif,
+  Lumen materiel, hit lighting, MegaLights (echantillons), ombres virtuelles, brouillard volumetrique, synchro, limite,
+  carte, pilote (version, interne, date), processeur, coeurs, RAM totale, RHI.
+Un prealable absent (niveau non charge, pas de salle de fosses, pas de chemin, scanner absent, ProfileGPU sans resultat,
+  ray tracing materiel absent) est NON VERIFIE, jamais une mesure valide.
+Options : -BRPerfScenes=fosses,bassins,marche0,marche1,lidar6  -BRPerfSeed=<n> (graine utilisateur pour toutes les scenes)
+  -BRPerfSeconds=<s>  -BRPerfWarm=<s>  -BRPerfGpu=<k>  -BRPerfTag=<texte>  -BRPerfRun=<n>  -BRPerfFrames=0
+Fichiers (Saved/AutoTest) : Perf.csv (une ligne par scene x profil), PerfPasses.csv (postes, postes asynchrones, passes
+  jusqu'a la profondeur 5), PerfGPU/<scene>_<profil>_<k>.txt (releves bruts), PerfFrames/<scene>_<profil>.csv (temps de
+  chaque image), lignes perf_<scene>_<profil> de Mesures.csv et Rapport.txt.
+Duree : environ 15 a 25 minutes pour les 5 scenes x 4 profils.
+
+2. Lanceur : Tools/Tests/run_perf.ps1 (N executions x graines x profils, chacune archivee sous une etiquette)
+----------------------------------------------------------------------------------------------------------
+  powershell -ExecutionPolicy Bypass -File Tools\Tests\run_perf.ps1 -Tag base -Runs 3
+  powershell -ExecutionPolicy Bypass -File Tools\Tests\run_perf.ps1 -Tag base_profils -Runs 3 -Seeds 0,4242 -Profiles 0,1,4,2
+Resultats : Saved\PerfRuns\<etiquette>\run<n>_graine<g>_profil<p>\ (+ commande.txt), manifest.json, summary.txt, resume.md.
+Aucune autre instance d'Unreal ne doit tourner (un lancement est saute sinon).
+
+3. Synthese : Tools/Tests/perf_summary.py (tests : python -m unittest Tools/Tests/test_perf_summary.py)
+----------------------------------------------------------------------------------------------------
+  python Tools/Tests/perf_summary.py Saved/PerfRuns/base --out resume.md
+  python Tools/Tests/perf_summary.py --before Saved/PerfRuns/base --after Saved/PerfRuns/opt1 --out comparaison.md
+Mediane des medianes, ecart des medianes, mediane des 95 %, pire 99 %, longues images (total et pour 1000 images),
+  threads, processeur graphique, VRAM, streaming, PSO, scanner, postes ; avant / apres avec ecarts (ms et %) et un
+  avertissement si la carte, le pilote, le processeur ou les resolutions different.
+
+Limites connues
+---------------
+- Le temps du processeur graphique par image (RHIGetGPUFrameCycles) et les temps des threads du rendu et du RHI sont ceux
+  des images precedentes (decalage d'une ou deux images) : les resumes sont justes, la correspondance image par image non.
+- Les profils changes en jeu gardent la memoire video deja allouee par le profil precedent : comparer la VRAM avec un
+  profil par lancement (-Profiles 0,1,4,2).
+- ProfileGPU mesure UNE image (trois releves, mediane) ; les postes sont une decomposition, pas une moyenne de la fenetre.
+- Les noms des passes sont ceux des RDG_EVENT_SCOPE d'Unreal 5.8.3 ; un autre moteur peut renommer des passes
+  (le poste "autre" grossit alors : les releves bruts PerfGPU/ permettent de le verifier).
