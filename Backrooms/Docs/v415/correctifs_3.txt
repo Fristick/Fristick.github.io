@@ -1,0 +1,70 @@
+# Correctifs 3 de la v4.15 (branche v415-round3, depuis f3478d4) : compilation, bancs hors moteur et verifications - sortie reelle
+# Machine : Windows 11, Unreal 5.8, Visual Studio 2026 ; depuis Backrooms/ (arbre de travail wt/r3)
+# Date : 2026-10-17
+# Le jeu n'a pas ete lance ici : les etapes en jeu sont preparees (commandes et lignes attendues en fin de fichier), non executees
+
+## Build.bat BackroomsEditor Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
+# apres chaque commit (compilation non regroupee des fichiers modifies), puis -DisableAdaptiveUnity (compilation regroupee)
+Result: Succeeded (0 avertissement, 0 erreur) ; -DisableAdaptiveUnity : [1/7] .. [4/7] Compile Module.Backrooms.N.cpp, Result: Succeeded (0 avertissement)
+
+## Build.bat Backrooms Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
+[9/16] .. [14/16] Compile [x64] Module.Backrooms.1..6.cpp ; [15/16] Link [x64] Backrooms.exe
+Result: Succeeded (0 avertissement, 0 erreur)
+
+## Bancs hors moteur (commandes de Saved/TestRuns/run_cpp_benches.bat, projet = l'arbre de travail)
+# clang-cl 22.1.3 /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow, puis cl 19.51.36260 /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-
+# 0 avertissement pour les 20 compilations ; sorties identiques entre les deux compilateurs
+test_story        : RESULTAT : OK
+test_lidar        : RESULTAT : OK
+test_content      : RESULTAT : OK (69 verifications, 0 echec(s))
+test_departure    : RESULTAT : OK
+test_light        : RESULTAT : OK
+test_color        : RESULTAT : OK (24 verification(s))
+test_fluo         : RESULTAT : OK (20 verifications, 0 echec(s))
+test_mechanisms   : RESULTAT : OK (71 verifications, 0 echec(s)) (G : sonde du point d'interaction ; H : couloirs de visee)
+test_missions     : RESULTAT : OK
+test_transactions : RESULTAT : OK
+
+## Python 3.14.8 (PYTHONUTF8=1)
+python Tools/Localization/loc_extract.py --check : a jour (aucun texte visible ajoute)
+python Tools/Localization/loc_build.py --check : traduits 1201/1201 dans chaque langue, a revoir 0
+python Tools/Localization/loc_review.py : problemes : 0
+python Tools/protect_assets.py check : OK
+python Tools/verify_device_clearance.py --seeds 120 : RESULTAT : OK (A, B, C, D, E : v4.14 echoue / v4.15 passe ; regle dans les sources) -> Docs/v415/correctifs_places.txt
+python Tools/verify_pitfalls.py --doors 1-500 : 500 graine(s), 0 avec probleme(s)
+python Tools/verify_lidar.py --seeds 1-200 : RESULTAT : OK (0 echec(s))
+python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTAT : OK
+
+## Correctifs
+# 1. Sonde du point d'interaction des tests (test) : ABRWorld::FindMissionDeviceObstruction, sphere de 1 cm
+#    (BRMech::Clearance::AimProbe) au lieu de 5 cm, tangente au mur des indices, cles et mire a 5 cm (14 mecanismes
+#    atteignables notes "point d'interaction dans BRChunk_..." aux Niveaux 1 a 6 et aux Poolrooms) ; message avec le modele
+#    touche. Aucun effet sur le jeu
+# 2. Couloirs de visee et poteaux en rang (jeu) : Niveau 10, graine du niveau 1697132605 : le tableau des granges entre le
+#    moulin et le frein, face a face sur leurs poteaux, prenait leur visee. BRMech::Clearance::CutsFocusLane dans PickSlot
+#    (choix d'avant faute de mieux : jamais plus d'echecs de placement), poteaux d'une cellule au meme lacet. Placement 3 pas
+#    encore distribue : meme numero ; l'hote compare chaque placement au placement 2 (MissionMovedFrom2) et ne previent une
+#    reprise du placement 2 que si la graine a change
+# 3. Marche des tests (test, et chemins des entites) : ABRWorld::GetClosedMissionEdges (portes du passage fermees de l'aile
+#    du Level 6) evitees par FindPath et FindPoolFreePath ; progression sur le chemin restant, blocage en 10 s explique ;
+#    points de passage a 35 cm dans une salle de fosses ; Tick des mecanismes masques depuis une cellule au-dela du retrait
+#    des chunks
+# 4. Echelle (jeu) : UpdateClimb glisse sur un sol touche (tablier du Niveau 8 remonte jusqu'au palier) ; tests : partie
+#    active changee par ABRAutoTest::SwapTestSave (ni ecriture differee ni enregistrement automatique herites)
+
+## Etapes en jeu (a lancer : Saved/TestRuns/run_autotests.ps1 sur la compilation de cet arbre)
+#   -BRAutoTest -BRAutoTestV411 -BRAutoTestStrict et la suite complete (-BRAutoTest -BRAutoTestStrict -BRSeed=4242) :
+#     aucune ligne "point d'interaction dans BRChunk_..." ; "Niveau 1 ... 16/16", "Niveau 2 ... 7/7", "Niveau 3 ... 10/10",
+#     "Niveau 4 ... 7/7", "Niveau 5 ... 12/12", "Niveau 6 ... 14/14", "Niveau 37 ... 5/5", "Niveau 10 (graine du niveau
+#     1697132605) : 4/4 mecanismes degages et atteignables" ; moulin et frein a cote du tableau, vers (-130, -5326, 140) et
+#     (-270, -5326, 140) ; "actions rejouees ... mission resolue oui" inchanges. Une ligne "REFUSEE par l'hote", "PAS VISE par
+#     le client" ou "aucune place debout" sur l'un des 14 mecanismes de la sonde serait un nouveau constat (ces controles
+#     n'avaient jamais tourne pour eux)
+#   -BRAutoTest -BRAutoTestV413 -BRAutoTestStrict et la suite complete : "Niveau 6 : sortie atteinte a pied" (graine du niveau
+#     2702236446 : entree par la porte V=2, environ 18 m, 0 saut), puis "traversee ... faite, ... scanner retire ... oui" ;
+#     tout blocage d'une marche dit ce qui est devant ("bloque : devant (...)", entite la plus proche, point de passage)
+#   -BRAutoTest -BRAutoTestV412 -BRAutoTestStrict et la suite complete : "Niveau  8 -> Niveau 9 : arrivee oui, demandes de
+#     depart au sommet de l'echelle : 1 (attendu 1)" ; Tick des mecanismes masques : "0 Tick(s) de mecanisme en 3 s" ;
+#     reprise du placement 2 au Niveau 2 : avis egal a l'attendu (3 si des mecanismes de cette graine ont change, 0 sinon) ;
+#     suite complete : "copie intacte de la sauvegarde avant reecriture oui"
+#   -BRAutoTest -BRAutoTestV415Fix -BRAutoTestStrict : inchangee (Niveaux 8 et 9, postes et cages du Level 6)
