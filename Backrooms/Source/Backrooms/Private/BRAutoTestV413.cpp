@@ -616,10 +616,21 @@ void ABRAutoTest::AddV413Steps()
 			Beyond += BRStory::CanEnter(S, Level) == BRStory::EAccess::Allowed ? 0 : 1;
 			List += (List.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::FromInt(Level);
 		}
-		const bool bOk = BRStory::IsDone(S, 2) && (S.ChapterEnds & (1u << Lot)) != 0 && (S.Events & BRStory::Event::StationSign) != 0 && L && L->StoryChapterEnds == S.ChapterEnds
-			&& BRLevels::Exists(Cont) && Beyond == 0 && Choices.Num() > 0;
-		Note(FString::Printf(TEXT("fin du chapitre %d : %s ; sauvegarde a jour %s ; CONTINUER reprend au Niveau %d ; exploration apres la fin : %s (hors histoire : %d)"), Lot,
-			*StoryText(S), Oui(L && L->StoryChapterEnds == S.ChapterEnds), Cont, *List, Beyond), !bOk);
+		// v4.15 : dans un canal ou le niveau suivant du fil est disponible (lot 5 des tests : Niveau 3), la sortie du Niveau 2 y
+		// mene : pas de fin de chapitre, le fil continue et CONTINUER y reprend. Avant : fin du chapitre attendue dans tous les
+		// canaux (jamais jugee : le test n'atteignait pas la sortie du Niveau 2). La version publiee (lot 1) est verifiee par
+		// -BRAutoTestV415 ("version publiee : fin du chapitre")
+		const int32 Next = BRStory::NextOf(2);
+		const bool bGoesOn = Next >= 0 && BRContent::IsAvailable(Next, BRLevels::Channel());
+		const bool bSaved = L && L->StoryChapterEnds == S.ChapterEnds;
+		const bool bOk = bGoesOn
+			? BRStory::IsDone(S, 2) && (S.ChapterEnds & (1u << Lot)) == 0 && S.Reached == BRStory::IndexOf(Next) && S.Resume == Next && Cont == Next && bSaved
+			: BRStory::IsDone(S, 2) && (S.ChapterEnds & (1u << Lot)) != 0 && (S.Events & BRStory::Event::StationSign) != 0 && bSaved && BRLevels::Exists(Cont) && Beyond == 0
+				&& Choices.Num() > 0;
+		const FString What = bGoesOn ? FString::Printf(TEXT("suite du fil apres le Niveau 2 (lot %d : Niveau %d disponible, pas de fin de chapitre attendue)"), Lot, Next)
+			: FString::Printf(TEXT("fin du chapitre %d"), Lot);
+		Note(FString::Printf(TEXT("%s : %s ; sauvegarde a jour %s ; CONTINUER reprend au Niveau %d%s ; exploration : %s (hors histoire : %d)"), *What,
+			*StoryText(S), Oui(bSaved), Cont, bGoesOn ? *FString::Printf(TEXT(" (attendu %d)"), Next) : TEXT(""), *List, Beyond), !bOk);
 		// Retour a la session de test d'avant (partie active, mode)
 		SwapTestSave(PC, TestOrigSave, TestOrigSlot);
 		PC->bDevSession = bTestDevSession;

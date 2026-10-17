@@ -60,6 +60,8 @@ namespace BRTestV412
 	int32 ModulePlacements = 0;
 	/** Niveaux traverses par deplacement reel (rapport) */
 	TArray<FString> AccessLines;
+	/** v4.15 : niveaux quittes a pied (les Poolrooms le sont deux fois : marche de la mission, puis sortie par le sas sans nager) */
+	TSet<int32> AccessLevels;
 	/** Inventaire du joueur avant les verifications d'inventaire (retabli) */
 	TArray<FBRItemSlot> SavedPockets, SavedStorage, SavedEquipment, SavedRecovered;
 	/** Mesures du Niveau 6 */
@@ -1316,6 +1318,7 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 				const FString Line = FString::Printf(TEXT("Niveau %2d -> fin du contenu disponible (chapitre %d) : %s"), Level, W->GetChapterEndLot(), YesNo(bOk));
 				LastExit.bArrived = bOk;
 				AccessLines.Add(Line);
+				AccessLevels.Add(Level);
 				Note(Line, !bOk);
 				Shot(FString::Printf(TEXT("v412_fin_du_contenu_%d"), Level));
 				W->CloseEnding(false);
@@ -1331,6 +1334,7 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			const FString Line = FString::Printf(TEXT("Niveau %2d -> Niveau %d%s : arrivee %s%s"), Level, Res.Target, Res.bRedirected ? TEXT(" (redirige)") : TEXT(""),
 				YesNo(bArrived), bLadder ? *FString::Printf(TEXT(", demandes de depart au sommet de l'echelle : %d (attendu 1)"), Requests) : TEXT(""));
 			AccessLines.Add(Line);
+			AccessLevels.Add(Level);
 			Note(Line, !bArrived || !bOneRequest);
 			return true;
 		}
@@ -1417,6 +1421,7 @@ void ABRAutoTest::AddV412Steps()
 		Reports.Add(R);
 		PlacementLines.Reset();
 		AccessLines.Reset();
+		AccessLevels.Reset();
 		ModulePlacements = 0;
 		return true;
 	});
@@ -2355,8 +2360,9 @@ void ABRAutoTest::AddV412Steps()
 		{
 			Note(TEXT("acces : ") + L);
 		}
-		Note(FString::Printf(TEXT("acces par deplacement reel : %d sortie(s) prise(s) a pied sur 6 (Niveaux 37, 0, 1, 2, 8 ; Niveau 6 sans sortie) ; modules de secours : %d"),
-			AccessLines.Num(), ModulePlacements), AccessLines.Num() != 5);
+		// v4.15 : niveaux differents (avant : nombre de sorties, faux des que les Poolrooms sont quittees deux fois)
+		Note(FString::Printf(TEXT("acces par deplacement reel : %d niveau(x) quitte(s) a pied sur 5 attendus (Niveaux 37, 0, 1, 2, 8 ; Niveau 6 sans sortie), %d sortie(s) prise(s) ; modules de secours : %d"),
+			AccessLevels.Num(), AccessLines.Num(), ModulePlacements), AccessLevels.Num() != 5);
 		return true;
 	});
 }
