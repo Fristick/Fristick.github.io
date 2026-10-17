@@ -208,6 +208,11 @@ private:
 	 *  l'echelle BRExit_42, client devant elle : rassemblement 2/2 puis depart (BRAutoTestV415Fix.cpp). v4.15 (correctifs 5) :
 	 *  Niveau 37 en partie classique (graine du niveau 2303284074) : memes echelles des chunks chez l'hote et le client */
 	void AddNetV415FixSteps(bool bClient);
+	/** v4.16 (echelles) : -BRAutoTestV416Ladder (BRAutoTestV416Ladder.cpp) : echelles des chunks du Niveau 37 (graine du niveau
+	 *  115083815 et 2303284074, partie classique) prises depuis le canal, cas limites du deplacement de secours de la montee,
+	 *  montee et descente aux Niveaux 8 et 6 ; reseau (avec -BRNetTest) : depart de groupe par une echelle des chunks du Niveau 37 */
+	void AddV416LadderSteps();
+	void AddNetV416LadderSteps(bool bClient);
 	/** v4.14 : REJOUER isole, migration ambigue, scanner (rechargement, arret, cadences, HUD), kit du Level 0
 	 *  (BRAutoTestV414.cpp) ; reseau : porte du client */
 	void AddV414Steps();

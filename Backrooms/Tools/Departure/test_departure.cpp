@@ -21,6 +21,13 @@
 // sont rejouees : pied au fond du canal, la marche immergee d'un trottoir lateral entre de 1,19 cm dans la capsule du
 // controle (regle d'avant) ; la regle du jeu refuse ces faces et pose l'echelle ailleurs, capsule libre ; sur 2000 graines,
 // plus aucune capsule prise et aucune echelle libre deplacee ; sans trottoirs, aucun tirage ne change.
+// v4.16 (echelles) : deplacement de secours de la montee pres du pied (ABRCharacter::UpdateClimb, BRGather::ClimbAfterHit,
+// ClimbStepProbeFeet, ClimbReleaseOnDescent) dans un modele 2D balaye, a 30, 60, 120 et 144 images/s, compare a la regle des
+// correctifs 5 et a l'absence de reprise : une echelle sur son trottoir se prend toujours depuis le canal, la marche immergee
+// ou le trottoir ; une caisse de 34 cm se franchit, pas une de 40 cm ou plus ; un mur haut (sol plat, ou montant devant une
+// echelle sur trottoir) ne leve plus le grimpeur ; un plafond bas non plus (tete jamais dedans), un plafond assez haut laisse
+// passer ; en descente, une caisse sous l'accroche ou l'ancienne marche laterale font lacher l'echelle au lieu d'y rester
+// accroche ; aucune boite traversee.
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Departure/test_departure.cpp
 //       Source/Backrooms/Private/BRGatherLogic.cpp Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp
@@ -1063,6 +1070,515 @@ namespace
 	}
 }
 
+namespace
+{
+	// =================================================================================================================
+	// 6. v4.16 (echelles) : deplacement de secours de la montee pres du pied (ABRCharacter::UpdateClimb, BRGather::ClimbAfterHit,
+	//    ClimbStepProbeFeet, ClimbReleaseOnDescent)
+	// =================================================================================================================
+
+	// Modele 2D balaye, dans le plan de la traction : u horizontal (vers la piece, accroche en u = Anchor), z hauteur du centre de
+	// la capsule du joueur (rayon 34, demi-hauteur 88 : ABRCharacter), boites de collision alignees. Chaque image comme
+	// UpdateClimb : traction min(1, dt * 10) vers l'accroche et montee 140 cm/s (bornee au sommet) en un deplacement balaye (pas
+	// de 1 cm puis dichotomie, recul de 0,1 cm comme le moteur : aucune boite traversee), puis la suite de l'impact par les
+	// fonctions du jeu. Hypothese pour le jeu (Chaos non modelise, pas de pente) : les etapes en jeu (-BRAutoTestV416Ladder) le
+	// verifient. Trois regles : sans reprise verticale (avant la v4.15 correctifs 5), v4.15 correctifs 5 (reprise sans essai de
+	// la marche, sans lacher en descente) et le jeu (v4.16)
+	namespace Climb2D
+	{
+		constexpr double Rad = 34.0;
+		constexpr double HalfH = 88.0;
+		constexpr double SegH = HalfH - Rad;
+		/** UCharacterMovementComponent::GetWalkableFloorZ (44,76 degres par defaut) */
+		constexpr double WalkableZ = 0.71;
+		/** ABRCharacter : MaxStepHeight */
+		constexpr float StepH = 35.f;
+		constexpr double ClimbSpeed = 140.0;
+		/** Hausse admise sans reprise verticale (cm) : la montee d'une image avant le contact (traction et montee balayees ensemble),
+		 *  bien moins qu'une marche */
+		constexpr double NoLift = 10.0;
+
+		struct FBox
+		{
+			double U0, U1, Z0, Z1;
+		};
+		using FBoxes = std::vector<FBox>;
+
+		/** Distance de la capsule (segment vertical en U, de Z - SegH a Z + SegH) aux boites ; normale de la plus proche (de la
+		 *  boite vers la capsule) */
+		double Dist(const FBoxes& B, double U, double Z, double& NU, double& NZ)
+		{
+			double Best = 1.0e18;
+			NU = 1.0;
+			NZ = 0.0;
+			for (const FBox& X : B)
+			{
+				const double DU = std::fmax(std::fmax(X.U0 - U, 0.0), U - X.U1);
+				const double SU = U < X.U0 ? -1.0 : (U > X.U1 ? 1.0 : 0.0);
+				const double ZA = Z - SegH, ZB = Z + SegH;
+				double DZ = 0.0, SZ = 0.0;
+				if (ZB < X.Z0)
+				{
+					DZ = X.Z0 - ZB;
+					SZ = -1.0;
+				}
+				else if (ZA > X.Z1)
+				{
+					DZ = ZA - X.Z1;
+					SZ = 1.0;
+				}
+				const double D = std::sqrt(DU * DU + DZ * DZ);
+				if (D < Best)
+				{
+					Best = D;
+					const double L = D;
+					if (L > 0.0)
+					{
+						NU = SU * DU / L;
+						NZ = SZ * DZ / L;
+					}
+					else
+					{
+						NU = 1.0;
+						NZ = 0.0;
+					}
+				}
+			}
+			return Best;
+		}
+
+		struct FMove
+		{
+			double U = 0.0, Z = 0.0;
+			bool bHit = false;
+			double NU = 0.0, NZ = 0.0;
+			double Time = 1.0;
+		};
+
+		/** Deplacement balaye de (U, Z) de (DU, DZ) pour une capsule de rayon R */
+		FMove Sweep(const FBoxes& B, double U, double Z, double DU, double DZ, double R)
+		{
+			FMove M;
+			M.U = U;
+			M.Z = Z;
+			const double L = std::sqrt(DU * DU + DZ * DZ);
+			if (L < 1.0e-9)
+			{
+				return M;
+			}
+			double NU = 0.0, NZ = 0.0;
+			const int N = static_cast<int>(std::ceil(L)) > 1 ? static_cast<int>(std::ceil(L)) : 1;
+			double Lo = 0.0, Hi = -1.0;
+			for (int I = 1; I <= N; ++I)
+			{
+				const double T = static_cast<double>(I) / N;
+				if (Dist(B, U + DU * T, Z + DZ * T, NU, NZ) < R)
+				{
+					Hi = T;
+					break;
+				}
+				Lo = T;
+			}
+			if (Hi < 0.0)
+			{
+				M.U = U + DU;
+				M.Z = Z + DZ;
+				return M;
+			}
+			for (int I = 0; I < 50; ++I)
+			{
+				const double Mid = (Lo + Hi) * 0.5;
+				if (Dist(B, U + DU * Mid, Z + DZ * Mid, NU, NZ) >= R)
+				{
+					Lo = Mid;
+				}
+				else
+				{
+					Hi = Mid;
+				}
+			}
+			const double T = std::fmax(0.0, Lo - 0.1 / L);
+			Dist(B, U + DU * Hi, Z + DZ * Hi, NU, NZ);
+			M.U = U + DU * T;
+			M.Z = Z + DZ * T;
+			M.bHit = true;
+			M.NU = NU;
+			M.NZ = NZ;
+			M.Time = T;
+			return M;
+		}
+
+		enum class ERule
+		{
+			/** Sans reprise verticale (avant la v4.15 correctifs 5) */
+			None,
+			/** v4.15 correctifs 5 : reprise verticale sans essai de la marche, sans lacher en descente */
+			Round5,
+			/** Le jeu (v4.16) : BRGather::ClimbAfterHit avec l'essai de la marche, ClimbReleaseOnDescent */
+			Game
+		};
+
+		/** Essai de la marche du jeu (ABRCharacter::UpdateClimb) : capsule reduite de ClimbProbeMargin, levee a la verticale jusqu'a
+		 *  des pieds a ClimbStepProbeFeet, puis menee a l'aplomb de l'accroche */
+		bool StepClear(const FBoxes& B, double U, double Z, double Anchor, float FootZ)
+		{
+			const double R = Rad - ClimbProbeMargin;
+			const double Lifted = static_cast<double>(ClimbStepProbeFeet(FootZ, StepH)) + HalfH;
+			if (Sweep(B, U, Z, 0.0, Lifted - Z, R).bHit)
+			{
+				return false;
+			}
+			return !Sweep(B, U, Lifted, Anchor - U, 0.0, R).bHit;
+		}
+
+		struct FLadder
+		{
+			FBoxes Boxes;
+			double Anchor = 52.0;
+			float FootZ = 0.f;
+			double TopZ = 600.0;
+		};
+
+		struct FRun
+		{
+			/** 0 : rien d'atteint ; 1 : but atteint (montee) ; 2 : pieds au pied (StopClimb a 4 cm) ; 3 : lache en descente
+			 *  (ClimbReleaseOnDescent) */
+			int End = 0;
+			double Time = 0.0;
+			double U = 0.0, Z = 0.0;
+			double StartFeet = 0.0;
+			/** Plus grand enfoncement dans une boite (cm, <= 0 : jamais) et plus haute tete */
+			double MaxPen = -1.0e9;
+			double MaxHead = -1.0e9;
+		};
+
+		/** Une prise : depart (U0, pieds Feet0 + 2 cm), avancer (UpSign 1) ou reculer (-1) apres Delay, Seconds au plus ; Goal :
+		 *  but de la montee (accroche atteinte au-dessus de GoalFeet) */
+		FRun Climb(const FLadder& L, ERule Rule, double U0, double Feet0, double Delay, int Fps, double UpSign, double Seconds, double GoalFeet)
+		{
+			FRun Out;
+			const double Dt = 1.0 / Fps;
+			double U = U0, Z = Feet0 + HalfH + 2.0;
+			Out.StartFeet = Z - HalfH;
+			const int Frames = static_cast<int>(Seconds * Fps);
+			for (int F = 1; F <= Frames; ++F)
+			{
+				const double Up = F * Dt > Delay ? UpSign : 0.0;
+				if (Up < 0.0 && Z - HalfH <= L.FootZ + 4.0)
+				{
+					Out.End = 2;
+					Out.Time = F * Dt;
+					break;
+				}
+				double DZ = Up * ClimbSpeed * Dt;
+				if (Z + DZ > L.TopZ)
+				{
+					DZ = std::fmax(0.0, L.TopZ - Z);
+				}
+				const double Pull = std::fmin(1.0, Dt * 10.0);
+				const double DU = (L.Anchor - U) * Pull;
+				const double Z0 = Z;
+				const FMove M = Sweep(L.Boxes, U, Z, DU, DZ, Rad);
+				U = M.U;
+				Z = M.Z;
+				FClimbHitIn In;
+				In.bBlocked = M.bHit;
+				In.bWalkable = M.bHit && M.NZ >= WalkableZ;
+				In.DZ = static_cast<float>(DZ);
+				In.FeetZ = static_cast<float>(Z - HalfH);
+				In.FootZ = L.FootZ;
+				In.StepHeight = StepH;
+				if (ClimbNeedsStepProbe(In))
+				{
+					In.bStepClear = Rule == ERule::Round5 ? true : (Rule == ERule::Game && StepClear(L.Boxes, U, Z, L.Anchor, L.FootZ));
+				}
+				EClimbHit What = ClimbAfterHit(In);
+				if (Rule == ERule::None && (What == EClimbHit::Rise || What == EClimbHit::Lower))
+				{
+					What = EClimbHit::Stop;
+				}
+				if (What == EClimbHit::Slide)
+				{
+					const double RU = DU * (1.0 - M.Time), RZ = DZ * (1.0 - M.Time);
+					const double Dot = RU * M.NU + RZ * M.NZ;
+					const FMove S = Sweep(L.Boxes, U, Z, RU - Dot * M.NU, RZ - Dot * M.NZ, Rad);
+					U = S.U;
+					Z = S.Z;
+				}
+				else if (What == EClimbHit::Rise || What == EClimbHit::Lower)
+				{
+					const FMove S = Sweep(L.Boxes, U, Z, 0.0, DZ * (1.0 - M.Time), Rad);
+					U = S.U;
+					Z = S.Z;
+				}
+				double NU = 0.0, NZ = 0.0;
+				Out.MaxPen = std::fmax(Out.MaxPen, Rad - Dist(L.Boxes, U, Z, NU, NZ));
+				Out.MaxHead = std::fmax(Out.MaxHead, Z + HalfH);
+				if (Rule == ERule::Game && ClimbReleaseOnDescent(static_cast<float>(DZ), static_cast<float>(Z0 - Z), static_cast<float>(Z - HalfH), L.FootZ, StepH))
+				{
+					Out.End = 3;
+					Out.Time = F * Dt;
+					break;
+				}
+				if (UpSign > 0.0 && Z - HalfH >= GoalFeet && std::fabs(U - L.Anchor) < 1.0)
+				{
+					Out.End = 1;
+					Out.Time = F * Dt;
+					break;
+				}
+			}
+			Out.U = U;
+			Out.Z = Z;
+			return Out;
+		}
+
+		/** Echelle sur son trottoir du Niveau 37 (ABRChunk::BuildDecks, ABRExit::GetClimbAnchor) : ligne du mur en u = 0, mur de
+		 *  120 cm (face en u = 60), trottoir de 68 cm jusqu'a 180 cm, marche immergee de 34 cm jusqu'a 220 cm, fond du canal ;
+		 *  plafond a 450 cm ; pied a 68 cm, accroche a 112 cm */
+		FLadder Walkway()
+		{
+			FLadder L;
+			L.Boxes = { { -200.0, 60.0, -100.0, 450.0 }, { -60.0, 180.0, -100.0, 68.0 }, { 180.0, 220.0, -100.0, 34.0 }, { -200.0, 3000.0, -100.0, 0.0 },
+				{ -200.0, 3000.0, 450.0, 600.0 } };
+			L.Anchor = 112.0;
+			L.FootZ = 68.f;
+			L.TopZ = 68.0 + 532.0;
+			return L;
+		}
+
+		/** Echelle au sol plat (pied a 0) : mur en u <= 0, accroche a 52 cm, plafond a 450 cm */
+		FLadder Flat()
+		{
+			FLadder L;
+			L.Boxes = { { -200.0, 0.0, -100.0, 450.0 }, { -200.0, 3000.0, -100.0, 0.0 }, { -200.0, 3000.0, 450.0, 600.0 } };
+			L.Anchor = 52.0;
+			L.FootZ = 0.f;
+			L.TopZ = 600.0;
+			return L;
+		}
+	}
+
+	void TestClimbFallback()
+	{
+		using namespace Climb2D;
+		std::printf("6. Deplacement de secours de la montee pres du pied (v4.16, ABRCharacter::UpdateClimb, BRGather::ClimbAfterHit)\n");
+		char Buf[512];
+		const int Fpss[4] = { 30, 60, 120, 144 };
+		double WorstPen = -1.0e9;
+		auto Pen = [&WorstPen](const FRun& R) { WorstPen = std::fmax(WorstPen, R.MaxPen); };
+
+		// a. Echelle sur son trottoir prise depuis le canal (3 departs x 3 delais x 4 cadences), depuis la marche, depuis le
+		//    trottoir : la montee passe la marche et le bord du trottoir (regle du jeu comme v4.15 correctifs 5)
+		{
+			const FLadder L = Walkway();
+			int CountGame = 0, CountRound5 = 0, CountNone = 0, Total = 0;
+			double TMin = 1.0e9, TMax = 0.0;
+			for (const double U0 : { 254.5, 300.0, 400.0 })
+			{
+				for (const double Delay : { 0.0, 0.05, 0.5 })
+				{
+					for (const int Fps : Fpss)
+					{
+						const FRun G = Climb(L, ERule::Game, U0, 0.0, Delay, Fps, 1.0, 6.0, 68.0 + 40.0);
+						const FRun R5 = Climb(L, ERule::Round5, U0, 0.0, Delay, Fps, 1.0, 6.0, 68.0 + 40.0);
+						const FRun N = Climb(L, ERule::None, U0, 0.0, Delay, Fps, 1.0, 6.0, 68.0 + 40.0);
+						Pen(G);
+						Pen(R5);
+						Pen(N);
+						++Total;
+						CountGame += G.End == 1 ? 1 : 0;
+						CountRound5 += R5.End == 1 ? 1 : 0;
+						CountNone += N.End == 1 ? 1 : 0;
+						if (G.End == 1)
+						{
+							TMin = std::fmin(TMin, G.Time);
+							TMax = std::fmax(TMax, G.Time);
+						}
+					}
+				}
+			}
+			std::snprintf(Buf, sizeof(Buf), "echelle sur son trottoir (pied 68 cm) prise depuis le canal : regle du jeu montee %d/%d (%.2f a %.2f s) ; v4.15 correctifs 5 : %d/%d ; sans "
+				"reprise verticale : %d/%d", CountGame, Total, TMin, TMax, CountRound5, Total, CountNone, Total);
+			Line(Buf, CountGame == Total && CountRound5 == Total && CountNone < Total);
+			int FromStep = 0, FromDeck = 0;
+			for (const int Fps : Fpss)
+			{
+				for (const double U0 : { 214.5, 230.0 })
+				{
+					const FRun S = Climb(L, ERule::Game, U0, 34.0, 0.5, Fps, 1.0, 6.0, 68.0 + 40.0);
+					Pen(S);
+					FromStep += S.End == 1 ? 1 : 0;
+				}
+				const FRun D = Climb(L, ERule::Game, 130.0, 68.0, 0.5, Fps, 1.0, 6.0, 68.0 + 40.0);
+				Pen(D);
+				FromDeck += D.End == 1 ? 1 : 0;
+			}
+			std::snprintf(Buf, sizeof(Buf), "la meme depuis la marche immergee : montee %d/8 ; depuis le trottoir : montee %d/4", FromStep, FromDeck);
+			Line(Buf, FromStep == 8 && FromDeck == 4);
+		}
+
+		// b. Une marche basse seulement : sol plat, caisse entre le joueur (a 200 cm) et l'accroche (52 cm), de 20 a 120 cm de haut
+		{
+			struct FCase
+			{
+				double H;
+				int ExpectGame; // 1 : monte ; 0 : arrete sans etre leve
+			};
+			const FCase Cases[] = { { 20.0, 1 }, { 34.0, 1 }, { 40.0, 0 }, { 50.0, 0 }, { 120.0, 0 } };
+			for (const FCase& C : Cases)
+			{
+				FLadder L = Flat();
+				L.Boxes.push_back({ 90.0, 130.0, -100.0, C.H });
+				bool bOk = true;
+				double GameFeet = 0.0, Round5Feet = 0.0, NoneFeet = 0.0;
+				int GameEnd = 0, Round5End = 0, NoneEnd = 0;
+				for (const int Fps : Fpss)
+				{
+					const FRun G = Climb(L, ERule::Game, 200.0, 0.0, 0.0, Fps, 1.0, 10.0, 0.0);
+					const FRun R5 = Climb(L, ERule::Round5, 200.0, 0.0, 0.0, Fps, 1.0, 10.0, 0.0);
+					const FRun N = Climb(L, ERule::None, 200.0, 0.0, 0.0, Fps, 1.0, 10.0, 0.0);
+					Pen(G);
+					Pen(R5);
+					// Arrete : jamais leve d'une marche (la montee de l'image avant le contact seule, NoLift), loin de l'accroche
+					bOk = bOk && (C.ExpectGame == 1 ? G.End == 1 : (G.End == 0 && G.Z - HalfH <= G.StartFeet + NoLift && std::fabs(G.U - L.Anchor) > 30.0));
+					if (Fps == 60)
+					{
+						GameFeet = G.Z - HalfH;
+						Round5Feet = R5.Z - HalfH;
+						NoneFeet = N.Z - HalfH;
+						GameEnd = G.End;
+						Round5End = R5.End;
+						NoneEnd = N.End;
+					}
+				}
+				std::snprintf(Buf, sizeof(Buf), "sol plat, caisse de %3.0f cm devant l'accroche (marche : 35 cm) : regle du jeu %s (pieds a %.1f cm) ; v4.15 correctifs 5 %s (%.1f cm) ; sans "
+					"reprise %s (%.1f cm)", C.H, GameEnd == 1 ? "monte" : "arrete au sol", GameFeet, Round5End == 1 ? "monte" : "ARRETE LEVE", Round5Feet, NoneEnd == 1 ? "monte" : "arrete",
+					NoneFeet);
+				Line(Buf, bOk);
+			}
+		}
+
+		// c. Mur haut entre le joueur et l'accroche : sur un sol plat (accroche derriere une paroi de 400 cm), puis depuis le canal
+		//    sous une echelle posee sur un trottoir (montant de porte de 450 cm dans le canal) : jamais leve le long du mur ; en
+		//    reculant, lache tout de suite
+		{
+			FLadder Wall = Flat();
+			Wall.Boxes = { { 0.0, 40.0, -100.0, 400.0 }, { -1000.0, 3000.0, -100.0, 0.0 } };
+			Wall.Anchor = -40.0;
+			FLadder Jamb = Walkway();
+			Jamb.Boxes.push_back({ 232.0, 252.0, -100.0, 450.0 });
+			bool bOk = true;
+			double GW = 0.0, RW = 0.0, GJ = 0.0, RJ = 0.0;
+			for (const int Fps : Fpss)
+			{
+				const FRun G = Climb(Wall, ERule::Game, 80.0, 0.0, 0.0, Fps, 1.0, 10.0, 0.0);
+				const FRun R5 = Climb(Wall, ERule::Round5, 80.0, 0.0, 0.0, Fps, 1.0, 10.0, 0.0);
+				const FRun GJam = Climb(Jamb, ERule::Game, 300.0, 0.0, 0.0, Fps, 1.0, 10.0, 68.0 + 40.0);
+				const FRun RJam = Climb(Jamb, ERule::Round5, 300.0, 0.0, 0.0, Fps, 1.0, 10.0, 68.0 + 40.0);
+				Pen(G);
+				Pen(R5);
+				Pen(GJam);
+				Pen(RJam);
+				// Puis reculer : pieds au pied (StopClimb) des la premiere image, sans rester accroche
+				FLadder Back = Wall;
+				const FRun B = Climb(Back, ERule::Game, G.U, G.Z - HalfH - 2.0, 0.0, Fps, -1.0, 2.0, 0.0);
+				bOk = bOk && G.End == 0 && G.Z - HalfH <= G.StartFeet + NoLift && GJam.End == 0 && GJam.Z - HalfH <= GJam.StartFeet + NoLift && B.End == 2 && B.Time <= 0.05;
+				if (Fps == 60)
+				{
+					GW = G.Z - HalfH;
+					RW = R5.Z - HalfH;
+					GJ = GJam.Z - HalfH;
+					RJ = RJam.Z - HalfH;
+				}
+			}
+			std::snprintf(Buf, sizeof(Buf), "mur haut entre le joueur et l'accroche, sol plat : regle du jeu pieds a %.1f cm (au sol) ; v4.15 correctifs 5 : LEVE a %.1f cm contre le mur", GW, RW);
+			Line(Buf, bOk && RW > 30.0);
+			std::snprintf(Buf, sizeof(Buf), "montant de 450 cm dans le canal devant une echelle sur son trottoir : regle du jeu pieds a %.1f cm ; v4.15 correctifs 5 : LEVE a %.1f cm", GJ, RJ);
+			Line(Buf, bOk && RJ > 90.0);
+		}
+
+		// d. Plafond : bas au-dessus du canal (la marche ne passe pas dessous) : ni levee ni tete dans le plafond ; plus haut (la
+		//    marche passe) : montee
+		{
+			bool bOk = true;
+			double GLow = 0.0, RLow = 0.0, HeadLow = 0.0, RHeadLow = 0.0;
+			int High = 0;
+			for (const int Fps : Fpss)
+			{
+				FLadder Low = Walkway();
+				Low.Boxes.push_back({ 150.0, 3000.0, 200.0, 260.0 });
+				FLadder Ok = Walkway();
+				Ok.Boxes.push_back({ 150.0, 3000.0, 300.0, 360.0 });
+				const FRun G = Climb(Low, ERule::Game, 300.0, 0.0, 0.0, Fps, 1.0, 10.0, 68.0 + 40.0);
+				const FRun R5 = Climb(Low, ERule::Round5, 300.0, 0.0, 0.0, Fps, 1.0, 10.0, 68.0 + 40.0);
+				const FRun H = Climb(Ok, ERule::Game, 300.0, 0.0, 0.0, Fps, 1.0, 10.0, 68.0 + 40.0);
+				Pen(G);
+				Pen(R5);
+				Pen(H);
+				High += H.End == 1 ? 1 : 0;
+				bOk = bOk && G.End == 0 && G.Z - HalfH <= G.StartFeet + NoLift && G.MaxHead <= 200.0 && R5.MaxHead <= 200.0;
+				if (Fps == 60)
+				{
+					GLow = G.Z - HalfH;
+					RLow = R5.Z - HalfH;
+					HeadLow = G.MaxHead;
+					RHeadLow = R5.MaxHead;
+				}
+			}
+			std::snprintf(Buf, sizeof(Buf), "plafond a 200 cm au-dessus du canal : regle du jeu pieds a %.1f cm, tete au plus a %.1f cm ; v4.15 correctifs 5 : leve a %.1f cm, tete a %.1f cm "
+				"(sous le plafond) ; plafond a 300 cm : montee %d/4", GLow, HeadLow, RLow, RHeadLow, High);
+			Line(Buf, bOk && High == 4 && RLow > 10.0);
+		}
+
+		// e. Descente : caisse de 20 cm sous l'accroche, ancienne place (marche laterale de 34 cm a 30 cm de l'axe, avant StandFlat),
+		//    echelle sur son trottoir : lacher pres du pied, jamais accroche au-dessus
+		{
+			FLadder Box = Flat();
+			Box.Boxes.push_back({ 20.0, 90.0, -100.0, 20.0 });
+			FLadder Side;
+			Side.Boxes = { { -1000.0, 0.0, -100.0, 34.0 }, { -1000.0, -40.0, -100.0, 68.0 }, { -1000.0, 3000.0, -100.0, 0.0 } };
+			Side.Anchor = 30.0;
+			Side.FootZ = 0.f;
+			const FLadder Deck = Walkway();
+			bool bOk = true;
+			double GB = 0.0, RB = 0.0, GS = 0.0, RS = 0.0, TB = 0.0, TD = 0.0;
+			for (const int Fps : Fpss)
+			{
+				const FRun G = Climb(Box, ERule::Game, 52.0, 150.0, 0.0, Fps, -1.0, 6.0, 0.0);
+				const FRun R5 = Climb(Box, ERule::Round5, 52.0, 150.0, 0.0, Fps, -1.0, 6.0, 0.0);
+				const FRun GSide = Climb(Side, ERule::Game, 30.0, 200.0, 0.0, Fps, -1.0, 6.0, 0.0);
+				const FRun RSide = Climb(Side, ERule::Round5, 30.0, 200.0, 0.0, Fps, -1.0, 6.0, 0.0);
+				const FRun D = Climb(Deck, ERule::Game, 112.0, 250.0, 0.0, Fps, -1.0, 6.0, 0.0);
+				Pen(G);
+				Pen(R5);
+				Pen(GSide);
+				Pen(RSide);
+				Pen(D);
+				bOk = bOk && G.End == 3 && std::fabs(G.Z - HalfH - 20.0) < 0.5 && R5.End == 0 && GSide.End == 3 && RSide.End == 0 && D.End == 2 && D.Z - HalfH <= 68.0 + 4.0;
+				if (Fps == 60)
+				{
+					GB = G.Z - HalfH;
+					RB = R5.Z - HalfH;
+					GS = GSide.Z - HalfH;
+					RS = RSide.Z - HalfH;
+					TB = G.Time;
+					TD = D.Time;
+				}
+			}
+			std::snprintf(Buf, sizeof(Buf), "descente sur une caisse de 20 cm sous l'accroche : regle du jeu lache a %.1f cm apres %.2f s ; v4.15 correctifs 5 : ACCROCHE a %.1f cm", GB, TB, RB);
+			Line(Buf, bOk);
+			std::snprintf(Buf, sizeof(Buf), "descente a l'ancienne place (marche laterale, avant StandFlat) : regle du jeu lache a %.1f cm ; v4.15 correctifs 5 : ACCROCHE a %.1f cm", GS, RS);
+			Line(Buf, bOk);
+			std::snprintf(Buf, sizeof(Buf), "descente d'une echelle sur son trottoir : pieds au pied (StopClimb a 4 cm) apres %.2f s, comme avant", TD);
+			Line(Buf, bOk);
+		}
+
+		// f. Balayage : dans toutes les prises ci-dessus (trois regles), la capsule n'entre jamais dans une boite
+		std::snprintf(Buf, sizeof(Buf), "aucune collision traversee : plus grand enfoncement %.3f cm (attendu <= 0)", std::fmax(WorstPen, 0.0));
+		Line(Buf, WorstPen <= 0.0);
+	}
+}
+
 int main()
 {
 	std::printf("# Banc du depart de groupe v4.12 (BRGatherLogic.cpp)\n\n");
@@ -1071,6 +1587,7 @@ int main()
 	TestGroup();
 	TestChunkLadderView();
 	TestPoolLadders();
+	TestClimbFallback();
 	std::printf("\nVerifications : %d, echecs : %d\nRESULTAT : %s\n", GChecks, GFailures, GFailures == 0 ? "OK" : "ECHEC");
 	return GFailures == 0 ? 0 : 1;
 }

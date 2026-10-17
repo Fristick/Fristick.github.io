@@ -130,4 +130,61 @@ namespace BRGather
 	constexpr float RearmDrop = 100.f;
 	/** Sans depart vu apres une demande, l'attente s'arrete (refus perdu, hote ancien) */
 	constexpr float RequestTimeout = 3.f;
+
+	// v4.16 (echelles) : suite du deplacement balaye d'une image de montee (ABRCharacter::UpdateClimb : traction vers l'accroche
+	// et montee ou descente) quand une surface l'arrete, et lacher de l'echelle en descente. Mouvement du pion local seulement
+	// (rien sur le reseau). Le banc Tools/Departure/test_departure.cpp (section 6) rejoue ces regles dans un modele balaye.
+	//   - Sol praticable touche : glisser le long de lui (v4.15 correctifs 3, tablier incline du Niveau 8).
+	//   - En montant, paroi non praticable, pieds encore sous le pied de l'echelle plus une marche (MaxStepHeight) : le reste de
+	//     la montee a la verticale (v4.15 correctifs 5 : echelle sur un trottoir du Niveau 37 prise depuis le canal) SEULEMENT si
+	//     l'essai de la marche est libre : capsule (reduite de ClimbProbeMargin) levee a la verticale jusqu'a des pieds a
+	//     ClimbStepProbeFeet, puis menee a cette hauteur jusqu'a l'aplomb de l'accroche, sans rien toucher. v4.16 : avant (v4.15
+	//     correctifs 5), sans cet essai, un mur haut, une caisse plus haute qu'une marche, un coequipier ou un plafond bas entre le
+	//     joueur et l'accroche le levaient quand meme jusqu'a une marche au-dessus du pied (37 cm sur un sol plat ; 105 cm depuis
+	//     le canal sous une echelle posee sur un trottoir), colle a la paroi, loin de l'echelle, sans pouvoir passer.
+	//   - En descendant, paroi : le reste de la descente a la verticale (v4.15 correctifs 5).
+	//   - v4.16 : en descendant, pieds a une marche au plus au-dessus du pied qui ne descendent plus (moins de ClimbStuckRatio de
+	//     la descente de l'image : sol, marche ou bord sous le grimpeur) : il lache l'echelle (ClimbReleaseOnDescent) et se tient
+	//     sur ce qu'il touche. Avant : il restait accroche au-dessus (16 cm sur la marche immergee d'un trottoir lateral du Niveau
+	//     37 ; le dessus d'une caisse sous l'accroche), seuls Saut ou Interagir le liberaient.
+	enum class EClimbHit : uint8_t
+	{
+		/** Rien de plus (pas d'impact, paroi en montee hors de la regle ou essai de la marche pris) */
+		Stop,
+		/** Glisser le long du sol praticable touche */
+		Slide,
+		/** Reste de la montee a la verticale (balaye) */
+		Rise,
+		/** Reste de la descente a la verticale (balaye) */
+		Lower
+	};
+	struct FClimbHitIn
+	{
+		/** Le deplacement balaye de l'image a ete arrete */
+		bool bBlocked = false;
+		/** La surface touchee est un sol praticable (Normal.Z >= sol praticable du mouvement) */
+		bool bWalkable = false;
+		/** Part verticale du deplacement de l'image (cm ; > 0 en montant) */
+		float DZ = 0.f;
+		/** Pieds du grimpeur apres le deplacement balaye, et pied de l'echelle (cm, monde) */
+		float FeetZ = 0.f;
+		float FootZ = 0.f;
+		/** Hauteur d'une marche (UCharacterMovementComponent::MaxStepHeight) */
+		float StepHeight = 0.f;
+		/** Essai de la marche libre (rempli par l'appelant quand ClimbNeedsStepProbe) */
+		bool bStepClear = false;
+	};
+	/** L'essai de la marche decide de la suite (deux balayages chez l'appelant, seulement dans ce cas) */
+	bool ClimbNeedsStepProbe(const FClimbHitIn& In);
+	EClimbHit ClimbAfterHit(const FClimbHitIn& In);
+	/** Pieds de la capsule de l'essai de la marche : une marche au-dessus du pied de l'echelle, plus ClimbProbeMargin */
+	float ClimbStepProbeFeet(float FootZ, float StepHeight);
+	/** Descente (DZ < 0) presque arretee (Descended, cm descendus pendant l'image, < -DZ * ClimbStuckRatio) les pieds a une marche
+	 *  au plus (plus ClimbProbeMargin) au-dessus du pied : lacher l'echelle */
+	bool ClimbReleaseOnDescent(float DZ, float Descended, float FeetZ, float FootZ, float StepHeight);
+	/** Marge de l'essai de la marche (cm) : rayon et demi-hauteur de sa capsule reduits d'autant (un contact a 0,1 cm laisse par
+	 *  le deplacement balaye ne compte pas), pieds de l'essai d'autant au-dessus d'une marche */
+	constexpr float ClimbProbeMargin = 1.f;
+	/** Part de la descente d'une image en dessous de laquelle la descente est arretee */
+	constexpr float ClimbStuckRatio = 0.25f;
 }
