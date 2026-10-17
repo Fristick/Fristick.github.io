@@ -69,11 +69,12 @@ règles détaillées (R-L1 à R-L6) : [`HISTOIRE_PROGRESSION_v4.15.md`](HISTOIRE
   sortie dont le point visé serait pris dans un obstacle le signale dans le journal (vérifié quand la sortie devient
   visible et quand la mission l'ouvre ; pas tant que la porte de la mission la ferme).
 
-## 6. Missions qui bloquaient (1er, 3e et 4e lots)
+## 6. Missions qui bloquaient (1er, 3e, 4e et 5e lots)
 
 Trouvés en jouant les tests dans Unreal sur un nouveau PC (aucun de ces cas n'avait été joué avant). Le détail, les bancs
 et les sorties réelles : [`Docs/v415/correctifs_places.txt`](v415/correctifs_places.txt),
-[`correctifs_3.txt`](v415/correctifs_3.txt), [`correctifs_4.txt`](v415/correctifs_4.txt).
+[`correctifs_3.txt`](v415/correctifs_3.txt), [`correctifs_4.txt`](v415/correctifs_4.txt),
+[`correctifs_5.txt`](v415/correctifs_5.txt).
 
 - **Level 6, postes de confinement** : sur toutes les graines, la cage de confinement enfermait le point d'action de son
   poste ; la mission ne pouvait pas être finie. La cage et son poste sont maintenant aux deux bouts du mur (±58 cm), et
@@ -85,6 +86,9 @@ et les sorties réelles : [`Docs/v415/correctifs_places.txt`](v415/correctifs_pl
   passerelle ne se grimpait pas depuis le tablier incliné (depuis la v4.12) : le grimpeur glisse maintenant sur le sol
   praticable jusqu'au palier. Les échelles des chunks ne sont plus enfouies dans la roche de leur paroi (en coopération,
   le départ de groupe y était refusé).
+- **Poolrooms, échelles vers le Niveau 2** (parcours classique) : environ une sur cinq était posée au fond du canal
+  contre la marche immergée du trottoir d'un mur voisin ; on ne pouvait pas y monter depuis le canal. Elles sont
+  maintenant posées là où le grimpeur tient à plat (souvent sur un trottoir) ; environ 2 % des zones n'en ont plus.
 - **Niveau 9** : la maison ne recouvre plus le « Plan de maison » (porche).
 - **Niveau 10, moulin** : les poteaux d'une même pièce avaient chacun leur orientation ; un mécanisme pouvait cacher son
   voisin à la visée (« Orientation du moulin » et « Frein du moulin »). Les poteaux d'une pièce sont maintenant en rang

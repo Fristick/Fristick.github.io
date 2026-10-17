@@ -91,9 +91,12 @@ corrections : [`correctifs_places.txt`](v415/correctifs_places.txt), [`correctif
 
 ## 6. Limites restantes
 
-- **Poolrooms, échelles des chunks vers le Niveau 2** (parcours classique seulement) : la vérification ajoutée au
-  4e lot signale que la capsule du grimpeur n'y tient pas sur certaines graines (ni visée ni montée). La sortie de la
-  mission marche ; ces sorties secondaires sont à corriger (suite de la v4.15).
+- **Poolrooms, échelles des chunks vers le Niveau 2** (parcours classique seulement) : corrigé au 5e lot
+  ([`correctifs_5.txt`](v415/correctifs_5.txt)). Une échelle sur un mur sans trottoir, au fond du canal, à côté du
+  trottoir d'un mur voisin (22 % des échelles des chunks) n'est plus posée là : la marche immergée de ce trottoir
+  entrait dans la capsule du grimpeur (montée bloquée depuis le canal ; la visée n'était pas gênée). Reste à vérifier
+  en jeu (étape ajoutée, non lancée) : une échelle posée sur son trottoir se prend-elle depuis le canal, sous le trottoir
+  (hypothèse hors moteur : non, le grimpeur s'arrête au bord ; depuis le trottoir, oui).
 - **Images par seconde** sur ce portable : salles de fosses en Cinématique (21–22 img/s) ; Poolrooms en RTX fluide à la
   limite de l'objectif de 60 img/s (passé dans 2 lancements sur 4) ; débits du scanner à 144 et 240 img/s non jugés.
 - **Lumière de gameplay** (`LightLevelAt`) : elle ne tient pas compte des murs (une lampe derrière un mur éclaire un
