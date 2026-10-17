@@ -19,10 +19,11 @@
 //   - v4.15 (correctifs 5) : Niveau 37 (Poolrooms), graine du niveau 115083815 (final3/v412 et full), partie classique : plus
 //     d'echelle des chunks vers le Niveau 2 en (-3250, -1560, 0), au fond du canal contre la marche immergee d'un trottoir
 //     lateral (capsule du grimpeur prise avant BRMech::Grid::StandFlat) ; l'echelle du chunk (-1, -1) (banc : (-1250, -1560, 68),
-//     sur son trottoir) et toutes celles des chunks construits ont leur point vise et leur capsule libres ; constat de la prise
-//     depuis le canal sous le trottoir ; approche a pied, visee, avancer 0,5 s apres la prise, sommet, une demande, arrivee au
-//     Niveau 2. En reseau : graine du niveau 2303284074 (net_final3), memes echelles tirees chez l'hote et le client (empreinte),
-//     aucune aux places signalees, celles des chunks construits libres.
+//     sur son trottoir) et toutes celles des chunks construits ont leur point vise et leur capsule libres ; prise depuis le canal
+//     sous le trottoir, avancer tout de suite puis 0,5 s apres (relecture : montee par-dessus le bord, ABRCharacter::UpdateClimb) ;
+//     approche a pied, visee, avancer 0,5 s apres la prise, sommet, une demande, arrivee au Niveau 2. En reseau : graine du
+//     niveau 2303284074 (net_final3), memes echelles tirees chez l'hote et le client (empreinte, au moins une), aucune aux
+//     places signalees (chunks tires), celles des chunks construits libres.
 // Les memes etapes font partie de -BRAutoTestV411 (AddMissionSteps : places des mecanismes de chaque niveau), de
 // -BRAutoTestV412 (Poolrooms) et de -BRAutoTestV413 (Level 6), donc du test complet : cette suite n'y est pas ajoutee une
 // seconde fois (les etapes des correctifs 4, Niveau 2 et Niveau 8, ne sont que dans cette suite et dans -BRNetTest). Une
@@ -352,8 +353,11 @@ namespace BRTestV415Fix
 	constexpr int32 MarkNet37Start = 4157;
 	constexpr int32 MarkNet37NoLevel = 4158;
 	constexpr int32 MarkNet37Hash = 1000000;
-	/** Etat du constat de la prise depuis le canal et du test reseau du Niveau 37 */
+	/** Etat de la prise depuis le canal et du test reseau du Niveau 37. v4.15 (correctifs 5, relecture) : deux prises, avancer
+	 *  tout de suite puis 0,5 s apres (CanalDelays, essai CanalTrial) */
 	int32 CanalPhase = 0;
+	int32 CanalTrial = 0;
+	constexpr float CanalDelays[2] = { 0.f, 0.5f };
 	FVector CanalStand = FVector::ZeroVector;
 	float CanalStartZ = 0.f;
 	FString Pool37Text;
@@ -363,6 +367,20 @@ namespace BRTestV415Fix
 	FVector SpotOf(const FSpot& S)
 	{
 		return FVector(S.X, S.Y, S.Z);
+	}
+
+	/** v4.15 (correctifs 5, relecture) : indice de la sortie en echelle vers Target dans les sorties du niveau (-1 : aucune) */
+	int32 ExitIndexTo(const ABRWorld* W, int32 Target)
+	{
+		const FBRLevelDef& D = W->Def();
+		for (int32 I = 0; I < D.Exits.Num(); ++I)
+		{
+			if (D.Exits[I].Style == EBRExitStyle::Ladder && D.Exits[I].Target == Target)
+			{
+				return I;
+			}
+		}
+		return INDEX_NONE;
 	}
 
 	/** Echelles posees par les chunks (proprietaire ABRChunk) vers Target ; Chunk : seulement celles de ce chunk */
@@ -968,7 +986,15 @@ void ABRAutoTest::AddV415FixSteps()
 		{
 			return false;
 		}
-		// Ancienne place (toutes les sorties vers le Niveau 2, chunk construit ou non)
+		// v4.15 (correctifs 5, relecture) : l'ancienne place n'est jugee que le chunk construit (avant : "aucune sortie" note OK
+		// meme quand le chunk ne l'etait pas en 30 s, juste avant le NON VERIFIE)
+		if (!W->IsChunkLoaded(Chunk))
+		{
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : NON VERIFIE, chunk (%d, %d) non construit en 30 s : ancienne place (%.0f, %.0f, 0) et echelle "
+				"du chunk (banc : (%.0f, %.0f, %.0f)) non jugees"), Pool37Seed, Chunk.X, Chunk.Y, Pool37Old.X, Pool37Old.Y, Pool37New.X, Pool37New.Y, Pool37New.Z));
+			return true;
+		}
+		// Ancienne place (toutes les sorties vers le Niveau 2, chunk construit)
 		ABRExit* AtOld = nullptr;
 		for (TActorIterator<ABRExit> It(GetWorld()); It && !AtOld; ++It)
 		{
@@ -981,10 +1007,11 @@ void ABRAutoTest::AddV415FixSteps()
 		Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : ancienne place (%.0f, %.0f, 0), au fond du canal contre la marche d'un trottoir lateral : %s "
 			"(attendu : aucune sortie, regle BRMech::Grid::StandFlat)"), Pool37Seed, Pool37Old.X, Pool37Old.Y, AtOld ? *FString::Printf(TEXT("ENCORE UNE SORTIE : %s"),
 			*LadderReport(GetWorld(), W, AtOld, bOldFree)) : TEXT("aucune sortie")), AtOld != nullptr);
-		if (InChunk.Num() == 0 || !W->IsChunkLoaded(Chunk))
+		if (InChunk.Num() == 0)
 		{
-			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : NON VERIFIE, aucune echelle vers le Niveau %d dans le chunk (%d, %d) en 30 s (construit %s ; "
-				"banc : (%.0f, %.0f, %.0f))"), Pool37Seed, Pool37Target, Chunk.X, Chunk.Y, Oui(W->IsChunkLoaded(Chunk)), Pool37New.X, Pool37New.Y, Pool37New.Z));
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : NON VERIFIE, aucune echelle vers le Niveau %d dans le chunk (%d, %d) construit (tire %s ; "
+				"banc : (%.0f, %.0f, %.0f))"), Pool37Seed, Pool37Target, Chunk.X, Chunk.Y, Oui(W->IsChunkExitDrawn(Chunk, ExitIndexTo(W, Pool37Target))), Pool37New.X, Pool37New.Y,
+				Pool37New.Z));
 			return true;
 		}
 		if (BRLevels::ResolveExit(37, Pool37Target).Kind == BRContent::EExit::Sealed)
@@ -1017,10 +1044,12 @@ void ABRAutoTest::AddV415FixSteps()
 		return true;
 	});
 	LimitLastStep(40.f);
-	// Constat (regle de montee inchangee, jamais un PROBLEME) : une echelle sur son trottoir prise depuis le canal, avancer 0,5 s
-	// apres la prise. Modele hors moteur (diag5/r5/deck_climb.py) : le grimpeur, tire vers l'accroche, s'arrete contre le bord du
-	// trottoir (contact presque horizontal, pas de glissement) ; HYPOTHESE a confirmer ici. L'echelle est lachee apres 1,5 s
-	Add(TEXT("v4.15 correctifs 5 : echelle du Niveau 37 sur son trottoir, prise depuis le canal (constat)"), 0.f, [this]()
+	// Prise depuis le canal (v4.15 correctifs 5, relecture : regle de montee corrigee, ABRCharacter::UpdateClimb) : une echelle sur
+	// son trottoir prise depuis le canal, deux fois : avancer tout de suite, puis 0,5 s apres la prise. Avant la correction (modele
+	// hors moteur diag5/r5/deck_climb.py) : le grimpeur, tire vers l'accroche, s'arretait contre l'arete de la marche puis le bord
+	// du trottoir dans les deux cas ; apres (diag5/r5fix/climb_lift.py) : il passe par-dessus (HYPOTHESE a confirmer ici). Un arret
+	// est un PROBLEME ; l'echelle est lachee des que le grimpeur est a l'accroche au-dessus du trottoir (jamais au sommet)
+	Add(TEXT("v4.15 correctifs 5 : echelle du Niveau 37 sur son trottoir, prise depuis le canal"), 0.f, [this]()
 	{
 		using namespace BRTestV415Fix;
 		ABRWorld* W = GetBRWorld();
@@ -1038,12 +1067,15 @@ void ABRAutoTest::AddV415FixSteps()
 				C->Interact(); // lacher l'echelle
 			}
 			CanalPhase = 0;
+			CanalTrial = 0;
 			return true;
 		};
 		if (!Exit || !bLadderOk || W->GetLevelNumber() != 37)
 		{
 			return End(); // echelle introuvable ou prise : notee plus haut
 		}
+		const float Delay = CanalDelays[CanalTrial];
+		const TCHAR* When = CanalTrial == 0 ? TEXT("avancer tout de suite") : TEXT("avancer 0,5 s apres la prise");
 		switch (CanalPhase)
 		{
 		case 0:
@@ -1051,7 +1083,7 @@ void ABRAutoTest::AddV415FixSteps()
 			// Sur son trottoir : une place libre dans le canal, droit devant (le bord du trottoir, sa marche, puis le canal)
 			if (FootZ < 30.f)
 			{
-				Skip(FString::Printf(TEXT("constat de la prise depuis le canal : echelle au fond du canal (pied a %.0f cm), pas sur un trottoir : sans objet"), FootZ));
+				Skip(FString::Printf(TEXT("prise depuis le canal NON VERIFIEE : echelle au fond du canal (pied a %.0f cm), pas sur un trottoir : sans objet"), FootZ));
 				return End();
 			}
 			const FVector F = LadderFront(Exit);
@@ -1075,9 +1107,10 @@ void ABRAutoTest::AddV415FixSteps()
 			}
 			if (!bStand)
 			{
-				Skip(TEXT("constat de la prise depuis le canal NON FAIT : aucune place libre dans le canal devant le trottoir de l'echelle"));
+				Skip(TEXT("prise depuis le canal NON VERIFIEE : aucune place libre dans le canal devant le trottoir de l'echelle"));
 				return End();
 			}
+			CanalTrial = 0;
 			PlaceStand(C, CanalStand, LadderAim(Exit));
 			Clock = Now;
 			CanalPhase = 1;
@@ -1096,7 +1129,7 @@ void ABRAutoTest::AddV415FixSteps()
 				{
 					return false;
 				}
-				Note(FString::Printf(TEXT("constat : echelle sur son trottoir PAS VISEE depuis le canal a %.0f cm de son pied (vise : %s) ; regle de visee inchangee"),
+				Skip(FString::Printf(TEXT("prise depuis le canal (%s) NON VERIFIEE : echelle sur son trottoir pas visee depuis le canal a %.0f cm de son pied (vise : %s)"), When,
 					FVector::Dist2D(C->GetActorLocation(), Exit->GetActorLocation()), *BRTestV412::FocusName(W, C->FocusActor.Get())));
 				return End();
 			}
@@ -1114,26 +1147,33 @@ void ABRAutoTest::AddV415FixSteps()
 			{
 				if (Now - Clock > 1.0)
 				{
-					Note(TEXT("constat : echelle sur son trottoir visee depuis le canal mais pas prise par l'interaction"));
+					Note(FString::Printf(TEXT("prise depuis le canal (%s) : echelle sur son trottoir visee depuis le canal mais PAS PRISE par l'interaction"), When), true);
 					return End();
 				}
 				return false;
 			}
-			if (Now - Clock >= 0.5)
+			if (Now - Clock >= Delay)
 			{
 				C->InputMove(FVector2D(0.f, 1.f));
 			}
-			if (Now - Clock < 1.5)
+			// Au-dessus du trottoir, a l'accroche : la montee a passe la marche et le bord du trottoir
+			const float Half = C->GetSimpleCollisionHalfHeight();
+			const FVector P = C->GetActorLocation();
+			const bool bUp = P.Z - Half >= FootZ + 10.f && FVector::Dist2D(P, Exit->GetClimbAnchor()) < 10.0;
+			if (!bUp && Now - Clock < Delay + 1.5)
 			{
 				return false;
 			}
 			const UPrimitiveComponent* Block = C->ClimbBlocker.Get();
-			const float Rise = MaxZ - CanalStartZ;
-			const float Half = C->GetSimpleCollisionHalfHeight();
-			Note(FString::Printf(TEXT("constat (regle de montee inchangee) : echelle sur son trottoir (pied a %.0f cm) prise depuis le canal (pieds a %.0f cm, %.0f cm devant son pied), "
-				"avancer apres 0,5 s : %s (centre monte de %.0f cm en 1 s ; dernier obstacle : %s)"), FootZ, CanalStartZ - Half, FVector::Dist2D(CanalStand, Exit->GetActorLocation()),
-				Rise > 80.f ? TEXT("montee") : TEXT("ARRETEE AU BORD DU TROTTOIR (il faut monter sur le trottoir avant de prendre l'echelle)"), Rise,
-				Block ? *FString::Printf(TEXT("%s (%s)"), *GetNameSafe(Block->GetOwner()), *Block->GetName()) : TEXT("aucun")));
+			Note(FString::Printf(TEXT("echelle sur son trottoir (pied a %.0f cm) prise depuis le canal (pieds a %.0f cm, %.0f cm devant son pied), %s : %s (pieds a %.0f cm, a %.0f cm "
+				"de l'accroche, %.2f s apres la prise ; dernier obstacle : %s) (attendu : montee, ABRCharacter::UpdateClimb)"), FootZ, CanalStartZ - Half,
+				FVector::Dist2D(CanalStand, Exit->GetActorLocation()), When, bUp ? TEXT("montee au-dessus du trottoir") : TEXT("ARRETEE (la montee depuis le canal ne passe pas le bord)"),
+				P.Z - Half, FVector::Dist2D(P, Exit->GetClimbAnchor()), Now - Clock, Block ? *FString::Printf(TEXT("%s (%s)"), *GetNameSafe(Block->GetOwner()), *Block->GetName())
+				: TEXT("aucun")), !bUp);
+			if (!bUp)
+			{
+				Shot(FString::Printf(TEXT("v415fix_niveau37_canal_%d"), CanalTrial));
+			}
 			C->Interact(); // lacher l'echelle
 			Clock = Now;
 			CanalPhase = 3;
@@ -1145,11 +1185,20 @@ void ABRAutoTest::AddV415FixSteps()
 			{
 				return false;
 			}
+			if (CanalTrial + 1 < static_cast<int32>(UE_ARRAY_COUNT(CanalDelays)))
+			{
+				// Deuxieme prise, depuis la meme place du canal
+				++CanalTrial;
+				PlaceStand(C, CanalStand, LadderAim(Exit));
+				Clock = Now;
+				CanalPhase = 1;
+				return false;
+			}
 			return End();
 		}
 		}
 	});
-	LimitLastStep(20.f);
+	LimitLastStep(30.f);
 	{
 		BRTestV415Fix::FClimbCase Pool;
 		Pool.Level = 37;
@@ -1674,19 +1723,24 @@ void ABRAutoTest::AddNetV415FixSteps(bool bClient)
 			TArray<FVector> Feet;
 			PlannedLadders(W, Pool37Target, Pool37Range, Feet, Pool37Text, Pool37Hash);
 			Pool37Count = Feet.Num();
+			// v4.15 (correctifs 5, relecture) : "plus d'echelle" seulement si le chunk de la place tire toujours son echelle (sinon
+			// la place serait vide sans rien prouver) ; aucune echelle tiree : PROBLEME (avant : toutes les lignes OK sans echelle)
+			const int32 ExitIdx = ExitIndexTo(W, Pool37Target);
 			bool bOldGone = true;
 			FString Spots;
 			for (int32 K = 0; K < 2; ++K)
 			{
-				FVector At = FVector::ZeroVector;
+				const FIntPoint SpotChunk = W->CellToChunk(W->WorldToCell(SpotOf(Pool37NetOld[K])));
+				const bool bDrawn = W->IsChunkExitDrawn(SpotChunk, ExitIdx);
 				const bool bOld = NearSpot(Feet, SpotOf(Pool37NetOld[K]), 50.0);
-				const bool bNew = NearSpot(Feet, SpotOf(Pool37NetNew[K]), 1.0, &At);
-				bOldGone = bOldGone && !bOld;
+				const bool bNew = NearSpot(Feet, SpotOf(Pool37NetNew[K]), 1.0);
+				bOldGone = bOldGone && !bOld && bDrawn;
 				Spots += FString::Printf(TEXT("%s(%.0f, %.0f, 0) : %s, place du banc (%.0f, %.0f, %.0f) %s"), K > 0 ? TEXT(" ; ") : TEXT(""), Pool37NetOld[K].X, Pool37NetOld[K].Y,
-					bOld ? TEXT("ENCORE UNE ECHELLE") : TEXT("plus d'echelle"), Pool37NetNew[K].X, Pool37NetNew[K].Y, Pool37NetNew[K].Z, bNew ? TEXT("oui") : TEXT("NON (cellules de la mission non rejouees par le banc ?)"));
+					bOld ? TEXT("ENCORE UNE ECHELLE") : (bDrawn ? TEXT("plus d'echelle") : *FString::Printf(TEXT("CHUNK (%d, %d) SANS ECHELLE TIREE (attendu : tiree, banc)"), SpotChunk.X,
+					SpotChunk.Y)), Pool37NetNew[K].X, Pool37NetNew[K].Y, Pool37NetNew[K].Z, bNew ? TEXT("oui") : TEXT("NON (cellules de la mission non rejouees par le banc ?)"));
 			}
-			Note(FString::Printf(TEXT("%s : Niveau 37 (graine du niveau %u), echelles des chunks vers le Niveau %d tirees (chunks -%d..%d) : %d, empreinte %08x ; %s"), Who, Pool37NetSeed, Pool37Target,
-				Pool37Range, Pool37Range, Pool37Count, Pool37Hash, *Spots), !bOldGone);
+			Note(FString::Printf(TEXT("%s : Niveau 37 (graine du niveau %u), echelles des chunks vers le Niveau %d tirees (chunks -%d..%d) : %d%s, empreinte %08x ; %s"), Who, Pool37NetSeed,
+				Pool37Target, Pool37Range, Pool37Range, Pool37Count, Pool37Count > 0 ? TEXT("") : TEXT(" (AUCUNE : attendu au moins une)"), Pool37Hash, *Spots), !bOldGone || Pool37Count == 0);
 			UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] %s : echelles des chunks du Niveau 37 vers le Niveau %d : %s"), Who, Pool37Target, *Pool37Text);
 			// Les echelles des chunks construits : posees par le tirage (meme pied), point vise et capsule libres
 			TArray<ABRExit*> Built;
@@ -1701,6 +1755,11 @@ void ABRAutoTest::AddNetV415FixSteps(bool bClient)
 			const int32 Taken = TakenLadders(GetWorld(), W, Count, What);
 			Note(FString::Printf(TEXT("%s : Niveau 37, %d echelle(s) des chunks construits (%d vers le Niveau %d, hors du tirage : %d, attendu 0), point vise ou capsule du grimpeur pris : %d "
 				"(attendu 0)%s%s"), Who, Count, Built.Num(), Pool37Target, Outside, Taken, Taken > 0 ? TEXT(" : ") : TEXT(""), *What), Taken > 0 || Outside > 0);
+			if (Built.Num() == 0)
+			{
+				// v4.15 (correctifs 5, relecture) : sans echelle construite vers le Niveau 2, "hors du tirage : 0" ne prouve rien
+				Skip(FString::Printf(TEXT("%s : Niveau 37 : NON VERIFIE, aucune echelle vers le Niveau %d dans les chunks construits : pose par le tirage non jugee"), Who, Pool37Target));
+			}
 			if (bClient)
 			{
 				BRTestNet::SendMark(GetPC(), MarkNet37Hash + static_cast<int32>(Pool37Hash % 1000000u));
@@ -1733,9 +1792,12 @@ void ABRAutoTest::AddNetV415FixSteps(bool bClient)
 			Phase = 0;
 			return true;
 		}
+		// v4.15 (correctifs 5, relecture) : deux tirages vides auraient la meme empreinte : au moins une echelle chez l'hote (celles du
+		// client different alors de l'empreinte d'un texte vide)
 		const int32 Mine = MarkNet37Hash + static_cast<int32>(Pool37Hash % 1000000u);
-		Note(FString::Printf(TEXT("hote : echelles des chunks du Niveau 37 identiques chez le client (empreinte %d, hote %d, %d echelles) : %s"), Mark - MarkNet37Hash, Mine - MarkNet37Hash,
-			Pool37Count, Oui(Mark == Mine)), Mark != Mine);
+		const bool bSame = Mark == Mine && Pool37Count > 0;
+		Note(FString::Printf(TEXT("hote : echelles des chunks du Niveau 37 identiques chez le client (empreinte %d, hote %d, %d echelles%s) : %s"), Mark - MarkNet37Hash, Mine - MarkNet37Hash,
+			Pool37Count, Pool37Count > 0 ? TEXT("") : TEXT(", AUCUNE chez l'hote"), Oui(bSame)), !bSame);
 		Phase = 0;
 		return true;
 	});

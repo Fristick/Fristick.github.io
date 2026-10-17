@@ -25,7 +25,7 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
   ombres de toutes les lampes (MegaLights, nouvelle option), néons qui s'amorcent et vieillissent, brouillard
   volumétrique, faisceau IES de la lampe, papier peint, moquette et plafond du Level 0 refaits, usure (taches, auréoles,
   éraflures) identique chez tous les joueurs.
-- **Douze bugs du jeu corrigés**, dont une mission impossible au Level 6 sur toutes les graines, des mécanismes pris
+- **Treize bugs du jeu corrigés**, dont une mission impossible au Level 6 sur toutes les graines, des mécanismes pris
   dans les rochers (Niveau 8) et dans la maison (Niveau 9), et trois bugs de coopération (arrivée d'un joueur, départ
   de groupe devant une porte murale, échelles du Niveau 8).
 

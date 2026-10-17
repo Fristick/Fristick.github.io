@@ -81,22 +81,25 @@ Non fait : R10 (kit en Nanite, demande une reconstruction Blender), l'extrémit�
 
 ## 5. Bugs corrigés
 
-Douze bugs du jeu trouvés et corrigés (liste et portée : [audit](AUDIT_v4.15.md) § 4 ; pour le joueur :
+Treize bugs du jeu trouvés et corrigés (liste et portée : [audit](AUDIT_v4.15.md) § 4 ; pour le joueur :
 [`GAMEPLAY_v4.15.md`](GAMEPLAY_v4.15.md) § 5 et 6), dont deux qui rendaient une mission impossible (Level 6 sur toutes
-les graines ; Niveau 8 et 9 selon la graine) et trois en coopération (arrivée d'un joueur, départ devant une porte
-murale, échelles du Niveau 8 dans la roche). Ainsi qu'une vingtaine de défauts des tests eux-mêmes. Journaux des
-corrections : [`correctifs_places.txt`](v415/correctifs_places.txt), [`correctifs_bancs.txt`](v415/correctifs_bancs.txt),
-[`correctifs_tests_jeu.txt`](v415/correctifs_tests_jeu.txt), [`correctifs_3.txt`](v415/correctifs_3.txt),
-[`correctifs_4.txt`](v415/correctifs_4.txt).
+les graines ; Niveau 8 et 9 selon la graine), trois en coopération (arrivée d'un joueur, départ devant une porte
+murale, échelles du Niveau 8 dans la roche) et, au 5e lot, des sorties secondaires des Poolrooms (échelles des chunks
+où le grimpeur ne tenait pas ; montée arrêtée au bord d'un trottoir). Ainsi qu'une vingtaine de défauts des tests
+eux-mêmes. Journaux des corrections : [`correctifs_places.txt`](v415/correctifs_places.txt),
+[`correctifs_bancs.txt`](v415/correctifs_bancs.txt), [`correctifs_tests_jeu.txt`](v415/correctifs_tests_jeu.txt),
+[`correctifs_3.txt`](v415/correctifs_3.txt), [`correctifs_4.txt`](v415/correctifs_4.txt),
+[`correctifs_5.txt`](v415/correctifs_5.txt).
 
 ## 6. Limites restantes
 
 - **Poolrooms, échelles des chunks vers le Niveau 2** (parcours classique seulement) : corrigé au 5e lot
-  ([`correctifs_5.txt`](v415/correctifs_5.txt)). Une échelle sur un mur sans trottoir, au fond du canal, à côté du
-  trottoir d'un mur voisin (22 % des échelles des chunks) n'est plus posée là : la marche immergée de ce trottoir
-  entrait dans la capsule du grimpeur (montée bloquée depuis le canal ; la visée n'était pas gênée). Reste à vérifier
-  en jeu (étape ajoutée, non lancée) : une échelle posée sur son trottoir se prend-elle depuis le canal, sous le trottoir
-  (hypothèse hors moteur : non, le grimpeur s'arrête au bord ; depuis le trottoir, oui).
+  ([`correctifs_5.txt`](v415/correctifs_5.txt)) ; reste ouvert : la vérification en jeu (étapes ajoutées, non lancées).
+  Une échelle n'est plus posée au fond du canal contre la marche immergée du trottoir d'un mur voisin (22 % des
+  échelles des chunks : la capsule du grimpeur y entrait ; la visée n'était pas gênée) ; 77 % des échelles des chunks
+  sont maintenant sur un trottoir (60 % avant). Prise depuis le canal, une échelle sur son trottoir arrêtait le
+  grimpeur au bord, même en avançant tout de suite (modèle hors moteur) ; la montée passe maintenant par-dessus une
+  marche ou un bord bas près du pied (`ABRCharacter::UpdateClimb`), ce que le même modèle prédit sans l'avoir joué.
 - **Images par seconde** sur ce portable : salles de fosses en Cinématique (21–22 img/s) ; Poolrooms en RTX fluide à la
   limite de l'objectif de 60 img/s (passé dans 2 lancements sur 4) ; débits du scanner à 144 et 240 img/s non jugés.
 - **Lumière de gameplay** (`LightLevelAt`) : elle ne tient pas compte des murs (une lampe derrière un mur éclaire un

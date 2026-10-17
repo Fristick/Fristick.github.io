@@ -1,8 +1,9 @@
-# Correctifs 5 de la v4.15 (branche v415-round5, depuis f126d64) : echelles des chunks du Niveau 37 - sortie reelle
+# Correctifs 5 de la v4.15 (branche v415-round5, depuis 655e8a9 ; partie de f126d64, rebasee a la relecture) : echelles des
+# chunks du Niveau 37 - sortie reelle
 # Machine : Windows 11, Unreal 5.8, Visual Studio 2026 ; depuis Backrooms/ (arbre de travail wt/r5)
 # Date : 2026-10-17
 # Le jeu n'a pas ete lance ici : les etapes en jeu sont preparees (commandes et lignes attendues en fin de fichier), non executees
-# Diagnostic et verification : Saved/TestRuns/diag5 (level37_ladder, bench, verify, r5) de l'arbre principal (hors depot)
+# Diagnostic et verification : Saved/TestRuns/diag5 (level37_ladder, bench, verify, r5, review5, r5fix), arbre principal, hors depot
 
 ## Constat (dernier passage en jeu : Saved/TestRuns/autotest/final3 et net_final3)
 # Niveau 37 (Poolrooms, "Sublimity"), partie classique, echelles des chunks vers le Niveau 2 (sorties secondaires : le parcours
@@ -19,15 +20,22 @@
 # l'echelle est a 250 cm. La capsule du controle du developpeur (rayon 32, demi-hauteur 84, centre a pied + 93) y entre de
 # 1,19 cm, celle du joueur debout au fond du canal (rayon 34) de 4 cm. Le composant cite est le lot de collision du sol du chunk
 # (dalles, fonds, trottoirs et marches) ; ISM_3/6/7 sont ses sous-lots (deduction : rang de la marche compatible).
-# Effet en jeu : la montee tire vers l'accroche (ABRCharacter::UpdateClimb, SafeMoveUpdatedComponent) qui est dans la marche ;
-# contact presque horizontal, pas de glissement : montee bloquee depuis le canal, descente arretee 16 a 18 cm au-dessus du fond
-# (HYPOTHESE par modele, diag5/verify/v_climb2.py) ; la visee (UpdateFocus) n'utilise pas cette capsule ("ni visee" etait trop
-# fort). Introduit par dc31499 (v4.3 : murs du Niveau 37 de 40 a 120 cm, accroche a 52 cm, montee balayee) ; marches de 8fe6df6
-# (v3.8) ; revele par 55974b4 (correctifs 4 : controle de la capsule du grimpeur ajoute ; meme tirage qu'avant).
-# Autres niveaux (balayage hors moteur, 2000 graines) : aucun defaut (aucun autre niveau n'a de trottoir ; Niveau 8 : 0 depuis
-# 55974b4).
+# Effet en jeu (HYPOTHESE par modele, diag5/verify/v_climb2.py) : la montee tire vers l'accroche (ABRCharacter::UpdateClimb,
+# SafeMoveUpdatedComponent) qui est dans la marche ; contact presque horizontal, pas de glissement : depuis le canal, la montee
+# passe si l'on avance des la prise, s'arrete au pied si l'on avance 0,05 a 0,5 s apres (selon la distance de depart) ; depuis
+# la marche ou un trottoir : montee ; descente arretee 16 a 18 cm au-dessus du fond ; la visee (UpdateFocus) n'utilise pas cette
+# capsule ("ni visee" etait trop fort). Introduit par dc31499 (v4.3 : murs du Niveau 37 de 40 a 120 cm, accroche a 52 cm,
+# montee balayee) ; marches de 8fe6df6 (v3.8) ; revele par 55974b4 (correctifs 4 : controle de la capsule du grimpeur ajoute ;
+# meme tirage qu'avant).
+# Meme origine, plus large (relecture, HYPOTHESE par modele, diag5/r5/deck_climb.py) : une echelle posee sur son trottoir (pied a
+# 68 cm ; 8353 des 13955 echelles des chunks avant ce lot, 59,9 %) prise depuis le canal : le grimpeur, tire vers l'accroche des
+# la prise, touche l'arete de la marche (34 cm) puis le bord du trottoir et s'y arrete, meme en avancant tout de suite ; depuis
+# la marche aussi ; depuis le trottoir : montee. Montee balayee sans glissement sur une paroi depuis dc31499 (le glissement des
+# correctifs 3 ne vaut que sur un sol praticable).
+# Autres niveaux (balayage hors moteur, 2000 graines) : aucun defaut de place (aucun autre niveau n'a de trottoir ; Niveau 8 : 0
+# depuis 55974b4).
 
-## Correctif (jeu, partie classique du Niveau 37 seulement)
+## Correctif 1 (jeu, partie classique du Niveau 37 seulement) : place des echelles
 # BRMech::Grid::StandFlat (BRMechLogic.h/.cpp) : le sol sous l'empreinte de la capsule du grimpeur (profondeurs ClimbAnchor - 36,
 # ClimbAnchor, ClimbAnchor + 36 et StandAhead = 16, 52, 88, 100 cm ; laterales -36, 0, +36) est a la hauteur du pied (sol a
 # FootProbe = 30 cm devant la face) a StandFlatTol = 1 cm pres. FFaceQuery::FloorAt (0 par defaut) ; PickWallFace recoit la
@@ -36,40 +44,68 @@
 # PickChunkWallFace passe CellSize et WallThickness ; PlanExits et IsChunkExitKeepOut font le meme tirage. ClimbAnchor (52) :
 # static_assert dans ABRExit::GetClimbAnchor (litteral garde : lu par Tools/verify_device_clearance.py).
 # Verification du developpeur (hors Shipping) : capsule prise mais libre 40 cm plus haut : "(obstacle bas sous l'accroche :
-# montee bloquee depuis le sol, descente arretee au-dessus de lui ; visee non genee)" ; sinon "(ni visee ni montee)".
+# descente arretee au-dessus de lui ; montee depuis le sol par-dessus lui, visee non genee)" ; sinon "(ni visee ni montee)".
 # Dispositions changees : Niveau 37 en partie classique (ancienne sauvegarde, Rejouer, mode dev, tests) : echelle, trappe du
-# plafond, decalques et lampes voisines des echelles deplacees. Parcours lineaire, placement de la mission, autres niveaux
-# (sol plat : StandFlat toujours vrai) inchanges.
-# Versions : GenVersion 2, PlaceVersion 3 et format de sauvegarde inchanges (les sorties des chunks ne touchent ni le plan, ni
-# le placement des mecanismes, ni la sauvegarde, ni les objets : PickFreeCell ignore ExitCells). NetVersion 415 garde (regle de
-# BRMissionLogic.h et BRContentLogic.h : aucune version 4.15 distribuee ; sinon passer a 416, ce seul numero) : l'hote et le
-# client d'une meme version tirent les memes echelles. Aucun texte visible ajoute.
+# plafond, decalques et lampes voisines des echelles deplacees ; 2789 echelles deplacees (2173 sur un trottoir, 616 au fond du
+# canal) et 291 chunks sans echelle sur 14357 qui en tirent une (2 % ; 0,12 % de tous les chunks, l'echelle n'etant tiree que
+# dans 6 %). Parcours lineaire, placement de la mission, autres niveaux (sol plat : StandFlat toujours vrai) inchanges.
+
+## Correctif 2 (relecture ; jeu, toutes les echelles) : montee par-dessus une arete basse pres du pied
+# ABRCharacter::UpdateClimb : le deplacement balaye (traction vers l'accroche + montee) arrete par une paroi non praticable
+# (Normal.Z < WalkableFloorZ), les pieds encore sous le pied de l'echelle + MaxStepHeight (35 cm) en montant, ou en descendant :
+# le reste du deplacement vertical seul (SafeMoveUpdatedComponent balaye), puis la traction reprend a l'image suivante. Le sol
+# praticable glisse comme avant (correctifs 3, tablier du Niveau 8). Hausse bornee : une paroi haute entre le joueur et
+# l'accroche ne le leve que d'une marche, puis l'arret d'avant ; en reculant, il redescend au pied et lache l'echelle (StopClimb
+# a 4 cm). Mouvement du pion local, comme avant : rien de nouveau sur le reseau.
+# Modele 2D (HYPOTHESE pour le jeu, PhysX non modele ; diag5/r5fix/climb_lift.py et climb_lift.txt, 30/60/120/144 i/s) :
+#   echelle sur son trottoir, depuis le canal (depart a 254,5 / 300 / 400 cm de la ligne du mur), avancer apres 0 / 0,05 / 0,5 s :
+#     avant "BLOQUE : pieds a 2.0 cm" a "11.7 cm" ; apres "monte (0.70 s)" a "monte (1.30 s)"
+#   depuis la marche (214,5 / 230) : avant "BLOQUE : pieds a 36.0 cm" a "38.0 cm" ; apres "monte (0.57 s)" a "monte (1.10 s)"
+#   depuis le trottoir : "monte" avant et apres (memes temps : la regle ne joue pas)
+#   ancienne place (marche laterale, avant StandFlat), depuis le canal : avancer tout de suite : "monte" avant et apres ; avancer
+#     0,05 ou 0,5 s apres : avant "BLOQUE : pieds a 2.0 cm" a "2.4 cm" selon le depart, apres "monte (0.47 s)" a "monte (0.93 s)" ;
+#     descente inchangee : "BLOQUE : pieds a 16.1 cm" avant et apres
+#   paroi haute (400 cm) entre le joueur et l'accroche : avant "BLOQUE : pieds a 2.7 cm", apres "BLOQUE : pieds a 37.0 cm" (une
+#     marche), "puis reculer : StopClimb apres 0.27 s"
+# StandFlat garde : avec la regle de montee seule, une echelle au fond du canal contre une marche laterale se monterait, mais la
+# descente s'y arreterait toujours 16 cm au-dessus du fond (Saut ou Interact pour lacher) et le controle du developpeur la
+# signalerait ; StandFlat ne coute que 2 % des echelles des chunks du Niveau 37.
+
+## Versions
+# GenVersion 2, PlaceVersion 3 et format de sauvegarde inchanges (les sorties des chunks ne touchent ni le plan, ni le placement
+# des mecanismes, ni la sauvegarde, ni les objets : PickFreeCell ignore ExitCells ; la regle de montee n'est pas sauvegardee).
+# NetVersion 415 garde (regle de BRMissionLogic.h et BRContentLogic.h : aucune version 4.15 distribuee ; sinon passer a 416, ce
+# seul numero) : l'hote et le client d'une meme version tirent les memes echelles ; la montee est calculee par le joueur local,
+# comme avant. Aucun texte visible ajoute (le controle du developpeur ecrit au journal seulement).
 
 ## Build.bat BackroomsEditor Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
-# apres les correctifs (compilation non regroupee des fichiers modifies), puis -DisableAdaptiveUnity (regroupee), puis sur le
-# premier commit seul et sur le dernier (arbre propre : compilation regroupee)
-Result: Succeeded (0 avertissement, 0 erreur) ; -DisableAdaptiveUnity : Compile Module.Backrooms.1..6.cpp, Result: Succeeded
-(0 avertissement) ; premier commit seul (acd49f2, etapes de test d'avant) : Result: Succeeded (0 avertissement)
+# Correctif 1 : apres les correctifs (compilation non regroupee des fichiers modifies), -DisableAdaptiveUnity (regroupee), puis
+# sur le premier commit seul et sur le dernier (arbre propre : compilation regroupee) : Result: Succeeded (0 avertissement)
+# Relecture (rebase sur 655e8a9 ; BRCharacter.cpp, BRInteractables.cpp, BRAutoTestV415Fix.cpp modifies) :
+Result: Succeeded (0 avertissement, 0 erreur ; [1/12] Compile BRInteractables.cpp, BRAutoTestV415Fix.cpp, BRCharacter.cpp non
+regroupes, Module.Backrooms.1..6.cpp) ; -DisableAdaptiveUnity : Compile Module.Backrooms.2.cpp et .4.cpp, Result: Succeeded
+(0 avertissement) ; apres le commit (arbre propre) : a jour, Result: Succeeded
 
 ## Build.bat Backrooms Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload
-Result: Succeeded (0 avertissement, 0 erreur)
+Result: Succeeded (0 avertissement, 0 erreur ; relecture : [1/11] a [11/11], puis -DisableAdaptiveUnity : Module.Backrooms.2.cpp
+et .4.cpp, Result: Succeeded, 0 avertissement ; apres le commit : a jour)
 
 ## Bancs hors moteur (commandes de Saved/TestRuns/run_cpp_benches.bat, projet = l'arbre de travail, sorties dans %TEMP%\brr5)
 # clang-cl 22.1.3 /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow, puis cl /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-
-# 0 avertissement pour les 20 compilations ; sorties identiques entre les deux compilateurs
-test_story        : RESULTAT : OK
-test_lidar        : RESULTAT : OK
+# 0 avertissement pour les 20 compilations ; sorties identiques entre les deux compilateurs (relecture, apres le rebase)
+test_story        : RESULTAT : OK (94 verifications, 0 echec)
+test_lidar        : RESULTAT : OK (20229 verifications, 0 echec)
 test_content      : RESULTAT : OK (69 verifications, 0 echec(s))
-test_departure    : RESULTAT : OK (53 verifications, 0 echec ; section 4 inchangee : "regle d'avant, 1981 echelles (200 graines) :
+test_departure    : RESULTAT : OK (54 verifications, 0 echec ; section 4 inchangee : "regle d'avant, 1981 echelles (200 graines) :
                     point vise dans un rocher 669, colonne prise 1111, approche prise 1148, point vise seul (colonne libre) 2" ;
                     "regle du jeu : 2083 rochers retires sur 42981 voisins ; point vise 0, colonne 0, approche 0 (attendu 0)")
-test_light        : RESULTAT : OK
+test_light        : RESULTAT : OK (6 verifications, 0 echec)
 test_color        : RESULTAT : OK (24 verification(s))
 test_fluo         : RESULTAT : OK (20 verifications, 0 echec(s))
 test_mechanisms   : RESULTAT : OK (78 verifications, 0 echec(s))
 test_missions     : RESULTAT : OK
-test_transactions : RESULTAT : OK
-# test_departure, section 5 (sortie reelle) :
+test_transactions : RESULTAT : OK (51 verifications, 0 echec)
+# test_departure, section 5 (sortie reelle ; relecture : ligne "echelles sur un trottoir" ajoutee, verifiee par les comptes) :
 5. Echelles des chunks du Niveau 37 et marches immergees des trottoirs lateraux (v4.15 correctifs 5)
   graine 115083815, chunk (-1, -1), regle d'avant : pied (-3250, -1560, 0), sans trottoir a son mur, 1 trottoir(s) lateral(aux) (journal v412 BRExit_2, full BRExit_244 : (-3250, -1560, 0)) OK
     capsule du controle dans la marche laterale de 1.19 cm (attendu 1,19), capsule du joueur au fond du canal de 4.00 cm (attendu 4) OK
@@ -83,69 +119,91 @@ test_transactions : RESULTAT : OK
   regle d'avant, 14357 chunks tires (2000 graines) : 13955 echelles, capsule du controle prise 3080 (22.07 %), du joueur 3080 ; mur sans trottoir a cote d'un trottoir lateral : 3080 (un : 2400, deux : 680) OK
   regle du jeu : 13664 echelles (95.2 % des chunks tires, avant 97.2 %), dont 10526 sur un trottoir ; capsule du controle prise 0, du joueur 0 (attendu 0) OK
   regle du jeu : 2789 echelles deplacees, 10875 inchangees, 291 chunks sans echelle de plus ; echelles libres deplacees 0 (attendu 0) OK
+  echelles sur un trottoir : regle d'avant 8353 (59.9 %), regle du jeu 10526 (77.0 %) ; echelles deplacees : sur un trottoir 2173 (77.9 %), au fond du canal 616 OK
   sol plat (FloorAt par defaut, niveaux sans trottoirs) : StandFlat accepte les 2500 faces (mur fin et paroi pleine) OK
 # Le miroir de la grille du banc ne rejoue pas les cellules de la mission : dans le jeu, une face de cellule de la mission est
 # refusee avant StandFlat (les places en jeu peuvent differer ; les etapes en jeu notent l'ecart sans le compter comme reussi)
+# Echelles sur un trottoir inchangees par StandFlat (memes places a f126d64 et ici ; banc, diag5/r5fix/walkway_ladders.txt) :
+#   graine du niveau 115083815 : chunk (2, 1) (11940, 4750, 68) ; graine 2303284074 : (-4060, -6750, 68), (7560, 6750, 68),
+#   (15750, -8440, 68), (13750, 10440, 68)
 
-## Python 3.14.8 (PYTHONUTF8=1)
-python Tools/Localization/loc_extract.py --check : a jour (aucun texte visible ajoute)
+## Python 3.14.8 (PYTHONUTF8=1, relecture)
+python Tools/Localization/loc_extract.py --check : "Verification seule (rien n'est ecrit) : a jour" (aucun texte visible ajoute)
 python Tools/Localization/loc_build.py --check : traduits 1201/1201 dans chaque langue, a revoir 0
 python Tools/Localization/loc_review.py : problemes : 0
 python Tools/protect_assets.py check : OK
 python Tools/verify_device_clearance.py --seeds 120 : RESULTAT : OK (A a F : v4.14 echoue / v4.15 passe) ; F (Niveau 8) inchange :
-  "regle v4.14 : 1208 echelles, point vise dans un rocher 415 (34.4 %), colonne du grimpeur prise 674 (55.8 %), approche prise
-  696 (57.6 %) ... -> ECHOUE" ; "regle v4.15 : 1208 echelles, point vise dans un rocher 0 (0.0 %), colonne du grimpeur prise 0
-  (0.0 %), approche prise 0 (0.0 %) ... -> PASSE"
+  "regle v4.15 : 1208 echelles, point vise dans un rocher 0 (0.0 %), colonne du grimpeur prise 0 (0.0 %), approche prise 0
+  (0.0 %), point vise seul (colonne libre) 0 -> PASSE"
 python Tools/verify_pitfalls.py --doors 1-500 : 500 graine(s), 0 avec probleme(s)
 python Tools/verify_lidar.py --seeds 1-200 : RESULTAT : OK (0 echec(s))
-python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) sans defaut, RESULTAT : OK
+python Tools/verify_level0_kit.py --seeds 40 : 40 graine(s) : 40 sans defaut, RESULTAT : OK
 
-## Commits (branche v415-round5)
-# acd49f2 v4.15 (correctifs 5) : echelles des chunks du Niveau 37 hors des marches des trottoirs
-# 898466f v4.15 (correctifs 5) : etapes en jeu des echelles du Niveau 37 (-BRAutoTestV415Fix, -BRNetTest)
-# puis ce fichier, Docs/GAMEPLAY_v4.15.md (section 6) et Docs/RAPPORT_v4.15.md (section 6, premiere limite)
+## Commits (branche v415-round5, rebasee sur 655e8a9 a la relecture : acd49f2 -> d0c44c0, 898466f -> 0fbf954, be978f5 -> 35f15fc)
+# d0c44c0 v4.15 (correctifs 5) : echelles des chunks du Niveau 37 hors des marches des trottoirs
+# 0fbf954 v4.15 (correctifs 5) : etapes en jeu des echelles du Niveau 37 (-BRAutoTestV415Fix, -BRNetTest)
+# 35f15fc v4.15 (correctifs 5) : documentation des correctifs 5 (compilation, bancs, verifications, etapes en jeu)
+# puis "v4.15 (correctifs 5) : corrections de relecture" (montee par-dessus une arete basse, etapes en jeu, chiffres, documents)
+# Integration : 655e8a9 (materiau de la moquette, MATERIAL_VERSION 9) est dans la branche ; relire par un diff a trois points
+# (backrooms-v4.15...v415-round5) ; jamais remettre backrooms-v4.15 sur une branche qui ne contient pas 655e8a9
 
 ## Etapes en jeu (a lancer : Saved/TestRuns/run_autotests.ps1 et run_nettest.ps1 sur la compilation de cet arbre)
 #   -BRAutoTest -BRAutoTestV415Fix -BRAutoTestStrict (apres le Niveau 8 ; partie classique imposee, Niveau 37 a la graine du
 #   niveau 115083815) :
-#     "Niveau 37 (graine du niveau 115083815, partie classique) : ancienne place (-3250, -1560, 0), au fond du canal contre la
-#     marche d'un trottoir lateral : aucune sortie (attendu : aucune sortie, regle BRMech::Grid::StandFlat)" ;
+#     chunk (-1, -1) construit : "Niveau 37 (graine du niveau 115083815, partie classique) : ancienne place (-3250, -1560, 0), au
+#     fond du canal contre la marche d'un trottoir lateral : aucune sortie (attendu : aucune sortie, regle
+#     BRMech::Grid::StandFlat)" ; chunk non construit en 30 s : "NON VERIFIE, chunk (-1, -1) non construit en 30 s : ancienne
+#     place (-3250, -1560, 0) et echelle du chunk (banc : (-1250, -1560, 68)) non jugees" (avant la relecture, la ligne
+#     "aucune sortie" etait notee OK meme sans le chunk) ;
 #     "Niveau 37 (graine du niveau 115083815, partie classique), chunk (-1, -1) : echelle vers le Niveau 2 (BRExit_N) en (-1250,
 #     -1560, 68), paroi de la cellule (-3, -4), sommet de la montee a N cm du pied ; point vise par le depart de groupe (-1250,
 #     -1660, 158) libre ; capsule du grimpeur a l'accroche libre (attendu : libres) ; place du banc (-1250, -1560, 68) oui" (une
 #     autre place libre dans ce chunk : "place du banc ... NON (ecart : cellules de la mission ...)", a comparer, pas un echec) ;
 #     "Niveau 37 : N echelle(s) des chunks construits, point vise ou capsule du grimpeur pris : 0 (attendu 0)" ;
-#     constat : "constat (regle de montee inchangee) : echelle sur son trottoir (pied a 68 cm) prise depuis le canal (...),
-#     avancer apres 0,5 s : ARRETEE AU BORD DU TROTTOIR (...)" attendu par le modele hors moteur, ou "montee" (l'hypothese est
-#     alors refutee) ; jamais un PROBLEME ;
+#     prise depuis le canal (deux prises depuis la meme place du canal, chacune jugee) : "echelle sur son trottoir (pied a 68 cm)
+#     prise depuis le canal (pieds a N cm, N cm devant son pied), avancer tout de suite : montee au-dessus du trottoir (pieds a N
+#     cm, a N cm de l'accroche, N s apres la prise ; dernier obstacle : ...) (attendu : montee, ABRCharacter::UpdateClimb)", puis
+#     la meme avec "avancer 0,5 s apres la prise" ; modele (pieds 40 cm au-dessus du trottoir) : 0,7 a 0,8 s et 1,2 a 1,3 s.
+#     Echec : "ARRETEE (la montee depuis le canal ne passe pas le bord)", PROBLEME, captures v415fix_niveau37_canal_0 / _1 ;
+#     pas visee depuis le canal : "prise depuis le canal (...) NON VERIFIEE : ..." ;
 #     "echelle du chunk (-1, -1) du Niveau 37 : pied de l'echelle atteint a pied depuis N cellule(s) de la grille : ..." ;
 #     "echelle du chunk (-1, -1) du Niveau 37 visee et montee : centre du grimpeur au plus haut a N cm du pied (sommet de la
 #     montee a N cm) atteint, demandes de depart au sommet 1 (attendu 1), arrivee au Niveau 2 oui".
-#     Echelle introuvable dans le chunk (-1, -1) en 30 s : NON VERIFIE, jamais OK ; avant acd49f2 : "ancienne place ... ENCORE UNE
-#     SORTIE : ... capsule du grimpeur a l'accroche PRIS dans BRChunk_N (InstancedStaticMeshComponent_M)", PROBLEME
+#     Echelle introuvable dans le chunk construit : "NON VERIFIE, aucune echelle vers le Niveau 2 dans le chunk (-1, -1) construit
+#     (tire oui ; ...)", jamais OK ; avant d0c44c0 : "ancienne place ... ENCORE UNE SORTIE : ... capsule du grimpeur a l'accroche
+#     PRIS dans BRChunk_N (InstancedStaticMeshComponent_M)", PROBLEME
 #     Inchanges : les lignes de l'echelle BRExit_42 du Niveau 8 (correctifs_4.txt)
 #   -BRNetTest (2 joueurs, apres l'echelle BRExit_42 du Niveau 8) : "hote : Niveau 37, graine 2303284074 (attendue 2303284074),
 #     partie classique oui" et la meme ligne du client ; chez chacun "... : Niveau 37 (graine du niveau 2303284074), echelles des
 #     chunks vers le Niveau 2 tirees (chunks -3..3) : N, empreinte H ; (-7750, 4560, 0) : plus d'echelle, place du banc (-7560,
-#     6750, 68) oui ; (11750, -2060, 0) : plus d'echelle, place du banc (11750, -1560, 0) oui" (meme N et meme H chez l'hote et
-#     le client ; liste des pieds au journal : "[AutoTest] hote : echelles des chunks du Niveau 37 vers le Niveau 2 : ...") ;
+#     6750, 68) oui ; (11750, -2060, 0) : plus d'echelle, place du banc (11750, -1560, 0) oui" (N au moins 1, meme N et meme H
+#     chez l'hote et le client ; liste des pieds au journal : "[AutoTest] hote : echelles des chunks du Niveau 37 vers le Niveau
+#     2 : ..."). PROBLEME (relecture) : "N (AUCUNE : attendu au moins une)" ou "CHUNK (-2, 1) SANS ECHELLE TIREE (attendu : tiree,
+#     banc)" (avant : toutes ces lignes OK meme sans aucune echelle tiree) ;
 #     "... : Niveau 37, N echelle(s) des chunks construits (N vers le Niveau 2, hors du tirage : 0, attendu 0), point vise ou
-#     capsule du grimpeur pris : 0 (attendu 0)" ; "hote : echelles des chunks du Niveau 37 identiques chez le client (empreinte
-#     X, hote X, N echelles) : oui"
+#     capsule du grimpeur pris : 0 (attendu 0)" ; aucune echelle vers le Niveau 2 construite : "NON VERIFIE, aucune echelle vers
+#     le Niveau 2 dans les chunks construits : pose par le tirage non jugee" ; "hote : echelles des chunks du Niveau 37
+#     identiques chez le client (empreinte X, hote X, N echelles) : oui" (N au moins 1 ; sinon ", AUCUNE chez l'hote) : NON")
 #   Suite complete (-BRSeed=4242), -BRAutoTestV412, -BRAutoTestV413 et le test reseau (game.log, hote et client) : aucune ligne
 #     "echelle prise dans" ni "point vise par le depart de groupe ... pris dans", a aucun niveau ; l'echelle de la mission des
-#     Poolrooms (dalle du sas) et les sorties du Niveau 2 inchangees
-#   Repro avant le correctif (facultatif, compilation de f126d64) : Niveau 37 a la graine du niveau 115083815 en partie
-#     classique, echelle en (-3250, -1560, 0) : depuis le canal devant elle, Interact, attendre 0,5 s, avancer : grimpeur arrete
-#     au pied (ClimbBlocker = BRChunk_N, lot du sol) ; depuis la marche ou un trottoir : montee ; descente arretee vers 16 cm
-#     au-dessus du fond (Saut ou Interact pour lacher)
+#     Poolrooms (dalle du sas), les sorties du Niveau 2 et l'echelle BRExit_42 du Niveau 8 (tablier incline : glissement inchange)
+#     montees comme avant
+#   Repro A/B de la regle de montee (facultatif, partie classique, graine du niveau 115083815, echelle sur son trottoir inchangee
+#     par StandFlat en (11940, 4750, 68), chunk (2, 1)) : depuis le canal devant elle, Interact, avancer tout de suite puis, une
+#     seconde fois, 0,5 s apres : compilation de f126d64 ou 655e8a9 : grimpeur arrete contre la marche puis le bord du trottoir
+#     (modele, ClimbBlocker = BRChunk_N, lot du sol) ; cette compilation : montee. Ancienne place (f126d64 seulement) : echelle en
+#     (-3250, -1560, 0), depuis le canal : avancer tout de suite : montee ; Interact, attendre 0,5 s, avancer : arretee au pied ;
+#     descente arretee vers 16 cm au-dessus du fond (Saut ou Interact pour lacher)
 
-## Constat ouvert (HYPOTHESE, regle de montee inchangee ; a confirmer par le constat de -BRAutoTestV415Fix)
-# Une echelle posee sur son trottoir (pied a 68 cm : 10526 des 13664 echelles de la regle du jeu, 77 %, et deja 78 % avant ce
-# correctif) se prend depuis le trottoir ; prise depuis la marche (34 cm) ou le canal, le grimpeur, tire vers l'accroche des la
-# prise, toucherait le bord du trottoir avec un contact presque horizontal (Normal.Z 0,06 a 0,2, sous WalkableFloorZ) et
-# s'y arreterait, meme en avancant tout de suite (modele 2D d'UpdateClimb, diag5/r5/deck_climb.py : "BLOQUE : pieds a 36 cm,
-# centre a 214 cm de la ligne" depuis la marche, "pieds a 2 cm, 254 cm" depuis le canal ; "monte" depuis le trottoir). Pas un
-# blocage (Saut ou Interact lache l'echelle), mais a corriger si le constat le confirme (UpdateClimb : un deplacement bloque par
-# un bord bas pendant qu'on avance pourrait monter d'abord a la verticale). L'approche des tests se fait donc jusqu'au trottoir
-# (ApproachAhead) ; elle n'avait jamais ete jouee pour ces echelles (la sortie de la mission est sur la dalle du sas)
+## Relecture (verdicts)
+# 1. "77 %, et deja 78 % avant" (constat ouvert) : FAUX, corrige : 59,9 % avant, 77,0 % apres ; StandFlat a pose 2173 echelles de
+#    plus sur un trottoir (78 % : part des echelles deplacees qui y arrivent). Le constat ouvert (prise depuis le canal) est traite
+#    par le correctif 2 au lieu d'etre laisse a l'etape en jeu ; l'etape essaie les deux prises (tout de suite et 0,5 s apres).
+# 2. Etapes en jeu reussies sans echelle : corrige (reseau : au moins une echelle tiree, chunk de chaque place toujours tire,
+#    empreintes comparees seulement avec des echelles, NON VERIFIE sans echelle construite ; solo : ancienne place jugee le chunk
+#    construit seulement).
+# 3. Documents : GAMEPLAY section 6 (le lot corrige des sorties secondaires ; "2 % des zones qui en tiraient une" ; plus de
+#    "on ne pouvait pas y monter depuis le canal"), RAPPORT section 5 (treize bugs, correctifs_5.txt), AUDIT section 4 (ligne
+#    13), README. Refuse en partie : RAPPORT section 6 garde l'echelle des Poolrooms en premiere limite, dite corrigee (consigne
+#    du lot) ; la ligne ne laisse ouvert que la verification en jeu.
+# 4. Base perimee : rebasee sur 655e8a9 (sans conflit) ; le diff a deux points ne montre plus MATERIAL_VERSION 9 -> 8.

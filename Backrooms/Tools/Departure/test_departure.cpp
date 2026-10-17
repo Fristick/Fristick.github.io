@@ -978,7 +978,7 @@ namespace
 
 		// Balayage : graines 1..2000 (graine du niveau : ABRWorld::SeedFromUser, Mix(n ^ (37 * 7919 + 17))), chunks -5..5 hors (0, 0)
 		int Drawn = 0, OldFound = 0, OldHit = 0, OldPlayerHit = 0, OldHitShape = 0, OneSide = 0, TwoSides = 0, NewFound = 0, NewHit = 0, NewPlayerHit = 0, Moved = 0, Same = 0,
-			ClearMoved = 0, OnDeck = 0;
+			ClearMoved = 0, OnDeck = 0, OldOnDeck = 0, MovedDeck = 0, MovedCanal = 0;
 		for (uint32_t N = 1; N <= 2000; ++N)
 		{
 			FGrid G;
@@ -1005,12 +1005,15 @@ namespace
 					NewHit += (New.bFound && New.Dev > 0.01f) ? 1 : 0;
 					NewPlayerHit += (New.bFound && New.Player > 0.01f) ? 1 : 0;
 					OnDeck += (New.bFound && New.Z == DeckZ) ? 1 : 0;
+					OldOnDeck += (Old.bFound && Old.Z == DeckZ) ? 1 : 0;
 					if (Old.bFound && New.bFound)
 					{
 						const bool bSame = SameFace(Old, New);
 						Same += bSame ? 1 : 0;
 						Moved += bSame ? 0 : 1;
 						ClearMoved += (!bSame && !bOldHit) ? 1 : 0;
+						MovedDeck += (!bSame && New.Z == DeckZ) ? 1 : 0;
+						MovedCanal += (!bSame && New.Z != DeckZ) ? 1 : 0;
 					}
 				}
 			}
@@ -1024,6 +1027,13 @@ namespace
 		std::snprintf(Buf, sizeof(Buf), "regle du jeu : %d echelles deplacees, %d inchangees, %d chunks sans echelle de plus ; echelles libres deplacees %d (attendu 0)", Moved, Same,
 			OldFound - NewFound, ClearMoved);
 		Line(Buf, ClearMoved == 0 && Moved + (OldFound - NewFound) == OldHit);
+		// v4.15 (correctifs 5, relecture) : part des echelles posees sur un trottoir (pied a 68 cm), avant et apres StandFlat (avant :
+		// "deja 78 % avant" etait faux, 78 % est la part des echelles deplacees qui arrivent sur un trottoir) ; prises depuis le canal,
+		// elles demandent la montee par-dessus la marche et le bord du trottoir (ABRCharacter::UpdateClimb)
+		std::snprintf(Buf, sizeof(Buf), "echelles sur un trottoir : regle d'avant %d (%.1f %%), regle du jeu %d (%.1f %%) ; echelles deplacees : sur un trottoir %d (%.1f %%), au fond "
+			"du canal %d", OldOnDeck, 100.0 * OldOnDeck / (OldFound > 0 ? OldFound : 1), OnDeck, 100.0 * OnDeck / (NewFound > 0 ? NewFound : 1), MovedDeck,
+			100.0 * MovedDeck / (Moved > 0 ? Moved : 1), MovedCanal);
+		Line(Buf, MovedDeck + MovedCanal == Moved && OldOnDeck + MovedDeck == OnDeck);
 
 		// Sans trottoirs (FloorAt par defaut : tous les autres niveaux), StandFlat accepte toute face : aucun tirage ne change
 		{

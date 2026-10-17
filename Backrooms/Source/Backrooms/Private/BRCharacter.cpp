@@ -3993,7 +3993,7 @@ void ABRCharacter::UpdateClimb(float Dt)
 	// l'ancre, la traction vers l'echelle est plus forte que la montee d'une image (la premiere est meme sans montee) : le
 	// grimpeur touche la pente et la remonte jusqu'au palier, puis l'echelle. Avant : SetActorLocation balaye sans glissement,
 	// arrete au premier contact : colle au tablier sans bouger, jamais au sommet, aucune demande de depart. Un mur, un flanc ou
-	// un plafond arretent toujours (pas de glissement le long d'une paroi)
+	// un plafond arretent toujours (pas de glissement le long d'une paroi), sauf le reste vertical pres du pied (ci-dessous)
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		Move->Velocity = FVector::ZeroVector;
@@ -4005,6 +4005,19 @@ void ABRCharacter::UpdateClimb(float Dt)
 			// elle hors de la marche au sol) : le reste du deplacement le long du sol, sans impact
 			UMovementComponent* Base = Move;
 			Base->SlideAlongSurface(Delta, 1.f - Hit.Time, Hit.Normal, Hit, false);
+		}
+		else if (Hit.IsValidBlockingHit() && DZ != 0.f && (DZ < 0.f || GetActorLocation().Z - Half < L->GetActorLocation().Z + Move->MaxStepHeight))
+		{
+			// v4.15 (correctifs 5, relecture) : arrete par une paroi non praticable, les pieds encore sous le pied de l'echelle plus
+			// une marche (MaxStepHeight) : le reste de la montee seul, a la verticale (balaye), puis la traction reprend. Niveau 37 :
+			// une echelle sur son trottoir (pied a 68 cm) prise depuis le canal ; le grimpeur, tire vers l'accroche des la prise,
+			// touchait l'arete de la marche immergee (34 cm) puis le bord du trottoir avec un contact presque horizontal (Normal.Z
+			// 0,06 a 0,5, sans glissement) et s'y arretait, meme en avancant tout de suite (modele 2D, diag5/r5/deck_climb.py,
+			// depuis dc31499 : murs de 120 cm, accroche a 52 cm, montee balayee). La hausse est bornee : une paroi haute entre le
+			// joueur et l'accroche ne le leve que d'une marche. En descente (DZ < 0), de meme le reste vertical seul : le grimpeur
+			// leve contre une paroi haute redescend jusqu'au pied (StopClimb a 4 cm)
+			FHitResult RiseHit;
+			Move->SafeMoveUpdatedComponent(FVector(0.f, 0.f, DZ * (1.f - Hit.Time)), GetActorQuat(), true, RiseHit);
 		}
 		ClimbBlocker = Hit.IsValidBlockingHit() ? Hit.GetComponent() : nullptr;
 	}

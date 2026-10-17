@@ -71,6 +71,7 @@ Trouvés ensuite, une fois ces blocages levés (le test allait plus loin) :
 | 10 | Niveau 8 : échelle de sortie impossible à grimper depuis le tablier incliné | depuis la v4.12 |
 | 11 | Niveau 8 : échelles des chunks enfouies dans la roche de leur paroi (départ de groupe refusé) | selon la graine |
 | 12 | Créatures : chemin calculé par une porte de l'aile du Level 6 restée fermée | Level 6 |
+| 13 | Poolrooms : échelles des chunks contre la marche immergée d'un trottoir voisin (le grimpeur n'y tient pas) ; montée arrêtée au bord d'une marche ou d'un trottoir quand on prend l'échelle depuis plus bas | 22 % des échelles des chunks, parcours classique ; échelles sur un trottoir prises depuis le canal |
 
 **Défauts des tests** (le jeu était juste, le test se trompait) : seuil des zones humides ; chemin par un bassin
 profond ; mort par folie malgré l'invincibilité des tests ; étapes en cascade après un premier échec ; compteur partagé
