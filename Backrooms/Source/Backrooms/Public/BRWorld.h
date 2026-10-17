@@ -379,6 +379,20 @@ public:
 	/** v4.15 : un volume du decor (rectangle oriente du plan) entrerait dans la zone libre d'un mecanisme ou d'une sortie
 	 *  de la mission : les chunks ne l'y posent pas (rochers des grottes). Meme resultat chez tous (placement replique) */
 	bool IsMissionKeepOut(const BRMech::Clearance::FRect& R) const;
+	/** v4.15 (correctifs 4) : la sortie ExitIndex du niveau (Def().Exits) est tiree par ce chunk (ABRChunk::PlanExits : jamais au
+	 *  chunk du depart d'un niveau ouvert ni pour la porte de service ; parcours lineaire, chunk tire, passage par noclip vers un
+	 *  niveau absent de cette version) */
+	bool IsChunkExitDrawn(const FIntPoint& Chunk, int32 ExitIndex) const;
+	/** v4.15 (correctifs 4) : face de paroi de cette sortie (BRMech::Grid::PickWallFace avec les regles du monde : cellule
+	 *  marchable hors du depart, des bassins, des salles de fosses et de la mission, atteignable ; paroi pleine ou mur fin) ;
+	 *  Hiding : cachettes du chunk (nullptr : aucune). Meme tirage que la branche murale d'ABRChunk::PlanExits */
+	bool PickChunkWallFace(const FIntPoint& Chunk, int32 ExitIndex, const TSet<FIntPoint>* Hiding, BRMech::Grid::FWallFace& Out) const;
+	/** v4.15 (correctifs 4) : un rocher (rectangle de sa boite de collision) entrerait dans la zone libre
+	 *  (BRMech::Clearance::ExitKeepOut) d'une sortie murale tiree par l'un des 3 x 3 chunks autour de lui. Les rochers d'une paroi
+	 *  sont poses (etape 5) avant les sorties du chunk (etape 9), et ceux d'un chunk voisin avant que ce chunk existe : les
+	 *  sorties sont tirees ici, sans cachette (les grottes n'en ont pas). Tirages mis en cache par chunk, vides a ClearMission.
+	 *  Meme resultat chez tous (graine, grille, cellules de la mission, parcours recu avec le niveau) */
+	bool IsChunkExitKeepOut(const BRMech::Clearance::FRect& Rock) const;
 	/** Mecanisme d'apres son indice (nullptr si absent) */
 	ABRMissionDevice* FindMissionDevice(int32 Index) const;
 	const TArray<TObjectPtr<ABRMissionDevice>>& GetMissionDevices() const { return MissionDevices; }
@@ -1002,6 +1016,9 @@ private:
 	/** v4.15 : zones que le decor laisse libres (rochers des grottes) : chaque mecanisme, son point vise et la place devant,
 	 *  chaque sortie posee par la mission (BRMech::Clearance::KeepOut), calculees avec le placement, les memes chez tous */
 	TArray<BRMech::Clearance::FRect> MissionKeepOuts;
+	/** v4.15 (correctifs 4) : sorties murales tirees par chaque chunk (repere de leur pied), pour IsChunkExitKeepOut ; videes a
+	 *  ClearMission (elles dependent des cellules de la mission et de la sortie garantie) */
+	mutable TMap<FIntPoint, TArray<BRMech::FFrame>> ChunkExitFrames;
 	/** Mecanisme -> emplacement ; sorties garanties (position, orientation, cible, style) */
 	TArray<FBRMissionSpot> MissionSpots;
 	struct FMissionExitSpot

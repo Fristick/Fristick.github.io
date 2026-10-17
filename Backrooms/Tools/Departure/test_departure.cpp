@@ -10,13 +10,21 @@
 // Les lignes de vue (murs) sont du ressort du moteur : ici, elles sont supposees libres au meme etage.
 // v4.15 : une porte posee sur la face d'un mur vise un point dans la piece (30 cm au moins devant le plan du mur), et non
 // plus la surface du mur (depart refuse devant l'ascenseur du Niveau 1 dans le test reseau).
+// v4.15 (correctifs 4) : echelles du Niveau 8 tirees par les chunks (partie classique) : avec les tirages du jeu
+// (BRMech::Grid::PickWallFace, BRMech::Cave::WallRock et CellRock, BRMechLogic.cpp) et son point vise (BRGather::ViewPoint),
+// l'echelle BRExit_42 de la graine 233637237 (journal final2/v413) est rejouee : le rocher de sa paroi enterre son point vise,
+// son accroche et la colonne du grimpeur (regle d'avant), la regle du jeu (BRMech::Cave::InExitKeepOut, ABRWorld::IsChunkExitKeepOut)
+// ne pose pas ce rocher ; sur 200 graines, aucun rocher garde ne touche le point vise, la colonne ni l'approche.
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Departure/test_departure.cpp
-//       Source/Backrooms/Private/BRGatherLogic.cpp -o test_departure && ./test_departure
+//       Source/Backrooms/Private/BRGatherLogic.cpp Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp
+//       -o test_departure && ./test_departure
 #include "BRGatherLogic.h"
+#include "BRMechLogic.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 using namespace BRGather;
@@ -348,12 +356,324 @@ namespace
 	}
 }
 
+namespace
+{
+	// =================================================================================================================
+	// 4. v4.15 (correctifs 4) : echelles des chunks du Niveau 8 et rochers de leur paroi
+	// =================================================================================================================
+
+	// Donnees du jeu reprises par le banc (entrees, pas des regles) : Niveau 8 (BRLevels.cpp : cellules de 400 cm, 8 par chunk,
+	// 38 % de cellules pleines, densite des accessoires 0,3, echelle vers le Niveau 9 a 12 % par chunk), bornes de SM_Rock
+	// (RawAssets/Meshes/SM_Rock.fbx, comme Tools/verify_device_clearance.py), accroche du grimpeur (ABRExit::GetClimbAnchor)
+	constexpr float CaveCell = 400.f;
+	constexpr int CaveChunk = 8;
+	constexpr float CaveSolid = 0.38f;
+	constexpr float CaveProps = 0.3f;
+	constexpr float LadderChance = 0.12f;
+	constexpr float ClimbAnchor = 52.f;
+	constexpr float CaveWall = 60.f;
+
+	int FloorDiv(int A, int B)
+	{
+		return (A >= 0) ? (A / B) : -((-A + B - 1) / B);
+	}
+
+	/** ABRWorld::IsSolid, grottes (grille de la graine) */
+	bool CaveIsSolid(int X, int Y, uint32_t Seed)
+	{
+		if ((X < 0 ? -X : X) <= 1 && (Y < 0 ? -Y : Y) <= 1)
+		{
+			return false;
+		}
+		const float R = 0.55f * BRMech::Grid::Rand(X, Y, 601, Seed) + 0.45f * BRMech::Grid::Rand(FloorDiv(X, 3), FloorDiv(Y, 3), 602, Seed);
+		return R < CaveSolid;
+	}
+
+	bool IsSpawnCell(int X, int Y)
+	{
+		return (X < 0 ? -X : X) <= 1 && (Y < 0 ? -Y : Y) <= 1;
+	}
+
+	/** Le monde des grottes vu par le tirage d'une sortie murale (ABRWorld : niveau ouvert, sans bassin, fosse, cachette ni mur
+	 *  fin ; les cellules de la mission ne sont pas rejouees ici) */
+	struct FCaveQuery final : BRMech::Grid::FFaceQuery
+	{
+		uint32_t Seed = 0;
+		virtual bool CellOk(int32_t X, int32_t Y) const override
+		{
+			return !CaveIsSolid(X, Y, Seed) && !IsSpawnCell(X, Y);
+		}
+		virtual bool IsFace(int32_t X, int32_t Y, int32_t DX, int32_t DY, bool& bOutSolid) const override
+		{
+			bOutSolid = CaveIsSolid(X + DX, Y + DY, Seed);
+			return bOutSolid;
+		}
+	};
+
+	/** Echelle tiree par le chunk (ABRChunk::PlanExits, sortie 0 du Niveau 8) : repere de son pied */
+	bool ChunkLadder(int CX, int CY, uint32_t Seed, BRMech::FFrame& Out, BRMech::Grid::FWallFace& OutFace)
+	{
+		if ((CX == 0 && CY == 0) || !(BRMech::Grid::Rand(CX, CY, 1100, Seed) < LadderChance))
+		{
+			return false;
+		}
+		FCaveQuery Q;
+		Q.Seed = Seed;
+		if (!BRMech::Grid::PickWallFace(CX, CY, 0, Seed, CaveChunk, false, Q, OutFace))
+		{
+			return false;
+		}
+		Out = BRMech::Grid::WallFaceFrame(OutFace, CaveCell, CaveWall, 0.f);
+		return true;
+	}
+
+	/** Boite de collision d'un rocher (rectangle oriente et hauteur) */
+	struct FRockBox
+	{
+		BRMech::Clearance::FRect R;
+		float Z0 = 0.f, Z1 = 0.f;
+		bool bWall = true;
+		float Dist2D(float X, float Y) const
+		{
+			const float Rad = R.Yaw * 3.14159265f / 180.f, C = std::cos(Rad), S = std::sin(Rad);
+			const float DX = X - R.CX, DY = Y - R.CY;
+			const float LX = DX * C + DY * S, LY = -DX * S + DY * C;
+			const float EX = std::fmax(std::fabs(LX) - R.HX, 0.f), EY = std::fmax(std::fabs(LY) - R.HY, 0.f);
+			return std::sqrt(EX * EX + EY * EY);
+		}
+		float Dist(float X, float Y, float Z) const
+		{
+			const float D = Dist2D(X, Y), EZ = std::fmax(std::fmax(Z0 - Z, 0.f), Z - Z1);
+			return std::sqrt(D * D + EZ * EZ);
+		}
+	};
+
+	BRMech::Cave::FMeshBounds RockBounds()
+	{
+		BRMech::Cave::FMeshBounds B;
+		B.Min.X = -112.93f;
+		B.Min.Y = -80.78f;
+		B.Min.Z = -36.39f;
+		B.Max.X = 100.91f;
+		B.Max.Y = 79.54f;
+		B.Max.Z = 115.91f;
+		return B;
+	}
+
+	FRockBox BoxOf(const BRMech::Cave::FRock& Rock, bool bWall)
+	{
+		FRockBox B;
+		B.R = BRMech::Cave::RockRect(Rock, RockBounds());
+		BRMech::Cave::RockHeight(Rock, RockBounds(), B.Z0, B.Z1);
+		B.bWall = bWall;
+		return B;
+	}
+
+	/** Rochers qu'ABRChunk pose autour de la cellule C : parois des cellules pleines (3 cellules autour, etape 5) et cellules libres
+	 *  (2 cellules autour ; ni au depart, ni dans la cellule devant la sortie, BuildCellProps) */
+	void RocksAround(int CX, int CY, int FrontX, int FrontY, uint32_t Seed, std::vector<FRockBox>& Out)
+	{
+		Out.clear();
+		for (int X = CX - 3; X <= CX + 3; ++X)
+		{
+			for (int Y = CY - 3; Y <= CY + 3; ++Y)
+			{
+				if (CaveIsSolid(X, Y, Seed))
+				{
+					for (int K = 0; K < 4; ++K)
+					{
+						BRMech::Cave::FRock Rock;
+						if (!CaveIsSolid(X + BRMech::Grid::DirX[K], Y + BRMech::Grid::DirY[K], Seed) && BRMech::Cave::WallRock(X, Y, K, Seed, CaveCell, Rock))
+						{
+							Out.push_back(BoxOf(Rock, true));
+						}
+					}
+				}
+				else if (!IsSpawnCell(X, Y) && !(X == FrontX && Y == FrontY) && std::abs(X - CX) <= 2 && std::abs(Y - CY) <= 2)
+				{
+					BRMech::Cave::FRock Rock;
+					if (BRMech::Cave::CellRock(X, Y, Seed, CaveCell, CaveProps, Rock))
+					{
+						Out.push_back(BoxOf(Rock, false));
+					}
+				}
+			}
+		}
+	}
+
+	/** Ce qu'un rocher fait a une echelle : point vise (sonde de 10 cm, ABRExit::CheckDepartureViewPoint), colonne du grimpeur
+	 *  (capsule de 34 cm a l'accroche, rocher plus haut qu'une marche), approche (place debout de l'accroche a 90 cm devant elle) */
+	struct FLadderHit
+	{
+		bool bView = false, bColumn = false, bApproach = false;
+	};
+	FLadderHit HitOf(const FRockBox& B, const BRMech::FFrame& F, const BRGather::FExitShape& Sh)
+	{
+		FLadderHit H;
+		const BRGather::FVec V = BRGather::ViewPoint(Sh);
+		H.bView = B.Dist(V.X, V.Y, V.Z) <= 10.f;
+		const bool bTall = B.Z1 > F.Z + 35.f;
+		H.bColumn = bTall && B.Dist2D(Sh.Anchor.X, Sh.Anchor.Y) < 34.f;
+		for (float X = ClimbAnchor; X <= ClimbAnchor + 90.f + 0.5f && bTall; X += 10.f)
+		{
+			H.bApproach |= B.Dist2D(Sh.Foot.X + Sh.Forward.X * X, Sh.Foot.Y + Sh.Forward.Y * X) < 34.f;
+		}
+		return H;
+	}
+
+	BRGather::FExitShape ShapeOf(const BRMech::FFrame& F)
+	{
+		BRGather::FExitShape Sh;
+		Sh.Style = EStyle::Ladder;
+		Sh.Foot = { F.X, F.Y, F.Z };
+		const float R = F.Yaw * 3.14159265f / 180.f;
+		Sh.Forward = { std::round(std::cos(R)), std::round(std::sin(R)), 0.f };
+		Sh.Anchor = { F.X + Sh.Forward.X * ClimbAnchor, F.Y + Sh.Forward.Y * ClimbAnchor, F.Z };
+		Sh.TopZ = F.Z + 450.f + 150.f;
+		return Sh;
+	}
+
+	uint32_t SeedMix(uint32_t X)
+	{
+		X ^= X >> 16;
+		X *= 0x7feb352dU;
+		X ^= X >> 15;
+		X *= 0x846ca68bU;
+		X ^= X >> 16;
+		return X;
+	}
+
+	void TestChunkLadderView()
+	{
+		std::printf("4. Echelles des chunks du Niveau 8 et rochers de leur paroi (v4.15 correctifs 4)\n");
+		char Buf[256];
+		// Grille rejouee : la cellule (0, 0) libre, une valeur de hachage du journal de diagnostic
+		const uint32_t Seed = 233637237u;
+		const float Roll = BRMech::Grid::Rand(1, -2, 1100, Seed);
+		std::snprintf(Buf, sizeof(Buf), "hachage de la grille (BRMech::Grid::Rand, comme BRHash::Rand) : tirage du chunk (1, -2) %.4f (diag4 : 0.0243)", Roll);
+		Line(Buf, std::fabs(Roll - 0.0243f) < 0.00005f);
+		BRMech::FFrame F;
+		BRMech::Grid::FWallFace Face;
+		const bool bLadder = ChunkLadder(1, -2, Seed, F, Face);
+		std::snprintf(Buf, sizeof(Buf), "echelle du chunk (1, -2) : cellule (%d, %d), pied en (%.0f, %.0f, %.0f), lacet %.0f (journal : BRExit_42 en (4000, -5400, 0), vers +X)", Face.CellX,
+			Face.CellY, F.X, F.Y, F.Z, F.Yaw);
+		Line(Buf, bLadder && Face.CellX == 10 && Face.CellY == -14 && Face.bSolid && F.X == 4000.f && F.Y == -5400.f && F.Yaw == 0.f);
+		const BRGather::FExitShape Sh = ShapeOf(F);
+		// Rocher de la face +X de la cellule pleine (9, -14), contre l'echelle
+		BRMech::Cave::FRock Rock;
+		const bool bRock = BRMech::Cave::WallRock(9, -14, 0, Seed, CaveCell, Rock);
+		const FRockBox Box = BoxOf(Rock, true);
+		const BRGather::FVec V = ViewPoint(Sh);
+		std::snprintf(Buf, sizeof(Buf), "rocher de la paroi (9, -14), face +X : echelle %.2f, boite de %.0f x %.0f cm, Z %.0f..%.0f ; point vise (%.0f, %.0f, %.0f) a %.0f cm de sa boite",
+			Rock.Scale, Box.R.HX * 2.f, Box.R.HY * 2.f, Box.Z0, Box.Z1, V.X, V.Y, V.Z, Box.Dist(V.X, V.Y, V.Z));
+		Line(Buf, bRock && Box.Dist(V.X, V.Y, V.Z) <= 0.f && std::fabs(Rock.Scale - 1.49f) < 0.01f);
+		const FLadderHit Old = HitOf(Box, F, Sh);
+		Line("regle d'avant : ce rocher prend aussi la colonne du grimpeur (accroche a 52 cm) et l'approche : echelle ni visee ni montee", Old.bColumn && Old.bApproach);
+		Line("regle du jeu (BRMech::Cave::InExitKeepOut, zone libre de la sortie) : ce rocher n'est pas pose", BRMech::Cave::InExitKeepOut(Box.R, &F, 1));
+		// 200 graines, chunks -4..4 (graines du diagnostic : diag4/level8_departure_view, probe_l8_exit.py --stats et --rules)
+		int Ladders = 0, OldView = 0, OldColumn = 0, OldApproach = 0, OldViewOnly = 0, NewView = 0, NewColumn = 0, NewApproach = 0, Near = 0, Removed = 0;
+		std::vector<FRockBox> Rocks;
+		for (uint32_t Si = 0; Si < 200; ++Si)
+		{
+			uint32_t S = SeedMix((Si + 1u) * 2654435761u);
+			S = S != 0 ? S : 1u;
+			std::vector<BRMech::FFrame> Frames;
+			std::vector<BRMech::Grid::FWallFace> Faces;
+			for (int CX = -5; CX <= 5; ++CX)
+			{
+				for (int CY = -5; CY <= 5; ++CY)
+				{
+					BRMech::FFrame G;
+					BRMech::Grid::FWallFace Fc;
+					if (ChunkLadder(CX, CY, S, G, Fc))
+					{
+						Frames.push_back(G);
+						Faces.push_back(Fc);
+					}
+				}
+			}
+			for (size_t L = 0; L < Frames.size(); ++L)
+			{
+				const BRMech::FFrame& G = Frames[L];
+				const int ChX = FloorDiv(Faces[L].CellX, CaveChunk), ChY = FloorDiv(Faces[L].CellY, CaveChunk);
+				if (ChX < -4 || ChX > 4 || ChY < -4 || ChY > 4)
+				{
+					continue;
+				}
+				++Ladders;
+				const BRGather::FExitShape GS = ShapeOf(G);
+				// Cellule devant la sortie (ABRChunk::PlanExits, ExitCells : pied + 30 cm) : pas de rocher de cellule
+				const int FrontX = static_cast<int>(std::floor((G.X + GS.Forward.X * 30.f) / CaveCell)), FrontY = static_cast<int>(std::floor((G.Y + GS.Forward.Y * 30.f) / CaveCell));
+				RocksAround(Faces[L].CellX, Faces[L].CellY, FrontX, FrontY, S, Rocks);
+				FLadderHit O, N;
+				for (const FRockBox& B : Rocks)
+				{
+					const FLadderHit H = HitOf(B, G, GS);
+					O.bView |= H.bView;
+					O.bColumn |= H.bColumn;
+					O.bApproach |= H.bApproach;
+					++Near;
+					if (BRMech::Cave::InExitKeepOut(B.R, Frames.data(), static_cast<int>(Frames.size())))
+					{
+						++Removed;
+						continue;
+					}
+					N.bView |= H.bView;
+					N.bColumn |= H.bColumn;
+					N.bApproach |= H.bApproach;
+				}
+				OldView += O.bView ? 1 : 0;
+				OldColumn += O.bColumn ? 1 : 0;
+				OldApproach += O.bApproach ? 1 : 0;
+				OldViewOnly += (O.bView && !O.bColumn) ? 1 : 0;
+				NewView += N.bView ? 1 : 0;
+				NewColumn += N.bColumn ? 1 : 0;
+				NewApproach += N.bApproach ? 1 : 0;
+			}
+		}
+		std::snprintf(Buf, sizeof(Buf), "regle d'avant, %d echelles (200 graines) : point vise dans un rocher %d, colonne prise %d, approche prise %d, point vise seul (colonne libre) %d",
+			Ladders, OldView, OldColumn, OldApproach, OldViewOnly);
+		Line(Buf, Ladders > 1000 && OldView > 0 && OldColumn > 0 && OldApproach > 0);
+		std::snprintf(Buf, sizeof(Buf), "regle du jeu : %d rochers retires sur %d voisins ; point vise %d, colonne %d, approche %d (attendu 0)", Removed, Near, NewView, NewColumn, NewApproach);
+		Line(Buf, Removed > 0 && Removed * 10 < Near && NewView == 0 && NewColumn == 0 && NewApproach == 0);
+		// Le point vise par le depart (inchange : 1 m devant le pied, 90 cm) est dans la zone libre d'une echelle, dans les 4 sens ;
+		// porte : 50 cm devant le pied
+		bool bAll = true;
+		const int Fw[4][2] = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } };
+		for (const auto& D : Fw)
+		{
+			BRMech::FFrame G;
+			G.X = -1200.f;
+			G.Y = 3600.f;
+			G.Yaw = std::atan2(static_cast<float>(D[1]), static_cast<float>(D[0])) * 180.f / 3.14159265f;
+			const BRGather::FExitShape GS = ShapeOf(G);
+			const BRGather::FVec P = ViewPoint(GS);
+			BRMech::Clearance::FRect Probe;
+			Probe.CX = P.X;
+			Probe.CY = P.Y;
+			Probe.HX = Probe.HY = 10.f;
+			float LX = 0.f, LY = 0.f;
+			G.ToLocal(P.X, P.Y, LX, LY);
+			const BRMech::Clearance::FRect K = BRMech::Clearance::ExitKeepOut(G);
+			bAll &= LX + 10.f <= BRMech::Clearance::StandDepth + 40.f && std::fabs(LY) + 10.f <= K.HY && BRMech::Clearance::Overlap(K, Probe);
+			G.ToLocal(GS.Anchor.X, GS.Anchor.Y, LX, LY);
+			bAll &= LX - BRMech::Clearance::PlayerRadius >= -12.f && LX + BRMech::Clearance::PlayerRadius <= BRMech::Clearance::StandDepth + 40.f;
+		}
+		FExitShape Door;
+		Door.Foot = { 0.f, 0.f, 0.f };
+		const FVec DV = ViewPoint(Door);
+		Line("point vise d'une echelle (1 m, 90 cm) et colonne du grimpeur dans la zone libre (4 sens) ; porte : 50 cm devant le pied", bAll
+			&& std::fabs(DV.X - DoorViewInset) < 0.01f && std::fabs(DV.Z - ViewHeight) < 0.01f);
+	}
+}
+
 int main()
 {
 	std::printf("# Banc du depart de groupe v4.12 (BRGatherLogic.cpp)\n\n");
 	TestGather();
 	TestClimbWait();
 	TestGroup();
+	TestChunkLadderView();
 	std::printf("\nVerifications : %d, echecs : %d\nRESULTAT : %s\n", GChecks, GFailures, GFailures == 0 ? "OK" : "ECHEC");
 	return GFailures == 0 ? 0 : 1;
 }

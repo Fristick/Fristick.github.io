@@ -840,4 +840,171 @@ namespace BRMech
 			return Pick();
 		}
 	}
+
+	namespace Grid
+	{
+		namespace
+		{
+			uint32_t Mix(uint32_t X)
+			{
+				X ^= X >> 16;
+				X *= 0x7feb352dU;
+				X ^= X >> 15;
+				X *= 0x846ca68bU;
+				X ^= X >> 16;
+				return X;
+			}
+		}
+
+		uint32_t Hash(int32_t A, int32_t B, int32_t C, uint32_t Seed)
+		{
+			uint32_t H = Mix(static_cast<uint32_t>(A) * 0x9E3779B1u ^ Seed);
+			H = Mix(H ^ (static_cast<uint32_t>(B) * 0x85EBCA77u));
+			H = Mix(H ^ (static_cast<uint32_t>(C) * 0xC2B2AE3Du));
+			return H;
+		}
+
+		float Rand(int32_t A, int32_t B, int32_t C, uint32_t Seed)
+		{
+			return static_cast<float>(Hash(A, B, C, Seed) & 0xFFFFFFu) / 16777216.f;
+		}
+
+		bool PickWallFace(int32_t ChunkX, int32_t ChunkY, int ExitIndex, uint32_t Seed, int ChunkCells, bool bBounded, const FFaceQuery& Q, FWallFace& Out)
+		{
+			// Meme ordre que la branche murale d'ABRChunk::PlanExits (v4.6 : niveau fini, nombre de sorties garanti : apres les 24
+			// essais tires, toutes les cellules et directions du chunk dans un ordre tire)
+			const int32_t N = ChunkCells;
+			if (N <= 0)
+			{
+				return false;
+			}
+			const int32_t X0 = ChunkX * N;
+			const int32_t Y0 = ChunkY * N;
+			const int32_t Tries = bBounded ? 24 + N * N * 4 : 24;
+			const int32_t ScanStart = static_cast<int32_t>(Hash(ChunkX, ChunkY, 1500 + ExitIndex * 64 + 63, Seed) % static_cast<uint32_t>(N * N * 4));
+			for (int32_t Try = 0; Try < Tries; ++Try)
+			{
+				const uint32_t Hh = Hash(ChunkX, ChunkY, 1500 + ExitIndex * 64 + Try, Seed);
+				int32_t CX = X0 + static_cast<int32_t>(Hh % static_cast<uint32_t>(N));
+				int32_t CY = Y0 + static_cast<int32_t>((Hh >> 8) % static_cast<uint32_t>(N));
+				int Dir = static_cast<int>((Hh >> 16) % 4u);
+				if (Try >= 24)
+				{
+					const int32_t Idx = (ScanStart + Try - 24) % (N * N * 4);
+					CX = X0 + (Idx / 4) % N;
+					CY = Y0 + (Idx / 4) / N;
+					Dir = static_cast<int>(Idx % 4);
+				}
+				if (!Q.CellOk(CX, CY))
+				{
+					continue;
+				}
+				bool bSolid = false;
+				if (!Q.IsFace(CX, CY, DirX[Dir], DirY[Dir], bSolid))
+				{
+					continue;
+				}
+				Out.CellX = CX;
+				Out.CellY = CY;
+				Out.Dir = Dir;
+				Out.bSolid = bSolid;
+				return true;
+			}
+			return false;
+		}
+
+		FFrame WallFaceFrame(const FWallFace& Face, float CellSize, float WallThickness, float FloorZ)
+		{
+			const float Inset = Face.bSolid ? 0.f : WallThickness * 0.5f;
+			const float DX = static_cast<float>(DirX[Face.Dir & 3]);
+			const float DY = static_cast<float>(DirY[Face.Dir & 3]);
+			FFrame F;
+			F.X = (static_cast<float>(Face.CellX) + 0.5f) * CellSize + DX * (CellSize * 0.5f - Inset);
+			F.Y = (static_cast<float>(Face.CellY) + 0.5f) * CellSize + DY * (CellSize * 0.5f - Inset);
+			F.Z = FloorZ;
+			// Vers la cellule (ABRChunk::PlanExits : YawFromDir(-Dir))
+			F.Yaw = DX > 0.5f ? 180.f : (DX < -0.5f ? 0.f : (DY > 0.5f ? -90.f : 90.f));
+			return F;
+		}
+	}
+
+	namespace Cave
+	{
+		bool WallRock(int32_t X, int32_t Y, int K, uint32_t Seed, float CellSize, FRock& Out)
+		{
+			// ABRChunk::StepPlan, etape 5 (memes operations, en double comme le FVector du jeu)
+			const float S = CellSize;
+			if (K < 0 || K > 3 || !(Grid::Rand(X * 4 + K, Y, 931, Seed) < 0.55f))
+			{
+				return false;
+			}
+			const float Sc = 1.f + 0.9f * Grid::Rand(X, Y * 4 + K, 932, Seed);
+			const double DX = static_cast<double>(Grid::DirX[K]);
+			const double DY = static_cast<double>(Grid::DirY[K]);
+			// Face de la paroi (centre de la cellule pleine + une demi-cellule), decalage le long d'elle, 30 cm dans la paroi
+			const double FaceX = static_cast<double>((static_cast<float>(X) + 0.5f) * S) + DX * static_cast<double>(S * 0.5f);
+			const double FaceY = static_cast<double>((static_cast<float>(Y) + 0.5f) * S) + DY * static_cast<double>(S * 0.5f);
+			const double Along = static_cast<double>((Grid::Rand(X, Y, 933 + K, Seed) - 0.5f) * S * 0.6f);
+			Out.X = FaceX + (-DY) * Along - DX * 30.0;
+			Out.Y = FaceY + DX * Along - DY * 30.0;
+			Out.Z = 0.0;
+			Out.Yaw = Grid::Rand(X, Y, 937 + K, Seed) * 360.f;
+			Out.Scale = Sc;
+			Out.ScaleZ = Sc * 1.4f;
+			return true;
+		}
+
+		bool CellRock(int32_t X, int32_t Y, uint32_t Seed, float CellSize, float PropDensity, FRock& Out)
+		{
+			// ABRChunk::BuildCellProps, grottes (memes operations)
+			const float S = CellSize;
+			if (!(Grid::Rand(X, Y, 930, Seed) < PropDensity * 0.4f))
+			{
+				return false;
+			}
+			const float Sc = 0.35f + Grid::Rand(X, Y, 931, Seed) * 0.6f;
+			Out.X = static_cast<double>((static_cast<float>(X) + 0.5f) * S) + static_cast<double>((Grid::Rand(X, Y, 932, Seed) - 0.5f) * S * 0.6f);
+			Out.Y = static_cast<double>((static_cast<float>(Y) + 0.5f) * S) + static_cast<double>((Grid::Rand(X, Y, 933, Seed) - 0.5f) * S * 0.6f);
+			Out.Z = -10.0;
+			Out.Yaw = Grid::Rand(X, Y, 934, Seed) * 360.f;
+			Out.Scale = Sc;
+			Out.ScaleZ = Sc;
+			return true;
+		}
+
+		Clearance::FRect RockRect(const FRock& Rock, const FMeshBounds& Bounds)
+		{
+			const double R = static_cast<double>(Rock.Yaw) * 3.14159265358979323846 / 180.0;
+			const double C = std::cos(R);
+			const double Sn = std::sin(R);
+			const double BX = static_cast<double>(Bounds.Min.X + Bounds.Max.X) * 0.5 * static_cast<double>(Rock.Scale);
+			const double BY = static_cast<double>(Bounds.Min.Y + Bounds.Max.Y) * 0.5 * static_cast<double>(Rock.Scale);
+			const float AbsScale = Rock.Scale < 0.f ? -Rock.Scale : Rock.Scale;
+			Clearance::FRect Out;
+			Out.CX = static_cast<float>(Rock.X + BX * C - BY * Sn);
+			Out.CY = static_cast<float>(Rock.Y + BX * Sn + BY * C);
+			Out.HX = (Bounds.Max.X - Bounds.Min.X) * 0.5f * AbsScale;
+			Out.HY = (Bounds.Max.Y - Bounds.Min.Y) * 0.5f * AbsScale;
+			Out.Yaw = Rock.Yaw;
+			return Out;
+		}
+
+		void RockHeight(const FRock& Rock, const FMeshBounds& Bounds, float& OutZ0, float& OutZ1)
+		{
+			OutZ0 = static_cast<float>(Rock.Z) + Bounds.Min.Z * Rock.ScaleZ;
+			OutZ1 = static_cast<float>(Rock.Z) + Bounds.Max.Z * Rock.ScaleZ;
+		}
+
+		bool InExitKeepOut(const Clearance::FRect& Rock, const FFrame* Exits, int NumExits)
+		{
+			for (int I = 0; I < NumExits && Exits; ++I)
+			{
+				if (Clearance::Overlap(Clearance::ExitKeepOut(Exits[I]), Rock))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+	}
 }

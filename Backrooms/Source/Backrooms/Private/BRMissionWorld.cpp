@@ -261,6 +261,7 @@ void ABRWorld::ClearMission()
 	MissionExitSpots.Reset();
 	MissionCells.Reset();
 	MissionKeepOuts.Reset();
+	ChunkExitFrames.Reset(); // v4.15 (correctifs 4) : tirees d'apres les cellules de la mission et la sortie garantie
 	MissionHoldTimes.Reset();
 	MissionCooldowns.Reset();
 	MissionPlan = BRM::FPlan();
@@ -1698,6 +1699,131 @@ bool ABRWorld::IsMissionKeepOut(const BRMech::Clearance::FRect& R) const
 		if (BRMech::Clearance::Overlap(K, R))
 		{
 			return true;
+		}
+	}
+	return false;
+}
+
+namespace
+{
+	/** v4.15 (correctifs 4) : styles poses par la branche murale d'ABRChunk::PlanExits (les autres : au sol, grange, maison,
+	 *  immeuble, porte de service) */
+	bool IsWallFaceExit(EBRExitStyle Style)
+	{
+		return Style != EBRExitStyle::NoclipFloor && Style != EBRExitStyle::Barn && Style != EBRExitStyle::HouseDoor && Style != EBRExitStyle::BuildingDoor
+			&& Style != EBRExitStyle::ServiceDoor;
+	}
+
+	/** v4.15 (correctifs 4) : le monde vu par BRMech::Grid::PickWallFace (memes tests que la branche murale d'ABRChunk::PlanExits) */
+	struct FWorldFaceQuery final : BRMech::Grid::FFaceQuery
+	{
+		const ABRWorld* W = nullptr;
+		const TSet<FIntPoint>* Hiding = nullptr;
+
+		virtual bool CellOk(int32_t X, int32_t Y) const override
+		{
+			const FIntPoint Cell(X, Y);
+			// v4.6 : jamais dans une salle de fosses ; niveau fini : atteignable sans la traverser
+			return W->IsWalkable(Cell) && !W->IsSpawnArea(X, Y) && !W->IsPoolCell(X, Y) && !(Hiding && Hiding->Contains(Cell)) && !W->IsPitRoomCell(X, Y)
+				&& W->IsSafelyReachable(Cell) && !W->IsMissionCell(X, Y);
+		}
+
+		virtual bool IsFace(int32_t X, int32_t Y, int32_t DX, int32_t DY, bool& bOutSolid) const override
+		{
+			const FIntPoint Next(X + DX, Y + DY);
+			bOutSolid = W->IsSolid(Next.X, Next.Y);
+			if (bOutSolid)
+			{
+				return true;
+			}
+			if (DX == 1)
+			{
+				return W->EdgeE(X, Y) == EBREdge::Wall;
+			}
+			if (DX == -1)
+			{
+				return W->EdgeE(Next.X, Next.Y) == EBREdge::Wall;
+			}
+			if (DY == 1)
+			{
+				return W->EdgeN(X, Y) == EBREdge::Wall;
+			}
+			return W->EdgeN(Next.X, Next.Y) == EBREdge::Wall;
+		}
+	};
+}
+
+bool ABRWorld::IsChunkExitDrawn(const FIntPoint& Chunk, int32 ExitIndex) const
+{
+	const FBRLevelDef& D = Def();
+	if (!D.Exits.IsValidIndex(ExitIndex))
+	{
+		return false;
+	}
+	const bool bBounded = D.BoundsChunks > 0;
+	if (!bBounded && Chunk == FIntPoint(0, 0))
+	{
+		return false; // jamais de sortie juste a cote du point d'apparition
+	}
+	const FBRExitDef& Ex = D.Exits[ExitIndex];
+	if (Ex.Style == EBRExitStyle::ServiceDoor)
+	{
+		return false; // v4.13 : posee par le monde (ABRWorld::PlaceServiceDoor), pas tiree
+	}
+	// v4.15 : parcours lineaire (drapeau recu avec le niveau, sortie garantie d'apres la mission) ; les tirages des autres sorties
+	// ne changent pas (sels propres a chaque sortie)
+	if (!BRStory::ChunkExitAllowed(IsLinearLevel(), IsLinearLevel() && HasGuaranteedForwardExit(), BRM::IsExitGuarded(D.Number, Ex.Target)))
+	{
+		return false;
+	}
+	// Niveau fini : un nombre garanti de sorties de chaque sorte, tirees parmi les chunks (hors point de depart)
+	const bool bPicked = bBounded ? IsChunkPicked(Chunk, 1100 + ExitIndex, FMath::Max(1, FMath::RoundToInt(Ex.ChancePerChunk * BoundedChunkCount(true))), true)
+		: BRHash::Rand(Chunk.X, Chunk.Y, 1100 + ExitIndex, GetSeed()) < Ex.ChancePerChunk;
+	if (!bPicked)
+	{
+		return false;
+	}
+	// v4.12 : vers un niveau pas encore disponible (sans redirection), un passage par noclip n'existe pas dans cette version
+	return !((Ex.Style == EBRExitStyle::NoclipWall || Ex.Style == EBRExitStyle::NoclipFloor) && BRLevels::ResolveExit(D.Number, Ex.Target).Kind == BRContent::EExit::Sealed);
+}
+
+bool ABRWorld::PickChunkWallFace(const FIntPoint& Chunk, int32 ExitIndex, const TSet<FIntPoint>* Hiding, BRMech::Grid::FWallFace& Out) const
+{
+	FWorldFaceQuery Q;
+	Q.W = this;
+	Q.Hiding = Hiding;
+	const FBRLevelDef& D = Def();
+	return BRMech::Grid::PickWallFace(Chunk.X, Chunk.Y, ExitIndex, GetSeed(), D.ChunkCells, D.BoundsChunks > 0, Q, Out);
+}
+
+bool ABRWorld::IsChunkExitKeepOut(const BRMech::Clearance::FRect& Rock) const
+{
+	const FBRLevelDef& D = Def();
+	// Un rocher deborde de 2,3 m au plus de sa paroi, une zone libre de 1,6 m au plus du pied de sa sortie : les chunks voisins
+	// suffisent
+	const FIntPoint Center = CellToChunk(WorldToCell(FVector(Rock.CX, Rock.CY, 0.f)));
+	for (int32 DX = -1; DX <= 1; ++DX)
+	{
+		for (int32 DY = -1; DY <= 1; ++DY)
+		{
+			const FIntPoint Chunk = Center + FIntPoint(DX, DY);
+			TArray<BRMech::FFrame>* Frames = ChunkExitFrames.Find(Chunk);
+			if (!Frames)
+			{
+				Frames = &ChunkExitFrames.Add(Chunk);
+				for (int32 I = 0; I < D.Exits.Num(); ++I)
+				{
+					BRMech::Grid::FWallFace Face;
+					if (IsWallFaceExit(D.Exits[I].Style) && IsChunkExitDrawn(Chunk, I) && PickChunkWallFace(Chunk, I, nullptr, Face))
+					{
+						Frames->Add(BRMech::Grid::WallFaceFrame(Face, D.CellSize, D.WallThickness, 0.f));
+					}
+				}
+			}
+			if (BRMech::Cave::InExitKeepOut(Rock, Frames->GetData(), Frames->Num()))
+			{
+				return true;
+			}
 		}
 	}
 	return false;

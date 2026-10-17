@@ -29,6 +29,12 @@ Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
      boites visees) prend le tableau (graine 1697132605 : journal du jeu "PAS VISE par le client"). Regle du jeu : poteaux
      d'une cellule en rang (meme lacet) et couloirs de visee degages (BRMech::Clearance::CutsFocusLane dans PickSlot,
      miroir ici) : aucune visee prise ; le couloir detecte chacune des combinaisons fautives de la regle d'avant.
+  F. v4.15 (correctifs 4) : Level 8 : echelles tirees par les chunks (partie classique ; ABRChunk::PlanExits, branche murale,
+     miroir ici). Regle d'avant : rochers des parois et des cellules sans zone libre autour d'elles : le point vise par le
+     depart de groupe (BRGather::ViewPoint, 1 m devant le pied, 90 cm), la colonne du grimpeur (ABRExit::GetClimbAnchor) ou
+     l'approche sont dans la boite d'un rocher (graine 233637237 : BRExit_42, journal final2/v413). Regle du jeu : pas de
+     rocher dans la zone libre (BRMech::Clearance::ExitKeepOut) des sorties tirees par les 3 x 3 chunks autour
+     (ABRWorld::IsChunkExitKeepOut).
 En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
 BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote ; v4.15
 correctifs 4 : puis la visee du client, BRTestV412::FocusFirstHit, touche le mecanisme avant tout decor).
@@ -42,7 +48,7 @@ mecanismes" ; -BRAutoTestV413 : postes et cages du Level 6).
 
 Usage : python Tools/verify_device_clearance.py [--seeds 120] [--rules both|old|new]
 Code de sortie : 0 si la regle v4.15 passe partout ET la regle v4.14 echoue la ou les journaux du jeu l'ont vue echouer ET la regle v4.15
-est dans les sources (cas A, D et E). Sortie : Docs/v415/correctifs_places.txt.
+est dans les sources (cas A, D, E et F). Sortie : Docs/v415/correctifs_places.txt.
 """
 import argparse
 import math
@@ -119,14 +125,25 @@ def read_constants():
     K["Reach"] = num(r"MissionReachServer = ([\d.]+)f;", world_h, "MissionReachServer")[0]
     K["Capsule"] = num(r"InitCapsuleSize\(([\d.]+)f, ([\d.]+)f\)", char, "capsule")
     K["EyeZ"] = num(r"constexpr float StandEyeZ = ([\d.]+)f;", char, "StandEyeZ")[0]
-    # Rochers (ABRChunk::StepPlan, etape 5 ; BuildCellProps, grottes)
-    wr = num(r"BRHash::Rand\(X \* 4 \+ k, Y, 931, Seed\) < ([\d.]+)f\)\s*\{\s*const float Sc = ([\d.]+)f \+ ([\d.]+)f \* BRHash::Rand\(X, Y \* 4 \+ k, 932, Seed\);"
-             r".*?\* S \* ([\d.]+)f\) - FVector\(Dir\.X, Dir\.Y, 0\.f\) \* ([\d.]+)f;.*?FVector\(Sc, Sc, Sc \* ([\d.]+)f\)", chunk, "rocher de paroi")
+    # Rochers (ABRChunk::StepPlan, etape 5 ; BuildCellProps, grottes). v4.15 (correctifs 4) : tirages dans BRMech::Cave::WallRock et
+    # CellRock (BRMechLogic.cpp), appeles par ABRChunk
+    wr = num(r"Grid::Rand\(X \* 4 \+ K, Y, 931, Seed\) < ([\d.]+)f\)\)\s*\{.*?const float Sc = ([\d.]+)f \+ ([\d.]+)f \* Grid::Rand\(X, Y \* 4 \+ K, 932, Seed\);"
+             r".*?\(Grid::Rand\(X, Y, 933 \+ K, Seed\) - 0\.5f\) \* S \* ([\d.]+)f\);\s*Out\.X = FaceX \+ \(-DY\) \* Along - DX \* ([\d.]+);.*?Out\.ScaleZ = Sc \* ([\d.]+)f;",
+             mech, "rocher de paroi")
     K["wall_rock"] = dict(chance=wr[0], sc0=wr[1], sc1=wr[2], spread=wr[3], inset=wr[4], zs=wr[5])
-    cr = num(r"R\(930\) < D\.PropDensity \* ([\d.]+)f\)\s*\{\s*const float Sc = ([\d.]+)f \+ R\(931\) \* ([\d.]+)f;\s*const FVector P = C \+ FVector\(\(R\(932\) - 0\.5f\) \* S \* ([\d.]+)f, "
-             r"\(R\(933\) - 0\.5f\) \* S \* [\d.]+f, (-?[\d.]+)f\);", chunk, "rocher de cellule")
+    cr = num(r"Grid::Rand\(X, Y, 930, Seed\) < PropDensity \* ([\d.]+)f\)\)\s*\{.*?const float Sc = ([\d.]+)f \+ Grid::Rand\(X, Y, 931, Seed\) \* ([\d.]+)f;"
+             r".*?\(Grid::Rand\(X, Y, 932, Seed\) - 0\.5f\) \* S \* ([\d.]+)f\);.*?Out\.Z = (-?[\d.]+);", mech, "rocher de cellule")
     K["cell_rock"] = dict(density=cr[0], sc0=cr[1], sc1=cr[2], spread=cr[3], z=cr[4])
-    K["rock_keepout_in_game"] = "RockInMissionKeepOut(this, InWorld, RockT)" in chunk and "RockInMissionKeepOut(this, W, RockT)" in chunk
+    K["rock_keepout_in_game"] = ("BRMech::Cave::WallRock(X, Y, k, Seed, S, Rock)" in chunk and "BRMech::Cave::CellRock(X, Y, Seed, S, D.PropDensity, Rock)" in chunk
+                                 and "RockInKeepOut(this, InWorld, Rock)" in chunk and "RockInKeepOut(this, W, Rock)" in chunk and "W->IsMissionKeepOut(R)" in chunk)
+    # v4.15 (correctifs 4) : sorties tirees par les chunks : regle des rochers et tirage partage
+    K["src_F"] = {
+        "ABRChunk : rochers hors de la zone libre des sorties tirees par les chunks (ABRWorld::IsChunkExitKeepOut)": "W->IsMissionKeepOut(R) || W->IsChunkExitKeepOut(R)" in chunk,
+        "ABRWorld::IsChunkExitKeepOut : sorties murales des 3 x 3 chunks, BRMech::Cave::InExitKeepOut": "PickChunkWallFace(Chunk, I, nullptr, Face)" in world
+        and "BRMech::Cave::InExitKeepOut(Rock, Frames->GetData(), Frames->Num())" in world,
+        "ABRChunk::PlanExits : meme tirage (ABRWorld::PickChunkWallFace)": "W->PickChunkWallFace(Coord, i, &HidingCells, Face)" in chunk and "W->IsChunkExitDrawn(Coord, i)" in chunk,
+        "BRMech::Cave::InExitKeepOut : BRMech::Clearance::ExitKeepOut": "Clearance::Overlap(Clearance::ExitKeepOut(Exits[I]), Rock)" in mech,
+    }
     # Maison (BRChunk.cpp)
     hb = re.search(r"constexpr float GHouseBodyFront = ([\d.]+)f;\s*constexpr float GHousePorchHalfY = ([\d.]+)f;\s*constexpr float GHousePorchTop = ([\d.]+)f;", chunk)
     K["house_body"] = [float(g) for g in hb.groups()] if hb else None
@@ -138,6 +155,13 @@ def read_constants():
         vals = dict((k, float(v)) for k, v in re.findall(r"D\.(\w+)\s*=\s*(-?[\d.]+)f?\s*;", body))
         K["L%d" % n] = vals
     K["WallThicknessDefault"] = num(r"float WallThickness = ([\d.]+)f;", read("Public/BRTypes.h"), "WallThickness")[0]
+    # v4.15 (correctifs 4) : echelle du Level 8 tiree par les chunks (BRLevels.cpp) et point vise par le depart (BRGatherLogic)
+    l8 = levels[levels.index("FBRLevelDef Level8()"):]
+    K["L8_ladder_chance"] = num(r"D\.Exits = \{ X\(9, EBRExitStyle::Ladder, ([\d.]+)f\) \};", l8[:l8.index("return D;")], "echelle du Level 8")[0]
+    gather_h, gather = read("Public/BRGatherLogic.h"), read("Private/BRGatherLogic.cpp")
+    K["view_height"] = num(r"constexpr float ViewHeight = ([\d.]+)f;", gather_h, "ViewHeight")[0]
+    K["gather_ahead"] = num(r"case EStyle::Ladder: return GatherImpl::Ahead\(Shape, ([\d.]+)f\);", gather, "GatherPoint (echelle)")[0]
+    K["ChunkCellsDefault"] = num(r"int32 ChunkCells = (\d+);", read("Public/BRTypes.h"), "ChunkCells")[0]
     # Places debout des tests du jeu (BRTestV412::CheckMissionStand / FindMissionStand) et marches vers elles
     walk = read("Private/BRAutoTestV412.cpp")
     walk_h = read("Private/BRAutoTestWalk.h")
@@ -917,9 +941,10 @@ class Caves:
         return v
 
 
-def rocks_near(K, W, c, bounds, radius=3):
+def rocks_near(K, W, c, bounds, radius=3, exclude=None):
     """Rochers que ABRChunk pose autour de la cellule c : parois des cellules pleines (etape 5) et centre des cellules
-    libres voisines (BuildCellProps ; pas dans la cellule du mecanisme, reservee a la mission)"""
+    libres voisines (BuildCellProps ; pas dans la cellule du mecanisme, reservee a la mission ; v4.15 correctifs 4 : exclude, la
+    cellule sans accessoire, sinon c)"""
     S = W.S
     wr, cr = K["wall_rock"], K["cell_rock"]
     out = []
@@ -937,7 +962,7 @@ def rocks_near(K, W, c, bounds, radius=3):
                     px, py = fx - d[1] * off - d[0] * wr["inset"], fy + d[0] * off - d[1] * wr["inset"]
                     yaw = float(vp.rand(X, Y, 937 + k, W.seed)) * 360.0
                     out.append(prop_box(bounds, px, py, 0.0, yaw, sc, sc, sc * wr["zs"]))
-            elif (X, Y) != c and not (abs(X) <= 1 and abs(Y) <= 1) and abs(X - c[0]) <= 2 and abs(Y - c[1]) <= 2:
+            elif (X, Y) != (c if exclude is None else exclude) and not (abs(X) <= 1 and abs(Y) <= 1) and abs(X - c[0]) <= 2 and abs(Y - c[1]) <= 2:
                 R = lambda salt: float(vp.rand(X, Y, salt, W.seed))
                 if R(930) < W.density * cr["density"]:
                     sc = cr["sc0"] + R(931) * cr["sc1"]
@@ -999,7 +1024,7 @@ def case_level8(K, rules, bounds, seeds):
         print("    (pour information, place au coin %+g : %d cas, point dans un rocher %d, sans place debout %d)" % (lats[-1], c[0], c[1], c[2]))
     if "new" in rules:
         print("  regle v4.15 : rochers retires autour d'un treuil (zone libre) : %d sur %d voisins (%.1f %%) ; dans le jeu : %s"
-              % (removed[0], removed[1], 100.0 * removed[0] / max(1, removed[1]), "oui (RockInMissionKeepOut)" if K["rock_keepout_in_game"] else "NON"))
+              % (removed[0], removed[1], 100.0 * removed[0] / max(1, removed[1]), "oui (RockInKeepOut)" if K["rock_keepout_in_game"] else "NON"))
     return results
 
 
@@ -1114,6 +1139,92 @@ def case_level8_exits(K, rules, bounds, seeds):
         print("  regle %s : %d sorties, echelle ou approche dans un rocher %d (%.1f %%) -> %s" % ("v4.14" if rname == "old" else "v4.15", st[0], st[1],
                                                                                          100.0 * st[1] / max(1, st[0]), "PASSE" if st[1] == 0 else "ECHOUE"))
     return results
+
+
+# ------------------------------------------------------------------------------- F. Level 8 : echelles des chunks
+def chunk_ladder(K, W, ch, seed, chance):
+    """ABRChunk::PlanExits, branche murale (miroir : BRMech::Grid::PickWallFace), Level 8 (niveau ouvert, sortie 0, echelle) :
+    24 essais tires ; grottes : seules les faces pleines (pas de mur fin) ; cellules de la mission non rejouees"""
+    if ch == (0, 0) or not vp.rand(ch[0], ch[1], 1100, seed) < vp.F32(chance):
+        return None
+    S, N = W.S, int(K["L8"].get("ChunkCells", K["ChunkCellsDefault"]))
+    x0, y0 = ch[0] * N, ch[1] * N
+    for t in range(24):
+        h = vp.bhash(ch[0], ch[1], 1500 + t, seed)
+        cell = (x0 + h % N, y0 + (h >> 8) % N)
+        d = vp.DIRS[(h >> 16) % 4]
+        if W.solid(*cell) or (abs(cell[0]) <= 1 and abs(cell[1]) <= 1) or not W.solid(cell[0] + d[0], cell[1] + d[1]):
+            continue
+        return dict(cell=cell, frame=face_frame(S, cell, d, 0.0, 0.0), fwd=(-d[0], -d[1]))
+    return None
+
+
+def case_level8_chunk_exits(K, rules, bounds, seeds):
+    S = K["L8"]["CellSize"]
+    back, extra = K["exit_keepout"]
+    hy = K["LidarDoor.Width"] * 0.5 + K["Clearance.StandGap"]
+    anchor = K["climb_anchor"]
+    R = K["Capsule"][0]
+    chance = K["L8_ladder_chance"]
+    print("F. Level 8 : echelles tirees par les chunks (%.0f %% par chunk, partie classique ; point vise par le depart a %g cm devant le pied et %g cm de haut, sonde de 10 cm ; "
+          "capsule du grimpeur de %g cm a %g cm ; approche jusqu'a %g cm) ; zone libre v4.15 de %g cm dans la paroi a %g cm devant le pied, +-%g cm ; %d graines, chunks -4..4"
+          % (100.0 * chance, K["gather_ahead"], K["view_height"], R, anchor, anchor + 90.0, back, K["Clearance.StandDepth"] + extra, hy, seeds))
+    stats = {r: [0, 0, 0, 0, 0] for r in rules}  # echelles, point vise, colonne, approche, point vise seul (colonne libre)
+    removed = [0, 0]
+    for si in range(seeds):
+        seed = vp.mix((si + 1) * 2654435761 & M32) or 1
+        W = Caves(K, seed)
+        ladders = []
+        for cx in range(-5, 6):
+            for cy in range(-5, 6):
+                ex = chunk_ladder(K, W, (cx, cy), seed, chance)
+                if ex:
+                    ladders.append(ex)
+        kos = [rect_of(ex["frame"], -back, -hy, K["Clearance.StandDepth"] + extra, hy) for ex in ladders]
+        for ex in ladders:
+            n = int(K["L8"].get("ChunkCells", K["ChunkCellsDefault"]))
+            ch = (vp.floordiv(ex["cell"][0], n), vp.floordiv(ex["cell"][1], n))
+            if abs(ch[0]) > 4 or abs(ch[1]) > 4:
+                continue
+            fr = ex["frame"]
+            fx, fy = ex["fwd"]
+            view = (fr[0] + fx * K["gather_ahead"], fr[1] + fy * K["gather_ahead"], fr[2] + K["view_height"])
+            anc = (fr[0] + fx * anchor, fr[1] + fy * anchor)
+            front = (math.floor((fr[0] + fx * 30.0) / S), math.floor((fr[1] + fy * 30.0) / S))
+            rocks = [b for b in rocks_near(K, W, ex["cell"], bounds, exclude=front)]
+            for rname in rules:
+                kept = rocks if rname == "old" else [b for b in rocks if not any(rect_overlap(ko, b.rect()) for ko in kos)]
+                if rname == "new":
+                    removed[0] += len(rocks) - len(kept)
+                    removed[1] += len(rocks)
+                tall = [b for b in kept if b.z1 - fr[2] > K["Clearance.StepHeight"]]
+                v = any(b.contains(view, 10.0) and box_point_dist(b, view) <= 10.0 for b in kept)
+                col = any(b.dist2d(*anc) < R for b in tall)
+                app = any(b.dist2d(fr[0] + fx * x, fr[1] + fy * x) < R for b in tall for x in range(int(anchor), int(anchor + 90.0) + 1, 10))
+                st = stats[rname]
+                st[0] += 1
+                st[1] += 1 if v else 0
+                st[2] += 1 if col else 0
+                st[3] += 1 if app else 0
+                st[4] += 1 if (v and not col) else 0
+    results = {}
+    for rname in rules:
+        st = stats[rname]
+        results[rname] = st[1] == 0 and st[2] == 0 and st[3] == 0
+        print("  regle %s : %d echelles, point vise dans un rocher %d (%.1f %%), colonne du grimpeur prise %d (%.1f %%), approche prise %d (%.1f %%), point vise seul (colonne libre) %d "
+              "-> %s" % ("v4.14" if rname == "old" else "v4.15", st[0], st[1], 100.0 * st[1] / max(1, st[0]), st[2], 100.0 * st[2] / max(1, st[0]), st[3],
+                         100.0 * st[3] / max(1, st[0]), st[4], "PASSE" if results[rname] else "ECHOUE"))
+    if "new" in rules:
+        print("  regle v4.15 : rochers retires autour des echelles : %d sur %d voisins (%.1f %%) ; dans le jeu : %s"
+              % (removed[0], removed[1], 100.0 * removed[0] / max(1, removed[1]), "oui (ABRWorld::IsChunkExitKeepOut)" if all(K["src_F"].values()) else "NON"))
+    return results
+
+
+def box_point_dist(b, p):
+    lx, ly = b.local(p[0], p[1])
+    ex, ey = max(abs(lx) - b.hx, 0.0), max(abs(ly) - b.hy, 0.0)
+    ez = max(b.z0 - p[2], 0.0, p[2] - b.z1)
+    return math.sqrt(ex * ex + ey * ey + ez * ez)
 
 
 # ------------------------------------------------------------------------------------- E. Niveau 10 : poteaux
@@ -1298,8 +1409,10 @@ def main():
     print()
     res["E"] = case_level10(K, rules)
     print()
+    res["F"] = case_level8_chunk_exits(K, rules, rock, a.seeds)
+    print()
     print("Regle du jeu dans les sources :")
-    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()) + list(K["src_E"].items()):
+    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()) + list(K["src_E"].items()) + list(K["src_F"].items()):
         print("  %s : %s" % (what, "oui" if ok else "NON"))
     print()
     bad = 0
@@ -1310,12 +1423,12 @@ def main():
         if "new" in r and not r["new"]:
             print("ECHEC : cas %s : la regle du jeu echoue" % case)
             bad += 1
-    for case, checks in (("A", K["src_A"]), ("D", K["src_D"]), ("E", K["src_E"])):
+    for case, checks in (("A", K["src_A"]), ("D", K["src_D"]), ("E", K["src_E"]), ("F", K["src_F"])):
         if "new" in rules and not all(checks.values()):
             print("ECHEC : cas %s : la regle v4.15 n'est plus dans les sources (%s)" % (case, ", ".join(w for w, ok in checks.items() if not ok)))
             bad += 1
     if "new" in rules and not K["rock_keepout_in_game"]:
-        print("ECHEC : BRChunk.cpp ne retire pas les rochers de la zone libre des mecanismes")
+        print("ECHEC : BRChunk.cpp ne retire pas les rochers de la zone libre des mecanismes (ou ne tire pas les rochers par BRMech::Cave)")
         bad += 1
     if "new" in rules and not K["house_body"]:
         print("ECHEC : BRChunk.cpp n'a pas la boite du corps de la maison (GHouseBodyFront)")

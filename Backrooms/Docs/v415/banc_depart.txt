@@ -1,10 +1,12 @@
-# Banc du depart de groupe v4.15 (correctifs 2 : point vise devant une porte posee sur un mur) — sortie reelle
+# Banc du depart de groupe v4.15 (correctifs 4 : echelles des chunks du Niveau 8 et rochers de leur paroi ; correctifs 2 : point vise devant une porte posee sur un mur) — sortie reelle
 # Commande (depuis Backrooms/, Windows) :
-#   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Departure\test_departure.cpp Source\Backrooms\Private\BRGatherLogic.cpp /Fedeparture.exe && departure.exe
-#   (meme sortie avec cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-, MSVC 14.50.35739, 0 avertissement)
+#   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Departure\test_departure.cpp Source\Backrooms\Private\BRGatherLogic.cpp Source\Backrooms\Private\BRMechLogic.cpp Source\Backrooms\Private\BRMissionLogic.cpp /Fedeparture.exe && departure.exe
+#   (meme sortie avec cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive-, 0 avertissement)
+#   v4.15 (correctifs 4) : le banc compile aussi BRMechLogic.cpp et BRMissionLogic.cpp (tirages des echelles et des rochers) :
+#   la ligne "departure" de Saved/TestRuns/run_cpp_benches.bat les ajoute
 # Compilateur : clang version 22.1.3 (clang-cl de Visual Studio 2026), 0 avertissement
 # Machine : Windows 11, RTX 5050 Laptop, 16 Go
-# Date : 2026-10-16T18:03:13Z
+# Date : 2026-10-17T07:44:46Z
 
 # Banc du depart de groupe v4.12 (BRGatherLogic.cpp)
 
@@ -43,6 +45,15 @@
 3. Depart du groupe (hote)
   2 joueurs : le groupe part ensemble (7.8 s), le grimpeur reste au sommet       OK
   4 joueurs : le groupe part ensemble (9.1 s), le grimpeur reste au sommet       OK
+4. Echelles des chunks du Niveau 8 et rochers de leur paroi (v4.15 correctifs 4)
+  hachage de la grille (BRMech::Grid::Rand, comme BRHash::Rand) : tirage du chunk (1, -2) 0.0243 (diag4 : 0.0243) OK
+  echelle du chunk (1, -2) : cellule (10, -14), pied en (4000, -5400, 0), lacet 0 (journal : BRExit_42 en (4000, -5400, 0), vers +X) OK
+  rocher de la paroi (9, -14), face +X : echelle 1.49, boite de 318 x 238 cm, Z -76..241 ; point vise (4100, -5400, 90) a 0 cm de sa boite OK
+  regle d'avant : ce rocher prend aussi la colonne du grimpeur (accroche a 52 cm) et l'approche : echelle ni visee ni montee OK
+  regle du jeu (BRMech::Cave::InExitKeepOut, zone libre de la sortie) : ce rocher n'est pas pose OK
+  regle d'avant, 1981 echelles (200 graines) : point vise dans un rocher 669, colonne prise 1111, approche prise 1148, point vise seul (colonne libre) 2 OK
+  regle du jeu : 2083 rochers retires sur 42981 voisins ; point vise 0, colonne 0, approche 0 (attendu 0) OK
+  point vise d'une echelle (1 m, 90 cm) et colonne du grimpeur dans la zone libre (4 sens) ; porte : 50 cm devant le pied OK
 
-Verifications : 32, echecs : 0
+Verifications : 40, echecs : 0
 RESULTAT : OK

@@ -546,7 +546,31 @@ void ABRExit::CheckDepartureViewPoint()
 			const FVector L = GetActorLocation();
 			UE_LOG(LogBackrooms, Warning, TEXT("Sortie vers le Niveau %d (%s) en (%.0f, %.0f, %.0f) : point vise par le depart de groupe (%.0f, %.0f, %.0f) pris dans %s (%s) : "
 				"la vue du rassemblement y serait coupee"), Target, *GetName(), L.X, L.Y, L.Z, Aim.X, Aim.Y, Aim.Z, *GetNameSafe(O.GetActor()), *GetNameSafe(O.GetComponent()));
-			return;
+			break;
+		}
+	}
+	// v4.15 (correctifs 4) : une echelle : la capsule du grimpeur a son accroche (GetClimbAnchor), posee 5 cm au-dessus du pied
+	// (rayon et demi-hauteur du joueur moins la marge des tests) : un decor qui la prend rend l'echelle inutilisable (ni visee
+	// ni montee). Avant : echelle du Niveau 8 tiree par un chunk, enterree dans la boite de collision d'un rocher de sa paroi
+	// (graine 233637237, BRExit_42), seul le point vise etait signale
+	if (IsClimbable())
+	{
+		constexpr float Radius = BRMech::Clearance::PlayerRadius - BRMech::Clearance::Margin;
+		constexpr float Half = 88.f - 2.f * BRMech::Clearance::Margin;
+		const FVector Anchor = GetClimbAnchor();
+		const FVector Center(Anchor.X, Anchor.Y, GetActorLocation().Z + 5.f + 2.f * BRMech::Clearance::Margin + Half);
+		TArray<FOverlapResult> Climb;
+		World->OverlapMultiByChannel(Climb, Center, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(Radius, Half), Q, R);
+		for (const FOverlapResult& O : Climb)
+		{
+			if (O.bBlockingHit)
+			{
+				const FVector L = GetActorLocation();
+				UE_LOG(LogBackrooms, Warning, TEXT("Sortie vers le Niveau %d (%s) en (%.0f, %.0f, %.0f) : echelle prise dans %s (%s) : la capsule du grimpeur en (%.0f, %.0f, %.0f) "
+					"n'y tient pas (ni visee ni montee)"), Target, *GetName(), L.X, L.Y, L.Z, *GetNameSafe(O.GetActor()), *GetNameSafe(O.GetComponent()), Center.X, Center.Y,
+					Center.Z);
+				return;
+			}
 		}
 	}
 #endif

@@ -271,27 +271,35 @@ namespace
 	constexpr float GHousePorchHalfY = 100.f;
 	constexpr float GHousePorchTop = 15.f;
 
-	/** v4.15 : boite de collision (bornes du modele, comme AddProp) d'un rocher, dans le plan : rectangle oriente */
-	BRMech::Clearance::FRect RockRect(const FBox& Bounds, const FTransform& T)
+	/** v4.15 (correctifs 4) : transformation d'un rocher tire par BRMech::Cave (WallRock, CellRock) */
+	FTransform RockTransform(const BRMech::Cave::FRock& Rock)
 	{
-		BRMech::Clearance::FRect R;
-		const FVector C = T.TransformPosition(Bounds.GetCenter());
-		const FVector Scale = T.GetScale3D();
-		R.CX = static_cast<float>(C.X);
-		R.CY = static_cast<float>(C.Y);
-		R.HX = static_cast<float>(Bounds.GetExtent().X * FMath::Abs(Scale.X));
-		R.HY = static_cast<float>(Bounds.GetExtent().Y * FMath::Abs(Scale.Y));
-		R.Yaw = static_cast<float>(T.Rotator().Yaw);
-		return R;
+		return FTransform(FRotator(0.f, Rock.Yaw, 0.f), FVector(Rock.X, Rock.Y, Rock.Z), FVector(Rock.Scale, Rock.Scale, Rock.ScaleZ));
 	}
 
-	/** v4.15 : un rocher (modele SM_Rock, transformation T) entrerait dans la zone libre d'un mecanisme ou d'une sortie de
-	 *  la mission. Sans modele, AddProp ne pose rien (ni rocher, ni collision) */
-	bool RockInMissionKeepOut(const UObject* Context, const ABRWorld* W, const FTransform& T)
+	/** v4.15 : un rocher (modele SM_Rock) entrerait dans la zone libre d'un mecanisme ou d'une sortie de la mission ; sa boite
+	 *  de collision (bornes du modele, comme AddProp) dans le plan : BRMech::Cave::RockRect. v4.15 (correctifs 4) : ou dans celle
+	 *  d'une sortie murale tiree par un chunk (ABRWorld::IsChunkExitKeepOut : echelle du Niveau 8 en partie classique, avant
+	 *  enterree dans la boite d'un rocher de sa paroi, ni visee ni montee). Sans modele, AddProp ne pose rien (ni rocher, ni
+	 *  collision) */
+	bool RockInKeepOut(const UObject* Context, const ABRWorld* W, const BRMech::Cave::FRock& Rock)
 	{
 		UBRAssets* A = UBRAssets::Get(Context);
 		UStaticMesh* M = A ? A->Mesh(TEXT("SM_Rock")) : nullptr;
-		return W && M && W->IsMissionKeepOut(RockRect(M->GetBoundingBox(), T));
+		if (!W || !M)
+		{
+			return false;
+		}
+		const FBox Box = M->GetBoundingBox();
+		BRMech::Cave::FMeshBounds Bounds;
+		Bounds.Min.X = static_cast<float>(Box.Min.X);
+		Bounds.Min.Y = static_cast<float>(Box.Min.Y);
+		Bounds.Min.Z = static_cast<float>(Box.Min.Z);
+		Bounds.Max.X = static_cast<float>(Box.Max.X);
+		Bounds.Max.Y = static_cast<float>(Box.Max.Y);
+		Bounds.Max.Z = static_cast<float>(Box.Max.Z);
+		const BRMech::Clearance::FRect R = BRMech::Cave::RockRect(Rock, Bounds);
+		return W->IsMissionKeepOut(R) || W->IsChunkExitKeepOut(R);
 	}
 }
 
@@ -2289,17 +2297,16 @@ bool ABRChunk::StepPlan()
 						const FVector TS = Dir.X != 0 ? FVector(6.f, S, 14.f) : FVector(S, 6.f, 14.f);
 						AddBox(D.Trim, FVector(Face.X, Face.Y, 7.f), TS, false);
 					}
-					if (D.Layout == EBRLayout::Caves && BRHash::Rand(X * 4 + k, Y, 931, Seed) < 0.55f)
+					// v4.15 (correctifs 4) : tirage du rocher de la face partage avec le banc (BRMech::Cave::WallRock, memes operations)
+					BRMech::Cave::FRock Rock;
+					if (D.Layout == EBRLayout::Caves && BRMech::Cave::WallRock(X, Y, k, Seed, S, Rock))
 					{
-						const float Sc = 1.f + 0.9f * BRHash::Rand(X, Y * 4 + k, 932, Seed);
-						const FVector Perp(-Dir.Y, Dir.X, 0.f);
-						const FVector P = Face + Perp * ((BRHash::Rand(X, Y, 933 + k, Seed) - 0.5f) * S * 0.6f) - FVector(Dir.X, Dir.Y, 0.f) * 30.f;
-						const FTransform RockT(FRotator(0.f, BRHash::Rand(X, Y, 937 + k, Seed) * 360.f, 0.f), P, FVector(Sc, Sc, Sc * 1.4f));
 						// v4.15 : pas de rocher dans la zone libre d'un mecanisme ou d'une sortie de la mission (sa boite de
-						// collision, jusqu'a 2,3 m devant la paroi, enfermait un treuil ou une plaque sur deux)
-						if (!RockInMissionKeepOut(this, InWorld, RockT))
+						// collision, jusqu'a 2,3 m devant la paroi, enfermait un treuil ou une plaque sur deux). v4.15 (correctifs 4) :
+						// ni dans celle d'une sortie tiree par un chunk (echelle du Niveau 8)
+						if (!RockInKeepOut(this, InWorld, Rock))
 						{
-							AddProp(TEXT("SM_Rock"), RockT, true, FVector::ZeroVector);
+							AddProp(TEXT("SM_Rock"), RockTransform(Rock), true, FVector::ZeroVector);
 						}
 					}
 				}
@@ -3063,15 +3070,15 @@ void ABRChunk::BuildCellProps(int32 X, int32 Y)
 	}
 	case EBRProps::Caves:
 	{
-		if (!bSpawn && R(930) < D.PropDensity * 0.4f)
+		// v4.15 (correctifs 4) : tirage partage avec le banc (BRMech::Cave::CellRock, memes operations)
+		BRMech::Cave::FRock Rock;
+		if (!bSpawn && BRMech::Cave::CellRock(X, Y, Seed, S, D.PropDensity, Rock))
 		{
-			const float Sc = 0.35f + R(931) * 0.6f;
-			const FVector P = C + FVector((R(932) - 0.5f) * S * 0.6f, (R(933) - 0.5f) * S * 0.6f, -10.f);
-			const FTransform RockT(FRotator(0.f, R(934) * 360.f, 0.f), P, FVector(Sc));
-			// v4.15 : un rocher d'une cellule voisine ne deborde pas dans la zone libre d'un mecanisme de la mission
-			if (!RockInMissionKeepOut(this, W, RockT))
+			// v4.15 : un rocher d'une cellule voisine ne deborde pas dans la zone libre d'un mecanisme de la mission ; v4.15
+			// (correctifs 4) : ni dans celle d'une sortie tiree par un chunk
+			if (!RockInKeepOut(this, W, Rock))
 			{
-				AddProp(TEXT("SM_Rock"), RockT, true, FVector::ZeroVector);
+				AddProp(TEXT("SM_Rock"), RockTransform(Rock), true, FVector::ZeroVector);
 			}
 		}
 		break;
@@ -3283,10 +3290,6 @@ void ABRChunk::PlanExits()
 	{
 		return; // jamais de sortie juste a cote du point d'apparition
 	}
-	// v4.15 : parcours lineaire (drapeau recu avec le niveau, sortie garantie d'apres la mission : le meme resultat chez
-	// tous) : aucune sortie tiree quand la mission pose sa sortie vers l'avant ; sinon seule la sortie gardee reste
-	const bool bLinear = W->IsLinearLevel();
-	const bool bForwardGuaranteed = bLinear && W->HasGuaranteedForwardExit();
 	for (int32 i = 0; i < D.Exits.Num(); ++i)
 	{
 		const FBRExitDef& Ex = D.Exits[i];
@@ -3305,23 +3308,14 @@ void ABRChunk::PlanExits()
 			}
 			continue;
 		}
-		if (!BRStory::ChunkExitAllowed(bLinear, bForwardGuaranteed, BRMission::IsExitGuarded(D.Number, Ex.Target)))
-		{
-			continue; // les tirages des autres sorties ne changent pas (sels propres a chaque sortie)
-		}
-		// Niveau fini : un nombre garanti de sorties de chaque sorte, tirees parmi les chunks (hors point de depart)
-		const bool bPicked = bBounded
-			? W->IsChunkPicked(Coord, 1100 + i, FMath::Max(1, FMath::RoundToInt(Ex.ChancePerChunk * W->BoundedChunkCount(true))), true)
-			: BRHash::Rand(Coord.X, Coord.Y, 1100 + i, Seed) < Ex.ChancePerChunk;
-		if (!bPicked)
-		{
-			continue;
-		}
-		// v4.12 : vers un niveau pas encore disponible (sans redirection), un passage par noclip n'existe pas dans cette
-		// version ; une porte, un ascenseur ou une echelle reste visible et condamne (ABRExit::IsSealed). Chaque sortie a
-		// ses propres tirages : les autres ne changent pas
-		if ((Ex.Style == EBRExitStyle::NoclipWall || Ex.Style == EBRExitStyle::NoclipFloor)
-			&& BRLevels::ResolveExit(D.Number, Ex.Target).Kind == BRContent::EExit::Sealed)
+		// v4.15 : parcours lineaire (drapeau recu avec le niveau, sortie garantie d'apres la mission : le meme resultat chez
+		// tous) : aucune sortie tiree quand la mission pose sa sortie vers l'avant ; sinon seule la sortie gardee reste. Niveau
+		// fini : un nombre garanti de sorties de chaque sorte, tirees parmi les chunks (hors point de depart). v4.12 : vers un
+		// niveau pas encore disponible (sans redirection), un passage par noclip n'existe pas dans cette version ; une porte, un
+		// ascenseur ou une echelle reste visible et condamne (ABRExit::IsSealed). Chaque sortie a ses propres tirages : les autres
+		// ne changent pas. v4.15 (correctifs 4) : ces regles dans ABRWorld::IsChunkExitDrawn, partagees avec la zone libre des
+		// rochers (ABRWorld::IsChunkExitKeepOut)
+		if (!W->IsChunkExitDrawn(Coord, i))
 		{
 			continue;
 		}
@@ -3393,52 +3387,15 @@ void ABRChunk::PlanExits()
 		default:
 		{
 			// Sur une face de mur (mur fin ou cellule pleine). v4.6 : niveau fini (nombre de sorties garanti) : apres les 24
-			// essais tires, on balaie toutes les cellules et directions du chunk dans un ordre tire
-			const int32 Tries = bBounded ? 24 + N * N * 4 : 24;
-			const int32 ScanStart = static_cast<int32>(BRHash::Hash(Coord.X, Coord.Y, 1500 + i * 64 + 63, Seed) % static_cast<uint32>(N * N * 4));
-			for (int32 Try = 0; Try < Tries && !bFound; ++Try)
+			// essais tires, on balaie toutes les cellules et directions du chunk dans un ordre tire ; jamais dans une salle de
+			// fosses, niveau fini : atteignable sans la traverser. v4.15 (correctifs 4) : meme tirage, partage avec la zone libre
+			// des rochers (BRMech::Grid::PickWallFace par ABRWorld::PickChunkWallFace, cachettes de ce chunk comprises)
+			BRMech::Grid::FWallFace Face;
+			if (W->PickChunkWallFace(Coord, i, &HidingCells, Face))
 			{
-				const uint32 Hh = BRHash::Hash(Coord.X, Coord.Y, 1500 + i * 64 + Try, Seed);
-				FIntPoint Cell(X0 + static_cast<int32>(Hh % static_cast<uint32>(N)), Y0 + static_cast<int32>((Hh >> 8) % static_cast<uint32>(N)));
-				FIntPoint Dir = GDirs[(Hh >> 16) % 4u];
-				if (Try >= 24)
-				{
-					const int32 Idx = (ScanStart + Try - 24) % (N * N * 4);
-					Cell = FIntPoint(X0 + (Idx / 4) % N, Y0 + (Idx / 4) / N);
-					Dir = GDirs[Idx % 4];
-				}
-				if (!W->IsWalkable(Cell) || W->IsSpawnArea(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || HidingCells.Contains(Cell)
-					|| W->IsPitRoomCell(Cell.X, Cell.Y) || !W->IsSafelyReachable(Cell) || W->IsMissionCell(Cell.X, Cell.Y))
-				{
-					continue; // v4.6 : jamais dans une salle de fosses ; niveau fini : atteignable sans la traverser
-				}
-				const FIntPoint Next(Cell.X + Dir.X, Cell.Y + Dir.Y);
-				bool bFace = false;
-				if (W->IsSolid(Next.X, Next.Y))
-				{
-					bFace = true;
-				}
-				else if (Dir.X == 1)
-				{
-					bFace = W->EdgeE(Cell.X, Cell.Y) == EBREdge::Wall;
-				}
-				else if (Dir.X == -1)
-				{
-					bFace = W->EdgeE(Next.X, Next.Y) == EBREdge::Wall;
-				}
-				else if (Dir.Y == 1)
-				{
-					bFace = W->EdgeN(Cell.X, Cell.Y) == EBREdge::Wall;
-				}
-				else
-				{
-					bFace = W->EdgeN(Next.X, Next.Y) == EBREdge::Wall;
-				}
-				if (!bFace)
-				{
-					continue;
-				}
-				const float Inset = W->IsSolid(Next.X, Next.Y) ? 0.f : D.WallThickness * 0.5f;
+				const FIntPoint Cell(Face.CellX, Face.CellY);
+				const FIntPoint Dir = GDirs[Face.Dir];
+				const float Inset = Face.bSolid ? 0.f : D.WallThickness * 0.5f;
 				Pos = W->CellCenter(Cell, 0.f) + FVector(Dir.X, Dir.Y, 0.f) * (S * 0.5f - Inset);
 				Pos.Z = W->FloorZAt(Pos - FVector(Dir.X, Dir.Y, 0.f) * 30.f); // pied de la sortie sur le trottoir
 				Yaw = YawFromDir(-Dir.X, -Dir.Y);

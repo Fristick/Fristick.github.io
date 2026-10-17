@@ -371,4 +371,83 @@ namespace BRMech
 		 *  (comparaison des reprises du placement 2, ABRWorld::PlaceMission) */
 		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf, bool bFocusLanes);
 	}
+
+	// =================================================================================================================
+	// v4.15 (correctifs 4) : sorties tirees par les chunks sur une face de paroi et rochers des grottes. Le jeu (ABRChunk::PlanExits,
+	// ABRChunk::StepPlan etape 5, ABRChunk::BuildCellProps, ABRWorld::IsChunkExitKeepOut) et le banc
+	// Tools/Departure/test_departure.cpp partagent ces tirages : un rocher n'entre plus dans la zone libre (Clearance::ExitKeepOut)
+	// d'une echelle tiree par un chunk (Niveau 8, partie classique : echelle enterree dans la boite de collision d'un rocher,
+	// point vise par le depart de groupe, accroche et colonne du grimpeur compris ; ni visee, ni montee)
+	// =================================================================================================================
+	namespace Grid
+	{
+		/** Hachage de la grille : identique a BRHash::Hash et BRHash::Rand (BRTypes.h) */
+		uint32_t Hash(int32_t A, int32_t B, int32_t C, uint32_t Seed);
+		float Rand(int32_t A, int32_t B, int32_t C, uint32_t Seed);
+		/** Directions des faces d'une cellule, dans l'ordre d'ABRChunk (GDirs) : +X, -X, +Y, -Y */
+		constexpr int32_t DirX[4] = { 1, -1, 0, 0 };
+		constexpr int32_t DirY[4] = { 0, 0, 1, -1 };
+
+		/** Le monde vu par le tirage d'une sortie murale (ABRWorld : grille, bassins, fosses, mission ; cachettes du chunk) */
+		struct FFaceQuery
+		{
+			virtual ~FFaceQuery() = default;
+			/** Une sortie peut se poser dans la cellule : marchable, hors du depart, d'un bassin, d'une cachette, d'une salle de
+			 *  fosses et des cellules de la mission ; niveau fini : atteignable sans traverser de fosse */
+			virtual bool CellOk(int32_t X, int32_t Y) const = 0;
+			/** La face (DX, DY) de la cellule est une paroi : cellule voisine pleine (bOutSolid) ou mur fin */
+			virtual bool IsFace(int32_t X, int32_t Y, int32_t DX, int32_t DY, bool& bOutSolid) const = 0;
+		};
+		/** Face tiree : cellule, direction (DirX/DirY), cellule voisine pleine (sinon mur fin) */
+		struct FWallFace
+		{
+			int32_t CellX = 0;
+			int32_t CellY = 0;
+			int Dir = 0;
+			bool bSolid = false;
+		};
+		/** Face de paroi de la sortie ExitIndex (indice dans les sorties du niveau) du chunk (branche murale d'ABRChunk::PlanExits) :
+		 *  24 essais tires (sels 1500 + ExitIndex * 64 + essai), puis, niveau fini (bBounded), toutes les faces du chunk dans un
+		 *  ordre tire (sel 1500 + ExitIndex * 64 + 63). false : aucune face */
+		bool PickWallFace(int32_t ChunkX, int32_t ChunkY, int ExitIndex, uint32_t Seed, int ChunkCells, bool bBounded, const FFaceQuery& Q, FWallFace& Out);
+		/** Repere de la sortie posee sur cette face : pied sur la face (devant un mur fin : en retrait de la moitie de son
+		 *  epaisseur), au sol FloorZ, X vers la cellule (lacet multiple de 90 degres) */
+		FFrame WallFaceFrame(const FWallFace& Face, float CellSize, float WallThickness, float FloorZ);
+	}
+
+	namespace Cave
+	{
+		/** Rocher pose (SM_Rock) : position (cm, monde ; double comme le FVector du jeu), lacet (degres), echelle dans le plan et
+		 *  en hauteur */
+		struct FRock
+		{
+			double X = 0.0;
+			double Y = 0.0;
+			double Z = 0.0;
+			float Yaw = 0.f;
+			float Scale = 1.f;
+			float ScaleZ = 1.f;
+		};
+		/** Bornes du modele SM_Rock (UStaticMesh::GetBoundingBox : donnee du jeu, lue par l'appelant ; le banc reprend celles
+		 *  de RawAssets/Meshes/SM_Rock.fbx) */
+		struct FMeshBounds
+		{
+			FVec3 Min;
+			FVec3 Max;
+		};
+		/** Rocher de la face K (Grid::DirX/DirY) de la cellule pleine (X, Y), contre la cellule voisine libre (ABRChunk::StepPlan,
+		 *  etape 5 : 55 % des faces, echelle 1 a 1,9, 1,4 fois plus haut, decale le long de la face, 30 cm dans
+		 *  la paroi). false : pas de rocher sur cette face */
+		bool WallRock(int32_t X, int32_t Y, int K, uint32_t Seed, float CellSize, FRock& Out);
+		/** Rocher dans une cellule libre (ABRChunk::BuildCellProps, grottes ; l'appelant ecarte le depart, la cellule devant une
+		 *  sortie et la mission). false : pas de rocher */
+		bool CellRock(int32_t X, int32_t Y, uint32_t Seed, float CellSize, float PropDensity, FRock& Out);
+		/** Boite de collision du rocher dans le plan (ABRChunk::AddProp : bornes du modele a l'echelle, tournees) */
+		Clearance::FRect RockRect(const FRock& Rock, const FMeshBounds& Bounds);
+		/** Bas et haut de cette boite (monde) */
+		void RockHeight(const FRock& Rock, const FMeshBounds& Bounds, float& OutZ0, float& OutZ1);
+		/** Le rocher entre dans la zone libre (Clearance::ExitKeepOut : pied, colonne du grimpeur, place devant) d'une de ces
+		 *  sorties */
+		bool InExitKeepOut(const Clearance::FRect& Rock, const FFrame* Exits, int NumExits);
+	}
 }
