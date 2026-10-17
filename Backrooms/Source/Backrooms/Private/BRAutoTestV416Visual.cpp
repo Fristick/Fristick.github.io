@@ -166,7 +166,10 @@ namespace BRTestV416Vis
 				++R.OverWidth;
 				R.Example(FString::Printf(TEXT("%s : %.0f px pour %.0f permis \"%s\""), *Where, A.W, A.MaxW, *Short(A.Text)));
 			}
-			if (A.PW > 0.f && (A.X < A.PX - 2.f || A.X + A.W > A.PX + A.PW + 2.f || A.Y < A.PY - 2.f || A.Y + A.H > A.PY + A.PH + 2.f))
+			// Hors du panneau : seulement un texte qui le touche et en depasse (un texte dessine plus loin, apres le panneau, n'en est
+			// pas un debordement)
+			const bool bTouchesPanel = A.X < A.PX + A.PW && A.X + A.W > A.PX && A.Y < A.PY + A.PH && A.Y + A.H > A.PY;
+			if (A.PW > 0.f && bTouchesPanel && (A.X < A.PX - 2.f || A.X + A.W > A.PX + A.PW + 2.f || A.Y < A.PY - 2.f || A.Y + A.H > A.PY + A.PH + 2.f))
 			{
 				++R.OutPanel;
 				R.Example(FString::Printf(TEXT("%s : hors de son panneau (texte %.0f..%.0f, panneau %.0f..%.0f) \"%s\""), *Where, A.X, A.X + A.W, A.PX, A.PX + A.PW, *Short(A.Text)));
@@ -642,7 +645,7 @@ void ABRAutoTest::AddV416VisualSteps()
 	}
 	Add(TEXT("v4.16 visuel : bilan des langues"), 0.f, [this]()
 	{
-		Note(FString::Printf(TEXT("HUD hors ecran (1280x720, 1920x1080, 2560x1080 ; 5 onglets et la pause ; %d langues) : %s"), PerLanguage.Num(), *ReportLine(OffReport)),
+		Note(FString::Printf(TEXT("HUD hors ecran (1280x720, 1920x1080, 2560x1080 ; 5 onglets, la pause et le HUD du jeu ; %d langues) : %s"), PerLanguage.Num(), *ReportLine(OffReport)),
 			OffReport.Problems() > 0);
 		for (const FString& E : OffReport.Examples)
 		{
