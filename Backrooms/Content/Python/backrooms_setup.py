@@ -46,8 +46,10 @@ VERSION = 13
 # v4.8 : usages "maillage a squelette" et "Nanite" sur M_BR_Mesh et M_BR_Skin : sans eux, la combinaison du joueur et les
 # entites SK_* recevaient le materiau par defaut, gris et sans texture, en jeu autonome et en paquet ;
 # v4.15 : 8 : monde : normales triplanaires reorientees dans l'espace monde, occlusion de cavite, reflectance par surface,
-# ligne de maree ; nouveau M_BR_WorldCloth (moquette en modele d'eclairage "tissu"))
-MATERIAL_VERSION = 8
+# ligne de maree ; nouveau M_BR_WorldCloth (moquette en modele d'eclairage "tissu") ;
+# 9 : M_BR_WorldCloth par un noeud d'attributs : sa creation echouait en 5.8 (Custom Data 0 cache a Python), la moquette
+# retombait sur M_BR_World et le paquet n'avait pas le materiau)
+MATERIAL_VERSION = 9
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 # (v4.15 : papier peint en les de 53 cm, moquette bouclee, dalles fissurees de 61 cm, et leurs cartes de rugosite)
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"],
@@ -528,8 +530,36 @@ class Graph(object):
         warn("Liaison impossible : %s.%s -> %s.%s" % (e.get_name(), out, dst.get_name(), inp))
         return False
 
+    # v4.15 : entrees du noeud MakeMaterialAttributes par propriete du materiau (mode attributs, use_attributes)
+    ATTRIBUTE_INPUTS = (("MP_BASE_COLOR", "BaseColor"), ("MP_METALLIC", "Metallic"), ("MP_SPECULAR", "Specular"),
+                        ("MP_ROUGHNESS", "Roughness"), ("MP_ANISOTROPY", "Anisotropy"), ("MP_EMISSIVE_COLOR", "EmissiveColor"),
+                        ("MP_OPACITY", "Opacity"), ("MP_OPACITY_MASK", "OpacityMask"), ("MP_NORMAL", "Normal"),
+                        ("MP_TANGENT", "Tangent"), ("MP_WORLD_POSITION_OFFSET", "WorldPositionOffset"),
+                        ("MP_SUBSURFACE_COLOR", "SubsurfaceColor"), ("MP_AMBIENT_OCCLUSION", "AmbientOcclusion"),
+                        ("MP_REFRACTION", "Refraction"))
+    attrs = None
+
+    def use_attributes(self):
+        """v4.15 : les sorties du materiau passent par un noeud MakeMaterialAttributes (attributs de materiau). Seule
+        facon, depuis Python en 5.8, de relier Custom Data 0 (« Cloth » du modele tissu, entree ClearCoat du noeud) :
+        MP_CustomData0 est cache dans l'enumeration (UMETA(Hidden)) et connect_material_property le refuse. A appeler
+        avant toute sortie ; output() accepte alors aussi le nom d'une entree du noeud ("ClearCoat")."""
+        safe_set(self.m, "use_material_attributes", True)
+        self.attrs = self.node(unreal.MaterialExpressionMakeMaterialAttributes)
+        if not MEL.connect_material_property(self.attrs, "", unreal.MaterialProperty.MP_MATERIAL_ATTRIBUTES):
+            raise RuntimeError("attributs de materiau : liaison du noeud MakeMaterialAttributes impossible")
+
     def output(self, src, prop):
         e, out = self.pin(src)
+        if self.attrs is not None:
+            inp = prop if isinstance(prop, str) else None
+            for name, pin_name in self.ATTRIBUTE_INPUTS:
+                if inp is None and hasattr(unreal.MaterialProperty, name) and prop == getattr(unreal.MaterialProperty, name):
+                    inp = pin_name
+            if inp is None:
+                warn("Liaison impossible vers %s : pas d'entree d'attributs" % prop)
+                return False
+            return self.link(src, self.attrs, inp)
         for o in ([out, ""] if out else [""]):
             try:
                 if MEL.connect_material_property(e, o, prop):
@@ -780,6 +810,9 @@ def build_world_material(cloth=False):
             raise RuntimeError("MaterialShadingModel.MSM_CLOTH absent")
         safe_set(m, "shading_model", cloth_model)
     g = Graph(m)
+    if cloth:
+        # v4.15 : sorties par un noeud d'attributs : « Cloth » (Custom Data 0) n'est plus reliable directement en 5.8
+        g.use_attributes()
     P = unreal.MaterialProperty
 
     wp = g.world_pos()
@@ -934,7 +967,8 @@ def build_world_material(cloth=False):
     if cloth:
         # v4.15 : moquette : lustre des fibres (duvet un peu plus clair que la matiere), perdu quand elle est mouillee
         g.output(g.mul(shaded, g.vector("FuzzTint", (1.3, 1.25, 1.15, 1))), P.MP_SUBSURFACE_COLOR)
-        g.output(g.mul(g.mul(g.scalar("Sheen", 0.8), g.sub(g.const(1.0), wet)), g.sub(g.const(1.0), puddle)), P.MP_CUSTOM_DATA0)
+        # « Cloth » du modele tissu = Custom Data 0 = entree ClearCoat du noeud d'attributs (BRMaterialBuilder : ClearCoat)
+        g.output(g.mul(g.mul(g.scalar("Sheen", 0.8), g.sub(g.const(1.0), wet)), g.sub(g.const(1.0), puddle)), "ClearCoat")
     finish_material(m)
     return m
 
@@ -973,8 +1007,10 @@ def build_decal_material():
     domain = getattr(unreal.MaterialDomain, "MD_DEFERRED_DECAL", None)
     if domain is None:
         raise RuntimeError("MaterialDomain.MD_DEFERRED_DECAL absent")
-    safe_set(m, "material_domain", domain)
+    # Melange avant le domaine : chaque reglage recompile le materiau, et un decalque opaque (melange par defaut) ne compile
+    # pas ("Failed to compile Material ... DeferredDecal domain can only use ... Translucent" dans le journal, sans suite)
     safe_set(m, "blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    safe_set(m, "material_domain", domain)
     g = Graph(m)
     P = unreal.MaterialProperty
     cell = g.vector4("AtlasCell", (0.0, 0.0, 1.0, 1.0))
@@ -1307,6 +1343,12 @@ def _material_problems(name):
     path = MAT + "/" + name
     if not exists(path):
         return [("material", name, "absent")]
+    # v4.15 : un materiau dont la creation a echoue peut rester en memoire (suppression refusee) sans fichier sur le
+    # disque : la validation le voyait, le paquet ne l'avait pas (M_BR_WorldCloth, check_package.py)
+    if path.startswith("/Game/"):
+        disk = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_content_dir()), path[len("/Game/"):] + ".uasset")
+        if not os.path.isfile(disk):
+            return [("material", name, "absent du disque (creation echouee ?)")]
     m = unreal.load_asset(path)
     if not isinstance(m, unreal.Material):
         return [("material", name, "n'est pas un materiau")]
