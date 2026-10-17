@@ -31,10 +31,16 @@ namespace BRMission
 	 *  (correctifs) : NetVersion 415 garde aussi les autres changements de generation des correctifs, hors placement :
 	 *  rochers du Level 8 retires des zones libres des mecanismes et des sorties, collision de la maison du Level 9
 	 *  (BRChunk.cpp). Le parcours lineaire porte la meme valeur : aucune version 415 sans ces correctifs ne doit etre
-	 *  distribuee */
+	 *  distribuee. v4.15 (correctifs 3) : toujours 3 (pas encore distribuee) avec les couloirs de visee
+	 *  (BRMech::Clearance::CutsFocusLane dans PickSlot) et les poteaux d'une cellule en rang : quelques graines changent
+	 *  ailleurs qu'au Level 6 (groupes sur poteaux des Niveaux 9 a 11, mecanismes en coin) ; l'hote compare chaque placement
+	 *  au placement 2 (ABRWorld::PlaceMission, bPlacement2) et previent une reprise du placement 2 seulement si cette graine
+	 *  a change. NetVersion 415 inchange : meme placement pour l'hote et le client d'une meme version */
 	constexpr int PlaceVersion = 3;
 	/** v4.15 : les mecanismes de ce niveau ont pu bouger depuis la version de placement FromVersion (avis "reamenages" a la
-	 *  reprise) : de 2 a 3, seul le Level 6 change ; ailleurs les places sont identiques */
+	 *  reprise) : de 2 a 3, tout le Level 6 change ; ailleurs, v4.15 (correctifs 3), cela depend de la graine (couloirs de
+	 *  visee, poteaux en rang) : l'hote compare le placement (ABRWorld::SetupMission, MissionMovedFrom2), cette fonction
+	 *  repond faux */
 	bool PlacementMoved(int Level, int FromVersion);
 	constexpr int MaxDevices = 24;
 	constexpr int MaxSteps = 4;

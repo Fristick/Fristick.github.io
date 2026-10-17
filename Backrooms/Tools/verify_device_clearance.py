@@ -23,6 +23,12 @@ Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
   D. Level 8 : sorties de la mission (echelle contre une paroi, ABRWorld::PlaceMission : FaceSpot au decalage 0). v4.14 : la
      capsule qui monte a l'echelle (ABRExit::GetClimbAnchor) et son approche sont dans un rocher ; v4.15 : pas de rocher dans
      la zone libre de la sortie (BRMech::Clearance::ExitKeepOut, miroir ici).
+  E. v4.15 (correctifs 3) : Niveau 10 : groupe du moulin (tableau des granges, orientation, frein) sur les poteaux d'une
+     cellule de champ (ABRWorld::PlaceMission, RoomSlots/PostSpot, miroir ici). Regle d'avant : un lacet tire par poteau ;
+     depuis la place devant le moulin ou le frein, la visee du client (ABRCharacter::UpdateFocus : balayage de 7 cm sur les
+     boites visees) prend le tableau (graine 1697132605 : journal du jeu "PAS VISE par le client"). Regle du jeu : poteaux
+     d'une cellule en rang (meme lacet) et couloirs de visee degages (BRMech::Clearance::CutsFocusLane dans PickSlot,
+     miroir ici) : aucune visee prise ; le couloir detecte chacune des combinaisons fautives de la regle d'avant.
 En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
 BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote).
 
@@ -35,7 +41,7 @@ mecanismes" ; -BRAutoTestV413 : postes et cages du Level 6).
 
 Usage : python Tools/verify_device_clearance.py [--seeds 120] [--rules both|old|new]
 Code de sortie : 0 si la regle v4.15 passe partout ET la regle v4.14 echoue la ou les journaux du jeu l'ont vue echouer ET la regle v4.15
-est dans les sources (cas A et D). Sortie : Docs/v415/correctifs_places.txt.
+est dans les sources (cas A, D et E). Sortie : Docs/v415/correctifs_places.txt.
 """
 import argparse
 import math
@@ -59,6 +65,17 @@ def read(rel):
         return f.read()
 
 
+def symbol(K, text):
+    """Valeur d'un litteral (110.f) ou d'une constante deja lue (BRMech::Clearance::StandRange)"""
+    m = re.fullmatch(r"BRMech::Clearance::(\w+)", text)
+    if m:
+        key = "Clearance." + m.group(1)
+        if key not in K:
+            raise SystemExit("constante %s non lue (BRMechLogic.h)" % text)
+        return K[key]
+    return float(text.rstrip("f"))
+
+
 def num(pattern, text, what):
     m = re.search(pattern, text, re.S)
     if not m:
@@ -77,7 +94,7 @@ def read_constants():
     K = {}
     ns = lambda name: mech_h[mech_h.index("namespace %s" % name):]
     for name, keys in (("LidarCage", ("Gap", "Depth", "HalfWidth", "Height")),
-                       ("Clearance", ("PlayerRadius", "Margin", "StandDepth", "StepHeight")),
+                       ("Clearance", ("PlayerRadius", "Margin", "StandDepth", "StepHeight", "FocusSweep", "StandRange", "StandEye", "AimProbe")),
                        ("Device", ("WorkZ",))):
         body = ns(name)
         for k in keys:
@@ -114,7 +131,7 @@ def read_constants():
     K["house_body"] = [float(g) for g in hb.groups()] if hb else None
     # Niveaux (BRLevels.cpp)
     levels = open(vp.LEVELS_CPP, encoding="utf-8").read()
-    for n in (6, 8, 9):
+    for n in (6, 8, 9, 10):
         body = levels[levels.index("FBRLevelDef Level%d()" % n):]
         body = body[:body.index("return D;")]
         vals = dict((k, float(v)) for k, v in re.findall(r"D\.(\w+)\s*=\s*(-?[\d.]+)f?\s*;", body))
@@ -126,7 +143,8 @@ def read_constants():
     rings = re.search(r"for \(const float Dist : \{ ([^}]*) \}\)", walk)
     if not rings:
         raise SystemExit("cercles de BRTestV412::FindMissionStand introuvables (BRAutoTestV412.cpp)")
-    K["rings"] = [float(v.strip().rstrip("f")) for v in rings.group(1).split(",")]
+    # v4.15 (correctifs 3) : le premier cercle est BRMech::Clearance::StandRange (place ordinaire du couloir de visee)
+    K["rings"] = [symbol(K, v.strip()) for v in rings.group(1).split(",")]
     t = num(r"for \(int32 Turn = 0; Turn < (\d+); \+\+Turn\)\s*\{\s*const FVector P = Aim \+ Fwd\.RotateAngleAxis\(Turn \* ([\d.]+)f", walk, "directions")
     K["turns"], K["turn_deg"] = int(t[0]), t[1]
     K["stand_cap"] = num(r"FCollisionShape::MakeCapsule\(([\d.]+)f, Half - ([\d.]+)f\)", walk, "capsule de la place")
@@ -137,7 +155,12 @@ def read_constants():
     K["retry"] = num(r"CheckMissionStand\(W, C, Dev, Aim \+ Fwd \* ([\d.]+)f, true, Closer\);.*?BeginWalk\(W, C, FVector\(Goal\.X, Goal\.Y, C->GetActorLocation\(\)\.Z\), "
                      r"([\d.]+)f, true\);", walk, "marche de reprise")
     # Visee du client (ABRCharacter::UpdateFocus) : balayage precis, portee, tolerance
-    K["focus_sweep"] = num(r"ECC_Visibility, FCollisionShape::MakeSphere\(([\d.]+)f\), Q\)", char, "balayage de la visee")[0]
+    # v4.15 (correctifs 3) : rayon du balayage = BRMech::Clearance::FocusSweep (le couloir de visee du placement)
+    fs = re.search(r"ECC_Visibility, FCollisionShape::MakeSphere\(([\w:.]+)\), Q\)", char)
+    if not fs:
+        raise SystemExit("balayage de la visee introuvable (BRCharacter.cpp)")
+    K["focus_sweep"] = symbol(K, fs.group(1))
+    K["focus_sweep_shared"] = fs.group(1) == "BRMech::Clearance::FocusSweep"
     K["InteractReach"] = num(r"constexpr float InteractReach = ([\d.]+)f;", char, "InteractReach")[0]
     K["tolerance"] = num(r"MakeSphere\(InteractReach \* ([\d.]+)f\)", char, "tolerance de la visee")[0]
     # Cage : boite visee (BRMech::Clearance::Of, R_LidarCage ; bloque la visee du client comme son volume)
@@ -162,6 +185,24 @@ def read_constants():
         "BRMech::Clearance::PickSlot : volume mural au bout de sa face": "FaceCenter(" in pick and "AbsF(T.Lateral) <= AbsF(Slots[Best].Lateral)" in pick,
     }
     K["src_D"] = {"ABRWorld::SetupMission : zone libre des sorties de la mission": "MissionKeepOuts.Add(BRMech::Clearance::ExitKeepOut(F))" in world}
+    # v4.15 (correctifs 3) : cas E : poteaux (PostSpot, RoomSlots), boites du moulin et du frein, regle des couloirs
+    K["post_back"] = num(r"Spot\.Pos = CellCenter\(C, 0\.f\) \+ Side \* Lateral - Fwd \* \(S \* ([\d.]+)f\);", world, "recul des poteaux")[0]
+    K["post_lat"] = num(r"Slots\.Add\(PostSpot\(C, Lateral\(K\) \* ([\d.]+)f, ", world, "ecart des poteaux")[0]
+    md = num(r"const float R = Role == R_MillDial \? ([\d.]+)f : [\d.]+f;\s*F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, Z \+ ([\d.]+)f\);\s*"
+             r"F\.AimExtent = V3\(([\d.]+)f, R \+ ([\d.]+)f, R \+ ([\d.]+)f\);", mech, "moulin")
+    K["mill"] = [md[1], md[2], Z + md[3], md[4], md[0] + md[5], md[0] + md[6]]
+    bd = num(r"else\s*\{\s*F\.Aim = V3\(([\d.]+)f, ([\d.]+)f, Z \+ ([\d.]+)f\);\s*F\.AimExtent = V3\(([\d.]+)f, ([\d.]+)f, ([\d.]+)f\);\s*\}\s*break;\s*case EKind::Gate:",
+             mech, "bouton (frein)")
+    K["button"] = [bd[0], bd[1], Z + bd[2], bd[3], bd[4], bd[5]]
+    lane = mech[mech.index("bool CutsFocusLane("):mech.index("bool FocusClash(")]
+    K["src_E"] = {
+        "ABRWorld::PlaceMission : poteaux d'une cellule en rang (meme lacet)": "bPlacement2 ? 77u + static_cast<uint32>(K) : 77u" in place,
+        "ABRWorld::PlaceMission : PickSlot avec les couloirs de visee": "FaceHalf, !bPlacement2)" in place,
+        "BRMech::Clearance::PickSlot : couloirs (FocusClash), puis le choix d'avant faute de mieux": "bLanes && FocusClash(Me, Placed[J])" in pick and "bLanes = false;" in pick,
+        "BRMech::Clearance::CutsFocusLane : place a StandRange, yeux a StandEye, FocusSweep + Margin": "StandRange" in lane and "StandEye" in lane
+        and "FocusSweep + Margin" in lane,
+        "ABRCharacter::UpdateFocus : balayage de BRMech::Clearance::FocusSweep": K["focus_sweep_shared"],
+    }
     return K
 
 
@@ -429,7 +470,7 @@ def find_mission_stand(K, fr, aim, boxes, solid_cells=None, S=0.0):
 
 
 # ------------------------------------------------------------------------------------------------ A. Level 6
-def pick_slot_mirror(K, prints, frames_lat, face_half, end_of_face=True):
+def pick_slot_mirror(K, prints, frames_lat, face_half, end_of_face=True, lanes=False):
     """BRMech::Clearance::PickSlot (miroir) pour un groupe : les membres a volume d'abord (tri stable, comme StableSort),
     chacun a la premiere place libre sans gene avec ceux deja poses ; un volume mural tient dans la face. v4.15 (correctifs,
     end_of_face) : un volume prend ensuite, sur cette face, la place libre de plus grand |lateral| ou il tient (la premiere a
@@ -439,28 +480,37 @@ def pick_slot_mirror(K, prints, frames_lat, face_half, end_of_face=True):
     placed = []
     out = [None] * len(prints)
 
-    def usable(pr, j):
+    def usable(pr, j, with_lanes):
         fr, lat = frames_lat[j]
         if taken[j]:
             return False
         if pr["solid"] and abs(lat) + max(abs(pr["solid"][1]), abs(pr["solid"][4])) > face_half + 0.01:
             return False
-        return not any(clash(K, (fr, pr), q) for q in placed)
+        return not any(clash(K, (fr, pr), q) or (with_lanes and focus_clash(K, (fr, pr), q)) for q in placed)
 
-    for i in order:
-        pr = prints[i]
+    def pick(pr, with_lanes):
         for j in range(len(frames_lat)):
-            if not usable(pr, j):
+            if not usable(pr, j, with_lanes):
                 continue
             best = j
             if pr["solid"] and end_of_face:
                 for k in range(j + 1, len(frames_lat)):
-                    if abs(frames_lat[k][1]) > abs(frames_lat[best][1]) + 0.01 and usable(pr, k):
+                    if abs(frames_lat[k][1]) > abs(frames_lat[best][1]) + 0.01 and usable(pr, k, with_lanes):
                         best = k
-            taken[best] = True
-            placed.append((frames_lat[best][0], pr))
-            out[i] = best
-            break
+            return best
+        return None
+
+    for i in order:
+        pr = prints[i]
+        # v4.15 (correctifs 3) : couloirs de visee degages d'abord, sinon le choix d'avant (BRMech::Clearance::PickSlot)
+        best = pick(pr, True) if lanes else None
+        if best is None:
+            best = pick(pr, False)
+        if best is None:
+            continue
+        taken[best] = True
+        placed.append((frames_lat[best][0], pr))
+        out[i] = best
     return out
 
 
@@ -666,6 +716,52 @@ def clash(K, a, b):
     return False
 
 
+def seg_aabb(a, b, c, e):
+    """Distance d'un segment a une boite alignee (centre c, demi-tailles e) : recherche ternaire (fonction convexe)"""
+    def at(t):
+        p = [a[k] + (b[k] - a[k]) * t for k in range(3)]
+        return math.sqrt(sum(max(abs(p[k] - c[k]) - e[k], 0.0) ** 2 for k in range(3)))
+    lo, hi = 0.0, 1.0
+    for _ in range(60):
+        m1, m2 = lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0
+        if at(m1) <= at(m2):
+            hi = m2
+        else:
+            lo = m1
+    return min(at(0.0), at(1.0), at((lo + hi) * 0.5))
+
+
+def cuts_focus_lane(K, me, other):
+    """BRMech::Clearance::CutsFocusLane (miroir) : du point vise de me vers les yeux a la place ordinaire (StandRange devant,
+    StandEye au-dessus du sol) et vers ce point a hauteur du point vise ; boite visee de other (si elle arrete la visee) ou son
+    volume a moins de FocusSweep + Margin. me, other : (repere, emprise) ; emprise : aim (6 valeurs), solid, aimable"""
+    fr, pr = me
+    ofr, opr = other
+    if not pr.get("aimable", True):
+        return False
+    aim = pr["aim"]
+    p = aim_point(fr, aim)
+    sx, sy = to_world(fr, aim[0] + K["Clearance.StandRange"], aim[1])
+    ax, ay = to_local(ofr, p[0], p[1])
+    ex, ey = to_local(ofr, sx, sy)
+    A = (ax, ay, p[2] - ofr[2])
+    eye = (ex, ey, fr[2] + K["Clearance.StandEye"] - ofr[2])
+    level = (ex, ey, A[2])
+    lim = K["Clearance.FocusSweep"] + K["Clearance.Margin"]
+    boxes = []
+    if opr.get("aimable", True):
+        oa = opr["aim"]
+        boxes.append((oa[:3], oa[3:6]))
+    if opr["solid"]:
+        x0, y0, z0, x1, y1, z1 = opr["solid"]
+        boxes.append((((x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5), (abs(x1 - x0) * 0.5, abs(y1 - y0) * 0.5, abs(z1 - z0) * 0.5)))
+    return any(seg_aabb(A, eye, c, e) < lim or seg_aabb(A, level, c, e) < lim for c, e in boxes)
+
+
+def focus_clash(K, a, b):
+    return cuts_focus_lane(K, a, b) or cuts_focus_lane(K, b, a)
+
+
 def case_level6(K, rules):
     S = K["L6"].get("CellSize", 350.0)
     T = K["L6"].get("WallThickness", K["WallThicknessDefault"])
@@ -690,7 +786,7 @@ def case_level6(K, rules):
             plans.append(("old", "v4.14", [0, 1]))  # membres dans l'ordre du plan (poste 1+K puis cage 5+K), places 0 puis 1
         else:
             plans.append(("first", "v4.15 avant correctifs (pour information)", pick_slot_mirror(K, [post, cage], slots, face_half, end_of_face=False)))
-            plans.append(("new", "v4.15", pick_slot_mirror(K, [post, cage], slots, face_half, end_of_face=True)))
+            plans.append(("new", "v4.15", pick_slot_mirror(K, [post, cage], slots, face_half, end_of_face=True, lanes=True)))
     results = {}
     for key, label, where in plans:
         if None in where:
@@ -952,6 +1048,155 @@ def case_level8_exits(K, rules, bounds, seeds):
     return results
 
 
+# ------------------------------------------------------------------------------------- E. Niveau 10 : poteaux
+def bhash_mission(seed, salt):
+    """BRMission::Hash"""
+    return vp.mix(((seed * 0x9E3779B1) & M32) ^ vp.mix((salt + 0x632BE59B) & M32))
+
+
+def post_yaw(seed, cell, salt):
+    """PostSpot : lacet tire par cellule et par sel"""
+    s = (seed ^ ((cell[0] * 73856093) & M32) ^ ((cell[1] * 19349663) & M32)) & M32
+    return 90.0 * (bhash_mission(s, salt) % 4)
+
+
+def post_frame(K, S, cell, k, yaw):
+    """PostSpot (ABRWorld::PlaceMission) : poteau k de la cellule, decalage Lateral(k) x post_lat, recule de post_back x S"""
+    f = forward((0.0, 0.0, 0.0, yaw))
+    step = (k + 1) // 2
+    lat = (1.0 if k % 2 == 1 else -1.0) * step * K["Spacing"] * K["post_lat"]
+    cx, cy = (cell[0] + 0.5) * S, (cell[1] + 0.5) * S
+    return (cx - f[1] * lat - f[0] * S * K["post_back"], cy + f[0] * lat - f[1] * S * K["post_back"], 0.0, yaw)
+
+
+def world_aim_box(fr, aim):
+    """Boite visee (alignee : lacet au quart de tour) dans le monde : centre et demi-tailles"""
+    c = aim_point(fr, aim)
+    turn = int(round(fr[3] / 90.0)) % 2
+    e = (aim[4], aim[3], aim[5]) if turn else (aim[3], aim[4], aim[5])
+    return c, e
+
+
+def first_hit(K, eye, target, devs):
+    """ABRCharacter::UpdateFocus, etape 1 : sphere de FocusSweep des yeux vers le point vise, portee InteractReach : premier
+    mecanisme dont la boite visee est touchee (la tolerance, etape 2, ne joue que si rien n'est touche)"""
+    d = math.dist(eye, target)
+    u = tuple((target[k] - eye[k]) / d for k in range(3))
+    reach = K["InteractReach"]
+    end = tuple(eye[k] + u[k] * reach for k in range(3))
+    r = K["focus_sweep"]
+    best = None
+    for i, (c, e) in enumerate(devs):
+        if seg_aabb(eye, end, c, e) > r:
+            continue
+        lo, hi = 0.0, 1.0
+        if seg_aabb(eye, eye, c, e) > r:
+            # premier contact (la distance decroit jusqu'au plus pres) : dichotomie sur le debut du segment
+            def at(t):
+                p = tuple(eye[k] + (end[k] - eye[k]) * t for k in range(3))
+                return math.sqrt(sum(max(abs(p[k] - c[k]) - e[k], 0.0) ** 2 for k in range(3)))
+            a, b = 0.0, 1.0
+            for _ in range(60):
+                m1, m2 = a + (b - a) / 3.0, b - (b - a) / 3.0
+                if at(m1) <= at(m2):
+                    b = m2
+                else:
+                    a = m1
+            hi = (a + b) * 0.5
+            for _ in range(60):
+                m = (lo + hi) * 0.5
+                if at(m) <= r:
+                    hi = m
+                else:
+                    lo = m
+        t = hi if seg_aabb(eye, eye, c, e) > r else 0.0
+        if best is None or t < best[0]:
+            best = (t, i)
+    return None if best is None else best[1]
+
+
+def mill_layout(K, S, cell, yaws, order, prints):
+    out = []
+    for k in range(3):
+        fr = post_frame(K, S, cell, k, yaws[k])
+        out.append((fr, prints[order[k]]))
+    return out
+
+
+def stolen(K, layout):
+    """Places devant chaque mecanisme (cercles de FindMissionStand dans l'axe, yeux a portee de la visee du client) d'ou la
+    visee prend un autre mecanisme : liste de (mecanisme, distance, mecanisme vise)"""
+    boxes = [world_aim_box(fr, pr["aim"]) for fr, pr in layout]
+    bad = []
+    for i, (fr, pr) in enumerate(layout):
+        ip = aim_point(fr, pr["aim"])
+        f = forward(fr)
+        for dist in K["rings"]:
+            eye = (ip[0] + f[0] * dist, ip[1] + f[1] * dist, fr[2] + K["Clearance.StandEye"])
+            if math.dist(eye, ip) > K["ClientFocusReach"]:
+                continue
+            hit = first_hit(K, eye, ip, boxes)
+            if hit is not None and hit != i:
+                bad.append((i, dist, hit))
+    return bad
+
+
+def case_level10(K, rules):
+    S = K["L10"]["CellSize"]
+    names = ("tableau des granges", "orientation du moulin", "frein du moulin")
+    prints = [{"aim": K["plate"], "solid": None}, {"aim": K["mill"], "solid": None}, {"aim": K["button"], "solid": None}]
+    lat = K["Spacing"] * K["post_lat"]
+    print("E. Niveau 10 : groupe du moulin sur les poteaux d'une cellule de champ (cellule de %g cm ; poteaux a 0/+%.1f/-%.1f cm, recules de %g cm ; boites visees : tableau %s, "
+          "moulin %s, frein %s ; visee du client : balayage de %g cm, portee %g ; places dans l'axe a %s cm, yeux a %g cm ; couloir : place a %g cm, ecart %g cm)"
+          % (S, lat, lat, S * K["post_back"], tuple(K["plate"]), tuple(K["mill"]), tuple(K["button"]), K["focus_sweep"], K["InteractReach"],
+             "/".join("%g" % r for r in K["rings"]), K["Clearance.StandEye"], K["Clearance.StandRange"], K["Clearance.FocusSweep"] + K["Clearance.Margin"]))
+    seed, cell = 1697132605, (-1, -14)
+    results = {}
+    old_bad = old_front = 0
+    missed = false_alarm = 0
+    for y0 in range(4):
+        for y1 in range(4):
+            for y2 in range(4):
+                lay = mill_layout(K, S, cell, (90.0 * y0, 90.0 * y1, 90.0 * y2), (0, 1, 2), prints)
+                bad = stolen(K, lay)
+                flagged = any(focus_clash(K, lay[a], lay[b]) for a in range(3) for b in range(a + 1, 3))
+                # Place ordinaire (premier cercle de FindMissionStand, celle du couloir) ; plus loin, la place passe derriere un
+                # voisin d'en face (pour information)
+                front = any(dist == K["rings"][0] for _, dist, _ in bad)
+                old_bad += 1 if bad else 0
+                old_front += 1 if front else 0
+                missed += 1 if front and not flagged else 0
+                false_alarm += 1 if flagged and not front else 0
+    yaws_old = tuple(post_yaw(seed, cell, 77 + k) for k in range(3))
+    lay = mill_layout(K, S, cell, yaws_old, (0, 1, 2), prints)
+    seed_bad = stolen(K, lay)
+    if "old" in rules:
+        results["old"] = old_front == 0
+        print("  regle d'avant (un lacet tire par poteau, sels 77, 78, 79) : %d combinaisons de lacets sur 64 ou la visee prend un autre mecanisme depuis la place ordinaire a %g cm "
+              "(%d depuis une place dans l'axe, jusqu'a %g cm) -> %s" % (old_front, K["rings"][0], old_bad, max(K["rings"]), "PASSE" if old_front == 0 else "ECHOUE"))
+        pts = ", ".join("%s lacet %g point (%.0f, %.0f, %.0f)" % ((names[i], fr[3]) + aim_point(fr, pr["aim"])) for i, (fr, pr) in enumerate(lay))
+        print("    graine %u, cellule %s : %s ; visee prise : %s"
+              % (seed, cell, pts, "; ".join("%s a %g cm -> %s" % (names[i], d, names[h]) for i, d, h in seed_bad) or "aucune"))
+    if "new" in rules:
+        row_bad = row_cut = 0
+        for yaw in (0.0, 90.0, 180.0, 270.0):
+            for order in ((0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)):
+                rl = mill_layout(K, S, cell, (yaw, yaw, yaw), order, prints)
+                row_bad += 1 if stolen(K, rl) else 0
+                row_cut += sum(1 for a in range(3) for b in range(a + 1, 3) if focus_clash(K, rl[a], rl[b]))
+        ok = row_bad == 0 and row_cut == 0 and missed == 0
+        results["new"] = ok
+        yaw = post_yaw(seed, cell, 77)
+        rl = mill_layout(K, S, cell, (yaw, yaw, yaw), (0, 1, 2), prints)
+        print("  regle du jeu (poteaux en rang, couloirs de visee) : rang, 4 lacets x 6 ordres des roles : visee prise %d (toutes les places dans l'axe), couloirs coupes %d ; "
+              "couloir sur les 64 combinaisons d'avant : %d fautive(s) depuis la place ordinaire non detectee(s), %d alerte(s) sans visee prise de la place ordinaire -> %s"
+              % (row_bad, row_cut, missed, false_alarm, "PASSE" if ok else "ECHOUE"))
+        print("    graine %u, cellule %s, rang au lacet %g : %s ; visee prise : %s"
+              % (seed, cell, yaw, ", ".join("%s point (%.0f, %.0f, %.0f)" % ((names[i],) + aim_point(fr, pr["aim"])) for i, (fr, pr) in enumerate(rl)),
+                 "; ".join("%s -> %s" % (names[i], names[h]) for i, _, h in stolen(K, rl)) or "aucune"))
+    return results
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=120, help="graines par niveau (grottes, banlieue)")
@@ -969,6 +1214,11 @@ def main():
     if K["Capsule"][0] != K["Clearance.PlayerRadius"]:
         print("ECHEC : BRMech::Clearance::PlayerRadius (%g) differe de la capsule de ABRCharacter (%g)" % (K["Clearance.PlayerRadius"], K["Capsule"][0]))
         return 1
+    # v4.15 (correctifs 3) : le couloir de visee du placement suit le personnage et les tests
+    if K["Capsule"][1] + K["EyeZ"] != K["Clearance.StandEye"] or K["rings"][0] != K["Clearance.StandRange"] or K["focus_sweep"] != K["Clearance.FocusSweep"]:
+        print("ECHEC : couloir de visee (BRMech::Clearance : StandEye %g, StandRange %g, FocusSweep %g) different du personnage (yeux %g) ou des tests (premier cercle %g, "
+              "balayage %g)" % (K["Clearance.StandEye"], K["Clearance.StandRange"], K["Clearance.FocusSweep"], K["Capsule"][1] + K["EyeZ"], K["rings"][0], K["focus_sweep"]))
+        return 1
     print()
     res = {"A": case_level6(K, rules)}
     print()
@@ -978,8 +1228,10 @@ def main():
     print()
     res["D"] = case_level8_exits(K, rules, rock, a.seeds)
     print()
+    res["E"] = case_level10(K, rules)
+    print()
     print("Regle du jeu dans les sources :")
-    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()):
+    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()) + list(K["src_E"].items()):
         print("  %s : %s" % (what, "oui" if ok else "NON"))
     print()
     bad = 0
@@ -990,7 +1242,7 @@ def main():
         if "new" in r and not r["new"]:
             print("ECHEC : cas %s : la regle du jeu echoue" % case)
             bad += 1
-    for case, checks in (("A", K["src_A"]), ("D", K["src_D"])):
+    for case, checks in (("A", K["src_A"]), ("D", K["src_D"]), ("E", K["src_E"])):
         if "new" in rules and not all(checks.values()):
             print("ECHEC : cas %s : la regle v4.15 n'est plus dans les sources (%s)" % (case, ", ".join(w for w, ok in checks.items() if not ok)))
             bad += 1

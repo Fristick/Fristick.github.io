@@ -207,7 +207,9 @@ namespace BRMech
 	// v4.15 : emprise des mecanismes et places libres. Le placement (ABRWorld::PlaceMission), les rochers des grottes
 	// (ABRChunk), les tests du jeu et les bancs (Tools/Mechanisms, Tools/verify_device_clearance.py) partagent ces regles :
 	// le point d'interaction d'un mecanisme (centre de sa boite visee, ABRMissionDevice::GetInteractPoint) n'est jamais
-	// dans le volume bloquant d'un autre (cage, porte fermee, module), et la place devant lui reste libre
+	// dans le volume bloquant d'un autre (cage, porte fermee, module), et la place devant lui reste libre. v4.15 (correctifs 3) :
+	// et son couloir de visee (de son point vise a la place ordinaire devant lui) ne passe ni par la boite visee ni par le volume
+	// d'un autre : la visee du client depuis cette place le prend, lui
 	// =================================================================================================================
 
 	/** Hauteur de travail des commandes murales (cm au-dessus du sol) */
@@ -242,6 +244,12 @@ namespace BRMech
 		 *  entre l'origine murale d'un mecanisme et son point vise (Aim.X : marques de la cloture 4 cm ; indices, cles, mire
 		 *  5 cm ; cadrans et boutons 6 cm). Avant : 5 cm, tangente au mur pour les mecanismes a 5 cm (Chaos compte le contact) */
 		constexpr float AimProbe = 1.f;
+		/** v4.15 (correctifs 3) : visee du client (ABRCharacter::UpdateFocus) : rayon de la sphere lancee dans l'axe du regard */
+		constexpr float FocusSweep = 7.f;
+		/** v4.15 (correctifs 3) : place ordinaire devant un point vise (premier cercle de BRTestV412::FindMissionStand) et
+		 *  yeux d'un joueur debout au-dessus du sol (capsule de 88 cm de demi-hauteur, camera 74 cm au-dessus de son centre) */
+		constexpr float StandRange = 110.f;
+		constexpr float StandEye = 162.f;
 
 		/** Boite locale (cm) : X vers la salle depuis l'origine du mecanisme, Y lateral (axe droit de l'acteur), Z depuis
 		 *  le sol de l'emplacement */
@@ -258,6 +266,9 @@ namespace BRMech
 			/** Volume qui bloque le passage et la vue tant que le mecanisme est la (cage, porte fermee, module) */
 			bool bSolid = false;
 			FBox Solid;
+			/** v4.15 (correctifs 3) : la boite visee arrete la visee du client (faux pour une porte ou un passage de la mission :
+			 *  leur boite n'a pas de collision, ABRMissionDevice::SetShown) */
+			bool bAimable = true;
 		};
 		/** Emprise d'un mecanisme d'apres sa sorte, son role et son module (BRMech::Module) ; WallThickness : epaisseur des
 		 *  murs du niveau (cadre des portes du Level 6). ABRMissionDevice::Init en tire sa boite visee */
@@ -277,6 +288,14 @@ namespace BRMech
 		 *  finit dedans : action toujours refusee), la place debout juste devant lui coupee par ce volume, ou deux volumes
 		 *  qui se chevauchent */
 		bool Clash(const FPlaced& A, const FPlaced& B);
+		/** v4.15 (correctifs 3) : couloir de visee de Me coupe par Other. Du point vise de Me vers les yeux d'un joueur debout a
+		 *  la place ordinaire (StandRange devant lui, StandEye au-dessus de son sol), et vers ce meme point a hauteur du point
+		 *  vise (place plus lointaine, joueur accroupi) : la boite visee de Other (si elle arrete la visee) ou son volume passe
+		 *  a moins de FocusSweep + Margin. Le client viserait Other depuis la place devant Me (Niveau 10 : tableau des granges
+		 *  entre le moulin et le frein, face a face sur leurs poteaux). Geometrie pure : meme resultat chez tous */
+		bool CutsFocusLane(const FPlaced& Me, const FPlaced& Other);
+		/** v4.15 (correctifs 3) : l'un des deux couloirs de visee coupe par l'autre mecanisme */
+		bool FocusClash(const FPlaced& A, const FPlaced& B);
 
 		/** Rectangle oriente (plan) : centre, demi-tailles, lacet quelconque (degres) */
 		struct FRect
@@ -307,7 +326,10 @@ namespace BRMech
 		 *  c'est le premier emplacement libre (ordre du placement d'avant la v4.15). v4.15 (correctifs) : un volume mural
 		 *  prend ensuite, sur la face de ce premier emplacement (meme lacet, meme point devant le centre de la cellule),
 		 *  l'emplacement libre de plus grand |Lateral| ou il tient et ne gene personne (le premier a egalite) : le reste de la
-		 *  face reste d'un seul tenant pour ses voisins (Level 6 : cage a +-58, poste a -+58) */
-		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf);
+		 *  face reste d'un seul tenant pour ses voisins (Level 6 : cage a +-58, poste a -+58). v4.15 (correctifs 3) : bFocusLanes :
+		 *  d'abord sans couloir de visee coupe (FocusClash) avec ceux deja poses ; si aucun emplacement ne le permet, le choix
+		 *  sans cette regle (le placement n'echoue jamais plus souvent qu'avant). false : le choix d'avant les couloirs
+		 *  (comparaison des reprises du placement 2, ABRWorld::PlaceMission) */
+		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf, bool bFocusLanes);
 	}
 }

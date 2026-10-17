@@ -121,7 +121,8 @@ namespace
 	}
 
 	/** v4.15 : invariant du placement (journal ; les tests du jeu le verifient aussi dans le decor construit) : aucun point
-	 *  d'interaction dans le volume bloquant d'un autre mecanisme. v4.15 (correctifs) : aussi pour le module de secours */
+	 *  d'interaction dans le volume bloquant d'un autre mecanisme. v4.15 (correctifs) : aussi pour le module de secours.
+	 *  v4.15 (correctifs 3) : aucun couloir de visee coupe (BRMech::Clearance::CutsFocusLane) */
 	void LogMissionVolumeInvariant(const BRM::FPlan& Plan, const TArray<FBRMissionSpot>& Spots, float WallThickness, const TCHAR* Tier)
 	{
 		for (int32 I = 0; I < Plan.NumDevices && I < Spots.Num(); ++I)
@@ -137,6 +138,12 @@ namespace
 				{
 					UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d%s : point d'interaction du mecanisme %d dans le volume du mecanisme %d (graine %u)"), Plan.Level, Tier, I, J,
 						Plan.Seed);
+				}
+				// v4.15 (correctifs 3) : couloir de visee (place ordinaire devant le mecanisme) coupe par la boite visee ou le volume
+				// d'un autre : le client viserait l'autre (PickSlot ne garde un tel choix que faute de place au couloir degage)
+				if (J != I && BRMech::Clearance::CutsFocusLane(PlacedMissionDevice(Plan, Spots, I, WallThickness), PlacedMissionDevice(Plan, Spots, J, WallThickness)))
+				{
+					UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d%s : couloir de visee du mecanisme %d coupe par le mecanisme %d (graine %u)"), Plan.Level, Tier, I, J, Plan.Seed);
 				}
 			}
 		}
@@ -236,6 +243,7 @@ void ABRWorld::ClearMission()
 	MissionPlan = BRM::FPlan();
 	MissionState = BRM::FState();
 	MissionGen = 0;
+	MissionMovedFrom2 = -1;
 	bMissionSolvedSeen = false;
 }
 
@@ -329,6 +337,40 @@ void ABRWorld::SetupMission()
 			MissionSpots = MoveTemp(Spots);
 			MissionExitSpots = MoveTemp(Exits);
 			MissionCells = MoveTemp(Cells);
+			// v4.15 (correctifs 3) : hote : mecanismes que les couloirs de visee et les poteaux en rang ont deplaces par rapport
+			// au placement 2 (meme plan, memes regles ailleurs), pour cette graine. Une reprise du placement 2 n'est prevenue
+			// ("reamenages") que si ce nombre n'est pas nul ; journalise pour les tests. Level 6 (deja reamenage par le placement
+			// 3) et module de secours (inchange hors du Level 6) : pas compare
+			MissionMovedFrom2 = -1;
+			if (HasAuthority() && MissionTier < 2 && Level != 6)
+			{
+				TArray<FBRMissionSpot> Before;
+				TArray<FMissionExitSpot> BeforeExits;
+				TSet<FIntPoint> BeforeCells;
+				FString Which;
+				if (PlaceMission(MissionPlan, Before, BeforeExits, BeforeCells, true) && Before.Num() == MissionSpots.Num())
+				{
+					MissionMovedFrom2 = 0;
+					for (int32 I = 0; I < MissionSpots.Num(); ++I)
+					{
+						if (FVector::Dist(Before[I].Pos, MissionSpots[I].Pos) > 1.f || FMath::Abs(FRotator::NormalizeAxis(Before[I].Yaw - MissionSpots[I].Yaw)) > 1.f)
+						{
+							++MissionMovedFrom2;
+							Which += FString::Printf(TEXT("%s%d"), Which.IsEmpty() ? TEXT("") : TEXT(", "), I);
+						}
+					}
+				}
+				else
+				{
+					MissionMovedFrom2 = MissionSpots.Num();
+					Which = TEXT("placement 2 impossible");
+				}
+				if (MissionMovedFrom2 > 0)
+				{
+					UE_LOG(LogBackrooms, Log, TEXT("Mission du Niveau %d : %d mecanisme(s) a une autre place qu'au placement 2 (couloirs de visee, poteaux en rang) : %s (graine %u)"),
+						Level, MissionMovedFrom2, *Which, Seed);
+				}
+			}
 			// v4.15 : zones libres des mecanismes et des sorties de la mission, avant la construction des chunks (rochers)
 			for (int32 I = 0; I < MissionPlan.NumDevices && I < MissionSpots.Num(); ++I)
 			{
@@ -360,8 +402,11 @@ void ABRWorld::SetupMission()
 						MissionState = Restored;
 						UE_LOG(LogBackrooms, Log, TEXT("Reprise : mission du Niveau %d restauree (%s)"), Level, (MissionState.Solved & 1) ? TEXT("resolue") : TEXT("en cours"));
 						// v4.12 : placement d'une autre version : la progression est gardee, les mecanismes peuvent avoir bouge.
-						// v4.15 : avis seulement dans les niveaux dont le placement a change (version 3 : le Level 6)
-						if (ResumePlaceVersion != BRM::PlaceVersion && MissionNotice == 0 && BRM::PlacementMoved(Level, ResumePlaceVersion))
+						// v4.15 : avis seulement dans les niveaux dont le placement a change (version 3 : le Level 6). v4.15
+						// (correctifs 3) : depuis le placement 2, ailleurs, seulement si cette graine a des mecanismes deplaces
+						// par les couloirs de visee ou les poteaux en rang (comparaison ci-dessus)
+						const bool bMovedHere = ResumePlaceVersion == 2 && MissionMovedFrom2 > 0;
+						if (ResumePlaceVersion != BRM::PlaceVersion && MissionNotice == 0 && (BRM::PlacementMoved(Level, ResumePlaceVersion) || bMovedHere))
 						{
 							MissionNotice = 3;
 						}
@@ -477,7 +522,7 @@ void ABRWorld::ShowMissionNotice(uint8 Notice)
 	ABRHUD::Notify(this, Msg.ToString(), 9.f, FLinearColor(1.f, 0.85f, 0.5f));
 }
 
-bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells) const
+bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells, bool bPlacement2) const
 {
 	OutSpots.Reset();
 	OutExits.Reset();
@@ -716,7 +761,10 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 			{
 				for (int32 K = 0; K < 3; ++K)
 				{
-					Slots.Add(PostSpot(C, Lateral(K) * 1.2f, 77u + K));
+					// v4.15 (correctifs 3) : les poteaux d'une cellule en rang, tournes du meme cote (lacet du poteau 0) : 70 cm
+					// entre eux, aucun ne coupe la visee d'un autre. Avant : un lacet tire par poteau (sel 77 + K) ; au Niveau 10,
+					// le moulin et le frein face a face, le tableau des granges entre eux prenait leur visee (36 lacets sur 64)
+					Slots.Add(PostSpot(C, Lateral(K) * 1.2f, bPlacement2 ? 77u + static_cast<uint32>(K) : 77u));
 				}
 			}
 		}
@@ -1123,7 +1171,8 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 				P.Print = BRMech::Clearance::Of(Plan.Devices[Other].Kind, Plan.Devices[Other].Role, OutSpots[Other].Module, D.WallThickness);
 			}
 			const BRMech::Clearance::FFootprint Print = BRMech::Clearance::Of(Plan.Devices[Dev].Kind, Plan.Devices[Dev].Role, BRMech::Module::None, D.WallThickness);
-			const int32 J = BRMech::Clearance::PickSlot(Print, Cand.GetData(), Cand.Num(), Near.GetData(), Near.Num(), FaceHalf);
+			// v4.15 (correctifs 3) : couloirs de visee degages d'abord (sauf comparaison avec le placement 2)
+			const int32 J = BRMech::Clearance::PickSlot(Print, Cand.GetData(), Cand.Num(), Near.GetData(), Near.Num(), FaceHalf, !bPlacement2);
 			if (J < 0)
 			{
 				return false;
@@ -1205,8 +1254,12 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		}
 		OutCells.Add(Spot.Cell);
 	}
-	// v4.15 : invariant du placement : aucun point d'interaction dans le volume bloquant d'un autre mecanisme (journal)
-	LogMissionVolumeInvariant(Plan, OutSpots, D.WallThickness, TEXT(""));
+	// v4.15 : invariant du placement : aucun point d'interaction dans le volume bloquant d'un autre mecanisme (journal).
+	// v4.15 (correctifs 3) : pas pour le placement de comparaison (regles du placement 2)
+	if (!bPlacement2)
+	{
+		LogMissionVolumeInvariant(Plan, OutSpots, D.WallThickness, TEXT(""));
+	}
 	return true;
 }
 
@@ -1425,7 +1478,7 @@ bool ABRWorld::PlaceMissionModule(const BRM::FPlan& Plan, TArray<FBRMissionSpot>
 			{
 				Cand[J].bOpen = !Taken[J] && !(OutExits.Num() > 0 && FVector::Dist2D(Slots[J].Pos, OutExits[0].Pos) < 140.f);
 			}
-			Idx = BRMech::Clearance::PickSlot(Print, Cand.GetData(), Cand.Num(), Placed.GetData(), Placed.Num(), S * 0.5f - D.WallThickness * 0.5f);
+			Idx = BRMech::Clearance::PickSlot(Print, Cand.GetData(), Cand.Num(), Placed.GetData(), Placed.Num(), S * 0.5f - D.WallThickness * 0.5f, true);
 		}
 		if (Idx < 0)
 		{

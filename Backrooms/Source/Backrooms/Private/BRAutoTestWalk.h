@@ -81,6 +81,10 @@ namespace BRTestV412
 	/** v4.15 : hauteur reelle des yeux au-dessus du centre de la capsule (camera du personnage, 74 cm debout) */
 	float EyeHeight(const ABRCharacter* C);
 
+	/** v4.15 (correctifs 3) : ce que la visee du client a pris, pour les notes : un mecanisme de la mission par son indice et
+	 *  son nom (avant : le nom de l'acteur seul, BRMissionDevice_97), sinon le nom de l'acteur, ou "rien" */
+	FString FocusName(const ABRWorld* W, const AActor* A);
+
 	/** v4.15 : place debout devant un mecanisme de la mission */
 	enum class EStand : uint8 { Ok, NoFloor, Swim, Blocked, TooFar, NoSight };
 	const TCHAR* StandName(EStand S);

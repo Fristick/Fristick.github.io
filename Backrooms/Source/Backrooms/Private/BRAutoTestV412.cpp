@@ -543,10 +543,11 @@ namespace BRTestV412
 		const FVector Aim = Dev->GetInteractPoint();
 		const FVector Ahead = Dev->GetActorForwardVector().GetSafeNormal2D();
 		const FVector Fwd = Ahead.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Ahead;
-		// Cercles : 110 cm (place ordinaire), plus loin, puis tout pres (place etroite) ; 16 directions depuis l'avant
+		// Cercles : 110 cm (place ordinaire), plus loin, puis tout pres (place etroite) ; 16 directions depuis l'avant.
+		// v4.15 (correctifs 3) : la place ordinaire est celle du couloir de visee du placement (BRMech::Clearance::StandRange)
 		int32 Refused[6] = { 0, 0, 0, 0, 0, 0 };
 		int32 Tried = 0;
-		for (const float Dist : { 110.f, 160.f, 210.f, 75.f, 240.f })
+		for (const float Dist : { BRMech::Clearance::StandRange, 160.f, 210.f, 75.f, 240.f })
 		{
 			for (int32 Turn = 0; Turn < 16; ++Turn)
 			{
@@ -567,6 +568,16 @@ namespace BRTestV412
 				Refused[static_cast<int32>(EStand::TooFar)], ClientFocusReach, Refused[static_cast<int32>(EStand::NoSight)]);
 		}
 		return false;
+	}
+
+	FString FocusName(const ABRWorld* W, const AActor* A)
+	{
+		const ABRMissionDevice* MD = Cast<ABRMissionDevice>(A);
+		if (MD && W && W->IsMissionActive())
+		{
+			return FString::Printf(TEXT("mecanisme %d (%s, %s)"), MD->GetIndex(), *BRMissionText::DeviceName(W->GetMissionPlan(), MD->GetIndex()), *MD->GetName());
+		}
+		return A ? A->GetName() : FString(TEXT("rien"));
 	}
 
 	/** v4.15 : yeux du joueur au point d'interaction, et ce que la regle de l'hote en dit depuis la place actuelle */
@@ -874,8 +885,7 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 			}
 			const AActor* Seen = C->FocusActor.Get();
 			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) atteint mais PAS VISE par l'interaction (vise : %s ; %s ; apres la marche de reprise ; graine du niveau %u)"),
-				Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), Seen ? *Seen->GetName() : TEXT("rien"), *ReachFromHere(W, C, Dev), WalkMission.LevelSeed),
-				true);
+				Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), *FocusName(W, Seen), *ReachFromHere(W, C, Dev), WalkMission.LevelSeed), true);
 			Shot(FString::Printf(TEXT("v412_acces_%d_pas_vise"), Level));
 			return true;
 		}
@@ -1081,7 +1091,7 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 					return false;
 				}
 				const AActor* Seen = C->FocusActor.Get();
-				Note(FString::Printf(TEXT("Niveau %d : sortie vers %d PAS VISEE par l'interaction (vise : %s)"), Level, TestLevel, Seen ? *Seen->GetName() : TEXT("rien")), true);
+				Note(FString::Printf(TEXT("Niveau %d : sortie vers %d PAS VISEE par l'interaction (vise : %s)"), Level, TestLevel, *FocusName(W, Seen)), true);
 				return true;
 			}
 			C->Interact();
@@ -1916,7 +1926,8 @@ void ABRAutoTest::AddV412Steps()
 		Note(FString::Printf(TEXT("placement d'une autre version : avis %d (attendu 3 : mecanismes replaces), indice lu garde %s"), Notice, YesNo(bKept)), Notice != 3 || !bKept);
 		Shot(TEXT("v412_reprise_mecanismes_replaces"));
 		// v4.15 : placement 3 : une session du placement 2 (v4.14) hors du Level 6 retrouve ses mecanismes a la meme place
-		// (aucun avis "reamenages") ; la sauvegarde de test reste active pour cette reprise
+		// (aucun avis "reamenages") ; la sauvegarde de test reste active pour cette reprise. v4.15 (correctifs 3) : sauf si les
+		// couloirs de visee ou les poteaux en rang deplacent des mecanismes de cette graine (avis 3, verifie a l'etape suivante)
 		const uint32 Seed = ABRWorld::SeedFromUser(4122, 2);
 		BRM::FPlan MPlan;
 		BRM::BuildPlan(2, Seed, MPlan);
@@ -1954,8 +1965,13 @@ void ABRAutoTest::AddV412Steps()
 			bRepriseFailed = true;
 			return true;
 		}
+		// v4.15 (correctifs 3) : hors du Level 6, l'avis depend de la graine : l'hote compare ce placement au placement 2
+		// (couloirs de visee, poteaux en rang) ; avis 3 seulement si des mecanismes ont change de place, 0 sinon
 		const uint8 Notice = W->GetMissionNotice();
-		Note(FString::Printf(TEXT("session du placement 2 (v4.14) au Niveau 2 : avis %d (attendu 0 : mecanismes a la meme place)"), Notice), Notice != 0 || !W->IsMissionActive());
+		const int32 Moved = W->GetMissionMovedFrom2();
+		const uint8 Want = Moved > 0 ? 3 : 0;
+		Note(FString::Printf(TEXT("session du placement 2 (v4.14) au Niveau 2 : avis %d (attendu %d : %d mecanisme(s) a une autre place qu'au placement 2%s)"), Notice, Want, Moved,
+			Moved < 0 ? TEXT(", comparaison NON FAITE") : TEXT("")), Notice != Want || Moved < 0 || !W->IsMissionActive());
 		return true;
 	});
 	// v4.15 : la session de test (partie active, emplacement, mode, histoire, prefixe des fichiers) est retablie quelle que

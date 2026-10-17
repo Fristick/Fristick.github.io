@@ -749,7 +749,7 @@ void ABRAutoTest::AddMissionPlaceSweep(int32 Level, bool bLidarOnly)
 			const FString Host = bServer ? FString(TEXT("acceptee par l'hote")) : FString::Printf(TEXT("REFUSEE par l'hote (vue coupee par %s, %s)"), *GetNameSafe(Block.GetActor()),
 				*GetNameSafe(Block.GetComponent()));
 			const FString Client = Seen == Dev ? (EyeDist > BRTestV412::ClientFocusReach + 10.f ? FString(TEXT(", hors de la portee de la visee du client")) : FString())
-				: FString::Printf(TEXT(", PAS VISE par le client (vise : %s)"), Seen ? *Seen->GetName() : TEXT("rien"));
+				: FString::Printf(TEXT(", PAS VISE par le client (vise : %s)"), *BRTestV412::FocusName(W, Seen));
 			Fail(FString::Printf(TEXT("depuis la place trouvee (yeux a %.0f cm du point), action %s%s"), EyeDist, *Host, *Client));
 		}
 		++TestMissionStep;

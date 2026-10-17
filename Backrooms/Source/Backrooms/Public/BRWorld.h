@@ -358,6 +358,8 @@ public:
 	/** v4.12 : placement retenu (0 normal, 1 variante de secours, 2 module de secours) */
 	uint8 GetMissionTier() const { return MissionTier; }
 	uint8 GetMissionNotice() const { return MissionNotice; }
+	/** v4.15 (correctifs 3) : hote : mecanismes deplaces par rapport au placement 2 pour cette graine (-1 : pas compare) */
+	int32 GetMissionMovedFrom2() const { return MissionMovedFrom2; }
 	/** v4.12 : l'hote doit copier la sauvegarde avant de la reecrire (mission non restauree) ; remis a faux */
 	bool ConsumeSaveBackupRequest()
 	{
@@ -1017,8 +1019,10 @@ private:
 	/** Construit le plan, place les mecanismes (cellules reservees avant la construction des chunks) et cree leurs acteurs.
 	 *  Serveur : decide la version (reprise d'une session ancienne : ancien mode) et l'etat ; client : suit NetMission */
 	void SetupMission();
-	/** Place les mecanismes et les sorties garanties ; false si impossible (la variante de secours est alors essayee) */
-	bool PlaceMission(const BRMission::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells) const;
+	/** Place les mecanismes et les sorties garanties ; false si impossible (la variante de secours est alors essayee).
+	 *  v4.15 (correctifs 3) : bPlacement2 : sans les couloirs de visee ni les poteaux en rang (regles du placement 2 hors du
+	 *  Level 6) : comparaison des reprises, pas de journal d'invariant */
+	bool PlaceMission(const BRMission::FPlan& Plan, TArray<FBRMissionSpot>& OutSpots, TArray<FMissionExitSpot>& OutExits, TSet<FIntPoint>& OutCells, bool bPlacement2 = false) const;
 	/** v4.12 : module de secours : tous les mecanismes pres du depart, sur les murs des premieres cellules atteintes (ou
 	 *  des poteaux), sorties gardees a la cellule atteinte la plus lointaine. Toujours possible : une mission n'est plus
 	 *  jamais abandonnee (avant : sorties ouvertes en silence) */
@@ -1029,6 +1033,9 @@ private:
 	int32 NoticeShownSerial = 0;
 	/** v4.12 : version de placement de la session reprise (1 : sauvegarde d'avant la v4.12) */
 	int32 ResumePlaceVersion = 0;
+	/** v4.15 (correctifs 3) : hote : mecanismes a une autre place qu'au placement 2 pour cette graine (couloirs de visee,
+	 *  poteaux en rang) ; -1 : pas compare (client, module de secours, Level 6) */
+	int32 MissionMovedFrom2 = -1;
 	/** v4.12 : la sauvegarde doit etre copiee avant sa prochaine ecriture (mission non restauree) */
 	bool bSaveBackupRequested = false;
 	void ShowMissionNotice(uint8 Notice);

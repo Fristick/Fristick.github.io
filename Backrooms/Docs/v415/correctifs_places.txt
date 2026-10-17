@@ -2,8 +2,8 @@
 # Commande (depuis Backrooms/, PYTHONUTF8=1, Python 3.14.8) : python Tools/verify_device_clearance.py --seeds 120
 # L'ancienne regle (v4.14) doit ECHOUER (le defaut des journaux du jeu est reproduit), la regle du jeu (v4.15) PASSER et etre dans les sources
 # v4.15 (correctifs, relecture) : cas A juge comme les tests du jeu (FindMissionStand, marches, visee du client, murs voisins), cage au bout de sa face ; B et C avec FindMissionStand ; cas D (sorties du Level 8)
-# Date : 2026-10-16T21:57:09Z
-
+# v4.15 (correctifs 3) : cas E (Niveau 10 : groupe du moulin sur poteaux ; poteaux en rang et couloirs de visee, BRMech::Clearance::CutsFocusLane) ; couloirs dans le miroir de PickSlot (cas A inchange)
+# Date : 2026-10-17T02:18:20Z
 Banc des places des mecanismes (v4.15, Tools/verify_device_clearance.py)
 Constantes lues : capsule 34 x 88, yeux a 74 cm au-dessus du centre, portee de l'hote 340 cm ; marge 2, place debout a 36 cm, profondeur libre 120 ; poste (18.0, 0.0, 110.0) ; treuil (26.0, 0.0, 60.0) ; plaque (5.0, 0.0, 140.0)
 
@@ -44,10 +44,21 @@ D. Level 8 : sorties de la mission (echelle : capsule de 34 cm a 52 cm du pied, 
   regle v4.14 : 2112 sorties, echelle ou approche dans un rocher 1207 (57.1 %) -> ECHOUE
   regle v4.15 : 2112 sorties, echelle ou approche dans un rocher 0 (0.0 %) -> PASSE
 
+E. Niveau 10 : groupe du moulin sur les poteaux d'une cellule de champ (cellule de 400 cm ; poteaux a 0/+69.6/-69.6 cm, recules de 80 cm ; boites visees : tableau (5.0, 0.0, 140.0, 6.0, 28.0, 28.0), moulin (6.0, 0.0, 140.0, 8.0, 36.0, 38.0), frein (6.0, 0.0, 140.0, 8.0, 16.0, 18.0) ; visee du client : balayage de 7 cm, portee 260 ; places dans l'axe a 110/160/210/75/240 cm, yeux a 162 cm ; couloir : place a 110 cm, ecart 9 cm)
+  regle d'avant (un lacet tire par poteau, sels 77, 78, 79) : 36 combinaisons de lacets sur 64 ou la visee prend un autre mecanisme depuis la place ordinaire a 110 cm (48 depuis une place dans l'axe, jusqu'a 240 cm) -> ECHOUE
+    graine 1697132605, cellule (-1, -14) : tableau des granges lacet 270 point (-200, -5325, 140), orientation du moulin lacet 0 point (-274, -5330, 140), frein du moulin lacet 180 point (-126, -5330, 140) ; visee prise : orientation du moulin a 110 cm -> tableau des granges; orientation du moulin a 160 cm -> frein du moulin; orientation du moulin a 210 cm -> frein du moulin; orientation du moulin a 75 cm -> tableau des granges; orientation du moulin a 240 cm -> frein du moulin; frein du moulin a 110 cm -> tableau des granges; frein du moulin a 160 cm -> orientation du moulin; frein du moulin a 210 cm -> orientation du moulin; frein du moulin a 75 cm -> tableau des granges; frein du moulin a 240 cm -> orientation du moulin
+  regle du jeu (poteaux en rang, couloirs de visee) : rang, 4 lacets x 6 ordres des roles : visee prise 0 (toutes les places dans l'axe), couloirs coupes 0 ; couloir sur les 64 combinaisons d'avant : 0 fautive(s) depuis la place ordinaire non detectee(s), 0 alerte(s) sans visee prise de la place ordinaire -> PASSE
+    graine 1697132605, cellule (-1, -14), rang au lacet 270 : tableau des granges point (-200, -5325, 140), orientation du moulin point (-130, -5326, 140), frein du moulin point (-270, -5326, 140) ; visee prise : aucune
+
 Regle du jeu dans les sources :
   ABRWorld::PlaceMission : volumes d'abord (StableSort), puis BRMech::Clearance::PickSlot : oui
   ABRWorld::PlaceMissionModule : PickSlot, curseur hors des places prises : oui
   BRMech::Clearance::PickSlot : volume mural au bout de sa face : oui
   ABRWorld::SetupMission : zone libre des sorties de la mission : oui
+  ABRWorld::PlaceMission : poteaux d'une cellule en rang (meme lacet) : oui
+  ABRWorld::PlaceMission : PickSlot avec les couloirs de visee : oui
+  BRMech::Clearance::PickSlot : couloirs (FocusClash), puis le choix d'avant faute de mieux : oui
+  BRMech::Clearance::CutsFocusLane : place a StandRange, yeux a StandEye, FocusSweep + Margin : oui
+  ABRCharacter::UpdateFocus : balayage de BRMech::Clearance::FocusSweep : oui
 
-RESULTAT : OK (A v4.14 echoue / v4.15 passe, B v4.14 echoue / v4.15 passe, C v4.14 echoue / v4.15 passe, D v4.14 echoue / v4.15 passe)
+RESULTAT : OK (A v4.14 echoue / v4.15 passe, B v4.14 echoue / v4.15 passe, C v4.14 echoue / v4.15 passe, D v4.14 echoue / v4.15 passe, E v4.14 echoue / v4.15 passe)

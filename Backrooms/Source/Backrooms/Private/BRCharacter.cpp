@@ -60,6 +60,9 @@ namespace
 	/** A la 3e personne la lampe est avancee devant la combinaison (sinon le corps la masquerait) */
 	const FVector ThirdPersonLightPush(32.f, 0.f, 0.f);
 	constexpr float InteractReach = 260.f;
+	/** v4.15 (correctifs 3) : yeux debout du couloir de visee du placement (BRMech::Clearance::StandEye) : demi-hauteur de la
+	 *  capsule (88 cm, InitCapsuleSize) + camera */
+	static_assert(BRMech::Clearance::StandEye == 88.f + StandEyeZ, "BRMech::Clearance::StandEye : yeux d'un joueur debout au-dessus du sol");
 }
 
 ABRCharacter::ABRCharacter()
@@ -3202,7 +3205,8 @@ void ABRCharacter::UpdateFocus()
 		return false;
 	};
 
-	// 1) Visee precise : petite sphere lancee dans l'axe du regard (depuis la camera a la 3e personne)
+	// 1) Visee precise : petite sphere lancee dans l'axe du regard (depuis la camera a la 3e personne). v4.15 (correctifs 3) :
+	// son rayon est celui du couloir de visee du placement (BRMech::Clearance::FocusSweep)
 	FVector Start = Eye;
 	float Len = InteractReach;
 	if (bThirdPerson && Camera)
@@ -3212,7 +3216,7 @@ void ABRCharacter::UpdateFocus()
 	}
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRFocus), false, this);
 	FHitResult Hit;
-	if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Dir * Len, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(7.f), Q)
+	if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Dir * Len, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q)
 		&& FVector::Dist(Hit.ImpactPoint, Eye) < InteractReach + 30.f && Accept(Hit.GetActor()))
 	{
 		return;

@@ -20,7 +20,11 @@
 //      poste du Level 6 (point d'interaction du poste dans la cage avec la regle v4.14, a cote d'elle avec PickSlot ; cage
 //      au bout de sa face, place ordinaire du poste libre du mur voisin), cage tenue dans sa face, premiere place libre
 //      sans volume (placement des autres niveaux inchange), rectangles orientes, zone libre devant un treuil et devant une
-//      sortie (echelle), boites visees de toutes les sortes et de tous les roles, volumes des modules.
+//      sortie (echelle), boites visees de toutes les sortes et de tous les roles, volumes des modules ; v4.15 (correctifs 3) :
+//      sonde du point d'interaction des tests plus fine que le plus petit ecart point vise - mur ;
+//   H. v4.15 (correctifs 3) : couloirs de visee (BRMech::Clearance::CutsFocusLane, regle de PickSlot) : le groupe du moulin
+//      du Niveau 10 (graine 1697132605 : tableau des granges entre le moulin et le frein), poteaux d'une cellule en rang,
+//      PickSlot (poteau au couloir degage, choix d'avant faute de mieux), voisins muraux et Level 6 inchanges.
 //
 // Le comportement reel (collisions, nage, rendu, reseau, sauvegarde, streaming) se verifie en jeu : -BRAutoTestV412
 // (prepare, non execute ici).
@@ -413,13 +417,13 @@ int main()
 			CL::Clash(At(1, Post), Cage0) && CL::Clash(At(2, Post), Cage0) && !CL::Clash(At(3, Post), Cage0) && !CL::Clash(At(4, Post), Cage0));
 		// PickSlot : la cage d'abord, au bout de sa face ou elle tient (v4.15 correctifs), puis le poste a cote d'elle, hors de
 		// son volume, a sa place ordinaire
-		const int CageSlot = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf);
+		const int CageSlot = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf, true);
 		int PostSlot = -1;
 		if (CageSlot >= 0)
 		{
 			Slots[CageSlot].bOpen = false;
 			const CL::FPlaced Placed[1] = { At(CageSlot, Cage) };
-			PostSlot = CL::PickSlot(Post, Slots, 5, Placed, 1, FaceHalf);
+			PostSlot = CL::PickSlot(Post, Slots, 5, Placed, 1, FaceHalf, true);
 			Slots[CageSlot].bOpen = true;
 		}
 		Line("placement v4.15 : cage a " + F1(CageSlot >= 0 ? Laterals[CageSlot] : -1.f) + ", poste a " + F1(PostSlot >= 0 ? Laterals[PostSlot] : -1.f) +
@@ -436,14 +440,14 @@ int main()
 		}
 		// Bout de face pris : l'autre bout ; aucun bout libre : le centre
 		Slots[1].bOpen = false;
-		const int CageOther = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf);
+		const int CageOther = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf, true);
 		Slots[2].bOpen = false;
-		const int CageMid = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf);
+		const int CageMid = CL::PickSlot(Cage, Slots, 5, nullptr, 0, FaceHalf, true);
 		Slots[1].bOpen = Slots[2].bOpen = true;
 		Line("cage, place +58 prise : a " + F1(CageOther >= 0 ? Laterals[CageOther] : -1.f) + " ; +58 et -58 prises : au centre", CageOther == 2 && CageMid == 0);
 		CL::FSlot Edge[2] = { Slots[3], Slots[4] };
 		Edge[0].bOpen = Edge[1].bOpen = true;
-		Line("cage a +-116 : refusee (elle entrerait de " + F1(116.f + LC::HalfWidth - FaceHalf) + " cm dans le mur voisin)", CL::PickSlot(Cage, Edge, 2, nullptr, 0, FaceHalf) == -1);
+		Line("cage a +-116 : refusee (elle entrerait de " + F1(116.f + LC::HalfWidth - FaceHalf) + " cm dans le mur voisin)", CL::PickSlot(Cage, Edge, 2, nullptr, 0, FaceHalf, true) == -1);
 		// Sans volume : premiere place libre (placement des autres niveaux inchange)
 		const CL::FFootprint Winch = CL::Of(BRM::EKind::Crank, BRM::R_Winch, BRMech::Module::None, 60.f);
 		CL::FSlot Free[5];
@@ -452,8 +456,11 @@ int main()
 			Free[K] = Slots[K];
 			Free[K].bOpen = K != 1;
 		}
-		const CL::FPlaced Two[2] = { At(0, Winch), At(2, Post) };
-		Line("sans volume ni voisin a volume : premiere place libre (ordre d'avant la v4.15)", CL::PickSlot(Winch, Free, 5, Two, 2, FaceHalf) == 0);
+		// v4.15 (correctifs 3) : voisins loin du couloir de visee (bouts de la face) ; un voisin pose a la meme place prendrait
+		// la visee (couloirs, plus bas)
+		const CL::FPlaced Two[2] = { At(3, Winch), At(4, Post) };
+		Line("sans volume ni voisin a volume : premiere place libre (ordre d'avant la v4.15)", CL::PickSlot(Winch, Free, 5, Two, 2, FaceHalf, true) == 0
+			&& CL::PickSlot(Winch, Free, 5, Two, 2, FaceHalf, false) == 0);
 		// Separation des axes : rectangles tournes
 		CL::FRect A;
 		A.HX = 100.f;
@@ -535,6 +542,122 @@ int main()
 		const CL::FFootprint BridgeF = CL::Of(BRM::EKind::Gate, BRM::R_Bridge, BRMech::Module::Bridge, 60.f);
 		Line("modules : battant de l'aile (" + F1(Door.Solid.X1 - Door.Solid.X0) + " cm, mur de 60), sas (" + F1(Lock.Solid.X1 - Lock.Solid.X0) + " cm), passerelle (" +
 			F1(BridgeF.Solid.X1 - BridgeF.Solid.X0) + " cm)", Door.bSolid && Lock.bSolid && BridgeF.bSolid && BridgeF.Solid.X1 - BridgeF.Solid.X0 == BB::TotalLength);
+	}
+
+	// v4.15 (correctifs 3) : couloirs de visee (BRMech::Clearance::CutsFocusLane, regle de PickSlot) : le groupe du moulin du
+	// Niveau 10 (graine 1697132605, diag3/level10_focus), les poteaux en rang, les voisins muraux et le Level 6 inchanges
+	std::printf("\nH. Couloirs de visee des mecanismes (v4.15 correctifs 3)\n");
+	{
+		namespace CL = BRMech::Clearance;
+		const CL::FFootprint Board = CL::Of(BRM::EKind::Clue, BRM::R_BarnBoard, BRMech::Module::None, 60.f);
+		const CL::FFootprint Dial = CL::Of(BRM::EKind::Switch, BRM::R_MillDial, BRMech::Module::None, 60.f);
+		const CL::FFootprint Brake = CL::Of(BRM::EKind::Button, BRM::R_MillBrake, BRMech::Module::None, 60.f);
+		// ABRWorld::PlaceMission, PostSpot : poteau K d'une cellule (decalage Lateral(K) x 1,2, recule de 0,2 S), lacet donne
+		constexpr float S10 = 400.f;
+		auto Post = [](int CX, int CY, int K, float Yaw, const CL::FFootprint& Print)
+		{
+			const float R = Yaw * 3.14159265f / 180.f;
+			const float FX = std::round(std::cos(R)), FY = std::round(std::sin(R));
+			const int Step = (K + 1) / 2;
+			const float Lat = (K % 2 == 1 ? 1.f : -1.f) * static_cast<float>(Step) * 58.f * 1.2f;
+			CL::FPlaced P0;
+			P0.Frame.X = (static_cast<float>(CX) + 0.5f) * S10 - FY * Lat - FX * S10 * 0.2f;
+			P0.Frame.Y = (static_cast<float>(CY) + 0.5f) * S10 + FX * Lat - FY * S10 * 0.2f;
+			P0.Frame.Yaw = Yaw;
+			P0.Print = Print;
+			return P0;
+		};
+		// Graine 1697132605, cellule (-1, -14) : lacets tires par poteau (sels 77, 78, 79) : 270, 0, 180 (journal du jeu :
+		// moulin en (-274, -5330, 140), frein en (-126, -5330, 140))
+		const CL::FPlaced OldBoard = Post(-1, -14, 0, 270.f, Board), OldDial = Post(-1, -14, 1, 0.f, Dial), OldBrake = Post(-1, -14, 2, 180.f, Brake);
+		const BRMech::FVec3 DialAim = CL::AimPoint(OldDial), BrakeAim = CL::AimPoint(OldBrake);
+		Line("Niveau 10, placement d'avant : moulin en (" + F1(DialAim.X) + ", " + F1(DialAim.Y) + ", " + F1(DialAim.Z) + "), frein en (" + F1(BrakeAim.X) + ", " + F1(BrakeAim.Y) +
+			") (points du journal du jeu a 0,4 cm pres)", std::fabs(DialAim.X + 274.f) < 1.f && std::fabs(DialAim.Y + 5330.f) < 1.f && std::fabs(BrakeAim.X + 126.f) < 1.f
+			&& std::fabs(BrakeAim.Y + 5330.f) < 1.f && DialAim.Z == 140.f);
+		Line("Niveau 10, placement d'avant : le tableau des granges coupe le couloir du moulin et celui du frein (visee prise, PAS VISE)",
+			CL::CutsFocusLane(OldDial, OldBoard) && CL::CutsFocusLane(OldBrake, OldBoard) && !CL::CutsFocusLane(OldBoard, OldDial) && !CL::CutsFocusLane(OldBoard, OldBrake));
+		// Poteaux en rang (un lacet par cellule) : aucun couloir coupe, quel que soit le lacet et l'ordre des roles
+		const CL::FFootprint Roles[3] = { Board, Dial, Brake };
+		const int Orders[6][3] = { { 0, 1, 2 }, { 0, 2, 1 }, { 1, 0, 2 }, { 1, 2, 0 }, { 2, 0, 1 }, { 2, 1, 0 } };
+		int RowCuts = 0;
+		for (const float Yaw : { 0.f, 90.f, 180.f, 270.f })
+		{
+			for (const auto& O : Orders)
+			{
+				CL::FPlaced Row[3];
+				for (int K = 0; K < 3; ++K)
+				{
+					Row[K] = Post(-1, -14, K, Yaw, Roles[O[K]]);
+				}
+				for (int A = 0; A < 3; ++A)
+				{
+					for (int B = A + 1; B < 3; ++B)
+					{
+						RowCuts += CL::FocusClash(Row[A], Row[B]) ? 1 : 0;
+					}
+				}
+			}
+		}
+		Line("poteaux d'une cellule en rang (4 lacets x 6 ordres des roles) : aucun couloir de visee coupe (" + std::to_string(RowCuts) + ")", RowCuts == 0);
+		// Lacets tires par poteau (placement d'avant) : combinaisons ou un couloir est coupe
+		int Combos = 0;
+		for (int Y0 = 0; Y0 < 4; ++Y0)
+		{
+			for (int Y1 = 0; Y1 < 4; ++Y1)
+			{
+				for (int Y2 = 0; Y2 < 4; ++Y2)
+				{
+					const CL::FPlaced Pb = Post(-1, -14, 0, 90.f * static_cast<float>(Y0), Board), Pd = Post(-1, -14, 1, 90.f * static_cast<float>(Y1), Dial),
+						Pk = Post(-1, -14, 2, 90.f * static_cast<float>(Y2), Brake);
+					Combos += (CL::FocusClash(Pb, Pd) || CL::FocusClash(Pb, Pk) || CL::FocusClash(Pd, Pk)) ? 1 : 0;
+				}
+			}
+		}
+		Line("lacets tires par poteau (placement d'avant) : " + std::to_string(Combos) + " combinaisons sur 64 avec un couloir coupe (rang : aucune)", Combos > 0);
+		// PickSlot : le tableau pose, le moulin ne prend plus le poteau dont le couloir passe par lui ; sans place degagee, le
+		// choix d'avant (le placement n'echoue pas plus qu'avant)
+		CL::FSlot Posts[4];
+		const CL::FPlaced Ref[4] = { OldBoard, Post(-1, -14, 1, 0.f, Dial), Post(-1, -14, 2, 180.f, Dial), Post(0, -14, 0, 90.f, Dial) };
+		for (int K = 0; K < 4; ++K)
+		{
+			Posts[K].Frame = Ref[K].Frame;
+			Posts[K].bWall = false;
+			Posts[K].bOpen = K != 0;
+		}
+		const CL::FPlaced Placed1[1] = { OldBoard };
+		const int DialNew = CL::PickSlot(Dial, Posts, 4, Placed1, 1, 200.f, true);
+		const int DialOld = CL::PickSlot(Dial, Posts, 4, Placed1, 1, 200.f, false);
+		Posts[3].bOpen = false;
+		const int DialOnly = CL::PickSlot(Dial, Posts, 3, Placed1, 1, 200.f, true);
+		Line("PickSlot (moulin apres le tableau) : poteau " + std::to_string(DialNew) + " au couloir degage (avant : " + std::to_string(DialOld) + ") ; sans poteau degage : " +
+			std::to_string(DialOnly) + " (le choix d'avant, pas d'echec)", DialNew == 3 && DialOld == 1 && DialOnly == 1);
+		// Voisins muraux a 58 cm (meme face) : couloirs degages pour les boites les plus larges des groupes ; Level 6 : poste a
+		// -58 et cage a +58 (correctifs) ; porte ou passage de la mission : jamais vise
+		auto Wall = [](float Lat, const CL::FFootprint& Print)
+		{
+			CL::FPlaced P0;
+			P0.Frame.X = Lat;
+			P0.Frame.Y = 145.f;
+			P0.Frame.Yaw = -90.f;
+			P0.Print = Print;
+			return P0;
+		};
+		const CL::FFootprint Wide[4] = { Dial, Board, CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::None, 60.f), CL::Of(BRM::EKind::Switch, BRM::R_CodeDial, BRMech::Module::None, 60.f) };
+		bool bSide = true;
+		for (const CL::FFootprint& A0 : Wide)
+		{
+			for (const CL::FFootprint& B0 : Wide)
+			{
+				bSide = bSide && !CL::FocusClash(Wall(0.f, A0), Wall(58.f, B0));
+			}
+		}
+		const CL::FFootprint Cage = CL::Of(BRM::EKind::Observe, BRM::R_LidarCage, BRMech::Module::None, 60.f);
+		const CL::FFootprint LPost = CL::Of(BRM::EKind::Crank, BRM::R_LidarPost, BRMech::Module::None, 60.f);
+		const CL::FFootprint Gate = CL::Of(BRM::EKind::Gate, BRM::R_ReserveLights, BRMech::Module::None, 60.f);
+		Line("voisins muraux a 58 cm (moulin, tableau, vanne, cadran) : couloirs degages ; Level 6 : poste a -58, cage a +58 : degages", bSide
+			&& !CL::FocusClash(Wall(-58.f, LPost), Wall(58.f, Cage)));
+		Line("porte ou passage de la mission (boite sans collision) : ne prend pas la visee, n'a pas de couloir", !Gate.bAimable && !CL::FocusClash(Wall(0.f, Gate), Wall(0.f, Board))
+			&& CL::FocusClash(Wall(0.f, Board), Wall(0.f, Dial)));
 	}
 
 	std::printf("\nRESULTAT : %s (%d verifications, %d echec(s))\n", GFailures == 0 ? "OK" : "ECHEC", GChecks, GFailures);

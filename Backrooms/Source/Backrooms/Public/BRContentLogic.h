@@ -53,7 +53,8 @@ namespace BRContent
 	constexpr int ChapterEndTarget = 998;
 	/** Version du protocole reseau (une partie ne melange pas deux versions). v4.14 : 414 (visee du scanner validee par
 	 *  l'hote, ServerLidarAim). v4.15 : 415 (parcours lineaire : FBRNetLevel::Flags, il change la generation ; places des
-	 *  mecanismes, PlaceVersion 3 : postes du Level 6 hors de leur cage, rochers du Niveau 8 et maison du Niveau 9 ecartes) */
+	 *  mecanismes, PlaceVersion 3 : postes du Level 6 hors de leur cage, rochers du Niveau 8 et maison du Niveau 9 ecartes ;
+	 *  correctifs 3 : couloirs de visee degages, poteaux d'une cellule en rang, dans la meme version 3 pas encore distribuee) */
 	constexpr int NetVersion = 415;
 
 	bool IsKnown(int Level);

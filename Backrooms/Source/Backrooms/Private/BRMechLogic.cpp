@@ -299,6 +299,42 @@ namespace BRMech
 				const float DY = MaxF(MaxF(B.Y0 - LY, 0.f), LY - B.Y1);
 				return std::sqrt(DX * DX + DY * DY);
 			}
+			/** v4.15 (correctifs 3) : distance d'un point a une boite alignee de centre C et de demi-tailles E (meme repere) */
+			float DistToBox(const FVec3& P, const FVec3& C, const FVec3& E)
+			{
+				const float DX = MaxF(AbsF(P.X - C.X) - E.X, 0.f);
+				const float DY = MaxF(AbsF(P.Y - C.Y) - E.Y, 0.f);
+				const float DZ = MaxF(AbsF(P.Z - C.Z) - E.Z, 0.f);
+				return std::sqrt(DX * DX + DY * DY + DZ * DZ);
+			}
+			/** v4.15 (correctifs 3) : distance d'un segment A-B a une boite alignee. Fonction convexe du parametre (distance a un
+			 *  convexe le long d'une droite) : recherche ternaire a nombre de pas fixe, memes operations chez tous */
+			float SegToBox(const FVec3& A, const FVec3& B, const FVec3& C, const FVec3& E)
+			{
+				auto At = [&](float T)
+				{
+					FVec3 P;
+					P.X = A.X + (B.X - A.X) * T;
+					P.Y = A.Y + (B.Y - A.Y) * T;
+					P.Z = A.Z + (B.Z - A.Z) * T;
+					return DistToBox(P, C, E);
+				};
+				float Lo = 0.f, Hi = 1.f;
+				for (int I = 0; I < 48; ++I)
+				{
+					const float M1 = Lo + (Hi - Lo) / 3.f;
+					const float M2 = Hi - (Hi - Lo) / 3.f;
+					if (At(M1) <= At(M2))
+					{
+						Hi = M2;
+					}
+					else
+					{
+						Lo = M1;
+					}
+				}
+				return MinF(MinF(At(0.f), At(1.f)), At((Lo + Hi) * 0.5f));
+			}
 			/** Me gene par le volume de Other : point vise dedans, ou place debout devant lui coupee */
 			bool Hinders(const FPlaced& Me, const FPlaced& Other)
 			{
@@ -478,8 +514,10 @@ namespace BRMech
 				break;
 			case EKind::Gate:
 			{
-				// Rien a viser ; les portes et passages fermes devant une sortie bloquent le passage
+				// Rien a viser ; les portes et passages fermes devant une sortie bloquent le passage. v4.15 (correctifs 3) : leur
+				// boite visee n'a pas de collision (ABRMissionDevice::SetShown) : elle ne prend pas la visee d'un voisin
 				F.AimExtent = V3(1.f, 1.f, 1.f);
+				F.bAimable = false;
 				if (ModuleId == Module::Bridge)
 				{
 					F.bSolid = true;
@@ -545,6 +583,44 @@ namespace BRMech
 			return AZ0 < BZ1 && BZ0 < AZ1 && Overlap(RectOf(A.Frame, A.Print.Solid), RectOf(B.Frame, B.Print.Solid));
 		}
 
+		bool CutsFocusLane(const FPlaced& Me, const FPlaced& Other)
+		{
+			if (!Me.Print.bAimable)
+			{
+				return false; // rien a viser (porte ou passage de la mission)
+			}
+			// Couloir de Me, exprime dans le repere de Other (lacets au quart de tour, comme RectOf) : du point vise vers les
+			// yeux d'un joueur debout a la place ordinaire, et vers ce meme point a hauteur du point vise
+			const FVec3 P = AimPoint(Me);
+			float SX = 0.f, SY = 0.f;
+			Me.Frame.ToWorld(Me.Print.Aim.X + StandRange, Me.Print.Aim.Y, SX, SY);
+			FVec3 A, Eye, Level;
+			Other.Frame.ToLocal(P.X, P.Y, A.X, A.Y);
+			A.Z = P.Z - Other.Frame.Z;
+			Other.Frame.ToLocal(SX, SY, Eye.X, Eye.Y);
+			Eye.Z = Me.Frame.Z + StandEye - Other.Frame.Z;
+			Level = Eye;
+			Level.Z = A.Z;
+			const float Limit = FocusSweep + Margin;
+			auto Cut = [&](const FVec3& C, const FVec3& E) { return SegToBox(A, Eye, C, E) < Limit || SegToBox(A, Level, C, E) < Limit; };
+			if (Other.Print.bAimable && Cut(Other.Print.Aim, Other.Print.AimExtent))
+			{
+				return true;
+			}
+			if (Other.Print.bSolid)
+			{
+				// Le volume d'un voisin (cage, porte fermee, module) coupe la vue de l'hote et la visee du client
+				const FBox& S = Other.Print.Solid;
+				return Cut(V3((S.X0 + S.X1) * 0.5f, (S.Y0 + S.Y1) * 0.5f, (S.Z0 + S.Z1) * 0.5f), V3(AbsF(S.X1 - S.X0) * 0.5f, AbsF(S.Y1 - S.Y0) * 0.5f, AbsF(S.Z1 - S.Z0) * 0.5f));
+			}
+			return false;
+		}
+
+		bool FocusClash(const FPlaced& A, const FPlaced& B)
+		{
+			return CutsFocusLane(A, B) || CutsFocusLane(B, A);
+		}
+
 		bool Overlap(const FRect& A, const FRect& B)
 		{
 			const float RA = MechImpl::Rad(A.Yaw), RB = MechImpl::Rad(B.Yaw);
@@ -597,9 +673,11 @@ namespace BRMech
 			return RectOf(F, Box(-12.f, -HY, 0.f, StandDepth + 40.f, HY, 0.f));
 		}
 
-		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf)
+		int PickSlot(const FFootprint& Print, const FSlot* Slots, int NumSlots, const FPlaced* Placed, int NumPlaced, float FaceHalf, bool bFocusLanes)
 		{
 			const float SolidHalf = Print.bSolid ? MaxF(AbsF(Print.Solid.Y0), AbsF(Print.Solid.Y1)) : 0.f;
+			// v4.15 (correctifs 3) : premier passage avec les couloirs de visee, puis, s'il ne trouve rien, le choix d'avant
+			bool bLanes = bFocusLanes;
 			auto Usable = [&](int I)
 			{
 				const FSlot& S = Slots[I];
@@ -617,7 +695,7 @@ namespace BRMech
 				Me.Print = Print;
 				for (int J = 0; J < NumPlaced; ++J)
 				{
-					if (Clash(Me, Placed[J]))
+					if (Clash(Me, Placed[J]) || (bLanes && FocusClash(Me, Placed[J])))
 					{
 						return false;
 					}
@@ -629,42 +707,54 @@ namespace BRMech
 			{
 				S.Frame.ToWorld(0.f, -S.Lateral, OutX, OutY);
 			};
-			for (int I = 0; I < NumSlots; ++I)
+			auto Pick = [&]() -> int
 			{
-				if (!Usable(I))
+				for (int I = 0; I < NumSlots; ++I)
 				{
-					continue;
-				}
-				if (!Print.bSolid || !Slots[I].bWall)
-				{
-					return I;
-				}
-				// v4.15 (correctifs) : un volume mural se pose au bout de sa face ou il tient (le plus grand decalage lateral,
-				// le premier dans l'ordre a egalite) : le reste de la face est d'un seul tenant. Au Level 6, la cage a +-58 et
-				// son poste a -+58 (diag_v413_4) : sa place ordinaire, 110 cm devant lui, est a 87 cm du mur voisin. Avant :
-				// cage au centre, poste a +-116, a 29 cm du mur voisin : place ordinaire coupee par ce mur, place de biais qui
-				// frolait la cage (vue de l'hote ou visee du client prises par elle)
-				float CX = 0.f, CY = 0.f;
-				FaceCenter(Slots[I], CX, CY);
-				const float Turn = QuarterYaw(Slots[I].Frame.Yaw);
-				int Best = I;
-				for (int J = I + 1; J < NumSlots; ++J)
-				{
-					const FSlot& T = Slots[J];
-					if (!T.bWall || QuarterYaw(T.Frame.Yaw) != Turn || AbsF(T.Lateral) <= AbsF(Slots[Best].Lateral) + 0.01f)
+					if (!Usable(I))
 					{
 						continue;
 					}
-					float TX = 0.f, TY = 0.f;
-					FaceCenter(T, TX, TY);
-					if (AbsF(TX - CX) < 1.f && AbsF(TY - CY) < 1.f && Usable(J))
+					if (!Print.bSolid || !Slots[I].bWall)
 					{
-						Best = J;
+						return I;
 					}
+					// v4.15 (correctifs) : un volume mural se pose au bout de sa face ou il tient (le plus grand decalage lateral,
+					// le premier dans l'ordre a egalite) : le reste de la face est d'un seul tenant. Au Level 6, la cage a +-58 et
+					// son poste a -+58 (diag_v413_4) : sa place ordinaire, 110 cm devant lui, est a 87 cm du mur voisin. Avant :
+					// cage au centre, poste a +-116, a 29 cm du mur voisin : place ordinaire coupee par ce mur, place de biais qui
+					// frolait la cage (vue de l'hote ou visee du client prises par elle)
+					float CX = 0.f, CY = 0.f;
+					FaceCenter(Slots[I], CX, CY);
+					const float Turn = QuarterYaw(Slots[I].Frame.Yaw);
+					int Best = I;
+					for (int J = I + 1; J < NumSlots; ++J)
+					{
+						const FSlot& T = Slots[J];
+						if (!T.bWall || QuarterYaw(T.Frame.Yaw) != Turn || AbsF(T.Lateral) <= AbsF(Slots[Best].Lateral) + 0.01f)
+						{
+							continue;
+						}
+						float TX = 0.f, TY = 0.f;
+						FaceCenter(T, TX, TY);
+						if (AbsF(TX - CX) < 1.f && AbsF(TY - CY) < 1.f && Usable(J))
+						{
+							Best = J;
+						}
+					}
+					return Best;
 				}
-				return Best;
+				return -1;
+			};
+			const int First = Pick();
+			if (First >= 0 || !bLanes)
+			{
+				return First;
 			}
-			return -1;
+			// Aucun emplacement au couloir degage : le choix sans les couloirs (le placement n'echoue pas plus qu'avant ;
+			// l'invariant du placement le journalise)
+			bLanes = false;
+			return Pick();
 		}
 	}
 }

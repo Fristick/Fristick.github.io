@@ -888,8 +888,9 @@ bool HasMission(int Level)
 
 bool PlacementMoved(int Level, int FromVersion)
 {
-	// v4.15 : version 3 : seul le placement du Level 6 change (postes et cages, salle de l'aile) depuis la 2 ; avant la 2
-	// (v4.11) ou version inconnue (plus recente) : tous les niveaux
+	// v4.15 : version 3 : seul le placement du Level 6 change en entier (postes et cages, salle de l'aile) depuis la 2 ; avant
+	// la 2 (v4.11) ou version inconnue (plus recente) : tous les niveaux. v4.15 (correctifs 3) : ailleurs, depuis la 2, selon
+	// la graine (couloirs de visee, poteaux en rang) : l'hote compare les deux placements (ABRWorld::SetupMission)
 	if (FromVersion == PlaceVersion)
 	{
 		return false;
