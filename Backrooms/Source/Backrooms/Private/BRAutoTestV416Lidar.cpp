@@ -259,8 +259,9 @@ namespace BRTestV416Lidar
 					R.DoorOnLeaf += (T.bLeaf && Ld <= 1.5f) ? 1 : 0;
 				}
 			}
-			// Ouverture vide (porte partie de sa pose fermee) : rien sauf le battant lui-meme
-			if (P.Progress > 0.05f && InDoorway(D, T.At) && (!P.bLeaf || LeafDistance(P.Leaf, T.At) > 4.f))
+			// Ouverture vide (porte partie de sa pose fermee) : rien sauf le battant lui-meme (une entite qui passe dans
+			// l'ouverture y est vraiment : ses croix ne sont pas un faux mur)
+			if (T.Category != BRLidar::Entity && P.Progress > 0.05f && InDoorway(D, T.At) && (!P.bLeaf || LeafDistance(P.Leaf, T.At) > 4.f))
 			{
 				++R.InDoorway;
 			}
