@@ -16,6 +16,13 @@
 //     chunks BRExit_42 en (4000, -5400, 0), enterree dans le rocher de sa paroi avant 55974b4 : point vise par le depart de
 //     groupe et capsule du grimpeur libres, approche a pied, visee, montee jusqu'au sommet avec une seule demande, arrivee au
 //     Niveau 9. En reseau (-BRNetTest, AddNetV415FixSteps) : hote au sommet, client a 3 m devant, rassemblement 2/2 puis depart.
+//   - v4.15 (correctifs 5) : Niveau 37 (Poolrooms), graine du niveau 115083815 (final3/v412 et full), partie classique : plus
+//     d'echelle des chunks vers le Niveau 2 en (-3250, -1560, 0), au fond du canal contre la marche immergee d'un trottoir
+//     lateral (capsule du grimpeur prise avant BRMech::Grid::StandFlat) ; l'echelle du chunk (-1, -1) (banc : (-1250, -1560, 68),
+//     sur son trottoir) et toutes celles des chunks construits ont leur point vise et leur capsule libres ; constat de la prise
+//     depuis le canal sous le trottoir ; approche a pied, visee, avancer 0,5 s apres la prise, sommet, une demande, arrivee au
+//     Niveau 2. En reseau : graine du niveau 2303284074 (net_final3), memes echelles tirees chez l'hote et le client (empreinte),
+//     aucune aux places signalees, celles des chunks construits libres.
 // Les memes etapes font partie de -BRAutoTestV411 (AddMissionSteps : places des mecanismes de chaque niveau), de
 // -BRAutoTestV412 (Poolrooms) et de -BRAutoTestV413 (Level 6), donc du test complet : cette suite n'y est pas ajoutee une
 // seconde fois (les etapes des correctifs 4, Niveau 2 et Niveau 8, ne sont que dans cette suite et dans -BRNetTest). Une
@@ -25,6 +32,7 @@
 #include "BRAutoTestWalk.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
+#include "BRChunk.h"
 #include "BREntity.h"
 #include "BRGatherLogic.h"
 #include "BRInteractables.h"
@@ -40,6 +48,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/PlatformTime.h"
+#include "Misc/Crc.h"
 
 namespace BRTestV415Fix
 {
@@ -169,8 +178,9 @@ namespace BRTestV415Fix
 	}
 
 	/** Place debout (centre de la capsule) sur le sol de cette cellule ou pres de son centre, au niveau du pied de l'echelle
-	 *  (a 40 cm pres), chunk construit, capsule libre ; false sinon */
-	bool StandIn(const ABRWorld* W, const ABRCharacter* C, const FVector& P, FVector& Out)
+	 *  (a MaxDZ pres : 40 cm ; v4.15 correctifs 5 : Niveau 37, 75 cm, le canal sous un trottoir de 68 cm), chunk construit,
+	 *  capsule libre ; false sinon */
+	bool StandIn(const ABRWorld* W, const ABRCharacter* C, const FVector& P, FVector& Out, float MaxDZ = 40.f)
 	{
 		const float Half = C->GetSimpleCollisionHalfHeight();
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestLadderStand), false, C);
@@ -178,7 +188,7 @@ namespace BRTestV415Fix
 		{
 			const FVector At = P + Off;
 			float FloorZ = 0.f;
-			if (!W->IsChunkLoaded(W->CellToChunk(W->WorldToCell(At))) || !BRTestV412::FloorUnder(W, At, FootZ + 100.f, C, FloorZ) || FMath::Abs(FloorZ - FootZ) > 40.f)
+			if (!W->IsChunkLoaded(W->CellToChunk(W->WorldToCell(At))) || !BRTestV412::FloorUnder(W, At, FootZ + 100.f, C, FloorZ) || FMath::Abs(FloorZ - FootZ) > MaxDZ)
 			{
 				continue;
 			}
@@ -193,8 +203,9 @@ namespace BRTestV415Fix
 	}
 
 	/** Depart de l'approche a pied : une cellule a ApproachCells pas de grille (ABRWorld::CanStep, parcours en largeur dans l'ordre
-	 *  des voisins) de la cellule devant l'echelle, sinon la plus lointaine trouvee ; false : aucune (on marche d'ou l'on est) */
-	bool ApproachStart(const ABRWorld* W, const ABRCharacter* C, const FIntPoint& Front, FVector& Out)
+	 *  des voisins) de la cellule devant l'echelle, sinon la plus lointaine trouvee ; false : aucune (on marche d'ou l'on est).
+	 *  MaxDZ : StandIn */
+	bool ApproachStart(const ABRWorld* W, const ABRCharacter* C, const FIntPoint& Front, FVector& Out, float MaxDZ = 40.f)
 	{
 		const FIntPoint Steps4[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
 		TArray<TPair<FIntPoint, int32>> Queue;
@@ -224,7 +235,7 @@ namespace BRTestV415Fix
 		{
 			for (const TPair<FIntPoint, int32>& Q : Queue)
 			{
-				if (Q.Value == Depth && StandIn(W, C, W->CellCenter(Q.Key, FootZ), Out))
+				if (Q.Value == Depth && StandIn(W, C, W->CellCenter(Q.Key, FootZ), Out, MaxDZ))
 				{
 					ApproachFrom = static_cast<float>(Depth);
 					return true;
@@ -278,6 +289,165 @@ namespace BRTestV415Fix
 		return FString::Printf(TEXT("echelle vers le Niveau %d (%s) en (%.0f, %.0f, %.0f), paroi de la cellule (%d, %d), sommet de la montee a %.0f cm du pied ; point vise par le depart de "
 			"groupe (%.0f, %.0f, %.0f) %s ; capsule du grimpeur a l'accroche %s"), Exit->Target, *Exit->GetName(), L.X, L.Y, L.Z, W->WorldToCell(L - LadderFront(Exit) * 30.f).X,
 			W->WorldToCell(L - LadderFront(Exit) * 30.f).Y, Exit->GetClimbTopZ() - L.Z, Aim.X, Aim.Y, Aim.Z, *View, *Climb);
+	}
+
+	/** v4.15 (correctifs 5) : une echelle des chunks a monter apres l'etape qui l'a trouvee et jugee (Ladder, bLadderOk, FootZ,
+	 *  TopZ) : niveau et cible, nom dans les notes, captures ; avancer HoldDelay secondes apres la prise seulement (UpdateClimb
+	 *  tire vers l'accroche des la prise, sans entree : diag5, montee bloquee contre une marche) ; StandDZ : StandIn de
+	 *  l'approche (Niveau 37 : depart dans le canal sous un trottoir) */
+	struct FClimbCase
+	{
+		int32 Level = 8;
+		int32 Target = 9;
+		const TCHAR* Name = TEXT("BRExit_42");
+		const TCHAR* ShotTag = TEXT("niveau8");
+		float HoldDelay = 0.f;
+		float StandDZ = 40.f;
+	};
+
+	/** v4.15 (correctifs 5) : place de l'approche devant l'echelle : 90 cm devant l'accroche (comme AddWalkExitSteps), plus pres si
+	 *  le sol n'y est plus a la hauteur du pied (Niveau 37 : echelle sur son trottoir de 120 cm, marche immergee au-dela) : centre
+	 *  et bord avant de la capsule du joueur au-dessus du sol du pied. OutRadius : rayon d'arrivee de la marche (60 cm ; 30 cm plus
+	 *  pres : l'arrivee ne se fait jamais sur la marche, ou la montee s'arreterait au bord du trottoir) */
+	float ApproachAhead(const ABRWorld* W, const ABRExit* Exit, float InFootZ, float& OutRadius)
+	{
+		const FVector A = Exit->GetClimbAnchor();
+		const FVector F = LadderFront(Exit);
+		for (const float Ahead : { 90.f, 70.f, 50.f })
+		{
+			const float Z0 = W->FloorZAt(A + F * Ahead);
+			const float Z1 = W->FloorZAt(A + F * (Ahead + BRMech::Clearance::PlayerRadius));
+			if (FMath::Abs(Z0 - InFootZ) < 1.f && FMath::Abs(Z1 - InFootZ) < 1.f)
+			{
+				OutRadius = 60.f;
+				return Ahead;
+			}
+		}
+		OutRadius = 30.f;
+		return BRMech::Clearance::PlayerRadius;
+	}
+
+	// v4.15 (correctifs 5) : echelles des chunks du Niveau 37 (Poolrooms, partie classique) vers le Niveau 2. final3/v412 et full :
+	// graine du niveau 115083815, BRExit_2 / BRExit_244 en (-3250, -1560, 0), pied au fond du canal contre la marche immergee du
+	// trottoir d'un mur lateral ("echelle prise dans BRChunk_19 (InstancedStaticMeshComponent_6)") ; net_final3 : graine du niveau
+	// 2303284074, (-7750, 4560, 0) et (11750, -2060, 0). Places de la regle du jeu (BRMech::Grid::StandFlat ; banc
+	// Tools/Departure/test_departure.cpp, section 5, sans les cellules de la mission) : (-1250, -1560, 68), (-7560, 6750, 68),
+	// (11750, -1560, 0)
+	constexpr uint32 Pool37Seed = 115083815u;
+	constexpr uint32 Pool37NetSeed = 2303284074u;
+	constexpr int32 Pool37Target = 2;
+	struct FSpot
+	{
+		double X;
+		double Y;
+		double Z;
+	};
+	constexpr FSpot Pool37Old = { -3250.0, -1560.0, 0.0 };
+	constexpr FSpot Pool37New = { -1250.0, -1560.0, 68.0 };
+	constexpr FSpot Pool37NetOld[2] = { { -7750.0, 4560.0, 0.0 }, { 11750.0, -2060.0, 0.0 } };
+	constexpr FSpot Pool37NetNew[2] = { { -7560.0, 6750.0, 68.0 }, { 11750.0, -1560.0, 0.0 } };
+	/** Chunks autour du depart dont le tirage est rejoue (les places de net_final3 sont a 2 chunks du depart) */
+	constexpr int32 Pool37Range = 3;
+	/** Barrieres du test reseau du Niveau 37 ; le client envoie l'empreinte de ses echelles : MarkNet37Hash + empreinte % 1000000 */
+	constexpr int32 MarkNet37Start = 4157;
+	constexpr int32 MarkNet37NoLevel = 4158;
+	constexpr int32 MarkNet37Hash = 1000000;
+	/** Etat du constat de la prise depuis le canal et du test reseau du Niveau 37 */
+	int32 CanalPhase = 0;
+	FVector CanalStand = FVector::ZeroVector;
+	float CanalStartZ = 0.f;
+	FString Pool37Text;
+	uint32 Pool37Hash = 0;
+	int32 Pool37Count = 0;
+
+	FVector SpotOf(const FSpot& S)
+	{
+		return FVector(S.X, S.Y, S.Z);
+	}
+
+	/** Echelles posees par les chunks (proprietaire ABRChunk) vers Target ; Chunk : seulement celles de ce chunk */
+	void ChunkLadders(UWorld* World, int32 Target, const FIntPoint* Chunk, TArray<ABRExit*>& Out)
+	{
+		Out.Reset();
+		for (TActorIterator<ABRExit> It(World); It; ++It)
+		{
+			const ABRChunk* Owner = Cast<ABRChunk>(It->GetOwner());
+			if (Owner && (Target < 0 || It->Target == Target) && It->IsClimbable() && (!Chunk || Owner->Coord == *Chunk))
+			{
+				Out.Add(*It);
+			}
+		}
+	}
+
+	/** Echelles vers Target tirees par les chunks de -Range a Range (hors depart) avec les regles du jeu, sans les construire
+	 *  (ABRWorld::IsChunkExitDrawn et PickChunkWallFace, pied comme ABRChunk::PlanExits ; le Niveau 37 n'a pas de cachette) ;
+	 *  OutText : leurs pieds dans l'ordre du balayage, OutHash : empreinte de ce texte (identique chez l'hote et le client) */
+	void PlannedLadders(const ABRWorld* W, int32 Target, int32 Range, TArray<FVector>& Out, FString& OutText, uint32& OutHash)
+	{
+		Out.Reset();
+		OutText.Reset();
+		const FBRLevelDef& D = W->Def();
+		for (int32 CX = -Range; CX <= Range; ++CX)
+		{
+			for (int32 CY = -Range; CY <= Range; ++CY)
+			{
+				for (int32 I = 0; I < D.Exits.Num(); ++I)
+				{
+					BRMech::Grid::FWallFace Face;
+					const FIntPoint Chunk(CX, CY);
+					if (D.Exits[I].Style != EBRExitStyle::Ladder || D.Exits[I].Target != Target || !W->IsChunkExitDrawn(Chunk, I) || !W->PickChunkWallFace(Chunk, I, nullptr, Face))
+					{
+						continue;
+					}
+					const FVector Dir(BRMech::Grid::DirX[Face.Dir], BRMech::Grid::DirY[Face.Dir], 0.f);
+					const float Inset = Face.bSolid ? 0.f : D.WallThickness * 0.5f;
+					FVector Foot = W->CellCenter(FIntPoint(Face.CellX, Face.CellY), 0.f) + Dir * (D.CellSize * 0.5f - Inset);
+					Foot.Z = W->FloorZAt(Foot - Dir * BRMech::Grid::FootProbe);
+					Out.Add(Foot);
+					OutText += FString::Printf(TEXT("%s(%.0f, %.0f, %.0f)"), OutText.IsEmpty() ? TEXT("") : TEXT(" "), Foot.X, Foot.Y, Foot.Z);
+				}
+			}
+		}
+		OutHash = FCrc::StrCrc32(*OutText);
+	}
+
+	/** Une echelle de la liste a moins de Tol cm (a l'horizontale) de P ; OutAt : son pied */
+	bool NearSpot(const TArray<FVector>& Feet, const FVector& P, double Tol, FVector* OutAt = nullptr)
+	{
+		for (const FVector& F : Feet)
+		{
+			if (FVector::Dist2D(F, P) < Tol)
+			{
+				if (OutAt)
+				{
+					*OutAt = F;
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Les echelles des chunks construits (toutes cibles) jugees comme ABRExit::CheckDepartureViewPoint : nombre, prises, et
+	 *  la description des prises */
+	int32 TakenLadders(UWorld* World, const ABRWorld* W, int32& OutCount, FString& OutWhat)
+	{
+		TArray<ABRExit*> All;
+		ChunkLadders(World, -1, nullptr, All);
+		OutCount = All.Num();
+		OutWhat.Reset();
+		int32 Taken = 0;
+		for (const ABRExit* E : All)
+		{
+			bool bFree = false;
+			const FString R = LadderReport(World, W, E, bFree);
+			if (!bFree)
+			{
+				++Taken;
+				OutWhat += (OutWhat.IsEmpty() ? TEXT("") : TEXT(" | ")) + R;
+			}
+		}
+		return Taken;
 	}
 }
 
@@ -558,7 +728,299 @@ void ABRAutoTest::AddV415FixSteps()
 		return true;
 	});
 	LimitLastStep(40.f);
-	Add(TEXT("v4.15 correctifs 4 : echelle BRExit_42 du Niveau 8, approche, visee et montee"), 0.f, [this]()
+	// v4.15 (correctifs 5) : approche, visee et montee d'une echelle des chunks, partagees par le Niveau 8 (BRExit_42) et le
+	// Niveau 37 (echelle du chunk (-1, -1)) : memes notes pour le Niveau 8 (Case.Name, Case.ShotTag)
+	auto AddLadderClimb = [this](const BRTestV415Fix::FClimbCase& Case, const FString& Title)
+	{
+		Add(Title, 0.f, [this, Case]()
+		{
+			using namespace BRTestV415Fix;
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			if (!W || !C)
+			{
+				return false;
+			}
+			ABRExit* Exit = Ladder.Get();
+			if (Phase == 0 && (!Exit || !bLadderOk))
+			{
+				if (Exit)
+				{
+					Skip(FString::Printf(TEXT("echelle %s : place prise (notee plus haut) : approche et montee non tentees"), Case.Name));
+				}
+				return true; // echelle introuvable : NON VERIFIE plus haut
+			}
+			const double Now = FPlatformTime::Seconds();
+			const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
+			const float Half = C->GetSimpleCollisionHalfHeight();
+			auto Stop = [&]()
+			{
+				BRTestV412::ReleaseJump(C);
+				Phase = 0;
+				return true;
+			};
+			if (!Exit && Phase <= 3)
+			{
+				Note(FString::Printf(TEXT("echelle %s disparue pendant l'approche (chunk retire ?)"), Case.Name), true);
+				return Stop();
+			}
+			switch (Phase)
+			{
+			case 0:
+			{
+				// La sortie est gardee par la mission du niveau : resolue par l'hote (seule l'echelle est jugee ici). Depart de
+				// l'approche a ApproachCells cellules de la grille devant l'echelle (mise en place, pas une marche)
+				W->DebugCompleteMission();
+				float Radius = 60.f;
+				const FVector Goal = Exit->GetClimbAnchor() + LadderFront(Exit) * ApproachAhead(W, Exit, FootZ, Radius);
+				FVector Start;
+				ApproachFrom = 0.f;
+				if (ApproachStart(W, C, W->WorldToCell(Goal), Start, Case.StandDZ))
+				{
+					PlaceStand(C, Start, Goal);
+				}
+				RequestsMark = C->ClimbRequestsSent;
+				MaxZ = -1.0e9f;
+				Clock = Now;
+				Phase = 1;
+				return false;
+			}
+			case 1:
+			{
+				if (Now - Clock < 0.5)
+				{
+					return false;
+				}
+				float Radius = 60.f;
+				const FVector Goal = Exit->GetClimbAnchor() + LadderFront(Exit) * ApproachAhead(W, Exit, FootZ, Radius);
+				BRTestV412::BeginWalk(W, C, FVector(Goal.X, Goal.Y, FootZ + Half), Radius, true, true, FootZ);
+				Phase = 2;
+				return false;
+			}
+			case 2:
+			{
+				const BRTestV412::EWalk R = BRTestV412::StepWalk(W, C, Dt, 120.0, C->GetScareKind() >= 0 || C->IsInputLocked());
+				if (R == BRTestV412::EWalk::Moving)
+				{
+					return false;
+				}
+				BRTestV412::ReleaseJump(C);
+				const FIntPoint Cell = W->WorldToCell(C->GetActorLocation());
+				if (R == BRTestV412::EWalk::Stuck && BRTestV412::Walk.bEntityBlock)
+				{
+					Skip(FString::Printf(TEXT("echelle %s : approche NON VERIFIEE a pied (cellule %d, %d) : une entite seule barre le passage : %s"), Case.Name, Cell.X, Cell.Y,
+						*BRTestV412::WalkStats()));
+					return Stop();
+				}
+				if (R == BRTestV412::EWalk::Stuck)
+				{
+					Note(FString::Printf(TEXT("echelle %s : approche a pied BLOQUEE a la cellule (%d, %d), pieds a %.0f cm (attendu %.0f), depuis %.0f cellule(s) : %s"), Case.Name, Cell.X,
+						Cell.Y, C->GetActorLocation().Z - Half, FootZ, ApproachFrom, *BRTestV412::WalkStats()), true);
+					Shot(FString::Printf(TEXT("v415fix_%s_approche_bloquee"), Case.ShotTag));
+					return Stop();
+				}
+				Note(FString::Printf(TEXT("echelle %s : pied de l'echelle atteint a pied depuis %.0f cellule(s) de la grille : %s"), Case.Name, ApproachFrom, *BRTestV412::WalkStats()),
+					BRTestV412::Walk.Teleports > 0);
+				Clock = Now;
+				Phase = 3;
+				return false;
+			}
+			case 3:
+			{
+				// La touche d'interaction sur l'echelle visee (comme AddWalkExitSteps)
+				FaceTo(C, LadderAim(Exit));
+				if (Now - Clock < 0.15)
+				{
+					return false;
+				}
+				if (C->FocusActor.Get() != Exit)
+				{
+					if (Now - Clock < 2.0)
+					{
+						return false;
+					}
+					Note(FString::Printf(TEXT("echelle %s PAS VISEE par l'interaction depuis son pied (vise : %s)"), Case.Name, *BRTestV412::FocusName(W, C->FocusActor.Get())), true);
+					Shot(FString::Printf(TEXT("v415fix_%s_pas_visee"), Case.ShotTag));
+					return Stop();
+				}
+				C->Interact();
+				Clock = Now;
+				Phase = 4;
+				return false;
+			}
+			case 4:
+			{
+				// On grimpe en avancant jusqu'au depart (une seule demande au sommet ; seul, le depart est immediat). v4.15
+				// (correctifs 5) : Niveau 37, avancer seulement HoldDelay secondes apres la prise (le grimpeur est deja tire vers
+				// l'accroche : avant StandFlat, la marche laterale l'arretait la)
+				if (W->IsTransitioning() || W->GetLevelNumber() != Case.Level || W->IsChapterEnd())
+				{
+					Clock = Now;
+					Phase = 5;
+					return false;
+				}
+				MaxZ = FMath::Max(MaxZ, static_cast<float>(C->GetActorLocation().Z));
+				if (!C->IsClimbing())
+				{
+					if (Now - Clock > 1.0)
+					{
+						Note(FString::Printf(TEXT("echelle %s visee mais PAS PRISE par l'interaction"), Case.Name), true);
+						return Stop();
+					}
+					return false;
+				}
+				if (Now - Clock >= Case.HoldDelay)
+				{
+					C->InputMove(FVector2D(0.f, 1.f));
+				}
+				if (Now - Clock > 30.0)
+				{
+					const UPrimitiveComponent* Block = C->ClimbBlocker.Get();
+					Note(FString::Printf(TEXT("echelle %s : pas de depart apres 30 s sur l'echelle (attente %d, demandes %d ; centre au plus haut a %.0f cm du pied, sommet a %.0f ; "
+						"dernier obstacle : %s)"), Case.Name, static_cast<int32>(C->GetClimbWaitState()), C->ClimbRequestsSent - RequestsMark, MaxZ - FootZ, TopZ - FootZ,
+						Block ? *FString::Printf(TEXT("%s (%s)"), *GetNameSafe(Block->GetOwner()), *Block->GetName()) : TEXT("aucun")), true);
+					Shot(FString::Printf(TEXT("v415fix_%s_montee"), Case.ShotTag));
+					return Stop();
+				}
+				return false;
+			}
+			default:
+			{
+				// Arrivee (niveau suivant, redirige, ou fin du contenu disponible)
+				const BRContent::FExitResolution Res = BRLevels::ResolveExit(Case.Level, Case.Target);
+				const bool bEnd = Res.Kind == BRContent::EExit::ChapterEnd;
+				const bool bThere = bEnd ? W->IsChapterEnd() : (!W->IsTransitioning() && W->IsLevelReady() && W->GetLevelNumber() == Res.Target);
+				if (!bThere && Now - Clock < 40.0)
+				{
+					return false;
+				}
+				const int32 Requests = C->ClimbRequestsSent - RequestsMark;
+				const bool bTop = MaxZ >= TopZ - 2.f;
+				const bool bOk = bThere && Requests == 1 && bTop;
+				Note(FString::Printf(TEXT("echelle %s visee et montee : centre du grimpeur au plus haut a %.0f cm du pied (sommet de la montee a %.0f cm) %s, demandes de depart au "
+					"sommet %d (attendu 1), %s %s"), Case.Name, MaxZ - FootZ, TopZ - FootZ, bTop ? TEXT("atteint") : TEXT("NON ATTEINT"), Requests,
+					bEnd ? TEXT("fin du contenu disponible") : *FString::Printf(TEXT("arrivee au Niveau %d"), Res.Target), Oui(bThere)), !bOk);
+				if (bEnd && W->IsChapterEnd())
+				{
+					W->CloseEnding(false);
+				}
+				return Stop();
+			}
+			}
+		});
+		LimitLastStep(240.f);
+	};
+	AddLadderClimb(BRTestV415Fix::FClimbCase(), TEXT("v4.15 correctifs 4 : echelle BRExit_42 du Niveau 8, approche, visee et montee"));
+	Add(TEXT("v4.15 correctifs 4 : retour a la regle normale du parcours"), 0.f, [this]()
+	{
+		if (ABRWorld* W = GetBRWorld())
+		{
+			W->SetLinearTestOverride(-1);
+		}
+		BRTestV415Fix::Ladder.Reset();
+		return true;
+	});
+
+	// v4.15 (correctifs 5) : Niveau 37 (Poolrooms), graine du niveau 115083815 (final3/v412 et full), partie classique imposee (le
+	// parcours lineaire ne tire aucune sortie des chunks). Plus d'echelle vers le Niveau 2 en (-3250, -1560, 0) (pied au fond du
+	// canal, capsule du grimpeur dans la marche immergee d'un trottoir lateral avant BRMech::Grid::StandFlat) ; l'echelle du chunk
+	// (-1, -1) (banc : (-1250, -1560, 68), sur son trottoir) et toutes celles des chunks construits libres ; constat de la prise
+	// depuis le canal ; approche, visee, montee, arrivee au Niveau 2. Echelle introuvable : NON VERIFIE, jamais OK
+	Add(TEXT("v4.15 correctifs 5 : partie classique imposee (Niveau 37)"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning())
+		{
+			return false;
+		}
+		W->SetLinearTestOverride(0);
+		return true;
+	});
+	AddLevelSeedLoad(37, BRTestV415Fix::Pool37Seed, TEXT("v4.15 correctifs 5 : Niveau 37 (graine du niveau 115083815, partie classique)"));
+	Add(TEXT("v4.15 correctifs 5 : echelles des chunks du Niveau 37 vers le Niveau 2, places libres"), 0.5f, [this]()
+	{
+		using namespace BRTestV415Fix;
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		Ladder.Reset();
+		bLadderOk = false;
+		Phase = 0;
+		CanalPhase = 0;
+		if (!W || !C)
+		{
+			return false;
+		}
+		if (W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 37 || W->GetSeed() != Pool37Seed)
+		{
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) non charge (Niveau %d, graine %u) : echelles des chunks du Niveau 37 non verifiees"), Pool37Seed,
+				W->GetLevelNumber(), W->GetSeed()));
+			return true;
+		}
+		if (W->IsLinearLevel())
+		{
+			Skip(TEXT("Niveau 37 charge en parcours lineaire malgre la partie classique imposee : aucune sortie des chunks, echelles du Niveau 37 non verifiees"));
+			return true;
+		}
+		const FIntPoint Chunk = W->CellToChunk(W->WorldToCell(SpotOf(Pool37Old)));
+		TArray<ABRExit*> InChunk;
+		ChunkLadders(GetWorld(), Pool37Target, &Chunk, InChunk);
+		if ((InChunk.Num() == 0 || !W->IsChunkLoaded(Chunk)) && StepTime < 30.f)
+		{
+			return false;
+		}
+		// Ancienne place (toutes les sorties vers le Niveau 2, chunk construit ou non)
+		ABRExit* AtOld = nullptr;
+		for (TActorIterator<ABRExit> It(GetWorld()); It && !AtOld; ++It)
+		{
+			if (It->Target == Pool37Target && FVector::Dist2D(It->GetActorLocation(), SpotOf(Pool37Old)) < 50.0)
+			{
+				AtOld = *It;
+			}
+		}
+		bool bOldFree = false;
+		Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : ancienne place (%.0f, %.0f, 0), au fond du canal contre la marche d'un trottoir lateral : %s "
+			"(attendu : aucune sortie, regle BRMech::Grid::StandFlat)"), Pool37Seed, Pool37Old.X, Pool37Old.Y, AtOld ? *FString::Printf(TEXT("ENCORE UNE SORTIE : %s"),
+			*LadderReport(GetWorld(), W, AtOld, bOldFree)) : TEXT("aucune sortie")), AtOld != nullptr);
+		if (InChunk.Num() == 0 || !W->IsChunkLoaded(Chunk))
+		{
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : NON VERIFIE, aucune echelle vers le Niveau %d dans le chunk (%d, %d) en 30 s (construit %s ; "
+				"banc : (%.0f, %.0f, %.0f))"), Pool37Seed, Pool37Target, Chunk.X, Chunk.Y, Oui(W->IsChunkLoaded(Chunk)), Pool37New.X, Pool37New.Y, Pool37New.Z));
+			return true;
+		}
+		if (BRLevels::ResolveExit(37, Pool37Target).Kind == BRContent::EExit::Sealed)
+		{
+			Skip(FString::Printf(TEXT("Niveau 37 : passage vers le Niveau %d condamne dans ce canal : echelle du chunk (%d, %d) non verifiee"), Pool37Target, Chunk.X, Chunk.Y));
+			return true;
+		}
+		// L'echelle de ce chunk (une sortie 1 au plus par chunk ; la plus proche de la place du banc)
+		ABRExit* Exit = InChunk[0];
+		for (ABRExit* E : InChunk)
+		{
+			Exit = FVector::Dist2D(E->GetActorLocation(), SpotOf(Pool37New)) < FVector::Dist2D(Exit->GetActorLocation(), SpotOf(Pool37New)) ? E : Exit;
+		}
+		bool bFree = false;
+		const FString Report = LadderReport(GetWorld(), W, Exit, bFree);
+		const bool bBench = FVector::Dist(Exit->GetActorLocation(), SpotOf(Pool37New)) < 1.0;
+		Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique), chunk (%d, %d) : %s (attendu : libres) ; place du banc (%.0f, %.0f, %.0f) %s"), Pool37Seed, Chunk.X,
+			Chunk.Y, *Report, Pool37New.X, Pool37New.Y, Pool37New.Z, bBench ? TEXT("oui") : TEXT("NON (ecart : cellules de la mission non rejouees par le banc, a comparer)")), !bFree);
+		// Toutes les echelles des chunks construits (le controle du developpeur les juge une par une au journal)
+		int32 Count = 0;
+		FString What;
+		const int32 Taken = TakenLadders(GetWorld(), W, Count, What);
+		Note(FString::Printf(TEXT("Niveau 37 : %d echelle(s) des chunks construits, point vise ou capsule du grimpeur pris : %d (attendu 0)%s%s"), Count, Taken, Taken > 0 ? TEXT(" : ")
+			: TEXT(""), *What), Taken > 0);
+		Shot(TEXT("v415fix_niveau37_echelle"));
+		Ladder = Exit;
+		bLadderOk = bFree;
+		FootZ = static_cast<float>(Exit->GetActorLocation().Z);
+		TopZ = Exit->GetClimbTopZ();
+		return true;
+	});
+	LimitLastStep(40.f);
+	// Constat (regle de montee inchangee, jamais un PROBLEME) : une echelle sur son trottoir prise depuis le canal, avancer 0,5 s
+	// apres la prise. Modele hors moteur (diag5/r5/deck_climb.py) : le grimpeur, tire vers l'accroche, s'arrete contre le bord du
+	// trottoir (contact presque horizontal, pas de glissement) ; HYPOTHESE a confirmer ici. L'echelle est lachee apres 1,5 s
+	Add(TEXT("v4.15 correctifs 5 : echelle du Niveau 37 sur son trottoir, prise depuis le canal (constat)"), 0.f, [this]()
 	{
 		using namespace BRTestV415Fix;
 		ABRWorld* W = GetBRWorld();
@@ -568,167 +1030,137 @@ void ABRAutoTest::AddV415FixSteps()
 			return false;
 		}
 		ABRExit* Exit = Ladder.Get();
-		if (Phase == 0 && (!Exit || !bLadderOk))
-		{
-			if (Exit)
-			{
-				Skip(TEXT("echelle BRExit_42 : place prise (notee plus haut) : approche et montee non tentees"));
-			}
-			return true; // echelle introuvable : NON VERIFIE plus haut
-		}
 		const double Now = FPlatformTime::Seconds();
-		const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
-		const float Half = C->GetSimpleCollisionHalfHeight();
-		auto Stop = [&]()
+		auto End = [&]()
 		{
-			BRTestV412::ReleaseJump(C);
-			Phase = 0;
+			if (C->IsClimbing())
+			{
+				C->Interact(); // lacher l'echelle
+			}
+			CanalPhase = 0;
 			return true;
 		};
-		if (!Exit && Phase <= 3)
+		if (!Exit || !bLadderOk || W->GetLevelNumber() != 37)
 		{
-			Note(TEXT("echelle BRExit_42 disparue pendant l'approche (chunk retire ?)"), true);
-			return Stop();
+			return End(); // echelle introuvable ou prise : notee plus haut
 		}
-		switch (Phase)
+		switch (CanalPhase)
 		{
 		case 0:
 		{
-			// La sortie vers le Niveau 9 est gardee par la mission du niveau : resolue par l'hote (seule l'echelle est jugee ici).
-			// Depart de l'approche a ApproachCells cellules de la grille devant l'echelle (mise en place, pas une marche)
-			W->DebugCompleteMission();
-			const FVector Goal = Exit->GetClimbAnchor() + LadderFront(Exit) * 90.f;
-			FVector Start;
-			ApproachFrom = 0.f;
-			if (ApproachStart(W, C, W->WorldToCell(Goal), Start))
+			// Sur son trottoir : une place libre dans le canal, droit devant (le bord du trottoir, sa marche, puis le canal)
+			if (FootZ < 30.f)
 			{
-				PlaceStand(C, Start, Goal);
+				Skip(FString::Printf(TEXT("constat de la prise depuis le canal : echelle au fond du canal (pied a %.0f cm), pas sur un trottoir : sans objet"), FootZ));
+				return End();
 			}
-			RequestsMark = C->ClimbRequestsSent;
-			MaxZ = -1.0e9f;
+			const FVector F = LadderFront(Exit);
+			const FVector A = Exit->GetClimbAnchor();
+			bool bStand = false;
+			for (float Ahead = 140.f; Ahead <= 260.f && !bStand; Ahead += 10.f)
+			{
+				const FVector P = A + F * Ahead;
+				float FloorZ = 0.f;
+				if (W->FloorZAt(P) < FootZ - 50.f && BRTestV412::FloorUnder(W, P, FootZ + 100.f, C, FloorZ) && FloorZ < FootZ - 50.f)
+				{
+					const float CapHalf = C->GetSimpleCollisionHalfHeight();
+					const FVector Stand(P.X, P.Y, FloorZ + CapHalf + 5.f);
+					FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestCanalStand), false, C);
+					if (!W->GetWorld()->OverlapAnyTestByChannel(Stand, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(36.f, CapHalf - 4.f), Q))
+					{
+						CanalStand = Stand;
+						bStand = true;
+					}
+				}
+			}
+			if (!bStand)
+			{
+				Skip(TEXT("constat de la prise depuis le canal NON FAIT : aucune place libre dans le canal devant le trottoir de l'echelle"));
+				return End();
+			}
+			PlaceStand(C, CanalStand, LadderAim(Exit));
 			Clock = Now;
-			Phase = 1;
+			CanalPhase = 1;
 			return false;
 		}
 		case 1:
 		{
-			if (Now - Clock < 0.5)
-			{
-				return false;
-			}
-			const FVector Goal = Exit->GetClimbAnchor() + LadderFront(Exit) * 90.f;
-			BRTestV412::BeginWalk(W, C, FVector(Goal.X, Goal.Y, FootZ + Half), 60.f, true, true, FootZ);
-			Phase = 2;
-			return false;
-		}
-		case 2:
-		{
-			const BRTestV412::EWalk R = BRTestV412::StepWalk(W, C, Dt, 120.0, C->GetScareKind() >= 0 || C->IsInputLocked());
-			if (R == BRTestV412::EWalk::Moving)
-			{
-				return false;
-			}
-			BRTestV412::ReleaseJump(C);
-			const FIntPoint Cell = W->WorldToCell(C->GetActorLocation());
-			if (R == BRTestV412::EWalk::Stuck && BRTestV412::Walk.bEntityBlock)
-			{
-				Skip(FString::Printf(TEXT("echelle BRExit_42 : approche NON VERIFIEE a pied (cellule %d, %d) : une entite seule barre le passage : %s"), Cell.X, Cell.Y,
-					*BRTestV412::WalkStats()));
-				return Stop();
-			}
-			if (R == BRTestV412::EWalk::Stuck)
-			{
-				Note(FString::Printf(TEXT("echelle BRExit_42 : approche a pied BLOQUEE a la cellule (%d, %d), pieds a %.0f cm (attendu %.0f), depuis %.0f cellule(s) : %s"), Cell.X, Cell.Y,
-					C->GetActorLocation().Z - Half, FootZ, ApproachFrom, *BRTestV412::WalkStats()), true);
-				Shot(TEXT("v415fix_niveau8_approche_bloquee"));
-				return Stop();
-			}
-			Note(FString::Printf(TEXT("echelle BRExit_42 : pied de l'echelle atteint a pied depuis %.0f cellule(s) de la grille : %s"), ApproachFrom, *BRTestV412::WalkStats()),
-				BRTestV412::Walk.Teleports > 0);
-			Clock = Now;
-			Phase = 3;
-			return false;
-		}
-		case 3:
-		{
-			// La touche d'interaction sur l'echelle visee (comme AddWalkExitSteps)
 			FaceTo(C, LadderAim(Exit));
-			if (Now - Clock < 0.15)
+			if (Now - Clock < 0.6)
 			{
 				return false;
 			}
 			if (C->FocusActor.Get() != Exit)
 			{
-				if (Now - Clock < 2.0)
+				if (Now - Clock < 2.6)
 				{
 					return false;
 				}
-				Note(FString::Printf(TEXT("echelle BRExit_42 PAS VISEE par l'interaction depuis son pied (vise : %s)"), *BRTestV412::FocusName(W, C->FocusActor.Get())), true);
-				Shot(TEXT("v415fix_niveau8_pas_visee"));
-				return Stop();
+				Note(FString::Printf(TEXT("constat : echelle sur son trottoir PAS VISEE depuis le canal a %.0f cm de son pied (vise : %s) ; regle de visee inchangee"),
+					FVector::Dist2D(C->GetActorLocation(), Exit->GetActorLocation()), *BRTestV412::FocusName(W, C->FocusActor.Get())));
+				return End();
 			}
+			CanalStartZ = static_cast<float>(C->GetActorLocation().Z);
+			MaxZ = CanalStartZ;
 			C->Interact();
 			Clock = Now;
-			Phase = 4;
+			CanalPhase = 2;
 			return false;
 		}
-		case 4:
+		case 2:
 		{
-			// On grimpe en avancant jusqu'au depart (une seule demande au sommet ; seul, le depart est immediat)
-			if (W->IsTransitioning() || W->GetLevelNumber() != 8 || W->IsChapterEnd())
-			{
-				Clock = Now;
-				Phase = 5;
-				return false;
-			}
 			MaxZ = FMath::Max(MaxZ, static_cast<float>(C->GetActorLocation().Z));
 			if (!C->IsClimbing())
 			{
 				if (Now - Clock > 1.0)
 				{
-					Note(TEXT("echelle BRExit_42 visee mais PAS PRISE par l'interaction"), true);
-					return Stop();
+					Note(TEXT("constat : echelle sur son trottoir visee depuis le canal mais pas prise par l'interaction"));
+					return End();
 				}
 				return false;
 			}
-			C->InputMove(FVector2D(0.f, 1.f));
-			if (Now - Clock > 30.0)
+			if (Now - Clock >= 0.5)
 			{
-				const UPrimitiveComponent* Block = C->ClimbBlocker.Get();
-				Note(FString::Printf(TEXT("echelle BRExit_42 : pas de depart apres 30 s sur l'echelle (attente %d, demandes %d ; centre au plus haut a %.0f cm du pied, sommet a %.0f ; "
-					"dernier obstacle : %s)"), static_cast<int32>(C->GetClimbWaitState()), C->ClimbRequestsSent - RequestsMark, MaxZ - FootZ, TopZ - FootZ,
-					Block ? *FString::Printf(TEXT("%s (%s)"), *GetNameSafe(Block->GetOwner()), *Block->GetName()) : TEXT("aucun")), true);
-				Shot(TEXT("v415fix_niveau8_montee"));
-				return Stop();
+				C->InputMove(FVector2D(0.f, 1.f));
 			}
+			if (Now - Clock < 1.5)
+			{
+				return false;
+			}
+			const UPrimitiveComponent* Block = C->ClimbBlocker.Get();
+			const float Rise = MaxZ - CanalStartZ;
+			const float Half = C->GetSimpleCollisionHalfHeight();
+			Note(FString::Printf(TEXT("constat (regle de montee inchangee) : echelle sur son trottoir (pied a %.0f cm) prise depuis le canal (pieds a %.0f cm, %.0f cm devant son pied), "
+				"avancer apres 0,5 s : %s (centre monte de %.0f cm en 1 s ; dernier obstacle : %s)"), FootZ, CanalStartZ - Half, FVector::Dist2D(CanalStand, Exit->GetActorLocation()),
+				Rise > 80.f ? TEXT("montee") : TEXT("ARRETEE AU BORD DU TROTTOIR (il faut monter sur le trottoir avant de prendre l'echelle)"), Rise,
+				Block ? *FString::Printf(TEXT("%s (%s)"), *GetNameSafe(Block->GetOwner()), *Block->GetName()) : TEXT("aucun")));
+			C->Interact(); // lacher l'echelle
+			Clock = Now;
+			CanalPhase = 3;
 			return false;
 		}
 		default:
 		{
-			// Arrivee (niveau suivant, redirige, ou fin du contenu disponible)
-			const BRContent::FExitResolution Res = BRLevels::ResolveExit(8, LadderTarget);
-			const bool bEnd = Res.Kind == BRContent::EExit::ChapterEnd;
-			const bool bThere = bEnd ? W->IsChapterEnd() : (!W->IsTransitioning() && W->IsLevelReady() && W->GetLevelNumber() == Res.Target);
-			if (!bThere && Now - Clock < 40.0)
+			if (Now - Clock < 1.5)
 			{
 				return false;
 			}
-			const int32 Requests = C->ClimbRequestsSent - RequestsMark;
-			const bool bTop = MaxZ >= TopZ - 2.f;
-			const bool bOk = bThere && Requests == 1 && bTop;
-			Note(FString::Printf(TEXT("echelle BRExit_42 visee et montee : centre du grimpeur au plus haut a %.0f cm du pied (sommet de la montee a %.0f cm) %s, demandes de depart au "
-				"sommet %d (attendu 1), %s %s"), MaxZ - FootZ, TopZ - FootZ, bTop ? TEXT("atteint") : TEXT("NON ATTEINT"), Requests,
-				bEnd ? TEXT("fin du contenu disponible") : *FString::Printf(TEXT("arrivee au Niveau %d"), Res.Target), Oui(bThere)), !bOk);
-			if (bEnd && W->IsChapterEnd())
-			{
-				W->CloseEnding(false);
-			}
-			return Stop();
+			return End();
 		}
 		}
 	});
-	LimitLastStep(240.f);
-	Add(TEXT("v4.15 correctifs 4 : retour a la regle normale du parcours"), 0.f, [this]()
+	LimitLastStep(20.f);
+	{
+		BRTestV415Fix::FClimbCase Pool;
+		Pool.Level = 37;
+		Pool.Target = BRTestV415Fix::Pool37Target;
+		Pool.Name = TEXT("du chunk (-1, -1) du Niveau 37");
+		Pool.ShotTag = TEXT("niveau37");
+		Pool.HoldDelay = 0.5f;
+		Pool.StandDZ = 75.f;
+		AddLadderClimb(Pool, TEXT("v4.15 correctifs 5 : echelle du chunk (-1, -1) du Niveau 37, approche, visee et montee"));
+	}
+	Add(TEXT("v4.15 correctifs 5 : retour a la regle normale du parcours"), 0.f, [this]()
 	{
 		if (ABRWorld* W = GetBRWorld())
 		{
@@ -1143,6 +1575,181 @@ void ABRAutoTest::AddNetV415FixSteps(bool bClient)
 			}
 		}
 		BRTestV415Fix::Ladder.Reset();
+		return true;
+	});
+
+	// v4.15 (correctifs 5) : Niveau 37 en partie classique, graine du niveau 2303284074 (net_final3 : echelles des chunks vers le
+	// Niveau 2 en (-7750, 4560, 0) et (11750, -2060, 0), capsule du grimpeur dans la marche d'un trottoir lateral chez l'hote et le
+	// client). Chacun rejoue le tirage de ses chunks (ABRWorld::IsChunkExitDrawn, PickChunkWallFace) : aucune echelle aux places
+	// signalees, empreinte des pieds identique chez l'hote et le client (le client l'envoie a l'hote), places du banc, echelles
+	// des chunks construits libres
+	Add(TEXT("v4.15 correctifs 5 reseau : Niveau 37 en partie classique"), 0.f, [this, bClient]()
+	{
+		using namespace BRTestV415Fix;
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning())
+		{
+			return false;
+		}
+		SerialMark = W->GetLevelSerial();
+		bNetOk = true;
+		Phase = 0;
+		Pool37Hash = 0;
+		Pool37Count = 0;
+		Pool37Text.Reset();
+		if (bClient)
+		{
+			BRTestNet::SendMark(GetPC(), MarkNet37Start);
+			return true;
+		}
+		const int32 Mark = BRTestNet::RemoteMark(W);
+		if (Mark != MarkNet37Start && Mark != BRTestNet::MarkFinished && BRTestNet::RemoteMate(W))
+		{
+			if (StepTime < 90.f)
+			{
+				return false;
+			}
+			Note(FString::Printf(TEXT("hote : le client n'est pas arrive a l'etape du Niveau 37 en 90 s (derniere etape signalee %d) : niveau change quand meme"), Mark), true);
+		}
+		SerialMark = W->GetLevelSerial();
+		W->SetLinearTestOverride(0);
+		W->RequestTransition(37, false, Pool37NetSeed);
+		return true;
+	});
+	LimitLastStep(100.f);
+	Add(TEXT("v4.15 correctifs 5 reseau : Niveau 37 chez chacun"), 0.f, [this, bClient]()
+	{
+		using namespace BRTestV415Fix;
+		ABRWorld* W = GetBRWorld();
+		if (!W)
+		{
+			return false;
+		}
+		const bool bThere = W->IsLevelReady() && !W->IsTransitioning() && W->GetLevelNumber() == 37 && W->GetLevelSerial() != SerialMark;
+		if ((!bThere || StepTime < 3.f) && StepTime < 120.f)
+		{
+			return false;
+		}
+		const TCHAR* Who = bClient ? TEXT("client") : TEXT("hote");
+		if (!bThere)
+		{
+			Note(FString::Printf(TEXT("%s : Niveau 37 (graine du niveau %u) non charge en 120 s"), Who, Pool37NetSeed), true);
+			bNetOk = false;
+			if (bClient)
+			{
+				BRTestNet::SendMark(GetPC(), MarkNet37NoLevel);
+			}
+			return true;
+		}
+		if (ABRCharacter* C = GetPlayer())
+		{
+			C->bGodMode = true;
+		}
+		const bool bOk = W->GetSeed() == Pool37NetSeed && !W->IsLinearLevel();
+		Note(FString::Printf(TEXT("%s : Niveau 37, graine %u (attendue %u), partie classique %s"), Who, W->GetSeed(), Pool37NetSeed, Oui(!W->IsLinearLevel())), !bOk);
+		bNetOk = bOk;
+		if (!bOk && bClient)
+		{
+			BRTestNet::SendMark(GetPC(), MarkNet37NoLevel);
+		}
+		return true;
+	});
+	LimitLastStep(130.f);
+	Add(TEXT("v4.15 correctifs 5 reseau : echelles des chunks du Niveau 37 chez chacun"), 2.f, [this, bClient]()
+	{
+		using namespace BRTestV415Fix;
+		ABRWorld* W = GetBRWorld();
+		if (!W)
+		{
+			return false;
+		}
+		if (!bNetOk)
+		{
+			return true; // deja note (et signale a l'hote par le client)
+		}
+		const TCHAR* Who = bClient ? TEXT("client") : TEXT("hote");
+		if (Phase == 0)
+		{
+			// Tirage de la regle du jeu, chunks -3..3 (les deux places de net_final3 sont a 2 chunks du depart)
+			TArray<FVector> Feet;
+			PlannedLadders(W, Pool37Target, Pool37Range, Feet, Pool37Text, Pool37Hash);
+			Pool37Count = Feet.Num();
+			bool bOldGone = true;
+			FString Spots;
+			for (int32 K = 0; K < 2; ++K)
+			{
+				FVector At = FVector::ZeroVector;
+				const bool bOld = NearSpot(Feet, SpotOf(Pool37NetOld[K]), 50.0);
+				const bool bNew = NearSpot(Feet, SpotOf(Pool37NetNew[K]), 1.0, &At);
+				bOldGone = bOldGone && !bOld;
+				Spots += FString::Printf(TEXT("%s(%.0f, %.0f, 0) : %s, place du banc (%.0f, %.0f, %.0f) %s"), K > 0 ? TEXT(" ; ") : TEXT(""), Pool37NetOld[K].X, Pool37NetOld[K].Y,
+					bOld ? TEXT("ENCORE UNE ECHELLE") : TEXT("plus d'echelle"), Pool37NetNew[K].X, Pool37NetNew[K].Y, Pool37NetNew[K].Z, bNew ? TEXT("oui") : TEXT("NON (cellules de la mission non rejouees par le banc ?)"));
+			}
+			Note(FString::Printf(TEXT("%s : Niveau 37 (graine du niveau %u), echelles des chunks vers le Niveau %d tirees (chunks -%d..%d) : %d, empreinte %08x ; %s"), Who, Pool37NetSeed, Pool37Target,
+				Pool37Range, Pool37Range, Pool37Count, Pool37Hash, *Spots), !bOldGone);
+			UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] %s : echelles des chunks du Niveau 37 vers le Niveau %d : %s"), Who, Pool37Target, *Pool37Text);
+			// Les echelles des chunks construits : posees par le tirage (meme pied), point vise et capsule libres
+			TArray<ABRExit*> Built;
+			ChunkLadders(GetWorld(), Pool37Target, nullptr, Built);
+			int32 Outside = 0;
+			for (const ABRExit* E : Built)
+			{
+				Outside += NearSpot(Feet, E->GetActorLocation(), 1.0) ? 0 : 1;
+			}
+			int32 Count = 0;
+			FString What;
+			const int32 Taken = TakenLadders(GetWorld(), W, Count, What);
+			Note(FString::Printf(TEXT("%s : Niveau 37, %d echelle(s) des chunks construits (%d vers le Niveau %d, hors du tirage : %d, attendu 0), point vise ou capsule du grimpeur pris : %d "
+				"(attendu 0)%s%s"), Who, Count, Built.Num(), Pool37Target, Outside, Taken, Taken > 0 ? TEXT(" : ") : TEXT(""), *What), Taken > 0 || Outside > 0);
+			if (bClient)
+			{
+				BRTestNet::SendMark(GetPC(), MarkNet37Hash + static_cast<int32>(Pool37Hash % 1000000u));
+				return true;
+			}
+			Phase = 1;
+			return false;
+		}
+		// Hote : l'empreinte du client
+		const int32 Mark = BRTestNet::RemoteMark(W);
+		if (!BRTestNet::RemoteMate(W))
+		{
+			Note(TEXT("hote : aucun client pour comparer les echelles des chunks du Niveau 37"), true);
+			Phase = 0;
+			return true;
+		}
+		if (Mark == MarkNet37NoLevel)
+		{
+			Skip(TEXT("hote : le client n'a pas charge le Niveau 37 a la graine attendue (voir son rapport) : echelles du client non comparees"));
+			Phase = 0;
+			return true;
+		}
+		if (Mark < MarkNet37Hash)
+		{
+			if (StepTime < 60.f)
+			{
+				return false;
+			}
+			Note(FString::Printf(TEXT("hote : le client n'a pas envoye l'empreinte de ses echelles du Niveau 37 en 60 s (derniere etape signalee %d)"), Mark), true);
+			Phase = 0;
+			return true;
+		}
+		const int32 Mine = MarkNet37Hash + static_cast<int32>(Pool37Hash % 1000000u);
+		Note(FString::Printf(TEXT("hote : echelles des chunks du Niveau 37 identiques chez le client (empreinte %d, hote %d, %d echelles) : %s"), Mark - MarkNet37Hash, Mine - MarkNet37Hash,
+			Pool37Count, Oui(Mark == Mine)), Mark != Mine);
+		Phase = 0;
+		return true;
+	});
+	LimitLastStep(75.f);
+	Add(TEXT("v4.15 correctifs 5 reseau : retour a la regle normale"), 0.f, [this, bClient]()
+	{
+		if (!bClient)
+		{
+			if (ABRWorld* W = GetBRWorld())
+			{
+				W->SetLinearTestOverride(-1);
+			}
+		}
+		BRTestV415Fix::Phase = 0;
 		return true;
 	});
 }

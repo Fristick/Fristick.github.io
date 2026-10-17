@@ -200,10 +200,13 @@ private:
 	 *  atteignables selon l'hote, poste 1 tourne depuis sa place (BRAutoTestV413Lidar.cpp) */
 	void AddV415LidarPlaceSteps();
 	/** v4.15 (correctifs) : -BRAutoTestV415Fix : les seules etapes de non-regression des correctifs (places des Niveaux 8 et 9,
-	 *  Level 6, Poolrooms), deja comprises dans -BRAutoTestV411, -BRAutoTestV412 et -BRAutoTestV413 (BRAutoTestV415Fix.cpp) */
+	 *  Level 6, Poolrooms), deja comprises dans -BRAutoTestV411, -BRAutoTestV412 et -BRAutoTestV413 (BRAutoTestV415Fix.cpp).
+	 *  v4.15 (correctifs 5) : echelles des chunks du Niveau 37 (graine du niveau 115083815, partie classique) : places libres,
+	 *  constat de la prise depuis le canal, approche, visee, montee, arrivee au Niveau 2 */
 	void AddV415FixSteps();
 	/** v4.15 (correctifs 4, relecture) : multijoueur : Niveau 8 en partie classique (graine du niveau 233637237), hote au sommet de
-	 *  l'echelle BRExit_42, client devant elle : rassemblement 2/2 puis depart (BRAutoTestV415Fix.cpp) */
+	 *  l'echelle BRExit_42, client devant elle : rassemblement 2/2 puis depart (BRAutoTestV415Fix.cpp). v4.15 (correctifs 5) :
+	 *  Niveau 37 en partie classique (graine du niveau 2303284074) : memes echelles des chunks chez l'hote et le client */
 	void AddNetV415FixSteps(bool bClient);
 	/** v4.14 : REJOUER isole, migration ambigue, scanner (rechargement, arret, cadences, HUD), kit du Level 0
 	 *  (BRAutoTestV414.cpp) ; reseau : porte du client */
