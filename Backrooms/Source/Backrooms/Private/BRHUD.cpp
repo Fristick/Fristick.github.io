@@ -4447,8 +4447,18 @@ void ABRHUD::DrawStatusPanel(ABRCharacter* C, float X, float Y, float W, float H
 	// Un mot d'etat en plus du pourcentage : lisible d'un coup d'oeil, sans dependre de la couleur
 	const FString StamState = Stam > 60.f ? BR_STR(NSLOCTEXT("BR", "HUD.StaminaRested", "repos\u00e9"))
 		: (Stam > 25.f ? BR_STR(NSLOCTEXT("BR", "HUD.StaminaWinded", "essouffl\u00e9")) : BR_STR(NSLOCTEXT("BR", "HUD.StaminaSpent", "\u00e0 bout de souffle")));
-	const FString SanState = San > 65.f ? BR_STR(NSLOCTEXT("BR", "HUD.SanityStable", "stable"))
+	FString SanState = San > 65.f ? BR_STR(NSLOCTEXT("BR", "HUD.SanityStable", "stable"))
 		: (San > 30.f ? BR_STR(NSLOCTEXT("BR", "HUD.SanityShaken", "nerveux")) : BR_STR(NSLOCTEXT("BR", "HUD.SanityBreaking", "au bord de la rupture")));
+	// v4.16 : la lumiere qui compte pour les regles (ABRWorld::LightLevelAt, la meme que celle des creatures), lisible sans
+	// couleur : dans le noir (la sante mentale baisse plus vite, une entite de l'ombre peut apparaitre), penombre, eclaire
+	// (un Smiler hors poursuite s'y dissipe). Pas en exterieur (la sante mentale n'y depend pas de la lumiere)
+	const ABRWorld* LW = ABRWorld::Get(this);
+	if (LW && LW->IsLevelReady() && !LW->Def().bOutdoor)
+	{
+		const int32 LightBand = BRLight::Band(LW->LightLevelAt(C->GetActorLocation(), C));
+		SanState += TEXT(" \u00b7 ") + (LightBand == 0 ? BR_STR(NSLOCTEXT("BR", "HUD.LightDark", "dans le noir"))
+			: (LightBand == 2 ? BR_STR(NSLOCTEXT("BR", "HUD.LightLit", "\u00e9clair\u00e9")) : BR_STR(NSLOCTEXT("BR", "HUD.LightDim", "p\u00e9nombre"))));
+	}
 	const float Row = (H - 70.f * U) * 0.5f;
 	DrawStatusGauge(0, BR_STR(NSLOCTEXT("BR", "HUD.Endurance", "ENDURANCE")), StamState, Stam, C->GetStaminaTrend(), X + 18.f * U, Y + 60.f * U, W - 36.f * U);
 	DrawStatusGauge(1, BR_STR(NSLOCTEXT("BR", "HUD.SanteMentale", "SANT\u00c9 MENTALE")), SanState, San, C->GetSanityTrend(), X + 18.f * U, Y + 60.f * U + Row, W - 36.f * U);
@@ -4495,8 +4505,9 @@ void ABRHUD::DrawStatusGauge(int32 Kind, const FString& Label, const FString& St
 	const float PctW = TextSize(Pct, 13.f, EUiWeight::Bold).X;
 	TextFit(Label, TX, Y - 1.f * U, W - IconS - PctW - 60.f * U, Ink, 12.5f, EUiWeight::Bold, Near, false);
 	TextF(Pct, FarX, Y - 1.f * U, Yellow, 13.f, EUiWeight::Bold, Far, false);
-	TextFit(State, TX, Y + 19.f * U, W - IconS - 60.f * U, InkDim, 10.5f, EUiWeight::Regular, Near, false);
 	const float Box = 20.f * U;
+	// v4.16 : l'etat (et la lumiere qui compte, sous la sante mentale) s'arrete avant la case de tendance (traductions longues)
+	TextFit(State, TX, Y + 19.f * U, W - IconS - PctW - Box - 28.f * U, InkDim, 10.5f, EUiWeight::Regular, Near, false);
 	TrendBox(bRTL ? X + PctW + 10.f * U : X + W - PctW - Box - 10.f * U, Y + 18.f * U, Box, Trend);
 	// Barre : 10 segments (endurance) ou barre continue a reperes (sante mentale) ; en arabe et en persan, de droite a gauche
 	const float BY = Y + 44.f * U;

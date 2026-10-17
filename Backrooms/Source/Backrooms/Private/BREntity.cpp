@@ -1527,7 +1527,7 @@ void ABREntity::StartVanish()
 		{
 			if (const ABRWorld* W = World.Get())
 			{
-				if (W->LightLevelAt(GetActorLocation()) > BRLight::SmilerVanish)
+				if (W->LightLevelAt(GetActorLocation(), this) > BRLight::SmilerVanish)
 				{
 					ABRHUD::Caption(this, BR_STR(NSLOCTEXT("BR", "Caption.SmilerLight", "[Un Smiler se dissipe dans la lumi\u00e8re]")), GetActorLocation(), 3.f);
 				}
@@ -2067,7 +2067,7 @@ void ABREntity::ThinkSmiler(ABRWorld* W, ABRCharacter* P, const FSense& S, float
 	const FBREntityInfo& I = MyInfo();
 	const FVector PL = P->GetActorLocation();
 	FacePlayer(Dt);
-	const float Light = W->LightLevelAt(GetActorLocation());
+	const float Light = W->LightLevelAt(GetActorLocation(), this);
 	// v4.12 : la lumiere ambiante (plafonniers, et balises ou sortie eclairees : BRLight) dissipe un Smiler hors poursuite
 	if (Light > BRLight::SmilerVanish && State != EState::Chase)
 	{
@@ -2460,8 +2460,8 @@ void ABREntity::ThinkDeathmoth(ABRCharacter* P, const FSense& S, float Dt)
 	// v4.11 : la lampe l'attire, sauf dans un endroit deja eclaire : il y tourne autour des neons du decor (on peut s'en
 	// servir pour le detourner)
 	const ABRWorld* MW = World.Get();
-	const bool bLitHere = MW && MW->LightLevelAt(GetActorLocation()) > 0.55f;
-	const bool bLitThere = MW && MW->LightLevelAt(P->GetActorLocation()) > 0.55f;
+	const bool bLitHere = MW && MW->LightLevelAt(GetActorLocation(), this) > 0.55f;
+	const bool bLitThere = MW && MW->LightLevelAt(P->GetActorLocation(), P) > 0.55f;
 	const bool bAttracted = P->IsFlashlightOn() && S.bLOS && S.Dist < 2000.f && !bLitThere && !bLitHere;
 	if (State == EState::Chase)
 	{
@@ -2725,7 +2725,7 @@ void ABREntity::ThinkBacteria(ABRWorld* W, ABRCharacter* P, const FSense& S, flo
 		{
 			Rate *= 0.6f;
 		}
-		if (!P->IsFlashlightOn() && W->LightLevelAt(PL) < 0.15f)
+		if (!P->IsFlashlightOn() && W->LightLevelAt(PL, P) < 0.15f)
 		{
 			Rate *= 0.5f; // une silhouette dans le noir se distingue mal
 		}

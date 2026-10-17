@@ -317,6 +317,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Banc visuel v4.15 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Light")))
+	{
+		// v4.16 : lumiere de gameplay alignee sur la lumiere visible (BRAutoTestV416Light.cpp)
+		AddV416LightSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.16 (lumiere) : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	BuildPlan(Levels);
 	UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Debut : %d etapes, %d niveaux. Captures et rapport : %s"), Plan.Num(), Levels.Num(), *OutDir);
 }

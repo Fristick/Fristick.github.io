@@ -548,7 +548,8 @@ void ABRAutoTest::AddVisualSteps()
 			// Connu (v4.15) : avec MegaLights, chaque plafonnier a son ombre et ne traverse plus les murs a l'image ; la lumiere
 			// de jeu (ABRWorld::LightLevelAt) compte toujours les plafonniers a travers les murs. Un Smiler place ici se trouve
 			// dans un coin qui parait sombre mais qui est "eclaire" pour les regles (il ne peut pas y apparaitre et s'y
-			// dissipe au-dessus de BRLight::SmilerVanish). Capture a juger avant de garder MegaLights par defaut
+			// dissipe au-dessus de BRLight::SmilerVanish). Capture a juger avant de garder MegaLights par defaut.
+			// v4.16 : corrige (BRWorldLight.cpp) : le plafonnier derriere le mur ne compte plus (-BRAutoTestV416Light)
 			const FString WallScene = SceneName(0, *Profile, TEXT("mur_smiler"));
 			Add(FString::Printf(TEXT("v4.15 visuel : %s"), *WallScene), CloseSettleSeconds, [this, WallScene]()
 			{
@@ -588,7 +589,7 @@ void ABRAutoTest::AddVisualSteps()
 					BRTestVisual::WallSmiler = E;
 				}
 				PC->SetControlRotation((At - C->GetEyeLocation()).Rotation());
-				Note(FString::Printf(TEXT("%s : lumiere de jeu %.2f a l'endroit du Smiler, dont %.2f du plafonnier derriere le mur (sombre a partir de %.2f, dissipation a %.2f) ; Smiler %s"),
+				Note(FString::Printf(TEXT("%s : lumiere de jeu %.2f a l'endroit du Smiler (v4.16 : sans les %.2f du plafonnier derriere le mur, que la regle d'avant comptait ; sombre a partir de %.2f, dissipation a %.2f) ; Smiler %s"),
 					*WallScene, W->LightLevelAt(At), Lamp, BRLight::NeedsDark, BRLight::SmilerVanish, BRTestVisual::WallSmiler.IsValid() ? TEXT("present") : TEXT("absent")));
 				return true;
 			});

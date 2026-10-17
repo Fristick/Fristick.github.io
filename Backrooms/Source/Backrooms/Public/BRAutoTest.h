@@ -404,4 +404,7 @@ private:
 	/** v4.15 (realisme) : banc visuel -BRAutoTestVisual (BRAutoTestVisual.cpp) : poses fixes par niveau et par profil,
 	 *  captures vis_<niveau>_<profil>_<pose> et mesures (Mesures.csv), coupure et lampe au Level 0 */
 	void AddVisualSteps();
+	/** v4.16 : -BRAutoTestV416Light : lumiere de gameplay (murs, passages, coupure, profils, sources de mission, cout)
+	 *  (BRAutoTestV416Light.cpp) */
+	void AddV416LightSteps();
 };
