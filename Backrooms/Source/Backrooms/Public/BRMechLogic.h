@@ -296,13 +296,45 @@ namespace BRMech
 		bool CutsFocusLane(const FPlaced& Me, const FPlaced& Other);
 		/** v4.15 (correctifs 3) : l'un des deux couloirs de visee coupe par l'autre mecanisme */
 		bool FocusClash(const FPlaced& A, const FPlaced& B);
-		/** v4.15 (correctifs 3) : couloir coupe que l'invariant du placement journalise (ABRWorld::PlaceMission) : CutsFocusLane,
-		 *  sauf pour la vanne B des Poolrooms (MeModule Module::PoolWheelB) devant les bassins de la vanne A (OtherModule
-		 *  Module::PoolTanks). Le module les assemble apres PickSlot, qui ne les a jamais juges (vanne B fixee sur l'avant du
-		 *  bassin B) : son point vise est a 8 cm du volume des bassins (moins que FocusSweep + Margin), mais sa boite visee
-		 *  depasse de 20 cm l'avant des bassins : depuis la place devant elle, la visee du client la touche avant eux. Avant
-		 *  (relecture des correctifs 3) : avertissement a chaque chargement des Poolrooms avec bassins, chez l'hote et le client */
+		/** v4.15 (correctifs 4) : verdict de l'invariant du placement pour le couloir de visee de Me face a Other
+		 *  (ABRWorld::PlaceMission, LogMissionVolumeInvariant) */
+		enum class ELaneCut : uint8_t
+		{
+			/** Couloir degage (CutsFocusLane faux) */
+			Clear,
+			/** Couloir coupe : avertissement du journal */
+			Logged,
+			/** v4.15 (correctifs 3, relecture) : vanne B des Poolrooms (MeModule Module::PoolWheelB) devant les bassins de la vanne A
+			 *  (OtherModule Module::PoolTanks). Le module les assemble apres PickSlot, qui ne les a jamais juges (vanne B fixee sur
+			 *  l'avant du bassin B) : son point vise est a 8 cm du volume des bassins (moins que FocusSweep + Margin), mais sa boite
+			 *  visee depasse de 20 cm l'avant des bassins : depuis la place devant elle, la visee du client la touche avant eux */
+			PoolModule,
+			/** Porte, grille ou portail ferme de la mission devant la sortie gardee (porte sans module : dalle de 30 cm, boite
+			 *  visee sans collision) : la place ordinaire de Me (StandRange devant son point vise, a son sol) est dans cette dalle
+			 *  grossie de la capsule (PlayerRadius). Personne ne s'y tient et la dalle ne prend pas la visee : la place se prend
+			 *  autour, jugee en jeu (BRTestV412::FindMissionStand, visee du client comprise). Niveau 2 : vannes face a la porte de
+			 *  la vapeur ; Niveau 4 : bouton du code a cote de la grille de l'hotel. La porte est posee avant les groupes : PickSlot
+			 *  ne la voit jamais (placement inchange) */
+			StandInGate,
+			/** Passerelle du Niveau 8 : seule son enveloppe (Of : boite du module, sol de l'interruption compris) coupe le
+			 *  couloir ; ses pieces (BridgeParts : palier, appui, marches, poteaux, tablier leve) le laissent degage (treuil de la
+			 *  salle sur la paroi a cote de l'interruption, place ordinaire au sol de l'interruption) */
+			BridgeEnvelope
+		};
+		/** v4.15 (correctifs 4) : verdict pour le couloir de Me (module MeModule) face a Other (module OtherModule). Une porte
+		 *  dont la dalle coupe le couloir depuis une place libre (hors de la dalle), ou une piece de la passerelle qui le coupe,
+		 *  reste journalisee (Logged) ; le sas des Poolrooms aussi (son volume est celui de ses murets) */
+		ELaneCut LaneCut(const FPlaced& Me, uint8_t MeModule, const FPlaced& Other, uint8_t OtherModule);
+		/** v4.15 (correctifs 3) : couloir coupe que l'invariant du placement journalise en avertissement : LaneCut == Logged.
+		 *  Avant (correctifs 4) : tout couloir coupe sauf la vanne B des Poolrooms ; la porte de la mission (Niveaux 2 et 4,
+		 *  place ordinaire dans la porte fermee) et l'enveloppe de la passerelle (Niveau 8, chaque graine) etaient
+		 *  journalisees a chaque chargement, sans gene reelle */
 		bool LaneCutLogged(const FPlaced& Me, uint8_t MeModule, const FPlaced& Other, uint8_t OtherModule);
+		/** v4.15 (correctifs 4) : pieces de la passerelle du Niveau 8 qui arretent la vue de l'hote ou la visee du client
+		 *  (ABRMissionDevice::BuildBridge, AddSolid), repere du module : palier, appui et ses marches, poteaux du portique et de
+		 *  la main courante, tablier leve (tant que les treuils servent). Rend leur nombre (au plus MaxBridgeParts) */
+		constexpr int MaxBridgeParts = 9;
+		int BridgeParts(FBox* Out, int MaxParts);
 
 		/** Rectangle oriente (plan) : centre, demi-tailles, lacet quelconque (degres) */
 		struct FRect

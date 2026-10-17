@@ -122,7 +122,8 @@ namespace
 
 	/** v4.15 : invariant du placement (journal ; les tests du jeu le verifient aussi dans le decor construit) : aucun point
 	 *  d'interaction dans le volume bloquant d'un autre mecanisme. v4.15 (correctifs) : aussi pour le module de secours.
-	 *  v4.15 (correctifs 3) : aucun couloir de visee coupe (BRMech::Clearance::CutsFocusLane) */
+	 *  v4.15 (correctifs 3) : aucun couloir de visee coupe (BRMech::Clearance::CutsFocusLane). v4.15 (correctifs 4) : verdict de
+	 *  BRMech::Clearance::LaneCut (avertissement pour une vraie gene seulement) */
 	void LogMissionVolumeInvariant(const BRM::FPlan& Plan, const TArray<FBRMissionSpot>& Spots, float WallThickness, const TCHAR* Tier)
 	{
 		for (int32 I = 0; I < Plan.NumDevices && I < Spots.Num(); ++I)
@@ -140,13 +141,32 @@ namespace
 						Plan.Seed);
 				}
 				// v4.15 (correctifs 3) : couloir de visee (place ordinaire devant le mecanisme) coupe par la boite visee ou le volume
-				// d'un autre : le client viserait l'autre (PickSlot ne garde un tel choix que faute de place au couloir degage).
-				// Pas pour la vanne B des Poolrooms devant les bassins de la vanne A (BRMech::Clearance::LaneCutLogged : posees
-				// ensemble par leur module, la visee prend la vanne B ; avant : avertissement a chaque chargement avec bassins)
-				if (J != I && BRMech::Clearance::LaneCutLogged(PlacedMissionDevice(Plan, Spots, I, WallThickness), Spots[I].Module, PlacedMissionDevice(Plan, Spots, J, WallThickness),
-					Spots[J].Module))
+				// d'un autre : le client viserait l'autre. Entre mecanismes d'un meme groupe, PickSlot ne garde un tel choix que faute
+				// de place au couloir degage. v4.15 (correctifs 4) : la porte de la mission est posee avant les groupes, devant la
+				// sortie gardee, et PickSlot ne la voit jamais : sa dalle (sans module) qui contient la place ordinaire (Niveaux 2 et 4)
+				// et l'enveloppe de la passerelle dont les pieces laissent le couloir degage (Niveau 8) ne sont pas une gene
+				// (BRMech::Clearance::LaneCut) : notees au journal, sans avertissement. Pas pour la vanne B des Poolrooms devant les
+				// bassins de la vanne A (posees ensemble par leur module, la visee prend la vanne B ; avant : avertissement a chaque
+				// chargement avec bassins)
+				if (J == I)
+				{
+					continue;
+				}
+				const BRMech::Clearance::ELaneCut Lane = BRMech::Clearance::LaneCut(PlacedMissionDevice(Plan, Spots, I, WallThickness), Spots[I].Module,
+					PlacedMissionDevice(Plan, Spots, J, WallThickness), Spots[J].Module);
+				if (Lane == BRMech::Clearance::ELaneCut::Logged)
 				{
 					UE_LOG(LogBackrooms, Warning, TEXT("Mission du Niveau %d%s : couloir de visee du mecanisme %d coupe par le mecanisme %d (graine %u)"), Plan.Level, Tier, I, J, Plan.Seed);
+				}
+				else if (Lane == BRMech::Clearance::ELaneCut::StandInGate)
+				{
+					UE_LOG(LogBackrooms, Log, TEXT("Mission du Niveau %d%s : place ordinaire du mecanisme %d dans la porte %d fermee (couloir non juge : la place se prend autour) (graine %u)"),
+						Plan.Level, Tier, I, J, Plan.Seed);
+				}
+				else if (Lane == BRMech::Clearance::ELaneCut::BridgeEnvelope)
+				{
+					UE_LOG(LogBackrooms, Log, TEXT("Mission du Niveau %d%s : couloir de visee du mecanisme %d dans l'enveloppe de la passerelle %d, degage de ses pieces (graine %u)"),
+						Plan.Level, Tier, I, J, Plan.Seed);
 				}
 			}
 		}

@@ -25,6 +25,10 @@
 //   H. v4.15 (correctifs 3) : couloirs de visee (BRMech::Clearance::CutsFocusLane, regle de PickSlot) : le groupe du moulin
 //      du Niveau 10 (graine 1697132605 : tableau des granges entre le moulin et le frein), poteaux d'une cellule en rang,
 //      PickSlot (poteau au couloir degage, choix d'avant faute de mieux), voisins muraux et Level 6 inchanges.
+//   I. v4.15 (correctifs 4) : la porte de la mission dans l'invariant des couloirs (BRMech::Clearance::LaneCut) : vannes du
+//      Niveau 2 face a la porte de la vapeur et bouton du code du Niveau 4 a cote de la grille (place ordinaire dans la porte
+//      fermee), treuil du Niveau 8 a cote de l'interruption (enveloppe de la passerelle seule) : plus d'avertissement ; une
+//      dalle entre un mecanisme et une place libre, le palier de la passerelle et la cage du Level 6 restent journalises.
 //
 // Le comportement reel (collisions, nage, rendu, reseau, sauvegarde, streaming) se verifie en jeu : -BRAutoTestV412
 // (prepare, non execute ici).
@@ -692,6 +696,104 @@ int main()
 			std::to_string(PoolLogged) + " (attendu 0), boite visee " + F1(PoolFront) + " cm devant les bassins ; Niveau 10 toujours journalise",
 			PoolLogged == 0 && PoolInside == 0 && PoolFront > CL::FocusSweep + CL::Margin
 			&& CL::LaneCutLogged(OldDial, BRMech::Module::None, OldBoard, BRMech::Module::None) && CL::LaneCutLogged(OldBrake, BRMech::Module::None, OldBoard, BRMech::Module::None));
+	}
+
+	// v4.15 (correctifs 4) : la porte de la mission (posee avant les groupes devant la sortie gardee, jamais vue par PickSlot)
+	// dans l'invariant des couloirs (BRMech::Clearance::LaneCut). Dispositions du journal final2 (graines 1882688588, 2877578827,
+	// 643828852 ; diag4/lane_warnings) : chaque fois CutsFocusLane compte le volume de la porte, mais la place ordinaire est dans
+	// la dalle fermee (Niveaux 2 et 4) ou l'enveloppe de la passerelle seule coupe le couloir (Niveau 8). Une dalle entre le
+	// mecanisme et une place libre, une piece de la passerelle, le tableau du Niveau 10 et la cage du Level 6 restent journalises
+	std::printf("\nI. Couloirs de visee et porte de la mission (v4.15 correctifs 4)\n");
+	{
+		namespace CL = BRMech::Clearance;
+		using ELane = CL::ELaneCut;
+		auto Place = [](float X, float Y, float Yaw, const CL::FFootprint& Print)
+		{
+			CL::FPlaced P0;
+			P0.Frame.X = X;
+			P0.Frame.Y = Y;
+			P0.Frame.Yaw = Yaw;
+			P0.Print = Print;
+			return P0;
+		};
+		// Place debout a Dist devant le point vise de Me (a son sol) dans la dalle de Gate grossie de la capsule
+		auto StandIn = [](const CL::FPlaced& Me, const CL::FPlaced& Gate, float Dist)
+		{
+			float SX = 0.f, SY = 0.f;
+			Me.Frame.ToWorld(Me.Print.Aim.X + Dist, Me.Print.Aim.Y, SX, SY);
+			return CL::InSolid(Gate, SX, SY, Me.Frame.Z, CL::PlayerRadius);
+		};
+		// Niveau 2 (couloirs de 260 cm, murs de 90) : salle (12, 10), sortie sur la face +X, porte de la vapeur 48 cm devant,
+		// vannes 4 a 6 sur la face d'en face aux places 0, +58, -58 (FaceSpot : Y = centre - Lateral)
+		{
+			constexpr float S = 260.f, T = 90.f;
+			const float ExitX = 12.5f * S + (S * 0.5f - T * 0.5f), CY = 10.5f * S;
+			const CL::FPlaced Steam = Place(ExitX - 48.f, CY, 180.f, CL::Of(BRM::EKind::Gate, BRM::R_SteamDoor, BRMech::Module::None, T));
+			int Counted = 0, InGate = 0, In110 = 0, Free60 = 0, Logged = 0;
+			for (const float Lat : { 0.f, 58.f, -58.f })
+			{
+				const CL::FPlaced Valve = Place(12.5f * S - (S * 0.5f - T * 0.5f), CY - Lat, 0.f, CL::Of(BRM::EKind::Switch, BRM::R_Valve, BRMech::Module::None, T));
+				Counted += CL::CutsFocusLane(Valve, Steam) ? 1 : 0;
+				InGate += CL::LaneCut(Valve, BRMech::Module::None, Steam, BRMech::Module::None) == ELane::StandInGate ? 1 : 0;
+				In110 += StandIn(Valve, Steam, CL::StandRange) ? 1 : 0;
+				Free60 += StandIn(Valve, Steam, 60.f) ? 0 : 1;
+				Logged += CL::LaneCutLogged(Valve, BRMech::Module::None, Steam, BRMech::Module::None) ? 1 : 0;
+			}
+			Line("Niveau 2, vannes face a la porte de la vapeur : couloir compte " + std::to_string(Counted) + "/3, place de 110 cm dans la porte " + std::to_string(In110) +
+				"/3, place de 60 cm libre " + std::to_string(Free60) + "/3 ; porte : place dans la porte " + std::to_string(InGate) + "/3, journalise " + std::to_string(Logged) +
+				" (attendu 0)", Counted == 3 && In110 == 3 && Free60 == 3 && InGate == 3 && Logged == 0 && !Steam.Print.bAimable);
+		}
+		// Niveau 4 (cellules de 360 cm, murs de 36) : salle (-13, 1), sortie sur la face -X, grille de l'hotel 48 cm devant ; bouton
+		// du code sur la face +Y a la place +116 (X = centre - Lateral), 46 cm du plan de la sortie
+		{
+			constexpr float S = 360.f, T = 36.f;
+			const float CX = -12.5f * S, CY = 1.5f * S;
+			const float ExitX = CX - (S * 0.5f - T * 0.5f);
+			const CL::FPlaced Grille = Place(ExitX + 48.f, CY, 0.f, CL::Of(BRM::EKind::Gate, BRM::R_HotelAccess, BRMech::Module::None, T));
+			const CL::FPlaced Button = Place(CX - 116.f, CY + (S * 0.5f - T * 0.5f), -90.f, CL::Of(BRM::EKind::Button, BRM::R_CodeEnter, BRMech::Module::None, T));
+			Line("Niveau 4, bouton du code a cote de la grille : couloir compte " + std::string(CL::CutsFocusLane(Button, Grille) ? "oui" : "non") + ", place de 110 cm dans la grille " +
+				std::string(StandIn(Button, Grille, CL::StandRange) ? "oui" : "non") + ", " + F1(Button.Frame.X - ExitX) + " cm du plan de la sortie ; journalise " +
+				std::string(CL::LaneCutLogged(Button, BRMech::Module::None, Grille, BRMech::Module::None) ? "OUI" : "non"),
+				CL::CutsFocusLane(Button, Grille) && StandIn(Button, Grille, CL::StandRange) && std::fabs(Button.Frame.X - ExitX - 46.f) < 0.5f
+				&& CL::LaneCut(Button, BRMech::Module::None, Grille, BRMech::Module::None) == ELane::StandInGate);
+		}
+		// Niveau 8 (cellules de 400 cm, parois pleines) : salle (-2, 5), echelle sur la face -Y, passerelle (repere a FarDepth de la
+		// paroi) ; treuil sur la face +X a la place 0 (module X = 90, cote de l'interruption) et a la place -174 (cote du palier)
+		{
+			constexpr float S = 400.f;
+			const float CX = -1.5f * S, CY = 5.5f * S;
+			const CL::FPlaced BridgeG = Place(CX, CY - S * 0.5f + BB::FarDepth, 90.f, CL::Of(BRM::EKind::Gate, BRM::R_Bridge, BRMech::Module::Bridge, 60.f));
+			const CL::FFootprint WinchF = CL::Of(BRM::EKind::Crank, BRM::R_Winch, BRMech::Module::None, 60.f);
+			const CL::FPlaced Winch = Place(CX + S * 0.5f, CY, 180.f, WinchF);
+			const CL::FPlaced ByLanding = Place(CX + S * 0.5f, CY - 174.f, 180.f, WinchF);
+			float LX = 0.f, LY = 0.f, PX = 0.f, PY = 0.f;
+			BridgeG.Frame.ToLocal(Winch.Frame.X, Winch.Frame.Y, LX, LY);
+			BridgeG.Frame.ToLocal(ByLanding.Frame.X, ByLanding.Frame.Y, PX, PY);
+			CL::FBox Parts[CL::MaxBridgeParts];
+			const int NParts = CL::BridgeParts(Parts, CL::MaxBridgeParts);
+			Line("Niveau 8, treuil de la salle en (" + F1(LX) + ", " + F1(LY) + ") du module (journal : 90, -200) : couloir compte par l'enveloppe " +
+				std::string(CL::CutsFocusLane(Winch, BridgeG) ? "oui" : "non") + ", degage des " + std::to_string(NParts) + " pieces ; journalise " +
+				std::string(CL::LaneCutLogged(Winch, BRMech::Module::None, BridgeG, BRMech::Module::Bridge) ? "OUI" : "non"),
+				std::fabs(LX - 90.f) < 0.5f && std::fabs(LY + 200.f) < 0.5f && NParts == CL::MaxBridgeParts && CL::CutsFocusLane(Winch, BridgeG)
+				&& CL::LaneCut(Winch, BRMech::Module::None, BridgeG, BRMech::Module::Bridge) == ELane::BridgeEnvelope);
+			Line("Niveau 8, treuil a cote du palier (module " + F1(PX) + ", " + F1(PY) + ") : couloir coupe par le palier, journalise",
+				PX > -BB::FarDepth && PX < 0.f && CL::LaneCut(ByLanding, BRMech::Module::None, BridgeG, BRMech::Module::Bridge) == ELane::Logged);
+		}
+		// Une dalle entre le mecanisme et une place libre (110 cm devant lui, hors de la dalle) coupe vraiment le couloir : journalisee
+		{
+			const CL::FPlaced Valve = Place(0.f, 0.f, 0.f, CL::Of(BRM::EKind::Switch, BRM::R_Valve, BRMech::Module::None, 90.f));
+			const CL::FPlaced Door = Place(60.f, 0.f, 180.f, CL::Of(BRM::EKind::Gate, BRM::R_SteamDoor, BRMech::Module::None, 90.f));
+			Line("porte entre une vanne et sa place ordinaire libre (dalle a 45..75 cm, place a 118 cm) : journalisee",
+				!StandIn(Valve, Door, CL::StandRange) && CL::CutsFocusLane(Valve, Door) && CL::LaneCut(Valve, BRMech::Module::None, Door, BRMech::Module::None) == ELane::Logged);
+		}
+		// Level 6 : poste a 0 et cage a +58 (disposition v4.14) : la cage (boite visee qui arrete la visee) reste journalisee
+		{
+			auto Wall6 = [&Place](float Lat, const CL::FFootprint& Print) { return Place(Lat, 145.f, -90.f, Print); };
+			const CL::FFootprint Cage = CL::Of(BRM::EKind::Observe, BRM::R_LidarCage, BRMech::Module::None, 60.f);
+			const CL::FFootprint LPost = CL::Of(BRM::EKind::Crank, BRM::R_LidarPost, BRMech::Module::None, 60.f);
+			Line("Level 6, poste a 0 et cage a +58 (v4.14) : la cage coupe le couloir du poste, journalise",
+				CL::LaneCut(Wall6(0.f, LPost), BRMech::Module::None, Wall6(58.f, Cage), BRMech::Module::None) == ELane::Logged);
+		}
 	}
 
 	std::printf("\nRESULTAT : %s (%d verifications, %d echec(s))\n", GFailures == 0 ? "OK" : "ECHEC", GChecks, GFailures);

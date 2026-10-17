@@ -104,9 +104,16 @@ namespace BRTestV412
 	 *  (ABRWorld::GetMissionMovedDevices) : "2, 3", "aucun", "placement 2 impossible" ou "comparaison NON FAITE" */
 	FString MovedFrom2Text(const ABRWorld* W);
 
-	/** v4.15 : place debout devant un mecanisme de la mission */
-	enum class EStand : uint8 { Ok, NoFloor, Swim, Blocked, TooFar, NoSight };
+	/** v4.15 : place debout devant un mecanisme de la mission. v4.15 (correctifs 4) : FocusTaken : depuis cette place, la
+	 *  visee du client (premier temps d'ABRCharacter::UpdateFocus) touche d'abord autre chose que ce mecanisme */
+	enum class EStand : uint8 { Ok, NoFloor, Swim, Blocked, TooFar, NoSight, FocusTaken };
 	const TCHAR* StandName(EStand S);
+	/** v4.15 (correctifs 4) : longueur du balayage de la visee du client (ABRCharacter::UpdateFocus, InteractReach) */
+	constexpr float ClientFocusSweep = 260.f;
+	/** v4.15 (correctifs 4) : la visee du client depuis ces yeux, dirigee sur le point d'interaction de Dev (sphere de
+	 *  BRMech::Clearance::FocusSweep, canal Visibility, seul Self ignore, ClientFocusSweep de long) : ce qu'elle touche en
+	 *  premier (nullptr : rien) */
+	const AActor* FocusFirstHit(const ABRWorld* W, const AActor* Self, const FVector& Eye, const ABRMissionDevice* Dev);
 	/** v4.15 : le sol sous (X, Y) (trace WorldStatic depuis FromZ + 60 cm jusqu'a FromZ - 450 cm, qui n'ignore que Self) ;
 	 *  false : pas de sol (chunk pas construit, vide) */
 	bool FloorUnder(const ABRWorld* W, const FVector& P, float FromZ, const AActor* Self, float& OutFloorZ);
@@ -117,6 +124,10 @@ namespace BRTestV412
 	 *  qui n'ignorent que le joueur : les volumes du mecanisme vise genent comme les autres), pas a la nage si bNoSwim, yeux a
 	 *  leur hauteur reelle, point d'interaction a portee de la visee du client (ClientFocusReach) et selon la regle de l'hote
 	 *  (ABRWorld::CanReachMissionDevice : distance des yeux, ligne de vue qui n'ignore que le joueur et le mecanisme).
+	 *  v4.15 (correctifs 4) : puis la visee du client depuis ces yeux (FocusFirstHit) touche ce mecanisme en premier. Avant :
+	 *  vannes du Niveau 2 face a la porte de la vapeur (graine du niveau 554144564) : place ordinaire dans la porte, premiere
+	 *  place des cercles de biais (110 cm, 67,5 degres) d'ou la visee prenait la vanne voisine ; la marche ne s'en sortait que
+	 *  par sa reprise a 60 cm, et le balayage des places (sans reprise) pouvait echouer.
 	 *  OutStand : centre de la capsule a poser (5 cm au-dessus du sol) */
 	EStand CheckMissionStand(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, const FVector& P, bool bNoSwim, FVector& OutStand);
 	/** v4.15 : la premiere place debout valable (CheckMissionStand) sur des cercles de 110, 160 et 210 cm, puis 75 cm (place

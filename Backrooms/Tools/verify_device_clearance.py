@@ -30,7 +30,8 @@ Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
      d'une cellule en rang (meme lacet) et couloirs de visee degages (BRMech::Clearance::CutsFocusLane dans PickSlot,
      miroir ici) : aucune visee prise ; le couloir detecte chacune des combinaisons fautives de la regle d'avant.
 En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
-BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote).
+BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote ; v4.15
+correctifs 4 : puis la visee du client, BRTestV412::FocusFirstHit, touche le mecanisme avant tout decor).
 
 Les constantes sont lues dans les sources (BRMechLogic.h/.cpp, BRMissionWorld.cpp, BRChunk.cpp, BRLevels.cpp, BRWorld.h,
 BRCharacter.cpp, BRInteractables.cpp, BRAutoTestV412.cpp, BRAutoTestWalk.h) et les bornes des modeles dans
@@ -376,6 +377,12 @@ class OBox:
     def rect(self):
         return (self.cx, self.cy, self.hx, self.hy, self.yaw)
 
+    def seg_dist(self, a, b):
+        """v4.15 (correctifs 4) : distance 3D d'un segment a la boite (dans son repere)"""
+        la = self.local(a[0], a[1]) + (a[2],)
+        lb = self.local(b[0], b[1]) + (b[2],)
+        return seg_box_dist(la, lb, (-self.hx, -self.hy, self.z0, self.hx, self.hy, self.z1))
+
 
 def prop_box(bounds, px, py, pz, yaw, sx, sy, sz):
     """Boite de collision de ABRChunk::AddProp : bornes du modele a l'echelle, tournees, centre transforme"""
@@ -465,8 +472,47 @@ def find_mission_stand(K, fr, aim, boxes, solid_cells=None, S=0.0):
                 continue
             if math.dist(eye, ip) > K["Reach"] or any(b.hits(eye, ip) for b in boxes) or los_solid(eye, ip):
                 continue
+            # v4.15 (correctifs 4) : la visee du client depuis ces yeux touche le mecanisme avant le decor (FocusFirstHit)
+            if not focus_first(K, eye, fr, aim, boxes, solid_cells, S):
+                continue
             return True
     return False
+
+
+def focus_first(K, eye, fr, aim, boxes, solid_cells=None, S=0.0):
+    """v4.15 (correctifs 4) : miroir de BRTestV412::FocusFirstHit (premier temps d'ABRCharacter::UpdateFocus) : la sphere de
+    FocusSweep lancee des yeux vers le point vise touche la boite visee du mecanisme avant toute boite du decor (rocher, maison)
+    et toute cellule pleine (contact avec la boite visee : entree du segment dans la boite grossie du rayon)"""
+    r = K["focus_sweep"]
+    ip = aim_point(fr, aim)
+    c, e = world_aim_box(fr, aim)
+    t0, t1 = 0.0, 1.0
+    for i in range(3):
+        d = ip[i] - eye[i]
+        lo, hi = c[i] - e[i] - r, c[i] + e[i] + r
+        if abs(d) < 1e-9:
+            if eye[i] < lo or eye[i] > hi:
+                return False
+            continue
+        u0, u1 = (lo - eye[i]) / d, (hi - eye[i]) / d
+        if u0 > u1:
+            u0, u1 = u1, u0
+        t0, t1 = max(t0, u0), min(t1, u1)
+        if t0 > t1:
+            return False
+    stop = tuple(eye[k] + (ip[k] - eye[k]) * t0 for k in range(3))
+    if any(b.seg_dist(eye, stop) < r for b in boxes):
+        return False
+    if solid_cells:
+        n = max(2, int(math.dist(eye, stop) / 5.0))
+        for i in range(n + 1):
+            x, y = eye[0] + (stop[0] - eye[0]) * i / n, eye[1] + (stop[1] - eye[1]) * i / n
+            cx, cy = math.floor(x / S), math.floor(y / S)
+            for X in range(cx - 1, cx + 2):
+                for Y in range(cy - 1, cy + 2):
+                    if solid_cells(X, Y) and math.hypot(max(X * S - x, 0.0, x - (X + 1) * S), max(Y * S - y, 0.0, y - (Y + 1) * S)) < r:
+                        return False
+    return True
 
 
 # ------------------------------------------------------------------------------------------------ A. Level 6
@@ -590,14 +636,36 @@ class Level6Face:
         return math.dist(eye, self.aim) <= self.K["Reach"] and not seg_hits_box(eye, self.aim, self.cage)
 
     def check(self, u, v):
-        """BRTestV412::CheckMissionStand (sol plat, pas d'eau au Level 6)"""
+        """BRTestV412::CheckMissionStand (sol plat, pas d'eau au Level 6) ; v4.15 (correctifs 4) : puis la visee du client touche le
+        poste en premier (FocusFirstHit)"""
         if not self.capsule_free(u, v):
             return "capsule"
         if math.dist((u, v, self.eye_z), self.aim) > self.K["ClientFocusReach"]:
             return "loin"
         if not self.host(u, v):
             return "vue"
+        if not self.first(u, v):
+            return "visee"
         return "ok"
+
+    def first(self, u, v):
+        """v4.15 (correctifs 4) : BRTestV412::FocusFirstHit (miroir) : le balayage de la visee touche le poste avant la cage et les
+        murs (sans la tolerance de la visee)"""
+        r = self.K["focus_sweep"]
+        eye = (u, v, self.eye_z)
+        g = tuple(self.post_box[k] - r for k in range(3)) + tuple(self.post_box[k] + r for k in range(3, 6))
+        n = max(2, int(math.dist(eye, self.aim) / 2.0))
+        stop = 1.0
+        for i in range(n + 1):
+            t = i / n
+            p = [eye[k] + (self.aim[k] - eye[k]) * t for k in range(3)]
+            if g[0] <= p[0] <= g[3] and g[1] <= p[1] <= g[4] and g[2] <= p[2] <= g[5]:
+                stop = t
+                break
+        end = tuple(eye[k] + (self.aim[k] - eye[k]) * stop for k in range(3))
+        gap = min(seg_box_dist(eye, end, self.cage), seg_box_dist(eye, end, self.cage_box))
+        side = min(self.wall_dist(eye[0] + (end[0] - eye[0]) * t / 10.0, eye[1] + (end[1] - eye[1]) * t / 10.0) for t in range(11))
+        return gap >= r and side >= r and math.dist(eye, end) <= self.K["InteractReach"]
 
     def client(self, u, v):
         """ABRCharacter::UpdateFocus, regard sur le point du poste : balayage de 7 cm jusqu'a la boite du poste (la cage frolee

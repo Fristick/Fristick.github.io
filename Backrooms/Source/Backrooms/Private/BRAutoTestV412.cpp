@@ -617,8 +617,33 @@ namespace BRTestV412
 		case EStand::Blocked: return TEXT("capsule genee");
 		case EStand::TooFar: return TEXT("hors de portee de la visee");
 		case EStand::NoSight: return TEXT("refusee par l'hote (vue coupee)");
+		case EStand::FocusTaken: return TEXT("visee du client prise par un voisin");
 		}
 		return TEXT("?");
+	}
+
+	const AActor* FocusFirstHit(const ABRWorld* W, const AActor* Self, const FVector& Eye, const ABRMissionDevice* Dev)
+	{
+		UWorld* World = W ? W->GetWorld() : nullptr;
+		if (!World || !Dev)
+		{
+			return nullptr;
+		}
+		// Premier temps d'ABRCharacter::UpdateFocus (a la 1re personne, depuis les yeux) : sphere de BRMech::Clearance::FocusSweep
+		// lancee dans l'axe du regard, canal Visibility, seul le joueur ignore (les capsules des joueurs et des entites
+		// ignorent ce canal)
+		const FVector Dir = (Dev->GetInteractPoint() - Eye).GetSafeNormal();
+		if (Dir.IsNearlyZero())
+		{
+			return nullptr;
+		}
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestStandFocus), false, Self);
+		FHitResult Hit;
+		if (!World->SweepSingleByChannel(Hit, Eye, Eye + Dir * ClientFocusSweep, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q))
+		{
+			return nullptr;
+		}
+		return Hit.GetActor();
 	}
 
 	bool FloorUnder(const ABRWorld* W, const FVector& P, float FromZ, const AActor* Self, float& OutFloorZ)
@@ -678,6 +703,12 @@ namespace BRTestV412
 		{
 			return EStand::NoSight;
 		}
+		// v4.15 (correctifs 4) : la visee du client depuis ces yeux touche ce mecanisme en premier (pas un voisin, ni un mur
+		// frole : le balayage s'arreterait avant lui)
+		if (FocusFirstHit(W, C, Eye, Dev) != Dev)
+		{
+			return EStand::FocusTaken;
+		}
 		OutStand = Stand;
 		return EStand::Ok;
 	}
@@ -693,7 +724,7 @@ namespace BRTestV412
 		const FVector Fwd = Ahead.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Ahead;
 		// Cercles : 110 cm (place ordinaire), plus loin, puis tout pres (place etroite) ; 16 directions depuis l'avant.
 		// v4.15 (correctifs 3) : la place ordinaire est celle du couloir de visee du placement (BRMech::Clearance::StandRange)
-		int32 Refused[6] = { 0, 0, 0, 0, 0, 0 };
+		int32 Refused[7] = { 0, 0, 0, 0, 0, 0, 0 };
 		int32 Tried = 0;
 		for (const float Dist : { BRMech::Clearance::StandRange, 160.f, 210.f, 75.f, 240.f })
 		{
@@ -711,9 +742,10 @@ namespace BRTestV412
 		}
 		if (OutWhy)
 		{
-			*OutWhy = FString::Printf(TEXT("%d places essayees : %d sans sol, %d a la nage, %d capsule genee, %d hors de portee de la visee (%.0f cm), %d refusees par l'hote"), Tried,
-				Refused[static_cast<int32>(EStand::NoFloor)], Refused[static_cast<int32>(EStand::Swim)], Refused[static_cast<int32>(EStand::Blocked)],
-				Refused[static_cast<int32>(EStand::TooFar)], ClientFocusReach, Refused[static_cast<int32>(EStand::NoSight)]);
+			*OutWhy = FString::Printf(TEXT("%d places essayees : %d sans sol, %d a la nage, %d capsule genee, %d hors de portee de la visee (%.0f cm), %d refusees par l'hote, "
+				"%d visee du client prise par un voisin"), Tried, Refused[static_cast<int32>(EStand::NoFloor)], Refused[static_cast<int32>(EStand::Swim)],
+				Refused[static_cast<int32>(EStand::Blocked)], Refused[static_cast<int32>(EStand::TooFar)], ClientFocusReach, Refused[static_cast<int32>(EStand::NoSight)],
+				Refused[static_cast<int32>(EStand::FocusTaken)]);
 		}
 		return false;
 	}

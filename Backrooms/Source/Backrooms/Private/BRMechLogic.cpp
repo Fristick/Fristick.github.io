@@ -621,14 +621,87 @@ namespace BRMech
 			return CutsFocusLane(A, B) || CutsFocusLane(B, A);
 		}
 
-		bool LaneCutLogged(const FPlaced& Me, uint8_t MeModule, const FPlaced& Other, uint8_t OtherModule)
+		int BridgeParts(FBox* Out, int MaxParts)
 		{
+			// Memes boites que ABRMissionDevice::BuildBridge (AddSolid) ; tablier leve : vertical sur sa charniere (tangage 90 degres,
+			// BRMech::Bridge::DeckPitch(0))
+			namespace BB = BRMech::Bridge;
+			static_assert(2 + BB::Steps + 4 + 1 <= MaxBridgeParts, "BRMech::Clearance::BridgeParts : MaxBridgeParts trop petit");
+			FBox Parts[MaxBridgeParts];
+			int N = 0;
+			Parts[N++] = Box(-BB::FarDepth, -BB::HalfWidth, 0.f, 0.f, BB::HalfWidth, BB::FarTop);
+			Parts[N++] = Box(BB::Gap, -BB::HalfWidth, 0.f, BB::Gap + BB::NearDepth, BB::HalfWidth, BB::NearTop);
+			for (int I = 0; I < BB::Steps; ++I)
+			{
+				const float SX = BB::Gap + BB::NearDepth + static_cast<float>(I) * BB::StepDepth;
+				const float Top = BB::NearTop * static_cast<float>(BB::Steps - I) / (static_cast<float>(BB::Steps) + 1.f);
+				Parts[N++] = Box(SX, -BB::HalfWidth, 0.f, SX + BB::StepDepth, BB::HalfWidth, Top);
+			}
+			for (int Side = -1; Side <= 1; Side += 2)
+			{
+				// Poteau du portique sur le palier, poteau de main courante sur l'appui
+				const float PY = static_cast<float>(Side) * (BB::DeckHalfWidth + 15.f);
+				Parts[N++] = Box(-35.f, PY - 5.f, BB::FarTop, -25.f, PY + 5.f, BB::FarTop + 230.f);
+				const float RY = static_cast<float>(Side) * (BB::DeckHalfWidth + 6.f);
+				Parts[N++] = Box(BB::Gap + 22.f, RY - 3.f, BB::NearTop, BB::Gap + 28.f, RY + 3.f, BB::NearTop + 100.f);
+			}
+			Parts[N++] = Box(-BB::DeckThick * 0.5f, -BB::DeckHalfWidth, BB::HingeZ(), BB::DeckThick * 0.5f, BB::DeckHalfWidth, BB::HingeZ() + BB::DeckLength());
+			const int Count = N < MaxParts ? N : MaxParts;
+			for (int I = 0; I < Count && Out; ++I)
+			{
+				Out[I] = Parts[I];
+			}
+			return Count;
+		}
+
+		ELaneCut LaneCut(const FPlaced& Me, uint8_t MeModule, const FPlaced& Other, uint8_t OtherModule)
+		{
+			if (!CutsFocusLane(Me, Other))
+			{
+				return ELaneCut::Clear;
+			}
 			// v4.15 (correctifs 3) : la vanne B et les bassins de la vanne A sont poses ensemble par leur module (apres PickSlot)
 			if (MeModule == Module::PoolWheelB && OtherModule == Module::PoolTanks)
 			{
-				return false;
+				return ELaneCut::PoolModule;
 			}
-			return CutsFocusLane(Me, Other);
+			// v4.15 (correctifs 4) : porte de la mission (boite visee sans collision : elle ne prend jamais la visee) : seul son
+			// volume coupe le couloir. Posee avant les groupes devant la sortie gardee, PickSlot ne la voit pas
+			if (!Other.Print.bAimable && Other.Print.bSolid)
+			{
+				if (OtherModule == Module::None)
+				{
+					// Dalle d'une porte, d'une grille ou d'un portail : la place ordinaire est dedans (capsule comprise)
+					float SX = 0.f, SY = 0.f;
+					Me.Frame.ToWorld(Me.Print.Aim.X + StandRange, Me.Print.Aim.Y, SX, SY);
+					if (InSolid(Other, SX, SY, Me.Frame.Z, PlayerRadius))
+					{
+						return ELaneCut::StandInGate;
+					}
+				}
+				else if (OtherModule == Module::Bridge)
+				{
+					// Enveloppe de la passerelle : le couloir est juge contre ses vraies pieces
+					FBox Parts[MaxBridgeParts];
+					const int N = BridgeParts(Parts, MaxBridgeParts);
+					FPlaced Part = Other;
+					for (int I = 0; I < N; ++I)
+					{
+						Part.Print.Solid = Parts[I];
+						if (CutsFocusLane(Me, Part))
+						{
+							return ELaneCut::Logged;
+						}
+					}
+					return ELaneCut::BridgeEnvelope;
+				}
+			}
+			return ELaneCut::Logged;
+		}
+
+		bool LaneCutLogged(const FPlaced& Me, uint8_t MeModule, const FPlaced& Other, uint8_t OtherModule)
+		{
+			return LaneCut(Me, MeModule, Other, OtherModule) == ELaneCut::Logged;
 		}
 
 		bool Overlap(const FRect& A, const FRect& B)
