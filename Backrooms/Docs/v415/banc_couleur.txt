@@ -3,7 +3,7 @@
 #   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Light\test_color.cpp /Fetest_color.exe && test_color.exe
 #   (aussi : cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive- ... : meme sortie)
 # Compilateur : clang version 22.1.3 (https://github.com/llvm/llvm-project e9846648fd6183ee6d8cbdb4502213fcf902a211)
-# Date : 2026-10-16T22:37:14Z
+# Date : 2026-10-17T09:20:10Z (clang-cl et cl /W4 : meme sortie : oui)
 Banc de la couleur des lampes v4.15 (BRColorLogic.h ; niveaux lus dans Source/Backrooms/Private/BRLevels.cpp)
 Modele (formules du moteur)
   balance des blancs a 6500 K : neutre (1.001, 1.000, 1.001)                                               OK

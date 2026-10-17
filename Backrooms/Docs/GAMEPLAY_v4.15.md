@@ -3,7 +3,8 @@
 Les règles de la v4.13 et de la v4.14 ([`GAMEPLAY_v4.13.md`](GAMEPLAY_v4.13.md), [`GAMEPLAY_v4.14.md`](GAMEPLAY_v4.14.md))
 restent valables : Level 0 sans énigme, porte de service tirée par partie, fil `0 → 1 → Poolrooms → 2 → 3 → …`, Level 6
 sans lumière au scanner, REJOUER sans écriture de la campagne. Ce document décrit seulement ce que la v4.15 change pour
-le joueur. Rien de ceci n'a encore été joué dans Unreal : les tests du jeu sont préparés (`-BRAutoTestV415`). Les
+le joueur. Tout a été joué dans Unreal 5.8 par les tests du jeu (`-BRAutoTestV415`, `-BRAutoTestV415Fix`, suites
+précédentes, test réseau) : résultats dans [`RAPPORT_v4.15.md`](RAPPORT_v4.15.md). Les
 règles détaillées (R-L1 à R-L6) : [`HISTOIRE_PROGRESSION_v4.15.md`](HISTOIRE_PROGRESSION_v4.15.md).
 
 ## 1. Toute nouvelle partie suit le parcours linéaire
@@ -67,3 +68,53 @@ règles détaillées (R-L1 à R-L6) : [`HISTOIRE_PROGRESSION_v4.15.md`](HISTOIRE
   le point de rassemblement (zone de 8 m) et la portée de la porte (3,6 m) ne changent pas. En développement, une
   sortie dont le point visé serait pris dans un obstacle le signale dans le journal (vérifié quand la sortie devient
   visible et quand la mission l'ouvre ; pas tant que la porte de la mission la ferme).
+
+## 6. Missions qui bloquaient (1er, 3e et 4e lots)
+
+Trouvés en jouant les tests dans Unreal sur un nouveau PC (aucun de ces cas n'avait été joué avant). Le détail, les bancs
+et les sorties réelles : [`Docs/v415/correctifs_places.txt`](v415/correctifs_places.txt),
+[`correctifs_3.txt`](v415/correctifs_3.txt), [`correctifs_4.txt`](v415/correctifs_4.txt).
+
+- **Level 6, postes de confinement** : sur toutes les graines, la cage de confinement enfermait le point d'action de son
+  poste ; la mission ne pouvait pas être finie. La cage et son poste sont maintenant aux deux bouts du mur (±58 cm), et
+  la place devant le poste est libre.
+- **Level 6, aile du scanner** : l'aile n'était atteinte que dans environ la moitié des graines (recherche limitée) ;
+  elle l'est toujours. Les créatures ne cherchent plus leur chemin par une porte de l'aile restée fermée.
+- **Niveau 8** : des mécanismes (environ la moitié des graines) et des échelles de sortie (57 %) étaient pris dans les
+  rochers ; les rochers sont écartés des mécanismes et des sorties. L'échelle de sortie posée sur le palier de la
+  passerelle ne se grimpait pas depuis le tablier incliné (depuis la v4.12) : le grimpeur glisse maintenant sur le sol
+  praticable jusqu'au palier. Les échelles des chunks ne sont plus enfouies dans la roche de leur paroi (en coopération,
+  le départ de groupe y était refusé).
+- **Niveau 9** : la maison ne recouvre plus le « Plan de maison » (porche).
+- **Niveau 10, moulin** : les poteaux d'une même pièce avaient chacun leur orientation ; un mécanisme pouvait cacher son
+  voisin à la visée (« Orientation du moulin » et « Frein du moulin »). Les poteaux d'une pièce sont maintenant en rang
+  et le placement garde dégagée la ligne de visée de chaque mécanisme.
+- **Graines** : chaque niveau tire sa disposition parmi 4 milliards de graines (32 bits) ; sous Windows il n'y en avait
+  que 32 768.
+- Ces changements de place valent pour les dispositions de la v4.15 (placement 3). Une mission de la v4.14 reprise
+  annonce « mécanismes réaménagés » seulement si ses mécanismes ont changé de place (toujours au Level 6 ; au Niveau 10
+  selon la graine) ; sinon elle garde sa progression.
+
+## 7. Image plus réaliste (direction « Backrooms: Escape Together »)
+
+- **Éclairage** : néons blanc chaud (3700 K) vus par une caméra réglée comme sous des tubes fluorescents (balance des
+  blancs à 3900 K au Level 0) : un jaune plus naturel, moins saturé ; plage d'exposition resserrée (le noir d'une
+  coupure reste noir, l'image ne « pompe » plus) ; adaptation de l'œil plus lente.
+- **Néons** : amorçage qui clignote à l'allumage, tubes en fin de vie, rallumage décalé après une coupure, bourdonnement
+  qui vient de chaque plafonnier. Avec « flashs réduits », aucun clignotement ne dépasse 3 par seconde.
+- **Ombres de toutes les lampes** (nouvelle option, PARAMÈTRES > GRAPHISMES, MegaLights) : chaque plafonnier projette son
+  ombre ; active dans QUALITÉ, RTX FLUIDE et CINÉMATIQUE, coupée dans PERFORMANCE, indisponible sans ray tracing
+  matériel.
+- **Lampe torche et frontale** : faisceau photométrique (profil IES, centre plus dense, halo doux) ; la lampe garde son
+  blanc chaud quelle que soit la balance des blancs du niveau.
+- **Brouillard** : brouillard volumétrique réglé par niveau (halos des lampes), air humide des salles de fosses et des
+  zones sans lumière, air froid du sas de la porte de service.
+- **Surfaces du Level 0** : papier peint en lés de 53 cm (joints, bords décollés), ligne de marée au-dessus de la
+  plinthe, moquette bouclée au lustre de tissu avec des zones humides, dalles de plafond de 61 cm fissurées ; sol et
+  plafond du kit posés cellule par cellule.
+- **Usure** (Levels 0, 1 et 2) : auréoles sous le plafond, taches près des plafonniers (plus près des lampes mortes),
+  moquette humide au pied des murs, éraflures. Tirées avec la graine : les mêmes chez tous les joueurs.
+- **Premier lancement** : le profil graphique est choisi selon la carte graphique (annoncé à l'écran) ; il se change
+  dans PARAMÈTRES > GRAPHISMES.
+- **Inchangé** : la lumière de gameplay (ce que voient les créatures, `LightLevelAt`) ; elle ne tient pas encore compte
+  des murs (décision de gameplay laissée ouverte).

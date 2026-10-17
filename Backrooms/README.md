@@ -7,15 +7,27 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.15** (parcours linéaire) :
+**Version 4.15** (parcours linéaire, image réaliste, tests du jeu joués dans Unreal) :
 
 - **Où lire** :
+  - résultats, méthode, limites : [`Docs/RAPPORT_v4.15.md`](Docs/RAPPORT_v4.15.md) ;
+  - la base v4.14 jouée pour la première fois dans Unreal, bugs trouvés : [`Docs/AUDIT_v4.15.md`](Docs/AUDIT_v4.15.md) ;
   - ce qui change pour le joueur : [`Docs/GAMEPLAY_v4.15.md`](Docs/GAMEPLAY_v4.15.md) ;
   - règles du parcours (R-L1 à R-L6), état de la partie, migration : [`Docs/HISTOIRE_PROGRESSION_v4.15.md`](Docs/HISTOIRE_PROGRESSION_v4.15.md) ;
-  - journaux réels des bancs : [`Docs/v415/`](Docs/v415/).
+  - journaux réels des bancs et des correctifs : [`Docs/v415/`](Docs/v415/).
 
-> **Compilé** sous Windows (Unreal 5.8, éditeur et jeu, 0 avertissement du projet) ; bancs hors moteur exécutés.
-> **Préparé, à exécuter dans Unreal** : les tests du jeu `-BRAutoTestV415` et `-BRNetTest`.
+> **Exécuté** sous Windows (Unreal 5.8.3, RTX 5050 Laptop) : compilation éditeur et jeu (0 avertissement du projet),
+> installation du contenu (0 problème), 10 bancs hors moteur, **14 suites de test du jeu et le test réseau** : toutes
+> réussies hormis les images par seconde des salles de fosses sur ce portable (V413 et V412 de bout en bout pour la
+> première fois ; test complet : 29 problèmes sur la base, 1 maintenant ; réseau : 0).
+
+- **Image réaliste** (direction « Backrooms: Escape Together ») : néons blanc chaud vus par une caméra réglée pour eux,
+  ombres de toutes les lampes (MegaLights, nouvelle option), néons qui s'amorcent et vieillissent, brouillard
+  volumétrique, faisceau IES de la lampe, papier peint, moquette et plafond du Level 0 refaits, usure (taches, auréoles,
+  éraflures) identique chez tous les joueurs.
+- **Douze bugs du jeu corrigés**, dont une mission impossible au Level 6 sur toutes les graines, des mécanismes pris
+  dans les rochers (Niveau 8) et dans la maison (Niveau 9), et trois bugs de coopération (arrivée d'un joueur, départ
+  de groupe devant une porte murale, échelles du Niveau 8).
 
 - **Parcours linéaire pour toute nouvelle partie** (aucun choix à faire ; pastille LINÉAIRE sur la carte de la partie) :
   le fil de l'histoire, chaque niveau avec une **disposition fixe pour la partie** (graine tirée une fois), et **une

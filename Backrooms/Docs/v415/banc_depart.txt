@@ -6,8 +6,8 @@
 #   la ligne "departure" de Saved/TestRuns/run_cpp_benches.bat les ajoute
 # Compilateur : clang version 22.1.3 (clang-cl de Visual Studio 2026), 0 avertissement
 # Machine : Windows 11, RTX 5050 Laptop, 16 Go
-# Date : 2026-10-17T07:44:46Z
-
+# Banc du depart de groupe v4.12 (BRGatherLogic.cpp)
+# Date : 2026-10-17T09:20:10Z (clang-cl et cl /W4 : meme sortie : oui)
 # Banc du depart de groupe v4.12 (BRGatherLogic.cpp)
 
 1. Rassemblement autour de l'echelle choisie

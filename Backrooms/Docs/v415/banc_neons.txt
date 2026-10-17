@@ -3,8 +3,8 @@
 #   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Light\test_fluo.cpp /Fetest_fluo.exe && test_fluo.exe
 #   (aussi : cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /permissive- ... : meme sortie)
 # Compilateur : clang version 22.1.3 (https://github.com/llvm/llvm-project e9846648fd6183ee6d8cbdb4502213fcf902a211)
-# Date : 2026-10-16T21:31:54Z
-
+# Banc des neons fluorescents v4.15 (BRFluoLogic.h)
+# Date : 2026-10-17T09:20:10Z (clang-cl et cl /W4 : meme sortie : oui)
 # Banc des neons fluorescents v4.15 (BRFluoLogic.h)
 
   tube ordinaire (2 h) : 2458 defaillances, 7358 phases eteintes, 7358 bruits ; amorcage 2 a 4 clignements, eteint 30-80 ms, allume 30-80 ms
