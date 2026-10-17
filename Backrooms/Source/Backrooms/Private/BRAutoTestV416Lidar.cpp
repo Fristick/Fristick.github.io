@@ -134,6 +134,12 @@ namespace BRTestV416Lidar
 		int32 Count = 0;
 		int32 Shots = 0;
 		BRTestNet::FPlacement Place;
+		/** v4.16 (relecture) : scan porte fermee vraiment fait (analyse atteinte) ; sinon l'ancienne place n'est pas relevee */
+		bool bClosedScanned = false;
+		/** v4.16 (relecture) : temps du monde a la fin du dernier scan de la porte (attente du rafraichissement des inscriptions) */
+		double ScanEndAt = -1.0;
+		/** v4.16 (relecture) : rayons sur une inscription en mouvement (ABRLidar::Stats) au debut de l'ouverture */
+		int64 MovingSkips0 = 0;
 	};
 	FRun& Run()
 	{
@@ -159,6 +165,8 @@ namespace BRTestV416Lidar
 		int32 Beyond = 0;
 		/** Inscriptions posees pendant que le battant bougeait (images du mouvement) */
 		int32 GlyphsMoving = 0;
+		/** v4.16 (relecture) : impacts sur la porte dont l'image relevee montre le battant entre ses poses fermee et ouverte */
+		int32 DoorImpactsMoving = 0;
 	};
 
 	/** Releve de l'image F ou de ses voisines (l'ordre des Ticks du test, du mecanisme et du scanner n'est pas fixe) qui
@@ -220,10 +228,11 @@ namespace BRTestV416Lidar
 			}
 			FPlate P = Now;
 			bool bMoving = false;
+			bool bMatched = false;
 			const bool bGlyph = T.Category == BRLidar::Glyph && T.Device == S.Door;
 			if (bSamples)
 			{
-				BestSample(S, T.Frame, T.At, bGlyph, P, bMoving);
+				bMatched = BestSample(S, T.Frame, T.At, bGlyph, P, bMoving);
 			}
 			if (bGlyph)
 			{
@@ -252,6 +261,9 @@ namespace BRTestV416Lidar
 			if (T.Category == BRLidar::Device && T.Device == S.Door)
 			{
 				++R.DoorImpacts;
+				// v4.16 (relecture) : le battant pivote a vitesse constante (Approach) : une pose entre fermee et ouverte n'existe
+				// que pendant le mouvement
+				R.DoorImpactsMoving += (bMatched && P.Progress > 0.f && P.Progress < 1.f) ? 1 : 0;
 				if (P.bLeaf)
 				{
 					const float Ld = LeafDistance(P.Leaf, T.At);
@@ -458,6 +470,10 @@ void ABRAutoTest::AddV416LidarSteps()
 			{
 				// Chunk de la porte construit (le joueur peut en etre loin), puis une place libre et a vue de la cible
 				L->SetFocus(false);
+				if (Expect == EExpect::Closed)
+				{
+					S.bClosedScanned = false;
+				}
 				if (!D->IsShown())
 				{
 					PlaceNear(C, D, Stands[0], Target, true);
@@ -520,6 +536,9 @@ void ABRAutoTest::AddV416LidarSteps()
 			L->SetFocus(false);
 			S.Phase = 0;
 			const FScan R = Analyze(L, D, S, false);
+			// v4.16 (relecture) : scan fait (l'ancienne place peut etre relevee), fin du scan pour l'attente du rafraichissement
+			S.bClosedScanned = S.bClosedScanned || Expect == EExpect::Closed;
+			S.ScanEndAt = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 			const FPlate P = PlateOf(D);
 			const FVector Eye = C->GetEyeLocation();
 			const FString Where = FString::Printf(TEXT("yeux a %.0f cm de la plaque, battant ouvert a %.0f %%"), FVector::Dist(Eye, P.C), P.Progress * 100.f);
@@ -596,6 +615,13 @@ void ABRAutoTest::AddV416LidarSteps()
 		ABRWorld* W = GetBRWorld();
 		ABRMissionDevice* D = (W && S.bReady) ? W->FindMissionDevice(S.Door) : nullptr;
 		ABRCharacter* C = GetPlayer();
+		// v4.16 (relecture) : scan ferme non fait (place, chunk) : condition absente, pas un echec ; l'ouverture pendant le scan
+		// est alors NON VERIFIEE (bOld faux)
+		if (D && !S.bClosedScanned)
+		{
+			Skip(TEXT("v4.16 lidar : ancienne place non relevee (scan porte fermee non fait, voir plus haut)"));
+			return true;
+		}
 		if (D && C && C->GetLidar())
 		{
 			S.Old = PlateOf(D);
@@ -623,6 +649,12 @@ void ABRAutoTest::AddV416LidarSteps()
 		ABRMissionDevice* D = (W && S.bReady) ? W->FindMissionDevice(S.Door) : nullptr;
 		if (!W || !C || !L || !D || !S.bOld)
 		{
+			// v4.16 (relecture) : la porte est tout de meme ouverte : les etapes suivantes l'attendent ouverte (et la reprise,
+			// mission resolue)
+			if (W && D)
+			{
+				W->DebugCompleteMission();
+			}
 			Skip(TEXT("v4.16 lidar : ouverture pendant le scan non verifiee (porte, scanner ou scan ferme absent)"));
 			S.Phase = 0;
 			return true;
@@ -635,6 +667,7 @@ void ABRAutoTest::AddV416LidarSteps()
 		{
 			S.Samples.Reset();
 			S.Samples.Add(GFrameCounter, P);
+			S.MovingSkips0 = ABRLidar::Stats.GlyphMovingSkips;
 			L->SetTestRecord(true);
 			L->SetFocus(true);
 			W->DebugCompleteMission(); // l'hote resout la mission : la bonne porte s'ouvre (Gate 255, animation de UpdateModule)
@@ -655,12 +688,28 @@ void ABRAutoTest::AddV416LidarSteps()
 		L->SetFocus(false);
 		S.Phase = 0;
 		const FScan R = Analyze(L, D, S, true);
+		S.ScanEndAt = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+		const int64 MovingSkips = ABRLidar::Stats.GlyphMovingSkips - S.MovingSkips0;
 		const bool bOpen = P.Progress >= 1.f && D->GetGateValue() >= 255;
-		const bool bOk = bOpen && R.GlyphsOnPlate == R.Glyphs && R.GlyphsAtOld == 0 && R.DoorOnLeaf == R.DoorImpacts && R.Ignored == 0 && R.InDoorway == 0;
-		Note(FString::Printf(TEXT("ouverture pendant le scan (%.2f s jusqu'a 95 degres) : porte ouverte %s ; inscriptions %d dont %d pendant le mouvement, sur la plaque de leur image %d, "
-			"a l'ancienne place %d (attendu 0) ; impacts sur le battant %d, sur ses boites a sa position %d (au plus %.2f cm), sur la boite visee ou le corps bloquant %d, dans "
-			"l'ouverture vide %d (attendu 0) ; %d images relevees"), S.Count / 100.f, Oui(bOpen), R.Glyphs, R.GlyphsMoving, R.GlyphsOnPlate, R.GlyphsAtOld, R.DoorImpacts,
-			R.DoorOnLeaf, R.LeafDistMax, R.Ignored, R.InDoorway, S.Samples.Num()), !bOk);
+		if (bOpen && R.DoorImpactsMoving == 0)
+		{
+			// v4.16 (relecture) : aucun rayon sur le battant pendant qu'il pivotait : rien n'est verifie (v4.16 initiale : 0 == 0
+			// comptait comme une reussite)
+			Skip(FString::Printf(TEXT("ouverture pendant le scan : aucun impact sur le battant pendant le mouvement (impacts sur la porte %d, %d images relevees) : cas \"mouvement "
+				"en cours\" non verifie"), R.DoorImpacts, S.Samples.Num()));
+		}
+		else
+		{
+			// Un support qui bouge ne se lit pas (BRLidar::FSupportTrack) : aucune inscription pendant le mouvement, et les rayons sur
+			// le battant en mouvement sont comptes comme tels
+			const bool bOk = bOpen && R.GlyphsMoving == 0 && R.GlyphsOnPlate == R.Glyphs && R.GlyphsAtOld == 0 && MovingSkips > 0 && R.DoorOnLeaf == R.DoorImpacts &&
+				R.Ignored == 0 && R.InDoorway == 0;
+			Note(FString::Printf(TEXT("ouverture pendant le scan (%.2f s jusqu'a 95 degres) : porte ouverte %s ; inscriptions %d dont %d pendant le mouvement (attendu 0 : un support "
+				"qui bouge ne se lit pas), sur la plaque de leur image %d, a l'ancienne place %d (attendu 0) ; impacts sur le battant %d dont %d pendant le mouvement, sur ses boites "
+				"a sa position %d (au plus %.2f cm), sur la boite visee ou le corps bloquant %d, dans l'ouverture vide %d (attendu 0) ; rayons sur l'inscription en mouvement (non "
+				"relevee) %lld (attendu > 0) ; %d images relevees"), S.Count / 100.f, Oui(bOpen), R.Glyphs, R.GlyphsMoving, R.GlyphsOnPlate, R.GlyphsAtOld, R.DoorImpacts,
+				R.DoorImpactsMoving, R.DoorOnLeaf, R.LeafDistMax, R.Ignored, R.InDoorway, MovingSkips, S.Samples.Num()), !bOk);
+		}
 		const FVector Moved = P.C - S.Old.C;
 		Note(FString::Printf(TEXT("plaque ouverte en (%.1f, %.1f, %.1f) : centre deplace de %.1f cm (prevu par le code : 100,5 cm), normale (%.2f, %.2f, %.2f)"), P.C.X, P.C.Y, P.C.Z,
 			Moved.Size(), P.N.X, P.N.Y, P.N.Z), !bOpen || FMath::Abs(Moved.Size() - 100.5) > 2.0);
@@ -676,7 +725,11 @@ void ABRAutoTest::AddV416LidarSteps()
 		const double Since = S.ClosedPassAt > 0.0 ? FPlatformTime::Seconds() - S.ClosedPassAt : -1.0;
 		const float Refresh = BRLidar::GlyphRefreshSeconds(ABRLidar::Settings().Persistence);
 		S.Count = Since >= 0.0 && Since + ScanSeconds + 1.0 < Refresh ? 1 : 0;
-		if (!S.Count && S.bReady)
+		if (S.bReady && Since < 0.0)
+		{
+			Skip(TEXT("nouveau scan juste apres l'ouverture : pas de passe porte fermee relevee (voir plus haut) : le cas \"avant le rafraichissement\" n'est pas isole"));
+		}
+		else if (!S.Count && S.bReady)
 		{
 			Skip(FString::Printf(TEXT("nouveau scan %.1f s apres la passe fermee, apres le rafraichissement (%.1f s) : le cas \"avant le rafraichissement\" n'est pas isole"), Since,
 				Refresh));
@@ -691,6 +744,12 @@ void ABRAutoTest::AddV416LidarSteps()
 		ABRLidar* L = C ? C->GetLidar() : nullptr;
 		if (!S.bReady || !L)
 		{
+			return true;
+		}
+		if (!S.bOld)
+		{
+			// v4.16 (relecture) : sans releve porte fermee, l'inscription a ete relevee pour la premiere fois porte ouverte (revision 0)
+			Skip(TEXT("v4.16 lidar : passe recommencee non verifiee (pas de releve porte fermee, voir plus haut)"));
 			return true;
 		}
 		uint32 Rev = 0;
@@ -727,10 +786,31 @@ void ABRAutoTest::AddV416LidarSteps()
 		});
 		LimitLastStep(45.f);
 	};
+	// v4.16 (relecture) : a la meme pose, une nouvelle passe n'est dessinee qu'apres le rafraichissement (0,6 x persistance) depuis
+	// la precedente : chaque rescan l'attend, ses inscriptions sont alors vraiment dessinees sous son angle (v4.16 initiale : les
+	// deux rescans de l'aile suivaient de quelques secondes celui de la galerie, aucune inscription, 0 == 0)
+	auto AddRefreshWait = [this](const FString& Name)
+	{
+		Add(Name, 0.f, [this]()
+		{
+			FRun& S = Run();
+			ABRCharacter* C = GetPlayer();
+			ABRLidar* L = C ? C->GetLidar() : nullptr;
+			if (!S.bReady || !L || !GetWorld() || S.ScanEndAt < 0.0)
+			{
+				return true;
+			}
+			L->SetFocus(false);
+			return GetWorld()->GetTimeSeconds() - S.ScanEndAt >= BRLidar::GlyphRefreshSeconds(ABRLidar::Settings().Persistence) + 0.5;
+		});
+		LimitLastStep(BRLidar::GlyphRefreshSeconds(ABRLidar::Settings().Persistence) + 15.f);
+	};
 	AddExpiry(TEXT("v4.16 lidar : expiration des anciens points"));
 	AddScan(TEXT("v4.16 lidar : rescan, galerie a travers l'ouverture"), StandsGallery(), false, EExpect::Open, false, true);
-	AddScan(TEXT("v4.16 lidar : rescan, dans l'aile face a la plaque"), StandsWing(), true, EExpect::Open, false, false);
-	AddScan(TEXT("v4.16 lidar : rescan, dans l'aile de biais"), StandsWingSide(), true, EExpect::Open, false, false);
+	AddRefreshWait(TEXT("v4.16 lidar : attente du rafraichissement des inscriptions (aile)"));
+	AddScan(TEXT("v4.16 lidar : rescan, dans l'aile face a la plaque"), StandsWing(), true, EExpect::Open, false, true);
+	AddRefreshWait(TEXT("v4.16 lidar : attente du rafraichissement des inscriptions (aile de biais)"));
+	AddScan(TEXT("v4.16 lidar : rescan, dans l'aile de biais"), StandsWingSide(), true, EExpect::Open, false, true);
 	// 6. Rechargement du chunk de la porte (le joueur s'eloigne puis revient) : la porte reparait ouverte, sa plaque est
 	// relevee a sa position actuelle. Phases 166 a 168
 	Add(TEXT("v4.16 lidar : rechargement du chunk de la porte"), 0.f, [this]()
@@ -835,6 +915,9 @@ void ABRAutoTest::AddV416LidarSteps()
 		const bool bOk = D && E.bSolved && L->GetLoadKey() != S.LoadKey && L->GetPointCount() == 0 && L->GetScannedPlates().Num() == 0;
 		Note(FString::Printf(TEXT("reprise : mission resolue %s, bonne porte %d ouverte a %.0f %%, nouvelle identite du scanner %s, points %d (attendu 0), plaques relevees %d (attendu 0)"),
 			Oui(E.bSolved), S.Door, D ? D->GetModuleProgress() * 100.f : -1.f, Oui(L->GetLoadKey() != S.LoadKey), L->GetPointCount(), L->GetScannedPlates().Num()), !bOk);
+		// v4.16 (relecture) : identite du chargement repris : l'autre plan (etape 8) doit en changer (v4.16 initiale : comparee au
+		// premier chargement)
+		S.LoadKey = L->GetLoadKey();
 		S.bReady = D != nullptr;
 		return true;
 	});
@@ -1028,7 +1111,19 @@ void ABRAutoTest::AddNetV416LidarSteps(bool bClient)
 				{
 					if (Now - S.Clock > 30.0)
 					{
-						Skip(FString::Printf(TEXT("%s : %s : place, chunk ou ouverture de la porte non obtenus en 30 s"), Who, *Name));
+						if (bPlaced && D->IsShown() && bOpen && P.Progress < 1.f)
+						{
+							// v4.16 (relecture) : joueur place, porte affichee, mission resolue par l'hote : la porte doit s'ouvrir sur
+							// chaque machine (etat replique) ; ne pas s'ouvrir est un echec, pas une condition absente
+							BRM::FEval E;
+							W->GetMissionEval(E);
+							Note(FString::Printf(TEXT("%s : %s : porte du passage non ouverte sur cette machine en 30 s (Gate %d, ouverture %.0f %%, mission resolue ici %s)"), Who,
+								*Name, static_cast<int32>(D->GetGateValue()), P.Progress * 100.f, Oui(E.bSolved)), true);
+						}
+						else
+						{
+							Skip(FString::Printf(TEXT("%s : %s : place ou chunk de la porte non obtenus en 30 s"), Who, *Name));
+						}
 						S.Phase = 0;
 						return true;
 					}
@@ -1081,12 +1176,16 @@ void ABRAutoTest::AddNetV416LidarSteps(bool bClient)
 		{
 			return false;
 		}
+		BRM::FEval E;
 		if (W)
 		{
 			W->DebugCompleteMission();
+			W->GetMissionEval(E);
 		}
-		Note(FString::Printf(TEXT("%s : scan du client %s, mission resolue par l'hote (la bonne porte s'ouvre chez chacun)"), Who, Oui(W && BRTestNet::RemoteMark(W) == MarkClosed)),
-			!W || BRTestNet::RemoteMark(W) != MarkClosed);
+		// v4.16 (relecture) : la mission est bien resolue chez l'hote ; l'ouverture de la porte sur chaque machine est verifiee par le
+		// scan porte ouverte (echec si elle ne s'ouvre pas en 30 s)
+		Note(FString::Printf(TEXT("%s : scan du client %s, mission resolue par l'hote %s (la bonne porte s'ouvre chez chacun)"), Who, Oui(W && BRTestNet::RemoteMark(W) == MarkClosed),
+			Oui(E.bSolved)), !W || BRTestNet::RemoteMark(W) != MarkClosed || !E.bSolved);
 		return true;
 	});
 	LimitLastStep(70.f);
