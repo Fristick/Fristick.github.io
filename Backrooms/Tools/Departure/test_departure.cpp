@@ -687,11 +687,11 @@ namespace
 	namespace Pool37
 	{
 		constexpr float Cell = 500.f;
-		constexpr float Wall = 120.f;
+		constexpr float WallThickness = 120.f; // v4.16 : epaisseur des murs (avant "Wall", masque par EEdge::Wall sous GCC -Wshadow)
 		constexpr int Chunk = 8;
 		constexpr float WallLine = 0.62f;
 		constexpr int Segment = 6;
-		constexpr float Door = 0.55f;
+		constexpr float DoorChance = 0.55f; // v4.16 : chance de porte (avant "Door", masque par EEdge::Door sous GCC -Wshadow)
 		constexpr float OpenZone = 0.3f;
 		constexpr float Pool = 0.15f;
 		constexpr float DeckZ = 68.f;
@@ -727,7 +727,7 @@ namespace
 				{
 					return EEdge::Open;
 				}
-				return BRMech::Grid::Rand(X, Y, 103, Seed) < Door ? EEdge::Door : EEdge::Wall;
+				return BRMech::Grid::Rand(X, Y, 103, Seed) < DoorChance ? EEdge::Door : EEdge::Wall;
 			}
 			EEdge EdgeN(int X, int Y) const
 			{
@@ -740,7 +740,7 @@ namespace
 				{
 					return EEdge::Open;
 				}
-				return BRMech::Grid::Rand(X, Y, 113, Seed) < Door ? EEdge::Door : EEdge::Wall;
+				return BRMech::Grid::Rand(X, Y, 113, Seed) < DoorChance ? EEdge::Door : EEdge::Wall;
 			}
 			bool IsPool(int X, int Y) const
 			{
@@ -786,7 +786,7 @@ namespace
 					return 0.f;
 				}
 				const float LX = PX - static_cast<float>(CX) * Cell, LY = PY - static_cast<float>(CY) * Cell;
-				const float Reach = Wall * 0.5f + DeckW;
+				const float Reach = WallThickness * 0.5f + DeckW;
 				const float Dist[4] = { Cell - LX, LX, Cell - LY, LY };
 				float Z = 0.f;
 				for (int K = 0; K < 4; ++K)
@@ -833,7 +833,7 @@ namespace
 		void DeckBoxes(const FGrid& G, int X, int Y, std::vector<FDeckBox>& Out)
 		{
 			Out.clear();
-			const float Depth = Wall * 0.5f + DeckW;
+			const float Depth = WallThickness * 0.5f + DeckW;
 			for (int CX = X - 1; CX <= X + 1; ++CX)
 			{
 				for (int CY = Y - 1; CY <= Y + 1; ++CY)
@@ -897,12 +897,12 @@ namespace
 			FQuery Q;
 			Q.G = &G;
 			Q.bDecks = bDecks;
-			if (!BRMech::Grid::PickWallFace(CX, CY, ExitIndex, G.Seed, Chunk, false, Cell, Wall, Q, L.Face))
+			if (!BRMech::Grid::PickWallFace(CX, CY, ExitIndex, G.Seed, Chunk, false, Cell, WallThickness, Q, L.Face))
 			{
 				return L;
 			}
 			L.bFound = true;
-			const BRMech::FFrame F = BRMech::Grid::WallFaceFrame(L.Face, Cell, Wall, 0.f);
+			const BRMech::FFrame F = BRMech::Grid::WallFaceFrame(L.Face, Cell, WallThickness, 0.f);
 			const float FX = static_cast<float>(-BRMech::Grid::DirX[L.Face.Dir]), FY = static_cast<float>(-BRMech::Grid::DirY[L.Face.Dir]);
 			L.X = F.X;
 			L.Y = F.Y;
@@ -968,9 +968,9 @@ namespace
 			Line(Buf, Old.bDevStep && std::fabs(Old.Dev - 1.19f) < 0.01f && std::fabs(Old.Player - 4.f) < 0.01f);
 			FQuery Q;
 			Q.G = &G;
-			const bool bOldFlat = BRMech::Grid::StandFlat(Old.Face, Cell, Wall, Q);
+			const bool bOldFlat = BRMech::Grid::StandFlat(Old.Face, Cell, WallThickness, Q);
 			const FLadder New = Draw(G, C.CX, C.CY, true);
-			const bool bNewFlat = New.bFound && BRMech::Grid::StandFlat(New.Face, Cell, Wall, Q);
+			const bool bNewFlat = New.bFound && BRMech::Grid::StandFlat(New.Face, Cell, WallThickness, Q);
 			std::snprintf(Buf, sizeof(Buf), "  regle du jeu : StandFlat refuse cette face %s ; face (%d, %d) dir %d, pied (%.0f, %.0f, %.0f) (attendu (%.0f, %.0f, %.0f)), capsule du controle a %.1f cm des trottoirs et marches",
 				bOldFlat ? "NON" : "oui", New.Face.CellX, New.Face.CellY, New.Face.Dir, New.X, New.Y, New.Z, C.NewX, C.NewY, C.NewZ, -New.Dev);
 			Line(Buf, !bOldFlat && bNewFlat && !SameFace(Old, New) && New.X == C.NewX && New.Y == C.NewY && New.Z == C.NewZ && New.Dev < 0.f && New.Player <= 0.01f);
@@ -1054,7 +1054,7 @@ namespace
 						Face.CellY = Y;
 						Face.Dir = K;
 						Face.bSolid = ((X + Y + K) & 1) == 0;
-						bAll = bAll && BRMech::Grid::StandFlat(Face, Cell, Wall, Flat);
+						bAll = bAll && BRMech::Grid::StandFlat(Face, Cell, WallThickness, Flat);
 					}
 				}
 			}
