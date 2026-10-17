@@ -220,16 +220,22 @@ namespace BRLidar
 			double DoneAt = -1e30;
 			double TouchedAt = -1e30;
 			bool bTouched = false;
+			/** v4.16 : revision de la pose du support pour laquelle la passe en cours est dessinee */
+			unsigned Pose = 0;
 		};
 		FTarget Targets[MaxGlyphTargets];
 		FRateBudget Budget{ GlyphPointsPerSecond, GlyphMaxPerFrame, 0.f };
 		/** Mesures : demandes de cibles (un rayon = une demande), cibles distinctes par image (apres deduplication) */
 		long long Touches = 0;
 		long long DistinctTouches = 0;
+		/** v4.16 : passes recommencees parce que le support a bouge (battant d'une porte) */
+		long long PoseRestarts = 0;
 
 		void Reset();
-		/** La cible a ete touchee par un rayon focalise dans cette image (dedupliquee) */
-		void Touch(int Id, int Total, double Now, float Persistence);
+		/** La cible a ete touchee par un rayon focalise dans cette image (dedupliquee). v4.16 : Pose, revision de la pose de
+		 *  son support (FSupportTrack) : une autre revision recommence la passe tout de suite, meme avant GlyphRefreshSeconds
+		 *  (un nouveau scan represente la position actuelle ; les points deja poses restent jusqu'a leur expiration) */
+		void Touch(int Id, int Total, double Now, float Persistence, unsigned Pose = 0);
 		/** Repartit le budget de l'image entre les cibles touchees ; renvoie le nombre d'entrees. OutCompleted : cibles dont
 		 *  l'inscription vient d'etre completee (une fois par passe) */
 		int Plan(float Dt, double Now, FGlyphEmit* Out, int MaxOut, int* OutCompleted, int& NumCompleted);
@@ -241,6 +247,8 @@ namespace BRLidar
 		/** Mecanisme a inscriptions touche (porte, cage sous tension) : identifiant, nombre de points ; -1 aucun */
 		int GlyphTarget = -1;
 		int GlyphTotal = 0;
+		/** v4.16 : revision de la pose du support de l'inscription (FSupportTrack::Rev) */
+		unsigned GlyphPose = 0;
 	};
 	/** Ce que le jeu (ABRLidar) ou le banc fournit : tracer un rayon et poser ses points en attente, poser des points
 	 *  d'inscription, compter les points en attente de l'image */
@@ -288,6 +296,77 @@ namespace BRLidar
 	 *  bornee des points en attente. Le jeu applique ensuite Out.Cleared puis ajoute Out.Accepted points par categorie dans
 	 *  le groupe Out.Bucket */
 	void RunFrame(FScanState& S, float Dt, float Persistence, bool bFocus, IScanHost& Host, FFrameResult& Out);
+
+	// ------------------------------------------------- v4.16 : inscriptions sur un support mobile, surfaces du scanner
+	// v4.15 gardait les inscriptions en coordonnees du MONDE, calculees une fois par chargement : la plaque d'une porte
+	// relevee fermee etait redessinee a l'ancienne place apres l'ouverture (centre deplace de 100,5 cm). Les inscriptions
+	// sont maintenant gardees dans le repere de leur support (battant, plaque murale, cage) et posees a la pose ACTUELLE
+	// du support a chaque emission. Les boites d'interaction (visee, corps bloquant) ne sont plus des surfaces du scanner :
+	// le battant est represente par ses propres boites, qui le suivent.
+
+	/** Repere rigide : origine O (cm) et axes orthonormes X, Y, Z, exprimes dans le repere parent (le monde, ou un repere
+	 *  qui le contient) */
+	struct FFrame3
+	{
+		float O[3] = { 0.f, 0.f, 0.f };
+		float X[3] = { 1.f, 0.f, 0.f };
+		float Y[3] = { 0.f, 1.f, 0.f };
+		float Z[3] = { 0.f, 0.f, 1.f };
+	};
+	/** Origine (OX, OY, OZ), tourne de YawDeg degres autour de la verticale (lacet du jeu : X tourne vers Y) */
+	FFrame3 YawFrame(float OX, float OY, float OZ, float YawDeg);
+	/** Repere Child (exprime dans Parent) exprime dans le parent de Parent */
+	FFrame3 Compose(const FFrame3& Parent, const FFrame3& Child);
+	/** Point ou direction du repere F vers son parent, et l'inverse */
+	void PointToParent(const FFrame3& F, const float L[3], float Out[3]);
+	void PointToLocal(const FFrame3& F, const float P[3], float Out[3]);
+	void DirToParent(const FFrame3& F, const float L[3], float Out[3]);
+	void DirToLocal(const FFrame3& F, const float P[3], float Out[3]);
+	/** Deux poses different de plus de PosTol cm (origine) ou AxisTol (ecart d'un axe : environ l'angle en radians) */
+	bool FrameMoved(const FFrame3& A, const FFrame3& B, float PosTol, float AxisTol);
+
+	/** Support immobile d'une image a l'autre a ces tolerances pres (cm, radians) */
+	constexpr float SupportStillPos = 0.02f;
+	constexpr float SupportStillAxis = 2.0e-4f;
+	/** Nouvelle revision de la pose quand le support s'ecarte de la pose de la revision courante */
+	constexpr float SupportRevPos = 0.5f;
+	constexpr float SupportRevAxis = 5.0e-3f;
+	/** Suivi d'un support d'inscription, une fois par image (avant les rayons) : en mouvement si sa pose a change depuis
+	 *  l'image precedente ; Rev augmente quand la pose s'ecarte de celle de la revision courante (y compris par une derive
+	 *  lente). Une inscription n'est pas relevee sur un support en mouvement (un battant qui pivote ne se lit pas) ; la
+	 *  revision suivante recommence sa passe a la pose ou le support s'est arrete */
+	struct FSupportTrack
+	{
+		FFrame3 Last;
+		FFrame3 RevPose;
+		unsigned Rev = 0;
+		bool bMoving = false;
+		bool bInit = false;
+		void Update(const FFrame3& Now);
+	};
+
+	/** Porte du passage du Level 6 (module BRMech::LidarDoor), repere du mecanisme (origine au sol au milieu de l'ouverture, X
+	 *  vers la galerie) : repere du battant (axe des charnieres) a l'ouverture Progress (0 fermee .. 1 ouverte) plus
+	 *  ShakeDeg (tremblement d'un refus), comme ABRMissionDevice::BuildLidarDoor et UpdateModule */
+	FFrame3 DoorLeafFrame(float Progress, float ShakeDeg);
+	/** Repere de l'inscription de la plaque dans le repere du battant (X normale, cote galerie porte fermee ; Y droite ; Z
+	 *  haut), comme ABRMissionDevice::GetLidarPlate */
+	FFrame3 DoorPlateFrame();
+	/** Boites du battant representees au scanner, dans le repere du battant : 0 le battant (il couvre aussi le jeu de la
+	 *  porte : rien ne se voit a travers une porte fermee), 1 la plaque. Cotes des pieces de BuildLidarDoor */
+	constexpr int DoorScanBoxes = 2;
+	void DoorScanBox(int I, float OutMin[3], float OutMax[3]);
+	/** Rayon (From, Dir unitaire, dans le parent de F) contre la boite [Min, Max] du repere F : distance d'entree dans
+	 *  ]0, MaxT] et normale de la face d'entree (parent de F) ; un rayon parti de l'interieur ne la touche pas */
+	bool RayBox(const FFrame3& F, const float Min[3], const float Max[3], const float From[3], const float Dir[3], float MaxT, float& OutT, float OutN[3]);
+	/** Distance (cm) d'un point (parent de F) a la boite [Min, Max] du repere F ; 0 dedans */
+	float BoxDistance(const FFrame3& F, const float Min[3], const float Max[3], const float P[3]);
+
+	/** Point K (0 .. PlateGlyphPoints - 1) d'une plaque, dans son plan (cm depuis le centre) : droite, haut. Figure : points
+	 *  de la silhouette de la plaque (mm, BRLidarShapes, FigurePoints points) */
+	void PlateShapePoint(int Symbol, int K, const short (*Figure)[3], int FigurePoints, float& OutRight, float& OutUp);
+	/** Point K (0 .. CageFigurePoints - 1) d'une silhouette de cage dans le repere de la cage (cm) */
+	void CageShapePoint(int K, const short (*Figure)[3], int FigurePoints, float Out[3]);
 
 	// --------------------------------------------------------------------------------------------- Menace lisible
 	/** Regle des Smilers dans le noir : une impulsion large s'entend (rayon, cm) et attire ; un Smiler pris dans le scan

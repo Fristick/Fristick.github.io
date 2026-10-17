@@ -10,20 +10,26 @@
 // les groupes echus, inscriptions (plaques, cages) dessinees une fois par cible et par periode sous un budget commun.
 // Le scanner est lie a l'identite du chargement (niveau, graine, numero de chargement, empreinte du plan) : un autre
 // chargement efface ses points, ses releves et ses temporisations.
+// v4.16 : inscriptions gardees dans le repere de leur support (le battant d'une porte peut pivoter) et posees a sa pose
+// actuelle ; boite visee et corps bloquant des portes du passage ignores par les rayons, le battant etant represente par
+// ses propres boites (BRLidarLogic.h : DoorScanBox) : pas de faux mur de points dans une ouverture vide.
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CollisionQueryParams.h"
 #include "GameFramework/Actor.h"
 #include "BRLidarLogic.h"
 #include "BRLidar.generated.h"
 
 class UInstancedStaticMeshComponent;
+class UPrimitiveComponent;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
 class UAudioComponent;
 class ABRCharacter;
 class ABRMissionDevice;
 class ABREntity;
+class ABRWorld;
 
 /** v4.14 : mesures du scanner (autotest, commande BRLidarStats) ; ce sont des compteurs du jeu, pas une mesure GPU */
 struct FBRLidarStats
@@ -39,6 +45,11 @@ struct FBRLidarStats
 	int64 GlyphPoints = 0;
 	int64 GlyphTouches = 0;
 	int64 GlyphDistinct = 0;
+	/** v4.16 : rayons arretes par un battant de porte (ses boites), passes d'inscription recommencees (support deplace),
+	 *  rayons sur une inscription dont le support bougeait (non relevee) */
+	int64 LeafHits = 0;
+	int64 GlyphPoseRestarts = 0;
+	int64 GlyphMovingSkips = 0;
 	int64 MidUpdates = 0;
 	int32 PeakFramePoints = 0;
 	int32 PeakFrameRays = 0;
@@ -96,6 +107,35 @@ public:
 	/** Compatibilite des tests v4.13 : rayons, points acceptes, temps */
 	static int64 StatRaysCompat() { return Stats.Rays; }
 
+	/** v4.16 (tests) : un point demande par ce scanner (position du glyphe, categorie, mecanisme touche ou inscrit, boite d'un
+	 *  battant, composant touche, image) */
+	struct FTestPoint
+	{
+		FVector At = FVector::ZeroVector;
+		uint8 Category = 0;
+		int32 Device = -1;
+		bool bLeaf = false;
+		TWeakObjectPtr<UPrimitiveComponent> Component;
+		uint64 Frame = 0;
+	};
+	/** v4.16 (tests) : releve des points demandes, seulement quand un test le demande (MaxTestPoints au plus) */
+	void SetTestRecord(bool bOn)
+	{
+		bTestRecord = bOn;
+		TestPoints.Reset();
+	}
+	const TArray<FTestPoint>& GetTestPoints() const { return TestPoints; }
+	static constexpr int32 MaxTestPoints = 200000;
+	/** v4.16 (tests) : suivi du support d'une inscription (revision de pose, en mouvement) ; false si pas encore relevee */
+	bool GetGlyphTrack(int32 DeviceIndex, uint32& OutRev, bool& bOutMoving) const;
+
+	/** v4.16 : rayons du scanner (points, visee du faisceau maintenu et sa verification par l'hote) : la boite visee et le
+	 *  corps bloquant des portes du passage sont ignores (Q) ; leurs battants arretent le rayon par leurs boites */
+	static void AddScanIgnored(const ABRWorld* W, FCollisionQueryParams& Q);
+	/** v4.16 : premier battant de porte du passage (affiche) touche par le rayon [From, From + Dir * MaxDist] (Dir unitaire) :
+	 *  le mecanisme, la distance et la normale ; nul sinon */
+	static ABRMissionDevice* TraceLeaves(const ABRWorld* W, const FVector& From, const FVector& Dir, float MaxDist, float& OutDist, FVector& OutNormal);
+
 	// BRLidar::IScanHost
 	virtual BRLidar::FHit TraceRay(bool bPulse, bool bCenter, float X, float Y, float Z) override;
 	virtual int EmitGlyphs(int Target, int First, int Count) override;
@@ -142,19 +182,45 @@ private:
 	TArray<FTransform> Pending[BRLidar::NumCategories];
 	TMap<int32, FIntPoint> ScannedPlates;
 
-	/** v4.14 : coordonnees fixes des inscriptions, calculees une fois par cible et par chargement */
+	/** v4.14 : forme des inscriptions, calculee une fois par cible et par chargement. v4.16 : dans le repere de son support
+	 *  (battant de la porte, plaque murale, cage : ABRMissionDevice::GetLidarSupport), posee a la pose actuelle du support a
+	 *  chaque emission (v4.15 : coordonnees du monde, redessinees a l'ancienne place apres l'ouverture de la porte) */
 	struct FGlyphCache
 	{
-		TArray<FVector> Points;
-		FVector Normal = FVector::ForwardVector;
+		TArray<FVector> Local;
+		FVector LocalNormal = FVector::ForwardVector;
 		bool bPlate = false;
+		/** Pose du support suivie a chaque image : inscription non relevee pendant un mouvement, nouvelle passe ensuite */
+		BRLidar::FSupportTrack Track;
 	};
 	TMap<int32, FGlyphCache> GlyphCache;
+
+	/** v4.16 : battants des portes du passage vus a cette image (repere monde) ; leurs boites (BRLidar::DoorScanBox) sont les
+	 *  surfaces du scanner, pas la boite visee ni le corps bloquant de la porte */
+	struct FScanLeaf
+	{
+		BRLidar::FFrame3 Frame;
+		TWeakObjectPtr<ABRMissionDevice> Device;
+	};
+	TArray<FScanLeaf> ScanLeaves;
+	/** v4.16 : requete des rayons de l'image : le joueur, le scanner et les collisions d'interaction ignores */
+	FCollisionQueryParams ScanQuery;
+	/** v4.16 : requete, battants et supports des inscriptions, une fois par image avant les rayons */
+	void PrepareScan(const FVector& Eye);
+	/** v4.16 : point d'impact sur un mecanisme (decor du mecanisme ou battant) : losange, et cible a inscription au focus */
+	void DeviceHit(ABRMissionDevice* D, const FVector& At, const FVector& N, bool bPulse, BRLidar::FHit& Out);
+
+	/** v4.16 (tests) : releve, et contexte du point en cours (mecanisme, battant, composant) */
+	bool bTestRecord = false;
+	TArray<FTestPoint> TestPoints;
+	int32 CtxDevice = -1;
+	bool bCtxLeaf = false;
+	TWeakObjectPtr<UPrimitiveComponent> CtxComponent;
 
 	void BuildComponents();
 	uint64 ComputeLoadKey() const;
 	void AddPoint(uint8 Category, const FVector& At, const FVector& Normal, float Size, const FVector* Along = nullptr);
-	const FGlyphCache* GetGlyphCache(int32 DeviceIndex);
+	FGlyphCache* GetGlyphCache(int32 DeviceIndex);
 	void ApplyFrame(const BRLidar::FFrameResult& R);
 	void UpdateFades(bool bForce);
 	void UpdateAim(float Dt);

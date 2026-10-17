@@ -15,9 +15,14 @@
 //     borne (jamais plus que la capacite), attenuation decroissante, aide de direction des parasites monotone ;
 //   - le budget par image : rayons et points ajoutes bornes ;
 //   - v4.15 : la longueur du couloir garanti (BRLidar::CorridorLength, plafond du parcours de l'aile dans
-//     ABRWorld::PlaceMission) egale au couloir parcouru, au plus 41 cellules sur les 180 positions possibles de l'aile.
+//     ABRWorld::PlaceMission) egale au couloir parcouru, au plus 41 cellules sur les 180 positions possibles de l'aile ;
+//   - v4.16 : inscriptions sur un battant mobile (repere local du support, pose actuelle a l'emission, passe recommencee
+//     apres un mouvement, rien de releve pendant le mouvement) et surfaces du scanner de la porte du passage (boites du
+//     battant : porte fermee etanche, ouverture vide une fois ouverte ; le modele v4.15 reproduit les deux defauts).
 // Code de sortie 0 si tout passe, 1 sinon. La sortie sert de journal (Docs/v413/banc_lidar.txt).
 #include "BRLidarLogic.h"
+// v4.16 : silhouettes des inscriptions, les memes que le jeu (donnees seules)
+#include "../../Source/Backrooms/Private/BRLidarShapes.inl"
 
 #include <cmath>
 #include <cstdio>
@@ -523,6 +528,415 @@ static void RunScannerChecks()
 	}
 }
 
+// ============================================================================================================
+// v4.16 : inscriptions sur un battant mobile, surfaces du scanner de la porte du passage
+// ============================================================================================================
+namespace Moving
+{
+	/** Cotes de la porte du passage (BRMech::LidarDoor, BRMechLogic.h) et de la boite visee de BRMech::Clearance::Of
+	 *  (v4.15 : surface du scanner) : centre (LeafThick + 6, 0, 120), demi-tailles (8, Width / 2, 100) ; mur de 60 cm */
+	const float LeafThick = 6.f;
+	const float AimMin[3] = { 6.f + 6.f - 8.f, -70.f, 20.f };
+	const float AimMax[3] = { 6.f + 6.f + 8.f, 70.f, 220.f };
+	const float HalfWall = 30.f;
+
+	float Dist3(const float A[3], const float B[3])
+	{
+		return std::sqrt((A[0] - B[0]) * (A[0] - B[0]) + (A[1] - B[1]) * (A[1] - B[1]) + (A[2] - B[2]) * (A[2] - B[2]));
+	}
+
+	/** Point K de la plaque (symbole, silhouette) dans le monde, pour un repere du mecanisme et une ouverture */
+	void PlateWorld(const FFrame3& Dev, float Progress, float Shake, int Sym, int Fig, int K, float Out[3])
+	{
+		const FFrame3 Leaf = Compose(Dev, DoorLeafFrame(Progress, Shake));
+		const FFrame3 Plate = Compose(Leaf, DoorPlateFrame());
+		float R = 0.f, U = 0.f;
+		PlateShapePoint(Sym, K, BRLidarShapes::Points[Fig], BRLidarShapes::PointsPerFigure, R, U);
+		const float L[3] = { 0.f, R, U };
+		PointToParent(Plate, L, Out);
+	}
+
+	/** Point (repere du mecanisme) dans l'ouverture du mur, hors de ses bords (ni le sol, ni le linteau, ni les tableaux, ni
+	 *  le battant ouvert contre le cote des charnieres) */
+	bool InDoorway(const float P[3])
+	{
+		return P[0] > -HalfWall + 3.f && P[0] < HalfWall - 3.f && std::fabs(P[1]) <= 62.f && P[2] >= 8.f && P[2] <= 215.f;
+	}
+
+	/** Premier impact d'un rayon (repere du mecanisme) sur les boites du battant a l'ouverture Progress */
+	bool LeafHit(float Progress, const float From[3], const float To[3], float OutAt[3], float OutN[3], float* OutT = nullptr)
+	{
+		float Dir[3] = { To[0] - From[0], To[1] - From[1], To[2] - From[2] };
+		const float Len = std::sqrt(Dir[0] * Dir[0] + Dir[1] * Dir[1] + Dir[2] * Dir[2]);
+		for (float& C : Dir)
+		{
+			C /= Len;
+		}
+		const FFrame3 Leaf = DoorLeafFrame(Progress, 0.f);
+		float Best = 5000.f;
+		bool bAny = false;
+		for (int B = 0; B < DoorScanBoxes; ++B)
+		{
+			float Lo[3], Hi[3], T = 0.f, N[3];
+			DoorScanBox(B, Lo, Hi);
+			if (RayBox(Leaf, Lo, Hi, From, Dir, Best, T, N) && T < Best)
+			{
+				Best = T;
+				bAny = true;
+				for (int I = 0; I < 3; ++I)
+				{
+					OutAt[I] = From[I] + Dir[I] * T;
+					OutN[I] = N[I];
+				}
+			}
+		}
+		if (OutT)
+		{
+			*OutT = Best;
+		}
+		return bAny;
+	}
+
+	/** Le meme rayon contre la boite visee (v4.15 : les rayons du scanner s'y arretaient) */
+	bool AimHit(const float From[3], const float To[3], float OutAt[3])
+	{
+		float Dir[3] = { To[0] - From[0], To[1] - From[1], To[2] - From[2] };
+		const float Len = std::sqrt(Dir[0] * Dir[0] + Dir[1] * Dir[1] + Dir[2] * Dir[2]);
+		for (float& C : Dir)
+		{
+			C /= Len;
+		}
+		const FFrame3 Id = FFrame3();
+		float T = 0.f, N[3];
+		if (!RayBox(Id, AimMin, AimMax, From, Dir, 5000.f, T, N))
+		{
+			return false;
+		}
+		for (int I = 0; I < 3; ++I)
+		{
+			OutAt[I] = From[I] + Dir[I] * T;
+		}
+		return true;
+	}
+}
+
+static void RunMovingSupportChecks()
+{
+	using namespace Moving;
+	std::printf("v4.16 : inscriptions sur un battant mobile, surfaces du scanner de la porte du passage :\n");
+	// 1. Reperes : aller-retour local <-> monde, composition, sur des poses quelconques
+	{
+		double Worst = 0.0;
+		for (int I = 0; I < 200; ++I)
+		{
+			const FFrame3 A = YawFrame(-4000.f + I * 37.5f, 2500.f - I * 21.25f, I * 0.5f, I * 13.7f);
+			const FFrame3 B = Compose(A, YawFrame(3.f, -69.f, 0.f, I * 0.475f));
+			const float P[3] = { 1000.f - I * 9.f, -300.f + I * 4.f, 150.f };
+			float L[3], Q[3];
+			PointToLocal(B, P, L);
+			PointToParent(B, L, Q);
+			Worst = std::fmax(Worst, static_cast<double>(Dist3(P, Q)));
+		}
+		Check(Worst < 0.01, 0, "repere : aller-retour local / monde inexact");
+		std::printf("  reperes : 200 poses (lacets quelconques, origines a 40 m), aller-retour local / monde %s\n", Worst < 0.01 ? "exact a 0,01 cm pres" : "INEXACT");
+	}
+	// 2. Plaque relevee porte fermee, puis porte ouverte : v4.15 (coordonnees du monde gardees) contre v4.16 (repere du battant)
+	{
+		const float Yaws[] = { 0.f, 90.f, 180.f, 270.f };
+		const float Opens[] = { 0.25f, 0.5f, 0.75f, 1.f };
+		double OldCentre = 0.0, OldWorst = 0.0, NewWorst = 0.0, NormalWorst = 0.0;
+		int Cases = 0, Points = 0;
+		for (float Yaw : Yaws)
+		{
+			const FFrame3 Dev = YawFrame(1234.5f, -987.25f, 0.f, Yaw);
+			for (int Sym = 0; Sym < NumSymbols; ++Sym)
+			{
+				const int Fig = Sym % BRLidarShapes::NumFigures;
+				const FFrame3 Leaf0 = Compose(Dev, DoorLeafFrame(0.f, 0.f));
+				const int Total = PlateGlyphPoints(Sym);
+				// Cache v4.16 : la forme dans le repere du battant, calculee porte fermee
+				std::vector<float> Local(static_cast<size_t>(Total) * 3);
+				std::vector<float> World0(static_cast<size_t>(Total) * 3);
+				for (int K = 0; K < Total; ++K)
+				{
+					PlateWorld(Dev, 0.f, 0.f, Sym, Fig, K, &World0[static_cast<size_t>(K) * 3]);
+					PointToLocal(Leaf0, &World0[static_cast<size_t>(K) * 3], &Local[static_cast<size_t>(K) * 3]);
+				}
+				const FFrame3 Plate0 = Compose(Leaf0, DoorPlateFrame());
+				float LN[3];
+				DirToLocal(Leaf0, Plate0.X, LN);
+				for (float Op : Opens)
+				{
+					const FFrame3 Leaf1 = Compose(Dev, DoorLeafFrame(Op, 0.f));
+					const FFrame3 Plate1 = Compose(Leaf1, DoorPlateFrame());
+					if (Op == 1.f)
+					{
+						OldCentre = std::fmax(OldCentre, static_cast<double>(Dist3(Plate0.O, Plate1.O)));
+					}
+					for (int K = 0; K < Total; ++K)
+					{
+						float Truth[3], Now[3];
+						PlateWorld(Dev, Op, 0.f, Sym, Fig, K, Truth);
+						PointToParent(Leaf1, &Local[static_cast<size_t>(K) * 3], Now);
+						NewWorst = std::fmax(NewWorst, static_cast<double>(Dist3(Truth, Now)));
+						OldWorst = std::fmax(OldWorst, static_cast<double>(Dist3(Truth, &World0[static_cast<size_t>(K) * 3])));
+						++Points;
+					}
+					float WN[3];
+					DirToParent(Leaf1, LN, WN);
+					NormalWorst = std::fmax(NormalWorst, static_cast<double>(Dist3(WN, Plate1.X)));
+					++Cases;
+				}
+			}
+		}
+		// Le modele v4.15 doit reproduire le defaut (le centre de la plaque se deplace d'environ 100,5 cm a l'ouverture)
+		Check(OldCentre > 100.f && OldCentre < 101.f, 0, "modele v4.15 : deplacement du centre de la plaque different de 100,5 cm");
+		Check(NewWorst < 0.01 && NormalWorst < 1e-4, 0, "v4.16 : inscription posee hors de la plaque actuelle ou normale fausse");
+		std::printf("  plaque relevee fermee puis porte ouverte (%d cas : 4 lacets, 6 symboles, ouverture 25 a 100 %%, %d points) : v4.15 (monde) centre deplace de %.1f cm, "
+			"jusqu'a %.0f cm d'ecart ; v4.16 (repere du battant) %s, normale suivie %s\n", Cases, Points, OldCentre, OldWorst,
+			NewWorst < 0.01 ? "sur la plaque actuelle a 0,01 cm pres" : "HORS DE LA PLAQUE", NormalWorst < 1e-4 ? "oui" : "NON");
+	}
+	// 3. Scan, ouverture pendant le scan, nouveau scan : suivi du support (FSupportTrack) et planificateur (passe recommencee)
+	for (int F : { 30, 60, 144 })
+	{
+		const float Dt = 1.f / static_cast<float>(F);
+		const int Sym = 2, Fig = 3, Id = 7;
+		const FFrame3 Dev = YawFrame(-2100.f, 1750.f, 0.f, 270.f);
+		const int Total = PlateGlyphPoints(Sym);
+		const float Persist = 12.f;
+		FGlyphPlanner Pl;
+		FSupportTrack Track;
+		// Forme gardee dans le repere du battant, calculee une fois porte fermee (ABRLidar::GetGlyphCache)
+		std::vector<float> Local(static_cast<size_t>(Total) * 3);
+		{
+			const FFrame3 Leaf0 = Compose(Dev, DoorLeafFrame(0.f, 0.f));
+			for (int K = 0; K < Total; ++K)
+			{
+				float W0[3];
+				PlateWorld(Dev, 0.f, 0.f, Sym, Fig, K, W0);
+				PointToLocal(Leaf0, W0, &Local[static_cast<size_t>(K) * 3]);
+			}
+		}
+		double Now = 0.0;
+		float Progress = 0.f, Target = 0.f;
+		int Phase = 0;
+		long long DuringMotion = 0, Completions = 0, Moved = 0;
+		int PeakFrame = 0;
+		double OffPlate = 0.0, FromOld = 1e9, FinalAt = -1.0, OpenedAt = -1.0;
+		bool bFinalPass = false;
+		FFrame3 OldPlate;
+		for (int I = 0; I < 6 * F; ++I)
+		{
+			// Ouverture a 1 s (vitesse de UpdateModule : 0,8 par seconde)
+			if (I == F)
+			{
+				Target = 1.f;
+				OldPlate = Compose(Compose(Dev, DoorLeafFrame(Progress, 0.f)), DoorPlateFrame());
+				Phase = 1;
+			}
+			Progress = Progress < Target ? (Progress + 0.8f * Dt < Target ? Progress + 0.8f * Dt : Target) : Progress;
+			const FFrame3 Leaf = Compose(Dev, DoorLeafFrame(Progress, 0.f));
+			Track.Update(Leaf);
+			if (Phase == 1 && Progress >= 1.f && !Track.bMoving)
+			{
+				Phase = 2;
+				OpenedAt = Now;
+			}
+			Moved += Track.bMoving ? 1 : 0;
+			// Focus maintenu sur la plaque tout du long : la cible n'est signalee que sur un support immobile (ABRLidar::DeviceHit)
+			if (!Track.bMoving)
+			{
+				for (int R = 0; R < 20; ++R)
+				{
+					Pl.Touch(Id, Total, Now, Persist, Track.Rev);
+				}
+			}
+			FGlyphEmit Emits[MaxGlyphTargets * 2];
+			int Done[MaxGlyphTargets];
+			int NumDone = 0;
+			const int NE = Pl.Plan(Dt, Now, Emits, MaxGlyphTargets * 2, Done, NumDone);
+			int Frame = 0;
+			for (int E = 0; E < NE; ++E)
+			{
+				for (int K = Emits[E].First; K < Emits[E].First + Emits[E].Count; ++K)
+				{
+					// ABRLidar::EmitGlyphs : forme locale posee a la pose actuelle du battant
+					float W3[3], Truth[3];
+					PointToParent(Leaf, &Local[static_cast<size_t>(K) * 3], W3);
+					PlateWorld(Dev, Progress, 0.f, Sym, Fig, K, Truth);
+					OffPlate = std::fmax(OffPlate, static_cast<double>(Dist3(W3, Truth)));
+					if (Phase == 1)
+					{
+						++DuringMotion;
+					}
+					if (Phase == 2)
+					{
+						FromOld = std::fmin(FromOld, static_cast<double>(Dist3(W3, OldPlate.O)));
+					}
+					++Frame;
+				}
+			}
+			PeakFrame = Frame > PeakFrame ? Frame : PeakFrame;
+			if (Phase == 2 && NumDone > 0 && !bFinalPass)
+			{
+				bFinalPass = true;
+				FinalAt = Now - OpenedAt;
+			}
+			Completions += NumDone;
+			Now += Dt;
+		}
+		const bool bOk = DuringMotion == 0 && bFinalPass && FinalAt >= 0.0 && FinalAt < 0.5 && Pl.PoseRestarts >= 1 && Completions == 2 && OffPlate < 0.01
+			&& FromOld > 60.0 && PeakFrame <= GlyphMaxPerFrame && Moved > 0;
+		Check(bOk, static_cast<uint32_t>(F), "porte ouverte pendant le scan : inscription pendant le mouvement, pas de nouvelle passe ou hors de la plaque actuelle");
+		std::printf("  %3d images/s : plaque scannee fermee, porte ouverte pendant le scan (%.2f s de mouvement) : %lld points d'inscription pendant le mouvement, nouvelle passe "
+			"%s %.2f s apres l'arret (avant le rafraichissement de %.1f s), %lld passes completes en 6 s, %lld reprise(s) de passe ; points sur la plaque actuelle %s, a %.0f cm au moins "
+			"de l'ancien centre ; %d points d'inscription au plus par image\n", F, static_cast<double>(Moved) / F, DuringMotion, bFinalPass ? "dessinee" : "ABSENTE",
+			FinalAt, GlyphRefreshSeconds(Persist), Completions, Pl.PoseRestarts, OffPlate < 0.01 ? "oui" : "NON", FromOld, PeakFrame);
+	}
+	// 4. Modele v4.15 sur la meme sequence : aucune nouvelle passe avant le rafraichissement, puis a l'ancienne place
+	{
+		const float Dt = 1.f / 60.f;
+		const int Sym = 2, Id = 7;
+		const int Total = PlateGlyphPoints(Sym);
+		FGlyphPlanner Pl;
+		double Now = 0.0, FirstAfter = -1.0;
+		long long Completions = 0;
+		for (int I = 0; I < 12 * 60; ++I)
+		{
+			for (int R = 0; R < 20; ++R)
+			{
+				Pl.Touch(Id, Total, Now, 12.f, 0u); // v4.15 : ni suivi du support ni revision de pose
+			}
+			FGlyphEmit Emits[MaxGlyphTargets * 2];
+			int Done[MaxGlyphTargets];
+			int NumDone = 0;
+			const int NE = Pl.Plan(Dt, Now, Emits, MaxGlyphTargets * 2, Done, NumDone);
+			if (I > 60 + 75 && NE > 0 && FirstAfter < 0.0)
+			{
+				FirstAfter = Now - (60 + 75) * Dt;
+			}
+			Completions += NumDone;
+			Now += Dt;
+		}
+		Check(FirstAfter > 4.0, 0, "modele v4.15 : la plaque serait redessinee tout de suite apres l'ouverture");
+		std::printf("  modele v4.15 (meme sequence, coordonnees du monde) : premiere passe %.1f s apres l'arret du battant (rafraichissement), dessinee a l'ancienne place "
+			"(%lld passes en 12 s)\n", FirstAfter, Completions);
+	}
+	// 5. Tremblement d'un refus (1,5 degre pendant 0,5 s) et derive lente : pas de releve en mouvement, passe a la pose actuelle
+	{
+		const FFrame3 Dev = YawFrame(500.f, 500.f, 0.f, 90.f);
+		FSupportTrack Track;
+		int Moving = 0;
+		unsigned RevAfterShake = 0;
+		for (int I = 0; I < 90; ++I)
+		{
+			const float T = I / 60.f;
+			const float Shake = T < 0.5f ? std::sin(T * 60.f) * 1.5f : 0.f;
+			Track.Update(Compose(Dev, DoorLeafFrame(0.f, I == 0 ? 0.f : Shake)));
+			Moving += Track.bMoving ? 1 : 0;
+		}
+		RevAfterShake = Track.Rev;
+		const bool bStill = !Track.bMoving;
+		FSupportTrack Slow;
+		unsigned SlowRevs = 0;
+		bool bSlowMoving = false;
+		for (int I = 0; I < 200; ++I)
+		{
+			Slow.Update(YawFrame(500.f + I * 0.01f, 500.f, 0.f, 90.f));
+			bSlowMoving = bSlowMoving || Slow.bMoving;
+			SlowRevs = Slow.Rev;
+		}
+		Check(Moving > 10 && bStill && RevAfterShake >= 1 && !bSlowMoving && SlowRevs >= 3, 0, "suivi du support : tremblement ou derive lente mal suivis");
+		std::printf("  tremblement d'un refus : %d images sans releve, immobile ensuite %s, revision de pose %u ; derive lente (0,01 cm par image) : jamais en mouvement %s, %u revisions en 2 cm\n",
+			Moving, bStill ? "oui" : "NON", RevAfterShake, !bSlowMoving ? "oui" : "NON", SlowRevs);
+	}
+	// 6. Rayons depuis la galerie : porte fermee etanche (boites du battant), ouverture vide une fois ouverte
+	{
+		int Closed = 0, ClosedHit = 0, ClosedFront = 0;
+		int Opened = 0, OpenWall = 0, AimWall = 0;
+		const float Stands[3][3] = { { 200.f, 40.f, 160.f }, { 260.f, -90.f, 120.f }, { 140.f, 110.f, 175.f } };
+		for (const auto& S : Stands)
+		{
+			for (float Y = -66.f; Y <= 66.f; Y += 6.f)
+			{
+				for (float Z = 6.f; Z <= 219.f; Z += 7.f)
+				{
+					const float To[3] = { 0.f, Y, Z };
+					float At[3], N[3];
+					// Fermee : chaque rayon vers l'ouverture s'arrete sur le battant (face cote galerie ou plaque), rien ne passe
+					++Closed;
+					if (LeafHit(0.f, S, To, At, N))
+					{
+						++ClosedHit;
+						ClosedFront += At[0] >= LeafThick * 0.5f - 0.01f ? 1 : 0;
+					}
+					// Ouverte : aucun impact dans l'ouverture (le battant est dans l'aile, contre le cote des charnieres)
+					++Opened;
+					if (LeafHit(1.f, S, To, At, N) && InDoorway(At))
+					{
+						++OpenWall;
+					}
+					// v4.15 : la boite visee, restee devant l'ouverture, arretait le rayon
+					float AimAt[3];
+					if (AimHit(S, To, AimAt) && InDoorway(AimAt))
+					{
+						++AimWall;
+					}
+				}
+			}
+		}
+		Check(ClosedHit == Closed && ClosedFront == Closed, 0, "porte fermee : un rayon passe a travers ou s'arrete hors de la face du battant");
+		Check(OpenWall == 0, 0, "porte ouverte : impact dans l'ouverture vide");
+		Check(AimWall > Opened / 2, 0, "modele v4.15 : la boite visee ne ferait pas de faux mur");
+		std::printf("  rayons de la galerie vers l'ouverture (%d) : porte fermee, %d sur le battant (face cote galerie %d), aucun au travers ; porte ouverte, %d impact(s) dans "
+			"l'ouverture vide (v4.15 : la boite visee en arretait %d, un faux mur de %.0f %% de l'ouverture)\n", Closed, ClosedHit, ClosedFront, OpenWall, AimWall,
+			100.0 * AimWall / (Opened ? Opened : 1));
+	}
+	// 7. Battant en mouvement : les impacts suivent le battant (sur ses boites a l'ouverture de l'image), plaque ouverte touchee
+	{
+		int Sweep = 0, OnLeaf = 0, InFront = 0;
+		for (int P = 0; P <= 20; ++P)
+		{
+			const float Op = P / 20.f;
+			const FFrame3 Leaf = DoorLeafFrame(Op, 0.f);
+			// Vers le milieu du battant (a 68 cm des charnieres, 150 cm de haut), depuis la galerie et depuis l'aile
+			const float Mid[3] = { 0.f, 68.f, 150.f };
+			float Aim[3];
+			PointToParent(Leaf, Mid, Aim);
+			const float FromGallery[3] = { 220.f, 60.f, 160.f };
+			const float FromWing[3] = { -120.f, 160.f, 160.f };
+			for (const float* From : { FromGallery, FromWing })
+			{
+				float At[3], N[3];
+				if (!LeafHit(Op, From, Aim, At, N))
+				{
+					continue;
+				}
+				++Sweep;
+				float Lo[3], Hi[3];
+				DoorScanBox(0, Lo, Hi);
+				const float D0 = BoxDistance(Leaf, Lo, Hi, At);
+				DoorScanBox(1, Lo, Hi);
+				const float D1 = BoxDistance(Leaf, Lo, Hi, At);
+				OnLeaf += (D0 < 0.01f || D1 < 0.01f) ? 1 : 0;
+				InFront += (Op > 0.1f && At[0] > 4.f) ? 1 : 0;
+			}
+		}
+		// Plaque de la porte ouverte, vue de l'aile en face : l'impact est sur la plaque, la normale est celle de la plaque ouverte
+		const FFrame3 Leaf1 = DoorLeafFrame(1.f, 0.f);
+		const FFrame3 Plate1 = Compose(Leaf1, DoorPlateFrame());
+		const float Eye[3] = { Plate1.O[0] + Plate1.X[0] * 160.f, Plate1.O[1] + Plate1.X[1] * 160.f, 160.f };
+		float At[3], N[3];
+		const bool bPlate = LeafHit(1.f, Eye, Plate1.O, At, N);
+		float PL[3];
+		PointToLocal(Plate1, At, PL);
+		const bool bOnPlate = bPlate && std::fabs(PL[0]) < 0.6f && std::fabs(PL[1]) < 28.f && std::fabs(PL[2]) < 28.f && Dist3(N, Plate1.X) < 1e-4f;
+		Check(Sweep >= 38 && OnLeaf == Sweep && InFront == 0 && bOnPlate, 0, "battant en mouvement : impacts hors du battant, devant l'ouverture, ou plaque ouverte manquee");
+		std::printf("  battant de 0 a 95 degres (21 positions, galerie et aile) : %d impacts, %d sur les boites du battant a sa position, %d devant l'ouverture ; plaque ouverte vue de "
+			"l'aile : touchee %s, normale de la plaque ouverte %s\n", Sweep, OnLeaf, InFront, bPlate ? "oui" : "NON", bOnPlate ? "oui" : "NON");
+	}
+}
+
 int main(int argc, char** argv)
 {
 	const int Seeds = argc > 1 ? std::atoi(argv[1]) : 2000;
@@ -693,6 +1107,7 @@ int main(int argc, char** argv)
 			PulseRays, PulseSeconds, PulseMaxPerFrame, PulseHalfYaw * 2.f, PulseHalfPitch * 2.f, WorstGap, FocusRaysPerSecond, FocusMaxPerFrame, FocusHalfAngle * 2.f);
 	}
 	RunScannerChecks();
+	RunMovingSupportChecks();
 	// v4.15 : toutes les positions possibles de l'aile (chunks de l'anneau x places dans le chunk, comme PickWing) : le
 	// couloir garanti mesure au plus 41 cellules ; le plafond du parcours de l'aile (couloir + 2) reste sous la limite de
 	// 6000 cellules du placement (diamant de rayon 43 : 3785 cellules)

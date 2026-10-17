@@ -4662,7 +4662,13 @@ void ABRCharacter::ServerLidarRepel_Implementation(ABREntity* E)
 	}
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRLidarRepel), false, this);
 	Q.AddIgnoredActor(E);
-	if (GetWorld()->LineTraceTestByChannel(Eye, To, ECC_Visibility, Q))
+	// v4.16 : memes surfaces que le faisceau du joueur (ABRLidar::UpdateAim) : la boite visee d'une porte du passage ouverte
+	// n'arrete plus le faisceau ; un battant l'arrete par ses boites
+	ABRLidar::AddScanIgnored(W, Q);
+	float LeafDist = 0.f;
+	FVector LeafNormal = FVector::ZeroVector;
+	if (GetWorld()->LineTraceTestByChannel(Eye, To, ECC_Visibility, Q)
+		|| ABRLidar::TraceLeaves(W, Eye, (To - Eye).GetSafeNormal(), static_cast<float>(FVector::Dist(Eye, To)), LeafDist, LeafNormal))
 	{
 		return;
 	}

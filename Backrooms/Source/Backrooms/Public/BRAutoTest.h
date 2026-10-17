@@ -199,6 +199,11 @@ private:
 	/** v4.15 : Level 6 sur les graines des correctifs (4136, 4126, 6, 208) : salle de l'aile sans avertissement, postes et cages
 	 *  atteignables selon l'hote, poste 1 tourne depuis sa place (BRAutoTestV413Lidar.cpp) */
 	void AddV415LidarPlaceSteps();
+	/** v4.16 (lidar) : -BRAutoTestV416Lidar : releves du scanner sur un battant mobile (BRAutoTestV416Lidar.cpp) ; avec -BRNetTest :
+	 *  hote et client */
+	void AddV416LidarPlan();
+	void AddV416LidarSteps();
+	void AddNetV416LidarSteps(bool bClient);
 	/** v4.15 (correctifs) : -BRAutoTestV415Fix : les seules etapes de non-regression des correctifs (places des Niveaux 8 et 9,
 	 *  Level 6, Poolrooms), deja comprises dans -BRAutoTestV411, -BRAutoTestV412 et -BRAutoTestV413 (BRAutoTestV415Fix.cpp).
 	 *  v4.15 (correctifs 5) : echelles des chunks du Niveau 37 (graine du niveau 115083815, partie classique) : places libres,

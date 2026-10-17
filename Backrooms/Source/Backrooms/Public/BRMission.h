@@ -63,6 +63,15 @@ public:
 	bool GetLidarPlate(FVector& OutCenter, FVector& OutRight, FVector& OutUp, FVector& OutNormal) const;
 	/** v4.13 : repere de l'interieur d'une cage (origine au sol au centre, X vers l'avant de la cage) */
 	bool GetCageFrame(FTransform& Out) const;
+	/** v4.16 : support des inscriptions du scanner, repere monde ACTUEL : battant de la porte du passage (il pivote), sinon
+	 *  l'acteur (plaque murale de secours, cage) ; false pour les autres mecanismes */
+	bool GetLidarSupport(FTransform& Out) const;
+	/** v4.16 : battant de la porte du passage (module) affiche : son repere monde actuel (ses boites vues par le scanner :
+	 *  BRLidar::DoorScanBox) */
+	bool GetLidarLeaf(FTransform& Out) const;
+	/** v4.16 : collisions propres a l'interaction ou au passage, que le scanner ne represente pas (boite visee et corps
+	 *  bloquant de la porte du passage : apres l'ouverture, la boite visee restait devant une ouverture vide) */
+	void GetLidarIgnored(TArray<const UPrimitiveComponent*>& Out) const;
 	/** v4.12 : module physique (BRMech::Module), son repere et la progression affichee (passerelle : 0 levee .. 1 posee) */
 	uint8 GetModule() const { return Module; }
 	BRMech::FFrame GetModuleFrame() const { return ModuleFrame(); }

@@ -1593,13 +1593,14 @@ bool ABRMissionDevice::GetLidarPlate(FVector& OutCenter, FVector& OutRight, FVec
 	const FTransform T = GetActorTransform();
 	if (Module == BRMech::Module::LidarDoor && DoorLeaf)
 	{
-		// Plaque au milieu du battant, cote galerie (le battant ferme est dans le plan du mur)
+		// Plaque au milieu du battant, cote galerie (le battant ferme est dans le plan du mur). v4.16 : repere partage avec le
+		// banc (BRLidar::DoorPlateFrame) ; pose ACTUELLE du battant
 		const FTransform L = DoorLeaf->GetComponentTransform();
-		const float LW = BRMech::LidarDoor::Width - 4.f;
-		OutCenter = L.TransformPosition(FVector(BRMech::LidarDoor::LeafThick * 0.5f + 2.f, LW * 0.5f, BRMech::LidarDoor::PlateZ));
-		OutNormal = L.TransformVectorNoScale(FVector(1.f, 0.f, 0.f));
-		OutRight = L.TransformVectorNoScale(FVector(0.f, 1.f, 0.f));
-		OutUp = FVector::UpVector;
+		const BRLidar::FFrame3 PF = BRLidar::DoorPlateFrame();
+		OutCenter = L.TransformPosition(FVector(PF.O[0], PF.O[1], PF.O[2]));
+		OutNormal = L.TransformVectorNoScale(FVector(PF.X[0], PF.X[1], PF.X[2]));
+		OutRight = L.TransformVectorNoScale(FVector(PF.Y[0], PF.Y[1], PF.Y[2]));
+		OutUp = L.TransformVectorNoScale(FVector(PF.Z[0], PF.Z[1], PF.Z[2]));
 		return true;
 	}
 	// Plaque murale (placement de secours)
@@ -1619,6 +1620,39 @@ bool ABRMissionDevice::GetCageFrame(FTransform& Out) const
 	// Interieur de la cage (voir Init : profondeur 12..122 cm devant le mur)
 	Out = FTransform(GetActorRotation(), GetActorTransform().TransformPosition(FVector(67.f, 0.f, 8.f)));
 	return true;
+}
+
+bool ABRMissionDevice::GetLidarSupport(FTransform& Out) const
+{
+	if (Device.Role != BRM::R_LidarDoor && Device.Role != BRM::R_LidarCage)
+	{
+		return false;
+	}
+	// v4.16 : le battant pivote jusqu'a OpenAngle (UpdateModule) : sa pose est relue a chaque emission du scanner
+	Out = (Module == BRMech::Module::LidarDoor && DoorLeaf) ? DoorLeaf->GetComponentTransform() : GetActorTransform();
+	return true;
+}
+
+bool ABRMissionDevice::GetLidarLeaf(FTransform& Out) const
+{
+	if (Device.Role != BRM::R_LidarDoor || Module != BRMech::Module::LidarDoor || !DoorLeaf || !bShown)
+	{
+		return false;
+	}
+	Out = DoorLeaf->GetComponentTransform();
+	return true;
+}
+
+void ABRMissionDevice::GetLidarIgnored(TArray<const UPrimitiveComponent*>& Out) const
+{
+	// v4.16 : la boite visee (point d'interaction, devant le battant) et le corps bloquant (dans le mur) ne sont pas le
+	// battant : ouvert, la boite visee restait seule dans l'ouverture et le scanner y dessinait un mur. Le battant est
+	// represente par ses boites (BRLidar::DoorScanBox), qui le suivent ; l'interaction et le passage ne changent pas
+	if (Device.Role == BRM::R_LidarDoor && Module == BRMech::Module::LidarDoor && DoorLeaf)
+	{
+		Out.Add(Box.Get());
+		Out.Add(Blocker.Get());
+	}
 }
 
 void ABRMissionDevice::BuildLidarDoor(const BRM::FPlan& Plan)
