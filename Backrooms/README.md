@@ -16,7 +16,8 @@ Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et
   - règles du parcours (R-L1 à R-L6), état de la partie, migration : [`Docs/HISTOIRE_PROGRESSION_v4.15.md`](Docs/HISTOIRE_PROGRESSION_v4.15.md) ;
   - journaux réels des bancs et des correctifs : [`Docs/v415/`](Docs/v415/).
 
-> **Exécuté** sous Windows (Unreal 5.8.3, RTX 5050 Laptop) : compilation éditeur et jeu (0 avertissement du projet),
+> **Exécuté** sous Windows (Unreal 5.8.3, RTX 5050 Laptop) : compilation éditeur et jeu (0 avertissement du projet), paquet
+> Windows Shipping construit, contrôlé et lancé,
 > installation du contenu (0 problème), 10 bancs hors moteur, **14 suites de test du jeu et le test réseau** : toutes
 > réussies hormis les images par seconde des salles de fosses sur ce portable (V413 et V412 de bout en bout pour la
 > première fois ; test complet : 29 problèmes sur la base, 1 maintenant ; réseau : 0).

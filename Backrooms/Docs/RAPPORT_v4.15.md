@@ -25,6 +25,9 @@ Tout ce qui suit a été **exécuté** sur cette machine :
 - outils Python : 5000 graines de portes, 300 graines de fosses, scanner (500 graines), dégagement des mécanismes,
   langues, modèles protégés, paquets ;
 - **14 suites de test du jeu** et le **test réseau à deux joueurs** (hôte et client sur ce PC), plusieurs fois.
+- **paquet Windows Shipping** (`Tools\Build\build_windows.ps1`, contenu public) : construit, cuit, contrôlé et lancé
+  (`check_package.py --launch` : structure, contenu, architecture et dépendances OK ; le jeu empaqueté passe son test de
+  démarrage, 0 problème). Le premier paquet a révélé le matériau de moquette absent (§ 4).
 
 Méthode : chaque échec a été diagnostiqué (code, journaux, captures, sondes hors moteur) puis vérifié par une seconde
 analyse chargée de le réfuter ; les corrections ont été faites sur des branches séparées, relues, puis fusionnées et
@@ -74,7 +77,10 @@ cellule par cellule, profil graphique choisi au premier lancement.
 Vérifié dans le jeu par le banc visuel (Levels 0, 1, 2, 6, 37 ; profils Performance, Qualité, RTX fluide) et par le
 test réseau (décalques identiques). Le banc a révélé un défaut, corrigé : avec la balance des blancs à 3900 K, la
 lampe torche paraissait bleu ciel et le papier peint vert sous son faisceau ; la couleur de la lampe est maintenant
-compensée par niveau (banc [`banc_couleur.txt`](v415/banc_couleur.txt)).
+compensée par niveau (banc [`banc_couleur.txt`](v415/banc_couleur.txt)). Le contrôle du premier paquet en a révélé un
+second, corrigé : sous Unreal 5.8, le matériau de moquette en tissu (`M_BR_WorldCloth`) n'était pas créé (l'entrée
+« Cloth », Custom Data 0, est cachée à Python) ; la moquette retombait sur le matériau ordinaire et le paquet ne l'avait
+pas. Il passe maintenant par un nœud d'attributs (matériaux v9), et la validation de l'installation vérifie le fichier.
 
 Non fait : R10 (kit en Nanite, demande une reconstruction Blender), l'extrémité sombre d'un tube en fin de vie (reportée
 à la v4.16).
