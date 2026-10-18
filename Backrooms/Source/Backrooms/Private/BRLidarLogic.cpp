@@ -1,6 +1,8 @@
 // v4.13 : logique pure de l'aile LiDAR et du scanner (voir BRLidarLogic.h). Aucune dependance au moteur : ce fichier est
 // aussi compile seul par Tools/Lidar/test_lidar.cpp.
 #include "BRLidarLogic.h"
+// v4.16 : cotes de la porte du passage (constantes seulement : rien a lier pour le banc)
+#include "BRMechLogic.h"
 
 #include <cmath>
 
@@ -493,7 +495,7 @@ void FGlyphPlanner::Reset()
 	*this = FGlyphPlanner();
 }
 
-void FGlyphPlanner::Touch(int Id, int Total, double Now, float Persistence)
+void FGlyphPlanner::Touch(int Id, int Total, double Now, float Persistence, unsigned Pose)
 {
 	++Touches;
 	if (Id < 0 || Total <= 0)
@@ -527,13 +529,21 @@ void FGlyphPlanner::Touch(int Id, int Total, double Now, float Persistence)
 		}
 		*T = FTarget();
 		T->Id = Id;
+		T->Pose = Pose;
 	}
 	if (!T->bTouched)
 	{
 		++DistinctTouches;
 	}
 	T->Total = Total;
-	if (T->Cursor >= T->Total && Now - T->DoneAt >= GlyphRefreshSeconds(Persistence))
+	if (T->Pose != Pose)
+	{
+		// v4.16 : le support a bouge depuis cette passe (porte ouverte) : nouvelle passe tout de suite, a la pose actuelle
+		T->Pose = Pose;
+		T->Cursor = 0;
+		++PoseRestarts;
+	}
+	else if (T->Cursor >= T->Total && Now - T->DoneAt >= GlyphRefreshSeconds(Persistence))
 	{
 		T->Cursor = 0; // nouvelle passe : l'inscription est redessinee avant de s'eteindre
 	}
@@ -649,7 +659,7 @@ void RunFrame(FScanState& S, float Dt, float Persistence, bool bFocus, IScanHost
 			const FHit H = Host.TraceRay(false, bCenter, X, Y, Z);
 			if (H.GlyphTarget >= 0)
 			{
-				S.Glyphs.Touch(H.GlyphTarget, H.GlyphTotal, S.Store.Now, Persistence);
+				S.Glyphs.Touch(H.GlyphTarget, H.GlyphTotal, S.Store.Now, Persistence, H.GlyphPose);
 			}
 		}
 		Out.FocusRays = N;
@@ -679,6 +689,236 @@ void RunFrame(FScanState& S, float Dt, float Persistence, bool bFocus, IScanHost
 			Out.Bucket[Cat] = S.Store.Current[Cat];
 		}
 	}
+}
+
+// ------------------------------------------------- v4.16 : inscriptions sur un support mobile, surfaces du scanner
+FFrame3 YawFrame(float OX, float OY, float OZ, float YawDeg)
+{
+	const float A = YawDeg * (Pi / 180.f);
+	const float C = std::cos(A);
+	const float S = std::sin(A);
+	FFrame3 F;
+	F.O[0] = OX;
+	F.O[1] = OY;
+	F.O[2] = OZ;
+	F.X[0] = C;
+	F.X[1] = S;
+	F.X[2] = 0.f;
+	F.Y[0] = -S;
+	F.Y[1] = C;
+	F.Y[2] = 0.f;
+	F.Z[0] = 0.f;
+	F.Z[1] = 0.f;
+	F.Z[2] = 1.f;
+	return F;
+}
+
+void PointToParent(const FFrame3& F, const float L[3], float Out[3])
+{
+	for (int I = 0; I < 3; ++I)
+	{
+		Out[I] = F.O[I] + F.X[I] * L[0] + F.Y[I] * L[1] + F.Z[I] * L[2];
+	}
+}
+
+void DirToParent(const FFrame3& F, const float L[3], float Out[3])
+{
+	for (int I = 0; I < 3; ++I)
+	{
+		Out[I] = F.X[I] * L[0] + F.Y[I] * L[1] + F.Z[I] * L[2];
+	}
+}
+
+void DirToLocal(const FFrame3& F, const float P[3], float Out[3])
+{
+	// Axes orthonormes : l'inverse de la rotation est sa transposee
+	Out[0] = F.X[0] * P[0] + F.X[1] * P[1] + F.X[2] * P[2];
+	Out[1] = F.Y[0] * P[0] + F.Y[1] * P[1] + F.Y[2] * P[2];
+	Out[2] = F.Z[0] * P[0] + F.Z[1] * P[1] + F.Z[2] * P[2];
+}
+
+void PointToLocal(const FFrame3& F, const float P[3], float Out[3])
+{
+	const float D[3] = { P[0] - F.O[0], P[1] - F.O[1], P[2] - F.O[2] };
+	DirToLocal(F, D, Out);
+}
+
+FFrame3 Compose(const FFrame3& Parent, const FFrame3& Child)
+{
+	FFrame3 F;
+	PointToParent(Parent, Child.O, F.O);
+	DirToParent(Parent, Child.X, F.X);
+	DirToParent(Parent, Child.Y, F.Y);
+	DirToParent(Parent, Child.Z, F.Z);
+	return F;
+}
+
+bool FrameMoved(const FFrame3& A, const FFrame3& B, float PosTol, float AxisTol)
+{
+	float DO = 0.f, DX = 0.f, DY = 0.f, DZ = 0.f;
+	for (int I = 0; I < 3; ++I)
+	{
+		DO += (A.O[I] - B.O[I]) * (A.O[I] - B.O[I]);
+		DX += (A.X[I] - B.X[I]) * (A.X[I] - B.X[I]);
+		DY += (A.Y[I] - B.Y[I]) * (A.Y[I] - B.Y[I]);
+		DZ += (A.Z[I] - B.Z[I]) * (A.Z[I] - B.Z[I]);
+	}
+	const float AT = AxisTol * AxisTol;
+	return DO > PosTol * PosTol || DX > AT || DY > AT || DZ > AT;
+}
+
+void FSupportTrack::Update(const FFrame3& Now)
+{
+	if (!bInit)
+	{
+		bInit = true;
+		Last = Now;
+		RevPose = Now;
+		bMoving = false;
+		return;
+	}
+	bMoving = FrameMoved(Last, Now, SupportStillPos, SupportStillAxis);
+	if (FrameMoved(RevPose, Now, SupportRevPos, SupportRevAxis))
+	{
+		++Rev;
+		RevPose = Now;
+	}
+	Last = Now;
+}
+
+FFrame3 DoorLeafFrame(float Progress, float ShakeDeg)
+{
+	// Charnieres a -Y : le battant commence a 1 cm du bord de l'ouverture (BuildLidarDoor), pivote de OpenAngle vers l'aile
+	namespace LD = BRMech::LidarDoor;
+	return YawFrame(0.f, -LD::Width * 0.5f + 1.f, 0.f, LD::OpenAngle * Progress + ShakeDeg);
+}
+
+FFrame3 DoorPlateFrame()
+{
+	// Milieu du battant, 2 cm devant sa face cote galerie (0,45 cm devant la plaque en relief), a PlateZ
+	namespace LD = BRMech::LidarDoor;
+	FFrame3 F;
+	F.O[0] = LD::LeafThick * 0.5f + 2.f;
+	F.O[1] = (LD::Width - 4.f) * 0.5f;
+	F.O[2] = LD::PlateZ;
+	return F;
+}
+
+void DoorScanBox(int I, float OutMin[3], float OutMax[3])
+{
+	namespace LD = BRMech::LidarDoor;
+	const float LW = LD::Width - 4.f;
+	if (I == 1)
+	{
+		// Plaque en relief : 1,5 cm d'epaisseur, posee 0,8 cm devant le centre de la face du battant
+		const float CX = LD::LeafThick * 0.5f + 0.8f;
+		OutMin[0] = CX - 0.75f;
+		OutMax[0] = CX + 0.75f;
+		OutMin[1] = LW * 0.5f - LD::PlateSize * 0.5f;
+		OutMax[1] = LW * 0.5f + LD::PlateSize * 0.5f;
+		OutMin[2] = LD::PlateZ - LD::PlateSize * 0.5f;
+		OutMax[2] = LD::PlateZ + LD::PlateSize * 0.5f;
+		return;
+	}
+	// Battant (LW x Height - 4, de 1 a Height - 3 cm), elargi au jeu de la porte : de l'axe des charnieres (1 cm du bord de
+	// l'ouverture) au bord oppose, du sol au linteau. Porte fermee, il couvre exactement l'ouverture du mur
+	OutMin[0] = -LD::LeafThick * 0.5f;
+	OutMax[0] = LD::LeafThick * 0.5f;
+	OutMin[1] = -1.f;
+	OutMax[1] = LD::Width - 1.f;
+	OutMin[2] = 0.f;
+	OutMax[2] = LD::Height;
+}
+
+bool RayBox(const FFrame3& F, const float Min[3], const float Max[3], const float From[3], const float Dir[3], float MaxT, float& OutT, float OutN[3])
+{
+	float O[3], D[3];
+	PointToLocal(F, From, O);
+	DirToLocal(F, Dir, D);
+	float TNear = -1e30f, TFar = 1e30f;
+	int Axis = -1;
+	float Sign = 0.f;
+	for (int I = 0; I < 3; ++I)
+	{
+		if (std::fabs(D[I]) < 1e-8f)
+		{
+			if (O[I] < Min[I] || O[I] > Max[I])
+			{
+				return false;
+			}
+			continue;
+		}
+		const float Inv = 1.f / D[I];
+		float T0 = (Min[I] - O[I]) * Inv;
+		float T1 = (Max[I] - O[I]) * Inv;
+		// Entree par la face Min si le rayon va vers +I (normale -I), par la face Max sinon (normale +I)
+		float S = -1.f;
+		if (T0 > T1)
+		{
+			const float Tmp = T0;
+			T0 = T1;
+			T1 = Tmp;
+			S = 1.f;
+		}
+		if (T0 > TNear)
+		{
+			TNear = T0;
+			Axis = I;
+			Sign = S;
+		}
+		TFar = T1 < TFar ? T1 : TFar;
+		if (TNear > TFar)
+		{
+			return false;
+		}
+	}
+	if (Axis < 0 || TNear <= 0.f || TNear > MaxT)
+	{
+		return false; // parti de l'interieur, derriere le point de depart ou au-dela de la portee
+	}
+	float NL[3] = { 0.f, 0.f, 0.f };
+	NL[Axis] = Sign;
+	DirToParent(F, NL, OutN);
+	OutT = TNear;
+	return true;
+}
+
+float BoxDistance(const FFrame3& F, const float Min[3], const float Max[3], const float P[3])
+{
+	float L[3];
+	PointToLocal(F, P, L);
+	float D2 = 0.f;
+	for (int I = 0; I < 3; ++I)
+	{
+		const float E = L[I] < Min[I] ? Min[I] - L[I] : (L[I] > Max[I] ? L[I] - Max[I] : 0.f);
+		D2 += E * E;
+	}
+	return std::sqrt(D2);
+}
+
+void PlateShapePoint(int Symbol, int K, const short (*Figure)[3], int FigurePoints, float& OutRight, float& OutUp)
+{
+	// A gauche la silhouette (40 cm de haut), a droite le code (grille 7 x 7, 18 cm) : memes cotes qu'en v4.14
+	int FigIdx = 0, Row = 0, Col = 0;
+	if (PlateGlyphPoint(Symbol, K, FigurePoints, FigIdx, Row, Col))
+	{
+		OutRight = 12.f + (Col - 3) * 2.8f;
+		OutUp = (3 - Row) * 2.8f;
+		return;
+	}
+	const short* Pt = Figure[FigIdx < FigurePoints ? FigIdx : FigurePoints - 1];
+	OutRight = -12.f + Pt[1] * 0.1f * 0.22f;
+	OutUp = Pt[2] * 0.1f * 0.22f - 18.f;
+}
+
+void CageShapePoint(int K, const short (*Figure)[3], int FigurePoints, float Out[3])
+{
+	// Silhouette debout dans la cage (1,8 m au plus : la cage mesure 2,1 m), face a l'avant de la cage
+	const int Idx = CageGlyphFigure(K, FigurePoints);
+	const short* Pt = Figure[Idx < FigurePoints ? Idx : FigurePoints - 1];
+	Out[0] = Pt[0] * 0.09f;
+	Out[1] = Pt[1] * 0.09f;
+	Out[2] = Pt[2] * 0.09f;
 }
 
 float StaticLevel(float Distance)

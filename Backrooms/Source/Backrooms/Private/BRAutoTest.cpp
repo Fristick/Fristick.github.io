@@ -126,6 +126,13 @@ void ABRAutoTest::BeginPlay()
 		GLog->AddOutputDevice(Capture.Get());
 	}
 
+	// v4.16 (lidar) : battant mobile du Level 6 au scanner (BRAutoTestV416Lidar.cpp), seul ou avec -BRNetTest
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Lidar")))
+	{
+		AddV416LidarPlan();
+		return;
+	}
+
 	if (bNetTest)
 	{
 		BuildNetPlan();

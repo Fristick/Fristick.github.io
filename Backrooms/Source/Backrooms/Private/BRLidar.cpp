@@ -28,9 +28,11 @@ FString FBRLidarStats::ToString() const
 	const double F = Frames > 0 ? static_cast<double>(Frames) : 1.0;
 	return FString::Printf(TEXT("%lld images ; rayons %lld (%.1f/image, pic %d) ; visees %lld ; points demandes %lld, acceptes %lld, remplaces %lld, expires %lld, refuses %lld (pic %d/image) ; ")
 		TEXT("inscriptions %lld points, %lld rayons sur des cibles -> %lld cibles distinctes ; materiaux mis a jour %lld (%.1f/image) ; ")
-		TEXT("temps : rayons et decisions %.3f ms/image, inscriptions %.3f ms/image, envoi aux instances %.3f ms/image, total %.3f ms/image"),
+		TEXT("temps : rayons et decisions %.3f ms/image, inscriptions %.3f ms/image, envoi aux instances %.3f ms/image, total %.3f ms/image ; ")
+		TEXT("v4.16 : rayons arretes par un battant %lld, passes recommencees (support deplace) %lld, rayons sur une inscription en mouvement %lld"),
 		Frames, Rays, Rays / F, PeakFrameRays, AimTraces, Requested, Accepted, Replaced, Expired, Rejected, PeakFramePoints, GlyphPoints, GlyphTouches, GlyphDistinct,
-		MidUpdates, MidUpdates / F, TraceSeconds * 1000.0 / F, GlyphSeconds * 1000.0 / F, UploadSeconds * 1000.0 / F, TotalSeconds * 1000.0 / F);
+		MidUpdates, MidUpdates / F, TraceSeconds * 1000.0 / F, GlyphSeconds * 1000.0 / F, UploadSeconds * 1000.0 / F, TotalSeconds * 1000.0 / F, LeafHits, GlyphPoseRestarts,
+		GlyphMovingSkips);
 }
 
 namespace
@@ -48,6 +50,31 @@ namespace
 	constexpr float GlowBase = 7.f;
 	/** Variation d'attenuation sous laquelle le materiau d'un groupe n'est pas reecrit */
 	constexpr float FadeStep = 1.f / 64.f;
+
+	/** v4.16 : repere d'une transformation du moteur (sans echelle) pour la logique pure (BRLidarLogic.h) */
+	BRLidar::FFrame3 LidarFrameOf(const FTransform& T)
+	{
+		BRLidar::FFrame3 F;
+		const FVector O = T.GetLocation();
+		const FVector AX = T.GetUnitAxis(EAxis::X);
+		const FVector AY = T.GetUnitAxis(EAxis::Y);
+		const FVector AZ = T.GetUnitAxis(EAxis::Z);
+		for (int32 I = 0; I < 3; ++I)
+		{
+			F.O[I] = static_cast<float>(O[I]);
+			F.X[I] = static_cast<float>(AX[I]);
+			F.Y[I] = static_cast<float>(AY[I]);
+			F.Z[I] = static_cast<float>(AZ[I]);
+		}
+		return F;
+	}
+
+	void LidarToFloats(const FVector& V, float Out[3])
+	{
+		Out[0] = static_cast<float>(V.X);
+		Out[1] = static_cast<float>(V.Y);
+		Out[2] = static_cast<float>(V.Z);
+	}
 }
 
 ABRLidar::ABRLidar()
@@ -136,6 +163,7 @@ void ABRLidar::ResetForLoad()
 	}
 	ScannedPlates.Empty();
 	GlyphCache.Empty();
+	ScanLeaves.Reset();
 	FocusDevice.Reset();
 	HoldEntity.Reset();
 	FocusHold = FocusSend = EntityHold = 0.f;
@@ -322,47 +350,61 @@ void ABRLidar::AddPoint(uint8 Category, const FVector& At, const FVector& Normal
 	}
 	const float S = Size * Settings().PointSize / 100.f;
 	Pending[Category].Add(FTransform(M.ToQuat(), At + N * 0.6f, FVector(S, S, S)));
+	if (bTestRecord && TestPoints.Num() < MaxTestPoints)
+	{
+		FTestPoint& T = TestPoints.AddDefaulted_GetRef();
+		T.At = At + N * 0.6f;
+		T.Category = Category;
+		T.Device = CtxDevice;
+		T.bLeaf = bCtxLeaf;
+		T.Component = CtxComponent;
+		T.Frame = GFrameCounter;
+	}
 }
 
-const ABRLidar::FGlyphCache* ABRLidar::GetGlyphCache(int32 DeviceIndex)
+ABRLidar::FGlyphCache* ABRLidar::GetGlyphCache(int32 DeviceIndex)
 {
-	if (const FGlyphCache* Found = GlyphCache.Find(DeviceIndex))
+	if (FGlyphCache* Found = GlyphCache.Find(DeviceIndex))
 	{
 		return Found;
 	}
 	const ABRWorld* W = ABRWorld::Get(this);
 	ABRMissionDevice* Dev = W ? W->FindMissionDevice(DeviceIndex) : nullptr;
-	if (!Dev)
+	FTransform Support;
+	if (!Dev || !Dev->GetLidarSupport(Support))
 	{
 		return nullptr;
 	}
+	// v4.16 : forme calculee une fois par chargement a la pose actuelle, puis gardee dans le repere de son support (le battant
+	// de la porte pivote ; v4.15 gardait les coordonnees du monde)
+	const BRLidar::FFrame3 SF = LidarFrameOf(Support);
 	const BRM::FDevice& D = Dev->GetDeviceDef();
 	const int32 Fig = FMath::Clamp<int32>(D.Info[0], 0, BRLidarShapes::NumFigures - 1);
 	FGlyphCache Cache;
+	auto AddWorld = [&Cache, &SF](const FVector& P)
+	{
+		float WP[3], LP[3];
+		LidarToFloats(P, WP);
+		BRLidar::PointToLocal(SF, WP, LP);
+		Cache.Local.Add(FVector(LP[0], LP[1], LP[2]));
+	};
+	FVector WorldNormal = FVector::ForwardVector;
 	if (D.Role == BRM::R_LidarDoor)
 	{
-		// Plaque : a gauche la silhouette (40 cm de haut), a droite le code (grille 7 x 7, 18 cm). Coordonnees fixes,
-		// calculees une fois par chargement
+		// Plaque : a gauche la silhouette (40 cm de haut), a droite le code (grille 7 x 7, 18 cm)
 		FVector C, R, U, N;
 		if (!Dev->GetLidarPlate(C, R, U, N))
 		{
 			return nullptr;
 		}
 		Cache.bPlate = true;
-		Cache.Normal = N;
+		WorldNormal = N;
 		const int32 Total = BRLidar::PlateGlyphPoints(D.Label);
 		for (int32 K = 0; K < Total; ++K)
 		{
-			int32 FigIdx = 0, Row = 0, Col = 0;
-			if (BRLidar::PlateGlyphPoint(D.Label, K, BRLidarShapes::PointsPerFigure, FigIdx, Row, Col))
-			{
-				Cache.Points.Add(C + R * (12.f + (Col - 3) * 2.8f) + U * ((3 - Row) * 2.8f));
-			}
-			else
-			{
-				const short* Pt = BRLidarShapes::Points[Fig][FigIdx];
-				Cache.Points.Add(C + R * (-12.f + Pt[1] * 0.1f * 0.22f) + U * (Pt[2] * 0.1f * 0.22f - 18.f));
-			}
+			float PR = 0.f, PU = 0.f;
+			BRLidar::PlateShapePoint(D.Label, K, BRLidarShapes::Points[Fig], BRLidarShapes::PointsPerFigure, PR, PU);
+			AddWorld(C + R * PR + U * PU);
 		}
 	}
 	else if (D.Role == BRM::R_LidarCage)
@@ -373,18 +415,129 @@ const ABRLidar::FGlyphCache* ABRLidar::GetGlyphCache(int32 DeviceIndex)
 		{
 			return nullptr;
 		}
-		Cache.Normal = F.GetRotation().GetForwardVector();
+		WorldNormal = F.GetRotation().GetForwardVector();
 		for (int32 K = 0; K < BRLidar::CageFigurePoints; ++K)
 		{
-			const short* Pt = BRLidarShapes::Points[Fig][BRLidar::CageGlyphFigure(K, BRLidarShapes::PointsPerFigure)];
-			Cache.Points.Add(F.TransformPosition(FVector(Pt[0] * 0.09f, Pt[1] * 0.09f, Pt[2] * 0.09f)));
+			float CP[3];
+			BRLidar::CageShapePoint(K, BRLidarShapes::Points[Fig], BRLidarShapes::PointsPerFigure, CP);
+			AddWorld(F.TransformPosition(FVector(CP[0], CP[1], CP[2])));
 		}
 	}
 	else
 	{
 		return nullptr;
 	}
+	float WN[3], LN[3];
+	LidarToFloats(WorldNormal, WN);
+	BRLidar::DirToLocal(SF, WN, LN);
+	Cache.LocalNormal = FVector(LN[0], LN[1], LN[2]);
+	Cache.Track.Update(SF);
 	return &GlyphCache.Add(DeviceIndex, MoveTemp(Cache));
+}
+
+bool ABRLidar::GetGlyphTrack(int32 DeviceIndex, uint32& OutRev, bool& bOutMoving) const
+{
+	const FGlyphCache* G = GlyphCache.Find(DeviceIndex);
+	if (!G)
+	{
+		return false;
+	}
+	OutRev = G->Track.Rev;
+	bOutMoving = G->Track.bMoving;
+	return true;
+}
+
+void ABRLidar::AddScanIgnored(const ABRWorld* W, FCollisionQueryParams& Q)
+{
+	if (!W)
+	{
+		return;
+	}
+	// Collisions de l'interaction et du passage : pas des surfaces a representer (un mecanisme masque n'en a plus)
+	TArray<const UPrimitiveComponent*> Ignored;
+	for (const ABRMissionDevice* D : W->GetMissionDevices())
+	{
+		if (D && D->IsShown())
+		{
+			D->GetLidarIgnored(Ignored);
+		}
+	}
+	for (const UPrimitiveComponent* C : Ignored)
+	{
+		if (C)
+		{
+			Q.AddIgnoredComponent(C);
+		}
+	}
+}
+
+ABRMissionDevice* ABRLidar::TraceLeaves(const ABRWorld* W, const FVector& From, const FVector& Dir, float MaxDist, float& OutDist, FVector& OutNormal)
+{
+	ABRMissionDevice* Best = nullptr;
+	if (!W)
+	{
+		return Best;
+	}
+	float F3[3], D3[3];
+	LidarToFloats(From, F3);
+	LidarToFloats(Dir, D3);
+	float Reach = MaxDist;
+	for (ABRMissionDevice* D : W->GetMissionDevices())
+	{
+		FTransform Leaf;
+		if (!D || !D->GetLidarLeaf(Leaf))
+		{
+			continue;
+		}
+		const BRLidar::FFrame3 LF = LidarFrameOf(Leaf);
+		for (int32 B = 0; B < BRLidar::DoorScanBoxes; ++B)
+		{
+			float Lo[3], Hi[3], T = 0.f, BN[3];
+			BRLidar::DoorScanBox(B, Lo, Hi);
+			if (BRLidar::RayBox(LF, Lo, Hi, F3, D3, Reach, T, BN) && T < Reach)
+			{
+				Reach = T;
+				Best = D;
+				OutDist = T;
+				OutNormal = FVector(BN[0], BN[1], BN[2]);
+			}
+		}
+	}
+	return Best;
+}
+
+void ABRLidar::PrepareScan(const FVector& Eye)
+{
+	const ABRWorld* W = ABRWorld::Get(this);
+	ScanQuery = FCollisionQueryParams(SCENE_QUERY_STAT(BRLidar), false, Holder.Get());
+	ScanQuery.AddIgnoredActor(this);
+	AddScanIgnored(W, ScanQuery);
+	ScanLeaves.Reset();
+	if (!W)
+	{
+		return;
+	}
+	for (ABRMissionDevice* D : W->GetMissionDevices())
+	{
+		// Battant : ses boites, a sa pose de cette image (au-dela de la portee : rien a toucher)
+		FTransform Leaf;
+		if (D && D->GetLidarLeaf(Leaf) && FVector::DistSquared(Leaf.GetLocation(), Eye) < FMath::Square(BRLidar::Range + 400.f))
+		{
+			FScanLeaf& L = ScanLeaves.AddDefaulted_GetRef();
+			L.Frame = LidarFrameOf(Leaf);
+			L.Device = D;
+		}
+	}
+	// Supports des inscriptions deja relevees : immobiles ou en mouvement, revision de leur pose
+	for (TPair<int32, FGlyphCache>& E : GlyphCache)
+	{
+		const ABRMissionDevice* D = W->FindMissionDevice(E.Key);
+		FTransform Support;
+		if (D && D->GetLidarSupport(Support))
+		{
+			E.Value.Track.Update(LidarFrameOf(Support));
+		}
+	}
 }
 
 BRLidar::FHit ABRLidar::TraceRay(bool bPulse, bool bCenter, float X, float Y, float Z)
@@ -393,6 +546,9 @@ BRLidar::FHit ABRLidar::TraceRay(bool bPulse, bool bCenter, float X, float Y, fl
 	UWorld* World = GetWorld();
 	const ABRWorld* W = ABRWorld::Get(this);
 	ABRCharacter* P = Holder.Get();
+	CtxDevice = -1;
+	bCtxLeaf = false;
+	CtxComponent.Reset();
 	if (!World || !W || !P)
 	{
 		return Out;
@@ -400,16 +556,52 @@ BRLidar::FHit ABRLidar::TraceRay(bool bPulse, bool bCenter, float X, float Y, fl
 	++Stats.Rays;
 	const FVector From = bPulse ? PulseOrigin : ViewOrigin;
 	const FVector Dir = (bPulse ? PulseRot : ViewRot).RotateVector(FVector(X, Y, Z));
-	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRLidar), false, P);
-	Q.AddIgnoredActor(this);
+	// v4.16 : requete de l'image (PrepareScan) : boite visee et corps bloquant des portes du passage ignores
 	FHitResult Hit;
-	if (!World->LineTraceSingleByChannel(Hit, From, From + Dir * BRLidar::Range, ECC_Visibility, Q))
+	const bool bHit = World->LineTraceSingleByChannel(Hit, From, From + Dir * BRLidar::Range, ECC_Visibility, ScanQuery);
+	// v4.16 : battants des portes du passage : leurs boites, a la pose de cette image, devant le decor touche
+	float Reach = bHit ? static_cast<float>(FVector::Dist(From, Hit.ImpactPoint)) : BRLidar::Range;
+	ABRMissionDevice* LeafDevice = nullptr;
+	float LeafN[3] = { 0.f, 0.f, 0.f };
+	if (ScanLeaves.Num() > 0)
+	{
+		float F3[3], D3[3];
+		LidarToFloats(From, F3);
+		LidarToFloats(Dir, D3);
+		for (const FScanLeaf& L : ScanLeaves)
+		{
+			ABRMissionDevice* LD = L.Device.Get();
+			for (int32 B = 0; LD && B < BRLidar::DoorScanBoxes; ++B)
+			{
+				float Lo[3], Hi[3], T = 0.f, BN[3];
+				BRLidar::DoorScanBox(B, Lo, Hi);
+				if (BRLidar::RayBox(L.Frame, Lo, Hi, F3, D3, Reach, T, BN) && T < Reach)
+				{
+					Reach = T;
+					LeafDevice = LD;
+					LeafN[0] = BN[0];
+					LeafN[1] = BN[1];
+					LeafN[2] = BN[2];
+				}
+			}
+		}
+	}
+	if (LeafDevice)
+	{
+		++Stats.LeafHits;
+		bCtxLeaf = true;
+		DeviceHit(LeafDevice, From + Dir * Reach, FVector(LeafN[0], LeafN[1], LeafN[2]), bPulse, Out);
+		bCtxLeaf = false;
+		return Out;
+	}
+	if (!bHit)
 	{
 		return Out;
 	}
 	AActor* A = Hit.GetActor();
 	const FVector At = Hit.ImpactPoint;
 	const FVector N = Hit.ImpactNormal;
+	CtxComponent = Hit.GetComponent();
 	if (Cast<ABREntity>(A))
 	{
 		// Menace : croix rouges, tournees vers le scanner
@@ -418,22 +610,7 @@ BRLidar::FHit ABRLidar::TraceRay(bool bPulse, bool bCenter, float X, float Y, fl
 	}
 	if (ABRMissionDevice* D = Cast<ABRMissionDevice>(A))
 	{
-		AddPoint(BRLidar::Device, At, N, GlyphSize[BRLidar::Device]);
-		if (!bPulse)
-		{
-			// Inscriptions : la cible est seulement signalee ; RunFrame la deduplique et la dessine sous le budget commun
-			const BRM::FDevice& Def = D->GetDeviceDef();
-			if (Def.Role == BRM::R_LidarCage && D->GetGateValue() >= 128)
-			{
-				Out.GlyphTarget = D->GetIndex();
-				Out.GlyphTotal = BRLidar::CageFigurePoints;
-			}
-			else if (Def.Role == BRM::R_LidarDoor)
-			{
-				Out.GlyphTarget = D->GetIndex();
-				Out.GlyphTotal = BRLidar::PlateGlyphPoints(Def.Label);
-			}
-		}
+		DeviceHit(D, At, N, bPulse, Out);
 		return Out;
 	}
 	(void)bCenter;
@@ -466,20 +643,69 @@ BRLidar::FHit ABRLidar::TraceRay(bool bPulse, bool bCenter, float X, float Y, fl
 	return Out;
 }
 
+void ABRLidar::DeviceHit(ABRMissionDevice* D, const FVector& At, const FVector& N, bool bPulse, BRLidar::FHit& Out)
+{
+	CtxDevice = D->GetIndex();
+	AddPoint(BRLidar::Device, At, N, GlyphSize[BRLidar::Device]);
+	CtxDevice = -1;
+	if (bPulse)
+	{
+		return;
+	}
+	// Inscriptions : la cible est seulement signalee ; RunFrame la deduplique et la dessine sous le budget commun
+	const BRM::FDevice& Def = D->GetDeviceDef();
+	const bool bCage = Def.Role == BRM::R_LidarCage && D->GetGateValue() >= 128;
+	if (!bCage && Def.Role != BRM::R_LidarDoor)
+	{
+		return;
+	}
+	const FGlyphCache* G = GetGlyphCache(D->GetIndex());
+	if (!G)
+	{
+		return;
+	}
+	// v4.16 : un support qui bouge (battant qui pivote, tremblement d'un refus) ne se lit pas ; une fois arrete, sa nouvelle
+	// revision de pose recommence la passe a la position actuelle
+	if (G->Track.bMoving)
+	{
+		++Stats.GlyphMovingSkips;
+		return;
+	}
+	Out.GlyphTarget = D->GetIndex();
+	Out.GlyphTotal = bCage ? BRLidar::CageFigurePoints : BRLidar::PlateGlyphPoints(Def.Label);
+	Out.GlyphPose = G->Track.Rev;
+}
+
 int ABRLidar::EmitGlyphs(int Target, int First, int Count)
 {
 	const double T0 = FPlatformTime::Seconds();
 	const FGlyphCache* C = GetGlyphCache(Target);
+	const ABRWorld* W = ABRWorld::Get(this);
+	const ABRMissionDevice* Dev = W ? W->FindMissionDevice(Target) : nullptr;
+	FTransform Support;
 	int Added = 0;
-	if (C)
+	if (C && Dev && Dev->GetLidarSupport(Support))
 	{
+		// v4.16 : forme du repere du support posee a sa pose ACTUELLE (position, normale et orientation des glyphes)
+		const BRLidar::FFrame3 SF = LidarFrameOf(Support);
+		float LN[3], WN[3];
+		LidarToFloats(C->LocalNormal, LN);
+		BRLidar::DirToParent(SF, LN, WN);
+		const FVector Normal(WN[0], WN[1], WN[2]);
 		const float Size = GlyphSize[BRLidar::Glyph] * (C->bPlate ? 0.75f : 1.f);
-		const int32 End = FMath::Min(First + Count, C->Points.Num());
+		const int32 End = FMath::Min(First + Count, C->Local.Num());
+		CtxDevice = Target;
+		bCtxLeaf = false;
+		CtxComponent.Reset();
 		for (int32 K = FMath::Max(0, First); K < End; ++K)
 		{
-			AddPoint(BRLidar::Glyph, C->Points[K], C->Normal, Size);
+			float LP[3], WP[3];
+			LidarToFloats(C->Local[K], LP);
+			BRLidar::PointToParent(SF, LP, WP);
+			AddPoint(BRLidar::Glyph, FVector(WP[0], WP[1], WP[2]), Normal, Size);
 			++Added;
 		}
+		CtxDevice = -1;
 	}
 	Stats.GlyphSeconds += FPlatformTime::Seconds() - T0;
 	return Added;
@@ -588,13 +814,21 @@ void ABRLidar::UpdateAim(float Dt)
 	{
 		return;
 	}
-	// Visee du scan focalise (un rayon par image, sans point) : mecanisme a relever, Smiler a repousser
+	// Visee du scan focalise (un rayon par image, sans point) : mecanisme a relever, Smiler a repousser. v4.16 : memes
+	// surfaces que les points (une porte du passage ouverte n'arrete plus le faisceau ; son battant l'arrete)
 	++Stats.AimTraces;
-	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRLidarAim), false, P);
-	Q.AddIgnoredActor(this);
 	FHitResult Hit;
-	const FVector End = ViewOrigin + ViewRot.GetForwardVector() * BRLidar::Range;
-	AActor* A = World->LineTraceSingleByChannel(Hit, ViewOrigin, End, ECC_Visibility, Q) ? Hit.GetActor() : nullptr;
+	const FVector Fwd = ViewRot.GetForwardVector();
+	const FVector End = ViewOrigin + Fwd * BRLidar::Range;
+	const bool bAimHit = World->LineTraceSingleByChannel(Hit, ViewOrigin, End, ECC_Visibility, ScanQuery);
+	AActor* A = bAimHit ? Hit.GetActor() : nullptr;
+	float LeafDist = 0.f;
+	FVector LeafNormal = FVector::ZeroVector;
+	if (ABRMissionDevice* LeafDev = TraceLeaves(ABRWorld::Get(this), ViewOrigin, Fwd, bAimHit ? static_cast<float>(FVector::Dist(ViewOrigin, Hit.ImpactPoint)) : BRLidar::Range,
+		LeafDist, LeafNormal))
+	{
+		A = LeafDev;
+	}
 	// Mire et cages : le scan focalise maintenu releve le mecanisme (meme action que la main, verifiee par l'hote)
 	ABRMissionDevice* D = Cast<ABRMissionDevice>(A);
 	FocusDevice = D;
@@ -675,18 +909,22 @@ void ABRLidar::Tick(float DeltaSeconds)
 	ViewOrigin = P->GetEyeLocation();
 	ViewRot = P->GetAimRotation().Quaternion();
 	const double TTrace = FPlatformTime::Seconds();
+	// v4.16 : requete, battants et supports des inscriptions de cette image
+	PrepareScan(ViewOrigin);
 	BRLidar::FFrameResult R;
 	const double Glyph0 = Stats.GlyphSeconds;
 	const long long Replaced0 = State.Store.Replaced;
 	const long long Expired0 = State.Store.Expired;
 	const long long Touches0 = State.Glyphs.Touches;
 	const long long Distinct0 = State.Glyphs.DistinctTouches;
+	const long long Restarts0 = State.Glyphs.PoseRestarts;
 	BRLidar::RunFrame(State, DeltaSeconds, Settings().Persistence, bFocus && bCan, *this, R);
 	Stats.TraceSeconds += (FPlatformTime::Seconds() - TTrace) - (Stats.GlyphSeconds - Glyph0);
 	Stats.Replaced += State.Store.Replaced - Replaced0;
 	Stats.Expired += State.Store.Expired - Expired0;
 	Stats.GlyphTouches += State.Glyphs.Touches - Touches0;
 	Stats.GlyphDistinct += State.Glyphs.DistinctTouches - Distinct0;
+	Stats.GlyphPoseRestarts += State.Glyphs.PoseRestarts - Restarts0;
 	ApplyFrame(R);
 	if (bFocus && bCan)
 	{
