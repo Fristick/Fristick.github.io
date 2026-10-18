@@ -906,6 +906,13 @@ void ABRAutoTest::AddV416LidarSteps()
 			}
 			return false;
 		}
+		// v4.16 : le scanner remarque le nouveau chargement a son propre Tick, la premiere image ou le niveau est pret, parfois
+		// juste apres cette etape (ordre des acteurs ; constate : remise a zero journalisee a la meme image que la verification).
+		// On lui laisse ce Tick ; une identite qui ne change jamais est jugee a 40 s
+		if (C->GetLidar()->GetLoadKey() == S.LoadKey && StepTime <= 40.f)
+		{
+			return false;
+		}
 		C->bGodMode = true;
 		const ABRLidar* L = C->GetLidar();
 		S.Door = RightDoor(W);
@@ -938,6 +945,11 @@ void ABRAutoTest::AddV416LidarSteps()
 				S.bReady = false;
 				return true;
 			}
+			return false;
+		}
+		// v4.16 : meme course d'une image que la reprise (le scanner voit le nouveau chargement a son Tick)
+		if (C->GetLidar() && C->GetLidar()->GetLoadKey() == S.LoadKey && StepTime <= 30.f)
+		{
 			return false;
 		}
 		C->bGodMode = true;
