@@ -420,4 +420,9 @@ private:
 	/** v4.15 (realisme) : banc visuel -BRAutoTestVisual (BRAutoTestVisual.cpp) : poses fixes par niveau et par profil,
 	 *  captures vis_<niveau>_<profil>_<pose> et mesures (Mesures.csv), coupure et lampe au Level 0 */
 	void AddVisualSteps();
+
+	/** v4.16 (perf) : mesures de performance -BRAutoTestPerf (BRAutoTestV416Perf.cpp) : scenes fixes (fosses du Level 0,
+	 *  Poolrooms, marches des Levels 0 et 1, scan LiDAR du Level 6) x profils, prechauffage, fenetre fixe, releves ProfileGPU ;
+	 *  Perf.csv et PerfPasses.csv */
+	void AddPerfSteps();
 };

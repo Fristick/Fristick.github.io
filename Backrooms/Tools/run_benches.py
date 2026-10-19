@@ -34,6 +34,7 @@ BENCHES = [
     ("mechanisms", ["Tools/Mechanisms/test_mechanisms.cpp", P + "BRMechLogic.cpp", P + "BRMissionLogic.cpp"]),
     ("missions", ["Tools/Missions/test_mission_logic.cpp", P + "BRMissionLogic.cpp", P + "BRMissionSolver.cpp"]),
     ("transactions", ["Tools/Transactions/test_transactions.cpp", P + "BRTxnLogic.cpp"]),
+    ("perf", ["Tools/Perf/test_perf.cpp"]),  # v4.16 (perf) : logique des mesures de performance (BRPerfLogic.h)
 ]
 GNU_FLAGS = ["-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror", "-Wshadow", "-I", "Source/Backrooms/Public"]
 CLANG_CL_FLAGS = ["/nologo", "/std:c++17", "/O2", "/EHsc", "/utf-8", "/W4", "/WX", "-Wshadow", "-Wno-c++98-compat",

@@ -347,6 +347,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Salle de fosses : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	// v4.16 (perf) : mesures de performance seules (BRAutoTestV416Perf.cpp : Perf.csv, PerfPasses.csv)
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestPerf")) || FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Perf")))
+	{
+		AddPerfSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Mesures de performance v4.16 : %d etapes. Rapport, Perf.csv et PerfPasses.csv : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestVisual")))
 	{
 		// v4.15 (realisme) : banc visuel seul (poses fixes, profils, captures et mesures a comparer d'un lot a l'autre)

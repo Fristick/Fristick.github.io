@@ -1751,14 +1751,21 @@ void ABRWorld::Tick(float DeltaSeconds)
 	if (TransState == ETrans::None)
 	{
 		UpdateTension(bMenu ? 0.f : Dt);
+		// v4.16 (perf) : bPerfQuiet (mesures de performance seulement) : ni apparition, ni ronde, ni phenomene, ni coupure
 		if (HasAuthority())
 		{
-			UpdatePopulation(Dt);
+			if (!bPerfQuiet)
+			{
+				UpdatePopulation(Dt);
+			}
 			UpdatePitFalls();
 		}
-		UpdatePatrol(Dt);
-		UpdatePhenomena(Dt);
-		if (!bMenu)
+		if (!bPerfQuiet)
+		{
+			UpdatePatrol(Dt);
+			UpdatePhenomena(Dt);
+		}
+		if (!bMenu && !bPerfQuiet)
 		{
 			UpdateBlackout(Dt);
 		}
@@ -1927,6 +1934,7 @@ void ABRWorld::StepTeardowns(double RemainingMs)
 	}
 	const float Ms = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
 	MaxTeardownMs = FMath::Max(MaxTeardownMs, Ms);
+	TeardownMsTotal += Ms; // v4.16 (perf)
 	FrameChunkMs += Ms;
 }
 
