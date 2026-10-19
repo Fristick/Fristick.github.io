@@ -1653,6 +1653,13 @@ void ABRMissionDevice::GetLidarIgnored(TArray<const UPrimitiveComponent*>& Out) 
 		Out.Add(Box.Get());
 		Out.Add(Blocker.Get());
 	}
+	// v4.16 (relecture) : cage : la boite visee depasse de 10 a 12 cm devant les barreaux, et le scanner y dessinait ses
+	// impacts sur une face invisible. Le volume de la cage (Blocker, meme acteur) reste la surface representee : la plaque
+	// se lit toujours. L'interaction (UpdateFocus) et la regle de l'hote (ECC_WorldStatic) ne passent pas par ici
+	else if (Device.Role == BRM::R_LidarCage)
+	{
+		Out.Add(Box.Get());
+	}
 }
 
 void ABRMissionDevice::BuildLidarDoor(const BRM::FPlan& Plan)

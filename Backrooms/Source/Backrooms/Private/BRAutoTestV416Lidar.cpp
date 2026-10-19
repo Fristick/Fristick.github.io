@@ -136,6 +136,8 @@ namespace BRTestV416Lidar
 		BRTestNet::FPlacement Place;
 		/** v4.16 (relecture) : scan porte fermee vraiment fait (analyse atteinte) ; sinon l'ancienne place n'est pas relevee */
 		bool bClosedScanned = false;
+		/** v4.16 (relecture) : nouveau scan porte ouverte vraiment fait (analyse atteinte) ; sinon la passe recommencee n'est pas jugee */
+		bool bOpenRescanned = false;
 		/** v4.16 (relecture) : temps du monde a la fin du dernier scan de la porte (attente du rafraichissement des inscriptions) */
 		double ScanEndAt = -1.0;
 		/** v4.16 (relecture) : rayons sur une inscription en mouvement (ABRLidar::Stats) au debut de l'ouverture */
@@ -538,6 +540,7 @@ void ABRAutoTest::AddV416LidarSteps()
 			const FScan R = Analyze(L, D, S, false);
 			// v4.16 (relecture) : scan fait (l'ancienne place peut etre relevee), fin du scan pour l'attente du rafraichissement
 			S.bClosedScanned = S.bClosedScanned || Expect == EExpect::Closed;
+			S.bOpenRescanned = S.bOpenRescanned || Expect == EExpect::Open;
 			S.ScanEndAt = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 			const FPlate P = PlateOf(D);
 			const FVector Eye = C->GetEyeLocation();
@@ -750,6 +753,12 @@ void ABRAutoTest::AddV416LidarSteps()
 		{
 			// v4.16 (relecture) : sans releve porte fermee, l'inscription a ete relevee pour la premiere fois porte ouverte (revision 0)
 			Skip(TEXT("v4.16 lidar : passe recommencee non verifiee (pas de releve porte fermee, voir plus haut)"));
+			return true;
+		}
+		if (!S.bOpenRescanned)
+		{
+			// v4.16 (relecture) : la passe ne recommence qu'au contact apres l'arret du battant (nouveau scan porte ouverte)
+			Skip(TEXT("v4.16 lidar : passe recommencee non verifiee (nouveau scan apres l'ouverture non fait, voir plus haut)"));
 			return true;
 		}
 		uint32 Rev = 0;
