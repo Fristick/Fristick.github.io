@@ -862,6 +862,17 @@ void ABRExit::SetServiceDoorOpen(bool bOpen, bool bAnimate)
 	const bool bChanged = bDoorOpen != bOpen;
 	bDoorOpen = bOpen;
 	DoorYawTarget = bOpen ? 95.f : 0.f;
+	// v4.16 (reseau, correctifs) : la boite d'interaction (devant le battant, sur toute la largeur de l'ouverture) n'arrete plus le
+	// canal de la vue quand la porte est ouverte : elle restait seule dans l'ouverture et coupait la vue des creatures
+	// (ABREntity::HasLineOfSight), le nom des coequipiers (ABRHUD), l'occultation des voix et des sons et le scanner, comme un
+	// mur invisible (client tardif, net416_porte : "vue par l'ouverture libre NON (Box)"). Ouverte, elle reste un volume de
+	// chevauchement de ce canal : la visee la trouve par sa tolerance (ABRCharacter::UpdateFocus, OverlapMultiByChannel) ; fermee,
+	// le battant arrete deja la vue et la boite reste bloquante (visee precise). Meme etat chez chacun (etat de l'hote, aucune
+	// donnee repliquee de plus)
+	if (Box)
+	{
+		Box->SetCollisionResponseToChannel(ECC_Visibility, bOpen ? ECR_Overlap : ECR_Block);
+	}
 	if (!bAnimate || !bChanged)
 	{
 		DoorYaw = DoorYawTarget;

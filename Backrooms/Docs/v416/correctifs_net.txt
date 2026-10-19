@@ -95,6 +95,21 @@
 # 2,5 s apres oui, a terre 1 fois" ; hote : "reveil ... refuse non ..., abandon a terre accepte oui". Banc content : protocole 416,
 # un client 415 refuse.
 
+# 9. Porte de service du Level 0 ouverte : sa boite d'interaction coupait la vue (series net416, ABRExit::SetServiceDoorOpen)
+# Cause : la boite d'interaction de la porte (BRInteractables.cpp, SetupInteractBox : X -5..25 cm, toute la largeur de
+# l'ouverture moins 7 cm de chaque cote, 2,10 m de haut) arrete le canal Visibility pour la visee precise. Fermee, le battant
+# arrete deja la vue ; ouverte (battant a 95 degres dans le sas), elle restait seule dans l'ouverture : mur invisible pour tout ce
+# qui regarde par ce canal (ABREntity::HasLineOfSight, nom des coequipiers ABRHUD, occultation des voix et des sons
+# UBRAssets::Attenuation, scanner ABRLidar, apparitions a l'abri des regards ABRWorld). Meme famille que la boite visee des portes
+# du passage du Level 6 (ABRMissionDevice::GetLidarIgnored). Defaut chez toutes les machines, pas propre au client tardif : seul
+# le client tardif de net416_porte faisait ce controle ("vue par l'ouverture libre NON (Box)", 20.53.59).
+# Apres : porte ouverte, la boite repond "chevauchement" au canal Visibility (ni la vue ni les sons ne s'y arretent) ; la visee
+# la trouve par sa tolerance (ABRCharacter::UpdateFocus, OverlapMultiByChannel, regard a environ 30 degres au plus de son centre, a
+# moins de 2,08 m des yeux au lieu de 2,60 m) ; fermee, elle reste bloquante (visee precise inchangee). Etat de l'hote applique
+# chez chacun comme avant (RegisterServiceDoor, ApplyStoryLocal) : aucun message ni champ replique de plus, NetVersion 416 inchange.
+# Tests : net416_porte, client tardif : "vue par l'ouverture libre oui" et (nouveau) "porte ouverte visee par l'interaction a
+# 1.2 m : oui" ; un obstacle est maintenant nomme avec son acteur ("(BRExit_N, Box)").
+
 ## Relecture (corrections du test et du lanceur, sans effet sur le jeu)
 # - Lanceur : code de sortie juge sur toutes les machines (avant : maximum courant ; l'hote, lu le premier, a toujours un NON
 #   VERIFIE "materiel absent" : un PROBLEME chez un client donnait 2 au lieu de 1). summary.txt finit par "code de sortie : N".
@@ -115,6 +130,12 @@
 # - F : sans son a jouer pendant le scan, "son arrete" est NON VERIFIE (avant : compte comme arrete) ; l'etape du changement de
 #   touches juge aussi le son.
 # - ABRPlayerController::InputKey deplace apres StopHeldActions (meme code) : plus de conflit de fusion avec la branche v416-vis.
+# - Echelles reseau du Niveau 37 (BRAutoTestV416Ladder.cpp, AddNetV416LadderSteps, plan -BRNetTest ordinaire, net416_classic) :
+#   le chargement retenu (L16.Serial) restait celui d'avant le Niveau 37 : l'etape du rassemblement se croyait "deja partie" des
+#   sa premiere image. Hote : echelle prise puis laissee 0,5 s apres (21.07.10.736 -> 21.07.11.244 : "0 demande(s) en tout,
+#   centre au plus haut a 90 cm du pied (sommet a 532)") ; client : "depart vu NON" 55 ms apres sa place ; puis "ECHEC (Niveau
+#   37)" chez chacun. Le chargement du Niveau 37 est retenu a l'arrivee (comme SerialMark des correctifs 4). Ni la demi-hauteur
+#   (CapsuleHalf416 deja employee) ni le vol du developpeur (aucun dans ces etapes) n'etaient en cause.
 
 ## Premiers essais en jeu (45c6562 : net416_base, net416_4j, net416_lag) : corrections du test, sans effet sur le jeu
 # - D et E, "N action(s) restantes selon l'etat recu (attendu 1)" (9 au sas, 4 a la passerelle) : le client comptait les
@@ -149,7 +170,8 @@
 #   (defaut 3 ; D : meme action par deux clients au meme instant), F inventaire, pause, touches changees et vraie perte de focus
 #   pendant un scan, une course et une interaction maintenus (defauts 4 et 5), G chute dans une fosse puis reveil.
 # -LateJoin porte : partie d'histoire de test de l'hote, porte ouverte et objet rendu, puis le client tardif : meme porte
-#   sauvegardee, mur perce, vue et capsule passent, battant ouvert, aucun reveil impose, objet rendu visible.
+#   sauvegardee, mur perce, vue et capsule passent, battant ouvert, porte ouverte prise par la visee, aucun reveil impose,
+#   objet rendu visible.
 # -LateJoin lidar | passage : Level 6, deux postes remis sous tension (lidar) ou jusqu'a la bonne porte du passage (passage),
 #   puis le client tardif : meme plan, etat, ouvertures et aile ; bonne porte ouverte (battant, passage libre) ; rien de remis
 #   a zero chez l'hote.

@@ -27,8 +27,8 @@
 //      d'avant le reveil, plus en chargement chez l'hote.
 // Avec -BRNetV416Late :
 //   porte       : partie d'histoire de l'hote (sauvegarde de test), porte de service du Level 0 ouverte, objet rendu au monde, puis
-//                 un client rejoint : meme porte sauvegardee, mur perce, passage libre (collision), porte ouverte, aucun reveil
-//                 impose, objet rendu visible ;
+//                 un client rejoint : meme porte sauvegardee, mur perce, passage libre (collision et vue), porte ouverte et
+//                 toujours prise par la visee, aucun reveil impose, objet rendu visible ;
 //   lidar       : Level 6, calibrage et deux postes faits, puis un client rejoint : meme plan, memes etats, rien de remis a zero ;
 //   passage     : Level 6 jusqu'a la bonne porte du passage ouverte : chez le client tardif, la meme porte ouverte (battant,
 //                 collision) ;
@@ -3982,11 +3982,50 @@ void ABRAutoTest::AddNetV416Plan()
 				FHitResult BodyHit;
 				const bool bBody = !GetWorld()->SweepSingleByChannel(BodyHit, T.TransformPosition(FVector(150.f, 0.f, 95.f)), T.TransformPosition(FVector(-Wall + 10.f, 0.f, 95.f)),
 					FQuat::Identity, ECC_Pawn, FCollisionShape::MakeCapsule(34.f, 86.f), Q);
+				// v4.16 (reseau, correctifs) : acteur et composant de l'obstacle (avant : composant seul, "Box" : boite d'une sortie ou
+				// d'un mecanisme ?)
+				auto HitName = [](const FHitResult& H) { return FString::Printf(TEXT(" (%s, %s)"), *GetNameSafe(H.GetActor()), *GetNameSafe(H.GetComponent())); };
 				Note(FString::Printf(TEXT("client tardif : porte construite, battant a %.0f degres (ouverte %s), mur perce %s, vue par l'ouverture libre %s%s, passage de la capsule libre %s%s"),
-					Door->GetServiceDoorAngle(), V6::Oui(Door->IsServiceDoorOpen()), V6::Oui(bEdge), V6::Oui(bSight),
-					bSight ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *GetNameSafe(SightHit.GetComponent())), V6::Oui(bBody),
-					bBody ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *GetNameSafe(BodyHit.GetComponent()))),
+					Door->GetServiceDoorAngle(), V6::Oui(Door->IsServiceDoorOpen()), V6::Oui(bEdge), V6::Oui(bSight), bSight ? TEXT("") : *HitName(SightHit), V6::Oui(bBody),
+					bBody ? TEXT("") : *HitName(BodyHit)),
 					!Door->IsServiceDoorOpen() || Door->GetServiceDoorAngle() < 90.f || !bEdge || !bSight || !bBody);
+				// v4.16 (reseau, correctifs) : ouverte, la boite d'interaction ne coupe plus la vue (ABRExit::SetServiceDoorOpen) : la
+				// porte doit rester prise par la visee (sa tolerance), de pres, au sol, regard sur le centre de la boite
+				const UCapsuleComponent* Cap = C->GetCapsuleComponent();
+				V6::S.Spot2 = T.TransformPosition(FVector(10.f, 0.f, 105.f));
+				V6::PlaceStart(C, T.TransformPosition(FVector(120.f, 0.f, 0.f)) + FVector(0.f, 0.f, (Cap ? Cap->GetScaledCapsuleHalfHeight() : 88.f) + 5.f), &V6::S.Spot2, true);
+				V6::S.Phase = 2;
+				V6::S.Clock = Now;
+				return false;
+			}
+			if (V6::S.Phase == 2)
+			{
+				ABRExit* Door = V6::FindServiceDoor(GetWorld());
+				const bool bHeld = V6::PlaceHeld(C, true);
+				if (AController* Ctrl = C->GetController())
+				{
+					Ctrl->SetControlRotation((V6::S.Spot2 - C->GetEyeLocation()).Rotation());
+				}
+				const bool bSeen = Door && C->FocusActor.Get() == Door;
+				if ((!bHeld || !bSeen) && Now - V6::S.Clock < 5.0)
+				{
+					return false;
+				}
+				V6::S.Phase = 9;
+				if (!Door)
+				{
+					Note(TEXT("client tardif : porte de service disparue avant la visee de la porte ouverte"), true);
+					return false;
+				}
+				const float Dist = static_cast<float>(FVector::Dist2D(C->GetActorLocation(), Door->GetActorLocation())) / 100.f;
+				if (!bSeen && !bHeld)
+				{
+					Skip(FString::Printf(TEXT("client tardif : porte ouverte visee par l'interaction NON VERIFIE : place a 1,2 m devant la porte non tenue en 5 s (a %.1f m, %d replacement(s))"),
+						Dist, V6::S.Place.Reapplied));
+					return false;
+				}
+				Note(FString::Printf(TEXT("client tardif : porte ouverte visee par l'interaction a %.1f m : %s (vise : %s)"), Dist, V6::Oui(bSeen),
+					*BRTestV412::FocusName(W, C->FocusActor.Get())), !bSeen);
 				return false;
 			}
 			if (V6::S.Phase == 5)

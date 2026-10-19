@@ -2121,6 +2121,11 @@ void ABRAutoTest::AddNetV416LadderSteps(bool bClient)
 		L16.Exit = E;
 		L16.FootZ = static_cast<float>(L.Z);
 		L16.TopZ = E->GetClimbTopZ();
+		// v4.16 (reseau, correctifs) : chargement du Niveau 37 retenu (comme SerialMark des etapes reseau des correctifs 4) : le
+		// depart de groupe (bLeft) et l'arrivee au Niveau 2 se jugent par rapport a lui. Avant : chargement d'avant le Niveau 37,
+		// donc "deja parti" des la premiere image du rassemblement : l'hote laissait l'echelle 0,5 s apres l'avoir prise (centre a
+		// 90 cm du pied, 0 demande) et le client concluait au depart sans l'avoir vu (net416_classic)
+		L16.Serial = W->GetLevelSerial();
 		const bool bFree = View == TEXT("libre") && Climb == TEXT("libre");
 		Note(FString::Printf(TEXT("%s : Niveau 37 (graine du niveau %u, partie classique) : %d echelle(s) vers le Niveau 2 dans les chunks construits ; celle du depart de groupe : %s en %s "
 			"(banc : (-1250, -1560, 68) %s), sur son trottoir %s, sommet de la montee a %.0f cm du pied ; point vise %s, capsule du grimpeur %s"), Who, Pool37Seed, Built.Num(), *E->GetName(),
