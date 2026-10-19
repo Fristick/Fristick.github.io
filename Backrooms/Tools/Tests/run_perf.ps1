@@ -39,7 +39,9 @@ param(
   [int]$TimeoutMin = 60,
   [switch]$Strict,
   [switch]$NoSummary,
-  [switch]$Append
+  [switch]$Append,
+  # v4.16 : commandes de la console appliquees apres le profil (-BRPerfCmds, essais ; separees par des points-virgules)
+  [string]$PerfCmds = ''
 )
 $ErrorActionPreference = 'Continue'
 $inv = [Globalization.CultureInfo]::InvariantCulture
@@ -130,6 +132,7 @@ for ($run = $firstRun; $run -lt ($firstRun + $Runs); $run++) {
       if ($Seconds -gt 0) { $gameArgs += ('-BRPerfSeconds=' + $Seconds.ToString($inv)) }
       if ($GpuCaptures -ge 0) { $gameArgs += "-BRPerfGpu=$GpuCaptures" }
       if ($Strict) { $gameArgs += '-BRAutoTestStrict' }
+      if ($PerfCmds) { $gameArgs += "-BRPerfCmds=`"$PerfCmds`"" }
       $gameArgs += "-abslog=`"$log`""
       $cmdLine = '"' + $Editor + '" ' + ($gameArgs -join ' ')
       Set-Content -Path (Join-Path $dir 'commande.txt') -Value $cmdLine -Encoding ASCII

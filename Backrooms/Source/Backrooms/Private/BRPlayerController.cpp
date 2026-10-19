@@ -4344,6 +4344,24 @@ void ABRPlayerController::ApplySettings()
 	// RTX fluide : 2 (vise 60 images/s avec une carte de 8 Go) ; sinon 4 a partir de la qualite Elevee, 2 en dessous (comme
 	// BaseScalability). Toujours fixe ici : une valeur donnee par la console l'emporte ensuite sur la scalability
 	Cmd(FString::Printf(TEXT("r.MegaLights.NumSamplesPerPixel %d"), (S.GraphicsProfile == 4 || S.Quality < 2) ? 2 : 4));
+#if !UE_BUILD_SHIPPING
+	// v4.16 (perf) : -BRPerfCmds="r.X 1;r.Y 2" : commandes de la console appliquees apres les reglages du profil (essais de
+	// mesure avant / apres sans recompiler ; jamais enregistrees, absentes de la version publiee)
+	{
+		FString Extra;
+		if (FParse::Value(FCommandLine::Get(), TEXT("BRPerfCmds="), Extra, false))
+		{
+			Extra.TrimQuotesInline();
+			TArray<FString> Lines;
+			Extra.ParseIntoArray(Lines, TEXT(";"));
+			for (const FString& Line : Lines)
+			{
+				Cmd(Line.TrimStartAndEnd());
+			}
+			UE_LOG(LogBackrooms, Log, TEXT("-BRPerfCmds : %d commande(s) appliquee(s) apres le profil : %s"), Lines.Num(), *Extra);
+		}
+	}
+#endif
 
 	// Volume general. v4.11 : effets et voix separes. Le volume principal de l'appareil porte general x voix (il agit aussi
 	// sur le chat vocal) ; les sons du jeu sont multiplies par effets / voix (au plus 4, voix au moins 25 %) : chacun obtient
