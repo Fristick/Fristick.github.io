@@ -105,6 +105,9 @@ public:
 	/** v4.16 (relecture) : tirages ecartes par les bornes du chunk (BRDecal::MaxProjectedPerChunk, MaxFloorPatchesPerChunk) ;
 	 *  GetDecalCount compte les decalques gardes */
 	int32 GetDecalDropped() const { return DecalDropped; }
+	/** v4.16 (relecture) : tirages avant les bornes : decalques projetes (bPatches faux) ou taches au sol (vrai). Le banc
+	 *  visuel verifie qu'un chunk garde exactement min(tirages, borne) de chaque sorte (rien de plus ecarte que la borne) */
+	int32 GetDecalDrawn(bool bPatches) const { return bPatches ? DecalDrawnPatches : DecalDrawnProjected; }
 	/** v4.15 : tache d'eau au plafond de la cellule (X, Y) a cote de son plafonnier, tiree avec la graine (sels 7450-7453) :
 	 *  centre (au plafond), rayon et rotation. Regle de BuildDecals (sans la trappe d'une echelle ni la borne du chunk : un
 	 *  appelant qui en a besoin le confirme par HasPlannedDecal), aussi pour le banc visuel */
@@ -292,6 +295,9 @@ protected:
 	int32 DecalTotal = 0;
 	/** v4.16 (relecture) : tirages ecartes par les bornes (GetDecalDropped) */
 	int32 DecalDropped = 0;
+	/** v4.16 (relecture) : tirages avant les bornes, par sorte (GetDecalDrawn) */
+	int32 DecalDrawnProjected = 0;
+	int32 DecalDrawnPatches = 0;
 	/** v4.15 : cree le composant d'un decalque en attente (range dans Extra, detruit au demontage) */
 	void CreateDecal(const FPendingDecal& P);
 

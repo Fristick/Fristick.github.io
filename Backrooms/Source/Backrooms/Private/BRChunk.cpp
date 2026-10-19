@@ -1344,6 +1344,8 @@ void ABRChunk::BuildDecals()
 	// resultat chez l'hote et les clients)
 	{
 		const int32 Drawn = PendingDecals.Num() + FloorPatches.Num();
+		DecalDrawnProjected = PendingDecals.Num();
+		DecalDrawnPatches = FloorPatches.Num();
 		if (PendingDecals.Num() > BRDecal::MaxProjectedPerChunk)
 		{
 			TArray<FPendingDecal> Kept;
@@ -2085,6 +2087,8 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 	DecalHash = 0;
 	DecalTotal = 0;
 	DecalDropped = 0;
+	DecalDrawnProjected = 0;
+	DecalDrawnPatches = 0;
 }
 
 bool ABRChunk::StepPlan()

@@ -231,6 +231,10 @@ private:
 		float LowerLen = 0.f;
 		/** v4.7 : pli ajoute par l'appui au sol (degres), applique par AnimateLimbs */
 		float PlantPitch = 0.f;
+		/** v4.16 (relecture 2) : piece rigide qui touche le sol (bras-bequilles de la Bacteria) : place du pivot au repos (repere
+		 *  du parent) et points d'appui (repere du pivot) ; KeepRigidPartsAboveGround releve le pivot du manque du plus bas */
+		FVector Joint = FVector::ZeroVector;
+		TArray<FVector> Contacts;
 	};
 
 	/** Ce que l'entite percoit du joueur cette image */
@@ -380,6 +384,11 @@ private:
 	bool MeasureFeet();
 	/** Hauteur du pied le plus bas au-dessus du sol (cm, sans le decalage deja applique) ; false sans jambes */
 	bool LowestFootHeight(float& OutHeight) const;
+	/** v4.16 (relecture 2) : modele rigide pose au sol par son corps (Bacteria) : points d'appui du corps (repere du Visual) */
+	TArray<FVector> BodyContacts;
+	/** v4.16 (relecture 2) : apres la pose de l'image : le corps rigide (BodyContacts) et les pieces a points d'appui
+	 *  (FLimb::Contacts) ne passent jamais sous le bas de la capsule (le sol) : ils sont releves du manque */
+	void KeepRigidPartsAboveGround();
 	float TwitchTimer = 0.f;
 	FRotator Twitch = FRotator::ZeroRotator;
 	FRotator HeadRot = FRotator::ZeroRotator;

@@ -459,16 +459,21 @@ void ABRPlayerController::EnsureInput()
 	LookPadAction = MakeAction(TEXT("IA_LookPad"), EInputActionValueType::Axis2D);
 	JumpAction = MakeAction(TEXT("IA_Jump"), EInputActionValueType::Boolean);
 	SprintAction = MakeAction(TEXT("IA_Sprint"), EInputActionValueType::Boolean);
-	CrouchAction = MakeAction(TEXT("IA_Crouch"), EInputActionValueType::Boolean);
-	FlashAction = MakeAction(TEXT("IA_Flashlight"), EInputActionValueType::Boolean);
-	InteractAction = MakeAction(TEXT("IA_Interact"), EInputActionValueType::Boolean);
-	DrinkAction = MakeAction(TEXT("IA_Drink"), EInputActionValueType::Boolean);
-	ReloadAction = MakeAction(TEXT("IA_Reload"), EInputActionValueType::Boolean);
+	// v4.16 (relecture) : les boutons de l'inventaire a la manette (B retour, Y aide, X inspecter, LB / RB onglets, croix
+	// gauche / droite) passent par ces actions : actives aussi pendant la pause, ou l'inventaire s'ouvre sur PARAMETRES ou
+	// TOUCHES (la pause en solo arrete le jeu : B ne ramenait pas a la pause, LB / RB ne changeaient pas d'onglet). Sans
+	// effet de jeu pendant la pause : leurs gestionnaires ne font que l'inventaire (manette) ou passent par CanPlay (faux
+	// pendant la pause et dans l'inventaire). Hors pause, rien ne change
+	CrouchAction = MakeAction(TEXT("IA_Crouch"), EInputActionValueType::Boolean, true);
+	FlashAction = MakeAction(TEXT("IA_Flashlight"), EInputActionValueType::Boolean, true);
+	InteractAction = MakeAction(TEXT("IA_Interact"), EInputActionValueType::Boolean, true);
+	DrinkAction = MakeAction(TEXT("IA_Drink"), EInputActionValueType::Boolean, true);
+	ReloadAction = MakeAction(TEXT("IA_Reload"), EInputActionValueType::Boolean, true);
 	JournalAction = MakeAction(TEXT("IA_Inventory"), EInputActionValueType::Boolean, true);
 	PauseAction = MakeAction(TEXT("IA_Pause"), EInputActionValueType::Boolean, true);
 	QuitAction = MakeAction(TEXT("IA_Quit"), EInputActionValueType::Boolean, true);
-	MenuPrevAction = MakeAction(TEXT("IA_MenuPrev"), EInputActionValueType::Boolean);
-	MenuNextAction = MakeAction(TEXT("IA_MenuNext"), EInputActionValueType::Boolean);
+	MenuPrevAction = MakeAction(TEXT("IA_MenuPrev"), EInputActionValueType::Boolean, true);
+	MenuNextAction = MakeAction(TEXT("IA_MenuNext"), EInputActionValueType::Boolean, true);
 	// v4.16 (fusion) : actives aussi pendant la pause (le jeu seul y est arrete) : cartes de la pause a la croix et a A, Entree
 	// pendant la confirmation de l'affichage. Avant, rien ne bougeait : la pause arrete les actions ordinaires
 	MenuConfirmAction = MakeAction(TEXT("IA_MenuConfirm"), EInputActionValueType::Boolean, true);

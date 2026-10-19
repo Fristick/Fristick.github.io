@@ -479,6 +479,39 @@ FBRHumanoidParts ABREntity::BuildHumanoid(const TCHAR* Prefix, const FBRHumanoid
 	return P;
 }
 
+namespace
+{
+	/** v4.16 (relecture 2) : points d'appui d'une piece rigide du modele fourni (repere du maillage, cm), si le maillage importe a
+	 *  la boite attendue (au centimetre pres) ; Y retourne si l'import l'a retourne ; sinon les huit coins de sa boite (prudent :
+	 *  la piece ne passe jamais sous le sol, elle peut seulement rester un peu au-dessus) */
+	TArray<FVector> RigidContacts(const UStaticMesh* Mesh, TConstArrayView<FVector> Points, const FBox& Expected)
+	{
+		TArray<FVector> Out;
+		if (!Mesh)
+		{
+			return Out;
+		}
+		const FBox B = Mesh->GetBoundingBox();
+		auto Near = [](const FBox& X, const FBox& Y) { return X.Min.Equals(Y.Min, 1.0) && X.Max.Equals(Y.Max, 1.0); };
+		const FBox Mirrored(FVector(Expected.Min.X, -Expected.Max.Y, Expected.Min.Z), FVector(Expected.Max.X, -Expected.Min.Y, Expected.Max.Z));
+		if (Near(B, Expected) || Near(B, Mirrored))
+		{
+			const double SignY = Near(B, Expected) ? 1.0 : -1.0;
+			for (const FVector& P : Points)
+			{
+				Out.Add(FVector(P.X, P.Y * SignY, P.Z));
+			}
+			return Out;
+		}
+		UE_LOG(LogBackrooms, Display, TEXT("Backrooms : %s n'a pas la boite attendue : points d'appui pris aux coins de sa boite"), *Mesh->GetName());
+		for (int32 i = 0; i < 8; ++i)
+		{
+			Out.Add(FVector((i & 1) ? B.Max.X : B.Min.X, (i & 2) ? B.Max.Y : B.Min.Y, (i & 4) ? B.Max.Z : B.Min.Z));
+		}
+		return Out;
+	}
+}
+
 bool ABREntity::BuildBacteriaModel()
 {
 	// Modele fourni (Tools/Blender/import_user_models.py) : corps, tete et deux longs bras en fils
@@ -494,6 +527,33 @@ bool ABREntity::BuildBacteriaModel()
 	// Bras ramenes un peu vers le corps pour passer les portes ; ils servent de bequilles en marchant
 	AddLimb(ArmL, ELimb::UpperArm, 0.f, 16.f, -1.f, FRotator(0.f, 0.f, -6.f));
 	AddLimb(ArmR, ELimb::UpperArm, PI, 16.f, 1.f, FRotator(0.f, 0.f, 6.f));
+	// v4.16 (relecture 2) : appui au sol des pieces rigides (KeepRigidPartsAboveGround). Les bras du modele penchent vers
+	// l'exterieur (griffes a 100 et 81 cm du pivot sur le cote) : les ramener vers le corps (roulis de 6 degres, plus le geste
+	// arme et le sursaut) abaisse les griffes. Sommets du modele fourni (RawAssets/Meshes/SM_BacteriaET_*.fbx), repere
+	// d'Unreal : au repos, les griffes de ArmR passaient 3,3 cm sous le bas de la capsule (ArmL 1,3 cm au-dessus) ; avec le
+	// tassement du corps (armee, sursaut : 7 et 3 cm, pieces rigides sans jambes a plier), corps et griffes jusqu'a 9 cm dessous.
+	// Banc v416vis : "bas des volumes visibles a -3.4 cm du sol". Points d'appui : sommets les plus bas pour toute rotation du
+	// bras jusqu'a 75 degres du repos (trois paquets de griffes par bras : ecart au vrai sommet le plus bas 2 mm au plus dans
+	// les poses d'AnimateLimbs) ; corps : sommets les plus bas pour un tangage du Visual de -20 a +20 degres
+	static const FVector ClawsL[] = { FVector(-2.5f, -100.2f, -211.6f), FVector(-2.4f, -64.3f, -231.0f), FVector(-2.4f, -88.4f, -228.5f), FVector(-1.5f, -99.9f, -212.5f),
+		FVector(-1.5f, -87.9f, -229.1f), FVector(-1.5f, -63.5f, -231.1f), FVector(-0.7f, -88.4f, -228.5f), FVector(-0.7f, -64.3f, -231.0f), FVector(-0.6f, -100.2f, -211.6f) };
+	static const FVector ClawsR[] = { FVector(-0.9f, 80.1f, -223.9f), FVector(-0.8f, 64.4f, -229.0f), FVector(-0.6f, 36.8f, -217.1f), FVector(0.1f, 37.2f, -217.8f),
+		FVector(0.1f, 63.5f, -229.3f), FVector(0.1f, 79.4f, -224.7f), FVector(0.9f, 36.8f, -217.1f), FVector(1.1f, 64.4f, -229.0f), FVector(1.1f, 80.1f, -223.9f) };
+	static const FVector Feet[] = { FVector(-2.0f, -28.4f, 0.f), FVector(-1.6f, -29.4f, 0.f), FVector(0.6f, -28.4f, 0.f) };
+	BodyContacts = RigidContacts(A->Mesh(TEXT("SM_BacteriaET_Body")), MakeArrayView(Feet), FBox(FVector(-7.68, -55.84, 0.0), FVector(6.32, 34.19, 233.48)));
+	auto SetClaws = [this, A](USceneComponent* Pivot, const TCHAR* PartMesh, TConstArrayView<FVector> Claws, const FBox& Box)
+	{
+		for (FLimb& L : Limbs)
+		{
+			if (Pivot && L.Pivot.Get() == Pivot)
+			{
+				L.Joint = Pivot->GetRelativeLocation();
+				L.Contacts = RigidContacts(A->Mesh(PartMesh), Claws, Box);
+			}
+		}
+	};
+	SetClaws(ArmL, TEXT("SM_BacteriaET_ArmL"), MakeArrayView(ClawsL), FBox(FVector(-10.47, -100.51, -231.06), FVector(10.89, 16.30, 3.60)));
+	SetClaws(ArmR, TEXT("SM_BacteriaET_ArmR"), MakeArrayView(ClawsR), FBox(FVector(-12.20, -14.37, -229.30), FVector(12.42, 80.82, 3.68)));
 	return true;
 }
 
@@ -2993,6 +3053,65 @@ bool ABREntity::MeasureFeet()
 	return bAny;
 }
 
+void ABREntity::KeepRigidPartsAboveGround()
+{
+	// v4.16 (relecture 2) : pieces rigides posees au sol (Bacteria : corps, bras-bequilles). Sol : bas de la capsule (meme
+	// reference que les pieds des modeles a jambes, LowestFootHeight). Le corps n'a pas de jambes a plier : le tassement du
+	// corps (armee, sursaut) ne l'enfonce plus, il est releve du manque de ses points d'appui. Chaque bras repart de son pivot
+	// de repos et, si sa griffe la plus basse passe sous le sol, son pivot monte du manque (la bequille pousse l'epaule).
+	// Jumpscare (modele tenu devant la camera) ou vol : pivots de repos, sans sol
+	if (!Visual)
+	{
+		return;
+	}
+	const bool bNoGround = bScareOverride || MyInfo().bFlying;
+	const UCapsuleComponent* Cap = GetCapsuleComponent();
+	const float Ground = static_cast<float>(GetActorLocation().Z) - (Cap ? Cap->GetScaledCapsuleHalfHeight() : MyInfo().HalfHeight);
+	if (!bNoGround && BodyContacts.Num() > 0)
+	{
+		const FTransform VT = Visual->GetComponentTransform();
+		float Low = TNumericLimits<float>::Max();
+		for (const FVector& P : BodyContacts)
+		{
+			Low = FMath::Min(Low, static_cast<float>(VT.TransformPosition(P).Z));
+		}
+		const float Missing = Ground - Low;
+		if (Missing > 0.f)
+		{
+			// Visual dans le repere de la capsule (debout, a l'echelle de l'acteur)
+			const float Up = Missing / FMath::Max(static_cast<float>(GetActorScale3D().Z), KINDA_SMALL_NUMBER);
+			Visual->AddRelativeLocation(FVector(0.f, 0.f, Up));
+			AppliedGroundZ += Up;
+		}
+	}
+	for (FLimb& L : Limbs)
+	{
+		USceneComponent* C = L.Pivot.Get();
+		if (!C || L.Contacts.Num() == 0)
+		{
+			continue;
+		}
+		C->SetRelativeLocation(L.Joint);
+		if (bNoGround)
+		{
+			continue;
+		}
+		const FTransform CT = C->GetComponentTransform();
+		float Low = TNumericLimits<float>::Max();
+		for (const FVector& P : L.Contacts)
+		{
+			Low = FMath::Min(Low, static_cast<float>(CT.TransformPosition(P).Z));
+		}
+		const float Missing = Ground - Low;
+		if (Missing > 0.f)
+		{
+			const USceneComponent* Parent = C->GetAttachParent();
+			const FVector Up = Parent ? Parent->GetComponentTransform().InverseTransformVector(FVector(0.f, 0.f, Missing)) : FVector(0.f, 0.f, Missing);
+			C->SetRelativeLocation(L.Joint + Up);
+		}
+	}
+}
+
 bool ABREntity::LowestFootHeight(float& OutHeight) const
 {
 	const FTransform AT = GetActorTransform();
@@ -3144,6 +3263,8 @@ void ABREntity::Animate(float Dt)
 			C->SetRelativeRotation(FRotator(Pitch, 0.f, Roll) + Twitch * (Kind == EBREntityKind::Wretch ? 0.25f : 0.f));
 		}
 	}
+	// v4.16 (relecture 2) : corps rigide et bras-bequilles (Bacteria) jamais sous le sol, une fois la pose de l'image faite
+	KeepRigidPartsAboveGround();
 	if (MassForm)
 	{
 		const float Pulse = 1.f + 0.06f * FMath::Sin(Life * 3.1f) + 0.03f * FMath::Sin(Life * 7.3f);

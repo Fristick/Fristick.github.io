@@ -10,19 +10,22 @@
 //      et retour a la fenetre du lancement (le plein ecran exclusif seulement avec -BRV416PleinEcran, sinon NON VERIFIE) ;
 //   3. manette : invites des boutons (HUD, pause, inventaire, scanner) = liaisons reelles de la manette ; inventaire a la
 //      manette par de vraies touches injectees (LB / RB, croix, Y, B ; dans PERSONNAGE, curseur des cases, X inspecter, A
-//      equiper) ; cartes de la pause a la croix et A ; vision nocturne du camescope reste dans le sac (croix haut) ;
+//      equiper) ; cartes de la pause a la croix et A, puis dans l'inventaire ouvert depuis la pause (jeu arrete) RB / LB et
+//      B (retour a la pause) ; vision nocturne du camescope reste dans le sac (croix haut) ;
 //   4. scanner du Level 6 (graine 4136) : HUD contextuel (rappel des touches au clavier et a la manette, recharge, cone du
 //      focus, releve de la mire, repos, aide des parasites derriere et devant) ;
 //   5. les neuf entites (Level 4, graine 4242 ; Smiler dans le noir) : premiere personne au repos (posee au sol) et en menace
 //      (geste arme), troisieme personne locale de face et de cote (affectation des materiaux, appui des pieds, poses) ;
-//      ecart au sol du bas des volumes visibles controle. La vue d'un vrai coequipier (client) n'est pas faite ici : NON
-//      VERIFIE (banc reseau) ;
+//      ecart au sol du bas des volumes visibles controle (pieces rigides : leurs vrais sommets quand l'editeur les lit, sinon
+//      leurs boites). La vue d'un vrai coequipier (client) n'est pas faite ici : NON VERIFIE (banc reseau) ;
 //   6. kit du Level 0 (graine 9) : raccords des plinthes le long de chaque face de mur, plafonds et sols cellule par cellule
 //      (boites des instances posees), captures des raccords (angle, poteau droit, jambage, plafond contre mur, plafond entre
 //      deux cellules) ;
 //   7. decalques d'usure (Levels 0 graines 9 et 4242, 1 et 2 graine 4242) : surface sous chaque decalque (traces), aucun sur
 //      une ouverture, un objet ou en partie dans le vide (murs), taches au sol posees (ni flottantes ni enfouies), nombre par
-//      chunk et tirages ecartes par la borne, distance utile pour la vue locale, motifs.
+//      chunk et tirages ecartes par la borne (chaque chunk garde min(tirages, borne)), distance utile pour la vue locale,
+//      motifs. Chunks construits et en place seulement ; un support (mur, sol, plafond) bati par un chunk pas encore construit
+//      (bord de la zone construite) n'est pas juge : NON VERIFIE, et le decalque doit etre au-dela de son effacement.
 // Une condition manquante (scanner, kit, decalques, cible de rendu, entite) est notee NON VERIFIE, jamais comptee reussie.
 // Reglages, langue, affichage et manette du joueur retablis au bilan.
 #include "BRAutoTest.h"
@@ -49,6 +52,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/Canvas.h"
 #include "Engine/HitResult.h"
 #include "Engine/StaticMesh.h"
@@ -64,6 +68,8 @@
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Rendering/PositionVertexBuffer.h"
+#include "StaticMeshResources.h"
 #include "UObject/StrongObjectPtr.h"
 
 namespace BRTestV416Vis
@@ -71,6 +77,31 @@ namespace BRTestV416Vis
 	const TCHAR* Oui(bool b)
 	{
 		return b ? TEXT("oui") : TEXT("NON");
+	}
+
+	/** v4.16 (relecture 2) : plus bas des vrais sommets d'un maillage statique, dans le monde (LOD 0 ; donnees lisibles par le
+	 *  processeur : editeur, ou maillage qui l'autorise) ; false sans ces donnees */
+	bool LowestVertexZ(const UStaticMeshComponent* Sm, float& OutZ)
+	{
+		const UStaticMesh* Mesh = Sm ? Sm->GetStaticMesh() : nullptr;
+		const FStaticMeshRenderData* RD = Mesh ? Mesh->GetRenderData() : nullptr;
+		if (!RD || RD->LODResources.Num() == 0)
+		{
+			return false;
+		}
+		const FPositionVertexBuffer& Pos = RD->LODResources[0].VertexBuffers.PositionVertexBuffer;
+		if (!Pos.GetAllowCPUAccess() || !Pos.GetVertexData() || Pos.GetNumVertices() == 0)
+		{
+			return false;
+		}
+		const FTransform Tr = Sm->GetComponentTransform();
+		float Low = TNumericLimits<float>::Max();
+		for (uint32 i = 0; i < Pos.GetNumVertices(); ++i)
+		{
+			Low = FMath::Min(Low, static_cast<float>(Tr.TransformPosition(FVector(Pos.VertexPosition(i))).Z));
+		}
+		OutZ = Low;
+		return true;
 	}
 
 	/** Tailles du HUD hors ecran (exactes) */
@@ -466,6 +497,25 @@ namespace BRTestV416Vis
 		int32 PatchBuried = 0;
 		int32 PatchHidden = 0;
 		float PatchMaxGap = 0.f;
+		/** v4.16 (relecture 2) : bornes : chunks dont les tirages depassent une borne ; chunks qui ne gardent pas exactement
+		 *  min(tirages, borne) d'une sorte (ABRChunk::GetDecalDrawn) */
+		int32 CappedChunks = 0;
+		int32 CapMismatch = 0;
+		/** v4.16 (relecture 2) : bord de la zone construite : point sans surface dont le support (mur, sol, plafond) est bati
+		 *  par un chunk absent ou pas pret (le mur d'une ligne de la grille est bati par le chunk de la cellule a l'ouest ou au
+		 *  sud ; le sol et le plafond par celui de la cellule). Non juge, compte a part ; le decalque doit etre au-dela de sa
+		 *  distance d'effacement (sinon il se verrait sans support : probleme) */
+		int32 FrontierSamples = 0;
+		int32 DecalsFrontier = 0;
+		int32 FrontierVisible = 0;
+		float FrontierNearest = 1.0e9f;
+		int32 PatchFrontier = 0;
+		int32 PatchFrontierVisible = 0;
+		float PatchFrontierNearest = 1.0e9f;
+		/** v4.16 (relecture 2) : taches au sol : point sous un objet ou un mur pose sur le sol (rayon parti dedans a 40 cm, puis
+		 *  au ras de la tache) ; points dans l'ouverture d'un passage (juges au sol ; avant : comptes caches sous le mur) */
+		int32 PatchUnderObject = 0;
+		int32 PatchDoorway = 0;
 		int32 Flipped = 0;
 		int32 Scuffs = 0;
 		float FadeMin = 1.0e9f;
@@ -1350,6 +1400,23 @@ void ABRAutoTest::AddV416VisualSteps()
 		return PC && PC->IsPauseMenuOpen() && PC->GetPauseCursor() == 1;
 	});
 	AddPadPress(TEXT("pause, A : ouvrir PARAMETRES"), EKeys::Gamepad_FaceButton_Bottom, nullptr, TabIs(2));
+	// v4.16 (relecture 2) : dans l'inventaire ouvert depuis la pause (jeu arrete en solo), les epaules changent d'onglet et B
+	// ramene a la pause. Avant : IA_Reload, IA_Drink et IA_Crouch inactives pendant la pause (B sans effet : "inventaire
+	// ouvert, pause ouverte")
+	auto PausedTabIs = [this, HudOf](int32 Want)
+	{
+		return [this, HudOf, Want](FString& Detail)
+		{
+			ABRHUD* H = HudOf();
+			ABRPlayerController* PC = GetPC();
+			const int32 Now = H ? static_cast<int32>(H->Tab) : -1;
+			Detail = FString::Printf(TEXT("onglet %d (attendu %d), inventaire %s, pause %s"), Now, Want, PC && PC->IsInventoryOpen() ? TEXT("ouvert") : TEXT("ferme"),
+				PC && PC->IsPauseMenuOpen() ? TEXT("ouverte") : TEXT("fermee"));
+			return H && PC && PC->IsInventoryOpen() && PC->IsPauseMenuOpen() && Now == Want;
+		};
+	};
+	AddPadPress(TEXT("pause, RB : onglet suivant (TOUCHES)"), EKeys::Gamepad_RightShoulder, nullptr, PausedTabIs(3));
+	AddPadPress(TEXT("pause, LB : onglet precedent (PARAMETRES)"), EKeys::Gamepad_LeftShoulder, nullptr, PausedTabIs(2));
 	AddPadPress(TEXT("pause, B : retour a la pause"), EKeys::Gamepad_FaceButton_Right, nullptr, [this](FString& Detail)
 	{
 		ABRPlayerController* PC = GetPC();
@@ -1707,25 +1774,58 @@ void ABRAutoTest::AddV416VisualSteps()
 			ABRChunk::DecalView(RenderW, Hfov);
 			const float CameraFov = GetPC() && GetPC()->PlayerCameraManager ? GetPC()->PlayerCameraManager->GetFOVAngle() : Hfov;
 			const FVector Eye = C->GetEyeLocation();
+			// v4.16 (relecture 2) : chunks construits et en place (prets, pas en demontage, comme le banc de lumiere) : seuls ceux-la
+			// sont mesures et portent un support. Le mur d'une ligne de la grille est bati par le chunk de la cellule a l'ouest (ligne
+			// X) ou au sud (ligne Y) de la ligne (ABRChunk::StepPlan, etapes 1 et 2), le mur d'enceinte ouest ou sud par le chunk du
+			// bord (etape 3) ; le sol et le plafond d'une cellule par son chunk. Un decalque de la colonne ouest (ou de la rangee
+			// sud) d'un chunk, sur sa face ouest (ou sud), est donc pose sur le mur du chunk voisin. Rapport v416vis (b1b19d3) : les
+			// 4 decalques "sans aucune surface" (Level 1 : eraflures en (-9540, -1679), (-9540, -1094), (-4740, -9093) ; Level 2 :
+			// aureole en (2484, -6195)) et la tache au sol "au-dessus du vide" en (7391..7630, 4915..4935) (seuil d'un passage de la
+			// ligne Y = 4800, pose par le chunk (1, 0)) avaient leur support dans un chunk hors de la vue (Level 1 : (-3, -1),
+			// (-2, -2), (1, 1) ; Level 2 : (1, -4)) : 12 et 32 chunks construits, exactement les chunks de centre a moins de
+			// ViewDistance + 0,75 chunk du depart (ABRWorld::UpdateStreaming). Le bord de la zone construite est a plus de 50 m du
+			// joueur, au-dela de l'effacement des decalques (35 m) : rien ne s'y voit. Ces points ne sont plus comptes "dans le vide"
+			// mais a part (support non construit), et le decalque doit etre au-dela de sa distance d'effacement
+			TSet<FIntPoint> Live;
+			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
+			{
+				if (It->IsReady() && !It->IsTearingDown())
+				{
+					Live.Add(It->Coord);
+				}
+			}
+			auto WallOwner = [W, S, T](const FVector& OnFace, const FVector& Into)
+			{
+				const FVector Mid = OnFace + Into * (T * 0.5f);
+				const bool bLineX = FMath::Abs(Into.X) > FMath::Abs(Into.Y);
+				const int32 Line = FMath::RoundToInt32(static_cast<float>((bLineX ? Mid.X : Mid.Y) / S));
+				const int32 Along = FMath::FloorToInt32(static_cast<float>((bLineX ? Mid.Y : Mid.X) / S));
+				FIntPoint Cell = bLineX ? FIntPoint(Line - 1, Along) : FIntPoint(Along, Line - 1);
+				if (!W->IsCellInBounds(Cell.X, Cell.Y))
+				{
+					Cell = bLineX ? FIntPoint(Line, Along) : FIntPoint(Along, Line); // enceinte ouest ou sud : chunk du bord
+				}
+				return W->CellToChunk(Cell);
+			};
+			const float DoorW = FMath::Min(Def.DoorWidth, S - 2.f * T - 20.f);
 			// Occurrences par face de mur (cellule, cote) pour les voisinages
 			TMap<FIntVector, int32> FaceKind;
 			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
 			{
 				ABRChunk* Ch = *It;
-				if (!Ch->IsReady())
+				if (!Ch->IsReady() || Ch->IsTearingDown())
 				{
-					continue; // encore en construction (decalques crees un par un)
+					continue; // encore en construction (decalques crees un par un) ou en demontage
 				}
 				TArray<UDecalComponent*> Decals;
 				Ch->GetComponents<UDecalComponent>(Decals);
 				int32 Patches = 0;
+				int32 ChunkProjected = 0;
 				TArray<UInstancedStaticMeshComponent*> Isms;
 				Ch->GetComponents<UInstancedStaticMeshComponent>(Isms);
 				++St.Chunks;
 				St.Expected += Ch->GetDecalCount();
 				St.Dropped += Ch->GetDecalDropped();
-				St.MaxPerChunk = FMath::Max(St.MaxPerChunk, Decals.Num());
-				St.MinPerChunk = FMath::Min(St.MinPerChunk, Decals.Num());
 				for (UDecalComponent* Dc : Decals)
 				{
 					int32 Kind = -1;
@@ -1737,6 +1837,7 @@ void ABRAutoTest::AddV416VisualSteps()
 					{
 						continue;
 					}
+					++ChunkProjected;
 					++St.Projected;
 					++St.KindCount[Kind];
 					const FTransform Tr = Dc->GetComponentTransform();
@@ -1766,8 +1867,10 @@ void ABRAutoTest::AddV416VisualSteps()
 						const int32 Side = FMath::Abs(XAx.X) > FMath::Abs(XAx.Y) ? (XAx.X > 0.f ? 0 : 1) : (XAx.Y > 0.f ? 2 : 3);
 						FaceKind.Add(FIntVector(Cell.X, Cell.Y, Side), Kind);
 					}
-					// Surface sous le decalque : 5 x 3 points de l'image, trace le long de l'axe de projection
-					int32 On = 0, Total = 0, VoidHere = 0;
+					// Surface sous le decalque : 5 x 3 points de l'image, trace le long de l'axe de projection. v4.16 (relecture 2) : un
+					// point sans surface dont le support est bati par un chunk non construit est compte a part (FrontierHere)
+					const bool bWallKind = Kind != static_cast<int32>(EBRDecal::CeilingStain);
+					int32 On = 0, Total = 0, VoidHere = 0, FrontierHere = 0;
 					for (int32 a = -2; a <= 2; ++a)
 					{
 						for (int32 b = -1; b <= 1; ++b)
@@ -1778,20 +1881,22 @@ void ABRAutoTest::AddV416VisualSteps()
 							FHitResult Hit;
 							++Total;
 							++St.Samples;
-							if (!GetWorld()->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Q, Resp))
-							{
-								++St.Void;
-								++VoidHere;
-								continue;
-							}
-							const float D = static_cast<float>(FVector::DotProduct(Hit.ImpactPoint - P, XAx));
-							if (D < -Half.X)
+							const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Q, Resp);
+							const float D = bHit ? static_cast<float>(FVector::DotProduct(Hit.ImpactPoint - P, XAx)) : 0.f;
+							if (bHit && D < -Half.X)
 							{
 								++St.Blocked;
 								continue;
 							}
-							if (D > Half.X)
+							if (!bHit || D > Half.X)
 							{
+								const FIntPoint Owner = bWallKind ? WallOwner(At, XAx) : W->CellToChunk(W->WorldToCell(At));
+								if (!Live.Contains(Owner))
+								{
+									++St.FrontierSamples;
+									++FrontierHere;
+									continue;
+								}
 								++St.Void;
 								++VoidHere;
 								continue;
@@ -1809,12 +1914,25 @@ void ABRAutoTest::AddV416VisualSteps()
 							}
 						}
 					}
-					if (On == 0)
+					if (FrontierHere > 0)
+					{
+						// Support dans un chunk non construit : le decalque ne doit pas se voir (au-dela de sa distance d'effacement)
+						++St.DecalsFrontier;
+						const float Dist = static_cast<float>(FVector::Dist(Eye, P));
+						St.FrontierNearest = FMath::Min(St.FrontierNearest, Dist);
+						if (Dist < FadeAt)
+						{
+							++St.FrontierVisible;
+							St.Example(FString::Printf(TEXT("sorte %d sans support construit a %.1f m du joueur (effacement a %.1f m) en (%.0f, %.0f, %.0f)"), Kind, Dist / 100.f,
+								FadeAt / 100.f, P.X, P.Y, P.Z));
+						}
+					}
+					if (On == 0 && FrontierHere < Total)
 					{
 						++St.DecalsFloating;
 						St.Example(FString::Printf(TEXT("sorte %d sans surface en (%.0f, %.0f, %.0f)"), Kind, P.X, P.Y, P.Z));
 					}
-					else if (On < Total)
+					else if (On > 0 && On < Total)
 					{
 						++St.DecalsPartial;
 					}
@@ -1882,19 +2000,61 @@ void ABRAutoTest::AddV416VisualSteps()
 								const FVector Ctr = W->CellCenter(Cell);
 								const float LX = static_cast<float>(At.X - Ctr.X), LY = static_cast<float>(At.Y - Ctr.Y);
 								const float Edge = S * 0.5f - T * 0.5f;
-								// Sous un mur (cellule pleine, ou dans l'epaisseur d'une arete mur / d'un jambage) : cache, normal
+								// Sous un mur (cellule pleine, ou dans l'epaisseur d'une arete mur / d'un jambage) : cache, normal. v4.16 (relecture
+								// 2) : dans l'ouverture d'un passage (a moins de la demi-largeur du passage de son milieu), le sol se voit : le point
+								// est juge au sol (avant : compte cache, ce qui laissait le seuil humide sans controle)
+								bool bDoorway = false;
+								auto Covers = [&bDoorway, DoorW](EBREdge E, float AlongEdge)
+								{
+									if (E == EBREdge::Door && FMath::Abs(AlongEdge) < DoorW * 0.5f)
+									{
+										bDoorway = true;
+										return false;
+									}
+									return E != EBREdge::Open;
+								};
 								const bool bSolid = !W->IsWalkable(Cell);
-								const bool bInWall = (LX > Edge && W->EdgeE(Cell.X, Cell.Y) != EBREdge::Open) || (LX < -Edge && W->EdgeE(Cell.X - 1, Cell.Y) != EBREdge::Open)
-									|| (LY > Edge && W->EdgeN(Cell.X, Cell.Y) != EBREdge::Open) || (LY < -Edge && W->EdgeN(Cell.X, Cell.Y - 1) != EBREdge::Open);
+								const bool bInWall = (LX > Edge && Covers(W->EdgeE(Cell.X, Cell.Y), LY)) || (LX < -Edge && Covers(W->EdgeE(Cell.X - 1, Cell.Y), LY))
+									|| (LY > Edge && Covers(W->EdgeN(Cell.X, Cell.Y), LX)) || (LY < -Edge && Covers(W->EdgeN(Cell.X, Cell.Y - 1), LX));
 								++St.PatchSamples;
 								if (bSolid || bInWall)
 								{
 									++St.PatchHidden;
 									continue;
 								}
+								St.PatchDoorway += bDoorway ? 1 : 0;
+								// v4.16 (relecture 2) : un rayon parti dans un objet ou un mur (40 cm au-dessus de la tache) touche a son depart :
+								// l'ecart lu etait alors -40 cm ("ecart au sol le plus grand 40.0 cm" aux quatre graines de v416vis, compte
+								// enfoui). Il est relance au ras de la tache (2 cm au-dessus du sol) ; s'il y part encore dedans, la tache passe
+								// sous un objet ou un mur pose sur le sol (cachee, comptee a part)
 								FHitResult Hit;
-								if (!GetWorld()->LineTraceSingleByChannel(Hit, At + FVector(0.f, 0.f, 40.f), At - FVector(0.f, 0.f, 60.f), ECC_Visibility, Q, Resp))
+								bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, At + FVector(0.f, 0.f, 40.f), At - FVector(0.f, 0.f, 60.f), ECC_Visibility, Q, Resp);
+								if (bHit && (Hit.bStartPenetrating || Hit.Time <= 0.f))
 								{
+									bHit = GetWorld()->LineTraceSingleByChannel(Hit, At + FVector(0.f, 0.f, 1.5f), At - FVector(0.f, 0.f, 60.f), ECC_Visibility, Q, Resp);
+									if (bHit && (Hit.bStartPenetrating || Hit.Time <= 0.f))
+									{
+										++St.PatchUnderObject;
+										continue;
+									}
+								}
+								if (!bHit)
+								{
+									// Sol de la cellule bati par un chunk non construit (seuil d'un passage sur la ligne nord ou est du chunk) : non
+									// juge ; la tache ne doit pas se voir (au-dela de la distance d'affichage du lot, BRDecal::FloorPatchCull)
+									if (!Live.Contains(W->CellToChunk(Cell)))
+									{
+										++St.PatchFrontier;
+										const float Dist = static_cast<float>(FVector::Dist(Eye, At));
+										St.PatchFrontierNearest = FMath::Min(St.PatchFrontierNearest, Dist);
+										if (Dist < BRDecal::FloorPatchCull)
+										{
+											++St.PatchFrontierVisible;
+											St.Example(FString::Printf(TEXT("tache au sol sans sol construit a %.1f m du joueur (affichage jusqu'a %.0f m) en (%.0f, %.0f)"), Dist / 100.f,
+												BRDecal::FloorPatchCull / 100.f, At.X, At.Y));
+										}
+										continue;
+									}
 									++St.PatchFloating;
 									St.Example(FString::Printf(TEXT("tache au sol au-dessus du vide en (%.0f, %.0f)"), At.X, At.Y));
 									continue;
@@ -1916,6 +2076,19 @@ void ABRAutoTest::AddV416VisualSteps()
 				}
 				St.Patches += Patches;
 				St.MaxPatchesPerChunk = FMath::Max(St.MaxPatchesPerChunk, Patches);
+				St.MaxPerChunk = FMath::Max(St.MaxPerChunk, ChunkProjected);
+				St.MinPerChunk = FMath::Min(St.MinPerChunk, ChunkProjected);
+				// v4.16 (relecture 2) : la borne : chaque chunk garde exactement min(tirages, borne) de chaque sorte (rien de plus, rien
+				// de moins : les ecartes sont repartis par BRDecal::KeepUnderCap, banc test_decals "Borne par chunk : repartition")
+				const int32 DrawnProj = Ch->GetDecalDrawn(false);
+				const int32 DrawnPatch = Ch->GetDecalDrawn(true);
+				St.CappedChunks += (DrawnProj > BRDecal::MaxProjectedPerChunk || DrawnPatch > BRDecal::MaxFloorPatchesPerChunk) ? 1 : 0;
+				if (ChunkProjected != FMath::Min(DrawnProj, BRDecal::MaxProjectedPerChunk) || Patches != FMath::Min(DrawnPatch, BRDecal::MaxFloorPatchesPerChunk))
+				{
+					++St.CapMismatch;
+					St.Example(FString::Printf(TEXT("chunk (%d, %d) : %d projete(s) pour %d tire(s), %d tache(s) au sol pour %d tiree(s) (bornes %d et %d)"), Ch->Coord.X, Ch->Coord.Y,
+						ChunkProjected, DrawnProj, Patches, DrawnPatch, BRDecal::MaxProjectedPerChunk, BRDecal::MaxFloorPatchesPerChunk));
+				}
 			}
 			if (St.Chunks == 0 || St.Projected + St.Patches == 0)
 			{
@@ -1947,20 +2120,41 @@ void ABRAutoTest::AddV416VisualSteps()
 			}
 			const int32 Created = St.Projected + St.Patches;
 			// v4.16 (relecture) : tirages ecartes par la borne comptes (avant : invisibles, "crees sur tires" comparait deux nombres
-			// pris apres la borne) ; la borne ne devrait pas servir sur ces graines (pire cas reel du banc : 34 pour 40)
-			Note(FString::Printf(TEXT("%s : %d chunk(s), %d decalque(s) crees sur %d gardes, %d tirage(s) ecarte(s) par la borne (aureoles %d, taches de plafond %d, eraflures %d ; taches "
-				"au sol %d) ; par chunk %d a %d projetes (borne %d), %d taches au sol au plus (borne %d)"), *Tag, St.Chunks, Created, St.Expected, St.Dropped, St.KindCount[0],
-				St.KindCount[1], St.KindCount[3], St.Patches, St.MinPerChunk == MAX_int32 ? 0 : St.MinPerChunk, St.MaxPerChunk, BRDecal::MaxProjectedPerChunk, St.MaxPatchesPerChunk,
-				BRDecal::MaxFloorPatchesPerChunk),
-				Created != St.Expected || St.Dropped > 0 || St.MaxPerChunk > BRDecal::MaxProjectedPerChunk || St.MaxPatchesPerChunk > BRDecal::MaxFloorPatchesPerChunk);
+			// pris apres la borne). v4.16 (relecture 2) : un ecart par la borne n'est plus un probleme : la borne est l'exigence
+			// (decalques bornes par chunk) et l'ecart regulier est son fonctionnement voulu ; v416vis, Level 0 graine 4242 : un chunk
+			// a tire 42 decalques projetes, 40 gardes (le banc admet la borne dans 1 % des chunks du cas dense). Probleme : un chunk
+			// qui garde plus que la borne, ou autre chose que min(tirages, borne) d'une sorte, ou un decalque garde non cree
+			Note(FString::Printf(TEXT("%s : %d chunk(s), %d decalque(s) crees sur %d gardes, %d tirage(s) ecarte(s) par la borne dans %d chunk(s) (aureoles %d, taches de plafond %d, "
+				"eraflures %d ; taches au sol %d) ; par chunk %d a %d projetes (borne %d), %d taches au sol au plus (borne %d) ; chunks qui ne gardent pas min(tirages, borne) : %d"), *Tag,
+				St.Chunks, Created, St.Expected, St.Dropped, St.CappedChunks, St.KindCount[0], St.KindCount[1], St.KindCount[3], St.Patches, St.MinPerChunk == MAX_int32 ? 0 : St.MinPerChunk,
+				St.MaxPerChunk, BRDecal::MaxProjectedPerChunk, St.MaxPatchesPerChunk, BRDecal::MaxFloorPatchesPerChunk, St.CapMismatch),
+				Created != St.Expected || St.CapMismatch > 0 || St.MaxPerChunk > BRDecal::MaxProjectedPerChunk || St.MaxPatchesPerChunk > BRDecal::MaxFloorPatchesPerChunk);
 			// v4.16 (relecture) : un decalque sur un objet (autre acteur que le chunk ; les objets du chunk ne recoivent plus les
-			// decalques) ou un decalque de mur en partie dans le vide sont des problemes (avant : comptes seulement)
+			// decalques) ou un decalque de mur en partie dans le vide sont des problemes (avant : comptes seulement). v4.16 (relecture
+			// 2) : support bati par un chunk non construit compte a part ; probleme s'il est a portee de vue (avant son effacement)
+			const FString FrontierText = St.DecalsFrontier > 0
+				? FString::Printf(TEXT("%d decalque(s) (%d point(s)), le plus proche a %.1f m du joueur, %d avant son effacement"), St.DecalsFrontier, St.FrontierSamples,
+					St.FrontierNearest / 100.f, St.FrontierVisible)
+				: FString(TEXT("aucun"));
 			Note(FString::Printf(TEXT("%s : surface sous les decalques projetes : %d point(s) sur %d sur la surface, %d dans le vide, %d derriere un obstacle, %d sur un objet (%s), %d obliques ; "
-				"decalques sans aucune surface %d, partiellement dans le vide %d (dont murs %d), au-dessus d'un passage %d"), *Tag, St.OnSurface, St.Samples, St.Void, St.Blocked,
-				St.OnObject, Objects.IsEmpty() ? TEXT("aucun") : *Objects, St.Oblique, St.DecalsFloating, St.DecalsPartial, St.WallPartVoid, St.OverOpening),
-				St.DecalsFloating > 0 || St.OverOpening > 0 || St.OnObject > 0 || St.WallPartVoid > 0);
-			Note(FString::Printf(TEXT("%s : taches au sol : %d point(s), %d caches sous un mur, %d flottant(s) (> 2 cm), %d enfoui(s) (< 1 mm), ecart au sol le plus grand %.1f cm"), *Tag,
-				St.PatchSamples, St.PatchHidden, St.PatchFloating, St.PatchBuried, St.PatchMaxGap), St.PatchFloating > 0);
+				"decalques sans aucune surface %d, partiellement dans le vide %d (dont murs %d), au-dessus d'un passage %d ; support dans un chunk non construit (bord de la zone "
+				"construite, non juge) : %s"), *Tag, St.OnSurface, St.Samples, St.Void, St.Blocked, St.OnObject, Objects.IsEmpty() ? TEXT("aucun") : *Objects, St.Oblique,
+				St.DecalsFloating, St.DecalsPartial, St.WallPartVoid, St.OverOpening, *FrontierText),
+				St.DecalsFloating > 0 || St.OverOpening > 0 || St.OnObject > 0 || St.WallPartVoid > 0 || St.FrontierVisible > 0);
+			const FString PatchFrontierText = St.PatchFrontier > 0
+				? FString::Printf(TEXT("%d point(s), le plus proche a %.1f m du joueur, %d avant %.0f m"), St.PatchFrontier, St.PatchFrontierNearest / 100.f, St.PatchFrontierVisible,
+					BRDecal::FloorPatchCull / 100.f)
+				: FString(TEXT("aucun"));
+			Note(FString::Printf(TEXT("%s : taches au sol : %d point(s), %d caches sous un mur, %d sous un objet ou un mur pose sur le sol, %d dans l'ouverture d'un passage (juges), "
+				"%d flottant(s) (> 2 cm), %d enfoui(s) (< 1 mm), ecart au sol le plus grand %.1f cm ; sol dans un chunk non construit (non juge) : %s"), *Tag, St.PatchSamples,
+				St.PatchHidden, St.PatchUnderObject, St.PatchDoorway, St.PatchFloating, St.PatchBuried, St.PatchMaxGap, *PatchFrontierText),
+				St.PatchFloating > 0 || St.PatchFrontierVisible > 0);
+			if (St.DecalsFrontier > 0 || St.PatchFrontier > 0)
+			{
+				// Condition manquante pour ceux-la (leur support n'existe pas encore) : NON VERIFIE, jamais compte reussi
+				Skip(FString::Printf(TEXT("decalques %s : %d decalque(s) projete(s) et %d point(s) de taches au sol au bord de la zone construite (mur ou sol bati par un chunk pas "
+					"encore construit) : leur surface NON VERIFIEE (a verifier joueur deplace vers eux)"), *Tag, St.DecalsFrontier, St.PatchFrontier));
+			}
 			Note(FString::Printf(TEXT("%s : motifs : %.2f %% des faces de cellule portent une aureole ou une eraflure ; meme sorte sur deux faces voisines %d / %d ; %d signatures pour %d decalques "
 				"projetes, la plus frequente %d fois ; eraflures retournees %d / %d"), *Tag, Rate * 100.f, Same, Pairs, St.Signatures.Num(), St.Projected, TopSig, St.Flipped,
 				St.Scuffs), St.Projected >= 20 && TopSig * 10 > St.Projected);
@@ -2507,6 +2701,13 @@ void ABRAutoTest::AddV416VisualSteps()
 					float LowBone = 1.0e9f;
 					FName LowName = NAME_None;
 					float LowBounds = 1.0e9f;
+					// v4.16 (relecture 2) : pieces rigides (maillages statiques) : le plus bas de leurs vrais sommets (donnees du
+					// maillage lisibles par le processeur : editeur), au lieu du bas de leur boite tournee. La boite d'une piece
+					// tournee (Bounds : boite du maillage tournee puis remise droite) descend sous ses sommets : bras de la Bacteria
+					// au repos, boite 1,8 cm sous la griffe la plus basse, 3,9 cm a l'armee (sommets du modele fourni, hors moteur) ;
+					// v416vis "-3.4 cm" etait cette boite. Le bas des boites reste note ; sans les sommets, la boite sert
+					float LowBoxes = 1.0e9f;
+					int32 VertexParts = 0, BoxParts = 0;
 					TArray<UPrimitiveComponent*> Prims;
 					E->GetComponents<UPrimitiveComponent>(Prims);
 					for (const UPrimitiveComponent* P : Prims)
@@ -2515,7 +2716,19 @@ void ABRAutoTest::AddV416VisualSteps()
 						{
 							continue;
 						}
-						LowBounds = FMath::Min(LowBounds, static_cast<float>(P->Bounds.Origin.Z - P->Bounds.BoxExtent.Z));
+						const float BoxLow = static_cast<float>(P->Bounds.Origin.Z - P->Bounds.BoxExtent.Z);
+						LowBoxes = FMath::Min(LowBoxes, BoxLow);
+						float VertLow = 0.f;
+						if (const UStaticMeshComponent* Sm = Cast<UStaticMeshComponent>(P); Sm && LowestVertexZ(Sm, VertLow))
+						{
+							LowBounds = FMath::Min(LowBounds, VertLow);
+							++VertexParts;
+						}
+						else
+						{
+							LowBounds = FMath::Min(LowBounds, BoxLow);
+							BoxParts += Cast<UStaticMeshComponent>(P) ? 1 : 0;
+						}
 						if (const USkinnedMeshComponent* Sk = Cast<USkinnedMeshComponent>(P))
 						{
 							for (int32 B = 0; B < Sk->GetNumBones(); ++B)
@@ -2543,9 +2756,13 @@ void ABRAutoTest::AddV416VisualSteps()
 					{
 						Skip(FString::Printf(TEXT("%s : appui au sol NON VERIFIE (%s)"), *Name, !bGround ? TEXT("entite pas au sol en marche") : TEXT("aucun volume visible")));
 					}
-					Note(FString::Printf(TEXT("%s : appui au sol (au sol en marche %s) : %s ; bas des volumes visibles a %+.1f cm du sol (borne 3 cm%s)"), *Name, Oui(bGround),
+					const FString Measure = VertexParts > 0
+						? FString::Printf(TEXT("sommets de %d piece(s) rigide(s)%s ; bas des boites a %+.1f cm"), VertexParts, BoxParts > 0 ? *FString::Printf(TEXT(", boites de %d"), BoxParts)
+							: TEXT(""), LowBoxes - Floor)
+						: FString(TEXT("boites"));
+					Note(FString::Printf(TEXT("%s : appui au sol (au sol en marche %s) : %s ; bas des volumes visibles a %+.1f cm du sol (borne 3 cm%s ; %s)"), *Name, Oui(bGround),
 						!bRigid ? *FString::Printf(TEXT("os le plus bas \"%s\" a %+.1f cm"), *LowName.ToString(), LowBone - Floor) : TEXT("sans squelette (pieces rigides)"),
-						Gap, bRigid ? TEXT(", des deux cotes") : TEXT(" au-dessus")), bGround && (bFloating || bSunk));
+						Gap, bRigid ? TEXT(", des deux cotes") : TEXT(" au-dessus"), *Measure), bGround && (bFloating || bSunk));
 				}
 				else
 				{
