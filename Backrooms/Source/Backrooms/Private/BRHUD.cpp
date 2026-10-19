@@ -481,7 +481,9 @@ FString ABRHUD::ControlsLine(int32 Line) const
 	using namespace BRKeys;
 	if (Line == 0)
 	{
-		return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MoveforwardMoveleftMovebackwardMoveright", "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}  se d\u00e9placer     {Sprint}  courir     {Crouch}  s'accroupir     {Jump}  sauter     {Interact}  interagir     {ThirdPerson}  vue 3e personne"), { { TEXT("MoveForward"), BRLoc::Arg(Primary(EBRAction::MoveForward)) }, { TEXT("MoveLeft"), BRLoc::Arg(Primary(EBRAction::MoveLeft)) }, { TEXT("MoveBackward"), BRLoc::Arg(Primary(EBRAction::MoveBackward)) }, { TEXT("MoveRight"), BRLoc::Arg(Primary(EBRAction::MoveRight)) }, { TEXT("Sprint"), BRLoc::Arg(Primary(EBRAction::Sprint)) }, { TEXT("Crouch"), BRLoc::Arg(Primary(EBRAction::Crouch)) }, { TEXT("Jump"), BRLoc::Arg(Primary(EBRAction::Jump)) }, { TEXT("Interact"), BRLoc::Arg(Primary(EBRAction::Interact)) }, { TEXT("ThirdPerson"), BRLoc::Arg(Primary(EBRAction::ThirdPerson)) } });
+		// v4.16 : manette : le stick gauche nomme une fois (les quatre directions)
+		const bool bPad = UsesGamepadPrompts();
+		return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MoveforwardMoveleftMovebackwardMoveright", "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}  se d\u00e9placer     {Sprint}  courir     {Crouch}  s'accroupir     {Jump}  sauter     {Interact}  interagir     {ThirdPerson}  vue 3e personne"), { { TEXT("MoveForward"), BRLoc::Arg(Primary(EBRAction::MoveForward)) }, { TEXT("MoveLeft"), BRLoc::Arg(bPad ? FString() : Primary(EBRAction::MoveLeft)) }, { TEXT("MoveBackward"), BRLoc::Arg(bPad ? FString() : Primary(EBRAction::MoveBackward)) }, { TEXT("MoveRight"), BRLoc::Arg(bPad ? FString() : Primary(EBRAction::MoveRight)) }, { TEXT("Sprint"), BRLoc::Arg(Primary(EBRAction::Sprint)) }, { TEXT("Crouch"), BRLoc::Arg(Primary(EBRAction::Crouch)) }, { TEXT("Jump"), BRLoc::Arg(Primary(EBRAction::Jump)) }, { TEXT("Interact"), BRLoc::Arg(Primary(EBRAction::Interact)) }, { TEXT("ThirdPerson"), BRLoc::Arg(Primary(EBRAction::ThirdPerson)) } });
 	}
 	return BRLoc::Fmt(NSLOCTEXT("BR", "HUD.FlashlightLampeNightvisionVisionNocturne", "{Flashlight}  lampe     {NightVision}  vision nocturne     {Pocket1}-{Pocket4}  poches     {Drink}  eau d'amande     {Bandage}  bandage     {Battery}  piles     {Inventory}  inventaire     {Pause}  pause"), { { TEXT("Flashlight"), BRLoc::Arg(Primary(EBRAction::Flashlight)) }, { TEXT("NightVision"), BRLoc::Arg(Primary(EBRAction::NightVision)) }, { TEXT("Pocket1"), BRLoc::Arg(Primary(EBRAction::Pocket1)) }, { TEXT("Pocket4"), BRLoc::Arg(Primary(EBRAction::Pocket4)) }, { TEXT("Drink"), BRLoc::Arg(Primary(EBRAction::Drink)) }, { TEXT("Bandage"), BRLoc::Arg(Primary(EBRAction::Bandage)) }, { TEXT("Battery"), BRLoc::Arg(Primary(EBRAction::Battery)) }, { TEXT("Inventory"), BRLoc::Arg(Primary(EBRAction::Inventory)) }, { TEXT("Pause"), BRLoc::Arg(Primary(EBRAction::Pause)) } });
 }
@@ -520,6 +522,8 @@ float ABRHUD::ScrollArea(float& Scroll, float X, float Y, float W, float H, floa
 			Scroll -= 60.f;
 		}
 	}
+	// v4.16 : croix de la manette (PadInventory) : toutes les listes de l'onglet, chacune bornee a son contenu
+	Scroll += PadScroll;
 	Scroll = FMath::Clamp(Scroll, 0.f, MaxOffset / FMath::Max(U, 0.01f));
 	const float Offset = Scroll * U;
 	const float AX = X + W - 14.f * U;
@@ -651,6 +655,58 @@ void ABRHUD::AddMessage(const FString& Text, float Duration, const FLinearColor&
 	}
 }
 
+void ABRHUD::PadInventory(int32 TabStep, int32 ScrollStep, bool bHint)
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	ABRCharacter* C = PC && !PC->IsInMenu() ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (TabStep != 0)
+	{
+		// Ordre des onglets a l'ecran (DrawInventory) ; depuis le menu titre, sans personnage : PARAMETRES et TOUCHES
+		static const ETab Order[] = { ETab::Character, ETab::Notebook, ETab::Journal, ETab::Settings, ETab::Keys };
+		const int32 First = C ? 0 : 3;
+		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(Order)) - First;
+		int32 Cur = 0;
+		for (int32 i = 0; i < Count; ++i)
+		{
+			if (Order[First + i] == Tab)
+			{
+				Cur = i;
+			}
+		}
+		Tab = Order[First + ((Cur + TabStep) % Count + Count) % Count];
+		Inspecting = FSlotRef();
+		Dragging = FSlotRef();
+		if (PC)
+		{
+			PC->CancelKeyCapture();
+		}
+	}
+	PadScroll += ScrollStep * 60.f;
+	if (bHint && Tab == ETab::Notebook && NotebookHintStep >= 0)
+	{
+		// Meme effet qu'un clic sur le bouton d'aide (DrawNotebookTab) : aucune, indice, rappel des indices trouves
+		int32& Level = NotebookHint.FindOrAdd(NotebookHintStep);
+		Level = (Level + 1) % 3;
+	}
+	if (C && (TabStep != 0 || bHint))
+	{
+		C->PlayUISound(TEXT("S_UIClick"), 0.5f);
+	}
+}
+
+void ABRHUD::RecordTestText(const FString& S, float X, float Y, const FVector2f& Size, float Points)
+{
+	FTestText T;
+	T.Text = S;
+	T.Rect = FVector4f(X, Y, Size.X, Size.Y);
+	T.Panel = TestPanel;
+	T.MaxW = TestTextMaxW;
+	T.Points = Points;
+	T.bCut = bTestTextCut;
+	T.Layer = TestLayer;
+	TestTexts.Add(MoveTemp(T));
+}
+
 // =====================================================================================================================
 // Primitives
 // =====================================================================================================================
@@ -676,7 +732,9 @@ void ABRHUD::TxtLine(const FString& S, float X, float Y, float W, const FLinearC
 {
 	// Ligne d'un paragraphe coupe par Wrap : alignee a droite du bloc dans une langue ecrite de droite a gauche
 	const bool bRtl = BRLoc::IsRightToLeft();
+	TestTextMaxW = W; // v4.16 (tests) : largeur du bloc
 	TextF(S, bRtl ? X + W : X, Y, C, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular, bRtl ? EUiAlign::Right : EUiAlign::Left, false);
+	TestTextMaxW = 0.f;
 }
 
 TArray<FString> ABRHUD::Wrap(const FString& S, float MaxWidth, UFont* Font, float Scale)
@@ -687,6 +745,7 @@ TArray<FString> ABRHUD::Wrap(const FString& S, float MaxWidth, UFont* Font, floa
 void ABRHUD::Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label)
 {
 	const float U = Ui();
+	++TestBarsDrawn; // v4.16 (relecture, tests)
 	TextF(Label, X, Y - 20.f * U, FLinearColor(1.f, 1.f, 1.f, 0.78f), 9.5f, EUiWeight::Bold);
 	const float R = H * 0.5f;
 	RoundRect(X, Y, W, H, R, FLinearColor(0.f, 0.f, 0.f, 0.5f));
@@ -708,6 +767,7 @@ void ABRHUD::Frame(float X, float Y, float W, float H, const FLinearColor& C, fl
 void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
 {
 	const float U = Ui();
+	TestPanel = FVector4f(X, Y, W, H); // v4.16 (tests) : textes suivants dans ce panneau
 	RoundRect(X, Y, W, H, 14.f * U, PanelBg);
 	RoundRect(X, Y, W, H, 14.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.22f), true);
 	if (!Title.IsEmpty())
@@ -888,6 +948,11 @@ void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, fl
 				const float W = static_cast<float>(Shaped.GetValue()->GetMeasuredWidth());
 				X -= Align == EUiAlign::Center ? W * 0.5f : W;
 			}
+			if (bTestRecordTexts && TestTextDepth == 0)
+			{
+				RecordTestText(S, X, Y, FVector2f(static_cast<float>(Shaped.GetValue()->GetMeasuredWidth()), static_cast<float>(Shaped.GetValue()->GetMaxTextHeight())),
+					static_cast<float>(Font.Size));
+			}
 			FCanvasShapedTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), Shaped.GetValue(), C);
 			if (bShadow)
 			{
@@ -901,6 +966,10 @@ void ABRHUD::TextF(const FString& S, float X, float Y, const FLinearColor& C, fl
 	{
 		const float W = TextSize(S, Size, Weight).X;
 		X -= Align == EUiAlign::Center ? W * 0.5f : W;
+	}
+	if (bTestRecordTexts && TestTextDepth == 0)
+	{
+		RecordTestText(S, X, Y, TextSize(S, Size, Weight), static_cast<float>(Font.Size)); // v4.16 (tests)
 	}
 	FCanvasTextItem Item(FVector2D(FMath::RoundToFloat(X), FMath::RoundToFloat(Y)), FText::FromString(S), Font, C);
 	if (bShadow)
@@ -940,6 +1009,12 @@ float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor&
 	{
 		X -= Align == EUiAlign::Center ? Total * 0.5f : Total;
 	}
+	if (bTestRecordTexts && TestTextDepth == 0)
+	{
+		// v4.16 (tests) : le titre espace est releve d'un bloc (pas lettre par lettre)
+		RecordTestText(S, X, Y, FVector2f(Total, TextSize(S, Size, Weight).Y), static_cast<float>(UiFontInfo(Size, static_cast<int32>(Weight), Ui()).Size));
+	}
+	++TestTextDepth;
 	Prev = 0;
 	for (int32 i = 0; i < Ends.Num(); ++i)
 	{
@@ -947,6 +1022,7 @@ float ABRHUD::TextSpaced(const FString& S, float X, float Y, const FLinearColor&
 		X += Widths[i] + Spacing;
 		Prev = Ends[i];
 	}
+	--TestTextDepth;
 	return Total;
 }
 
@@ -1017,7 +1093,13 @@ void ABRHUD::TextFit(const FString& S, float X, float Y, float MaxWidth, const F
 	const float Fitted = FitSize(S, MaxWidth, Size, Weight);
 	// Hauteur gardee : le texte reduit reste centre sur la ligne prevue
 	const float DY = (TextSize(S, Size, Weight).Y - TextSize(S, Fitted, Weight).Y) * 0.5f;
-	TextF(Ellipsize(S, MaxWidth, Fitted, Weight), X, Y + DY, C, Fitted, Weight, Align, bShadow);
+	const FString Shown = Ellipsize(S, MaxWidth, Fitted, Weight);
+	// v4.16 (tests) : largeur permise et texte raccourci
+	TestTextMaxW = MaxWidth;
+	bTestTextCut = Shown != S;
+	TextF(Shown, X, Y + DY, C, Fitted, Weight, Align, bShadow);
+	TestTextMaxW = 0.f;
+	bTestTextCut = false;
 }
 
 void ABRHUD::DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight)
@@ -1227,6 +1309,15 @@ void ABRHUD::DrawHUD()
 	LastTime = Now;
 	Clock += Dt;
 	UiDt = Dt;
+	if (bTestRecordTexts)
+	{
+		// v4.16 (tests) : releve des textes de cette image seulement ; hors panneau : l'ecran entier
+		TestTexts.Reset();
+		TestBand = FVector4f(0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+		TestPanel = TestBand;
+	}
+	TestBarsDrawn = 0; // v4.16 (relecture, tests)
+	TestLayer = 0;
 
 	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
 	ABRCharacter* C = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
@@ -1295,6 +1386,7 @@ void ABRHUD::DrawHUD()
 		Dragging = FSlotRef();
 		Inspecting = FSlotRef();
 		HoverSlot = FSlotRef();
+		PadCursor = FSlotRef(); // v4.16 (relecture) : premiere case du sac a la prochaine ouverture
 	}
 	bWasInventoryOpen = bInv;
 
@@ -3851,10 +3943,20 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 	const float CW = 500.f * U;
 	const float CH = 78.f * U;
 	float Y = 262.f * U;
+	// v4.16 (relecture) : croix (ou fleches) et A (ou Entree) : la carte du curseur est selectionnee ; une souris qui bouge le
+	// deplace sur la carte survolee (une souris immobile au-dessus d'une carte ne bloque pas la croix)
+	const bool bMouseMoved = FMath::Abs(MouseX - LastPauseMouse.X) + FMath::Abs(MouseY - LastPauseMouse.Y) > 1.f;
+	LastPauseMouse = FVector2f(MouseX, MouseY);
+	const bool bCursorShown = PC && PC->IsPauseCursorShown();
 	for (int32 i = 0; i < 5; ++i)
 	{
 		const bool bHov = Hover(X0, Y, CW, CH);
-		PauseSel[i] = FMath::FInterpTo(PauseSel[i], bHov ? 1.f : 0.f, UiDt, 14.f);
+		if (bHov && bMouseMoved && PC)
+		{
+			PC->SetPauseCursor(i);
+		}
+		const bool bSel = bCursorShown ? PC->GetPauseCursor() == i : bHov;
+		PauseSel[i] = FMath::FInterpTo(PauseSel[i], bSel ? 1.f : 0.f, UiDt, 14.f);
 		DrawCard(X0, Y, CW, CH, PauseSel[i], Labels[i], Subs[i], Icons[i], In * EaseOut((PauseTime - 0.05f * i) / 0.3f), i == 4);
 		AddButton(Ids[i], X0, Y, CW, CH);
 		Y += CH + 12.f * U;
@@ -3867,10 +3969,26 @@ void ABRHUD::DrawPause(ABRPlayerController* PC)
 	TArray<TPair<FString, FString>> Hints;
 	Hints.Emplace(BRKeys::Primary(EBRAction::Pause), BR_STR(NSLOCTEXT("BR", "HUD.Reprendre2", "Reprendre")));
 	Hints.Emplace(BRKeys::Primary(EBRAction::Inventory), BR_STR(NSLOCTEXT("BR", "HUD.ParametresTouches", "Param\u00e8tres et touches")));
-	Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Fin", "FIN")), BR_STR(NSLOCTEXT("BR", "HUD.Quitter", "Quitter")));
+	if (BRKeys::UsesGamepadPrompts())
+	{
+		// v4.16 (relecture) : manette : les cartes au curseur (croix) et A ; avant, "[FIN] Quitter", une touche du clavier
+		Hints.Emplace(BRKeys::GamepadDpadName(), BR_STR(NSLOCTEXT("BR", "HUD.Choisir", "Choisir")));
+		Hints.Emplace(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom), BR_STR(NSLOCTEXT("BR", "HUD.Valider", "Valider")));
+	}
+	else
+	{
+		Hints.Emplace(BR_STR(NSLOCTEXT("BR", "HUD.Fin", "FIN")), BR_STR(NSLOCTEXT("BR", "HUD.Quitter", "Quitter")));
+	}
 	KeyHints(CX, H - 84.f * U, Hints, In, true);
-	TextF(BR_STR(NSLOCTEXT("BR", "HUD.ConsoleTouche2Brlevel37", "Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives")), CX, H - 38.f * U,
-		WithAlpha(InkDim, 0.5f * In), 9.5f, EUiWeight::Light, EUiAlign::Center, false);
+#if !UE_BUILD_SHIPPING
+	// v4.16 : commandes de la console (outils de developpement) : en mode developpeur seulement. Avant : sous la pause de
+	// tout joueur, y compris dans la version publiee (ou la console n'existe pas)
+	if (PC && PC->IsDevMode())
+	{
+		TextF(BR_STR(NSLOCTEXT("BR", "HUD.ConsoleTouche2Brlevel37", "Console (touche \u00b2) : BRLevel 37  |  BRGod  |  BRSpawn 0-8  |  BRGiveAll  |  BRBlackout  |  BRObjectives")), CX, H - 38.f * U,
+			WithAlpha(InkDim, 0.5f * In), 9.5f, EUiWeight::Light, EUiAlign::Center, false);
+	}
+#endif
 }
 
 void ABRHUD::HandlePauseMouse(ABRPlayerController* PC)
@@ -3879,22 +3997,24 @@ void ABRHUD::HandlePauseMouse(ABRPlayerController* PC)
 	{
 		return;
 	}
+	// v4.16 (relecture) : meme action qu'a la manette (ABRPlayerController::ActivatePauseItem : 0 reprendre, 1 parametres,
+	// 2 touches, 3 menu principal, 4 quitter le jeu)
 	switch (ButtonAt(MouseX, MouseY))
 	{
 	case Btn_PauseResume:
-		PC->TogglePause();
+		PC->ActivatePauseItem(0);
 		break;
 	case Btn_PauseSettings:
-		PC->SetInventoryOpen(true, static_cast<int32>(ETab::Settings));
+		PC->ActivatePauseItem(1);
 		break;
 	case Btn_PauseKeys:
-		PC->SetInventoryOpen(true, static_cast<int32>(ETab::Keys));
+		PC->ActivatePauseItem(2);
 		break;
 	case Btn_PauseMainMenu:
-		PC->ReturnToMainMenu();
+		PC->ActivatePauseItem(3);
 		break;
 	case Btn_PauseQuit:
-		PC->QuitToDesktop();
+		PC->ActivatePauseItem(4);
 		break;
 	default:
 		break;
@@ -3977,6 +4097,7 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 		? FString(BR_STR(NSLOCTEXT("BR", "HUD.AppuyezNouvelleToucheClavierBouton", "Appuyez sur la nouvelle touche (clavier ou bouton de souris).  \u00c9chap : annuler   -   Retour arri\u00e8re : effacer")))
 		: FString(BR_STR(NSLOCTEXT("BR", "HUD.CliquezCasePuisAppuyezTouche", "Cliquez sur une case puis appuyez sur une touche. Clic droit : effacer. Les changements s'appliquent imm\u00e9diatement.")));
 	Txt(Help, RX + RW + 24.f * U, RY + 8.f * U, PC->IsCapturingKey() ? Yellow : InkDim, 0.72f * U, Small, false, false);
+	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
 void ABRHUD::DrawGlitch(float Amount)
@@ -4028,6 +4149,9 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	ColX[0] = IX;
 	ColX[1] = ColX[0] + ColW[0] + Gap;
 	ColX[2] = ColX[1] + ColW[1] + Gap;
+	// v4.16 (tests) : en-tete et pied dans la bande de l'inventaire ; chaque panneau d'onglet y revient a la fin de son contenu
+	TestBand = FVector4f(IX, 0.f, IW, Canvas->ClipY);
+	TestPanel = TestBand;
 
 	// En-tete "MENU >" et onglets
 	Txt(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), IX, 44.f * U, Yellow, 1.25f * U, Large, false, false);
@@ -4092,10 +4216,12 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 		DrawKeysTab(PC);
 		break;
 	}
+	EndTestPanel(); // v4.16 (relecture, tests)
 
 	if (Inspecting.IsValid())
 	{
 		DrawInspect(C);
+		EndTestPanel();
 	}
 	if (TestDisplayRequestInDraw.X > 0)
 	{
@@ -4103,6 +4229,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 		bTestDisplayRequestDone = BRDisplay::Request(2, TestDisplayRequestInDraw);
 		TestDisplayRequestInDraw = FIntPoint::ZeroValue;
 	}
+	PadScroll = 0.f; // v4.16 : defilement de la manette applique aux listes de cette image
 	HandleInventoryMouse(PC, C);
 	if (!Canvas)
 	{
@@ -4111,18 +4238,47 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 
 	// Pied de page
 	const float FY = Canvas->ClipY - 70.f * U;
+	EndTestPanel(); // v4.16 (tests) : bande de l'inventaire
 	DrawRect(YellowDim, IX, FY - 14.f * U, IW, 1.f * U);
-	Txt(BR_STR(NSLOCTEXT("BR", "HUD.1992ThresholdSystems", "\u00a9 1992 THRESHOLD SYSTEMS")), IX, FY, InkDim, 0.8f * U, Small, false, false);
-	if (Tab == ETab::Character)
+	const FString Copyright(BR_STR(NSLOCTEXT("BR", "HUD.1992ThresholdSystems", "\u00a9 1992 THRESHOLD SYSTEMS")));
+	Txt(Copyright, IX, FY, InkDim, 0.8f * U, Small, false, false);
+	FString FootHints;
+	if (BRKeys::UsesGamepadPrompts() && C && Tab == ETab::Character)
 	{
-		TxtRight(BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.GlisserDeplacerDoubleClicUtiliser", "[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER"))), IX + IW, FY,
-			InkDim, 0.8f * U, Small);
+		// v4.16 (relecture) : manette dans PERSONNAGE : onglets (LB / RB), curseur des cases (croix), utiliser ou equiper (A),
+		// inspecter (X), fermer (B). Avant : aucun objet du sac utilisable a la manette
+		FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCharacterFooter", "[{Prev}] [{Next}]  ONGLETS     [{Move}]  CHOISIR     [{Use}]  UTILISER / \u00c9QUIPER     [{Inspect}]  INSPECTER     [{Close}]  FERMER"),
+			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
+				{ TEXT("Move"), BRLoc::Arg(BRKeys::GamepadDpadName()) }, { TEXT("Use"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom)) },
+				{ TEXT("Inspect"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Left)) }, { TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
+	}
+	else if (BRKeys::UsesGamepadPrompts())
+	{
+		// v4.16 : manette : ses boutons dans l'inventaire (onglets, defilement, aide du carnet, fermeture) ; avant : les gestes
+		// de la souris seulement
+		FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadInventoryFooter", "[{Prev}] [{Next}]  ONGLETS     [{Up}] [{Down}]  FAIRE D\u00c9FILER     [{Close}]  FERMER"),
+			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
+				{ TEXT("Up"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Up)) }, { TEXT("Down"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Down)) },
+				{ TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
+		if (Tab == ETab::Notebook)
+		{
+			FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadNotebookHint", "[{Hint}]  AIDE"), { { TEXT("Hint"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } })
+				+ TEXT("     ") + FootHints;
+		}
+	}
+	else if (Tab == ETab::Character)
+	{
+		FootHints = BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.GlisserDeplacerDoubleClicUtiliser", "[GLISSER]  D\u00c9PLACER     [DOUBLE-CLIC]  UTILISER / \u00c9QUIPER     [CLIC DROIT]  INSPECTER     {Inventory}  FERMER")));
 	}
 	else
 	{
-		TxtRight(Tab == ETab::Keys ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChangerClicDroitEffacer", "[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [\u00c9CHAP]  ANNULER / FERMER")))
-			: FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChoisirEchapFermer", "[CLIC]  CHOISIR     [\u00c9CHAP]  FERMER"))), IX + IW, FY, InkDim, 0.8f * U, Small);
+		FootHints = Tab == ETab::Keys ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChangerClicDroitEffacer", "[CLIC]  CHANGER     [CLIC DROIT]  EFFACER     [\u00c9CHAP]  ANNULER / FERMER")))
+			: FString(BR_STR(NSLOCTEXT("BR", "HUD.ClicChoisirEchapFermer", "[CLIC]  CHOISIR     [\u00c9CHAP]  FERMER")));
 	}
+	// v4.16 : les aides tiennent entre le copyright et le bord droit (langues longues, petites fenetres) : taille reduite, puis
+	// points de suspension ; avant, rien ne les bornait
+	const float FootSize = LegacySize(Small, 0.8f * U, U);
+	TextFit(FootHints, IX + IW, FY, IW - TextSize(Copyright, FootSize, EUiWeight::Regular).X - 30.f * U, InkDim, FootSize, EUiWeight::Regular, EUiAlign::Right, true);
 
 	// Infobulle et objet en cours de deplacement (au-dessus de tout)
 	if (Tab == ETab::Character && !Inspecting.IsValid())
@@ -4140,6 +4296,146 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 			}
 		}
 	}
+	// v4.16 (relecture, tests) : apres l'inventaire (notifications), l'image entiere
+	TestBand = FVector4f(0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	TestPanel = TestBand;
+}
+
+const ABRHUD::FSlotBox* ABRHUD::SlotBoxOf(const FSlotRef& Ref) const
+{
+	for (const FSlotBox& B : Slots)
+	{
+		if (B.Ref == Ref)
+		{
+			return &B;
+		}
+	}
+	return nullptr;
+}
+
+bool ABRHUD::UsesPadCursor(const ABRCharacter* C) const
+{
+	return C && Tab == ETab::Character && !Inspecting.IsValid() && BRKeys::UsesGamepadPrompts();
+}
+
+void ABRHUD::PadDirection(int32 DX, int32 DY)
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	ABRCharacter* C = PC && !PC->IsInMenu() ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (!C || Tab != ETab::Character)
+	{
+		PadInventory(DX, DY, false); // v4.16 : onglets (gauche, droite), defilement (haut, bas)
+		return;
+	}
+	if (Inspecting.IsValid() || Slots.Num() == 0)
+	{
+		return; // inspection ouverte : seuls A (utiliser) et B (fermer) repondent
+	}
+	// v4.16 (relecture) : case voisine dans la direction demandee (la plus proche, l'ecart de cote compte double), sur la
+	// disposition de la derniere image (poches, sac 5 x 4, equipement autour de la silhouette)
+	const FSlotBox* Cur = SlotBoxOf(PadCursor);
+	if (!Cur)
+	{
+		PadCursor = Slots[0].Ref;
+		for (const FSlotBox& B : Slots)
+		{
+			if (B.Ref.Group == EBRSlotGroup::Storage)
+			{
+				PadCursor = B.Ref;
+				break;
+			}
+		}
+		return;
+	}
+	const float CX = Cur->X + Cur->S * 0.5f;
+	const float CY = Cur->Y + Cur->S * 0.5f;
+	const float FX = static_cast<float>(DX);
+	const float FY = static_cast<float>(DY);
+	const FSlotBox* Best = nullptr;
+	float BestScore = 1.0e9f;
+	for (const FSlotBox& B : Slots)
+	{
+		if (B.Ref == Cur->Ref)
+		{
+			continue;
+		}
+		const float VX = B.X + B.S * 0.5f - CX;
+		const float VY = B.Y + B.S * 0.5f - CY;
+		const float Along = VX * FX + VY * FY;
+		if (Along <= 1.f)
+		{
+			continue;
+		}
+		const float Across = FMath::Abs(VX * FY - VY * FX);
+		const float Score = Along + 2.f * Across;
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = &B;
+		}
+	}
+	if (Best)
+	{
+		PadCursor = Best->Ref;
+		C->PlayUISound(TEXT("S_UIClick"), 0.35f);
+	}
+}
+
+bool ABRHUD::PadSlotAction(bool bInspect)
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	ABRCharacter* C = PC && !PC->IsInMenu() ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (!C || Tab != ETab::Character)
+	{
+		return false;
+	}
+	if (Inspecting.IsValid())
+	{
+		if (!bInspect)
+		{
+			// Meme effet que le bouton UTILISER / EQUIPER / RETIRER de l'inspection (HandleInventoryMouse)
+			C->UseSlot(Inspecting.Group, Inspecting.Index);
+			const FBRItemSlot* After = C->GetSlot(Inspecting.Group, Inspecting.Index);
+			if (!After || After->IsEmpty() || Inspecting.Group == EBRSlotGroup::Equipment || BRItems::Get(After->Item).Slot != EBREquipSlot::None)
+			{
+				Inspecting = FSlotRef();
+			}
+		}
+		return true;
+	}
+	if (!SlotBoxOf(PadCursor))
+	{
+		PadDirection(0, 0); // premiere case du sac
+		return true;
+	}
+	const FBRItemSlot* S = C->GetSlot(PadCursor.Group, PadCursor.Index);
+	if (!S || S->IsEmpty())
+	{
+		return true;
+	}
+	if (bInspect)
+	{
+		// Meme effet qu'un clic droit sur la case
+		Inspecting = PadCursor;
+		Dragging = FSlotRef();
+		C->PlayUISound(TEXT("S_UIClick"));
+	}
+	else
+	{
+		// Meme effet qu'un double-clic : utiliser, equiper ou retirer
+		C->UseSlot(PadCursor.Group, PadCursor.Index);
+	}
+	return true;
+}
+
+bool ABRHUD::PadBack()
+{
+	if (Inspecting.IsValid())
+	{
+		Inspecting = FSlotRef();
+		return true;
+	}
+	return false;
 }
 
 void ABRHUD::LayoutCharacterTab(ABRCharacter* C)
@@ -4346,6 +4642,7 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		const float ContentH = Layout(false, 0.f);
 		Layout(true, ScrollArea(ObjectiveScroll, LX, Top, LW, Bottom - Top, ContentH));
 	}
+	EndTestPanel(); // v4.16 (relecture, tests) : fin du panneau OBJECTIFS
 	DrawStatusPanel(C, LX, IY + ObjH + 18.f * U, LW, StatusH);
 
 	// ---------------- Colonne du milieu : INVENTAIRE
@@ -4396,6 +4693,7 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 			{ { TEXT("Items"), BRLoc::Arg(Items) } });
 		TxtLine(Line, Left, Bottom + 8.f * U, Right - Left, Yellow, 0.72f * U, GEngine->GetSmallFont());
 	}
+	EndTestPanel(); // v4.16 (relecture, tests) : fin du panneau INVENTAIRE (ses cases sont dessinees plus bas, dans leur panneau)
 
 	// ---------------- Colonne de droite : EQUIPEMENT
 	Panel(ColX[2], IY, ColW[2], IH, BR_STR(NSLOCTEXT("BR", "HUD.Equipement", "\u00c9QUIPEMENT")));
@@ -4434,8 +4732,12 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 
 	for (const FSlotBox& B : Slots)
 	{
+		// v4.16 (relecture, tests) : chaque case dans le panneau de sa colonne (poches et sac : INVENTAIRE ; equipement)
+		const int32 Col = B.Ref.Group == EBRSlotGroup::Equipment ? 2 : 1;
+		TestPanel = FVector4f(ColX[Col], IY, ColW[Col], IH);
 		DrawSlot(C, B);
 	}
+	EndTestPanel();
 	(void)Medium;
 }
 
@@ -4444,6 +4746,7 @@ void ABRHUD::DrawStatusPanel(ABRCharacter* C, float X, float Y, float W, float H
 	Panel(X, Y, W, H, BR_STR(NSLOCTEXT("BR", "HUD.StatusPanel", "\u00c9TAT")));
 	if (!C)
 	{
+		EndTestPanel(); // v4.16 (relecture, tests)
 		return;
 	}
 	const float U = Ui();
@@ -4457,6 +4760,7 @@ void ABRHUD::DrawStatusPanel(ABRCharacter* C, float X, float Y, float W, float H
 	const float Row = (H - 70.f * U) * 0.5f;
 	DrawStatusGauge(0, BR_STR(NSLOCTEXT("BR", "HUD.Endurance", "ENDURANCE")), StamState, Stam, C->GetStaminaTrend(), X + 18.f * U, Y + 60.f * U, W - 36.f * U);
 	DrawStatusGauge(1, BR_STR(NSLOCTEXT("BR", "HUD.SanteMentale", "SANT\u00c9 MENTALE")), SanState, San, C->GetSanityTrend(), X + 18.f * U, Y + 60.f * U + Row, W - 36.f * U);
+	EndTestPanel(); // v4.16 (relecture, tests) : fin du panneau ETAT
 }
 
 void ABRHUD::DrawStatusGauge(int32 Kind, const FString& Label, const FString& State, float Value, float Trend, float X, float Y, float W)
@@ -4563,19 +4867,36 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 		Lines.Append(Wrap(Charge, W - 28.f * U, Small, 0.72f * U));
 	}
 	FString Hint;
+	// v4.16 (relecture) : manette : le bouton A (meme effet que le double-clic) et une infobulle a cote de la case du curseur
+	const FSlotBox* PadBox = UsesPadCursor(C) && HoverSlot == PadCursor ? SlotBoxOf(PadCursor) : nullptr;
+	const FString PadUse = TEXT("[") + BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom) + TEXT("]  ");
 	if (Info.bConsumable)
 	{
-		Hint = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DoubleClicUseverb", "[DOUBLE-CLIC]  {UseVerb}"), { { TEXT("UseVerb"), BRLoc::Arg(Info.UseVerb.ToUpper()) } });
+		Hint = PadBox ? PadUse + Info.UseVerb.ToUpper().ToString()
+			: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DoubleClicUseverb", "[DOUBLE-CLIC]  {UseVerb}"), { { TEXT("UseVerb"), BRLoc::Arg(Info.UseVerb.ToUpper()) } });
 	}
 	else if (Info.Slot != EBREquipSlot::None)
 	{
-		Hint = HoverSlot.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicRetirer", "[DOUBLE-CLIC]  RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicEquiper", "[DOUBLE-CLIC]  \u00c9QUIPER"));
+		if (PadBox)
+		{
+			Hint = PadUse + (HoverSlot.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.Retirer", "RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.Equiper", "\u00c9QUIPER")));
+		}
+		else
+		{
+			Hint = HoverSlot.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicRetirer", "[DOUBLE-CLIC]  RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicEquiper", "[DOUBLE-CLIC]  \u00c9QUIPER"));
+		}
 	}
 	const float H = 52.f * U + Lines.Num() * 19.f * U + (Hint.IsEmpty() ? 0.f : 26.f * U);
-	float X = MouseX + 20.f * U;
-	float Y = MouseY + 20.f * U;
-	X = FMath::Min(X, Canvas->ClipX - W - 10.f * U);
+	float X = PadBox ? PadBox->X + PadBox->S + 12.f * U : MouseX + 20.f * U;
+	float Y = PadBox ? PadBox->Y : MouseY + 20.f * U;
+	if (PadBox && X + W > Canvas->ClipX - 10.f * U)
+	{
+		X = PadBox->X - W - 12.f * U; // pas de place a droite : a gauche de la case
+	}
+	X = FMath::Max(10.f * U, FMath::Min(X, Canvas->ClipX - W - 10.f * U));
 	Y = FMath::Min(Y, Canvas->ClipY - H - 10.f * U);
+	TestPanel = FVector4f(X, Y, W, H); // v4.16 (relecture, tests) : textes de l'infobulle dans son cadre, sur sa couche
+	++TestLayer;
 	DrawRect(FLinearColor(0.02f, 0.018f, 0.008f, 0.95f), X, Y, W, H);
 	Frame(X, Y, W, H, YellowDim, 1.f * U);
 	Txt(FString::Printf(TEXT("%s%s"), *Info.Name.ToUpper().ToString(), It->Count > 1 ? *BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt2", "  x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }) : TEXT("")), X + 14.f * U,
@@ -4590,6 +4911,7 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 	{
 		Txt(Hint, X + 14.f * U, LY + 6.f * U, InkDim, 0.68f * U, Small, false, false);
 	}
+	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
 void ABRHUD::DrawInspect(ABRCharacter* C)
@@ -4609,6 +4931,7 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 	const float H = 340.f * U;
 	const float X = (Canvas->ClipX - W) * 0.5f;
 	const float Y = (Canvas->ClipY - H) * 0.5f;
+	++TestLayer; // v4.16 (relecture, tests) : fenetre posee sur l'inventaire
 	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
 	Panel(X, Y, W, H, BR_STR(NSLOCTEXT("BR", "HUD.Inspecter", "INSPECTER")));
 	const float IconS = 220.f * U;
@@ -4658,6 +4981,12 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 		UseLabel = Inspecting.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.Retirer", "RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.Equiper", "\u00c9QUIPER"));
 	}
 	float BX = TX;
+	// v4.16 (relecture) : manette : chaque bouton nomme le sien (A : utiliser, B : fermer)
+	const bool bPadInspect = BRKeys::UsesGamepadPrompts();
+	if (bPadInspect && !UseLabel.IsEmpty())
+	{
+		UseLabel = TEXT("[") + BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom) + TEXT("]  ") + UseLabel;
+	}
 	if (!UseLabel.IsEmpty())
 	{
 		const float BW = TextW(UseLabel, Medium, 0.85f * U) + 40.f * U;
@@ -4668,7 +4997,8 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 		AddButton(Btn_InspectUse, BX, BY, BW, BH);
 		BX += BW + 16.f * U;
 	}
-	const FString CloseLabel(BR_STR(NSLOCTEXT("BR", "HUD.Fermer", "FERMER")));
+	const FString CloseLabel = (bPadInspect ? TEXT("[") + BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right) + TEXT("]  ") : FString())
+		+ BR_STR(NSLOCTEXT("BR", "HUD.Fermer", "FERMER"));
 	const float CW = TextW(CloseLabel, Medium, 0.85f * U) + 40.f * U;
 	const bool bHovC = Hover(BX, BY, CW, BH);
 	DrawRect(bHovC ? WithAlpha(Ink, 0.85f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), BX, BY, CW, BH);
@@ -4758,6 +5088,7 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	}
 
 	// ---- Entites
+	EndTestPanel(); // v4.16 (relecture, tests) : fin du panneau JOURNAL DU VAGABOND
 	Panel(RX, IY, RW, IH, BR_STR(NSLOCTEXT("BR", "HUD.EntitesRencontrees", "ENTIT\u00c9S RENCONTR\u00c9ES")));
 	X = RX + 20.f * U;
 	Y = IY + 60.f * U;
@@ -4829,6 +5160,7 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 			Y += 19.f * U;
 		}
 	}
+	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
 void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
@@ -4978,6 +5310,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	// v4.10 : reduits a la largeur du panneau (langues aux mots longs, petites fenetres)
 	TextFit(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 42.f * U, W2 - 56.f * U, WithAlpha(Yellow, 0.85f), LegacySize(Small, 0.66f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
 	TextFit(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 24.f * U, W2 - 56.f * U, WithAlpha(InkDim, 0.7f), LegacySize(Small, 0.62f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
+	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
 void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
@@ -4992,6 +5325,24 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 	const bool bRight = PlayerOwner->WasInputKeyJustPressed(EKeys::RightMouseButton);
 
 	FSlotBox* Under = (C && Tab == ETab::Character && !Inspecting.IsValid()) ? FindSlot(MouseX, MouseY) : nullptr;
+	if (UsesPadCursor(C) && !bPressed && !bRight && !Dragging.IsValid())
+	{
+		// v4.16 (relecture) : manette : la case du curseur est la case survolee (cadre, infobulle) ; premiere case du sac au debut.
+		// Un clic de souris garde la case sous la souris
+		if (!SlotBoxOf(PadCursor))
+		{
+			PadDirection(0, 0);
+		}
+		Under = nullptr;
+		for (FSlotBox& B : Slots)
+		{
+			if (B.Ref == PadCursor)
+			{
+				Under = &B;
+				break;
+			}
+		}
+	}
 	HoverSlot = Under ? Under->Ref : FSlotRef();
 
 	// Clic droit sur une touche : effacer
@@ -5434,6 +5785,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	float Y = IY + 60.f * U;
 	LastNotebookObservations = 0;
 	LastNotebookHintLevel = 0;
+	LastNotebookLeftRoom = 0.f;
 
 	if (W->HasServiceDoor())
 	{
@@ -5454,6 +5806,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			}
 			Y += 10.f * U;
 		}
+		EndTestPanel(); // v4.16 (relecture, tests)
 		return;
 	}
 	if (!W->IsMissionActive())
@@ -5466,6 +5819,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			TxtLine(L, X, Y, ColWidth, Ink, 0.8f * U, Medium);
 			Y += 24.f * U;
 		}
+		EndTestPanel(); // v4.16 (relecture, tests)
 		return;
 	}
 	const BRMission::FPlan& Plan = W->GetMissionPlan();
@@ -5662,6 +6016,8 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		NotebookLeftScroll = HintStart >= 0.f ? FMath::Max(0.f, (HintStart - (LBottom - LTop) * 0.25f) / FMath::Max(U, 0.01f)) : 0.f;
 	}
 	float NY = LTop + ScrollArea(NotebookLeftScroll, X, LTop, ColWidth, LBottom - LTop, LeftH);
+	// v4.16 (relecture, tests) : defilement encore possible (le banc verifie que la croix bas fait defiler quand il en reste)
+	LastNotebookLeftRoom = FMath::Max(0.f, FMath::Max(0.f, LeftH - (LBottom - LTop)) / FMath::Max(U, 0.01f) - NotebookLeftScroll);
 	for (const FNoteLine& N : Left)
 	{
 		if (!N.Text.IsEmpty() && NY >= LTop - 1.f && NY + N.H <= LBottom + 1.f)
@@ -5691,6 +6047,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	}
 
 	// ---- Observations acquises (indices lus, observations, fragments de route de la campagne)
+	EndTestPanel(); // v4.16 (relecture, tests) : fin du panneau CARNET DE MISSION
 	Panel(RX, IY, RW, IH, BR_STR(NSLOCTEXT("BR", "HUD.Observations", "OBSERVATIONS")));
 	const float OX = RX + 20.f * U;
 	const float OW = RW - 40.f * U;
@@ -5773,6 +6130,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			TxtLine(L, OX, EY, OW, InkDim, 0.74f * U, Small);
 			EY += 19.f * U;
 		}
+		EndTestPanel(); // v4.16 (relecture, tests)
 		return;
 	}
 	float LY = Top + ScrollArea(NotebookScroll, OX, Top, OW, Bottom - Top, ContentH);
@@ -5792,6 +6150,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		}
 		LY += H + (L.bHeader ? 0.f : 0.f);
 	}
+	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
 void ABRHUD::DrawMissionDoc(ABRCharacter* C, ABRWorld* W)

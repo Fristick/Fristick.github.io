@@ -31,6 +31,7 @@ BENCHES = [
     ("light", ["Tools/Light/test_light.cpp"]),
     ("color", ["Tools/Light/test_color.cpp"]),
     ("fluo", ["Tools/Light/test_fluo.cpp"]),
+    ("decals", ["Tools/Visual/test_decals.cpp"]),
     ("mechanisms", ["Tools/Mechanisms/test_mechanisms.cpp", P + "BRMechLogic.cpp", P + "BRMissionLogic.cpp"]),
     ("missions", ["Tools/Missions/test_mission_logic.cpp", P + "BRMissionLogic.cpp", P + "BRMissionSolver.cpp"]),
     ("transactions", ["Tools/Transactions/test_transactions.cpp", P + "BRTxnLogic.cpp"]),

@@ -384,6 +384,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Mesures de performance v4.16 : %d etapes. Rapport, Perf.csv et PerfPasses.csv : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Visual")))
+	{
+		// v4.16 (vis) : HUD (tailles, langues, manette), modes d'affichage, scanner, entites, kit, decalques
+		AddV416VisualSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Banc visuel v4.16 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestVisual")))
 	{
 		// v4.15 (realisme) : banc visuel seul (poses fixes, profils, captures et mesures a comparer d'un lot a l'autre)

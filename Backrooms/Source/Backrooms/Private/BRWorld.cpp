@@ -11,6 +11,7 @@
 #include "BRLevels.h"
 #include "BRAssets.h"
 #include "BRChunk.h"
+#include "BRDecalLogic.h"
 #include "BREntity.h"
 #include "BRCharacter.h"
 #include "BRHUD.h"
@@ -2224,6 +2225,23 @@ void ABRWorld::UpdateLightLOD(float Dt)
 				}
 			}
 			ShadowedLights = Count;
+		}
+		// v4.16 (relecture) : la vue locale a change (fenetre, pourcentage de rendu, champ) : effacement des decalques deja crees
+		// recalcule (le moteur le rapporte a la largeur interne de l'image) ; les nouveaux le prennent a leur creation
+		float ViewW = 0.f;
+		float ViewFov = 0.f;
+		ABRChunk::DecalView(ViewW, ViewFov);
+		if (DecalFadeWidth <= 0.f || BRDecal::FadeViewChanged(DecalFadeWidth, DecalFadeFov, ViewW, ViewFov))
+		{
+			DecalFadeWidth = ViewW;
+			DecalFadeFov = ViewFov;
+			for (const TPair<FIntPoint, TObjectPtr<ABRChunk>>& Pair : Chunks)
+			{
+				if (Pair.Value)
+				{
+					Pair.Value->RefreshDecalFade(ViewW, ViewFov);
+				}
+			}
 		}
 	}
 	FrameChunkMs += static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);

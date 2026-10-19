@@ -443,4 +443,8 @@ private:
 	 *  reconnexion pendant un chargement, morts et reveils, mecanismes loin de l'hote, interactions simultanees, focus,
 	 *  pause, inventaire et touches pendant une action maintenue (BRAutoTestV416Net.cpp ; lanceur Tools/Tests/run_nettest.ps1) */
 	void AddNetV416Plan();
+
+	/** v4.16 (vis) : -BRAutoTestV416Visual (BRAutoTestV416Visual.cpp) : HUD aux trois tailles et dans les 22 langues (textes
+	 *  controles), vraies fenetres, modes d'affichage, manette, HUD du scanner, neuf entites, raccords du kit, decalques */
+	void AddV416VisualSteps();
 };

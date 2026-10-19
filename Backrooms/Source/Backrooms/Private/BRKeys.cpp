@@ -56,6 +56,8 @@ namespace
 
 	int32 GRevision = 1;
 	bool GInitialized = false;
+	/** v4.16 : la manette a servi en dernier (invites de ses boutons) */
+	bool GPadPrompts = false;
 
 	void SetDefault(EBRAction A, const FKey& K0, const FKey& K1 = FKey(), const FKey& K2 = FKey())
 	{
@@ -208,6 +210,17 @@ namespace BRKeys
 
 	FString Primary(EBRAction Action)
 	{
+		// v4.16 : manette : son bouton ; les quatre actions du deplacement nomment le stick gauche (Expand ne le repete pas
+		// quand elles se suivent : "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}" donne "[STICK GAUCHE]", l'echelle garde
+		// "[STICK GAUCHE] monter - [STICK GAUCHE] descendre")
+		if (GPadPrompts)
+		{
+			const FKey Pad = GamepadKey(Action);
+			if (Pad.IsValid())
+			{
+				return GamepadName(Pad);
+			}
+		}
 		for (int32 Slot = 0; Slot < SlotsPerAction; ++Slot)
 		{
 			const FKey K = GetKey(Action, Slot);
@@ -239,6 +252,16 @@ namespace BRKeys
 				Out = Out.Replace(*Token, *Tag(static_cast<EBRAction>(A)));
 			}
 		}
+		if (GPadPrompts)
+		{
+			// v4.16 : manette : le stick gauche une seule fois pour les quatre directions qui se suivent
+			const FString Stick = Tag(EBRAction::MoveForward);
+			const FString Twice = Stick + Stick;
+			while (Out.Contains(Twice))
+			{
+				Out.ReplaceInline(*Twice, *Stick);
+			}
+		}
 		return Out;
 	}
 
@@ -259,5 +282,140 @@ namespace BRKeys
 	{
 		EnsureInit();
 		return GRevision;
+	}
+
+	void SetGamepadPrompts(bool bPad)
+	{
+		GPadPrompts = bPad;
+	}
+
+	bool UsesGamepadPrompts()
+	{
+		return GPadPrompts;
+	}
+
+	FKey GamepadKey(EBRAction Action)
+	{
+		// v4.16 : meme table que les liaisons fixes de la manette (ABRPlayerController::RebuildMappings) ; le test
+		// -BRAutoTestV416Visual compare les deux
+		switch (Action)
+		{
+		case EBRAction::MoveForward:
+		case EBRAction::MoveBackward:
+		case EBRAction::MoveLeft:
+		case EBRAction::MoveRight:
+			return EKeys::Gamepad_Left2D;
+		case EBRAction::Jump:
+			return EKeys::Gamepad_FaceButton_Bottom;
+		case EBRAction::Sprint:
+			return EKeys::Gamepad_LeftThumbstick;
+		case EBRAction::Crouch:
+			return EKeys::Gamepad_FaceButton_Right;
+		case EBRAction::Interact:
+			return EKeys::Gamepad_FaceButton_Left;
+		case EBRAction::Flashlight:
+			return EKeys::Gamepad_FaceButton_Top;
+		case EBRAction::NightVision:
+			return EKeys::Gamepad_DPad_Up;
+		case EBRAction::Inventory:
+			return EKeys::Gamepad_Special_Left;
+		case EBRAction::Drink:
+			return EKeys::Gamepad_LeftShoulder;
+		case EBRAction::Bandage:
+			return EKeys::Gamepad_DPad_Down;
+		case EBRAction::Battery:
+			return EKeys::Gamepad_RightShoulder;
+		case EBRAction::ThirdPerson:
+			return EKeys::Gamepad_RightThumbstick;
+		case EBRAction::Pause:
+			return EKeys::Gamepad_Special_Right;
+		case EBRAction::LidarPulse:
+			return EKeys::Gamepad_LeftTrigger;
+		case EBRAction::LidarFocus:
+			return EKeys::Gamepad_RightTrigger;
+		default:
+			return FKey();
+		}
+	}
+
+	FString GamepadName(const FKey& Key)
+	{
+		// Noms des boutons d'une manette au format Xbox (les plus repandus sur PC) ; mots traduits pour les boutons sans lettre
+		// (fleches absentes de la police de l'interface : "CROIX HAUT" plutot qu'une fleche)
+		if (Key == EKeys::Gamepad_FaceButton_Bottom)
+		{
+			return TEXT("A");
+		}
+		if (Key == EKeys::Gamepad_FaceButton_Right)
+		{
+			return TEXT("B");
+		}
+		if (Key == EKeys::Gamepad_FaceButton_Left)
+		{
+			return TEXT("X");
+		}
+		if (Key == EKeys::Gamepad_FaceButton_Top)
+		{
+			return TEXT("Y");
+		}
+		if (Key == EKeys::Gamepad_LeftShoulder)
+		{
+			return TEXT("LB");
+		}
+		if (Key == EKeys::Gamepad_RightShoulder)
+		{
+			return TEXT("RB");
+		}
+		if (Key == EKeys::Gamepad_LeftTrigger)
+		{
+			return TEXT("LT");
+		}
+		if (Key == EKeys::Gamepad_RightTrigger)
+		{
+			return TEXT("RT");
+		}
+		if (Key == EKeys::Gamepad_LeftThumbstick)
+		{
+			return TEXT("LS");
+		}
+		if (Key == EKeys::Gamepad_RightThumbstick)
+		{
+			return TEXT("RS");
+		}
+		if (Key == EKeys::Gamepad_Special_Left)
+		{
+			return NSLOCTEXT("BR", "Key.Pad.View", "VUE").ToString();
+		}
+		if (Key == EKeys::Gamepad_Special_Right)
+		{
+			return NSLOCTEXT("BR", "Key.Pad.Menu", "MENU").ToString();
+		}
+		if (Key == EKeys::Gamepad_DPad_Up)
+		{
+			return NSLOCTEXT("BR", "Key.Pad.DpadUp", "CROIX HAUT").ToString();
+		}
+		if (Key == EKeys::Gamepad_DPad_Down)
+		{
+			return NSLOCTEXT("BR", "Key.Pad.DpadDown", "CROIX BAS").ToString();
+		}
+		if (Key == EKeys::Gamepad_DPad_Left)
+		{
+			return NSLOCTEXT("BR", "Key.Pad.DpadLeft", "CROIX GAUCHE").ToString();
+		}
+		if (Key == EKeys::Gamepad_DPad_Right)
+		{
+			return NSLOCTEXT("BR", "Key.Pad.DpadRight", "CROIX DROITE").ToString();
+		}
+		if (Key == EKeys::Gamepad_Left2D)
+		{
+			return NSLOCTEXT("BR", "Key.Pad.LeftStick", "STICK GAUCHE").ToString();
+		}
+		return KeyName(Key);
+	}
+
+	FString GamepadDpadName()
+	{
+		// v4.16 (relecture) : la croix entiere (curseur des cases de l'inventaire, cartes de la pause)
+		return NSLOCTEXT("BR", "Key.Pad.Dpad", "CROIX").ToString();
 	}
 }

@@ -2,7 +2,7 @@
 
 Fichier ecrit par `Tools/Localization/loc_build.py` le 2026-10-19 : ne pas modifier a la main.
 
-Le jeu compte **1202 textes** (60530 caracteres en francais, la langue source).
+Le jeu compte **1213 textes** (60823 caracteres en francais, la langue source).
 
 Deux mesures sont distinctes :
 
@@ -14,28 +14,28 @@ Le jeu le dit sur la page Langue. Une langue passe en « relue » dans le jeu qu
 
 | Langue | Code | Traduits | Relus | Manquants (francais affiche) | Refuses par les controles | A revoir (source changee) |
 |---|---|---|---|---|---|---|
-| Français | `fr` | 1202 / 1202 (100 %) | 1202 | 0 | 0 | 0 |
-| Anglais | `en` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Allemand | `de` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Espagnol (Espagne) | `es-ES` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Portugais (Brésil) | `pt-BR` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Russe | `ru` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Italien | `it` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Turc | `tr` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Espagnol (Amérique latine) | `es-419` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Polonais | `pl` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Chinois simplifié | `zh-Hans` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Ukrainien | `uk` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Arabe | `ar` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Coréen | `ko` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Persan | `fa` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Japonais | `ja` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Hongrois | `hu` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Tchèque | `cs` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Portugais (Portugal) | `pt-PT` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Suédois | `sv` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Chinois traditionnel | `zh-Hant` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
-| Indonésien | `id` | 1202 / 1202 (100 %) | 0 | 0 | 0 | 0 |
+| Français | `fr` | 1213 / 1213 (100 %) | 1213 | 0 | 0 | 0 |
+| Anglais | `en` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Allemand | `de` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Espagnol (Espagne) | `es-ES` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Portugais (Brésil) | `pt-BR` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Russe | `ru` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Italien | `it` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Turc | `tr` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Espagnol (Amérique latine) | `es-419` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Polonais | `pl` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Chinois simplifié | `zh-Hans` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Ukrainien | `uk` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Arabe | `ar` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Coréen | `ko` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Persan | `fa` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Japonais | `ja` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Hongrois | `hu` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Tchèque | `cs` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Portugais (Portugal) | `pt-PT` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Suédois | `sv` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Chinois traditionnel | `zh-Hant` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
+| Indonésien | `id` | 1213 / 1213 (100 %) | 0 | 0 | 0 | 0 |
 
 ## Ce qui n'est pas traduit
 

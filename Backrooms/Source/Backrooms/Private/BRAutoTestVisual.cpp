@@ -180,6 +180,18 @@ namespace BRTestVisual
 			{
 				return false;
 			}
+			// v4.16 (relecture) : la tache existe vraiment dans son chunk (ni trappe d'echelle, ni borne du chunk : CeilingStainAt
+			// ne le sait pas)
+			bool bKept = false;
+			const FIntPoint ChunkCoord = W->CellToChunk(Cell);
+			for (TActorIterator<ABRChunk> It(W->GetWorld()); It && !bKept; ++It)
+			{
+				bKept = It->Coord == ChunkCoord && It->HasPlannedDecal(EBRDecal::CeilingStain, Stain, 2.f);
+			}
+			if (!bKept)
+			{
+				return false;
+			}
 			const FVector Center = W->CellCenter(Cell);
 			const FVector Fixture = Center + Lamp.Offset;
 			FVector Dir = (Stain - Fixture).GetSafeNormal2D();

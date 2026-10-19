@@ -102,9 +102,20 @@ public:
 	 *  chez l'hote et les clients ; 0 avant la planification */
 	int32 GetDecalCount() const { return DecalTotal; }
 	uint32 GetDecalHash() const { return DecalHash; }
+	/** v4.16 (relecture) : tirages ecartes par les bornes du chunk (BRDecal::MaxProjectedPerChunk, MaxFloorPatchesPerChunk) ;
+	 *  GetDecalCount compte les decalques gardes */
+	int32 GetDecalDropped() const { return DecalDropped; }
 	/** v4.15 : tache d'eau au plafond de la cellule (X, Y) a cote de son plafonnier, tiree avec la graine (sels 7450-7453) :
-	 *  centre (au plafond), rayon et rotation. Regle de BuildDecals (sans la trappe d'une echelle), aussi pour le banc visuel */
+	 *  centre (au plafond), rayon et rotation. Regle de BuildDecals (sans la trappe d'une echelle ni la borne du chunk : un
+	 *  appelant qui en a besoin le confirme par HasPlannedDecal), aussi pour le banc visuel */
 	static bool CeilingStainAt(const ABRWorld* W, int32 X, int32 Y, FVector& OutPos, float& OutRadius, float& OutSpin);
+	/** v4.16 (relecture) : ce chunk garde un decalque projete de cette sorte a Tolerance (cm) de Pos (cree ou en attente) */
+	bool HasPlannedDecal(EBRDecal Kind, const FVector& Pos, float Tolerance) const;
+	/** v4.16 (relecture) : vue locale qui regle l'effacement des decalques : largeur interne (pixels, pourcentage de rendu
+	 *  compris) et champ horizontal (degres) ; sans ecran, la vue de reference (BRDecal::ReferenceWidth) */
+	static void DecalView(float& OutWidth, float& OutHFovDeg);
+	/** v4.16 (relecture) : effacement des decalques deja crees recalcule pour cette vue ; renvoie le nombre de decalques */
+	int32 RefreshDecalFade(float ViewWidth, float HFovDeg);
 	/** Tous les composants et objets sont crees */
 	bool IsReady() const { return bReady; }
 	/** Sol et murs (collisions) crees : on peut marcher dessus */
@@ -172,6 +183,8 @@ protected:
 		bool bLumenWhileHidden = false;
 		/** v4.15 : diffuseurs alimentes (bPowered) a la couleur d'une lampe de cette temperature (K) ; 0 : RGB d'origine */
 		float LightTemperatureK = 0.f;
+		/** v4.16 (relecture) : objets poses (AddProp) : les decalques d'usure ne les peignent pas */
+		bool bNoDecals = false;
 		TArray<FTransform> Transforms;
 		/** v4.8 : instances deja creees (sous-lots) */
 		int32 Cursor = 0;
@@ -277,6 +290,8 @@ protected:
 	/** v4.15 : empreinte et nombre des decalques planifies (GetDecalHash) */
 	uint32 DecalHash = 0;
 	int32 DecalTotal = 0;
+	/** v4.16 (relecture) : tirages ecartes par les bornes (GetDecalDropped) */
+	int32 DecalDropped = 0;
 	/** v4.15 : cree le composant d'un decalque en attente (range dans Extra, detruit au demontage) */
 	void CreateDecal(const FPendingDecal& P);
 

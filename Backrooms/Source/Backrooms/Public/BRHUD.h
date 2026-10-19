@@ -42,6 +42,53 @@ public:
 	/** Direction d'une position par rapport au regard du joueur local (texte localise) */
 	static FString DirectionWord(const UObject* WorldContext, const FVector& Source);
 	void AddMessage(const FString& Text, float Duration, const FLinearColor& Color);
+	/** v4.16 : manette dans l'inventaire (ABRPlayerController : croix, LB / RB, Y) : onglet precedent ou suivant (TabStep),
+	 *  defilement des listes de l'onglet a la prochaine image (ScrollStep, en pas de molette), aide du carnet (bHint). Avant :
+	 *  souris seulement (le carnet n'etait pas atteignable a la manette) */
+	void PadInventory(int32 TabStep, int32 ScrollStep, bool bHint);
+	/** v4.16 (relecture) : croix de la manette dans l'inventaire : dans PERSONNAGE, deplace le curseur des cases (sac, poches,
+	 *  equipement) ; ailleurs, gauche / droite changent d'onglet et haut / bas font defiler (PadInventory). Avant : la croix
+	 *  changeait d'onglet partout et aucun objet du sac n'etait utilisable a la manette */
+	void PadDirection(int32 DX, int32 DY);
+	/** v4.16 (relecture) : A (bInspect faux : utiliser, equiper ou retirer l'objet de la case du curseur ; bouton UTILISER de
+	 *  l'inspection ouverte) ou X (bInspect : inspecter cette case) dans PERSONNAGE ; false hors de cet onglet */
+	bool PadSlotAction(bool bInspect);
+	/** v4.16 (relecture) : B : ferme l'inspection ouverte (true) ; false : rien a fermer ici (le controleur ferme l'inventaire) */
+	bool PadBack();
+
+private:
+	/** v4.16 (tests, -BRAutoTestV416Visual) : releve des textes dessines pendant une image (bTestRecordTexts) : rectangle
+	 *  (X, Y, largeur, hauteur), panneau en cours (Panel ; inventaire : sa bande), largeur permise par l'appelant (TextFit,
+	 *  TxtLine ; 0 : aucune), taille effective (points), texte raccourci par des points de suspension */
+	struct FTestText
+	{
+		FString Text;
+		FVector4f Rect = FVector4f(0.f, 0.f, 0.f, 0.f);
+		FVector4f Panel = FVector4f(0.f, 0.f, 0.f, 0.f);
+		float MaxW = 0.f;
+		float Points = 0.f;
+		bool bCut = false;
+		/** v4.16 (relecture) : couche (0 : l'ecran ; +1 par fenetre posee par-dessus : infobulle, inspection) ; deux textes de
+		 *  couches differentes ne se chevauchent pas (celui du dessus cache l'autre, sur son fond) */
+		int32 Layer = 0;
+	};
+	bool bTestRecordTexts = false;
+	int32 TestLayer = 0;
+	TArray<FTestText> TestTexts;
+	FVector4f TestPanel = FVector4f(0.f, 0.f, 0.f, 0.f);
+	/** v4.16 (relecture) : zone des textes hors panneau (inventaire : sa bande ; sinon l'image entiere). Chaque panneau la
+	 *  remet en place a la fin de son contenu (EndTestPanel) : un texte dessine apres un panneau n'est plus rapporte a lui,
+	 *  et un texte d'un panneau qui en sort (meme d'une ligne entiere) est un debordement */
+	FVector4f TestBand = FVector4f(0.f, 0.f, 0.f, 0.f);
+	void EndTestPanel() { TestPanel = TestBand; }
+	float TestTextMaxW = 0.f;
+	bool bTestTextCut = false;
+	int32 TestTextDepth = 0;
+	/** v4.16 (relecture, tests) : barres dessinees pendant l'image (Bar : reanimation, actions maintenues ; aucune barre de vie) */
+	int32 TestBarsDrawn = 0;
+	void RecordTestText(const FString& S, float X, float Y, const FVector2f& Size, float Points);
+	/** v4.16 : defilement demande a la manette (pixels a 1080p), applique par ScrollArea a la prochaine image de l'inventaire */
+	float PadScroll = 0.f;
 
 private:
 	struct FCaption
@@ -269,6 +316,12 @@ private:
 	FSlotRef Dragging;
 	FSlotRef HoverSlot;
 	FSlotRef Inspecting;
+	/** v4.16 (relecture) : curseur de la manette dans PERSONNAGE (case survolee quand la manette a servi en dernier) ; remis a
+	 *  la premiere case du sac a chaque ouverture */
+	FSlotRef PadCursor;
+	const FSlotBox* SlotBoxOf(const FSlotRef& Ref) const;
+	/** Le curseur de la manette remplace la souris (manette en dernier, onglet PERSONNAGE, pas d'inspection ouverte) */
+	bool UsesPadCursor(const ABRCharacter* C) const;
 	FSlotRef LastClickSlot;
 	double LastClickTime = 0.0;
 	float MouseX = 0.f;
@@ -315,6 +368,8 @@ private:
 	float TipClock = 0.f;
 	float PauseTime = 0.f;
 	float PauseSel[5] = { 0.f, 0.f, 0.f, 0.f, 0.f };
+	/** v4.16 (relecture) : position de la souris a l'image precedente de la pause (une souris qui bouge choisit la carte) */
+	FVector2f LastPauseMouse = FVector2f(-1.f, -1.f);
 	bool bWasInMenu = false;
 	bool bWasPaused = false;
 	bool bWasInventoryOpen = false;
@@ -355,6 +410,9 @@ public:
 	/** v4.11 (tests) : lignes d'observation et niveau d'aide dessines par le carnet a la derniere image */
 	int32 LastNotebookObservations = 0;
 	int32 LastNotebookHintLevel = 0;
+	/** v4.16 (relecture, tests) : defilement encore possible de la colonne de gauche du carnet a la derniere image (pixels a
+	 *  1080p ; 0 : contenu plus court que la zone, ou deja en bas) */
+	float LastNotebookLeftRoom = 0.f;
 private:
 
 	// Zone de l'inventaire (calculee a chaque image)
