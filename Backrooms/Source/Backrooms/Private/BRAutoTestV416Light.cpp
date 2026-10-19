@@ -1,24 +1,32 @@
 // v4.16 : -BRAutoTest -BRAutoTestV416Light : lumiere de gameplay alignee sur la lumiere visible (prompt v4.16, 3.1 et 3.2 ;
 // ABRWorld::LightLevelAt, BRWorldLight.cpp, BRLight::Occlusion).
 //   1. Grille : sur 8 graines (Levels 0, 1, 2, 4, 5, 8 et 37), empreinte de la grille de lumiere (aretes, piliers, cellules
-//      pleines, plafonniers) comparee a celle du banc hors moteur (Tools/Light/test_light.cpp, section D : meme portage) ;
-//      points d'emission des plafonniers de jeu = lumieres construites par les chunks ; accord de la regle de la grille avec
-//      une trace physique de l'emetteur au point (murs du decor construit ; les objets poses, rochers et ecoincons d'arche
-//      sans collision expliquent les ecarts, notes) ; part des positions dont la lumiere change sur cette graine.
+//      pleines, plafonniers) comparee a la table partagee avec le banc hors moteur (BRLightPrints.h ; Tools/Light/
+//      test_light.cpp, section D : meme portage) ; relecture v4.16 : Niveau 9 de nuit (maisons, lampadaires : empreinte
+//      relevee, le banc ne porte pas les rues) ; chaque plafonnier de jeu = une lumiere construite par les chunks, et aucun
+//      sous une trappe d'echelle ; accord de la regle de la grille avec une trace physique de l'emetteur au point (murs du
+//      decor construit) : la grille seule ne doit pas cacher plus de 3 % des paires (hors ecoincons d'arche sans collision
+//      des Poolrooms, comptes a part ; les objets poses et rochers, que la physique seule voit, sont notes) ; part des
+//      positions dont la lumiere change sur cette graine.
+//   1 bis. Relecture v4.16 : trappes des echelles des chunks (partie classique imposee, Niveaux 8 et 37 aux graines des
+//      tests v4.15) : trappe predite par le monde = echelle construite, plafonniers sous la trappe ni poses ni comptes.
 //   2. Level 0, graine 9 (scene du kit, ombres MegaLights) : meme endroit avec et sans mur (le plafonnier derriere le mur ne
-//      compte plus, un Smiler pose la ne se dissipe plus), passage (axe, jambage, linteau selon la hauteur), coupure :
+//      compte plus), arete fermee par le crochet de test (comme une porte de mission sur une ouverture de la grille : la
+//      lumiere est coupee puis revient), Smiler du coin sombre (endroit ou la regle d'avant le dissipait et plus la v4.16, avec
+//      un Smiler temoin dans la lumiere qui doit se dissiper), passage (axe, jambage, linteau selon la hauteur), coupure :
 //      alimentation vue par les regles = fondu regulier a chaque image, quels que soient le vacillement local et le reglage
 //      FLASHS (normaux puis attenues), source eteinte (noir : 0) ; profils Performance, Qualite, RTX fluide, Cinematique, puis
 //      ombres de toutes les lampes et neons surfaciques coupes : memes valeurs au bit pres ; meme graine rechargee : memes
 //      valeurs (comme un client qui construit le niveau).
 //   3. Source de mission (3.2) : source de test enregistree comme celles des mecanismes (SetGameplayLight), point vise : le
-//      joueur ; rien entre les deux ; une capsule de coequipier (profil Pawn, comme un joueur), puis une creature, entre les
-//      deux : la valeur ne baisse pas (le filtre d'avant la v4.16, journal : capsule touchee, la coupait) ; porte physique
-//      fermee (boite Blocker des mecanismes) : la lumiere est coupee, porte ouverte : elle revient ; mur du decor : coupee ;
-//      source eteinte : 0 ; LightLevelAt (caches) = recalcul sans cache dans chaque etat.
+//      joueur ; rien entre les deux (relecture v4.16 : le filtre d'avant renvoie 0, arrete par la capsule du joueur lui-meme :
+//      le defaut d'avant reproduit) ; une capsule de coequipier (profil Pawn, comme un joueur), puis une creature, entre les
+//      deux : la trace qui garde les capsules (sans la cible) doit toucher cet obstacle (sinon NON VERIFIE), et la valeur ne
+//      baisse pas ; porte physique fermee (boite Blocker des mecanismes) : la lumiere est coupee, porte ouverte : elle
+//      revient ; mur du decor : coupee ; source eteinte : 0 ; LightLevelAt (caches) = recalcul sans cache dans chaque etat.
 //   4. Cout par image : creatures qui lisent la lumiere a chaque image (Smilers, Deathmoths, Bacteria), immobiles puis libres,
-//      source de mission allumee pres d'elles : appels, calculs, cache, plafonniers, obstacles, traces par image et par
-//      creature ; temps d'un appel (cache vide, puis plein).
+//      source de mission allumee pres d'elles : appels, calculs, cache (part reprise : noeuds de 10 cm), plafonniers,
+//      obstacles, traces par image et par creature ; temps d'un appel (cache vide, puis plein).
 // Une verification impossible (pas de mur avec un plafonnier derriere, chunk absent, materiel sans ray tracing...) est
 // notee "NON VERIFIE", jamais comptee comme reussie.
 #include "BRAutoTest.h"
@@ -29,6 +37,7 @@
 #include "BRInteractables.h"
 #include "BRLevels.h"
 #include "BRLightLogic.h"
+#include "BRLightPrints.h"
 #include "BRPlayerController.h"
 #include "BRWorld.h"
 
@@ -45,17 +54,36 @@
 
 namespace BRTestV416Light
 {
-	/** Empreintes de la grille de lumiere calculees par le banc hors moteur (Tools/Light/test_light.cpp, section D) */
-	struct FPrint
+	/** Graines de l'etape de la grille : la table partagee avec le banc (BRLightPrints.h), puis (relecture v4.16) le Niveau 9 de
+	 *  nuit, sans empreinte du banc (il ne porte pas les rues) */
+	struct FGridRun
 	{
 		int32 Level;
 		uint32 UserSeed;
 		uint32 Expected;
+		bool bBench;
 	};
-	const FPrint Prints[] = {
-		{ 0, 9u, 0x33387e10u }, { 0, 4242u, 0xb142f19cu }, { 1, 4242u, 0xd0705669u }, { 2, 4242u, 0x94f0c4d7u },
-		{ 4, 4242u, 0x8d3f54e3u }, { 5, 4242u, 0xb752f85fu }, { 8, 4242u, 0x9c633728u }, { 37, 4242u, 0x5b6e31f0u } };
-	constexpr int32 PrintHalf = 12;
+	TArray<FGridRun> GridRuns()
+	{
+		TArray<FGridRun> Out;
+		for (int32 K = 0; K < BRLightPrints::Count; ++K)
+		{
+			Out.Add({ BRLightPrints::Table[K].Level, BRLightPrints::Table[K].UserSeed, BRLightPrints::Table[K].Print, true });
+		}
+		Out.Add({ 9, 4242u, 0u, false });
+		return Out;
+	}
+	constexpr int32 PrintHalf = BRLightPrints::Half;
+	/** Relecture v4.16 : la grille seule (plus sombre que le decor construit) ne doit pas cacher plus de cette part des paires */
+	constexpr float GridHideBudget = 0.03f;
+	/** Relecture v4.16 : trappes des echelles des chunks, partie classique : graines du niveau des tests v4.15 (Level 8 :
+	 *  echelle BRExit_42 vers le Niveau 9 ; Level 37 : echelles des chunks vers le Niveau 2) */
+	struct FHatchRun
+	{
+		int32 Level;
+		uint32 LevelSeed;
+	};
+	const FHatchRun HatchRuns[] = { { 8, 233637237u }, { 37, 115083815u } };
 
 	const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
 
@@ -110,12 +138,13 @@ namespace BRTestV416Light
 		return L.bLamp && !L.bFlicker;
 	}
 
-	/** Apport d'un plafonnier en P selon la loi d'apport (sans occlusion ni alimentation) */
+	/** Apport d'un plafonnier en P selon la loi d'apport (sans occlusion ni alimentation) ; aussi pour un plafonnier de la grille
+	 *  sous une trappe (ce que la regle comptait sans qu'il soit pose) */
 	float LampWeight(const ABRWorld* W, const FBRLightCell& L, const FVector& P)
 	{
 		const float Radius = W->Def().LightRadius;
 		const float Dist = static_cast<float>(FVector::Dist2D(P, L.Anchor));
-		if (!L.bLamp || !(Dist < Radius))
+		if ((!L.bLamp && !L.bUnderHatch) || !(Dist < Radius))
 		{
 			return 0.f;
 		}
@@ -152,6 +181,52 @@ namespace BRTestV416Light
 		return FVector(P.X, P.Y, W->FloorZAt(P) + Z);
 	}
 
+	/** Lumieres construites par les chunks prets (Only : ce chunk seulement) */
+	void BuiltLights(UWorld* InWorld, const FIntPoint* Only, TArray<FVector>& Out)
+	{
+		Out.Reset();
+		for (TActorIterator<ABRChunk> It(InWorld); It; ++It)
+		{
+			if (!It->IsReady() || (Only && It->Coord != *Only))
+			{
+				continue;
+			}
+			TInlineComponentArray<ULocalLightComponent*> Lights(*It);
+			for (const ULocalLightComponent* L : Lights)
+			{
+				Out.Add(L->GetComponentLocation());
+			}
+		}
+	}
+
+	/** Une lumiere construite a la place du plafonnier L : point d'emission (FLightRecord::Pos) ; une lumiere surfacique est
+	 *  posee juste sous le plafond, a la meme verticale ; applique et lampadaire au-dessus de la hauteur des murs */
+	bool HasBuiltLight(const ABRWorld* W, const FBRLightCell& L, const TArray<FVector>& Built)
+	{
+		const double Top = FMath::Max(static_cast<double>(W->Def().WallHeight), L.Emitter.Z) + 1.0;
+		for (const FVector& B : Built)
+		{
+			if (FVector::Dist2D(B, L.Emitter) < 2.0 && B.Z <= Top && B.Z >= L.Emitter.Z - 1.0)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Un des acteurs touches est A */
+	bool HitsActor(const TArray<TWeakObjectPtr<const AActor>>& Hits, const AActor* A)
+	{
+		for (const TWeakObjectPtr<const AActor>& H : Hits)
+		{
+			if (A && H.Get() == A)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Joueur pose au sol en P, immobile */
 	void PlacePlayer(const ABRWorld* W, ABRCharacter* C, const FVector& P)
 	{
@@ -175,7 +250,17 @@ namespace BRTestV416Light
 	/** Passage (arete Door) */
 	bool bDoorScene = false;
 	FIntPoint DoorA, DoorB, DoorDir;
-	TWeakObjectPtr<ABREntity> WallSmiler;
+	/** Relecture v4.16 : coin sombre (regle d'avant au-dessus du seuil de dissipation, v4.16 en dessous) et Smiler temoin dans
+	 *  la lumiere ; Smilers poses (bSpawned : ils ont existe) */
+	bool bCornerScene = false;
+	FVector CornerP = FVector::ZeroVector;
+	FVector ControlP = FVector::ZeroVector;
+	TWeakObjectPtr<ABREntity> CornerSmiler;
+	TWeakObjectPtr<ABREntity> ControlSmiler;
+	bool bCornerSpawned = false;
+	bool bControlSpawned = false;
+	/** Relecture v4.16 : trappes predites (chunk, rectangle) du niveau en cours de l'etape 1 bis */
+	TArray<TPair<FIntPoint, BRLight::FHatch>> Hatches;
 	/** Points compares d'un profil a l'autre et apres le rechargement */
 	TArray<FVector> Probes;
 	TArray<float> Baseline;
@@ -268,7 +353,7 @@ void ABRAutoTest::AddV416LightSteps()
 		TotalPairs = 0;
 		TotalAgree = 0;
 		FLevelReport R;
-		R.Title = TEXT("v4.16 : lumiere de gameplay (murs, passages, coupure, profils, sources de mission, cout)");
+		R.Title = TEXT("v4.16 : lumiere de gameplay (murs, passages, trappes, coupure, profils, sources de mission, cout)");
 		R.Scene = TEXT("v4.16");
 		R.FirstLogLine = LogLineCount();
 		Reports.Add(R);
@@ -278,17 +363,24 @@ void ABRAutoTest::AddV416LightSteps()
 	});
 
 	// ------------------------------------------------------------------------------------------------ 1. grille par niveau
-	for (const FPrint& Pr : Prints)
+	for (const FGridRun& Run : GridRuns())
 	{
-		const int32 Level = Pr.Level;
+		const int32 Level = Run.Level;
+		const uint32 UserSeed = Run.UserSeed;
 		if (!BRLevels::Exists(Level))
 		{
+			// v4.16 (relecture) : niveau absent de ce canal : dit, pas saute en silence
+			Add(FString::Printf(TEXT("v4.16 lumiere : Niveau %d indisponible"), Level), 0.f, [this, Level, UserSeed]()
+			{
+				Skip(FString::Printf(TEXT("Niveau %d (-BRSeed=%u) indisponible dans ce canal : grille de lumiere non verifiee"), Level, UserSeed));
+				return true;
+			});
 			continue;
 		}
-		const uint32 UserSeed = Pr.UserSeed;
-		const uint32 Expected = Pr.Expected;
+		const uint32 Expected = Run.Expected;
+		const bool bBench = Run.bBench;
 		AddSeedLoad(Level, UserSeed, FString::Printf(TEXT("v4.16 lumiere : Niveau %d, -BRSeed=%u"), Level, UserSeed));
-		Add(FString::Printf(TEXT("v4.16 lumiere : grille du Niveau %d (graine %u)"), Level, UserSeed), 0.f, [this, Level, UserSeed, Expected]()
+		Add(FString::Printf(TEXT("v4.16 lumiere : grille du Niveau %d (graine %u)"), Level, UserSeed), 0.f, [this, Level, UserSeed, Expected, bBench]()
 		{
 			ABRWorld* W = GetBRWorld();
 			ABRCharacter* C = GetPlayer();
@@ -297,14 +389,22 @@ void ABRAutoTest::AddV416LightSteps()
 				return false;
 			}
 			const FIntPoint Here = W->WorldToCell(C->GetActorLocation());
-			// Chunks autour du point de depart construits (la trace physique en a besoin)
+			// Chunks autour du point de depart construits et prets (la trace physique et les lumieres construites en ont besoin)
+			TSet<FIntPoint> Ready;
+			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
+			{
+				if (It->IsReady())
+				{
+					Ready.Add(It->Coord);
+				}
+			}
 			int32 Missing = 0;
 			for (int32 DX = -1; DX <= 1; ++DX)
 			{
 				for (int32 DY = -1; DY <= 1; ++DY)
 				{
 					const FIntPoint Ch = W->CellToChunk(Here) + FIntPoint(DX, DY);
-					Missing += (W->IsChunkInBounds(Ch) && !W->IsChunkLoaded(Ch)) ? 1 : 0;
+					Missing += (W->IsChunkInBounds(Ch) && !Ready.Contains(Ch)) ? 1 : 0;
 				}
 			}
 			if (Missing > 0 && StepTime < 20.f)
@@ -314,37 +414,25 @@ void ABRAutoTest::AddV416LightSteps()
 			const FBRLevelDef& D = W->Def();
 			// a. Empreinte (meme portage que le banc ; ABRWorld l'ecrit aussi au journal, chez l'hote et chez chaque client)
 			const uint32 Got = W->GetLightGridFingerprint(PrintHalf);
-			const FString PrintText = FString::Printf(TEXT("Niveau %d, -BRSeed=%u (graine du niveau %u) : empreinte de la grille de lumiere %08x, banc %08x"),
-				Level, UserSeed, W->GetSeed(), Got, Expected);
-			Note(PrintText, Got != Expected);
-			// b. Points d'emission des plafonniers de jeu = lumieres construites
+			if (bBench)
+			{
+				Note(FString::Printf(TEXT("Niveau %d, -BRSeed=%u (graine du niveau %u) : empreinte de la grille de lumiere %08x, banc %08x"), Level, UserSeed, W->GetSeed(), Got,
+					Expected), Got != Expected);
+			}
+			else
+			{
+				Note(FString::Printf(TEXT("Niveau %d, -BRSeed=%u (graine du niveau %u) : empreinte de la grille de lumiere %08x"), Level, UserSeed, W->GetSeed(), Got));
+				Skip(FString::Printf(TEXT("Niveau %d : empreinte non comparee au banc (le banc ne porte pas les rues des Niveaux 9 et 11)"), Level));
+			}
+			// b. Chaque plafonnier de jeu = une lumiere construite ; relecture v4.16 : aucun plafonnier de jeu sous une trappe
+			// d'echelle (le chunk ne l'y pose pas, la regle ne le compte plus) ; tout ecart est un probleme
 			TArray<FVector> Built;
-			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
-			{
-				if (!It->IsReady())
-				{
-					continue;
-				}
-				TInlineComponentArray<ULocalLightComponent*> Lights(*It);
-				for (const ULocalLightComponent* L : Lights)
-				{
-					Built.Add(L->GetComponentLocation());
-				}
-			}
-			// Echelles des sorties : une echelle perce le plafond d'une trappe et le chunk ne pose pas le plafonnier a moins de 70 cm
-			// d'elle (ABRChunk, etape des lumieres) ; la regle le compte (avant comme apres la v4.16) : ecart connu, note a part
-			TArray<FVector> Ladders;
-			for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
-			{
-				if (It->Style == EBRExitStyle::Ladder)
-				{
-					Ladders.Add(It->GetActorLocation());
-				}
-			}
+			BuiltLights(GetWorld(), nullptr, Built);
 			int32 Lamps = 0;
 			int32 Matched = 0;
 			int32 Off = 0;
 			int32 Hatch = 0;
+			int32 HatchBuilt = 0;
 			FString FirstOff;
 			const int32 Span = 10;
 			for (int32 DX = -Span; DX <= Span; ++DX)
@@ -352,37 +440,25 @@ void ABRAutoTest::AddV416LightSteps()
 				for (int32 DY = -Span; DY <= Span; ++DY)
 				{
 					const FIntPoint Cell = Here + FIntPoint(DX, DY);
-					if (!W->IsChunkLoaded(W->CellToChunk(Cell)))
+					if (!Ready.Contains(W->CellToChunk(Cell)))
 					{
 						continue;
 					}
 					const FBRLightCell L = W->GetLightCell(Cell.X, Cell.Y);
+					if (L.bUnderHatch)
+					{
+						++Hatch;
+						HatchBuilt += HasBuiltLight(W, L, Built) ? 1 : 0;
+						continue;
+					}
 					if (!L.bLamp)
 					{
 						continue;
 					}
 					++Lamps;
-					bool bFound = false;
-					for (const FVector& B : Built)
-					{
-						// Point d'emission : FLightRecord::Pos ; une lumiere surfacique est posee juste sous le plafond, a la meme verticale
-						if (FVector::Dist2D(B, L.Emitter) < 2.0 && B.Z <= D.WallHeight + 1.0 && B.Z >= L.Emitter.Z - 1.0)
-						{
-							bFound = true;
-							break;
-						}
-					}
+					const bool bFound = HasBuiltLight(W, L, Built);
 					Matched += bFound ? 1 : 0;
-					bool bNearLadder = false;
-					for (const FVector& Lad : Ladders)
-					{
-						bNearLadder = bNearLadder || FVector::Dist2D(Lad, L.Anchor) < 260.0;
-					}
-					if (!bFound && bNearLadder)
-					{
-						++Hatch;
-					}
-					else if (!bFound && ++Off == 1)
+					if (!bFound && ++Off == 1)
 					{
 						FirstOff = FString::Printf(TEXT("cellule (%d, %d), emetteur %s"), Cell.X, Cell.Y, *L.Emitter.ToCompactString());
 					}
@@ -394,13 +470,14 @@ void ABRAutoTest::AddV416LightSteps()
 			}
 			else
 			{
-				Note(FString::Printf(TEXT("Niveau %d : %d plafonnier(s) de jeu dans les chunks construits, %d a la place d'une lumiere construite (%d lumiere(s) dans les chunks) ; %d pres d'une trappe d'echelle (non construit, compte par la regle : ecart connu)%s%s"),
-					Level, Lamps, Matched, Built.Num(), Hatch, Off > 0 ? TEXT(" ; premier ecart : ") : TEXT(""), *FirstOff), Off > 0);
+				Note(FString::Printf(TEXT("Niveau %d : %d plafonnier(s) de jeu dans les chunks construits, %d a la place d'une lumiere construite (%d lumiere(s) dans les chunks) ; sous une trappe d'echelle : %d, dont %d avec une lumiere construite (attendu 0)%s%s"),
+					Level, Lamps, Matched, Built.Num(), Hatch, HatchBuilt, Off > 0 ? TEXT(" ; premier ecart : ") : TEXT(""), *FirstOff), Off > 0 || HatchBuilt > 0);
 			}
 			// c. Accord de la grille avec une trace physique (emetteur -> point), d. positions dont la lumiere change
 			int32 Pairs = 0;
 			int32 Agree = 0;
 			int32 GridHides = 0;
+			int32 ArchHides = 0;
 			int32 PhysHides = 0;
 			TMap<FString, int32> HitNames;
 			int32 Cells = 0;
@@ -412,12 +489,19 @@ void ABRAutoTest::AddV416LightSteps()
 			const float S = D.CellSize;
 			const float Free = S - D.WallThickness - 80.f;
 			const int32 R = FMath::Clamp(FMath::CeilToInt(D.LightRadius / D.CellSize), 1, 4);
+			// Relecture v4.16 : cotes du niveau, et les memes avec des passages ouverts jusqu'au plafond (sans arche ni linteau) : une
+			// paire que la grille seule cache et que ces cotes voient est cachee par l'arche ; dans les Poolrooms, ses ecoincons sont
+			// sans collision (ABRChunk::AddDoorway : SM_ArchSpandrel) mais font de l'ombre : ecart attendu, compte a part
+			const BRLight::Occlusion::FGeom Geom = W->GetLightGeom();
+			BRLight::Occlusion::FGeom OpenTop = Geom;
+			OpenTop.bArch = false;
+			OpenTop.DoorTop = BRLight::Occlusion::Huge;
 			for (int32 DX = -8; DX <= 8; ++DX)
 			{
 				for (int32 DY = -8; DY <= 8; ++DY)
 				{
 					const FIntPoint Cell = Here + FIntPoint(DX, DY);
-					if (!UsableCell(W, Cell))
+					if (!UsableCell(W, Cell) || !Ready.Contains(W->CellToChunk(Cell)))
 					{
 						continue;
 					}
@@ -445,7 +529,7 @@ void ABRAutoTest::AddV416LightSteps()
 						{
 							const FIntPoint LampCell = Cell + FIntPoint(LX, LY);
 							const FBRLightCell L = W->GetLightCell(LampCell.X, LampCell.Y);
-							if (!L.bLamp || !W->IsChunkLoaded(W->CellToChunk(LampCell)) || LampWeight(W, L, Player) <= 0.f)
+							if (!L.bLamp || !Ready.Contains(W->CellToChunk(LampCell)) || LampWeight(W, L, Player) <= 0.f)
 							{
 								continue;
 							}
@@ -456,8 +540,18 @@ void ABRAutoTest::AddV416LightSteps()
 								const bool bPhys = PhysicsSees(GetWorld(), C, L.Emitter, P, &Hit);
 								++Pairs;
 								Agree += bGrid == bPhys ? 1 : 0;
-								GridHides += (!bGrid && bPhys) ? 1 : 0;
 								PhysHides += (bGrid && !bPhys) ? 1 : 0;
+								if (!bGrid && bPhys)
+								{
+									if (Geom.bArch && W->IsLampVisibleFrom(LampCell, P, &OpenTop))
+									{
+										++ArchHides;
+									}
+									else
+									{
+										++GridHides;
+									}
+								}
 								if (bGrid != bPhys)
 								{
 									// Nom de l'obstacle sans le numero d'instance (regroupement)
@@ -489,10 +583,14 @@ void ABRAutoTest::AddV416LightSteps()
 			else
 			{
 				const float Pct = 100.f * Agree / Pairs;
-				// Un desaccord massif voudrait dire que la grille ne decrit pas le decor construit (seuil large : objets poses, rochers,
-				// ecoincons sans collision restent dans les ecarts)
-				Note(FString::Printf(TEXT("Niveau %d : regle de la grille et trace physique d'accord sur %d / %d paires (%.1f %%) ; la grille seule cache : %d ; la physique seule cache : %d%s%s"),
-					Level, Agree, Pairs, Pct, GridHides, PhysHides, Top.IsEmpty() ? TEXT("") : TEXT(" ; ecarts : "), *Top), Pct < 80.f);
+				const float GridPct = 100.f * GridHides / Pairs;
+				// Relecture v4.16 : la grille seule (rule plus sombre que le decor construit : jambage, linteau, sommet mal places) ne
+				// doit pas depasser GridHideBudget des paires, dans chaque niveau ; la physique seule (objets poses, rochers, trottoirs
+				// du Level 37 : la grille ne les connait pas) est notee ; un accord global sous 80 % reste un probleme
+				Note(FString::Printf(TEXT("Niveau %d : regle de la grille et trace physique d'accord sur %d / %d paires (%.1f %%) ; la grille seule cache : %d (%.1f %%, au plus %.0f %%)%s ; la physique seule cache : %d%s%s"),
+					Level, Agree, Pairs, Pct, GridHides, GridPct, GridHideBudget * 100.f,
+					Geom.bArch ? *FString::Printf(TEXT(", plus %d par les ecoincons d'arche sans collision (attendu)"), ArchHides) : TEXT(""), PhysHides,
+					Top.IsEmpty() ? TEXT("") : TEXT(" ; ecarts : "), *Top), Pct < 80.f || GridHides > GridHideBudget * Pairs);
 			}
 			if (Cells > 0)
 			{
@@ -503,6 +601,192 @@ void ABRAutoTest::AddV416LightSteps()
 		});
 		LimitLastStep(40.f);
 	}
+
+	// ------------------------------------------------------------------------------------------------ 1 bis. trappes des echelles
+	// Relecture v4.16 : partie classique imposee (le parcours lineaire ne tire aucune sortie des chunks a ces niveaux) ; chaque
+	// trappe predite par le monde (ABRWorld::GetLightHatch, memes tirages qu'ABRChunk::PlanExits) doit etre celle d'une echelle
+	// construite, et ses plafonniers ne sont ni poses par le chunk ni comptes par la regle
+	Add(TEXT("v4.16 lumiere : partie classique imposee (trappes des echelles)"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning())
+		{
+			return false;
+		}
+		W->SetLinearTestOverride(0);
+		return true;
+	});
+	for (const FHatchRun& Run : HatchRuns)
+	{
+		const int32 Level = Run.Level;
+		const uint32 LevelSeed = Run.LevelSeed;
+		if (!BRLevels::Exists(Level))
+		{
+			Add(FString::Printf(TEXT("v4.16 lumiere : trappes du Niveau %d indisponible"), Level), 0.f, [this, Level]()
+			{
+				Skip(FString::Printf(TEXT("Niveau %d indisponible dans ce canal : trappes des echelles non verifiees"), Level));
+				return true;
+			});
+			continue;
+		}
+		AddLevelSeedLoad(Level, LevelSeed, FString::Printf(TEXT("v4.16 lumiere : Niveau %d (graine du niveau %u, partie classique)"), Level, LevelSeed));
+		Add(FString::Printf(TEXT("v4.16 lumiere : trappes du Niveau %d : recherche"), Level), 0.f, [this, Level, LevelSeed]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			Hatches.Reset();
+			if (!W || !C)
+			{
+				return false;
+			}
+			if (W->GetLevelNumber() != Level || W->GetSeed() != LevelSeed)
+			{
+				Skip(FString::Printf(TEXT("Niveau %d (graine du niveau %u) non charge : trappes des echelles non verifiees"), Level, LevelSeed));
+				return true;
+			}
+			if (W->IsLinearLevel())
+			{
+				Skip(FString::Printf(TEXT("Niveau %d charge en parcours lineaire malgre la partie classique imposee : trappes des echelles non verifiees"), Level));
+				return true;
+			}
+			// Chunks du niveau fini (ou 12 x 12 autour du depart) : trappes predites, ordre fixe
+			const int32 B = W->Def().BoundsChunks > 0 ? W->Def().BoundsChunks : 6;
+			for (int32 CX = -B; CX < B; ++CX)
+			{
+				for (int32 CY = -B; CY < B; ++CY)
+				{
+					BRLight::FHatch H;
+					if (W->GetLightHatch(FIntPoint(CX, CY), H))
+					{
+						Hatches.Add(TPair<FIntPoint, BRLight::FHatch>(FIntPoint(CX, CY), H));
+					}
+				}
+			}
+			if (Hatches.Num() == 0)
+			{
+				Skip(FString::Printf(TEXT("Niveau %d (graine du niveau %u, partie classique) : aucune trappe d'echelle predite (regle de la trappe non exercee)"), Level, LevelSeed));
+				return true;
+			}
+			// Le joueur va dans une cellule praticable voisine de la premiere trappe (son chunk se construit)
+			const BRLight::FHatch& H0 = Hatches[0].Value;
+			const FIntPoint HatchCell = W->WorldToCell(FVector((H0.MinX + H0.MaxX) * 0.5, (H0.MinY + H0.MaxY) * 0.5, 0.0));
+			const bool bPlaced = ForRings(HatchCell, 3, [&](const FIntPoint& Cell)
+			{
+				if (Cell == HatchCell || !W->IsWalkable(Cell) || !W->IsCellInBounds(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || W->IsPitRoomCell(Cell.X, Cell.Y))
+				{
+					return false;
+				}
+				PlacePlayer(W, C, W->CellCenter(Cell));
+				return true;
+			});
+			Note(FString::Printf(TEXT("Niveau %d (graine du niveau %u, partie classique) : %d trappe(s) d'echelle predite(s), premiere au chunk (%d, %d) (%.0f..%.0f x %.0f..%.0f) ; joueur %s"),
+				Level, LevelSeed, Hatches.Num(), Hatches[0].Key.X, Hatches[0].Key.Y, H0.MinX, H0.MaxX, H0.MinY, H0.MaxY, bPlaced ? TEXT("pose a cote") : TEXT("NON pose (aucune cellule libre)")));
+			return true;
+		});
+		Add(FString::Printf(TEXT("v4.16 lumiere : trappes du Niveau %d : plafonniers"), Level), 0.5f, [this, Level]()
+		{
+			ABRWorld* W = GetBRWorld();
+			if (!W || Hatches.Num() == 0 || W->GetLevelNumber() != Level)
+			{
+				return true;
+			}
+			TSet<FIntPoint> Ready;
+			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
+			{
+				if (It->IsReady())
+				{
+					Ready.Add(It->Coord);
+				}
+			}
+			if (!Ready.Contains(Hatches[0].Key) && StepTime < 30.f)
+			{
+				return false;
+			}
+			const int32 N = W->Def().ChunkCells;
+			int32 Checked = 0;
+			int32 WithLadder = 0;
+			int32 Placed = 0;
+			int32 PlacedBuilt = 0;
+			int32 Under = 0;
+			int32 UnderBuilt = 0;
+			float Removed = 0.f;
+			FString FirstBad;
+			for (const TPair<FIntPoint, BRLight::FHatch>& Pair : Hatches)
+			{
+				if (!Ready.Contains(Pair.Key))
+				{
+					continue;
+				}
+				++Checked;
+				const BRLight::FHatch& H = Pair.Value;
+				// Echelle construite a cette trappe (pied dans le rectangle du conduit, a 10 cm pres)
+				bool bLadder = false;
+				for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
+				{
+					const FVector At = It->GetActorLocation();
+					bLadder = bLadder || (It->Style == EBRExitStyle::Ladder && At.X > H.MinX - 10.0 && At.X < H.MaxX + 10.0 && At.Y > H.MinY - 10.0 && At.Y < H.MaxY + 10.0);
+				}
+				WithLadder += bLadder ? 1 : 0;
+				if (!bLadder && FirstBad.IsEmpty())
+				{
+					FirstBad = FString::Printf(TEXT("aucune echelle construite a la trappe du chunk (%d, %d)"), Pair.Key.X, Pair.Key.Y);
+				}
+				TArray<FVector> Built;
+				BuiltLights(GetWorld(), &Pair.Key, Built);
+				for (int32 LY = 0; LY < N; ++LY)
+				{
+					for (int32 LX = 0; LX < N; ++LX)
+					{
+						const FIntPoint Cell(Pair.Key.X * N + LX, Pair.Key.Y * N + LY);
+						const FBRLightCell L = W->GetLightCell(Cell.X, Cell.Y);
+						const bool bBuilt = (L.bLamp || L.bUnderHatch) && HasBuiltLight(W, L, Built);
+						if (L.bUnderHatch)
+						{
+							++Under;
+							UnderBuilt += bBuilt ? 1 : 0;
+							// Apport que la regle comptait sans que la lampe existe, a 1,65 m sous la trappe
+							Removed = FMath::Max(Removed, LampWeight(W, L, FVector((H.MinX + H.MaxX) * 0.5, (H.MinY + H.MaxY) * 0.5, 165.0)));
+							if (bBuilt && FirstBad.IsEmpty())
+							{
+								FirstBad = FString::Printf(TEXT("cellule (%d, %d) : plafonnier sous la trappe pourtant construit"), Cell.X, Cell.Y);
+							}
+						}
+						else if (L.bLamp)
+						{
+							++Placed;
+							PlacedBuilt += bBuilt ? 1 : 0;
+							if (!bBuilt && FirstBad.IsEmpty())
+							{
+								FirstBad = FString::Printf(TEXT("cellule (%d, %d) : plafonnier de jeu sans lumiere construite"), Cell.X, Cell.Y);
+							}
+						}
+					}
+				}
+			}
+			if (Checked == 0)
+			{
+				Skip(FString::Printf(TEXT("Niveau %d : chunk de la trappe pas construit en 30 s (trappes des echelles non verifiees)"), Level));
+				return true;
+			}
+			const bool bBad = WithLadder != Checked || UnderBuilt > 0 || PlacedBuilt != Placed;
+			Note(FString::Printf(TEXT("Niveau %d, partie classique : %d chunk(s) a trappe construits : echelle a la trappe predite %d / %d ; plafonniers poses %d (lumiere construite %d) ; sous la trappe %d (lumiere construite %d, attendu 0 ; la regle ne les compte plus : jusqu'a %.3f retire sous la trappe)%s%s"),
+				Level, Checked, WithLadder, Checked, Placed, PlacedBuilt, Under, UnderBuilt, Removed, FirstBad.IsEmpty() ? TEXT("") : TEXT(" ; premier ecart : "), *FirstBad), bBad);
+			if (Under == 0)
+			{
+				Skip(FString::Printf(TEXT("Niveau %d : aucun plafonnier de la grille sous une trappe construite (plafonnier non pose non exerce)"), Level));
+			}
+			return true;
+		});
+		LimitLastStep(40.f);
+	}
+	Add(TEXT("v4.16 lumiere : parcours normal retabli"), 0.f, [this]()
+	{
+		if (ABRWorld* W = GetBRWorld())
+		{
+			W->SetLinearTestOverride(-1);
+		}
+		return true;
+	});
 
 	// ------------------------------------------------------------------------------------------------ 2. Level 0, graine 9
 	AddSeedLoad(0, 9u, TEXT("v4.16 lumiere : Level 0, -BRSeed=9 (scenes de controle)"));
@@ -627,21 +911,6 @@ void ABRAutoTest::AddV416LightSteps()
 			{
 				Skip(TEXT("Level 0 : aucune arete ouverte vers un plafonnier stable (meme endroit sans mur)"));
 			}
-			// Un Smiler pose dans le coin : dissipe avant la v4.16 si la regle d'avant y depassait le seuil
-			const FBRLightSample Sm = W->SampleLight(WallSmilerP, nullptr, false);
-			if (ABREntity* E = SpawnFrozen(W, EBREntityKind::Smiler, WallSmilerP, 0.05f))
-			{
-				E->SetActorLocation(WallSmilerP);
-				WallSmiler = E;
-				TestSpawned.Add(E);
-				Note(FString::Printf(TEXT("mur : Smiler pose au point (lumiere de jeu %.3f, regle d'avant %.3f, dissipation au-dessus de %.2f)"), Sm.Value, Sm.CeilingAll * Sm.Power,
-					BRLight::SmilerVanish));
-			}
-			PlacePlayer(W, C, CellPoint(W, WallA, WallDir, -(Face - 50.f), 0.f, 0.f));
-			if (AController* Ctrl = C->GetController())
-			{
-				Ctrl->SetControlRotation((WallSmilerP - C->GetEyeLocation()).Rotation());
-			}
 		}
 
 		// b. Passage : dans l'axe pres du mur, au fond de la cellule (joueur, Smiler), derriere le jambage
@@ -675,6 +944,85 @@ void ABRAutoTest::AddV416LightSteps()
 				Note(FString::Printf(TEXT("passage (cellule (%d, %d), plafonnier (%d, %d)%s) : %s : %s (apport %.3f) ; trace physique : %s"), DoorA.X, DoorA.Y, DoorB.X, DoorB.Y,
 					AL.bLamp ? TEXT(", la cellule a son plafonnier") : TEXT(""), DP.Name, bVisible ? TEXT("eclaire") : TEXT("cache"), LampWeight(W, L, P), bPhys ? TEXT("rien") : *Hit),
 					(bExpectSeen && !bVisible) || (bExpectHidden && bVisible));
+			}
+		}
+
+		// c. Relecture v4.16 : coin sombre pour un Smiler : la regle d'avant (murs ignores) l'y dissipait, la v4.16 non (marge de
+		// 0,05 de part et d'autre du seuil) ; temoin : un point ou la v4.16 depasse le seuil de 0,1 (un Smiler doit s'y dissiper,
+		// sinon la lumiere ne decide rien en ce moment et l'etape n'est pas verifiee)
+		bCornerScene = false;
+		bCornerSpawned = false;
+		bControlSpawned = false;
+		CornerSmiler.Reset();
+		ControlSmiler.Reset();
+		FIntPoint CornerCell = Start;
+		FIntPoint CornerDir(1, 0);
+		if (PowerSteady(W))
+		{
+			const bool bCorner = ForRings(Start, 8, [&](const FIntPoint& A)
+			{
+				if (!UsableCell(W, A))
+				{
+					return false;
+				}
+				for (const FIntPoint& Dir : Dirs)
+				{
+					if (EdgeToward(W, A, Dir) != static_cast<uint8>(EBREdge::Wall))
+					{
+						continue;
+					}
+					for (const float Side : { 0.f, -80.f, 80.f })
+					{
+						const FVector P = CellPoint(W, A, Dir, Face - 45.f, Side, 165.f);
+						const FBRLightSample Sm = W->SampleLight(P, nullptr, false);
+						if (Sm.CeilingAll * Sm.Power > BRLight::SmilerVanish + 0.05f && Sm.Value < BRLight::SmilerVanish - 0.05f)
+						{
+							CornerP = P;
+							CornerCell = A;
+							CornerDir = Dir;
+							return true;
+						}
+					}
+				}
+				return false;
+			});
+			const bool bControl = ForRings(Start, 6, [&](const FIntPoint& Cell)
+			{
+				if (!UsableCell(W, Cell) || (bCorner && FMath::Abs(Cell.X - CornerCell.X) + FMath::Abs(Cell.Y - CornerCell.Y) <= 1))
+				{
+					return false;
+				}
+				const FVector P = CellPoint(W, Cell, FIntPoint(1, 0), 0.f, 0.f, 165.f);
+				if (W->SampleLight(P, nullptr, false).Value > BRLight::SmilerVanish + 0.1f)
+				{
+					ControlP = P;
+					return true;
+				}
+				return false;
+			});
+			bCornerScene = bCorner && bControl;
+			if (bCornerScene)
+			{
+				if (ABREntity* E = SpawnFrozen(W, EBREntityKind::Smiler, CornerP, 0.05f))
+				{
+					E->SetActorLocation(CornerP);
+					CornerSmiler = E;
+					bCornerSpawned = true;
+					TestSpawned.Add(E);
+				}
+				if (ABREntity* E = SpawnFrozen(W, EBREntityKind::Smiler, ControlP, 0.05f))
+				{
+					E->SetActorLocation(ControlP);
+					ControlSmiler = E;
+					bControlSpawned = true;
+					TestSpawned.Add(E);
+				}
+				// Le joueur au fond de la cellule du coin, tourne vers le Smiler (capture v416_mur_smiler)
+				PlacePlayer(W, C, CellPoint(W, CornerCell, CornerDir, -(Face - 50.f), 0.f, 0.f));
+				if (AController* Ctrl = C->GetController())
+				{
+					Ctrl->SetControlRotation((CornerP - C->GetEyeLocation()).Rotation());
+				}
 			}
 		}
 
@@ -726,32 +1074,100 @@ void ABRAutoTest::AddV416LightSteps()
 		{
 			return false;
 		}
-		if (!bWallScene)
+		if (!bCornerScene)
 		{
+			Skip(TEXT("Smiler du coin sombre : aucun coin ou la regle d'avant dissipait un Smiler et pas la v4.16 a moins de 8 cellules, aucun point temoin eclaire, ou coupure en cours (defaut d'avant non reproduit)"));
 			return true;
 		}
 		Shot(TEXT("v416_mur_smiler"));
-		const FBRLightSample Sm = W->SampleLight(WallSmilerP, nullptr, false);
-		const ABREntity* E = WallSmiler.Get();
-		const bool bVanishing = !E || E->IsVanishing();
-		if (Sm.Value > BRLight::SmilerVanish)
+		const ABREntity* E = CornerSmiler.Get();
+		const ABREntity* T = ControlSmiler.Get();
+		if (!bCornerSpawned || !bControlSpawned)
 		{
-			Note(FString::Printf(TEXT("mur : le point reste eclaire par d'autres plafonniers visibles (%.3f) : le Smiler %s (attendu : il se dissipe)"), Sm.Value,
-				bVanishing ? TEXT("se dissipe") : TEXT("reste")), !bVanishing);
+			Skip(FString::Printf(TEXT("Smiler du coin sombre : Smiler non pose (coin %s, temoin %s)"), bCornerSpawned ? TEXT("pose") : TEXT("NON pose"),
+				bControlSpawned ? TEXT("pose") : TEXT("NON pose")));
 		}
 		else
 		{
-			const bool bOldWould = Sm.CeilingAll * Sm.Power > BRLight::SmilerVanish;
-			Note(FString::Printf(TEXT("mur : lumiere de jeu %.3f sous le seuil (regle d'avant %.3f%s) : le Smiler %s (capture v416_mur_smiler)"), Sm.Value, Sm.CeilingAll * Sm.Power,
-				bOldWould ? TEXT(" : il s'y dissipait") : TEXT(""), bVanishing ? TEXT("SE DISSIPE") : TEXT("reste dans le coin sombre")), bVanishing);
+			// Un Smiler pose puis retire (dissipe, 0,6 s de son temps ralenti) compte comme dissipe
+			const bool bControlVanish = !T || T->IsVanishing();
+			const bool bCornerVanish = !E || E->IsVanishing();
+			const FVector At = E ? E->GetActorLocation() : CornerP;
+			const FBRLightSample Sm = W->SampleLight(At, nullptr, false);
+			const float Old = Sm.CeilingAll * Sm.Power;
+			const FString Values = FString::Printf(TEXT("coin %s : lumiere de jeu %.3f, regle d'avant %.3f (dissipation au-dessus de %.2f) ; temoin %s : %.3f"), *At.ToCompactString(),
+				Sm.Value, Old, BRLight::SmilerVanish, *ControlP.ToCompactString(), W->SampleLight(T ? T->GetActorLocation() : ControlP, nullptr, false).Value);
+			if (!bControlVanish)
+			{
+				Skip(FString::Printf(TEXT("Smiler du coin sombre : le Smiler temoin, dans la lumiere, ne se dissipe pas (%s) : la lumiere ne decide rien en ce moment ; %s"),
+					T && T->IsHunting() ? TEXT("il poursuit le joueur") : TEXT("pas encore decide"), *Values));
+			}
+			else if (E && E->IsHunting() && !bCornerVanish)
+			{
+				Skip(FString::Printf(TEXT("Smiler du coin sombre : il poursuit le joueur (la lumiere ne le dissipe pas en poursuite) : non verifie ; %s"), *Values));
+			}
+			else if (!(Old > BRLight::SmilerVanish && Sm.Value <= BRLight::SmilerVanish))
+			{
+				Skip(FString::Printf(TEXT("Smiler du coin sombre : a sa position du moment, la regle d'avant ne le dissipait plus ou la v4.16 le dissiperait : non verifie ; %s"), *Values));
+			}
+			else
+			{
+				Note(FString::Printf(TEXT("Smiler du coin sombre : %s : il s'y dissipait avant la v4.16 ; le Smiler %s ; temoin dans la lumiere : se dissipe (capture v416_mur_smiler)"), *Values,
+					bCornerVanish ? TEXT("SE DISSIPE") : TEXT("reste dans le coin sombre")), bCornerVanish);
+			}
 		}
-		if (ABREntity* Live = WallSmiler.Get())
+		for (TWeakObjectPtr<ABREntity>* Ptr : { &CornerSmiler, &ControlSmiler })
 		{
-			Live->Destroy();
+			if (ABREntity* Live = Ptr->Get())
+			{
+				Live->Destroy();
+			}
+			Ptr->Reset();
 		}
-		WallSmiler.Reset();
 		return true;
 	});
+	// Relecture v4.16 : plafonnier derriere une porte de mission. Les seules portes posees sur une ouverture de la grille sont
+	// celles de l'aile du Level 6, qui n'a pas de plafonniers : le crochet de test ferme l'arete ouverte de la scene sans mur
+	// (meme ensemble d'aretes, meme relecture et meme invalidation qu'une porte de mission qui change), puis la rouvre
+	Add(TEXT("v4.16 lumiere : arete fermee comme une porte de mission"), 0.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		if (!W)
+		{
+			return false;
+		}
+		if (!bOpenScene)
+		{
+			Skip(TEXT("Level 0 : pas d'arete ouverte vers un plafonnier stable : arete fermee par le crochet de test non verifiee"));
+			return true;
+		}
+		if (!PowerSteady(W))
+		{
+			if (StepTime > 20.f)
+			{
+				Skip(TEXT("arete fermee comme une porte de mission : coupure de courant en cours pendant 20 s (valeurs non comparees)"));
+				return true;
+			}
+			return false;
+		}
+		const float V0 = W->LightLevelAt(OpenP);
+		const bool bSeen0 = W->IsLampVisibleFrom(OpenB, OpenP);
+		const int32 Inv0 = W->GetLightStats(true).Invalidations;
+		W->SetLightTestClosedEdge(OpenA, OpenB, true);
+		const float V1 = W->LightLevelAt(OpenP);
+		const bool bSeen1 = W->IsLampVisibleFrom(OpenB, OpenP);
+		const int32 Inv1 = W->GetLightStats(true).Invalidations;
+		W->SetLightTestClosedEdge(OpenA, OpenB, false);
+		const float V2 = W->LightLevelAt(OpenP);
+		const bool bSeen2 = W->IsLampVisibleFrom(OpenB, OpenP);
+		const bool bOk = bSeen0 && !bSeen1 && bSeen2 && V1 < V0 && V2 == V0 && Inv1 > Inv0;
+		Note(FString::Printf(TEXT("arete (%d, %d) - (%d, %d) fermee comme une porte de mission (crochet de test) : plafonnier (%d, %d) ouvert : %s (lumiere de jeu %.3f) ; ferme : %s (%.3f) ; rouvert : %s (%.3f) ; caches vides a la fermeture : %s"),
+			OpenA.X, OpenA.Y, OpenB.X, OpenB.Y, OpenB.X, OpenB.Y, bSeen0 ? TEXT("compte") : TEXT("NE COMPTE PAS"), V0, bSeen1 ? TEXT("COMPTE ENCORE") : TEXT("ne compte plus"), V1,
+			bSeen2 ? TEXT("compte") : TEXT("NE COMPTE PAS"), V2, Inv1 > Inv0 ? TEXT("oui") : TEXT("NON")), !bOk);
+		Skip(TEXT("plafonnier derriere une porte de mission reelle (ABRWorld::GetClosedMissionEdges) : aucune porte de mission n'est posee sur une ouverture de la grille d'un niveau a plafonniers (aile du Level 6 seulement) ; chemin exerce par le crochet de test"));
+		return true;
+	});
+	LimitLastStep(25.f);
 
 	// Etat lisible de la lumiere qui compte (inventaire, sous la sante mentale) : capture a juger (petite fenetre, langues)
 	Add(TEXT("v4.16 lumiere : inventaire ouvert"), 0.8f, [this]()
@@ -1052,6 +1468,18 @@ void ABRAutoTest::AddV416LightSteps()
 		Note(FString::Printf(TEXT("source de mission : rien entre la source et le joueur (%.0f cm) : apport %.3f (loi %.3f), filtre d'avant %.3f ; obstacles : %s / avant : %s"),
 			FVector::Dist(C->GetActorLocation(), SourceP), Sm.Mission, SourceAdd, Sm.MissionOldFilter, Sm.MissionHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionHits,
 			Sm.MissionOldHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionOldHits), FMath::Abs(Sm.Mission - SourceAdd) > 1e-4f || SourceAdd <= 0.01f);
+		// Relecture v4.16 : reproduction du defaut d'avant : la trace finit au centre de la cible, seul l'emetteur etait ignore :
+		// la capsule du joueur lui-meme l'arretait (une source de mission ne comptait jamais pour un joueur ou une creature)
+		if (Sm.MissionOldFilter == 0.f && BRTestV416Light::HitsActor(Sm.MissionOldHitActors, C))
+		{
+			Note(FString::Printf(TEXT("source de mission, rien entre : filtre d'avant la v4.16 : 0.000, trace arretee par la capsule du joueur lui-meme (%s) : defaut d'avant reproduit (elle ne comptait jamais pour un joueur ou une creature)"),
+				*Sm.MissionOldHits));
+		}
+		else
+		{
+			Skip(FString::Printf(TEXT("source de mission, rien entre : le filtre d'avant renvoie %.3f, obstacle %s : defaut d'avant (capsule de la cible) non reproduit"), Sm.MissionOldFilter,
+				Sm.MissionOldHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionOldHits));
+		}
 		return true;
 	});
 	struct FBlock
@@ -1164,14 +1592,21 @@ void ABRAutoTest::AddV416LightSteps()
 				bBad = bBad || Sm.Mission != 0.f;
 				Expect = TEXT("attendu : 0");
 			}
-			const bool bOldCut = Sm.MissionOldFilter < Clear - 1e-4f;
-			Note(FString::Printf(TEXT("source de mission, %s : apport %.3f (sans obstacle %.3f ; %s) ; filtre d'avant la v4.16 : %.3f%s ; obstacles touches : %s / avant : %s ; LightLevelAt %.3f, recalcul %.3f"),
-				*Name, Sm.Mission, Clear, *Expect, Sm.MissionOldFilter, (Kind <= 1 && bOldCut) ? TEXT(" (defaut reproduit : la capsule coupait la lumiere)") : TEXT(""),
-				Sm.MissionHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionHits, Sm.MissionOldHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionOldHits, Cached, Sm.Value), bBad);
-			if (Kind <= 1 && !bOldCut)
+			// Relecture v4.16 : coequipier ou creature : la trace qui garde les capsules (sans la cible) doit toucher cet obstacle,
+			// sinon il n'est pas sur le rayon et rien n'est demontre (le filtre d'avant renvoie 0 de toute facon : la capsule de la
+			// cible l'arrete)
+			const AActor* Obstacle = Kind == 0 ? static_cast<const AActor*>(Mate.Get()) : (Kind == 1 ? static_cast<const AActor*>(Creature.Get()) : nullptr);
+			const bool bOnRay = Obstacle && BRTestV416Light::HitsActor(Sm.MissionPawnHitActors, Obstacle);
+			const FString Detail = FString::Printf(TEXT("apport %.3f (sans obstacle %.3f ; %s) ; filtre d'avant la v4.16 : %.3f ; capsules comprises, sans la cible : %.3f ; obstacles touches : %s / avant : %s / capsules comprises : %s ; LightLevelAt %.3f, recalcul %.3f"),
+				Sm.Mission, Clear, *Expect, Sm.MissionOldFilter, Sm.MissionPawnFilter, Sm.MissionHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionHits,
+				Sm.MissionOldHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionOldHits, Sm.MissionPawnHits.IsEmpty() ? TEXT("aucun") : *Sm.MissionPawnHits, Cached, Sm.Value);
+			if (Kind <= 1 && !bOnRay)
 			{
-				Note(FString::Printf(TEXT("source de mission, %s : le filtre d'avant ne coupait pas non plus (la capsule n'est pas sur la ligne ?)"), *Name));
+				Skip(FString::Printf(TEXT("source de mission, %s : l'obstacle n'est pas sur le rayon (la trace qui garde les capsules ne le touche pas) : non verifie ; %s"), *Name, *Detail));
+				return true;
 			}
+			Note(FString::Printf(TEXT("source de mission, %s : %s%s"), *Name, *Detail,
+				Kind <= 1 ? TEXT(" (defaut reproduit : la capsule sur le rayon coupait la lumiere ; v4.16 : ignoree)") : TEXT("")), bBad);
 			return true;
 		});
 	}
@@ -1276,8 +1711,11 @@ void ABRAutoTest::AddV416LightSteps()
 			const FBRLightStats T = W->GetLightStats(true);
 			const double Frames = static_cast<double>(FMath::Max<uint64>(1, GFrameCounter - CostFrame0));
 			const double PerEntity = Alive > 0 ? T.Traces / Frames / Alive : 0.0;
-			Note(FString::Printf(TEXT("cout (%s, %d creature(s), %.0f images en %.1f s) : par image %.1f appel(s), %.1f calcul(s), %.1f repris du cache, %.1f plafonnier(s), %.0f obstacle(s), %.2f trace(s) (%.2f par creature), %.1f trace(s) reprise(s) ; %d chunk(s) de grille mis en cache"),
-				Pass == 0 ? TEXT("immobiles") : TEXT("libres"), Alive, Frames, FPlatformTime::Seconds() - CostT0, T.Queries / Frames, T.Computes / Frames, T.CacheHits / Frames,
+			// Relecture v4.16 : part des plafonniers repris du cache (noeud de 10 cm : une creature qui bouge le reprend tant qu'elle
+			// reste pres du meme noeud)
+			const double HitRate = (T.CacheHits + T.Computes) > 0 ? 100.0 * T.CacheHits / (T.CacheHits + T.Computes) : 0.0;
+			Note(FString::Printf(TEXT("cout (%s, %d creature(s), %.0f images en %.1f s) : par image %.1f appel(s), %.1f calcul(s), %.1f repris du cache (%.1f %% des plafonniers repris), %.1f plafonnier(s), %.0f obstacle(s), %.2f trace(s) (%.2f par creature), %.1f trace(s) reprise(s) ; %d chunk(s) de grille mis en cache"),
+				Pass == 0 ? TEXT("immobiles") : TEXT("libres"), Alive, Frames, FPlatformTime::Seconds() - CostT0, T.Queries / Frames, T.Computes / Frames, T.CacheHits / Frames, HitRate,
 				T.Lamps / Frames, T.Boxes / Frames, T.Traces / Frames, PerEntity, T.TraceHits / Frames, T.ChunkBuilds), PerEntity > 2.0);
 			if (Alive == 0)
 			{
@@ -1377,6 +1815,7 @@ void ABRAutoTest::AddV416LightSteps()
 		if (ABRWorld* W = GetBRWorld())
 		{
 			W->SetGameplayLight(this, TestSlot, SourceP, BRLight::BeaconRadius, BRLight::BeaconIntensity, false);
+			W->SetLinearTestOverride(-1); // relecture v4.16 : parcours normal (deja retabli apres les trappes)
 		}
 		for (const TWeakObjectPtr<AActor>& A : { TWeakObjectPtr<AActor>(Mate.Get()), TWeakObjectPtr<AActor>(Creature.Get()), Door })
 		{

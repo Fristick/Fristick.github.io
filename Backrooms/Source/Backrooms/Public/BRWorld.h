@@ -9,7 +9,7 @@
 #include "BRMechLogic.h"
 #include "BRStoryLogic.h"
 #include "BRLidarLogic.h"
-#include "BRLightLogic.h"
+#include "BRWorldLightTypes.h"
 #include "BRSave.h"
 #include "BRWorld.generated.h"
 
@@ -272,75 +272,6 @@ struct FBRDoorCandidate
 	uint32 Hash = 0;
 	/** 0 : bande visee (24-40 cellules) ; 1 : bande elargie (16-56) ; 2 : hors bande (secours seulement) */
 	uint8 Band = 2;
-};
-
-/** v4.16 : cellule de la grille vue par la lumiere de gameplay (BRWorldLight.cpp, en cache par chunk) : aretes Est et Nord
- *  (EBREdge ; une porte de mission fermee sur une ouverture de la grille compte comme un mur), pilier du sommet (+X, +Y),
- *  bloc d'une cellule pleine, plafonnier allume (present, pas casse, dans l'enceinte) */
-struct FBRLightCell
-{
-	uint8 EdgeE = 0;
-	uint8 EdgeN = 0;
-	bool bPillar = false;
-	bool bSolid = false;
-	bool bLamp = false;
-	bool bFlicker = false;
-	/** Centre de la cellule + decalage du plafonnier : la distance de la loi d'apport (inchangee) */
-	FVector Anchor = FVector::ZeroVector;
-	/** Point d'emission (cotes d'ABRChunk::AddLight) : l'occlusion part de la */
-	FVector Emitter = FVector::ZeroVector;
-	FVector SolidLo = FVector::ZeroVector;
-	FVector SolidHi = FVector::ZeroVector;
-};
-
-/** v4.16 (tests, diagnostic) : detail de la lumiere de gameplay en un point (ABRWorld::SampleLight) */
-struct FBRLightSample
-{
-	/** ABRWorld::LightLevelAt */
-	float Value = 0.f;
-	/** Alimentation vue par les regles (BRLight::PhasePower) et alimentation de l'image (vacillement local) */
-	float Power = 1.f;
-	float VisualPower = 1.f;
-	/** Plafonniers a portee dont la lumiere atteint le point / tous (la regle d'avant la v4.16, murs ignores), avant
-	 *  l'alimentation */
-	float CeilingVisible = 0.f;
-	float CeilingAll = 0.f;
-	int32 Lamps = 0;
-	int32 LampsHidden = 0;
-	/** Sources de mission en ligne de vue (filtre v4.16) / avec le filtre d'avant (capsules comprises) */
-	float Mission = 0.f;
-	float MissionOldFilter = 0.f;
-	int32 MissionSources = 0;
-	/** Obstacles touches par les traces des sources de mission (v4.16, puis filtre d'avant) : "acteur.composant" */
-	FString MissionHits;
-	FString MissionOldHits;
-	/** Obstacles de la grille testes */
-	int32 Boxes = 0;
-};
-
-/** v4.16 : compteurs de la lumiere de gameplay (cout : appels, cache, plafonniers, obstacles, traces) */
-struct FBRLightStats
-{
-	int32 Queries = 0;
-	/** Resultat des plafonniers repris du cache (meme point) / calcule */
-	int32 CacheHits = 0;
-	int32 Computes = 0;
-	int32 Lamps = 0;
-	int32 Hidden = 0;
-	int32 Boxes = 0;
-	/** Traces des sources de mission lancees / reprises du cache */
-	int32 Traces = 0;
-	int32 TraceHits = 0;
-	/** Chunks de la grille mis en cache ; caches vides (niveau, disposition, portes de mission) */
-	int32 ChunkBuilds = 0;
-	int32 Invalidations = 0;
-	/** Images comptees */
-	int32 Frames = 0;
-	void Add(const FBRLightStats& O)
-	{
-		Queries += O.Queries; CacheHits += O.CacheHits; Computes += O.Computes; Lamps += O.Lamps; Hidden += O.Hidden; Boxes += O.Boxes;
-		Traces += O.Traces; TraceHits += O.TraceHits; ChunkBuilds += O.ChunkBuilds; Invalidations += O.Invalidations; Frames += O.Frames;
-	}
 };
 
 /** Objectif affiche dans l'inventaire (colonne OBJECTIFS) et dans le coin de l'ecran */
@@ -711,11 +642,11 @@ public:
 	 *  la meme chez l'hote et chez les clients et quel que soit le profil graphique : plafonniers dont la lumiere atteint P
 	 *  selon la grille (BRLight::Occlusion : murs, passages, piliers, cellules pleines, plafond, sol), alimentation de la
 	 *  phase de coupure (BRLight::PhasePower), sources de mission en ligne de vue (murs et portes physiques ; ni les capsules
-	 *  des personnages et des creatures, ni Target). Plafonniers en cache par point (vide au changement de niveau) ; traces des
-	 *  sources de mission en cache 0,2 s par 10 cm */
+	 *  des personnages et des creatures, ni Target). Plafonniers evalues au noeud de 10 cm le plus proche de P, en cache par
+	 *  noeud (vide au changement de niveau) ; traces des sources de mission en cache 0,2 s par 10 cm */
 	float LightLevelAt(const FVector& P, const AActor* Target = nullptr) const;
 	/** v4.16 (tests, diagnostic) : detail de LightLevelAt en P, recalcule sans cache ; bDiagnose : composants touches par les
-	 *  traces des sources de mission, avec le filtre v4.16 et avec celui d'avant */
+	 *  traces des sources de mission, avec le filtre v4.16, celui d'avant et un filtre qui garde les capsules sans la cible */
 	FBRLightSample SampleLight(const FVector& P, const AActor* Target, bool bDiagnose) const;
 	/** v4.16 : alimentation des plafonniers vue par les regles : fondu regulier de la phase de coupure (BRLight::PhasePower),
 	 *  jamais le vacillement local de GetPower() */
@@ -728,8 +659,13 @@ public:
 	 *  -BRNetTest a chaque niveau construit : l'hote et chaque client doivent ecrire la meme */
 	uint32 GetLightGridFingerprint(int32 Half) const;
 	/** v4.16 (tests) : la lumiere du plafonnier de la cellule LampCell atteint-elle P (BRLight::Occlusion, la regle du jeu) ?
-	 *  False s'il n'y a pas de plafonnier allume */
-	bool IsLampVisibleFrom(const FIntPoint& LampCell, const FVector& P) const;
+	 *  False s'il n'y a pas de plafonnier allume. Geom : autres cotes (diagnostic ; nullptr : celles du niveau) */
+	bool IsLampVisibleFrom(const FIntPoint& LampCell, const FVector& P, const BRLight::Occlusion::FGeom* Geom = nullptr) const;
+	/** v4.16 (relecture, tests) : trappe de l'echelle de sortie du chunk (celle d'ABRChunk::PlanExits, d'apres le tirage) */
+	bool GetLightHatch(const FIntPoint& Chunk, BRLight::FHatch& Out) const;
+	/** v4.16 (relecture, tests) : ferme (ou rouvre) pour la lumiere l'arete entre deux cellules voisines, comme une porte de
+	 *  mission fermee sur une ouverture de la grille (meme ensemble, meme invalidation) ; pour le chargement en cours */
+	void SetLightTestClosedEdge(const FIntPoint& A, const FIntPoint& B, bool bClosed);
 	/** v4.16 : compteurs de la lumiere de gameplay : derniere image complete, ou total depuis ResetLightStats */
 	FBRLightStats GetLightStats(bool bTotal) const;
 	void ResetLightStats() const;
@@ -1196,59 +1132,11 @@ private:
 		TWeakObjectPtr<const AActor> Owner;
 	};
 	TMap<uint64, FGameplayLight> GameplayLights;
-	// ---- v4.16 : lumiere de gameplay (BRWorldLight.cpp) : grille par chunk, plafonniers par point, traces des sources de
-	// mission ; valides pour un niveau, une graine, un chargement et un etat des portes de mission
-	struct FLightChunk
-	{
-		TArray<FBRLightCell> Cells;
-	};
-	struct FLightResult
-	{
-		float Visible = 0.f;
-		float All = 0.f;
-	};
-	struct FLightTraceKey
-	{
-		uint64 Light = 0;
-		FIntVector Spot = FIntVector::ZeroValue;
-		uint32 Target = 0;
-		bool operator==(const FLightTraceKey& O) const { return Light == O.Light && Spot == O.Spot && Target == O.Target; }
-		friend uint32 GetTypeHash(const FLightTraceKey& K) { return HashCombine(HashCombine(GetTypeHash(K.Light), GetTypeHash(K.Spot)), K.Target); }
-	};
-	struct FLightTrace
-	{
-		double Time = 0.0;
-		bool bVisible = true;
-	};
-	mutable TMap<FIntPoint, FLightChunk> LightChunks;
-	mutable FIntPoint LightMemoChunk = FIntPoint(MAX_int32, MAX_int32);
-	mutable const FLightChunk* LightMemo = nullptr;
-	mutable TMap<FVector, FLightResult> LightResults;
-	mutable TMap<FLightTraceKey, FLightTrace> LightTraces;
-	mutable TSet<FIntPoint> LightClosedEdges;
-	mutable BRLight::Occlusion::FGeom LightGeom;
-	mutable bool bLightCacheValid = false;
-	mutable uint32 LightCacheSeed = 0;
-	mutable int32 LightCacheSerial = -1;
-	mutable int32 LightCacheLevel = MIN_int32;
-	mutable uint16 LightCacheRev = 0;
-	mutable FBRLightStats LightFrame;
-	mutable FBRLightStats LightLast;
-	mutable FBRLightStats LightTotal;
-	mutable uint64 LightStatsFrameNo = 0;
-	/** Grille vue par BRLight::Occlusion (BRWorldLight.cpp) */
+	// ---- v4.16 : lumiere de gameplay (BRWorldLight.cpp) : caches (BRWorldLightTypes.h) ; grille vue par BRLight::Occlusion ;
+	// calculs (fonctions de FLightImpl, classe imbriquee : acces aux membres prives)
+	mutable FBRLightCache LightCache;
 	struct FLightGridView;
-	/** Caches perimes (niveau, graine, chargement, portes de mission) : vides */
-	void ValidateLightCache() const;
-	/** Cellule calculee d'apres la grille (aretes, pilier, bloc plein, plafonnier) */
-	FBRLightCell MakeLightCell(int32 X, int32 Y) const;
-	const FBRLightCell& LightCellRef(int32 X, int32 Y) const;
-	/** Plafonniers en P (cache par point) */
-	FLightResult CeilingLightAt(const FVector& P) const;
-	/** Sources de mission en P ; Sample : detail (traces fraiches, composants touches) */
-	float MissionLightAt(const FVector& P, const AActor* Target, FBRLightSample* Sample) const;
-	/** Compteurs de l'image en cours (passe a la suivante a la premiere demande d'une nouvelle image) */
-	FBRLightStats& LightStatsNow() const;
+	struct FLightImpl;
 	/** v4.12 : eau locale des mecanismes */
 	struct FLocalWater
 	{

@@ -11,18 +11,22 @@
 //   B. scenes de controle de l'occlusion des plafonniers (BRLight::Occlusion, le code du jeu) : meme point avec et sans
 //      mur, passage (ouverture, jambage, linteau selon la hauteur, mur epais traverse en biais), arche des Poolrooms,
 //      bout de mur au sommet, pilier, cellule pleine, applique de l'hotel, plafond, sol perce d'une fosse, point colle a un
-//      mur, loi d'apport inchangee quand rien ne cache la lampe ;
+//      mur, loi d'apport inchangee quand rien ne cache la lampe ; relecture v4.16 : noeuds du reseau de 10 cm ou le jeu evalue
+//      les plafonniers, trappe d'une echelle de sortie (plafonnier non pose, plus compte) ;
 //   C. equilibrage : la grille des niveaux 0, 1, 2, 3, 4, 5, 8 et 37 rejouee hors moteur (regles d'ABRWorld : aretes,
 //      zones, bureaux, labyrinthe, hotel, grottes, piliers, plafonniers, salles de fosses et portes percees du Level 0 ;
 //      parametres lus dans Source/Backrooms/Private/BRLevels.cpp), sur des centaines de graines : part des positions dont la
 //      lumiere change, apparitions d'entites de l'ombre, dissipation d'un Smiler, Deathmoth, Bacteria, sante mentale ;
-//   D. empreintes de la grille de quelques graines, que -BRAutoTestV416Light recalcule dans Unreal (meme portage ?).
+//   D. empreintes de la grille de quelques graines, comparees a la table partagee avec -BRAutoTestV416Light (BRLightPrints.h,
+//      relecture v4.16 : un ecart echoue ici) ; aucun niveau n'a a la fois des cachettes et une echelle de sortie (le jeu
+//      predit les trappes sans les cachettes).
 // Le banc s'execute depuis Backrooms/ (il lit BRLevels.cpp).
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Light/test_light.cpp -o test_light
 //   clang-cl /nologo /std:c++17 /O2 /EHsc /utf-8 /W4 /WX -Wshadow -Wno-c++98-compat /I Source\Backrooms\Public Tools\Light\test_light.cpp
 //   (ou python Tools/run_benches.py --bench light : gcc, clang-cl et MSVC, sorties identiques exigees)
 #include "BRLightLogic.h"
+#include "BRLightPrints.h"
 
 #include <cctype>
 #include <cmath>
@@ -337,6 +341,56 @@ namespace
 			std::snprintf(Buf, sizeof(Buf), "rien ne cache : somme %.4f = loi d'avant %.4f (neon qui clignote x 0,6, lampe a 9 m ignoree)", Vis, Expected);
 			Line(Buf, Vis == All && Vis == Expected);
 		}
+		// 9. v4.16 (relecture) : reseau des noeuds ou le jeu evalue les plafonniers (BRLight::SnapIndex, pas de 10 cm)
+		{
+			Line("noeud du reseau : arrondi au plus proche, moitie vers le haut, aussi sous zero (-5 -> 0, -5,000001 -> -10, 4,999 -> 0, 5 -> 10)",
+				BRLight::SnapIndex(-5.0) == 0 && BRLight::SnapIndex(-5.000001) == -1 && BRLight::SnapIndex(4.999) == 0 && BRLight::SnapIndex(5.0) == 1
+					&& BRLight::SnapCoord(123.4) == 120.0 && BRLight::SnapCoord(-123.4) == -120.0 && BRLight::SnapCoord(-125.0) == -120.0);
+			// Au plus 8,7 cm du point (demi-diagonale d'un cube de 10 cm), moins que la marge EndSlack (12 cm) : de part et d'autre
+			// d'un mur, un point a 10 cm ou plus de ses faces voit la meme chose que son noeud
+			FTestGrid T;
+			T.AddLamp(1, 0, 1, G0.Height);
+			T.E[FCellKey(0, 0)] = EdgeWall;
+			const FVec Lamp = T.Lamps[FCellKey(1, 0)].Emitter;
+			bool bSame = true;
+			int Points = 0;
+			for (double X = 150.0; X <= 550.0; X += 1.0)
+			{
+				if (X > 310.0 && X < 390.0)
+				{
+					continue; // dans le mur (faces a 320 et 380) ou a moins de 10 cm d'une face
+				}
+				for (double Z = 30.0; Z <= 250.0; Z += 55.0)
+				{
+					const FVec P = V3(X, 177.3, Z);
+					const FVec Nd = V3(BRLight::SnapCoord(P.X), BRLight::SnapCoord(P.Y), BRLight::SnapCoord(P.Z));
+					bSame = bSame && Sees(T, G0, Lamp, P) == Sees(T, G0, Lamp, Nd);
+					++Points;
+				}
+			}
+			std::snprintf(Buf, sizeof(Buf), "noeud : %d points de part et d'autre d'un mur (10 cm ou plus des faces) voient comme leur noeud", Points);
+			Line(Buf, bSame && Points > 1000);
+		}
+		// 10. v4.16 (relecture) : trappe d'une echelle de sortie (ABRChunk::PlanExits, etape des lumieres) : echelle contre le mur
+		// fin Est de la cellule (0, 0) du Level 0 (pied a 30 cm du milieu de l'arete, regard vers -X)
+		{
+			const BRLight::FHatch H = BRLight::HatchRect(320.0, 175.0, -1.0, 0.0);
+			std::snprintf(Buf, sizeof(Buf), "trappe : conduit de %.0f a %.0f x %.0f a %.0f (62 cm de chaque cote, de 2 cm derriere le pied a 112 cm devant)", H.MinX, H.MaxX,
+				H.MinY, H.MaxY);
+			Line(Buf, H.MinX == 208.0 && H.MaxX == 322.0 && H.MinY == 113.0 && H.MaxY == 237.0);
+			Line("trappe : plafonnier au centre ou a 42 cm sur le cote : non pose ; a 42 cm vers le fond (x 133 < 208 - 70), cellule voisine : poses",
+				BRLight::UnderHatch(H, 175.0, 175.0) && BRLight::UnderHatch(H, 175.0, 133.0) && !BRLight::UnderHatch(H, 133.0, 175.0) && !BRLight::UnderHatch(H, 525.0, 175.0));
+			Line("trappe : bornes exclues comme le chunk (138 cm : pose)", !BRLight::UnderHatch(H, 138.0, 175.0) && BRLight::UnderHatch(H, 138.001, 175.0));
+			// La regle ne compte plus un plafonnier non pose : grille de controle avec ce plafonnier retire (comme ABRWorld::MakeCell)
+			FTestGrid T;
+			T.AddLamp(0, 0, 1, G0.Height);
+			float AllWith = 0.f, VisWith = 0.f, AllWithout = 0.f, VisWithout = 0.f;
+			CeilingSum(T, G0, 620.f, V3(175.0, 300.0, 92.0), AllWith, VisWith);
+			T.Lamps[FCellKey(0, 0)].bOn = !BRLight::UnderHatch(H, T.Lamps[FCellKey(0, 0)].AX, T.Lamps[FCellKey(0, 0)].AY);
+			CeilingSum(T, G0, 620.f, V3(175.0, 300.0, 92.0), AllWithout, VisWithout);
+			std::snprintf(Buf, sizeof(Buf), "trappe : sous l'echelle, %.3f avant, %.3f quand le plafonnier non pose ne compte plus", VisWith, VisWithout);
+			Line(Buf, VisWith > 0.5f && VisWithout == 0.f && AllWithout == 0.f);
+		}
 	}
 
 	// ------------------------------------------------------------------------------------------------ portage de la grille
@@ -395,6 +449,9 @@ namespace
 		int BoundsChunks = 0;
 		float PitRoomChance = 0.f;
 		int PitRoomsMin = 1, PitRoomCells = 5, PitDoorsPerSide = 1;
+		/** v4.16 (relecture) : cachettes ; une sortie du niveau est une echelle (EBRExitStyle::Ladder) */
+		float HidingSpotChance = 0.f;
+		bool bLadderExit = false;
 		int Assigned = 0;
 	};
 
@@ -473,7 +530,9 @@ namespace
 			F("BrokenChance", D.BrokenChance); F("FlickerChance", D.FlickerChance); F("LightRadius", D.LightRadius); F("DarkZoneChance", D.DarkZoneChance);
 			F("CubicleZoneChance", D.CubicleZoneChance); F("PoolChance", D.PoolChance); F("SanityDrain", D.SanityDrain); I("BoundsChunks", D.BoundsChunks); F("PitRoomChance", D.PitRoomChance);
 			I("PitRoomsMin", D.PitRoomsMin); I("PitRoomCells", D.PitRoomCells); I("PitDoorsPerSide", D.PitDoorsPerSide);
+			F("HidingSpotChance", D.HidingSpotChance);
 		}
+		D.bLadderExit = Body.find("EBRExitStyle::Ladder") != std::string::npos;
 		return true;
 	}
 
@@ -1319,26 +1378,25 @@ namespace
 
 	void SectionFingerprints(const std::string& Src)
 	{
-		std::printf("\n## D. Empreintes de la grille de lumiere (cellules -12..11), a comparer avec -BRAutoTestV416Light\n\n");
-		struct FPrint
+		// v4.16 (relecture) : la table attendue est partagee avec le jeu (BRLightPrints.h) : une derive du portage ou de la grille
+		// echoue ici, hors moteur
+		std::printf("\n## D. Empreintes de la grille de lumiere (cellules -%d..%d), table partagee avec -BRAutoTestV416Light (BRLightPrints.h)\n\n",
+			BRLightPrints::Half, BRLightPrints::Half - 1);
+		bool bParsed = true;
+		bool bSame = true;
+		for (int K = 0; K < BRLightPrints::Count; ++K)
 		{
-			int Level;
-			uint32_t UserSeed;
-		};
-		const FPrint Prints[] = { { 0, 9u }, { 0, 4242u }, { 1, 4242u }, { 2, 4242u }, { 4, 4242u }, { 5, 4242u }, { 8, 4242u }, { 37, 4242u } };
-		bool bOk = true;
-		for (const FPrint& Pr : Prints)
-		{
+			const BRLightPrints::FPrint& Pr = BRLightPrints::Table[K];
 			FLevelDef D;
 			if (!ParseLevel(Src, Pr.Level, D))
 			{
-				bOk = false;
+				bParsed = false;
 				continue;
 			}
 			const uint32_t LevelSeed = SeedFromUser(Pr.UserSeed, Pr.Level);
 			const FPortWorld P(D, LevelSeed);
 			FBenchGrid G;
-			BuildBenchGrid(P, 12, 0, G);
+			BuildBenchGrid(P, BRLightPrints::Half, 0, G);
 			std::string Rooms;
 			for (const auto& Room : P.BoundedPitRooms)
 			{
@@ -1346,11 +1404,36 @@ namespace
 				std::snprintf(RB, sizeof(RB), " [cellules %d,%d a %d,%d]", Room.second.MinX, Room.second.MinY, Room.second.MaxX - 1, Room.second.MaxY - 1);
 				Rooms += RB;
 			}
+			const uint32_t Got = Fingerprint(G, BRLightPrints::Half);
+			bSame = bSame && Got == Pr.Print;
 			// Comme le journal du jeu (ABRWorld::PrepareLevelLayout) : "<n> porte(s) percee(s) ... <n> salle(s) de fosses [cellules ...]"
-			std::printf("  Niveau %-2d -BRSeed=%-5u (graine du niveau %10u) : %08x (%zu porte(s) percee(s), %zu salle(s) de fosses%s)\n", Pr.Level, Pr.UserSeed, LevelSeed,
-				Fingerprint(G, 12), P.ForcedDoors.size(), P.BoundedPitRooms.size(), Rooms.c_str());
+			std::printf("  Niveau %-2d -BRSeed=%-5u (graine du niveau %10u) : %08x, table %08x%s (%zu porte(s) percee(s), %zu salle(s) de fosses%s)\n", Pr.Level,
+				Pr.UserSeed, LevelSeed, Got, Pr.Print, Got == Pr.Print ? "" : " DIFFERENTE", P.ForcedDoors.size(), P.BoundedPitRooms.size(), Rooms.c_str());
 		}
-		Line("empreintes calculees (8 graines)", bOk);
+		char Buf[160];
+		std::snprintf(Buf, sizeof(Buf), "empreintes du portage = table partagee avec le jeu (%d graines)", BRLightPrints::Count);
+		Line(Buf, bParsed && bSame);
+		// v4.16 (relecture) : le jeu predit les trappes des echelles des chunks sans leurs cachettes (FLightImpl::PredictHatch) :
+		// exact tant qu'aucun niveau n'a a la fois des cachettes et une echelle de sortie
+		static const int Levels[] = { 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 37 };
+		std::string Both;
+		int Read = 0;
+		for (const int Number : Levels)
+		{
+			FLevelDef D;
+			if (!ParseLevel(Src, Number, D))
+			{
+				continue;
+			}
+			++Read;
+			if (D.HidingSpotChance > 0.f && D.bLadderExit)
+			{
+				Both += " " + std::to_string(Number);
+			}
+		}
+		std::snprintf(Buf, sizeof(Buf), "aucun niveau n'a a la fois des cachettes et une echelle de sortie (%d niveaux lus%s%s)", Read, Both.empty() ? "" : " ; en defaut :",
+			Both.c_str());
+		Line(Buf, Read == static_cast<int>(sizeof(Levels) / sizeof(Levels[0])) && Both.empty());
 	}
 }
 
@@ -1363,6 +1446,12 @@ int main()
 	const float Gate = ReachByScan(LitGateRadius, LitGateIntensity, SmilerVanish);
 	std::printf("  balise : Smiler hors poursuite dissipe a moins de %.1f m ; aucune entite de l'ombre a moins de %.1f m\n", Vanish / 100.f, NoSpawn / 100.f);
 	std::printf("  sortie de secours eclairee / porche : Smiler dissipe a moins de %.1f m\n", Gate / 100.f);
+	// v4.16 (relecture) : jusqu'a la v4.15, la capsule de la cible arretait la trace (elle finit en son centre) : une source de
+	// mission ne comptait jamais pour un joueur ou une creature. Seule source du contenu actuel : le porche allume du Niveau 9
+	// (balises et sortie eclairee du Level 6 : anciennes sauvegardes seulement, BRMission::BuildLevel6Old)
+	const float GateDark = ReachByScan(LitGateRadius, LitGateIntensity, NeedsDark);
+	std::printf("  porche allume (Niveau 9) : joueur hors du noir (sante mentale, seuil %.2f) a moins de %.1f m (v4.15 : jamais, capsule du joueur)\n", NeedsDark,
+		GateDark / 100.f);
 	Line("formule de l'indice (R x (1 - racine(seuil / I))) = recherche avec la loi du jeu", std::fabs(Reach(BeaconRadius, BeaconIntensity, SmilerVanish) - Vanish) < 1.f);
 	const int Announced = static_cast<int>(std::floor(Reach(BeaconRadius, BeaconIntensity, SmilerVanish) / 100.f));
 	char Buf[160];

@@ -15,7 +15,10 @@
 //   - pendant une coupure, l'alimentation vue par les regles est le fondu regulier de la phase repliquee (PhasePower), pas
 //     le vacillement tire au hasard a chaque image ni le reglage FLASHS du joueur ;
 //   - la loi d'apport et les seuils ne changent pas (Contribution, SmilerVanish, NeedsDark ; plafonniers : distance a plat
-//     depuis l'ancre de la cellule, x 0,6 pour un neon qui clignote).
+//     depuis l'ancre de la cellule, x 0,6 pour un neon qui clignote) ; les plafonniers sont evalues au noeud du reseau de
+//     10 cm le plus proche (SnapCoord, relecture v4.16 : resultat repris du cache pour une creature qui bouge) ;
+//   - relecture v4.16 : un plafonnier de la grille que le chunk ne pose pas (sous la trappe d'une echelle de sortie :
+//     HatchRect, UnderHatch) ne compte pas.
 // Le banc Tools/Light/test_light.cpp verifie ces regles sur des scenes de controle et mesure l'equilibrage sur des
 // centaines de graines ; -BRAutoTestV416Light les rejoue dans Unreal (BRAutoTestV416Light.cpp).
 #pragma once
@@ -80,6 +83,58 @@ namespace BRLight
 	inline int Band(float Light)
 	{
 		return Light < NeedsDark ? 0 : (Light > SmilerVanish ? 2 : 1);
+	}
+
+	/** v4.16 (relecture) : reseau des points ou les regles evaluent les plafonniers (pas de SnapStep cm sur X, Y et Z).
+	 *  ABRWorld::LightLevelAt calcule au noeud le plus proche du point (au plus 8,7 cm de lui, moins que la marge
+	 *  Occlusion::FGeom::EndSlack de 12 cm) : la valeur ne depend que du noeud (memes resultats chez l'hote et chez les
+	 *  clients) et une creature qui bouge reprend le resultat en cache tant qu'elle reste pres du meme noeud. Arrondi au plus
+	 *  proche, moitie vers le haut (floor(V / pas + 0,5)) : le meme calcul sur toutes les machines */
+	constexpr double SnapStep = 10.0;
+	inline long long SnapIndex(double V)
+	{
+		return static_cast<long long>(std::floor(V / SnapStep + 0.5));
+	}
+	inline double SnapCoord(double V)
+	{
+		return static_cast<double>(SnapIndex(V)) * SnapStep;
+	}
+
+	/** v4.16 (relecture) : trappe d'une echelle de sortie au plafond (ABRChunk::PlanExits : une par chunk au plus) : rectangle
+	 *  XY du conduit d'apres le pied de l'echelle (PosX, PosY) et la direction ou elle regarde (FwdX, FwdY, vers la piece) :
+	 *  HatchSide cm de chaque cote, de HatchBack cm derriere le pied a HatchAhead cm devant. Le chunk ne pose pas un plafonnier
+	 *  dont l'ancre est a moins de HatchMargin cm de ce rectangle (etape des lumieres) : les regles ne le comptent pas non plus.
+	 *  Memes cotes et memes operations que le chunk (une operation par terme, dans le meme ordre) */
+	constexpr double HatchSide = 62.0;
+	constexpr double HatchBack = 2.0;
+	constexpr double HatchAhead = 112.0;
+	constexpr double HatchMargin = 70.0;
+	struct FHatch
+	{
+		double MinX = 0.0;
+		double MinY = 0.0;
+		double MaxX = 0.0;
+		double MaxY = 0.0;
+	};
+	inline FHatch HatchRect(double PosX, double PosY, double FwdX, double FwdY)
+	{
+		const double SideX = -FwdY;
+		const double SideY = FwdX;
+		const double C0X = PosX + SideX * HatchSide - FwdX * HatchBack;
+		const double C0Y = PosY + SideY * HatchSide - FwdY * HatchBack;
+		const double C1X = PosX - SideX * HatchSide + FwdX * HatchAhead;
+		const double C1Y = PosY - SideY * HatchSide + FwdY * HatchAhead;
+		FHatch H;
+		H.MinX = C0X < C1X ? C0X : C1X;
+		H.MinY = C0Y < C1Y ? C0Y : C1Y;
+		H.MaxX = C0X > C1X ? C0X : C1X;
+		H.MaxY = C0Y > C1Y ? C0Y : C1Y;
+		return H;
+	}
+	/** Le plafonnier d'ancre (X, Y) n'est pas pose : il est a moins de HatchMargin cm de la trappe (bornes exclues, comme le chunk) */
+	inline bool UnderHatch(const FHatch& H, double X, double Y)
+	{
+		return X > H.MinX - HatchMargin && X < H.MaxX + HatchMargin && Y > H.MinY - HatchMargin && Y < H.MaxY + HatchMargin;
 	}
 
 	/** v4.16 : occlusion des plafonniers par la grille partagee. Le monde (ou le banc) fournit la grille par un objet

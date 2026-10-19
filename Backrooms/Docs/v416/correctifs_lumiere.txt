@@ -1,6 +1,6 @@
 # Correctifs v4.16 (lumiere) : lumiere de gameplay alignee sur la lumiere visible (prompt v4.16, 3.1 et 3.2)
 # Branche v416-light depuis f99e8a6 (backrooms-v4.16) ; arbre de travail wt/light
-# Machine : Windows 11, Unreal 5.8.3, Visual Studio 2026 (MSVC 14.50) ; date : 2026-10-18
+# Machine : Windows 11, Unreal 5.8.3, Visual Studio 2026 (MSVC 14.50) ; dates : 2026-10-18 (lumiere), 2026-10-19 (relecture)
 # Le jeu n'a pas ete lance ici : les etapes en jeu sont preparees (commandes et lignes attendues en fin de fichier), non executees.
 # Sorties hors moteur : Docs/v416/banc_lumiere.txt ; journaux : Saved/TestRuns/v416/light (arbre principal, hors depot)
 
@@ -15,7 +15,12 @@
 # vacillement de l'image tire au hasard chez chaque joueur et qui depend de son reglage FLASHS (BRWorld.cpp, UpdateBlackout) :
 # pendant les 1,8 s de defaillance et les 1,4 s de retour, une meme zone pouvait etre "eclairee" chez l'un et "noire" chez
 # l'autre (la sante mentale est calculee chez chaque joueur).
-# Correction (BRWorldLight.cpp, BRLightLogic.h : BRLight::Occlusion, BRLight::PhasePower) :
+# Troisieme cause (relecture, FAIT, code) : un plafonnier de la grille que le chunk ne pose pas comptait quand meme. Une echelle
+# de sortie perce le plafond d'une trappe (ABRChunk::PlanExits) et le chunk ne pose pas un plafonnier dont l'ancre est a moins
+# de 70 cm de son conduit (BRChunk.cpp, etape des lumieres) ; la regle (avant comme apres la premiere passe v4.16) le
+# comptait : de la lumiere de jeu sans lampe au pied des echelles des Niveaux 2 (vers 37), 8 (vers 9) et 37 (vers 2), en
+# partie classique (le parcours lineaire ne tire pas ces sorties ; les sorties posees par la mission n'ont pas de trappe).
+# Correction (BRWorldLight.cpp, BRLightLogic.h : BRLight::Occlusion, BRLight::PhasePower, BRLight::HatchRect / UnderHatch) :
 #   - un plafonnier compte seulement si le segment de son point d'emission (cotes d'ABRChunk::AddLight : dalle a H-25, tube a
 #     H-70, dalle des Poolrooms a H-40, applique a 30 cm du mur et 2,1 m, lampadaire) au point vise ne traverse pas la geometrie
 #     batie d'apres la grille partagee : murs epais (60 cm au Level 0) centres sur les aretes, jambages, linteau (225 cm) ou arche
@@ -23,27 +28,51 @@
 #     (un point au-dessus ne voit rien), sol (un point sous le sol ne voit la lampe que par une fosse, un bassin ou une cuve de
 #     mecanisme ouverte), porte de mission fermee posee sur une ouverture de la grille (aile du Level 6, ABRWorld::
 #     GetClosedMissionEdges, d'apres l'etat replique de la mission) ;
+#   - relecture : un plafonnier sous la trappe d'une echelle de sortie ne compte pas. Le monde predit la trappe de chaque chunk
+#     avec les memes tirages que le chunk (ABRWorld::IsChunkExitDrawn, PickChunkWallFace ; pied, orientation et conduit : memes
+#     operations, BRLight::HatchRect) ; les cachettes du chunk n'entrent pas dans ce tirage (seul le Level 0 en a, et sa seule
+#     sortie est la porte de service : le banc le verifie, section D). La cellule garde son ancre (FBRLightCell::bUnderHatch) :
+#     l'empreinte decrit toujours la grille, comme le banc ;
 #   - aucune trace physique : graine et grille seules, memes resultats chez l'hote et chez les clients, quel que soit le profil
 #     graphique, Lumen, MegaLights, FLASHS ou la carte graphique ;
 #   - alimentation vue par les regles : BRLight::PhasePower, le fondu regulier de la phase repliquee (celui de FLASHS "aucun") ;
 #     le vacillement local ne decide plus rien ;
 #   - loi d'apport et seuils inchanges ((1 - d/R)^2 a plat depuis l'ancre, x 0,6 si le neon clignote ; apparition sous 0,12,
 #     dissipation au-dessus de 0,50, Deathmoth 0,55, Bacteria 0,15, sante mentale 0,12).
-# Cout borne : cellules voisines seulement (+-R comme avant), grille en cache par chunk (calculee une fois par chargement),
-# resultat des plafonniers en cache par point (une creature immobile ne recalcule rien), courant multiplie a chaque appel (pas
-# dans le cache) ; caches vides au changement de niveau, de graine, de chargement et quand une porte de mission posee sur la
-# grille change. Banc : 2 a 4 obstacles testes par plafonnier en moyenne, aucune trace.
+# Cout borne : cellules voisines seulement (+-R comme avant), grille en cache par chunk (calculee une fois par chargement, la
+# trappe avec elle). Relecture : les plafonniers sont evalues au noeud du reseau de 10 cm le plus proche du point (au plus
+# 8,7 cm de lui, moins que la marge de 12 cm du point vise) et mis en cache par noeud : avant, le cache etait cle sur la
+# position exacte et une creature ou un joueur qui bouge le manquait a chaque image (une entree de plus par image jusqu'a
+# l'effacement a 4096) ; une creature qui bouge reprend maintenant le resultat tant qu'elle reste pres du meme noeud, et la
+# valeur ne depend que du noeud. Le courant est multiplie a chaque appel (pas dans le cache). Caches vides au changement de
+# niveau, de graine, de chargement, de disposition de la mission (version, variante, parcours, cellules et sorties reservees :
+# les trappes en dependent) et quand une porte de mission posee sur la grille change. Banc : 2 a 4 obstacles testes par
+# plafonnier en moyenne, aucune trace.
 # Lisible : l'inventaire affiche sous la sante mentale l'etat de la lumiere qui compte ("dans le noir" / "penombre" /
 # "eclaire", BRLight::Band), sans couleur ; 3 textes, 21 traductions marquees a relire.
 
-## 2. Sources de mission coupees par les capsules (3.2)
+## 2. Sources de mission (3.2)
 
-# Constat (FAIT, code ; effet a confirmer en jeu par l'etape ci-dessous) : la trace d'une source de mission (canal WorldStatic,
-# seul l'emetteur ignore) s'arrete sur la capsule d'un personnage ou d'une creature (profil Pawn : bloque ce canal).
+# Constat (FAIT, code ; effet a confirmer en jeu par les etapes ci-dessous) : la trace d'une source de mission (canal
+# WorldStatic, seul l'emetteur ignore) s'arrete sur une capsule de personnage ou de creature (profil Pawn : il bloque ce canal ;
+# ni ABRCharacter, ni ABREntity, ni la configuration ne changent ce profil).
+# Relecture : la cause est plus large que "un coequipier entre la balise et le Smiler". La trace finissait au centre de la
+# cible (GetActorLocation) : la capsule de la cible elle-meme l'arretait, toujours. Jusqu'a la v4.15, une source de mission ne
+# comptait donc jamais pour un joueur ou une creature : ni pour dissiper un Smiler (ThinkSmiler, StartVanish), ni pour le
+# Deathmoth, la Bacteria ou la sante mentale ; seulement pour les apparitions (point sans cible, FindSpawnSpot).
 # Correction : FCollisionResponseParams qui ignore ECC_Pawn (comme FindRecentNoise), cible ignoree (LightLevelAt(P, Target) :
 # joueur, Smiler, Deathmoth, Bacteria) ; murs des chunks et battants fermes (boite Blocker des mecanismes, WorldDynamic qui
 # bloque tout) arretent toujours la lumiere. Traces en cache 0,2 s par 10 cm (cle : source, point, cible), videes quand une
-# source bouge, s'eteint ou que l'etat de la mission change.
+# source bouge, s'eteint ou que l'etat de la mission change. Relecture : cette revision est verifiee a chaque appel de
+# LightLevelAt ; avant, seulement dans un niveau a plafonniers et hors coupure, alors que le Level 6 (sans plafonniers) est le
+# niveau des portes de mission : une porte qui bougeait y gardait sa visibilite 0,2 s de plus.
+# Consequence sur le jeu (relecture, FAIT, code) : dans le contenu actuel, la seule source de mission est le porche allume du
+# Niveau 9 (BRM::R_HouseMarker, 7 m, intensite 1,6). Les balises et la sortie eclairee du Level 6 n'existent plus depuis la
+# v4.13 (le Level 6 se joue au scanner ; BRMission::BuildLevel6Old ne sert qu'a convertir les anciennes sauvegardes, et
+# -BRAutoTestV412 exige 0 source de gameplay au Level 6) : aucun effet sur l'equilibrage du Level 6. Au Niveau 9, un joueur a
+# moins de 5,1 m d'un porche allume n'est plus "dans le noir" pour la sante mentale (banc, en tete : v4.15 jamais) ; ses
+# entites (Skin-Stealer, Hound, Faceling) ne lisent pas la lumiere. L'indice du carnet "a moins de 4 m" (balise) devient vrai
+# pour une ancienne partie convertie qui en aurait encore.
 
 ## 3. Equilibrage mesure hors moteur (Docs/v416/banc_lumiere.txt, section C ; courant plein, plafonniers seuls)
 # niveau  positions changees  apparition possible  Smiler dissipe   noir (sante)    sante sans lampe (100 points)
@@ -59,45 +88,75 @@
 # places ou une entite de l'ombre peut apparaitre, sante mentale qui baisse plus vite sans lampe). "Apparition possible" est
 # une part de cellules, pas un nombre d'apparitions (minuteries et budget de menace inchanges). Seuils gardes ; a juger en
 # jeu. Si c'est trop dur : baisser NeedsDark ou compter une part des plafonniers caches (rebond) - decision du proprietaire.
+# Relecture : le banc mesure aux points exacts (le jeu au noeud de 10 cm le plus proche : meme statistique a 8,7 cm pres) et
+# sans les trappes (une cellule au plus par chunk a echelle, en partie classique : negligeable dans ces parts).
 
 ## 4. Tests
-# Hors moteur : Tools/Light/test_light.cpp (39 verifications, gcc/clang-cl/MSVC identiques) : A alimentation des coupures,
+# Hors moteur : Tools/Light/test_light.cpp (46 verifications, gcc/clang-cl/MSVC identiques) : A alimentation des coupures,
 # B scenes de controle (meme point avec et sans mur, passage : axe, jambage, linteau selon la hauteur, mur epais en biais ;
-# arche ; sommet ; pilier ; cellule pleine ; applique ; plafond ; fosse ; loi d'avant retrouvee sans obstacle), C equilibrage
-# (grille du jeu rejouee hors moteur sur 300 graines du Level 0 et 60 graines de 7 autres niveaux), D empreintes de la grille.
+# arche ; sommet ; pilier ; cellule pleine ; applique ; plafond ; fosse ; loi d'avant retrouvee sans obstacle ; relecture :
+# noeuds du reseau de 10 cm, trappe d'echelle : rectangle du conduit, plafonniers poses ou non, bornes, plus compte), C
+# equilibrage (grille du jeu rejouee hors moteur sur 300 graines du Level 0 et 60 graines de 7 autres niveaux), D empreintes de
+# la grille comparees a la table partagee avec le jeu (Source/Backrooms/Public/BRLightPrints.h : un ecart du portage ou de la
+# grille echoue hors moteur), aucun niveau avec des cachettes et une echelle de sortie ; en tete, portee du porche du Niveau 9.
 # En jeu (prepare) : -BRAutoTest -BRAutoTestV416Light -BRAutoTestStrict (BRAutoTestV416Light.cpp).
 #
-# Commande (depuis l'arbre fusionne, ou avec le .uproject de wt/light) :
+# Commande (depuis l'arbre fusionne C:\Users\Fristick\Desktop\Backrooms\Backrooms, ou avec le .uproject de wt/light) :
 #   & 'C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' '"<Backrooms>\Backrooms.uproject"' -game -windowed
 #     -ResX=1536 -ResY=960 -unattended -nosplash -log -BRAutoTest -BRAutoTestV416Light -BRAutoTestStrict '-abslog="<dossier>\game.log"'
 #   ou run_autotests.ps1 avec l'entree 'v416light' = @{ a = @('-BRAutoTest', '-BRAutoTestV416Light', '-BRAutoTestStrict'); t = 30 }
 # Lignes attendues (Rapport.txt, section "v4.16 : lumiere de gameplay") :
-#   Niveau N, -BRSeed=S (graine du niveau G) : empreinte de la grille de lumiere X, banc X (memes valeurs, 8 graines ; banc :
-#     0/9 33387e10, 0/4242 b142f19c, 1 d0705669, 2 94f0c4d7, 4 8d3f54e3, 5 b752f85f, 8 9c633728, 37 5b6e31f0)
-#   Niveau N : K plafonnier(s) de jeu ..., K a la place d'une lumiere construite (hors trappes d'echelle)
-#   Niveau N : regle de la grille et trace physique d'accord sur A / P paires (au moins 80 %)
+#   Niveau N, -BRSeed=S (graine du niveau G) : empreinte de la grille de lumiere X, banc X (memes valeurs, 8 graines ; table
+#     BRLightPrints.h : 0/9 33387e10, 0/4242 b142f19c, 1 d0705669, 2 94f0c4d7, 4 8d3f54e3, 5 b752f85f, 8 9c633728, 37 5b6e31f0)
+#   Niveau 9, -BRSeed=4242 : empreinte relevee, puis "NON VERIFIE : ... empreinte non comparee au banc" (rues hors du banc)
+#   Niveau N : K plafonnier(s) de jeu ..., K a la place d'une lumiere construite ; sous une trappe d'echelle : H, dont 0 avec
+#     une lumiere construite
+#   Niveau N : regle de la grille et trace physique d'accord sur A / P paires (au moins 80 %) ; la grille seule cache : g
+#     (au plus 3 %)[, plus a par les ecoincons d'arche sans collision (attendu), Level 37] ; la physique seule cache : p
+#   Niveau 8 / 37, partie classique : t trappe(s) d'echelle predite(s) ... ; chunk(s) a trappe construits : echelle a la trappe
+#     predite t / t ; plafonniers poses K (lumiere construite K) ; sous la trappe H (lumiere construite 0, attendu 0 ...)
 #   mur (...) : ... apport du plafonnier derriere le mur 0.xxx : ne compte plus ; trace physique : <composant du mur>
 #   sans mur (...) : apport 0.xxx compte ; trace physique : rien
+#   Smiler du coin sombre : coin ... : lumiere de jeu < 0.50, regle d'avant > 0.50 ... ; le Smiler reste dans le coin sombre ;
+#     temoin dans la lumiere : se dissipe (sinon NON VERIFIE avec la raison)
+#   arete (...) fermee comme une porte de mission (crochet de test) : ouvert : compte ; ferme : ne compte plus ; rouvert :
+#     compte (meme valeur) ; caches vides a la fermeture : oui ; puis "NON VERIFIE : plafonnier derriere une porte de mission
+#     reelle ..." (aucune porte de mission sur la grille d'un niveau a plafonniers)
 #   passage (...) : axe, 40 cm du mur, joueur : eclaire ... ; derriere le jambage, joueur : cache
-#   mur : lumiere de jeu x sous le seuil (regle d'avant y : il s'y dissipait) : le Smiler reste dans le coin sombre
 #   coupure (defaillance, flashs normaux) / (retour, flashs attenues) : ... a chaque image : oui ; alimentation toujours
 #     decroissante / croissante ; coupure : noir : ... plus forte lumiere de jeu aux N points : 0.000
 #   courant revenu, profils Performance / Qualite / RTX fluide / Cinematique, reglages coupes, Level 0 recharge :
 #     0 / N point(s) differents
-#   source de mission : rien entre ... apport a (loi a) ; capsule de coequipier / creature entre les deux : apport comme sans
-#     obstacle ; filtre d'avant la v4.16 : 0.000 (defaut reproduit : la capsule coupait la lumiere) ; obstacles touches :
-#     aucun / avant : <capsule> ; porte physique fermee : apport 0.000, obstacle V416DoorBlocker ; porte ouverte : comme sans
-#     obstacle ; source eteinte : 0.000 ; derriere un mur : 0.000, obstacle du chunk
-#   cout (immobiles / libres) : ... trace(s) par creature au plus 2 par image ; temps d'un appel : moins de 200 us
+#   source de mission : rien entre ... apport a (loi a) ; "filtre d'avant la v4.16 : 0.000, trace arretee par la capsule du
+#     joueur lui-meme" (defaut d'avant reproduit) ; capsule de coequipier / creature entre les deux : capsules comprises, sans la
+#     cible : < loi, obstacles touches ... / capsules comprises : <coequipier ou creature> ; apport comme sans obstacle (defaut
+#     reproduit ...) ; porte physique fermee : apport 0.000, obstacle V416DoorBlocker ; porte ouverte : comme sans obstacle ;
+#     source eteinte : 0.000 ; derriere un mur : 0.000, obstacle du chunk
+#   cout (immobiles / libres) : ... (x % des plafonniers repris) ... trace(s) par creature au plus 2 par image ; temps d'un
+#     appel : moins de 200 us
 # Banc visuel (-BRAutoTestVisual) : vis_0_<profil>_mur_smiler : lumiere de jeu sous 0,50 (0,72 - 0,35 au plus) ; Smiler present.
 # Reseau (run_nettest.ps1) : chaque machine ecrit "[Lumiere] Niveau N, graine du niveau G (hote|client) : empreinte de la grille
 # de lumiere X" a chaque niveau construit : memes valeurs chez l'hote et chez le client.
 
 ## 5. Non verifie, limites
-# - Tout ce qui est en jeu (capsules, composants touches, accord grille/physique, cout reel, captures) : prepare, non lance.
+# - Tout ce qui est en jeu (capsules, composants touches, accord grille/physique, trappes, cout reel, captures) : prepare, non
+#   lance.
 # - Rebond de la lumiere (Lumen) non compte : la regle suit la lumiere directe (celle du profil Performance aussi).
 # - Trottoirs du Level 37, objets poses (rochers, mobilier) et battants des mecanismes hors de la grille (portes, volets, pont
 #   leve des missions des Niveaux 2 a 11) ne cachent pas les plafonniers (HYPOTHESE a juger en jeu : la plupart des portes de
 #   mission sont posees contre un mur, qui cache deja la lampe) ; les sources de mission, elles, voient tout le decor physique.
-# - Level 6 sans plafonniers : la porte de l'aile fermee comme mur n'y est pas exercee par la lumiere des plafonniers.
+# - Level 6 sans plafonniers : la porte de l'aile fermee comme mur n'y est pas exercee par la lumiere des plafonniers ; le
+#   meme ensemble d'aretes et la meme invalidation le sont par le crochet de test (ABRWorld::SetLightTestClosedEdge).
+# - Trappes : un client qui recoit une variante de mission apres avoir construit ses chunks (OnRep_Mission relance
+#   SetupMission) garde les sorties de ses chunks deja construits, alors que la regle suit la nouvelle disposition (ecart
+#   d'avant la v4.16 pour les sorties elles-memes, non corrige ici).
+# - Maison du Niveau 9 (boite 8 x 7 x 4,5 m) et forme de l'arche : seulement par l'accord grille / physique en jeu.
 # - Client : le fondu de la coupure demarre a la reception de la phase (latence) ; les creatures sont decidees par l'hote.
+
+## 6. Fusion (relecture)
+# BRWorld.h : un include (BRWorldLightTypes.h), les declarations de l'interface et un seul membre prive (FBRLightCache
+# LightCache, plus les noms FLightGridView et FLightImpl) ; types et caches dans BRWorldLightTypes.h, table des empreintes dans
+# BRLightPrints.h. Les 22 Game.po changent surtout par leurs SourceLocation (numeros de ligne) et les .locres sont binaires :
+# a la fusion, ne pas les fusionner a la main : prendre l'un des cotes, relancer python Tools/Localization/loc_extract.py,
+# ressaisir les 3 cles x 21 traductions (HUD.LightDark, HUD.LightDim, HUD.LightLit) si elles manquent, puis
+# loc_build.py, loc_extract.py --check et loc_build.py --check.

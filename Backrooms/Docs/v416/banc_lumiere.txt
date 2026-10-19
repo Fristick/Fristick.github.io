@@ -2,12 +2,13 @@
 # Commande (depuis Backrooms/) : python Tools/run_benches.py --bench light (gcc, clang-cl et MSVC, options strictes, sorties identiques exigees)
 #   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Light/test_light.cpp -o test_light
 # Compilateurs : g++ (MinGW-W64 x86_64-ucrt-posix-seh) 16.2.0, clang-cl 22.1.3, MSVC 14.50 (VS 2026) : trois sorties identiques
-# Date : 2026-10-18 ; Windows 11, arbre de travail wt/light
+# Date : 2026-10-19 (relecture v4.16) ; Windows 11, arbre de travail wt/light
 
 # Banc de la lumiere de gameplay v4.12 / v4.16 (BRLightLogic.h)
 
   balise : Smiler hors poursuite dissipe a moins de 4.5 m ; aucune entite de l'ombre a moins de 6.8 m
   sortie de secours eclairee / porche : Smiler dissipe a moins de 3.1 m
+  porche allume (Niveau 9) : joueur hors du noir (sante mentale, seuil 0.12) a moins de 5.1 m (v4.15 : jamais, capsule du joueur)
   formule de l'indice (R x (1 - racine(seuil / I))) = recherche avec la loi du jeu                     OK
   indice du carnet : "a moins de 4 m" ; a 4 m l'effet a toujours lieu (apport 0.62 > 0.50)             OK
   au-dela de la portee visuelle (9 m), aucun apport                                                    OK
@@ -49,6 +50,12 @@
   point au-dessus du plafond : cache                                                                   OK
   fosse : point sous le sol vu par l'ouverture : eclaire ; meme point vu a travers la dalle : cache    OK
   rien ne cache : somme 0.9167 = loi d'avant 0.9167 (neon qui clignote x 0,6, lampe a 9 m ignoree)     OK
+  noeud du reseau : arrondi au plus proche, moitie vers le haut, aussi sous zero (-5 -> 0, -5,000001 -> -10, 4,999 -> 0, 5 -> 10) OK
+  noeud : 1610 points de part et d'autre d'un mur (10 cm ou plus des faces) voient comme leur noeud    OK
+  trappe : conduit de 208 a 322 x 113 a 237 (62 cm de chaque cote, de 2 cm derriere le pied a 112 cm devant) OK
+  trappe : plafonnier au centre ou a 42 cm sur le cote : non pose ; a 42 cm vers le fond (x 133 < 208 - 70), cellule voisine : poses OK
+  trappe : bornes exclues comme le chunk (138 cm : pose)                                               OK
+  trappe : sous l'echelle, 0.637 avant, 0.000 quand le plafonnier non pose ne compte plus              OK
   Source/Backrooms/Private/BRLevels.cpp lu (le banc s'execute depuis Backrooms/)                       OK
 
 ## C. Equilibrage : plafonniers d'avant (murs ignores) et de la v4.16, sur la grille du jeu rejouee hors moteur
@@ -91,18 +98,19 @@
   positions ou la sante mentale baisse plus vite ; "Deathmoth" = positions eclairees ou il n'est pas attire par la lampe
   (sa propre hauteur) ; "Bacteria" = positions ou elle repere deux fois moins vite un joueur sans lampe.
 
-## D. Empreintes de la grille de lumiere (cellules -12..11), a comparer avec -BRAutoTestV416Light
+## D. Empreintes de la grille de lumiere (cellules -12..11), table partagee avec -BRAutoTestV416Light (BRLightPrints.h)
 
-  Niveau 0  -BRSeed=9     (graine du niveau 1896875771) : 33387e10 (84 porte(s) percee(s), 1 salle(s) de fosses [cellules -14,-7 a -10,-3])
-  Niveau 0  -BRSeed=4242  (graine du niveau 2271519799) : b142f19c (73 porte(s) percee(s), 1 salle(s) de fosses [cellules -15,2 a -11,6])
-  Niveau 1  -BRSeed=4242  (graine du niveau  814216900) : d0705669 (0 porte(s) percee(s), 0 salle(s) de fosses)
-  Niveau 2  -BRSeed=4242  (graine du niveau  755154332) : 94f0c4d7 (0 porte(s) percee(s), 0 salle(s) de fosses)
-  Niveau 4  -BRSeed=4242  (graine du niveau 2325780338) : 8d3f54e3 (0 porte(s) percee(s), 0 salle(s) de fosses)
-  Niveau 5  -BRSeed=4242  (graine du niveau 2376421866) : b752f85f (0 porte(s) percee(s), 0 salle(s) de fosses)
-  Niveau 8  -BRSeed=4242  (graine du niveau 3155158614) : 9c633728 (0 porte(s) percee(s), 0 salle(s) de fosses)
-  Niveau 37 -BRSeed=4242  (graine du niveau 2772684265) : 5b6e31f0 (0 porte(s) percee(s), 0 salle(s) de fosses)
-  empreintes calculees (8 graines)                                                                     OK
+  Niveau 0  -BRSeed=9     (graine du niveau 1896875771) : 33387e10, table 33387e10 (84 porte(s) percee(s), 1 salle(s) de fosses [cellules -14,-7 a -10,-3])
+  Niveau 0  -BRSeed=4242  (graine du niveau 2271519799) : b142f19c, table b142f19c (73 porte(s) percee(s), 1 salle(s) de fosses [cellules -15,2 a -11,6])
+  Niveau 1  -BRSeed=4242  (graine du niveau  814216900) : d0705669, table d0705669 (0 porte(s) percee(s), 0 salle(s) de fosses)
+  Niveau 2  -BRSeed=4242  (graine du niveau  755154332) : 94f0c4d7, table 94f0c4d7 (0 porte(s) percee(s), 0 salle(s) de fosses)
+  Niveau 4  -BRSeed=4242  (graine du niveau 2325780338) : 8d3f54e3, table 8d3f54e3 (0 porte(s) percee(s), 0 salle(s) de fosses)
+  Niveau 5  -BRSeed=4242  (graine du niveau 2376421866) : b752f85f, table b752f85f (0 porte(s) percee(s), 0 salle(s) de fosses)
+  Niveau 8  -BRSeed=4242  (graine du niveau 3155158614) : 9c633728, table 9c633728 (0 porte(s) percee(s), 0 salle(s) de fosses)
+  Niveau 37 -BRSeed=4242  (graine du niveau 2772684265) : 5b6e31f0, table 5b6e31f0 (0 porte(s) percee(s), 0 salle(s) de fosses)
+  empreintes du portage = table partagee avec le jeu (8 graines)                                       OK
+  aucun niveau n'a a la fois des cachettes et une echelle de sortie (12 niveaux lus)                   OK
 
-Verifications : 39, echecs : 0
+Verifications : 46, echecs : 0
 RESULTAT : OK
 # Code de sortie : 0
