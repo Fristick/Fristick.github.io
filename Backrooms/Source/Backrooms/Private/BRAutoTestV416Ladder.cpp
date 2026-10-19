@@ -33,6 +33,12 @@
 // a elle (avant : seulement si l'echelle retenue pour les caisses etait celle-la, sans ligne sinon) ; une echelle disparue en
 // cours de cas est notee (avant : etape finie sans ligne) ; la prise depuis le canal (AddV416LadderPlan, AddV416LadderGoTo,
 // AddV416LadderCanalGrab) sert aussi a -BRAutoTestV415Fix, ou l'echelle du chunk (-1, -1) n'a pas de place dans le canal.
+// v4.16 (echelles, correctifs, v416m1) : la demi-hauteur du joueur est celle de sa capsule (CapsuleHalf416) : pendant le vol du
+// developpeur (collisions de l'acteur coupees), GetSimpleCollisionHalfHeight rend 0. Avant : chaque place du canal etait jugee
+// avec une boule de 36 cm 5 cm au-dessus du sol ("place libre NON" pour les 6 echelles essayees, 9 NON VERIFIE), et le cas du
+// Level 6 visait des pieds trop hauts, atteignait le sommet de la montee et partait au Niveau 8 ("echelle disparue pendant la
+// montee"). Un depart pendant le cas des Niveaux 8 et 6 est maintenant juge comme tel (une demande au sommet, arrivee), la suite
+// du cas NON VERIFIEE ; marge sous le sommet de 25 cm (TopMargin, avant 60 cm : cas du Level 6 impossible, sommet a 196 cm).
 #include "BRAutoTest.h"
 #include "BRAutoTestNet.h"
 #include "BRAutoTestWalk.h"
@@ -91,6 +97,11 @@ namespace BRTestV416Ladder
 	/** Hausse admise sans reprise verticale (cm) : la montee d'une image avant le contact (banc : NoLift), bien moins qu'une
 	 *  marche (35 cm) ; la regle des correctifs 5 levait de 37 cm (sol plat) a 105 cm (canal sous un trottoir) */
 	constexpr float NoLift = 10.f;
+	/** v4.16 (echelles, correctifs) : marge sous le sommet de la montee des cas qui ne doivent pas partir (cm, centre de la
+	 *  capsule) : la demande de depart part a 1 cm du sommet (BRGather::FClimbWait) ; 25 cm couvrent la montee d'une image
+	 *  jusqu'a 6 img/s (1,4 m/s). Avant : 60 cm, et l'echelle de l'alcove de l'aile du Level 6 (plafond a 290 cm, sommet de la
+	 *  montee a 196 cm du pied, sans conduit) n'aurait laisse que 48 cm de montee : cas NON VERIFIE (moins de 80 cm) */
+	constexpr float TopMargin = 25.f;
 	/** Barrieres du test reseau (le client signale l'etape atteinte) ; empreinte de l'echelle du client : MarkHash + empreinte % 100000 */
 	constexpr int32 MarkStart = 41610;
 	constexpr int32 MarkNoLevel = 41611;
@@ -113,9 +124,22 @@ namespace BRTestV416Ladder
 		return E->GetClimbAnchor() + FVector(0.f, 0.f, 60.f);
 	}
 
+	/** v4.16 (echelles, correctifs) : demi-hauteur de la capsule du joueur (composant, a l'echelle), quel que soit l'etat de ses
+	 *  collisions. AActor::GetSimpleCollisionCylinder (donc GetSimpleCollisionHalfHeight) ne lit la capsule que si les collisions
+	 *  de l'acteur sont actives (IsRootComponentCollisionRegistered) ; sinon le cylindre des composants qui ont des collisions :
+	 *  aucun, 0 cm, pendant le vol du developpeur (ABRCharacter::SetDevFly : SetActorEnableCollision(false)). Avant : FreeStand,
+	 *  appele pendant le vol (AddV416LadderGoTo), posait une capsule (36, -4 cm), une boule de 36 cm centree 5 cm au-dessus du sol,
+	 *  toujours dans le sol : "place libre NON" pour chaque echelle du Niveau 37 (v416m1) ; le cas du Level 6 visait des pieds a
+	 *  136 cm du pied (demi-hauteur 0) au lieu de 48, atteignait le sommet de la montee et partait au Niveau 8 */
+	float CapsuleHalf416(const ABRCharacter* C)
+	{
+		const UCapsuleComponent* Cap = C ? C->GetCapsuleComponent() : nullptr;
+		return Cap ? Cap->GetScaledCapsuleHalfHeight() : 88.f;
+	}
+
 	float FeetZOf(const ABRCharacter* C)
 	{
-		return static_cast<float>(C->GetActorLocation().Z) - C->GetSimpleCollisionHalfHeight();
+		return static_cast<float>(C->GetActorLocation().Z) - CapsuleHalf416(C);
 	}
 
 	void LookAt416(ABRCharacter* C, const FVector& Target)
@@ -259,10 +283,11 @@ namespace BRTestV416Ladder
 	}
 
 	/** Place debout (centre de la capsule, 5 cm au-dessus du sol) en (XY.X, XY.Y) : sol (trace) a FloorZ (10 cm pres), capsule
-	 *  libre (rayon 36, pions ignores) */
+	 *  libre (rayon 36, pions ignores). v4.16 (echelles, correctifs) : demi-hauteur de la capsule elle-meme (CapsuleHalf416), aussi
+	 *  pendant le vol du developpeur */
 	bool FreeStand(const ABRWorld* W, const ABRCharacter* C, const FVector& XY, float FloorZ, FVector& Out)
 	{
-		const float Half = C->GetSimpleCollisionHalfHeight();
+		const float Half = CapsuleHalf416(C);
 		float Floor = 0.f;
 		if (!BRTestV412::FloorUnder(W, FVector(XY.X, XY.Y, 0.f), FloorZ + 100.f, C, Floor) || FMath::Abs(Floor - FloorZ) > 10.f)
 		{
@@ -383,7 +408,7 @@ namespace BRTestV416Ladder
 		{
 			StartFeet = FeetZOf(C);
 			MaxFeet = StartFeet;
-			MaxHead = static_cast<float>(C->GetActorLocation().Z) + C->GetSimpleCollisionHalfHeight();
+			MaxHead = static_cast<float>(C->GetActorLocation().Z) + CapsuleHalf416(C);
 			Samples = 0;
 			Inside = 0;
 			InsideFirst.Reset();
@@ -393,7 +418,7 @@ namespace BRTestV416Ladder
 		{
 			++Samples;
 			MaxFeet = FMath::Max(MaxFeet, FeetZOf(C));
-			MaxHead = FMath::Max(MaxHead, static_cast<float>(C->GetActorLocation().Z) + C->GetSimpleCollisionHalfHeight());
+			MaxHead = FMath::Max(MaxHead, static_cast<float>(C->GetActorLocation().Z) + CapsuleHalf416(C));
 			const FString What = InsideWhat(C);
 			if (!What.IsEmpty())
 			{
@@ -446,6 +471,8 @@ namespace BRTestV416Ladder
 		float GroundFeet = 0.f;
 		int32 Cleared = 0;
 		bool bGodWas = false;
+		/** v4.16 (echelles, correctifs) : phase du cas des Niveaux 8 et 6 quand le niveau a ete quitte (0 : jamais) */
+		int32 LeftPhase = 0;
 		FTrack Track;
 		TArray<TWeakObjectPtr<AActor>> Blocks;
 		/** Reseau */
@@ -677,7 +704,7 @@ namespace BRTestV416Ladder
 	{
 		const FVector Gather = E->GetActorLocation() + LadderFrontOf(E) * 100.f;
 		const FVector Aim = ABRWorld::DepartureViewPoint(E);
-		const float Half = C->GetSimpleCollisionHalfHeight();
+		const float Half = CapsuleHalf416(C);
 		const float FloorZ = static_cast<float>(E->GetActorLocation().Z);
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestV416FarStand), false, C);
 		Q.AddIgnoredActor(E);
@@ -889,7 +916,7 @@ void ABRAutoTest::AddV416LadderGoTo(bool bFlatList, const FString& Title)
 			const FVector Anchor = E->GetClimbAnchor();
 			Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) : echelle %s : %s en (%.0f, %.0f, %.0f), chunk (%d, %d), sommet de la montee a %.0f cm du pied ; point vise %s, "
 				"capsule du grimpeur %s ; place libre en (%.0f, %.0f, %.0f), %.0f cm devant l'accroche, %.0f cm de cote (accroche (%.0f, %.0f, %.0f))%s"), W->GetSeed(), Kind, *E->GetName(),
-				L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.FootZ, L16.Cur.Chunk.X, L16.Cur.Chunk.Y, L16.TopZ - L16.FootZ, *View, *Climb, Stand.X, Stand.Y, Stand.Z - C->GetSimpleCollisionHalfHeight() - 5.f,
+				L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.FootZ, L16.Cur.Chunk.X, L16.Cur.Chunk.Y, L16.TopZ - L16.FootZ, *View, *Climb, Stand.X, Stand.Y, Stand.Z - CapsuleHalf416(C) - 5.f,
 				L16.StandAt.X, L16.StandAt.Y, Anchor.X, Anchor.Y, Anchor.Z, L16.Tried.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" ; ecartees avant : %s"), *L16.Tried)));
 			// v4.16 (echelles, relecture) : la place de la regle du jeu au chunk (2, -1) (graine du niveau 2303284074) n'est plus jugee
 			// ici (avant : seulement si l'echelle retenue etait celle-la, sinon aucune ligne) mais par une etape a elle, apres les caisses
@@ -1037,9 +1064,11 @@ void ABRAutoTest::AddV416LadderCanalGrab()
 		}
 		case 4:
 		{
-			// Montee de 2 m au-dessus du pied
+			// Montee de 2 m au-dessus du pied. v4.16 (echelles, correctifs) : TopMargin sous le sommet de la montee au plus (une
+			// seconde echelle d'un chunk n'a pas de conduit : sommet de la montee a 288 cm du pied d'un trottoir, des pieds a 200 cm
+			// l'atteignaient, demande de depart et depart au Niveau 2 au milieu du cas)
 			L16.Track.Sample(C);
-			if (C->IsClimbing() && FeetZOf(C) < L16.FootZ + 200.f && Now - L16.Clock < 5.0)
+			if (C->IsClimbing() && FeetZOf(C) < L16.FootZ + FMath::Min(200.f, L16.TopZ - CapsuleHalf416(C) - TopMargin - L16.FootZ) && Now - L16.Clock < 5.0)
 			{
 				C->InputMove(FVector2D(0.f, 1.f));
 				return false;
@@ -1321,7 +1350,7 @@ void ABRAutoTest::AddV416LadderSteps()
 			const FVector Front = LadderFrontOf(E);
 			const FVector Anchor = E->GetClimbAnchor();
 			const float Yaw = static_cast<float>(Front.Rotation().Yaw);
-			const float Half = C->GetSimpleCollisionHalfHeight();
+			const float Half = CapsuleHalf416(C);
 			// Place du joueur le long de l'avant de l'echelle (devant l'accroche) et hauteur de son sol
 			const double Ahead = FVector::DotProduct(L16.Stand - Anchor, Front);
 			const float FloorZ = static_cast<float>(L16.Stand.Z) - Half - 5.f;
@@ -1599,7 +1628,7 @@ void ABRAutoTest::AddV416LadderSteps()
 			if (Now - L16.Clock > 20.0)
 			{
 				Note(FString::Printf(TEXT("montee complete depuis le canal : pas de depart apres 20 s (pieds au plus a %.0f cm du pied, sommet de la montee a %.0f cm ; attente %d, demandes %d ; "
-					"dernier obstacle : %s)"), L16.Track.MaxFeet - L16.FootZ, L16.TopZ - L16.FootZ - C->GetSimpleCollisionHalfHeight(), static_cast<int32>(C->GetClimbWaitState()),
+					"dernier obstacle : %s)"), L16.Track.MaxFeet - L16.FootZ, L16.TopZ - L16.FootZ - CapsuleHalf416(C), static_cast<int32>(C->GetClimbWaitState()),
 					C->ClimbRequestsSent - L16.RequestsMark, *CompName(C->ClimbBlocker.Get())), true);
 				EndClimbCase(C);
 				return true;
@@ -1616,7 +1645,7 @@ void ABRAutoTest::AddV416LadderSteps()
 				return false;
 			}
 			const int32 Requests = C->ClimbRequestsSent - L16.RequestsMark;
-			const bool bTop = L16.Track.MaxFeet + C->GetSimpleCollisionHalfHeight() >= L16.TopZ - 2.f;
+			const bool bTop = L16.Track.MaxFeet + CapsuleHalf416(C) >= L16.TopZ - 2.f;
 			const bool bOk = bThere && Requests == 1 && bTop && L16.Track.Inside == 0;
 			Note(FString::Printf(TEXT("echelle sur son trottoir montee depuis le canal (%s) : sommet de la montee %s, demandes de depart au sommet %d (attendu 1), %s %s ; %s"),
 				L16.bDirect ? TEXT("prise directe") : TEXT("visee et touche d'interaction"), bTop ? TEXT("atteint") : TEXT("NON ATTEINT"), Requests, bEnd ? TEXT("fin du contenu disponible")
@@ -1652,7 +1681,7 @@ void ABRAutoTest::AddV416LadderSteps()
 				return false;
 			}
 			const double Now = FPlatformTime::Seconds();
-			const float Half = C->GetSimpleCollisionHalfHeight();
+			const float Half = CapsuleHalf416(C);
 			ABRExit* E = L16.Exit.Get();
 			auto Done416 = [&]()
 			{
@@ -1669,6 +1698,18 @@ void ABRAutoTest::AddV416LadderSteps()
 				L16.Exit.Reset();
 				return true;
 			};
+			// v4.16 (echelles, correctifs) : niveau quitte pendant le cas (transition, ou numero de niveau change) : le sommet de la
+			// montee atteint envoie la demande de depart (BRGather::FClimbWait), seul le depart est immediat (ABRExit::FinishClimb,
+			// ABRWorld::RequestDeparture) et l'echelle part avec le niveau. Avant (v416m1, Level 6) : le cas continuait jusqu'a la
+			// destruction de l'echelle et notait "disparue pendant la montee" (PROBLEME), sans dire que le niveau etait quitte. Jugement
+			// en phase 7, apres l'arrivee
+			if (L16.Phase >= 1 && L16.Phase < 7 && (W->IsTransitioning() || W->GetLevelSerial() != L16.Serial))
+			{
+				L16.LeftPhase = L16.Phase;
+				L16.Clock = Now;
+				L16.Phase = 7;
+				return false;
+			}
 			switch (L16.Phase)
 			{
 			case 0:
@@ -1718,13 +1759,19 @@ void ABRAutoTest::AddV416LadderSteps()
 				L16.Exit = E;
 				L16.FootZ = static_cast<float>(E->GetActorLocation().Z);
 				L16.TopZ = E->GetClimbTopZ();
-				// Pieds au plus a 2 m du pied, 60 cm sous le sommet de la montee (aucune demande de depart)
-				L16.Value = FMath::Min(200.f, L16.TopZ - Half - 60.f - L16.FootZ);
+				// Pieds au plus a 2 m du pied, TopMargin sous le sommet de la montee (aucune demande de depart). v4.16 (echelles,
+				// correctifs) : Half est la capsule elle-meme (avant : 0 cm dans l'image de la fin du vol du developpeur, des pieds vises
+				// a 136 cm au Level 6 au lieu de 48 : sommet atteint, depart vers le Niveau 8, "echelle disparue pendant la montee")
+				L16.Value = FMath::Min(200.f, L16.TopZ - Half - TopMargin - L16.FootZ);
 				if (L16.Value < 80.f)
 				{
 					Skip(FString::Printf(TEXT("Niveau %d : %s (%s) : NON VERIFIE, sommet de la montee a %.0f cm du pied seulement"), Level, *Name, *E->GetName(), L16.TopZ - L16.FootZ));
 					return Done416();
 				}
+				// v4.16 (echelles, correctifs) : niveau et demandes de depart d'avant la prise (un depart pendant le cas se voit, phase 7)
+				L16.Serial = W->GetLevelSerial();
+				L16.RequestsMark = C->ClimbRequestsSent;
+				L16.LeftPhase = 0;
 				// La sortie est gardee par la mission du niveau (resolue ici : seule l'echelle est jugee) ; une frayeur bloquerait les
 				// entrees du grimpeur : entites proches ecartees (hote)
 				W->DebugCompleteMission();
@@ -1865,6 +1912,34 @@ void ABRAutoTest::AddV416LadderSteps()
 				L16.Phase = 6;
 				return false;
 			}
+			case 7:
+			{
+				// v4.16 (echelles, correctifs) : niveau quitte pendant le cas. Une demande au sommet de la montee puis l'arrivee a la
+				// destination : le depart attendu au sommet (pas une echelle disparue, pas un PROBLEME du jeu) ; la descente et le lacher
+				// en hauteur ne sont pas joues : NON VERIFIES. Un depart sans une demande au sommet : PROBLEME
+				const BRContent::FExitResolution Res = BRLevels::ResolveExit(Level, Target);
+				const bool bEnd = Res.Kind == BRContent::EExit::ChapterEnd;
+				const bool bThere = bEnd ? W->IsChapterEnd()
+					: (!W->IsTransitioning() && W->IsLevelReady() && W->GetLevelSerial() != L16.Serial && W->GetLevelNumber() == Res.Target);
+				if (!bThere && Now - L16.Clock < 40.0)
+				{
+					return false;
+				}
+				const int32 Requests = C->ClimbRequestsSent - L16.RequestsMark;
+				const bool bTop = L16.Track.MaxFeet + Half >= L16.TopZ - 2.f;
+				const bool bExpected = Requests == 1 && bTop;
+				Note(FString::Printf(TEXT("Niveau %d : %s : niveau quitte pendant le cas (phase %d) : sommet de la montee %s (pieds au plus a %.0f cm du pied, vises %.0f, au sommet a %.0f), "
+					"demandes de depart au sommet %d (attendu 1), %s %s ; %s"), Level, *Name, L16.LeftPhase, bTop ? TEXT("atteint") : TEXT("NON ATTEINT"), L16.Track.MaxFeet - L16.FootZ,
+					L16.Value, L16.TopZ - Half - L16.FootZ, Requests, bEnd ? TEXT("fin du contenu disponible") : *FString::Printf(TEXT("arrivee au Niveau %d"), Res.Target), OuiNon(bThere),
+					bExpected ? TEXT("depart attendu au sommet (seul : depart immediat, ABRExit::FinishClimb), l'echelle part avec le niveau")
+					: TEXT("DEPART SANS UNE DEMANDE AU SOMMET DE LA MONTEE")), !bExpected || !bThere);
+				Skip(FString::Printf(TEXT("Niveau %d : %s : descente jusqu'au lacher au pied et lacher en hauteur (Saut) NON VERIFIES (niveau quitte pendant le cas)"), Level, *Name));
+				if (bEnd && W->IsChapterEnd())
+				{
+					W->CloseEnding(false);
+				}
+				return Done416();
+			}
 			default:
 			{
 				// Lachee en hauteur : au sol vite (chute libre de 120 cm : 0,5 s), pieds revenus au sol de la descente
@@ -1888,7 +1963,8 @@ void ABRAutoTest::AddV416LadderSteps()
 			}
 			}
 		});
-		LimitLastStep(75.f);
+		// v4.16 (echelles, correctifs) : 40 s de plus pour l'arrivee apres un depart pendant le cas (phase 7)
+		LimitLastStep(115.f);
 	};
 	AddUpDown(8, BRTestV416Ladder::Level8Seed, BRTestV416Ladder::Level8Target, false, TEXT("echelle BRExit_42 du Niveau 8 (tablier incline)"));
 	AddUpDown(6, BRTestV416Ladder::Level6Seed, BRTestV416Ladder::Level6Target, true, TEXT("echelle de l'alcove de l'aile du Level 6"));
@@ -2269,7 +2345,7 @@ void ABRAutoTest::AddNetV416LadderSteps(bool bClient)
 		{
 			// Depuis son trottoir, juste devant l'accroche (placement direct : l'approche a pied est jugee en solo, v4.15 correctifs 5)
 			W->DebugCompleteMission();
-			const float Half = C->GetSimpleCollisionHalfHeight();
+			const float Half = CapsuleHalf416(C);
 			PutAt416(C, E->GetClimbAnchor() + LadderFrontOf(E) * BRMech::Clearance::PlayerRadius + FVector(0.f, 0.f, Half + 5.f), LadderAimOf(E));
 			L16.RequestsMark = C->ClimbRequestsSent;
 			L16.Clock = Now;
@@ -2371,7 +2447,7 @@ void ABRAutoTest::AddNetV416LadderSteps(bool bClient)
 			const int32 Requests = C->ClimbRequestsSent - L16.RequestsMark;
 			const bool bOk = bLeft && !L16.bDepCancelled && Requests == 1 && L16.bDepPhase2 && L16.MaxNeeded == 2 && L16.MaxReady == L16.MaxNeeded;
 			Note(FString::Printf(TEXT("hote au sommet de l'echelle des chunks : %d demande(s) en tout (attendu 1), centre au plus haut a %.0f cm du pied (sommet a %.0f) ; rassembles au plus "
-				"%d/%d (attendu 2/2), depart (phase 2) %s%s ; client compte apres %d changement(s) d'etat"), Requests, L16.Track.MaxFeet + C->GetSimpleCollisionHalfHeight() - L16.FootZ,
+				"%d/%d (attendu 2/2), depart (phase 2) %s%s ; client compte apres %d changement(s) d'etat"), Requests, L16.Track.MaxFeet + CapsuleHalf416(C) - L16.FootZ,
 				L16.TopZ - L16.FootZ, L16.MaxReady, L16.MaxNeeded, OuiNon(L16.bDepPhase2 && bLeft), L16.bDepCancelled ? *FString::Printf(TEXT(", ANNULE (raison %d ; 1 : fin du delai)"),
 				L16.DepReason) : (bLeft ? TEXT("") : TEXT(", NON lance en 100 s")), L16.GatherChanges), !bOk);
 			L16.Phase = 0;
