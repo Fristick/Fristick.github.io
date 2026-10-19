@@ -1239,7 +1239,13 @@ bool ABRWorld::PlaceMission(const BRM::FPlan& Plan, TArray<FBRMissionSpot>& OutS
 		}
 	}
 	// v4.12 : Poolrooms : les deux bassins sont adosses au mur de la vanne A ; la vanne B est fixee a cote d'elle, sur
-	// l'avant du bassin B (meme face). Sans place sur cette face, les vannes restent murales (sans bassins visibles)
+	// l'avant du bassin B (meme face). Sans place sur cette face, les vannes restent murales (sans bassins visibles).
+	// v4.16 : vanne B a WheelLateralB = 98 cm de la vanne A (avant : 58) : leurs boites visees ne se chevauchent plus (34 cm
+	// d'ecart) et la visee du client vers l'une n'est plus prise par l'autre depuis une place de biais (BRMech::Clearance::
+	// FanSteals, banc Tools/Mechanisms et Tools/verify_device_clearance.py, cas G). La place de la vanne B (40 cm plus loin sur
+	// l'avant du meme bassin, meme cellule), le sol mesure devant elle et sa zone libre (MissionKeepOuts) changent : generation
+	// de cette version du reseau seulement (NetVersion 416, pas encore distribuee ; hote et clients la calculent de meme). Le
+	// plan, l'etat de la mission et la sauvegarde n'ont pas de position (PlaceVersion inchangee)
 	if (Plan.Level == 37)
 	{
 		int32 SA = -1, SB = -1;

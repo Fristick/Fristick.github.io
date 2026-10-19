@@ -29,6 +29,9 @@
 //      Niveau 2 face a la porte de la vapeur et bouton du code du Niveau 4 a cote de la grille (place ordinaire dans la porte
 //      fermee), treuil du Niveau 8 a cote de l'interruption (enveloppe de la passerelle seule) : plus d'avertissement ; une
 //      dalle entre un mecanisme et une place libre, le palier de la passerelle et la cage du Level 6 restent journalises.
+//   J. v4.16 : les deux vannes des Poolrooms (BRMech::Clearance::AimGap, FanSteals) : boites visees separees, aucune visee
+//      prise depuis les places de biais des tests et leurs arrivees ; vanne B a 58 cm (regle d'avant, graine 3053711763) :
+//      boites chevauchees, visee prise ; voisins a 58 cm du placement des autres niveaux (pour information).
 //
 // Le comportement reel (collisions, nage, rendu, reseau, sauvegarde, streaming) se verifie en jeu : -BRAutoTestV412
 // (prepare, non execute ici).
@@ -794,6 +797,101 @@ int main()
 			Line("Level 6, poste a 0 et cage a +58 (v4.14) : la cage coupe le couloir du poste, journalise",
 				CL::LaneCut(Wall6(0.f, LPost), BRMech::Module::None, Wall6(58.f, Cage), BRMech::Module::None) == ELane::Logged);
 		}
+	}
+
+	// ------------------------------------------------------------------------------------------------------------
+	// v4.16 : Poolrooms, vannes A et B sur l'avant des bassins (ABRWorld::PlaceMission, module : B a WheelLateralB de A, meme
+	// lacet ; chaque vanne au sol 40 cm devant les bassins, le sien). Regle d'avant (v4.12 a v4.16) : B a 58 cm, boites visees
+	// chevauchees de 6 cm ; Niveau 37, graine 3053711763 (chapitre, phase 1) : d'apres le rapport et la capture, place a 45 degres
+	// de l'avant de A du cote de B, arrivee de la marche plus pres de B, visee prise par B, la marche de reprise revient au meme but
+	// (0 m). Regle du jeu : B a
+	// 98 cm, et aucune visee prise depuis les places de biais (jusqu'a 45 degres) et leurs arrivees (BRMech::Clearance::FanSteals),
+	// sols de la vanne B et du joueur decales (canal 0, marche 34, trottoir 68)
+	std::printf("\nJ. Poolrooms : vannes A et B, visee de biais (v4.16)\n");
+	{
+		namespace CL = BRMech::Clearance;
+		auto Pair = [](float Yaw, float LateralB, float FloorB, CL::FPlaced& OutA, CL::FPlaced& OutB)
+		{
+			const float Rd = Yaw * 3.14159265f / 180.f;
+			const float FX = std::round(std::cos(Rd)), FY = std::round(std::sin(Rd));
+			OutA = CL::FPlaced();
+			OutA.Frame.X = 500.f + FX * P::TankDepth;
+			OutA.Frame.Y = -300.f + FY * P::TankDepth;
+			OutA.Frame.Yaw = Yaw;
+			OutA.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolTanks, 60.f);
+			OutB = CL::FPlaced();
+			OutB.Frame = OutA.Frame;
+			OutA.Frame.ToWorld(0.f, LateralB, OutB.Frame.X, OutB.Frame.Y);
+			OutB.Frame.Z = FloorB;
+			OutB.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolWheelB, 60.f);
+		};
+		constexpr float OldLateralB = 58.f;
+		const float FloorsB[5] = { 0.f, 34.f, DeckHeight, -34.f, -DeckHeight };
+		const float Lifts[3] = { 0.f, DeckHeight, -DeckHeight };
+		float NewGap = 1.0e6f, OldGap = 1.0e6f;
+		int NewSteals = 0, OldSteals = 0, OldAB = 0;
+		BRMech::FVec3 OldFirst;
+		for (const float Yaw : { 0.f, 90.f })
+		{
+			for (const float FloorB : FloorsB)
+			{
+				CL::FPlaced NA, NB, OA, OB;
+				Pair(Yaw, P::WheelLateralB, FloorB, NA, NB);
+				Pair(Yaw, OldLateralB, FloorB, OA, OB);
+				NewGap = std::fmin(NewGap, CL::AimGap(NA, NB));
+				OldGap = std::fmin(OldGap, CL::AimGap(OA, OB));
+				for (const float Lift : Lifts)
+				{
+					NewSteals += CL::FanSteals(NA, NB, Lift) + CL::FanSteals(NB, NA, Lift);
+					BRMech::FVec3 First;
+					const int AB = CL::FanSteals(OA, OB, Lift, &First);
+					if (OldAB == 0 && AB > 0)
+					{
+						OldFirst = First;
+					}
+					OldAB += AB;
+					OldSteals += AB + CL::FanSteals(OB, OA, Lift);
+				}
+			}
+		}
+		const float Need = 2.f * (CL::FocusSweep + CL::Margin);
+		Line("vanne B a " + F1(P::WheelLateralB) + " cm de A : boites visees a " + F1(NewGap) + " cm l'une de l'autre au plus pres (>= " + F1(Need) +
+			") ; regle d'avant (58 cm) : " + F1(OldGap) + " cm (chevauchees)", NewGap >= Need && OldGap <= 0.f);
+		Line("regle du jeu : visee prise depuis " + std::to_string(NewSteals) + " point(s) des places de biais (cercles " + F1(CL::FanRings[0]) + " a " +
+			F1(CL::FanRings[CL::NumFanRings - 1]) + ", +-" + F1(CL::FanTurns * CL::FanStep) + " degres) et de leurs arrivees (" + F1(CL::FanArrival) + " cm, " +
+			F1(CL::FanArrivalFront) + " devant), 2 lacets, sols decales (attendu 0)", NewSteals == 0);
+		Line("defaut reproduit (B a 58 cm) : visee prise depuis " + std::to_string(OldSteals) + " point(s), dont " + std::to_string(OldAB) +
+			" en visant A ; premier : yeux a (" + F1(OldFirst.X) + ", " + F1(OldFirst.Y) + ", " + F1(OldFirst.Z) + ") du point de A (devant, cote B, haut)",
+			OldAB > 0 && OldFirst.Y > 0.f);
+		// Le module garde ses autres regles : vanne B dans la face des bassins, son point vise hors de leur volume
+		CL::FPlaced NA, NB;
+		Pair(0.f, P::WheelLateralB, 0.f, NA, NB);
+		const BRMech::FVec3 BAim = CL::AimPoint(NB);
+		Line("vanne B sur l'avant du bassin B (" + F1(P::BY0) + " a " + F1(P::BY1) + ") ; point vise hors du volume des bassins",
+			P::WheelLateralB - NB.Print.AimExtent.Y >= P::BY0 && P::WheelLateralB + NB.Print.AimExtent.Y <= P::BY1 + P::Wall
+			&& !CL::InSolid(NA, BAim.X, BAim.Y, BAim.Z, CL::Margin) && !CL::Clash(NA, NB));
+		// Information : voisins muraux de PickSlot a 58 cm (placement des autres niveaux, inchange en v4.16) ; leurs boites visees
+		// peuvent se chevaucher (larges) et la visee se prendre de biais. Non corrige ici : signale
+		const CL::FFootprint Wide[5] = { CL::Of(BRM::EKind::Switch, BRM::R_MillDial, BRMech::Module::None, 60.f),
+			CL::Of(BRM::EKind::Crank, BRM::R_Winch, BRMech::Module::None, 60.f), CL::Of(BRM::EKind::Switch, BRM::R_Valve, BRMech::Module::None, 60.f),
+			CL::Of(BRM::EKind::Switch, BRM::R_Breaker, BRMech::Module::None, 60.f), CL::Of(BRM::EKind::Button, BRM::R_HouseMarker, BRMech::Module::None, 60.f) };
+		int Pairs = 0, Overlap = 0, Taken = 0;
+		for (const CL::FFootprint& A0 : Wide)
+		{
+			for (const CL::FFootprint& B0 : Wide)
+			{
+				CL::FPlaced WA, WB;
+				WA.Frame.Yaw = 0.f;
+				WA.Print = A0;
+				WB.Frame.Y = 58.f;
+				WB.Print = B0;
+				++Pairs;
+				Overlap += CL::AimGap(WA, WB) <= 0.f ? 1 : 0;
+				Taken += CL::FanSteals(WA, WB, 0.f) > 0 ? 1 : 0;
+			}
+		}
+		std::printf("  information : voisins muraux a 58 cm (PickSlot ; moulin, treuil, vanne, disjoncteur, marqueur) : %d paire(s) sur %d aux boites chevauchees, "
+			"%d a la visee prise de biais (placement des autres niveaux inchange en v4.16)\n", Overlap, Pairs, Taken);
 	}
 
 	std::printf("\nRESULTAT : %s (%d verifications, %d echec(s))\n", GFailures == 0 ? "OK" : "ECHEC", GChecks, GFailures);

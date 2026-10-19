@@ -35,6 +35,16 @@ Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
      l'approche sont dans la boite d'un rocher (graine 233637237 : BRExit_42, journal final2/v413). Regle du jeu : pas de
      rocher dans la zone libre (BRMech::Clearance::ExitKeepOut) des sorties tirees par les 3 x 3 chunks autour
      (ABRWorld::IsChunkExitKeepOut).
+  G. v4.16 : Niveau 37 : les deux vannes des bassins (ABRWorld::PlaceMission, module des Poolrooms : vanne B a
+     BRMech::Pool::WheelLateralB de la vanne A, meme face, meme lacet ; boites visees de BRMech::Clearance::Of, R_Sluice ;
+     volume des bassins). Regle d'avant (v4.12 a v4.16) : B a 58 cm, boites visees chevauchees de 6 cm ; graine 3053711763
+     (chapitre, phase 1 : "mecanisme 2 (Vanne du bassin A) atteint mais PAS VISE", vise : vanne B, apres une marche de reprise
+     de 0 m) : place a 45 degres de l'avant de A du cote de B (cercle de 160 cm), arrivee de la marche plus pres de B, la
+     sphere de la visee du client touche la boite de B avant celle de A. Regle du jeu : miroir de
+     BRMech::Clearance::FanSteals (places de biais des tests jusqu'a 45 degres, sur chaque cercle, et toutes leurs arrivees ;
+     sols de la vanne B et du joueur decales : canal, marche, trottoir) : aucune visee prise ; et l'avant du bassin B (volants
+     et graduations, regard de la vidange, regles) sans recouvrement. Les places plus de biais (67,5 degres) sont montrees
+     pour information, ainsi que les voisins a 58 cm du placement des autres niveaux (inchange).
 En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
 BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote ; v4.15
 correctifs 4 : puis la visee du client prend le mecanisme, BRTestV412::FocusVerdict : balayage, puis tolerance d'UpdateFocus si
@@ -49,7 +59,7 @@ mecanismes" ; -BRAutoTestV413 : postes et cages du Level 6).
 
 Usage : python Tools/verify_device_clearance.py [--seeds 120] [--rules both|old|new]
 Code de sortie : 0 si la regle v4.15 passe partout ET la regle v4.14 echoue la ou les journaux du jeu l'ont vue echouer ET la regle v4.15
-est dans les sources (cas A, D, E et F). Sortie : Docs/v415/correctifs_places.txt.
+est dans les sources (cas A, D, E et F ; v4.16 : cas G, regle d'avant = vanne B a 58 cm). Sortie : Docs/v415/correctifs_places.txt.
 """
 import argparse
 import math
@@ -58,6 +68,8 @@ import re
 import struct
 import sys
 import zlib
+
+import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
@@ -150,7 +162,7 @@ def read_constants():
     K["house_body"] = [float(g) for g in hb.groups()] if hb else None
     # Niveaux (BRLevels.cpp)
     levels = open(vp.LEVELS_CPP, encoding="utf-8").read()
-    for n in (6, 8, 9, 10):
+    for n in (6, 8, 9, 10, 37):
         body = levels[levels.index("FBRLevelDef Level%d()" % n):]
         body = body[:body.index("return D;")]
         vals = dict((k, float(v)) for k, v in re.findall(r"D\.(\w+)\s*=\s*(-?[\d.]+)f?\s*;", body))
@@ -237,6 +249,48 @@ def read_constants():
         "BRMech::Clearance::CutsFocusLane : place a StandRange, yeux a StandEye, FocusSweep + Margin": "StandRange" in lane and "StandEye" in lane
         and "FocusSweep + Margin" in lane,
         "ABRCharacter::UpdateFocus : balayage de BRMech::Clearance::FocusSweep": K["focus_sweep_shared"],
+    }
+    # v4.16 : cas G : vannes des Poolrooms (BRMech::Pool, boite visee R_Sluice, volume des bassins), places de biais
+    # (BRMech::Clearance::Fan*) et pieces de l'avant des bassins (ABRMissionDevice::Init et BuildPoolTanks)
+    pool = ns("Pool")
+    for k in ("TankDepth", "WheelLateralB", "Wall", "DrainLateral", "GaugeLateralA", "GaugeLateralB"):
+        K["Pool." + k] = num(r"constexpr float %s = (-?[\d.]+)f;" % k, pool, "Pool." + k)[0]
+    K["Pool.AY"] = num(r"constexpr float AY0 = (-?[\d.]+)f, AY1 = (-?[\d.]+)f;", pool, "Pool.AY0/AY1")
+    K["Pool.BY"] = num(r"constexpr float BY0 = (-?[\d.]+)f, BY1 = (-?[\d.]+)f;", pool, "Pool.BY0/BY1")
+    sl = num(r"const float R = Role == R_Sluice \? ([\d.]+)f : [\d.]+f;\s*F\.AimExtent = V3\(([\d.]+)f, R \+ ([\d.]+)f, R \+ ([\d.]+)f\);", mech, "vanne (R_Sluice)")
+    K["sluice"] = [K["default"][0], K["default"][1], K["default"][2], sl[1], sl[0] + sl[2], sl[0] + sl[3]]
+    K["tank_top"] = num(r"F\.Solid = Box\(-Pool::TankDepth, Pool::AY0 - Pool::Wall, 0\.f, 0\.f, Pool::BY1 \+ Pool::Wall, ([\d.]+)f\);", mech, "volume des bassins")[0]
+    clh = ns("Clearance")
+    fr_ = re.search(r"constexpr float FanRings\[NumFanRings\] = \{ ([^}]*) \};", clh)
+    if not fr_:
+        raise SystemExit("BRMech::Clearance::FanRings introuvable (BRMechLogic.h)")
+    K["fan_rings"] = [K["Clearance." + v.strip()] if re.fullmatch(r"[A-Za-z]\w*", v.strip()) else symbol(K, v.strip()) for v in fr_.group(1).split(",")]
+    for k in ("FanStep", "FanArrival", "FanArrivalFront", "FanReach", "FanGrid"):
+        K["Clearance." + k] = num(r"constexpr float %s = ([\d.]+)f;" % k, clh, "Clearance." + k)[0]
+    K["Clearance.FanTurns"] = int(num(r"constexpr int FanTurns = (\d+);", clh, "Clearance.FanTurns")[0])
+    dev = read("Private/BRMissionDevice.cpp")
+    K["wheel_r"] = num(r"const float R = Device\.Role == BRM::R_Sluice \? ([\d.]+)f : [\d.]+f;", dev, "rayon du volant")[0]
+    K["wheel_ring_half"] = num(r"AddBoxPart\(FVector\(0\.f, FMath::Cos\(Ang\) \* R, FMath::Sin\(Ang\) \* R\), FVector\(([\d.]+)f, R \* [\d.]+f, [\d.]+f\)", dev,
+                               "anneau du volant")[0] * 0.5
+    gl = num(r"AddLabel\(FString::FromInt\(I\), FVector\([\d.]+f, FMath::Sin\(Ang\) \* \(R \+ ([\d.]+)f\), Z \+ FMath::Cos\(Ang\) \* \(R \+ [\d.]+f\)\), ([\d.]+)f, LabelColor\);",
+             dev, "graduations du volant")
+    K["wheel_label_r"], K["wheel_label_size"] = gl
+    K["window_d"] = num(r"AddPart\(A->Cylinder\(\), Wd, FRotator\(90\.f, 0\.f, 0\.f\), FVector\(([\d.]+)f, ", dev, "regards")[0]
+    K["gauge_w"] = num(r"AddBoxPart\(FVector\(1\.5f, GY, Zl\(\(S0 \+ SN\) \* 0\.5f\)\), FVector\(2\.f, ([\d.]+)f, ", dev, "regle graduee")[0]
+    gd = num(r"AddLabel\(FString::FromInt\(M\), FVector\(3\.2f, GY \+ ([\d.]+)f, Zl\(Z\)\), ([\d.]+)f, ", dev, "chiffres de la regle")
+    K["gauge_digit"] = gd[0] + gd[1] * 0.3
+    K["sluice_positions"] = int(num(r"Add\(P, EKind::Switch, R_Sluice, 0, (\d+), ", read("Private/BRMissionLogic.cpp"), "crans des vannes")[0])
+    bench = open(os.path.join(ROOT, "Tools", "Mechanisms", "test_mechanisms.cpp"), encoding="utf-8").read()
+    walk_r = K["walk_radius"]
+    K["src_G"] = {
+        "ABRWorld::PlaceMission : vanne B a BRMech::Pool::WheelLateralB de la vanne A": "B.Pos = A.Pos + Left * BRMech::Pool::WheelLateralB + Fwd * BRMech::Pool::TankDepth;" in world,
+        "ABRMissionDevice::BuildPoolTanks : vidange a Pool::DrainLateral, regles a Pool::GaugeLateralA/B": "const float DY = P::DrainLateral;" in dev
+        and "const float GY = T == 0 ? P::GaugeLateralA : P::GaugeLateralB;" in dev,
+        "BRMech::Clearance::FanSteals, juge par le banc Tools/Mechanisms (section J)": "int FanSteals(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst)" in mech
+        and "CL::FanSteals(NA, NB, Lift) + CL::FanSteals(NB, NA, Lift)" in bench,
+        "BRMech::Clearance::Fan* = cercles, pas, arrivees et portee des tests (FindMissionStand, marches, ClientFocusReach)":
+        K["fan_rings"] == K["rings"] and K["Clearance.FanStep"] == K["turn_deg"] and walk_r[0] == K["Clearance.FanArrivalFront"]
+        and walk_r[1] == K["Clearance.FanArrival"] and K["Clearance.FanReach"] == K["ClientFocusReach"],
     }
     return K
 
@@ -1401,6 +1455,213 @@ def case_level10(K, rules):
     return results
 
 
+# ------------------------------------------------------------------------------------- G. Niveau 37 : vannes des bassins
+def np_dist_box(P, c, e):
+    d = np.maximum(np.abs(P - c) - e, 0.0)
+    return np.sqrt((d * d).sum(axis=-1))
+
+
+def np_sweep(E, T, c, e, r):
+    """Miroir de SweepContact (BRMechLogic.cpp), vectorise : premier contact (parametre 0..1) de la sphere de rayon r lancee de E
+    vers T (n x 3) avec la boite alignee (c, e) ; 2 sans contact. Plus pres par recherche ternaire (48 pas), premier passage sous
+    r par dichotomie (40 pas)"""
+    D = T - E
+    n = len(E)
+
+    def at(t):
+        return np_dist_box(E + D * t[:, None], c, e)
+    lo, hi = np.zeros(n), np.ones(n)
+    for _ in range(48):
+        m1 = lo + (hi - lo) / 3.0
+        m2 = hi - (hi - lo) / 3.0
+        sel = at(m1) <= at(m2)
+        hi = np.where(sel, m2, hi)
+        lo = np.where(sel, lo, m1)
+    first = (lo + hi) * 0.5
+    first = np.where(at(np.ones(n)) < at(first), 1.0, first)
+    hit = at(first) <= r
+    prev = np.zeros(n)
+    for _ in range(40):
+        m = (prev + first) * 0.5
+        inside = at(m) <= r
+        first = np.where(inside, m, first)
+        prev = np.where(inside, prev, m)
+    return np.where(at(np.zeros(n)) <= r, 0.0, np.where(hit, first, 2.0))
+
+
+def np_seg_box(E, T, c, e):
+    """Miroir de SegToBox (BRMechLogic.cpp), vectorise : distance du segment E-T a la boite alignee (c, e)"""
+    D = T - E
+    n = len(E)
+
+    def at(t):
+        return np_dist_box(E + D * t[:, None], c, e)
+    lo, hi = np.zeros(n), np.ones(n)
+    for _ in range(48):
+        m1 = lo + (hi - lo) / 3.0
+        m2 = hi - (hi - lo) / 3.0
+        sel = at(m1) <= at(m2)
+        hi = np.where(sel, m2, hi)
+        lo = np.where(sel, lo, m1)
+    return np.minimum(np.minimum(at(np.zeros(n)), at(np.ones(n))), at((lo + hi) * 0.5))
+
+
+def fan_points(K, steps=None):
+    """Points de BRMech::Clearance::FanSteals depuis le point vise de Me (repere de Me) : places des cercles FanRings aux pas
+    -FanTurns..FanTurns (ou steps), et grille de FanGrid dans le disque d'arrivee (FanArrivalFront pour la place devant, au
+    premier cercle). Rend [(x, y, cercle, pas)]"""
+    g = K["Clearance.FanGrid"]
+    turns = K["Clearance.FanTurns"]
+    out = []
+    for ri, ring in enumerate(K["fan_rings"]):
+        for step in (steps if steps is not None else range(-turns, turns + 1)):
+            a = math.radians(step * K["Clearance.FanStep"])
+            sx, sy = math.cos(a) * ring, math.sin(a) * ring
+            arr = K["Clearance.FanArrivalFront"] if (ri == 0 and step == 0) else K["Clearance.FanArrival"]
+            cells = int(arr / g)
+            for gx in range(-cells, cells + 1):
+                for gy in range(-cells, cells + 1):
+                    ox, oy = gx * g, gy * g
+                    if ox * ox + oy * oy <= arr * arr:
+                        out.append((sx + ox, sy + oy, ri, step))
+    return out
+
+
+def fan_steals(K, me_box, other_box, me_solid, other_solid, lift, pts):
+    """Miroir de BRMech::Clearance::FanSteals. Boites (centre, demi-tailles) dans le repere de Me, Z depuis son sol ; volumes :
+    idem ou None. Capsule (PlayerRadius + Margin) hors des volumes plus hauts qu'une marche, yeux (StandEye au-dessus du sol
+    de Me + lift) a portee (FanReach), ligne de vue de l'hote libre du volume de Other ; visee prise si la sphere (FocusSweep)
+    lancee vers le point vise de Me touche la boite de Other au plus tard avec celle de Me, avant tout volume. Rend le masque"""
+    tgt = np.array(me_box[0], float)
+    P = np.array([(tgt[0] + p[0], tgt[1] + p[1]) for p in pts], float)
+    ok = np.ones(len(P), bool)
+    cap = K["Clearance.PlayerRadius"] + K["Clearance.Margin"]
+    for s in (me_solid, other_solid):
+        if s is None or s[1][2] * 2.0 <= K["Clearance.StepHeight"]:
+            continue
+        dx = np.maximum(np.abs(P[:, 0] - s[0][0]) - s[1][0], 0.0)
+        dy = np.maximum(np.abs(P[:, 1] - s[0][1]) - s[1][1], 0.0)
+        ok &= np.hypot(dx, dy) >= cap
+    E = np.column_stack([P, np.full(len(P), lift + K["Clearance.StandEye"])])
+    T = np.repeat(tgt[None, :], len(P), 0)
+    ok &= np.linalg.norm(E - T, axis=1) <= K["Clearance.FanReach"]
+    if other_solid is not None:
+        ok &= np_seg_box(E, T, np.array(other_solid[0], float), np.array(other_solid[1], float)) > 0.0
+    r = K["Clearance.FocusSweep"]
+    t_me = np_sweep(E, T, tgt, np.array(me_box[1], float), r)
+    t_o = np_sweep(E, T, np.array(other_box[0], float), np.array(other_box[1], float), r)
+    t_s = np.full(len(P), 2.0)
+    for s in (me_solid, other_solid):
+        if s is not None:
+            t_s = np.minimum(t_s, np_sweep(E, T, np.array(s[0], float), np.array(s[1], float), r))
+    return ok & (t_o <= t_me) & (t_o < t_s), E - T
+
+
+def pool_pair(K, lat_b, floor_b):
+    """Repere de la vanne A (X sortant de l'avant des bassins, Y vers B, Z depuis le sol de A) : boites visees de A et de B (au
+    sol floor_b), volume des bassins (BRMech::Clearance::Of, PoolTanks)"""
+    s = K["sluice"]
+    a_box = ((s[0], s[1], s[2]), (s[3], s[4], s[5]))
+    b_box = ((s[0], lat_b + s[1], floor_b + s[2]), (s[3], s[4], s[5]))
+    y0, y1 = K["Pool.AY"][0] - K["Pool.Wall"], K["Pool.BY"][1] + K["Pool.Wall"]
+    td, top = K["Pool.TankDepth"], K["tank_top"]
+    tanks = ((-td * 0.5, (y0 + y1) * 0.5, top * 0.5), (td * 0.5, (y1 - y0) * 0.5, top * 0.5))
+    return a_box, b_box, tanks
+
+
+def moved(box, dy, dz):
+    """Boite du repere de A vers celui de B (origine a (0, lat_b), sol floor_b ; meme lacet)"""
+    return ((box[0][0], box[0][1] - dy, box[0][2] - dz), box[1])
+
+
+def pool_steals(K, lat_b, floor_b, lift, pts, target):
+    a_box, b_box, tanks = pool_pair(K, lat_b, floor_b)
+    if target == "A":
+        return fan_steals(K, a_box, b_box, tanks, None, lift, pts)
+    return fan_steals(K, moved(b_box, lat_b, floor_b), moved(a_box, lat_b, floor_b), None, moved(tanks, lat_b, floor_b), lift, pts)
+
+
+def pool_bands(K, lat_b, drain, gauge_a, gauge_b):
+    """Bandes laterales (repere de A) des pieces de l'avant des bassins : volants et leurs graduations (ABRMissionDevice::Init,
+    R_Sluice : anneau de rayon R, graduations a R + 9 sur l'arc -120..120 degres), regard de la vidange (BuildPoolTanks : il
+    descend ou monte avec le sol de la vanne, il ne doit croiser aucun volant quelle que soit sa hauteur), regles graduees"""
+    n = K["sluice_positions"]
+    lab = max(abs(math.sin(math.radians(-120.0 + i * 240.0 / max(1, n - 1)))) for i in range(n)) * (K["wheel_r"] + K["wheel_label_r"])
+    wheel = max(K["wheel_r"] + K["wheel_ring_half"], lab + K["wheel_label_size"] * 0.3)
+    half_w = K["window_d"] * 0.5
+    g = K["gauge_w"] * 0.5
+    return [("volant A et ses graduations", -wheel, wheel), ("volant B et ses graduations", lat_b - wheel, lat_b + wheel),
+            ("regard de la vidange", drain - half_w, drain + half_w), ("regle de A", gauge_a - g, gauge_a + max(g, K["gauge_digit"])),
+            ("regle de B", gauge_b - g, gauge_b + max(g, K["gauge_digit"]))]
+
+
+def case_poolrooms(K, rules):
+    """v4.16 : cas G : vannes A et B des Poolrooms, visee de biais (miroir de BRMech::Clearance::FanSteals) et pieces de l'avant
+    des bassins"""
+    old_lat, old_drain, old_gauge_b = 58.0, 96.0, 118.0
+    new_lat = K["Pool.WheelLateralB"]
+    l37 = K["L37"]
+    floors = (0.0, l37["DeckStep"], l37["DeckHeight"], -l37["DeckStep"], -l37["DeckHeight"])
+    pts = fan_points(K)
+    print("G. Niveau 37 : vannes des bassins (boite visee R_Sluice %s ; bassins %g cm, Y %g..%g, haut %g ; places de biais : cercles %s, +-%d pas de %g degres, "
+          "arrivees a %g cm (%g devant), grille de %g, portee %g ; visee du client : sphere de %g cm ; sols de B et du joueur decales de %s cm)"
+          % (tuple(K["sluice"]), K["Pool.TankDepth"], K["Pool.AY"][0] - K["Pool.Wall"], K["Pool.BY"][1] + K["Pool.Wall"], K["tank_top"],
+             "/".join("%g" % r for r in K["fan_rings"]), K["Clearance.FanTurns"], K["Clearance.FanStep"], K["Clearance.FanArrival"], K["Clearance.FanArrivalFront"],
+             K["Clearance.FanGrid"], K["Clearance.FanReach"], K["Clearance.FocusSweep"], "/".join("%+g" % f for f in floors)))
+    # Place de la graine 3053711763 (rapport du chapitre, phase 1) : place autour de A (la place devant refusee, "capsule genee"),
+    # premiere place bonne au cercle de 160 cm a 45 degres du cote de B (arrivee a 18 cm environ, yeux a 169 cm du point de A
+    # d'apres le rapport et la capture) ; la marche de reprise (but a 60 cm refuse, "capsule genee") revient au meme but : 0 m
+    seen = [p for p in fan_points(K, steps=(2,)) if p[2] == 1]
+    results = {}
+    for key, label, lat, drain, gauge_b in (("old", "regle d'avant (v4.12 a v4.16)", old_lat, old_drain, old_gauge_b),
+                                            ("new", "regle du jeu (v4.16)", new_lat, K["Pool.DrainLateral"], K["Pool.GaugeLateralB"])):
+        if key not in rules:
+            continue
+        total = 0
+        first = None
+        worst = []
+        for fb in floors:
+            for lift in floors:
+                for target in ("A", "B"):
+                    mask, rel = pool_steals(K, lat, fb, lift, pts, target)
+                    c = int(mask.sum())
+                    total += c
+                    if c and first is None:
+                        k = int(np.argmax(mask))
+                        first = (target, fb, lift, pts[k][2], pts[k][3], tuple(rel[k]))
+                    if c:
+                        worst.append((target, fb, lift, c))
+        mask, rel = pool_steals(K, lat, 0.0, 0.0, seen, "A")
+        seen_n = int(mask.sum())
+        seen_txt = "aucune"
+        if seen_n:
+            k = int(np.argmax(mask))
+            seen_txt = "yeux a (%.0f, %.0f, %.0f) du point de A, a %.0f degres de son avant" % (rel[k][0], rel[k][1], rel[k][2], math.degrees(math.atan2(rel[k][1], rel[k][0])))
+        bands = pool_bands(K, lat, drain, K["Pool.GaugeLateralA"], gauge_b)
+        clash_b = ["%s / %s" % (bands[i][0], bands[j][0]) for i in range(len(bands)) for j in range(i + 1, len(bands))
+                   if bands[i][1] < bands[j][2] and bands[j][1] < bands[i][2]]
+        lo_y, hi_y = K["Pool.AY"][0] - K["Pool.Wall"], K["Pool.BY"][1] + K["Pool.Wall"]
+        outside = [b[0] for b in bands if b[1] < lo_y or b[2] > hi_y]
+        gap = max(0.0, lat - 2.0 * K["sluice"][4])
+        ok = total == 0 and seen_n == 0 and not clash_b and not outside
+        results[key] = ok
+        print("  %s : vanne B a %g cm de A (boites visees a %g cm), vidange a %g, regle de B a %g : visee prise depuis %d point(s) des places de biais et de leurs "
+              "arrivees (2 cibles, %d sols) ; place de la graine 3053711763 (cercle de 160 cm, 45 degres vers B) : %d arrivee(s) sur %d ou B prend la visee de A "
+              "(%s) ; reprise : meme but, meme disque ; avant des bassins : %s%s -> %s"
+              % (label, lat, gap, drain, gauge_b, total, len(floors) * len(floors), seen_n, len(seen), seen_txt,
+                 ("pieces qui se recouvrent : " + ", ".join(clash_b)) if clash_b else "pieces sans recouvrement",
+                 (" ; hors de l'avant des bassins : " + ", ".join(outside)) if outside else "", "PASSE" if ok else "ECHOUE"))
+        if first:
+            print("    premier point : cible %s, sol de B %+g, joueur %+g, cercle %g, pas %+d, yeux a (%.0f, %.0f, %.0f) du point vise ; sols ou la visee est prise : %s"
+                  % (first[0], first[1], first[2], K["fan_rings"][first[3]], first[4], first[5][0], first[5][1], first[5][2],
+                     ", ".join("%s B%+g J%+g : %d" % w for w in worst[:6]) + (" ..." if len(worst) > 6 else "")))
+        # Pour information : places plus de biais (67,5 degres : apres l'avant et les 45 degres de FindMissionStand du meme cote)
+        graze = fan_points(K, steps=(-3, 3))
+        g_total = sum(int(pool_steals(K, lat, fb, lift, graze, t)[0].sum()) for fb in floors for lift in floors for t in ("A", "B"))
+        print("    pour information : places a 67,5 degres et leurs arrivees : visee prise depuis %d point(s) (l'autre volant tout pres de la ligne du regard)" % g_total)
+    return results
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=120, help="graines par niveau (grottes, banlieue)")
@@ -1436,8 +1697,10 @@ def main():
     print()
     res["F"] = case_level8_chunk_exits(K, rules, rock, a.seeds)
     print()
+    res["G"] = case_poolrooms(K, rules)
+    print()
     print("Regle du jeu dans les sources :")
-    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()) + list(K["src_E"].items()) + list(K["src_F"].items()):
+    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()) + list(K["src_E"].items()) + list(K["src_F"].items()) + list(K["src_G"].items()):
         print("  %s : %s" % (what, "oui" if ok else "NON"))
     print()
     bad = 0
@@ -1448,7 +1711,7 @@ def main():
         if "new" in r and not r["new"]:
             print("ECHEC : cas %s : la regle du jeu echoue" % case)
             bad += 1
-    for case, checks in (("A", K["src_A"]), ("D", K["src_D"]), ("E", K["src_E"]), ("F", K["src_F"])):
+    for case, checks in (("A", K["src_A"]), ("D", K["src_D"]), ("E", K["src_E"]), ("F", K["src_F"]), ("G", K["src_G"])):
         if "new" in rules and not all(checks.values()):
             print("ECHEC : cas %s : la regle v4.15 n'est plus dans les sources (%s)" % (case, ", ".join(w for w, ok in checks.items() if not ok)))
             bad += 1
@@ -1461,7 +1724,8 @@ def main():
     word = lambda r, k: ("passe" if r[k] else "echoue") if k in r else "non jouee"
     for r in res.values():
         r.pop("first", None)  # premiere disposition v4.15 du cas A : pour information
-    print("RESULTAT : %s (%s)" % ("OK" if bad == 0 else "ECHEC", ", ".join("%s v4.14 %s / v4.15 %s" % (c, word(r, "old"), word(r, "new")) for c, r in res.items())))
+    print("RESULTAT : %s (%s)" % ("OK" if bad == 0 else "ECHEC", ", ".join(("%s avant (vanne B a 58 cm) %s / v4.16 %s" if c == "G" else "%s v4.14 %s / v4.15 %s")
+                                                                     % (c, word(r, "old"), word(r, "new")) for c, r in res.items())))
     return 0 if bad == 0 else 1
 
 

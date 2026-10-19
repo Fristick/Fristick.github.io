@@ -1384,7 +1384,8 @@ void ABRMissionDevice::BuildPoolTanks()
 		WaterPlanes.Add(Plane);
 		// Regle graduee sur l'avant : plaque emaillee, marques et chiffres, colonne d'eau et flotteur (lisibles du sol)
 		const int32 Marks = T == 0 ? P::MarksA : P::MarksB;
-		const float GY = T == 0 ? -78.f : 118.f;
+		// v4.16 : regle de B a GaugeLateralB (avant : 118 cm), au-dela du volant de B (BRMech::Pool::WheelLateralB)
+		const float GY = T == 0 ? P::GaugeLateralA : P::GaugeLateralB;
 		const float S0 = T == 0 ? P::SurfaceA(0, LW) : P::SurfaceB(0, LW);
 		const float SN = T == 0 ? P::SurfaceA(Marks, LW) : P::SurfaceB(Marks, LW);
 		AddBoxPart(FVector(1.5f, GY, Zl((S0 + SN) * 0.5f)), FVector(2.f, 22.f, SN - S0 + 18.f), Enamel);
@@ -1403,8 +1404,9 @@ void ABRMissionDevice::BuildPoolTanks()
 	// Vanne A : dans la cloison, au fond du bassin A ; elle se deverse dans B par une bouche (jet visible)
 	AddPart(A->Cylinder(), FVector(-60.f, P::BY0 + 4.f, Zl(Ba + 6.f)), FRotator(0.f, 0.f, 90.f), FVector(12.f, 12.f, 10.f), DarkMetal);
 	Flows.Add(AddBoxPart(FVector(-60.f, P::BY0 + 11.f, Zl(Ba)), FVector(16.f, 3.f, 1.f), Water));
-	// Vanne B : vidange vers le canal (conduite coudee devant le bassin, bouche au-dessus d'une grille)
-	const float DY = 96.f;
+	// Vanne B : vidange vers le canal (conduite coudee devant le bassin, bouche au-dessus d'une grille). v4.16 : entre les deux
+	// volants (BRMech::Pool::DrainLateral ; avant : 96 cm, au-dela du volant de B alors a 58 cm)
+	const float DY = P::DrainLateral;
 	AddRod(FVector(-2.f, DY, Zl(Bb + 10.f)), FVector(30.f, DY, Zl(Bb + 10.f)), 9.f, Steel);
 	AddRod(FVector(30.f, DY, Zl(Bb + 14.f)), FVector(30.f, DY, Zl(Bb - 14.f)), 9.f, Steel);
 	AddBoxPart(FVector(30.f, DY, 1.f), FVector(32.f, 32.f, 2.f), DarkMetal);

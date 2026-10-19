@@ -1022,6 +1022,45 @@ namespace BRTestV412
 			bServer ? TEXT("action acceptee") : *FString::Printf(TEXT("REFUSEE (%s, %s)"), *GetNameSafe(Block.GetActor()), *GetNameSafe(Block.GetComponent())));
 	}
 
+	/** v4.16 : geometrie d'une visee ratee, dans le repere du point vise de Dev (X devant le mecanisme, Y a sa droite, comme
+	 *  BRMech::FFrame, Z vers le haut) : yeux et leur angle a son avant, point vise de l'objet pris a sa place, impact de la sphere
+	 *  de la visee du client (ABRCharacter::UpdateFocus, etape 1) lancee dans l'axe du regard. Avant : seule la distance des yeux
+	 *  (Niveau 37, graine 3053711763 : vanne B prise en visant la vanne A, positions inconnues du rapport) */
+	FString FocusGeometry(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, const AActor* Seen)
+	{
+		const FVector Origin = Dev->GetInteractPoint();
+		const FVector Ahead = Dev->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Side(-Ahead.Y, Ahead.X, 0.f);
+		auto Local = [&Origin, &Ahead, &Side](const FVector& P)
+		{
+			const FVector D = P - Origin;
+			return FVector(FVector::DotProduct(D, Ahead), FVector::DotProduct(D, Side), D.Z);
+		};
+		const FVector EyeAt = C->GetEyeLocation();
+		const FVector Eye = Local(EyeAt);
+		FString Out = FString::Printf(TEXT("geometrie : point vise en (%.0f, %.0f, %.0f), lacet %.0f ; yeux a (%.0f, %.0f, %.0f) de lui, %.0f degres de son avant"), Origin.X,
+			Origin.Y, Origin.Z, Dev->GetActorRotation().Yaw, Eye.X, Eye.Y, Eye.Z, FMath::RadiansToDegrees(FMath::Atan2(Eye.Y, Eye.X)));
+		if (const ABRMissionDevice* Other = Cast<ABRMissionDevice>(Seen))
+		{
+			const FVector At = Local(Other->GetInteractPoint());
+			Out += FString::Printf(TEXT(", point vise de %s a (%.0f, %.0f, %.0f)"), *Other->GetName(), At.X, At.Y, At.Z);
+		}
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRTestFocusGeometry), false, C);
+		if (W && W->GetWorld() && W->GetWorld()->SweepSingleByChannel(Hit, EyeAt, EyeAt + C->GetViewDirection() * ClientFocusSweep, FQuat::Identity, ECC_Visibility,
+			FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q))
+		{
+			const FVector At = Local(Hit.ImpactPoint);
+			Out += FString::Printf(TEXT(", sphere de la visee : impact en (%.0f, %.0f, %.0f) a %.0f cm des yeux sur %s (%s)"), At.X, At.Y, At.Z, Hit.Distance,
+				*GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()));
+		}
+		else
+		{
+			Out += TEXT(", sphere de la visee : aucun impact");
+		}
+		return Out;
+	}
+
 	/** Point au centre d'un volume local (repere d'un module) */
 	FVector BoxCenter(const BRMech::FFrame& F, float LX0, float LY0, float LX1, float LY1, float Z)
 	{
@@ -1333,8 +1372,10 @@ void ABRAutoTest::AddWalkMissionSteps(int32 Level, uint32 UserSeed, bool bLoad)
 				return false;
 			}
 			const AActor* Seen = C->FocusActor.Get();
-			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) atteint mais PAS VISE par l'interaction (vise : %s ; %s ; apres la marche de reprise ; graine du niveau %u)"),
-				Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), *FocusName(W, Seen), *ReachFromHere(W, C, Dev), WalkMission.LevelSeed), true);
+			// v4.16 : avec la geometrie de la visee (repere du mecanisme vise : yeux, point vise de l'objet pris, impact de la sphere)
+			Note(FString::Printf(TEXT("Niveau %d : mecanisme %d (%s) atteint mais PAS VISE par l'interaction (vise : %s ; %s ; apres la marche de reprise ; graine du niveau %u ; %s)"),
+				Level, TestMissionDevice, *BRMissionText::DeviceName(P, TestMissionDevice), *FocusName(W, Seen), *ReachFromHere(W, C, Dev), WalkMission.LevelSeed,
+				*FocusGeometry(W, C, Dev, Seen)), true);
 			Shot(FString::Printf(TEXT("v412_acces_%d_pas_vise"), Level));
 			return true;
 		}

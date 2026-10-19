@@ -335,6 +335,84 @@ namespace BRMech
 				}
 				return MinF(MinF(At(0.f), At(1.f)), At((Lo + Hi) * 0.5f));
 			}
+			/** v4.16 : premier contact (parametre 0..1 du segment A-B) d'une sphere de rayon Rad lancee de A vers B avec la boite
+			 *  alignee (C, E) ; 2 sans contact. La distance est convexe le long du segment : recherche ternaire du plus pres, puis
+			 *  dichotomie du premier passage sous Rad (nombres de pas fixes, memes operations chez tous) */
+			float SweepContact(const FVec3& A, const FVec3& B, const FVec3& C, const FVec3& E, float Rad)
+			{
+				auto At = [&](float T)
+				{
+					FVec3 P;
+					P.X = A.X + (B.X - A.X) * T;
+					P.Y = A.Y + (B.Y - A.Y) * T;
+					P.Z = A.Z + (B.Z - A.Z) * T;
+					return DistToBox(P, C, E);
+				};
+				if (At(0.f) <= Rad)
+				{
+					return 0.f;
+				}
+				float Lo = 0.f, Hi = 1.f;
+				for (int I = 0; I < 48; ++I)
+				{
+					const float M1 = Lo + (Hi - Lo) / 3.f;
+					const float M2 = Hi - (Hi - Lo) / 3.f;
+					if (At(M1) <= At(M2))
+					{
+						Hi = M2;
+					}
+					else
+					{
+						Lo = M1;
+					}
+				}
+				float TFirst = (Lo + Hi) * 0.5f;
+				if (At(1.f) < At(TFirst))
+				{
+					TFirst = 1.f;
+				}
+				if (At(TFirst) > Rad)
+				{
+					return 2.f;
+				}
+				float TPrev = 0.f;
+				for (int I = 0; I < 40; ++I)
+				{
+					const float M = (TPrev + TFirst) * 0.5f;
+					if (At(M) <= Rad)
+					{
+						TFirst = M;
+					}
+					else
+					{
+						TPrev = M;
+					}
+				}
+				return TFirst;
+			}
+			/** v4.16 : quart de tour impair entre deux reperes (les demi-tailles X et Y s'echangent) */
+			bool OddTurn(const FFrame& A, const FFrame& B)
+			{
+				const int Turns = static_cast<int>(std::lround((QuarterYaw(A.Yaw) - QuarterYaw(B.Yaw)) / 90.f));
+				return (Turns % 2) != 0;
+			}
+			/** v4.16 : boite locale Local (repere de P, Z depuis son sol) exprimee dans le repere In (Z depuis le sol de In) : centre
+			 *  et demi-tailles */
+			void BoxIn(const FPlaced& P, const FVec3& LocalC, const FVec3& LocalE, const FFrame& In, FVec3& OutC, FVec3& OutE)
+			{
+				float WX = 0.f, WY = 0.f;
+				P.Frame.ToWorld(LocalC.X, LocalC.Y, WX, WY);
+				In.ToLocal(WX, WY, OutC.X, OutC.Y);
+				OutC.Z = P.Frame.Z + LocalC.Z - In.Z;
+				OutE = OddTurn(P.Frame, In) ? V3(LocalE.Y, LocalE.X, LocalE.Z) : LocalE;
+			}
+			/** v4.16 : volume de P (FFootprint::Solid) en centre et demi-tailles de son repere */
+			void SolidCenter(const FPlaced& P, FVec3& OutC, FVec3& OutE)
+			{
+				const FBox& S = P.Print.Solid;
+				OutC = V3((S.X0 + S.X1) * 0.5f, (S.Y0 + S.Y1) * 0.5f, (S.Z0 + S.Z1) * 0.5f);
+				OutE = V3(AbsF(S.X1 - S.X0) * 0.5f, AbsF(S.Y1 - S.Y0) * 0.5f, AbsF(S.Z1 - S.Z0) * 0.5f);
+			}
 			/** Me gene par le volume de Other : point vise dedans, ou place debout devant lui coupee */
 			bool Hinders(const FPlaced& Me, const FPlaced& Other)
 			{
@@ -619,6 +697,116 @@ namespace BRMech
 		bool FocusClash(const FPlaced& A, const FPlaced& B)
 		{
 			return CutsFocusLane(A, B) || CutsFocusLane(B, A);
+		}
+
+		float AimGap(const FPlaced& A, const FPlaced& B)
+		{
+			if (!A.Print.bAimable || !B.Print.bAimable)
+			{
+				return -1.f;
+			}
+			// Boite de B dans le repere de A : ecart par axe entre les deux boites alignees
+			FVec3 BC, BE;
+			BoxIn(B, B.Print.Aim, B.Print.AimExtent, A.Frame, BC, BE);
+			const FVec3& AC = A.Print.Aim;
+			const FVec3& AE = A.Print.AimExtent;
+			const float GX = MaxF(AbsF(BC.X - AC.X) - AE.X - BE.X, 0.f);
+			const float GY = MaxF(AbsF(BC.Y - AC.Y) - AE.Y - BE.Y, 0.f);
+			const float GZ = MaxF(AbsF(BC.Z - AC.Z) - AE.Z - BE.Z, 0.f);
+			return std::sqrt(GX * GX + GY * GY + GZ * GZ);
+		}
+
+		int FanSteals(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst)
+		{
+			if (!Me.Print.bAimable || !Other.Print.bAimable)
+			{
+				return 0;
+			}
+			// Tout dans le repere de Me (X vers la salle, Y lateral, Z depuis son sol)
+			const FVec3 Target = Me.Print.Aim;
+			FVec3 OC, OE;
+			BoxIn(Other, Other.Print.Aim, Other.Print.AimExtent, Me.Frame, OC, OE);
+			const bool bMeSolid = Me.Print.bSolid;
+			const bool bOtherSolid = Other.Print.bSolid;
+			FVec3 MSC, MSE, OSC, OSE;
+			if (bMeSolid)
+			{
+				SolidCenter(Me, MSC, MSE);
+			}
+			if (bOtherSolid)
+			{
+				FVec3 LC, LE;
+				SolidCenter(Other, LC, LE);
+				BoxIn(Other, LC, LE, Me.Frame, OSC, OSE);
+			}
+			const float CapsuleR = PlayerRadius + Margin;
+			const float EyeZ = FloorLift + StandEye;
+			// Capsule (plan) hors d'un volume plus haut qu'une marche (comme Hinders)
+			auto Blocks = [&](bool bHas, const FVec3& SC, const FVec3& SE, float PX, float PY)
+			{
+				if (!bHas || SE.Z * 2.f <= StepHeight)
+				{
+					return false;
+				}
+				const float DX = MaxF(AbsF(PX - SC.X) - SE.X, 0.f);
+				const float DY = MaxF(AbsF(PY - SC.Y) - SE.Y, 0.f);
+				return std::sqrt(DX * DX + DY * DY) < CapsuleR;
+			};
+			auto Stolen = [&](float PX, float PY)
+			{
+				if (Blocks(bMeSolid, MSC, MSE, PX, PY) || Blocks(bOtherSolid, OSC, OSE, PX, PY))
+				{
+					return false; // personne ne s'y tient
+				}
+				const FVec3 Eye = V3(PX, PY, EyeZ);
+				const float DX = Eye.X - Target.X, DY = Eye.Y - Target.Y, DZ = Eye.Z - Target.Z;
+				if (std::sqrt(DX * DX + DY * DY + DZ * DZ) > FanReach)
+				{
+					return false; // hors de portee de la visee du client : place refusee par les tests
+				}
+				if (bOtherSolid && SegToBox(Eye, Target, OSC, OSE) <= 0.f)
+				{
+					return false; // ligne de vue de l'hote coupee : place refusee
+				}
+				const float TMe = SweepContact(Eye, Target, Target, Me.Print.AimExtent, FocusSweep);
+				const float TOther = SweepContact(Eye, Target, OC, OE, FocusSweep);
+				if (TOther > TMe)
+				{
+					return false;
+				}
+				// Un volume (decor) touche avant : la tolerance d'UpdateFocus joue, l'autre mecanisme ne prend pas la visee
+				const float TSolidMe = bMeSolid ? SweepContact(Eye, Target, MSC, MSE, FocusSweep) : 2.f;
+				const float TSolidOther = bOtherSolid ? SweepContact(Eye, Target, OSC, OSE, FocusSweep) : 2.f;
+				return TOther < MinF(TSolidMe, TSolidOther);
+			};
+			int Count = 0;
+			for (int Ring = 0; Ring < NumFanRings; ++Ring)
+			{
+				for (int Step = -FanTurns; Step <= FanTurns; ++Step)
+				{
+					const float Ang = MechImpl::Rad(static_cast<float>(Step) * FanStep);
+					const float SX = Target.X + std::cos(Ang) * FanRings[Ring];
+					const float SY = Target.Y + std::sin(Ang) * FanRings[Ring];
+					const float Arrival = (Ring == 0 && Step == 0) ? FanArrivalFront : FanArrival;
+					const int Cells = static_cast<int>(Arrival / FanGrid);
+					for (int GXi = -Cells; GXi <= Cells; ++GXi)
+					{
+						for (int GYi = -Cells; GYi <= Cells; ++GYi)
+						{
+							const float OX = static_cast<float>(GXi) * FanGrid, OY = static_cast<float>(GYi) * FanGrid;
+							if (OX * OX + OY * OY <= Arrival * Arrival && Stolen(SX + OX, SY + OY))
+							{
+								if (Count == 0 && OutFirst)
+								{
+									*OutFirst = V3(SX + OX - Target.X, SY + OY - Target.Y, EyeZ - Target.Z);
+								}
+								++Count;
+							}
+						}
+					}
+				}
+			}
+			return Count;
 		}
 
 		int BridgeParts(FBox* Out, int MaxParts)

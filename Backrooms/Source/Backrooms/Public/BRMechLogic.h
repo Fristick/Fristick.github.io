@@ -109,8 +109,20 @@ namespace BRMech
 	{
 		/** Les deux bassins sont adosses au mur de la vanne A ; les vannes sont fixees sur leur face avant */
 		constexpr float TankDepth = 120.f;
-		/** Vanne B : a cote de la vanne A, sur la meme face (repere de la vanne A) */
-		constexpr float WheelLateralB = 58.f;
+		/** Vanne B : a cote de la vanne A, sur la meme face (repere de la vanne A). v4.16 : 98 cm (avant : 58). Les boites visees
+		 *  des deux volants (BRMech::Clearance::Of, R_Sluice : 32 cm de part et d'autre de leur axe, 24 cm de profondeur, la meme
+		 *  face avant) se chevauchaient de 6 cm : de biais, du cote de B (au-dela de 54 degres de l'avant de A), la sphere de la
+		 *  visee du client lancee vers le moyeu de A touchait la boite de B avant celle de A, le moyeu de A bien visible (Niveau 37,
+		 *  graine 3053711763 : "mecanisme 2 (Vanne du bassin A) atteint mais PAS VISE", vise : vanne B). A 98 cm, 34 cm separent
+		 *  les deux boites ; BRMech::Clearance::FanSteals le verifie pour les places de biais des tests et leurs arrivees */
+		constexpr float WheelLateralB = 98.f;
+		/** v4.16 : vidange du bassin B (conduite, bouche, grille, regard de l'indicateur de courant) entre les deux volants, et
+		 *  regles graduees des bassins (repere de la vanne A). Avant : vidange a 96 cm et regle de B a 118 cm, de part et d'autre
+		 *  du volant de B a 58 cm ; le volant de B a 98 cm y passerait. Chaque piece de l'avant du bassin B (volants et leurs
+		 *  graduations, regard, regle) a sa bande laterale, sans recouvrement (Tools/verify_device_clearance.py, cas G) */
+		constexpr float DrainLateral = 49.f;
+		constexpr float GaugeLateralA = -78.f;
+		constexpr float GaugeLateralB = 148.f;
 		/** Bassin A (repere de la vanne A, X depuis la face avant des bassins vers le mur : -TankDepth..0) */
 		constexpr float AY0 = -112.f, AY1 = -8.f;
 		/** Bassin B, plus bas, a cote */
@@ -296,6 +308,37 @@ namespace BRMech
 		bool CutsFocusLane(const FPlaced& Me, const FPlaced& Other);
 		/** v4.15 (correctifs 3) : l'un des deux couloirs de visee coupe par l'autre mecanisme */
 		bool FocusClash(const FPlaced& A, const FPlaced& B);
+		/** v4.16 : ecart (cm) entre les boites visees de A et de B (lacets au quart de tour) ; 0 si elles se touchent ou se
+		 *  chevauchent, -1 si l'une n'arrete pas la visee (porte ou passage de la mission). Niveau 37 : vannes A et B a 58 cm
+		 *  l'une de l'autre (v4.12 a v4.16) : 0, boites chevauchees de 6 cm */
+		float AimGap(const FPlaced& A, const FPlaced& B);
+		/** v4.16 : places de biais des tests du jeu (BRTestV412::FindMissionStand : cercles FanRings, pas de FanStep degres depuis
+		 *  l'avant du mecanisme), jugees par FanSteals de l'avant jusqu'a FanTurns pas de chaque cote. Une marche des tests
+		 *  s'arrete a FanArrival du but (place autour du mecanisme ; FanArrivalFront pour la place devant lui, au premier cercle)
+		 *  puis vise ; portee de la visee du client FanReach (BRTestV412 : ClientFocusReach). Tools/verify_device_clearance.py lit
+		 *  les memes valeurs dans BRAutoTestV412.cpp et BRAutoTestWalk.h (ECHEC si elles different) */
+		constexpr int NumFanRings = 5;
+		constexpr float FanRings[NumFanRings] = { StandRange, 160.f, 210.f, 75.f, 240.f };
+		constexpr float FanStep = 22.5f;
+		constexpr int FanTurns = 2;
+		constexpr float FanArrival = 35.f;
+		constexpr float FanArrivalFront = 70.f;
+		constexpr float FanReach = 250.f;
+		/** Pas de la grille des points d'arrivee (cm) */
+		constexpr float FanGrid = 5.f;
+		/** v4.16 : visee de Me prise par Other depuis une place de biais. Chaque place des cercles FanRings, de l'avant de Me
+		 *  jusqu'a FanTurns pas de FanStep de chaque cote, et chaque arrivee de la marche vers elle (grille de FanGrid dans le
+		 *  disque de FanArrival, FanArrivalFront pour la place devant au premier cercle), au sol de Me releve de FloorLift :
+		 *  capsule (PlayerRadius + Margin) hors des volumes de Me et de Other, yeux (StandEye) a portee (FanReach), ligne de vue
+		 *  de l'hote libre du volume de Other (ABRWorld::CanReachMissionDevice ignore le mecanisme vise). La sphere de la visee du
+		 *  client (FocusSweep, ABRCharacter::UpdateFocus) lancee des yeux vers le point vise de Me touche la boite visee de Other
+		 *  au plus tard avec celle de Me, avant tout volume : visee prise. Rend le nombre de ces points (0 : la visee prend
+		 *  toujours Me). Niveau 37, graine 3053711763 : vanne B a 58 cm de la vanne A ; d'apres le rapport et la capture (yeux a
+		 *  169 cm, 51 a 54 degres de l'avant de A du cote de B), place a 45 degres au cercle de 160 cm et arrivee plus pres de B :
+		 *  visee prise par B (seuil du modele : 54 degres). OutFirst : yeux du premier de ces points, depuis
+		 *  le point vise de Me (X devant lui, Y lateral, Z vers le haut). Geometrie pure, nombre de pas fixe : meme resultat chez
+		 *  tous */
+		int FanSteals(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst = nullptr);
 		/** v4.15 (correctifs 4) : verdict de l'invariant du placement pour le couloir de visee de Me face a Other
 		 *  (ABRWorld::PlaceMission, LogMissionVolumeInvariant) */
 		enum class ELaneCut : uint8_t
