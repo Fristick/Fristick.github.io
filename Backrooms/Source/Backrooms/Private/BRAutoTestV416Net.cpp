@@ -729,6 +729,8 @@ namespace BRTestV416Net
 		bool bJumpTried = false;
 		bool bJumpNoted = false;
 		float TimerBeforeJump = -1.f;
+		/** v4.16 (fusion) : C3, hote et autres clients a terre au coup mortel du client lointain */
+		bool bOthersDownAtHit = false;
 		bool bHelpAtDeath = false;
 		int32 FallsBefore = 0;
 		int32 FallsBySlot[4] = { 0, 0, 0, 0 };
@@ -1794,7 +1796,8 @@ void ABRAutoTest::AddNetV416Plan()
 					return false;
 				}
 				const bool bRefused = LogContains(V6::S.LogFrom, TEXT("reveil refuse"));
-				const bool bGaveUp = LogContains(V6::S.LogFrom, TEXT("abandon a terre accepte"));
+				// v4.16 (fusion) : compteur de l'hote (le releve du journal ne garde que les avertissements)
+				const bool bGaveUp = bThere && Victim.Pawn && Victim.Pawn->ServerGiveUpsAccepted > 0;
 				Note(FString::Printf(TEXT("hote : reveil du client mort loin de ses coequipiers refuse %s (attendu non ; v4.15 : refuse, le client se croyait seul), "
 					"abandon a terre accepte %s (attendu oui, v4.16 : ServerReportGiveUp)"), bRefused ? TEXT("OUI") : TEXT("non"), bGaveUp ? TEXT("oui") : TEXT("NON")), bRefused || !bGaveUp);
 				// v4.16 (relecture) : apres le reveil (et quelques pas du client)
@@ -2054,19 +2057,33 @@ void ABRAutoTest::AddNetV416Plan()
 				return false;
 			}
 			// 1,5 s plus tard (etats de mort recus par la victime), le client lointain
-			if (FPlatformTime::Seconds() - V6::S.Clock < 1.5)
+			if (V6::S.Phase == 1)
+			{
+				if (FPlatformTime::Seconds() - V6::S.Clock < 1.5)
+				{
+					return false;
+				}
+				bool bOthersDown = C->GetDeathState().bDead;
+				for (const V6::FMate& X : M)
+				{
+					bOthersDown &= X.Slot == 1 || X.Pawn->GetDeathState().bDead;
+				}
+				V6::S.bOthersDownAtHit = bOthersDown;
+				Victim.Pawn->ReceiveAttack(1000.f, 0.f, nullptr);
+				V6::S.Clock = FPlatformTime::Seconds();
+				V6::S.Phase = 2;
+				return false;
+			}
+			// v4.16 (fusion) : la mort officielle suit le signalement du client (ServerReportDeath, ou l'hote l'applique seul
+			// au bout du delai de ABRCharacter::TickServerVitals) : avant, la note etait faite dans l'image du coup, toujours NON
+			const double SinceHit = FPlatformTime::Seconds() - V6::S.Clock;
+			if (!Victim.Pawn->GetDeathState().bDead && SinceHit < 3.0)
 			{
 				return false;
 			}
-			bool bOthersDown = C->GetDeathState().bDead;
-			for (const V6::FMate& X : M)
-			{
-				bOthersDown &= X.Slot == 1 || X.Pawn->GetDeathState().bDead;
-			}
-			Victim.Pawn->ReceiveAttack(1000.f, 0.f, nullptr);
-			Note(FString::Printf(TEXT("hote : mort loin apres les autres : hote et autres clients a terre %s, puis coup mortel sur le client lointain (a %.0f m de l'hote), mort officielle %s"),
-				V6::Oui(bOthersDown), FVector::Dist2D(Victim.Pawn->GetActorLocation(), C->GetActorLocation()) / 100.f, V6::Oui(Victim.Pawn->GetDeathState().bDead)),
-				!bOthersDown || !Victim.Pawn->GetDeathState().bDead);
+			Note(FString::Printf(TEXT("hote : mort loin apres les autres : hote et autres clients a terre %s, puis coup mortel sur le client lointain (a %.0f m de l'hote), mort officielle %s (%.1f s apres le coup, attendu au plus 3 s)"),
+				V6::Oui(V6::S.bOthersDownAtHit), FVector::Dist2D(Victim.Pawn->GetActorLocation(), C->GetActorLocation()) / 100.f, V6::Oui(Victim.Pawn->GetDeathState().bDead), SinceHit),
+				!V6::S.bOthersDownAtHit || !Victim.Pawn->GetDeathState().bDead);
 			V6::S.Phase = 0;
 			V6::SetHostPhase(GetWorld(), 38);
 			return true;
