@@ -10,6 +10,10 @@
 //      positions dont la lumiere change sur cette graine.
 //   1 bis. Relecture v4.16 : trappes des echelles des chunks (partie classique imposee, Niveaux 8 et 37 aux graines des
 //      tests v4.15) : trappe predite par le monde = echelle construite, plafonniers sous la trappe ni poses ni comptes.
+//      Seuls les chunks construits ET en place comptent (un chunk qui sort de la vue reste IsReady() pendant son demontage,
+//      ses sorties detruites d'abord) : ceux du depart sont verifies avant que le joueur parte ; il va ensuite a la trappe
+//      visee, la premiere dont un plafonnier de la grille tombe dessous (cherchee jusqu'a 24 chunks du depart d'un niveau
+//      ouvert : "plafonnier non pose" exerce), sinon la premiere ; un ecart d'echelle cite les sorties posees par le chunk.
 //   2. Level 0, graine 9 (scene du kit, ombres MegaLights) : meme endroit avec et sans mur (le plafonnier derriere le mur ne
 //      compte plus), arete fermee par le crochet de test (comme une porte de mission sur une ouverture de la grille : la
 //      lumiere est coupee puis revient), Smiler du coin sombre (endroit ou la regle d'avant le dissipait et plus la v4.16, avec
@@ -84,6 +88,9 @@ namespace BRTestV416Light
 		uint32 LevelSeed;
 	};
 	const FHatchRun HatchRuns[] = { { 8, 233637237u }, { 37, 115083815u } };
+	/** Relecture v4.16 : niveau ouvert : la trappe visee (un plafonnier de la grille dessous, que le chunk ne pose pas) est
+	 *  cherchee anneau par anneau jusqu'a ce nombre de chunks du depart quand les 12 x 12 chunks du centre n'en ont pas */
+	constexpr int32 HatchSearchChunks = 24;
 
 	const FIntPoint Dirs[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
 
@@ -181,13 +188,34 @@ namespace BRTestV416Light
 		return FVector(P.X, P.Y, W->FloorZAt(P) + Z);
 	}
 
-	/** Lumieres construites par les chunks prets (Only : ce chunk seulement) */
+	/** Relecture v4.16 : chunk construit et en place : pret ET pas en demontage. Un chunk qui sort de la vue (joueur deplace)
+	 *  reste IsReady() pendant tout son demontage etale (ABRChunk::StepTeardown) ; ses acteurs partent les premiers (la derniere
+	 *  sortie posee en tete) : ses echelles, objets et lumieres ne sont plus ceux de sa construction */
+	bool LiveChunk(const ABRChunk& Chunk)
+	{
+		return Chunk.IsReady() && !Chunk.IsTearingDown();
+	}
+
+	/** Chunks construits et en place, par coordonnees */
+	void LiveChunks(UWorld* InWorld, TMap<FIntPoint, ABRChunk*>& Out)
+	{
+		Out.Reset();
+		for (TActorIterator<ABRChunk> It(InWorld); It; ++It)
+		{
+			if (LiveChunk(**It))
+			{
+				Out.Add(It->Coord, *It);
+			}
+		}
+	}
+
+	/** Lumieres construites par les chunks construits et en place (Only : ce chunk seulement) */
 	void BuiltLights(UWorld* InWorld, const FIntPoint* Only, TArray<FVector>& Out)
 	{
 		Out.Reset();
 		for (TActorIterator<ABRChunk> It(InWorld); It; ++It)
 		{
-			if (!It->IsReady() || (Only && It->Coord != *Only))
+			if (!LiveChunk(**It) || (Only && It->Coord != *Only))
 			{
 				continue;
 			}
@@ -238,6 +266,153 @@ namespace BRTestV416Light
 		}
 	}
 
+	/** Nom lisible d'un style de sortie (diagnostic) */
+	const TCHAR* ExitStyleName(EBRExitStyle Style)
+	{
+		switch (Style)
+		{
+		case EBRExitStyle::NoclipWall: return TEXT("mur noclip");
+		case EBRExitStyle::NoclipFloor: return TEXT("sol noclip");
+		case EBRExitStyle::Door: return TEXT("porte");
+		case EBRExitStyle::HotelDoor: return TEXT("porte d'hotel");
+		case EBRExitStyle::Elevator: return TEXT("ascenseur");
+		case EBRExitStyle::Ladder: return TEXT("echelle");
+		case EBRExitStyle::Barn: return TEXT("grange");
+		case EBRExitStyle::HouseDoor: return TEXT("porte de maison");
+		case EBRExitStyle::BuildingDoor: return TEXT("porte d'immeuble");
+		case EBRExitStyle::ServiceDoor: return TEXT("porte de service");
+		}
+		return TEXT("?");
+	}
+
+	/** Relecture v4.16 : un plafonnier de la grille du chunk tombe sous sa trappe predite (le chunk ne le pose pas) : premiere
+	 *  cellule du chunk, ordre fixe */
+	bool LampUnderHatch(const ABRWorld* W, const FIntPoint& Chunk, FIntPoint& OutCell)
+	{
+		const int32 N = W->Def().ChunkCells;
+		for (int32 LY = 0; LY < N; ++LY)
+		{
+			for (int32 LX = 0; LX < N; ++LX)
+			{
+				const FIntPoint Cell(Chunk.X * N + LX, Chunk.Y * N + LY);
+				if (W->GetLightCell(Cell.X, Cell.Y).bUnderHatch)
+				{
+					OutCell = Cell;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Relecture v4.16 : bilan des chunks a trappe verifies (etape 1 bis) ; Done : chunks deja verifies (une fois chacun) */
+	struct FHatchTally
+	{
+		TSet<FIntPoint> Done;
+		int32 Checked = 0;
+		int32 WithLadder = 0;
+		int32 Placed = 0;
+		int32 PlacedBuilt = 0;
+		int32 Under = 0;
+		int32 UnderBuilt = 0;
+		float Removed = 0.f;
+		FString FirstBad;
+	};
+
+	/** Une echelle construite a cette trappe : pied dans le rectangle du conduit, a 10 cm pres */
+	bool LadderAtHatch(const ABRExit& Exit, const BRLight::FHatch& H)
+	{
+		const FVector At = Exit.GetActorLocation();
+		return Exit.Style == EBRExitStyle::Ladder && At.X > H.MinX - 10.0 && At.X < H.MaxX + 10.0 && At.Y > H.MinY - 10.0 && At.Y < H.MaxY + 10.0;
+	}
+
+	bool LadderAtHatch(UWorld* InWorld, const BRLight::FHatch& H)
+	{
+		for (TActorIterator<ABRExit> It(InWorld); It; ++It)
+		{
+			if (LadderAtHatch(**It, H))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Relecture v4.16 : un chunk a trappe construit et en place (LiveChunk) : une echelle construite a la trappe predite (pied
+	 *  dans le rectangle du conduit, a 10 cm pres) ; plafonniers de la grille poses (lumiere construite) et sous la trappe (aucune
+	 *  lumiere). Premier ecart d'echelle : les sorties posees par ce chunk (style, pied, lacet), a cote du rectangle predit */
+	void CheckHatchChunk(UWorld* InWorld, const ABRWorld* W, const ABRChunk& Chunk, const BRLight::FHatch& H, FHatchTally& T)
+	{
+		const FIntPoint Key = Chunk.Coord;
+		T.Done.Add(Key);
+		++T.Checked;
+		bool bLadder = false;
+		FString Exits;
+		for (TActorIterator<ABRExit> It(InWorld); It; ++It)
+		{
+			const FVector At = It->GetActorLocation();
+			bLadder = bLadder || LadderAtHatch(**It, H);
+			if (It->GetOwner() == &Chunk)
+			{
+				Exits += FString::Printf(TEXT("%s%s (%.0f, %.0f, %.0f) lacet %.0f"), Exits.IsEmpty() ? TEXT("") : TEXT(", "), ExitStyleName(It->Style), At.X, At.Y, At.Z,
+					It->GetActorRotation().Yaw);
+			}
+		}
+		T.WithLadder += bLadder ? 1 : 0;
+		if (!bLadder && T.FirstBad.IsEmpty())
+		{
+			T.FirstBad = FString::Printf(TEXT("aucune echelle construite a la trappe du chunk (%d, %d) (trappe predite %.0f..%.0f x %.0f..%.0f) ; sorties posees par ce chunk : %s"),
+				Key.X, Key.Y, H.MinX, H.MaxX, H.MinY, H.MaxY, Exits.IsEmpty() ? TEXT("aucune") : *Exits);
+		}
+		const int32 N = W->Def().ChunkCells;
+		TArray<FVector> Built;
+		BuiltLights(InWorld, &Key, Built);
+		for (int32 LY = 0; LY < N; ++LY)
+		{
+			for (int32 LX = 0; LX < N; ++LX)
+			{
+				const FIntPoint Cell(Key.X * N + LX, Key.Y * N + LY);
+				const FBRLightCell L = W->GetLightCell(Cell.X, Cell.Y);
+				const bool bBuilt = (L.bLamp || L.bUnderHatch) && HasBuiltLight(W, L, Built);
+				if (L.bUnderHatch)
+				{
+					++T.Under;
+					T.UnderBuilt += bBuilt ? 1 : 0;
+					// Apport que la regle comptait sans que la lampe existe, a 1,65 m sous la trappe
+					T.Removed = FMath::Max(T.Removed, LampWeight(W, L, FVector((H.MinX + H.MaxX) * 0.5, (H.MinY + H.MaxY) * 0.5, 165.0)));
+					if (bBuilt && T.FirstBad.IsEmpty())
+					{
+						T.FirstBad = FString::Printf(TEXT("cellule (%d, %d) : plafonnier sous la trappe pourtant construit"), Cell.X, Cell.Y);
+					}
+				}
+				else if (L.bLamp)
+				{
+					++T.Placed;
+					T.PlacedBuilt += bBuilt ? 1 : 0;
+					if (!bBuilt && T.FirstBad.IsEmpty())
+					{
+						T.FirstBad = FString::Printf(TEXT("cellule (%d, %d) : plafonnier de jeu sans lumiere construite"), Cell.X, Cell.Y);
+					}
+				}
+			}
+		}
+	}
+
+	/** Relecture v4.16 : chunks a trappe construits et en place, pas encore verifies */
+	void CheckLiveHatches(UWorld* InWorld, const ABRWorld* W, const TArray<TPair<FIntPoint, BRLight::FHatch>>& List, FHatchTally& T)
+	{
+		TMap<FIntPoint, ABRChunk*> Live;
+		LiveChunks(InWorld, Live);
+		for (const TPair<FIntPoint, BRLight::FHatch>& Pair : List)
+		{
+			ABRChunk* const* Found = Live.Find(Pair.Key);
+			if (Found && *Found && !T.Done.Contains(Pair.Key))
+			{
+				CheckHatchChunk(InWorld, W, **Found, Pair.Value, T);
+			}
+		}
+	}
+
 	// ---------------------------------------------------------------------------------------------- etat des etapes
 	/** Scene du mur : cellule A, voisine B (derriere le mur) et son plafonnier, point a 40 cm de la face du mur dans A */
 	bool bWallScene = false;
@@ -259,8 +434,14 @@ namespace BRTestV416Light
 	TWeakObjectPtr<ABREntity> ControlSmiler;
 	bool bCornerSpawned = false;
 	bool bControlSpawned = false;
-	/** Relecture v4.16 : trappes predites (chunk, rectangle) du niveau en cours de l'etape 1 bis */
+	/** Relecture v4.16 : trappes predites (chunk, rectangle) du niveau en cours de l'etape 1 bis ; trappe visee (indice ; avec un
+	 *  plafonnier de la grille dessous ou non, cellule de ce plafonnier, anneau de chunks fouille) ; bilan des chunks verifies */
 	TArray<TPair<FIntPoint, BRLight::FHatch>> Hatches;
+	int32 HatchTarget = 0;
+	bool bHatchTargetUnder = false;
+	FIntPoint HatchUnderCell = FIntPoint::ZeroValue;
+	int32 HatchSearched = 0;
+	FHatchTally HatchTally;
 	/** Points compares d'un profil a l'autre et apres le rechargement */
 	TArray<FVector> Probes;
 	TArray<float> Baseline;
@@ -389,11 +570,12 @@ void ABRAutoTest::AddV416LightSteps()
 				return false;
 			}
 			const FIntPoint Here = W->WorldToCell(C->GetActorLocation());
-			// Chunks autour du point de depart construits et prets (la trace physique et les lumieres construites en ont besoin)
+			// Chunks autour du point de depart construits et prets (la trace physique et les lumieres construites en ont besoin) ;
+			// relecture v4.16 : en place (pas en demontage), comme les lumieres construites comparees (BuiltLights)
 			TSet<FIntPoint> Ready;
 			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
 			{
-				if (It->IsReady())
+				if (LiveChunk(**It))
 				{
 					Ready.Add(It->Coord);
 				}
@@ -635,6 +817,11 @@ void ABRAutoTest::AddV416LightSteps()
 			ABRWorld* W = GetBRWorld();
 			ABRCharacter* C = GetPlayer();
 			Hatches.Reset();
+			HatchTarget = 0;
+			bHatchTargetUnder = false;
+			HatchUnderCell = FIntPoint::ZeroValue;
+			HatchSearched = 0;
+			HatchTally = FHatchTally();
 			if (!W || !C)
 			{
 				return false;
@@ -650,7 +837,8 @@ void ABRAutoTest::AddV416LightSteps()
 				return true;
 			}
 			// Chunks du niveau fini (ou 12 x 12 autour du depart) : trappes predites, ordre fixe
-			const int32 B = W->Def().BoundsChunks > 0 ? W->Def().BoundsChunks : 6;
+			const bool bBounded = W->Def().BoundsChunks > 0;
+			const int32 B = bBounded ? W->Def().BoundsChunks : 6;
 			for (int32 CX = -B; CX < B; ++CX)
 			{
 				for (int32 CY = -B; CY < B; ++CY)
@@ -667,9 +855,47 @@ void ABRAutoTest::AddV416LightSteps()
 				Skip(FString::Printf(TEXT("Niveau %d (graine du niveau %u, partie classique) : aucune trappe d'echelle predite (regle de la trappe non exercee)"), Level, LevelSeed));
 				return true;
 			}
-			// Le joueur va dans une cellule praticable voisine de la premiere trappe (son chunk se construit)
-			const BRLight::FHatch& H0 = Hatches[0].Value;
-			const FIntPoint HatchCell = W->WorldToCell(FVector((H0.MinX + H0.MaxX) * 0.5, (H0.MinY + H0.MaxY) * 0.5, 0.0));
+			const int32 Predicted = Hatches.Num();
+			// Relecture v4.16 : trappe visee : la premiere (ordre fixe) dont un plafonnier de la grille tombe sous la trappe (le chunk
+			// ne le pose pas, la regle ne le compte pas : "plafonnier non pose" exerce) ; niveau ouvert : sinon cherchee anneau par
+			// anneau autour des 12 x 12 chunks, jusqu'a HatchSearchChunks du depart. Graine et grille seules : le meme choix a chaque
+			// lancement. Aucune : la premiere trappe
+			HatchTarget = -1;
+			for (int32 I = 0; I < Hatches.Num() && HatchTarget < 0; ++I)
+			{
+				if (LampUnderHatch(W, Hatches[I].Key, HatchUnderCell))
+				{
+					HatchTarget = I;
+				}
+			}
+			HatchSearched = B;
+			for (int32 R = B + 1; !bBounded && R <= HatchSearchChunks && HatchTarget < 0; ++R)
+			{
+				HatchSearched = R;
+				for (int32 CX = -R; CX < R && HatchTarget < 0; ++CX)
+				{
+					for (int32 CY = -R; CY < R && HatchTarget < 0; ++CY)
+					{
+						BRLight::FHatch H;
+						const FIntPoint Chunk(CX, CY);
+						if ((CX == -R || CX == R - 1 || CY == -R || CY == R - 1) && W->GetLightHatch(Chunk, H) && LampUnderHatch(W, Chunk, HatchUnderCell))
+						{
+							HatchTarget = Hatches.Add(TPair<FIntPoint, BRLight::FHatch>(Chunk, H));
+						}
+					}
+				}
+			}
+			bHatchTargetUnder = HatchTarget >= 0;
+			HatchTarget = FMath::Max(HatchTarget, 0);
+			// Relecture v4.16 : chunks a trappe construits au depart (construction synchrone du chargement), verifies avant que le
+			// joueur parte : ensuite ils sortent de la vue et se demontent (ABRChunk::StepTeardown : sorties detruites d'abord, le
+			// chunk reste IsReady() ; avant, ils etaient encore comptes : "aucune echelle construite a la trappe du chunk (0, -2)")
+			CheckLiveHatches(GetWorld(), W, Hatches, HatchTally);
+			const int32 AtStart = HatchTally.Checked;
+			// Le joueur va dans une cellule praticable voisine de la trappe visee (son chunk se construit)
+			const FIntPoint TargetChunk = Hatches[HatchTarget].Key;
+			const BRLight::FHatch& HT = Hatches[HatchTarget].Value;
+			const FIntPoint HatchCell = W->WorldToCell(FVector((HT.MinX + HT.MaxX) * 0.5, (HT.MinY + HT.MaxY) * 0.5, 0.0));
 			const bool bPlaced = ForRings(HatchCell, 3, [&](const FIntPoint& Cell)
 			{
 				if (Cell == HatchCell || !W->IsWalkable(Cell) || !W->IsCellInBounds(Cell.X, Cell.Y) || W->IsPoolCell(Cell.X, Cell.Y) || W->IsPitRoomCell(Cell.X, Cell.Y))
@@ -679,8 +905,15 @@ void ABRAutoTest::AddV416LightSteps()
 				PlacePlayer(W, C, W->CellCenter(Cell));
 				return true;
 			});
-			Note(FString::Printf(TEXT("Niveau %d (graine du niveau %u, partie classique) : %d trappe(s) d'echelle predite(s), premiere au chunk (%d, %d) (%.0f..%.0f x %.0f..%.0f) ; joueur %s"),
-				Level, LevelSeed, Hatches.Num(), Hatches[0].Key.X, Hatches[0].Key.Y, H0.MinX, H0.MaxX, H0.MinY, H0.MaxY, bPlaced ? TEXT("pose a cote") : TEXT("NON pose (aucune cellule libre)")));
+			const BRLight::FHatch& H0 = Hatches[0].Value;
+			const FString Where = bBounded ? FString(TEXT("dans l'enceinte")) : FString::Printf(TEXT("a moins de %d chunks du depart"), HatchSearched);
+			const FString Target = bHatchTargetUnder
+				? FString::Printf(TEXT("trappe visee au chunk (%d, %d) (%.0f..%.0f x %.0f..%.0f) : plafonnier de la grille de la cellule (%d, %d) dessous"), TargetChunk.X, TargetChunk.Y,
+					HT.MinX, HT.MaxX, HT.MinY, HT.MaxY, HatchUnderCell.X, HatchUnderCell.Y)
+				: FString::Printf(TEXT("aucun plafonnier de la grille sous une trappe predite %s : trappe visee : la premiere"), *Where);
+			Note(FString::Printf(TEXT("Niveau %d (graine du niveau %u, partie classique) : %d trappe(s) d'echelle predite(s), premiere au chunk (%d, %d) (%.0f..%.0f x %.0f..%.0f) ; %d chunk(s) a trappe construits au depart, verifies avant le depart du joueur ; %s ; joueur %s"),
+				Level, LevelSeed, Predicted, Hatches[0].Key.X, Hatches[0].Key.Y, H0.MinX, H0.MaxX, H0.MinY, H0.MaxY, AtStart, *Target,
+				bPlaced ? TEXT("pose a cote") : TEXT("NON pose (aucune cellule libre)")));
 			return true;
 		});
 		Add(FString::Printf(TEXT("v4.16 lumiere : trappes du Niveau %d : plafonniers"), Level), 0.5f, [this, Level]()
@@ -690,90 +923,56 @@ void ABRAutoTest::AddV416LightSteps()
 			{
 				return true;
 			}
-			TSet<FIntPoint> Ready;
-			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
-			{
-				if (It->IsReady())
-				{
-					Ready.Add(It->Coord);
-				}
-			}
-			if (!Ready.Contains(Hatches[0].Key) && StepTime < 30.f)
+			// Relecture v4.16 : chunks construits ET en place (LiveChunk) ; ceux du depart, verifies a l'etape d'avant, se demontent
+			const FIntPoint TargetChunk = Hatches[HatchTarget].Key;
+			TMap<FIntPoint, ABRChunk*> Live;
+			LiveChunks(GetWorld(), Live);
+			if (!Live.Contains(TargetChunk) && StepTime < 30.f)
 			{
 				return false;
 			}
-			const int32 N = W->Def().ChunkCells;
-			int32 Checked = 0;
-			int32 WithLadder = 0;
-			int32 Placed = 0;
-			int32 PlacedBuilt = 0;
-			int32 Under = 0;
-			int32 UnderBuilt = 0;
-			float Removed = 0.f;
-			FString FirstBad;
-			for (const TPair<FIntPoint, BRLight::FHatch>& Pair : Hatches)
-			{
-				if (!Ready.Contains(Pair.Key))
-				{
-					continue;
-				}
-				++Checked;
-				const BRLight::FHatch& H = Pair.Value;
-				// Echelle construite a cette trappe (pied dans le rectangle du conduit, a 10 cm pres)
-				bool bLadder = false;
-				for (TActorIterator<ABRExit> It(GetWorld()); It; ++It)
-				{
-					const FVector At = It->GetActorLocation();
-					bLadder = bLadder || (It->Style == EBRExitStyle::Ladder && At.X > H.MinX - 10.0 && At.X < H.MaxX + 10.0 && At.Y > H.MinY - 10.0 && At.Y < H.MaxY + 10.0);
-				}
-				WithLadder += bLadder ? 1 : 0;
-				if (!bLadder && FirstBad.IsEmpty())
-				{
-					FirstBad = FString::Printf(TEXT("aucune echelle construite a la trappe du chunk (%d, %d)"), Pair.Key.X, Pair.Key.Y);
-				}
-				TArray<FVector> Built;
-				BuiltLights(GetWorld(), &Pair.Key, Built);
-				for (int32 LY = 0; LY < N; ++LY)
-				{
-					for (int32 LX = 0; LX < N; ++LX)
-					{
-						const FIntPoint Cell(Pair.Key.X * N + LX, Pair.Key.Y * N + LY);
-						const FBRLightCell L = W->GetLightCell(Cell.X, Cell.Y);
-						const bool bBuilt = (L.bLamp || L.bUnderHatch) && HasBuiltLight(W, L, Built);
-						if (L.bUnderHatch)
-						{
-							++Under;
-							UnderBuilt += bBuilt ? 1 : 0;
-							// Apport que la regle comptait sans que la lampe existe, a 1,65 m sous la trappe
-							Removed = FMath::Max(Removed, LampWeight(W, L, FVector((H.MinX + H.MaxX) * 0.5, (H.MinY + H.MaxY) * 0.5, 165.0)));
-							if (bBuilt && FirstBad.IsEmpty())
-							{
-								FirstBad = FString::Printf(TEXT("cellule (%d, %d) : plafonnier sous la trappe pourtant construit"), Cell.X, Cell.Y);
-							}
-						}
-						else if (L.bLamp)
-						{
-							++Placed;
-							PlacedBuilt += bBuilt ? 1 : 0;
-							if (!bBuilt && FirstBad.IsEmpty())
-							{
-								FirstBad = FString::Printf(TEXT("cellule (%d, %d) : plafonnier de jeu sans lumiere construite"), Cell.X, Cell.Y);
-							}
-						}
-					}
-				}
-			}
-			if (Checked == 0)
+			CheckLiveHatches(GetWorld(), W, Hatches, HatchTally);
+			const FHatchTally& T = HatchTally;
+			if (T.Checked == 0)
 			{
 				Skip(FString::Printf(TEXT("Niveau %d : chunk de la trappe pas construit en 30 s (trappes des echelles non verifiees)"), Level));
 				return true;
 			}
-			const bool bBad = WithLadder != Checked || UnderBuilt > 0 || PlacedBuilt != Placed;
-			Note(FString::Printf(TEXT("Niveau %d, partie classique : %d chunk(s) a trappe construits : echelle a la trappe predite %d / %d ; plafonniers poses %d (lumiere construite %d) ; sous la trappe %d (lumiere construite %d, attendu 0 ; la regle ne les compte plus : jusqu'a %.3f retire sous la trappe)%s%s"),
-				Level, Checked, WithLadder, Checked, Placed, PlacedBuilt, Under, UnderBuilt, Removed, FirstBad.IsEmpty() ? TEXT("") : TEXT(" ; premier ecart : "), *FirstBad), bBad);
-			if (Under == 0)
+			// Diagnostic : chunks a trappe encore IsReady() mais en demontage (le joueur est parti) : pas comptes ; ceux qui n'ont deja
+			// plus leur echelle (ce que l'etape comptait avant comme "aucune echelle construite")
+			int32 Torn = 0;
+			int32 TornNoLadder = 0;
+			for (TActorIterator<ABRChunk> It(GetWorld()); It; ++It)
 			{
-				Skip(FString::Printf(TEXT("Niveau %d : aucun plafonnier de la grille sous une trappe construite (plafonnier non pose non exerce)"), Level));
+				if (!It->IsReady() || !It->IsTearingDown())
+				{
+					continue;
+				}
+				for (const TPair<FIntPoint, BRLight::FHatch>& Pair : Hatches)
+				{
+					if (Pair.Key == It->Coord)
+					{
+						++Torn;
+						TornNoLadder += LadderAtHatch(GetWorld(), Pair.Value) ? 0 : 1;
+					}
+				}
+			}
+			const FString TornText = Torn > 0 ? FString::Printf(TEXT(" ; %d chunk(s) a trappe en demontage, pas comptes (dont %d deja sans echelle)"), Torn, TornNoLadder) : FString();
+			const bool bBad = T.WithLadder != T.Checked || T.UnderBuilt > 0 || T.PlacedBuilt != T.Placed;
+			Note(FString::Printf(TEXT("Niveau %d, partie classique : %d chunk(s) a trappe construits : echelle a la trappe predite %d / %d ; plafonniers poses %d (lumiere construite %d) ; sous la trappe %d (lumiere construite %d, attendu 0 ; la regle ne les compte plus : jusqu'a %.3f retire sous la trappe)%s%s%s"),
+				Level, T.Checked, T.WithLadder, T.Checked, T.Placed, T.PlacedBuilt, T.Under, T.UnderBuilt, T.Removed, *TornText, T.FirstBad.IsEmpty() ? TEXT("") : TEXT(" ; premier ecart : "),
+				*T.FirstBad), bBad);
+			if (!T.Done.Contains(TargetChunk))
+			{
+				Skip(FString::Printf(TEXT("Niveau %d : chunk (%d, %d) de la trappe visee pas construit en 30 s (trappe non verifiee)"), Level, TargetChunk.X, TargetChunk.Y));
+			}
+			if (T.Under == 0)
+			{
+				const FString Where = W->Def().BoundsChunks > 0 ? FString(TEXT("dans l'enceinte")) : FString::Printf(TEXT("a moins de %d chunks du depart"), HatchSearched);
+				Skip(bHatchTargetUnder
+					? FString::Printf(TEXT("Niveau %d : plafonnier de la grille de la cellule (%d, %d) sous la trappe visee, chunk pas verifie (plafonnier non pose non exerce)"), Level,
+						HatchUnderCell.X, HatchUnderCell.Y)
+					: FString::Printf(TEXT("Niveau %d : aucun plafonnier de la grille sous une trappe predite %s (plafonnier non pose non exerce)"), Level, *Where));
 			}
 			return true;
 		});
