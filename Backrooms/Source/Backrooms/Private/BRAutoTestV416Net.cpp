@@ -12,7 +12,7 @@
 //   B. depart de groupe simultane par la porte de service du Level 0 (meme regle) : un seul depart, liste des joueurs
 //      attendus, un seul changement de niveau ;
 //   C. Poolrooms : C1 mort d'un client a plus de 150 m de ses coequipiers (toujours repliques chez lui depuis la relecture),
-//      coequipiers debout : fenetre entiere, {Saut} a terre ignore chez le client ; C2 toute l'equipe a terre (le dernier
+//      coequipiers debout : fenetre entiere, puis {Saut} a terre (abandon) accepte par l'hote ; C2 toute l'equipe a terre (le dernier
 //      coequipier debout tombe apres) ; C3 le client lointain tombe apres tous les autres : 6 s comme en v4.15. Aucun reveil
 //      refuse par l'hote, une seule mort chacun ; apres chaque reveil, chez l'hote : plus en chargement, position recue,
 //      aucune chute constatee ;
@@ -724,11 +724,10 @@ namespace BRTestV416Net
 		float DelayAtDeath = -1.f;
 		double DeathAt = 0.0;
 		double WakeAt = 0.0;
-		// v4.16 (relecture) : {Saut} a terre chez un client (abandon reserve a l'hote) ; aide affichee a la mort ; chutes
-		// constatees par l'hote (fosse : a la mort, puis apres le reveil)
+		// v4.16 : {Saut} a terre chez un client (abandon, ServerReportGiveUp) ; aide affichee a la mort ; chutes constatees par
+		// l'hote (fosse : a la mort, puis apres le reveil)
 		bool bJumpTried = false;
 		bool bJumpNoted = false;
-		int32 GiveUpsBefore = 0;
 		float TimerBeforeJump = -1.f;
 		bool bHelpAtDeath = false;
 		int32 FallsBefore = 0;
@@ -865,9 +864,10 @@ namespace BRTestV416Net
 		S.bWasDead = bDead;
 	}
 
-	/** v4.16 (relecture) : client a terre : un appui sur {Saut} 1,5 s apres la mort ; il doit etre ignore (abandon reserve a
-	 *  l'hote, ABRWorld::CanGiveUpDowned). Avant : reveil au point de depart, refuse par l'hote, retour a terre au point de
-	 *  depart avec l'equipement de depart. Une seule note, 1 s apres l'appui : vrai quand elle est prete (OutNote, bOutProblem) */
+	/** v4.16 : client a terre : un appui sur {Saut} 1,5 s apres la mort (abandon) ; l'hote doit l'accepter (ServerReportGiveUp) :
+	 *  reveil au point de depart dans la seconde, puis toujours debout 2,5 s apres. Avant : reveil signale comme ordinaire,
+	 *  refuse par l'hote (fenetre de reanimation), retour a terre au point de depart avec l'equipement de depart. Une seule
+	 *  note : vrai quand elle est prete (OutNote, bOutProblem) */
 	bool TryGiveUp(ABRWorld* W, ABRCharacter* C, bool bDead, double Now, FString& OutNote, bool& bOutProblem)
 	{
 		if (!W || !C || S.bJumpNoted)
@@ -879,7 +879,6 @@ namespace BRTestV416Net
 			if (bDead && S.Deaths == 1 && Now - S.DeathAt > 1.5)
 			{
 				S.bJumpTried = true;
-				S.GiveUpsBefore = C->IgnoredGiveUps;
 				S.TimerBeforeJump = W->GetDeathTimer();
 				S.Clock2 = Now;
 				C->InputJump(true);
@@ -887,18 +886,18 @@ namespace BRTestV416Net
 			}
 			return false;
 		}
-		if (Now - S.Clock2 < 1.0)
+		const bool bWoke = S.Wakes > 0 && S.WakeAt >= S.Clock2;
+		if (!(bWoke && Now - S.WakeAt >= 2.5) && Now - S.Clock2 < 6.0)
 		{
 			return false;
 		}
 		S.bJumpNoted = true;
-		const int32 Ignored = C->IgnoredGiveUps - S.GiveUpsBefore;
-		const float Left = W->GetDeathTimer();
-		const bool bStill = C->IsDead() && Left > S.TimerBeforeJump - 2.5f;
-		OutNote = FString::Printf(TEXT("client a terre : appui sur {Saut} (abandon) ignore %d fois (attendu 1 : abandon reserve a l'hote ; v4.15 : reveil au point de depart refuse par l'hote), "
-			"toujours a terre %s, delai restant %.1f s (avant l'appui %.1f s), abandon propose ici %s"), Ignored, Oui(bStill), Left, S.TimerBeforeJump,
-			W->CanGiveUpDowned() ? TEXT("OUI") : TEXT("non"));
-		bOutProblem = Ignored != 1 || !bStill || W->CanGiveUpDowned();
+		const double After = bWoke ? S.WakeAt - S.Clock2 : -1.0;
+		const bool bUp = bWoke && !C->IsDead();
+		OutNote = FString::Printf(TEXT("client a terre : appui sur {Saut} (abandon) %.1f s avant la fin du delai : reveil %.1f s apres l'appui (attendu moins de 1,5 s), "
+			"toujours debout 2,5 s apres %s, a terre %d fois (attendu 1 ; v4.15 : reveil refuse par l'hote, retour a terre au point de depart)"),
+			S.TimerBeforeJump, After, Oui(bUp), S.Deaths);
+		bOutProblem = !bWoke || After > 1.5 || !bUp || S.Deaths != 1;
 		return true;
 	}
 
@@ -1795,8 +1794,9 @@ void ABRAutoTest::AddNetV416Plan()
 					return false;
 				}
 				const bool bRefused = LogContains(V6::S.LogFrom, TEXT("reveil refuse"));
-				Note(FString::Printf(TEXT("hote : reveil du client mort loin de ses coequipiers refuse %s (attendu non ; v4.15 : refuse, le client se croyait seul)"),
-					bRefused ? TEXT("OUI") : TEXT("non")), bRefused);
+				const bool bGaveUp = LogContains(V6::S.LogFrom, TEXT("abandon a terre accepte"));
+				Note(FString::Printf(TEXT("hote : reveil du client mort loin de ses coequipiers refuse %s (attendu non ; v4.15 : refuse, le client se croyait seul), "
+					"abandon a terre accepte %s (attendu oui, v4.16 : ServerReportGiveUp)"), bRefused ? TEXT("OUI") : TEXT("non"), bGaveUp ? TEXT("oui") : TEXT("NON")), bRefused || !bGaveUp);
 				// v4.16 (relecture) : apres le reveil (et quelques pas du client)
 				if (bThere)
 				{
@@ -1815,7 +1815,7 @@ void ABRAutoTest::AddNetV416Plan()
 			V6::TrackDeath(W, C, Now);
 			const bool bDead = C->IsDead();
 			C->Sanity = 100.f;
-			// v4.16 (relecture) : {Saut} a terre, ignore chez un client (abandon reserve a l'hote)
+			// v4.16 : {Saut} a terre chez un client : abandon accepte par l'hote
 			FString JumpNote;
 			bool bJumpProblem = false;
 			if (V6::TryGiveUp(W, C, bDead, Now, JumpNote, bJumpProblem))

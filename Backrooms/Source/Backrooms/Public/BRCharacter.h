@@ -401,6 +401,11 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerReportRespawn();
 
+	/** v4.16 : le proprietaire a abandonne a terre ({Saut}) et s'est reveille au point de depart ; le serveur l'accepte a tout
+	 *  moment (un reveil ordinaire avant la fin de la fenetre de reanimation est refuse). NetVersion 416 */
+	UFUNCTION(Server, Reliable)
+	void ServerReportGiveUp();
+
 	/** v4.8 : effet d'un coup decide par le serveur (secousse, son, jumpscare) et sante qui en resulte, a appliquer telle
 	 *  quelle. SourceKind : EBREntityKind de l'entite (-1 : autre). v4.12 : Rev, revision de la sante (commune aux coups,
 	 *  soins, morts et reveils) ; Epoch, vie du joueur : un coup d'une vie terminee ou plus ancien que l'etat recu est
@@ -456,12 +461,12 @@ public:
 	int32 ServerPickupsRefused = 0;
 	/** v4.16 (tests) : serveur : demandes de depart de groupe et d'action de mission recues de ce joueur, image de l'hote
 	 *  (GFrameCounter) de sa derniere demande (ramassage, depart, mission) et dernier retour d'une action de mission. Joueur
-	 *  local : appuis sur {Saut} a terre ignores (abandon reserve a l'hote, ABRWorld::CanGiveUpDowned) */
+	 *  v4.16, serveur : abandons a terre acceptes (ServerReportGiveUp) */
 	int32 ServerDepartureRequests = 0;
 	int32 ServerMissionRequests = 0;
 	uint64 ServerLastRequestFrame = 0;
 	uint8 ServerLastMissionFeedback = 0;
-	int32 IgnoredGiveUps = 0;
+	int32 ServerGiveUpsAccepted = 0;
 	/** v4.11 (tests) : reponses de soin ou de ramassage ignorees (repetees ou d'un ancien niveau) */
 	int32 IgnoredRepeatedResults = 0;
 	int32 StaleResultsReconciled = 0;
@@ -810,6 +815,8 @@ private:
 	bool bSwimming = false;
 	bool bUnderwater = false;
 	bool bJumpHeld = false;
+	/** v4.16 : a terre, {Saut} presse (abandon) : le reveil qui suit est signale comme un abandon (ServerReportGiveUp) */
+	bool bGaveUpDowned = false;
 	bool bDiving = false;
 	float Breath = 100.f;
 	float WaterDepth = 0.f;

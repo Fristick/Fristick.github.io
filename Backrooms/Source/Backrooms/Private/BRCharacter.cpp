@@ -843,21 +843,15 @@ void ABRCharacter::InputJump(bool bPressed)
 	bJumpHeld = bPressed;
 	if (bDead && bPressed)
 	{
-		// A terre en cooperation : abandonner, se reveiller tout de suite au point de depart. v4.16 (relecture) : chez l'hote
-		// seulement (ABRWorld::CanGiveUpDowned) : l'hote refusait le reveil anticipe d'un client, qui retombait a terre au
-		// point de depart avec l'equipement de depart ; chez un client, l'appui est ignore (l'invite ne le propose plus)
+		// A terre en cooperation : abandonner, se reveiller tout de suite au point de depart. v4.16 : un client le signale
+		// comme un abandon (ServerReportGiveUp) ; avant, l'hote le prenait pour un reveil ordinaire trop tot, le refusait, et
+		// le joueur retombait a terre au point de depart avec l'equipement de depart
 		if (ABRWorld* W = ABRWorld::Get(this))
 		{
 			if (W->IsNetGame())
 			{
-				if (W->CanGiveUpDowned())
-				{
-					W->GiveUpDowned();
-				}
-				else
-				{
-					++IgnoredGiveUps;
-				}
+				bGaveUpDowned = true;
+				W->GiveUpDowned();
 			}
 		}
 		return;
@@ -1930,6 +1924,7 @@ void ABRCharacter::DieOf(EBRDeathCause Cause, int8 InKiller, AActor* Killer)
 	StopClimb();
 	SetDevFly(false);
 	bDead = true;
+	bGaveUpDowned = false;
 	LocalCause = Cause;
 	Health = 0.f;
 	DeathTime = 0.f;
@@ -2147,6 +2142,22 @@ void ABRCharacter::ServerReportRespawn_Implementation()
 		ClientRespawnDenied(MinDelay - Elapsed);
 		return;
 	}
+	ServerApplyDeathState(false, EBRDeathCause::None, 3);
+	ClientWakeAck(DeathState.WakeCount);
+}
+
+void ABRCharacter::ServerReportGiveUp_Implementation()
+{
+	if (!DeathState.bDead)
+	{
+		ClientWakeAck(DeathState.WakeCount);
+		return;
+	}
+	// v4.16 : abandon a terre ({Saut}) accepte a tout moment, comme celui de l'hote (ABRCharacter::InputJump) : le joueur
+	// renonce a etre releve et repart du point de depart avec l'equipement de depart, sans rien y gagner
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	UE_LOG(LogBackrooms, Display, TEXT("%s : abandon a terre accepte %.1f s apres la mort"), *GetName(), Now - ServerDeathTime);
+	++ServerGiveUpsAccepted;
 	ServerApplyDeathState(false, EBRDeathCause::None, 3);
 	ClientWakeAck(DeathState.WakeCount);
 }
@@ -2422,6 +2433,8 @@ void ABRCharacter::ServerSetState_Implementation(uint8 Flags, uint8 Hand, uint8 
 void ABRCharacter::ResetStats()
 {
 	const bool bWasDead = bDead || DeathState.bDead;
+	const bool bGaveUp = bGaveUpDowned;
+	bGaveUpDowned = false;
 	Health = 100.f;
 	Sanity = 100.f;
 	Stamina = 100.f;
@@ -2461,7 +2474,14 @@ void ABRCharacter::ResetStats()
 			// v4.12 : l'inventaire est deja celui de la nouvelle vie ; l'epoque suit des la demande, en attendant la
 			// confirmation (ou le refus) du serveur
 			PendingWakeReports = static_cast<uint8>(PendingWakeReports + 1);
-			ServerReportRespawn();
+			if (bGaveUp)
+			{
+				ServerReportGiveUp();
+			}
+			else
+			{
+				ServerReportRespawn();
+			}
 		}
 	}
 }

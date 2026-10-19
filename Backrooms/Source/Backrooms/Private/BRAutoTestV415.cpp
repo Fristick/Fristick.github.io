@@ -13,7 +13,7 @@
 //   - marche reelle : mission resolue a pied, sortie unique prise, Niveau 3 avec sa graine ; version publiee : fin du
 //     chapitre ;
 //   - REJOUER et mode developpeur (REJOUER d'un niveau inexplore) dans une partie lineaire : niveau classique, partie
-//     intacte ; migration 5 -> 6 (copie _Format5, parcours classique) ; protocole 415.
+//     intacte ; migration 5 -> 6 (copie _Format5, parcours classique) ; protocole 415 (416 depuis la v4.16).
 // Reseau : l'hote impose le parcours lineaire (SetLinearTestOverride, hors version finale) ; drapeau, graine et sorties
 // identiques chez chacun ; le client tombe et se reveille dans le niveau (regle de la cooperation).
 // Prepare, non execute dans l'environnement de developpement (pas d'Unreal) : une verification qui ne peut pas etre
@@ -1159,7 +1159,8 @@ void ABRAutoTest::AddV415Steps()
 	{
 		const FString Options = BRLevels::JoinOptions();
 		const FString Label = BRLevels::VersionLabel(BRContent::NetVersion);
-		const bool bOk = BRContent::NetVersion == 415 && Options.Contains(TEXT("?BRNet=415")) && Label == TEXT("4.15") && FString(BR_GAME_VERSION) == TEXT("v4.15");
+		// v4.16 : protocole 416 (abandon a terre d'un client, ABRCharacter::ServerReportGiveUp)
+		const bool bOk = BRContent::NetVersion == 416 && Options.Contains(TEXT("?BRNet=416")) && Label == TEXT("4.16") && FString(BR_GAME_VERSION) == TEXT("v4.16");
 		Note(FString::Printf(TEXT("protocole %d, options d'entree \"%s\", version affichee %s, jeu %s"), BRContent::NetVersion, *Options, *Label, BR_GAME_VERSION), !bOk);
 		return true;
 	});

@@ -36,7 +36,7 @@
 // ajoute la porte du client comparee a celle de l'hote.
 // v4.15 : -BRAutoTestV415 : parcours lineaire (NOUVELLE PARTIE par le menu, graine de chaque niveau, sortie unique, mort
 // qui relance le niveau, jeu ferme pendant la mort, contraste classique, marche jusqu'au Niveau 3, fin du chapitre de la
-// version publiee, REJOUER, migration 5 -> 6, protocole 415). Inclus dans -BRAutoTest ; -BRNetTest y ajoute le parcours
+// version publiee, REJOUER, migration 5 -> 6, protocole 415, 416 depuis la v4.16). Inclus dans -BRAutoTest ; -BRNetTest y ajoute le parcours
 // lineaire impose par l'hote (drapeau, graine, sorties chez chacun) et la mort du client dans le niveau.
 #pragma once
 

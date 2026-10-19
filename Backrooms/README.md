@@ -753,7 +753,7 @@ rapport, vérifications et commandes dans [`Docs/RAPPORT_v4.6.md`](Docs/RAPPORT_
   est **étouffée derrière les murs**. Trois modes : appuyer pour parler (**T**, par défaut), voix ouverte, micro coupé.
   Des barres s'animent à côté du nom de celui qui parle.
 - **À terre, pas mort** (coopération) : un coéquipier a 30 secondes pour vous **relever** en maintenant **E** près de
-  vous (3,5 s). Vous gardez votre inventaire. Sinon, réveil au point de départ ; l'hôte peut abandonner tout de suite (**Espace**).
+  vous (3,5 s). Vous gardez votre inventaire. Sinon, réveil au point de départ ; **Espace** pour abandonner tout de suite.
 - **Hallucinations** : quand la santé mentale baisse, on aperçoit une **silhouette sans visage** au coin de l'œil,
   qui disparaît dès qu'on la regarde, ou un **sourire lumineux** qui flotte dans le noir. Seul le joueur concerné les voit.
 - **Paramètres complets** (sur deux colonnes) : volume général, chat vocal, luminosité, mode d'affichage (plein écran,
@@ -1008,7 +1008,7 @@ endurance et son journal.
 **À terre** : en coopération, on ne meurt pas tout de suite. Un coéquipier peut vous **relever** en maintenant **E**
 près de vous pendant 3,5 secondes : vous repartez avec un peu de santé et **tout votre inventaire**. Si personne ne
 vient dans les 30 secondes (ou s'il ne reste personne debout), vous vous réveillez au point de départ du niveau avec
-l'équipement de départ. L'hôte peut abandonner tout de suite (**Espace**) ; un client attend son réveil (l'hôte refusait son réveil anticipé). Si le groupe change de niveau, vous le suivez.
+l'équipement de départ. **Espace** permet d'abandonner tout de suite (hôte comme client). Si le groupe change de niveau, vous le suivez.
 
 **Pause** : en ligne, le jeu ne s'arrête pas pendant la pause. **MENU PRINCIPAL** quitte la partie. Si c'est l'hôte qui
 quitte, la partie se termine pour tout le monde.

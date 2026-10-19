@@ -86,11 +86,14 @@
 # anterieur a la v4.16 (meme famille que les defauts 1 et 2).
 # Avant : client qui abandonne : reveil au point de depart avec l'equipement de depart (inventaire perdu), refus, de nouveau a
 # terre au point de depart pour le temps restant, loin de ceux qui pouvaient le relever ; recommencait a chaque appui.
-# Apres : en cooperation, seul l'hote peut abandonner (regle de l'hote inchangee). Chez un client, l'appui est ignore et l'invite
-# devient "Reveil au point de depart du niveau dans {Value} s" (nouveau texte HUD.ReveilPointDepartNiveauSeul, 21 traductions
-# "fuzzy" tirees de l'invite existante sans sa partie "abandonner") ; README mis a jour. Changement de regle annonce ici : rendre
-# l'abandon aux clients demande un nouveau message (RPC ou parametre) et donc une nouvelle NetVersion, hors de ce lot.
-# Tests : en jeu : C1, "client a terre : appui sur {Saut} (abandon) ignore 1 fois ... toujours a terre oui ... abandon propose ici non".
+# Apres (correction de la branche, remplacee a la fusion) : abandon reserve a l'hote, appui ignore chez un client.
+# Apres (fusion dans backrooms-v4.16, version finale) : l'abandon d'un client est signale par un nouveau message,
+# ABRCharacter::ServerReportGiveUp, que l'hote accepte a tout moment (comme son propre abandon) ; NetVersion 416. La regle du
+# jeu est celle d'avant (tout joueur a terre peut abandonner) ; l'invite "{Saut} abandonner" est rendue a tous, le texte
+# HUD.ReveilPointDepartNiveauSeul de la branche est retire, ABRWorld::CanGiveUpDowned aussi.
+# Tests : en jeu : C1, client : "appui sur {Saut} (abandon) ... reveil x s apres l'appui (attendu moins de 1,5 s), toujours debout
+# 2,5 s apres oui, a terre 1 fois" ; hote : "reveil ... refuse non ..., abandon a terre accepte oui". Banc content : protocole 416,
+# un client 415 refuse.
 
 ## Relecture (corrections du test et du lanceur, sans effet sur le jeu)
 # - Lanceur : code de sortie juge sur toutes les machines (avant : maximum courant ; l'hote, lu le premier, a toujours un NON
@@ -173,7 +176,7 @@
 #   "ramassage simultane : 3 demande(s) de clients recues au meme instant du serveur (attendu 3, l'hote s'abstient) : images ..."
 #   "depart simultane : 3 demande(s) de clients recues ..." ; "1 depart(s) annonce(s)" ; "1 attribution(s)"
 #   "personnages des coequipiers toujours repliques ici 3/3" ; "delai a terre 30.0 s ... aide d'un coequipier affichee oui"
-#   "appui sur {Saut} (abandon) ignore 1 fois ... toujours a terre oui ... abandon propose ici non"
+#   "appui sur {Saut} (abandon) ... reveil x s apres l'appui ..., toujours debout 2,5 s apres oui, a terre 1 fois" (fusion)
 #   "apres son reveil : en chargement chez l'hote non, position d'avant le placement non, a terre non, chutes constatees depuis 0"
 #   "client lointain tombe apres tous les autres : delai a terre 6.0 s ... aide d'un coequipier affichee non"
 #   "meme action demandee par 2 clients au meme instant du serveur (...) : retours X et Y (attendu X puis Y ...) ... oui"

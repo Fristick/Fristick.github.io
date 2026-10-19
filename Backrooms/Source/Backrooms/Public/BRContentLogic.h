@@ -55,8 +55,9 @@ namespace BRContent
 	 *  l'hote, ServerLidarAim). v4.15 : 415 (parcours lineaire : FBRNetLevel::Flags, il change la generation ; places des
 	 *  mecanismes, PlaceVersion 3 : postes du Level 6 hors de leur cage, rochers du Niveau 8 et maison du Niveau 9 ecartes ;
 	 *  correctifs 3 : couloirs de visee degages, poteaux d'une cellule en rang, dans la meme version 3 pas encore distribuee ;
-	 *  correctifs 5 : echelles des chunks du Niveau 37 hors des marches des trottoirs, tirees de meme chez l'hote et le client) */
-	constexpr int NetVersion = 415;
+	 *  correctifs 5 : echelles des chunks du Niveau 37 hors des marches des trottoirs, tirees de meme chez l'hote et le client).
+	 *  v4.16 : 416 (abandon a terre d'un client, ABRCharacter::ServerReportGiveUp) */
+	constexpr int NetVersion = 416;
 
 	bool IsKnown(int Level);
 	EStage StageOf(int Level);

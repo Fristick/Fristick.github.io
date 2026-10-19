@@ -402,16 +402,6 @@ void ABRWorld::HandlePlayerDeath(EBRDeathCause Cause)
 		: 4.5f;
 }
 
-bool ABRWorld::CanGiveUpDowned() const
-{
-	// v4.16 (relecture) : en cooperation, seul l'hote peut abandonner a terre. Le reveil d'un client est signale a l'hote par
-	// ServerReportRespawn, qui ne distingue pas un abandon d'un reveil ordinaire : avant la fin de la fenetre de reanimation
-	// (28,5 s si un coequipier etait debout a la mort, 4,5 s sinon), l'hote le refusait et le joueur retombait a terre au
-	// point de depart, l'equipement de depart deja repris, loin de qui pouvait le relever. Rendre l'abandon aux clients
-	// demande un nouveau message (changement du protocole, NetVersion) : hors de ce lot
-	return HasAuthority();
-}
-
 bool ABRWorld::HasLivingTeammate() const
 {
 	const ABRCharacter* Me = GetPlayer();
