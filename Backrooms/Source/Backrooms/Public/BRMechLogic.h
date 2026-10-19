@@ -337,8 +337,49 @@ namespace BRMech
 		 *  169 cm, 51 a 54 degres de l'avant de A du cote de B), place a 45 degres au cercle de 160 cm et arrivee plus pres de B :
 		 *  visee prise par B (seuil du modele : 54 degres). OutFirst : yeux du premier de ces points, depuis
 		 *  le point vise de Me (X devant lui, Y lateral, Z vers le haut). Geometrie pure, nombre de pas fixe : meme resultat chez
-		 *  tous */
+		 *  tous. v4.16 (visee) : c'est la regle d'avant de la visee (premier contact), gardee pour juger le placement (plus
+		 *  severe) ; la visee du jeu est jugee par FanStealsPicked */
 		int FanSteals(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst = nullptr);
+		/** v4.16 (visee) : regle de choix de la visee du client (ABRCharacter::UpdateFocus, etape 1) entre les mecanismes que sa
+		 *  sphere (FocusSweep) touche */
+		enum class EAimPick : uint8_t
+		{
+			/** v4.12 a v4.16 (c1c2bde) : le premier objet touche par la sphere (SweepSingleByChannel) */
+			FirstContact,
+			/** v4.16 (visee) : ABRCharacter::PickAimedDevice : quand le premier objet touche est la boite visee d'un mecanisme
+			 *  (volume invisible), le balayage la traverse et continue ; il s'arrete au premier objet opaque (volume d'un mecanisme,
+			 *  decor) et apres MaxAimCandidates objets. Parmi les mecanismes touches jusque-la, celui dont le point vise est le
+			 *  plus pres de l'axe du regard (plus grand cosinus) ; un autre que le premier touche seulement si l'hote accepterait
+			 *  son action depuis ces yeux (ABRWorld::CanReachMissionDevice : portee HostReach, ligne de vue libre de tout volume
+			 *  sauf le sien ; le modele la juge coupee a Margin pres, du cote prudent) ; le premier touche garde l'egalite */
+			NearestCentre
+		};
+		/** v4.16 (visee) : piece de la scene de la visee (meme repere pour toutes) : boite alignee (centre C, demi-tailles E),
+		 *  mecanisme proprietaire (indice dans les points vises ; -1 : decor, mur), boite visee (invisible : le balayage la
+		 *  traverse, la vue de l'hote aussi) ou volume (il arrete le balayage et la vue de l'hote) */
+		struct FAimShape
+		{
+			FVec3 C;
+			FVec3 E;
+			int Owner = -1;
+			bool bAimBox = false;
+		};
+		/** v4.16 (visee) : objets touches au plus par la visee du client (le premier compris : ABRCharacter::PickAimedDevice) et
+		 *  pieces au plus d'une scene de PickAim */
+		constexpr int MaxAimCandidates = 4;
+		constexpr int MaxAimShapes = 16;
+		/** v4.16 (visee) : portee de l'hote (ABRWorld::MissionReachServer ; Tools/verify_device_clearance.py compare) */
+		constexpr float HostReach = 340.f;
+		/** v4.16 (visee) : choix de la visee du client : sphere de FocusSweep lancee de Eye vers Look (le segment ; a egalite de
+		 *  contact, l'ordre de Shapes), pieces Shapes, points vises Centres des NumDevices mecanismes. Rend le mecanisme pris, -1
+		 *  si rien (premier contact sur le decor ou aucun : la tolerance d'UpdateFocus jouerait). FirstContact : proprietaire du
+		 *  premier contact ; NearestCentre : voir EAimPick. Geometrie pure, nombre de pas fixe : meme resultat chez tous */
+		int PickAim(const FVec3& Eye, const FVec3& Look, const FAimShape* Shapes, int NumShapes, const FVec3* Centres, int NumDevices, EAimPick Rule);
+		/** v4.16 (visee) : FanSteals jugee avec la regle du jeu (EAimPick::NearestCentre, PickAim) : memes places de biais,
+		 *  arrivees, sols, capsule, portee et ligne de vue de l'hote ; la visee de Me est prise si PickAim rend Other (a egalite
+		 *  de contact, Other passe le premier). FanSteals reste la regle d'avant (premier contact), plus severe : elle juge le
+		 *  placement (banc, section J), inchange */
+		int FanStealsPicked(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst = nullptr);
 		/** v4.15 (correctifs 4) : verdict de l'invariant du placement pour le couloir de visee de Me face a Other
 		 *  (ABRWorld::PlaceMission, LogMissionVolumeInvariant) */
 		enum class ELaneCut : uint8_t

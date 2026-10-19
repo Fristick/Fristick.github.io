@@ -311,6 +311,19 @@ public:
 	/** Flou de profondeur derriere le menu titre et la pause (0 = net, 1 = arriere-plan tres flou) */
 	void ApplyMenuBlur(float Amount);
 	const FString& GetFocusPrompt() const { return FocusPrompt; }
+	/** v4.16 (visee) : visee precise d'UpdateFocus (etape 1) entre mecanismes voisins (BRMech::Clearance::EAimPick::NearestCentre,
+	 *  modele PickAim du banc). First : premier objet touche par la sphere de BRMech::Clearance::FocusSweep lancee de Start dans
+	 *  l'axe Dir (Len de long). S'il est la boite visee d'un mecanisme qu'on peut actionner, le balayage la traverse (memes
+	 *  requete, canal et sphere, ce composant ignore) et continue jusqu'au premier objet qui n'est pas une boite visee de
+	 *  mecanisme (volume d'un mecanisme, decor, porte, sortie, objet a ramasser : rien n'est vu derriere) ou jusqu'a
+	 *  BRMech::Clearance::MaxAimCandidates objets, impacts a moins de MaxImpact des yeux. Rend, parmi les mecanismes touches,
+	 *  celui dont le point vise (GetInteractPoint) est le plus pres de l'axe du regard depuis Start ; un autre que le premier
+	 *  seulement si la regle de l'hote l'accepte depuis Eye (ABRWorld::CanReachMissionDevice : portee, ligne de vue
+	 *  WorldStatic qui n'ignore que Self et lui ; ServerMissionAct la rejoue). Sinon, et pour tout autre premier objet : celui de
+	 *  First (regle d'avant). AlwaysTakes (tests : BRTestV412::FocusVerdict) : mecanisme compte meme sans invite. OutCandidates :
+	 *  mecanismes touches (diagnostic) */
+	static AActor* PickAimedDevice(const UWorld* World, const AActor* Self, const FVector& Start, const FVector& Eye, const FVector& Dir, float Len, float MaxImpact,
+		const FHitResult& First, const AActor* AlwaysTakes = nullptr, int32* OutCandidates = nullptr);
 	bool IsReadingNote() const { return bReadingNote; }
 	/** v4.8 : texte de la note ouverte, dans la langue courante (illisible si elle n'a pas d'identifiant) */
 	FString GetOpenNote() const;

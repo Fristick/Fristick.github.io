@@ -63,6 +63,8 @@ namespace
 	/** v4.15 (correctifs 3) : yeux debout du couloir de visee du placement (BRMech::Clearance::StandEye) : demi-hauteur de la
 	 *  capsule (88 cm, InitCapsuleSize) + camera */
 	static_assert(BRMech::Clearance::StandEye == 88.f + StandEyeZ, "BRMech::Clearance::StandEye : yeux d'un joueur debout au-dessus du sol");
+	/** v4.16 (visee) : portee de l'hote du modele de la visee (BRMech::Clearance::PickAim, banc Tools/Mechanisms) */
+	static_assert(BRMech::Clearance::HostReach == ABRWorld::MissionReachServer, "BRMech::Clearance::HostReach : portee de l'hote (ABRWorld::MissionReachServer)");
 }
 
 ABRCharacter::ABRCharacter()
@@ -3267,7 +3269,12 @@ void ABRCharacter::UpdateFocus()
 	};
 
 	// 1) Visee precise : petite sphere lancee dans l'axe du regard (depuis la camera a la 3e personne). v4.15 (correctifs 3) :
-	// son rayon est celui du couloir de visee du placement (BRMech::Clearance::FocusSweep)
+	// son rayon est celui du couloir de visee du placement (BRMech::Clearance::FocusSweep). v4.16 (visee) : quand elle touche
+	// d'abord la boite visee d'un mecanisme, le mecanisme pris est, parmi ceux que le balayage traverse avant un objet opaque,
+	// celui dont le point vise est le plus pres de l'axe du regard (PickAimedDevice ; un autre que le premier seulement si l'hote
+	// accepterait l'action). Avant : le premier touche ; deux boites voisines (vannes du Niveau 37 a 58 cm, disjoncteurs du
+	// Niveau 1, vannes du Niveau 2) : de biais, la sphere lancee vers le centre de l'une touchait d'abord l'autre. Autre premier
+	// objet (decor, porte, sortie, objet a ramasser, volume d'un mecanisme) : inchange
 	FVector Start = Eye;
 	float Len = InteractReach;
 	if (bThirdPerson && Camera)
@@ -3278,7 +3285,7 @@ void ABRCharacter::UpdateFocus()
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRFocus), false, this);
 	FHitResult Hit;
 	if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Dir * Len, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q)
-		&& FVector::Dist(Hit.ImpactPoint, Eye) < InteractReach + 30.f && Accept(Hit.GetActor()))
+		&& FVector::Dist(Hit.ImpactPoint, Eye) < InteractReach + 30.f && Accept(PickAimedDevice(GetWorld(), this, Start, Eye, Dir, Len, InteractReach + 30.f, Hit)))
 	{
 		return;
 	}
@@ -3334,6 +3341,70 @@ void ABRCharacter::UpdateFocus()
 		FocusPrompt = bNeedsCrouch ? BRKeys::Tag(EBRAction::Crouch) + BR_STR(NSLOCTEXT("BR", "Player.AccroupirGlisserTrouCacher", " S'accroupir et se glisser dans le trou pour se cacher"))
 			: FString(BR_STR(NSLOCTEXT("BR", "Player.EntrerPlacardCacher", "Entrer dans le placard pour se cacher")));
 	}
+}
+
+AActor* ABRCharacter::PickAimedDevice(const UWorld* World, const AActor* Self, const FVector& Start, const FVector& Eye, const FVector& Dir, float Len, float MaxImpact,
+	const FHitResult& First, const AActor* AlwaysTakes, int32* OutCandidates)
+{
+	AActor* FirstActor = First.GetActor();
+	if (OutCandidates)
+	{
+		*OutCandidates = 0;
+	}
+	// Un mecanisme que la visee prendrait (Accept d'UpdateFocus : on peut l'actionner et il a une invite)
+	auto Takes = [AlwaysTakes](const ABRMissionDevice* D)
+	{
+		return D && (D == AlwaysTakes || (D->IsInteractable() && !D->GetPrompt().IsEmpty()));
+	};
+	const ABRMissionDevice* D0 = Cast<ABRMissionDevice>(FirstActor);
+	if (!World || !Takes(D0) || !D0->IsAimBox(First.GetComponent()))
+	{
+		return FirstActor; // regle d'avant : decor, porte, sortie, objet a ramasser, volume d'un mecanisme, rien
+	}
+	int32 Touched = 1;
+	// Le premier touche est pris sans autre condition (comme avant) ; un voisin plus pres de l'axe du regard le remplace
+	// seulement si l'hote accepterait son action (portee, ligne de vue WorldStatic qui n'ignore que Self et lui)
+	const ABRWorld* W = ABRWorld::Get(World);
+	auto Cosine = [&Start, &Dir](const ABRMissionDevice* D)
+	{
+		return static_cast<float>(FVector::DotProduct((D->GetInteractPoint() - Start).GetSafeNormal(), Dir));
+	};
+	AActor* Best = FirstActor;
+	float BestCos = Cosine(D0);
+	// Meme balayage (sphere, canal, longueur), les boites visees deja touchees ignorees : il les traverse comme la vue
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BRFocusPick), false, Self);
+	Q.AddIgnoredComponent(First.GetComponent());
+	for (int32 I = 1; I < BRMech::Clearance::MaxAimCandidates; ++I)
+	{
+		FHitResult Next;
+		if (!World->SweepSingleByChannel(Next, Start, Start + Dir * Len, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q)
+			|| FVector::Dist(Next.ImpactPoint, Eye) >= MaxImpact)
+		{
+			break; // plus rien a portee
+		}
+		ABRMissionDevice* D = Cast<ABRMissionDevice>(Next.GetActor());
+		if (!Takes(D))
+		{
+			break; // decor, porte, sortie, objet a ramasser : opaque pour ce choix, rien n'est pris derriere
+		}
+		++Touched;
+		const float Cos = Cosine(D);
+		if (D != Best && Cos > BestCos && W && W->CanReachMissionDevice(Eye, D, Self))
+		{
+			Best = D;
+			BestCos = Cos;
+		}
+		if (!D->IsAimBox(Next.GetComponent()))
+		{
+			break; // volume du mecanisme (bassins, cage, battant) : opaque
+		}
+		Q.AddIgnoredComponent(Next.GetComponent());
+	}
+	if (OutCandidates)
+	{
+		*OutCandidates = Touched;
+	}
+	return Best;
 }
 
 void ABRCharacter::UpdateHiding()

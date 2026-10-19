@@ -755,6 +755,11 @@ FVector ABRMissionDevice::GetInteractPoint() const
 	return Box ? Box->GetComponentLocation() : GetActorLocation();
 }
 
+bool ABRMissionDevice::IsAimBox(const UPrimitiveComponent* C) const
+{
+	return C && C == Box.Get();
+}
+
 void ABRMissionDevice::SetShown(bool bShow)
 {
 	if (bShown == bShow)

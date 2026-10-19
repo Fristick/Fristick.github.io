@@ -32,6 +32,11 @@
 //   J. v4.16 : les deux vannes des Poolrooms (BRMech::Clearance::AimGap, FanSteals) : boites visees separees, aucune visee
 //      prise depuis les places de biais des tests et leurs arrivees ; vanne B a 58 cm (regle d'avant, graine 3053711763) :
 //      boites chevauchees, visee prise ; voisins a 58 cm du placement des autres niveaux (pour information).
+//   K. v4.16 (visee) : choix de la visee du client entre voisins (BRMech::Clearance::PickAim, FanStealsPicked ; le jeu :
+//      ABRCharacter::PickAimedDevice) : le point vise le plus pres de l'axe du regard parmi les mecanismes que le balayage
+//      traverse. Regle d'avant (premier contact) : visee prise entre voisins larges a 58 cm, entre les voisins des groupes de
+//      chaque niveau, et vanne B a 58 cm au Niveau 37 ; regle du jeu : jamais ; un mecanisme cache (mur, volume, point vise
+//      derriere une dalle, hors de portee de l'hote) n'est jamais pris.
 //
 // Le comportement reel (collisions, nage, rendu, reseau, sauvegarde, streaming) se verifie en jeu : -BRAutoTestV412
 // (prepare, non execute ici).
@@ -44,6 +49,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -74,6 +80,21 @@ namespace
 	constexpr float EyeAboveFeet = 160.f;
 	constexpr float Reach = 340.f;       // portee d'interaction (3D, depuis les yeux), verifiee par l'hote
 	constexpr float WorkZ = 120.f;       // hauteur des volants au-dessus du sol (BRMissionDevice.cpp)
+
+	/** v4.16 (visee) : nom d'un role (BRMission::ERole, sans le prefixe R_) pour les lignes du banc */
+	const char* RoleName(uint8_t Role)
+	{
+		static const char* const Names[] = { "None", "Anomaly", "MaintNote", "Dial", "Stabilize", "RouteLever", "Passage", "Schematic", "Fuse", "FuseSocket",
+			"Breaker", "ElevatorCall", "ReserveLights", "ReserveNote", "PressurePlate", "Gauge", "Valve", "SteamDoor", "LoadBoard",
+			"JunctionBox", "Relay", "ElevatorPower", "Planning", "Directory", "Archive", "CodeDial", "CodeEnter", "HotelAccess",
+			"Register", "Key", "Lock", "BoilerNote", "BoilerDial", "BoilerPassage", "StaffNote", "StartPlate", "Beacon",
+			"EmergencyPower", "LightsExit", "PassageMarks", "Winch", "Bridge", "HousePlan", "StreetBox", "HouseMarker",
+			"HouseDoor", "FenceMark", "BarnBoard", "MillDial", "MillBrake", "BarnDoor", "Generator", "CityBoard", "DestDial",
+			"DestConfirm", "StationGate", "LevelMarks", "Current", "Sluice", "DryPassage", "DiveLog", "LidarTarget", "LidarPost",
+			"LidarCage", "TeamLog", "LidarDoor", "LidarStatic" };
+		static_assert(static_cast<int>(sizeof(Names) / sizeof(Names[0])) == static_cast<int>(BRM::R_Count), "RoleName : un nom par role de BRMission::ERole");
+		return Role < BRM::R_Count ? Names[Role] : "?";
+	}
 
 	int FindDevice(const BRM::FPlan& Plan, BRM::ERole Role, int Label)
 	{
@@ -892,6 +913,223 @@ int main()
 		}
 		std::printf("  information : voisins muraux a 58 cm (PickSlot ; moulin, treuil, vanne, disjoncteur, marqueur) : %d paire(s) sur %d aux boites chevauchees, "
 			"%d a la visee prise de biais (placement des autres niveaux inchange en v4.16)\n", Overlap, Pairs, Taken);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------
+	// v4.16 (visee) : choix de la visee du client entre voisins (ABRCharacter::PickAimedDevice, modele BRMech::Clearance::PickAim,
+	// EAimPick::NearestCentre). Regle d'avant (v4.12 a c1c2bde) : le premier objet touche par la sphere (FanSteals) ; deux boites
+	// visees voisines : de biais, la sphere lancee vers le centre de l'une touche d'abord l'autre. Regle du jeu (FanStealsPicked) :
+	// le balayage traverse les boites visees jusqu'au premier objet opaque, le point vise le plus pres de l'axe du regard l'emporte,
+	// un voisin seulement si l'hote accepterait son action. Memes places de biais, arrivees et filtres que la section J. Le
+	// placement ne change pas (section J : FanSteals, regle d'avant plus severe, juge toujours les vannes du Niveau 37)
+	std::printf("\nK. Visee du client entre voisins : point vise le plus pres de l'axe du regard (v4.16)\n");
+	{
+		namespace CL = BRMech::Clearance;
+		auto Wall = [](BRM::EKind Kind, uint8_t Role, float Lateral)
+		{
+			CL::FPlaced Out;
+			Out.Frame.Y = Lateral;
+			Out.Print = CL::Of(Kind, Role, BRMech::Module::None, 60.f);
+			return Out;
+		};
+		// 1. Les 25 paires larges de la section J (voisins muraux a 58 cm : B prend-il la visee de A ?)
+		const BRM::EKind WideKind[5] = { BRM::EKind::Switch, BRM::EKind::Crank, BRM::EKind::Switch, BRM::EKind::Switch, BRM::EKind::Button };
+		const uint8_t WideRole[5] = { BRM::R_MillDial, BRM::R_Winch, BRM::R_Valve, BRM::R_Breaker, BRM::R_HouseMarker };
+		int WidePairs = 0, WideOld = 0, WideNew = 0, WideOldPts = 0, WideNewPts = 0;
+		for (int A = 0; A < 5; ++A)
+		{
+			for (int B = 0; B < 5; ++B)
+			{
+				const CL::FPlaced WA = Wall(WideKind[A], WideRole[A], 0.f), WB = Wall(WideKind[B], WideRole[B], 58.f);
+				const int Old = CL::FanSteals(WA, WB, 0.f), New = CL::FanStealsPicked(WA, WB, 0.f);
+				++WidePairs;
+				WideOld += Old > 0 ? 1 : 0;
+				WideNew += New > 0 ? 1 : 0;
+				WideOldPts += Old;
+				WideNewPts += New;
+			}
+		}
+		Line("voisins muraux larges a 58 cm (section J) : regle d'avant, visee prise pour " + std::to_string(WideOld) + " paire(s) sur " + std::to_string(WidePairs) + " (" +
+			std::to_string(WideOldPts) + " points) ; regle du jeu : " + std::to_string(WideNew) + " (" + std::to_string(WideNewPts) + " points)", WideOld > 0 && WideNew == 0);
+
+		// 2. Voisins de chaque niveau : membres d'un meme groupe de la mission (ABRWorld::PlaceMission : meme cle de groupe, salle de
+		// la mission comprise ; ni la porte gardee, ni les portes du passage du Level 6, posees a part), poses par PickSlot sur des
+		// places voisines de la meme face (58 cm, meme lacet, meme sol) ; chaque paire de roles distincte, chacun visant l'autre de
+		// chaque cote (places de biais de -45 a +45 degres). Niveau 37 : les vannes A et B dans leur module (B a WheelLateralB)
+		constexpr int Seeds = 48;
+		int AllPairs = 0, AllOld = 0, AllNew = 0, AllOldPts = 0, AllNewPts = 0;
+		for (int Level = 0; Level <= 40; ++Level)
+		{
+			if (!BRM::HasMission(Level))
+			{
+				continue;
+			}
+			int Keys[64][4];
+			int NumKeys = 0;
+			for (int S = 1; S <= Seeds; ++S)
+			{
+				BRM::FPlan Plan;
+				BRM::BuildPlan(Level, 0x9E3779B9u * static_cast<uint32_t>(S) + static_cast<uint32_t>(Level), Plan);
+				int Gate = -1;
+				for (int I = 0; I < Plan.NumDevices; ++I)
+				{
+					if (Plan.Devices[I].Kind == BRM::EKind::Gate && Plan.Devices[I].Zone == 4 && Plan.Devices[I].Role != BRM::R_Passage)
+					{
+						Gate = I;
+						break;
+					}
+				}
+				auto GroupOf = [&Plan, Gate](int I)
+				{
+					const BRM::FDevice& D = Plan.Devices[I];
+					if (I == Gate || D.Role == BRM::R_LidarDoor || !(D.Group > 0 || D.Zone == 4))
+					{
+						return -1;
+					}
+					return D.Zone == 4 ? 1000 + D.Group : static_cast<int>(D.Group);
+				};
+				for (int I = 0; I < Plan.NumDevices; ++I)
+				{
+					for (int J = I + 1; J < Plan.NumDevices; ++J)
+					{
+						const int GI = GroupOf(I);
+						if (GI < 0 || GI != GroupOf(J))
+						{
+							continue;
+						}
+						int K0 = static_cast<int>(Plan.Devices[I].Kind) * 256 + Plan.Devices[I].Role, K1 = static_cast<int>(Plan.Devices[J].Kind) * 256 + Plan.Devices[J].Role;
+						if (K1 < K0)
+						{
+							std::swap(K0, K1);
+						}
+						if (!CL::Of(static_cast<BRM::EKind>(K0 / 256), static_cast<uint8_t>(K0 % 256), BRMech::Module::None, 60.f).bAimable
+							|| !CL::Of(static_cast<BRM::EKind>(K1 / 256), static_cast<uint8_t>(K1 % 256), BRMech::Module::None, 60.f).bAimable)
+						{
+							continue;
+						}
+						bool bKnown = false;
+						for (int Q = 0; Q < NumKeys; ++Q)
+						{
+							bKnown |= Keys[Q][0] == K0 && Keys[Q][1] == K1;
+						}
+						if (!bKnown && NumKeys < 64)
+						{
+							Keys[NumKeys][0] = K0;
+							Keys[NumKeys][1] = K1;
+							++NumKeys;
+						}
+					}
+				}
+			}
+			int LOld = 0, LNew = 0, LOldPts = 0, LNewPts = 0;
+			std::string Names;
+			for (int Q = 0; Q < NumKeys; ++Q)
+			{
+				const BRM::EKind KA = static_cast<BRM::EKind>(Keys[Q][0] / 256), KB = static_cast<BRM::EKind>(Keys[Q][1] / 256);
+				const uint8_t RA = static_cast<uint8_t>(Keys[Q][0] % 256), RB = static_cast<uint8_t>(Keys[Q][1] % 256);
+				CL::FPlaced PA = Wall(KA, RA, 0.f), PB = Wall(KB, RB, 58.f);
+				const bool bPool = Level == 37 && RA == BRM::R_Sluice && RB == BRM::R_Sluice;
+				if (bPool)
+				{
+					// Module des Poolrooms (ABRWorld::PlaceMission) : vanne A avancee de TankDepth, bassins derriere elle ; vanne B a
+					// WheelLateralB sur l'avant du bassin B
+					PA.Frame.X = P::TankDepth;
+					PA.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolTanks, 60.f);
+					PB.Frame.X = P::TankDepth;
+					PB.Frame.Y = P::WheelLateralB;
+					PB.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolWheelB, 60.f);
+				}
+				const int Old = CL::FanSteals(PA, PB, 0.f) + CL::FanSteals(PB, PA, 0.f);
+				const int New = CL::FanStealsPicked(PA, PB, 0.f) + CL::FanStealsPicked(PB, PA, 0.f);
+				LOld += Old > 0 ? 1 : 0;
+				LNew += New > 0 ? 1 : 0;
+				LOldPts += Old;
+				LNewPts += New;
+				if (Old > 0 || New > 0)
+				{
+					Names += std::string(Names.empty() ? "" : ", ") + RoleName(RA) + "/" + RoleName(RB) + (bPool ? " (module)" : "") + " : " +
+						std::to_string(Old) + " -> " + std::to_string(New);
+				}
+			}
+			std::printf("  Niveau %d : %d paire(s) de voisins (groupes de %d graines) ; regle d'avant : visee prise pour %d paire(s) (%d points) ; regle du jeu : %d (%d points)%s%s\n",
+				Level, NumKeys, Seeds, LOld, LOldPts, LNew, LNewPts, Names.empty() ? "" : " ; roles : ", Names.c_str());
+			AllPairs += NumKeys;
+			AllOld += LOld;
+			AllNew += LNew;
+			AllOldPts += LOldPts;
+			AllNewPts += LNewPts;
+		}
+		Line("voisins de tous les niveaux (" + std::to_string(AllPairs) + " paires de roles a 58 cm) : regle d'avant, visee prise pour " + std::to_string(AllOld) + " paire(s) (" +
+			std::to_string(AllOldPts) + " points) ; regle du jeu : " + std::to_string(AllNew) + " (" + std::to_string(AllNewPts) + " points)", AllOld > 0 && AllNew == 0);
+
+		// 3. Niveau 37, vanne B a 58 cm (placement d'avant, graine 3053711763) : regle d'avant, B prend la visee de A ; regle du jeu :
+		// jamais, sur les memes sols decales que la section J
+		const float FloorsB[5] = { 0.f, 34.f, DeckHeight, -34.f, -DeckHeight };
+		const float Lifts[3] = { 0.f, DeckHeight, -DeckHeight };
+		int PoolOld = 0, PoolNew = 0;
+		for (const float FloorB : FloorsB)
+		{
+			CL::FPlaced OA, OB;
+			OA.Frame.X = P::TankDepth;
+			OA.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolTanks, 60.f);
+			OB.Frame.X = P::TankDepth;
+			OB.Frame.Y = 58.f;
+			OB.Frame.Z = FloorB;
+			OB.Print = CL::Of(BRM::EKind::Switch, BRM::R_Sluice, BRMech::Module::PoolWheelB, 60.f);
+			for (const float Lift : Lifts)
+			{
+				PoolOld += CL::FanSteals(OA, OB, Lift) + CL::FanSteals(OB, OA, Lift);
+				PoolNew += CL::FanStealsPicked(OA, OB, Lift) + CL::FanStealsPicked(OB, OA, Lift);
+			}
+		}
+		Line("Niveau 37, vanne B a 58 cm (graine 3053711763) : regle d'avant, visee prise depuis " + std::to_string(PoolOld) + " point(s) ; regle du jeu : " +
+			std::to_string(PoolNew), PoolOld > 0 && PoolNew == 0);
+
+		// 4. Jamais un mecanisme cache. Repere libre : regard selon -X depuis (200, 0, 120) ; Me : boite visee (X -2 a 18, Y 6 a 26)
+		// frolee par la sphere, son point vise hors de l'axe ; Other : boite visee plus loin (X -50 a -30), point vise dans l'axe.
+		// Sans rien entre eux, la visee prend Other (le balayage traverse la boite de Me). Derriere un mur (decor, X -11 a -9),
+		// derriere le volume de Me au meme endroit, son point vise derriere une dalle (X -35 a -33 : sa boite touchee avant, ligne
+		// de vue de l'hote coupee) ou hors de la portee de l'hote (yeux a 345 cm de son point) : jamais
+		const BRMech::FVec3 Eye = BRMech::FVec3{ 200.f, 0.f, 120.f }, Far = BRMech::FVec3{ -200.f, 0.f, 120.f };
+		auto Scene = [](CL::FAimShape* Out, int& N, const BRMech::FVec3& C, const BRMech::FVec3& E, int Owner, bool bAimBox)
+		{
+			Out[N].C = C;
+			Out[N].E = E;
+			Out[N].Owner = Owner;
+			Out[N].bAimBox = bAimBox;
+			++N;
+		};
+		const BRMech::FVec3 MeC = BRMech::FVec3{ 8.f, 16.f, 120.f }, MeE = BRMech::FVec3{ 10.f, 10.f, 25.f };
+		const BRMech::FVec3 OtherC = BRMech::FVec3{ -40.f, 0.f, 120.f }, OtherE = BRMech::FVec3{ 10.f, 22.f, 25.f };
+		const BRMech::FVec3 Centres[2] = { MeC, OtherC };
+		auto Pick = [&](int Extra, const BRMech::FVec3& From, CL::EAimPick Rule)
+		{
+			CL::FAimShape S[4];
+			int N = 0;
+			Scene(S, N, MeC, MeE, 0, true);
+			Scene(S, N, OtherC, OtherE, 1, true);
+			if (Extra == 1)
+			{
+				Scene(S, N, BRMech::FVec3{ -10.f, 0.f, 120.f }, BRMech::FVec3{ 1.f, 60.f, 100.f }, -1, false); // mur entre la boite de Me et celle de Other
+			}
+			else if (Extra == 2)
+			{
+				Scene(S, N, BRMech::FVec3{ -10.f, 0.f, 120.f }, BRMech::FVec3{ 1.f, 60.f, 100.f }, 0, false); // volume de Me (cage, battant) au meme endroit
+			}
+			else if (Extra == 3)
+			{
+				Scene(S, N, BRMech::FVec3{ -34.f, 0.f, 120.f }, BRMech::FVec3{ 1.f, 60.f, 100.f }, -1, false); // dalle dans la boite de Other, devant son point vise
+			}
+			return CL::PickAim(From, Far, S, N, Centres, 2, Rule);
+		};
+		const BRMech::FVec3 FarEye = BRMech::FVec3{ 305.f, 0.f, 120.f };
+		const int Open = Pick(0, Eye, CL::EAimPick::NearestCentre), OpenOld = Pick(0, Eye, CL::EAimPick::FirstContact);
+		const int Walled = Pick(1, Eye, CL::EAimPick::NearestCentre), Solid = Pick(2, Eye, CL::EAimPick::NearestCentre);
+		const int Slab = Pick(3, Eye, CL::EAimPick::NearestCentre), TooFar = Pick(0, FarEye, CL::EAimPick::NearestCentre);
+		Line("mecanisme cache jamais pris : a decouvert, regle du jeu " + std::to_string(Open) + " (le voisin dans l'axe ; regle d'avant " + std::to_string(OpenOld) +
+			") ; derriere un mur " + std::to_string(Walled) + ", derriere le volume du premier touche " + std::to_string(Solid) + ", point vise derriere une dalle " +
+			std::to_string(Slab) + ", hors de portee de l'hote (" + F1(FarEye.X - OtherC.X) + " cm) " + std::to_string(TooFar) + " (attendu 1 ; 0 ; 0, 0, 0, 0)",
+			Open == 1 && OpenOld == 0 && Walled == 0 && Solid == 0 && Slab == 0 && TooFar == 0);
 	}
 
 	std::printf("\nRESULTAT : %s (%d verifications, %d echec(s))\n", GFailures == 0 ? "OK" : "ECHEC", GChecks, GFailures);

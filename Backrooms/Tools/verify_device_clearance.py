@@ -45,6 +45,13 @@ Quatre cas, chacun avec la regle d'avant (v4.14) et celle du jeu (v4.15) :
      sols de la vanne B et du joueur decales : canal, marche, trottoir) : aucune visee prise ; et l'avant du bassin B (volants
      et graduations, regard de la vidange, regles) sans recouvrement. Les places plus de biais (67,5 degres) sont montrees
      pour information, ainsi que les voisins a 58 cm du placement des autres niveaux (inchange).
+  H. v4.16 (visee) : choix de la visee du client entre voisins (ABRCharacter::PickAimedDevice, miroir de
+     BRMech::Clearance::PickAim). Regle d'avant (v4.12 a c1c2bde) : le premier objet touche par la sphere ; juge sur le defaut
+     d'origine (vannes du Niveau 37 a 58 cm, memes places, arrivees et sols que le cas G) : visee prise, ECHOUE. Regle du jeu :
+     le balayage traverse les boites visees jusqu'au premier volume, le point vise le plus pres de l'axe du regard l'emporte, un
+     voisin seulement si l'hote l'accepte : aucune visee prise, a 58 cm comme a 98 cm, et jamais un mecanisme cache (mur,
+     volume, point vise derriere une dalle, hors de portee de l'hote : scenes du banc Tools/Mechanisms, section K, qui juge
+     aussi les voisins de chaque niveau avec le code du jeu).
 En B et C, la place debout est celle des tests du jeu (BRTestV412::FindMissionStand : cercles et directions lus dans
 BRAutoTestV412.cpp, capsule de 36 cm, yeux a leur hauteur, portee de la visee du client puis regle de l'hote ; v4.15
 correctifs 4 : puis la visee du client prend le mecanisme, BRTestV412::FocusVerdict : balayage, puis tolerance d'UpdateFocus si
@@ -59,7 +66,8 @@ mecanismes" ; -BRAutoTestV413 : postes et cages du Level 6).
 
 Usage : python Tools/verify_device_clearance.py [--seeds 120] [--rules both|old|new]
 Code de sortie : 0 si la regle v4.15 passe partout ET la regle v4.14 echoue la ou les journaux du jeu l'ont vue echouer ET la regle v4.15
-est dans les sources (cas A, D, E et F ; v4.16 : cas G, regle d'avant = vanne B a 58 cm). Sortie : Docs/v415/correctifs_places.txt.
+est dans les sources (cas A, D, E et F ; v4.16 : cas G, regle d'avant = vanne B a 58 cm ; cas H, regle d'avant = visee au premier
+contact). Sortie : Docs/v415/correctifs_places.txt.
 """
 import argparse
 import math
@@ -291,6 +299,27 @@ def read_constants():
         "BRMech::Clearance::Fan* = cercles, pas, arrivees et portee des tests (FindMissionStand, marches, ClientFocusReach)":
         K["fan_rings"] == K["rings"] and K["Clearance.FanStep"] == K["turn_deg"] and walk_r[0] == K["Clearance.FanArrivalFront"]
         and walk_r[1] == K["Clearance.FanArrival"] and K["Clearance.FanReach"] == K["ClientFocusReach"],
+    }
+    # v4.16 (visee) : cas H : choix de la visee du client entre voisins (BRMech::Clearance::PickAim, ABRCharacter::PickAimedDevice)
+    K["Clearance.HostReach"] = num(r"constexpr float HostReach = ([\d.]+)f;", clh, "Clearance.HostReach")[0]
+    K["Clearance.MaxAimCandidates"] = int(num(r"constexpr int MaxAimCandidates = (\d+);", clh, "Clearance.MaxAimCandidates")[0])
+    pick = char[char.index("AActor* ABRCharacter::PickAimedDevice("):] if "AActor* ABRCharacter::PickAimedDevice(" in char else ""
+    pick = pick[:pick.index("\n}") + 2] if pick else ""
+    K["src_H"] = {
+        "ABRCharacter::UpdateFocus : etape 1 par ABRCharacter::PickAimedDevice": "Accept(PickAimedDevice(GetWorld(), this, Start, Eye, Dir, Len, InteractReach + 30.f, Hit))" in char,
+        "ABRCharacter::PickAimedDevice : boites visees traversees (meme sphere), arret au premier objet opaque, au plus MaxAimCandidates":
+        "D0->IsAimBox(First.GetComponent())" in pick and "Q.AddIgnoredComponent(Next.GetComponent());" in pick
+        and "FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q)" in pick and "I < BRMech::Clearance::MaxAimCandidates" in pick
+        and "if (!D->IsAimBox(Next.GetComponent()))" in pick,
+        "ABRCharacter::PickAimedDevice : point vise le plus pres de l'axe, un voisin seulement selon la regle de l'hote":
+        "D->GetInteractPoint() - Start" in pick and "Cos > BestCos && W && W->CanReachMissionDevice(Eye, D, Self)" in pick,
+        "BRTestV412::FocusVerdict : le meme choix (Dev compte toujours)":
+        "ABRCharacter::PickAimedDevice(World, Self, Eye, Eye, Dir, ClientFocusSweep, ClientFocusSweep + 30.f, Hit, Dev)" in walk,
+        "BRMech::Clearance::PickAim et FanStealsPicked, juges par le banc Tools/Mechanisms (section K)":
+        "int PickAim(const FVec3& Eye, const FVec3& Look, const FAimShape* Shapes, int NumShapes, const FVec3* Centres, int NumDevices, EAimPick Rule)" in mech
+        and "CL::FanStealsPicked(WA, WB, 0.f)" in bench and "CL::PickAim(From, Far, S, N, Centres, 2, Rule)" in bench,
+        "BRMech::Clearance::HostReach = ABRWorld::MissionReachServer": K["Clearance.HostReach"] == K["Reach"]
+        and "static_assert(BRMech::Clearance::HostReach == ABRWorld::MissionReachServer" in char,
     }
     return K
 
@@ -1662,6 +1691,143 @@ def case_poolrooms(K, rules):
     return results
 
 
+# ------------------------------------------------------------------- H. v4.16 (visee) : choix de la visee entre voisins
+def np_pick_aim(K, E, look, shapes, centres, rule):
+    """Miroir de BRMech::Clearance::PickAim (BRMechLogic.cpp ; le jeu : ABRCharacter::PickAimedDevice), vectorise sur les yeux E
+    (n x 3) : sphere de FocusSweep lancee de E vers look (n x 3). shapes : [(centre, demi-tailles, proprietaire, boite visee)]
+    (proprietaire -1 : decor ; a egalite de contact, l'ordre de la liste) ; centres : points vises des mecanismes. rule "first" :
+    proprietaire du premier contact ; "nearest" (regle du jeu) : le balayage traverse les boites visees jusqu'au premier volume ou
+    decor, au plus MaxAimCandidates objets ; le point vise le plus pres de l'axe du regard (cosinus) l'emporte, un autre que le
+    premier touche seulement si l'hote l'accepte (portee HostReach, ligne de vue a Margin pres de tout volume sauf le sien).
+    Rend le mecanisme pris par yeux, -1 si rien"""
+    n = len(E)
+    r = K["Clearance.FocusSweep"]
+    T = np.stack([np_sweep(E, look, np.array(s[0], float), np.array(s[1], float), r) for s in shapes], axis=1)
+    order = np.argsort(T, axis=1, kind="stable")
+    hit = np.take_along_axis(T, order, axis=1) <= 1.0
+    owners = np.array([s[2] for s in shapes])[order]
+    aim = np.array([bool(s[3]) for s in shapes])[order]
+    nd = len(centres)
+    is_dev = hit & (owners >= 0) & (owners < nd)
+    best = np.where(is_dev[:, 0], owners[:, 0], -1)
+    if rule == "first":
+        return best
+    C = [np.broadcast_to(np.array(c, float), (n, 3)) for c in centres]
+    L = look - E
+    ll = np.linalg.norm(L, axis=1)
+
+    def cosine(d):
+        V = C[d] - E
+        vl = np.linalg.norm(V, axis=1)
+        ok = (ll > 0) & (vl > 0)
+        return np.where(ok, (V * L).sum(axis=1) / np.where(ok, vl * ll, 1.0), -1.0)
+
+    def host(d):
+        ok = np.linalg.norm(C[d] - E, axis=1) <= K["Clearance.HostReach"]
+        for s in shapes:
+            if not s[3] and s[2] != d:
+                ok &= np_seg_box(E, C[d], np.array(s[0], float), np.array(s[1], float)) >= K["Clearance.Margin"]
+        return ok
+    cos = np.stack([cosine(d) for d in range(nd)], axis=1)
+    hosts = np.stack([host(d) for d in range(nd)], axis=1)
+    rows = np.arange(n)
+    going = is_dev[:, 0] & aim[:, 0]
+    best_cos = np.where(best >= 0, cos[rows, np.maximum(best, 0)], -2.0)
+    for k in range(1, min(len(shapes), K["Clearance.MaxAimCandidates"])):
+        own = owners[:, k]
+        going &= is_dev[:, k]
+        oc = np.maximum(own, 0)
+        take = going & (own != best) & (cos[rows, oc] > best_cos) & hosts[rows, oc]
+        best = np.where(take, own, best)
+        best_cos = np.where(take, cos[rows, oc], best_cos)
+        going &= aim[:, k]
+    return best
+
+
+def fan_steals_picked(K, me_box, other_box, me_solid, other_solid, lift, pts):
+    """Miroir de BRMech::Clearance::FanStealsPicked : les places, arrivees et filtres de fan_steals (capsule, portee, ligne de vue
+    de l'hote libre du volume de Other), puis la regle du jeu (np_pick_aim, "nearest") : pieces de Other d'abord (a egalite de
+    contact, Other est le premier touche) ; visee prise si elle rend Other. Rend le masque"""
+    tgt = np.array(me_box[0], float)
+    P = np.array([(tgt[0] + p[0], tgt[1] + p[1]) for p in pts], float)
+    ok = np.ones(len(P), bool)
+    cap = K["Clearance.PlayerRadius"] + K["Clearance.Margin"]
+    for s in (me_solid, other_solid):
+        if s is None or s[1][2] * 2.0 <= K["Clearance.StepHeight"]:
+            continue
+        dx = np.maximum(np.abs(P[:, 0] - s[0][0]) - s[1][0], 0.0)
+        dy = np.maximum(np.abs(P[:, 1] - s[0][1]) - s[1][1], 0.0)
+        ok &= np.hypot(dx, dy) >= cap
+    E = np.column_stack([P, np.full(len(P), lift + K["Clearance.StandEye"])])
+    T = np.repeat(tgt[None, :], len(P), 0)
+    ok &= np.linalg.norm(E - T, axis=1) <= K["Clearance.FanReach"]
+    if other_solid is not None:
+        ok &= np_seg_box(E, T, np.array(other_solid[0], float), np.array(other_solid[1], float)) > 0.0
+    shapes = [(other_box[0], other_box[1], 1, True)] + ([(other_solid[0], other_solid[1], 1, False)] if other_solid is not None else [])
+    shapes += [(me_box[0], me_box[1], 0, True)] + ([(me_solid[0], me_solid[1], 0, False)] if me_solid is not None else [])
+    picked = np_pick_aim(K, E, T, shapes, [tuple(tgt), tuple(other_box[0])], "nearest")
+    return ok & (picked == 1), E - T
+
+
+def pool_steals_by(K, fn, lat_b, floor_b, lift, pts, target):
+    a_box, b_box, tanks = pool_pair(K, lat_b, floor_b)
+    if target == "A":
+        return fn(K, a_box, b_box, tanks, None, lift, pts)
+    return fn(K, moved(b_box, lat_b, floor_b), moved(a_box, lat_b, floor_b), None, moved(tanks, lat_b, floor_b), lift, pts)
+
+
+def hidden_scenes(K, rule):
+    """Scenes du banc Tools/Mechanisms (section K, 4) rejouees par le miroir : regard selon -X depuis (200, 0, 120) ; boite visee
+    de Me frolee (X -2 a 18, Y 6 a 26), celle de Other plus loin (X -50 a -30), son point vise dans l'axe. Rend (a decouvert,
+    derriere un mur, derriere le volume du premier touche, point vise derriere une dalle, hors de portee de l'hote)"""
+    me = ((8.0, 16.0, 120.0), (10.0, 10.0, 25.0), 0, True)
+    other = ((-40.0, 0.0, 120.0), (10.0, 22.0, 25.0), 1, True)
+    centres = [me[0], other[0]]
+    slab_e = (1.0, 60.0, 100.0)
+    far = np.array([[-200.0, 0.0, 120.0]])
+
+    def pick(extra, eye):
+        shapes = [me, other] + ([] if extra is None else [extra])
+        return int(np_pick_aim(K, np.array([eye], float), far, shapes, centres, rule)[0])
+    eye = (200.0, 0.0, 120.0)
+    return (pick(None, eye), pick(((-10.0, 0.0, 120.0), slab_e, -1, False), eye), pick(((-10.0, 0.0, 120.0), slab_e, 0, False), eye),
+            pick(((-34.0, 0.0, 120.0), slab_e, -1, False), eye), pick(None, (305.0, 0.0, 120.0)))
+
+
+def case_aim_pick(K, rules):
+    """v4.16 (visee) : cas H : choix de la visee du client entre voisins, juge sur le defaut d'origine (Niveau 37, vanne B a 58 cm
+    de la vanne A, boites visees chevauchees de 6 cm : graine 3053711763, "PAS VISE") : regle d'avant (premier contact,
+    fan_steals) ECHOUE ; regle du jeu (np_pick_aim, "nearest") : aucune visee prise sur tous les sols decales, au placement d'avant
+    comme a celui du jeu (98 cm), et jamais un mecanisme cache (scenes de la section K du banc)"""
+    l37 = K["L37"]
+    floors = (0.0, l37["DeckStep"], l37["DeckHeight"], -l37["DeckStep"], -l37["DeckHeight"])
+    pts = fan_points(K)
+    seen = [p for p in fan_points(K, steps=(2,)) if p[2] == 1]
+    print("H. v4.16 (visee) : choix de la visee du client entre voisins (ABRCharacter::PickAimedDevice, miroir de BRMech::Clearance::PickAim : boites visees "
+          "traversees jusqu'au premier volume, au plus %d objets ; point vise le plus pres de l'axe du regard ; un voisin seulement si l'hote l'accepte : portee %g, "
+          "ligne de vue a %g cm pres) ; places de biais et arrivees du cas G, vannes du Niveau 37"
+          % (K["Clearance.MaxAimCandidates"], K["Clearance.HostReach"], K["Clearance.Margin"]))
+    results = {}
+    for key, label, fn, rule in (("old", "regle d'avant (premier contact, v4.12 a c1c2bde)", fan_steals, "first"),
+                                 ("new", "regle du jeu (v4.16 : point vise le plus pres de l'axe)", fan_steals_picked, "nearest")):
+        if key not in rules:
+            continue
+        counts = {}
+        for lat in (58.0, K["Pool.WheelLateralB"]):
+            counts[lat] = sum(int(pool_steals_by(K, fn, lat, fb, lift, pts, t)[0].sum()) for fb in floors for lift in floors for t in ("A", "B"))
+        seen_n = int(pool_steals_by(K, fn, 58.0, 0.0, 0.0, seen, "A")[0].sum())
+        sc = hidden_scenes(K, rule)
+        hidden_ok = sc[1] != 1 and sc[2] != 1 and sc[3] != 1 and sc[4] != 1
+        ok = counts[58.0] == 0 and seen_n == 0 and hidden_ok and (sc[0] == 1 if key == "new" else True)
+        results[key] = ok
+        print("  %s : vanne B a 58 cm (placement d'avant) : visee prise depuis %d point(s) (2 cibles, %d sols) ; place de la graine 3053711763 (cercle de 160 cm, "
+              "45 degres vers B) : %d arrivee(s) sur %d ; vanne B a %g cm (placement du jeu) : %d ; scenes du banc (a decouvert, mur, volume du premier touche, "
+              "dalle, hors de portee) : %s -> %s"
+              % (label, counts[58.0], len(floors) * len(floors), seen_n, len(seen), K["Pool.WheelLateralB"], counts[K["Pool.WheelLateralB"]],
+                 "/".join("%d" % v for v in sc), "PASSE" if ok else "ECHOUE"))
+    return results
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=120, help="graines par niveau (grottes, banlieue)")
@@ -1699,8 +1865,10 @@ def main():
     print()
     res["G"] = case_poolrooms(K, rules)
     print()
+    res["H"] = case_aim_pick(K, rules)
+    print()
     print("Regle du jeu dans les sources :")
-    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()) + list(K["src_E"].items()) + list(K["src_F"].items()) + list(K["src_G"].items()):
+    for what, ok in list(K["src_A"].items()) + list(K["src_D"].items()) + list(K["src_E"].items()) + list(K["src_F"].items()) + list(K["src_G"].items()) + list(K["src_H"].items()):
         print("  %s : %s" % (what, "oui" if ok else "NON"))
     print()
     bad = 0
@@ -1711,7 +1879,7 @@ def main():
         if "new" in r and not r["new"]:
             print("ECHEC : cas %s : la regle du jeu echoue" % case)
             bad += 1
-    for case, checks in (("A", K["src_A"]), ("D", K["src_D"]), ("E", K["src_E"]), ("F", K["src_F"]), ("G", K["src_G"])):
+    for case, checks in (("A", K["src_A"]), ("D", K["src_D"]), ("E", K["src_E"]), ("F", K["src_F"]), ("G", K["src_G"]), ("H", K["src_H"])):
         if "new" in rules and not all(checks.values()):
             print("ECHEC : cas %s : la regle v4.15 n'est plus dans les sources (%s)" % (case, ", ".join(w for w, ok in checks.items() if not ok)))
             bad += 1
@@ -1724,8 +1892,9 @@ def main():
     word = lambda r, k: ("passe" if r[k] else "echoue") if k in r else "non jouee"
     for r in res.values():
         r.pop("first", None)  # premiere disposition v4.15 du cas A : pour information
-    print("RESULTAT : %s (%s)" % ("OK" if bad == 0 else "ECHEC", ", ".join(("%s avant (vanne B a 58 cm) %s / v4.16 %s" if c == "G" else "%s v4.14 %s / v4.15 %s")
-                                                                     % (c, word(r, "old"), word(r, "new")) for c, r in res.items())))
+    fmt = {"G": "%s avant (vanne B a 58 cm) %s / v4.16 %s", "H": "%s visee au premier contact %s / v4.16 (point vise le plus pres de l'axe) %s"}
+    print("RESULTAT : %s (%s)" % ("OK" if bad == 0 else "ECHEC", ", ".join(fmt.get(c, "%s v4.14 %s / v4.15 %s") % (c, word(r, "old"), word(r, "new"))
+                                                                     for c, r in res.items())))
     return 0 if bad == 0 else 1
 
 

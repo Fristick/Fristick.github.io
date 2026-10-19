@@ -45,6 +45,9 @@ public:
 	FString GetPrompt() const;
 	/** Point vise et verifie par l'hote (distance 3D, ligne de vue) */
 	FVector GetInteractPoint() const;
+	/** v4.16 (visee) : C est la boite visee de ce mecanisme (volume invisible du canal Visibility, centre au point vise) : la
+	 *  visee du client (ABRCharacter::PickAimedDevice) la traverse pour juger un voisin ; ses autres pieces sont opaques */
+	bool IsAimBox(const UPrimitiveComponent* C) const;
 	/** Cellule de la grille */
 	FIntPoint GetCell() const { return Cell; }
 	int32 GetIndex() const { return Index; }

@@ -716,97 +716,225 @@ namespace BRMech
 			return std::sqrt(GX * GX + GY * GY + GZ * GZ);
 		}
 
-		int FanSteals(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst)
+		int PickAim(const FVec3& Eye, const FVec3& Look, const FAimShape* Shapes, int NumShapes, const FVec3* Centres, int NumDevices, EAimPick Rule)
 		{
-			if (!Me.Print.bAimable || !Other.Print.bAimable)
+			// Contacts de la sphere le long du segment, dans l'ordre (a egalite, l'ordre de Shapes : tri par insertion stable)
+			float Hits[MaxAimShapes];
+			int Order[MaxAimShapes];
+			int NumHits = 0;
+			for (int I = 0; I < NumShapes && I < MaxAimShapes; ++I)
 			{
-				return 0;
+				const float T = SweepContact(Eye, Look, Shapes[I].C, Shapes[I].E, FocusSweep);
+				if (T > 1.f)
+				{
+					continue;
+				}
+				int K = NumHits;
+				while (K > 0 && Hits[K - 1] > T)
+				{
+					Hits[K] = Hits[K - 1];
+					Order[K] = Order[K - 1];
+					--K;
+				}
+				Hits[K] = T;
+				Order[K] = I;
+				++NumHits;
 			}
-			// Tout dans le repere de Me (X vers la salle, Y lateral, Z depuis son sol)
-			const FVec3 Target = Me.Print.Aim;
-			FVec3 OC, OE;
-			BoxIn(Other, Other.Print.Aim, Other.Print.AimExtent, Me.Frame, OC, OE);
-			const bool bMeSolid = Me.Print.bSolid;
-			const bool bOtherSolid = Other.Print.bSolid;
-			FVec3 MSC, MSE, OSC, OSE;
-			if (bMeSolid)
+			auto IsDevice = [NumDevices](int Owner) { return Owner >= 0 && Owner < NumDevices; };
+			if (NumHits == 0 || !IsDevice(Shapes[Order[0]].Owner))
 			{
-				SolidCenter(Me, MSC, MSE);
+				return -1; // rien, ou le decor d'abord : la tolerance d'UpdateFocus jouerait
 			}
-			if (bOtherSolid)
+			const FAimShape& First = Shapes[Order[0]];
+			if (Rule == EAimPick::FirstContact || !First.bAimBox)
 			{
-				FVec3 LC, LE;
-				SolidCenter(Other, LC, LE);
-				BoxIn(Other, LC, LE, Me.Frame, OSC, OSE);
+				return First.Owner; // premier contact ; le volume d'un mecanisme est opaque : rien n'est vu derriere
 			}
-			const float CapsuleR = PlayerRadius + Margin;
-			const float EyeZ = FloorLift + StandEye;
-			// Capsule (plan) hors d'un volume plus haut qu'une marche (comme Hinders)
-			auto Blocks = [&](bool bHas, const FVec3& SC, const FVec3& SE, float PX, float PY)
+			const float LX = Look.X - Eye.X, LY = Look.Y - Eye.Y, LZ = Look.Z - Eye.Z;
+			const float LookLen = std::sqrt(LX * LX + LY * LY + LZ * LZ);
+			// Cosinus entre l'axe du regard et la direction du point vise du mecanisme D
+			auto Cosine = [&](int D)
 			{
-				if (!bHas || SE.Z * 2.f <= StepHeight)
+				const float CX = Centres[D].X - Eye.X, CY = Centres[D].Y - Eye.Y, CZ = Centres[D].Z - Eye.Z;
+				const float CLen = std::sqrt(CX * CX + CY * CY + CZ * CZ);
+				return (LookLen > 0.f && CLen > 0.f) ? (CX * LX + CY * LY + CZ * LZ) / (CLen * LookLen) : -1.f;
+			};
+			// Regle de l'hote (ABRWorld::CanReachMissionDevice) : portee, ligne de vue qui n'ignore que ce mecanisme ; les boites
+			// visees n'arretent pas sa ligne (canal WorldStatic). Ligne a moins de Margin d'un volume : coupee (cote prudent : le
+			// voisin n'est pas pris, le premier touche reste ; la recherche ternaire s'arrete au bord d'une boite traversee, a
+			// quelques millioniemes de cm au-dessus de 0)
+			auto HostAccepts = [&](int D)
+			{
+				const float CX = Centres[D].X - Eye.X, CY = Centres[D].Y - Eye.Y, CZ = Centres[D].Z - Eye.Z;
+				if (std::sqrt(CX * CX + CY * CY + CZ * CZ) > HostReach)
 				{
 					return false;
 				}
-				const float DX = MaxF(AbsF(PX - SC.X) - SE.X, 0.f);
-				const float DY = MaxF(AbsF(PY - SC.Y) - SE.Y, 0.f);
-				return std::sqrt(DX * DX + DY * DY) < CapsuleR;
-			};
-			auto Stolen = [&](float PX, float PY)
-			{
-				if (Blocks(bMeSolid, MSC, MSE, PX, PY) || Blocks(bOtherSolid, OSC, OSE, PX, PY))
+				for (int I = 0; I < NumShapes && I < MaxAimShapes; ++I)
 				{
-					return false; // personne ne s'y tient
-				}
-				const FVec3 Eye = V3(PX, PY, EyeZ);
-				const float DX = Eye.X - Target.X, DY = Eye.Y - Target.Y, DZ = Eye.Z - Target.Z;
-				if (std::sqrt(DX * DX + DY * DY + DZ * DZ) > FanReach)
-				{
-					return false; // hors de portee de la visee du client : place refusee par les tests
-				}
-				if (bOtherSolid && SegToBox(Eye, Target, OSC, OSE) <= 0.f)
-				{
-					return false; // ligne de vue de l'hote coupee : place refusee
-				}
-				const float TMe = SweepContact(Eye, Target, Target, Me.Print.AimExtent, FocusSweep);
-				const float TOther = SweepContact(Eye, Target, OC, OE, FocusSweep);
-				if (TOther > TMe)
-				{
-					return false;
-				}
-				// Un volume (decor) touche avant : la tolerance d'UpdateFocus joue, l'autre mecanisme ne prend pas la visee
-				const float TSolidMe = bMeSolid ? SweepContact(Eye, Target, MSC, MSE, FocusSweep) : 2.f;
-				const float TSolidOther = bOtherSolid ? SweepContact(Eye, Target, OSC, OSE, FocusSweep) : 2.f;
-				return TOther < MinF(TSolidMe, TSolidOther);
-			};
-			int Count = 0;
-			for (int Ring = 0; Ring < NumFanRings; ++Ring)
-			{
-				for (int Step = -FanTurns; Step <= FanTurns; ++Step)
-				{
-					const float Ang = MechImpl::Rad(static_cast<float>(Step) * FanStep);
-					const float SX = Target.X + std::cos(Ang) * FanRings[Ring];
-					const float SY = Target.Y + std::sin(Ang) * FanRings[Ring];
-					const float Arrival = (Ring == 0 && Step == 0) ? FanArrivalFront : FanArrival;
-					const int Cells = static_cast<int>(Arrival / FanGrid);
-					for (int GXi = -Cells; GXi <= Cells; ++GXi)
+					if (!Shapes[I].bAimBox && Shapes[I].Owner != D && SegToBox(Eye, Centres[D], Shapes[I].C, Shapes[I].E) < Margin)
 					{
-						for (int GYi = -Cells; GYi <= Cells; ++GYi)
+						return false;
+					}
+				}
+				return true;
+			};
+			int Best = First.Owner;
+			float BestCos = Cosine(Best);
+			for (int K = 1; K < NumHits && K < MaxAimCandidates; ++K)
+			{
+				const FAimShape& S = Shapes[Order[K]];
+				if (!IsDevice(S.Owner))
+				{
+					break; // decor : opaque, le balayage s'arrete
+				}
+				const float Cos = Cosine(S.Owner);
+				if (S.Owner != Best && Cos > BestCos && HostAccepts(S.Owner))
+				{
+					Best = S.Owner;
+					BestCos = Cos;
+				}
+				if (!S.bAimBox)
+				{
+					break; // volume d'un mecanisme : opaque
+				}
+			}
+			return Best;
+		}
+
+		namespace
+		{
+			/** v4.16 (visee) : places de biais et arrivees de FanSteals (bPicked faux : premier contact, regle d'avant, code
+			 *  inchange) et de FanStealsPicked (bPicked vrai : PickAim, regle du jeu) ; memes filtres */
+			int FanCount(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst, bool bPicked)
+			{
+				if (!Me.Print.bAimable || !Other.Print.bAimable)
+				{
+					return 0;
+				}
+				// Tout dans le repere de Me (X vers la salle, Y lateral, Z depuis son sol)
+				const FVec3 Target = Me.Print.Aim;
+				FVec3 OC, OE;
+				BoxIn(Other, Other.Print.Aim, Other.Print.AimExtent, Me.Frame, OC, OE);
+				const bool bMeSolid = Me.Print.bSolid;
+				const bool bOtherSolid = Other.Print.bSolid;
+				FVec3 MSC, MSE, OSC, OSE;
+				if (bMeSolid)
+				{
+					SolidCenter(Me, MSC, MSE);
+				}
+				if (bOtherSolid)
+				{
+					FVec3 LC, LE;
+					SolidCenter(Other, LC, LE);
+					BoxIn(Other, LC, LE, Me.Frame, OSC, OSE);
+				}
+				const float CapsuleR = PlayerRadius + Margin;
+				const float EyeZ = FloorLift + StandEye;
+				// Capsule (plan) hors d'un volume plus haut qu'une marche (comme Hinders)
+				auto Blocks = [&](bool bHas, const FVec3& SC, const FVec3& SE, float PX, float PY)
+				{
+					if (!bHas || SE.Z * 2.f <= StepHeight)
+					{
+						return false;
+					}
+					const float DX = MaxF(AbsF(PX - SC.X) - SE.X, 0.f);
+					const float DY = MaxF(AbsF(PY - SC.Y) - SE.Y, 0.f);
+					return std::sqrt(DX * DX + DY * DY) < CapsuleR;
+				};
+				auto Stolen = [&](float PX, float PY)
+				{
+					if (Blocks(bMeSolid, MSC, MSE, PX, PY) || Blocks(bOtherSolid, OSC, OSE, PX, PY))
+					{
+						return false; // personne ne s'y tient
+					}
+					const FVec3 Eye = V3(PX, PY, EyeZ);
+					const float DX = Eye.X - Target.X, DY = Eye.Y - Target.Y, DZ = Eye.Z - Target.Z;
+					if (std::sqrt(DX * DX + DY * DY + DZ * DZ) > FanReach)
+					{
+						return false; // hors de portee de la visee du client : place refusee par les tests
+					}
+					if (bOtherSolid && SegToBox(Eye, Target, OSC, OSE) <= 0.f)
+					{
+						return false; // ligne de vue de l'hote coupee : place refusee
+					}
+					if (bPicked)
+					{
+						// v4.16 (visee) : regle du jeu. Pieces dans le repere de Me, celles de Other d'abord (a egalite de contact, Other
+						// est le premier touche) ; points vises : Me (0), Other (1, centre de sa boite visee)
+						FAimShape Shapes[4];
+						int NumShapes = 0;
+						auto AddShape = [&Shapes, &NumShapes](const FVec3& C, const FVec3& E, int Owner, bool bAimBox)
 						{
-							const float OX = static_cast<float>(GXi) * FanGrid, OY = static_cast<float>(GYi) * FanGrid;
-							if (OX * OX + OY * OY <= Arrival * Arrival && Stolen(SX + OX, SY + OY))
+							Shapes[NumShapes].C = C;
+							Shapes[NumShapes].E = E;
+							Shapes[NumShapes].Owner = Owner;
+							Shapes[NumShapes].bAimBox = bAimBox;
+							++NumShapes;
+						};
+						AddShape(OC, OE, 1, true);
+						if (bOtherSolid)
+						{
+							AddShape(OSC, OSE, 1, false);
+						}
+						AddShape(Target, Me.Print.AimExtent, 0, true);
+						if (bMeSolid)
+						{
+							AddShape(MSC, MSE, 0, false);
+						}
+						const FVec3 Centres[2] = { Target, OC };
+						return PickAim(Eye, Target, Shapes, NumShapes, Centres, 2, EAimPick::NearestCentre) == 1;
+					}
+					const float TMe = SweepContact(Eye, Target, Target, Me.Print.AimExtent, FocusSweep);
+					const float TOther = SweepContact(Eye, Target, OC, OE, FocusSweep);
+					if (TOther > TMe)
+					{
+						return false;
+					}
+					// Un volume (decor) touche avant : la tolerance d'UpdateFocus joue, l'autre mecanisme ne prend pas la visee
+					const float TSolidMe = bMeSolid ? SweepContact(Eye, Target, MSC, MSE, FocusSweep) : 2.f;
+					const float TSolidOther = bOtherSolid ? SweepContact(Eye, Target, OSC, OSE, FocusSweep) : 2.f;
+					return TOther < MinF(TSolidMe, TSolidOther);
+				};
+				int Count = 0;
+				for (int Ring = 0; Ring < NumFanRings; ++Ring)
+				{
+					for (int Step = -FanTurns; Step <= FanTurns; ++Step)
+					{
+						const float Ang = MechImpl::Rad(static_cast<float>(Step) * FanStep);
+						const float SX = Target.X + std::cos(Ang) * FanRings[Ring];
+						const float SY = Target.Y + std::sin(Ang) * FanRings[Ring];
+						const float Arrival = (Ring == 0 && Step == 0) ? FanArrivalFront : FanArrival;
+						const int Cells = static_cast<int>(Arrival / FanGrid);
+						for (int GXi = -Cells; GXi <= Cells; ++GXi)
+						{
+							for (int GYi = -Cells; GYi <= Cells; ++GYi)
 							{
-								if (Count == 0 && OutFirst)
+								const float OX = static_cast<float>(GXi) * FanGrid, OY = static_cast<float>(GYi) * FanGrid;
+								if (OX * OX + OY * OY <= Arrival * Arrival && Stolen(SX + OX, SY + OY))
 								{
-									*OutFirst = V3(SX + OX - Target.X, SY + OY - Target.Y, EyeZ - Target.Z);
+									if (Count == 0 && OutFirst)
+									{
+										*OutFirst = V3(SX + OX - Target.X, SY + OY - Target.Y, EyeZ - Target.Z);
+									}
+									++Count;
 								}
-								++Count;
 							}
 						}
 					}
 				}
+				return Count;
 			}
-			return Count;
+		}
+
+		int FanSteals(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst)
+		{
+			return FanCount(Me, Other, FloorLift, OutFirst, false);
+		}
+
+		int FanStealsPicked(const FPlaced& Me, const FPlaced& Other, float FloorLift, FVec3* OutFirst)
+		{
+			return FanCount(Me, Other, FloorLift, OutFirst, true);
 		}
 
 		int BridgeParts(FBox* Out, int MaxParts)

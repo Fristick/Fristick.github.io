@@ -831,10 +831,14 @@ namespace BRTestV412
 		if (World->SweepSingleByChannel(Hit, Eye, Eye + Dir * ClientFocusSweep, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(BRMech::Clearance::FocusSweep), Q))
 		{
 			Out.Hit = Hit.GetActor();
-			if (FocusTakes(Out.Hit, Dev))
+			// v4.16 (visee) : le choix du jeu entre mecanismes voisins (ABRCharacter::PickAimedDevice, la meme fonction : point vise le
+			// plus pres de l'axe du regard parmi les mecanismes que le balayage traverse, regle de l'hote pour un autre que le
+			// premier touche ; Dev compte toujours). Avant : le premier touche (Out.Hit)
+			const AActor* Picked = ABRCharacter::PickAimedDevice(World, Self, Eye, Eye, Dir, ClientFocusSweep, ClientFocusSweep + 30.f, Hit, Dev);
+			if (FocusTakes(Picked, Dev))
 			{
-				Out.Taken = Out.Hit;
-				Out.Kind = Out.Hit == Dev ? EFocus::Dev : EFocus::Other;
+				Out.Taken = Picked;
+				Out.Kind = Picked == Dev ? EFocus::Dev : EFocus::Other;
 				return Out;
 			}
 		}
@@ -1053,6 +1057,12 @@ namespace BRTestV412
 			const FVector At = Local(Hit.ImpactPoint);
 			Out += FString::Printf(TEXT(", sphere de la visee : impact en (%.0f, %.0f, %.0f) a %.0f cm des yeux sur %s (%s)"), At.X, At.Y, At.Z, Hit.Distance,
 				*GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()));
+			// v4.16 (visee) : choix du jeu entre voisins depuis ce premier impact (ABRCharacter::PickAimedDevice) : mecanisme retenu et
+			// nombre de mecanismes que le balayage traverse
+			int32 Touched = 0;
+			const AActor* Picked = ABRCharacter::PickAimedDevice(W->GetWorld(), C, EyeAt, EyeAt, C->GetViewDirection(), ClientFocusSweep, ClientFocusSweep + 30.f, Hit, nullptr,
+				&Touched);
+			Out += FString::Printf(TEXT(", choix entre voisins : %s (%d mecanisme(s) touche(s))"), *FocusName(W, Picked), Touched);
 		}
 		else
 		{

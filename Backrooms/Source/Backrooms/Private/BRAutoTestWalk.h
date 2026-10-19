@@ -159,7 +159,8 @@ namespace BRTestV412
 	struct FFocus
 	{
 		EFocus Kind = EFocus::None;
-		/** Premier objet touche par le balayage (nullptr : rien) */
+		/** Premier objet touche par le balayage (nullptr : rien). v4.16 (visee) : la visee peut retenir un voisin derriere lui
+		 *  (Taken) */
 		const AActor* Hit = nullptr;
 		/** Objet pris par la visee (Dev, un voisin) ; nullptr : rien */
 		const AActor* Taken = nullptr;
@@ -171,7 +172,9 @@ namespace BRTestV412
 	 *  ClientFocusSweep de long : un objet que la visee prend (mecanisme de la mission qu'on peut actionner, objet a ramasser,
 	 *  sortie utilisable ; Dev toujours) decide ; 2) sinon (decor, mecanisme inactif, rien) la tolerance. Avant (correctifs 4) :
 	 *  FocusFirstHit, toute autre chose que Dev en premier refusait la place, alors que le jeu la vise par sa tolerance (mur
-	 *  frole, rocher, porte fermee devant un voisin) */
+	 *  frole, rocher, porte fermee devant un voisin). v4.16 (visee) : en 1), quand le premier objet touche est la boite visee
+	 *  d'un mecanisme, le choix du jeu entre voisins (ABRCharacter::PickAimedDevice, la meme fonction ; Dev compte toujours) :
+	 *  Hit reste le premier touche, Taken le mecanisme retenu */
 	FFocus FocusVerdict(const ABRWorld* W, const AActor* Self, const FVector& Eye, const ABRMissionDevice* Dev);
 	/** v4.15 : le sol sous (X, Y) (trace WorldStatic depuis FromZ + 60 cm jusqu'a FromZ - 450 cm, qui n'ignore que Self) ;
 	 *  false : pas de sol (chunk pas construit, vide) */
