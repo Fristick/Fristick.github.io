@@ -469,13 +469,15 @@ void ABRPlayerController::EnsureInput()
 	QuitAction = MakeAction(TEXT("IA_Quit"), EInputActionValueType::Boolean, true);
 	MenuPrevAction = MakeAction(TEXT("IA_MenuPrev"), EInputActionValueType::Boolean);
 	MenuNextAction = MakeAction(TEXT("IA_MenuNext"), EInputActionValueType::Boolean);
-	MenuConfirmAction = MakeAction(TEXT("IA_MenuConfirm"), EInputActionValueType::Boolean);
+	// v4.16 (fusion) : actives aussi pendant la pause (le jeu seul y est arrete) : cartes de la pause a la croix et a A, Entree
+	// pendant la confirmation de l'affichage. Avant, rien ne bougeait : la pause arrete les actions ordinaires
+	MenuConfirmAction = MakeAction(TEXT("IA_MenuConfirm"), EInputActionValueType::Boolean, true);
 	NightVisionAction = MakeAction(TEXT("IA_NightVision"), EInputActionValueType::Boolean);
 	BandageAction = MakeAction(TEXT("IA_Bandage"), EInputActionValueType::Boolean);
 	ViewAction = MakeAction(TEXT("IA_View"), EInputActionValueType::Boolean);
-	MenuUpAction = MakeAction(TEXT("IA_MenuUp"), EInputActionValueType::Boolean);
+	MenuUpAction = MakeAction(TEXT("IA_MenuUp"), EInputActionValueType::Boolean, true);
 	TalkAction = MakeAction(TEXT("IA_Talk"), EInputActionValueType::Boolean, true);
-	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean);
+	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean, true);
 	MenuDeleteAction = MakeAction(TEXT("IA_MenuDelete"), EInputActionValueType::Boolean);
 	LidarPulseAction = MakeAction(TEXT("IA_LidarPulse"), EInputActionValueType::Boolean);
 	LidarFocusAction = MakeAction(TEXT("IA_LidarFocus"), EInputActionValueType::Boolean);

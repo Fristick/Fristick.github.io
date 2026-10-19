@@ -1575,11 +1575,21 @@ void ABRAutoTest::AddV416VisualSteps()
 			Note(FString::Printf(TEXT("mode %d : demande %d en %d x %d, obtenu %d en %d x %d (ecran %d x %d) ; valeur affichee \"%s\" (attendu \"%s\")"), Mode, Cur.Window,
 				Cur.Resolution.X, Cur.Resolution.Y, Eff.Window, Eff.Resolution.X, Eff.Resolution.Y, Mon.Size.X, Mon.Size.Y, *Value, *ModeLabel(Mode)), !bMode || !bSize || !bLabel);
 			ShotNamed(FString::Printf(TEXT("v416_mode_affichage_%d"), Mode));
-			BRDisplay::Revert();
+			return true;
+		});
+		// v4.16 (fusion) : le retour attend la capture. Avant, Revert() dans la meme image que la demande de capture : la
+		// fenetre changeait de taille avant la lecture de l'image, et Unreal 5.8 s'arretait (assertion D3D12, copie hors de
+		// l'image : 'BackBuffer0' 1520 x 641 lu depuis (-8, -135))
+		Add(FString::Printf(TEXT("v4.16 visuel : retour apres le mode %d"), Mode), 1.f, [this, Mode, CloseScreens]()
+		{
+			if (ModeTried == Mode && BRDisplay::IsPending())
+			{
+				BRDisplay::Revert();
+			}
 			CloseScreens();
 			return true;
 		});
-		Add(FString::Printf(TEXT("v4.16 visuel : retour apres le mode %d"), Mode), 2.f, []()
+		Add(FString::Printf(TEXT("v4.16 visuel : fenetre revenue apres le mode %d"), Mode), 2.f, []()
 		{
 			return true;
 		});
