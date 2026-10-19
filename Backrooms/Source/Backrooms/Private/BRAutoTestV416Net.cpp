@@ -7,16 +7,24 @@
 // Saved/NetTest_<nom>, BRAutoTest.cpp). Le plan reseau ordinaire (-BRNetTest seul) ne change pas.
 //
 // Sans -BRNetV416Late (scenarios de base, 2 a 4 joueurs) :
-//   A. ramassage simultane : chacun demande le meme objet au meme moment : une seule attribution ;
-//   B. depart de groupe simultane par la porte de service du Level 0 : un seul depart, liste des joueurs attendus, un seul
-//      changement de niveau ;
-//   C. Poolrooms : mort d'un client a plus de 150 m de ses coequipiers (non repliques chez lui), puis toute l'equipe a terre
-//      (le dernier coequipier debout tombe apres) : delai a terre, aucun reveil refuse par l'hote, une seule mort chacun ;
+//   A. ramassage simultane : les clients demandent le meme objet au meme instant du serveur (l'hote s'abstient a partir de
+//      deux clients : sa demande, appliquee sur place, passait toujours la premiere) : une seule attribution ;
+//   B. depart de groupe simultane par la porte de service du Level 0 (meme regle) : un seul depart, liste des joueurs
+//      attendus, un seul changement de niveau ;
+//   C. Poolrooms : C1 mort d'un client a plus de 150 m de ses coequipiers (toujours repliques chez lui depuis la relecture),
+//      coequipiers debout : fenetre entiere, {Saut} a terre ignore chez le client ; C2 toute l'equipe a terre (le dernier
+//      coequipier debout tombe apres) ; C3 le client lointain tombe apres tous les autres : 6 s comme en v4.15. Aucun reveil
+//      refuse par l'hote, une seule mort chacun ; apres chaque reveil, chez l'hote : plus en chargement, position recue,
+//      aucune chute constatee ;
 //   D. Poolrooms : sas du passage sec manipule par un client, hote a plus de 35 m : deversoir (collision) et eau chez l'hote ;
+//      la derniere action est demandee au meme instant par deux clients : etat de la mission et retours conformes aux regles
+//      appliquees une demande apres l'autre ;
 //   E. Niveau 8 : passerelle abaissee par l'action d'un client, hote loin : tablier (collision), navigation des entites ;
 //   F. Level 6 : inventaire, pause, changement de touches et vraie perte de focus de la fenetre (reduite par le test,
 //      FSlateApplication::IsActive) pendant un scan focalise, un sprint et une interaction maintenus (touches simulees par les
-//      entrees du joueur) : scan, son et actions arretes, nouvel appui requis (hote, puis le premier client).
+//      entrees du joueur) : scan, son et actions arretes, nouvel appui requis (hote, puis le premier client) ;
+//   G. Level 6 : un client tombe dans une fosse de l'aile LiDAR puis se reveille : aucune seconde chute imputee a sa position
+//      d'avant le reveil, plus en chargement chez l'hote.
 // Avec -BRNetV416Late :
 //   porte       : partie d'histoire de l'hote (sauvegarde de test), porte de service du Level 0 ouverte, objet rendu au monde, puis
 //                 un client rejoint : meme porte sauvegardee, mur perce, passage libre (collision), porte ouverte, aucun reveil
@@ -231,6 +239,53 @@ namespace BRTestV416Net
 		return (W && PC) ? W->PlayerSlot(PC->PlayerState) : 0;
 	}
 
+	// ------------------------------------------------------------------------------------------------------ simultaneite
+	/** v4.16 (relecture) : demandes simultanees de plusieurs machines. Temps du serveur (AGameStateBase::GetServerWorldTimeSeconds,
+	 *  le meme partout a la latence pres) : l'hote ouvre l'etape juste apres un multiple de SyncPeriod ; chaque machine qui la
+	 *  voit ouverte (moins de SyncPeriod - SyncLead plus tard) vise ce multiple + SyncLead. Les demandes partent ensemble et
+	 *  arrivent chez l'hote dans des images voisines (avant : l'hote demandait le premier, appliquait sur place, et les
+	 *  clients ne demandaient qu'apres avoir recu l'ouverture : rien n'etait en concurrence) */
+	constexpr double SyncPeriod = 10.0;
+	constexpr double SyncLead = 6.0;
+
+	double ServerNow(const UWorld* World)
+	{
+		const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
+		return GS ? GS->GetServerWorldTimeSeconds() : (World ? World->GetTimeSeconds() : 0.0);
+	}
+
+	/** Hote : l'etape peut s'ouvrir maintenant (debut d'une periode) */
+	bool SyncOpenNow(const UWorld* World)
+	{
+		return FMath::Fmod(ServerNow(World), SyncPeriod) < 0.5;
+	}
+
+	/** Instant commun des demandes, pour une etape vue ouverte maintenant */
+	double SyncTarget(const UWorld* World)
+	{
+		return FMath::FloorToDouble(ServerNow(World) / SyncPeriod) * SyncPeriod + SyncLead;
+	}
+
+	/** Ecart (images de l'hote) entre les demandes recues de ces personnages depuis la remise a zero (0 : pas de demande) */
+	FString FrameSpread(const TArray<const ABRCharacter*>& Who, int32& OutWith)
+	{
+		uint64 Lo = 0;
+		uint64 Hi = 0;
+		OutWith = 0;
+		for (const ABRCharacter* C : Who)
+		{
+			const uint64 F = C ? C->ServerLastRequestFrame : 0;
+			if (F == 0)
+			{
+				continue;
+			}
+			Lo = OutWith == 0 ? F : FMath::Min(Lo, F);
+			Hi = OutWith == 0 ? F : FMath::Max(Hi, F);
+			++OutWith;
+		}
+		return OutWith == 0 ? FString(TEXT("aucune")) : FString::Printf(TEXT("images %llu a %llu (ecart %llu)"), Lo, Hi, Hi - Lo);
+	}
+
 	/** Une etape pour ce client : signalee une seule fois */
 	int32 GSentMark = 0;
 	void Mark(APlayerController* PC, int32 Value)
@@ -419,6 +474,34 @@ namespace BRTestV416Net
 			Out.Add(Solver->Steps[I]);
 		}
 		return bOk && Out.Num() > 0;
+	}
+
+	/** v4.16 (relecture) : une seconde place valable devant Dev (BRTestV412::CheckMissionStand, cercles de FindMissionStand), a
+	 *  plus d'un metre de la premiere (celle que prend le client de la place 1 : meme capsule, meme recherche) */
+	bool SecondStand(const ABRWorld* W, const ABRCharacter* C, const ABRMissionDevice* Dev, FVector& Out)
+	{
+		FVector First;
+		if (!W || !C || !Dev || !BRTestV412::FindMissionStand(W, C, Dev, false, First))
+		{
+			return false;
+		}
+		const FVector Aim = Dev->GetInteractPoint();
+		const FVector Ahead = Dev->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Fwd = Ahead.IsNearlyZero() ? FVector(1.f, 0.f, 0.f) : Ahead;
+		for (const float Dist : { BRMech::Clearance::StandRange, 160.f, 210.f, 75.f, 240.f })
+		{
+			for (int32 Turn = 0; Turn < 16; ++Turn)
+			{
+				const FVector P = Aim + Fwd.RotateAngleAxis(Turn * 22.5f, FVector::UpVector) * Dist;
+				FVector Stand;
+				if (FVector::Dist2D(P, First) > 100.f && BRTestV412::CheckMissionStand(W, C, Dev, P, false, Stand) == BRTestV412::EStand::Ok)
+				{
+					Out = Stand;
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	FString RoleOf(const ABRWorld* W, int32 Device)
@@ -615,6 +698,13 @@ namespace BRTestV416Net
 		FVector Spot = FVector::ZeroVector;
 		FVector Spot2 = FVector::ZeroVector;
 		bool bSkipBlock = false;
+		// v4.16 (relecture) : demandes simultanees : instant commun (temps du serveur), concurrence entre au moins deux clients
+		// (l'hote s'abstient), demandes recues par l'hote avant l'essai
+		double SyncAt = 0.0;
+		bool bRace = false;
+		int32 RequestsBefore = 0;
+		int32 MissionReqBefore[2] = { 0, 0 };
+		BRMission::FState MissionBefore;
 		// A. ramassage
 		uint64 PickupId = 0;
 		EBRItem PickupItem = EBRItem::None;
@@ -634,6 +724,20 @@ namespace BRTestV416Net
 		float DelayAtDeath = -1.f;
 		double DeathAt = 0.0;
 		double WakeAt = 0.0;
+		// v4.16 (relecture) : {Saut} a terre chez un client (abandon reserve a l'hote) ; aide affichee a la mort ; chutes
+		// constatees par l'hote (fosse : a la mort, puis apres le reveil)
+		bool bJumpTried = false;
+		bool bJumpNoted = false;
+		int32 GiveUpsBefore = 0;
+		float TimerBeforeJump = -1.f;
+		bool bHelpAtDeath = false;
+		int32 FallsBefore = 0;
+		int32 FallsBySlot[4] = { 0, 0, 0, 0 };
+		int32 FallsAtDeath = -1;
+		bool bSeenDead = false;
+		bool bSeenAwake = false;
+		FIntPoint PitCorner = FIntPoint::ZeroValue;
+		EBRDeathCause CauseAtDeath = EBRDeathCause::None;
 		// D, E. mecanismes loin de l'hote
 		int32 Device = -1;
 		uint8 Action = 0;
@@ -650,6 +754,8 @@ namespace BRTestV416Net
 		FKey KeyInteract;
 		FKey KeySprint;
 		int32 InputProblems = 0;
+		/** v4.16 (relecture) : le scanner avait un son a jouer pendant le scan (sinon : arret du son NON VERIFIE) */
+		bool bScanSound = false;
 		// arrivee tardive, reconnexion
 		TArray<int32> KnownIds;
 		int32 LateId = -1;
@@ -701,6 +807,99 @@ namespace BRTestV416Net
 	bool PlaceHeld(ABRCharacter* C, bool bClient)
 	{
 		return !bClient || S.Place.Update(C, FPlatformTime::Seconds());
+	}
+
+	/** v4.16 (relecture) : hote : client reveille au point de depart (spec. : pas d'invulnerabilite restee par erreur, pas de
+	 *  chute imputee a une ancienne position). Plus en chargement (les entites ignorent un joueur en chargement : invulnerable de
+	 *  fait), un mouvement recu depuis son placement (sinon sa position connue reste celle de sa mort), debout, aucune chute
+	 *  constatee depuis FallsBefore */
+	bool WokeCleanly(const ABRCharacter* M, int32 FallsBefore, FString& Out)
+	{
+		if (!M)
+		{
+			Out = TEXT("personnage absent chez l'hote");
+			return false;
+		}
+		const bool bLoading = M->IsLevelLoading();
+		const bool bStale = M->HasStaleServerPosition();
+		const bool bDown = M->GetDeathState().bDead;
+		const int32 Falls = M->GetServerPitFalls() - FallsBefore;
+		Out = FString::Printf(TEXT("en chargement chez l'hote %s, position d'avant le placement %s, a terre %s, chutes constatees depuis %d (attendu 0)"),
+			bLoading ? TEXT("OUI") : TEXT("non"), bStale ? TEXT("ENCORE") : TEXT("non"), bDown ? TEXT("OUI") : TEXT("non"), Falls);
+		return !bLoading && !bStale && !bDown && Falls == 0;
+	}
+
+	/** Suivi d'une mort et d'un reveil remis a zero (essais C et G) */
+	void ResetDeathTrack()
+	{
+		S.bWasDead = false;
+		S.Deaths = S.Wakes = 0;
+		S.DelayAtDeath = -1.f;
+		S.bJumpTried = S.bJumpNoted = false;
+		S.bHelpAtDeath = false;
+		S.CauseAtDeath = EBRDeathCause::None;
+		S.FallsAtDeath = -1;
+		S.bSeenDead = S.bSeenAwake = false;
+	}
+
+	/** Suivi chez ce joueur : premiere mort (delai, aide affichee, cause) et reveils */
+	void TrackDeath(const ABRWorld* W, const ABRCharacter* C, double Now)
+	{
+		const bool bDead = C->IsDead();
+		if (bDead && !S.bWasDead)
+		{
+			++S.Deaths;
+			if (S.Deaths == 1)
+			{
+				S.DelayAtDeath = W->GetDeathTimer();
+				S.DeathAt = Now;
+				S.bHelpAtDeath = W->HasLivingTeammate();
+				S.CauseAtDeath = C->GetDeathCause();
+			}
+		}
+		if (!bDead && S.bWasDead)
+		{
+			++S.Wakes;
+			S.WakeAt = Now;
+		}
+		S.bWasDead = bDead;
+	}
+
+	/** v4.16 (relecture) : client a terre : un appui sur {Saut} 1,5 s apres la mort ; il doit etre ignore (abandon reserve a
+	 *  l'hote, ABRWorld::CanGiveUpDowned). Avant : reveil au point de depart, refuse par l'hote, retour a terre au point de
+	 *  depart avec l'equipement de depart. Une seule note, 1 s apres l'appui : vrai quand elle est prete (OutNote, bOutProblem) */
+	bool TryGiveUp(ABRWorld* W, ABRCharacter* C, bool bDead, double Now, FString& OutNote, bool& bOutProblem)
+	{
+		if (!W || !C || S.bJumpNoted)
+		{
+			return false;
+		}
+		if (!S.bJumpTried)
+		{
+			if (bDead && S.Deaths == 1 && Now - S.DeathAt > 1.5)
+			{
+				S.bJumpTried = true;
+				S.GiveUpsBefore = C->IgnoredGiveUps;
+				S.TimerBeforeJump = W->GetDeathTimer();
+				S.Clock2 = Now;
+				C->InputJump(true);
+				C->InputJump(false);
+			}
+			return false;
+		}
+		if (Now - S.Clock2 < 1.0)
+		{
+			return false;
+		}
+		S.bJumpNoted = true;
+		const int32 Ignored = C->IgnoredGiveUps - S.GiveUpsBefore;
+		const float Left = W->GetDeathTimer();
+		const bool bStill = C->IsDead() && Left > S.TimerBeforeJump - 2.5f;
+		OutNote = FString::Printf(TEXT("client a terre : appui sur {Saut} (abandon) ignore %d fois (attendu 1 : abandon reserve a l'hote ; v4.15 : reveil au point de depart refuse par l'hote), "
+			"toujours a terre %s, delai restant %.1f s (avant l'appui %.1f s), abandon propose ici %s"), Ignored, Oui(bStill), Left, S.TimerBeforeJump,
+			W->CanGiveUpDowned() ? TEXT("OUI") : TEXT("non"));
+		bOutProblem = Ignored != 1 || !bStill || W->CanGiveUpDowned();
+		return true;
 	}
 
 	/** Joueur invincible des tests : sante mentale et endurance tenues (la folie ignore le mode invincible) */
@@ -1007,7 +1206,13 @@ void ABRAutoTest::AddNetV416Plan()
 		(void)bVar;
 		(void)bLoss;
 #endif
-		V6::Put(OutDir, TEXT("debut"), TEXT("niveau"), FString::Printf(TEXT("%d/%u"), W->GetLevelNumber(), W->GetSeed()), TEXT("egal"));
+		// v4.16 (relecture) : le client tardif arrive ou en est le groupe (Level 6 pour lidar et passage), pas au Level 0 du debut
+		// des autres : ses valeurs propres sont comparees plus loin (lidar|..., porte|emplacement). Avant : DIFFERENT, donc un
+		// PROBLEME, dans les essais lidar et passage meme quand le jeu etait correct
+		if (!V6::Opts().bLate)
+		{
+			V6::Put(OutDir, TEXT("debut"), TEXT("niveau"), FString::Printf(TEXT("%d/%u"), W->GetLevelNumber(), W->GetSeed()), TEXT("egal"));
+		}
 		return true;
 	});
 
@@ -1069,25 +1274,52 @@ void ABRAutoTest::AddNetV416Plan()
 			if (bOnClient)
 			{
 				V6::Mark(GetPC(), 11);
-				return V6::HostPhase(GetWorld()) >= 11 || StepTime > 60.f;
+				if (V6::HostPhase(GetWorld()) < 11 && StepTime < 60.f)
+				{
+					return false;
+				}
+				V6::S.SyncAt = V6::SyncTarget(GetWorld()); // v4.16 (relecture) : instant commun des demandes
+				return true;
 			}
-			for (const V6::FMate& M : V6::Mates(W))
+			const TArray<V6::FMate> M = V6::Mates(W);
+			for (const V6::FMate& X : M)
 			{
-				if (M.Mark < 11 && StepTime < 50.f)
+				if (X.Mark < 11 && StepTime < 50.f)
 				{
 					return false;
 				}
 			}
+			// v4.16 (relecture) : a partir de deux clients, eux seuls demandent (au meme instant) ; l'hote compte les demandes recues
+			V6::S.bRace = M.Num() >= 2;
+			if (V6::S.bRace && !V6::SyncOpenNow(GetWorld()) && StepTime < 62.f)
+			{
+				return false;
+			}
+			V6::S.RequestsBefore = 0;
+			for (const V6::FMate& X : M)
+			{
+				V6::S.RequestsBefore += X.Pawn->ServerPickupsAccepted + X.Pawn->ServerPickupsRefused;
+				X.Pawn->ServerLastRequestFrame = 0;
+			}
 			V6::SetHostPhase(GetWorld(), 11);
+			V6::S.SyncAt = V6::SyncTarget(GetWorld());
 			return true;
 		});
 		LimitLastStep(70.f);
-		Add(TEXT("v4.16 reseau : ramassage simultane, demandes"), 3.f, [this]()
+		Add(TEXT("v4.16 reseau : ramassage simultane, demandes"), 0.f, [this, bOnClient]()
 		{
 			ABRCharacter* C = GetPlayer();
 			if (!C || V6::S.PickupId == 0)
 			{
 				return true;
+			}
+			if (V6::ServerNow(GetWorld()) < V6::S.SyncAt && StepTime < 15.f)
+			{
+				return false;
+			}
+			if (!bOnClient && V6::S.bRace)
+			{
+				return true; // l'hote s'abstient : sa demande serait appliquee sur place avant celles des clients
 			}
 			if (ABRPickup* P = V6::PickupById(GetWorld(), V6::S.PickupId))
 			{
@@ -1099,6 +1331,7 @@ void ABRAutoTest::AddNetV416Plan()
 			}
 			return true;
 		});
+		LimitLastStep(20.f);
 		Add(TEXT("v4.16 reseau : ramassage simultane, un seul attributaire"), 1.f, [this, bOnClient]()
 		{
 			ABRWorld* W = GetBRWorld();
@@ -1115,6 +1348,21 @@ void ABRAutoTest::AddNetV416Plan()
 			{
 				return false; // les demandes des clients arrivent
 			}
+			if (!bOnClient && V6::S.bRace && StepTime < 8.f)
+			{
+				// v4.16 (relecture) : chaque client a demande (latence et pertes simulees : renvois)
+				int32 Got = -V6::S.RequestsBefore;
+				int32 Want = 0;
+				for (const V6::FMate& M : V6::Mates(W))
+				{
+					Got += M.Pawn->ServerPickupsAccepted + M.Pawn->ServerPickupsRefused;
+					++Want;
+				}
+				if (Got < Want)
+				{
+					return false;
+				}
+			}
 			const int32 Gain = C->CountItem(V6::S.PickupItem) > V6::S.CountBefore ? 1 : 0;
 			V6::Put(OutDir, TEXT("ramassage"), TEXT("gagnant"), FString::FromInt(Gain), TEXT("somme=1"));
 			if (bOnClient)
@@ -1124,14 +1372,34 @@ void ABRAutoTest::AddNetV416Plan()
 			}
 			int32 Accepted = C->ServerPickupsAccepted;
 			int32 Players = 1;
+			int32 Requests = -V6::S.RequestsBefore;
+			TArray<const ABRCharacter*> Who;
 			for (const V6::FMate& M : V6::Mates(W))
 			{
 				Accepted += M.Pawn->ServerPickupsAccepted;
+				Requests += M.Pawn->ServerPickupsAccepted + M.Pawn->ServerPickupsRefused;
+				Who.Add(M.Pawn);
 				++Players;
 			}
 			Accepted -= V6::S.AcceptedBefore;
 			Note(FString::Printf(TEXT("hote : ramassage simultane a %d joueurs : %d attribution(s) (attendu 1), objet retire pour tous %s"), Players, Accepted,
 				V6::Oui(W->IsCollected(V6::S.PickupId))), Accepted != 1 || !W->IsCollected(V6::S.PickupId));
+			// v4.16 (relecture) : la concurrence n'est reelle qu'entre clients (la demande de l'hote est appliquee sur place, avant)
+			if (!V6::S.bRace)
+			{
+				Skip(TEXT("ramassage simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)"));
+			}
+			else
+			{
+				int32 With = 0;
+				const FString Spread = V6::FrameSpread(Who, With);
+				Note(FString::Printf(TEXT("hote : ramassage simultane : %d demande(s) de clients recues au meme instant du serveur (attendu %d, l'hote s'abstient) : %s"), Requests,
+					Players - 1, *Spread));
+				if (Requests < 2)
+				{
+					Skip(TEXT("ramassage simultane : moins de deux demandes de clients recues par l'hote : concurrence NON VERIFIEE"));
+				}
+			}
 			return true;
 		});
 		LimitLastStep(20.f);
@@ -1213,21 +1481,40 @@ void ABRAutoTest::AddNetV416Plan()
 			if (bOnClient)
 			{
 				V6::Mark(GetPC(), 21);
-				return V6::HostPhase(GetWorld()) >= 21 || StepTime > 90.f;
+				if (V6::HostPhase(GetWorld()) < 21 && StepTime < 90.f)
+				{
+					return false;
+				}
+				V6::S.SyncAt = V6::SyncTarget(GetWorld()); // v4.16 (relecture) : instant commun des demandes
+				return true;
 			}
-			for (const V6::FMate& M : V6::Mates(W))
+			const TArray<V6::FMate> M = V6::Mates(W);
+			for (const V6::FMate& X : M)
 			{
-				if (M.Mark < 21 && StepTime < 80.f)
+				if (X.Mark < 21 && StepTime < 80.f)
 				{
 					return false;
 				}
 			}
+			// v4.16 (relecture) : a partir de deux clients, eux seuls prennent la porte (au meme instant)
+			V6::S.bRace = M.Num() >= 2;
+			if (V6::S.bRace && !V6::SyncOpenNow(GetWorld()) && StepTime < 92.f)
+			{
+				return false;
+			}
+			V6::S.RequestsBefore = 0;
+			for (const V6::FMate& X : M)
+			{
+				V6::S.RequestsBefore += X.Pawn->ServerDepartureRequests;
+				X.Pawn->ServerLastRequestFrame = 0;
+			}
 			V6::S.MaxNeeded = V6::S.MaxReady = 0;
 			V6::SetHostPhase(GetWorld(), 21);
+			V6::S.SyncAt = V6::SyncTarget(GetWorld());
 			return true;
 		});
 		LimitLastStep(100.f);
-		Add(TEXT("v4.16 reseau : depart simultane, demandes"), 0.f, [this]()
+		Add(TEXT("v4.16 reseau : depart simultane, demandes"), 0.f, [this, bOnClient]()
 		{
 			ABRCharacter* C = GetPlayer();
 			ABRExit* Door = V6::FindServiceDoor(GetWorld());
@@ -1235,11 +1522,20 @@ void ABRAutoTest::AddNetV416Plan()
 			{
 				return true;
 			}
+			if (V6::ServerNow(GetWorld()) < V6::S.SyncAt && StepTime < 15.f)
+			{
+				return false;
+			}
+			V6::S.Clock = FPlatformTime::Seconds();
+			if (!bOnClient && V6::S.bRace)
+			{
+				return true; // l'hote s'abstient : sa demande creerait le depart sur place, avant celles des clients
+			}
 			// Chacun prend la porte au meme moment (touche d'interaction : ABRExit::Use, la demande ordinaire)
 			Door->Use(C);
-			V6::S.Clock = FPlatformTime::Seconds();
 			return true;
 		});
+		LimitLastStep(20.f);
 		Add(TEXT("v4.16 reseau : depart simultane, un seul depart"), 0.f, [this, bOnClient]()
 		{
 			ABRWorld* W = GetBRWorld();
@@ -1270,10 +1566,34 @@ void ABRAutoTest::AddNetV416Plan()
 			V6::Put(OutDir, TEXT("depart"), TEXT("niveau"), FString::Printf(TEXT("%d/%u"), W->GetLevelNumber(), W->GetSeed()), TEXT("egal"));
 			if (!bOnClient)
 			{
-				const int32 Players = V6::Mates(W).Num() + 1;
+				const TArray<V6::FMate> M = V6::Mates(W);
+				const int32 Players = M.Num() + 1;
 				const int32 Departures = static_cast<int32>(static_cast<uint16>(V6::S.DepIdSeen - V6::S.DepIdBefore));
 				Note(FString::Printf(TEXT("hote : %d joueur(s) devant la porte, %d depart(s) annonce(s) (attendu 1), joueurs attendus au plus %d (attendu %d), rassembles au plus %d"),
 					Players, Departures, V6::S.MaxNeeded, Players, V6::S.MaxReady), Departures != 1 || V6::S.MaxNeeded != Players || V6::S.MaxReady != Players);
+				// v4.16 (relecture) : la concurrence n'est reelle qu'entre clients (la porte prise par l'hote cree le depart sur place)
+				if (!V6::S.bRace)
+				{
+					Skip(TEXT("depart simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)"));
+				}
+				else
+				{
+					int32 Requests = -V6::S.RequestsBefore;
+					TArray<const ABRCharacter*> Askers;
+					for (const V6::FMate& X : M)
+					{
+						Requests += X.Pawn->ServerDepartureRequests;
+						Askers.Add(X.Pawn);
+					}
+					int32 With = 0;
+					const FString Spread = V6::FrameSpread(Askers, With);
+					Note(FString::Printf(TEXT("hote : depart simultane : %d demande(s) de clients recues au meme instant du serveur (attendu %d, l'hote s'abstient) : %s"), Requests,
+						M.Num(), *Spread));
+					if (Requests < 2)
+					{
+						Skip(TEXT("depart simultane : moins de deux demandes de clients recues par l'hote : concurrence NON VERIFIEE"));
+					}
+				}
 			}
 			return true;
 		});
@@ -1282,117 +1602,139 @@ void ABRAutoTest::AddNetV416Plan()
 		// ============================================================================================= C. morts et reveils
 		Barrier(30, TEXT("morts et reveils"));
 		GoLevel(37, V6::PoolSeed, TEXT("morts et reveils"));
-		// C1 : le client de la place 1 s'eloigne a plus de 150 m (les autres personnages ne sont plus repliques chez lui), meurt
-		Add(TEXT("v4.16 reseau : mort loin des coequipiers, eloignement"), 0.f, [this, bOnClient]()
+		// v4.16 (relecture) : eloignement du client de la place 1 a 230-300 m (essais C1 et C3). ReadyMark : en place (mode
+		// invincible quitte), SkipMark : essai impossible ; bAllMortal : les autres clients quittent aussi le mode invincible
+		auto GoFar = [this, bOnClient](int32 ReadyMark, int32 SkipMark, bool bAllMortal, const TCHAR* What)
 		{
-			ABRWorld* W = GetBRWorld();
-			ABRCharacter* C = GetPlayer();
-			if (!W || !C)
+			Add(FString::Printf(TEXT("v4.16 reseau : %s, eloignement"), What), 0.f, [this, bOnClient, ReadyMark, SkipMark, bAllMortal, What]()
 			{
-				return false;
-			}
-			V6::S.bVictim = bOnClient && V6::S.Slot == 1 && !V6::S.bSkipBlock;
-			if (!bOnClient)
-			{
-				V6::FMate Victim;
-				if (!V6::MateAt(W, 1, Victim))
-				{
-					Skip(TEXT("mort loin des coequipiers : aucun client (au moins un client requis)"));
-					V6::S.bSkipBlock = true;
-				}
-				return true;
-			}
-			if (!V6::S.bVictim)
-			{
-				return true;
-			}
-			if (V6::S.Phase == 0)
-			{
-				const FVector Base = C->GetActorLocation();
-				for (const float Dist : { 23000.f, 26000.f, 30000.f })
-				{
-					for (const float Yaw : { 0.f, 90.f, 180.f, 270.f })
-					{
-						const FIntPoint Cell = W->WorldToCell(Base + FRotator(0.f, Yaw, 0.f).Vector() * Dist);
-						if (V6::S.Phase == 0 && W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y))
-						{
-							V6::S.Spot = W->CellCenter(Cell, Base.Z + 200.f);
-							V6::S.Phase = 1;
-						}
-					}
-				}
-				if (V6::S.Phase == 0)
-				{
-					Skip(TEXT("mort loin des coequipiers : aucune cellule marchable a 230-300 m"));
-					V6::Mark(GetPC(), 32);
-					V6::S.bVictim = false;
-					return true;
-				}
-				V6::Hover(C, true);
-				BRTestNet::TeleportForServer(C, V6::S.Spot);
-				V6::Hover(C, true);
-				V6::S.Clock = FPlatformTime::Seconds();
-				return false;
-			}
-			if (V6::S.Phase == 1)
-			{
-				float Z = 0.f;
-				const FIntPoint Cell = W->WorldToCell(V6::S.Spot);
-				if (!W->IsChunkLoaded(W->CellToChunk(Cell)) || !V6::FloorAt(W, C, V6::S.Spot, W->FloorZAt(V6::S.Spot), Z))
-				{
-					if (FPlatformTime::Seconds() - V6::S.Clock < 40.0)
-					{
-						return false;
-					}
-					V6::Hover(C, false);
-					Skip(TEXT("mort loin des coequipiers : sol lointain pas construit en 40 s"));
-					V6::Mark(GetPC(), 32);
-					V6::S.bVictim = false;
-					V6::S.Phase = 0;
-					return true;
-				}
-				V6::Hover(C, false);
-				V6::S.Place.Start(C, FVector(V6::S.Spot.X, V6::S.Spot.Y, Z + C->GetSimpleCollisionHalfHeight() + 5.f), nullptr, FPlatformTime::Seconds());
-				V6::S.Phase = 2;
-				V6::S.Clock = FPlatformTime::Seconds();
-				return false;
-			}
-			if (V6::S.Phase == 2)
-			{
-				if (!V6::S.Place.Update(C, FPlatformTime::Seconds()) && FPlatformTime::Seconds() - V6::S.Clock < 10.0)
+				ABRWorld* W = GetBRWorld();
+				ABRCharacter* C = GetPlayer();
+				if (!W || !C)
 				{
 					return false;
 				}
-				V6::S.Phase = 3;
-				V6::S.Clock = FPlatformTime::Seconds();
-				return false;
-			}
-			// Les personnages des coequipiers cessent d'etre repliques ici (pertinence a distance du moteur)
-			TArray<ABRCharacter*> Seen;
-			W->GetPlayers(Seen);
-			if (Seen.Num() > 1 && FPlatformTime::Seconds() - V6::S.Clock < 25.0)
-			{
-				return false;
-			}
-			V6::S.Phase = 0;
-			const AGameStateBase* GS = GetWorld()->GetGameState();
-			if (Seen.Num() > 1)
-			{
-				Skip(FString::Printf(TEXT("mort loin des coequipiers : %d autre(s) personnage(s) encore repliques ici apres 25 s : cas non reproduit"), Seen.Num() - 1));
-				V6::Mark(GetPC(), 32);
-				V6::S.bVictim = false;
+				if (V6::S.Phase == 0)
+				{
+					V6::ResetDeathTrack();
+				}
+				V6::S.bVictim = bOnClient && V6::S.Slot == 1 && !V6::S.bSkipBlock;
+				if (!bOnClient)
+				{
+					V6::FMate Victim;
+					if (!V6::MateAt(W, 1, Victim))
+					{
+						Skip(FString::Printf(TEXT("%s : aucun client (au moins un client requis)"), What));
+						V6::S.bSkipBlock = true;
+					}
+					return true;
+				}
+				if (!V6::S.bVictim)
+				{
+					if (bAllMortal)
+					{
+						C->bGodMode = false;
+						V6::Mark(GetPC(), ReadyMark);
+					}
+					return true;
+				}
+				if (V6::S.Phase == 0)
+				{
+					const FVector Base = C->GetActorLocation();
+					for (const float Dist : { 23000.f, 26000.f, 30000.f })
+					{
+						for (const float Yaw : { 0.f, 90.f, 180.f, 270.f })
+						{
+							const FIntPoint Cell = W->WorldToCell(Base + FRotator(0.f, Yaw, 0.f).Vector() * Dist);
+							if (V6::S.Phase == 0 && W->IsWalkable(Cell) && !W->IsPoolCell(Cell.X, Cell.Y))
+							{
+								V6::S.Spot = W->CellCenter(Cell, Base.Z + 200.f);
+								V6::S.Phase = 1;
+							}
+						}
+					}
+					if (V6::S.Phase == 0)
+					{
+						Skip(FString::Printf(TEXT("%s : aucune cellule marchable a 230-300 m"), What));
+						V6::Mark(GetPC(), SkipMark);
+						V6::S.bVictim = false;
+						return true;
+					}
+					V6::Hover(C, true);
+					BRTestNet::TeleportForServer(C, V6::S.Spot);
+					V6::Hover(C, true);
+					V6::S.Clock = FPlatformTime::Seconds();
+					return false;
+				}
+				if (V6::S.Phase == 1)
+				{
+					float Z = 0.f;
+					const FIntPoint Cell = W->WorldToCell(V6::S.Spot);
+					if (!W->IsChunkLoaded(W->CellToChunk(Cell)) || !V6::FloorAt(W, C, V6::S.Spot, W->FloorZAt(V6::S.Spot), Z))
+					{
+						if (FPlatformTime::Seconds() - V6::S.Clock < 40.0)
+						{
+							return false;
+						}
+						V6::Hover(C, false);
+						Skip(FString::Printf(TEXT("%s : sol lointain pas construit en 40 s"), What));
+						V6::Mark(GetPC(), SkipMark);
+						V6::S.bVictim = false;
+						V6::S.Phase = 0;
+						return true;
+					}
+					V6::Hover(C, false);
+					V6::S.Place.Start(C, FVector(V6::S.Spot.X, V6::S.Spot.Y, Z + C->GetSimpleCollisionHalfHeight() + 5.f), nullptr, FPlatformTime::Seconds());
+					V6::S.Phase = 2;
+					V6::S.Clock = FPlatformTime::Seconds();
+					return false;
+				}
+				if (V6::S.Phase == 2)
+				{
+					if (!V6::S.Place.Update(C, FPlatformTime::Seconds()) && FPlatformTime::Seconds() - V6::S.Clock < 10.0)
+					{
+						return false;
+					}
+					V6::S.Phase = 3;
+					V6::S.Clock = FPlatformTime::Seconds();
+					return false;
+				}
+				// v4.16 (relecture) : les personnages des coequipiers restent repliques ici a toute distance (ABRCharacter::IsNetRelevantFor ;
+				// avant : plus rien au-dela de 150 m, apres le delai de pertinence du moteur, 5 s). Attente de 8 s, puis compte
+				if (FPlatformTime::Seconds() - V6::S.Clock < 8.0)
+				{
+					return false;
+				}
+				TArray<ABRCharacter*> Seen;
+				W->GetPlayers(Seen);
+				V6::S.Phase = 0;
+				const AGameStateBase* GS = GetWorld()->GetGameState();
+				const int32 Others = GS ? GS->PlayerArray.Num() - 1 : 0;
+				float Nearest = -1.f;
+				for (const ABRCharacter* X : Seen)
+				{
+					if (X != C)
+					{
+						const float D = static_cast<float>(FVector::Dist2D(X->GetActorLocation(), C->GetActorLocation())) / 100.f;
+						Nearest = Nearest < 0.f ? D : FMath::Min(Nearest, D);
+					}
+				}
+				Note(FString::Printf(TEXT("client (%s) : a %.0f m du depart, coequipier le plus proche a %.0f m : personnages des coequipiers toujours repliques ici %d/%d (attendu tous ; v4.15 : aucun au-dela de 150 m)"),
+					What, FVector::Dist2D(C->GetActorLocation(), W->CellCenter(FIntPoint(0, 0))) / 100.f, Nearest, Seen.Num() - 1, Others), Seen.Num() - 1 < Others);
+				if (Nearest >= 0.f && Nearest < 150.f)
+				{
+					Skip(FString::Printf(TEXT("%s : coequipier le plus proche a %.0f m (moins de 150 m) : replication a distance NON VERIFIEE"), What, Nearest));
+				}
+				C->bGodMode = false;
+				V6::ResetDeathTrack();
+				V6::Mark(GetPC(), ReadyMark);
 				return true;
-			}
-			Note(FString::Printf(TEXT("client : a %.0f m du depart, plus aucun autre personnage replique ici (%d joueur(s) dans la partie)"),
-				FVector::Dist2D(C->GetActorLocation(), W->CellCenter(FIntPoint(0, 0))) / 100.f, GS ? GS->PlayerArray.Num() : 0));
-			C->bGodMode = false;
-			V6::S.bWasDead = false;
-			V6::S.Deaths = V6::S.Wakes = 0;
-			V6::S.DelayAtDeath = -1.f;
-			V6::Mark(GetPC(), 31);
-			return true;
-		});
-		LimitLastStep(120.f);
+			});
+			LimitLastStep(120.f);
+		};
+		// C1 : le client de la place 1 s'eloigne a plus de 150 m (v4.15 : les autres personnages n'etaient plus repliques chez lui ;
+		// v4.16, relecture : ils le restent), meurt, coequipiers debout
+		GoFar(31, 32, false, TEXT("mort loin des coequipiers"));
 		Add(TEXT("v4.16 reseau : mort loin des coequipiers, coup de l'hote"), 0.f, [this, bOnClient]()
 		{
 			ABRWorld* W = GetBRWorld();
@@ -1421,6 +1763,7 @@ void ABRAutoTest::AddNetV416Plan()
 				return false; // le client quitte le mode invincible (etat envoye a l'hote)
 			}
 			V6::S.LogFrom = LogLineCount();
+			V6::S.FallsBefore = Victim.Pawn->GetServerPitFalls();
 			Victim.Pawn->ReceiveAttack(1000.f, 0.f, nullptr);
 			V6::S.Clock = FPlatformTime::Seconds();
 			V6::S.Phase = 0;
@@ -1454,6 +1797,13 @@ void ABRAutoTest::AddNetV416Plan()
 				const bool bRefused = LogContains(V6::S.LogFrom, TEXT("reveil refuse"));
 				Note(FString::Printf(TEXT("hote : reveil du client mort loin de ses coequipiers refuse %s (attendu non ; v4.15 : refuse, le client se croyait seul)"),
 					bRefused ? TEXT("OUI") : TEXT("non")), bRefused);
+				// v4.16 (relecture) : apres le reveil (et quelques pas du client)
+				if (bThere)
+				{
+					FString Woke;
+					const bool bClean = V6::WokeCleanly(Victim.Pawn, V6::S.FallsBefore, Woke);
+					Note(TEXT("hote : client mort loin de ses coequipiers, apres son reveil : ") + Woke, !bClean);
+				}
 				V6::SetHostPhase(GetWorld(), 33);
 				return true;
 			}
@@ -1461,37 +1811,41 @@ void ABRAutoTest::AddNetV416Plan()
 			{
 				return V6::HostPhase(GetWorld()) >= 33 || StepTime > 120.f;
 			}
+			const double Now = FPlatformTime::Seconds();
+			V6::TrackDeath(W, C, Now);
 			const bool bDead = C->IsDead();
-			if (bDead && !V6::S.bWasDead)
-			{
-				++V6::S.Deaths;
-				if (V6::S.Deaths == 1)
-				{
-					V6::S.DelayAtDeath = W->GetDeathTimer();
-					V6::S.DeathAt = FPlatformTime::Seconds();
-				}
-			}
-			if (!bDead && V6::S.bWasDead)
-			{
-				++V6::S.Wakes;
-				V6::S.WakeAt = FPlatformTime::Seconds();
-			}
-			V6::S.bWasDead = bDead;
 			C->Sanity = 100.f;
+			// v4.16 (relecture) : {Saut} a terre, ignore chez un client (abandon reserve a l'hote)
+			FString JumpNote;
+			bool bJumpProblem = false;
+			if (V6::TryGiveUp(W, C, bDead, Now, JumpNote, bJumpProblem))
+			{
+				Note(JumpNote, bJumpProblem);
+			}
 			if (V6::S.Deaths == 0 && StepTime < 15.f)
 			{
 				return false;
 			}
-			// Reveil, puis 4 s debout (un refus de l'hote remettrait a terre)
-			if ((bDead || V6::S.Wakes == 0 || FPlatformTime::Seconds() - V6::S.WakeAt < 4.0) && StepTime < 70.f)
+			// Reveil, puis 4 s debout (un refus de l'hote remettrait a terre) ; quelques pas apres 1,5 s (mouvements recus par
+			// l'hote depuis la nouvelle place)
+			if (!bDead && V6::S.Wakes > 0 && Now - V6::S.WakeAt > 1.5)
+			{
+				C->AddMovementInput(C->GetActorForwardVector(), 1.f);
+			}
+			if ((bDead || V6::S.Wakes == 0 || Now - V6::S.WakeAt < 4.0) && StepTime < 70.f)
 			{
 				return false;
 			}
 			const float Window = BRDeath::ReviveWindow(EBRDeathCause::Injury);
 			const bool bDelayOk = V6::S.DelayAtDeath > Window - 1.f;
-			Note(FString::Printf(TEXT("client mort loin de ses coequipiers : delai a terre %.1f s (attendu %.0f : un coequipier non replique ici est suppose vivant ; v4.15 : 6), "
-				"a terre %d fois (attendu 1), reveils %d, reveil %.1f s apres la mort"), V6::S.DelayAtDeath, Window, V6::S.Deaths, V6::S.Wakes,
-				V6::S.Wakes > 0 ? V6::S.WakeAt - V6::S.DeathAt : -1.0), !bDelayOk || V6::S.Deaths != 1 || V6::S.Wakes != 1 || bDead);
+			Note(FString::Printf(TEXT("client mort loin de ses coequipiers : delai a terre %.1f s (attendu %.0f : coequipiers debout, repliques a toute distance ; v4.15 : 6), "
+				"aide d'un coequipier affichee %s (attendu oui), a terre %d fois (attendu 1), reveils %d, reveil %.1f s apres la mort"), V6::S.DelayAtDeath, Window,
+				V6::Oui(V6::S.bHelpAtDeath), V6::S.Deaths, V6::S.Wakes, V6::S.Wakes > 0 ? V6::S.WakeAt - V6::S.DeathAt : -1.0),
+				!bDelayOk || !V6::S.bHelpAtDeath || V6::S.Deaths != 1 || V6::S.Wakes != 1 || bDead);
+			if (!V6::S.bJumpNoted)
+			{
+				Skip(TEXT("client a terre : appui sur {Saut} non essaye (reveil avant l'appui) : abandon chez un client NON VERIFIE"));
+			}
 			C->bGodMode = true;
 			V6::Mark(GetPC(), 33);
 			return true;
@@ -1508,9 +1862,7 @@ void ABRAutoTest::AddNetV416Plan()
 			{
 				return false;
 			}
-			V6::S.bWasDead = false;
-			V6::S.Deaths = V6::S.Wakes = 0;
-			V6::S.DelayAtDeath = -1.f;
+			V6::ResetDeathTrack();
 			V6::S.Phase = 0;
 			if (bOnClient)
 			{
@@ -1534,6 +1886,10 @@ void ABRAutoTest::AddNetV416Plan()
 				}
 			}
 			V6::S.LogFrom = LogLineCount();
+			for (const V6::FMate& X : M)
+			{
+				V6::S.FallsBySlot[FMath::Clamp(X.Slot, 0, 3)] = X.Pawn->GetServerPitFalls();
+			}
 			C->bGodMode = false;
 			V6::FMate First;
 			if (V6::MateAt(W, 1, First))
@@ -1581,28 +1937,20 @@ void ABRAutoTest::AddNetV416Plan()
 				C->bGodMode = true;
 				return true;
 			}
+			const double Now = FPlatformTime::Seconds();
+			V6::TrackDeath(W, C, Now);
 			const bool bDead = C->IsDead();
-			if (bDead && !V6::S.bWasDead)
-			{
-				++V6::S.Deaths;
-				if (V6::S.Deaths == 1)
-				{
-					V6::S.DelayAtDeath = W->GetDeathTimer();
-					V6::S.DeathAt = FPlatformTime::Seconds();
-				}
-			}
-			if (!bDead && V6::S.bWasDead)
-			{
-				++V6::S.Wakes;
-				V6::S.WakeAt = FPlatformTime::Seconds();
-			}
-			V6::S.bWasDead = bDead;
 			C->Sanity = 100.f;
 			if (V6::S.Deaths == 0 && StepTime < 60.f)
 			{
 				return false;
 			}
-			if ((bDead || V6::S.Wakes == 0 || FPlatformTime::Seconds() - V6::S.WakeAt < 4.0) && StepTime < 110.f)
+			// v4.16 (relecture) : quelques pas apres le reveil (mouvements recus par l'hote depuis la nouvelle place)
+			if (bOnClient && !bDead && V6::S.Wakes > 0 && Now - V6::S.WakeAt > 1.5 && Now - V6::S.WakeAt < 4.0)
+			{
+				C->AddMovementInput(C->GetActorForwardVector(), 1.f);
+			}
+			if ((bDead || V6::S.Wakes == 0 || Now - V6::S.WakeAt < 4.0) && StepTime < 110.f)
 			{
 				return false;
 			}
@@ -1637,6 +1985,176 @@ void ABRAutoTest::AddNetV416Plan()
 			const bool bRefused = LogContains(V6::S.LogFrom, TEXT("reveil refuse"));
 			Note(FString::Printf(TEXT("hote : equipe a terre, reveil refuse par l'hote %s (attendu non ; v4.15 : refuse a la place 1, qui retombait au point de depart)"),
 				bRefused ? TEXT("OUI") : TEXT("non")), bRefused);
+			// v4.16 (relecture) : chaque client apres son reveil (et quelques pas)
+			for (const V6::FMate& X : V6::Mates(W))
+			{
+				FString Woke;
+				const bool bClean = V6::WokeCleanly(X.Pawn, V6::S.FallsBySlot[FMath::Clamp(X.Slot, 0, 3)], Woke);
+				Note(FString::Printf(TEXT("hote : equipe a terre, client de la place %d apres son reveil : %s"), X.Slot, *Woke), !bClean);
+			}
+			return true;
+		});
+		LimitLastStep(160.f);
+
+		// C3 (v4.16, relecture) : le client de la place 1 s'eloigne de nouveau ; tous les autres (hote compris) tombent d'abord,
+		// puis lui. Plus personne debout a sa mort : 6 s comme en v4.15 (la premiere correction supposait vivant tout coequipier
+		// non replique : 30 s). Les autres, tombes avec un coequipier debout, ramenent leur delai a 6 s a sa chute. Aucun reveil
+		// refuse, une mort chacun. Etapes : clients prets 38 (place 1 : 39 si l'essai est impossible), fin 40 ; hote 38 (coups
+		// portes), 39 (fin)
+		GoFar(38, 39, true, TEXT("mort loin apres les autres"));
+		Add(TEXT("v4.16 reseau : mort loin apres les autres, coups de l'hote"), 0.f, [this, bOnClient]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			if (!W || !C || bOnClient)
+			{
+				return true;
+			}
+			V6::FMate Victim;
+			if (V6::S.bSkipBlock || !V6::MateAt(W, 1, Victim))
+			{
+				V6::S.Phase = -1;
+				V6::SetHostPhase(GetWorld(), 39);
+				return true;
+			}
+			const TArray<V6::FMate> M = V6::Mates(W);
+			if (V6::S.Phase == 0)
+			{
+				bool bWait = false;
+				for (const V6::FMate& X : M)
+				{
+					bWait |= X.Mark < 38 || (X.Mark == 38 && ((X.Pawn->NetFlags & 16) != 0 || X.Pawn->IsDead()));
+				}
+				if (bWait && StepTime < 130.f)
+				{
+					return false;
+				}
+				if (Victim.Mark != 38)
+				{
+					// essai impossible chez la victime (note chez elle) ou jamais pret
+					V6::S.Phase = -1;
+					V6::SetHostPhase(GetWorld(), 39);
+					return true;
+				}
+				// Tous les autres a terre d'abord (coequipier lointain debout : fenetre de 30 s pour eux)
+				V6::S.LogFrom = LogLineCount();
+				V6::S.FallsBefore = Victim.Pawn->GetServerPitFalls();
+				for (const V6::FMate& X : M)
+				{
+					V6::S.FallsBySlot[FMath::Clamp(X.Slot, 0, 3)] = X.Pawn->GetServerPitFalls();
+					if (X.Slot != 1)
+					{
+						X.Pawn->ReceiveAttack(1000.f, 0.f, nullptr);
+					}
+				}
+				C->bGodMode = false;
+				C->ReceiveAttack(1000.f, 0.f, nullptr);
+				V6::S.Clock = FPlatformTime::Seconds();
+				V6::S.Phase = 1;
+				return false;
+			}
+			// 1,5 s plus tard (etats de mort recus par la victime), le client lointain
+			if (FPlatformTime::Seconds() - V6::S.Clock < 1.5)
+			{
+				return false;
+			}
+			bool bOthersDown = C->GetDeathState().bDead;
+			for (const V6::FMate& X : M)
+			{
+				bOthersDown &= X.Slot == 1 || X.Pawn->GetDeathState().bDead;
+			}
+			Victim.Pawn->ReceiveAttack(1000.f, 0.f, nullptr);
+			Note(FString::Printf(TEXT("hote : mort loin apres les autres : hote et autres clients a terre %s, puis coup mortel sur le client lointain (a %.0f m de l'hote), mort officielle %s"),
+				V6::Oui(bOthersDown), FVector::Dist2D(Victim.Pawn->GetActorLocation(), C->GetActorLocation()) / 100.f, V6::Oui(Victim.Pawn->GetDeathState().bDead)),
+				!bOthersDown || !Victim.Pawn->GetDeathState().bDead);
+			V6::S.Phase = 0;
+			V6::SetHostPhase(GetWorld(), 38);
+			return true;
+		});
+		LimitLastStep(150.f);
+		Add(TEXT("v4.16 reseau : mort loin apres les autres, reveils"), 0.f, [this, bOnClient]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			if (!W || !C)
+			{
+				return false;
+			}
+			if (!bOnClient && V6::S.Phase == -1)
+			{
+				V6::S.Phase = 0;
+				C->bGodMode = true;
+				return true;
+			}
+			const double Now = FPlatformTime::Seconds();
+			if (bOnClient && V6::HostPhase(GetWorld()) >= 39 && V6::S.Deaths == 0)
+			{
+				// essai abandonne par l'hote (victime absente ou essai impossible chez elle)
+				C->bGodMode = true;
+				V6::Mark(GetPC(), 40);
+				return true;
+			}
+			V6::TrackDeath(W, C, Now);
+			const bool bDead = C->IsDead();
+			C->Sanity = 100.f;
+			if (V6::S.Deaths == 0 && StepTime < 60.f)
+			{
+				return false;
+			}
+			if (bOnClient && !bDead && V6::S.Wakes > 0 && Now - V6::S.WakeAt > 1.5 && Now - V6::S.WakeAt < 4.0)
+			{
+				C->AddMovementInput(C->GetActorForwardVector(), 1.f);
+			}
+			if ((bDead || V6::S.Wakes == 0 || Now - V6::S.WakeAt < 4.0) && StepTime < 110.f)
+			{
+				return false;
+			}
+			const TCHAR* Who = bOnClient ? TEXT("client") : TEXT("hote");
+			const double Wake = V6::S.Wakes > 0 ? V6::S.WakeAt - V6::S.DeathAt : -1.0;
+			if (V6::S.Phase != 40)
+			{
+				V6::S.Phase = 40;
+				if (V6::S.bVictim)
+				{
+					// Le client lointain, tombe le dernier : plus personne debout, delai de 6 s, pas d'aide proposee
+					const bool bShortOk = V6::S.DelayAtDeath > 0.f && V6::S.DelayAtDeath <= BRTxn::DownedAloneSeconds + 0.5f;
+					Note(FString::Printf(TEXT("client lointain tombe apres tous les autres : delai a terre %.1f s (attendu 6 : plus personne debout, coequipiers lointains repliques ; "
+						"premiere correction v4.16 : 30), aide d'un coequipier affichee %s (attendu non), a terre %d fois (attendu 1), reveils %d, reveil %.1f s apres la mort"),
+						V6::S.DelayAtDeath, V6::Oui(V6::S.bHelpAtDeath), V6::S.Deaths, V6::S.Wakes, Wake),
+						!bShortOk || V6::S.bHelpAtDeath || V6::S.Deaths != 1 || V6::S.Wakes != 1 || bDead || Wake > 10.0);
+				}
+				else
+				{
+					Note(FString::Printf(TEXT("%s (place %d) tombe avant le client lointain : a terre %d fois (attendu 1), reveils %d, reveil %.1f s apres sa mort (delai a la mort %.1f s ; "
+						"ramene a 6 s a la chute du dernier : attendu avant 12 s)"), Who, V6::S.Slot, V6::S.Deaths, V6::S.Wakes, Wake, V6::S.DelayAtDeath),
+						V6::S.Deaths != 1 || V6::S.Wakes != 1 || bDead || Wake > 12.0);
+				}
+				C->bGodMode = true;
+			}
+			if (bOnClient)
+			{
+				V6::S.Phase = 0;
+				V6::Mark(GetPC(), 40);
+				return true;
+			}
+			const TArray<V6::FMate> M = V6::Mates(W);
+			for (const V6::FMate& X : M)
+			{
+				if (X.Mark < 40 && StepTime < 140.f)
+				{
+					return false;
+				}
+			}
+			V6::S.Phase = 0;
+			const bool bRefused = LogContains(V6::S.LogFrom, TEXT("reveil refuse"));
+			Note(FString::Printf(TEXT("hote : mort loin apres les autres, reveil refuse par l'hote %s (attendu non)"), bRefused ? TEXT("OUI") : TEXT("non")), bRefused);
+			for (const V6::FMate& X : M)
+			{
+				FString Woke;
+				const bool bClean = V6::WokeCleanly(X.Pawn, V6::S.FallsBySlot[FMath::Clamp(X.Slot, 0, 3)], Woke);
+				Note(FString::Printf(TEXT("hote : mort loin apres les autres, client de la place %d apres son reveil : %s"), X.Slot, *Woke), !bClean);
+			}
+			V6::SetHostPhase(GetWorld(), 39);
 			return true;
 		});
 		LimitLastStep(160.f);
@@ -1753,8 +2271,10 @@ void ABRAutoTest::AddNetV416Plan()
 		};
 		// Actions : l'hote joue la solution sauf la derniere action ; le client de la place 1 la fait (vraie demande, regles de
 		// l'hote : portee, vue) ; a defaut l'hote l'applique (NON VERIFIE pour l'action du client). Etapes de l'hote : MarkId + 1
-		// (derniere action au client), MarkId + 4 (fait), MarkId + 5 (essai abandonne) ; le client signale MarkId + 3
-		auto FarActions = [this, bOnClient](int32 MarkId, const TCHAR* What)
+		// (derniere action au client), MarkId + 2 (instant commun, v4.16 relecture), MarkId + 4 (fait), MarkId + 5 (essai
+		// abandonne) ; le client signale MarkId + 2 (en place) puis MarkId + 3. bRace : le client de la place 2 demande la meme
+		// action au meme instant du serveur (interactions simultanees sur un mecanisme)
+		auto FarActions = [this, bOnClient](int32 MarkId, const TCHAR* What, bool bRace)
 		{
 			Add(FString::Printf(TEXT("v4.16 reseau : %s, actions de l'hote"), What), 1.f, [this, bOnClient, MarkId, What]()
 			{
@@ -1787,7 +2307,7 @@ void ABRAutoTest::AddNetV416Plan()
 				V6::SetHostPhase(GetWorld(), MarkId + 1);
 				return true;
 			});
-			Add(FString::Printf(TEXT("v4.16 reseau : %s, action du client"), What), 0.f, [this, bOnClient, MarkId, What]()
+			Add(FString::Printf(TEXT("v4.16 reseau : %s, action du client"), What), 0.f, [this, bOnClient, MarkId, What, bRace]()
 			{
 				ABRWorld* W = GetBRWorld();
 				ABRCharacter* C = GetPlayer();
@@ -1803,9 +2323,91 @@ void ABRAutoTest::AddNetV416Plan()
 					}
 					V6::FMate Op;
 					const bool bOp = V6::MateAt(W, 1, Op);
-					if (bOp && Op.Mark < MarkId + 3 && StepTime < 120.f)
+					// v4.16 (relecture) : deuxieme client (place 2) sur le meme mecanisme, au meme instant du serveur
+					V6::FMate Op2;
+					const bool bOp2 = bRace && V6::MateAt(W, 2, Op2);
+					if (V6::S.Phase == 0)
+					{
+						// Acteurs en place (MarkId + 2 ; MarkId + 3 : essai impossible chez eux), puis l'instant commun
+						const bool bReady = (!bOp || Op.Mark >= MarkId + 2) && (!bOp2 || Op2.Mark >= MarkId + 2);
+						if (!bReady && StepTime < 120.f)
+						{
+							return false;
+						}
+						if (!V6::SyncOpenNow(GetWorld()) && StepTime < 132.f)
+						{
+							return false;
+						}
+						V6::S.MissionBefore = W->GetMissionState();
+						V6::S.MissionReqBefore[0] = bOp ? Op.Pawn->ServerMissionRequests : 0;
+						V6::S.MissionReqBefore[1] = bOp2 ? Op2.Pawn->ServerMissionRequests : 0;
+						if (bOp)
+						{
+							Op.Pawn->ServerLastRequestFrame = 0;
+						}
+						if (bOp2)
+						{
+							Op2.Pawn->ServerLastRequestFrame = 0;
+						}
+						V6::SetHostPhase(GetWorld(), MarkId + 2);
+						V6::S.Phase = 1;
+						return false;
+					}
+					if (((bOp && Op.Mark < MarkId + 3) || (bOp2 && Op2.Mark < MarkId + 3)) && StepTime < 170.f)
 					{
 						return false;
+					}
+					V6::S.Phase = 0;
+					if (bRace && !bOp2)
+					{
+						Skip(FString::Printf(TEXT("%s : interactions simultanees sur un mecanisme NON VERIFIEES (moins de 2 clients)"), What));
+					}
+					else if (bRace && bOp)
+					{
+						// Les deux demandes, appliquees par l'hote l'une apres l'autre (comme le jeu), depuis l'etat d'avant : meme etat,
+						// memes retours (ordre quelconque). Une demande perdue, doublee ou appliquee sur un etat perime se verrait ici
+						const int32 N1 = Op.Pawn->ServerMissionRequests - V6::S.MissionReqBefore[0];
+						const int32 N2 = Op2.Pawn->ServerMissionRequests - V6::S.MissionReqBefore[1];
+						const uint8 F1 = Op.Pawn->ServerLastMissionFeedback;
+						const uint8 F2 = Op2.Pawn->ServerLastMissionFeedback;
+						const auto Refused = [](uint8 Fb)
+						{
+							return Fb == BRMissionText::TooFar || Fb == BRMissionText::NotNow;
+						};
+						if (N1 != 1 || N2 != 1 || Refused(F1) || Refused(F2))
+						{
+							Skip(FString::Printf(TEXT("%s : interactions simultanees NON VERIFIEES : demandes recues par l'hote %d et %d (attendu 1 et 1), retours %d et %d (hors de portee %d, refus %d)"),
+								What, N1, N2, static_cast<int32>(F1), static_cast<int32>(F2), static_cast<int32>(BRMissionText::TooFar), static_cast<int32>(BRMissionText::NotNow)));
+						}
+						else
+						{
+							const BRM::FPlan& Plan = W->GetMissionPlan();
+							const BRM::FDevice& D = Plan.Devices[FMath::Clamp(V6::S.Device, 0, Plan.NumDevices - 1)];
+							const bool bHeld = D.Kind == BRM::EKind::Observe || D.Kind == BRM::EKind::Crank;
+							BRM::FState Sim = V6::S.MissionBefore;
+							uint8 Expect[2] = { 0, 0 };
+							for (int32 K = 0; K < 2; ++K)
+							{
+								if (K == 1 && D.Kind == BRM::EKind::Button && Expect[0] == static_cast<uint8>(BRM::EFeedback::Wrong))
+								{
+									Expect[1] = BRMissionText::Cooldown; // ABRWorld::ServerMissionAct : bouton rearme apres une erreur
+									continue;
+								}
+								const BRM::FResult R = BRM::Act(Plan, Sim, W->GetMissionCampaign(), V6::S.Device, bHeld ? BRM::EAction::Hold : BRM::EAction::Use, bHeld ? 1 : 0);
+								Expect[K] = (D.Kind == BRM::EKind::Item && R.Feedback == BRM::EFeedback::AlreadyDone) ? BRMissionText::Taken : static_cast<uint8>(R.Feedback);
+							}
+							const bool bState = FMemory::Memcmp(&Sim, &W->GetMissionState(), sizeof(BRM::FState)) == 0;
+							const bool bFeedback = (F1 == Expect[0] && F2 == Expect[1]) || (F1 == Expect[1] && F2 == Expect[0]);
+							const int32 Dones = (F1 == static_cast<uint8>(BRM::EFeedback::Done) ? 1 : 0) + (F2 == static_cast<uint8>(BRM::EFeedback::Done) ? 1 : 0);
+							TArray<const ABRCharacter*> Who;
+							Who.Add(Op.Pawn);
+							Who.Add(Op2.Pawn);
+							int32 With = 0;
+							const FString Spread = V6::FrameSpread(Who, With);
+							Note(FString::Printf(TEXT("hote : %s : meme action demandee par 2 clients au meme instant du serveur (%s) : retours %d et %d (attendu %d puis %d, dans un ordre "
+								"quelconque), %d \"fait\", etat de la mission celui des deux demandes appliquees l'une apres l'autre %s"), What, *Spread, static_cast<int32>(F1),
+								static_cast<int32>(F2), static_cast<int32>(Expect[0]), static_cast<int32>(Expect[1]), Dones, V6::Oui(bState)), !bState || !bFeedback);
+						}
 					}
 					BRM::FEval E;
 					W->GetMissionEval(E);
@@ -1832,7 +2434,8 @@ void ABRAutoTest::AddNetV416Plan()
 					V6::S.Phase = 0;
 					return true;
 				}
-				if (V6::S.Slot != 1 || V6::S.Phase == 9 || V6::HostPhase(GetWorld()) < MarkId + 1)
+				const bool bActor = V6::S.Slot == 1 || (bRace && V6::S.Slot == 2);
+				if (!bActor || V6::S.Phase == 9 || V6::HostPhase(GetWorld()) < MarkId + 1)
 				{
 					return false;
 				}
@@ -1871,9 +2474,15 @@ void ABRAutoTest::AddNetV416Plan()
 					}
 					FVector Stand;
 					V6::Hover(C, false);
-					if (!Dev || !BRTestV412::FindMissionStand(W, C, Dev, false, Stand))
+					// v4.16 (relecture) : la place 2 prend une autre place valable, a plus d'un metre de celle de la place 1
+					const bool bStand = Dev && (V6::S.Slot == 1 ? BRTestV412::FindMissionStand(W, C, Dev, false, Stand) : V6::SecondStand(W, C, Dev, Stand));
+					if (!bStand)
 					{
-						Note(FString::Printf(TEXT("client : %s : aucune place devant le mecanisme %d"), What, V6::S.Device), true);
+						Note(FString::Printf(TEXT("client (place %d) : %s : aucune place devant le mecanisme %d"), V6::S.Slot, What, V6::S.Device), V6::S.Slot == 1);
+						if (V6::S.Slot != 1)
+						{
+							Skip(FString::Printf(TEXT("%s : pas de seconde place devant le mecanisme : interactions simultanees NON VERIFIEES"), What));
+						}
 						V6::Mark(GetPC(), MarkId + 3);
 						V6::S.Phase = 9;
 						return false;
@@ -1890,6 +2499,30 @@ void ABRAutoTest::AddNetV416Plan()
 					{
 						return false;
 					}
+					// v4.16 (relecture) : en place ; la demande part a l'instant commun ouvert par l'hote
+					V6::Mark(GetPC(), MarkId + 2);
+					V6::S.Phase = 7;
+					V6::S.Clock = Now;
+					return false;
+				}
+				if (V6::S.Phase == 7)
+				{
+					// (plus long que l'attente de l'hote, 120 s + l'instant commun : aucune demande ne part avant l'etat note par l'hote)
+					if (V6::HostPhase(GetWorld()) < MarkId + 2 && Now - V6::S.Clock < 135.0)
+					{
+						return false;
+					}
+					V6::S.SyncAt = V6::SyncTarget(GetWorld());
+					V6::S.Phase = 8;
+					V6::S.Clock = Now;
+					return false;
+				}
+				if (V6::S.Phase == 8)
+				{
+					if (V6::ServerNow(GetWorld()) < V6::S.SyncAt && Now - V6::S.Clock < 15.0)
+					{
+						return false;
+					}
 					V6::S.ResultsBefore = C->MissionResultsReceived;
 					C->RequestMissionAction(V6::S.Device, V6::S.Action);
 					V6::S.Phase = 2;
@@ -1903,11 +2536,14 @@ void ABRAutoTest::AddNetV416Plan()
 						return false;
 					}
 					const bool bAnswered = C->MissionResultsReceived != V6::S.ResultsBefore;
-					Note(FString::Printf(TEXT("client : %s : derniere action (mecanisme %d, action %d) demandee a l'hote : reponse %s, retour %d"), What, V6::S.Device,
-						static_cast<int32>(V6::S.Action), V6::Oui(bAnswered), static_cast<int32>(C->LastMissionFeedback)));
-					// Retour devant le module (le mecanisme manipule peut en etre loin)
-					const FVector Face = V6::S.Spot2 + FVector(0.f, 0.f, 50.f);
-					V6::S.Place.Start(C, V6::S.Spot2, &Face, Now);
+					Note(FString::Printf(TEXT("client (place %d) : %s : derniere action (mecanisme %d, action %d) demandee a l'hote : reponse %s, retour %d"), V6::S.Slot, What,
+						V6::S.Device, static_cast<int32>(V6::S.Action), V6::Oui(bAnswered), static_cast<int32>(C->LastMissionFeedback)));
+					// Retour devant le module (le mecanisme manipule peut en etre loin) ; la place 2 reste a sa place
+					if (V6::S.Slot == 1)
+					{
+						const FVector Face = V6::S.Spot2 + FVector(0.f, 0.f, 50.f);
+						V6::S.Place.Start(C, V6::S.Spot2, &Face, Now);
+					}
 					V6::S.Phase = 3;
 					V6::S.Clock = Now;
 					return false;
@@ -1920,10 +2556,10 @@ void ABRAutoTest::AddNetV416Plan()
 				V6::S.Phase = 9;
 				return false;
 			});
-			LimitLastStep(190.f);
+			LimitLastStep(200.f);
 		};
 		FarPlaces(BRMech::Module::PoolLock, 41, TEXT("sas loin de l'hote"), 160.f);
-		FarActions(41, TEXT("sas loin de l'hote"));
+		FarActions(41, TEXT("sas loin de l'hote"), true);
 		Add(TEXT("v4.16 reseau : sas loin de l'hote, deversoir et eau"), 0.f, [this, bOnClient]()
 		{
 			ABRWorld* W = GetBRWorld();
@@ -1980,7 +2616,7 @@ void ABRAutoTest::AddNetV416Plan()
 		Barrier(50, TEXT("passerelle du Niveau 8 loin de l'hote"));
 		GoLevel(8, V6::BridgeSeed, TEXT("passerelle loin de l'hote"));
 		FarPlaces(BRMech::Module::Bridge, 51, TEXT("passerelle loin de l'hote"), BRMech::Bridge::Gap + BRMech::Bridge::NearDepth + BRMech::Bridge::Steps * BRMech::Bridge::StepDepth + 120.f);
-		FarActions(51, TEXT("passerelle loin de l'hote"));
+		FarActions(51, TEXT("passerelle loin de l'hote"), false);
 		Add(TEXT("v4.16 reseau : passerelle loin de l'hote, tablier pose"), 0.f, [this, bOnClient]()
 		{
 			ABRWorld* W = GetBRWorld();
@@ -2115,6 +2751,7 @@ void ABRAutoTest::AddNetV416Plan()
 					V6::S.KeyInteract = BRKeys::GetKey(EBRAction::Interact, 0);
 					V6::S.KeySprint = BRKeys::GetKey(EBRAction::Sprint, 0);
 					V6::S.InputProblems = 0;
+					V6::S.bScanSound = false;
 					if (!V6::S.KeyFocus.IsValid() || !V6::S.KeyInteract.IsValid() || !V6::S.KeySprint.IsValid())
 					{
 						Skip(FString::Printf(TEXT("%s : entrees maintenues NON VERIFIEES (touche du scan, d'interaction ou de course non affectee)"), Who));
@@ -2150,6 +2787,12 @@ void ABRAutoTest::AddNetV416Plan()
 						return false;
 					}
 					Note(FString::Printf(TEXT("%s : scan focalise par la touche %s : en marche oui, son %s"), Who, *V6::S.KeyFocus.ToString(), bHasSound ? V6::Oui(bHum) : TEXT("absent (aucun son)")));
+					// v4.16 (relecture) : sans son a jouer, "son arrete" ne prouve rien : NON VERIFIE (avant : compte comme arrete)
+					V6::S.bScanSound = bHasSound;
+					if (!bHasSound)
+					{
+						Skip(FString::Printf(TEXT("%s : son du scan NON VERIFIE : le scanner n'a aucun son a jouer pendant le scan (arret du son non juge)"), Who));
+					}
 					PC->SetInventoryOpen(true);
 					Next(12);
 					return false;
@@ -2158,8 +2801,8 @@ void ABRAutoTest::AddNetV416Plan()
 					{
 						return false;
 					}
-					Note(FString::Printf(TEXT("%s : inventaire ouvert pendant le scan maintenu : scan arrete %s, son arrete %s"), Who, V6::Oui(!L->IsFocusing()), V6::Oui(!bHum)),
-						L->IsFocusing() || bHum);
+					Note(FString::Printf(TEXT("%s : inventaire ouvert pendant le scan maintenu : scan arrete %s, son arrete %s"), Who, V6::Oui(!L->IsFocusing()),
+						V6::S.bScanSound ? V6::Oui(!bHum) : TEXT("non juge (aucun son)")), L->IsFocusing() || bHum);
 					PC->SetInventoryOpen(false);
 					Next(13);
 					return false;
@@ -2231,7 +2874,8 @@ void ABRAutoTest::AddNetV416Plan()
 						return false;
 					}
 					Note(FString::Printf(TEXT("%s : menu pause ouvert %s, interaction maintenue arretee %s (v4.15 : continuait sous la pause), scan arrete %s, son arrete %s"), Who,
-						V6::Oui(PC->IsPauseMenuOpen()), V6::Oui(!C->bInteractHeld), V6::Oui(!L->IsFocusing()), V6::Oui(!bHum)), C->bInteractHeld || L->IsFocusing() || bHum);
+						V6::Oui(PC->IsPauseMenuOpen()), V6::Oui(!C->bInteractHeld), V6::Oui(!L->IsFocusing()), V6::S.bScanSound ? V6::Oui(!bHum) : TEXT("non juge (aucun son)")),
+						C->bInteractHeld || L->IsFocusing() || bHum);
 					PC->TogglePause();
 					Next(23);
 					return false;
@@ -2270,8 +2914,10 @@ void ABRAutoTest::AddNetV416Plan()
 					{
 						return false;
 					}
-					Note(FString::Printf(TEXT("%s : touche %s ajoutee au scan pendant l'appui : entrees reconstruites %s, scan arrete %s"), Who, *V6::ExtraKey().ToString(),
-						V6::Oui(PC->MappingRevision == BRKeys::Revision()), V6::Oui(!L->IsFocusing())), L->IsFocusing());
+					// v4.16 (relecture) : le son aussi (avant : non verifie a cette etape)
+					Note(FString::Printf(TEXT("%s : touche %s ajoutee au scan pendant l'appui : entrees reconstruites %s, scan arrete %s, son arrete %s"), Who, *V6::ExtraKey().ToString(),
+						V6::Oui(PC->MappingRevision == BRKeys::Revision()), V6::Oui(!L->IsFocusing()), V6::S.bScanSound ? V6::Oui(!bHum) : TEXT("non juge (aucun son)")),
+						L->IsFocusing() || bHum);
 					PC->SetInventoryOpen(false);
 					Next(33);
 					return false;
@@ -2362,7 +3008,7 @@ void ABRAutoTest::AddNetV416Plan()
 						return false;
 					}
 					Note(FString::Printf(TEXT("%s : fenetre reduite par le test (FSlateApplication::IsActive faux) : scan arrete %s, son arrete %s, course arretee %s, interaction maintenue arretee %s"),
-						Who, V6::Oui(!L->IsFocusing()), V6::Oui(!bHum), V6::Oui(!C->bWantsSprint), V6::Oui(!C->bInteractHeld)),
+						Who, V6::Oui(!L->IsFocusing()), V6::S.bScanSound ? V6::Oui(!bHum) : TEXT("non juge (aucun son)"), V6::Oui(!C->bWantsSprint), V6::Oui(!C->bInteractHeld)),
 						L->IsFocusing() || bHum || C->bWantsSprint || C->bInteractHeld);
 					V6::Activate();
 					Next(44);
@@ -2468,6 +3114,242 @@ void ABRAutoTest::AddNetV416Plan()
 		};
 		InputTurn(0, 61, 61);
 		InputTurn(1, 63, 64);
+
+		// ============================================================================================= G. chute puis reveil
+		// v4.16 (relecture) : le client de la place 1 tombe dans une fosse de l'aile LiDAR (Level 6), puis se reveille au point de
+		// depart : l'hote ne doit constater aucune seconde chute (v4.15, ServerPlacedAt : sa position connue restait celle du fond
+		// de la fosse dans l'image du reveil, et le joueur a peine reveille etait tue de nouveau), ni le garder en chargement.
+		// Etapes : place 1 en place 67 (68 : essai impossible), reveille 69 ; hote 67 (chute permise)
+		Barrier(66, TEXT("chute dans une fosse puis reveil"));
+		Add(TEXT("v4.16 reseau : chute dans une fosse, place"), 0.f, [this, bOnClient]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			if (!W || !C)
+			{
+				return false;
+			}
+			if (!bOnClient)
+			{
+				V6::FMate Victim;
+				V6::S.bSkipBlock = !V6::MateAt(W, 1, Victim);
+				if (V6::S.bSkipBlock)
+				{
+					Skip(TEXT("chute dans une fosse : aucun client (au moins un client requis)"));
+				}
+				return true;
+			}
+			if (V6::S.Slot != 1)
+			{
+				V6::S.bVictim = false;
+				return true;
+			}
+			const double Now = FPlatformTime::Seconds();
+			if (V6::S.Phase == 0)
+			{
+				V6::S.bVictim = false;
+				V6::ResetDeathTrack();
+				// Premier coin perce de l'aile (fosse centree sur le coin de la grille, comme ABRWorld::IsOverPit)
+				const BRLidar::FWing& Wing = W->GetLidarWing();
+				bool bFound = false;
+				for (int32 X = Wing.MinX; X < Wing.MinX + BRLidar::WingCells - 1 && !bFound; ++X)
+				{
+					for (int32 Y = Wing.MinY; Y < Wing.MinY + BRLidar::WingCells - 1 && !bFound; ++Y)
+					{
+						if (W->HasPitAtCorner(X, Y))
+						{
+							V6::S.PitCorner = FIntPoint(X, Y);
+							bFound = true;
+						}
+					}
+				}
+				if (!W->HasPits() || !bFound)
+				{
+					Skip(FString::Printf(TEXT("chute dans une fosse : aucune fosse dans l'aile LiDAR de ce niveau (Niveau %d, aile valide %s) : essai NON VERIFIE"), W->GetLevelNumber(),
+						V6::Oui(Wing.bValid)));
+					V6::Mark(GetPC(), 68);
+					return true;
+				}
+				V6::S.Spot = W->CellCenter(V6::S.PitCorner, C->GetActorLocation().Z + 200.f);
+				V6::Hover(C, true);
+				BRTestNet::TeleportForServer(C, V6::S.Spot);
+				V6::Hover(C, true);
+				V6::S.Phase = 1;
+				V6::S.Clock = Now;
+				return false;
+			}
+			if (V6::S.Phase == 1)
+			{
+				float Z = 0.f;
+				const FIntPoint Cell = W->WorldToCell(V6::S.Spot);
+				if (!W->IsChunkLoaded(W->CellToChunk(Cell)) || !V6::FloorAt(W, C, V6::S.Spot, W->FloorZAt(V6::S.Spot), Z))
+				{
+					if (Now - V6::S.Clock < 40.0)
+					{
+						return false;
+					}
+					V6::Hover(C, false);
+					Skip(TEXT("chute dans une fosse : sol de l'aile LiDAR pas construit en 40 s : essai NON VERIFIE"));
+					V6::Mark(GetPC(), 68);
+					V6::S.Phase = 0;
+					return true;
+				}
+				V6::Hover(C, false);
+				V6::S.Place.Start(C, FVector(V6::S.Spot.X, V6::S.Spot.Y, Z + C->GetSimpleCollisionHalfHeight() + 5.f), nullptr, Now);
+				V6::S.Phase = 2;
+				V6::S.Clock = Now;
+				return false;
+			}
+			if (!V6::S.Place.Update(C, Now) && Now - V6::S.Clock < 10.0)
+			{
+				return false;
+			}
+			V6::S.Phase = 0;
+			V6::S.bVictim = true;
+			C->bGodMode = false;
+			V6::Mark(GetPC(), 67);
+			return true;
+		});
+		LimitLastStep(80.f);
+		Add(TEXT("v4.16 reseau : chute dans une fosse, chute"), 0.f, [this, bOnClient]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			ABRPlayerController* PC = GetPC();
+			if (!W || !C || !PC)
+			{
+				return false;
+			}
+			if (!bOnClient)
+			{
+				if (V6::S.bSkipBlock)
+				{
+					return true;
+				}
+				V6::FMate Victim;
+				const bool bThere = V6::MateAt(W, 1, Victim);
+				if (bThere && Victim.Mark < 67 && StepTime < 90.f)
+				{
+					return false;
+				}
+				if (!bThere || Victim.Mark != 67)
+				{
+					V6::S.bSkipBlock = true; // essai impossible (note chez le client) ou jamais pret
+					return true;
+				}
+				if ((Victim.Pawn->NetFlags & 16) != 0 && StepTime < 100.f)
+				{
+					return false; // mode invincible quitte (etat envoye a l'hote)
+				}
+				V6::S.LogFrom = LogLineCount();
+				V6::S.FallsBefore = Victim.Pawn->GetServerPitFalls();
+				V6::S.FallsAtDeath = -1;
+				V6::S.bSeenDead = V6::S.bSeenAwake = false;
+				V6::SetHostPhase(GetWorld(), 67);
+				return true;
+			}
+			if (!V6::S.bVictim)
+			{
+				return true;
+			}
+			if (V6::HostPhase(GetWorld()) < 67 && StepTime < 110.f)
+			{
+				return false;
+			}
+			const double Now = FPlatformTime::Seconds();
+			V6::TrackDeath(W, C, Now);
+			if (V6::S.Deaths > 0)
+			{
+				return true;
+			}
+			if (StepTime > 12.f)
+			{
+				Note(FString::Printf(TEXT("chute dans une fosse : toujours debout apres 12 s de marche vers la fosse du coin (%d, %d) (Z = %.0f cm)"), V6::S.PitCorner.X, V6::S.PitCorner.Y,
+					C->GetActorLocation().Z), true);
+				V6::S.bVictim = false;
+				C->bGodMode = true;
+				V6::Mark(GetPC(), 69);
+				return true;
+			}
+			// Vers le centre de la fosse (coin de la grille), en diagonale depuis la cellule
+			const float CellSz = W->CellSize();
+			const FVector Hole((V6::S.PitCorner.X + 1) * CellSz, (V6::S.PitCorner.Y + 1) * CellSz, C->GetActorLocation().Z);
+			const FVector To = (Hole - C->GetActorLocation()).GetSafeNormal2D();
+			PC->SetControlRotation(FRotator(-35.f, To.Rotation().Yaw, 0.f));
+			C->AddMovementInput(To, 1.f);
+			return false;
+		});
+		LimitLastStep(130.f);
+		Add(TEXT("v4.16 reseau : chute dans une fosse, reveil"), 0.f, [this, bOnClient]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			if (!W || !C)
+			{
+				return false;
+			}
+			if (!bOnClient)
+			{
+				if (V6::S.bSkipBlock)
+				{
+					V6::S.bSkipBlock = false;
+					return true;
+				}
+				V6::FMate Victim;
+				const bool bThere = V6::MateAt(W, 1, Victim);
+				if (bThere)
+				{
+					// Chutes constatees par l'hote a la mort (0 si le client l'a signalee le premier, 1 si l'hote l'a vue)
+					if (Victim.Pawn->GetDeathState().bDead && !V6::S.bSeenDead)
+					{
+						V6::S.bSeenDead = true;
+						V6::S.FallsAtDeath = Victim.Pawn->GetServerPitFalls();
+					}
+					V6::S.bSeenAwake |= V6::S.bSeenDead && !Victim.Pawn->GetDeathState().bDead;
+				}
+				if (bThere && Victim.Mark < 69 && StepTime < 60.f)
+				{
+					return false;
+				}
+				const bool bRefused = LogContains(V6::S.LogFrom, TEXT("reveil refuse"));
+				const int32 AtDeath = V6::S.FallsAtDeath >= 0 ? V6::S.FallsAtDeath - V6::S.FallsBefore : -1;
+				FString Woke;
+				const bool bClean = bThere && V6::WokeCleanly(Victim.Pawn, V6::S.FallsAtDeath >= 0 ? V6::S.FallsAtDeath : V6::S.FallsBefore, Woke);
+				Note(FString::Printf(TEXT("hote : chute du client dans une fosse : mort vue %s, chutes constatees a la mort %d (0 : signalee par le client, 1 : vue par l'hote), reveil vu %s, "
+					"reveil refuse %s ; apres le reveil : %s (v4.15 : seconde chute a la position du fond de la fosse, le joueur reveille etait tue de nouveau)"), V6::Oui(V6::S.bSeenDead), AtDeath,
+					V6::Oui(V6::S.bSeenAwake), bRefused ? TEXT("OUI") : TEXT("non"), *Woke), !V6::S.bSeenDead || !V6::S.bSeenAwake || bRefused || !bClean || AtDeath > 1);
+				return true;
+			}
+			if (!V6::S.bVictim)
+			{
+				return true;
+			}
+			const double Now = FPlatformTime::Seconds();
+			V6::TrackDeath(W, C, Now);
+			const bool bDead = C->IsDead();
+			if (!bDead && V6::S.Wakes > 0 && Now - V6::S.WakeAt > 1.5 && Now - V6::S.WakeAt < 4.0)
+			{
+				C->AddMovementInput(C->GetActorForwardVector(), 1.f);
+			}
+			if ((bDead || V6::S.Wakes == 0 || Now - V6::S.WakeAt < 4.0) && StepTime < 40.f)
+			{
+				return false;
+			}
+			const FVector L = C->GetActorLocation();
+			if (V6::S.CauseAtDeath != EBRDeathCause::Fall)
+			{
+				Skip(FString::Printf(TEXT("chute dans une fosse : mort d'une autre cause (%s) avant la fosse : chute puis reveil NON VERIFIES"), BRDeath::CauseId(V6::S.CauseAtDeath)));
+			}
+			Note(FString::Printf(TEXT("client tombe dans une fosse : cause %s, delai a terre %.1f s (attendu 6), a terre %d fois (attendu 1), reveils %d, reveil %.1f s apres la mort, "
+				"reveil hors des fosses %s (%.0f, %.0f, %.0f)"), BRDeath::CauseId(V6::S.CauseAtDeath), V6::S.DelayAtDeath, V6::S.Deaths, V6::S.Wakes,
+				V6::S.Wakes > 0 ? V6::S.WakeAt - V6::S.DeathAt : -1.0, V6::Oui(!W->IsOverPit(L, 60.f) && !bDead), L.X, L.Y, L.Z),
+				V6::S.Deaths != 1 || V6::S.Wakes != 1 || bDead || W->IsOverPit(L, 60.f));
+			C->bGodMode = true;
+			V6::S.bVictim = false;
+			V6::Mark(GetPC(), 69);
+			return true;
+		});
+		LimitLastStep(80.f);
 		Add(TEXT("v4.16 reseau : materiel absent"), 0.f, [this, bOnClient]()
 		{
 			if (!bOnClient)

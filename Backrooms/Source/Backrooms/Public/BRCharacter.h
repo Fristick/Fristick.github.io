@@ -95,6 +95,9 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	/** v4.12, serveur : un joueur qui part (deconnexion) sans avoir accuse reception d'un objet attribue le rend au monde */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	/** v4.16 (relecture) : le personnage d'un joueur est replique a tous les joueurs, a toute distance (avant : plus au-dela de
+	 *  150 m, distance de pertinence du moteur ; le client ignorait alors l'etat de mort de ce coequipier) */
+	virtual bool IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const override;
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	/** Reception d'un saut : gerbe d'eau si on atterrit dans l'eau */
@@ -451,6 +454,14 @@ public:
 	bool IsPickupPending() const { return PendingPickup.RequestId != 0; }
 	int32 ServerPickupsAccepted = 0;
 	int32 ServerPickupsRefused = 0;
+	/** v4.16 (tests) : serveur : demandes de depart de groupe et d'action de mission recues de ce joueur, image de l'hote
+	 *  (GFrameCounter) de sa derniere demande (ramassage, depart, mission) et dernier retour d'une action de mission. Joueur
+	 *  local : appuis sur {Saut} a terre ignores (abandon reserve a l'hote, ABRWorld::CanGiveUpDowned) */
+	int32 ServerDepartureRequests = 0;
+	int32 ServerMissionRequests = 0;
+	uint64 ServerLastRequestFrame = 0;
+	uint8 ServerLastMissionFeedback = 0;
+	int32 IgnoredGiveUps = 0;
 	/** v4.11 (tests) : reponses de soin ou de ramassage ignorees (repetees ou d'un ancien niveau) */
 	int32 IgnoredRepeatedResults = 0;
 	int32 StaleResultsReconciled = 0;

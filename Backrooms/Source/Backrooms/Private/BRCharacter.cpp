@@ -843,12 +843,21 @@ void ABRCharacter::InputJump(bool bPressed)
 	bJumpHeld = bPressed;
 	if (bDead && bPressed)
 	{
-		// A terre en cooperation : abandonner, se reveiller tout de suite au point de depart
+		// A terre en cooperation : abandonner, se reveiller tout de suite au point de depart. v4.16 (relecture) : chez l'hote
+		// seulement (ABRWorld::CanGiveUpDowned) : l'hote refusait le reveil anticipe d'un client, qui retombait a terre au
+		// point de depart avec l'equipement de depart ; chez un client, l'appui est ignore (l'invite ne le propose plus)
 		if (ABRWorld* W = ABRWorld::Get(this))
 		{
 			if (W->IsNetGame())
 			{
-				W->GiveUpDowned();
+				if (W->CanGiveUpDowned())
+				{
+					W->GiveUpDowned();
+				}
+				else
+				{
+					++IgnoredGiveUps;
+				}
 			}
 		}
 		return;
@@ -1579,6 +1588,7 @@ bool ABRCharacter::ServerRequestPickup_Validate(uint64 PickupId, uint16 RequestI
 
 void ABRCharacter::ServerRequestPickup_Implementation(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, uint8 Epoch)
 {
+	ServerLastRequestFrame = GFrameCounter; // v4.16 (tests : demandes simultanees)
 	// Demande deja servie (renvoi) : la meme reponse, sans second effet
 	for (const FBRTxnRecord& R : ServerPickupHistory)
 	{
@@ -1676,6 +1686,19 @@ void ABRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+bool ABRCharacter::IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const
+{
+	// v4.16 (relecture) : un joueur voit toujours ses coequipiers (au plus trois personnages de plus par client, partie a 4).
+	// Au-dela de 150 m (distance de pertinence du moteur), le personnage d'un coequipier n'etait plus replique : le client
+	// ignorait son etat de mort et choisissait un autre delai a terre que l'hote (BRTxn::MateKnownAlive, ABRWorld::HasLivingTeammate).
+	// Aucun champ ni RPC ne change
+	if (RealViewer && RealViewer->IsA<APlayerController>())
+	{
+		return true;
+	}
+	return Super::IsNetRelevantFor(RealViewer, ViewTarget, SrcLocation);
 }
 
 int32 ABRCharacter::RoomFor(EBRItem Item) const
@@ -4399,6 +4422,10 @@ void ABRCharacter::ServerMissionInteract_Implementation(uint8 Device, uint8 Acti
 	ABRWorld* W = ABRWorld::Get(this);
 	uint8 Related = 255, Count = 0;
 	const uint8 Fb = W ? W->ServerMissionAct(this, Device, Action, LevelSerial, Related, Count) : BRMissionText::NotNow;
+	// v4.16 (tests : demandes simultanees de plusieurs clients sur un mecanisme)
+	++ServerMissionRequests;
+	ServerLastRequestFrame = GFrameCounter;
+	ServerLastMissionFeedback = Fb;
 	FBRTxnRecord& Rec = ServerMissionHistory[ServerMissionHistoryNext];
 	ServerMissionHistoryNext = (ServerMissionHistoryNext + 1) % TxnHistory;
 	Rec = FBRTxnRecord();
@@ -4703,6 +4730,9 @@ bool ABRCharacter::ServerRequestDeparture_Validate(int32 Target, int32 LevelSeri
 
 void ABRCharacter::ServerRequestDeparture_Implementation(int32 Target, int32 LevelSerial)
 {
+	// v4.16 (tests : demandes simultanees de plusieurs clients, image de l'hote ou chacune arrive)
+	++ServerDepartureRequests;
+	ServerLastRequestFrame = GFrameCounter;
 	ABRWorld* W = ABRWorld::Get(this);
 	uint8 Reason = 0;
 	if (W && !W->ServerStartDeparture(this, Target, LevelSerial, Reason))

@@ -401,6 +401,16 @@ void ABRWorld::HandlePlayerDeath(EBRDeathCause Cause)
 		: 4.5f;
 }
 
+bool ABRWorld::CanGiveUpDowned() const
+{
+	// v4.16 (relecture) : en cooperation, seul l'hote peut abandonner a terre. Le reveil d'un client est signale a l'hote par
+	// ServerReportRespawn, qui ne distingue pas un abandon d'un reveil ordinaire : avant la fin de la fenetre de reanimation
+	// (28,5 s si un coequipier etait debout a la mort, 4,5 s sinon), l'hote le refusait et le joueur retombait a terre au
+	// point de depart, l'equipement de depart deja repris, loin de qui pouvait le relever. Rendre l'abandon aux clients
+	// demande un nouveau message (changement du protocole, NetVersion) : hors de ce lot
+	return HasAuthority();
+}
+
 bool ABRWorld::HasLivingTeammate() const
 {
 	const ABRCharacter* Me = GetPlayer();
@@ -416,10 +426,12 @@ bool ABRWorld::HasLivingTeammate() const
 			Alive += C->IsDead() ? 0 : 1;
 		}
 	}
-	// v4.16 : chez un client, le personnage d'un coequipier a plus de 150 m n'est pas replique (pertinence a distance du
+	// v4.16 : chez un client, le personnage d'un coequipier a plus de 150 m n'etait pas replique (pertinence a distance du
 	// moteur) : il n'existait pas ici, et le joueur a terre se croyait seul (reveil a 6 s, refuse par l'hote qui le voit
-	// vivant ; le joueur retombait a terre au point de depart). Un joueur de la partie sans personnage replique ici est
-	// suppose vivant, comme l'hote le voit (BRTxn::MateKnownAlive)
+	// vivant ; le joueur retombait a terre au point de depart). Les personnages des joueurs sont maintenant repliques a toute
+	// distance (ABRCharacter::IsNetRelevantFor) : leur etat de mort est connu ici comme chez l'hote. Reste un joueur de la
+	// partie dont le personnage n'est pas encore arrive ici (il rejoint, premiere replication) : suppose vivant, comme l'hote
+	// le voit le plus souvent (BRTxn::MateKnownAlive)
 	int32 Unseen = 0;
 	if (!HasAuthority())
 	{

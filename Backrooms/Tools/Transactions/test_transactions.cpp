@@ -1051,18 +1051,22 @@ namespace
 
 	// ---------------------------------------------------------------------- F. v4.16 : reveil en cooperation
 	// Modele : le joueur A tombe a t = 0 (cause relevable, fenetre de 30 s) ; ses coequipiers changent d'etat (debout, a
-	// terre, partis) a des instants donnes ; leur personnage est replique chez A ou non (portee de 150 m). A apprend leur
-	// etat avec un retard (latence de leur acteur, par defaut celle du reseau). Le client applique DownedDelay a la mort puis
-	// ClampDowned a chaque pas (50 ms) avec ce qu'il sait ; a la fin du delai il signale son reveil, que l'hote juge a
-	// t + L avec ServerMinWake (AloneAfter : premier pas ou l'hote ne voit aucun coequipier debout). Un refus remet A a terre
-	// pour le temps restant + 0,25 s (ABRCharacter::ClientRespawnDenied), quand la reponse arrive (t + 2L). Regles d'avant
-	// (v4.15) : le client ne compte que les personnages repliques, l'hote garde la regle fixee a la mort.
+	// terre, partis) a des instants donnes ; ils sont pres de A ou a plus de 150 m (bFar), ou viennent d'arriver dans la partie
+	// (bArriving : leur personnage n'est pas encore recu chez A). A apprend leur etat avec un retard (latence de leur acteur,
+	// par defaut celle du reseau). Le client applique DownedDelay a la mort puis ClampDowned a chaque pas (50 ms) avec ce qu'il
+	// sait ; a la fin du delai il signale son reveil, que l'hote juge a t + L avec ServerMinWake (AloneAfter : premier pas ou
+	// l'hote ne voit aucun coequipier debout). Un refus remet A a terre pour le temps restant + 0,25 s
+	// (ABRCharacter::ClientRespawnDenied), quand la reponse arrive (t + 2L). Regles d'avant (v4.15) : le client ne compte que
+	// les personnages repliques chez lui (rien au-dela de 150 m), l'hote garde la regle fixee a la mort. Regles v4.16
+	// (relecture) : les personnages des joueurs sont repliques a toute distance (ABRCharacter::IsNetRelevantFor) ; seul un
+	// joueur dont le personnage n'est pas encore recu est suppose vivant (BRTxn::MateKnownAlive).
 	enum class EMate : uint8_t { Up, Down, Gone };
 	struct FMate
 	{
 		EMate Start = EMate::Up;
 		std::vector<std::pair<int, EMate>> Changes; // (pas de 50 ms, nouvel etat)
-		bool bReplicated = true;
+		bool bFar = false;
+		bool bArriving = false;
 		int LagSteps = -1; // retard propre de cet acteur (pas) ; < 0 : celui du reseau
 	};
 	EMate MateAt(const FMate& M, int Step)
@@ -1097,7 +1101,8 @@ namespace
 				{
 					continue;
 				}
-				if (!M.bReplicated)
+				// Personnage absent chez A : en v4.15 au-dela de 150 m ou a l'arrivee ; en v4.16 a l'arrivee seulement
+				if (M.bArriving || (!bNewRules && M.bFar))
 				{
 					++Unseen;
 				}
@@ -1187,8 +1192,8 @@ namespace
 		FMate Near;
 		WakeScenario("F1 coequipier debout a cote tout du long : fenetre entiere, accepte", { Near }, 2, 30000, 30300, false);
 		FMate Far;
-		Far.bReplicated = false;
-		WakeScenario("F2 coequipier debout a plus de 150 m (non replique) : v4.15 6 s puis refus ; v4.16 fenetre entiere", { Far }, 2, 30000, 30300, true);
+		Far.bFar = true;
+		WakeScenario("F2 coequipier debout a plus de 150 m : v4.15 non replique, 6 s puis refus ; v4.16 replique, fenetre entiere", { Far }, 2, 30000, 30300, true);
 		FMate Drops;
 		Drops.Changes = { { 60, EMate::Down }, { 180, EMate::Up } };
 		WakeScenario("F3 le seul coequipier tombe a 3 s (reveil a 9 s), latence 100 ms : reveil 6 s apres", { Drops }, 2, 9000, 9600, true);
@@ -1206,9 +1211,9 @@ namespace
 		Leaves.Changes = { { 200, EMate::Gone } };
 		WakeScenario("F7 le coequipier quitte la partie a 10 s : reveil 6 s apres", { Leaves }, 2, 16000, 16600, true);
 		FMate FarDrops;
-		FarDrops.bReplicated = false;
+		FarDrops.bFar = true;
 		FarDrops.Changes = { { 100, EMate::Down } };
-		WakeScenario("F8 coequipier non replique qui tombe a 5 s : v4.15 refus ; v4.16 attend la fenetre (rien de refuse)", { FarDrops }, 2, 30000, 30300, true);
+		WakeScenario("F8 coequipier a plus de 150 m qui tombe a 5 s : v4.15 refus ; v4.16 sa chute est vue, reveil 6 s apres", { FarDrops }, 2, 11000, 11600, true);
 		// F9 : cas residuel : l'etat de deux acteurs arrive dans le desordre (releve vu 500 ms apres la chute de l'autre) : le
 		// client se croit seul un instant alors que l'hote ne l'a jamais ete : un refus, puis le reveil a la fin de la fenetre
 		FMate Fell, Revived;
@@ -1217,6 +1222,16 @@ namespace
 		Revived.Changes = { { 38, EMate::Up } };
 		Revived.LagSteps = 12;
 		WakeScenario("F9 cas residuel (etats de deux acteurs dans le desordre) : au plus un refus, reveil avant 31 s", { Fell, Revived }, 2, 28000, 31000, true, 1);
+		// v4.16 (relecture) : la premiere correction supposait vivant tout coequipier non replique : un coequipier lointain deja
+		// a terre faisait attendre 30 s au lieu de 6 s (regle de mort de la v4.15 changee). Il est maintenant replique
+		FMate FarDown;
+		FarDown.bFar = true;
+		FarDown.Start = EMate::Down;
+		FarDown.Changes = { { 100, EMate::Up } };
+		WakeScenario("F10 coequipier a plus de 150 m deja a terre a la mort : 6 s comme en v4.15, accepte", { FarDown }, 2, 6000, 6400, false);
+		FMate Arriving;
+		Arriving.bArriving = true;
+		WakeScenario("F11 coequipier qui arrive (personnage pas encore recu), debout chez l'hote : v4.15 6 s puis refus ; v4.16 fenetre entiere", { Arriving }, 2, 30000, 30300, true);
 	}
 }
 

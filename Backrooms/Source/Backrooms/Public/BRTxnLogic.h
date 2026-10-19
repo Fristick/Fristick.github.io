@@ -284,7 +284,9 @@ namespace BRTxn
 	/** Marge de l'hote (latence, ecart des horloges) */
 	constexpr float WakeServerMargin = 1.5f;
 	/** Un coequipier peut venir relever : le personnage vivant d'un autre joueur, ou (client seulement) un joueur de la
-	 *  partie dont le personnage n'est pas replique ici (hors de portee de replication : suppose vivant, l'hote le voit) */
+	 *  partie dont le personnage n'est pas replique ici (suppose vivant, l'hote le voit). v4.16 (relecture) : les personnages
+	 *  des joueurs sont repliques a toute distance (ABRCharacter::IsNetRelevantFor) ; ce dernier cas ne reste qu'a l'arrivee
+	 *  d'un joueur, avant la premiere replication de son personnage */
 	bool MateKnownAlive(int VisibleAliveMates, int UnseenMates, bool bAuthority);
 	/** Delai a terre choisi a la mort (fenetre de la cause si quelqu'un peut relever, sinon 6 s) */
 	float DownedDelay(bool bMateAlive, bool bRevivable, float Window);

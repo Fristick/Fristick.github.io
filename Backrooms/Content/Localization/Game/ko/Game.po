@@ -2389,6 +2389,14 @@ msgctxt "BR,HUD.ReveilPointDepartNiveauValue"
 msgid "Réveil au point de départ du niveau dans {Value} s      {Jump}  abandonner"
 msgstr "{Value}초 후 레벨 시작 지점에서 깨어남      {Jump}  포기하기"
 
+#. Key:	HUD.ReveilPointDepartNiveauSeul
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3779)
+#: Source/Backrooms/Private/BRHUD.cpp(3779)
+#, fuzzy
+msgctxt "BR,HUD.ReveilPointDepartNiveauSeul"
+msgid "Réveil au point de départ du niveau dans {Value} s"
+msgstr "{Value}초 후 레벨 시작 지점에서 깨어남"
+
 #. Key:	HUD.EtesMort
 #. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3778)
 #: Source/Backrooms/Private/BRHUD.cpp(3778)

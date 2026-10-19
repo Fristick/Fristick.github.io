@@ -2389,6 +2389,14 @@ msgctxt "BR,HUD.ReveilPointDepartNiveauValue"
 msgid "Réveil au point de départ du niveau dans {Value} s      {Jump}  abandonner"
 msgstr "Du vaknar vid nivåns startpunkt om {Value} s      {Jump}  ge upp"
 
+#. Key:	HUD.ReveilPointDepartNiveauSeul
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3779)
+#: Source/Backrooms/Private/BRHUD.cpp(3779)
+#, fuzzy
+msgctxt "BR,HUD.ReveilPointDepartNiveauSeul"
+msgid "Réveil au point de départ du niveau dans {Value} s"
+msgstr "Du vaknar vid nivåns startpunkt om {Value} s"
+
 #. Key:	HUD.EtesMort
 #. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3778)
 #: Source/Backrooms/Private/BRHUD.cpp(3778)

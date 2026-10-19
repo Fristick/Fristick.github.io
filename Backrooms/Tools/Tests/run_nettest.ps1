@@ -139,7 +139,11 @@ foreach ($Name in @($Procs.Keys)) {
 }
 "duree totale {0:n1} min" -f $Sw.Elapsed.TotalMinutes
 $Summary = @()
-$Worst = 0
+# v4.16 (relecture) : un indicateur par sorte de resultat, puis le code (3 > 1 > 2 > 0). Avant : maximum courant ; l'hote, lu le
+# premier, a toujours un NON VERIFIE ("materiel absent") : un PROBLEME chez un client donnait le code 2 au lieu de 1
+$AnyMissing = $false
+$AnyProblem = $false
+$AnyNotVerified = $false
 foreach ($Name in @($Procs.Keys)) {
 	$Dir = Join-Path $OutDir $Name
 	$Src = Join-Path $SavedDir "NetTest_$Name"
@@ -153,15 +157,18 @@ foreach ($Name in @($Procs.Keys)) {
 		$Summary += $Line
 		$J.problemes | ForEach-Object { $Summary += "   PROBLEME: $_" }
 		$J.non_verifies | ForEach-Object { $Summary += "   NON VERIFIE: $_" }
-		if (@($J.problemes).Count -gt 0) { $Worst = [Math]::Max($Worst, 1) } elseif (@($J.non_verifies).Count -gt 0 -and $Worst -lt 1) { $Worst = 2 }
+		if (@($J.problemes).Count -gt 0) { $AnyProblem = $true }
+		if (@($J.non_verifies).Count -gt 0) { $AnyNotVerified = $true }
 	} else {
 		$Summary += ("{0,-8} sortie={1} PAS DE RAPPORT" -f $Name, $Code)
-		$Worst = 3
+		$AnyMissing = $true
 	}
 }
+$Worst = if ($AnyMissing) { 3 } elseif ($AnyProblem) { 1 } elseif ($AnyNotVerified) { 2 } else { 0 }
 $Head = "run_nettest {0} : clients {1} (sans rendu {2}), arrivee tardive {3}, latence {4} ms, gigue {5} ms, pertes {6} %, plan {7}" -f $Tag, $Clients, $NullRhiCount,
 	$LateJoin, $Lag, $Jitter, $Loss, $(if ($Classic) { 'ordinaire (-BRNetTest)' } else { 'v4.16 (-BRAutoTestV416Net)' })
 $Summary = @($Head) + $Summary
+$Summary += "code de sortie : $Worst (0 tout reussi, 1 au moins un probleme, 2 seulement des verifications non faites, 3 un rapport manquant)"
 $Summary | Set-Content -Path (Join-Path $OutDir 'summary.txt') -Encoding UTF8
 $Summary
 exit $Worst
