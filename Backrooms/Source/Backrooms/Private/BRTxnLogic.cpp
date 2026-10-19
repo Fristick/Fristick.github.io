@@ -492,4 +492,31 @@ namespace BRTxn
 		}
 		return N;
 	}
+
+	// v4.16 : reveil en cooperation (voir BRTxnLogic.h)
+	bool MateKnownAlive(int VisibleAliveMates, int UnseenMates, bool bAuthority)
+	{
+		return VisibleAliveMates > 0 || (!bAuthority && UnseenMates > 0);
+	}
+
+	float DownedDelay(bool bMateAlive, bool bRevivable, float Window)
+	{
+		return (bMateAlive && bRevivable) ? Window : DownedAloneSeconds;
+	}
+
+	float ClampDowned(float Remaining, bool bMateAlive)
+	{
+		return (Remaining > DownedAloneSeconds && !bMateAlive) ? DownedAloneSeconds : Remaining;
+	}
+
+	float ServerMinWake(bool bRevivable, bool bMateAtDeath, float AloneAfter, float Window)
+	{
+		float Rule = (bRevivable && bMateAtDeath) ? Window : DownedAloneSeconds;
+		if (AloneAfter >= 0.f && Rule > AloneAfter + DownedAloneSeconds)
+		{
+			Rule = AloneAfter + DownedAloneSeconds;
+		}
+		const float Min = Rule - WakeServerMargin;
+		return Min > 1.5f ? Min : 1.5f;
+	}
 }

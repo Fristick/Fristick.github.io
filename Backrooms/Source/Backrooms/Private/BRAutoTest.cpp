@@ -126,8 +126,12 @@ void ABRAutoTest::BeginPlay()
 	Super::BeginPlay();
 	StartTime = FPlatformTime::Seconds();
 	bNetTest = IsNetTestRequested();
-	// Test multijoueur : l'hote et le client ecrivent chacun dans leur dossier
-	const FString Sub = !bNetTest ? FString(TEXT("AutoTest")) : (GetNetMode() == NM_Client ? FString(TEXT("NetTest_Client")) : FString(TEXT("NetTest_Hote")));
+	// Test multijoueur : l'hote et le client ecrivent chacun dans leur dossier. v4.16 : -BRNetTestName=<nom> (plusieurs
+	// clients sur ce PC : Saved/NetTest_<nom>)
+	FString NetName;
+	FParse::Value(FCommandLine::Get(), TEXT("BRNetTestName="), NetName);
+	const FString Sub = !bNetTest ? FString(TEXT("AutoTest")) : (!NetName.IsEmpty() ? FString(TEXT("NetTest_")) + NetName
+		: (GetNetMode() == NM_Client ? FString(TEXT("NetTest_Client")) : FString(TEXT("NetTest_Hote"))));
 	OutDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), Sub));
 	IFileManager::Get().DeleteDirectory(*OutDir, false, true);
 	IFileManager::Get().MakeDirectory(*OutDir, true);
@@ -147,7 +151,15 @@ void ABRAutoTest::BeginPlay()
 
 	if (bNetTest)
 	{
-		BuildNetPlan();
+		// v4.16 : -BRAutoTestV416Net : scenarios de cooperation v4.16 (BRAutoTestV416Net.cpp) a la place du plan reseau ordinaire
+		if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Net")))
+		{
+			AddNetV416Plan();
+		}
+		else
+		{
+			BuildNetPlan();
+		}
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Test multijoueur (%s) : %d etapes. Rapport : %s"), GetNetMode() == NM_Client ? TEXT("client") : TEXT("hote"),
 			Plan.Num(), *OutDir);
 		return;

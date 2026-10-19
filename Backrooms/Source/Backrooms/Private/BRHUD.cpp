@@ -3772,7 +3772,12 @@ void ABRHUD::DrawDeath(ABRCharacter* C)
 			Txt(BR_STR(NSLOCTEXT("BR", "HUD.PersonnePeutAtteindreEtes", "Personne ne peut vous atteindre l\u00e0 o\u00f9 vous \u00eates.")), CX, H * 0.52f, FLinearColor(0.85f, 0.85f, 0.85f, A), 1.f * U,
 				GEngine->GetMediumFont(), true);
 		}
-		Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ReveilPointDepartNiveauValue", "R\u00e9veil au point de d\u00e9part du niveau dans {Value} s      {Jump}  abandonner"), { { TEXT("Value"), BRLoc::Int(FMath::CeilToInt(Left)) }, { TEXT("Jump"), BRLoc::Arg(BRKeys::Tag(EBRAction::Jump)) } }), CX, H * 0.58f, FLinearColor(0.9f, 0.85f, 0.6f, A), 1.f * U, GEngine->GetMediumFont(), true);
+		// v4.16 (relecture) : abandon propose a l'hote seulement (ABRWorld::CanGiveUpDowned : l'hote refusait le reveil anticipe
+		// d'un client, qui retombait a terre au point de depart)
+		const FString WakeLine = (W && W->CanGiveUpDowned())
+			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ReveilPointDepartNiveauValue", "R\u00e9veil au point de d\u00e9part du niveau dans {Value} s      {Jump}  abandonner"), { { TEXT("Value"), BRLoc::Int(FMath::CeilToInt(Left)) }, { TEXT("Jump"), BRLoc::Arg(BRKeys::Tag(EBRAction::Jump)) } })
+			: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.ReveilPointDepartNiveauSeul", "R\u00e9veil au point de d\u00e9part du niveau dans {Value} s"), { { TEXT("Value"), BRLoc::Int(FMath::CeilToInt(Left)) } });
+		Txt(WakeLine, CX, H * 0.58f, FLinearColor(0.9f, 0.85f, 0.6f, A), 1.f * U, GEngine->GetMediumFont(), true);
 		return;
 	}
 	Txt(BR_STR(NSLOCTEXT("BR", "HUD.EtesMort", "VOUS \u00caTES MORT")), CX, H * 0.38f, FLinearColor(0.9f, 0.1f, 0.08f, A), 2.4f * U, GEngine->GetLargeFont(), true);

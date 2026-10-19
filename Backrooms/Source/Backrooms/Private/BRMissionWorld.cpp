@@ -1579,9 +1579,27 @@ void ABRWorld::UpdateMissionDevices(float Dt)
 	}
 	MissionDeviceTimer = 0.5f;
 	TArray<FVector> Near;
-	if (const ABRCharacter* P = GetPlayer())
+	const ABRCharacter* Mine = GetPlayer();
+	if (Mine)
 	{
-		Near.Add(P->GetActorLocation());
+		Near.Add(Mine->GetActorLocation());
+	}
+	// v4.16 : l'hote anime aussi les mecanismes proches de chaque coequipier. Son tablier de la passerelle (Niveau 8) et son
+	// deversoir du sas (Poolrooms) sont de vraies collisions qui suivent l'animation : manipules par un client a plus de 35 m
+	// de l'hote, ils restaient leves chez lui (Tick coupe), alors que le client les voyait poses. Les entites de l'hote
+	// tombaient dans l'interruption ou butaient sur le deversoir, leur navigation gardait le tablier leve, et les vues de
+	// l'hote (actions, depart de groupe, lumiere) passaient par un tablier ou un deversoir qui n'existaient plus chez le client
+	if (HasAuthority() && IsNetGame())
+	{
+		TArray<ABRCharacter*> All;
+		GetPlayers(All);
+		for (const ABRCharacter* Mate : All)
+		{
+			if (Mate && Mate != Mine)
+			{
+				Near.Add(Mate->GetActorLocation());
+			}
+		}
 	}
 	for (ABRMissionDevice* D : MissionDevices)
 	{

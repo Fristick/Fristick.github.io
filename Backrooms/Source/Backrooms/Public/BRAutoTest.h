@@ -438,4 +438,9 @@ private:
 	 *  Poolrooms, marches des Levels 0 et 1, scan LiDAR du Level 6) x profils, prechauffage, fenetre fixe, releves ProfileGPU ;
 	 *  Perf.csv et PerfPasses.csv */
 	void AddPerfSteps();
+
+	/** v4.16 (cooperation) : -BRNetTest -BRAutoTestV416Net : 2 a 4 joueurs, client tardif (porte du Level 0, Level 6),
+	 *  reconnexion pendant un chargement, morts et reveils, mecanismes loin de l'hote, interactions simultanees, focus,
+	 *  pause, inventaire et touches pendant une action maintenue (BRAutoTestV416Net.cpp ; lanceur Tools/Tests/run_nettest.ps1) */
+	void AddNetV416Plan();
 };

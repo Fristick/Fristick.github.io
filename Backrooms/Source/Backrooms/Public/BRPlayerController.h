@@ -35,6 +35,11 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+	/** v4.16 : une repetition (IE_Repeat) d'une touche que l'entree du joueur ne tient pas pour enfoncee (touches purgees :
+	 *  perte du focus de la fenetre, inventaire, dialogue, changement de touches) est ignoree. Unreal 5.8 la changeait en nouvel
+	 *  appui (Input.AutoReconcilePressedEventsOnFirstRepeat) : au retour d'Alt+Tab, une touche toujours tenue relancait seule le
+	 *  scan, la course ou l'interaction. Il faut maintenant la relacher puis l'appuyer de nouveau */
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 
 	// ---- Menu principal : SOLO / MULTIJOUEUR / PARAMETRES / QUITTER
 	EBRMenuPage GetMenuPage() const { return MenuPage; }
@@ -137,6 +142,8 @@ public:
 	/** v4.15 (test reseau -BRNetTest, developpement) : derniere etape du plan signalee par ce client (copie de son controleur
 	 *  chez l'hote) : l'hote s'en sert de barriere (changement de niveau, fin du test) */
 	int32 NetTestMark = 0;
+	/** v4.16 (tests) : repetitions de touches purgees ignorees (voir InputKey) */
+	int32 IgnoredStaleRepeats = 0;
 
 	bool IsInMenu() const { return bInMenu; }
 	/** Le joueur vient d'etre place : la camera du menu repart de sa nouvelle orientation */

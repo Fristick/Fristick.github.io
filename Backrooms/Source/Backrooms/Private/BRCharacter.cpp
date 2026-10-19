@@ -843,12 +843,21 @@ void ABRCharacter::InputJump(bool bPressed)
 	bJumpHeld = bPressed;
 	if (bDead && bPressed)
 	{
-		// A terre en cooperation : abandonner, se reveiller tout de suite au point de depart
+		// A terre en cooperation : abandonner, se reveiller tout de suite au point de depart. v4.16 (relecture) : chez l'hote
+		// seulement (ABRWorld::CanGiveUpDowned) : l'hote refusait le reveil anticipe d'un client, qui retombait a terre au
+		// point de depart avec l'equipement de depart ; chez un client, l'appui est ignore (l'invite ne le propose plus)
 		if (ABRWorld* W = ABRWorld::Get(this))
 		{
 			if (W->IsNetGame())
 			{
-				W->GiveUpDowned();
+				if (W->CanGiveUpDowned())
+				{
+					W->GiveUpDowned();
+				}
+				else
+				{
+					++IgnoredGiveUps;
+				}
 			}
 		}
 		return;
@@ -1261,6 +1270,20 @@ void ABRCharacter::ApplyHitFeedback(float Damage, float SanityDamage, AActor* So
 
 void ABRCharacter::TickServerVitals(float Dt)
 {
+	// v4.16 : a terre, l'hote note le premier instant ou plus aucun coequipier n'est debout (meme regle que le joueur, qui
+	// ramene alors son delai a 6 s ; voir MinRespawnDelay)
+	if (DeathState.bDead && ServerAloneSince < 0.f && GetWorld())
+	{
+		bool bMateUp = false;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It && !bMateUp; ++It)
+		{
+			bMateUp = *It != this && IsValid(*It) && !It->IsActorBeingDestroyed() && !It->DeathState.bDead;
+		}
+		if (!bMateUp)
+		{
+			ServerAloneSince = GetWorld()->GetTimeSeconds();
+		}
+	}
 	if (!bServerDying)
 	{
 		return;
@@ -1565,6 +1588,7 @@ bool ABRCharacter::ServerRequestPickup_Validate(uint64 PickupId, uint16 RequestI
 
 void ABRCharacter::ServerRequestPickup_Implementation(uint64 PickupId, uint16 RequestId, int32 LevelSerial, uint8 ExpectedItem, uint8 Room, uint8 Epoch)
 {
+	ServerLastRequestFrame = GFrameCounter; // v4.16 (tests : demandes simultanees)
 	// Demande deja servie (renvoi) : la meme reponse, sans second effet
 	for (const FBRTxnRecord& R : ServerPickupHistory)
 	{
@@ -1662,6 +1686,19 @@ void ABRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+bool ABRCharacter::IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const
+{
+	// v4.16 (relecture) : un joueur voit toujours ses coequipiers (au plus trois personnages de plus par client, partie a 4).
+	// Au-dela de 150 m (distance de pertinence du moteur), le personnage d'un coequipier n'etait plus replique : le client
+	// ignorait son etat de mort et choisissait un autre delai a terre que l'hote (BRTxn::MateKnownAlive, ABRWorld::HasLivingTeammate).
+	// Aucun champ ni RPC ne change
+	if (RealViewer && RealViewer->IsA<APlayerController>())
+	{
+		return true;
+	}
+	return Super::IsNetRelevantFor(RealViewer, ViewTarget, SrcLocation);
 }
 
 int32 ABRCharacter::RoomFor(EBRItem Item) const
@@ -2005,6 +2042,8 @@ void ABRCharacter::ServerApplyDeathState(bool bInDead, EBRDeathCause Cause, uint
 	{
 		ServerDeathTime = GetWorld()->GetTimeSeconds();
 	}
+	// v4.16 : nouvelle mort : seul des maintenant si personne n'etait debout ; releve, reveille : plus a terre
+	ServerAloneSince = (bInDead && !bServerTeammateAtDeath && GetWorld()) ? static_cast<float>(GetWorld()->GetTimeSeconds()) : -1.f;
 	UE_LOG(LogBackrooms, Log, TEXT("Etat de mort (serveur) : %s %s, cause %d, evenement %d"), *GetName(), bInDead ? TEXT("mort") : TEXT("vivant"),
 		static_cast<int32>(Cause), static_cast<int32>(Event));
 	OnRep_DeathState(); // l'hote applique aussi (pions de ses invites, et le sien)
@@ -2058,10 +2097,12 @@ void ABRCharacter::ServerReportDeath_Implementation(uint8 InCause)
 float ABRCharacter::MinRespawnDelay() const
 {
 	// Meme regle que ABRWorld::HandlePlayerDeath cote client (delai de reanimation si un coequipier vivant pouvait venir,
-	// sinon 6 s), moins une marge pour la latence et l'ecart des horloges
+	// sinon 6 s), moins une marge pour la latence et l'ecart des horloges. v4.16 : et le meme raccourci a 6 s quand plus
+	// aucun coequipier n'est debout (ABRWorld::Tick) ; avant, l'hote gardait la fenetre fixee a la mort et refusait le
+	// reveil : le joueur retombait a terre au point de depart, puis recommencait toutes les 6 s (BRTxn::ServerMinWake)
 	const EBRDeathCause Cause = static_cast<EBRDeathCause>(DeathState.Cause);
-	const float Rule = (DeathState.bRevivable && bServerTeammateAtDeath) ? BRDeath::ReviveWindow(Cause) : 6.f;
-	return FMath::Max(1.5f, Rule - 1.5f);
+	const float AloneAfter = ServerAloneSince >= 0.f ? FMath::Max(0.f, ServerAloneSince - ServerDeathTime) : -1.f;
+	return BRTxn::ServerMinWake(DeathState.bRevivable, bServerTeammateAtDeath, AloneAfter, BRDeath::ReviveWindow(Cause));
 }
 
 bool ABRCharacter::ServerCanStillRevive() const
@@ -4432,6 +4473,10 @@ void ABRCharacter::ServerMissionInteract_Implementation(uint8 Device, uint8 Acti
 	ABRWorld* W = ABRWorld::Get(this);
 	uint8 Related = 255, Count = 0;
 	const uint8 Fb = W ? W->ServerMissionAct(this, Device, Action, LevelSerial, Related, Count) : BRMissionText::NotNow;
+	// v4.16 (tests : demandes simultanees de plusieurs clients sur un mecanisme)
+	++ServerMissionRequests;
+	ServerLastRequestFrame = GFrameCounter;
+	ServerLastMissionFeedback = Fb;
 	FBRTxnRecord& Rec = ServerMissionHistory[ServerMissionHistoryNext];
 	ServerMissionHistoryNext = (ServerMissionHistoryNext + 1) % TxnHistory;
 	Rec = FBRTxnRecord();
@@ -4742,6 +4787,9 @@ bool ABRCharacter::ServerRequestDeparture_Validate(int32 Target, int32 LevelSeri
 
 void ABRCharacter::ServerRequestDeparture_Implementation(int32 Target, int32 LevelSerial)
 {
+	// v4.16 (tests : demandes simultanees de plusieurs clients, image de l'hote ou chacune arrive)
+	++ServerDepartureRequests;
+	ServerLastRequestFrame = GFrameCounter;
 	ABRWorld* W = ABRWorld::Get(this);
 	uint8 Reason = 0;
 	if (W && !W->ServerStartDeparture(this, Target, LevelSerial, Reason))

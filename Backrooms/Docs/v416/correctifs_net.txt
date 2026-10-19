@@ -1,0 +1,181 @@
+# v4.16 (cooperation) : couverture du test reseau et defauts trouves par lecture du code (branche v416-net, depuis f99e8a6)
+# Machine : Windows 11, Unreal 5.8.3, Visual Studio 2026 (MSVC 14.50) ; depuis Backrooms/ (arbre de travail wt/net)
+# Date : 2026-10-18
+# Le jeu n'a pas ete lance ici : les etapes en jeu sont preparees (commandes et lignes attendues en fin de fichier), non executees.
+# Resultats de compilation, des bancs et des controles Python : Saved/TestRuns/v416/net/ (arbre principal, hors depot).
+
+## Defauts du jeu (FAIT : lecture du code ; effet en jeu : HYPOTHESE tant que les etapes ci-dessous n'ont pas tourne)
+
+# 1. Reveil refuse a un joueur a terre loin de ses coequipiers (ABRWorld::HasLivingTeammate, client)
+# Cause : le client ne comptait que les personnages repliques chez lui ; au-dela de 150 m (pertinence du moteur), un coequipier
+# vivant n'existe pas chez lui. Il se croyait seul (6 s) ; l'hote, qui voit tout le monde, exigeait la fenetre de la cause
+# (30 s pour une blessure, moins 1,5 s de marge) et refusait le reveil.
+# Avant : reveil a 6 s, refuse ("reveil refuse"), le joueur retombe a terre au point de depart avec l'equipement de depart, et
+# recommence toutes les 6 s jusqu'a la fin de la fenetre (banc F2 : 4 refus).
+# Apres (relecture) : le personnage d'un joueur est replique a tous les joueurs, a toute distance (ABRCharacter::IsNetRelevantFor :
+# au plus trois personnages de plus par client a 4 joueurs ; aucun champ ni RPC ne change). Le client connait l'etat de mort reel
+# de chaque coequipier, comme l'hote. Seul un joueur de la partie dont le personnage n'est pas encore arrive chez lui (il rejoint)
+# reste suppose vivant (BRTxn::MateKnownAlive), comme l'hote le voit.
+# La premiere correction supposait vivant tout coequipier non replique : un coequipier lointain deja a terre faisait attendre 30 s
+# au lieu des 6 s de la v4.15 (regle de mort changee en silence, relecture). Ce n'est plus le cas (banc F10).
+# Tests : banc section F (F2 debout a plus de 150 m : fenetre entiere ; F8 qui tombe a 5 s : reveil 6 s apres ; F10 deja a terre :
+# 6 s ; F11 joueur qui arrive : fenetre entiere) ; en jeu : C1 "mort loin des coequipiers" (personnages toujours repliques a
+# 230-300 m, 30 s, aide affichee) et C3 "mort loin apres les autres" (6 s, pas d'aide).
+
+# 2. Reveil refuse quand le dernier coequipier debout tombe apres (ABRCharacter::MinRespawnDelay, hote)
+# Cause : le client ramene son delai a 6 s des que plus personne n'est debout (ABRWorld::Tick) ; l'hote gardait la regle fixee a
+# l'instant de la mort (fenetre entiere si un coequipier etait debout a cet instant).
+# Avant : reveil 6 s apres la chute du dernier, refuse, le joueur retombe a terre (banc F3 a F7 : 1 ou 2 refus, reveil vers 29 s).
+# Apres : l'hote retient le premier instant ou aucun coequipier n'est debout (ServerAloneSince, TickServerVitals) et accepte des
+# cet instant + 6 s - 1,5 s (BRTxn::ServerMinWake). Meme regle cote client (BRTxn::DownedDelay, BRTxn::ClampDowned).
+# Tests : banc section F (F0 fonctions, F1 a F9, dont F5 a quatre joueurs et F9 le cas residuel : deux acteurs recus dans le
+# desordre, au plus un refus) ; en jeu : etape C2 "toute l'equipe a terre".
+
+# 3. Mecanismes manipules par un client loin de l'hote (ABRWorld::UpdateMissionDevices)
+# Cause : l'hote n'animait (Tick) que les mecanismes a moins de 35 m de son propre joueur. Le tablier de la passerelle (Niveau 8)
+# et le deversoir du sas (Poolrooms) sont des collisions qui suivent l'animation, et l'hote fait foi pour les entites et les
+# vues (actions, depart de groupe ; la position des joueurs, elle, vient de leur machine).
+# Avant : hote a plus de 35 m, client qui abaisse la passerelle ou vide le sas : chez l'hote, tablier leve (navigation des
+# entites par le tablier fermee, entites et vues de l'hote arretees par un tablier leve que les clients voient pose),
+# deversoir leve devant l'entree du sas.
+# Apres : chez l'hote d'une partie en ligne, un mecanisme est anime s'il est a moins de 35 m de n'importe quel joueur (meme
+# regle que le streaming des chunks, qui suivait deja chaque joueur).
+# Tests : en jeu : etapes D "sas loin de l'hote" et E "passerelle loin de l'hote" (hote a plus de 45 m, derniere action faite
+# par le client par une vraie demande).
+
+# 4. Interaction maintenue sous le menu pause (ABRPlayerController::StopHeldActions)
+# Cause : l'arret des actions maintenues (v4.14) couvrait le scan focalise et la course ; en ligne, la pause ne purge pas les
+# touches et le monde continue.
+# Avant : manivelle, treuil, poste, observation ou relever un coequipier continuaient sous le menu pause et reprenaient a sa
+# fermeture sans nouvel appui. Apres : l'interaction maintenue s'arrete aussi (nouvel appui requis).
+# Tests : en jeu : etape F "pause avec interaction et scan" (hote, puis le premier client).
+
+# 5. Repetition du clavier apres une purge des touches (ABRPlayerController::InputKey)
+# Cause : Unreal 5.8 change la premiere repetition (IE_Repeat) d'une touche purgee en nouvel appui
+# (Input.AutoReconcilePressedEventsOnFirstRepeat, vrai par defaut, PlayerInput.cpp). Les touches sont purgees a la perte du
+# focus (Alt+Tab), a l'ouverture et a la fermeture de l'inventaire et sous un dialogue ; une touche toujours tenue se repete.
+# Avant : retour d'Alt+Tab ou fermeture de l'inventaire en tenant X (scan), Maj (course) ou E (interaction) : le scan, la course
+# ou l'interaction repartaient seuls (E relancait meme une interaction). Apres : une repetition d'une touche que l'entree du
+# joueur ne tient pas pour enfoncee est ignoree jusqu'au relachement (compteur IgnoredStaleRepeats).
+# Tests : en jeu : etape F "inventaire, repetition de la touche toujours tenue" et "retour au premier plan, touches toujours
+# tenues (repetition)" ; la perte de focus est une vraie : fenetre reduite par le test, FSlateApplication::IsActive faux.
+
+# 6. Objets rendus au monde invisibles pour un client qui rejoint ou se reconnecte (ABRWorld::LoadLevelNow)
+# Cause : les objets rendus au monde (joueur parti avant l'accuse de reception d'un ramassage) n'etaient poses que quand la liste
+# changeait (OnRep_Returned), qui arrive chez un client avant qu'il ait un niveau (SpawnReturnedPickups sort sans rien faire) ;
+# l'hote qui reprenait une session sauvegardee ne les posait pas non plus.
+# Avant : objet absent chez le client arrive apres coup (impossible a ramasser pour lui) ; absent partout apres une reprise.
+# Apres : poses aussi a la construction du niveau.
+# Tests : en jeu : arrivee tardive "porte" (objet rendu visible chez le client tardif) et "reconnexion" (objet rendu apres le
+# rechargement, pendant que le client se reconnecte).
+
+# 7. Personnage recu apres la fin du fondu d'arrivee (ABRWorld::Tick)
+# Cause : le deverrouillage des entrees et la fin du chargement signalee a l'hote n'avaient lieu qu'a la fin du fondu ; sans
+# personnage a cet instant (client qui rejoint ou se reconnecte sous latence ou pertes), ni l'un ni l'autre.
+# Avant : l'hote gardait le joueur "en chargement" jusqu'a 90 s : ignore des entites (invulnerable de fait), ni action de mission,
+# ni ramassage, ni depart, pas attendu par le groupe. Apres : quand le personnage est place hors transition, entrees
+# deverrouillees (sauf reveil du Level 0 en cours) et fin du chargement signalee ; avertissement "Personnage place apres la fin
+# de l'arrivee" dans le journal.
+# Tests : en jeu : "reconnexion" et arrivees tardives (entrees deverrouillees, plus en chargement chez l'hote ; une note dit si
+# ce chemin a ete emprunte, ce qui depend de la latence).
+
+# 8. Abandon a terre d'un client refuse par l'hote (relecture ; ABRCharacter::InputJump, ABRWorld::CanGiveUpDowned, ABRHUD)
+# Cause : l'invite "{Saut} abandonner" s'affichait a tous en cooperation. Chez un client, l'abandon ramenait son delai a 0,3 s :
+# reveil au point de depart, puis ServerReportRespawn, que l'hote ne distingue pas d'un reveil ordinaire et refusait avant sa
+# regle (28,5 s si un coequipier etait debout a la mort, 4,5 s sinon). L'abandon de l'hote, lui, n'est jamais verifie. Defaut
+# anterieur a la v4.16 (meme famille que les defauts 1 et 2).
+# Avant : client qui abandonne : reveil au point de depart avec l'equipement de depart (inventaire perdu), refus, de nouveau a
+# terre au point de depart pour le temps restant, loin de ceux qui pouvaient le relever ; recommencait a chaque appui.
+# Apres : en cooperation, seul l'hote peut abandonner (regle de l'hote inchangee). Chez un client, l'appui est ignore et l'invite
+# devient "Reveil au point de depart du niveau dans {Value} s" (nouveau texte HUD.ReveilPointDepartNiveauSeul, 21 traductions
+# "fuzzy" tirees de l'invite existante sans sa partie "abandonner") ; README mis a jour. Changement de regle annonce ici : rendre
+# l'abandon aux clients demande un nouveau message (RPC ou parametre) et donc une nouvelle NetVersion, hors de ce lot.
+# Tests : en jeu : C1, "client a terre : appui sur {Saut} (abandon) ignore 1 fois ... toujours a terre oui ... abandon propose ici non".
+
+## Relecture (corrections du test et du lanceur, sans effet sur le jeu)
+# - Lanceur : code de sortie juge sur toutes les machines (avant : maximum courant ; l'hote, lu le premier, a toujours un NON
+#   VERIFIE "materiel absent" : un PROBLEME chez un client donnait 2 au lieu de 1). summary.txt finit par "code de sortie : N".
+# - Client tardif : "debut|niveau" n'est plus ecrit par lui (il arrive au Level 6 pour lidar et passage : DIFFERENT, donc un
+#   PROBLEME, meme quand le jeu etait correct).
+# - A et B : a partir de deux clients, l'hote s'abstient et les clients demandent au meme instant du serveur
+#   (AGameStateBase::GetServerWorldTimeSeconds ; l'hote ouvre l'etape juste apres un multiple de 10 s, chacun vise ce multiple
+#   + 6 s). Avant, la demande de l'hote, appliquee sur place, passait toujours la premiere : rien n'etait en concurrence. L'hote
+#   compte les demandes recues et l'image ou chacune arrive (ServerLastRequestFrame) ; moins de deux clients : NON VERIFIE.
+# - D : la derniere action du sas est demandee au meme instant par les clients des places 1 et 2 (interactions simultanees sur
+#   un mecanisme) : l'hote rejoue les deux demandes sur une copie de l'etat d'avant (BRMission::Act, une apres l'autre, comme
+#   ABRWorld::ServerMissionAct) et compare l'etat et les retours ; moins de 2 clients ou une demande hors de portee : NON VERIFIE.
+# - C1, C2, C3 : apres chaque reveil, l'hote verifie que le client n'est plus en chargement (les entites l'ignoreraient), qu'un
+#   mouvement est arrive depuis son placement (HasStaleServerPosition) et qu'aucune chute n'a ete constatee ; les clients font
+#   quelques pas apres le reveil. C3 (nouveau) : le client lointain tombe apres tous les autres.
+# - G (nouveau, Level 6) : chute d'un client dans une fosse de l'aile LiDAR puis reveil : aucune seconde chute imputee a la
+#   position du fond de la fosse (v4.15, ServerPlacedAt), plus en chargement, reveil hors des fosses.
+# - F : sans son a jouer pendant le scan, "son arrete" est NON VERIFIE (avant : compte comme arrete) ; l'etape du changement de
+#   touches juge aussi le son.
+# - ABRPlayerController::InputKey deplace apres StopHeldActions (meme code) : plus de conflit de fusion avec la branche v416-vis.
+
+## Test reseau v4.16 : -BRNetTest -BRAutoTestV416Net (Source/Backrooms/Private/BRAutoTestV416Net.cpp)
+# Lanceur : Tools/Tests/run_nettest.ps1 (projet trouve depuis le script ; moteur : -Editor, UE_EDITOR, registre d'Epic, puis
+# C:\Program Files\Epic Games\UE_5.8). Le plan reseau ordinaire (-BRNetTest seul, -Classic dans le lanceur) ne change pas.
+# Machines sur ce PC : Hote, Client1..Client3 (-NullRhiClients : tous sauf Client1 sans rendu), Tardif ; rapports
+# Saved/NetTest_<machine> copies dans <OutRoot>\<Tag>\<machine>\ (Rapport.txt, Rapport.json, V416.txt, game.log) et summary.txt.
+# Reseau simule par le moteur sur chaque machine : -PktLag, -PktLagVariance, -PktLoss (relus dans le pilote reseau par le test ;
+# non appliques : NON VERIFIE). La latence s'applique a l'envoi de chaque cote (aller-retour ~ 2 x -Lag).
+# Barrieres : etape signalee par chaque client (ServerCheat 4), etape ouverte par l'hote (score de son PlayerState).
+# Comparaisons entre machines : V416.txt de chaque machine, lus par l'hote a la fin (meme PC seulement).
+# Scenarios sans -LateJoin : A ramassage simultane (une attribution), B depart simultane par la porte de service (un depart,
+#   joueurs attendus = joueurs presents), C1, C2 et C3 morts et reveils (defauts 1, 2 et 8), D et E mecanismes loin de l'hote
+#   (defaut 3 ; D : meme action par deux clients au meme instant), F inventaire, pause, touches changees et vraie perte de focus
+#   pendant un scan, une course et une interaction maintenus (defauts 4 et 5), G chute dans une fosse puis reveil.
+# -LateJoin porte : partie d'histoire de test de l'hote, porte ouverte et objet rendu, puis le client tardif : meme porte
+#   sauvegardee, mur perce, vue et capsule passent, battant ouvert, aucun reveil impose, objet rendu visible.
+# -LateJoin lidar | passage : Level 6, deux postes remis sous tension (lidar) ou jusqu'a la bonne porte du passage (passage),
+#   puis le client tardif : meme plan, etat, ouvertures et aile ; bonne porte ouverte (battant, passage libre) ; rien de remis
+#   a zero chez l'hote.
+# -LateJoin reconnexion : le client de la place 1 se reconnecte pendant un rechargement : entrees, chargement, aucune chute
+#   imputee a une ancienne position, objet rendu visible, meme niveau que l'hote.
+# Reste NON VERIFIE ici (materiel absent) : second ecran, deuxieme machine, quatre joueurs physiques.
+
+## Verifications de la relecture (2026-10-19, sortie reelle ; journaux fix_*.txt dans Saved/TestRuns/v416/net/ de l'arbre principal)
+# Build.bat BackroomsEditor Win64 Development ... : Result: Succeeded, 0 avertissement du projet (fix_build_editor.txt ;
+#   -DisableAdaptiveUnity : fix_build_editor_unity.txt, Succeeded, 0 avertissement)
+# Build.bat Backrooms Win64 Development ... : Result: Succeeded, 0 avertissement (fix_build_game_2.txt)
+# python Tools/run_benches.py : RESULTAT : OK (10 banc(s) x 3 compilateur(s)) ; transactions : 66 verifications, 0 echec
+#   (section F : F0 a F11), sorties identiques entre compilateurs (fix_benches.txt)
+# loc_extract.py --check, loc_build.py --check, loc_review.py, protect_assets.py check : 0 ; test_packaging.py : 62 tests, OK
+#   (1 saute) ; verify_pitfalls.py --doors 1-500 (500 graines, 0 probleme), verify_lidar.py --seeds 1-200,
+#   verify_device_clearance.py --seeds 120, verify_level0_kit.py --seeds 40 : code 0, RESULTAT : OK (fix_verify_*.txt)
+# Le jeu n'a pas ete lance : les etapes en jeu (A a G, arrivees tardives, reconnexion) restent a executer.
+
+## Verifications faites ici avant la relecture (sortie reelle ; journaux : Saved/TestRuns/v416/net/ de l'arbre principal)
+# Build.bat BackroomsEditor Win64 Development -Project=...\Backrooms.uproject -WaitMutex -NoHotReload : Result: Succeeded,
+#   0 avertissement du projet (build_editor_3.txt, build_editor_4.txt)
+# Build.bat BackroomsEditor ... -DisableAdaptiveUnity (compilation regroupee, 7 modules) : Result: Succeeded, 0 avertissement
+# Build.bat Backrooms Win64 Development ... : Result: Succeeded, 0 avertissement (build_game_1.txt, build_game_2.txt)
+# python Tools/run_benches.py : RESULTAT : OK (10 banc(s) x 3 compilateur(s)) ; gcc 16.2.0, clang-cl 22.1.3, MSVC 14.50 ;
+#   transactions : 64 verifications, 0 echec (51 avant + section F : 13), sorties identiques entre compilateurs
+# loc_extract.py --check, loc_build.py --check, loc_review.py : 0 ; protect_assets.py check : 0 ;
+#   python -m unittest Tools/Build/tests/test_packaging.py : 62 tests, OK (1 saute)
+# verify_pitfalls.py --doors 1-500, verify_lidar.py --seeds 1-200, verify_device_clearance.py --seeds 120,
+#   verify_level0_kit.py --seeds 40 : RESULTAT : OK (generation non modifiee par ce lot)
+
+## Etapes en jeu a lancer (depuis Backrooms/ ; une seule serie a la fois, aucun autre Unreal ouvert)
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 3 -NullRhiClients -Tag net416_4j
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 1 -LateJoin porte -Tag net416_porte
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 1 -LateJoin lidar -Tag net416_lidar
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 1 -LateJoin passage -Tag net416_passage
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 1 -LateJoin reconnexion -Tag net416_reco
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 1 -Lag 150 -Jitter 40 -Loss 3 -Tag net416_lag
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 1 -LateJoin reconnexion -Lag 150 -Jitter 40 -Loss 3 -Tag net416_reco_lag
+#   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Classic -Tag net416_classic     (plan reseau ordinaire)
+# Resultats : Saved\TestRuns\autotest\<Tag>\summary.txt et <machine>\Rapport.txt. Code de sortie : 0 reussi, 1 probleme,
+# 2 seulement des NON VERIFIE (attendu chez l'hote : materiel absent), 3 rapport manquant.
+# Lignes attendues ajoutees par la relecture (net416_4j : 3 clients ; avec 1 client, les parties "concurrence" sont NON VERIFIE) :
+#   "ramassage simultane : 3 demande(s) de clients recues au meme instant du serveur (attendu 3, l'hote s'abstient) : images ..."
+#   "depart simultane : 3 demande(s) de clients recues ..." ; "1 depart(s) annonce(s)" ; "1 attribution(s)"
+#   "personnages des coequipiers toujours repliques ici 3/3" ; "delai a terre 30.0 s ... aide d'un coequipier affichee oui"
+#   "appui sur {Saut} (abandon) ignore 1 fois ... toujours a terre oui ... abandon propose ici non"
+#   "apres son reveil : en chargement chez l'hote non, position d'avant le placement non, a terre non, chutes constatees depuis 0"
+#   "client lointain tombe apres tous les autres : delai a terre 6.0 s ... aide d'un coequipier affichee non"
+#   "meme action demandee par 2 clients au meme instant du serveur (...) : retours X et Y (attendu X puis Y ...) ... oui"
+#   "chute du client dans une fosse : mort vue oui ... reveil vu oui, reveil refuse non ; apres le reveil : ... chutes constatees depuis 0"
+#   "reveil refuse par l'hote non" (C1, C2, C3) ; net416_lidar et net416_passage : plus de "debut|niveau : DIFFERENT"

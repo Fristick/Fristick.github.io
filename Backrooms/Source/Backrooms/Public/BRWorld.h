@@ -320,6 +320,9 @@ public:
 	void SetDeathTimer(float Seconds) { DeathTimer = Seconds; }
 	/** A terre : abandonner et se reveiller tout de suite au point de depart */
 	void GiveUpDowned() { DeathTimer = FMath::Min(DeathTimer, 0.3f); }
+	/** v4.16 (relecture) : cooperation : abandonner a terre est possible ici (hote seulement : l'hote refusait le reveil
+	 *  anticipe d'un client ; voir la definition) */
+	bool CanGiveUpDowned() const;
 	/** Un autre joueur est encore debout (il peut nous relever) */
 	bool HasLivingTeammate() const;
 	/** Client : une entite repliquee rejoint la liste (lampes rouges, camescope, sante mentale) */

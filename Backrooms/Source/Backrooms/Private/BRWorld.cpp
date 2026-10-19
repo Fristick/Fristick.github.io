@@ -395,9 +395,20 @@ void ABRWorld::HandlePlayerDeath(EBRDeathCause Cause)
 	// equipe : a terre, un coequipier peut nous relever pendant un delai propre a la cause (blessure 30 s, noyade 20 s),
 	// sinon on se reveille au point de depart du niveau.
 	// v4.7 : la cause est explicite. Au fond d'une fosse, personne ne peut nous relever.
+	// v4.16 : meme regle que l'hote (BRTxn::DownedDelay, ABRCharacter::MinRespawnDelay)
 	DeathTimer = IsNetGame()
-		? ((HasLivingTeammate() && BRDeath::CanRevive(Cause)) ? BRDeath::ReviveWindow(Cause) : 6.f)
+		? BRTxn::DownedDelay(HasLivingTeammate(), BRDeath::CanRevive(Cause), BRDeath::ReviveWindow(Cause))
 		: 4.5f;
+}
+
+bool ABRWorld::CanGiveUpDowned() const
+{
+	// v4.16 (relecture) : en cooperation, seul l'hote peut abandonner a terre. Le reveil d'un client est signale a l'hote par
+	// ServerReportRespawn, qui ne distingue pas un abandon d'un reveil ordinaire : avant la fin de la fenetre de reanimation
+	// (28,5 s si un coequipier etait debout a la mort, 4,5 s sinon), l'hote le refusait et le joueur retombait a terre au
+	// point de depart, l'equipement de depart deja repris, loin de qui pouvait le relever. Rendre l'abandon aux clients
+	// demande un nouveau message (changement du protocole, NetVersion) : hors de ce lot
+	return HasAuthority();
 }
 
 bool ABRWorld::HasLivingTeammate() const
@@ -405,14 +416,37 @@ bool ABRWorld::HasLivingTeammate() const
 	const ABRCharacter* Me = GetPlayer();
 	TArray<ABRCharacter*> All;
 	GetPlayers(All);
+	int32 Alive = 0;
+	TArray<const APlayerState*, TInlineAllocator<4>> Seen;
 	for (const ABRCharacter* C : All)
 	{
-		if (C != Me && !C->IsDead())
+		if (C != Me)
 		{
-			return true;
+			Seen.Add(C->GetPlayerState());
+			Alive += C->IsDead() ? 0 : 1;
 		}
 	}
-	return false;
+	// v4.16 : chez un client, le personnage d'un coequipier a plus de 150 m n'etait pas replique (pertinence a distance du
+	// moteur) : il n'existait pas ici, et le joueur a terre se croyait seul (reveil a 6 s, refuse par l'hote qui le voit
+	// vivant ; le joueur retombait a terre au point de depart). Les personnages des joueurs sont maintenant repliques a toute
+	// distance (ABRCharacter::IsNetRelevantFor) : leur etat de mort est connu ici comme chez l'hote. Reste un joueur de la
+	// partie dont le personnage n'est pas encore arrive ici (il rejoint, premiere replication) : suppose vivant, comme l'hote
+	// le voit le plus souvent (BRTxn::MateKnownAlive)
+	int32 Unseen = 0;
+	if (!HasAuthority())
+	{
+		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+		const ABRPlayerController* PC = LocalPC();
+		const APlayerState* MyState = PC ? PC->PlayerState.Get() : nullptr;
+		if (GS)
+		{
+			for (const APlayerState* PS : GS->PlayerArray)
+			{
+				Unseen += (PS && PS != MyState && !PS->IsOnlyASpectator() && !Seen.Contains(PS)) ? 1 : 0;
+			}
+		}
+	}
+	return BRTxn::MateKnownAlive(Alive, Unseen, HasAuthority());
 }
 
 void ABRWorld::RespawnLocalPlayer()
@@ -768,6 +802,11 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 	UpdateStreaming(true);
 	PlacePlayer(bFirstClientLoad);
 	UBRAssets::bCountBuildLoads = false;
+	// v4.16 : objets rendus au monde (joueur parti sans accuse de reception) : poses aussi a la construction du niveau. Avant,
+	// seulement quand la liste changeait (OnRep_Returned) : un client qui rejoignait ou se reconnectait recevait la liste
+	// avant d'avoir un niveau et ne voyait jamais ces objets ; l'hote qui reprenait une session sauvegardee ne les reposait
+	// pas (ils n'existaient nulle part, impossibles a ramasser)
+	SpawnReturnedPickups();
 	// v4.13 : histoire : arrivee dans le fil, reveil et aide du Level 0 (hote) ; publie l'etat
 	OnStoryLevelLoaded();
 	// Sauvegarde de la partie en cours : ce niveau est desormais explore
@@ -1585,6 +1624,24 @@ void ABRWorld::Tick(float DeltaSeconds)
 	{
 		// Client qui arrive dans la partie : son personnage apparait a la place que le serveur lui a donnee
 		PlacePlayer(!HasAuthority());
+		// v4.16 : personnage recu apres la fin du fondu d'arrivee (client qui rejoint ou se reconnecte sous latence ou pertes :
+		// le niveau, replique avec le monde, etait deja construit). Le deverrouillage des entrees et la fin du chargement
+		// signalee au serveur n'avaient lieu qu'a la fin du fondu, sans personnage : il restait immobile (entrees verrouillees
+		// des sa creation) et l'hote le gardait "en chargement" jusqu'a 90 s (ignore des entites, ni action, ni ramassage, ni
+		// depart, pas attendu par le groupe)
+		if (bPlayerPlaced && TransState == ETrans::None)
+		{
+			if (ABRCharacter* Placed = GetPlayer())
+			{
+				if (!bIntroPending && !GetWorldTimerManager().IsTimerActive(IntroUnlockTimer))
+				{
+					Placed->SetInputLocked(false);
+				}
+			}
+			SetLocalLoading(false);
+			// Avertissement : cas rare (latence, pertes), visible dans les rapports des tests reseau
+			UE_LOG(LogBackrooms, Warning, TEXT("Personnage place apres la fin de l'arrivee : entrees deverrouillees, fin du chargement signalee"));
+		}
 	}
 
 	switch (TransState)
@@ -1672,9 +1729,10 @@ void ABRWorld::Tick(float DeltaSeconds)
 		break;
 	}
 
-	if (DeathTimer > 6.f && IsNetGame() && !HasLivingTeammate())
+	if (DeathTimer > BRTxn::DownedAloneSeconds && IsNetGame())
 	{
-		DeathTimer = 6.f; // plus personne pour nous relever
+		// Plus personne pour nous relever : 6 s. v4.16 : l'hote retient le meme instant (ABRCharacter::MinRespawnDelay)
+		DeathTimer = BRTxn::ClampDowned(DeathTimer, HasLivingTeammate());
 	}
 	if (DeathTimer > 0.f)
 	{

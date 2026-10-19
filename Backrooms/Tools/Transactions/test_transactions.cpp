@@ -1048,6 +1048,191 @@ namespace
 			Scenario(Buf, Ok == Runs);
 		}
 	}
+
+	// ---------------------------------------------------------------------- F. v4.16 : reveil en cooperation
+	// Modele : le joueur A tombe a t = 0 (cause relevable, fenetre de 30 s) ; ses coequipiers changent d'etat (debout, a
+	// terre, partis) a des instants donnes ; ils sont pres de A ou a plus de 150 m (bFar), ou viennent d'arriver dans la partie
+	// (bArriving : leur personnage n'est pas encore recu chez A). A apprend leur etat avec un retard (latence de leur acteur,
+	// par defaut celle du reseau). Le client applique DownedDelay a la mort puis ClampDowned a chaque pas (50 ms) avec ce qu'il
+	// sait ; a la fin du delai il signale son reveil, que l'hote juge a t + L avec ServerMinWake (AloneAfter : premier pas ou
+	// l'hote ne voit aucun coequipier debout). Un refus remet A a terre pour le temps restant + 0,25 s
+	// (ABRCharacter::ClientRespawnDenied), quand la reponse arrive (t + 2L). Regles d'avant (v4.15) : le client ne compte que
+	// les personnages repliques chez lui (rien au-dela de 150 m), l'hote garde la regle fixee a la mort. Regles v4.16
+	// (relecture) : les personnages des joueurs sont repliques a toute distance (ABRCharacter::IsNetRelevantFor) ; seul un
+	// joueur dont le personnage n'est pas encore recu est suppose vivant (BRTxn::MateKnownAlive).
+	enum class EMate : uint8_t { Up, Down, Gone };
+	struct FMate
+	{
+		EMate Start = EMate::Up;
+		std::vector<std::pair<int, EMate>> Changes; // (pas de 50 ms, nouvel etat)
+		bool bFar = false;
+		bool bArriving = false;
+		int LagSteps = -1; // retard propre de cet acteur (pas) ; < 0 : celui du reseau
+	};
+	EMate MateAt(const FMate& M, int Step)
+	{
+		EMate S = M.Start;
+		for (const std::pair<int, EMate>& C : M.Changes)
+		{
+			if (Step >= C.first)
+			{
+				S = C.second;
+			}
+		}
+		return S;
+	}
+	struct FWakeRun
+	{
+		int Denials = 0;
+		int WakeStep = -1; // pas ou l'hote accepte le reveil
+	};
+	FWakeRun SimulateWake(const std::vector<FMate>& Mates, int LagSteps, bool bNewRules)
+	{
+		const float Window = 30.f;
+		const float Dt = 0.05f;
+		auto Known = [&](int Step)
+		{
+			int Visible = 0, Unseen = 0;
+			for (const FMate& M : Mates)
+			{
+				const int Seen = Step - (M.LagSteps >= 0 ? M.LagSteps : LagSteps);
+				const EMate S = MateAt(M, Seen < 0 ? 0 : Seen);
+				if (S == EMate::Gone)
+				{
+					continue;
+				}
+				// Personnage absent chez A : en v4.15 au-dela de 150 m ou a l'arrivee ; en v4.16 a l'arrivee seulement
+				if (M.bArriving || (!bNewRules && M.bFar))
+				{
+					++Unseen;
+				}
+				else if (S == EMate::Up)
+				{
+					++Visible;
+				}
+			}
+			return MateKnownAlive(Visible, bNewRules ? Unseen : 0, false);
+		};
+		auto HostAlive = [&](int Step)
+		{
+			for (const FMate& M : Mates)
+			{
+				if (MateAt(M, Step) == EMate::Up)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+		const bool bMateAtDeath = HostAlive(0);
+		int AloneStep = -1;
+		float Timer = DownedDelay(Known(0), true, Window);
+		int ResumeStep = 0; // reponse d'un refus attendue jusqu'a ce pas
+		FWakeRun R;
+		for (int Step = 1; Step < 2400; ++Step)
+		{
+			if (AloneStep < 0 && !HostAlive(Step))
+			{
+				AloneStep = Step;
+			}
+			if (Step < ResumeStep)
+			{
+				continue;
+			}
+			Timer -= Dt;
+			if (Timer > DownedAloneSeconds)
+			{
+				Timer = ClampDowned(Timer, Known(Step));
+			}
+			if (Timer > 0.f)
+			{
+				continue;
+			}
+			// Reveil signale : juge par l'hote a l'arrivee
+			const int Arrive = Step + LagSteps;
+			const float Elapsed = static_cast<float>(Arrive) * Dt;
+			const float AloneAfter = (bNewRules && AloneStep >= 0 && AloneStep <= Arrive) ? static_cast<float>(AloneStep) * Dt : -1.f;
+			const float Min = ServerMinWake(true, bMateAtDeath, AloneAfter, Window);
+			if (Elapsed >= Min)
+			{
+				R.WakeStep = Arrive;
+				return R;
+			}
+			++R.Denials;
+			ResumeStep = Step + 2 * LagSteps;
+			Timer = (Min - Elapsed) + 0.25f;
+		}
+		return R;
+	}
+
+	void WakeScenario(const char* Name, const std::vector<FMate>& Mates, int LagSteps, int MinWakeMs, int MaxWakeMs, bool bOldDenied, int MaxNewDenials = 0)
+	{
+		const FWakeRun Old = SimulateWake(Mates, LagSteps, false);
+		const FWakeRun New = SimulateWake(Mates, LagSteps, true);
+		const int NewMs = New.WakeStep * 50;
+		const bool bOk = New.Denials <= MaxNewDenials && New.WakeStep >= 0 && NewMs >= MinWakeMs && NewMs <= MaxWakeMs && (Old.Denials > 0) == bOldDenied;
+		std::printf("  %s\n    regle v4.15 : %d refus, reveil a %d ms ; regle v4.16 : %d refus, reveil a %d ms (attendu %d..%d ms)\n", Name, Old.Denials,
+			Old.WakeStep * 50, New.Denials, NewMs, MinWakeMs, MaxWakeMs);
+		Check(bOk, Name);
+		std::printf("    %s\n", bOk ? "OK" : "ECHEC");
+	}
+
+	void TestCoopWake()
+	{
+		std::printf("\nF. v4.16 : reveil en cooperation (delai du joueur a terre, minimum de l'hote)\n");
+		const int FailuresBefore = GFailures;
+		// Fonctions elles-memes
+		Check(MateKnownAlive(1, 0, true) && MateKnownAlive(1, 0, false) && MateKnownAlive(0, 1, false) && !MateKnownAlive(0, 1, true) && !MateKnownAlive(0, 0, false),
+			"F0 MateKnownAlive");
+		Check(DownedDelay(true, true, 30.f) == 30.f && DownedDelay(false, true, 30.f) == 6.f && DownedDelay(true, false, 30.f) == 6.f, "F0 DownedDelay");
+		Check(ClampDowned(20.f, false) == 6.f && ClampDowned(5.f, false) == 5.f && ClampDowned(20.f, true) == 20.f, "F0 ClampDowned");
+		Check(ServerMinWake(true, true, -1.f, 30.f) == 28.5f && ServerMinWake(true, true, 3.f, 30.f) == 7.5f && ServerMinWake(true, false, -1.f, 30.f) == 4.5f
+			&& ServerMinWake(false, true, -1.f, 30.f) == 4.5f && ServerMinWake(true, true, 40.f, 30.f) == 28.5f, "F0 ServerMinWake (v4.15 sans AloneAfter : identique)");
+		std::printf("  F0 fonctions : %s\n", GFailures == FailuresBefore ? "OK" : "ECHEC");
+		FMate Near;
+		WakeScenario("F1 coequipier debout a cote tout du long : fenetre entiere, accepte", { Near }, 2, 30000, 30300, false);
+		FMate Far;
+		Far.bFar = true;
+		WakeScenario("F2 coequipier debout a plus de 150 m : v4.15 non replique, 6 s puis refus ; v4.16 replique, fenetre entiere", { Far }, 2, 30000, 30300, true);
+		FMate Drops;
+		Drops.Changes = { { 60, EMate::Down }, { 180, EMate::Up } };
+		WakeScenario("F3 le seul coequipier tombe a 3 s (reveil a 9 s), latence 100 ms : reveil 6 s apres", { Drops }, 2, 9000, 9600, true);
+		WakeScenario("F4 le meme, latence 350 ms", { Drops }, 7, 9000, 10200, true);
+		FMate A3, B3, C3;
+		A3.Changes = { { 60, EMate::Down }, { 180, EMate::Up } };
+		B3.Changes = { { 80, EMate::Down }, { 200, EMate::Up } };
+		C3.Changes = { { 100, EMate::Down }, { 220, EMate::Up } };
+		WakeScenario("F5 quatre joueurs : les trois autres tombent a 3, 4 et 5 s", { A3, B3, C3 }, 2, 11000, 11600, true);
+		FMate AllDown;
+		AllDown.Start = EMate::Down;
+		AllDown.Changes = { { 100, EMate::Up } };
+		WakeScenario("F6 aucun coequipier debout a la mort : 6 s, accepte", { AllDown }, 2, 6000, 6400, false);
+		FMate Leaves;
+		Leaves.Changes = { { 200, EMate::Gone } };
+		WakeScenario("F7 le coequipier quitte la partie a 10 s : reveil 6 s apres", { Leaves }, 2, 16000, 16600, true);
+		FMate FarDrops;
+		FarDrops.bFar = true;
+		FarDrops.Changes = { { 100, EMate::Down } };
+		WakeScenario("F8 coequipier a plus de 150 m qui tombe a 5 s : v4.15 refus ; v4.16 sa chute est vue, reveil 6 s apres", { FarDrops }, 2, 11000, 11600, true);
+		// F9 : cas residuel : l'etat de deux acteurs arrive dans le desordre (releve vu 500 ms apres la chute de l'autre) : le
+		// client se croit seul un instant alors que l'hote ne l'a jamais ete : un refus, puis le reveil a la fin de la fenetre
+		FMate Fell, Revived;
+		Fell.Changes = { { 40, EMate::Down } };
+		Revived.Start = EMate::Down;
+		Revived.Changes = { { 38, EMate::Up } };
+		Revived.LagSteps = 12;
+		WakeScenario("F9 cas residuel (etats de deux acteurs dans le desordre) : au plus un refus, reveil avant 31 s", { Fell, Revived }, 2, 28000, 31000, true, 1);
+		// v4.16 (relecture) : la premiere correction supposait vivant tout coequipier non replique : un coequipier lointain deja
+		// a terre faisait attendre 30 s au lieu de 6 s (regle de mort de la v4.15 changee). Il est maintenant replique
+		FMate FarDown;
+		FarDown.bFar = true;
+		FarDown.Start = EMate::Down;
+		FarDown.Changes = { { 100, EMate::Up } };
+		WakeScenario("F10 coequipier a plus de 150 m deja a terre a la mort : 6 s comme en v4.15, accepte", { FarDown }, 2, 6000, 6400, false);
+		FMate Arriving;
+		Arriving.bArriving = true;
+		WakeScenario("F11 coequipier qui arrive (personnage pas encore recu), debout chez l'hote : v4.15 6 s puis refus ; v4.16 fenetre entiere", { Arriving }, 2, 30000, 30300, true);
+	}
 }
 
 int main()
@@ -1058,6 +1243,7 @@ int main()
 	TestRecovery();
 	TestDecisions();
 	TestEndToEnd();
+	TestCoopWake();
 	std::printf("\nVerifications : %d, echecs : %d\nRESULTAT : %s\n", GChecks, GFailures, GFailures == 0 ? "OK" : "ECHEC");
 	return GFailures == 0 ? 0 : 1;
 }
