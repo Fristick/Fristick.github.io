@@ -2337,6 +2337,13 @@ msgctxt "BR,HUD.1992ThresholdSystems"
 msgid "© 1992 THRESHOLD SYSTEMS"
 msgstr "© 1992 THRESHOLD SYSTEMS"
 
+#. Key:	HUD.PadCharacterFooter
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4239)
+#: Source/Backrooms/Private/BRHUD.cpp(4239)
+msgctxt "BR,HUD.PadCharacterFooter"
+msgid "[{Prev}] [{Next}]  ONGLETS     [{Move}]  CHOISIR     [{Use}]  UTILISER / ÉQUIPER     [{Inspect}]  INSPECTER     [{Close}]  FERMER"
+msgstr "[{Prev}] [{Next}]  ONGLETS     [{Move}]  CHOISIR     [{Use}]  UTILISER / ÉQUIPER     [{Inspect}]  INSPECTER     [{Close}]  FERMER"
+
 #. Key:	HUD.PadInventoryFooter
 #. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4211)
 #: Source/Backrooms/Private/BRHUD.cpp(4211)
@@ -3820,6 +3827,13 @@ msgstr "CROIX DROITE"
 msgctxt "BR,Key.Pad.LeftStick"
 msgid "STICK GAUCHE"
 msgstr "STICK GAUCHE"
+
+#. Key:	Key.Pad.Dpad
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(419)
+#: Source/Backrooms/Private/BRKeys.cpp(419)
+msgctxt "BR,Key.Pad.Dpad"
+msgid "CROIX"
+msgstr "CROIX"
 
 #. Key:	Level.0.Title
 #. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(43)

@@ -1164,6 +1164,10 @@ private:
 	TArray<TWeakObjectPtr<ABRChunk>> LightRefreshQueue;
 	float ShadowLODTimer = 0.f;
 	int32 ShadowedLights = 0;
+	/** v4.16 (relecture) : vue locale pour laquelle l'effacement des decalques des chunks construits a ete calcule (largeur
+	 *  interne, champ horizontal ; 0 : pas encore) */
+	float DecalFadeWidth = 0.f;
+	float DecalFadeFov = 0.f;
 	/** v4.8 : arrivee dans un niveau : ecran noir tenu (8 s au plus) tant que des shaders se compilent ; modeles a
 	 *  squelette montres une fois derriere le noir pour preparer leurs shaders (PSO, ray tracing) et leurs textures */
 	float ShaderHold = 0.f;

@@ -13,17 +13,40 @@
 namespace BRDecal
 {
 	// ---------------------------------------------------------------------------------------------------- bornes v4.16
-	/** Decalques projetes (un composant chacun) par chunk, au plus : les premiers tires, dans l'ordre des cellules (le meme chez
-	 *  l'hote et chez les clients). Ordre de grandeur : 15 a 25 par chunk du Level 0 */
+	/** Decalques projetes (un composant chacun) par chunk, au plus. v4.16 (relecture) : au-dela, les tirages gardes sont
+	 *  repartis sur tout le chunk (KeepUnderCap), dans l'ordre des cellules (le meme chez l'hote et chez les clients) ; avant,
+	 *  les premiers tires seulement (un chunk plein restait nu dans ses dernieres colonnes). Ordre de grandeur : 15 a 25 par
+	 *  chunk du Level 0 */
 	constexpr int MaxProjectedPerChunk = 40;
-	/** Taches au sol (instances d'un seul lot) par chunk, au plus */
+	/** Taches au sol (instances d'un seul lot) par chunk, au plus (meme repartition) */
 	constexpr int MaxFloorPatchesPerChunk = 24;
-	/** Distance utile (cm) : un decalque s'efface entre 2/3 de cette distance et elle, pour une image de reference de 1920 px de
-	 *  large et un champ horizontal de 88 degres. Le moteur rapporte l'effacement a la taille a l'ecran : la distance suit la
-	 *  definition interne (1536 px : 80 % de la reference). Avant : FadeScreenSize 0,01 (jusqu'a 116 m pour une aureole) */
+	/** Distance utile (cm) : un decalque s'efface entre 2/3 de cette distance et elle. Le moteur rapporte l'effacement a la
+	 *  taille a l'ecran, donc a la largeur interne de l'image et au champ : v4.16 (relecture) FadeScreenSize est calcule pour la
+	 *  vue locale (largeur interne, champ horizontal du reglage), puis recalcule quand elle change (ABRWorld) : 35 m a toute
+	 *  definition. Avant la relecture : calcule pour 1920 px seulement (19 m a 1024 px, 70 m a 3840 px). Avant la v4.16 :
+	 *  FadeScreenSize 0,01 (jusqu'a 116 m pour une aureole a 1920 px) */
 	constexpr float UsefulDistance = 3500.f;
+	/** Vue de reference (sans vue locale : serveur dedie, aucun ecran) */
 	constexpr float ReferenceWidth = 1920.f;
 	constexpr float ReferenceHFovDeg = 88.f;
+
+	/** v4.16 (relecture) : sur Count tirages ranges dans l'ordre des cellules, le tirage Index est-il garde sous la borne Max ?
+	 *  Exactement min(Count, Max) tirages gardes, repartis regulierement (jamais plus de ceil(Count / Max) - 1 ecartes de
+	 *  suite) ; le meme resultat partout (entiers seulement) */
+	inline bool KeepUnderCap(int Index, int Count, int Max)
+	{
+		if (Count <= Max)
+		{
+			return true;
+		}
+		if (Max <= 0 || Index < 0 || Index >= Count)
+		{
+			return false;
+		}
+		const long long Next = static_cast<long long>(Index + 1) * Max / Count;
+		const long long Here = static_cast<long long>(Index) * Max / Count;
+		return Next > Here;
+	}
 	/** Lot des taches au sol : distance d'affichage (cm) ; avant 4500 */
 	constexpr float FloorPatchCull = 3500.f;
 
@@ -191,13 +214,25 @@ namespace BRDecal
 	/** FadeScreenSize d'avant la v4.16 (le meme pour tous) : gardee comme plancher, un petit decalque s'efface toujours aussi tot */
 	constexpr float LegacyFadeScreenSize = 0.01f;
 
-	/** UDecalComponent::FadeScreenSize d'un decalque de demi-taille maximale MaxHalfSize : invisible au plus tard a UsefulDistance a
-	 *  la reference (le moteur : visible tant que demi-taille / distance > FadeScreenSize x facteur de champ ; fondu sur 1/3) ; un
-	 *  petit decalque (demi-taille < 21 cm) s'efface plus tot, comme avant */
+	/** UDecalComponent::FadeScreenSize d'un decalque de demi-taille maximale MaxHalfSize, pour une vue de ViewWidth px de large
+	 *  (largeur interne) et de champ horizontal HFovDeg : invisible au plus tard a UsefulDistance (le moteur : visible tant que
+	 *  demi-taille / distance > FadeScreenSize x facteur de champ ; fondu sur 1/3) ; un petit decalque s'efface plus tot, comme
+	 *  avant (plancher LegacyFadeScreenSize). v4.16 (relecture) : la vue est un parametre (avant : 1920 px toujours) */
+	inline float FadeScreenSizeFor(float MaxHalfSize, float ViewWidth, float HFovDeg)
+	{
+		const float Fss = MaxHalfSize / (UsefulDistance * EngineFovFactor(ViewWidth, HFovDeg));
+		return Fss > LegacyFadeScreenSize ? Fss : LegacyFadeScreenSize;
+	}
 	inline float FadeScreenSizeFor(float MaxHalfSize)
 	{
-		const float Fss = MaxHalfSize / (UsefulDistance * EngineFovFactor(ReferenceWidth, ReferenceHFovDeg));
-		return Fss > LegacyFadeScreenSize ? Fss : LegacyFadeScreenSize;
+		return FadeScreenSizeFor(MaxHalfSize, ReferenceWidth, ReferenceHFovDeg);
+	}
+
+	/** v4.16 (relecture) : la vue a change assez pour recalculer l'effacement des decalques deja crees (3 % de la largeur, 1
+	 *  degre de champ) */
+	inline bool FadeViewChanged(float AppliedWidth, float AppliedHFovDeg, float ViewWidth, float HFovDeg)
+	{
+		return std::fabs(ViewWidth - AppliedWidth) > AppliedWidth * 0.03f || std::fabs(HFovDeg - AppliedHFovDeg) > 1.f;
 	}
 
 	/** Distance (cm) ou le decalque disparait pour une vue donnee (largeur interne, champ horizontal) */

@@ -733,16 +733,48 @@ namespace BRPadInput
 		{
 			return false;
 		}
+		ABRHUD* H = Cast<ABRHUD>(PC->GetHUD());
 		if (bClose)
 		{
-			PC->SetInventoryOpen(false);
+			// v4.16 (relecture) : B ferme d'abord l'inspection ouverte, puis l'inventaire
+			if (!H || !H->PadBack())
+			{
+				PC->SetInventoryOpen(false);
+			}
 			return true;
 		}
-		if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
+		if (H)
 		{
 			H->PadInventory(TabStep, ScrollStep, bHint);
 		}
 		return true;
+	}
+
+	/** v4.16 (relecture) : croix de la manette dans l'inventaire (ABRHUD::PadDirection : curseur des cases dans PERSONNAGE,
+	 *  onglets et defilement ailleurs) */
+	bool Direction(ABRPlayerController* PC, bool bOpen, const FKey& Key, int32 DX, int32 DY)
+	{
+		if (!bOpen || !PC->IsInputKeyDown(Key))
+		{
+			return false;
+		}
+		if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
+		{
+			H->PadDirection(DX, DY);
+		}
+		return true;
+	}
+
+	/** v4.16 (relecture) : A (utiliser, equiper) ou X (inspecter) sur la case du curseur de PERSONNAGE ; false hors de cet onglet
+	 *  ou si ce n'est pas ce bouton (l'action habituelle suit) */
+	bool SlotAction(ABRPlayerController* PC, bool bOpen, const FKey& Key, bool bInspect)
+	{
+		if (!bOpen || !PC->IsInputKeyDown(Key))
+		{
+			return false;
+		}
+		ABRHUD* H = Cast<ABRHUD>(PC->GetHUD());
+		return H && H->PadSlotAction(bInspect);
 	}
 }
 
@@ -1202,7 +1234,7 @@ void ABRPlayerController::OnSprintCompleted(const FInputActionValue& Value)
 
 void ABRPlayerController::OnCrouch(const FInputActionValue& Value)
 {
-	// v4.16 : B ferme l'inventaire (retour, comme dans les menus d'une console)
+	// v4.16 : B ferme l'inventaire (retour, comme dans les menus d'une console) ; v4.16 (relecture) : d'abord l'inspection ouverte
 	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Right, 0, 0, false, true))
 	{
 		return;
@@ -1234,6 +1266,11 @@ void ABRPlayerController::OnFlash(const FInputActionValue& Value)
 
 void ABRPlayerController::OnInteract(const FInputActionValue& Value)
 {
+	// v4.16 (relecture) : X dans PERSONNAGE : inspecter la case du curseur
+	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Left, true))
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1341,6 +1378,9 @@ void ABRPlayerController::TogglePause()
 	else
 	{
 		WriteActiveSave();
+		// v4.16 (relecture) : curseur des cartes sur REPRENDRE, montre des que la manette (ou une fleche) sert
+		PauseCursor = 0;
+		bPauseKeyNav = false;
 	}
 	// En multijoueur le monde continue de tourner pour les autres
 	if (!IsNetGame())
@@ -1522,8 +1562,9 @@ void ABRPlayerController::OnQuit(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 {
-	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
-	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Left, -1, 0))
+	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas) ; v4.16
+	// (relecture) : dans PERSONNAGE, curseur des cases (ABRHUD::PadDirection)
+	if (BRPadInput::Direction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Left, -1, 0))
 	{
 		return;
 	}
@@ -1542,8 +1583,8 @@ void ABRPlayerController::OnMenuPrev(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 {
-	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
-	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Right, 1, 0))
+	// v4.16 : croix de la manette dans l'inventaire (v4.16, relecture : curseur des cases dans PERSONNAGE)
+	if (BRPadInput::Direction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Right, 1, 0))
 	{
 		return;
 	}
@@ -1561,28 +1602,32 @@ void ABRPlayerController::OnMenuNext(const FInputActionValue& Value)
 
 void ABRPlayerController::OnMenuUp(const FInputActionValue& Value)
 {
-	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
-	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Up, 0, -1))
+	// v4.16 : croix de la manette dans l'inventaire (v4.16, relecture : curseur des cases dans PERSONNAGE)
+	if (BRPadInput::Direction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Up, 0, -1))
 	{
 		return;
 	}
 	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		SetMenuCursor((MenuCursor + GetMenuItemCount() - 1) % FMath::Max(1, GetMenuItemCount()));
+		return;
 	}
+	MovePauseCursor(-1);
 }
 
 void ABRPlayerController::OnMenuDown(const FInputActionValue& Value)
 {
-	// v4.16 : croix de la manette dans l'inventaire : onglets (gauche, droite), defilement des listes (haut, bas)
-	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Down, 0, 1))
+	// v4.16 : croix de la manette dans l'inventaire (v4.16, relecture : curseur des cases dans PERSONNAGE)
+	if (BRPadInput::Direction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_DPad_Down, 0, 1))
 	{
 		return;
 	}
 	if (bInMenu && !bInventory && !IsModalDialogOpen())
 	{
 		SetMenuCursor((MenuCursor + 1) % FMath::Max(1, GetMenuItemCount()));
+		return;
 	}
+	MovePauseCursor(1);
 }
 
 void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
@@ -1592,9 +1637,70 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 		BRDisplay::Confirm(); // v4.9 : Entree pendant la confirmation de l'affichage : conserver
 		return;
 	}
+	// v4.16 (relecture) : A dans PERSONNAGE : utiliser, equiper ou retirer l'objet de la case du curseur
+	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Bottom, false))
+	{
+		return;
+	}
 	if (bInMenu && !bInventory)
 	{
 		MenuActivate(MenuCursor);
+		return;
+	}
+	// v4.16 (relecture) : pause : la carte du curseur (A, Entree ou Espace), une fois le curseur montre (manette, fleches)
+	if (bPauseMenu && !bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && IsPauseCursorShown())
+	{
+		ActivatePauseItem(PauseCursor);
+	}
+}
+
+void ABRPlayerController::SetPauseCursor(int32 Item)
+{
+	PauseCursor = FMath::Clamp(Item, 0, PauseItemCount - 1);
+}
+
+bool ABRPlayerController::IsPauseCursorShown() const
+{
+	return bPadActive || bPauseKeyNav;
+}
+
+void ABRPlayerController::MovePauseCursor(int32 Step)
+{
+	// v4.16 (relecture) : croix de la manette (ou fleches, Z / S) dans la pause : carte precedente ou suivante
+	if (!bPauseMenu || bInMenu || bInventory || IsModalDialogOpen() || CaptureAction != INDEX_NONE)
+	{
+		return;
+	}
+	if (IsPauseCursorShown())
+	{
+		PauseCursor = (PauseCursor + Step + PauseItemCount) % PauseItemCount;
+	}
+	bPauseKeyNav = true; // premier appui : le curseur apparait sur la carte en cours
+	PlayMenuSound(TEXT("S_UIClick"), 0.35f);
+}
+
+void ABRPlayerController::ActivatePauseItem(int32 Item)
+{
+	// v4.16 (relecture) : actions des cartes de la pause (souris : ABRHUD::HandlePauseMouse ; manette : A)
+	switch (Item)
+	{
+	case 0:
+		TogglePause();
+		break;
+	case 1:
+		SetInventoryOpen(true, 2); // PARAMETRES
+		break;
+	case 2:
+		SetInventoryOpen(true, 3); // TOUCHES
+		break;
+	case 3:
+		ReturnToMainMenu();
+		break;
+	case 4:
+		QuitToDesktop();
+		break;
+	default:
+		break;
 	}
 }
 

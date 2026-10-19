@@ -71,4 +71,6 @@ namespace BRKeys
 	FKey GamepadKey(EBRAction Action);
 	/** Nom court d'un bouton de la manette (A, B, X, Y, LB, RB, LT, RT, LS, RS, VUE, MENU, CROIX...) */
 	FString GamepadName(const FKey& Key);
+	/** v4.16 (relecture) : nom de la croix entiere (ses quatre directions) */
+	FString GamepadDpadName();
 }

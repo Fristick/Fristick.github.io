@@ -146,6 +146,14 @@ public:
 	/** v4.14 : actions de jeu permises (ni menu, ni pause, ni inventaire, ni dialogue, ni saisie de touche) */
 	bool CanPlayActions() const { return CanPlay(); }
 	bool IsPauseMenuOpen() const { return bPauseMenu; }
+	/** v4.16 (relecture) : cartes de la pause a la manette (croix, A) ou aux fleches (Entree) : carte du curseur (0 reprendre,
+	 *  1 parametres, 2 touches, 3 menu principal, 4 quitter le jeu), montree une fois la manette ou une fleche utilisee ; la
+	 *  souris la deplace. Avant : souris seulement */
+	static constexpr int32 PauseItemCount = 5;
+	int32 GetPauseCursor() const { return PauseCursor; }
+	void SetPauseCursor(int32 Item);
+	bool IsPauseCursorShown() const;
+	void ActivatePauseItem(int32 Item);
 	void SetInventoryOpen(bool bOpen, int32 Tab = INDEX_NONE);
 	/** Onglet demande a l'ouverture de l'inventaire (lu une fois par le HUD) */
 	int32 ConsumeRequestedTab();
@@ -473,6 +481,10 @@ private:
 	float SafeSpotTimer = 0.f;
 	/** v4.7 : derniere entree venue de la manette */
 	bool bPadActive = false;
+	/** v4.16 (relecture) : curseur des cartes de la pause, montre depuis un appui de la croix ou d'une fleche (bPauseKeyNav) */
+	int32 PauseCursor = 0;
+	bool bPauseKeyNav = false;
+	void MovePauseCursor(int32 Step);
 
 	float MenuBlur = 0.f;
 	float MenuDrift = 0.f;

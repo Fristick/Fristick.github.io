@@ -4,21 +4,25 @@
 //      dans les 22 langues : chaque texte dessine est releve (ABRHUD::bTestRecordTexts) et controle : dans l'image, dans son
 //      panneau, dans la largeur permise par son appelant, sans chevauchement ; textes raccourcis et tailles effectives notes.
 //      Captures v416_hud_<taille>_<langue>_<onglet> (fr, de, ru, ar, ja) ;
-//   2. vraies fenetres : 1280 x 720, puis les plus grandes fenetres 16:9 et 64:27 que l'ecran accepte (tailles obtenues
-//      notees), memes controles sur l'image reelle ; modes d'affichage : les trois presents dans PARAMETRES > VIDEO, essai du
-//      plein ecran fenetre (sans bordures) et retour (le plein ecran exclusif seulement avec -BRV416PleinEcran) ;
+//   2. vraies fenetres : 1280 x 720, puis les plus grandes fenetres 16:9 et 64:27 que l'ecran accepte (taille obtenue
+//      comparee a la taille demandee), memes controles sur l'image reelle ; modes d'affichage : libelles de la ligne MODE
+//      D'AFFICHAGE lus dans chaque mode essaye, essai du plein ecran fenetre (sans bordures : mode et taille de l'ecran obtenus)
+//      et retour a la fenetre du lancement (le plein ecran exclusif seulement avec -BRV416PleinEcran, sinon NON VERIFIE) ;
 //   3. manette : invites des boutons (HUD, pause, inventaire, scanner) = liaisons reelles de la manette ; inventaire a la
-//      manette par de vraies touches injectees (LB / RB, croix, Y, B) ;
+//      manette par de vraies touches injectees (LB / RB, croix, Y, B ; dans PERSONNAGE, curseur des cases, X inspecter, A
+//      equiper) ; cartes de la pause a la croix et A ; vision nocturne du camescope reste dans le sac (croix haut) ;
 //   4. scanner du Level 6 (graine 4136) : HUD contextuel (rappel des touches au clavier et a la manette, recharge, cone du
 //      focus, releve de la mire, repos, aide des parasites derriere et devant) ;
-//   5. les neuf entites (Level 4, graine 4242 ; Smiler dans le noir) : premiere personne au repos et en menace (geste arme),
-//      troisieme personne de face et de cote (vue d'un coequipier : affectation des materiaux, appui des pieds, poses) ;
-//      hauteur du pied le plus bas notee ;
+//   5. les neuf entites (Level 4, graine 4242 ; Smiler dans le noir) : premiere personne au repos (posee au sol) et en menace
+//      (geste arme), troisieme personne locale de face et de cote (affectation des materiaux, appui des pieds, poses) ;
+//      ecart au sol du bas des volumes visibles controle. La vue d'un vrai coequipier (client) n'est pas faite ici : NON
+//      VERIFIE (banc reseau) ;
 //   6. kit du Level 0 (graine 9) : raccords des plinthes le long de chaque face de mur, plafonds et sols cellule par cellule
 //      (boites des instances posees), captures des raccords (angle, poteau droit, jambage, plafond contre mur, plafond entre
 //      deux cellules) ;
 //   7. decalques d'usure (Levels 0 graines 9 et 4242, 1 et 2 graine 4242) : surface sous chaque decalque (traces), aucun sur
-//      une ouverture ou un objet, taches au sol posees (ni flottantes ni enfouies), nombre par chunk, distance utile, motifs.
+//      une ouverture, un objet ou en partie dans le vide (murs), taches au sol posees (ni flottantes ni enfouies), nombre par
+//      chunk et tirages ecartes par la borne, distance utile pour la vue locale, motifs.
 // Une condition manquante (scanner, kit, decalques, cible de rendu, entite) est notee NON VERIFIE, jamais comptee reussie.
 // Reglages, langue, affichage et manette du joueur retablis au bilan.
 #include "BRAutoTest.h"
@@ -106,6 +110,8 @@ namespace BRTestV416Vis
 		float MaxW = 0.f;
 		float Points = 0.f;
 		bool bCut = false;
+		/** v4.16 (relecture) : couche (infobulle, inspection : au-dessus du reste, sur leur propre fond) */
+		int32 Layer = 0;
 	};
 
 	/** Bilan des controles de textes */
@@ -137,6 +143,36 @@ namespace BRTestV416Vis
 		return S.Len() > 48 ? S.Left(46) + TEXT("..") : S;
 	}
 
+	/** v4.16 (relecture) : le texte montre la valeur repere de la sante (MarkerHealth = 93) en pourcentage : "93 %", "93%", en
+	 *  chiffres latins, arabes ou persans, espaces insecables compris */
+	bool ShowsMarkerPercent(const FString& S)
+	{
+		const TCHAR* const Forms[] = { TEXT("93"), TEXT("\u0669\u0663"), TEXT("\u06f9\u06f3") };
+		for (const TCHAR* Form : Forms)
+		{
+			int32 From = 0;
+			while (true)
+			{
+				const int32 At = S.Find(Form, ESearchCase::CaseSensitive, ESearchDir::FromStart, From);
+				if (At == INDEX_NONE)
+				{
+					break;
+				}
+				int32 K = At + 2;
+				while (K < S.Len() && (S[K] == TEXT(' ') || S[K] == 0x00A0 || S[K] == 0x202F || S[K] == 0x2009))
+				{
+					++K;
+				}
+				if (K < S.Len() && (S[K] == TEXT('%') || S[K] == 0x066A))
+				{
+					return true;
+				}
+				From = At + 1;
+			}
+		}
+		return false;
+	}
+
 	/** Controles d'une image : textes dans l'image (W x H), dans leur panneau, dans la largeur permise, sans chevauchement */
 	void CheckTexts(const TArray<FDrawnText>& T, float W, float H, const FString& Where, FTextReport& R)
 	{
@@ -166,13 +202,14 @@ namespace BRTestV416Vis
 				++R.OverWidth;
 				R.Example(FString::Printf(TEXT("%s : %.0f px pour %.0f permis \"%s\""), *Where, A.W, A.MaxW, *Short(A.Text)));
 			}
-			// Hors du panneau : seulement un texte qui le touche et en depasse (un texte dessine plus loin, apres le panneau, n'en est
-			// pas un debordement)
-			const bool bTouchesPanel = A.X < A.PX + A.PW && A.X + A.W > A.PX && A.Y < A.PY + A.PH && A.Y + A.H > A.PY;
-			if (A.PW > 0.f && bTouchesPanel && (A.X < A.PX - 2.f || A.X + A.W > A.PX + A.PW + 2.f || A.Y < A.PY - 2.f || A.Y + A.H > A.PY + A.PH + 2.f))
+			// Hors du panneau : contenance stricte (2 px de marge). v4.16 (relecture) : chaque panneau du HUD est ferme a la fin de
+			// son contenu (ABRHUD::EndTestPanel) : un texte dessine apres lui est rapporte a la bande de l'inventaire ou a l'image ;
+			// une ligne entiere sous le bord du panneau est donc un debordement (avant : ignoree, il fallait qu'elle touche le panneau)
+			if (A.PW > 0.f && (A.X < A.PX - 2.f || A.X + A.W > A.PX + A.PW + 2.f || A.Y < A.PY - 2.f || A.Y + A.H > A.PY + A.PH + 2.f))
 			{
 				++R.OutPanel;
-				R.Example(FString::Printf(TEXT("%s : hors de son panneau (texte %.0f..%.0f, panneau %.0f..%.0f) \"%s\""), *Where, A.X, A.X + A.W, A.PX, A.PX + A.PW, *Short(A.Text)));
+				R.Example(FString::Printf(TEXT("%s : hors de son panneau (texte %.0f..%.0f x %.0f..%.0f, panneau %.0f..%.0f x %.0f..%.0f) \"%s\""), *Where, A.X, A.X + A.W, A.Y,
+					A.Y + A.H, A.PX, A.PX + A.PW, A.PY, A.PY + A.PH, *Short(A.Text)));
 			}
 			// Chevauchement : coeur des lettres (60 % de la hauteur de ligne), 1 px de marge laterale
 			const float AX0 = A.X + 1.f, AX1 = A.X + A.W - 1.f, AY0 = A.Y + A.H * 0.2f, AY1 = A.Y + A.H * 0.8f;
@@ -182,6 +219,10 @@ namespace BRTestV416Vis
 				if (A.Text == B.Text && FMath::Abs(A.X - B.X) < 0.6f && FMath::Abs(A.Y - B.Y) < 0.6f)
 				{
 					continue; // meme texte dessine deux fois au meme endroit
+				}
+				if (A.Layer != B.Layer)
+				{
+					continue; // v4.16 (relecture) : une infobulle ou une inspection cache ce qui est dessous (son fond)
 				}
 				const float BX0 = B.X + 1.f, BX1 = B.X + B.W - 1.f, BY0 = B.Y + B.H * 0.2f, BY1 = B.Y + B.H * 0.8f;
 				const float IW = FMath::Min(AX1, BX1) - FMath::Max(AX0, BX0);
@@ -224,8 +265,43 @@ namespace BRTestV416Vis
 	bool bSaved = false;
 	FBRSettings SavedSettings;
 	FString SavedLang;
+	/** Mode enregistre du joueur (GameUserSettings : retabli au bilan) et fenetre reellement ouverte au lancement (-windowed,
+	 *  -ResX / -ResY : retablie pour la suite du banc et comparee). v4.16 (relecture) : avant, la fenetre du milieu du banc
+	 *  etait le mode enregistre, qui peut differer de la fenetre du lancement */
 	BRDisplay::FMode SavedMode;
+	BRDisplay::FMode SavedEff;
 	bool bDisplayTouched = false;
+	/** v4.16 (relecture) : taille demandee de chaque vraie fenetre (comparee a la taille obtenue) ; mode essaye (-1 : aucun) */
+	FIntPoint WantSizes[3] = { FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue };
+	int32 ModeTried = -1;
+	/** v4.16 (relecture) : libelle de la ligne MODE D'AFFICHAGE lu et juste pour ce mode reellement obtenu (0, 1, 2) */
+	bool LabelSeen[3] = { false, false, false };
+	/** v4.16 (relecture) : kit du Level 0 mesure (niveau pret, kit utilise) : sinon les captures des raccords sont sautees */
+	bool bKitReady = false;
+	/** v4.16 (relecture) : etat note avant un appui injecte (onglet, aide, defilement, reste a defiler) */
+	int32 PressInt = 0;
+	float PressFloat = 0.f;
+	float PressRoom = 0.f;
+	/** v4.16 (relecture) : sac et equipement modifies pour l'essai des objets a la manette (retablis), batterie et vision
+	 *  nocturne avant l'essai du camescope */
+	bool bInvSaved = false;
+	FBRItemSlot SavedStorage1;
+	FBRItemSlot SavedHead;
+	float SavedBattery = 100.f;
+	/** v4.16 (relecture) : sante, endurance, sante mentale du joueur avant les rendus (valeurs reperes : une sante affichee en
+	 *  chiffres serait vue) */
+	bool bVitalsSaved = false;
+	float SavedHealth = 100.f;
+	float SavedStamina = 100.f;
+	float SavedSanity = 100.f;
+	constexpr float MarkerHealth = 93.f;
+	int32 HealthReadouts = 0;
+	int32 GameHudBars = 0;
+	int32 GameHudDraws = 0;
+	/** v4.16 (relecture) : invites de la pause a la manette : boutons de la manette vus (A) et touche FIN du clavier vue */
+	int32 PadPauseDraws = 0;
+	int32 PadPauseConfirmSeen = 0;
+	int32 PadPauseEndSeen = 0;
 	int32 SavedStaticAid = 0;
 	FTextReport OffReport;
 	TMap<FString, FTextReport> PerLanguage;
@@ -236,6 +312,7 @@ namespace BRTestV416Vis
 	/** Jauges d'endurance et de sante mentale du dernier rendu hors ecran (ABRHUD::StatusGaugesDrawn) ; bilan : rendus de
 	 *  PERSONNAGE (2 attendues), autres ecrans (0 attendue), commandes de la console sous la pause d'un joueur (0 attendue) */
 	int32 LastGauges = -1;
+	int32 LastBars = 0;
 	int32 GaugeCharDraws = 0;
 	int32 GaugeCharBad = 0;
 	int32 GaugeOtherDraws = 0;
@@ -243,7 +320,6 @@ namespace BRTestV416Vis
 	int32 ConsoleHints = 0;
 	int32 Phase = 0;
 	double PhaseClock = 0.0;
-	int32 Index = 0;
 	FVector Anchor = FVector::ZeroVector;
 	FRotator AnchorRot = FRotator::ZeroRotator;
 	TWeakObjectPtr<ABREntity> Entity;
@@ -311,6 +387,56 @@ namespace BRTestV416Vis
 		}
 	}
 
+	/** v4.16 (relecture) : boites (monde) rangees par case de grille au sol ; Inside ne teste que les boites de la case du point
+	 *  (chaque boite est rangee dans toutes les cases qu'elle touche, marge Margin comprise : Tol <= Margin) */
+	struct FBoxGrid
+	{
+		float CellSize = 100.f;
+		const TArray<FBox>* Boxes = nullptr;
+		TMap<FIntPoint, TArray<int32>> Buckets;
+
+		FIntPoint KeyOf(double X, double Y) const
+		{
+			return FIntPoint(FMath::FloorToInt32(static_cast<float>(X) / CellSize), FMath::FloorToInt32(static_cast<float>(Y) / CellSize));
+		}
+		void Build(const TArray<FBox>& In, float InCellSize, float Margin)
+		{
+			Boxes = &In;
+			CellSize = FMath::Max(1.f, InCellSize);
+			Buckets.Reset();
+			for (int32 i = 0; i < In.Num(); ++i)
+			{
+				const FBox& B = In[i];
+				const FIntPoint Lo = KeyOf(B.Min.X - Margin, B.Min.Y - Margin);
+				const FIntPoint Hi = KeyOf(B.Max.X + Margin, B.Max.Y + Margin);
+				for (int32 KX = Lo.X; KX <= Hi.X; ++KX)
+				{
+					for (int32 KY = Lo.Y; KY <= Hi.Y; ++KY)
+					{
+						Buckets.FindOrAdd(FIntPoint(KX, KY)).Add(i);
+					}
+				}
+			}
+		}
+		bool Inside(const FVector& P, float Tol) const
+		{
+			const TArray<int32>* List = Boxes ? Buckets.Find(KeyOf(P.X, P.Y)) : nullptr;
+			if (!List)
+			{
+				return false;
+			}
+			for (const int32 i : *List)
+			{
+				const FBox& B = (*Boxes)[i];
+				if (P.X >= B.Min.X - Tol && P.X <= B.Max.X + Tol && P.Y >= B.Min.Y - Tol && P.Y <= B.Max.Y + Tol && P.Z >= B.Min.Z - Tol && P.Z <= B.Max.Z + Tol)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+	};
+
 	// ---- decalques : mesures sur les chunks construits
 	struct FDecalStats
 	{
@@ -318,6 +444,10 @@ namespace BRTestV416Vis
 		int32 Projected = 0;
 		int32 Patches = 0;
 		int32 Expected = 0;
+		/** v4.16 (relecture) : tirages ecartes par les bornes (ABRChunk::GetDecalDropped) */
+		int32 Dropped = 0;
+		/** v4.16 (relecture) : decalques de mur en partie dans le vide (au moins un point sur rien, au moins un sur la surface) */
+		int32 WallPartVoid = 0;
 		int32 KindCount[4] = { 0, 0, 0, 0 };
 		int32 MaxPerChunk = 0;
 		int32 MaxPatchesPerChunk = 0;
@@ -383,6 +513,7 @@ void ABRAutoTest::AddV416VisualSteps()
 			D.MaxW = T.MaxW;
 			D.Points = T.Points;
 			D.bCut = T.bCut;
+			D.Layer = T.Layer;
 			Out.Add(D);
 		}
 	};
@@ -471,6 +602,7 @@ void ABRAutoTest::AddV416VisualSteps()
 		Hud->SetCanvas(Cv, Cv);
 		Hud->DrawHUD();
 		BRTestV416Vis::LastGauges = Hud->StatusGaugesDrawn; // jauges de ce rendu (remis a zero au debut de DrawHUD)
+		BRTestV416Vis::LastBars = Hud->TestBarsDrawn;       // v4.16 (relecture) : barres de ce rendu
 		Hud->SetCanvas(PrevCanvas, PrevDebug);
 		Hud->bTestRecordTexts = false;
 		UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Ctx);
@@ -511,6 +643,7 @@ void ABRAutoTest::AddV416VisualSteps()
 			BRTestV416Vis::SavedSettings = FBRSettings::Get();
 			BRTestV416Vis::SavedLang = BRLoc::Current().Code;
 			BRTestV416Vis::SavedMode = BRDisplay::Current();
+			BRTestV416Vis::SavedEff = BRDisplay::Effective();
 			BRTestV416Vis::SavedStaticAid = ABRLidar::Settings().StaticAid;
 			BRTestV416Vis::bSaved = true;
 		}
@@ -525,8 +658,10 @@ void ABRAutoTest::AddV416VisualSteps()
 		BRKeys::SetGamepadPrompts(false);
 		const BRDisplay::FMonitor M = BRDisplay::ActiveMonitor();
 		const BRDisplay::FMode Eff = BRDisplay::Effective();
-		Note(FString::Printf(TEXT("ecran : %d x %d (zone utile %d x %d, %d ppp, %d ecran(s)) ; fenetre du jeu : mode %d, %d x %d ; affichage modifiable : %s"), M.Size.X, M.Size.Y,
-			M.WorkSize.X, M.WorkSize.Y, M.DPI, M.Count, Eff.Window, Eff.Resolution.X, Eff.Resolution.Y, BRTestV416Vis::Oui(BRDisplay::CanChange())));
+		const BRDisplay::FMode Cur = BRDisplay::Current();
+		Note(FString::Printf(TEXT("ecran : %d x %d (zone utile %d x %d, %d ppp, %d ecran(s)) ; fenetre du jeu : mode %d, %d x %d (mode enregistre du joueur : %d, %d x %d) ; "
+			"affichage modifiable : %s"), M.Size.X, M.Size.Y, M.WorkSize.X, M.WorkSize.Y, M.DPI, M.Count, Eff.Window, Eff.Resolution.X, Eff.Resolution.Y, Cur.Window,
+			Cur.Resolution.X, Cur.Resolution.Y, BRTestV416Vis::Oui(BRDisplay::CanChange())));
 		return true;
 	});
 
@@ -538,7 +673,13 @@ void ABRAutoTest::AddV416VisualSteps()
 		ABRHUD* H = HudOf();
 		if (!W || !H || !GetPlayer())
 		{
-			return StepTime > 20.f;
+			if (StepTime <= 20.f)
+			{
+				return false;
+			}
+			// v4.16 (relecture) : avant, l'etape passait sans rien noter
+			Skip(TEXT("Level 1 : monde, HUD ou joueur absent en 20 s : carnet rempli NON VERIFIE (carnet des rendus sans indices ni observations)"));
+			return true;
 		}
 		int32 Read = 0;
 		if (W->IsMissionActive())
@@ -565,14 +706,22 @@ void ABRAutoTest::AddV416VisualSteps()
 		ABRHUD* H = HudOf();
 		if (!H)
 		{
+			Skip(TEXT("carnet : HUD absent : colonne la plus longue (aide et rappel) NON VERIFIEE"));
 			return true;
 		}
 		ShowScreen(4);
 		if (StepTime < 0.3f || H->NotebookHintStep < 0)
 		{
-			return StepTime > 3.f; // le carnet dessine fixe l'etape en cours (cle de l'aide)
+			if (StepTime <= 3.f)
+			{
+				return false; // le carnet dessine fixe l'etape en cours (cle de l'aide)
+			}
+			// v4.16 (relecture) : avant, l'etape passait sans rien noter et les rendus du carnet n'avaient pas l'aide
+			Skip(TEXT("carnet : aucune etape en cours en 3 s (pas de mission ou mission resolue) : colonne la plus longue (aide et rappel) NON VERIFIEE"));
+			return true;
 		}
 		H->NotebookHint.FindOrAdd(H->NotebookHintStep) = 2; // aide et rappel : la colonne la plus longue
+		Note(FString::Printf(TEXT("carnet : aide et rappel de l'etape en cours montres pour les rendus (cle %d)"), H->NotebookHintStep));
 		return true;
 	});
 
@@ -601,6 +750,21 @@ void ABRAutoTest::AddV416VisualSteps()
 			}
 			FTextReport& Lang = PerLanguage.FindOrAdd(Code);
 			int32 Failed = 0;
+			// v4.16 (relecture) : valeurs reperes (sante 93, endurance et sante mentale 100) : une sante montree en pourcentage
+			// serait relevee ; retablies au bilan des langues
+			if (ABRCharacter* Hero = GetPlayer())
+			{
+				if (!bVitalsSaved)
+				{
+					SavedHealth = Hero->Health;
+					SavedStamina = Hero->Stamina;
+					SavedSanity = Hero->Sanity;
+					bVitalsSaved = true;
+				}
+				Hero->Health = MarkerHealth;
+				Hero->Stamina = 100.f;
+				Hero->Sanity = 100.f;
+			}
 			for (const FScreen& Sc : Screens)
 			{
 				ShowScreen(Sc.Tab);
@@ -632,6 +796,14 @@ void ABRAutoTest::AddV416VisualSteps()
 					for (const FDrawnText& T : Texts)
 					{
 						ConsoleHints += T.Text.Contains(TEXT("BRGod")) ? 1 : 0;
+						// v4.16 (relecture) : sante en chiffres (hors PARAMETRES, ou un reglage peut valoir 93 %)
+						HealthReadouts += (Sc.Tab != 2 && ShowsMarkerPercent(T.Text)) ? 1 : 0;
+					}
+					if (Sc.Tab == -2)
+					{
+						// HUD du jeu, sans reanimation ni action maintenue : aucune barre (Bar) attendue
+						++GameHudDraws;
+						GameHudBars += LastBars;
 					}
 				}
 			}
@@ -643,6 +815,45 @@ void ABRAutoTest::AddV416VisualSteps()
 			return true;
 		});
 	}
+	// v4.16 (relecture) : controle positif de la ligne des commandes de la console : en mode developpeur (hors Shipping), la pause
+	// la montre et le releve la voit. Sans lui, "0 (attendu 0)" pouvait venir d'un texte change ou coupe
+	Add(TEXT("v4.16 visuel : commandes de la console en mode developpeur (controle positif)"), 0.f, [this, ShowScreen, CloseScreens, Offscreen]()
+	{
+#if UE_BUILD_SHIPPING
+		(void)ShowScreen;
+		(void)CloseScreens;
+		(void)Offscreen;
+		Skip(TEXT("commandes de la console : version Shipping (pas de mode developpeur) : controle positif NON VERIFIE"));
+#else
+		ABRPlayerController* PC = GetPC();
+		if (!PC)
+		{
+			Skip(TEXT("commandes de la console : controleur absent : controle positif NON VERIFIE"));
+			return true;
+		}
+		BRLoc::SetLanguage(TEXT("fr"));
+		FBRSettings::Get().bDevMode = true;
+		ShowScreen(-1);
+		TArray<FDrawnText> Texts;
+		const bool bDrawn = Offscreen(1920, 1080, FString(), Texts);
+		int32 Seen = 0;
+		for (const FDrawnText& T : Texts)
+		{
+			Seen += (T.Text.Contains(TEXT("BRGod")) && T.Text.Contains(TEXT("BRLevel"))) ? 1 : 0;
+		}
+		FBRSettings::Get().bDevMode = false;
+		CloseScreens();
+		if (!bDrawn)
+		{
+			Skip(TEXT("commandes de la console : rendu hors ecran impossible : controle positif NON VERIFIE"));
+		}
+		else
+		{
+			Note(FString::Printf(TEXT("commandes de la console sous la pause en mode developpeur (controle positif) : %d ligne(s) relevee(s) (attendu au moins 1)"), Seen), Seen == 0);
+		}
+#endif
+		return true;
+	});
 	Add(TEXT("v4.16 visuel : bilan des langues"), 0.f, [this]()
 	{
 		Note(FString::Printf(TEXT("HUD hors ecran (1280x720, 1920x1080, 2560x1080 ; 5 onglets, la pause et le HUD du jeu ; %d langues) : %s"), PerLanguage.Num(), *ReportLine(OffReport)),
@@ -668,10 +879,23 @@ void ABRAutoTest::AddV416VisualSteps()
 		}
 		else
 		{
+			// v4.16 (relecture) : barre de vie mesuree : sante a la valeur repere 93 jamais montree en pourcentage, aucune barre
+			// (Bar) sur le HUD du jeu ; avant, la phrase "aucune barre de vie" etait ecrite sans mesure
 			Note(FString::Printf(TEXT("jauges : endurance et sante mentale dans PERSONNAGE (%d rendu(s), %d sans les deux jauges) ; aucune ailleurs (%d rendu(s) du jeu, "
-				"du carnet, du journal, des parametres, des touches et de la pause, %d avec une jauge) ; aucune barre de vie (le HUD n'en dessine pas) ; commandes de la "
-				"console sous la pause d'un joueur (mode developpeur coupe) : %d (attendu 0)"), GaugeCharDraws, GaugeCharBad, GaugeOtherDraws, GaugeOtherBad, ConsoleHints),
-				GaugeCharBad > 0 || GaugeOtherBad > 0 || ConsoleHints > 0 || GaugeCharDraws == 0);
+				"du carnet, du journal, des parametres, des touches et de la pause, %d avec une jauge) ; barre de vie : sante a %.0f montree en pourcentage %d fois, "
+				"%d barre(s) sur %d rendu(s) du HUD du jeu (attendu 0 et 0) ; commandes de la console sous la pause d'un joueur (mode developpeur coupe) : %d (attendu 0)"),
+				GaugeCharDraws, GaugeCharBad, GaugeOtherDraws, GaugeOtherBad, MarkerHealth, HealthReadouts, GameHudBars, GameHudDraws, ConsoleHints),
+				GaugeCharBad > 0 || GaugeOtherBad > 0 || ConsoleHints > 0 || GaugeCharDraws == 0 || HealthReadouts > 0 || GameHudBars > 0 || GameHudDraws == 0);
+		}
+		if (bVitalsSaved)
+		{
+			if (ABRCharacter* Hero = GetPlayer())
+			{
+				Hero->Health = SavedHealth;
+				Hero->Stamina = SavedStamina;
+				Hero->Sanity = SavedSanity;
+			}
+			bVitalsSaved = false;
 		}
 		BRLoc::SetLanguage(TEXT("fr"));
 		return true;
@@ -779,12 +1003,25 @@ void ABRAutoTest::AddV416VisualSteps()
 						continue;
 					}
 					CheckTexts(Texts, static_cast<float>(Sz.W), static_cast<float>(Sz.H), FString::Printf(TEXT("manette %s %s onglet %d"), Sz.Name, *Code, Tab), PadReport);
+					// v4.16 (relecture) : pause a la manette : chaque invite nomme un bouton de la manette (A pour valider), plus
+					// la touche FIN du clavier
+					const FString EndKey(BR_STR(NSLOCTEXT("BR", "HUD.Fin", "FIN")));
+					const FString PadConfirm = BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom);
+					bool bConfirm = false, bEnd = false;
 					for (const FDrawnText& T : Texts)
 					{
 						if (T.Text.Contains(TEXT("[LB]")))
 						{
 							PadFooterSeen = T.Text;
 						}
+						bConfirm |= T.Text == PadConfirm;
+						bEnd |= T.Text == EndKey;
+					}
+					if (Tab == -1)
+					{
+						++PadPauseDraws;
+						PadPauseConfirmSeen += bConfirm ? 1 : 0;
+						PadPauseEndSeen += bEnd ? 1 : 0;
 					}
 				}
 			}
@@ -796,6 +1033,15 @@ void ABRAutoTest::AddV416VisualSteps()
 	{
 		Note(FString::Printf(TEXT("manette, inventaire et pause hors ecran : %s ; pied de l'inventaire : \"%s\""), *ReportLine(PadReport), *PadFooterSeen),
 			PadReport.Problems() > 0 || PadFooterSeen.IsEmpty());
+		if (PadPauseDraws == 0)
+		{
+			Skip(TEXT("pause a la manette : aucun rendu hors ecran : invites de la pause NON VERIFIEES"));
+		}
+		else
+		{
+			Note(FString::Printf(TEXT("pause a la manette (%d rendu(s)) : bouton A (valider) montre %d fois, touche FIN du clavier montree %d fois (attendu : a chaque rendu, jamais)"),
+				PadPauseDraws, PadPauseConfirmSeen, PadPauseEndSeen), PadPauseConfirmSeen != PadPauseDraws || PadPauseEndSeen > 0);
+		}
 		for (const FString& E : PadReport.Examples)
 		{
 			Note(TEXT("  ") + E, true);
@@ -803,23 +1049,72 @@ void ABRAutoTest::AddV416VisualSteps()
 		BRLoc::SetLanguage(TEXT("fr"));
 		return true;
 	});
-	// Inventaire a la manette par de vraies touches (injectees dans le controleur, comme une manette branchee)
-	struct FPadPress
+	// Inventaire a la manette par de vraies touches (injectees dans le controleur, comme une manette branchee). v4.16 (relecture) :
+	// chaque appui a sa propre verification : Before note l'etat avant l'appui ; Check, deux images plus tard (touche encore
+	// enfoncee), dit si le resultat attendu est la et le decrit (Detail) ; une precondition absente y est notee NON VERIFIE
+	auto AddPadPress = [this](const FString& What, const FKey& Key, TFunction<void()> Before, TFunction<bool(FString&)> Check)
 	{
-		FKey Key;
-		const TCHAR* What;
-		int32 WantTab;      // onglet attendu apres l'appui (-1 : pas de controle d'onglet)
-		bool bWantClosed;   // inventaire ferme apres l'appui
-		bool bWantHint;     // aide du carnet augmentee
+		Add(FString::Printf(TEXT("v4.16 visuel : manette, %s"), *What), 0.f, [this, What, Key, Before, Check]()
+		{
+			ABRPlayerController* PC = GetPC();
+			if (!PC)
+			{
+				Skip(FString::Printf(TEXT("manette, %s : controleur absent : NON VERIFIE"), *What));
+				return true;
+			}
+			if (BRTestV416Vis::Phase == 0)
+			{
+				BRTestV416Vis::Phase = 1;
+				PC->bPadActive = true;
+				if (Before)
+				{
+					Before();
+				}
+				PC->InputKey(FInputKeyEventArgs::CreateSimulated(Key, IE_Pressed, 1.f));
+				return false;
+			}
+			if (BRTestV416Vis::Phase == 1)
+			{
+				// Une image pour l'evenement, une pour le dessin
+				if (StepTime < 0.15f)
+				{
+					return false;
+				}
+				BRTestV416Vis::Phase = 2;
+				const bool bDown = PC->IsInputKeyDown(Key);
+				FString Detail;
+				const bool bOk = Check(Detail);
+				if (!bOk && !bDown)
+				{
+					Skip(FString::Printf(TEXT("manette, %s : la touche injectee n'est pas enfoncee pour le controleur (injection sans effet ici : a verifier avec une vraie manette) ; %s"),
+						*What, *Detail));
+				}
+				else
+				{
+					Note(FString::Printf(TEXT("manette, %s : touche enfoncee %s ; %s"), *What, BRTestV416Vis::Oui(bDown), *Detail), !bOk);
+				}
+				PC->InputKey(FInputKeyEventArgs::CreateSimulated(Key, IE_Released, 0.f));
+				return false;
+			}
+			if (StepTime < 0.3f)
+			{
+				return false;
+			}
+			BRTestV416Vis::Phase = 0;
+			return true;
+		});
 	};
-	const TArray<FPadPress> Presses = {
-		{ EKeys::Gamepad_RightShoulder, TEXT("RB : onglet suivant (CARNET)"), 4, false, false },
-		{ EKeys::Gamepad_DPad_Right, TEXT("croix droite : onglet suivant (JOURNAL)"), 1, false, false },
-		{ EKeys::Gamepad_LeftShoulder, TEXT("LB : onglet precedent (CARNET)"), 4, false, false },
-		{ EKeys::Gamepad_DPad_Down, TEXT("croix bas : defilement du carnet"), 4, false, false },
-		{ EKeys::Gamepad_FaceButton_Top, TEXT("Y : aide du carnet"), 4, false, true },
-		{ EKeys::Gamepad_DPad_Left, TEXT("croix gauche : onglet precedent (PERSONNAGE)"), 0, false, false },
-		{ EKeys::Gamepad_FaceButton_Right, TEXT("B : fermer"), -1, true, false },
+	// Onglet attendu apres l'appui (et inventaire ouvert)
+	auto TabIs = [this, HudOf](int32 Want)
+	{
+		return [this, HudOf, Want](FString& Detail)
+		{
+			ABRHUD* H = HudOf();
+			ABRPlayerController* PC = GetPC();
+			const int32 Now = H ? static_cast<int32>(H->Tab) : -1;
+			Detail = FString::Printf(TEXT("onglet %d (attendu %d), inventaire %s"), Now, Want, PC && PC->IsInventoryOpen() ? TEXT("ouvert") : TEXT("ferme"));
+			return H && PC && PC->IsInventoryOpen() && Now == Want;
+		};
 	};
 	Add(TEXT("v4.16 visuel : manette, inventaire ouvert sur PERSONNAGE"), 0.4f, [this, HudOf, ShowScreen]()
 	{
@@ -836,64 +1131,190 @@ void ABRAutoTest::AddV416VisualSteps()
 		}
 		return true;
 	});
-	for (const FPadPress& Press : Presses)
+	AddPadPress(TEXT("RB : onglet suivant (CARNET)"), EKeys::Gamepad_RightShoulder, nullptr, TabIs(4));
+	AddPadPress(TEXT("croix droite : onglet suivant (JOURNAL)"), EKeys::Gamepad_DPad_Right, nullptr, TabIs(1));
+	AddPadPress(TEXT("LB : onglet precedent (CARNET)"), EKeys::Gamepad_LeftShoulder, nullptr, TabIs(4));
+	AddPadPress(TEXT("Y : aide du carnet"), EKeys::Gamepad_FaceButton_Top, [this, HudOf]()
 	{
-		Add(FString::Printf(TEXT("v4.16 visuel : manette, %s"), Press.What), 0.f, [this, HudOf, Press, ShotNamed]()
+		if (ABRHUD* H = HudOf())
 		{
-			ABRPlayerController* PC = GetPC();
+			PressInt = H->LastNotebookHintLevel;
+		}
+	}, [this, HudOf, ShotNamed](FString& Detail)
+	{
+		ABRHUD* H = HudOf();
+		if (!H)
+		{
+			Detail = TEXT("HUD absent");
+			return false;
+		}
+		ShotNamed(TEXT("v416_manette_carnet_aide"));
+		Detail = FString::Printf(TEXT("onglet %d, aide du carnet %d -> %d"), static_cast<int32>(H->Tab), PressInt, H->LastNotebookHintLevel);
+		if (H->NotebookHintStep < 0)
+		{
+			Skip(TEXT("manette, Y : aucune etape en cours dans le carnet : aide a la manette NON VERIFIEE"));
+			return static_cast<int32>(H->Tab) == 4;
+		}
+		return static_cast<int32>(H->Tab) == 4 && H->LastNotebookHintLevel > PressInt;
+	});
+	// v4.16 (relecture) : le defilement est verifie (avant : seulement l'onglet) ; il faut du contenu a faire defiler
+	AddPadPress(TEXT("croix bas : defilement du carnet"), EKeys::Gamepad_DPad_Down, [this, HudOf]()
+	{
+		if (ABRHUD* H = HudOf())
+		{
+			PressFloat = H->NotebookLeftScroll;
+			PressRoom = H->LastNotebookLeftRoom;
+		}
+	}, [this, HudOf](FString& Detail)
+	{
+		ABRHUD* H = HudOf();
+		if (!H)
+		{
+			Detail = TEXT("HUD absent");
+			return false;
+		}
+		Detail = FString::Printf(TEXT("onglet %d, defilement du carnet %.0f -> %.0f (reste a defiler avant l'appui : %.0f)"), static_cast<int32>(H->Tab), PressFloat,
+			H->NotebookLeftScroll, PressRoom);
+		if (PressRoom < 1.f)
+		{
+			Skip(TEXT("manette, croix bas : colonne du carnet plus courte que sa zone (ou deja en bas) : defilement a la manette NON VERIFIE"));
+			return static_cast<int32>(H->Tab) == 4;
+		}
+		return static_cast<int32>(H->Tab) == 4 && H->NotebookLeftScroll > PressFloat + 0.5f;
+	});
+	AddPadPress(TEXT("croix gauche : onglet precedent (PERSONNAGE)"), EKeys::Gamepad_DPad_Left, nullptr, TabIs(0));
+	// v4.16 (relecture) : objets du sac a la manette : une frontale posee dans la 2e case du sac (tete vide), curseur sur la 1re ;
+	// croix droite (curseur), X (inspecter), B (fermer l'inspection), A (equiper), B (fermer l'inventaire). Sac retabli ensuite
+	Add(TEXT("v4.16 visuel : manette, objets du sac (preparation)"), 0.3f, [this, HudOf]()
+	{
+		ABRCharacter* C = GetPlayer();
+		ABRHUD* H = HudOf();
+		FBRItemSlot* S1 = C ? C->GetSlot(EBRSlotGroup::Storage, 1) : nullptr;
+		FBRItemSlot* Head = C ? C->GetSlot(EBRSlotGroup::Equipment, static_cast<int32>(EBREquipSlot::Head)) : nullptr;
+		if (!H || !S1 || !Head)
+		{
+			Skip(TEXT("manette, objets du sac : joueur, HUD ou cases absents : utilisation des objets du sac a la manette NON VERIFIEE"));
+			return true;
+		}
+		if (!bInvSaved)
+		{
+			SavedStorage1 = *S1;
+			SavedHead = *Head;
+			bInvSaved = true;
+		}
+		*S1 = FBRItemSlot{ EBRItem::Headlamp, 1 };
+		Head->Clear();
+		C->OnEquipmentChanged();
+		H->PadCursor.Group = EBRSlotGroup::Storage;
+		H->PadCursor.Index = 0;
+		H->Inspecting = ABRHUD::FSlotRef();
+		return true;
+	});
+	auto CursorOn = [this, HudOf](EBRSlotGroup WantGroup, int32 WantIndex)
+	{
+		return [this, HudOf, WantGroup, WantIndex](FString& Detail)
+		{
 			ABRHUD* H = HudOf();
-			if (!PC || !H)
+			if (!H)
 			{
+				Detail = TEXT("HUD absent");
+				return false;
+			}
+			Detail = FString::Printf(TEXT("curseur sur la case %d du groupe %d (attendu %d du groupe %d), onglet %d"), H->PadCursor.Index, static_cast<int32>(H->PadCursor.Group),
+				WantIndex, static_cast<int32>(WantGroup), static_cast<int32>(H->Tab));
+			return static_cast<int32>(H->Tab) == 0 && H->PadCursor.Group == WantGroup && H->PadCursor.Index == WantIndex;
+		};
+	};
+	AddPadPress(TEXT("croix droite dans PERSONNAGE : curseur sur la 2e case du sac"), EKeys::Gamepad_DPad_Right, nullptr, CursorOn(EBRSlotGroup::Storage, 1));
+	AddPadPress(TEXT("X : inspecter la frontale"), EKeys::Gamepad_FaceButton_Left, nullptr, [this, HudOf, ShotNamed](FString& Detail)
+	{
+		ABRHUD* H = HudOf();
+		const bool bOk = H && H->Inspecting.IsValid() && H->Inspecting.Group == EBRSlotGroup::Storage && H->Inspecting.Index == 1;
+		Detail = FString::Printf(TEXT("inspection %s"), H && H->Inspecting.IsValid() ? *FString::Printf(TEXT("de la case %d du groupe %d"), H->Inspecting.Index,
+			static_cast<int32>(H->Inspecting.Group)) : TEXT("fermee"));
+		ShotNamed(TEXT("v416_manette_inspecter"));
+		return bOk;
+	});
+	AddPadPress(TEXT("B : fermer l'inspection (inventaire ouvert)"), EKeys::Gamepad_FaceButton_Right, nullptr, [this, HudOf](FString& Detail)
+	{
+		ABRHUD* H = HudOf();
+		ABRPlayerController* PC = GetPC();
+		const bool bOpen = PC && PC->IsInventoryOpen();
+		Detail = FString::Printf(TEXT("inspection %s, inventaire %s"), H && H->Inspecting.IsValid() ? TEXT("ouverte") : TEXT("fermee"), bOpen ? TEXT("ouvert") : TEXT("ferme"));
+		return H && !H->Inspecting.IsValid() && bOpen;
+	});
+	AddPadPress(TEXT("A : equiper la frontale"), EKeys::Gamepad_FaceButton_Bottom, nullptr, [this, ShotNamed](FString& Detail)
+	{
+		ABRCharacter* C = GetPlayer();
+		const FBRItemSlot* S1 = C ? C->GetSlot(EBRSlotGroup::Storage, 1) : nullptr;
+		const bool bOk = C && C->GetEquipped(EBREquipSlot::Head) == EBRItem::Headlamp && S1 && S1->IsEmpty();
+		Detail = FString::Printf(TEXT("tete : %s, 2e case du sac %s"), C && C->GetEquipped(EBREquipSlot::Head) == EBRItem::Headlamp ? TEXT("frontale") : TEXT("autre"),
+			S1 && S1->IsEmpty() ? TEXT("vide") : TEXT("occupee"));
+		ShotNamed(TEXT("v416_manette_equipe"));
+		return bOk;
+	});
+	AddPadPress(TEXT("B : fermer l'inventaire"), EKeys::Gamepad_FaceButton_Right, nullptr, [this](FString& Detail)
+	{
+		ABRPlayerController* PC = GetPC();
+		Detail = FString::Printf(TEXT("inventaire %s"), PC && PC->IsInventoryOpen() ? TEXT("ouvert") : TEXT("ferme"));
+		return PC && !PC->IsInventoryOpen();
+	});
+	Add(TEXT("v4.16 visuel : manette, sac retabli"), 0.f, [this]()
+	{
+		ABRCharacter* C = GetPlayer();
+		FBRItemSlot* S1 = C ? C->GetSlot(EBRSlotGroup::Storage, 1) : nullptr;
+		FBRItemSlot* Head = C ? C->GetSlot(EBRSlotGroup::Equipment, static_cast<int32>(EBREquipSlot::Head)) : nullptr;
+		if (bInvSaved && S1 && Head)
+		{
+			*S1 = SavedStorage1;
+			*Head = SavedHead;
+			C->OnEquipmentChanged();
+		}
+		bInvSaved = false;
+		return true;
+	});
+	// v4.16 (relecture) : camescope reste dans le sac : sa vision nocturne a la manette (croix haut), deux fois (allumee, eteinte)
+	Add(TEXT("v4.16 visuel : manette, camescope dans le sac (preparation)"), 0.3f, [this, CloseScreens]()
+	{
+		CloseScreens();
+		ABRCharacter* C = GetPlayer();
+		if (C)
+		{
+			SavedBattery = C->Battery;
+			C->Battery = 100.f;
+			PressInt = C->IsNightVision() ? 1 : 0;
+		}
+		return true;
+	});
+	for (int32 Turn = 0; Turn < 2; ++Turn)
+	{
+		AddPadPress(Turn == 0 ? FString(TEXT("croix haut : vision nocturne du camescope reste dans le sac")) : FString(TEXT("croix haut : vision nocturne coupee")),
+			EKeys::Gamepad_DPad_Up, nullptr, [this, Turn](FString& Detail)
+		{
+			ABRCharacter* C = GetPlayer();
+			if (!C || !C->HasCamcorder())
+			{
+				Detail = TEXT("pas de camescope sur le joueur");
+				Skip(TEXT("manette : camescope absent du sac : vision nocturne depuis le sac NON VERIFIEE"));
 				return true;
 			}
-			if (BRTestV416Vis::Phase == 0)
-			{
-				BRTestV416Vis::Phase = 1;
-				BRTestV416Vis::Index = H->LastNotebookHintLevel;
-				BRTestV416Vis::PhaseClock = H->NotebookLeftScroll;
-				PC->InputKey(FInputKeyEventArgs::CreateSimulated(Press.Key, IE_Pressed, 1.f));
-				return false;
-			}
-			if (BRTestV416Vis::Phase == 1)
-			{
-				// Une image pour l'evenement, une pour le dessin
-				if (StepTime < 0.15f)
-				{
-					return false;
-				}
-				BRTestV416Vis::Phase = 2;
-				const bool bDown = PC->IsInputKeyDown(Press.Key);
-				const int32 TabNow = static_cast<int32>(H->Tab);
-				const bool bTab = Press.WantTab < 0 || TabNow == Press.WantTab;
-				const bool bClosed = !Press.bWantClosed || !PC->IsInventoryOpen();
-				const bool bHint = !Press.bWantHint || H->LastNotebookHintLevel > BRTestV416Vis::Index;
-				const bool bOk = bTab && bClosed && bHint;
-				if (!bOk && !bDown)
-				{
-					Skip(FString::Printf(TEXT("manette, %s : la touche injectee n'est pas enfoncee pour le controleur (injection sans effet ici : a verifier avec une vraie manette)"),
-						Press.What));
-				}
-				else
-				{
-					Note(FString::Printf(TEXT("manette, %s : touche enfoncee %s, onglet %d, inventaire %s, aide du carnet %d -> %d, defilement du carnet %.0f -> %.0f"), Press.What,
-						BRTestV416Vis::Oui(bDown), TabNow, PC->IsInventoryOpen() ? TEXT("ouvert") : TEXT("ferme"), BRTestV416Vis::Index, H->LastNotebookHintLevel,
-						BRTestV416Vis::PhaseClock, H->NotebookLeftScroll), !bOk);
-				}
-				if (Press.WantTab == 4 && Press.bWantHint)
-				{
-					ShotNamed(TEXT("v416_manette_carnet_aide"));
-				}
-				PC->InputKey(FInputKeyEventArgs::CreateSimulated(Press.Key, IE_Released, 0.f));
-				return false;
-			}
-			if (StepTime < 0.3f)
-			{
-				return false;
-			}
-			BRTestV416Vis::Phase = 0;
-			return true;
+			const bool bWant = Turn == 0 ? PressInt == 0 : PressInt != 0;
+			Detail = FString::Printf(TEXT("camescope dans le sac oui, vision nocturne %s (attendu %s)"), Oui(C->IsNightVision()), Oui(bWant));
+			return C->IsNightVision() == bWant;
 		});
 	}
+	Add(TEXT("v4.16 visuel : manette, camescope retabli"), 0.f, [this]()
+	{
+		if (ABRCharacter* C = GetPlayer())
+		{
+			if (C->IsNightVision() != (PressInt != 0))
+			{
+				C->ToggleNightVision();
+			}
+			C->Battery = SavedBattery;
+		}
+		return true;
+	});
 	Add(TEXT("v4.16 visuel : manette, pause et HUD en jeu"), 0.6f, [this, HudOf, ShowScreen]()
 	{
 		if (ABRPlayerController* PC = GetPC())
@@ -909,13 +1330,35 @@ void ABRAutoTest::AddV416VisualSteps()
 		if (PC)
 		{
 			PC->bPadActive = true;
+			PC->SetPauseCursor(0);
 		}
 		Note(FString::Printf(TEXT("pause a la manette (fenetre) : invites de la manette %s"), Oui(BRKeys::UsesGamepadPrompts())), !BRKeys::UsesGamepadPrompts());
 		ShotNamed(TEXT("v416_manette_pause_fenetre"));
 		return true;
 	});
-	Add(TEXT("v4.16 visuel : clavier, capture de la pause"), 0.4f, [this]()
+	// v4.16 (relecture) : cartes de la pause a la manette : croix bas (PARAMETRES), A (ouvre les parametres), B (retour a la pause)
+	AddPadPress(TEXT("pause, croix bas : carte PARAMETRES"), EKeys::Gamepad_DPad_Down, [this]()
 	{
+		if (ABRPlayerController* PC = GetPC())
+		{
+			PC->SetPauseCursor(0);
+		}
+	}, [this](FString& Detail)
+	{
+		ABRPlayerController* PC = GetPC();
+		Detail = FString::Printf(TEXT("pause %s, carte %d (attendu 1)"), PC && PC->IsPauseMenuOpen() ? TEXT("ouverte") : TEXT("fermee"), PC ? PC->GetPauseCursor() : -1);
+		return PC && PC->IsPauseMenuOpen() && PC->GetPauseCursor() == 1;
+	});
+	AddPadPress(TEXT("pause, A : ouvrir PARAMETRES"), EKeys::Gamepad_FaceButton_Bottom, nullptr, TabIs(2));
+	AddPadPress(TEXT("pause, B : retour a la pause"), EKeys::Gamepad_FaceButton_Right, nullptr, [this](FString& Detail)
+	{
+		ABRPlayerController* PC = GetPC();
+		Detail = FString::Printf(TEXT("inventaire %s, pause %s"), PC && PC->IsInventoryOpen() ? TEXT("ouvert") : TEXT("ferme"), PC && PC->IsPauseMenuOpen() ? TEXT("ouverte") : TEXT("fermee"));
+		return PC && !PC->IsInventoryOpen() && PC->IsPauseMenuOpen();
+	});
+	Add(TEXT("v4.16 visuel : clavier, capture de la pause"), 0.4f, [this, ShowScreen]()
+	{
+		ShowScreen(-1, false);
 		if (ABRPlayerController* PC = GetPC())
 		{
 			PC->bPadActive = false;
@@ -959,10 +1402,13 @@ void ABRAutoTest::AddV416VisualSteps()
 				const int32 W = FMath::Min(MaxW, FMath::Min(2560, MaxH * 64 / 27)) & ~1;
 				Want = FIntPoint(W, W * 27 / 64);
 			}
-			const bool bOk = BRDisplay::Request(2, Want);
+			// v4.16 (relecture) : Request ne dit pas si la fenetre a change (vrai des que l'affichage est modifiable) : la taille
+			// obtenue est comparee a celle-ci a la capture
+			WantSizes[Wc.Kind] = Want;
+			BRDisplay::Request(2, Want);
 			BRDisplay::Confirm();
 			BRTestV416Vis::bDisplayTouched = true;
-			Note(FString::Printf(TEXT("fenetre %s : %d x %d demandee (zone utile %d x %d) : acceptee %s"), Wc.Name, Want.X, Want.Y, M.WorkSize.X, M.WorkSize.Y, Oui(bOk)), !bOk);
+			Note(FString::Printf(TEXT("fenetre %s : %d x %d demandee (zone utile %d x %d)"), Wc.Name, Want.X, Want.Y, M.WorkSize.X, M.WorkSize.Y));
 			return true;
 		});
 		for (const int32 Tab : { 0, 4 })
@@ -978,6 +1424,18 @@ void ABRAutoTest::AddV416VisualSteps()
 			});
 			Add(FString::Printf(TEXT("v4.16 visuel : fenetre %s, capture %d"), Wc.Name, Tab), 0.2f, [this, Wc, Tab, HudOf, Grab, ShotNamed, CloseScreens]()
 			{
+				if (!BRDisplay::CanChange())
+				{
+					if (ABRHUD* H0 = HudOf())
+					{
+						H0->bTestRecordTexts = false;
+					}
+					if (Tab == 4)
+					{
+						CloseScreens();
+					}
+					return true; // deja note NON VERIFIE a la demande
+				}
 				ABRHUD* H = HudOf();
 				const BRDisplay::FMode Eff = BRDisplay::Effective();
 				FIntPoint View(0, 0);
@@ -985,6 +1443,10 @@ void ABRAutoTest::AddV416VisualSteps()
 				{
 					PC->GetViewportSize(View.X, View.Y);
 				}
+				// v4.16 (relecture) : la fenetre obtenue est-elle celle demandee (fenetre, a 2 px pres) ? Avant : seulement notee
+				const FIntPoint Want = WantSizes[Wc.Kind];
+				const bool bSize = Eff.Window == 2 && FMath::Abs(Eff.Resolution.X - Want.X) <= 2 && FMath::Abs(Eff.Resolution.Y - Want.Y) <= 2
+					&& FMath::Abs(View.X - Want.X) <= 2 && FMath::Abs(View.Y - Want.Y) <= 2;
 				if (H)
 				{
 					TArray<FDrawnText> Texts;
@@ -993,8 +1455,11 @@ void ABRAutoTest::AddV416VisualSteps()
 					CheckTexts(Texts, static_cast<float>(View.X), static_cast<float>(View.Y), FString::Printf(TEXT("fenetre %s (%d x %d) onglet %d"), Wc.Name, View.X, View.Y, Tab),
 						RealReport);
 				}
-				Note(FString::Printf(TEXT("fenetre %s, onglet %d : fenetre obtenue %d x %d (mode %d), image %d x %d"), Wc.Name, Tab, Eff.Resolution.X, Eff.Resolution.Y, Eff.Window,
-					View.X, View.Y));
+				if (Tab == 0)
+				{
+					Note(FString::Printf(TEXT("fenetre %s : demandee %d x %d, obtenue %d x %d (mode %d), image %d x %d : %s"), Wc.Name, Want.X, Want.Y, Eff.Resolution.X,
+						Eff.Resolution.Y, Eff.Window, View.X, View.Y, bSize ? TEXT("taille obtenue") : TEXT("TAILLE NON OBTENUE (textes controles a la taille obtenue)")), !bSize);
+				}
 				ShotNamed(FString::Printf(TEXT("v416_fenetre_%s_%s"), Wc.Name, Tab == 0 ? TEXT("personnage") : TEXT("carnet")));
 				if (Tab == 4)
 				{
@@ -1019,63 +1484,96 @@ void ABRAutoTest::AddV416VisualSteps()
 	});
 
 	// ------------------------------------------------------------------------------------------------ 1.4 modes d'affichage
-	Add(TEXT("v4.16 visuel : modes d'affichage presents"), 0.f, [this]()
+	// v4.16 (relecture) : libelles lus dans la ligne MODE D'AFFICHAGE pour chaque mode vraiment obtenu (avant : les trois noms du
+	// banc compares entre eux) ; mode obtenu = fenetre reelle (Effective), et non le mode demande (Current, ecrit par Request)
+	auto ModeLabel = [](int32 Window)
+	{
+		const FString Names[] = { BR_STR(NSLOCTEXT("BR", "Menu.PleinEcran", "PLEIN \u00c9CRAN")), BR_STR(NSLOCTEXT("BR", "Menu.FenetreSansBordure", "FEN\u00caTR\u00c9 SANS BORDURE")),
+			BR_STR(NSLOCTEXT("BR", "Menu.Fenetre", "FEN\u00caTR\u00c9")) };
+		return Names[FMath::Clamp(Window, 0, 2)];
+	};
+	auto RowValue = [this]()
+	{
+		const ABRPlayerController* PC = GetPC();
+		const int32 Row = ABRPlayerController::FindSettingRow(TEXT("WindowMode"));
+		return (PC && Row != INDEX_NONE) ? PC->GetSettingValue(Row) : FString();
+	};
+	Add(TEXT("v4.16 visuel : modes d'affichage presents"), 0.f, [this, ModeLabel, RowValue]()
 	{
 		ABRPlayerController* PC = GetPC();
 		if (!PC)
 		{
+			Skip(TEXT("modes d'affichage : controleur absent : ligne MODE D'AFFICHAGE NON VERIFIEE"));
 			return true;
 		}
+		for (bool& B : LabelSeen)
+		{
+			B = false;
+		}
 		const int32 Row = ABRPlayerController::FindSettingRow(TEXT("WindowMode"));
-		const FString Names[] = { BR_STR(NSLOCTEXT("BR", "Menu.PleinEcran", "PLEIN \u00c9CRAN")), BR_STR(NSLOCTEXT("BR", "Menu.FenetreSansBordure", "FEN\u00caTR\u00c9 SANS BORDURE")),
-			BR_STR(NSLOCTEXT("BR", "Menu.Fenetre", "FEN\u00caTR\u00c9")) };
-		const bool bDistinct = !Names[0].IsEmpty() && !Names[1].IsEmpty() && !Names[2].IsEmpty() && Names[0] != Names[1] && Names[1] != Names[2] && Names[0] != Names[2];
-		const bool bRow = Row != INDEX_NONE && PC->GetSettingCategory(Row) == 1 && !PC->GetSettingLabel(Row).IsEmpty() && !PC->GetSettingValue(Row).IsEmpty();
+		const bool bRow = Row != INDEX_NONE && PC->GetSettingCategory(Row) == 1 && !PC->GetSettingLabel(Row).IsEmpty();
+		const BRDisplay::FMode Eff = BRDisplay::Effective();
+		const FString Value = RowValue();
+		const bool bLabel = Value == ModeLabel(Eff.Window) && BRDisplay::Current().Window == Eff.Window;
+		LabelSeen[FMath::Clamp(Eff.Window, 0, 2)] = bLabel;
+		const bool bDistinct = ModeLabel(0) != ModeLabel(1) && ModeLabel(1) != ModeLabel(2) && ModeLabel(0) != ModeLabel(2);
 		const int32 Full = BRDisplay::ResolutionsFor(0).Num();
 		const int32 Borderless = BRDisplay::ResolutionsFor(1).Num();
 		const int32 Windowed = BRDisplay::ResolutionsFor(2).Num();
-		Note(FString::Printf(TEXT("PARAMETRES > VIDEO : ligne \"%s\" (valeur \"%s\") %s ; trois modes : %s / %s / %s ; definitions proposees : plein ecran %d, sans bordures %d, fenetre %d ; "
-			"plein ecran exclusif sur cette plateforme %s"), Row != INDEX_NONE ? *PC->GetSettingLabel(Row) : TEXT("ABSENTE"), Row != INDEX_NONE ? *PC->GetSettingValue(Row) : TEXT(""),
-			Oui(bRow), *Names[0], *Names[1], *Names[2], Full, Borderless, Windowed, Oui(BRDisplay::PlatformHasExclusiveFullscreen())),
-			!bRow || !bDistinct || Full == 0 || Borderless == 0 || Windowed == 0);
+		Note(FString::Printf(TEXT("PARAMETRES > VIDEO : ligne \"%s\" %s ; mode en cours %d, valeur affichee \"%s\" (attendu \"%s\") ; noms distincts %s ; definitions proposees : "
+			"plein ecran %d, sans bordures %d, fenetre %d ; plein ecran exclusif sur cette plateforme %s"), Row != INDEX_NONE ? *PC->GetSettingLabel(Row) : TEXT("ABSENTE"), Oui(bRow),
+			Eff.Window, *Value, *ModeLabel(Eff.Window), Oui(bDistinct), Full, Borderless, Windowed, Oui(BRDisplay::PlatformHasExclusiveFullscreen())),
+			!bRow || !bLabel || !bDistinct || Full == 0 || Borderless == 0 || Windowed == 0);
 		return true;
 	});
 	for (int32 Mode = 1; Mode >= 0; --Mode)
 	{
 		Add(FString::Printf(TEXT("v4.16 visuel : essai du mode %d"), Mode), 2.5f, [this, Mode, ShowScreen]()
 		{
+			ModeTried = -1;
 			if (!BRDisplay::CanChange())
 			{
-				Skip(TEXT("modes d'affichage : affichage non modifiable (editeur)"));
+				Skip(FString::Printf(TEXT("mode %d : affichage non modifiable (editeur) : NON VERIFIE"), Mode));
 				return true;
 			}
 			if (Mode == 0 && !FParse::Param(FCommandLine::Get(), TEXT("BRV416PleinEcran")))
 			{
-				Note(TEXT("plein ecran exclusif : present (ligne et definitions ci-dessus), non essaye sur cette machine (option -BRV416PleinEcran : change la definition de l'ecran)"));
+				// v4.16 (relecture) : avant, une simple note ; le mode n'est ni obtenu ni lu dans la ligne
+				Skip(TEXT("plein ecran exclusif : present dans la liste des definitions, non essaye (option -BRV416PleinEcran : change la definition de l'ecran) : "
+					"mode obtenu et libelle NON VERIFIES"));
 				return true;
 			}
 			ShowScreen(2);
-			const bool bOk = BRDisplay::Request(Mode, FIntPoint::ZeroValue);
+			BRDisplay::Request(Mode, FIntPoint::ZeroValue);
+			ModeTried = Mode;
 			BRTestV416Vis::bDisplayTouched = true;
-			Note(FString::Printf(TEXT("essai du mode %d : demande acceptee %s, en attente de confirmation %s"), Mode, Oui(bOk), Oui(BRDisplay::IsPending())), !bOk);
+			Note(FString::Printf(TEXT("essai du mode %d : demande faite, en attente de confirmation %s"), Mode, Oui(BRDisplay::IsPending())), !BRDisplay::IsPending());
 			return true;
 		});
-		Add(FString::Printf(TEXT("v4.16 visuel : mode %d obtenu"), Mode), 0.f, [this, Mode, ShotNamed, CloseScreens]()
+		Add(FString::Printf(TEXT("v4.16 visuel : mode %d obtenu"), Mode), 0.f, [this, Mode, ShotNamed, CloseScreens, ModeLabel, RowValue]()
 		{
+			if (ModeTried != Mode)
+			{
+				return true; // essai saute : deja note NON VERIFIE
+			}
 			if (!BRDisplay::IsPending())
 			{
+				// v4.16 (relecture) : avant, l'etape sortait sans rien noter
+				Skip(FString::Printf(TEXT("mode %d : aucune demande en attente apres l'essai (retour automatique ?) : mode obtenu NON VERIFIE"), Mode));
+				CloseScreens();
 				return true;
 			}
 			const BRDisplay::FMode Cur = BRDisplay::Current();
 			const BRDisplay::FMode Eff = BRDisplay::Effective();
-			FString Value;
-			if (ABRPlayerController* PC = GetPC())
-			{
-				const int32 Row = ABRPlayerController::FindSettingRow(TEXT("WindowMode"));
-				Value = Row != INDEX_NONE ? PC->GetSettingValue(Row) : FString();
-			}
-			Note(FString::Printf(TEXT("mode %d : demande %d en %d x %d, obtenu %d en %d x %d ; valeur affichee \"%s\""), Mode, Cur.Window, Cur.Resolution.X, Cur.Resolution.Y,
-				Eff.Window, Eff.Resolution.X, Eff.Resolution.Y, *Value), Cur.Window != Mode);
+			const BRDisplay::FMonitor Mon = BRDisplay::ActiveMonitor();
+			const FString Value = RowValue();
+			const bool bMode = Eff.Window == Mode;
+			// Sans bordures : la fenetre a la taille de l'ecran
+			const bool bSize = Mode != 1 || (FMath::Abs(Eff.Resolution.X - Mon.Size.X) <= 2 && FMath::Abs(Eff.Resolution.Y - Mon.Size.Y) <= 2);
+			const bool bLabel = Value == ModeLabel(Mode);
+			LabelSeen[Mode] = bLabel;
+			Note(FString::Printf(TEXT("mode %d : demande %d en %d x %d, obtenu %d en %d x %d (ecran %d x %d) ; valeur affichee \"%s\" (attendu \"%s\")"), Mode, Cur.Window,
+				Cur.Resolution.X, Cur.Resolution.Y, Eff.Window, Eff.Resolution.X, Eff.Resolution.Y, Mon.Size.X, Mon.Size.Y, *Value, *ModeLabel(Mode)), !bMode || !bSize || !bLabel);
 			ShotNamed(FString::Printf(TEXT("v416_mode_affichage_%d"), Mode));
 			BRDisplay::Revert();
 			CloseScreens();
@@ -1086,7 +1584,8 @@ void ABRAutoTest::AddV416VisualSteps()
 			return true;
 		});
 	}
-	// Fenetre d'origine pour la suite (mesures des decalques, scanner, entites et kit a la taille habituelle des bancs)
+	// Fenetre du lancement pour la suite (mesures des decalques, scanner, entites et kit a la taille habituelle des bancs).
+	// v4.16 (relecture) : la fenetre reellement ouverte au lancement (SavedEff), et non le mode enregistre du joueur
 	Add(TEXT("v4.16 visuel : fenetre d'origine"), 2.5f, []()
 	{
 		if (BRTestV416Vis::bDisplayTouched && BRDisplay::CanChange())
@@ -1095,12 +1594,12 @@ void ABRAutoTest::AddV416VisualSteps()
 			{
 				BRDisplay::Revert();
 			}
-			BRDisplay::Request(BRTestV416Vis::SavedMode.Window, BRTestV416Vis::SavedMode.Resolution);
+			BRDisplay::Request(BRTestV416Vis::SavedEff.Window, BRTestV416Vis::SavedEff.Resolution);
 			BRDisplay::Confirm();
 		}
 		return true;
 	});
-	Add(TEXT("v4.16 visuel : fenetre d'origine obtenue"), 0.f, [this]()
+	Add(TEXT("v4.16 visuel : fenetre d'origine obtenue"), 0.f, [this, ModeLabel, RowValue]()
 	{
 		FIntPoint View(0, 0);
 		if (ABRPlayerController* PC = GetPC())
@@ -1108,7 +1607,21 @@ void ABRAutoTest::AddV416VisualSteps()
 			PC->GetViewportSize(View.X, View.Y);
 		}
 		const BRDisplay::FMode Eff = BRDisplay::Effective();
-		Note(FString::Printf(TEXT("fenetre d'origine retablie : mode %d, %d x %d (image %d x %d)"), Eff.Window, Eff.Resolution.X, Eff.Resolution.Y, View.X, View.Y));
+		const BRDisplay::FMode& Want = BRTestV416Vis::SavedEff;
+		const bool bSame = Eff.Window == Want.Window && FMath::Abs(Eff.Resolution.X - Want.Resolution.X) <= 2 && FMath::Abs(Eff.Resolution.Y - Want.Resolution.Y) <= 2;
+		if (!BRDisplay::CanChange())
+		{
+			Skip(TEXT("fenetre d'origine : affichage non modifiable (editeur) : NON VERIFIE"));
+			return true;
+		}
+		// Retour en fenetre : la ligne le dit (troisieme libelle lu, si l'essai du mode sans bordures l'a quitte)
+		if (Eff.Window == 2 && RowValue() == ModeLabel(2))
+		{
+			LabelSeen[2] = true;
+		}
+		Note(FString::Printf(TEXT("fenetre d'origine retablie : mode %d, %d x %d (image %d x %d) ; fenetre du lancement : mode %d, %d x %d : %s ; libelles lus dans la ligne : "
+			"plein ecran %s, sans bordures %s, fenetre %s"), Eff.Window, Eff.Resolution.X, Eff.Resolution.Y, View.X, View.Y, Want.Window, Want.Resolution.X, Want.Resolution.Y,
+			bSame ? TEXT("identique") : TEXT("DIFFERENTE"), LabelSeen[0] ? TEXT("oui") : TEXT("non lu"), Oui(LabelSeen[1]), Oui(LabelSeen[2])), !bSame);
 		return true;
 	});
 
@@ -1120,7 +1633,12 @@ void ABRAutoTest::AddV416VisualSteps()
 			ABRWorld* W = GetBRWorld();
 			if (!W || W->GetLevelNumber() != Level || !W->IsLevelReady())
 			{
-				return StepTime > 30.f;
+				if (StepTime <= 30.f)
+				{
+					return false;
+				}
+				Section(FString::Printf(TEXT("v4.16 decalques : %s"), *Tag), Level); // l'etape suivante le note NON VERIFIE
+				return true;
 			}
 			// Les composants sont crees un par un dans le budget de l'image : attendre que chaque chunk ait les siens
 			int32 Missing = 0;
@@ -1154,9 +1672,9 @@ void ABRAutoTest::AddV416VisualSteps()
 			ABRWorld* W = GetBRWorld();
 			UBRAssets* A = UBRAssets::Get(this);
 			ABRCharacter* C = GetPlayer();
-			if (!W || !A || !C || W->GetLevelNumber() != Level)
+			if (!W || !A || !C || W->GetLevelNumber() != Level || !W->IsLevelReady())
 			{
-				Skip(FString::Printf(TEXT("decalques %s : monde absent"), *Tag));
+				Skip(FString::Printf(TEXT("decalques %s : monde absent ou niveau non pret : decalques NON VERIFIES"), *Tag));
 				return true;
 			}
 			const FBRLevelDef& Def = W->Def();
@@ -1172,11 +1690,12 @@ void ABRAutoTest::AddV416VisualSteps()
 			const float S = Def.CellSize;
 			const float T = Def.WallThickness;
 			const float H = Def.WallHeight;
-			// Vue de reference de la mesure : largeur interne et champ de la camera du joueur
-			int32 VX = 1920, VY = 1080;
-			GetPC()->GetViewportSize(VX, VY);
-			const float Hfov = GetPC()->PlayerCameraManager ? GetPC()->PlayerCameraManager->GetFOVAngle() : 88.f;
-			const float RenderW = static_cast<float>(VX) * FMath::Clamp(FBRSettings::Get().RenderScale / 100.f, 0.3f, 1.f);
+			// Vue de la mesure : celle qui regle l'effacement des decalques (ABRChunk::DecalView : largeur interne de la vue locale,
+			// champ du reglage) ; champ courant de la camera note a cote. v4.16 (relecture) : avant, une estimation du banc
+			float RenderW = BRDecal::ReferenceWidth;
+			float Hfov = BRDecal::ReferenceHFovDeg;
+			ABRChunk::DecalView(RenderW, Hfov);
+			const float CameraFov = GetPC() && GetPC()->PlayerCameraManager ? GetPC()->PlayerCameraManager->GetFOVAngle() : Hfov;
 			const FVector Eye = C->GetEyeLocation();
 			// Occurrences par face de mur (cellule, cote) pour les voisinages
 			TMap<FIntVector, int32> FaceKind;
@@ -1194,6 +1713,7 @@ void ABRAutoTest::AddV416VisualSteps()
 				Ch->GetComponents<UInstancedStaticMeshComponent>(Isms);
 				++St.Chunks;
 				St.Expected += Ch->GetDecalCount();
+				St.Dropped += Ch->GetDecalDropped();
 				St.MaxPerChunk = FMath::Max(St.MaxPerChunk, Decals.Num());
 				St.MinPerChunk = FMath::Min(St.MinPerChunk, Decals.Num());
 				for (UDecalComponent* Dc : Decals)
@@ -1237,7 +1757,7 @@ void ABRAutoTest::AddV416VisualSteps()
 						FaceKind.Add(FIntVector(Cell.X, Cell.Y, Side), Kind);
 					}
 					// Surface sous le decalque : 5 x 3 points de l'image, trace le long de l'axe de projection
-					int32 On = 0, Total = 0;
+					int32 On = 0, Total = 0, VoidHere = 0;
 					for (int32 a = -2; a <= 2; ++a)
 					{
 						for (int32 b = -1; b <= 1; ++b)
@@ -1251,6 +1771,7 @@ void ABRAutoTest::AddV416VisualSteps()
 							if (!GetWorld()->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Q, Resp))
 							{
 								++St.Void;
+								++VoidHere;
 								continue;
 							}
 							const float D = static_cast<float>(FVector::DotProduct(Hit.ImpactPoint - P, XAx));
@@ -1262,6 +1783,7 @@ void ABRAutoTest::AddV416VisualSteps()
 							if (D > Half.X)
 							{
 								++St.Void;
+								++VoidHere;
 								continue;
 							}
 							++On;
@@ -1286,25 +1808,46 @@ void ABRAutoTest::AddV416VisualSteps()
 					{
 						++St.DecalsPartial;
 					}
-					// Ouverture : un point d'une face de mur qui tombe dans un passage (grille)
 					if (Kind != static_cast<int32>(EBRDecal::CeilingStain))
 					{
-						for (int32 a = -2; a <= 2; ++a)
+						const bool bEastWest = FMath::Abs(XAx.X) > FMath::Abs(XAx.Y);
+						// v4.16 (relecture) : decalque de mur dont une partie ne tombe sur rien (geometrie reelle : bout de mur, trou,
+						// jambage plus court que prevu) ; avant, compte sans jamais etre un probleme
+						bool bOpening = false;
+						if (VoidHere > 0 && On > 0)
+						{
+							++St.WallPartVoid;
+							const FIntPoint Own = W->WorldToCell(P - XAx * 30.f);
+							const EBREdge OwnEdge = bEastWest ? W->EdgeE(XAx.X > 0.f ? Own.X : Own.X - 1, Own.Y) : W->EdgeN(Own.X, XAx.Y > 0.f ? Own.Y : Own.Y - 1);
+							if (OwnEdge == EBREdge::Door)
+							{
+								// Eraflure de jambage qui deborde dans le passage (mesure sur la geometrie, independante de BuildDecals)
+								bOpening = true;
+								St.Example(FString::Printf(TEXT("sorte %d sur un jambage, %d point(s) sur %d dans le vide (passage) en (%.0f, %.0f, %.0f)"), Kind, VoidHere, Total, P.X,
+									P.Y, P.Z));
+							}
+							else
+							{
+								St.Example(FString::Printf(TEXT("sorte %d en partie dans le vide (%d point(s) sur %d) en (%.0f, %.0f, %.0f)"), Kind, VoidHere, Total, P.X, P.Y, P.Z));
+							}
+						}
+						// Ouverture : un point d'une face de mur qui tombe dans un passage (grille ; meme largeur que BuildDecals : controle
+						// de coherence, la mesure independante est celle de la geometrie ci-dessus)
+						for (int32 a = -2; a <= 2 && !bOpening; ++a)
 						{
 							const FVector At = P + ZAx * (Half.Z * 0.95f * a / 2.f);
 							const FIntPoint In = W->WorldToCell(At - XAx * 30.f);
 							const FVector Ctr = W->CellCenter(In);
-							const bool bEastWest = FMath::Abs(XAx.X) > FMath::Abs(XAx.Y);
 							const float Along = static_cast<float>(bEastWest ? At.Y - Ctr.Y : At.X - Ctr.X);
 							const EBREdge E = bEastWest ? W->EdgeE(XAx.X > 0.f ? In.X : In.X - 1, In.Y) : W->EdgeN(In.X, XAx.Y > 0.f ? In.Y : In.Y - 1);
 							const float DW = FMath::Min(Def.DoorWidth, S - 2.f * T - 20.f);
 							if (E == EBREdge::Door && FMath::Abs(Along) < DW * 0.5f)
 							{
-								++St.OverOpening;
+								bOpening = true;
 								St.Example(FString::Printf(TEXT("sorte %d au-dessus d'un passage en (%.0f, %.0f, %.0f)"), Kind, At.X, At.Y, At.Z));
-								break;
 							}
 						}
+						St.OverOpening += bOpening ? 1 : 0;
 					}
 				}
 				// Taches au sol (instances) : posees a 0,6 cm du sol praticable, cachees sous les murs
@@ -1393,21 +1936,28 @@ void ABRAutoTest::AddV416VisualSteps()
 				Objects += FString::Printf(TEXT("%s%s x%d"), Objects.IsEmpty() ? TEXT("") : TEXT(", "), *KV.Key, KV.Value);
 			}
 			const int32 Created = St.Projected + St.Patches;
-			Note(FString::Printf(TEXT("%s : %d chunk(s), %d decalque(s) crees sur %d tires (aureoles %d, taches de plafond %d, eraflures %d ; taches au sol %d) ; par chunk %d a %d projetes "
-				"(borne %d), %d taches au sol au plus (borne %d)"), *Tag, St.Chunks, Created, St.Expected, St.KindCount[0], St.KindCount[1], St.KindCount[3], St.Patches,
-				St.MinPerChunk == MAX_int32 ? 0 : St.MinPerChunk, St.MaxPerChunk, BRDecal::MaxProjectedPerChunk, St.MaxPatchesPerChunk, BRDecal::MaxFloorPatchesPerChunk),
-				Created != St.Expected || St.MaxPerChunk > BRDecal::MaxProjectedPerChunk || St.MaxPatchesPerChunk > BRDecal::MaxFloorPatchesPerChunk);
+			// v4.16 (relecture) : tirages ecartes par la borne comptes (avant : invisibles, "crees sur tires" comparait deux nombres
+			// pris apres la borne) ; la borne ne devrait pas servir sur ces graines (pire cas reel du banc : 34 pour 40)
+			Note(FString::Printf(TEXT("%s : %d chunk(s), %d decalque(s) crees sur %d gardes, %d tirage(s) ecarte(s) par la borne (aureoles %d, taches de plafond %d, eraflures %d ; taches "
+				"au sol %d) ; par chunk %d a %d projetes (borne %d), %d taches au sol au plus (borne %d)"), *Tag, St.Chunks, Created, St.Expected, St.Dropped, St.KindCount[0],
+				St.KindCount[1], St.KindCount[3], St.Patches, St.MinPerChunk == MAX_int32 ? 0 : St.MinPerChunk, St.MaxPerChunk, BRDecal::MaxProjectedPerChunk, St.MaxPatchesPerChunk,
+				BRDecal::MaxFloorPatchesPerChunk),
+				Created != St.Expected || St.Dropped > 0 || St.MaxPerChunk > BRDecal::MaxProjectedPerChunk || St.MaxPatchesPerChunk > BRDecal::MaxFloorPatchesPerChunk);
+			// v4.16 (relecture) : un decalque sur un objet (autre acteur que le chunk ; les objets du chunk ne recoivent plus les
+			// decalques) ou un decalque de mur en partie dans le vide sont des problemes (avant : comptes seulement)
 			Note(FString::Printf(TEXT("%s : surface sous les decalques projetes : %d point(s) sur %d sur la surface, %d dans le vide, %d derriere un obstacle, %d sur un objet (%s), %d obliques ; "
-				"decalques sans aucune surface %d, partiellement dans le vide %d, au-dessus d'un passage %d"), *Tag, St.OnSurface, St.Samples, St.Void, St.Blocked, St.OnObject,
-				Objects.IsEmpty() ? TEXT("aucun") : *Objects, St.Oblique, St.DecalsFloating, St.DecalsPartial, St.OverOpening), St.DecalsFloating > 0 || St.OverOpening > 0);
+				"decalques sans aucune surface %d, partiellement dans le vide %d (dont murs %d), au-dessus d'un passage %d"), *Tag, St.OnSurface, St.Samples, St.Void, St.Blocked,
+				St.OnObject, Objects.IsEmpty() ? TEXT("aucun") : *Objects, St.Oblique, St.DecalsFloating, St.DecalsPartial, St.WallPartVoid, St.OverOpening),
+				St.DecalsFloating > 0 || St.OverOpening > 0 || St.OnObject > 0 || St.WallPartVoid > 0);
 			Note(FString::Printf(TEXT("%s : taches au sol : %d point(s), %d caches sous un mur, %d flottant(s) (> 2 cm), %d enfoui(s) (< 1 mm), ecart au sol le plus grand %.1f cm"), *Tag,
 				St.PatchSamples, St.PatchHidden, St.PatchFloating, St.PatchBuried, St.PatchMaxGap), St.PatchFloating > 0);
 			Note(FString::Printf(TEXT("%s : motifs : %.2f %% des faces de cellule portent une aureole ou une eraflure ; meme sorte sur deux faces voisines %d / %d ; %d signatures pour %d decalques "
 				"projetes, la plus frequente %d fois ; eraflures retournees %d / %d"), *Tag, Rate * 100.f, Same, Pairs, St.Signatures.Num(), St.Projected, TopSig, St.Flipped,
 				St.Scuffs), St.Projected >= 20 && TopSig * 10 > St.Projected);
-			Note(FString::Printf(TEXT("%s : distance utile (image de %.0f px de large, champ %.0f degres) : de %.1f a %.1f m selon la taille ; %d decalque(s) projete(s) sur %d a portee du joueur"),
-				*Tag, RenderW, Hfov, St.FadeMin / 100.f, St.FadeMax / 100.f, St.WithinUseful, St.Projected),
-				St.FadeMax > BRDecal::UsefulDistance * BRDecal::EngineFovFactor(BRDecal::ReferenceWidth, BRDecal::ReferenceHFovDeg) / BRDecal::EngineFovFactor(RenderW, Hfov) + 50.f);
+			// v4.16 (relecture) : effacement calcule pour la vue locale : au plus tard a la distance utile a toute definition
+			Note(FString::Printf(TEXT("%s : distance utile (vue locale : image de %.0f px de large, champ du reglage %.0f degres, camera %.0f) : de %.1f a %.1f m selon la taille "
+				"(au plus %.0f m) ; %d decalque(s) projete(s) sur %d a portee du joueur"), *Tag, RenderW, Hfov, CameraFov, St.FadeMin / 100.f, St.FadeMax / 100.f,
+				BRDecal::UsefulDistance / 100.f, St.WithinUseful, St.Projected), St.FadeMax > BRDecal::UsefulDistance + 50.f);
 			for (const FString& E : St.Examples)
 			{
 				Note(TEXT("  ") + E);
@@ -1487,7 +2037,15 @@ void ABRAutoTest::AddV416VisualSteps()
 			bLT |= T.Text == TEXT("LT");
 			bRT |= T.Text == TEXT("RT");
 		}
-		Note(FString::Printf(TEXT("rappel du scanner a la manette : LT %s, RT %s (rappel %.2f)"), Oui(bLT), Oui(bRT), H->LastLidarHintAlpha), H->LastLidarHintAlpha > 0.f && !(bLT && bRT));
+		if (H->LastLidarHintAlpha <= 0.f)
+		{
+			// v4.16 (relecture) : rappel deja efface : avant, "LT NON, RT NON" passait sans probleme ni NON VERIFIE
+			Skip(TEXT("rappel du scanner a la manette : rappel des touches plus affiche : boutons LT / RT NON VERIFIES"));
+		}
+		else
+		{
+			Note(FString::Printf(TEXT("rappel du scanner a la manette : LT %s, RT %s (rappel %.2f)"), Oui(bLT), Oui(bRT), H->LastLidarHintAlpha), !(bLT && bRT));
+		}
 		ShotNamed(TEXT("v416_lidar_rappel_manette"));
 		BRTestV416Vis::Phase = 0;
 		return true;
@@ -1726,7 +2284,11 @@ void ABRAutoTest::AddV416VisualSteps()
 		Section(TEXT("v4.16 entites : premiere et troisieme personne"), 4);
 		int32 Bad = 0;
 		const FString Mats = MaterialAudit(C, Bad);
-		Note(FString::Printf(TEXT("joueur (combinaison, vue des coequipiers) : %s"), *Mats), Bad > 0);
+		Note(FString::Printf(TEXT("joueur (combinaison, troisieme personne locale) : %s"), *Mats), Bad > 0);
+		// v4.16 (relecture) : la troisieme personne de ce banc est celle du joueur local, sans session : la vue d'un vrai coequipier
+		// (client : pose et animation recues par le reseau, maillage de la combinaison vu par les autres, composants caches au
+		// proprietaire) n'est pas exercee ici
+		Skip(TEXT("vue d'un coequipier reel (client qui regarde l'entite et le joueur de l'hote) : NON VERIFIE (banc solo ; a faire au test reseau)"));
 		BRTestV416Vis::Anchor = C->GetActorLocation();
 		BRTestV416Vis::AnchorRot = GetPC() ? GetPC()->GetControlRotation() : FRotator::ZeroRotator;
 		return true;
@@ -1792,6 +2354,26 @@ void ABRAutoTest::AddV416VisualSteps()
 			FVector ToPlayer = C->GetActorLocation() - Spot;
 			ToPlayer.Z = 0.f;
 			E->SetActorRotation(ToPlayer.Rotation());
+			if (!Info.bFlying)
+			{
+				// v4.16 (relecture) : posee au sol avant d'etre figee (avant : apparue 5 cm au-dessus, figee aussitot en pleine
+				// chute : la capture au repos la montrait en l'air)
+				FCollisionQueryParams FloorQ(SCENE_QUERY_STAT(BRV416Land), false, E);
+				FloorQ.AddIgnoredActor(C);
+				FCollisionResponseParams FloorResp;
+				FloorResp.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+				FHitResult FloorHit;
+				if (GetWorld()->LineTraceSingleByChannel(FloorHit, Spot + FVector(0.f, 0.f, 50.f), Spot - FVector(0.f, 0.f, 400.f), ECC_Visibility, FloorQ, FloorResp))
+				{
+					const float Half = E->GetCapsuleComponent() ? E->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : Info.HalfHeight;
+					E->SetActorLocation(FVector(Spot.X, Spot.Y, FloorHit.ImpactPoint.Z + Half + 1.f), false, nullptr, ETeleportType::TeleportPhysics);
+				}
+				if (UCharacterMovementComponent* Move = E->GetCharacterMovement())
+				{
+					Move->StopMovementImmediately();
+					Move->SetMovementMode(MOVE_Walking);
+				}
+			}
 			E->CustomTimeDilation = 0.02f;
 			BRTestV416Vis::Entity = E;
 			PC->SetControlRotation((Spot + FVector(0.f, 0.f, Info.bFlying ? 0.f : Info.HalfHeight * 0.3f) - C->GetEyeLocation()).Rotation());
@@ -1939,9 +2521,25 @@ void ABRAutoTest::AddV416VisualSteps()
 						}
 					}
 					const float Floor = static_cast<float>(Hit.ImpactPoint.Z);
-					Note(FString::Printf(TEXT("%s : appui au sol : %s ; bas des volumes visibles a %+.1f cm du sol"), *Name,
-						LowBone < 1.0e8f ? *FString::Printf(TEXT("os le plus bas \"%s\" a %+.1f cm"), *LowName.ToString(), LowBone - Floor) : TEXT("sans squelette (pieces rigides)"),
-						LowBounds < 1.0e8f ? LowBounds - Floor : 0.f));
+					const UCharacterMovementComponent* Move = E->GetCharacterMovement();
+					const bool bGround = Move && Move->IsMovingOnGround();
+					const bool bRigid = LowBone >= 1.0e8f;
+					const float Gap = LowBounds < 1.0e8f ? LowBounds - Floor : 0.f;
+					// v4.16 (relecture) : ecart au sol controle (3 cm) : au-dessus, l'entite flotte ; en dessous, seulement pour les
+					// pieces rigides (les bornes d'un maillage a squelette viennent de son corps physique et peuvent passer sous le sol)
+					const bool bFloating = LowBounds < 1.0e8f && Gap > 3.f;
+					const bool bSunk = LowBounds < 1.0e8f && bRigid && Gap < -3.f;
+					if (!bGround || LowBounds >= 1.0e8f)
+					{
+						Skip(FString::Printf(TEXT("%s : appui au sol NON VERIFIE (%s)"), *Name, !bGround ? TEXT("entite pas au sol en marche") : TEXT("aucun volume visible")));
+					}
+					Note(FString::Printf(TEXT("%s : appui au sol (au sol en marche %s) : %s ; bas des volumes visibles a %+.1f cm du sol (borne 3 cm%s)"), *Name, Oui(bGround),
+						!bRigid ? *FString::Printf(TEXT("os le plus bas \"%s\" a %+.1f cm"), *LowName.ToString(), LowBone - Floor) : TEXT("sans squelette (pieces rigides)"),
+						Gap, bRigid ? TEXT(", des deux cotes") : TEXT(" au-dessus")), bGround && (bFloating || bSunk));
+				}
+				else
+				{
+					Skip(FString::Printf(TEXT("%s : sol introuvable sous l'entite : appui au sol NON VERIFIE"), *Name));
 				}
 			}
 			E->Destroy();
@@ -1970,9 +2568,18 @@ void ABRAutoTest::AddV416VisualSteps()
 	{
 		ABRWorld* W = GetBRWorld();
 		UBRAssets* A = UBRAssets::Get(this);
+		bKitReady = false;
 		if (!W || !A || !W->IsLevelReady() || W->GetLevelNumber() != 0)
 		{
-			return StepTime > 40.f;
+			if (StepTime <= 40.f)
+			{
+				return false;
+			}
+			// v4.16 (relecture) : avant, l'etape passait sans section ni note, et les captures des raccords suivaient sur le niveau
+			// charge, quel qu'il soit
+			Section(TEXT("v4.16 kit du Level 0 : raccords"), 0);
+			Skip(TEXT("kit du Level 0 : niveau non pret en 40 s : plinthes, plafonds, sols et captures des raccords NON VERIFIES"));
+			return true;
 		}
 		// Chunks construits jusqu'au bout (modules, plinthes, decalques : crees par etapes dans le budget de l'image)
 		TSet<FIntPoint> Ready;
@@ -1995,9 +2602,10 @@ void ABRAutoTest::AddV416VisualSteps()
 		Section(TEXT("v4.16 kit du Level 0 : raccords"), 0);
 		if (!A->UseLevel0Kit())
 		{
-			Skip(FString::Printf(TEXT("kit du Level 0 non utilise (%s) : raccords non verifies"), *A->GetLevel0KitStatus()));
+			Skip(FString::Printf(TEXT("kit du Level 0 non utilise (%s) : raccords et leurs captures NON VERIFIES"), *A->GetLevel0KitStatus()));
 			return true;
 		}
+		bKitReady = true;
 		const FBRLevelDef& Def = W->Def();
 		const float S = Def.CellSize;
 		const float T = Def.WallThickness;
@@ -2069,17 +2677,16 @@ void ABRAutoTest::AddV416VisualSteps()
 			}
 			return true;
 		};
-		auto Inside = [](const TArray<FBox>& Boxes, const FVector& P, float Tol)
-		{
-			for (const FBox& B : Boxes)
-			{
-				if (P.X >= B.Min.X - Tol && P.X <= B.Max.X + Tol && P.Y >= B.Min.Y - Tol && P.Y <= B.Max.Y + Tol && P.Z >= B.Min.Z - Tol && P.Z <= B.Max.Z + Tol)
-				{
-					return true;
-				}
-			}
-			return false;
-		};
+		// v4.16 (relecture) : boites rangees par case de grille (FBoxGrid) : chaque point ne teste que les boites de sa case (avant :
+		// toutes les boites pour chacun des quelque 2,6e5 points, environ 1e9 tests dans une seule image)
+		FBoxGrid WallsG, PostCoresG, BaseboardsG, PostsG, CasingsG, CeilingsG, FloorsG;
+		WallsG.Build(Walls, S, 1.f);
+		PostCoresG.Build(PostCores, S, 1.f);
+		BaseboardsG.Build(Baseboards, S, 1.f);
+		PostsG.Build(Posts, S, 1.f);
+		CasingsG.Build(Casings, S, 1.f);
+		CeilingsG.Build(Ceilings, S, 1.f);
+		FloorsG.Build(Floors, S, 1.f);
 		// Plinthes : le long de chaque face de mur (aretes mur et jambages des passages) des cellules praticables construites, un
 		// point par 2 cm a 0,8 cm devant la face et 6 cm du sol ; un point dans un mur ou un poteau voisin est cache ; sinon une
 		// plinthe (ou celle d'un poteau) doit le couvrir. Trous : suites de points non couverts
@@ -2123,13 +2730,13 @@ void ABRAutoTest::AddV416VisualSteps()
 							}
 							const FVector P = Face + Along * D;
 							++Points;
-							if (Inside(Walls, P, -0.2f) || Inside(PostCores, P, -0.2f))
+							if (WallsG.Inside(P, -0.2f) || PostCoresG.Inside(P, -0.2f))
 							{
 								++Hidden;
 								Run = 0.f;
 								continue;
 							}
-							if (Inside(Baseboards, P, 0.05f) || Inside(Posts, P, 0.05f) || Inside(Casings, P, 0.05f))
+							if (BaseboardsG.Inside(P, 0.05f) || PostsG.Inside(P, 0.05f) || CasingsG.Inside(P, 0.05f))
 							{
 								++Covered;
 								Run = 0.f;
@@ -2179,16 +2786,16 @@ void ABRAutoTest::AddV416VisualSteps()
 					}
 					++Cells;
 					const FVector C0 = W->CellCenter(FIntPoint(X, Y));
-					const bool bCeil = Inside(Ceilings, C0 + FVector(0.f, 0.f, H + 1.f), 0.1f);
+					const bool bCeil = CeilingsG.Inside(C0 + FVector(0.f, 0.f, H + 1.f), 0.1f);
 					NoCeil += bCeil ? 0 : 1;
-					NoFloor += Inside(Floors, C0 + FVector(0.f, 0.f, -1.f), 0.1f) ? 0 : 1;
+					NoFloor += FloorsG.Inside(C0 + FVector(0.f, 0.f, -1.f), 0.1f) ? 0 : 1;
 					// Joint avec la cellule voisine a l'est, sans mur entre elles, les deux sous un plafond du kit : il continue
-					const bool bEastCeil = Inside(Ceilings, W->CellCenter(FIntPoint(X + 1, Y)) + FVector(0.f, 0.f, H + 1.f), 0.1f);
+					const bool bEastCeil = CeilingsG.Inside(W->CellCenter(FIntPoint(X + 1, Y)) + FVector(0.f, 0.f, H + 1.f), 0.1f);
 					if (bCeil && bEastCeil && W->EdgeE(X, Y) == EBREdge::Open && W->IsWalkable(FIntPoint(X + 1, Y)) && !W->IsPitRoomCell(X + 1, Y))
 					{
 						for (float D = -0.6f; D <= 0.6f; D += 0.3f)
 						{
-							if (!Inside(Ceilings, C0 + FVector(S * 0.5f + D, 0.f, H + 1.f), 0.02f))
+							if (!CeilingsG.Inside(C0 + FVector(S * 0.5f + D, 0.f, H + 1.f), 0.02f))
 							{
 								++CeilSeams;
 								break;
@@ -2218,8 +2825,11 @@ void ABRAutoTest::AddV416VisualSteps()
 		{
 			ABRWorld* W = GetBRWorld();
 			ABRCharacter* C = GetPlayer();
-			if (!W || !C)
+			// v4.16 (relecture) : sans le kit mesure (niveau non pret, kit absent : deja note NON VERIFIE), pas de capture des
+			// raccords sur un autre decor
+			if (!W || !C || !bKitReady || W->GetLevelNumber() != 0)
 			{
+				BRTestV416Vis::Phase = -1;
 				return true;
 			}
 			if (ABRHUD* H = HudOf())
@@ -2346,6 +2956,26 @@ void ABRAutoTest::AddV416VisualSteps()
 	{
 		CloseScreens();
 		Section(TEXT("v4.16 visuel : bilan"), 0);
+		// v4.16 (relecture) : sac et valeurs reperes retablis si une etape a ete interrompue avant de le faire
+		if (ABRCharacter* Hero = GetPlayer())
+		{
+			FBRItemSlot* S1 = Hero->GetSlot(EBRSlotGroup::Storage, 1);
+			FBRItemSlot* Head = Hero->GetSlot(EBRSlotGroup::Equipment, static_cast<int32>(EBREquipSlot::Head));
+			if (BRTestV416Vis::bInvSaved && S1 && Head)
+			{
+				*S1 = BRTestV416Vis::SavedStorage1;
+				*Head = BRTestV416Vis::SavedHead;
+				Hero->OnEquipmentChanged();
+			}
+			if (BRTestV416Vis::bVitalsSaved)
+			{
+				Hero->Health = BRTestV416Vis::SavedHealth;
+				Hero->Stamina = BRTestV416Vis::SavedStamina;
+				Hero->Sanity = BRTestV416Vis::SavedSanity;
+			}
+		}
+		BRTestV416Vis::bInvSaved = false;
+		BRTestV416Vis::bVitalsSaved = false;
 		if (BRTestV416Vis::bSaved)
 		{
 			FBRSettings::Get() = BRTestV416Vis::SavedSettings;

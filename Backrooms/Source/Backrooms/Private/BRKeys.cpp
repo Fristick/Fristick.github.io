@@ -412,4 +412,10 @@ namespace BRKeys
 		}
 		return KeyName(Key);
 	}
+
+	FString GamepadDpadName()
+	{
+		// v4.16 (relecture) : la croix entiere (curseur des cases de l'inventaire, cartes de la pause)
+		return NSLOCTEXT("BR", "Key.Pad.Dpad", "CROIX").ToString();
+	}
 }

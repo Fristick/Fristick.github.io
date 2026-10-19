@@ -6,7 +6,9 @@
 //     le depasse), au-dessus du sol (eraflures), hors du chambranle et du poteau (jambages) ;
 //   - qu'une tache au sol passee sous un mur n'en ressort pas de l'autre cote, meme tournee ;
 //   - qu'une tache de plafond ne passe jamais au-dessus de la piece voisine ;
-//   - les bornes v4.16 : nombre par chunk (pire cas : toutes les faces sont des murs), distance utile (formule du moteur) ;
+//   - les bornes v4.16 : nombre par chunk (pire cas : toutes les faces sont des murs) et, en relecture, repartition des tirages
+//     gardes sous la borne (KeepUnderCap : aucune colonne du chunk laissee nue) ; distance utile (formule du moteur) pour toute
+//     vue de 640 a 3840 px (FadeScreenSize calcule pour la vue locale) ;
 //   - la variete : frequences tirees, independance de deux faces voisines (pas de rangees), signatures distinctes, eraflures
 //     retournees une fois sur deux, aucun chunk qui en repete un autre.
 // Les surfaces reelles (kit du Level 0, objets contre les murs, portes) sont mesurees en jeu : -BRAutoTestV416Visual.
@@ -181,11 +183,15 @@ int main()
 			const int Chunks = 2000;
 			std::set<std::string> Layouts;
 			int Duplicates = 0;
+			// v4.16 (relecture) : repartition sous la borne (KeepUnderCap) : derniere colonne de cellules du chunk sans aucun
+			// decalque garde alors qu'elle en avait tire, avec la regle d'avant (les premiers tires) et avec la nouvelle
+			int BareFirstN = 0, BareSpread = 0, CapBad = 0;
 			for (int Ch = 0; Ch < Chunks; ++Ch)
 			{
 				const int32_t X0 = (Ch % 50) * 8 - 200, Y0 = (Ch / 50) * 8 - 160;
 				int Proj = 0, Patches = 0;
 				std::string Sig;
+				std::vector<int> Columns; // colonne (X - X0) de chaque decalque projete tire, dans l'ordre de BuildDecals
 				for (int32_t X = X0; X < X0 + 8; ++X)
 				{
 					for (int32_t Y = Y0; Y < Y0 + 8; ++Y)
@@ -200,6 +206,7 @@ int main()
 							if (Roll < 0.1f * L.Density)
 							{
 								++Proj;
+								Columns.push_back(X - X0);
 								Sig += static_cast<char>('a' + Side + (Roll < 0.06f * L.Density ? 0 : 4));
 								Sig += static_cast<char>('0' + (X - X0) * 8 + (Y - Y0));
 							}
@@ -207,7 +214,11 @@ int main()
 						}
 						const bool bLit = Extreme || Rand(X, Y, 32, 9u) < L.LightChance;
 						const bool bBroken = Extreme || Rand(X, Y, 33, 9u) < L.BrokenChance;
-						Proj += (bLit && Rand(X, Y, 7450, 9u) < (bBroken ? 0.35f : 0.22f) * L.Density) ? 1 : 0;
+						if (bLit && Rand(X, Y, 7450, 9u) < (bBroken ? 0.35f : 0.22f) * L.Density)
+						{
+							++Proj;
+							Columns.push_back(X - X0);
+						}
 					}
 				}
 				Worst = Proj > Worst ? Proj : Worst;
@@ -216,11 +227,31 @@ int main()
 				OverPatchCap += Patches > MaxFloorPatchesPerChunk ? 1 : 0;
 				Sum += Proj;
 				Duplicates += Layouts.insert(Sig).second ? 0 : 1;
+				bool bLastDrawn = false, bLastFirstN = false, bLastSpread = false;
+				int Kept = 0;
+				for (int i = 0; i < static_cast<int>(Columns.size()); ++i)
+				{
+					const bool bKeep = KeepUnderCap(i, static_cast<int>(Columns.size()), MaxProjectedPerChunk);
+					Kept += bKeep ? 1 : 0;
+					if (Columns[static_cast<size_t>(i)] == 7)
+					{
+						bLastDrawn = true;
+						bLastFirstN = bLastFirstN || i < MaxProjectedPerChunk;
+						bLastSpread = bLastSpread || bKeep;
+					}
+				}
+				const int Want = Proj < MaxProjectedPerChunk ? Proj : MaxProjectedPerChunk;
+				CapBad += Kept != Want ? 1 : 0;
+				BareFirstN += (bLastDrawn && !bLastFirstN) ? 1 : 0;
+				BareSpread += (bLastDrawn && !bLastSpread) ? 1 : 0;
 			}
 			if (Extreme)
 			{
 				std::printf("  cas extreme (%d chunks) : %.1f decalques projetes par chunk en moyenne, %d au plus : borne %d atteinte dans %.1f %% des chunks\n", Chunks,
 					Sum / Chunks, Worst, MaxProjectedPerChunk, 100.0 * OverCap / Chunks);
+				std::snprintf(Buf, sizeof(Buf), "cas extreme sous la borne : %d garde(s) par chunk exactement ; derniere colonne nue : %d chunk(s) (premiers tires : %d)",
+					MaxProjectedPerChunk, BareSpread, BareFirstN);
+				Line(Buf, CapBad == 0 && BareSpread == 0);
 				continue;
 			}
 			std::snprintf(Buf, sizeof(Buf), "cas dense (%d chunks) : %.1f decalques projetes par chunk, %d au plus (borne %d, %d fois) ; taches au sol %d au plus (borne %d)",
@@ -289,24 +320,74 @@ int main()
 		Line(Buf, std::fabs(static_cast<double>(Flipped) / static_cast<double>(Scuffs) - 0.5) < 0.02);
 	}
 
-	// ---- Distance utile (formule du moteur, DecalRenderingShared.cpp)
+	// ---- v4.16 (relecture) : repartition sous la borne, toutes les tailles de 0 a 400 tirages
+	{
+		std::printf("\n## Borne par chunk : repartition\n");
+		int Bad = 0, WorstRun = 0;
+		for (const int Max : { MaxProjectedPerChunk, MaxFloorPatchesPerChunk })
+		{
+			for (int Count = 0; Count <= 400; ++Count)
+			{
+				int Kept = 0, Run = 0, LongestRun = 0;
+				for (int i = 0; i < Count; ++i)
+				{
+					if (KeepUnderCap(i, Count, Max))
+					{
+						++Kept;
+						Run = 0;
+					}
+					else
+					{
+						++Run;
+						LongestRun = Run > LongestRun ? Run : LongestRun;
+					}
+				}
+				const int Want = Count < Max ? Count : Max;
+				const int AllowedRun = Count <= Max ? 0 : (Count + Max - 1) / Max - 1;
+				Bad += (Kept != Want || LongestRun > AllowedRun) ? 1 : 0;
+				WorstRun = LongestRun > WorstRun ? LongestRun : WorstRun;
+			}
+		}
+		std::snprintf(Buf, sizeof(Buf), "0 a 400 tirages sous les bornes %d et %d : exactement min(tirages, borne) gardes, ecartes regulierement (au plus %d de suite)",
+			MaxProjectedPerChunk, MaxFloorPatchesPerChunk, WorstRun);
+		Line(Buf, Bad == 0);
+	}
+
+	// ---- Distance utile (formule du moteur, DecalRenderingShared.cpp). v4.16 (relecture) : FadeScreenSize calcule pour la vue
+	// locale (largeur interne, champ) : la distance ne depend plus de la definition
 	{
 		std::printf("\n## Distance utile\n");
 		bool bSame = true;
 		for (const float Half : { 5.f, 15.f, 35.f, 70.f })
 		{
-			const float Fss = FadeScreenSizeFor(Half);
-			const float Ref = FadeOutDistance(Half, Fss, ReferenceWidth, ReferenceHFovDeg);
-			const float Low = FadeOutDistance(Half, Fss, 1229.f, ReferenceHFovDeg);
+			const float Ref = FadeOutDistance(Half, FadeScreenSizeFor(Half), ReferenceWidth, ReferenceHFovDeg);
+			const float Low = FadeOutDistance(Half, FadeScreenSizeFor(Half, 1024.f, ReferenceHFovDeg), 1024.f, ReferenceHFovDeg);
+			const float High = FadeOutDistance(Half, FadeScreenSizeFor(Half, 3840.f, ReferenceHFovDeg), 3840.f, ReferenceHFovDeg);
 			const float Old = FadeOutDistance(Half, 0.01f, ReferenceWidth, ReferenceHFovDeg);
-			std::printf("  demi-taille %3.0f cm : efface a %4.1f m en 1920 px (%4.1f m en 1229 px, fenetre de test a 80 %%) ; avant (0,01) : %5.1f m\n", Half, Ref / 100.f,
-				Low / 100.f, Old / 100.f);
-			// Au plus tard a la distance utile ; jamais plus loin qu'avant ; a la distance utile des que la regle d'avant allait au-dela
-			bSame = bSame && Ref <= UsefulDistance + 1.f && Ref <= Old + 1.f && (Old <= UsefulDistance + 1.f || std::fabs(Ref - UsefulDistance) < 1.f) && Low < Ref;
+			std::printf("  demi-taille %3.0f cm : efface a %4.1f m en 1920 px, %4.1f m en 1024 px, %4.1f m en 3840 px ; avant (0,01, 1920 px) : %5.1f m\n", Half,
+				Ref / 100.f, Low / 100.f, High / 100.f, Old / 100.f);
 		}
-		std::snprintf(Buf, sizeof(Buf), "chaque decalque s'efface au plus tard a %.0f m en 1920 px, jamais plus loin qu'avant (plus tot dans une image plus petite)",
+		// Pour chaque vue : au plus tard a la distance utile ; jamais plus loin qu'avant (0,01 a la meme vue) ; exactement la
+		// distance d'avant pour un petit decalque, la distance utile des que la regle d'avant allait au-dela
+		for (const float Width : { 640.f, 1024.f, 1229.f, 1536.f, 1920.f, 2560.f, 3840.f })
+		{
+			for (const float Fov : { 70.f, 88.f, 110.f })
+			{
+				for (float Half = 2.f; Half <= 120.f; Half += 1.f)
+				{
+					const float Fss = FadeScreenSizeFor(Half, Width, Fov);
+					const float D = FadeOutDistance(Half, Fss, Width, Fov);
+					const float Old = FadeOutDistance(Half, LegacyFadeScreenSize, Width, Fov);
+					const float Want = Old < UsefulDistance ? Old : UsefulDistance;
+					bSame = bSame && D <= UsefulDistance + 1.f && D <= Old + 1.f && std::fabs(D - Want) < 1.f;
+				}
+			}
+		}
+		std::snprintf(Buf, sizeof(Buf), "chaque decalque s'efface au plus tard a %.0f m de 640 a 3840 px (champ de 70 a 110 degres), jamais plus loin qu'avant",
 			UsefulDistance / 100.f);
 		Line(Buf, bSame);
+		const bool bTrigger = !FadeViewChanged(1920.f, 88.f, 1950.f, 88.5f) && FadeViewChanged(1920.f, 88.f, 1536.f, 88.f) && FadeViewChanged(1920.f, 88.f, 1920.f, 95.f);
+		Line("effacement recalcule quand la vue change (largeur de plus de 3 %, champ de plus d'un degre), pas pour un ecart plus petit", bTrigger);
 		Line("le lot des taches au sol s'arrete a la meme distance", std::fabs(FloorPatchCull - UsefulDistance) < 1.f);
 	}
 

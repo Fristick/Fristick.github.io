@@ -7,6 +7,7 @@
 #include "BRLevels.h"
 #include "BRInteractables.h"
 #include "BRItems.h"
+#include "BRPlayerController.h"
 #include "BRRig.h"
 
 #include "Components/DecalComponent.h"
@@ -315,7 +316,11 @@ void ABRChunk::AddProp(FName MeshName, const FTransform& T, bool bCollision, con
 	const FTransform Local(T.GetRotation(), T.GetLocation() - GetActorLocation(), T.GetScale3D());
 	if (UStaticMesh* M = A->Mesh(MeshName))
 	{
-		GetBatch(TEXT("PROP|") + MeshName.ToString(), M, nullptr, false, bShadow, CullDistance).Transforms.Add(Local);
+		// v4.16 (relecture) : les decalques d'usure (projetes sur les murs) ne peignent pas les objets poses contre eux (prises,
+		// grilles, meubles) : avant, une aureole ou une eraflure se deformait sur l'objet
+		FBatch& PB = GetBatch(TEXT("PROP|") + MeshName.ToString(), M, nullptr, false, bShadow, CullDistance);
+		PB.bNoDecals = true;
+		PB.Transforms.Add(Local);
 		if (bCollision && A->Cube())
 		{
 			const FBox Bounds = M->GetBoundingBox();
@@ -342,8 +347,9 @@ void ABRChunk::AddProp(FName MeshName, const FTransform& T, bool bCollision, con
 	{
 		const FBRSurface Surf = FallbackSurface ? *FallbackSurface : FBRSurface(TEXT("T_Grime"), FLinearColor(0.45f, 0.45f, 0.45f), 100.f);
 		const FTransform BoxT = FTransform(FQuat::Identity, FVector(0.f, 0.f, FallbackSize.Z * 0.5f), FallbackSize / 100.f) * Local;
-		GetBatch(FString::Printf(TEXT("FALLBACK|%d|%s"), bCollision ? 1 : 0, *Surf.Key()), A->Cube(), A->Surface(Surf), bCollision, bShadow, CullDistance)
-			.Transforms.Add(BoxT);
+		FBatch& FB = GetBatch(FString::Printf(TEXT("FALLBACK|%d|%s"), bCollision ? 1 : 0, *Surf.Key()), A->Cube(), A->Surface(Surf), bCollision, bShadow, CullDistance);
+		FB.bNoDecals = true; // v4.16 (relecture) : objet de repli, comme le modele
+		FB.Transforms.Add(BoxT);
 	}
 }
 
@@ -1219,14 +1225,11 @@ void ABRChunk::BuildDecals()
 	TArray<FTransform> FloorPatches;
 	// Decalque projete : X = direction de projection (vers la surface), Y = vers le bas de l'image ; demi-tailles (profondeur,
 	// hauteur de l'image, largeur de l'image)
-	// v4.16 : au plus BRDecal::MaxProjectedPerChunk decalques projetes et MaxFloorPatchesPerChunk taches au sol par chunk (les
-	// premiers tires, dans l'ordre des cellules : les memes chez tous)
+	// v4.16 : au plus BRDecal::MaxProjectedPerChunk decalques projetes et MaxFloorPatchesPerChunk taches au sol par chunk. v4.16
+	// (relecture) : tout est tire, puis les tirages gardes sont repartis sur le chunk (BRDecal::KeepUnderCap, apres les boucles :
+	// les memes chez tous) ; les tirages ecartes sont comptes (GetDecalDropped). Avant : les premiers tires seulement
 	auto AddDecal = [this](EBRDecal Kind, const FVector& Pos, const FVector& XAxis, const FVector& YAxis, const FVector& HalfSize, int32 Sort)
 	{
-		if (PendingDecals.Num() >= BRDecal::MaxProjectedPerChunk)
-		{
-			return;
-		}
 		FPendingDecal P;
 		P.Kind = Kind;
 		P.Pos = Pos;
@@ -1238,10 +1241,6 @@ void ABRChunk::BuildDecals()
 	// Tache au sol : plan du moteur (100 x 100 cm) a 6 mm au-dessus du sol, X le long de Yaw
 	auto AddPatch = [this, &FloorPatches](const FVector& At, float Yaw, float Length, float Width)
 	{
-		if (FloorPatches.Num() >= BRDecal::MaxFloorPatchesPerChunk)
-		{
-			return;
-		}
 		FloorPatches.Add(FTransform(FRotator(0.f, Yaw, 0.f), At + FVector(0.f, 0.f, 0.6f) - GetActorLocation(), FVector(Length / 100.f, Width / 100.f, 1.f)));
 	};
 	for (int32 X = X0; X < X0 + N; ++X)
@@ -1341,6 +1340,38 @@ void ABRChunk::BuildDecals()
 			}
 		}
 	}
+	// v4.16 (relecture) : bornes par chunk, tirages gardes repartis dans l'ordre des cellules (entiers seulement : le meme
+	// resultat chez l'hote et les clients)
+	{
+		const int32 Drawn = PendingDecals.Num() + FloorPatches.Num();
+		if (PendingDecals.Num() > BRDecal::MaxProjectedPerChunk)
+		{
+			TArray<FPendingDecal> Kept;
+			Kept.Reserve(BRDecal::MaxProjectedPerChunk);
+			for (int32 i = 0; i < PendingDecals.Num(); ++i)
+			{
+				if (BRDecal::KeepUnderCap(i, PendingDecals.Num(), BRDecal::MaxProjectedPerChunk))
+				{
+					Kept.Add(PendingDecals[i]);
+				}
+			}
+			PendingDecals = MoveTemp(Kept);
+		}
+		if (FloorPatches.Num() > BRDecal::MaxFloorPatchesPerChunk)
+		{
+			TArray<FTransform> KeptPatches;
+			KeptPatches.Reserve(BRDecal::MaxFloorPatchesPerChunk);
+			for (int32 i = 0; i < FloorPatches.Num(); ++i)
+			{
+				if (BRDecal::KeepUnderCap(i, FloorPatches.Num(), BRDecal::MaxFloorPatchesPerChunk))
+				{
+					KeptPatches.Add(FloorPatches[i]);
+				}
+			}
+			FloorPatches = MoveTemp(KeptPatches);
+		}
+		DecalDropped = Drawn - (PendingDecals.Num() + FloorPatches.Num());
+	}
 	// v4.15 : empreinte des decalques du chunk (sortes, positions et rotations au centimetre et au degre pres, taches au
 	// sol) : le test reseau la compare entre l'hote et les clients (ABRWorld::DecalChecksumText)
 	{
@@ -1396,12 +1427,54 @@ void ABRChunk::CreateDecal(const FPendingDecal& P)
 	Dc->SetDecalMaterial(Mat);
 	Dc->DecalSize = P.HalfSize;
 	Dc->SortOrder = P.Sort;
-	// v4.16 : s'efface au plus tard a sa distance utile (BRDecal::UsefulDistance : 35 m en 1920 px de large) ; un petit decalque
-	// plus tot, comme avant. Avant : 0,01 pour tous (une grande aureole restait dessinee jusqu'a 116 m)
-	Dc->FadeScreenSize = BRDecal::FadeScreenSizeFor(static_cast<float>(FMath::Max3(P.HalfSize.X, P.HalfSize.Y, P.HalfSize.Z)));
+	// v4.16 : s'efface au plus tard a sa distance utile (BRDecal::UsefulDistance, 35 m) ; un petit decalque plus tot, comme
+	// avant. Avant : 0,01 pour tous (une grande aureole restait dessinee jusqu'a 116 m). v4.16 (relecture) : pour la vue locale
+	// (le moteur rapporte l'effacement a la largeur interne de l'image) ; rendu seulement, hors de l'empreinte DecalHash
+	float ViewW = BRDecal::ReferenceWidth;
+	float ViewFov = BRDecal::ReferenceHFovDeg;
+	DecalView(ViewW, ViewFov);
+	Dc->FadeScreenSize = BRDecal::FadeScreenSizeFor(static_cast<float>(FMath::Max3(P.HalfSize.X, P.HalfSize.Y, P.HalfSize.Z)), ViewW, ViewFov);
 	Dc->SetRelativeLocationAndRotation(P.Pos - GetActorLocation(), P.Rot);
 	Dc->RegisterComponent();
 	Extra.Add(Dc);
+}
+
+void ABRChunk::DecalView(float& OutWidth, float& OutHFovDeg)
+{
+	// v4.16 (relecture) : largeur interne de la vue locale (pourcentage de rendu compris) et champ horizontal du reglage (le
+	// sprint ajoute 4 degres : ecart negligeable) ; sans ecran (serveur dedie) : la vue de reference
+	const FIntPoint Internal = ABRPlayerController::InternalResolution();
+	OutWidth = Internal.X > 0 ? static_cast<float>(Internal.X) : BRDecal::ReferenceWidth;
+	OutHFovDeg = FMath::Clamp(FBRSettings::Get().FOV, 40.f, 140.f);
+}
+
+int32 ABRChunk::RefreshDecalFade(float ViewWidth, float HFovDeg)
+{
+	// v4.16 (relecture) : effacement des decalques deja crees recalcule pour la nouvelle vue (fenetre, pourcentage de rendu, champ)
+	int32 Count = 0;
+	for (UActorComponent* Comp : Extra)
+	{
+		if (UDecalComponent* Dc = Cast<UDecalComponent>(Comp))
+		{
+			const FVector Half = Dc->DecalSize;
+			Dc->SetFadeScreenSize(BRDecal::FadeScreenSizeFor(static_cast<float>(FMath::Max3(Half.X, Half.Y, Half.Z)), ViewWidth, HFovDeg));
+			++Count;
+		}
+	}
+	return Count;
+}
+
+bool ABRChunk::HasPlannedDecal(EBRDecal Kind, const FVector& Pos, float Tolerance) const
+{
+	// v4.16 (relecture) : decalque garde par ce chunk (apres la trappe d'une echelle et la borne), cree ou en attente de creation
+	for (const FPendingDecal& P : PendingDecals)
+	{
+		if (P.Kind == Kind && FVector::DistSquared(P.Pos, Pos) <= FMath::Square(Tolerance))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void ABRChunk::AddStroke(const FBRSurface& Surf, const FVector& Origin, const FQuat& WallQ, const FVector2D& A, const FVector2D& B, float Width)
@@ -2011,6 +2084,7 @@ void ABRChunk::BeginBuild(ABRWorld* InWorld, const FIntPoint& InCoord)
 	DecalCursor = 0;
 	DecalHash = 0;
 	DecalTotal = 0;
+	DecalDropped = 0;
 }
 
 bool ABRChunk::StepPlan()
@@ -3524,6 +3598,10 @@ int32 ABRChunk::CreateBatchStep(const FString& Key, int32 MaxInstances)
 		ISM->bAffectDistanceFieldLighting = false;
 		ISM->bAffectDynamicIndirectLighting = false;
 		ISM->bReceivesDecals = false;
+	}
+	if (B.bNoDecals)
+	{
+		ISM->bReceivesDecals = false; // v4.16 (relecture) : objets poses (AddProp)
 	}
 	if (B.bCollision)
 	{

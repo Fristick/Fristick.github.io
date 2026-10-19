@@ -2669,6 +2669,14 @@ msgctxt "BR,HUD.1992ThresholdSystems"
 msgid "© 1992 THRESHOLD SYSTEMS"
 msgstr "© 1992 THRESHOLD SYSTEMS"
 
+#. Key:	HUD.PadCharacterFooter
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4239)
+#: Source/Backrooms/Private/BRHUD.cpp(4239)
+#, fuzzy
+msgctxt "BR,HUD.PadCharacterFooter"
+msgid "[{Prev}] [{Next}]  ONGLETS     [{Move}]  CHOISIR     [{Use}]  UTILISER / ÉQUIPER     [{Inspect}]  INSPECTER     [{Close}]  FERMER"
+msgstr "[{Prev}] [{Next}]  탭     [{Move}]  선택     [{Use}]  사용 / 장착     [{Inspect}]  살펴보기     [{Close}]  닫기"
+
 #. Key:	HUD.PadInventoryFooter
 #. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4211)
 #: Source/Backrooms/Private/BRHUD.cpp(4211)
@@ -4364,6 +4372,14 @@ msgstr "방향 패드 오른쪽"
 msgctxt "BR,Key.Pad.LeftStick"
 msgid "STICK GAUCHE"
 msgstr "왼쪽 스틱"
+
+#. Key:	Key.Pad.Dpad
+#. SourceLocation:	Source/Backrooms/Private/BRKeys.cpp(419)
+#: Source/Backrooms/Private/BRKeys.cpp(419)
+#, fuzzy
+msgctxt "BR,Key.Pad.Dpad"
+msgid "CROIX"
+msgstr "방향 패드"
 
 #. Key:	Level.0.Title
 #. SourceLocation:	Source/Backrooms/Private/BRLevels.cpp(43)
