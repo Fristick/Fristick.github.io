@@ -202,7 +202,8 @@ private:
 	/** v4.15 (correctifs) : -BRAutoTestV415Fix : les seules etapes de non-regression des correctifs (places des Niveaux 8 et 9,
 	 *  Level 6, Poolrooms), deja comprises dans -BRAutoTestV411, -BRAutoTestV412 et -BRAutoTestV413 (BRAutoTestV415Fix.cpp).
 	 *  v4.15 (correctifs 5) : echelles des chunks du Niveau 37 (graine du niveau 115083815, partie classique) : places libres,
-	 *  constat de la prise depuis le canal, approche, visee, montee, arrivee au Niveau 2 */
+	 *  constat de la prise depuis le canal, approche, visee, montee, arrivee au Niveau 2. v4.16 (echelles, relecture) : prise
+	 *  depuis le canal jugee aussi sur une echelle des chunks qui a une place dans le canal (AddV416LadderCanalGrab) */
 	void AddV415FixSteps();
 	/** v4.15 (correctifs 4, relecture) : multijoueur : Niveau 8 en partie classique (graine du niveau 233637237), hote au sommet de
 	 *  l'echelle BRExit_42, client devant elle : rassemblement 2/2 puis depart (BRAutoTestV415Fix.cpp). v4.15 (correctifs 5) :
@@ -210,9 +211,16 @@ private:
 	void AddNetV415FixSteps(bool bClient);
 	/** v4.16 (echelles) : -BRAutoTestV416Ladder (BRAutoTestV416Ladder.cpp) : echelles des chunks du Niveau 37 (graine du niveau
 	 *  115083815 et 2303284074, partie classique) prises depuis le canal, cas limites du deplacement de secours de la montee,
-	 *  montee et descente aux Niveaux 8 et 6 ; reseau (avec -BRNetTest) : depart de groupe par une echelle des chunks du Niveau 37 */
+	 *  montee et descente aux Niveaux 8 et 6 ; reseau (toujours dans -BRNetTest) : depart de groupe par une echelle des chunks du
+	 *  Niveau 37 */
 	void AddV416LadderSteps();
 	void AddNetV416LadderSteps(bool bClient);
+	/** v4.16 (echelles, relecture) : etapes partagees avec -BRAutoTestV415Fix : Niveau 37 en partie classique a la graine du niveau
+	 *  Seed et tirage des echelles des chunks ; conduite a une echelle sur son trottoir avec une place dans le canal (ou au fond du
+	 *  canal) ; prise depuis le canal deux fois, lacher, montee et descente */
+	void AddV416LadderPlan(uint32 Seed);
+	void AddV416LadderGoTo(bool bFlatList, const FString& Title);
+	void AddV416LadderCanalGrab();
 	/** v4.14 : REJOUER isole, migration ambigue, scanner (rechargement, arret, cadences, HUD), kit du Level 0
 	 *  (BRAutoTestV414.cpp) ; reseau : porte du client */
 	void AddV414Steps();

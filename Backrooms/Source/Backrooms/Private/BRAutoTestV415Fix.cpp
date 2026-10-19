@@ -24,6 +24,12 @@
 //     approche a pied, visee, avancer 0,5 s apres la prise, sommet, une demande, arrivee au Niveau 2. En reseau : graine du
 //     niveau 2303284074 (net_final3), memes echelles tirees chez l'hote et le client (empreinte, au moins une), aucune aux
 //     places signalees (chunks tires), celles des chunks construits libres.
+//   - v4.16 (echelles, relecture) : l'echelle du chunk (-1, -1) n'a aucune place dans le canal devant son trottoir (canal de 60 cm
+//     entre deux trottoirs, la capsule n'y tient pas : final4/v415fix NON VERIFIE) : la prise depuis le canal est jugee ensuite sur
+//     une echelle des chunks -6..6 sur son trottoir avec une place dans le canal (Niveau 37 recharge a la graine du niveau
+//     115083815, etapes partagees de BRAutoTestV416Ladder.cpp). En reseau, aucune echelle vers le Niveau 2 dans les chunks
+//     construits au depart a 2303284074 (net_final4) : leur pose par le tirage est jugee juste apres, a 115083815
+//     (AddNetV416LadderSteps, toujours dans le plan reseau).
 // Les memes etapes font partie de -BRAutoTestV411 (AddMissionSteps : places des mecanismes de chaque niveau), de
 // -BRAutoTestV412 (Poolrooms) et de -BRAutoTestV413 (Level 6), donc du test complet : cette suite n'y est pas ajoutee une
 // seconde fois (les etapes des correctifs 4, Niveau 2 et Niveau 8, ne sont que dans cette suite et dans -BRNetTest). Une
@@ -1107,7 +1113,12 @@ void ABRAutoTest::AddV415FixSteps()
 			}
 			if (!bStand)
 			{
-				Skip(TEXT("prise depuis le canal NON VERIFIEE : aucune place libre dans le canal devant le trottoir de l'echelle"));
+				// v4.16 (echelles, relecture) : sans objet pour cette echelle (canal trop etroit devant son trottoir), jugee plus bas sur
+				// une echelle des chunks qui a une place dans le canal (AddV416LadderCanalGrab, toujours dans cette suite) ; avant :
+				// NON VERIFIE, jamais juge par cette suite
+				Note(FString::Printf(TEXT("prise depuis le canal devant l'echelle %s (pied a %.0f cm) : aucune place libre dans le canal devant son trottoir (140 a 260 cm devant l'accroche) : "
+					"sans objet pour cette echelle, jugee plus bas sur une echelle des chunks sur son trottoir avec une place dans le canal (v4.16, graine du niveau %u)"), *Exit->GetName(),
+					FootZ, Pool37Seed));
 				return End();
 			}
 			CanalTrial = 0;
@@ -1209,11 +1220,27 @@ void ABRAutoTest::AddV415FixSteps()
 		Pool.StandDZ = 75.f;
 		AddLadderClimb(Pool, TEXT("v4.15 correctifs 5 : echelle du chunk (-1, -1) du Niveau 37, approche, visee et montee"));
 	}
+	// v4.16 (echelles, relecture) : prise depuis le canal sur une echelle des chunks qui a une place dans le canal devant son
+	// trottoir (celle du chunk (-1, -1) n'en a pas) : Niveau 37 recharge a la graine du niveau 115083815 (partie classique, sans
+	// seconde transformation), tirage des chunks -6..6, conduite (vol du developpeur le temps de la construction du chunk), deux
+	// prises (avancer tout de suite, puis 0,5 s apres), lacher sur le trottoir, montee de 2 m et descente. Aucune echelle
+	// utilisable : NON VERIFIE (BRAutoTestV416Ladder.cpp)
+	AddV416LadderPlan(BRTestV415Fix::Pool37Seed);
+	AddV416LadderGoTo(false, TEXT("v4.15 correctifs 5 (v4.16) : echelle sur son trottoir avec une place dans le canal devant elle"));
+	AddV416LadderCanalGrab();
 	Add(TEXT("v4.15 correctifs 5 : retour a la regle normale du parcours"), 0.f, [this]()
 	{
 		if (ABRWorld* W = GetBRWorld())
 		{
 			W->SetLinearTestOverride(-1);
+		}
+		// v4.16 (echelles, relecture) : jamais de vol du developpeur laisse par une conduite bloquee
+		if (ABRCharacter* C = GetPlayer())
+		{
+			if (C->IsDevFlying())
+			{
+				C->SetDevFly(false);
+			}
 		}
 		BRTestV415Fix::Ladder.Reset();
 		return true;
@@ -1757,8 +1784,12 @@ void ABRAutoTest::AddNetV415FixSteps(bool bClient)
 				"(attendu 0)%s%s"), Who, Count, Built.Num(), Pool37Target, Outside, Taken, Taken > 0 ? TEXT(" : ") : TEXT(""), *What), Taken > 0 || Outside > 0);
 			if (Built.Num() == 0)
 			{
-				// v4.15 (correctifs 5, relecture) : sans echelle construite vers le Niveau 2, "hors du tirage : 0" ne prouve rien
-				Skip(FString::Printf(TEXT("%s : Niveau 37 : NON VERIFIE, aucune echelle vers le Niveau %d dans les chunks construits : pose par le tirage non jugee"), Who, Pool37Target));
+				// v4.15 (correctifs 5, relecture) : sans echelle construite vers le Niveau 2, "hors du tirage : 0" ne prouve rien.
+				// v4.16 (echelles, relecture) : jugee juste apres a la graine du niveau 115083815, dont le chunk (-1, -1) construit au
+				// depart porte une echelle vers le Niveau 2 (AddNetV416LadderSteps, toujours dans le plan reseau ; NON VERIFIE la-bas si
+				// elle manque) ; avant : NON VERIFIE ici, jamais juge par le test reseau ordinaire
+				Note(FString::Printf(TEXT("%s : Niveau 37 (graine du niveau %u) : aucune echelle vers le Niveau %d dans les chunks construits au depart : pose par le tirage non jugee a cette "
+					"graine, jugee plus bas a la graine du niveau 115083815 (v4.16 echelles reseau)"), Who, Pool37NetSeed, Pool37Target));
 			}
 			if (bClient)
 			{

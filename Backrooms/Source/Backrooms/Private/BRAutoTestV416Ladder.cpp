@@ -23,12 +23,16 @@
 //   - UpdateClimb est commun : Niveau 8, graine du niveau 233637237, echelle BRExit_42 (tablier incline), et Level 6, graine du
 //     niveau 2702236446, echelle de l'alcove de l'aile : montee de 2 m, descente jusqu'au lacher au pied (debout, jamais coince),
 //     reprise et lacher en hauteur (Saut) : chute au sol, jamais en l'air sans echelle.
-// Reseau (-BRNetTest -BRAutoTestV416Ladder, apres les etapes de -BRNetTest) : Niveau 37 a la graine du niveau 115083815 (son chunk
-// (-1, -1), construit au depart, porte une echelle vers le Niveau 2 sur un trottoir : banc et final4/v415fix ; a 2303284074,
-// net_final4, aucune dans les chunks construits au depart) : echelles des chunks construits posees par le tirage et libres,
-// meme tirage et meme echelle chez l'hote et le client, l'hote au sommet (une demande, attente stable, 1/2), le client loin puis a pied, rassemblement 2/2,
-// depart et arrivee au Niveau 2 chez chacun. Une etape impossible (chunk absent, echelle introuvable, place prise) est notee
-// "NON VERIFIE", jamais comptee comme reussie.
+// Reseau (-BRNetTest, a la fin du plan reseau ; v4.16 relecture : toujours, plus seulement avec -BRAutoTestV416Ladder) : Niveau 37
+// a la graine du niveau 115083815 (son chunk (-1, -1), construit au depart, porte une echelle vers le Niveau 2 sur un trottoir :
+// banc et final4/v415fix ; a 2303284074, net_final4, aucune dans les chunks construits au depart) : echelles des chunks construits
+// posees par le tirage et libres, meme tirage et meme echelle chez l'hote et le client, l'hote au sommet (une demande, attente
+// stable, 1/2), le client loin puis a pied, rassemblement 2/2, depart et arrivee au Niveau 2 chez chacun. Une etape impossible
+// (chunk absent, echelle introuvable, place prise) est notee "NON VERIFIE", jamais comptee comme reussie.
+// v4.16 (echelles, relecture) : la place de la regle du jeu au chunk (2, -1) (graine du niveau 2303284074) est jugee par une etape
+// a elle (avant : seulement si l'echelle retenue pour les caisses etait celle-la, sans ligne sinon) ; une echelle disparue en
+// cours de cas est notee (avant : etape finie sans ligne) ; la prise depuis le canal (AddV416LadderPlan, AddV416LadderGoTo,
+// AddV416LadderCanalGrab) sert aussi a -BRAutoTestV415Fix, ou l'echelle du chunk (-1, -1) n'a pas de place dans le canal.
 #include "BRAutoTest.h"
 #include "BRAutoTestNet.h"
 #include "BRAutoTestWalk.h"
@@ -628,6 +632,17 @@ namespace BRTestV416Ladder
 		L16.Blocks.Reset();
 	}
 
+	/** v4.16 (echelles, relecture) : vol du developpeur de la conduite arrete (etape finie, ou bloquee : sinon le joueur volerait,
+	 *  sans collision, jusque dans le niveau suivant) */
+	void StopFlying416(ABRCharacter* C)
+	{
+		if (L16.bFlying && C)
+		{
+			C->SetDevFly(false);
+		}
+		L16.bFlying = false;
+	}
+
 	/** Fin d'une prise : lacher l'echelle, vol du developpeur arrete, boites retirees */
 	void EndClimbCase(ABRCharacter* C)
 	{
@@ -701,320 +716,196 @@ namespace BRTestV416Ladder
 	}
 }
 
-void ABRAutoTest::AddV416LadderSteps()
+// v4.16 (echelles, relecture) : etapes partagees avec -BRAutoTestV415Fix (AddV415FixSteps : la prise depuis le canal y est jugee
+// sur une echelle des chunks qui a une place dans le canal devant elle, celle du chunk (-1, -1) n'en ayant pas)
+
+// Partie classique imposee avant le chargement (ABRWorld::SetLinearTestOverride) : le parcours lineaire ne tire aucune sortie
+// des chunks (une seule sortie, celle de la mission) ; Niveau 37 charge a la graine DU NIVEAU (AddLevelSeedLoad, sans seconde
+// transformation), puis tirage des echelles et de leurs places (grille seule, chunks pas encore construits)
+void ABRAutoTest::AddV416LadderPlan(uint32 Seed)
 {
-	Add(TEXT("v4.16 echelles : preparation"), 0.f, [this]()
+	Add(FString::Printf(TEXT("v4.16 echelles : partie classique imposee (Niveau 37, graine du niveau %u)"), Seed), 0.f, [this]()
 	{
-		FLevelReport R;
-		R.Title = TEXT("v4.16 (echelles) : echelles des chunks du Niveau 37 et deplacement de secours de la montee");
-		R.Scene = TEXT("v4.16");
-		R.FirstLogLine = LogLineCount();
-		Reports.Add(R);
-		BRTestV416Ladder::L16 = BRTestV416Ladder::FLadderTest();
+		ABRWorld* W = GetBRWorld();
+		if (!W || W->IsTransitioning())
+		{
+			return false;
+		}
+		// v4.16 (echelles, relecture) : jamais de vol du developpeur (sans collision) herite d'une etape bloquee
+		BRTestV416Ladder::StopFlying416(GetPlayer());
+		W->SetLinearTestOverride(0);
 		return true;
 	});
-	// Partie classique imposee avant le chargement (ABRWorld::SetLinearTestOverride) : le parcours lineaire ne tire aucune sortie
-	// des chunks (une seule sortie, celle de la mission) ; Niveau 37 charge a la graine DU NIVEAU (AddLevelSeedLoad, sans seconde
-	// transformation), puis tirage des echelles et de leurs places (grille seule, chunks pas encore construits)
-	auto AddPlan = [this](uint32 Seed)
+	AddLevelSeedLoad(37, Seed, FString::Printf(TEXT("v4.16 echelles : Niveau 37 (graine du niveau %u, partie classique)"), Seed));
+	Add(FString::Printf(TEXT("v4.16 echelles : echelles des chunks vers le Niveau 2 et places de depart (graine du niveau %u)"), Seed), 0.5f, [this, Seed]()
 	{
-		Add(FString::Printf(TEXT("v4.16 echelles : partie classique imposee (Niveau 37, graine du niveau %u)"), Seed), 0.f, [this]()
+		using namespace BRTestV416Ladder;
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C)
 		{
-			ABRWorld* W = GetBRWorld();
-			if (!W || W->IsTransitioning())
-			{
-				return false;
-			}
-			W->SetLinearTestOverride(0);
-			return true;
-		});
-		AddLevelSeedLoad(37, Seed, FString::Printf(TEXT("v4.16 echelles : Niveau 37 (graine du niveau %u, partie classique)"), Seed));
-		Add(FString::Printf(TEXT("v4.16 echelles : echelles des chunks vers le Niveau 2 et places de depart (graine du niveau %u)"), Seed), 0.5f, [this, Seed]()
+			return false;
+		}
+		L16.Deck.Reset();
+		L16.Flat.Reset();
+		L16.Drawn = 0;
+		L16.OnDeck = 0;
+		if (W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 37 || W->GetSeed() != Seed)
 		{
-			using namespace BRTestV416Ladder;
-			ABRWorld* W = GetBRWorld();
-			ABRCharacter* C = GetPlayer();
-			if (!W || !C)
-			{
-				return false;
-			}
-			L16.Deck.Reset();
-			L16.Flat.Reset();
-			L16.Drawn = 0;
-			L16.OnDeck = 0;
-			if (W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 37 || W->GetSeed() != Seed)
-			{
-				Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) non charge (Niveau %d, graine %u) : echelles des chunks non verifiees"), Seed, W->GetLevelNumber(), W->GetSeed()));
-				return true;
-			}
-			if (W->IsLinearLevel())
-			{
-				Skip(TEXT("Niveau 37 charge en parcours lineaire malgre la partie classique imposee : aucune sortie des chunks, echelles non verifiees"));
-				return true;
-			}
-			if (BRLevels::ResolveExit(37, PoolTarget).Kind == BRContent::EExit::Sealed)
-			{
-				Skip(TEXT("Niveau 37 : passage vers le Niveau 2 condamne dans ce canal : echelles des chunks non verifiees"));
-				return true;
-			}
-			PlanLadders(W, C->GetActorLocation());
-			Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : %d echelle(s) vers le Niveau 2 tirees (chunks -%d..%d), %d sur un trottoir ; sur un trottoir avec "
-				"une place dans le canal devant elle (grille) : %s ; au fond du canal avec un sol plat devant elle : %s"), Seed, L16.Drawn, PlanRange, PlanRange, L16.OnDeck,
-				*CandidateText(L16.Deck), *CandidateText(L16.Flat)));
-			if (L16.Drawn == 0)
-			{
-				Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) : aucune echelle vers le Niveau 2 tiree dans les chunks -%d..%d : prises non verifiees"), Seed, PlanRange, PlanRange));
-			}
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) non charge (Niveau %d, graine %u) : echelles des chunks non verifiees"), Seed, W->GetLevelNumber(), W->GetSeed()));
 			return true;
-		});
-	};
+		}
+		if (W->IsLinearLevel())
+		{
+			Skip(TEXT("Niveau 37 charge en parcours lineaire malgre la partie classique imposee : aucune sortie des chunks, echelles non verifiees"));
+			return true;
+		}
+		if (BRLevels::ResolveExit(37, PoolTarget).Kind == BRContent::EExit::Sealed)
+		{
+			Skip(TEXT("Niveau 37 : passage vers le Niveau 2 condamne dans ce canal : echelles des chunks non verifiees"));
+			return true;
+		}
+		PlanLadders(W, C->GetActorLocation());
+		Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) : %d echelle(s) vers le Niveau 2 tirees (chunks -%d..%d), %d sur un trottoir ; sur un trottoir avec "
+			"une place dans le canal devant elle (grille) : %s ; au fond du canal avec un sol plat devant elle : %s"), Seed, L16.Drawn, PlanRange, PlanRange, L16.OnDeck,
+			*CandidateText(L16.Deck), *CandidateText(L16.Flat)));
+		if (L16.Drawn == 0)
+		{
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) : aucune echelle vers le Niveau 2 tiree dans les chunks -%d..%d : prises non verifiees"), Seed, PlanRange, PlanRange));
+		}
+		return true;
+	});
+}
 
-	// Conduite a une echelle de la liste (Deck : sur un trottoir, place dans le canal ; Flat : au fond du canal), chunk construit,
-	// echelle jugee, place verifiee par les collisions ; la suivante si la place est prise. Aucune : NON VERIFIE
-	auto AddGoTo = [this](bool bFlatList, const FString& Title)
+// Conduite a une echelle de la liste (Deck : sur un trottoir, place dans le canal ; Flat : au fond du canal), chunk construit,
+// echelle jugee, place verifiee par les collisions ; la suivante si la place est prise. Aucune : NON VERIFIE
+void ABRAutoTest::AddV416LadderGoTo(bool bFlatList, const FString& Title)
+{
+	Add(Title + TEXT(" : debut"), 0.f, [this]()
 	{
-		Add(Title + TEXT(" : debut"), 0.f, [this]()
+		using namespace BRTestV416Ladder;
+		L16.bReady = false;
+		L16.Exit.Reset();
+		L16.Index = 0;
+		L16.Phase = 0;
+		// v4.16 (echelles, relecture) : premier essai de la prise depuis le canal (aussi apres une etape bloquee, et dans
+		// -BRAutoTestV415Fix)
+		L16.Trial = 0;
+		L16.Tried.Reset();
+		return true;
+	});
+	Add(Title, 0.f, [this, bFlatList]()
+	{
+		using namespace BRTestV416Ladder;
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C)
 		{
-			using namespace BRTestV416Ladder;
-			L16.bReady = false;
-			L16.Exit.Reset();
-			L16.Index = 0;
+			return false;
+		}
+		const TArray<FCandidate>& List = bFlatList ? L16.Flat : L16.Deck;
+		const TCHAR* Kind = bFlatList ? TEXT("au fond du canal (sol plat devant elle)") : TEXT("sur un trottoir avec une place dans le canal devant elle");
+		const double Now = FPlatformTime::Seconds();
+		auto Finish416 = [&]()
+		{
+			StopFlying416(C);
 			L16.Phase = 0;
-			L16.Tried.Reset();
 			return true;
-		});
-		Add(Title, 0.f, [this, bFlatList]()
+		};
+		if (L16.Phase == 0)
 		{
-			using namespace BRTestV416Ladder;
-			ABRWorld* W = GetBRWorld();
-			ABRCharacter* C = GetPlayer();
-			if (!W || !C)
+			if (W->GetLevelNumber() != 37 || W->IsLinearLevel())
 			{
-				return false;
-			}
-			const TArray<FCandidate>& List = bFlatList ? L16.Flat : L16.Deck;
-			const TCHAR* Kind = bFlatList ? TEXT("au fond du canal (sol plat devant elle)") : TEXT("sur un trottoir avec une place dans le canal devant elle");
-			const double Now = FPlatformTime::Seconds();
-			auto Finish416 = [&]()
-			{
-				if (L16.bFlying)
-				{
-					C->SetDevFly(false);
-					L16.bFlying = false;
-				}
-				L16.Phase = 0;
-				return true;
-			};
-			if (L16.Phase == 0)
-			{
-				if (W->GetLevelNumber() != 37 || W->IsLinearLevel())
-				{
-					Skip(FString::Printf(TEXT("echelle %s : Niveau 37 en partie classique absent (Niveau %d) : prises non verifiees"), Kind, W->GetLevelNumber()));
-					return Finish416();
-				}
-				// Les MaxTried plus proches au plus (30 s chacune pour la construction de son chunk)
-				if (L16.Index >= FMath::Min(List.Num(), MaxTried))
-				{
-					Skip(FString::Printf(TEXT("echelle %s : NON VERIFIE, aucune construite avec sa place libre parmi les %d essayee(s) sur %d tiree(s) (%s)"), Kind, FMath::Min(List.Num(), MaxTried),
-						List.Num(), L16.Tried.IsEmpty() ? TEXT("aucune") : *L16.Tried));
-					return Finish416();
-				}
-				L16.Cur = List[L16.Index];
-				L16.Exit.Reset();
-				// Vol du developpeur (sans collision) au-dessus de la premiere place, le temps que le chunk se construise
-				if (!L16.bFlying)
-				{
-					C->SetDevFly(true);
-					L16.bFlying = true;
-				}
-				C->SetActorLocation(FVector(L16.Cur.Stands[0].X, L16.Cur.Stands[0].Y, L16.Cur.Foot.Z + 300.f), false, nullptr, ETeleportType::TeleportPhysics);
-				L16.Clock = Now;
-				L16.Phase = 1;
-				return false;
-			}
-			if (L16.Phase == 1)
-			{
-				ABRExit* E = W->IsChunkLoaded(L16.Cur.Chunk) ? LadderNear(GetWorld(), L16.Cur.Foot, PoolTarget, 2.0) : nullptr;
-				const FIntPoint StandChunk = W->CellToChunk(W->WorldToCell(L16.Cur.Stands[0]));
-				if ((!E || !W->IsChunkLoaded(StandChunk)) && Now - L16.Clock < 30.0)
-				{
-					return false;
-				}
-				if (!E)
-				{
-					L16.Tried += FString::Printf(TEXT("%s(%.0f, %.0f, %.0f) : %s"), L16.Tried.IsEmpty() ? TEXT("") : TEXT(" ; "), L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.Cur.Foot.Z,
-						W->IsChunkLoaded(L16.Cur.Chunk) ? TEXT("echelle introuvable dans le chunk construit") : TEXT("chunk non construit en 30 s"));
-					++L16.Index;
-					L16.Phase = 0;
-					return false;
-				}
-				// Echelle construite : point vise et capsule du grimpeur libres, puis la premiere place libre
-				const FString View = LadderTaken(GetWorld(), E, false);
-				const FString Climb = LadderTaken(GetWorld(), E, true);
-				FVector Stand = FVector::ZeroVector;
-				int32 Found = INDEX_NONE;
-				for (int32 K = 0; K < L16.Cur.Stands.Num() && Found == INDEX_NONE; ++K)
-				{
-					if (FreeStand(W, C, L16.Cur.Stands[K], static_cast<float>(L16.Cur.Stands[K].Z), Stand))
-					{
-						Found = K;
-					}
-				}
-				if (View != TEXT("libre") || Climb != TEXT("libre") || Found == INDEX_NONE)
-				{
-					L16.Tried += FString::Printf(TEXT("%s(%.0f, %.0f, %.0f) : point vise %s, capsule du grimpeur %s, place libre %s"), L16.Tried.IsEmpty() ? TEXT("") : TEXT(" ; "),
-						L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.Cur.Foot.Z, *View, *Climb, OuiNon(Found != INDEX_NONE));
-					++L16.Index;
-					L16.Phase = 0;
-					return false;
-				}
-				C->SetDevFly(false);
-				L16.bFlying = false;
-				PutAt416(C, Stand, LadderAimOf(E));
-				L16.Exit = E;
-				L16.Stand = Stand;
-				L16.StandAt = L16.Cur.StandAt[Found];
-				L16.FootZ = static_cast<float>(E->GetActorLocation().Z);
-				L16.TopZ = E->GetClimbTopZ();
-				L16.bReady = true;
-				// La sortie est gardee par la mission du niveau : resolue par l'hote (seule l'echelle est jugee ici)
-				W->DebugCompleteMission();
-				const FVector Anchor = E->GetClimbAnchor();
-				Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) : echelle %s : %s en (%.0f, %.0f, %.0f), chunk (%d, %d), sommet de la montee a %.0f cm du pied ; point vise %s, "
-					"capsule du grimpeur %s ; place libre en (%.0f, %.0f, %.0f), %.0f cm devant l'accroche, %.0f cm de cote (accroche (%.0f, %.0f, %.0f))%s"), W->GetSeed(), Kind, *E->GetName(),
-					L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.FootZ, L16.Cur.Chunk.X, L16.Cur.Chunk.Y, L16.TopZ - L16.FootZ, *View, *Climb, Stand.X, Stand.Y, Stand.Z - C->GetSimpleCollisionHalfHeight() - 5.f,
-					L16.StandAt.X, L16.StandAt.Y, Anchor.X, Anchor.Y, Anchor.Z, L16.Tried.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" ; ecartees avant : %s"), *L16.Tried)));
-				// v4.16 : graine du niveau 2303284074, chunk (2, -1) : la place de la regle des correctifs 5 (BRMech::Grid::StandFlat ;
-				// banc test_departure section 5) jugee dans le chunk construit ; net_final4 : chunk pas construit au depart, NON VERIFIE
-				const FVector BenchFoot(FlatBenchX, FlatBenchY, 0.0);
-				if (W->GetSeed() == Pool37FlatSeed && FVector::Dist2D(E->GetActorLocation(), BenchFoot) < 100.0)
-				{
-					const bool bAtBench = FVector::Dist(E->GetActorLocation(), BenchFoot) < 1.0;
-					const bool bOldEmpty = LadderNear(GetWorld(), FVector(FlatBenchX, FlatOldY, 0.0), PoolTarget, 50.0) == nullptr;
-					Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u), chunk (%d, %d) construit : echelle vers le Niveau 2 a la place de la regle du jeu (banc : (%.0f, %.0f, 0)) %s ; "
-						"ancienne place (%.0f, %.0f, 0) sans echelle %s"), Pool37FlatSeed, L16.Cur.Chunk.X, L16.Cur.Chunk.Y, FlatBenchX, FlatBenchY, OuiNon(bAtBench), FlatBenchX, FlatOldY,
-						OuiNon(bOldEmpty)), !bAtBench || !bOldEmpty);
-				}
-				Shot(bFlatList ? TEXT("v416_echelle_fond_du_canal") : TEXT("v416_echelle_trottoir_canal"));
+				Skip(FString::Printf(TEXT("echelle %s : Niveau 37 en partie classique absent (Niveau %d) : prises non verifiees"), Kind, W->GetLevelNumber()));
 				return Finish416();
 			}
-			return Finish416();
-		});
-		LimitLastStep(200.f);
-	};
-
-	// ---------------------------------------------------------------------------------------------------------------------
-	// A. Graine du niveau 2303284074 : echelle au fond du canal, sol plat devant elle : une marche basse seulement (caisses posees
-	//    par le test)
-	// ---------------------------------------------------------------------------------------------------------------------
-	AddPlan(BRTestV416Ladder::Pool37FlatSeed);
-	AddGoTo(true, TEXT("v4.16 echelles : echelle au fond du canal (sol plat), construite et libre"));
-	// Caisse de Height cm entre le joueur (160 cm devant l'accroche) et l'accroche (de 80 a 120 cm devant elle, 160 cm de large) ;
-	// prise directe (StartClimb : la visee n'est pas jugee ici), avancer 4 s. bPass : franchie et l'accroche atteinte ; sinon
-	// aucune hausse au-dela de NoLift, toujours loin de l'accroche ; puis reculer : lachee au pied
-	auto AddFlatBox = [this](float Height, bool bPass)
-	{
-		Add(FString::Printf(TEXT("v4.16 echelles : caisse de %.0f cm devant l'accroche (sol plat)"), Height), 0.f, [this, Height, bPass]()
+			// Les MaxTried plus proches au plus (30 s chacune pour la construction de son chunk)
+			if (L16.Index >= FMath::Min(List.Num(), MaxTried))
+			{
+				Skip(FString::Printf(TEXT("echelle %s : NON VERIFIE, aucune construite avec sa place libre parmi les %d essayee(s) sur %d tiree(s) (%s)"), Kind, FMath::Min(List.Num(), MaxTried),
+					List.Num(), L16.Tried.IsEmpty() ? TEXT("aucune") : *L16.Tried));
+				return Finish416();
+			}
+			L16.Cur = List[L16.Index];
+			L16.Exit.Reset();
+			// Vol du developpeur (sans collision) au-dessus de la premiere place, le temps que le chunk se construise
+			if (!L16.bFlying)
+			{
+				C->SetDevFly(true);
+				L16.bFlying = true;
+			}
+			C->SetActorLocation(FVector(L16.Cur.Stands[0].X, L16.Cur.Stands[0].Y, L16.Cur.Foot.Z + 300.f), false, nullptr, ETeleportType::TeleportPhysics);
+			L16.Clock = Now;
+			L16.Phase = 1;
+			return false;
+		}
+		if (L16.Phase == 1)
 		{
-			using namespace BRTestV416Ladder;
-			ABRWorld* W = GetBRWorld();
-			ABRCharacter* C = GetPlayer();
-			if (!W || !C)
+			ABRExit* E = W->IsChunkLoaded(L16.Cur.Chunk) ? LadderNear(GetWorld(), L16.Cur.Foot, PoolTarget, 2.0) : nullptr;
+			const FIntPoint StandChunk = W->CellToChunk(W->WorldToCell(L16.Cur.Stands[0]));
+			if ((!E || !W->IsChunkLoaded(StandChunk)) && Now - L16.Clock < 30.0)
 			{
 				return false;
 			}
-			ABRExit* E = L16.bReady ? CurrentLadder(GetWorld()) : nullptr;
-			const TCHAR* Expect = bPass ? TEXT("franchie (marche basse)") : TEXT("jamais franchie, aucune hausse le long d'elle");
-			if (!E || L16.Cur.Foot.Z >= 30.f)
+			if (!E)
 			{
-				if (L16.Phase == 0)
-				{
-					Skip(FString::Printf(TEXT("caisse de %.0f cm devant une echelle au fond du canal : NON VERIFIE (aucune echelle au fond du canal construite avec sa place, voir plus haut) ; "
-						"attendu : %s"), Height, Expect));
-				}
-				EndClimbCase(C);
-				return true;
+				L16.Tried += FString::Printf(TEXT("%s(%.0f, %.0f, %.0f) : %s"), L16.Tried.IsEmpty() ? TEXT("") : TEXT(" ; "), L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.Cur.Foot.Z,
+					W->IsChunkLoaded(L16.Cur.Chunk) ? TEXT("echelle introuvable dans le chunk construit") : TEXT("chunk non construit en 30 s"));
+				++L16.Index;
+				L16.Phase = 0;
+				return false;
 			}
-			const double Now = FPlatformTime::Seconds();
-			const FVector Front = LadderFrontOf(E);
+			// Echelle construite : point vise et capsule du grimpeur libres, puis la premiere place libre
+			const FString View = LadderTaken(GetWorld(), E, false);
+			const FString Climb = LadderTaken(GetWorld(), E, true);
+			FVector Stand = FVector::ZeroVector;
+			int32 Found = INDEX_NONE;
+			for (int32 K = 0; K < L16.Cur.Stands.Num() && Found == INDEX_NONE; ++K)
+			{
+				if (FreeStand(W, C, L16.Cur.Stands[K], static_cast<float>(L16.Cur.Stands[K].Z), Stand))
+				{
+					Found = K;
+				}
+			}
+			if (View != TEXT("libre") || Climb != TEXT("libre") || Found == INDEX_NONE)
+			{
+				L16.Tried += FString::Printf(TEXT("%s(%.0f, %.0f, %.0f) : point vise %s, capsule du grimpeur %s, place libre %s"), L16.Tried.IsEmpty() ? TEXT("") : TEXT(" ; "),
+					L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.Cur.Foot.Z, *View, *Climb, OuiNon(Found != INDEX_NONE));
+				++L16.Index;
+				L16.Phase = 0;
+				return false;
+			}
+			C->SetDevFly(false);
+			L16.bFlying = false;
+			PutAt416(C, Stand, LadderAimOf(E));
+			L16.Exit = E;
+			L16.Stand = Stand;
+			L16.StandAt = L16.Cur.StandAt[Found];
+			L16.FootZ = static_cast<float>(E->GetActorLocation().Z);
+			L16.TopZ = E->GetClimbTopZ();
+			L16.bReady = true;
+			// La sortie est gardee par la mission du niveau : resolue par l'hote (seule l'echelle est jugee ici)
+			W->DebugCompleteMission();
 			const FVector Anchor = E->GetClimbAnchor();
-			switch (L16.Phase)
-			{
-			case 0:
-			{
-				PutAt416(C, L16.Stand, LadderAimOf(E));
-				SpawnBlock(GetWorld(), FVector(Anchor.X, Anchor.Y, L16.FootZ) + Front * 100.f + FVector(0.f, 0.f, Height * 0.5f), FVector(20.f, 80.f, Height * 0.5f),
-					static_cast<float>(Front.Rotation().Yaw));
-				L16.Clock = Now;
-				L16.Phase = 1;
-				return false;
-			}
-			case 1:
-			{
-				if (Now - L16.Clock < 0.6)
-				{
-					return false;
-				}
-				C->StartClimb(E);
-				L16.Track.Begin(C);
-				L16.Clock = Now;
-				L16.Phase = 2;
-				return false;
-			}
-			case 2:
-			{
-				L16.Track.Sample(C);
-				C->InputMove(FVector2D(0.f, 1.f));
-				const double D2 = FVector::Dist2D(C->GetActorLocation(), Anchor);
-				const bool bAt = D2 < 10.0 && C->IsClimbing();
-				if (!bAt && Now - L16.Clock < 4.0)
-				{
-					return false;
-				}
-				const float Rise = L16.Track.MaxFeet - L16.Track.StartFeet;
-				const bool bOk = (bPass ? (bAt && L16.Track.MaxFeet >= L16.FootZ + Height) : (!bAt && C->IsClimbing() && Rise < NoLift && D2 > 40.0)) && L16.Track.Inside == 0;
-				Note(FString::Printf(TEXT("echelle au fond du canal (pied a %.0f cm), caisse de %.0f cm entre le joueur et l'accroche, avancer 4 s : %s (pieds au plus %.1f cm au-dessus du "
-					"depart, a %.0f cm de l'accroche, %.2f s ; dernier obstacle : %s) ; %s (attendu : %s, BRGather::ClimbAfterHit)"), L16.FootZ, Height, bAt ? TEXT("accroche atteinte")
-					: (Rise >= NoLift ? TEXT("LEVE contre la caisse") : TEXT("arrete au sol")), Rise, D2, Now - L16.Clock, *CompName(C->ClimbBlocker.Get()), *L16.Track.InsideText(), Expect), !bOk);
-				if (!bOk)
-				{
-					Shot(FString::Printf(TEXT("v416_caisse_%.0f"), Height));
-				}
-				L16.Clock = Now;
-				L16.Phase = 3;
-				return false;
-			}
-			case 3:
-			{
-				// Reculer : lachee au pied (pieds a 4 cm du pied : StopClimb), jamais accrochee
-				if (C->IsClimbing() && Now - L16.Clock < 6.0)
-				{
-					C->InputMove(FVector2D(0.f, -1.f));
-					return false;
-				}
-				Note(FString::Printf(TEXT("caisse de %.0f cm : puis reculer : echelle lachee %s (pieds a %.1f cm du pied, %.2f s)"), Height, OuiNon(!C->IsClimbing()), FeetZOf(C) - L16.FootZ,
-					Now - L16.Clock), C->IsClimbing());
-				EndClimbCase(C);
-				return true;
-			}
-			default:
-				EndClimbCase(C);
-				return true;
-			}
-		});
-		LimitLastStep(30.f);
-	};
-	AddFlatBox(20.f, true);
-	AddFlatBox(50.f, false);
+			Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u) : echelle %s : %s en (%.0f, %.0f, %.0f), chunk (%d, %d), sommet de la montee a %.0f cm du pied ; point vise %s, "
+				"capsule du grimpeur %s ; place libre en (%.0f, %.0f, %.0f), %.0f cm devant l'accroche, %.0f cm de cote (accroche (%.0f, %.0f, %.0f))%s"), W->GetSeed(), Kind, *E->GetName(),
+				L16.Cur.Foot.X, L16.Cur.Foot.Y, L16.FootZ, L16.Cur.Chunk.X, L16.Cur.Chunk.Y, L16.TopZ - L16.FootZ, *View, *Climb, Stand.X, Stand.Y, Stand.Z - C->GetSimpleCollisionHalfHeight() - 5.f,
+				L16.StandAt.X, L16.StandAt.Y, Anchor.X, Anchor.Y, Anchor.Z, L16.Tried.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" ; ecartees avant : %s"), *L16.Tried)));
+			// v4.16 (echelles, relecture) : la place de la regle du jeu au chunk (2, -1) (graine du niveau 2303284074) n'est plus jugee
+			// ici (avant : seulement si l'echelle retenue etait celle-la, sinon aucune ligne) mais par une etape a elle, apres les caisses
+			Shot(bFlatList ? TEXT("v416_echelle_fond_du_canal") : TEXT("v416_echelle_trottoir_canal"));
+			return Finish416();
+		}
+		return Finish416();
+	});
+	LimitLastStep(200.f);
+}
 
-	// ---------------------------------------------------------------------------------------------------------------------
-	// B. Graine du niveau 115083815 : echelle sur son trottoir, prise depuis le canal devant elle
-	// ---------------------------------------------------------------------------------------------------------------------
-	AddPlan(BRTestV416Ladder::Pool37Seed);
-	AddGoTo(false, TEXT("v4.16 echelles : echelle sur son trottoir, place dans le canal devant elle"));
-	// Deux prises depuis la meme place du canal : avancer tout de suite (puis lacher : debout sur le trottoir), puis 0,5 s apres
-	// (puis montee de 2 m et descente jusqu'au lacher sur le trottoir). Visee et touche d'interaction ; echelle pas visee depuis le
-	// canal : NON VERIFIE pour la visee, et la prise directe (StartClimb) juge quand meme la montee
+// Deux prises depuis la meme place du canal : avancer tout de suite (puis lacher : debout sur le trottoir), puis 0,5 s apres
+// (puis montee de 2 m et descente jusqu'au lacher sur le trottoir). Visee et touche d'interaction ; echelle pas visee depuis le
+// canal : NON VERIFIE pour la visee, et la prise directe (StartClimb) juge quand meme la montee
+void ABRAutoTest::AddV416LadderCanalGrab()
+{
 	Add(TEXT("v4.16 echelles : prise depuis le canal, montee au-dessus du trottoir, lacher, montee et descente"), 0.f, [this]()
 	{
 		using namespace BRTestV416Ladder;
@@ -1027,7 +918,15 @@ void ABRAutoTest::AddV416LadderSteps()
 		ABRExit* E = L16.bReady ? CurrentLadder(GetWorld()) : nullptr;
 		if (!E || L16.Cur.Foot.Z < 30.f)
 		{
-			Skip(TEXT("prise depuis le canal devant une echelle sur son trottoir : NON VERIFIE (aucune echelle sur un trottoir construite avec une place libre dans le canal, voir plus haut)"));
+			if (L16.Phase == 0 && L16.Trial == 0)
+			{
+				Skip(TEXT("prise depuis le canal devant une echelle sur son trottoir : NON VERIFIE (aucune echelle sur un trottoir construite avec une place libre dans le canal, voir plus haut)"));
+			}
+			else
+			{
+				// v4.16 (echelles, relecture) : echelle disparue au milieu du cas (avant : la ligne "aucune echelle construite")
+				Note(FString::Printf(TEXT("prise depuis le canal : echelle sur son trottoir DISPARUE pendant le cas (essai %d, phase %d) : verdict non rendu"), L16.Trial + 1, L16.Phase), true);
+			}
 			EndClimbCase(C);
 			return true;
 		}
@@ -1188,6 +1087,203 @@ void ABRAutoTest::AddV416LadderSteps()
 		}
 	});
 	LimitLastStep(45.f);
+}
+
+void ABRAutoTest::AddV416LadderSteps()
+{
+	Add(TEXT("v4.16 echelles : preparation"), 0.f, [this]()
+	{
+		FLevelReport R;
+		R.Title = TEXT("v4.16 (echelles) : echelles des chunks du Niveau 37 et deplacement de secours de la montee");
+		R.Scene = TEXT("v4.16");
+		R.FirstLogLine = LogLineCount();
+		Reports.Add(R);
+		BRTestV416Ladder::L16 = BRTestV416Ladder::FLadderTest();
+		return true;
+	});
+
+	// ---------------------------------------------------------------------------------------------------------------------
+	// A. Graine du niveau 2303284074 : echelle au fond du canal, sol plat devant elle : une marche basse seulement (caisses posees
+	//    par le test)
+	// ---------------------------------------------------------------------------------------------------------------------
+	AddV416LadderPlan(BRTestV416Ladder::Pool37FlatSeed);
+	AddV416LadderGoTo(true, TEXT("v4.16 echelles : echelle au fond du canal (sol plat), construite et libre"));
+	// Caisse de Height cm entre le joueur (160 cm devant l'accroche) et l'accroche (de 80 a 120 cm devant elle, 160 cm de large) ;
+	// prise directe (StartClimb : la visee n'est pas jugee ici), avancer 4 s. bPass : franchie et l'accroche atteinte ; sinon
+	// aucune hausse au-dela de NoLift, toujours loin de l'accroche ; puis reculer : lachee au pied
+	auto AddFlatBox = [this](float Height, bool bPass)
+	{
+		Add(FString::Printf(TEXT("v4.16 echelles : caisse de %.0f cm devant l'accroche (sol plat)"), Height), 0.f, [this, Height, bPass]()
+		{
+			using namespace BRTestV416Ladder;
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			if (!W || !C)
+			{
+				return false;
+			}
+			ABRExit* E = L16.bReady ? CurrentLadder(GetWorld()) : nullptr;
+			const TCHAR* Expect = bPass ? TEXT("franchie (marche basse)") : TEXT("jamais franchie, aucune hausse le long d'elle");
+			if (!E || L16.Cur.Foot.Z >= 30.f)
+			{
+				if (L16.Phase == 0)
+				{
+					Skip(FString::Printf(TEXT("caisse de %.0f cm devant une echelle au fond du canal : NON VERIFIE (aucune echelle au fond du canal construite avec sa place, voir plus haut) ; "
+						"attendu : %s"), Height, Expect));
+				}
+				else
+				{
+					// v4.16 (echelles, relecture) : echelle disparue au milieu du cas (chunk reconstruit ?) : notee (avant : etape finie
+					// sans ligne, ni "franchie" ni NON VERIFIE)
+					Note(FString::Printf(TEXT("caisse de %.0f cm : echelle au fond du canal DISPARUE pendant la prise (phase %d) : verdict non rendu (attendu : %s)"), Height, L16.Phase, Expect),
+						true);
+				}
+				EndClimbCase(C);
+				return true;
+			}
+			const double Now = FPlatformTime::Seconds();
+			const FVector Front = LadderFrontOf(E);
+			const FVector Anchor = E->GetClimbAnchor();
+			switch (L16.Phase)
+			{
+			case 0:
+			{
+				PutAt416(C, L16.Stand, LadderAimOf(E));
+				SpawnBlock(GetWorld(), FVector(Anchor.X, Anchor.Y, L16.FootZ) + Front * 100.f + FVector(0.f, 0.f, Height * 0.5f), FVector(20.f, 80.f, Height * 0.5f),
+					static_cast<float>(Front.Rotation().Yaw));
+				L16.Clock = Now;
+				L16.Phase = 1;
+				return false;
+			}
+			case 1:
+			{
+				if (Now - L16.Clock < 0.6)
+				{
+					return false;
+				}
+				C->StartClimb(E);
+				L16.Track.Begin(C);
+				L16.Clock = Now;
+				L16.Phase = 2;
+				return false;
+			}
+			case 2:
+			{
+				L16.Track.Sample(C);
+				C->InputMove(FVector2D(0.f, 1.f));
+				const double D2 = FVector::Dist2D(C->GetActorLocation(), Anchor);
+				const bool bAt = D2 < 10.0 && C->IsClimbing();
+				if (!bAt && Now - L16.Clock < 4.0)
+				{
+					return false;
+				}
+				const float Rise = L16.Track.MaxFeet - L16.Track.StartFeet;
+				const bool bOk = (bPass ? (bAt && L16.Track.MaxFeet >= L16.FootZ + Height) : (!bAt && C->IsClimbing() && Rise < NoLift && D2 > 40.0)) && L16.Track.Inside == 0;
+				Note(FString::Printf(TEXT("echelle au fond du canal (pied a %.0f cm), caisse de %.0f cm entre le joueur et l'accroche, avancer 4 s : %s (pieds au plus %.1f cm au-dessus du "
+					"depart, a %.0f cm de l'accroche, %.2f s ; dernier obstacle : %s) ; %s (attendu : %s, BRGather::ClimbAfterHit)"), L16.FootZ, Height, bAt ? TEXT("accroche atteinte")
+					: (Rise >= NoLift ? TEXT("LEVE contre la caisse") : TEXT("arrete au sol")), Rise, D2, Now - L16.Clock, *CompName(C->ClimbBlocker.Get()), *L16.Track.InsideText(), Expect), !bOk);
+				if (!bOk)
+				{
+					Shot(FString::Printf(TEXT("v416_caisse_%.0f"), Height));
+				}
+				L16.Clock = Now;
+				L16.Phase = 3;
+				return false;
+			}
+			case 3:
+			{
+				// Reculer : lachee au pied (pieds a 4 cm du pied : StopClimb), jamais accrochee
+				if (C->IsClimbing() && Now - L16.Clock < 6.0)
+				{
+					C->InputMove(FVector2D(0.f, -1.f));
+					return false;
+				}
+				Note(FString::Printf(TEXT("caisse de %.0f cm : puis reculer : echelle lachee %s (pieds a %.1f cm du pied, %.2f s)"), Height, OuiNon(!C->IsClimbing()), FeetZOf(C) - L16.FootZ,
+					Now - L16.Clock), C->IsClimbing());
+				EndClimbCase(C);
+				return true;
+			}
+			default:
+				EndClimbCase(C);
+				return true;
+			}
+		});
+		LimitLastStep(30.f);
+	};
+	AddFlatBox(20.f, true);
+	AddFlatBox(50.f, false);
+	// v4.16 (echelles, relecture) : place de la regle des correctifs 5 au chunk (2, -1) (BRMech::Grid::StandFlat ; banc
+	// test_departure section 5 : (11750, -1560, 0) ; net_final3 : ancienne place (11750, -2060, 0) ; net_final4 : chunk pas construit
+	// au depart, NON VERIFIE), jugee a chaque fois dans le chunk construit, quelle que soit l'echelle retenue pour les caisses (avant :
+	// seulement si c'etait celle-la, sans ligne sinon). Chunk absent : vol du developpeur au-dessus de la place, 30 s au plus ; pas
+	// construit : NON VERIFIE ; construit sans echelle a cette place : PROBLEME
+	Add(TEXT("v4.16 echelles : chunk (2, -1), echelle a la place de la regle du jeu (graine du niveau 2303284074)"), 0.f, [this]()
+	{
+		using namespace BRTestV416Ladder;
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C)
+		{
+			return false;
+		}
+		const FVector BenchFoot(FlatBenchX, FlatBenchY, 0.0);
+		const FVector OldFoot(FlatBenchX, FlatOldY, 0.0);
+		auto Finish416 = [&]()
+		{
+			StopFlying416(C);
+			return true;
+		};
+		if (W->IsTransitioning() || !W->IsLevelReady() || W->GetLevelNumber() != 37 || W->GetSeed() != Pool37FlatSeed || W->IsLinearLevel())
+		{
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u, partie classique) non charge (Niveau %d, graine %u, lineaire %s) : place de la regle du jeu au chunk (2, -1) "
+				"(%.0f, %.0f, 0) non verifiee"), Pool37FlatSeed, W->GetLevelNumber(), W->GetSeed(), OuiNon(W->IsLinearLevel()), FlatBenchX, FlatBenchY));
+			return Finish416();
+		}
+		const FIntPoint Chunk = W->CellToChunk(W->WorldToCell(BenchFoot));
+		const FIntPoint OldChunk = W->CellToChunk(W->WorldToCell(OldFoot));
+		const bool bBuilt = W->IsChunkLoaded(Chunk) && W->IsChunkLoaded(OldChunk);
+		ABRExit* E = bBuilt ? LadderNear(GetWorld(), BenchFoot, PoolTarget, 100.0) : nullptr;
+		if (!E && StepTime < 30.f)
+		{
+			// Vol du developpeur (sans collision) au-dessus de la place, le temps que son chunk se construise
+			if (!bBuilt && !L16.bFlying)
+			{
+				C->SetDevFly(true);
+				L16.bFlying = true;
+				C->SetActorLocation(BenchFoot + FVector(0.f, 0.f, 300.f), false, nullptr, ETeleportType::TeleportPhysics);
+			}
+			return false;
+		}
+		if (!bBuilt)
+		{
+			Skip(FString::Printf(TEXT("Niveau 37 (graine du niveau %u), chunk (%d, %d) : NON VERIFIE, chunk non construit en 30 s : place de la regle du jeu (%.0f, %.0f, 0) et ancienne "
+				"place (%.0f, %.0f, 0) non jugees"), Pool37FlatSeed, Chunk.X, Chunk.Y, FlatBenchX, FlatBenchY, FlatBenchX, FlatOldY));
+			return Finish416();
+		}
+		// La regle du jeu tire-t-elle toujours une echelle a cette place (tirage des chunks -PlanRange..PlanRange) ?
+		FString DrawnText;
+		bool bPlanned = false;
+		for (const FVector& F : DrawnFeet(W, DrawnText))
+		{
+			bPlanned = bPlanned || FVector::Dist(F, BenchFoot) < 1.0;
+		}
+		const bool bAtBench = E && FVector::Dist(E->GetActorLocation(), BenchFoot) < 1.0;
+		const bool bOldEmpty = LadderNear(GetWorld(), OldFoot, PoolTarget, 50.0) == nullptr;
+		const FString Where = E ? FString::Printf(TEXT("%s en (%.0f, %.0f, %.0f)"), *E->GetName(), E->GetActorLocation().X, E->GetActorLocation().Y, E->GetActorLocation().Z)
+			: FString(TEXT("AUCUNE echelle vers le Niveau 2 a moins de 1 m"));
+		Note(FString::Printf(TEXT("Niveau 37 (graine du niveau %u), chunk (%d, %d) construit : echelle vers le Niveau 2 a la place de la regle du jeu (banc : (%.0f, %.0f, 0)) %s (%s ; "
+			"tiree a cette place par la regle %s) ; ancienne place (%.0f, %.0f, 0) sans echelle %s"), Pool37FlatSeed, Chunk.X, Chunk.Y, FlatBenchX, FlatBenchY, OuiNon(bAtBench), *Where,
+			OuiNon(bPlanned), FlatBenchX, FlatOldY, OuiNon(bOldEmpty)), !bAtBench || !bOldEmpty);
+		return Finish416();
+	});
+	LimitLastStep(40.f);
+
+	// ---------------------------------------------------------------------------------------------------------------------
+	// B. Graine du niveau 115083815 : echelle sur son trottoir, prise depuis le canal devant elle
+	// ---------------------------------------------------------------------------------------------------------------------
+	AddV416LadderPlan(BRTestV416Ladder::Pool37Seed);
+	AddV416LadderGoTo(false, TEXT("v4.16 echelles : echelle sur son trottoir, place dans le canal devant elle"));
+	AddV416LadderCanalGrab();
 
 	// Cas limites depuis la place du canal (prise directe : la boite posee peut couper la visee) : bWall : mur haut (10 cm
 	// d'epaisseur, 400 cm de haut, 300 cm de large) entre le joueur et la marche ; sinon plafond bas (dalle 15 cm au-dessus de la
@@ -1209,7 +1305,15 @@ void ABRAutoTest::AddV416LadderSteps()
 			ABRExit* E = L16.bReady ? CurrentLadder(GetWorld()) : nullptr;
 			if (!E || L16.Cur.Foot.Z < 30.f)
 			{
-				Skip(FString::Printf(TEXT("%s : NON VERIFIE (aucune echelle sur un trottoir construite avec une place dans le canal) ; attendu : aucune hausse"), What));
+				if (L16.Phase == 0)
+				{
+					Skip(FString::Printf(TEXT("%s : NON VERIFIE (aucune echelle sur un trottoir construite avec une place dans le canal) ; attendu : aucune hausse"), What));
+				}
+				else
+				{
+					// v4.16 (echelles, relecture) : echelle disparue au milieu du cas : notee (avant : la ligne "aucune echelle construite")
+					Note(FString::Printf(TEXT("%s : echelle sur son trottoir DISPARUE pendant le cas (phase %d) : verdict non rendu (attendu : aucune hausse)"), What, L16.Phase), true);
+				}
 				EndClimbCase(C);
 				return true;
 			}
@@ -1318,7 +1422,16 @@ void ABRAutoTest::AddV416LadderSteps()
 		ABRExit* E = L16.bReady ? CurrentLadder(GetWorld()) : nullptr;
 		if (!E || L16.Cur.Foot.Z < 30.f)
 		{
-			Skip(TEXT("descente sur une caisse sous l'accroche : NON VERIFIE (aucune echelle sur un trottoir construite) ; attendu : lachee sur la caisse"));
+			if (L16.Phase == 0)
+			{
+				Skip(TEXT("descente sur une caisse sous l'accroche : NON VERIFIE (aucune echelle sur un trottoir construite) ; attendu : lachee sur la caisse"));
+			}
+			else
+			{
+				// v4.16 (echelles, relecture) : echelle disparue au milieu du cas : notee (avant : la ligne "aucune echelle construite")
+				Note(FString::Printf(TEXT("descente sur une caisse sous l'accroche : echelle sur son trottoir DISPARUE pendant le cas (phase %d) : verdict non rendu (attendu : lachee sur la "
+					"caisse)"), L16.Phase), true);
+			}
 			EndClimbCase(C);
 			return true;
 		}
@@ -1702,16 +1815,25 @@ void ABRAutoTest::AddV416LadderSteps()
 				const UCharacterMovementComponent* M = C->GetCharacterMovement();
 				const bool bGround = M && M->IsMovingOnGround();
 				const bool bOk = L16.bOk && bGround && L16.Climbed >= L16.Value - 10.f && L16.Track.Inside == 0;
+				// v4.16 (echelles, relecture) : GetNameSafe : l'echelle (pointeur faible) a pu disparaitre pendant la descente (avant :
+				// *E->GetName() avant le test de E, plantage au lieu d'une ligne)
 				Note(FString::Printf(TEXT("Niveau %d (graine du niveau %u, partie classique), %s (%s, %s ; %d entite(s) proche(s) ecartee(s)) : montee jusqu'a %.0f cm au-dessus du pied (attendu "
 					"%.0f), puis descente : echelle lachee %s apres %.2f s, au sol %s (pieds a %.1f cm du pied) ; %s (attendu : lachee au pied, au sol, jamais coincee)"), Level, Seed, *Name,
-					*E->GetName(), L16.bDirect ? TEXT("prise directe") : TEXT("visee et touche d'interaction"), L16.Cleared, L16.Climbed, L16.Value, L16.bOk ? TEXT("oui")
+					*GetNameSafe(E), L16.bDirect ? TEXT("prise directe") : TEXT("visee et touche d'interaction"), L16.Cleared, L16.Climbed, L16.Value, L16.bOk ? TEXT("oui")
 					: TEXT("NON (COINCEE en descente)"), L16.Since, OuiNon(bGround), FeetZOf(C) - L16.FootZ, *L16.Track.InsideText()), !bOk);
 				if (!bOk)
 				{
 					Shot(FString::Printf(TEXT("v416_niveau%d_descente"), Level));
 				}
-				if (!L16.bOk || !bGround || !E)
+				if (!E)
 				{
+					Note(FString::Printf(TEXT("Niveau %d : %s DISPARUE apres la descente : reprise au pied et lacher en hauteur (Saut) non joues"), Level, *Name), true);
+					return Done416();
+				}
+				if (!L16.bOk || !bGround)
+				{
+					// v4.16 (echelles, relecture) : la suite de l'etape n'est pas jouee : notee (avant : sans ligne)
+					Skip(FString::Printf(TEXT("Niveau %d : %s : reprise au pied et lacher en hauteur (Saut) NON VERIFIES, descente en echec (voir la ligne precedente)"), Level, *Name));
 					return Done416();
 				}
 				// Reprise au pied (prise directe : la visee est jugee plus haut), montee a 120 cm, puis Saut
@@ -1790,7 +1912,7 @@ void ABRAutoTest::AddV416LadderSteps()
 }
 
 // =====================================================================================================================
-// v4.16 (echelles) : reseau (-BRNetTest -BRAutoTestV416Ladder, apres les etapes de -BRNetTest) : Niveau 37 en partie classique a
+// v4.16 (echelles) : reseau (-BRNetTest, apres les etapes des correctifs 5 de la v4.15) : Niveau 37 en partie classique a
 // la graine du niveau 115083815 (son chunk (-1, -1), construit au depart, porte une echelle vers le Niveau 2 sur son trottoir).
 // Meme echelle chez l'hote et le client (empreinte envoyee par le client), le client a 9-12 m du point de rassemblement, l'hote
 // grimpe : une seule demande au sommet, attente stable, 1/2 (le depart attend le coequipier), puis le client a pied :
@@ -1799,10 +1921,9 @@ void ABRAutoTest::AddV416LadderSteps()
 
 void ABRAutoTest::AddNetV416LadderSteps(bool bClient)
 {
-	if (!FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Ladder")))
-	{
-		return;
-	}
+	// v4.16 (echelles, relecture) : toujours dans le plan reseau (avant : seulement avec -BRAutoTestV416Ladder). Le test reseau
+	// ordinaire juge ainsi les echelles des chunks construits, que les etapes des correctifs 5 (graine du niveau 2303284074 : aucune
+	// dans les chunks construits au depart) ne peuvent pas juger, et le depart de groupe par une echelle des chunks du Niveau 37
 	Add(TEXT("v4.16 echelles reseau : Niveau 37 en partie classique (graine du niveau 115083815)"), 0.f, [this, bClient]()
 	{
 		using namespace BRTestV416Ladder;
