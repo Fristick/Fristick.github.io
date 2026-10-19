@@ -116,6 +116,25 @@
 #   touches juge aussi le son.
 # - ABRPlayerController::InputKey deplace apres StopHeldActions (meme code) : plus de conflit de fusion avec la branche v416-vis.
 
+## Premiers essais en jeu (45c6562 : net416_base, net416_4j, net416_lag) : corrections du test, sans effet sur le jeu
+# - D et E, "N action(s) restantes selon l'etat recu (attendu 1)" (9 au sas, 4 a la passerelle) : le client comptait les
+#   actions que le solveur rejoue depuis l'etat recu, or il relit l'indice, refait les manivelles finies (retour "deja fait")
+#   et ramene les vannes du sas a zero avant de les remettre. Banc hors moteur (graines 115083815 et 1401743838) : 6 et 13
+#   actions depuis l'etat initial, 9 et 4 depuis l'etat de l'hote apres ses 5 et 12 actions : le client avait bien recu cet
+#   etat (aucun defaut de replication) ; sur 4 400 plans (11 niveaux x 400 graines) l'ancienne regle n'etait jamais vraie.
+#   Desormais (V6::OneActionLeft) : mission non resolue et la derniere action du solveur, seule sur l'etat recu, la resout
+#   (vrai sur les 4 400 plans apres les N - 1 actions de l'hote, avec la meme action que l'hote ; jamais depuis l'etat
+#   initial). L'hote et le client journalisent la revision de l'etat de la mission (meme valeur attendue).
+#   Le NON VERIFIE de l'hote "la derniere action n'est pas venue du client" et, dans net416_4j, "demandes recues par
+#   l'hote 0 et 0" en decoulaient (aucun client ne demandait).
+# - B, net416_4j "0 depart(s) annonce(s), joueurs attendus au plus 0" : le depart a bien eu lieu (journal de l'hote :
+#   "Depart de groupe 1 vers 1 demande par" un client a 20.49.04:633, Niveau 1 prepare 1,2 s apres, chaque client
+#   "depart 1 (avant 0)", 1 chargement). L'hote, qui s'abstient, attendait l'instant commun et ne relevait le depart
+#   qu'ensuite : il le releve desormais des le debut des demandes (V6::SeeDeparture).
+# - A, B, D : les clients demandaient aussitot l'etape vue ouverte (estimation du temps du serveur un peu en retard : multiple
+#   precedent, visee deja passee ; net416_4j : objet deja pris 57 ms apres l'ouverture, demandes du depart une image apres).
+#   SyncTarget vise le multiple de 10 s le plus proche (ecart admis +-5 s au lieu de 0 a 5,5 s en avance).
+
 ## Test reseau v4.16 : -BRNetTest -BRAutoTestV416Net (Source/Backrooms/Private/BRAutoTestV416Net.cpp)
 # Lanceur : Tools/Tests/run_nettest.ps1 (projet trouve depuis le script ; moteur : -Editor, UE_EDITOR, registre d'Epic, puis
 # C:\Program Files\Epic Games\UE_5.8). Le plan reseau ordinaire (-BRNetTest seul, -Classic dans le lanceur) ne change pas.

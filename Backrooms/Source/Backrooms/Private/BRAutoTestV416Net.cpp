@@ -242,7 +242,7 @@ namespace BRTestV416Net
 	// ------------------------------------------------------------------------------------------------------ simultaneite
 	/** v4.16 (relecture) : demandes simultanees de plusieurs machines. Temps du serveur (AGameStateBase::GetServerWorldTimeSeconds,
 	 *  le meme partout a la latence pres) : l'hote ouvre l'etape juste apres un multiple de SyncPeriod ; chaque machine qui la
-	 *  voit ouverte (moins de SyncPeriod - SyncLead plus tard) vise ce multiple + SyncLead. Les demandes partent ensemble et
+	 *  voit ouverte vise le multiple le plus proche de son estimation + SyncLead (SyncTarget). Les demandes partent ensemble et
 	 *  arrivent chez l'hote dans des images voisines (avant : l'hote demandait le premier, appliquait sur place, et les
 	 *  clients ne demandaient qu'apres avoir recu l'ouverture : rien n'etait en concurrence) */
 	constexpr double SyncPeriod = 10.0;
@@ -260,10 +260,16 @@ namespace BRTestV416Net
 		return FMath::Fmod(ServerNow(World), SyncPeriod) < 0.5;
 	}
 
-	/** Instant commun des demandes, pour une etape vue ouverte maintenant */
+	/** Instant commun des demandes, pour une etape vue ouverte maintenant. v4.16 (correctif) : le multiple le plus proche, et
+	 *  non plus celui d'avant. Chez un client, GetServerWorldTimeSeconds n'est qu'une estimation (temps de l'hote envoye
+	 *  toutes les 0,1 s, sans la latence, ecart lisse sur des centaines d'envois : GameStateBase.cpp) : un peu en retard, une
+	 *  etape ouverte 0 a 0,5 s apres le multiple P y semblait ouverte avant P, d'ou la visee P - 4, deja passee, et une
+	 *  demande aussitot (net416_4j : etape 11 ouverte a 20.48.44:607, objet deja pris chez un client a 44:664 ; etape 21
+	 *  ouverte image 429, les trois demandes du depart recues images 4430 et 4431, 6 s avant l'instant de l'hote). Ecart
+	 *  admis desormais : moins de SyncPeriod / 2 de part et d'autre (avant : de 0 a SyncLead - 0,5 s, en avance seulement) */
 	double SyncTarget(const UWorld* World)
 	{
-		return FMath::FloorToDouble(ServerNow(World) / SyncPeriod) * SyncPeriod + SyncLead;
+		return FMath::RoundToDouble(ServerNow(World) / SyncPeriod) * SyncPeriod + SyncLead;
 	}
 
 	/** Ecart (images de l'hote) entre les demandes recues de ces personnages depuis la remise a zero (0 : pas de demande) */
@@ -474,6 +480,45 @@ namespace BRTestV416Net
 			Out.Add(Solver->Steps[I]);
 		}
 		return bOk && Out.Num() > 0;
+	}
+
+	/** v4.16 (correctif) : la mission est a une action de sa resolution selon l'etat de cette machine. Le nombre d'actions du
+	 *  solveur n'est pas ce qui reste : il rejoue sa solution depuis l'etat donne (indice relu et manivelles finies : retour
+	 *  "deja fait" ; vannes du sas ramenees a zero puis remises), soit 9 actions au sas et 4 a la passerelle quand une seule
+	 *  reste (banc hors moteur, graines 115083815 et 1401743838 ; 6 et 13 depuis l'etat initial). Une action reste si la mission
+	 *  n'est pas resolue et si la derniere action du solveur (celle que l'hote reserve au client), appliquee seule a l'etat de
+	 *  cette machine comme l'hote l'applique (ABRWorld::ServerMissionAct : une unite pour une manivelle ou une observation),
+	 *  la resout. Un etat perime (etat initial) n'en a aucune. OutReplayed : actions du solveur depuis cet etat (journal) */
+	bool OneActionLeft(const ABRWorld* W, BRM::FSolveStep& Out, int32& OutReplayed)
+	{
+		OutReplayed = 0;
+		TArray<BRM::FSolveStep> Steps;
+		const bool bOk = Solve(W, Steps);
+		OutReplayed = Steps.Num();
+		if (!bOk)
+		{
+			return false;
+		}
+		BRM::FEval Before;
+		W->GetMissionEval(Before);
+		const BRM::FPlan& Plan = W->GetMissionPlan();
+		const BRM::FSolveStep& Last = Steps.Last();
+		if (Before.bSolved || Last.Device >= Plan.NumDevices)
+		{
+			return false;
+		}
+		const BRM::FDevice& D = Plan.Devices[Last.Device];
+		const bool bHeld = D.Kind == BRM::EKind::Observe || D.Kind == BRM::EKind::Crank;
+		BRM::FState After = W->GetMissionState();
+		BRM::Act(Plan, After, W->GetMissionCampaign(), Last.Device, bHeld ? BRM::EAction::Hold : BRM::EAction::Use, bHeld ? 1 : 0);
+		BRM::FEval E;
+		BRM::Evaluate(Plan, After, W->GetMissionCampaign(), E);
+		if (!E.bSolved)
+		{
+			return false;
+		}
+		Out = Last;
+		return true;
 	}
 
 	/** v4.16 (relecture) : une seconde place valable devant Dev (BRTestV412::CheckMissionStand, cercles de FindMissionStand), a
@@ -780,6 +825,26 @@ namespace BRTestV416Net
 		TArray<FString> CarriedSkips;
 	};
 	FRun S;
+
+	/** B. Depart de groupe vu par cette machine depuis l'essai (identifiant, joueurs attendus et rassembles au plus). v4.16
+	 *  (correctif) : releve a chaque image des le debut des demandes, et plus seulement apres l'instant commun : un depart dont
+	 *  tous les joueurs sont rassembles part 1,2 s apres la premiere demande (ABRWorld::UpdateDeparture), et l'hote qui
+	 *  s'abstient attendait encore l'instant commun quand celle d'un client l'a cree (net416_4j : depart 1 cree a 20.49.04:633,
+	 *  niveau 1 prepare a 05:839, l'hote n'a regarde qu'apres : "0 depart(s) annonce(s)", attendus et rassembles 0) */
+	void SeeDeparture(const ABRWorld* W)
+	{
+		if (!W)
+		{
+			return;
+		}
+		const FBRNetDeparture& Dep = W->GetDeparture();
+		if (Dep.Id != S.DepIdBefore && Dep.Phase == 1)
+		{
+			S.DepIdSeen = Dep.Id;
+			S.MaxNeeded = FMath::Max<int32>(S.MaxNeeded, Dep.Needed);
+			S.MaxReady = FMath::Max<int32>(S.MaxReady, Dep.Ready);
+		}
+	}
 
 	/** Place ce joueur : chez un client, deplacement recu tel quel par l'hote (BRTestNet::FPlacement) ; chez l'hote, direct */
 	void PlaceStart(ABRCharacter* C, const FVector& Stand, const FVector* Face, bool bClient)
@@ -1469,6 +1534,7 @@ void ABRAutoTest::AddNetV416Plan()
 			V6::S.Phase = 0;
 			V6::S.SerialBefore = W->GetLevelSerial();
 			V6::S.DepIdBefore = W->GetDeparture().Id;
+			V6::S.DepIdSeen = V6::S.DepIdBefore;
 			return true;
 		});
 		LimitLastStep(60.f);
@@ -1519,6 +1585,8 @@ void ABRAutoTest::AddNetV416Plan()
 		{
 			ABRCharacter* C = GetPlayer();
 			ABRExit* Door = V6::FindServiceDoor(GetWorld());
+			// v4.16 (correctif) : le depart cree par la demande d'un autre joueur est releve pendant l'attente de l'instant commun
+			V6::SeeDeparture(GetBRWorld());
 			if (V6::S.bSkipBlock || !C || !Door)
 			{
 				return true;
@@ -1544,13 +1612,7 @@ void ABRAutoTest::AddNetV416Plan()
 			{
 				return true;
 			}
-			const FBRNetDeparture& Dep = W->GetDeparture();
-			if (Dep.Id != V6::S.DepIdBefore && Dep.Phase == 1)
-			{
-				V6::S.DepIdSeen = Dep.Id;
-				V6::S.MaxNeeded = FMath::Max<int32>(V6::S.MaxNeeded, Dep.Needed);
-				V6::S.MaxReady = FMath::Max<int32>(V6::S.MaxReady, Dep.Ready);
-			}
+			V6::SeeDeparture(W);
 			const bool bArrived = !W->IsTransitioning() && W->IsLevelReady() && W->GetLevelSerial() != V6::S.SerialBefore;
 			if (!bArrived && StepTime < 60.f)
 			{
@@ -2319,8 +2381,9 @@ void ABRAutoTest::AddNetV416Plan()
 				}
 				V6::S.Device = Steps.Last().Device;
 				V6::S.Action = Steps.Last().Action;
-				Note(FString::Printf(TEXT("hote : %s : %d action(s) jouees par l'hote, la derniere (mecanisme %d, %s, action %d) revient au client"), What, Steps.Num() - 1,
-					V6::S.Device, *V6::RoleOf(W, V6::S.Device), static_cast<int32>(V6::S.Action)));
+				// v4.16 (correctif) : revision de l'etat publie, comparee a celle que le client lit (meme etat recu)
+				Note(FString::Printf(TEXT("hote : %s : %d action(s) jouees par l'hote, la derniere (mecanisme %d, %s, action %d) revient au client ; etat de la mission : revision %d"),
+					What, Steps.Num() - 1, V6::S.Device, *V6::RoleOf(W, V6::S.Device), static_cast<int32>(V6::S.Action), static_cast<int32>(W->GetMissionRev())));
 				V6::SetHostPhase(GetWorld(), MarkId + 1);
 				return true;
 			});
@@ -2458,22 +2521,34 @@ void ABRAutoTest::AddNetV416Plan()
 				}
 				if (V6::S.Phase == 0)
 				{
-					// La solution restante, depuis l'etat recu de l'hote : une action
-					TArray<BRM::FSolveStep> Steps;
-					if ((!V6::Solve(W, Steps) || Steps.Num() != 1) && StepTime < 15.f)
+					// La solution restante, depuis l'etat recu de l'hote : une action. v4.16 (correctif) : jugee par V6::OneActionLeft
+					// (la derniere action du solveur, seule, resout la mission recue) et non plus par le nombre d'actions que le
+					// solveur rejoue depuis cet etat (9 au sas, 4 a la passerelle : relectures et reglages repris compris)
+					BRM::FSolveStep Last;
+					int32 Replayed = 0;
+					const bool bOne = V6::OneActionLeft(W, Last, Replayed);
+					if (!bOne && StepTime < 15.f)
 					{
 						return false;
 					}
-					ABRMissionDevice* Target = Steps.Num() == 1 ? W->FindMissionDevice(Steps[0].Device) : nullptr;
+					ABRMissionDevice* Target = bOne ? W->FindMissionDevice(Last.Device) : nullptr;
 					if (!Target)
 					{
-						Note(FString::Printf(TEXT("client : %s : %d action(s) restantes selon l'etat recu (attendu 1)"), What, Steps.Num()), true);
+						BRM::FEval E;
+						W->GetMissionEval(E);
+						Note(bOne ? FString::Printf(TEXT("client (place %d) : %s : mecanisme %d de la derniere action absent chez ce client"), V6::S.Slot, What,
+								static_cast<int32>(Last.Device))
+							: FString::Printf(TEXT("client (place %d) : %s : etat recu de l'hote (revision %d) a une action de la resolution NON apres %.0f s (mission resolue %s, "
+								"le solveur rejoue %d action(s) depuis cet etat)"), V6::S.Slot, What, static_cast<int32>(W->GetMissionRev()), StepTime, V6::Oui(E.bSolved), Replayed), true);
 						V6::Mark(GetPC(), MarkId + 3);
 						V6::S.Phase = 9;
 						return false;
 					}
-					V6::S.Device = Steps[0].Device;
-					V6::S.Action = Steps[0].Action;
+					Note(FString::Printf(TEXT("client (place %d) : %s : etat recu de l'hote (revision %d) a une action de la resolution oui : mecanisme %d, action %d (le solveur "
+						"rejoue %d action(s) depuis cet etat)"), V6::S.Slot, What, static_cast<int32>(W->GetMissionRev()), static_cast<int32>(Last.Device),
+						static_cast<int32>(Last.Action), Replayed));
+					V6::S.Device = Last.Device;
+					V6::S.Action = Last.Action;
 					// Vers le mecanisme (son chunk se construit autour du joueur), en vol
 					V6::Hover(C, true);
 					BRTestNet::TeleportForServer(C, Target->GetInteractPoint() + Target->GetActorForwardVector() * 160.f + FVector(0.f, 0.f, 40.f));
