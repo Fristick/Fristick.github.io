@@ -1681,8 +1681,14 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
     joueur ne sont pas touchées). Par défaut, trois lancements séparés par de vraies fermetures du jeu (reprise aux
     Poolrooms, fin du chapitre enregistrée, relance après la fin) ; `--chapter-mode single` : un lancement ;
     `--chapter-out <dossier>` : rapports des phases. `build_windows.ps1 -Chapter` construit puis vérifie ainsi le paquet.
-    Une version publiée n'accepte que ces deux essais (`-BRSmokeTest`, `-BRAutoTestChapter`) et se ferme toujours à
-    leur fin. Dans l'éditeur lancé en jeu (canal publié imposé) : `-BRAutoTest -BRAutoTestChapter -BRAutoTestStrict`
+    Une version publiée n'accepte que ces deux essais (`-BRSmokeTest`, `-BRAutoTestChapter`), refuse tout autre plan
+    avant sa première étape (code 1) et se ferme toujours à leur fin. Un paquet Shipping écrit dans le dossier du
+    joueur (Windows : `%LOCALAPPDATA%\Backrooms\Saved\SaveGames`, à côté de ses parties `BR_Partie_*`) : le test de
+    démarrage y a son propre préfixe (`BR_AutoTestLancement_*`, liste vide), et les fichiers de test qu'une traversée
+    arrêtée y laisse sont déplacés dans `<dossier des rapports>\parties_de_test` à la fin du contrôle (après une
+    traversée complète, un fichier restant est un échec). Délai d'une phase : `--chapter-timeout` (par défaut 4500 s,
+    7200 s en `single`, au-delà des limites des étapes du jeu) ; au-delà, le lanceur et le jeu sont arrêtés ensemble.
+    Dans l'éditeur lancé en jeu (canal publié imposé) : `-BRAutoTest -BRAutoTestChapter -BRAutoTestStrict`
     (un lancement), ou `-BRChapterPhase=1`, puis `2`, puis `3` ; `-BRChapterSeed=<graine du parcours>
     -BRChapterIntro=<graine du Level 0>` rejoue une disposition donnée par le rapport. **v4.16** `-BRAutoTest
     -BRAutoTestV416Ship -BRAutoTestStrict` : REJOUER et sauvegardes (consommation, dégâts, document lu, entité vue, mort,

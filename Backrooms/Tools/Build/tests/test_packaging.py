@@ -3,6 +3,8 @@ v4.11 : droits d'execution poses par la fixture sur POSIX (et cas sans droits), 
 rapport absent, vide, d'un autre essai, incoherent), binaires PE / ELF / Mach-O tronques ou a offsets hors limites.
 v4.16 : traversee du chapitre simulee (--chapter : trois phases ou un lancement, phase incomplete qui arrete la suite,
 echec, etat absent ou d'un autre essai, niveaux inattendus, fin non enregistree, canal interne, demarrage en echec).
+v4.16 (relecture) : delai depasse (le jeu, enfant du lanceur, arrete aussi), delai par defaut, fichiers de test retires du
+dossier du joueur (remplace par un dossier du test : le vrai dossier n'est jamais touche).
 
   python -m unittest discover -s Tools/Build/tests -v
 
@@ -172,12 +174,18 @@ if rep is not None:
             fh.write("pas du json")
         else:
             json.dump(rep, fh)
+for name in scenario.get("fichiers", []):
+    os.makedirs(os.environ["BR_FAKE_SAVES"], exist_ok=True)
+    with open(os.path.join(os.environ["BR_FAKE_SAVES"], name), "w") as fh:
+        fh.write("test")
 sys.exit(scenario.get("code", 0))
 '''
 
 
 # v4.16 : jeu simule pour la traversee du chapitre : chaque phase (-BRChapterPhase) ecrit son rapport (-BRSmokeOut) et son
-# etat (-BRChapterOut) selon le scenario ; sans -BRAutoTestChapter, le test de demarrage ("demarrage" du scenario)
+# etat (-BRChapterOut) selon le scenario ; sans -BRAutoTestChapter, le test de demarrage ("demarrage" du scenario).
+# v4.16 (relecture) : "fichiers" : ecrits dans le dossier des parties (BR_FAKE_SAVES) ; "bloque" : comme le lanceur d'un
+# paquet Windows, attend un processus enfant (le vrai jeu) qui ecrit un battement dans ce fichier (60 s au plus)
 FAKE_CHAPTER_GAME = r'''
 import json, os, sys
 scenario = json.loads(os.environ["BR_FAKE_GAME"])
@@ -203,6 +211,14 @@ if rep is not None:
 if state is not None and case.get("etat") is not None:
     with open(state, "w", encoding="utf-8") as fh:
         json.dump(case["etat"], fh)
+for name in case.get("fichiers", []):
+    os.makedirs(os.environ["BR_FAKE_SAVES"], exist_ok=True)
+    with open(os.path.join(os.environ["BR_FAKE_SAVES"], name), "w") as fh:
+        fh.write("test")
+if case.get("bloque"):
+    import subprocess
+    beat = "import os, sys, time\nopen(sys.argv[1] + '.pid', 'w').write(str(os.getpid()))\nfor n in range(600):\n    open(sys.argv[1], 'w').write(str(n))\n    time.sleep(0.1)\n"
+    subprocess.Popen([sys.executable, "-c", beat, case["bloque"]]).wait()
 sys.exit(case.get("code", 0))
 '''
 
@@ -225,8 +241,16 @@ class CheckPackageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="br_pkgtest_")
         self.f = Fixture(self.tmp)
+        # v4.16 (relecture) : dossier des parties du joueur (%LOCALAPPDATA%) remplace par un dossier du test : le controle y
+        # retire les fichiers de test ; le vrai dossier du joueur n'est jamais touche par les tests
+        self.player_saves = os.path.join(self.tmp, "joueur", "SaveGames")
+        os.makedirs(self.player_saves)
+        os.environ["BR_FAKE_SAVES"] = self.player_saves
+        self.saved_saves_dir = check_package.player_saves_dir
+        check_package.player_saves_dir = lambda platform: self.player_saves
 
     def tearDown(self):
+        check_package.player_saves_dir = self.saved_saves_dir
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def check(self, archive, *extra, platform="Windows", tool=True):
@@ -427,6 +451,15 @@ class CheckPackageTests(unittest.TestCase):
         code, out, rep, _ = self.launch({"code": 1, "rapport": rapport}, "--launch", platform="Windows")
         self.assertEqual(code, 1, out)
 
+    def test_lancement_fichier_de_test_retire(self):
+        # v4.16 (relecture) : le demarrage n'utilise aucune partie ; un fichier de son prefixe ne reste pas chez le joueur
+        write(os.path.join(self.player_saves, "BR_Partie_1.sav"), "joueur")
+        code, out, rep, _ = self.launch({"code": 0, "rapport": self.OK_REPORT, "fichiers": ["BR_AutoTestLancement_1.sav"]}, "--require-launch",
+                                        platform="Windows")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(os.listdir(self.player_saves), ["BR_Partie_1.sav"])
+        self.assertIn("retire(s) du dossier du joueur", out)
+
     def test_lancement_exige_hors_hote(self):
         # Paquet Linux controle depuis un autre systeme : lancement impossible -> inspection incomplete, jamais un succes
         if sys.platform.startswith("linux"):
@@ -576,6 +609,84 @@ class CheckPackageTests(unittest.TestCase):
         code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
         self.assertEqual(code, 1, out)
         self.assertIn("version publiee", out)
+
+    def test_chapitre_delai_arrete_le_jeu_et_son_enfant(self):
+        # v4.16 (relecture) : delai depasse : le lanceur ET le vrai jeu (son enfant) sont arretes (avant : le seul lanceur, le
+        # jeu continuait) ; ses fichiers de test ne restent pas dans le dossier du joueur
+        beat = os.path.join(self.tmp, "battement.txt")
+        bloque = {"bloque": beat, "fichiers": ["BR_AutoTestChapitre_1.sav", "BR_AutoTestChapitre_Etat.txt"]}
+        try:
+            code, out, rep, runs = self.chapter({"phases": self.chapter_phases(**{"1": bloque})}, "--chapter", "--chapter-timeout", "4")
+            self.assertEqual(code, 1, out)
+            self.assertIn("n'a pas fini sa phase de la traversee en 4 s", out)
+            self.assertEqual(self.phases_run(runs), ["1"])
+            self.assertTrue(os.path.exists(beat), out)
+            time.sleep(0.6)
+            with open(beat) as fh:
+                first = fh.read()
+            time.sleep(1.2)
+            with open(beat) as fh:
+                self.assertEqual(fh.read(), first, "le processus enfant du lanceur tourne encore")
+            self.assertEqual(os.listdir(self.player_saves), [])
+            self.assertEqual(sorted(os.listdir(os.path.join(self.tmp, "chapitre", "parties_de_test"))),
+                             ["BR_AutoTestChapitre_1.sav", "BR_AutoTestChapitre_Etat.txt"])
+        finally:
+            # Le test echoue : l'enfant est arrete quand meme (sinon il s'arrete seul au bout de 60 s)
+            if os.path.exists(beat + ".pid"):
+                with open(beat + ".pid") as fh:
+                    pid_text = fh.read()
+                try:
+                    os.kill(int(pid_text), 9)
+                except (OSError, ValueError):
+                    pass
+
+    def test_chapitre_delai_par_defaut(self):
+        # v4.16 (relecture) : sans --chapter-timeout, un delai au-dela des limites des etapes du jeu (avant : 2400 s)
+        seen = []
+        real = check_package.run_game
+
+        def spy(cmd, timeout):
+            seen.append(timeout)
+            return real(cmd, timeout)
+        check_package.run_game = spy
+        try:
+            code, out, rep, runs = self.chapter({"phases": self.chapter_phases()}, "--chapter")
+            code1, out1, rep1, runs1 = self.chapter({"phases": {"0": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(0)}}},
+                                                    "--chapter", "--chapter-mode", "single")
+        finally:
+            check_package.run_game = real
+        self.assertEqual(code, 0, out)
+        self.assertEqual(code1, 0, out1)
+        self.assertEqual(seen, [check_package.CHAPTER_TIMEOUTS["restart"]] * 3 + [check_package.CHAPTER_TIMEOUTS["single"]])
+        self.assertGreaterEqual(check_package.CHAPTER_TIMEOUTS["restart"], 3600)
+
+    def test_chapitre_parties_de_test_retirees_apres_echec(self):
+        # v4.16 (relecture) : phase en echec : les parties de test et l'etat de la traversee quittent le dossier du joueur
+        # (gardes avec les rapports) ; les parties du joueur restent
+        write(os.path.join(self.player_saves, "BR_Partie_1.sav"), "joueur")
+        noms = ["BR_AutoTestChapitre_1.sav", "BR_AutoTestChapitre_1_Secours.sav", "BR_AutoTestChapitre_Etat.txt"]
+        echec = {"code": 1, "rapport": dict(self.OK_CHAPTER, etat="echec", problemes=["Niveau 1 : mission non resolue"]),
+                 "etat": self.chapter_state(1, valide=False), "fichiers": noms}
+        code, out, rep, runs = self.chapter({"phases": self.chapter_phases(**{"1": echec})}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(os.listdir(self.player_saves), ["BR_Partie_1.sav"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.tmp, "chapitre", "parties_de_test"))), sorted(noms))
+        self.assertIn("retire(s) du dossier du joueur", out)
+
+    def test_chapitre_phase_incomplete_retire_les_parties_de_test(self):
+        incomplet = {"code": 2, "rapport": dict(self.OK_CHAPTER, etat="incomplet", non_verifies=["Niveau 1 : mecanisme 3 NON VERIFIE a pied"]),
+                     "etat": self.chapter_state(1, valide=False), "fichiers": ["BR_AutoTestChapitre_2.sav", "BR_AutoTestChapitre_Etat.txt"]}
+        code, out, rep, runs = self.chapter({"phases": self.chapter_phases(**{"1": incomplet})}, "--chapter")
+        self.assertEqual(code, 2, out)
+        self.assertEqual(os.listdir(self.player_saves), [])
+
+    def test_chapitre_fichier_restant_apres_traversee(self):
+        # Traversee complete mais un fichier de test reste chez le joueur : le nettoyage du jeu a echoue -> ECHEC
+        phases = self.chapter_phases(**{"3": {"code": 0, "rapport": self.OK_CHAPTER, "etat": self.chapter_state(3), "fichiers": ["BR_AutoTestChapitre_1.sav"]}})
+        code, out, rep, _ = self.chapter({"phases": phases}, "--chapter")
+        self.assertEqual(code, 1, out)
+        self.assertIn("laisse(s) par le jeu dans le dossier du joueur", out)
+        self.assertEqual(os.listdir(self.player_saves), [])
 
     def test_chapitre_exige_hors_hote(self):
         if sys.platform.startswith("linux"):

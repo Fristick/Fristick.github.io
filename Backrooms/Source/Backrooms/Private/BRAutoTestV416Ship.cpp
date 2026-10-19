@@ -19,7 +19,9 @@
 //   chapitre ; 3 relance apres la fin, verifications, nettoyage. 0 (defaut) : tout dans un lancement (la fermeture est
 //   l'ecriture de QUITTER, la reprise relit le fichier par le menu). Etat de chaque phase : Chapitre.json (dossier du
 //   rapport) et -BRChapterOut=<fichier> ; etat passe d'une phase a la suivante : Saved/SaveGames/BR_AutoTestChapitre_Etat.txt
-//   (efface au nettoyage, comme les parties de test).
+//   (efface au nettoyage, comme les parties de test). v4.16 (relecture) : dans un paquet Shipping, Saved est le dossier du
+//   JOUEUR (%LOCALAPPDATA%\Backrooms\Saved : parties de test et etat a cote de ses parties BR_Partie_*) ; une traversee
+//   arretee avant le nettoyage les y laisse : check_package.py les en retire a la fin du controle, quelle qu'en soit l'issue.
 //
 // -BRAutoTest -BRAutoTestV416Ship : REJOUER et sauvegardes, sur des parties de test (prefixe BR_AutoTestV416Ship_) :
 //   - campagne lineaire reprise au Niveau 2 par le menu : consommation (eau d'amande par l'objet rapide), degats (decides par

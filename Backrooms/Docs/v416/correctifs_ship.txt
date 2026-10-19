@@ -28,6 +28,9 @@ D2. Paquet Shipping : tous les plans de test etaient joignables depuis la ligne 
     Apres : en Shipping, seuls -BRAutoTest -BRSmokeTest (demarrage) et -BRAutoTest -BRAutoTestChapter (traversee) sont
     acceptes ; -BRAutoTestStay est ignore (le jeu se ferme toujours a la fin) ; pas de test reseau. Les commandes de la
     console restent fermees (AreCheatsAllowed, inchange). Hors Shipping : rien ne change.
+    Correction de relecture (C1 plus bas) : la restriction ne depend plus de l'ordre des choix de ABRAutoTest::BeginPlay.
+    Le premier commit disait qu'elle tenait "quel que soit l'ordre donne par la fusion" : c'etait faux (le choix
+    -BRAutoTestV416Lidar de la branche v416-lidar tombait au meme endroit et pouvait passer devant).
     Test : check_package.py --launch --chapter sur le paquet (les deux essais acceptes passent) ; compilation de la cible
     Shipping (branches UE_BUILD_SHIPPING). Le refus des autres plans n'est pas essaye en jeu (il faudrait lancer le paquet
     avec un plan refuse : a faire a la main, attendu : menu ordinaire, aucun rapport dans Saved/AutoTest).
@@ -37,7 +40,8 @@ D3. Traversee du chapitre : les parties du joueur auraient ete lues au lancement
     etape d'un test ; BRSaves::Load peut reprendre une copie de secours ou mettre un fichier illisible de cote. Apres :
     avec -BRAutoTest -BRAutoTestChapter, BRSaves commence avec le prefixe de test (BR_AutoTestChapitre_) : les parties du
     joueur (BR_Partie_*) ne sont ni lues ni ecrites. Test : -BRAutoTestChapter, premiere note "parties de test ... des le
-    lancement oui" (PROBLEME sinon).
+    lancement oui" (PROBLEME sinon). Correction de relecture (C3 plus bas) : le test de demarrage (-BRSmokeTest) a aussi
+    son prefixe des le lancement.
 
 N1. Nouveau : traversee du premier chapitre publie dans le paquet (Source/Backrooms/Private/BRAutoTestV416Ship.cpp,
     -BRAutoTestChapter) et son controle (Tools/Build/check_package.py --chapter, Tools/Build/build_windows.ps1 -Chapter).
@@ -80,12 +84,76 @@ R1. Ecriture de l'arrivee pendant le fondu (risque trouve dans le code, non corr
 R2. -BRNetTest n'est plus accepte par un paquet Shipping (D2) : pour un essai reseau sur deux machines, construire un
     paquet Development (build_windows.ps1 -Config Development) ou lancer l'editeur.
 
+## Corrections de relecture (commit "v4.16 (ship) : corrections de relecture")
+
+Ou un paquet Shipping ecrit : dans le dossier du JOUEUR, pas dans celui du paquet. Sous Windows,
+%LOCALAPPDATA%\Backrooms\Saved (FPaths::ShouldSaveToUserDir ; constate sur cette machine : Saved\AutoTest, Config, Logs du
+test de demarrage du 17 octobre). Les parties de test et l'etat de la traversee (SaveGames\BR_AutoTestChapitre_*) y sont
+donc a cote des vraies parties du joueur (SaveGames\BR_Partie_*) et de ses reglages. Le compte rendu du premier commit
+disait a tort "dans le dossier SaveGames du paquet" (ce document et le code ne disaient que Saved/SaveGames, sans dire
+lequel). Dans l'editeur lance en jeu : Saved\SaveGames du projet.
+
+C1. Restriction Shipping dependante de l'ordre des choix (constat 1, confirme). Cause : le bloc des essais du paquet etait
+    place juste avant "if (bNetTest)", ou v416-lidar ajoute aussi son choix -BRAutoTestV416Lidar (git merge-tree : conflit
+    dans BRAutoTest.cpp, seul conflit avec les six autres branches). Si la fusion mettait le choix lidar au-dessus, un
+    paquet Shipping lance avec -BRAutoTest -BRSmokeTest -BRAutoTestV416Lidar executait le plan lidar (IsRequested vrai).
+    Apres : membre bPackagePlan, mis a vrai seulement par les choix -BRSmokeTest et -BRAutoTestChapter de BeginPlay ;
+    en Shipping, ABRAutoTest::Tick refuse tout autre plan avant sa premiere etape (probleme "plan de test refuse par une
+    version publiee", rapport ecrit, fermeture avec le code 1). Tick n'est touche par aucune autre branche : la regle
+    tient quel que soit l'endroit ou tombe un choix apres la fusion. Le choix -BRAutoTestChapter est revenu a cote du test
+    de demarrage (plus bas dans BeginPlay, hors des lignes des autres branches). backrooms-v4.16 contient maintenant
+    v416-lidar (fusion 822d39f) : son choix -BRAutoTestV416Lidar est en tete de BeginPlay, avant le test de demarrage ;
+    un paquet lance avec -BRAutoTest -BRSmokeTest -BRAutoTestV416Lidar construit donc le plan lidar, que Tick refuse.
+    git merge-tree --write-tree de cette branche avec backrooms-v4.16 (lidar fusionne) et avec chacune des six autres
+    branches v416 : aucun conflit.
+    Test : compilation Shipping ; en jeu (paquet), non essaye ici : un paquet lance avec un autre plan doit se fermer
+    avec le code 1 et la ligne ci-dessus dans %LOCALAPPDATA%\Backrooms\Saved\AutoTest\Rapport.txt.
+
+C2. Delai d'une phase : seul le lanceur etait arrete, delai par defaut trop court (constat 2, confirme). Cause :
+    subprocess.run(cmd, timeout) n'arretait que le processus lance, Backrooms.exe a la racine du paquet, qui demarre le
+    vrai jeu (Backrooms\Binaries\Win64\Backrooms-Win64-Shipping.exe) et l'attend ; le jeu continuait (carte graphique
+    occupee, parties de test et etat ecrits apres le verdict ECHEC). --chapter-timeout valait 2400 s alors que les limites
+    des etapes de la phase 1 font environ 3600 s au pire (porte de service 560 s, mission du Niveau 1 980 s, sortie 330 s,
+    mission des Poolrooms 980 s, arrivees, relectures et preparation) : le controle pouvait couper une phase avant que le
+    jeu ne note lui-meme l'etape bloquee. Apres : run_game (Popen puis wait) ; au-dela du delai, kill_tree arrete tout
+    l'arbre (Windows : taskkill /PID <lanceur> /T /F tant que le lanceur vit ; Linux : groupe de processus, le jeu lance
+    dans sa propre session ; Mac : open -W n'est pas le parent de l'application, a fermer a la main), meme chose pour le
+    test de demarrage. Delai par defaut : 4500 s par phase (restart), 7200 s (single : environ 5850 s de limites).
+    Tests : test_chapitre_delai_arrete_le_jeu_et_son_enfant (jeu simule qui, comme le lanceur, attend un enfant qui ecrit
+    un battement : le battement s'arrete ; avec l'ancien arret, le test echoue : "le processus enfant du lanceur tourne
+    encore", essai fait), test_chapitre_delai_par_defaut.
+
+C3. Le test de demarrage lisait les parties du joueur (constat 3, confirme). Cause : build_windows.ps1 -Chapter ajoute
+    toujours --launch ; le test de demarrage (-BRAutoTest -BRSmokeTest) ouvre le menu, dont la liste (RefreshSaves ->
+    BRSaves::Load) lit BR_Partie_1 a 6 dans le dossier du joueur et peut les reecrire (copie de secours reprise, fichier
+    illisible mis de cote, copie _FormatN d'un ancien format). Le test n'utilise aucune partie. Apres : avec -BRAutoTest
+    -BRSmokeTest, BRSaves commence avec le prefixe BR_AutoTestLancement_ (liste vide) ; -BRSmokeTest est prioritaire,
+    comme dans BeginPlay. Aucun essai lance par check_package.py ne lit ni n'ecrit plus BR_Partie_*. Le test de demarrage
+    de l'editeur (run_autotests.ps1 smoke) a aussi une liste vide (il n'en dependait pas). Test : en jeu (non lance ici) ;
+    check_package.py retire un eventuel BR_AutoTestLancement_* du dossier du joueur (test_lancement_fichier_de_test_retire).
+
+C4. Fichiers de test laisses dans le dossier du joueur apres un echec (constat 4, confirme). Cause : check_chapter
+    rendait la main apres un echec, une phase incomplete ou un delai sans rien retirer ; la phase 1 suivante les efface,
+    mais d'ici la ils restaient a cote des parties du joueur. Apres : a la fin de --chapter, quelle qu'en soit l'issue,
+    les fichiers BR_AutoTestChapitre_* (etat de la traversee compris) du dossier du joueur sont deplaces dans
+    <dossier des rapports>\parties_de_test (gardes pour l'analyse) ; apres une traversee complete, un fichier restant est
+    un ECHEC (le nettoyage de la phase 3 aurait du l'effacer). Seuls les fichiers de ces prefixes sont touches, jamais
+    BR_Partie_*. Windows seulement (les autres systemes ne sont pas controles). Tests :
+    test_chapitre_parties_de_test_retirees_apres_echec, test_chapitre_phase_incomplete_retire_les_parties_de_test,
+    test_chapitre_fichier_restant_apres_traversee ; dans tous les tests, le dossier du joueur est remplace par un dossier
+    du test (le vrai n'est jamais touche).
+
 ## Resultats hors moteur (cette branche, apres les modifications)
 
 - Compilation BackroomsEditor Win64 Development : reussie, 0 avertissement du projet (avant et apres le commit, ce dernier
   avec le fichier dans le lot unity) ; Backrooms Win64 Development et Backrooms Win64 Shipping : reussies, 0 avertissement.
 - python Tools/run_benches.py : RESULTAT : OK (10 banc(s) x 3 compilateur(s)) ; story : 95 verifications.
-- python -m unittest Tools/Build/tests/test_packaging.py : 77 tests, OK (1 saute : hote Windows pour le cas Linux).
+- python -m unittest Tools/Build/tests/test_packaging.py : 77 tests, OK (1 saute : hote Windows pour le cas Linux) ;
+  apres les corrections de relecture : 83 tests, OK (1 saute).
+- Apres les corrections de relecture : BackroomsEditor Win64 Development, Backrooms Win64 Development et Backrooms Win64
+  Shipping reussies, 0 avertissement du projet (BRAutoTest.cpp, BRSave.cpp, BRAutoTestV416Ship.cpp recompiles ; la
+  branche UE_BUILD_SHIPPING de Tick compilee par la cible Shipping) ; run_benches.py : OK (10 x 3) ; controles de langues
+  et protect_assets : OK.
 - loc_extract.py --check (a jour), loc_build.py --check, loc_review.py (problemes : 0), protect_assets.py check (OK) ;
   verify_pitfalls.py --doors 1-500, verify_lidar.py --seeds 1-200, verify_device_clearance.py --seeds 120,
   verify_level0_kit.py --seeds 40 : OK (aucun texte visible ni generation touches par cette branche).
@@ -107,4 +175,12 @@ R2. -BRNetTest n'est plus accepte par un paquet Shipping (D2) : pour un essai re
 # Attendu : "chapitre     OK" et "RESULTAT : PAQUET VERIFIE ET LANCE, CHAPITRE TRAVERSE" (code 0) ; INCOMPLET (code 2) si une
 # phase a une verification NON VERIFIEE (phases suivantes non lancees) ; ECHEC (code 1) sinon.
 # Rapport de chaque phase : <dossier>/chapitre_<phase>.json (rapport du jeu), chapitre_<phase>_etat.json (Chapitre.json),
-# chapitre_<phase>.log (journal ; vide en Shipping, sans journal).
+# chapitre_<phase>.log (journal ; vide en Shipping, sans journal) ; <dossier>/parties_de_test : fichiers de test retires du
+# dossier du joueur (%LOCALAPPDATA%\Backrooms\Saved\SaveGames) apres une traversee arretee (vide apres un succes).
+# Delai d'une phase : 4500 s par defaut (--chapter-timeout) ; au-dela, le lanceur et le jeu sont arretes ensemble.
+# Refus des autres plans par le paquet (a la main, paquet du projet fusionne) :
+#   Build\Windows\Shipping\Backrooms.exe -BRAutoTest -BRAutoTestV415 -BRAutoTestStay : menu ordinaire, aucun essai ;
+#   ... -BRAutoTest -BRSmokeTest -BRAutoTestStay : test de demarrage seul, puis fermeture (Stay ignore) ;
+#   ... -BRAutoTest -BRSmokeTest -BRAutoTestV416Lidar (choix lidar avant le test de demarrage dans BeginPlay) : code
+#   de sortie 1, %LOCALAPPDATA%\Backrooms\Saved\AutoTest\Rapport.txt : "PROBLEME : plan de test refuse par une version
+#   publiee (seuls -BRSmokeTest et -BRAutoTestChapter y sont acceptes)".

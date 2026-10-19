@@ -460,11 +460,15 @@ namespace BRSaves
 	{
 		FString& Prefix()
 		{
-			// v4.16 (paquet) : traversee du chapitre (-BRAutoTest -BRAutoTestChapter, aussi dans le paquet Shipping) : parties de
-			// test des le lancement (prefixe de BRAutoTestV416Ship.cpp). Les parties du joueur ne sont ni lues ni ecrites, pas
-			// meme par la liste du menu au demarrage (BRSaves::Load peut reprendre une copie de secours ou mettre un fichier de cote)
-			static FString Value = (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTest")) && FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestChapter")))
-				? FString(TEXT("BR_AutoTestChapitre_")) : FString(TEXT("BR_Partie_"));
+			// v4.16 (paquet) : essais du paquet (aussi dans le paquet Shipping, ou Saved est le dossier du joueur :
+			// %LOCALAPPDATA%\Backrooms\Saved) : parties de test des le lancement. Les parties du joueur ne sont ni lues ni
+			// ecrites, pas meme par la liste du menu au demarrage (BRSaves::Load peut reprendre une copie de secours, mettre un
+			// fichier de cote ou ecrire la copie d'un ancien format). Test de lancement (-BRSmokeTest, choisi avant la traversee
+			// par ABRAutoTest::BeginPlay) : BR_AutoTestLancement_ (liste vide, il n'utilise aucune partie) ; traversee du
+			// chapitre (-BRAutoTestChapter) : prefixe de BRAutoTestV416Ship.cpp
+			static FString Value = !FParse::Param(FCommandLine::Get(), TEXT("BRAutoTest")) ? FString(TEXT("BR_Partie_"))
+				: (FParse::Param(FCommandLine::Get(), TEXT("BRSmokeTest")) ? FString(TEXT("BR_AutoTestLancement_"))
+				: (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestChapter")) ? FString(TEXT("BR_AutoTestChapitre_")) : FString(TEXT("BR_Partie_"))));
 			return Value;
 		}
 	}

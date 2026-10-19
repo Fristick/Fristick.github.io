@@ -160,6 +160,9 @@ private:
 	/** v4.16 (paquet) : -BRAutoTestV416Ship : REJOUER et sauvegardes : consommation, degats, document et entite, mort, fermeture
 	 *  et reprise sans alterer la campagne (seule l'union du journal), migration 5 -> 6 avec copie (BRAutoTestV416Ship.cpp) */
 	void AddV416ShipSteps();
+	/** v4.16 (paquet) : le plan choisi par BeginPlay est un plan du paquet (-BRSmokeTest, -BRAutoTestChapter) : le seul qu'une
+	 *  version publiee execute (Tick), ou que tombe son choix dans BeginPlay */
+	bool bPackagePlan = false;
 	/** v4.10 : session longue (-BRAutoTestSoak=<minutes>) : allers-retours entre le Niveau 0 et les 11 autres niveaux,
 	 *  promenade a chaque arrivee ; memoire, objets, caches et images par seconde releves (SessionLongue.csv) */
 	void AddSoakSteps(float Minutes);

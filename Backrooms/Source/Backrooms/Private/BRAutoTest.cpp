@@ -138,24 +138,6 @@ void ABRAutoTest::BeginPlay()
 		GLog->AddOutputDevice(Capture.Get());
 	}
 
-	// v4.16 (paquet) : les essais du paquet passent avant tout autre choix : une version publiee n'accepte que ceux-ci
-	// (IsRequested), quels que soient les autres options de la ligne de commande et l'ordre des plans plus bas.
-	// -BRAutoTestChapter : traversee du premier chapitre publie (aussi dans le paquet Shipping : check_package.py --chapter)
-#if UE_BUILD_SHIPPING
-	if (FParse::Param(FCommandLine::Get(), TEXT("BRSmokeTest")))
-	{
-		AddSmokeSteps();
-		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Test de lancement : %d etapes"), Plan.Num());
-		return;
-	}
-#endif
-	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestChapter")))
-	{
-		AddChapterSteps();
-		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Traversee du chapitre : %d etapes. Rapport : %s"), Plan.Num(), *OutDir);
-		return;
-	}
-
 	if (bNetTest)
 	{
 		BuildNetPlan();
@@ -191,7 +173,18 @@ void ABRAutoTest::BeginPlay()
 	{
 		// v4.10 : lancement d'un paquet (Tools/Build/check_package.py --launch)
 		AddSmokeSteps();
+		bPackagePlan = true; // v4.16 (paquet) : plan du paquet, execute aussi par une version publiee (Tick)
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Test de lancement : %d etapes"), Plan.Num());
+		return;
+	}
+	// v4.16 (paquet) : traversee du premier chapitre publie (BRAutoTestV416Ship.cpp ; aussi dans le paquet Shipping :
+	// check_package.py --chapter). Plan du paquet : une version publiee n'execute que celui-ci et le test de lancement,
+	// quel que soit l'ordre des choix de cette fonction apres une fusion (bPackagePlan, verifie par Tick)
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestChapter")))
+	{
+		AddChapterSteps();
+		bPackagePlan = true;
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Traversee du chapitre : %d etapes. Rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
 	// v4.16 (paquet) : REJOUER et sauvegardes (BRAutoTestV416Ship.cpp)
@@ -1940,6 +1933,20 @@ void ABRAutoTest::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+#if UE_BUILD_SHIPPING
+	// v4.16 (paquet) : version publiee : seuls les plans du paquet (test de lancement -BRSmokeTest, traversee du chapitre
+	// -BRAutoTestChapter : bPackagePlan) s'executent, ou que tombe leur choix dans BeginPlay (avant : la restriction tenait a
+	// l'ordre des choix, qu'une fusion pouvait changer). Tout autre plan est refuse avant sa premiere etape : probleme note,
+	// rapport ecrit, le jeu se ferme (code 1)
+	if (!bPackagePlan)
+	{
+		Plan.Reset();
+		StepIndex = 0;
+		Note(TEXT("plan de test refuse par une version publiee (seuls -BRSmokeTest et -BRAutoTestChapter y sont acceptes)"), true);
+		Finish();
+		return;
+	}
+#endif
 	const float RealDt = static_cast<float>(FApp::GetDeltaTime());
 	if (bMeasuring && RealDt > 0.f)
 	{
