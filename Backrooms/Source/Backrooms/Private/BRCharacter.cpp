@@ -2978,7 +2978,7 @@ void ABRCharacter::UpdateStats(float Dt)
 	{
 		const FBRLevelDef& D = W->Def();
 		float Drain = D.SanityDrain + SanityPressure;
-		const float Light = W->LightLevelAt(GetActorLocation());
+		const float Light = W->LightLevelAt(GetActorLocation(), this);
 		if (Light < 0.12f && !D.bOutdoor)
 		{
 			Drain += (IsFlashlightOn() || bNightVision) ? 0.06f : 0.22f;

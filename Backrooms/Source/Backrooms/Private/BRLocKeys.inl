@@ -1,4 +1,4 @@
-// Genere par Tools/Localization/loc_extract.py : ne pas modifier a la main (1213 cles du namespace BR)
+// Genere par Tools/Localization/loc_extract.py : ne pas modifier a la main (1216 cles du namespace BR)
 TEXT("Assets.WrongScale"),
 TEXT("Caption.Ahead"),
 TEXT("Caption.Bacteria"),
@@ -266,6 +266,9 @@ TEXT("HUD.LidarPlate"),
 TEXT("HUD.LidarPulseHint"),
 TEXT("HUD.LidarStatic"),
 TEXT("HUD.LidarSurvey"),
+TEXT("HUD.LightDark"),
+TEXT("HUD.LightDim"),
+TEXT("HUD.LightLit"),
 TEXT("HUD.MateriauxMatproblemsMatproblems2"),
 TEXT("HUD.MemeReseauLanDonnezCette"),
 TEXT("HUD.Menu"),

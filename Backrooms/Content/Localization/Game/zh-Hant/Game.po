@@ -2495,7 +2495,7 @@ msgstr "繼續"
 
 #. Key:	HUD.Parametres
 #. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(3933)
-#: Source/Backrooms/Private/BRHUD.cpp(3933) Source/Backrooms/Private/BRHUD.cpp(4172) Source/Backrooms/Private/BRHUD.cpp(5177)
+#: Source/Backrooms/Private/BRHUD.cpp(3933) Source/Backrooms/Private/BRHUD.cpp(4172) Source/Backrooms/Private/BRHUD.cpp(5188)
 #, fuzzy
 msgctxt "BR,HUD.Parametres"
 msgid "PARAMÈTRES"
@@ -2893,793 +2893,817 @@ msgctxt "BR,HUD.SanityBreaking"
 msgid "au bord de la rupture"
 msgstr "瀕臨崩潰"
 
+#. Key:	HUD.LightDark
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4767)
+#: Source/Backrooms/Private/BRHUD.cpp(4767)
+#, fuzzy
+msgctxt "BR,HUD.LightDark"
+msgid "dans le noir"
+msgstr "身處黑暗"
+
+#. Key:	HUD.LightLit
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4768)
+#: Source/Backrooms/Private/BRHUD.cpp(4768)
+#, fuzzy
+msgctxt "BR,HUD.LightLit"
+msgid "éclairé"
+msgstr "有光照"
+
+#. Key:	HUD.LightDim
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4768)
+#: Source/Backrooms/Private/BRHUD.cpp(4768)
+#, fuzzy
+msgctxt "BR,HUD.LightDim"
+msgid "pénombre"
+msgstr "昏暗"
+
 #. Key:	HUD.Endurance
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4761)
-#: Source/Backrooms/Private/BRHUD.cpp(4761)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4771)
+#: Source/Backrooms/Private/BRHUD.cpp(4771)
 #, fuzzy
 msgctxt "BR,HUD.Endurance"
 msgid "ENDURANCE"
 msgstr "體力"
 
 #. Key:	HUD.SanteMentale
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4762)
-#: Source/Backrooms/Private/BRHUD.cpp(4762)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4772)
+#: Source/Backrooms/Private/BRHUD.cpp(4772)
 #, fuzzy
 msgctxt "BR,HUD.SanteMentale"
 msgid "SANTÉ MENTALE"
 msgstr "理智"
 
 #. Key:	HUD.DoubleClicUseverb
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4876)
-#: Source/Backrooms/Private/BRHUD.cpp(4876)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4887)
+#: Source/Backrooms/Private/BRHUD.cpp(4887)
 #, fuzzy
 msgctxt "BR,HUD.DoubleClicUseverb"
 msgid "[DOUBLE-CLIC]  {UseVerb}"
 msgstr "[雙擊]  {UseVerb}"
 
 #. Key:	HUD.Retirer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4882)
-#: Source/Backrooms/Private/BRHUD.cpp(4882) Source/Backrooms/Private/BRHUD.cpp(4981)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4893)
+#: Source/Backrooms/Private/BRHUD.cpp(4893) Source/Backrooms/Private/BRHUD.cpp(4992)
 #, fuzzy
 msgctxt "BR,HUD.Retirer"
 msgid "RETIRER"
 msgstr "卸下"
 
 #. Key:	HUD.Equiper
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4882)
-#: Source/Backrooms/Private/BRHUD.cpp(4882) Source/Backrooms/Private/BRHUD.cpp(4981)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4893)
+#: Source/Backrooms/Private/BRHUD.cpp(4893) Source/Backrooms/Private/BRHUD.cpp(4992)
 #, fuzzy
 msgctxt "BR,HUD.Equiper"
 msgid "ÉQUIPER"
 msgstr "裝備"
 
 #. Key:	HUD.DoubleClicRetirer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4886)
-#: Source/Backrooms/Private/BRHUD.cpp(4886)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4897)
+#: Source/Backrooms/Private/BRHUD.cpp(4897)
 #, fuzzy
 msgctxt "BR,HUD.DoubleClicRetirer"
 msgid "[DOUBLE-CLIC]  RETIRER"
 msgstr "[雙擊]  卸下"
 
 #. Key:	HUD.DoubleClicEquiper
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4886)
-#: Source/Backrooms/Private/BRHUD.cpp(4886)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4897)
+#: Source/Backrooms/Private/BRHUD.cpp(4897)
 #, fuzzy
 msgctxt "BR,HUD.DoubleClicEquiper"
 msgid "[DOUBLE-CLIC]  ÉQUIPER"
 msgstr "[雙擊]  裝備"
 
 #. Key:	HUD.XIt2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4902)
-#: Source/Backrooms/Private/BRHUD.cpp(4902)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4913)
+#: Source/Backrooms/Private/BRHUD.cpp(4913)
 #, fuzzy
 msgctxt "BR,HUD.XIt2"
 msgid "  x{It}"
 msgstr "  x{It}"
 
 #. Key:	HUD.Inspecter
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4936)
-#: Source/Backrooms/Private/BRHUD.cpp(4936)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4947)
+#: Source/Backrooms/Private/BRHUD.cpp(4947)
 #, fuzzy
 msgctxt "BR,HUD.Inspecter"
 msgid "INSPECTER"
 msgstr "檢視"
 
 #. Key:	HUD.Consommable
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4947)
-#: Source/Backrooms/Private/BRHUD.cpp(4947)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4958)
+#: Source/Backrooms/Private/BRHUD.cpp(4958)
 #, fuzzy
 msgctxt "BR,HUD.Consommable"
 msgid "CONSOMMABLE"
 msgstr "消耗品"
 
 #. Key:	HUD.Objet
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4947)
-#: Source/Backrooms/Private/BRHUD.cpp(4947)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4958)
+#: Source/Backrooms/Private/BRHUD.cpp(4958)
 #, fuzzy
 msgctxt "BR,HUD.Objet"
 msgid "OBJET"
 msgstr "物品"
 
 #. Key:	HUD.EquipmentSlot
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4950)
-#: Source/Backrooms/Private/BRHUD.cpp(4950)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4961)
+#: Source/Backrooms/Private/BRHUD.cpp(4961)
 #, fuzzy
 msgctxt "BR,HUD.EquipmentSlot"
 msgid "ÉQUIPEMENT - {Slot}"
 msgstr "裝備 - {Slot}"
 
 #. Key:	HUD.KindQuantiteIt
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4952)
-#: Source/Backrooms/Private/BRHUD.cpp(4952)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(4963)
+#: Source/Backrooms/Private/BRHUD.cpp(4963)
 #, fuzzy
 msgctxt "BR,HUD.KindQuantiteIt"
 msgid "{Kind}     QUANTITÉ : {It}"
 msgstr "{Kind}     數量：{It}"
 
 #. Key:	HUD.Fermer
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5001)
-#: Source/Backrooms/Private/BRHUD.cpp(5001)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5012)
+#: Source/Backrooms/Private/BRHUD.cpp(5012)
 #, fuzzy
 msgctxt "BR,HUD.Fermer"
 msgid "FERMER"
 msgstr "關閉"
 
 #. Key:	HUD.JournalVagabond
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5027)
-#: Source/Backrooms/Private/BRHUD.cpp(5027)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5038)
+#: Source/Backrooms/Private/BRHUD.cpp(5038)
 #, fuzzy
 msgctxt "BR,HUD.JournalVagabond"
 msgid "JOURNAL DU VAGABOND"
 msgstr "流浪者日誌"
 
 #. Key:	HUD.NiveauNumberTitle2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5031)
-#: Source/Backrooms/Private/BRHUD.cpp(5031)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5042)
+#: Source/Backrooms/Private/BRHUD.cpp(5042)
 #, fuzzy
 msgctxt "BR,HUD.NiveauNumberTitle2"
 msgid "NIVEAU {Number} - « {Title} »"
 msgstr "第 {Number} 層 - 「{Title}」"
 
 #. Key:	HUD.LevelsVisited
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5048)
-#: Source/Backrooms/Private/BRHUD.cpp(5048)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5059)
+#: Source/Backrooms/Private/BRHUD.cpp(5059)
 #, fuzzy
 msgctxt "BR,HUD.LevelsVisited"
 msgid "Niveaux visités : {List}"
 msgstr "到過的層級：{List}"
 
 #. Key:	HUD.TempsNiveauLeveltime
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5050)
-#: Source/Backrooms/Private/BRHUD.cpp(5050)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5061)
+#: Source/Backrooms/Private/BRHUD.cpp(5061)
 #, fuzzy
 msgctxt "BR,HUD.TempsNiveauLeveltime"
 msgid "Temps sur ce niveau : {LevelTime}"
 msgstr "在本層的時間：{LevelTime}"
 
 #. Key:	HUD.LeaveLevelHelp
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5053)
-#: Source/Backrooms/Private/BRHUD.cpp(5053)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5064)
+#: Source/Backrooms/Private/BRHUD.cpp(5064)
 #, fuzzy
 msgctxt "BR,HUD.LeaveLevelHelp"
 msgid "Pour quitter un niveau : cherchez sa sortie (porte, ascenseur, échelle...). Les sorties émettent un bourdonnement électrique ; au Niveau 0, la porte de service laisse passer un courant d'air froid."
 msgstr "離開層級的方法：尋找它的出口（門、電梯、梯子……）。出口會發出電流嗡鳴；在第 0 層，員工門會透進一股冷風。"
 
 #. Key:	HUD.NotesTrouveesReadnotes
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5061)
-#: Source/Backrooms/Private/BRHUD.cpp(5061)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5072)
+#: Source/Backrooms/Private/BRHUD.cpp(5072)
 #, fuzzy
 msgctxt "BR,HUD.NotesTrouveesReadnotes"
 msgid "NOTES TROUVÉES ({ReadNotes})"
 msgstr "找到的紙條（{ReadNotes}）"
 
 #. Key:	HUD.QuotedNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5068)
-#: Source/Backrooms/Private/BRHUD.cpp(5068)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5079)
+#: Source/Backrooms/Private/BRHUD.cpp(5079)
 #, fuzzy
 msgctxt "BR,HUD.QuotedNote"
 msgid "« {Note} »"
 msgstr "「{Note}」"
 
 #. Key:	HUD.EntitesRencontrees
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5092)
-#: Source/Backrooms/Private/BRHUD.cpp(5092)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5103)
+#: Source/Backrooms/Private/BRHUD.cpp(5103)
 #, fuzzy
 msgctxt "BR,HUD.EntitesRencontrees"
 msgid "ENTITÉS RENCONTRÉES"
 msgstr "遇到的實體"
 
 #. Key:	HUD.EntityNumberName
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5117)
-#: Source/Backrooms/Private/BRHUD.cpp(5117)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5128)
+#: Source/Backrooms/Private/BRHUD.cpp(5128)
 #, fuzzy
 msgctxt "BR,HUD.EntityNumberName"
 msgid "{Number} - {Name}"
 msgstr "{Number} - {Name}"
 
 #. Key:	HUD.AdviceLine
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5125)
-#: Source/Backrooms/Private/BRHUD.cpp(5125)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5136)
+#: Source/Backrooms/Private/BRHUD.cpp(5136)
 #, fuzzy
 msgctxt "BR,HUD.AdviceLine"
 msgid "Conseil : {Advice}"
 msgstr "建議：{Advice}"
 
 #. Key:	HUD.AucuneInstantTresBienComme
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5155)
-#: Source/Backrooms/Private/BRHUD.cpp(5155)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5166)
+#: Source/Backrooms/Private/BRHUD.cpp(5166)
 #, fuzzy
 msgctxt "BR,HUD.AucuneInstantTresBienComme"
 msgid "Aucune pour l'instant... et c'est très bien comme ça."
 msgstr "暫時還沒有……這樣最好。"
 
 #. Key:	HUD.AstuceFilmerEntiteCamescopePendant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5157)
-#: Source/Backrooms/Private/BRHUD.cpp(5157)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5168)
+#: Source/Backrooms/Private/BRHUD.cpp(5168)
 #, fuzzy
 msgctxt "BR,HUD.AstuceFilmerEntiteCamescopePendant"
 msgid "Astuce : filmer une entité au caméscope pendant 3 secondes ajoute sa fiche au journal."
 msgstr "提示：用攝像機拍攝實體 3 秒，就會把它的資料加入日誌。"
 
 #. Key:	HUD.SettingsGame
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5180)
-#: Source/Backrooms/Private/BRHUD.cpp(5180)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5191)
+#: Source/Backrooms/Private/BRHUD.cpp(5191)
 #, fuzzy
 msgctxt "BR,HUD.SettingsGame"
 msgid "JEU"
 msgstr "遊戲"
 
 #. Key:	HUD.SettingsVideo
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5180)
-#: Source/Backrooms/Private/BRHUD.cpp(5180)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5191)
+#: Source/Backrooms/Private/BRHUD.cpp(5191)
 #, fuzzy
 msgctxt "BR,HUD.SettingsVideo"
 msgid "VIDÉO"
 msgstr "視訊"
 
 #. Key:	HUD.SettingsInterface
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5181)
-#: Source/Backrooms/Private/BRHUD.cpp(5181)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5192)
+#: Source/Backrooms/Private/BRHUD.cpp(5192)
 #, fuzzy
 msgctxt "BR,HUD.SettingsInterface"
 msgid "INTERFACE"
 msgstr "介面"
 
 #. Key:	HUD.SettingsGraphics
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5181)
-#: Source/Backrooms/Private/BRHUD.cpp(5181)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5192)
+#: Source/Backrooms/Private/BRHUD.cpp(5192)
 #, fuzzy
 msgctxt "BR,HUD.SettingsGraphics"
 msgid "GRAPHISMES"
 msgstr "圖形"
 
 #. Key:	HUD.ReglagesSontSauvegardesAutomatiquementBa
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5271)
-#: Source/Backrooms/Private/BRHUD.cpp(5271)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5282)
+#: Source/Backrooms/Private/BRHUD.cpp(5282)
 #, fuzzy
 msgctxt "BR,HUD.ReglagesSontSauvegardesAutomatiquementBa"
 msgid "Les réglages sont sauvegardés automatiquement (BackroomsPlayer.ini)."
 msgstr "設定會自動儲存（BackroomsPlayer.ini）。"
 
 #. Key:	HUD.ImmediatProfilQualiteRayTracing
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5312)
-#: Source/Backrooms/Private/BRHUD.cpp(5312)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5323)
+#: Source/Backrooms/Private/BRHUD.cpp(5323)
 #, fuzzy
 msgctxt "BR,HUD.ImmediatProfilQualiteRayTracing"
 msgid "Immédiat : profil, qualité, ray tracing, reflets, ombres de la lampe, résolution.  Au redémarrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini)."
 msgstr "立即生效：配置、畫質、光線追蹤、反射、手電筒陰影、解析度。  重啟後生效：DirectX 12 / 11、光線追蹤支援、蒙皮快取（Config/DefaultEngine.ini）。"
 
 #. Key:	HUD.DistM
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5524)
-#: Source/Backrooms/Private/BRHUD.cpp(5524) Source/Backrooms/Private/BRHUD.cpp(5558)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5535)
+#: Source/Backrooms/Private/BRHUD.cpp(5535) Source/Backrooms/Private/BRHUD.cpp(5569)
 #, fuzzy
 msgctxt "BR,HUD.DistM"
 msgid "{Dist} m"
 msgstr "{Dist} 公尺"
 
 #. Key:	HUD.Explorateur
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5531)
-#: Source/Backrooms/Private/BRHUD.cpp(5531)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5542)
+#: Source/Backrooms/Private/BRHUD.cpp(5542)
 #, fuzzy
 msgctxt "BR,HUD.Explorateur"
 msgid "Explorateur"
 msgstr "探險者"
 
 #. Key:	HUD.NoyeSortez
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5541)
-#: Source/Backrooms/Private/BRHUD.cpp(5541)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5552)
+#: Source/Backrooms/Private/BRHUD.cpp(5552)
 #, fuzzy
 msgctxt "BR,HUD.NoyeSortez"
 msgid "  (noyé : sortez-le)"
 msgstr "  （溺水：把他拉出來）"
 
 #. Key:	HUD.Terre2
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5541)
-#: Source/Backrooms/Private/BRHUD.cpp(5541)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5552)
+#: Source/Backrooms/Private/BRHUD.cpp(5552)
 #, fuzzy
 msgctxt "BR,HUD.Terre2"
 msgid "  (à terre)"
 msgstr "  （倒地）"
 
 #. Key:	HUD.HorsAtteinte
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5542)
-#: Source/Backrooms/Private/BRHUD.cpp(5542)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5553)
+#: Source/Backrooms/Private/BRHUD.cpp(5553)
 #, fuzzy
 msgctxt "BR,HUD.HorsAtteinte"
 msgid "  (hors d'atteinte)"
 msgstr "  （無法到達）"
 
 #. Key:	Display.KeepTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5580)
-#: Source/Backrooms/Private/BRHUD.cpp(5580)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5591)
+#: Source/Backrooms/Private/BRHUD.cpp(5591)
 #, fuzzy
 msgctxt "BR,Display.KeepTitle"
 msgid "CONSERVER CET AFFICHAGE ?"
 msgstr "保留此顯示設定？"
 
 #. Key:	Display.Countdown
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5582)
-#: Source/Backrooms/Private/BRHUD.cpp(5582)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5593)
+#: Source/Backrooms/Private/BRHUD.cpp(5593)
 #, fuzzy
 msgctxt "BR,Display.Countdown"
 msgid "Retour à l'affichage précédent dans {Seconds} s."
 msgstr "{Seconds} 秒後恢復先前的顯示設定。"
 
 #. Key:	Display.Keep
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5584)
-#: Source/Backrooms/Private/BRHUD.cpp(5584)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5595)
+#: Source/Backrooms/Private/BRHUD.cpp(5595)
 #, fuzzy
 msgctxt "BR,Display.Keep"
 msgid "CONSERVER  [ENTRÉE]"
 msgstr "保留  [ENTER]"
 
 #. Key:	Display.Revert
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5585)
-#: Source/Backrooms/Private/BRHUD.cpp(5585)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5596)
+#: Source/Backrooms/Private/BRHUD.cpp(5596)
 #, fuzzy
 msgctxt "BR,Display.Revert"
 msgid "RÉTABLIR  [ÉCHAP]"
 msgstr "恢復  [ESC]"
 
 #. Key:	HUD.MicroOuvert
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5626)
-#: Source/Backrooms/Private/BRHUD.cpp(5626)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5637)
+#: Source/Backrooms/Private/BRHUD.cpp(5637)
 #, fuzzy
 msgctxt "BR,HUD.MicroOuvert"
 msgid "MICRO OUVERT"
 msgstr "麥克風常開"
 
 #. Key:	HUD.Parlez
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5626)
-#: Source/Backrooms/Private/BRHUD.cpp(5626)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5637)
+#: Source/Backrooms/Private/BRHUD.cpp(5637)
 #, fuzzy
 msgctxt "BR,HUD.Parlez"
 msgid "VOUS PARLEZ"
 msgstr "你正在說話"
 
 #. Key:	HUD.PushToTalkHint
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5630)
-#: Source/Backrooms/Private/BRHUD.cpp(5630)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5641)
+#: Source/Backrooms/Private/BRHUD.cpp(5641)
 #, fuzzy
 msgctxt "BR,HUD.PushToTalkHint"
 msgid "{Key} parler"
 msgstr "{Key} 說話"
 
 #. Key:	HUD.MicroCoupe
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5634)
-#: Source/Backrooms/Private/BRHUD.cpp(5634)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5645)
+#: Source/Backrooms/Private/BRHUD.cpp(5645)
 #, fuzzy
 msgctxt "BR,HUD.MicroCoupe"
 msgid "MICRO COUPÉ"
 msgstr "麥克風已靜音"
 
 #. Key:	HUD.Joueurs
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5680)
-#: Source/Backrooms/Private/BRHUD.cpp(5680)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5691)
+#: Source/Backrooms/Private/BRHUD.cpp(5691)
 #, fuzzy
 msgctxt "BR,HUD.Joueurs"
 msgid "JOUEURS"
 msgstr "玩家"
 
 #. Key:	HUD.Latence
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5681)
-#: Source/Backrooms/Private/BRHUD.cpp(5681)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5692)
+#: Source/Backrooms/Private/BRHUD.cpp(5692)
 #, fuzzy
 msgctxt "BR,HUD.Latence"
 msgid "LATENCE"
 msgstr "延遲"
 
 #. Key:	HUD.Hote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5710)
-#: Source/Backrooms/Private/BRHUD.cpp(5710) Source/Backrooms/Private/BRHUD.cpp(5713)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5721)
+#: Source/Backrooms/Private/BRHUD.cpp(5721) Source/Backrooms/Private/BRHUD.cpp(5724)
 #, fuzzy
 msgctxt "BR,HUD.Hote"
 msgid "HÔTE"
 msgstr "主機"
 
 #. Key:	HUD.PingMs
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5717)
-#: Source/Backrooms/Private/BRHUD.cpp(5717)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5728)
+#: Source/Backrooms/Private/BRHUD.cpp(5728)
 #, fuzzy
 msgctxt "BR,HUD.PingMs"
 msgid "{Ping} ms"
 msgstr "{Ping} 毫秒"
 
 #. Key:	HUD.CarnetMission
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5783)
-#: Source/Backrooms/Private/BRHUD.cpp(5783)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5794)
+#: Source/Backrooms/Private/BRHUD.cpp(5794)
 #, fuzzy
 msgctxt "BR,HUD.CarnetMission"
 msgid "CARNET DE MISSION"
 msgstr "任務筆記本"
 
 #. Key:	HUD.NotebookL0
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5794)
-#: Source/Backrooms/Private/BRHUD.cpp(5794)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5805)
+#: Source/Backrooms/Private/BRHUD.cpp(5805)
 #, fuzzy
 msgctxt "BR,HUD.NotebookL0"
 msgid "Vous vous êtes réveillé ici. Rien à réparer, rien à résoudre : il faut seulement trouver comment sortir."
 msgstr "你在這裡醒來。沒有要修的，也沒有要解的：你只需要找到出去的路。"
 
 #. Key:	HUD.NotebookL0Team
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5795)
-#: Source/Backrooms/Private/BRHUD.cpp(5795)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5806)
+#: Source/Backrooms/Private/BRHUD.cpp(5806)
 #, fuzzy
 msgctxt "BR,HUD.NotebookL0Team"
 msgid "Quelqu'un est passé avant vous : des marques à la craie, un cercle barré et un L. Les notes trouvées en parlent."
 msgstr "有人比你先來過這裡：粉筆記號、一個帶斜線的圓圈和一個 L.。你找到的紙條裡提到了他們。"
 
 #. Key:	HUD.NotebookL0Hint
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5798)
-#: Source/Backrooms/Private/BRHUD.cpp(5798)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5809)
+#: Source/Backrooms/Private/BRHUD.cpp(5809)
 #, fuzzy
 msgctxt "BR,HUD.NotebookL0Hint"
 msgid "AIDE : suivez l'air froid. Il passe sous une porte de service, dans un mur extérieur. Les flèches à la craie montrent le chemin."
 msgstr "說明：跟著冷空氣走。它從一面外牆上的員工門底下鑽進來。粉筆箭頭指出了方向。"
 
 #. Key:	HUD.NotebookLegacy
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5815)
-#: Source/Backrooms/Private/BRHUD.cpp(5815)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5826)
+#: Source/Backrooms/Private/BRHUD.cpp(5826)
 #, fuzzy
 msgctxt "BR,HUD.NotebookLegacy"
 msgid "Partie commencée avant la version 4.11 : ce niveau garde son ancien objectif (cassettes VHS et enregistrement pendant une coupure). Les niveaux suivants auront leur mission, qui s'affichera ici."
 msgstr "此存檔開始於 4.11 版本之前：本層級保留原來的目標（VHS 錄影帶和停電時錄影）。之後的層級會有各自的任務，並顯示在這裡。"
 
 #. Key:	HUD.NotebookNone
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5816)
-#: Source/Backrooms/Private/BRHUD.cpp(5816)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5827)
+#: Source/Backrooms/Private/BRHUD.cpp(5827)
 #, fuzzy
 msgctxt "BR,HUD.NotebookNone"
 msgid "Aucune mission dans ce niveau : trouvez une sortie."
 msgstr "本層級沒有任務：找到出口。"
 
 #. Key:	HUD.StepUnknown
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5887)
-#: Source/Backrooms/Private/BRHUD.cpp(5887)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5898)
+#: Source/Backrooms/Private/BRHUD.cpp(5898)
 #, fuzzy
 msgctxt "BR,HUD.StepUnknown"
 msgid "Étape encore inconnue"
 msgstr "尚未知曉的步驟"
 
 #. Key:	HUD.TeamItems
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5917)
-#: Source/Backrooms/Private/BRHUD.cpp(5917)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5928)
+#: Source/Backrooms/Private/BRHUD.cpp(5928)
 #, fuzzy
 msgctxt "BR,HUD.TeamItems"
 msgid "Objets de l'équipe : {Items}"
 msgstr "隊伍物品：{Items}"
 
 #. Key:	HUD.HintHeader
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5962)
-#: Source/Backrooms/Private/BRHUD.cpp(5962)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5973)
+#: Source/Backrooms/Private/BRHUD.cpp(5973)
 #, fuzzy
 msgctxt "BR,HUD.HintHeader"
 msgid "AIDE  ·  étape en cours"
 msgstr "說明  ·  目前步驟"
 
 #. Key:	HUD.RouteFragment
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5989)
-#: Source/Backrooms/Private/BRHUD.cpp(5989)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6000)
+#: Source/Backrooms/Private/BRHUD.cpp(6000)
 #, fuzzy
 msgctxt "BR,HUD.RouteFragment"
 msgid "Destination, chiffre {I} : {D}"
 msgstr "目的地，第 {I} 位：{D}"
 
 #. Key:	HUD.HintNothingYet
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(5995)
-#: Source/Backrooms/Private/BRHUD.cpp(5995)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6006)
+#: Source/Backrooms/Private/BRHUD.cpp(6006)
 #, fuzzy
 msgctxt "BR,HUD.HintNothingYet"
 msgid "Rien d'utile n'a encore été trouvé pour cette étape."
 msgstr "這一步還沒有找到有用的東西。"
 
 #. Key:	HUD.HintAsk
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6039)
-#: Source/Backrooms/Private/BRHUD.cpp(6039)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6050)
+#: Source/Backrooms/Private/BRHUD.cpp(6050)
 #, fuzzy
 msgctxt "BR,HUD.HintAsk"
 msgid "AIDE : afficher un indice"
 msgstr "說明：顯示提示"
 
 #. Key:	HUD.HintMore
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6040)
-#: Source/Backrooms/Private/BRHUD.cpp(6040)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6051)
+#: Source/Backrooms/Private/BRHUD.cpp(6051)
 #, fuzzy
 msgctxt "BR,HUD.HintMore"
 msgid "AIDE : rappeler les indices trouvés"
 msgstr "說明：回顧已找到的線索"
 
 #. Key:	HUD.HintHide
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6040)
-#: Source/Backrooms/Private/BRHUD.cpp(6040)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6051)
+#: Source/Backrooms/Private/BRHUD.cpp(6051)
 #, fuzzy
 msgctxt "BR,HUD.HintHide"
 msgid "AIDE : masquer"
 msgstr "說明：隱藏"
 
 #. Key:	HUD.Observations
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6051)
-#: Source/Backrooms/Private/BRHUD.cpp(6051)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6062)
+#: Source/Backrooms/Private/BRHUD.cpp(6062)
 #, fuzzy
 msgctxt "BR,HUD.Observations"
 msgid "OBSERVATIONS"
 msgstr "觀察記錄"
 
 #. Key:	HUD.LidarPlate
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6100)
-#: Source/Backrooms/Private/BRHUD.cpp(6100)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6111)
+#: Source/Backrooms/Private/BRHUD.cpp(6111)
 #, fuzzy
 msgctxt "BR,HUD.LidarPlate"
 msgid "Porte du passage {N} : silhouette {Fig}, code {Sym}"
 msgstr "通道門 {N}：輪廓 {Fig}，代碼 {Sym}"
 
 #. Key:	HUD.CampaignFragment
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6115)
-#: Source/Backrooms/Private/BRHUD.cpp(6115)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6126)
+#: Source/Backrooms/Private/BRHUD.cpp(6126)
 #, fuzzy
 msgctxt "BR,HUD.CampaignFragment"
 msgid "Fragment de route rapporté d'un niveau précédent : chiffre {I} = {D}"
 msgstr "從之前層級帶來的路線片段：第 {I} 位 = {D}"
 
 #. Key:	HUD.NoObservation
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6128)
-#: Source/Backrooms/Private/BRHUD.cpp(6128)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6139)
+#: Source/Backrooms/Private/BRHUD.cpp(6139)
 #, fuzzy
 msgctxt "BR,HUD.NoObservation"
 msgid "Rien pour l'instant : lisez les panneaux et examinez ce qui sort de l'ordinaire (maintenir la touche d'interaction)."
 msgstr "暫時沒有：閱讀標牌，檢查任何不尋常的東西（按住互動鍵）。"
 
 #. Key:	HUD.ObservationTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6194)
-#: Source/Backrooms/Private/BRHUD.cpp(6194)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6205)
+#: Source/Backrooms/Private/BRHUD.cpp(6205)
 #, fuzzy
 msgctxt "BR,HUD.ObservationTitle"
 msgid "Observation enregistrée : {Name}"
 msgstr "已記錄觀察：{Name}"
 
 #. Key:	HUD.MissionDocClose
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6203)
-#: Source/Backrooms/Private/BRHUD.cpp(6203)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6214)
+#: Source/Backrooms/Private/BRHUD.cpp(6214)
 #, fuzzy
 msgctxt "BR,HUD.MissionDocClose"
 msgid "{Interact} Ranger  (copié dans le CARNET : {Inventory})"
 msgstr "{Interact} 收起  （已抄入筆記本：{Inventory}）"
 
 #. Key:	HUD.LidarCageOff
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6279)
-#: Source/Backrooms/Private/BRHUD.cpp(6279)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6290)
+#: Source/Backrooms/Private/BRHUD.cpp(6290)
 #, fuzzy
 msgctxt "BR,HUD.LidarCageOff"
 msgid "CAGE HORS TENSION : RÉACTIVEZ SON POSTE"
 msgstr "籠子沒有電：重新啟動它的站點"
 
 #. Key:	HUD.LidarSurvey
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6279)
-#: Source/Backrooms/Private/BRHUD.cpp(6279)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6290)
+#: Source/Backrooms/Private/BRHUD.cpp(6290)
 #, fuzzy
 msgctxt "BR,HUD.LidarSurvey"
 msgid "RELEVÉ AU SCANNER"
 msgstr "掃描器測繪"
 
 #. Key:	HUD.LidarStatic
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6306)
-#: Source/Backrooms/Private/BRHUD.cpp(6306)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6317)
+#: Source/Backrooms/Private/BRHUD.cpp(6317)
 #, fuzzy
 msgctxt "BR,HUD.LidarStatic"
 msgid "PARASITES"
 msgstr "干擾"
 
 #. Key:	HUD.LidarBehind
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6322)
-#: Source/Backrooms/Private/BRHUD.cpp(6322)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6333)
+#: Source/Backrooms/Private/BRHUD.cpp(6333)
 #, fuzzy
 msgctxt "BR,HUD.LidarBehind"
 msgid "derrière vous"
 msgstr "在你身後"
 
 #. Key:	HUD.LidarPulseHint
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6357)
-#: Source/Backrooms/Private/BRHUD.cpp(6357)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6368)
+#: Source/Backrooms/Private/BRHUD.cpp(6368)
 #, fuzzy
 msgctxt "BR,HUD.LidarPulseHint"
 msgid "Impulsion"
 msgstr "脈衝"
 
 #. Key:	HUD.LidarFocusHint
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6358)
-#: Source/Backrooms/Private/BRHUD.cpp(6358)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6369)
+#: Source/Backrooms/Private/BRHUD.cpp(6369)
 #, fuzzy
 msgctxt "BR,HUD.LidarFocusHint"
 msgid "Scan focalisé (maintenir)"
 msgstr "聚焦掃描（按住）"
 
 #. Key:	HUD.Documenting
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6377)
-#: Source/Backrooms/Private/BRHUD.cpp(6377)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6388)
+#: Source/Backrooms/Private/BRHUD.cpp(6388)
 #, fuzzy
 msgctxt "BR,HUD.Documenting"
 msgid "OBSERVATION"
 msgstr "觀察"
 
 #. Key:	HUD.Cranking
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6377)
-#: Source/Backrooms/Private/BRHUD.cpp(6377)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6388)
+#: Source/Backrooms/Private/BRHUD.cpp(6388)
 #, fuzzy
 msgctxt "BR,HUD.Cranking"
 msgid "MÉCANISME"
 msgstr "操作機關"
 
 #. Key:	HUD.ClimbWaitRequest
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6399)
-#: Source/Backrooms/Private/BRHUD.cpp(6399)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6410)
+#: Source/Backrooms/Private/BRHUD.cpp(6410)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitRequest"
 msgid "Au sommet de l'échelle : demande de départ envoyée…"
 msgstr "梯子頂端：已送出出發請求…"
 
 #. Key:	HUD.ClimbWaitStopped
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6400)
-#: Source/Backrooms/Private/BRHUD.cpp(6400)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6411)
+#: Source/Backrooms/Private/BRHUD.cpp(6411)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitStopped"
 msgid "Pas de départ pour l'instant. Redescendez d'un mètre puis remontez pour redemander."
 msgstr "暫不出發。往下爬 1 公尺再爬上來，即可再次請求。"
 
 #. Key:	HUD.DepartureBanner
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6408)
-#: Source/Backrooms/Private/BRHUD.cpp(6408)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6419)
+#: Source/Backrooms/Private/BRHUD.cpp(6419)
 #, fuzzy
 msgctxt "BR,HUD.DepartureBanner"
 msgid "DÉPART VERS {Dest}  ·  {Ready}/{Needed} rassemblés  ·  {Secs} s"
 msgstr "前往 {Dest}  ·  已集合 {Ready}/{Needed}  ·  {Secs} 秒"
 
 #. Key:	HUD.DepartureHelp
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6411)
-#: Source/Backrooms/Private/BRHUD.cpp(6411)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6422)
+#: Source/Backrooms/Private/BRHUD.cpp(6422)
 #, fuzzy
 msgctxt "BR,HUD.DepartureHelp"
 msgid "Rejoignez la sortie (moins de 8 m, même étage). S'en éloigner annule le départ."
 msgstr "請到出口集合（8 公尺以內，同一層）。離開會取消出發。"
 
 #. Key:	HUD.ClimbWaitInitiator
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6418)
-#: Source/Backrooms/Private/BRHUD.cpp(6418)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6429)
+#: Source/Backrooms/Private/BRHUD.cpp(6429)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitInitiator"
 msgid "Au sommet : vous êtes compté. Le groupe vous rejoint au pied ou sur l'échelle. Redescendre annule le départ."
 msgstr "已到頂端：你已被計入。隊友會在梯子底部或梯子上與你會合。重新爬下會取消出發。"
 
 #. Key:	HUD.ClimbWaitMate
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6419)
-#: Source/Backrooms/Private/BRHUD.cpp(6419)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6430)
+#: Source/Backrooms/Private/BRHUD.cpp(6430)
 #, fuzzy
 msgctxt "BR,HUD.ClimbWaitMate"
 msgid "Sur l'échelle : vous êtes compté. Attendez le groupe."
 msgstr "在梯子上：你已被計入。請等待隊伍。"
 
 #. Key:	HUD.DepartureHelpLadder
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6420)
-#: Source/Backrooms/Private/BRHUD.cpp(6420)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6431)
+#: Source/Backrooms/Private/BRHUD.cpp(6431)
 #, fuzzy
 msgctxt "BR,HUD.DepartureHelpLadder"
 msgid "Rejoignez le pied de l'échelle (moins de 8 m, même étage) ou montez-y."
 msgstr "前往梯子底部（8 公尺以內，同一樓層）或爬上梯子。"
 
 #. Key:	HUD.DepartureCarried
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6424)
-#: Source/Backrooms/Private/BRHUD.cpp(6424)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6435)
+#: Source/Backrooms/Private/BRHUD.cpp(6435)
 #, fuzzy
 msgctxt "BR,HUD.DepartureCarried"
 msgid "{Count} {Count}|plural(one=joueur à terre emmené,other=joueurs à terre emmenés)."
 msgstr "將帶走 {Count} 名倒地的玩家。"
 
 #. Key:	Ending.TitleVariant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6441)
-#: Source/Backrooms/Private/BRHUD.cpp(6441)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6452)
+#: Source/Backrooms/Private/BRHUD.cpp(6452)
 #, fuzzy
 msgctxt "BR,Ending.TitleVariant"
 msgid "FIN : CE QUE LES AUTRES ONT LAISSÉ"
 msgstr "結局：前人留下的東西"
 
 #. Key:	Ending.Title
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6442)
-#: Source/Backrooms/Private/BRHUD.cpp(6442)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6453)
+#: Source/Backrooms/Private/BRHUD.cpp(6453)
 #, fuzzy
 msgctxt "BR,Ending.Title"
 msgid "FIN : LE DERNIER QUAI"
 msgstr "結局：最後的月台"
 
 #. Key:	Ending.BodyVariant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6444)
-#: Source/Backrooms/Private/BRHUD.cpp(6444)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6455)
+#: Source/Backrooms/Private/BRHUD.cpp(6455)
 #, fuzzy
 msgctxt "BR,Ending.BodyVariant"
 msgid "Les carnets, les cassettes et les notes que vous avez gardés racontent la même histoire : d'autres sont passés avant vous et ont laissé des repères pour ceux qui suivraient. Avant de monter dans le train, vous ajoutez les vôtres au mur du quai. Quelqu'un, un jour, saura où aller."
 msgstr "你留下的筆記本、錄影帶和便條講述著同一個故事：有人在你之前走過這裡，並為後來的人留下了標記。上車之前，你也在月台的牆上添上了自己的標記。總有一天，會有人知道該往哪裡走。"
 
 #. Key:	Ending.Body
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6445)
-#: Source/Backrooms/Private/BRHUD.cpp(6445)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6456)
+#: Source/Backrooms/Private/BRHUD.cpp(6456)
 #, fuzzy
 msgctxt "BR,Ending.Body"
 msgid "Le train de la station sans nom démarre sans un bruit. Derrière les vitres, les couloirs jaunes défilent puis s'effacent. Quand les portes s'ouvrent, il fait jour et l'air sent la pluie. Vous ne savez pas si c'est la sortie ou un niveau qui imite très bien le monde. Mais pour la première fois, rien ne bourdonne."
 msgstr "無名車站的列車無聲地啟動了。窗外，黃色的走廊一閃而過，漸漸淡去。車門開啟時，已是白天，空氣裡有雨的味道。你不知道這裡是出口，還是一個把世界模仿得極像的層級。但這是第一次，沒有任何東西在嗡嗡作響。"
 
 #. Key:	Ending.NoteVariant
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6446)
-#: Source/Backrooms/Private/BRHUD.cpp(6446)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6457)
+#: Source/Backrooms/Private/BRHUD.cpp(6457)
 #, fuzzy
 msgctxt "BR,Ending.NoteVariant"
 msgid "Variante obtenue grâce à au moins trois objectifs facultatifs remplis pendant la campagne."
 msgstr "因在戰役中完成至少三個可選目標而獲得的變體結局。"
 
 #. Key:	Ending.Note
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6447)
-#: Source/Backrooms/Private/BRHUD.cpp(6447)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6458)
+#: Source/Backrooms/Private/BRHUD.cpp(6458)
 #, fuzzy
 msgctxt "BR,Ending.Note"
 msgid "Une autre fin existe : remplissez au moins trois objectifs facultatifs pendant la campagne."
 msgstr "還有另一個結局：在整個戰役中完成至少三個可選目標。"
 
 #. Key:	Ending.ChapterTitle
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6452)
-#: Source/Backrooms/Private/BRHUD.cpp(6452)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6463)
+#: Source/Backrooms/Private/BRHUD.cpp(6463)
 #, fuzzy
 msgctxt "BR,Ending.ChapterTitle"
 msgid "FIN DU CHAPITRE {Lot} : {Name}"
 msgstr "第 {Lot} 章完：{Name}"
 
 #. Key:	Ending.ChapterBody
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6453)
-#: Source/Backrooms/Private/BRHUD.cpp(6453)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6464)
+#: Source/Backrooms/Private/BRHUD.cpp(6464)
 #, fuzzy
 msgctxt "BR,Ending.ChapterBody"
 msgid "Le passage s'ouvre sur un couloir qui ne mène encore nulle part : vous avez atteint la fin du contenu disponible dans cette version. La suite, « {Next} », arrivera dans une prochaine mise à jour de contenu. Votre partie, vos découvertes et vos fins sont conservées : ce passage s'ouvrira avec la suite."
 msgstr "通道通往一條尚未通往任何地方的走廊：你已抵達此版本可玩內容的盡頭。後續內容「{Next}」將在日後的內容更新中推出。你的存檔、發現和結局都會保留：這條通道將隨後續內容一同開啟。"
 
 #. Key:	Ending.ChapterNote
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6455)
-#: Source/Backrooms/Private/BRHUD.cpp(6455)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6466)
+#: Source/Backrooms/Private/BRHUD.cpp(6466)
 #, fuzzy
 msgctxt "BR,Ending.ChapterNote"
 msgid "En attendant, les niveaux déjà disponibles restent à explorer : objectifs facultatifs, documents, autres routes."
 msgstr "在此之前，已開放的層級仍可繼續探索：選擇性目標、文件、其他路線。"
 
 #. Key:	Ending.Chapter1Body
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6459)
-#: Source/Backrooms/Private/BRHUD.cpp(6459)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6470)
+#: Source/Backrooms/Private/BRHUD.cpp(6470)
 #, fuzzy
 msgctxt "BR,Ending.Chapter1Body"
 msgid "La vapeur retombée, la porte de la station s'ouvre sur un escalier qui descend vers un bourdonnement électrique. Sur le battant, à la craie : un cercle barré, un L., et dessous : « Station. On continue. » L'équipe de L. est passée ici, et elle allait plus loin, vers le dernier quai. Votre chapitre s'arrête là : la suite, « {Next} », arrivera dans une prochaine mise à jour, et votre partie reprendra exactement ici."
 msgstr "蒸汽散去，車站的門打開了，一段樓梯向下通往一陣電流的嗡鳴。門板上用粉筆畫著：一個帶斜線的圓圈、一個 L.，下面寫著：「車站。我們繼續走。」L. 的小隊從這裡經過，而且走得更遠，前往最後的月台。你的章節到此結束：續篇「{Next}」將在之後的更新中推出，你的遊戲會正好從這裡繼續。"
 
 #. Key:	Ending.ContinueReached
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6474)
-#: Source/Backrooms/Private/BRHUD.cpp(6474)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6485)
+#: Source/Backrooms/Private/BRHUD.cpp(6485)
 #, fuzzy
 msgctxt "BR,Ending.ContinueReached"
 msgid "Continuer l'exploration (un niveau déjà atteint, au hasard)"
 msgstr "繼續探索（隨機前往一個已到達的層級）"
 
 #. Key:	Ending.Continue
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6475)
-#: Source/Backrooms/Private/BRHUD.cpp(6475)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6486)
+#: Source/Backrooms/Private/BRHUD.cpp(6486)
 #, fuzzy
 msgctxt "BR,Ending.Continue"
 msgid "Continuer l'exploration (niveau au hasard)"
 msgstr "繼續探索（隨機層級）"
 
 #. Key:	Ending.Close
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6476)
-#: Source/Backrooms/Private/BRHUD.cpp(6476)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6487)
+#: Source/Backrooms/Private/BRHUD.cpp(6487)
 #, fuzzy
 msgctxt "BR,Ending.Close"
 msgid "Fermer (l'hôte décide de la suite)"
 msgstr "關閉（接下來由主機決定）"
 
 #. Key:	Ending.Menu
-#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6477)
-#: Source/Backrooms/Private/BRHUD.cpp(6477)
+#. SourceLocation:	Source/Backrooms/Private/BRHUD.cpp(6488)
+#: Source/Backrooms/Private/BRHUD.cpp(6488)
 #, fuzzy
 msgctxt "BR,Ending.Menu"
 msgid "Menu principal"
@@ -9496,200 +9520,200 @@ msgid "Vous vous réveillez au départ du niveau avec l'équipement de départ."
 msgstr "你在本層起點醒來，攜帶初始裝備。"
 
 #. Key:	World.FilmerPendantCoupure
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(996)
-#: Source/Backrooms/Private/BRWorld.cpp(996) Source/Backrooms/Private/BRWorld.cpp(1134) Source/Backrooms/Private/BRWorld.cpp(3292)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(998)
+#: Source/Backrooms/Private/BRWorld.cpp(998) Source/Backrooms/Private/BRWorld.cpp(1136) Source/Backrooms/Private/BRWorld.cpp(3294)
 #, fuzzy
 msgctxt "BR,World.FilmerPendantCoupure"
 msgid "FILMER PENDANT UNE COUPURE"
 msgstr "在停電時錄影"
 
 #. Key:	World.FilmerEntite
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1000)
-#: Source/Backrooms/Private/BRWorld.cpp(1000) Source/Backrooms/Private/BRWorld.cpp(1139) Source/Backrooms/Private/BRWorld.cpp(3272) Source/Backrooms/Private/BRWorld.cpp(3301)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1002)
+#: Source/Backrooms/Private/BRWorld.cpp(1002) Source/Backrooms/Private/BRWorld.cpp(1141) Source/Backrooms/Private/BRWorld.cpp(3274) Source/Backrooms/Private/BRWorld.cpp(3303)
 #, fuzzy
 msgctxt "BR,World.FilmerEntite"
 msgid "FILMER UNE ENTITÉ"
 msgstr "拍攝一個實體"
 
 #. Key:	World.NouvelleEntreeJournalNumberName
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1588)
-#: Source/Backrooms/Private/BRWorld.cpp(1588)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1590)
+#: Source/Backrooms/Private/BRWorld.cpp(1590)
 #, fuzzy
 msgctxt "BR,World.NouvelleEntreeJournalNumberName"
 msgid "Nouvelle entrée du journal : {Number} - {Name}  {Inventory}"
 msgstr "新的日誌條目：{Number} - {Name}  {Inventory}"
 
 #. Key:	World.ObjectifsTrouverVhsrequiredCassettesVhs
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1843)
-#: Source/Backrooms/Private/BRWorld.cpp(1843)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(1845)
+#: Source/Backrooms/Private/BRWorld.cpp(1845)
 #, fuzzy
 msgctxt "BR,World.ObjectifsTrouverVhsrequiredCassettesVhs"
 msgid "OBJECTIFS : trouver {VHSRequired} cassettes VHS et filmer pendant une coupure de courant pour stabiliser la sortie.  {Inventory}"
 msgstr "目標：找到 {VHSRequired} 盤 VHS 錄影帶，並在停電時錄影，以穩定出口。  {Inventory}"
 
 #. Key:	World.StickGaucheDeplacerClicStick
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2553)
-#: Source/Backrooms/Private/BRWorld.cpp(2553)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2555)
+#: Source/Backrooms/Private/BRWorld.cpp(2555)
 #, fuzzy
 msgctxt "BR,World.StickGaucheDeplacerClicStick"
 msgid "Stick gauche : se déplacer  ·  clic du stick : courir  ·  Y : lampe  ·  B : s'accroupir"
 msgstr "左搖桿：移動  ·  按下搖桿：奔跑  ·  Y：手電筒  ·  B：蹲下"
 
 #. Key:	World.MoveforwardMoveleftMovebackwardMoveright
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2554)
-#: Source/Backrooms/Private/BRWorld.cpp(2554)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2556)
+#: Source/Backrooms/Private/BRWorld.cpp(2556)
 #, fuzzy
 msgctxt "BR,World.MoveforwardMoveleftMovebackwardMoveright"
 msgid "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight} : se déplacer  ·  {Sprint} : courir  ·  {Flashlight} : lampe  ·  {Crouch} : s'accroupir"
 msgstr "{MoveForward}{MoveLeft}{MoveBackward}{MoveRight}：移動  ·  {Sprint}：奔跑  ·  {Flashlight}：手電筒  ·  {Crouch}：蹲下"
 
 #. Key:	World.BoutonVueInventaireObjectifsJournal
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2557)
-#: Source/Backrooms/Private/BRWorld.cpp(2557)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2559)
+#: Source/Backrooms/Private/BRWorld.cpp(2559)
 #, fuzzy
 msgctxt "BR,World.BoutonVueInventaireObjectifsJournal"
 msgid "Bouton Vue : inventaire, objectifs et journal  ·  X : interagir"
 msgstr "檢視鍵：物品欄、目標和日誌  ·  X：互動"
 
 #. Key:	World.InventoryInventaireObjectifsJournalInter
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2558)
-#: Source/Backrooms/Private/BRWorld.cpp(2558)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2560)
+#: Source/Backrooms/Private/BRWorld.cpp(2560)
 #, fuzzy
 msgctxt "BR,World.InventoryInventaireObjectifsJournalInter"
 msgid "{Inventory} : inventaire, objectifs et journal  ·  {Interact} : interagir"
 msgstr "{Inventory}：物品欄、目標和日誌  ·  {Interact}：互動"
 
 #. Key:	World.CamescopeSacSortezFilmerCroix
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2562)
-#: Source/Backrooms/Private/BRWorld.cpp(2562)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2564)
+#: Source/Backrooms/Private/BRWorld.cpp(2564)
 #, fuzzy
 msgctxt "BR,World.CamescopeSacSortezFilmerCroix"
 msgid "Le caméscope est dans le sac : sortez-le pour filmer. Croix haut : vision nocturne dans le noir."
 msgstr "攝像機在包裡：拿出來才能拍攝。十字鍵上：在黑暗中開啟夜視。"
 
 #. Key:	World.CamescopeSacSortezFilmerNightvision
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2563)
-#: Source/Backrooms/Private/BRWorld.cpp(2563)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2565)
+#: Source/Backrooms/Private/BRWorld.cpp(2565)
 #, fuzzy
 msgctxt "BR,World.CamescopeSacSortezFilmerNightvision"
 msgid "Le caméscope est dans le sac : sortez-le pour filmer. {NightVision} : vision nocturne dans le noir."
 msgstr "攝像機在包裡：拿出來才能拍攝。{NightVision}：在黑暗中開啟夜視。"
 
 #. Key:	World.SortiesBourdonnentEcoutezGuide
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2564)
-#: Source/Backrooms/Private/BRWorld.cpp(2564)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2566)
+#: Source/Backrooms/Private/BRWorld.cpp(2566)
 #, fuzzy
 msgctxt "BR,World.SortiesBourdonnentEcoutezGuide"
 msgid "Les sorties bourdonnent : écoutez, le son vous guide."
 msgstr "出口會發出嗡嗡聲：仔細聽，聲音會為你指路。"
 
 #. Key:	World.RepereCassezLigneVuePortes
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2567)
-#: Source/Backrooms/Private/BRWorld.cpp(2567)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(2569)
+#: Source/Backrooms/Private/BRWorld.cpp(2569)
 #, fuzzy
 msgctxt "BR,World.RepereCassezLigneVuePortes"
 msgid "Repéré ? Cassez la ligne de vue (portes, virages). Les placards cachent ; les trous dans les murs se prennent accroupi."
 msgstr "被發現了？切斷視線（門、拐角）。櫃子能藏身；牆上的洞要蹲著鑽進去。"
 
 #. Key:	Caption.Blackout
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3136)
-#: Source/Backrooms/Private/BRWorld.cpp(3136)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3138)
+#: Source/Backrooms/Private/BRWorld.cpp(3138)
 #, fuzzy
 msgctxt "BR,Caption.Blackout"
 msgid "[Les néons grésillent : coupure de courant]"
 msgstr "［燈管滋滋作響：停電］"
 
 #. Key:	World.CoupureCourant
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3147)
-#: Source/Backrooms/Private/BRWorld.cpp(3147) Source/Backrooms/Private/BRWorld.cpp(3437)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3149)
+#: Source/Backrooms/Private/BRWorld.cpp(3149) Source/Backrooms/Private/BRWorld.cpp(3439)
 #, fuzzy
 msgctxt "BR,World.CoupureCourant"
 msgid "COUPURE DE COURANT"
 msgstr "停電"
 
 #. Key:	World.FilmezPendantCoupureGardezCamescope
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3150)
-#: Source/Backrooms/Private/BRWorld.cpp(3150)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3152)
+#: Source/Backrooms/Private/BRWorld.cpp(3152)
 #, fuzzy
 msgctxt "BR,World.FilmezPendantCoupureGardezCamescope"
 msgid "Filmez pendant la coupure : gardez le caméscope sur vous et regardez autour de vous."
 msgstr "在停電時錄影：隨身帶著攝像機，環顧四周。"
 
 #. Key:	World.TrouverCassettesVhs
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3283)
-#: Source/Backrooms/Private/BRWorld.cpp(3283)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3285)
+#: Source/Backrooms/Private/BRWorld.cpp(3285)
 #, fuzzy
 msgctxt "BR,World.TrouverCassettesVhs"
 msgid "TROUVER LES CASSETTES VHS"
 msgstr "找到 VHS 錄影帶"
 
 #. Key:	World.StabiliserPrendreSortie
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3307)
-#: Source/Backrooms/Private/BRWorld.cpp(3307)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3309)
+#: Source/Backrooms/Private/BRWorld.cpp(3309)
 #, fuzzy
 msgctxt "BR,World.StabiliserPrendreSortie"
 msgid "STABILISER ET PRENDRE LA SORTIE"
 msgstr "穩定並進入出口"
 
 #. Key:	World.TrouverSortie
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3307)
-#: Source/Backrooms/Private/BRWorld.cpp(3307)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3309)
+#: Source/Backrooms/Private/BRWorld.cpp(3309)
 #, fuzzy
 msgctxt "BR,World.TrouverSortie"
 msgid "TROUVER UNE SORTIE"
 msgstr "尋找出口"
 
 #. Key:	World.ExitUnstableTapes
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3335)
-#: Source/Backrooms/Private/BRWorld.cpp(3335)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3337)
+#: Source/Backrooms/Private/BRWorld.cpp(3337)
 #, fuzzy
 msgctxt "BR,World.ExitUnstableTapes"
 msgid "La sortie est instable... Cassettes VHS {Found}/{Required}"
 msgstr "出口不穩定……VHS 錄影帶 {Found}/{Required}"
 
 #. Key:	World.FilmerPendantCoupureBlackoutrecorded1
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3338)
-#: Source/Backrooms/Private/BRWorld.cpp(3338)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3340)
+#: Source/Backrooms/Private/BRWorld.cpp(3340)
 #, fuzzy
 msgctxt "BR,World.FilmerPendantCoupureBlackoutrecorded1"
 msgid ", filmer pendant une coupure {BlackoutRecorded}/1"
 msgstr "，停電時錄影 {BlackoutRecorded}/1"
 
 #. Key:	World.TacheAccomplieText
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3346)
-#: Source/Backrooms/Private/BRWorld.cpp(3346)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3348)
+#: Source/Backrooms/Private/BRWorld.cpp(3348)
 #, fuzzy
 msgctxt "BR,World.TacheAccomplieText"
 msgid "TÂCHE ACCOMPLIE : {Text}"
 msgstr "任務完成：{Text}"
 
 #. Key:	World.SortiesSontStabiliseesTrouvezPassage
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3356)
-#: Source/Backrooms/Private/BRWorld.cpp(3356)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3358)
+#: Source/Backrooms/Private/BRWorld.cpp(3358)
 #, fuzzy
 msgctxt "BR,World.SortiesSontStabiliseesTrouvezPassage"
 msgid "Les sorties se sont stabilisées. Trouvez un passage (noclip) pour quitter le Niveau."
 msgstr "出口已經穩定。找到一條通道（noclip）離開本層。"
 
 #. Key:	World.1CassetteVhsVhsfound
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3366)
-#: Source/Backrooms/Private/BRWorld.cpp(3366)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3368)
+#: Source/Backrooms/Private/BRWorld.cpp(3368)
 #, fuzzy
 msgctxt "BR,World.1CassetteVhsVhsfound"
 msgid "+1 Cassette VHS  ({VHSFound})"
 msgstr "+1 VHS 錄影帶  （{VHSFound}）"
 
 #. Key:	World.TapesTaskDone
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3371)
-#: Source/Backrooms/Private/BRWorld.cpp(3371)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3373)
+#: Source/Backrooms/Private/BRWorld.cpp(3373)
 #, fuzzy
 msgctxt "BR,World.TapesTaskDone"
 msgid "CASSETTES VHS {Found}/{Required}"
 msgstr "VHS 錄影帶 {Found}/{Required}"
 
 #. Key:	World.CassetteVhsVhsfoundVhsrequired
-#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3375)
-#: Source/Backrooms/Private/BRWorld.cpp(3375)
+#. SourceLocation:	Source/Backrooms/Private/BRWorld.cpp(3377)
+#: Source/Backrooms/Private/BRWorld.cpp(3377)
 #, fuzzy
 msgctxt "BR,World.CassetteVhsVhsfoundVhsrequired"
 msgid "Cassette VHS  {VHSFound}/{VHSRequired}"

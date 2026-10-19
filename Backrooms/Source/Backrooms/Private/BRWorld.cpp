@@ -796,6 +796,8 @@ void ABRWorld::LoadLevelNow(int32 LevelNumber, uint32 InSeed)
 
 	// v4.11 : mission du niveau (plan, placement, cellules reservees) avant la construction des chunks
 	SetupMission();
+	// v4.16 : disposition complete (portes percees, salles de fosses, mission) : la lumiere de gameplay repart de la grille
+	InvalidateLightCache();
 
 	// v4.10 : les chargements synchrones de la construction sont comptes (ressources non preparees pendant le fondu)
 	UBRAssets::bCountBuildLoads = true;
@@ -2811,7 +2813,7 @@ void ABRWorld::UpdateAudio(float Dt)
 			HumAudio->Play();
 		}
 		const ABRCharacter* P = GetPlayer();
-		const float Light = P ? LightLevelAt(P->GetActorLocation()) : 0.f;
+		const float Light = P ? LightLevelAt(P->GetActorLocation(), P) : 0.f;
 		// v4.15 : fond discret (30 %) : le bourdonnement vient surtout des plafonniers proches (UpdateHumPool)
 		HumAudio->SetVolumeMultiplier(FMath::Max(0.01f, D.HumVolume * 0.3f * FMath::Clamp(Light, 0.f, 1.f) * (1.f - Fade)));
 	}
@@ -4907,91 +4909,8 @@ FBRLightInfo ABRWorld::CellLight(int32 X, int32 Y) const
 	}
 }
 
-float ABRWorld::LightLevelAt(const FVector& P) const
-{
-	const FBRLevelDef& D = Def();
-	if (D.bOutdoor && (D.Sky == EBRSky::Day || D.Sky == EBRSky::Overcast))
-	{
-		return 1.f;
-	}
-	// Plafonniers du niveau (suivent les coupures).
-	// v4.15 (connu, non corrige dans cette version : ce serait un changement de gameplay) : les plafonniers comptent a
-	// travers les murs (distance a plat). Avant, l'image s'accordait avec cette regle (85 % des neons sans ombre : leur
-	// lumiere traversait les murs) ; avec OMBRES DE TOUTES LES LAMPES (MegaLights), chaque neon a son ombre et un coin
-	// derriere un mur parait sombre alors qu'il est "eclaire" ici (pas d'apparition de Smiler, dissipation au-dessus de
-	// BRLight::SmilerVanish). Capture du banc visuel : vis_0_<profil>_mur_smiler. Correction possible (a decider) : ignorer
-	// une lampe dont le chemin de cellules jusqu'a P traverse un mur, avec la grille seule (memes resultats chez l'hote et
-	// les clients), et la meme regle dans Tools/verify_pitfalls.py
-	float Acc = 0.f;
-	if (D.Fixture != EBRFixture::None && Power >= 0.05f)
-	{
-		const FIntPoint C = WorldToCell(P);
-		const int32 R = FMath::Clamp(FMath::CeilToInt(D.LightRadius / D.CellSize), 1, 4);
-		for (int32 DX = -R; DX <= R; ++DX)
-		{
-			for (int32 DY = -R; DY <= R; ++DY)
-			{
-				const FBRLightInfo L = CellLight(C.X + DX, C.Y + DY);
-				if (!L.bHas || L.bBroken)
-				{
-					continue;
-				}
-				const FVector LP = CellCenter(FIntPoint(C.X + DX, C.Y + DY)) + L.Offset;
-				const float Dist = static_cast<float>(FVector::Dist2D(P, LP));
-				if (Dist < D.LightRadius)
-				{
-					Acc += FMath::Square(1.f - Dist / D.LightRadius) * (L.bFlicker ? 0.6f : 1.f);
-				}
-			}
-		}
-		Acc *= Power;
-	}
-	// v4.12 : sources de mission allumees (balises, sortie eclairee, porche) : autonomes, meme loi que les plafonniers, en
-	// 3D, et un mur entre la source et le point l'annule. Peu de sources (quelques-unes par niveau), une trace chacune et
-	// seulement a portee : le cout reste borne
-	if (GameplayLights.Num() > 0 && GetWorld())
-	{
-		for (const TPair<uint64, FGameplayLight>& Pair : GameplayLights)
-		{
-			const FGameplayLight& L = Pair.Value;
-			const float Dist = static_cast<float>(FVector::Dist(P, L.Pos));
-			const float Add = BRLight::Contribution(Dist, L.Radius, L.Intensity);
-			if (Add <= 0.01f)
-			{
-				continue;
-			}
-			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRGameplayLight), false);
-			if (const AActor* LightActor = L.Owner.Get())
-			{
-				Q.AddIgnoredActor(LightActor);
-			}
-			if (!GetWorld()->LineTraceTestByChannel(L.Pos, P, ECC_WorldStatic, Q))
-			{
-				Acc += Add;
-			}
-		}
-	}
-	return FMath::Clamp(Acc, 0.f, 1.5f);
-}
-
-void ABRWorld::SetGameplayLight(const AActor* LightOwner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn)
-{
-	if (!LightOwner)
-	{
-		return;
-	}
-	const uint64 Key = (static_cast<uint64>(LightOwner->GetUniqueID()) << 8) | Slot;
-	if (!bOn)
-	{
-		GameplayLights.Remove(Key);
-		return;
-	}
-	FGameplayLight& L = GameplayLights.FindOrAdd(Key);
-	L.Pos = Where;
-	L.Radius = Radius;
-	L.Intensity = Intensity;
-	L.Owner = LightOwner;
-}
+// v4.16 : ABRWorld::LightLevelAt et ABRWorld::SetGameplayLight sont dans BRWorldLight.cpp (lumiere de gameplay alignee sur
+// la lumiere visible : murs, passages et alimentation de la phase de coupure)
 
 bool ABRWorld::FindPath(const FIntPoint& From, const FIntPoint& To, TArray<FIntPoint>& OutPath, int32 MaxNodes) const
 {

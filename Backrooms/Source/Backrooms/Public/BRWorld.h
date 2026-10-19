@@ -9,6 +9,7 @@
 #include "BRMechLogic.h"
 #include "BRStoryLogic.h"
 #include "BRLidarLogic.h"
+#include "BRWorldLightTypes.h"
 #include "BRSave.h"
 #include "BRWorld.generated.h"
 
@@ -640,8 +641,39 @@ public:
 	void AddWaterRipple(const FVector& Location, float Strength);
 	/** Vagues simulees autour du joueur (nullptr hors des niveaux inondes) */
 	UBRWaterSim* GetWaterSim() const { return WaterSim; }
-	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire) */
-	float LightLevelAt(const FVector& P) const;
+	/** Estimation de l'eclairage (0 = noir, 1 = bien eclaire). v4.16 (BRWorldLight.cpp) : la lumiere qui compte pour les regles,
+	 *  la meme chez l'hote et chez les clients et quel que soit le profil graphique : plafonniers dont la lumiere atteint P
+	 *  selon la grille (BRLight::Occlusion : murs, passages, piliers, cellules pleines, plafond, sol), alimentation de la
+	 *  phase de coupure (BRLight::PhasePower), sources de mission en ligne de vue (murs et portes physiques ; ni les capsules
+	 *  des personnages et des creatures, ni Target). Plafonniers evalues au noeud de 10 cm le plus proche de P, en cache par
+	 *  noeud (vide au changement de niveau) ; traces des sources de mission en cache 0,2 s par 10 cm */
+	float LightLevelAt(const FVector& P, const AActor* Target = nullptr) const;
+	/** v4.16 (tests, diagnostic) : detail de LightLevelAt en P, recalcule sans cache ; bDiagnose : composants touches par les
+	 *  traces des sources de mission, avec le filtre v4.16, celui d'avant et un filtre qui garde les capsules sans la cible */
+	FBRLightSample SampleLight(const FVector& P, const AActor* Target, bool bDiagnose) const;
+	/** v4.16 : alimentation des plafonniers vue par les regles : fondu regulier de la phase de coupure (BRLight::PhasePower),
+	 *  jamais le vacillement local de GetPower() */
+	float GetGameplayPower() const;
+	/** v4.16 : cellule de la grille vue par la lumiere de gameplay ; cotes du niveau pour l'occlusion */
+	FBRLightCell GetLightCell(int32 X, int32 Y) const;
+	BRLight::Occlusion::FGeom GetLightGeom() const;
+	/** v4.16 : empreinte (FNV-1a) de la grille de lumiere sur les cellules [-Half, Half[ : aretes, pilier, bloc plein, plafonnier,
+	 *  clignotement, ancre au cm ; la meme que Tools/Light/test_light.cpp (section D). Ecrite au journal sous -BRAutoTest ou
+	 *  -BRNetTest a chaque niveau construit : l'hote et chaque client doivent ecrire la meme */
+	uint32 GetLightGridFingerprint(int32 Half) const;
+	/** v4.16 (tests) : la lumiere du plafonnier de la cellule LampCell atteint-elle P (BRLight::Occlusion, la regle du jeu) ?
+	 *  False s'il n'y a pas de plafonnier allume. Geom : autres cotes (diagnostic ; nullptr : celles du niveau) */
+	bool IsLampVisibleFrom(const FIntPoint& LampCell, const FVector& P, const BRLight::Occlusion::FGeom* Geom = nullptr) const;
+	/** v4.16 (relecture, tests) : trappe de l'echelle de sortie du chunk (celle d'ABRChunk::PlanExits, d'apres le tirage) */
+	bool GetLightHatch(const FIntPoint& Chunk, BRLight::FHatch& Out) const;
+	/** v4.16 (relecture, tests) : ferme (ou rouvre) pour la lumiere l'arete entre deux cellules voisines, comme une porte de
+	 *  mission fermee sur une ouverture de la grille (meme ensemble, meme invalidation) ; pour le chargement en cours */
+	void SetLightTestClosedEdge(const FIntPoint& A, const FIntPoint& B, bool bClosed);
+	/** v4.16 : compteurs de la lumiere de gameplay : derniere image complete, ou total depuis ResetLightStats */
+	FBRLightStats GetLightStats(bool bTotal) const;
+	void ResetLightStats() const;
+	/** v4.16 : vide les caches de la lumiere de gameplay (aussi d'eux-memes : niveau, graine, chargement, portes de mission) */
+	void InvalidateLightCache() const;
 	/** v4.12 : source de lumiere de gameplay (mecanisme de mission allume) : enregistree ou retiree, sur chaque machine,
 	 *  d'apres l'etat replique ; autonome (une coupure des neons ne l'eteint pas). Slot : plusieurs sources par acteur */
 	void SetGameplayLight(const AActor* LightOwner, uint8 Slot, const FVector& Where, float Radius, float Intensity, bool bOn);
@@ -1109,6 +1141,11 @@ private:
 		TWeakObjectPtr<const AActor> Owner;
 	};
 	TMap<uint64, FGameplayLight> GameplayLights;
+	// ---- v4.16 : lumiere de gameplay (BRWorldLight.cpp) : caches (BRWorldLightTypes.h) ; grille vue par BRLight::Occlusion ;
+	// calculs (fonctions de FLightImpl, classe imbriquee : acces aux membres prives)
+	mutable FBRLightCache LightCache;
+	struct FLightGridView;
+	struct FLightImpl;
 	/** v4.12 : eau locale des mecanismes */
 	struct FLocalWater
 	{

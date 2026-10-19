@@ -447,4 +447,8 @@ private:
 	/** v4.16 (vis) : -BRAutoTestV416Visual (BRAutoTestV416Visual.cpp) : HUD aux trois tailles et dans les 22 langues (textes
 	 *  controles), vraies fenetres, modes d'affichage, manette, HUD du scanner, neuf entites, raccords du kit, decalques */
 	void AddV416VisualSteps();
+
+	/** v4.16 : -BRAutoTestV416Light : lumiere de gameplay (murs, passages, coupure, profils, sources de mission, cout)
+	 *  (BRAutoTestV416Light.cpp) */
+	void AddV416LightSteps();
 };
