@@ -87,6 +87,23 @@ namespace
 	}
 #endif
 
+	/** v4.16 (perf) : mode des impacts eclaires de Lumen quand le profil les demande (r.Lumen.HardwareRayTracing.LightingMode) :
+	 *  2, reflets seulement. Hors version publiee, -BRHitLightingMode=1 rend le mode 1 d'avant (eclairage indirect compris),
+	 *  pour les mesures avant / apres */
+	int32 BRPerfHitLightingMode()
+	{
+#if !UE_BUILD_SHIPPING
+		static const int32 Parsed = []()
+		{
+			int32 Value = 2;
+			return (FParse::Value(FCommandLine::Get(), TEXT("BRHitLightingMode="), Value) && (Value == 1 || Value == 2)) ? Value : 2;
+		}();
+		return Parsed;
+#else
+		return 2;
+#endif
+	}
+
 	/** v4.15 : profil choisi au premier lancement (-1 : aucun choix a annoncer), carte qui l'a decide et sa memoire (Mo, 0 :
 	 *  inconnue) */
 	int32 GFirstRunProfile = -1;
@@ -4277,8 +4294,11 @@ void ABRPlayerController::ApplySettings()
 	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing %d"), bRT ? 1 : 0));
 	// v4.5 : reflets eclaires par les rayons (hit lighting) seulement si demandes (profil Cinematique) : c'est le reglage le
 	// plus couteux ; sinon le cache de surfaces de Lumen eclaire les reflets
+	// v4.16 (perf) : mode 2 (impacts eclaires pour les reflets seulement). Le mode 1, garde depuis la v4.5, eclaire aussi les
+	// impacts de l'eclairage indirect (sondes d'ecran) dans Unreal 5.8 : le premier poste du profil Cinematique (Lumen sur la
+	// file asynchrone : 25 ms sur 34 dans les fosses, banc base_v416), pour un but qui n'etait que les reflets
 	const bool bHitLighting = bRT && S.bRTHitLighting;
-	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing.LightingMode %d"), bHitLighting ? 1 : 0));
+	Cmd(FString::Printf(TEXT("r.Lumen.HardwareRayTracing.LightingMode %d"), bHitLighting ? BRPerfHitLightingMode() : 0));
 	// Reflets de premier plan de l'eau translucide (Poolrooms) a partir de la qualite Epique
 	Cmd(FString::Printf(TEXT("r.Lumen.TranslucencyReflections.FrontLayer.Enable %d"), S.Quality >= 3 ? 1 : 0));
 	// Ombres ray tracees : jamais globales (r.RayTracing.Shadows reste a 0), seulement la lampe torche, au cas par cas
