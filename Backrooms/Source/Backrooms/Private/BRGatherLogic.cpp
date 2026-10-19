@@ -161,4 +161,38 @@ namespace BRGather
 		SeenDeparture = 0;
 		bCancelSent = false;
 	}
+
+	// v4.16 (echelles) : suite d'une image de montee arretee par une surface (voir BRGatherLogic.h)
+	bool ClimbNeedsStepProbe(const FClimbHitIn& In)
+	{
+		return In.bBlocked && !In.bWalkable && In.DZ > 0.f && In.FeetZ < In.FootZ + In.StepHeight;
+	}
+
+	EClimbHit ClimbAfterHit(const FClimbHitIn& In)
+	{
+		if (!In.bBlocked)
+		{
+			return EClimbHit::Stop;
+		}
+		if (In.bWalkable)
+		{
+			return EClimbHit::Slide;
+		}
+		if (In.DZ < 0.f)
+		{
+			return EClimbHit::Lower;
+		}
+		// Montee : une marche basse seulement (essai de la marche libre), jamais le long d'une paroi haute
+		return (ClimbNeedsStepProbe(In) && In.bStepClear) ? EClimbHit::Rise : EClimbHit::Stop;
+	}
+
+	float ClimbStepProbeFeet(float FootZ, float StepHeight)
+	{
+		return FootZ + StepHeight + ClimbProbeMargin;
+	}
+
+	bool ClimbReleaseOnDescent(float DZ, float Descended, float FeetZ, float FootZ, float StepHeight)
+	{
+		return DZ < 0.f && Descended < -DZ * ClimbStuckRatio && FeetZ <= FootZ + StepHeight + ClimbProbeMargin;
+	}
 }

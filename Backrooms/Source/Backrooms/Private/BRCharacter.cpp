@@ -3994,32 +3994,79 @@ void ABRCharacter::UpdateClimb(float Dt)
 	// grimpeur touche la pente et la remonte jusqu'au palier, puis l'echelle. Avant : SetActorLocation balaye sans glissement,
 	// arrete au premier contact : colle au tablier sans bouger, jamais au sommet, aucune demande de depart. Un mur, un flanc ou
 	// un plafond arretent toujours (pas de glissement le long d'une paroi), sauf le reste vertical pres du pied (ci-dessous)
+	bool bReleaseAtFoot = false;
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		Move->Velocity = FVector::ZeroVector;
 		FHitResult Hit;
 		Move->SafeMoveUpdatedComponent(Delta, GetActorQuat(), true, Hit);
-		if (Hit.IsValidBlockingHit() && Hit.Normal.Z >= Move->GetWalkableFloorZ())
+		// v4.16 (echelles) : la suite de l'impact suit BRGather::ClimbAfterHit (regles et banc : BRGatherLogic.h,
+		// Tools/Departure/test_departure.cpp section 6)
+		const float LadderFootZ = static_cast<float>(L->GetActorLocation().Z);
+		BRGather::FClimbHitIn HitIn;
+		HitIn.bBlocked = Hit.IsValidBlockingHit();
+		HitIn.bWalkable = HitIn.bBlocked && Hit.Normal.Z >= Move->GetWalkableFloorZ();
+		HitIn.DZ = DZ;
+		HitIn.FeetZ = static_cast<float>(GetActorLocation().Z) - Half;
+		HitIn.FootZ = LadderFootZ;
+		HitIn.StepHeight = Move->MaxStepHeight;
+		if (BRGather::ClimbNeedsStepProbe(HitIn))
+		{
+			// v4.16 (echelles) : essai de la marche : la capsule du grimpeur (reduite de ClimbProbeMargin), levee a la verticale
+			// jusqu'a une marche au-dessus du pied de l'echelle, puis menee a cette hauteur jusqu'a l'aplomb de l'accroche, ne
+			// touche rien (memes collisions que le deplacement : coequipiers et decor). Avant (v4.15 correctifs 5) : un mur haut,
+			// une caisse, un coequipier ou un plafond bas levaient quand meme le grimpeur d'une marche, colle a la paroi
+			const UCapsuleComponent* StepCap = GetCapsuleComponent();
+			UWorld* StepWorld = GetWorld();
+			if (StepCap && StepWorld)
+			{
+				const FVector StepFrom = GetActorLocation();
+				const FVector StepLifted(StepFrom.X, StepFrom.Y, BRGather::ClimbStepProbeFeet(LadderFootZ, Move->MaxStepHeight) + Half);
+				const FVector StepAhead(Anchor.X, Anchor.Y, StepLifted.Z);
+				FCollisionQueryParams StepQuery(SCENE_QUERY_STAT(BRClimbStepProbe), false, this);
+				FCollisionResponseParams StepResponse;
+				StepCap->InitSweepCollisionParams(StepQuery, StepResponse);
+				const FCollisionShape StepShape = FCollisionShape::MakeCapsule(FMath::Max(1.f, StepCap->GetScaledCapsuleRadius() - BRGather::ClimbProbeMargin),
+					FMath::Max(1.f, Half - BRGather::ClimbProbeMargin));
+				const ECollisionChannel StepChannel = StepCap->GetCollisionObjectType();
+				FHitResult StepHit;
+				HitIn.bStepClear = !StepWorld->SweepSingleByChannel(StepHit, StepFrom, StepLifted, GetActorQuat(), StepChannel, StepShape, StepQuery, StepResponse)
+					&& !StepWorld->SweepSingleByChannel(StepHit, StepLifted, StepAhead, GetActorQuat(), StepChannel, StepShape, StepQuery, StepResponse);
+			}
+		}
+		switch (BRGather::ClimbAfterHit(HitIn))
+		{
+		case BRGather::EClimbHit::Slide:
 		{
 			// UMovementComponent::SlideAlongSurface (publique ; la version du mouvement du personnage, protegee, glisse comme
 			// elle hors de la marche au sol) : le reste du deplacement le long du sol, sans impact
 			UMovementComponent* Base = Move;
 			Base->SlideAlongSurface(Delta, 1.f - Hit.Time, Hit.Normal, Hit, false);
+			break;
 		}
-		else if (Hit.IsValidBlockingHit() && DZ != 0.f && (DZ < 0.f || GetActorLocation().Z - Half < L->GetActorLocation().Z + Move->MaxStepHeight))
+		case BRGather::EClimbHit::Rise:
+		case BRGather::EClimbHit::Lower:
 		{
 			// v4.15 (correctifs 5, relecture) : arrete par une paroi non praticable, les pieds encore sous le pied de l'echelle plus
 			// une marche (MaxStepHeight) : le reste de la montee seul, a la verticale (balaye), puis la traction reprend. Niveau 37 :
 			// une echelle sur son trottoir (pied a 68 cm) prise depuis le canal ; le grimpeur, tire vers l'accroche des la prise,
 			// touchait l'arete de la marche immergee (34 cm) puis le bord du trottoir avec un contact presque horizontal (Normal.Z
 			// 0,06 a 0,5, sans glissement) et s'y arretait, meme en avancant tout de suite (modele 2D, diag5/r5/deck_climb.py,
-			// depuis dc31499 : murs de 120 cm, accroche a 52 cm, montee balayee). La hausse est bornee : une paroi haute entre le
-			// joueur et l'accroche ne le leve que d'une marche. En descente (DZ < 0), de meme le reste vertical seul : le grimpeur
-			// leve contre une paroi haute redescend jusqu'au pied (StopClimb a 4 cm)
+			// depuis dc31499 : murs de 120 cm, accroche a 52 cm, montee balayee). v4.16 : en montant, seulement si l'essai de la
+			// marche est libre (ci-dessus). En descente (DZ < 0), de meme le reste vertical seul
 			FHitResult RiseHit;
 			Move->SafeMoveUpdatedComponent(FVector(0.f, 0.f, DZ * (1.f - Hit.Time)), GetActorQuat(), true, RiseHit);
+			break;
+		}
+		default:
+			break;
 		}
 		ClimbBlocker = Hit.IsValidBlockingHit() ? Hit.GetComponent() : nullptr;
+		// v4.16 (echelles) : en descente, les pieds ne descendent plus a une marche au plus au-dessus du pied (sol, marche ou bord
+		// sous le grimpeur) : il lache l'echelle (apres les envois de l'image, ci-dessous). Avant : accroche au-dessus (marche
+		// immergee d'un trottoir lateral du Niveau 37 a 16 cm, caisse sous l'accroche), Saut ou Interagir pour lacher
+		bReleaseAtFoot = BRGather::ClimbReleaseOnDescent(DZ, static_cast<float>(Pos.Z - GetActorLocation().Z), static_cast<float>(GetActorLocation().Z) - Half, LadderFootZ,
+			Move->MaxStepHeight);
 	}
 	else
 	{
@@ -4048,6 +4095,10 @@ void ABRCharacter::UpdateClimb(float Dt)
 		{
 			ServerCancelDeparture();
 		}
+	}
+	if (bReleaseAtFoot)
+	{
+		StopClimb(); // v4.16 (echelles) : descente arretee pres du pied, on se tient sur ce qu'on touche
 	}
 }
 

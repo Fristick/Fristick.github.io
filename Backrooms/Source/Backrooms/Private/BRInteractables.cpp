@@ -569,7 +569,9 @@ void ABRExit::CheckDepartureViewPoint()
 				// d'un trottoir du Niveau 37, avant BRMech::Grid::StandFlat) : la descente s'arrete au-dessus de lui ; la visee
 				// (ABRCharacter::UpdateFocus) ne passe pas par cette capsule. Sinon (rocher, mur) : ni visee ni montee. v4.15
 				// (correctifs 5, relecture) : la montee depuis le sol passe par-dessus (ABRCharacter::UpdateClimb : reste de la montee
-				// a la verticale contre une paroi non praticable, pieds sous le pied plus une marche)
+				// a la verticale contre une paroi non praticable, pieds sous le pied plus une marche). v4.16 (echelles) : la montee ne
+				// passe plus que par-dessus une marche (BRGather::ClimbAfterHit, essai de la marche) et la descente lache l'echelle sur
+				// l'obstacle (ClimbReleaseOnDescent) : texte du controle mis a jour (avant : "descente arretee au-dessus de lui")
 				constexpr float Lift = 40.f;
 				TArray<FOverlapResult> High;
 				World->OverlapMultiByChannel(High, Center + FVector(0.f, 0.f, Lift), FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeCapsule(Radius, Half), Q, R);
@@ -581,7 +583,8 @@ void ABRExit::CheckDepartureViewPoint()
 				const FVector L = GetActorLocation();
 				UE_LOG(LogBackrooms, Warning, TEXT("Sortie vers le Niveau %d (%s) en (%.0f, %.0f, %.0f) : echelle prise dans %s (%s) : la capsule du grimpeur en (%.0f, %.0f, %.0f) "
 					"n'y tient pas (%s)"), Target, *GetName(), L.X, L.Y, L.Z, *GetNameSafe(O.GetActor()), *GetNameSafe(O.GetComponent()), Center.X, Center.Y, Center.Z,
-					bLow ? TEXT("obstacle bas sous l'accroche : descente arretee au-dessus de lui ; montee depuis le sol par-dessus lui, visee non genee") : TEXT("ni visee ni montee"));
+					bLow ? TEXT("obstacle bas sous l'accroche : la descente lache l'echelle sur lui ; montee depuis le sol par-dessus lui s'il ne depasse pas une marche, visee non genee")
+					: TEXT("ni visee ni montee"));
 				return;
 			}
 		}

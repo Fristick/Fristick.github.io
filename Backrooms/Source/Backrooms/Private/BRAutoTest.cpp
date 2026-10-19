@@ -255,6 +255,19 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications des correctifs v4.15 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Ladder")))
+	{
+		// v4.16 (echelles) : echelles des chunks du Niveau 37, deplacement de secours de la montee, Niveaux 8 et 6 (reseau :
+		// AddNetV416LadderSteps, toujours a la fin du plan de -BRNetTest)
+		AddV416LadderSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.16 des echelles : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV413")))
 	{
 		AddV413Steps();
@@ -1033,6 +1046,7 @@ void ABRAutoTest::BuildNetPlan()
 	AddNetV414Steps(bClient); // v4.14
 	AddNetV415Steps(bClient); // v4.15
 	AddNetV415FixSteps(bClient); // v4.15 (correctifs 4, relecture) : depart de groupe par l'echelle BRExit_42 du Niveau 8
+	AddNetV416LadderSteps(bClient); // v4.16 (echelles) : depart de groupe par une echelle des chunks du Niveau 37 (graine du niveau 115083815)
 	// Le client part le premier. v4.15 : l'hote attend que le client ait quitte la partie (ou signale la fin de son plan),
 	// 120 s au plus : avant, il fermait la partie au bout de 12 s, pendant que le client finissait encore ses etapes
 	Add(TEXT("Fin"), bClient ? 1.f : 2.f, [this, bClient]()
