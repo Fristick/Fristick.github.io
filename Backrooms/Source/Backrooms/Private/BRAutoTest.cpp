@@ -101,12 +101,24 @@ ABRAutoTest::ABRAutoTest()
 
 bool ABRAutoTest::IsRequested()
 {
+#if UE_BUILD_SHIPPING
+	// v4.16 (paquet) : version publiee : seuls les essais du paquet (demarrage -BRSmokeTest, traversee du chapitre
+	// -BRAutoTestChapter : Tools/Build/check_package.py). Les autres plans ne sont pas joignables depuis la ligne de commande
+	// d'un joueur (avant : -BRAutoTest -BRAutoTestV415 -BRAutoTestStay laissait la partie ouverte en mode invincible)
+	return FParse::Param(FCommandLine::Get(), TEXT("BRAutoTest"))
+		&& (FParse::Param(FCommandLine::Get(), TEXT("BRSmokeTest")) || FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestChapter")));
+#else
 	return FParse::Param(FCommandLine::Get(), TEXT("BRAutoTest")) || IsNetTestRequested();
+#endif
 }
 
 bool ABRAutoTest::IsNetTestRequested()
 {
+#if UE_BUILD_SHIPPING
+	return false; // v4.16 (paquet) : pas de test reseau dans une version publiee (ni plan, ni client lance par le controleur)
+#else
 	return FParse::Param(FCommandLine::Get(), TEXT("BRNetTest"));
+#endif
 }
 
 void ABRAutoTest::BeginPlay()
@@ -168,7 +180,30 @@ void ABRAutoTest::BeginPlay()
 	{
 		// v4.10 : lancement d'un paquet (Tools/Build/check_package.py --launch)
 		AddSmokeSteps();
+		bPackagePlan = true; // v4.16 (paquet) : plan du paquet, execute aussi par une version publiee (Tick)
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Test de lancement : %d etapes"), Plan.Num());
+		return;
+	}
+	// v4.16 (paquet) : traversee du premier chapitre publie (BRAutoTestV416Ship.cpp ; aussi dans le paquet Shipping :
+	// check_package.py --chapter). Plan du paquet : une version publiee n'execute que celui-ci et le test de lancement,
+	// quel que soit l'ordre des choix de cette fonction apres une fusion (bPackagePlan, verifie par Tick)
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestChapter")))
+	{
+		AddChapterSteps();
+		bPackagePlan = true;
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Traversee du chapitre : %d etapes. Rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
+	// v4.16 (paquet) : REJOUER et sauvegardes (BRAutoTestV416Ship.cpp)
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Ship")))
+	{
+		AddV416ShipSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Verifications v4.16 (REJOUER et sauvegardes) : %d etapes. Rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
 	float SoakMinutes = 0.f;
@@ -1905,6 +1940,20 @@ void ABRAutoTest::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+#if UE_BUILD_SHIPPING
+	// v4.16 (paquet) : version publiee : seuls les plans du paquet (test de lancement -BRSmokeTest, traversee du chapitre
+	// -BRAutoTestChapter : bPackagePlan) s'executent, ou que tombe leur choix dans BeginPlay (avant : la restriction tenait a
+	// l'ordre des choix, qu'une fusion pouvait changer). Tout autre plan est refuse avant sa premiere etape : probleme note,
+	// rapport ecrit, le jeu se ferme (code 1)
+	if (!bPackagePlan)
+	{
+		Plan.Reset();
+		StepIndex = 0;
+		Note(TEXT("plan de test refuse par une version publiee (seuls -BRSmokeTest et -BRAutoTestChapter y sont acceptes)"), true);
+		Finish();
+		return;
+	}
+#endif
 	const float RealDt = static_cast<float>(FApp::GetDeltaTime());
 	if (bMeasuring && RealDt > 0.f)
 	{
@@ -2244,7 +2293,12 @@ void ABRAutoTest::Finish()
 		Reports.Last().LastLogLine = Capture->Num();
 	}
 	WriteReport();
-	if (!FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestStay")))
+#if UE_BUILD_SHIPPING
+	const bool bStay = false; // v4.16 (paquet) : version publiee : le jeu se ferme toujours a la fin d'un essai (etat du test jamais laisse)
+#else
+	const bool bStay = FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestStay"));
+#endif
+	if (!bStay)
 	{
 		// v4.10 : le code de sortie dit le resultat (avant : toujours 0, meme avec des problemes)
 		const uint8 Code = Problems.Num() > 0 ? 1 : ((Skipped.Num() > 0 && FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestStrict"))) ? 2 : 0);

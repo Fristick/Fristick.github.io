@@ -15,6 +15,23 @@ ne prouve rien : les formats sont lus.
                  rapport doit exister, venir de cet essai (son chemin figure dans la ligne de commande du jeu) et suivre
                  le schema (etat, problemes, non_verifies) ; code de sortie et etat doivent concorder. Etat INCOMPLET si
                  le jeu a demarre mais n'a pas tout verifie.
+  chapitre     : v4.16 (--chapter) la traversee du premier chapitre publie DANS le paquet : 0 -> 1 -> 37 -> 2 -> fin du
+                 chapitre, nouvelle partie par le menu, missions resolues et sorties prises en marchant, parties de test
+                 (prefixe BR_AutoTestChapitre_, les parties du joueur ne sont pas touchees). --chapter-mode restart (defaut) :
+                 trois lancements separes par de vraies fermetures du jeu (-BRChapterPhase=1 jusqu'aux Poolrooms resolues
+                 et fermeture ; 2 reprise, Niveau 2, fin du chapitre enregistree ; 3 relance apres la fin, CONTINUER,
+                 nettoyage) ; single : un lancement (-BRChapterPhase=0). Chaque phase est jugee comme le lancement (rapport
+                 de cet essai, schema, code de sortie) et par son etat (-BRChapterOut : niveaux atteints, fermeture, reprise,
+                 fin du chapitre enregistree, nettoyage) ; une phase incomplete arrete la traversee (INCOMPLET, phases
+                 suivantes non lancees). Rapports et etats : --chapter-out <dossier> (sinon un dossier temporaire, indique).
+                 v4.16 (relecture) : un paquet Shipping ecrit dans le dossier du joueur (Windows :
+                 %LOCALAPPDATA%/Backrooms/Saved/SaveGames, a cote de ses parties BR_Partie_*). Les fichiers de test qui y
+                 restent (BR_AutoTestChapitre_*, etat de la traversee compris ; BR_AutoTestLancement_* du demarrage) sont
+                 deplaces dans <dossier des rapports>/parties_de_test a la fin du controle, quelle qu'en soit l'issue ; apres
+                 une traversee complete, un fichier restant est un ECHEC (le nettoyage du jeu l'aurait du effacer). Delai
+                 d'une phase (--chapter-timeout) : par defaut au-dela des limites des etapes du jeu (restart : 4500 s par
+                 phase, single : 7200 s), pour que le rapport detaille du jeu arrive avant ; un delai depasse arrete tout
+                 l'arbre de processus (le lanceur Backrooms.exe et le vrai jeu, son enfant).
 
 Modes :
   --mode release (defaut) : structure, contenu, architecture et dependances sont obligatoires ; le lancement aussi avec
@@ -28,6 +45,7 @@ Codes de sortie : 0 complet pour le mode choisi ; 1 probleme ; 2 inspection inco
 --json <fichier> : rapport structure (lu par make_steam_vdf.py et par les tests).
 
 Usage : python Tools/Build/check_package.py --platform Windows|Linux|Mac --dir Build/<Plateforme>/<Config> [--ue <moteur>]
+        [--launch] [--chapter [--chapter-mode restart|single] [--chapter-out <dossier>]]
 """
 import argparse
 import csv
@@ -36,6 +54,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import struct
 import subprocess
 import sys
@@ -52,7 +71,7 @@ FONTS = ["NotoSans%s-%s.ttf" % (s, w) for s in ("Arabic", "SC", "TC", "JP", "KR"
 MAP_PACKAGE = "/Game/Backrooms/Maps/L_Backrooms"
 
 OK, FAIL, SKIP, PARTIAL = "OK", "ECHEC", "NON VERIFIE", "INCOMPLET"
-CHECKS = ("structure", "contenu", "architecture", "dependances", "lancement")
+CHECKS = ("structure", "contenu", "architecture", "dependances", "lancement", "chapitre")
 
 PAK_MAGIC = struct.pack("<I", 0x5A6F12E1)
 UTOC_MAGIC = b"-==--==--==--==-"
@@ -678,11 +697,89 @@ def launch_command(platform, root, launcher):
     return [launcher]
 
 
+def kill_tree(p):
+    """v4.16 (relecture) : arrete le processus lance ET ses enfants. Le lanceur d'un paquet Windows (Backrooms.exe, a la
+    racine) demarre le vrai jeu (Backrooms/Binaries/Win64/Backrooms-Win64-Shipping.exe) et attend sa fin : arreter le seul
+    lanceur (avant : subprocess.run au bout du delai) laissait le jeu tourner, carte graphique occupee, parties de test et
+    etat de la traversee ecrits apres le verdict. Rend ce qui a ete fait (rapport)"""
+    how = []
+    if os.name == "nt":
+        # Tant que le lanceur vit, son enfant est dans son arbre : taskkill /T l'arrete aussi
+        try:
+            r = subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True, text=True, errors="replace", timeout=60)
+            how.append("arbre de processus arrete (taskkill /T, code %d)" % r.returncode)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            how.append("taskkill impossible (%s)" % e)
+    else:
+        # Lance dans sa propre session (run_game) : tout le groupe, script de lancement Linux et jeu compris. Mac : open -W
+        # n'est pas le parent de l'application (lancee par le systeme) : elle reste a fermer a la main
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+            how.append("groupe de processus arrete")
+        except OSError as e:
+            how.append("groupe de processus non arrete (%s)" % e)
+    try:
+        p.kill()
+    except OSError:
+        pass
+    try:
+        p.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        how.append("lanceur toujours actif 30 s apres")
+    return ", ".join(how)
+
+
+def run_game(cmd, timeout):
+    """v4.16 (relecture) : (code de sortie, None), ou (None, ce qui a ete arrete) si le jeu depasse le delai"""
+    p = subprocess.Popen(cmd, **({} if os.name == "nt" else {"start_new_session": True}))
+    try:
+        return p.wait(timeout=timeout), None
+    except subprocess.TimeoutExpired:
+        return None, kill_tree(p)
+
+
+# v4.16 (relecture) : fichiers que les essais du paquet ecrivent dans le dossier des parties (prefixes de BRSave.cpp, Prefix)
+CHAPTER_SAVE_PREFIX = "BR_AutoTestChapitre_"
+LAUNCH_SAVE_PREFIX = "BR_AutoTestLancement_"
+
+
+def player_saves_dir(platform):
+    """v4.16 (relecture) : dossier des parties d'un paquet Shipping sur cet hote : celui du JOUEUR (FPaths::ShouldSaveToUserDir :
+    %LOCALAPPDATA%\\<jeu>\\Saved\\SaveGames sous Windows), pas celui du paquet. None : non controle (autres systemes ;
+    remplace par les tests unitaires)"""
+    if platform != "Windows" or os.name != "nt" or not os.environ.get("LOCALAPPDATA"):
+        return None
+    return os.path.join(os.environ["LOCALAPPDATA"], "Backrooms", "Saved", "SaveGames")
+
+
+def move_test_saves(platform, prefix, dest):
+    """(fichiers deplaces, erreurs) : les fichiers de test (prefix*) du dossier du joueur deplaces dans dest (gardes pour
+    l'analyse, hors du dossier du joueur). Les autres fichiers (parties du joueur) ne sont jamais touches"""
+    saves = player_saves_dir(platform)
+    if not saves or not os.path.isdir(saves):
+        return [], []
+    moved, errors = [], []
+    for path in sorted(glob.glob(os.path.join(saves, glob.escape(prefix) + "*"))):
+        if not os.path.isfile(path):
+            continue
+        try:
+            os.makedirs(dest, exist_ok=True)
+            target = os.path.join(dest, os.path.basename(path))
+            if os.path.exists(target):
+                os.remove(target)
+            shutil.move(path, target)
+            moved.append(os.path.basename(path))
+        except OSError as e:
+            errors.append("%s (%s)" % (path, e))
+    return moved, errors
+
+
 LAUNCH_STATES = ("reussi", "echec", "incomplet")
 
 
-def read_launch_report(path, out_dir, started):
-    """(rapport, erreur) : le rapport doit exister, etre ecrit par CET essai et suivre le schema du jeu (v4.11)"""
+def read_launch_report(path, out_dir, started, marker="-BRSmokeTest"):
+    """(rapport, erreur) : le rapport doit exister, etre ecrit par CET essai et suivre le schema du jeu (v4.11).
+    v4.16 : marker : option de l'essai attendue dans la ligne de commande du rapport (-BRSmokeTest, -BRAutoTestChapter)"""
     if not os.path.isfile(path):
         return None, "aucun rapport de lancement"
     if os.path.getmtime(path) + 2 < started:
@@ -704,7 +801,7 @@ def read_launch_report(path, out_dir, started):
             return None, "champ %s mal forme (liste de textes attendue)" % k
     cmdline = rep["ligne_de_commande"] if isinstance(rep["ligne_de_commande"], str) else ""
     # Le chemin du rapport est un dossier temporaire neuf : un rapport qui ne le cite pas vient d'un autre essai
-    if "-BRSmokeTest" not in cmdline or os.path.basename(out_dir) not in cmdline:
+    if marker not in cmdline or os.path.basename(out_dir) not in cmdline:
         return None, "le rapport ne correspond pas a cet essai (ligne de commande : %s)" % cmdline[:200]
     return rep, None
 
@@ -722,14 +819,23 @@ def check_launch(c, platform, root, launcher, timeout, required):
                                                        "-unattended", "-windowed", "-ResX=960", "-ResY=540", "-abslog=%s" % log]
     started = time.time()
     try:
-        p = subprocess.run(cmd, timeout=timeout)
-        code = p.returncode if platform != "Mac" else None
-    except subprocess.TimeoutExpired:
-        c.fail("le jeu n'a pas fini le test de lancement en %d s" % timeout)
-        return
+        code, stopped = run_game(cmd, timeout)
     except OSError as e:
         c.fail("lancement impossible : %s" % e)
         return
+    finally:
+        # v4.16 (relecture) : le test de demarrage n'utilise aucune partie (prefixe BR_AutoTestLancement_ : liste vide) ; un
+        # fichier de ce prefixe ne reste jamais dans le dossier du joueur
+        moved, errors = move_test_saves(platform, LAUNCH_SAVE_PREFIX, os.path.join(out_dir, "parties_de_test"))
+        if moved:
+            c.info("lancement : %d fichier(s) de test retire(s) du dossier du joueur : %s" % (len(moved), ", ".join(moved)))
+        for e in errors:
+            c.fail("fichier de test non retire du dossier du joueur : %s" % e)
+    if stopped is not None:
+        c.fail("le jeu n'a pas fini le test de lancement en %d s (%s)" % (timeout, stopped))
+        return
+    if platform == "Mac":
+        code = None
     rep, err = read_launch_report(result, out_dir, started)
     if err:
         c.fail("%s (code de sortie %s ; journal : %s)" % (err, code, log))
@@ -756,6 +862,167 @@ def check_launch(c, platform, root, launcher, timeout, required):
         c.partial("le jeu a demarre mais %d verification(s) n'ont pas ete faites" % len(rep["non_verifies"]))
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# v4.16 : traversee du premier chapitre dans le paquet
+# ---------------------------------------------------------------------------------------------------------------------
+CHAPTER_LEVELS = [0, 1, 37, 2]
+CHAPTER_KEYS = ("phase", "canal", "niveaux", "fermeture", "reprise", "fin_du_chapitre", "fin_enregistree", "apres_relance", "continuer",
+                "nettoyage", "valide")
+
+
+def chapter_command(platform, root, launcher, phase, report, state, log):
+    """Commande d'une phase de la traversee (-BRChapterPhase : 0 un lancement, 1 a 3 lancements separes)"""
+    return launch_command(platform, root, launcher) + [
+        "-BRAutoTest", "-BRAutoTestChapter", "-BRChapterPhase=%d" % phase, "-BRAutoTestStrict", "-BRSmokeOut=%s" % report,
+        "-BRChapterOut=%s" % state, "-unattended", "-windowed", "-ResX=1280", "-ResY=720", "-abslog=%s" % log]
+
+
+def read_chapter_state(path, started, phase):
+    """(etat, erreur) : l'etat de la phase (Chapitre.json, recopie a -BRChapterOut) ecrit par CET essai, pour cette phase"""
+    if not os.path.isfile(path):
+        return None, "aucun etat de la traversee (Chapitre.json)"
+    if os.path.getmtime(path) + 2 < started:
+        return None, "etat de la traversee anterieur a l'essai (%s)" % path
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            st = json.load(fh)
+    except (ValueError, OSError) as e:
+        return None, "etat de la traversee illisible (%s)" % e
+    if not isinstance(st, dict):
+        return None, "etat de la traversee mal forme (objet JSON attendu)"
+    missing = [k for k in CHAPTER_KEYS if k not in st]
+    if missing:
+        return None, "etat de la traversee incomplet : champ(s) absent(s) %s" % ", ".join(missing)
+    if st["phase"] != phase:
+        return None, "etat d'une autre phase (%r, attendu %d)" % (st["phase"], phase)
+    if not isinstance(st["niveaux"], list) or not all(isinstance(x, int) and not isinstance(x, bool) for x in st["niveaux"]):
+        return None, "champ niveaux mal forme (liste d'entiers attendue)"
+    for k in ("fermeture", "reprise", "fin_du_chapitre", "fin_enregistree", "apres_relance", "nettoyage", "valide"):
+        if not isinstance(st[k], bool):
+            return None, "champ %s mal forme (booleen attendu)" % k
+    return st, None
+
+
+# v4.16 (relecture) : delai d'une phase par defaut, au-dela de la somme des limites des etapes du jeu (le jeu note alors
+# lui-meme l'etape bloquee et ecrit son rapport detaille avant d'etre arrete). Pire cas des limites (BRAutoTestV416Ship.cpp,
+# marches de BRAutoTestV412.cpp et BRAutoTestV413.cpp) : phase 1 environ 3600 s, phase 2 environ 2000 s, phase 3 environ
+# 220 s, un lancement environ 5850 s ; chargement du paquet en plus
+CHAPTER_TIMEOUTS = {"restart": 4500, "single": 7200}
+
+
+def check_chapter(c, platform, root, launcher, timeout, mode, keep_dir):
+    host = host_platform()
+    if host != platform:
+        c.skip("traversee possible seulement sur un hote %s (hote actuel : %s)" % (platform, host))
+        return
+    if keep_dir:
+        os.makedirs(keep_dir, exist_ok=True)
+        out_dir = os.path.abspath(keep_dir)
+    else:
+        out_dir = tempfile.mkdtemp(prefix="br_chapter_")
+    c.info("rapports et etats des phases : %s" % out_dir)
+    complete = False
+    try:
+        complete = chapter_phases(c, platform, root, launcher, timeout or CHAPTER_TIMEOUTS[mode], mode, out_dir)
+    finally:
+        # v4.16 (relecture) : un paquet Shipping ecrit ses parties dans le dossier du JOUEUR. Une traversee arretee (echec,
+        # phase incomplete, delai) y laissait ses parties de test et l'etat de la traversee : ils sont deplaces dans le
+        # dossier des rapports. Apres une traversee complete, le nettoyage du jeu (phase 3) les a deja effaces : un fichier
+        # restant est un echec de ce nettoyage
+        kept = os.path.join(out_dir, "parties_de_test")
+        moved, errors = move_test_saves(platform, CHAPTER_SAVE_PREFIX, kept)
+        if moved and complete:
+            c.fail("traversee : %d fichier(s) de test laisse(s) par le jeu dans le dossier du joueur (%s), deplace(s) dans %s" % (
+                len(moved), ", ".join(moved), kept))
+        elif moved:
+            c.info("traversee arretee : %d fichier(s) de test retire(s) du dossier du joueur, gardes dans %s : %s" % (len(moved), kept, ", ".join(moved)))
+        for e in errors:
+            c.fail("fichier de test non retire du dossier du joueur : %s" % e)
+
+
+def chapter_phases(c, platform, root, launcher, timeout, mode, out_dir):
+    """Les phases de la traversee, puis la traversee complete. True : toutes les phases ont ete lancees et jugees"""
+    phases = (0,) if mode == "single" else (1, 2, 3)
+    states = {}
+    for phase in phases:
+        report = os.path.join(out_dir, "chapitre_%d.json" % phase)
+        state = os.path.join(out_dir, "chapitre_%d_etat.json" % phase)
+        log = os.path.join(out_dir, "chapitre_%d.log" % phase)
+        for f in (report, state):
+            if os.path.exists(f):
+                os.remove(f)
+        cmd = chapter_command(platform, root, launcher, phase, report, state, log)
+        started = time.time()
+        try:
+            code, stopped = run_game(cmd, timeout)
+        except OSError as e:
+            c.fail("phase %d : lancement impossible : %s" % (phase, e))
+            return False
+        if stopped is not None:
+            c.fail("phase %d : le jeu n'a pas fini sa phase de la traversee en %d s (%s)" % (phase, timeout, stopped))
+            return False
+        if platform == "Mac":
+            code = None
+        rep, err = read_launch_report(report, out_dir, started, marker="-BRAutoTestChapter")
+        st = None
+        if not err:
+            st, err = read_chapter_state(state, started, phase)
+        if err:
+            c.fail("phase %d : %s (code de sortie %s ; journal : %s)" % (phase, err, code, log))
+            return False
+        c.info("phase %d : code %s, etat %s, %d probleme(s), %d verification(s) non faite(s) ; niveaux atteints %s ; phase valide %s" % (
+            phase, "inconnu (open)" if code is None else code, rep["etat"], len(rep["problemes"]), len(rep["non_verifies"]),
+            " -> ".join(str(x) for x in st["niveaux"]) or "aucun", "oui" if st["valide"] else "NON"))
+        for prob in rep["problemes"]:
+            c.fail("phase %d : %s" % (phase, prob))
+        if rep["etat"] == "echec" and not rep["problemes"]:
+            c.fail("phase %d : le jeu indique un echec sans le detailler" % phase)
+        if rep["etat"] == "reussi" and (rep["problemes"] or rep["non_verifies"]):
+            c.fail("phase %d : rapport incoherent : etat reussi avec des problemes ou des verifications non faites" % phase)
+        if code not in (None, 0, 2):
+            c.fail("phase %d : code de sortie %s" % (phase, code))
+        if code == 2 and rep["etat"] != "incomplet":
+            c.fail("phase %d : code de sortie 2 (verifications non faites) mais etat %s" % (phase, rep["etat"]))
+        if st["canal"] != "public":
+            c.fail("phase %d : contenu %s, la traversee du premier chapitre demande la version publiee" % (phase, st["canal"]))
+        if rep["etat"] == "reussi" and not st["valide"]:
+            c.fail("phase %d : rapport reussi mais phase non validee par le jeu" % phase)
+        if c.problems:
+            return False
+        if rep["etat"] == "incomplet" or rep["non_verifies"]:
+            for item in rep["non_verifies"]:
+                c.info("phase %d, non verifie : %s" % (phase, item))
+            rest = [str(x) for x in phases if x > phase]
+            c.partial("phase %d : %d verification(s) non faite(s)%s" % (
+                phase, len(rep["non_verifies"]), (" ; phase(s) %s non lancee(s)" % ", ".join(rest)) if rest else ""))
+            return False
+        states[phase] = st
+    # La traversee complete, d'un lancement a l'autre
+    if mode == "single":
+        s0 = states[0]
+        levels = list(s0["niveaux"])
+        steps = [("fermeture aux Poolrooms", s0["fermeture"]), ("reprise par CONTINUER", s0["reprise"]),
+                 ("fin du chapitre atteinte", s0["fin_du_chapitre"]), ("fin du chapitre enregistree", s0["fin_enregistree"]),
+                 ("partie apres la fin", s0["apres_relance"]), ("CONTINUER au Niveau 2", s0["continuer"] == 2), ("nettoyage", s0["nettoyage"])]
+    else:
+        s1, s2, s3 = states[1], states[2], states[3]
+        levels = list(s1["niveaux"]) + list(s2["niveaux"])
+        steps = [("phase 1 : fermeture aux Poolrooms", s1["fermeture"]), ("phase 2 : reprise apres redemarrage", s2["reprise"]),
+                 ("phase 2 : fin du chapitre atteinte", s2["fin_du_chapitre"]), ("phase 2 : fin du chapitre enregistree", s2["fin_enregistree"]),
+                 ("phase 3 : partie apres un nouveau redemarrage", s3["apres_relance"]), ("phase 3 : CONTINUER au Niveau 2", s3["continuer"] == 2),
+                 ("phase 3 : nettoyage des parties de test", s3["nettoyage"])]
+        if s3["niveaux"]:
+            c.fail("phase 3 : niveaux atteints inattendus %s (la reprise du Niveau 2 n'est pas une arrivee)" % s3["niveaux"])
+    if levels != CHAPTER_LEVELS:
+        c.fail("niveaux traverses %s, attendu %s" % (" -> ".join(str(x) for x in levels) or "aucun", " -> ".join(str(x) for x in CHAPTER_LEVELS)))
+    for what, ok in steps:
+        if not ok:
+            c.fail("traversee : %s NON" % what)
+    if not c.problems:
+        c.info("traversee : %s -> fin du chapitre ; %s" % (" -> ".join(str(x) for x in levels), ", ".join(w for w, _ in steps)))
+    return True
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--platform", required=True)
@@ -767,6 +1034,15 @@ def main(argv=None):
     ap.add_argument("--launch", action="store_true", help="lancer le paquet (meme systeme que l'hote)")
     ap.add_argument("--require-launch", action="store_true")
     ap.add_argument("--launch-timeout", type=int, default=600)
+    ap.add_argument("--chapter", action="store_true", help="v4.16 : traversee du premier chapitre dans le paquet (meme systeme que l'hote)")
+    ap.add_argument("--require-chapter", action="store_true", help="v4.16 : traversee obligatoire (sinon : comptee seulement si elle a eu lieu)")
+    ap.add_argument("--chapter-mode", choices=["restart", "single"], default="restart",
+                    help="restart : trois lancements separes par de vraies fermetures du jeu (defaut) ; single : un lancement")
+    # v4.16 (relecture) : par defaut, au-dela des limites des etapes du jeu (CHAPTER_TIMEOUTS ; avant : 2400 s, moins que le
+    # pire cas de la phase 1)
+    ap.add_argument("--chapter-timeout", type=int, default=None,
+                    help="duree maximale d'une phase (s ; defaut : %d en restart, %d en single)" % (CHAPTER_TIMEOUTS["restart"], CHAPTER_TIMEOUTS["single"]))
+    ap.add_argument("--chapter-out", help="dossier des rapports et etats des phases (defaut : dossier temporaire)")
     ap.add_argument("--archs", default="arm64,x86_64", help="Mac : architectures attendues")
     ap.add_argument("--json")
     a = ap.parse_args(argv)
@@ -801,6 +1077,16 @@ def main(argv=None):
                 checks["lancement"].fail("structure en echec : paquet non lance")
         else:
             checks["lancement"].skip("non demande (--launch)")
+        # v4.16 : traversee du chapitre, apres le test de demarrage (un demarrage en echec ne la lance pas)
+        if a.chapter or a.require_chapter:
+            if checks["structure"].close().state != OK:
+                checks["chapitre"].fail("structure en echec : traversee non lancee")
+            elif checks["lancement"].close().state == FAIL:
+                checks["chapitre"].fail("test de demarrage en echec : traversee non lancee")
+            else:
+                guarded(checks["chapitre"], check_chapter, a.platform, root, launcher, a.chapter_timeout, a.chapter_mode, a.chapter_out)
+        else:
+            checks["chapitre"].skip("non demande (--chapter)")
     else:
         for n in CHECKS[1:]:
             checks[n].skip("structure introuvable")
@@ -810,21 +1096,28 @@ def main(argv=None):
     required = ["structure"] if a.mode == "structure" else ["structure", "contenu", "architecture", "dependances"]
     if a.require_launch:
         required.append("lancement")
+    if a.require_chapter:
+        required.append("chapitre")
     # v4.11 : un lancement demande (--launch) qui a eu lieu compte toujours : un echec fait echouer la commande, un essai
     # incomplet la rend incomplete. Seul un lancement impossible sur cet hote reste facultatif avec --launch.
     counted = list(required)
     if a.launch and "lancement" not in counted and checks["lancement"].state in (FAIL, PARTIAL):
         counted.append("lancement")
+    # v4.16 : de meme pour la traversee demandee (--chapter) : faite, elle compte toujours
+    if a.chapter and "chapitre" not in counted and checks["chapitre"].state in (FAIL, PARTIAL):
+        counted.append("chapitre")
     failed = [n for n in counted if checks[n].state == FAIL]
     missing = [n for n in counted if checks[n].state in (SKIP, PARTIAL)]
     if failed:
         status, code = "ECHEC", 1
     elif missing:
-        status, code = "INSPECTION INCOMPLETE" + (" (lancement incomplet)" if checks["lancement"].state == PARTIAL else ""), 2
+        status, code = "INSPECTION INCOMPLETE" + (" (lancement incomplet)" if checks["lancement"].state == PARTIAL else "") + (
+            " (traversee du chapitre incomplete)" if checks["chapitre"].state == PARTIAL else ""), 2
     elif a.mode == "structure":
         status, code = "CONTROLE STRUCTUREL SEULEMENT (contenu non verifie)", 0
     else:
-        status, code = "PAQUET VERIFIE" + (" ET LANCE" if checks["lancement"].state == OK else ""), 0
+        status, code = "PAQUET VERIFIE" + (" ET LANCE" if checks["lancement"].state == OK else "") + (
+            ", CHAPITRE TRAVERSE" if checks["chapitre"].state == OK else ""), 0
 
     print("Paquet %s : %s" % (a.platform, a.dir))
     for n in CHECKS:

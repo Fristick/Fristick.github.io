@@ -5,6 +5,8 @@
 // d'ecriture de la partie (REJOUER et mode developpeur n'ecrivent pas la campagne).
 // v4.15 : parcours lineaire (section J) : graine fixe par niveau (LevelSeedFor), regle de la mort (DeathRuleFor), sorties
 // des chunks (ChunkExitAllowed), fil, acces, reprise et migration inchanges, rien de nouveau ecrit en REJOUER.
+// v4.16 : le journal de la partie a deux listes, comme la sauvegarde (UBRSaveGame::Discovered : entites ; Notes : documents
+// lus) : en REJOUER, l'union porte sur les deux (le jeu ne completait que les entites ; une note lue en rejeu se perdait).
 // Le banc compile le code meme du jeu (BRStoryLogic.cpp, BRContentLogic.cpp) ; il ne remplace pas un essai dans Unreal.
 //
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wshadow -I Source/Backrooms/Public Tools/Story/test_story.cpp
@@ -116,13 +118,16 @@ namespace
 		unsigned StoryFlags = 0;
 		unsigned RunSeed = 0;
 		double PlayTime = 0.0;
+		/** Entites du journal (UBRSaveGame::Discovered) */
 		std::vector<int> Journal;
+		/** v4.16 : documents lus (UBRSaveGame::Notes) */
+		std::vector<int> Documents;
 		bool operator==(const FRecord& O) const
 		{
 			return Items == O.Items && Deaths == O.Deaths && bPendingDeath == O.bPendingDeath && bSessionValid == O.bSessionValid && SessionLevel == O.SessionLevel
 				&& SessionSeed == O.SessionSeed && CurrentLevel == O.CurrentLevel && RouteBits == O.RouteBits && OptionalFound == O.OptionalFound
 				&& Endings == O.Endings && StoryDone == O.StoryDone && StoryFlags == O.StoryFlags && RunSeed == O.RunSeed && PlayTime == O.PlayTime
-				&& Journal == O.Journal;
+				&& Journal == O.Journal && Documents == O.Documents;
 		}
 	};
 
@@ -140,7 +145,25 @@ namespace
 		unsigned StoryFlags = 0;
 		unsigned RunSeed = 0;
 		std::vector<int> Journal;
+		std::vector<int> Documents;
 	};
+
+	/** Union, dans l'ordre, sans retrait (ABRPlayerController::WriteActiveSave en rejeu) */
+	void UnionInto(std::vector<int>& Into, const std::vector<int>& From)
+	{
+		for (int Id : From)
+		{
+			bool bHas = false;
+			for (int J : Into)
+			{
+				bHas |= J == Id;
+			}
+			if (!bHas)
+			{
+				Into.push_back(Id);
+			}
+		}
+	}
 
 	/** Meme decoupage que ABRPlayerController::WriteActiveSave, NotifyPlayerDeath et le compteur de temps, gouverne par
 	 *  BRStory::WritePolicyFor */
@@ -150,18 +173,9 @@ namespace
 		{
 			if (P.bJournalUnion)
 			{
-				for (int Id : Play.Journal)
-				{
-					bool bHas = false;
-					for (int J : R.Journal)
-					{
-						bHas |= J == Id;
-					}
-					if (!bHas)
-					{
-						R.Journal.push_back(Id);
-					}
-				}
+				// v4.16 : entites et documents (avant : seules les entites dans le jeu)
+				UnionInto(R.Journal, Play.Journal);
+				UnionInto(R.Documents, Play.Documents);
 			}
 			return;
 		}
@@ -179,6 +193,7 @@ namespace
 			R.SessionSeed = Play.Seed;
 		}
 		R.Journal = Play.Journal;
+		R.Documents = Play.Documents;
 		R.RouteBits = Play.RouteBits;
 		R.OptionalFound = Play.OptionalFound;
 		R.Endings = Play.Endings;
@@ -439,15 +454,18 @@ int main()
 		Camp.StoryFlags = Flag::Linear;
 		Camp.RunSeed = 41500u;
 		Camp.Journal = { 3, 7 };
+		Camp.Documents = { 11 };
 		Write(Story, R, Camp);
 		Tick(Story, R, 600.0);
 		const FRecord Before = R;
-		// Rejeu du Level 0 : consommation (4 objets), ramassage (6), degats, document lu (9), fin vue, mort, menu, fermeture
+		// Rejeu du Level 0 : consommation (4 objets), ramassage (6), degats, entite vue (9), document lu (12), fin vue, mort, menu,
+		// fermeture
 		FPlay Rep;
 		Rep.Level = 0;
 		Rep.Seed = 77;
 		Rep.Items = 4;
 		Rep.Journal = { 3, 7, 9 };
+		Rep.Documents = { 11, 12 };
 		Rep.Endings = 2;
 		Rep.StoryDone = 0;
 		Write(Replay, R, Rep);
@@ -458,9 +476,11 @@ int main()
 		Write(Replay, R, Rep);
 		FRecord Expected = Before;
 		Expected.Journal = { 3, 7, 9 };
+		Expected.Documents = { 11, 12 };
 		Line("rejeu (consommation, ramassage, mort, fin, fermeture) : equipement, morts, session, niveau, campagne, histoire, temps inchanges",
 			R == Expected);
-		Line("transfert explicite : le document lu en rejeu complete le journal (union, rien retire)", R.Journal.size() == 3 && R.Journal[2] == 9);
+		Line("transfert explicite : l'entite vue en rejeu complete le journal (union, rien retire)", R.Journal.size() == 3 && R.Journal[2] == 9);
+		Line("v4.16 : le document lu en rejeu complete les notes de la partie (union, rien retire)", R.Documents.size() == 2 && R.Documents[0] == 11 && R.Documents[1] == 12);
 		// Mode developpeur sur un niveau deja decouvert : rien du tout
 		FRecord R2 = Before;
 		FPlay DevPlay = Rep;
