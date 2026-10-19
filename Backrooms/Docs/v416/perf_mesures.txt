@@ -38,6 +38,14 @@ Toujours notes : fenetre, resolution interne, pourcentage de rendu, agrandisseme
   carte, pilote (version, interne, date), processeur, coeurs, RAM totale, RHI.
 Un prealable absent (niveau non charge, pas de salle de fosses, pas de chemin, scanner absent, ProfileGPU sans resultat,
   ray tracing materiel absent) est NON VERIFIE, jamais une mesure valide.
+v4.16 (perf, corrections de relecture) : scenario verifie a chaque image de la fenetre, colonne scenario_ok de Perf.csv
+  (0 : ligne NON VERIFIE dans le rapport, comptee a part dans la ligne de bilan, exclue par perf_summary.py) : meme
+  niveau et meme graine, ni transition ni mort ; scenes fixes : joueur a moins de 1,5 m de sa pose ; marches : distance
+  mesuree image par image (colonne distance_m) d'au moins la moitie de la distance prevue, et au Niveau 1 au moins un
+  chunk construit ou demonte ; LiDAR : scanner actif, rayons, points, au moins une impulsion, scan focalise sur au moins
+  90 % des images. Marches : le mouvement du personnage (MOVE_None pendant la marche) recoit la vitesse du chemin, que
+  lit la prediction du streaming (position dans 0,75 s) ; colonne collisions_predites (sols construits sur la position
+  predite).
 Options : -BRPerfScenes=fosses,bassins,marche0,marche1,lidar6  -BRPerfSeed=<n> (graine utilisateur pour toutes les scenes)
   -BRPerfSeconds=<s>  -BRPerfWarm=<s>  -BRPerfGpu=<k>  -BRPerfTag=<texte>  -BRPerfRun=<n>  -BRPerfFrames=0
 Fichiers (Saved/AutoTest) : Perf.csv (une ligne par scene x profil), PerfPasses.csv (postes, postes asynchrones, passes
@@ -49,8 +57,12 @@ Duree : environ 15 a 25 minutes pour les 5 scenes x 4 profils.
 ----------------------------------------------------------------------------------------------------------
   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_perf.ps1 -Tag base -Runs 3
   powershell -ExecutionPolicy Bypass -File Tools\Tests\run_perf.ps1 -Tag base_profils -Runs 3 -Seeds 0,4242 -Profiles 0,1,4,2
-Resultats : Saved\PerfRuns\<etiquette>\run<n>_graine<g>_profil<p>\ (+ commande.txt), manifest.json, summary.txt, resume.md.
+Resultats : Saved\PerfRuns\<etiquette>\run<n>_graine<g>_profil<p>\ (+ commande.txt, commit.txt), manifest.json, summary.txt,
+  resume.md.
 Aucune autre instance d'Unreal ne doit tourner (un lancement est saute sinon).
+v4.16 (perf, corrections de relecture) : une etiquette qui contient deja des executions est refusee (sortie 2) ; -Append
+  ajoute des executions numerotees a la suite (manifest.json garde les resultats precedents). commit.txt (commit=<sha>,
+  modifie=0|1) dans chaque dossier d'execution.
 
 3. Synthese : Tools/Tests/perf_summary.py (tests : python -m unittest Tools/Tests/test_perf_summary.py)
 ----------------------------------------------------------------------------------------------------
@@ -59,6 +71,14 @@ Aucune autre instance d'Unreal ne doit tourner (un lancement est saute sinon).
 Mediane des medianes, ecart des medianes, mediane des 95 %, pire 99 %, longues images (total et pour 1000 images),
   threads, processeur graphique, VRAM, streaming, PSO, scanner, postes ; avant / apres avec ecarts (ms et %) et un
   avertissement si la carte, le pilote, le processeur ou les resolutions different.
+v4.16 (perf, corrections de relecture) : reglages de rendu compares (RT, Lumen materiel, hit lighting, MegaLights et ses
+  echantillons, ombres virtuelles et RT de la lampe, brouillard volumetrique, qualite, resolution interne, pourcentage de
+  rendu, agrandissement, resolution dynamique, synchro, limite d'images) : "ATTENTION : reglages de rendu differents" si
+  avant et apres different (une baisse de qualite ne passe pas pour un gain), ou si les executions d'une etiquette
+  different ; synchro ou limite d'images signalees ; lignes scenario_ok != 1 exclues et comptees (n (instables, scenario
+  non realise)) ; graines du niveau affichees, ecart "[graines + executions]" pour un groupe de plusieurs graines,
+  avertissement si avant et apres n'ont pas les memes graines ; avertissement si une etiquette melange plusieurs commits
+  ou un arbre modifie (commit.txt, sinon manifest.json).
 
 Limites connues
 ---------------

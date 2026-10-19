@@ -46,6 +46,17 @@
 // Un prealable absent (niveau non charge, pas de salle de fosses, pas de chemin, scanner absent, ProfileGPU sans resultat,
 // ray tracing materiel absent) est note NON VERIFIE, jamais compte comme une mesure valide. Aucun seuil d'images par
 // seconde n'est juge ici : ce sont des mesures, pas des verifications.
+// v4.16 (perf, corrections de relecture) :
+//   - scenario verifie a chaque image de la fenetre (colonne scenario_ok, NON VERIFIE sinon, exclu par perf_summary.py) :
+//     meme niveau, meme graine, ni transition ni mort ; scenes fixes : joueur a moins de 1,5 m de sa pose ; marches :
+//     distance MESUREE image par image (plus vitesse x temps) d'au moins la moitie de la distance prevue, et au Niveau 1
+//     (infini) au moins un chunk construit ou demonte ; LiDAR : images du scanner, rayons, points, au moins une impulsion,
+//     scan focalise maintenu sur au moins 90 % des images (SetFocus et Pulse ne font rien quand CanScan est faux) ; une
+//     ligne NON VERIFIE (Skip) par scene dont le scenario n'a pas eu lieu, comptee a part dans la ligne de bilan ;
+//   - marches : la position suit toujours la loi du temps, mais le mouvement du personnage recoit la vitesse du chemin
+//     (MOVE_None pendant la marche : rien n'est integre, la vitesse reste exacte) : la prediction du streaming
+//     (ABRWorld::GetStreamingCenters, position dans 0,75 s a la vitesse du personnage) est celle d'un joueur qui court ;
+//     colonne collisions_predites (ABRWorld::PredictedCollisionBuilds).
 #include "BRAutoTest.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
@@ -146,6 +157,12 @@ namespace BRTestPerf
 	constexpr double PerfGpuMinMs = 0.05;
 	/** Graine fixe des tirages du jeu (FMath::FRand) au debut du prechauffage et de la fenetre */
 	constexpr int32 PerfRandSeed = 416416;
+	/** v4.16 (perf, corrections de relecture) : scenario realise ? Scenes fixes : ecart a la pose (cm) ; marches : part de la
+	 *  distance prevue ; LiDAR : part des images avec le scan focalise ; sonde de la direction de la marche (cm) */
+	constexpr float PerfPoseDriftMax = 150.f;
+	constexpr double PerfWalkMinRatio = 0.5;
+	constexpr double PerfLidarFocusMin = 0.9;
+	constexpr float PerfWalkVelocityProbe = 20.f;
 
 	struct FPerfOptions
 	{
@@ -336,6 +353,18 @@ namespace BRTestPerf
 		int32 LidarPeak = 0;
 		FVector WalkFrom = FVector::ZeroVector;
 		double WalkMeters = 0.0;
+		// v4.16 (perf, corrections de relecture) : scenario verifie a chaque image de la fenetre
+		/** Premiere raison pour laquelle la scene n'est plus celle qu'on mesure (vide : intacte) */
+		FString SceneBroken;
+		/** Position de l'image precedente et distance parcourue mesuree (cm) */
+		FVector WalkPrev = FVector::ZeroVector;
+		double MovedCm = 0.0;
+		/** Ecart maximal a la pose (cm, scenes fixes) */
+		double PoseDriftMax = 0.0;
+		int32 LidarFocusFrames = 0;
+		int32 LidarPulses = 0;
+		bool bInfiniteLevel = false;
+		int32 PredictedBuilds = 0;
 		// Releves a la fin de la fenetre
 		int32 ChunksBuilt = 0;
 		float ChunkBuildMs = 0.f;
@@ -373,6 +402,8 @@ namespace BRTestPerf
 	int32 PerfMeasured = 0;
 	int32 PerfUnstable = 0;
 	int32 PerfInvalid = 0;
+	/** v4.16 (perf, corrections de relecture) : lignes ecrites avec scenario_ok = 0 */
+	int32 PerfScenarioFailed = 0;
 	int32 PerfGpuDumps = 0;
 	double PerfSuiteStart = 0.0;
 
@@ -623,16 +654,25 @@ namespace BRTestPerf
 		return FMath::Lerp(S.Path[Lo], S.Path[Hi], FMath::Clamp((Dist - S.PathCum[Lo]) / Seg, 0.f, 1.f));
 	}
 
+	/** Distance Distance cm le long de l'aller-retour : abscisse sur le chemin et sens (retour ou non) */
+	float WalkAbscissa(const FPerfState& S, float Distance, bool& bOutBack)
+	{
+		const float Len = FMath::Max(1.f, S.PathLength);
+		float U = FMath::Fmod(FMath::Max(0.f, Distance), 2.f * Len);
+		bOutBack = U > Len;
+		if (bOutBack)
+		{
+			U = 2.f * Len - U;
+		}
+		return U;
+	}
+
 	/** Position de la marche apres Distance cm (aller-retour sur le chemin) et lacet du regard (1,5 m devant) */
 	FVector WalkAt(FPerfState& S, float Distance, float& OutYaw)
 	{
 		const float Len = FMath::Max(1.f, S.PathLength);
-		float U = FMath::Fmod(FMath::Max(0.f, Distance), 2.f * Len);
-		const bool bBack = U > Len;
-		if (bBack)
-		{
-			U = 2.f * Len - U;
-		}
+		bool bBack = false;
+		const float U = WalkAbscissa(S, Distance, bBack);
 		const FVector Here = PathLerp(S, U);
 		const FVector Ahead = PathLerp(S, FMath::Clamp(U + (bBack ? -PerfWalkLookAhead : PerfWalkLookAhead), 0.f, Len));
 		FVector Dir = Ahead - Here;
@@ -645,13 +685,45 @@ namespace BRTestPerf
 		return Here;
 	}
 
-	/** Le joueur du scanner : focus maintenu, impulsion des qu'elle est prete, rotation reguliere */
-	void DriveLidar(FPerfState& S, ABRCharacter* C, ABRPlayerController* PC)
+	/** v4.16 (perf, corrections de relecture) : un pas de la marche, Seconds apres le debut de la fenetre. La position suit
+	 *  la loi du temps (memes positions a chaque execution) ; le mouvement du personnage (MOVE_None pendant la marche : rien
+	 *  n'est integre) recoit la vitesse du chemin, que lit la prediction du streaming (ABRWorld::GetStreamingCenters).
+	 *  Avant : vitesse nulle, la position predite etait la position actuelle (chemin de streaming d'un joueur immobile) */
+	void DriveWalk(FPerfState& S, ABRCharacter* C, ABRPlayerController* PC, double Seconds)
+	{
+		if (!C || !PC)
+		{
+			return;
+		}
+		const float Dist = static_cast<float>(PerfWalkSpeed * Seconds);
+		float Yaw = 0.f;
+		const FVector At = WalkAt(S, Dist, Yaw);
+		C->SetActorLocation(At, false, nullptr, ETeleportType::TeleportPhysics);
+		PC->SetControlRotation(FRotator(0.f, Yaw, 0.f));
+		if (UCharacterMovementComponent* Move = C->GetCharacterMovement())
+		{
+			bool bBack = false;
+			FVector Dir = PathLerp(S, WalkAbscissa(S, Dist + PerfWalkVelocityProbe, bBack)) - At;
+			Dir.Z = 0.f;
+			if (Dir.IsNearlyZero(0.1f))
+			{
+				// Demi-tour exactement entre les deux sondes : direction d'arrivee
+				Dir = At - PathLerp(S, WalkAbscissa(S, FMath::Max(0.f, Dist - PerfWalkVelocityProbe), bBack));
+				Dir.Z = 0.f;
+			}
+			Move->Velocity = Dir.GetSafeNormal2D() * PerfWalkSpeed;
+		}
+	}
+
+	/** Le joueur du scanner : focus maintenu, impulsion des qu'elle est prete, rotation reguliere. v4.16 (perf, corrections
+	 *  de relecture) : vrai si une impulsion est partie (SetFocus et Pulse ne font rien quand le scanner ne peut pas scanner :
+	 *  la fenetre le verifie) */
+	bool DriveLidar(FPerfState& S, ABRCharacter* C, ABRPlayerController* PC)
 	{
 		ABRLidar* L = C ? C->GetLidar() : nullptr;
 		if (!L || !PC)
 		{
-			return;
+			return false;
 		}
 		const double Now = FPlatformTime::Seconds();
 		if (S.ScanStart <= 0.0)
@@ -661,7 +733,41 @@ namespace BRTestPerf
 		const float Yaw = static_cast<float>(S.PoseRot.Yaw + PerfLidarYawRate * (Now - S.ScanStart));
 		PC->SetControlRotation(FRotator(PerfLidarPitch, FRotator::NormalizeAxis(Yaw), 0.f));
 		L->SetFocus(true);
-		L->Pulse();
+		return L->Pulse();
+	}
+
+	/** v4.16 (perf, corrections de relecture) : la scene est-elle toujours celle qu'on mesure ? Vide si oui, sinon la raison
+	 *  (meme niveau, meme graine, niveau pret, pas de transition, joueur vivant) */
+	FString SceneBreak(const ABRWorld* W, const ABRCharacter* C, const FPerfScene& Sc, const FPerfState& S)
+	{
+		if (!W || !C)
+		{
+			return TEXT("monde ou joueur absent");
+		}
+		if (W->IsTransitioning() || !W->IsLevelReady())
+		{
+			return TEXT("transition ou rechargement du niveau");
+		}
+		if (W->GetLevelNumber() != Sc.Level || W->GetSeed() != S.LevelSeed)
+		{
+			return FString::Printf(TEXT("Niveau %d, graine du niveau %u au lieu du Niveau %d, graine %u"), W->GetLevelNumber(), W->GetSeed(), Sc.Level, S.LevelSeed);
+		}
+		if (C->IsDead())
+		{
+			return TEXT("joueur mort");
+		}
+		return FString();
+	}
+
+	/** v4.16 (perf, corrections de relecture) : marche : mouvement du personnage remis en marche normale (fin de scene) */
+	void RestoreWalking(ABRCharacter* C)
+	{
+		UCharacterMovementComponent* Move = C ? C->GetCharacterMovement() : nullptr;
+		if (Move && Move->MovementMode == MOVE_None && !C->IsDead())
+		{
+			Move->SetMovementMode(MOVE_Walking);
+			Move->StopMovementImmediately();
+		}
 	}
 
 	/** Composants des chunks : ajoutes depuis le debut de la fenetre (nouveaux chunks compris) */
@@ -885,6 +991,7 @@ void ABRAutoTest::AddPerfSteps()
 		BRTestPerf::PerfMeasured = 0;
 		BRTestPerf::PerfUnstable = 0;
 		BRTestPerf::PerfInvalid = 0;
+		BRTestPerf::PerfScenarioFailed = 0;
 		BRTestPerf::PerfGpuDumps = 0;
 		BRTestPerf::PerfSuiteStart = FPlatformTime::Seconds();
 		FLevelReport R;
@@ -1128,10 +1235,20 @@ void ABRAutoTest::AddPerfSteps()
 					break;
 				}
 				BRTestPerf::PlacePlayer(C, PC, Loc, Rot);
+				if (Sc.Kind == BRTestPerf::EPerfKind::Walk)
+				{
+					// v4.16 (perf, corrections de relecture) : pendant la marche (prechauffage compris : meme etat), le mouvement
+					// n'integre rien ; la fenetre lui donne la vitesse du chemin (DriveWalk). Remis en marche au bilan
+					if (UCharacterMovementComponent* Move = C->GetCharacterMovement())
+					{
+						Move->SetMovementMode(MOVE_None);
+					}
+				}
 				C->Sanity = 100.f;
 				C->Health = 100.f;
 				S.PoseLoc = Loc;
 				S.PoseRot = Rot;
+				S.bInfiniteLevel = W->Def().BoundsChunks <= 0;
 				return true;
 			});
 			LimitLastStep(30.f);
@@ -1241,12 +1358,22 @@ void ABRAutoTest::AddPerfSteps()
 				{
 					return true;
 				}
-				if (!W || !C || !PC)
-				{
-					return false;
-				}
 				const BRTestPerf::FPerfScene& Sc = BRTestPerf::PerfScenes[S.SceneIndex];
 				const double Now = FPlatformTime::Seconds();
+				if (!W || !C || !PC)
+				{
+					if (S.T0 <= 0.0)
+					{
+						return false;
+					}
+					// v4.16 (perf, corrections de relecture) : joueur ou monde perdu en cours de fenetre : scene cassee, fin
+					if (S.SceneBroken.IsEmpty())
+					{
+						S.SceneBroken = TEXT("monde ou joueur absent");
+					}
+					S.Duration = Now - S.T0;
+					return true;
+				}
 				if (S.T0 <= 0.0)
 				{
 					// Debut : compteurs remis a zero ; l'image en cours appartient encore a l'etape precedente
@@ -1266,6 +1393,12 @@ void ABRAutoTest::AddPerfSteps()
 					BRTestPerf::CountChunkComponents(S, GetWorld(), true);
 					S.NextMemory = Now;
 					S.WalkFrom = C->GetActorLocation();
+					S.WalkPrev = S.WalkFrom;
+					S.MovedCm = 0.0;
+					S.PoseDriftMax = 0.0;
+					S.LidarFocusFrames = 0;
+					S.LidarPulses = 0;
+					S.SceneBroken.Reset();
 					C->Sanity = 100.f;
 					FMath::RandInit(BRTestPerf::PerfRandSeed);
 					FMath::SRandInit(BRTestPerf::PerfRandSeed);
@@ -1287,7 +1420,21 @@ void ABRAutoTest::AddPerfSteps()
 					if (const ABRLidar* L = C->GetLidar())
 					{
 						S.LidarPeak = FMath::Max(S.LidarPeak, L->GetPointCount());
+						S.LidarFocusFrames += L->IsFocusing() ? 1 : 0;
 					}
+				}
+				// v4.16 (perf, corrections de relecture) : scenario verifie a chaque image (premiere raison gardee), distance
+				// mesuree d'une image a l'autre, ecart a la pose des scenes fixes
+				if (S.SceneBroken.IsEmpty())
+				{
+					S.SceneBroken = BRTestPerf::SceneBreak(W, C, Sc, S);
+				}
+				const FVector Here = C->GetActorLocation();
+				S.MovedCm += FVector::Dist2D(S.WalkPrev, Here);
+				S.WalkPrev = Here;
+				if (Sc.Kind != BRTestPerf::EPerfKind::Walk)
+				{
+					S.PoseDriftMax = FMath::Max(S.PoseDriftMax, FVector::Dist(S.PoseLoc, Here));
 				}
 				if (Now >= S.NextMemory)
 				{
@@ -1308,6 +1455,7 @@ void ABRAutoTest::AddPerfSteps()
 					S.ChunksTornDown = W->ChunksTornDown;
 					S.TeardownMs = W->TeardownMsTotal;
 					S.TeardownWorstMs = W->MaxTeardownMs;
+					S.PredictedBuilds = W->PredictedCollisionBuilds;
 					S.SyncLoads = UBRAssets::SyncLoadsInGame - S.SyncBase;
 					TArray<FString> NewNames;
 					for (int32 I = S.SyncNamesBase; I < UBRAssets::SyncLoadNames.Num(); ++I)
@@ -1332,24 +1480,19 @@ void ABRAutoTest::AddPerfSteps()
 					S.ChunksEnd = W->GetChunkCount();
 					S.PreparingEnd = W->GetPreparingChunkCount();
 					S.bForegroundEnd = FPlatformApplicationMisc::IsThisApplicationForeground();
-					S.WalkMeters = FVector::Dist2D(S.WalkFrom, C->GetActorLocation()) / 100.0;
-					if (Sc.Kind == BRTestPerf::EPerfKind::Walk)
-					{
-						S.WalkMeters = BRTestPerf::PerfWalkSpeed * Elapsed / 100.0;
-					}
+					// v4.16 (perf, corrections de relecture) : distance mesuree image par image (avant : vitesse x temps pour
+					// les marches, ce qui ne verifiait rien)
+					S.WalkMeters = S.MovedCm / 100.0;
 					return true;
 				}
 				// Mouvements de la scene, fonction du temps seul (memes positions a chaque execution)
 				if (Sc.Kind == BRTestPerf::EPerfKind::Walk)
 				{
-					float Yaw = 0.f;
-					const FVector At = BRTestPerf::WalkAt(S, static_cast<float>(BRTestPerf::PerfWalkSpeed * Elapsed), Yaw);
-					C->SetActorLocation(At, false, nullptr, ETeleportType::TeleportPhysics);
-					PC->SetControlRotation(FRotator(0.f, Yaw, 0.f));
+					BRTestPerf::DriveWalk(S, C, PC, Elapsed);
 				}
 				else if (Sc.Kind == BRTestPerf::EPerfKind::Lidar)
 				{
-					BRTestPerf::DriveLidar(S, C, PC);
+					S.LidarPulses += BRTestPerf::DriveLidar(S, C, PC) ? 1 : 0;
 				}
 				return false;
 			});
@@ -1368,6 +1511,16 @@ void ABRAutoTest::AddPerfSteps()
 					}
 					const BRTestPerf::FPerfScene& Sc = BRTestPerf::PerfScenes[S.SceneIndex];
 					const double Now = FPlatformTime::Seconds();
+					// v4.16 (perf, corrections de relecture) : scene cassee (rechargement, autre niveau, mort) : plus de releve
+					// (ceux deja faits sont gardes, la ligne le note)
+					const FString Broken = BRTestPerf::SceneBreak(GetBRWorld(), GetPlayer(), Sc, S);
+					if (!Broken.IsEmpty())
+					{
+						S.RowNotes.Add(FString::Printf(TEXT("releves ProfileGPU interrompus : %s"), *Broken));
+						S.GpuFailed += FMath::Max(0, Wanted - S.GpuCaptures.Num() - S.GpuFailed);
+						BRTestPerf::DetachRhiLog();
+						return true;
+					}
 					if (Sc.Kind == BRTestPerf::EPerfKind::Lidar)
 					{
 						BRTestPerf::DriveLidar(S, GetPlayer(), GetPC());
@@ -1376,16 +1529,7 @@ void ABRAutoTest::AddPerfSteps()
 					{
 						// v4.16 (perf, relecture) : la marche continue pendant les releves (meme loi du temps que la fenetre) : le
 						// releve est celui d'une image de marche (streaming compris), pas d'un arret au bout du chemin
-						if (ABRCharacter* C = GetPlayer())
-						{
-							float Yaw = 0.f;
-							const FVector At = BRTestPerf::WalkAt(S, static_cast<float>(BRTestPerf::PerfWalkSpeed * (Now - S.T0)), Yaw);
-							C->SetActorLocation(At, false, nullptr, ETeleportType::TeleportPhysics);
-							if (ABRPlayerController* PC = GetPC())
-							{
-								PC->SetControlRotation(FRotator(0.f, Yaw, 0.f));
-							}
-						}
+						BRTestPerf::DriveWalk(S, GetPlayer(), GetPC(), Now - S.T0);
 					}
 					switch (S.GpuPhase)
 					{
@@ -1462,6 +1606,11 @@ void ABRAutoTest::AddPerfSteps()
 					{
 						L->SetFocus(false);
 					}
+					if (Sc.Kind == BRTestPerf::EPerfKind::Walk)
+					{
+						// Seules les marches mettent le mouvement a MOVE_None (un MOVE_None du jeu ailleurs reste le sien)
+						BRTestPerf::RestoreWalking(C);
+					}
 				}
 				const FString Who = FString::Printf(TEXT("perf %s %s"), Sc.Id, S.Profile.Name);
 				if (!S.bValid)
@@ -1535,6 +1684,62 @@ void ABRAutoTest::AddPerfSteps()
 				{
 					S.RowNotes.Add(FString::Printf(TEXT("%d releve(s) ProfileGPU sans resultat"), S.GpuFailed));
 				}
+				// v4.16 (perf, corrections de relecture) : le scenario a-t-il eu lieu ? Sinon la ligne est ecrite avec
+				// scenario_ok = 0 (NON VERIFIE ; exclue des resumes de perf_summary.py), jamais comptee comme une mesure de la scene
+				TArray<FString> ScenarioFail;
+				if (!S.SceneBroken.IsEmpty())
+				{
+					ScenarioFail.Add(S.SceneBroken);
+				}
+				const double ExpectedWalkM = BRTestPerf::PerfWalkSpeed * S.Duration / 100.0;
+				const double FocusShare = S.FrameTimes.Num() > 0 ? static_cast<double>(S.LidarFocusFrames) / S.FrameTimes.Num() : 0.0;
+				switch (Sc.Kind)
+				{
+				case BRTestPerf::EPerfKind::Walk:
+					if (S.WalkMeters < BRTestPerf::PerfWalkMinRatio * ExpectedWalkM)
+					{
+						ScenarioFail.Add(FString::Printf(TEXT("distance parcourue mesuree %.1f m au lieu de %.1f m"), S.WalkMeters, ExpectedWalkM));
+					}
+					if (S.bInfiniteLevel && S.ChunksBuilt + S.ChunksTornDown == 0)
+					{
+						ScenarioFail.Add(TEXT("aucun chunk construit ni demonte pendant la marche du niveau infini"));
+					}
+					break;
+				case BRTestPerf::EPerfKind::Lidar:
+					if (S.Lidar.Frames == 0)
+					{
+						ScenarioFail.Add(TEXT("scanner inactif pendant la fenetre"));
+					}
+					if (S.Lidar.Rays == 0)
+					{
+						ScenarioFail.Add(TEXT("aucun rayon du scanner"));
+					}
+					if (S.LidarPeak == 0)
+					{
+						ScenarioFail.Add(TEXT("aucun point du scanner"));
+					}
+					if (S.LidarPulses == 0)
+					{
+						ScenarioFail.Add(TEXT("aucune impulsion partie"));
+					}
+					if (FocusShare < BRTestPerf::PerfLidarFocusMin)
+					{
+						ScenarioFail.Add(FString::Printf(TEXT("scan focalise maintenu sur %.0f %% des images seulement (scanner bloque : inventaire, pause, dialogue, entree verrouillee)"),
+							FocusShare * 100.0));
+					}
+					break;
+				default:
+					break;
+				}
+				if (Sc.Kind != BRTestPerf::EPerfKind::Walk && S.PoseDriftMax > BRTestPerf::PerfPoseDriftMax)
+				{
+					ScenarioFail.Add(FString::Printf(TEXT("joueur deplace de %.1f m depuis la pose"), S.PoseDriftMax / 100.0));
+				}
+				const bool bScenarioOk = ScenarioFail.Num() == 0;
+				if (!bScenarioOk)
+				{
+					S.RowNotes.Add(TEXT("scenario NON REALISE : ") + FString::Join(ScenarioFail, TEXT(", ")));
+				}
 
 				BRTestPerf::FPerfCsv Row;
 				Row.Int(TEXT("format"), BRTestPerf::PerfFormat);
@@ -1580,6 +1785,7 @@ void ABRAutoTest::AddPerfSteps()
 				Row.Num(TEXT("attente_shaders_arrivee_s"), S.ShaderHoldMax, 2);
 				Row.Num(TEXT("prechauffe_s"), S.WarmSeconds, 2);
 				Row.Int(TEXT("prechauffe_stable"), S.bStable ? 1 : 0);
+				Row.Int(TEXT("scenario_ok"), bScenarioOk ? 1 : 0); // v4.16 (perf, corrections de relecture)
 				Row.Int(TEXT("shaders_max_prechauffe"), S.WarmShaderMax);
 				Row.Num(TEXT("duree_s"), S.Duration, 3);
 				Row.Int(TEXT("images"), SumFrame.Frames);
@@ -1630,6 +1836,8 @@ void ABRAutoTest::AddPerfSteps()
 				Row.Int(TEXT("chunks_demontes"), S.ChunksTornDown);
 				Row.Num(TEXT("demontage_ms"), S.TeardownMs, 2);
 				Row.Num(TEXT("demontage_pire_ms"), S.TeardownWorstMs, 2);
+				// v4.16 (perf, corrections de relecture) : sols construits sur la position predite (vitesse du personnage)
+				Row.Int(TEXT("collisions_predites"), S.PredictedBuilds);
 				Row.Int(TEXT("composants_ajoutes"), S.ComponentsAdded);
 				Row.Num(TEXT("composants_par_s"), static_cast<double>(S.ComponentsAdded) / Secs, 1);
 				Row.Int(TEXT("chunks_apparus"), S.ChunksAppeared);
@@ -1766,6 +1974,7 @@ void ABRAutoTest::AddPerfSteps()
 				BRTestPerf::SavePerfFiles(OutDir);
 				++BRTestPerf::PerfMeasured;
 				BRTestPerf::PerfUnstable += S.bStable ? 0 : 1;
+				BRTestPerf::PerfScenarioFailed += bScenarioOk ? 0 : 1;
 
 				// Ligne du rapport (Mesures.csv, Rapport.txt)
 				R.AvgFPS = static_cast<float>(Fps);
@@ -1797,9 +2006,10 @@ void ABRAutoTest::AddPerfSteps()
 					*Who, Internal.X, Internal.Y, Window.X, Window.Y, Upscaler, bRtActive ? TEXT("actif") : TEXT("non"), bLumenHw ? TEXT("materiel") : TEXT("logiciel"),
 					bHit ? TEXT("oui") : TEXT("non"), ABRWorld::IsMegaLightsActive() ? TEXT("actif") : TEXT("non"), S.LoadSeconds, S.ShaderHoldMax, S.WarmSeconds,
 					S.bStable ? TEXT("stable") : TEXT("INSTABLE")));
-				Note(FString::Printf(TEXT("%s : streaming : %d chunk(s) construit(s) (%.1f ms, pire image %.1f ms, %d au-dela du budget, %d force(s)), %d demonte(s) (%.1f ms, pire %.1f), %lld composant(s) ajoute(s) aux chunks, %d chargement(s) synchrone(s)%s%s ; %d composants enregistres dans le monde"),
-					*Who, S.ChunksBuilt, S.ChunkBuildMs, S.ChunkWorstFrameMs, S.FramesOverBudget, S.ForcedBuilds, S.ChunksTornDown, S.TeardownMs, S.TeardownWorstMs, S.ComponentsAdded,
-					S.SyncLoads, S.SyncNames.IsEmpty() ? TEXT("") : TEXT(" : "), *S.SyncNames, static_cast<int32>(WorldComponents)));
+				// v4.16 (perf, corrections de relecture) : sols construits sur la position predite et distance mesuree
+				Note(FString::Printf(TEXT("%s : streaming : %d chunk(s) construit(s) (%.1f ms, pire image %.1f ms, %d au-dela du budget, %d force(s), %d sol(s) sur la position predite), %d demonte(s) (%.1f ms, pire %.1f), %lld composant(s) ajoute(s) aux chunks, %d chargement(s) synchrone(s)%s%s ; %d composants enregistres dans le monde ; %.1f m parcourus"),
+					*Who, S.ChunksBuilt, S.ChunkBuildMs, S.ChunkWorstFrameMs, S.FramesOverBudget, S.ForcedBuilds, S.PredictedBuilds, S.ChunksTornDown, S.TeardownMs, S.TeardownWorstMs,
+					S.ComponentsAdded, S.SyncLoads, S.SyncNames.IsEmpty() ? TEXT("") : TEXT(" : "), *S.SyncNames, static_cast<int32>(WorldComponents), S.WalkMeters));
 				Note(FString::Printf(TEXT("%s : PSO crees a la demande pendant la fenetre : %lld (creations trop longues : %lld) ; %d image(s) avec shaders ou PSO en preparation (au plus %d)"),
 					*Who, S.PsoWindow.Created, S.PsoWindow.Hitches, S.ShaderFrames, S.ShaderMax));
 				if (bLidarScene)
@@ -1822,6 +2032,12 @@ void ABRAutoTest::AddPerfSteps()
 				if (!S.bStable)
 				{
 					Skip(FString::Printf(TEXT("%s : temps d'image non stabilises apres %.0f s de prechauffage : mesure gardee, marquee instable"), *Who, S.WarmSeconds));
+				}
+				if (!bScenarioOk)
+				{
+					// v4.16 (perf, corrections de relecture) : prealable de la scene absent : NON VERIFIE, jamais une mesure valide
+					Skip(FString::Printf(TEXT("%s : scenario non realise (%s) : ligne ecrite avec scenario_ok = 0, ce n'est pas une mesure de la scene"), *Who,
+						*FString::Join(ScenarioFail, TEXT(", "))));
 				}
 				if (PC)
 				{
@@ -1859,8 +2075,9 @@ void ABRAutoTest::AddPerfSteps()
 		R.Scene = TEXT("perf");
 		R.FirstLogLine = LogLineCount();
 		Reports.Add(R);
-		Note(FString::Printf(TEXT("perf : %d mesure(s) ecrite(s) dans Perf.csv (%d instable(s)), %d non faite(s) ; %d ligne(s) dans PerfPasses.csv, %d releve(s) ProfileGPU dans PerfGPU/ ; %.0f s"),
-			BRTestPerf::PerfMeasured, BRTestPerf::PerfUnstable, BRTestPerf::PerfInvalid, BRTestPerf::PassLines.Num(), BRTestPerf::PerfGpuDumps,
+		// v4.16 (perf, corrections de relecture) : lignes dont le scenario n'a pas eu lieu (scenario_ok = 0) comptees a part
+		Note(FString::Printf(TEXT("perf : %d mesure(s) ecrite(s) dans Perf.csv (%d instable(s), %d scenario(s) non realise(s)), %d non faite(s) ; %d ligne(s) dans PerfPasses.csv, %d releve(s) ProfileGPU dans PerfGPU/ ; %.0f s"),
+			BRTestPerf::PerfMeasured, BRTestPerf::PerfUnstable, BRTestPerf::PerfScenarioFailed, BRTestPerf::PerfInvalid, BRTestPerf::PassLines.Num(), BRTestPerf::PerfGpuDumps,
 			FPlatformTime::Seconds() - BRTestPerf::PerfSuiteStart));
 		if (BRTestPerf::PerfMeasured == 0)
 		{

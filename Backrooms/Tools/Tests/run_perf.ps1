@@ -17,6 +17,11 @@ Exemples (depuis n'importe quel dossier, PowerShell 5.1) :
 Comparer deux etiquettes :
   python Tools\Tests\perf_summary.py --before Saved\PerfRuns\base --after Saved\PerfRuns\opt1 --out comparaison.md
 Aucune autre instance d'Unreal ne doit tourner (mesures du processeur graphique) : un lancement est saute sinon.
+v4.16 (perf, corrections de relecture) : une etiquette qui contient deja des executions (dossiers run*) est refusee (sortie
+2) : perf_summary.py lit tout le dossier de l'etiquette, d'anciennes executions s'y melangeraient sans bruit. -Append
+ajoute des executions numerotees a la suite (manifest.json garde les resultats precedents). Chaque dossier d'execution
+recoit commit.txt (commit=<sha>, modifie=0|1), que perf_summary.py lit pour signaler une etiquette qui melange plusieurs
+commits ou un arbre modifie.
 #>
 param(
   [string]$Tag = '',
@@ -33,7 +38,8 @@ param(
   [string]$OutRoot = '',
   [int]$TimeoutMin = 60,
   [switch]$Strict,
-  [switch]$NoSummary
+  [switch]$NoSummary,
+  [switch]$Append
 )
 $ErrorActionPreference = 'Continue'
 $inv = [Globalization.CultureInfo]::InvariantCulture
@@ -45,6 +51,19 @@ if (-not $OutRoot) { $OutRoot = Join-Path $saved 'PerfRuns' }
 if (-not $Tag) { $Tag = 'perf_' + (Get-Date -Format 'yyyyMMdd_HHmm') }
 $Tag = $Tag -replace '[^A-Za-z0-9_.-]', '_'
 $tagDir = Join-Path $OutRoot $Tag
+# v4.16 (perf, corrections de relecture) : etiquette deja utilisee : refusee, sauf -Append (executions numerotees a la suite)
+$firstRun = 1
+$existingRuns = @()
+if (Test-Path -LiteralPath $tagDir) {
+  $existingRuns = @(Get-ChildItem -LiteralPath $tagDir -Directory -ErrorAction SilentlyContinue | ForEach-Object { if ($_.Name -match '^run(\d+)_') { [int]$Matches[1] } })
+}
+if ($existingRuns.Count -gt 0) {
+  if (-not $Append) {
+    "L'etiquette $Tag contient deja $($existingRuns.Count) execution(s) ($tagDir) : choisir une autre etiquette, ou -Append pour ajouter des executions a la suite"
+    exit 2
+  }
+  $firstRun = [int](($existingRuns | Measure-Object -Maximum).Maximum) + 1
+}
 New-Item -ItemType Directory -Force $tagDir | Out-Null
 if (-not (Test-Path $Editor)) { "Editeur introuvable : $Editor"; exit 2 }
 
@@ -81,11 +100,12 @@ try { $cpuName = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Obj
 
 $summary = Join-Path $tagDir 'summary.txt'
 $results = @()
-$header = 'etiquette {0} : {1} execution(s) x graines [{2}] x profils [{3}] ; commit {4}{5} ; {6} ; {7}' -f $Tag, $Runs, ($seedList -join ','), ($profileList -join ','), $commit, $(if ($dirty) { ' (modifie)' } else { '' }), ($gpus -join ' / '), $cpuName
+$header = 'etiquette {0} : {1} execution(s) x graines [{2}] x profils [{3}] ; commit {4}{5} ; {6} ; {7}{8}' -f $Tag, $Runs, ($seedList -join ','), ($profileList -join ','), $commit, $(if ($dirty) { ' (modifie)' } else { '' }), ($gpus -join ' / '), $cpuName, $(if ($firstRun -gt 1) { " ; ajout a partir de l'execution $firstRun (-Append)" } else { '' })
 $header
 Add-Content -Path $summary -Value $header
+$dirtyFlag = $(if ($dirty) { '1' } else { '0' })
 
-for ($run = 1; $run -le $Runs; $run++) {
+for ($run = $firstRun; $run -lt ($firstRun + $Runs); $run++) {
   foreach ($seed in $seedList) {
     foreach ($prof in $profileList) {
       $name = 'run{0}_graine{1}_profil{2}' -f $run, $seed, $prof
@@ -93,12 +113,14 @@ for ($run = 1; $run -le $Runs; $run++) {
         $line = "{0,-34} SAUTE : un autre Unreal tourne" -f $name
         $line
         Add-Content -Path $summary -Value $line
-        $results += [ordered]@{ nom = $name; etat = 'saute' }
+        $results += [ordered]@{ nom = $name; etat = 'saute'; commit = $commit; modifie = $dirty }
         continue
       }
       $dir = Join-Path $tagDir $name
       if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
       New-Item -ItemType Directory -Force $dir | Out-Null
+      # v4.16 (perf, corrections de relecture) : identite du code mesure, lue par perf_summary.py
+      [IO.File]::WriteAllText((Join-Path $dir 'commit.txt'), ("commit=$commit`r`nmodifie=$dirtyFlag`r`n"), (New-Object System.Text.UTF8Encoding($false)))
       $log = Join-Path $dir 'game.log'
       $gameArgs = @("`"$Project`"", '-game', '-windowed', "-ResX=$ResX", "-ResY=$ResY", '-unattended', '-nosplash', '-log', '-BRAutoTest', '-BRAutoTestPerf',
         "-BRPerfTag=$Tag", "-BRPerfRun=$run")
@@ -133,10 +155,24 @@ for ($run = 1; $run -le $Runs; $run++) {
       $line = "{0,-34} exit={1} duree={2:n1}min etat={3} problemes={4} non_verifies={5} mesures={6}" -f $name, $code, $sw.Elapsed.TotalMinutes, $state, $problems, $skipped, $rows
       $line
       Add-Content -Path $summary -Value $line
-      $results += [ordered]@{ nom = $name; execution = $run; graine = $seed; profil = $prof; sortie = "$code"; minutes = [Math]::Round($sw.Elapsed.TotalMinutes, 2); etat = $state; problemes = $problems; non_verifies = $skipped; mesures = $rows; commande = $cmdLine }
+      $results += [ordered]@{ nom = $name; execution = $run; graine = $seed; profil = $prof; sortie = "$code"; minutes = [Math]::Round($sw.Elapsed.TotalMinutes, 2); etat = $state; problemes = $problems; non_verifies = $skipped; mesures = $rows; commit = $commit; modifie = $dirty; commande = $cmdLine }
     }
   }
 }
+
+# v4.16 (perf, corrections de relecture) : avec -Append, les resultats des lancements precedents restent dans manifest.json
+$manifestPath = Join-Path $tagDir 'manifest.json'
+$allResults = @()
+if ($Append -and (Test-Path $manifestPath)) {
+  try {
+    $previous = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($previous.resultats) { $allResults += @($previous.resultats) }
+  } catch {
+    'manifest.json precedent illisible : ses resultats ne sont pas repris (les dossiers run* et leur commit.txt restent)'
+  }
+}
+$allResults += $results
+$commitsSeen = @($allResults | ForEach-Object { $_.commit } | Where-Object { $_ } | Sort-Object -Unique)
 
 $manifest = [ordered]@{
   etiquette = $Tag
@@ -151,9 +187,11 @@ $manifest = [ordered]@{
   profils = $profileList
   scenes = $Scenes
   secondes = $Seconds
-  resultats = $results
+  premiere_execution = $firstRun
+  commits = $commitsSeen
+  resultats = $allResults
 }
-[IO.File]::WriteAllText((Join-Path $tagDir 'manifest.json'), ($manifest | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
+[IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
 
 if (-not $NoSummary) {
   $py = Get-Command python -ErrorAction SilentlyContinue

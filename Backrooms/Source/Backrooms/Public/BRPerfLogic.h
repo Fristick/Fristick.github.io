@@ -13,6 +13,8 @@
 //     v4.16 (perf, relecture) : la ligne "%d Other Children" (enfants sous le seuil) est ecrite par le moteur AU RETRAIT DE
 //     SON PARENT (LeftPad(Level * 3), pas Level + 1 comme dans le tableau) : elle est rattachee a ce parent (profondeur + 1) ;
 //     lue telle quelle, celle de la racine s'ajoutait a la racine (temps de l'image compte deux fois) ;
+//     v4.16 (perf, corrections de relecture) : sur la file graphique, son temps est occupation + attente des enfants caches
+//     (les autres lignes : occupation seule) : l'attente en est retiree ;
 //   - postes du processeur graphique (Lumen, MegaLights, ombres, brouillard, scene ray tracee, translucidite et eau, post,
 //     passe de base, eclairage direct, effets d'ecran, scene GPU, interface) d'apres le nom des evenements, et attribution
 //     sans double compte : chaque evenement apporte son temps PROPRE (inclusif - enfants affiches) a son poste effectif.
@@ -321,9 +323,10 @@ namespace BRPerf
 	{
 		int Depth = 0;
 		double Percent = 0.0;
-		/** Temps inclusif occupe (ms) */
+		/** Temps inclusif occupe (ms). v4.16 (perf, corrections de relecture) : occupation seule, y compris pour "%d Other
+		 *  Children" (le moteur y ajoute l'attente : retiree ici) */
 		double Ms = 0.0;
-		/** Attente (file graphique : racine et feuilles seulement), 0 sinon */
+		/** Attente (file graphique : racine, feuilles et "Other Children" seulement), 0 sinon */
 		double WaitMs = 0.0;
 		int NameStart = 0;
 		int NameLen = 0;
@@ -434,6 +437,14 @@ namespace BRPerf
 		if (Out.bOtherChildren)
 		{
 			++Out.Depth;
+			// v4.16 (perf, corrections de relecture) : sur la file graphique, le moteur ecrit pour cette ligne occupation +
+			// attente des enfants caches (GPUProfiler.cpp : OtherChildrenInclusiveMs = Busy + Wait), alors que toutes les
+			// autres lignes portent l'occupation seule. Ramene a l'occupation (attente gardee dans WaitMs) : sinon le parent
+			// recevait l'attente dans ChildMs, son temps propre tombait a 0 et la somme des postes depassait la racine
+			if (Wait > 0.0)
+			{
+				Out.Ms = Ms > Wait ? Ms - Wait : 0.0;
+			}
 		}
 		return true;
 	}

@@ -23,9 +23,13 @@
 //     RenderDeferredLighting / DiffuseIndirectAndAO / Lights gardent leur poste (avant : tout en "eclairage") ;
 //     "LightScattering" du brouillard n'est pas de l'eclairage ("Lights" en nom entier) ; eau des Poolrooms (SLW::) ;
 //   - plusieurs racines (files de calcul asynchrone) et saut de profondeur rattache au dernier evenement ouvert.
+// v4.16 (perf, corrections de relecture) :
+//   - "k Other Children ... + w Wait" de la file graphique (occupation + attente dans le temps ecrit) : relu en occupation
+//     seule ; racine sans temps propre : somme des postes = racine (avant : racine + attente cachee).
 // Code de sortie 0 si tout passe, 1 sinon.
 #include "BRPerfLogic.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -247,7 +251,11 @@ namespace
 			const std::string S = EngineLine(Case.Level, Case.Percent, Case.Ms, Case.Wait, Case.Name);
 			BRPerf::FGpuLine L;
 			const bool bParsed = ParseAs(S, L);
-			const bool bGood = bParsed && L.Depth == Case.Depth && L.bOtherChildren == Case.bOther && Near(L.Ms, std::round(Case.Ms * 100.0) / 100.0, 1e-9)
+			// v4.16 (perf, corrections de relecture) : "Other Children" ecrit occupation + attente : relu en occupation seule
+			const double PrintedMs = std::round(Case.Ms * 100.0) / 100.0;
+			const double PrintedWait = std::round(Case.Wait * 100.0) / 100.0;
+			const double WantMs = (Case.bOther && PrintedWait > 0.0) ? std::max(0.0, PrintedMs - PrintedWait) : PrintedMs;
+			const bool bGood = bParsed && L.Depth == Case.Depth && L.bOtherChildren == Case.bOther && Near(L.Ms, WantMs, 1e-9)
 				&& Near(L.WaitMs, std::round(Case.Wait * 100.0) / 100.0, 1e-9) && Near(L.Percent, std::round(Case.Percent * 10.0) / 10.0, 1e-9)
 				&& NameOf(S, L) == Case.Name;
 			Ok += bGood ? 1 : 0;
@@ -261,7 +269,7 @@ namespace
 				std::printf("    ligne mal lue : [%s]\n", S.c_str());
 			}
 		}
-		std::snprintf(Buf, sizeof(Buf), "%d / %d lignes lues (profondeur, \"Other Children\" rattache au parent, temps, attente, nom), %d / %d en larges", Ok,
+		std::snprintf(Buf, sizeof(Buf), "%d / %d lignes lues (profondeur, \"Other Children\" rattache au parent et sans attente, temps, attente, nom), %d / %d en larges", Ok,
 			static_cast<int>(sizeof(Cases) / sizeof(Cases[0])), OkWide, static_cast<int>(sizeof(Cases) / sizeof(Cases[0])));
 		Line(Buf, Ok == static_cast<int>(sizeof(Cases) / sizeof(Cases[0])) && OkWide == Ok);
 		// Fin de ligne Windows et espaces de fin ignores
@@ -490,6 +498,56 @@ namespace
 			AsyncRoot, Ms[CatLumen], Ms[CatScreen], Ms[CatRtScene], Ms[CatOther]);
 		Line(Buf, Near(AsyncRoot, 3.0) && Near(Ms[CatLumen], 1.5) && Near(Ms[CatScreen], 0.3) && Near(Ms[CatRtScene], 0.6) && Near(Ms[CatOther], 0.6)
 			&& Near(Ms[CatLighting], 0.0));
+
+		// v4.16 (perf, corrections de relecture) : attente des enfants caches sur la file graphique. Le moteur ecrit la racine
+		// en occupation seule (10 ms, " + 0.40 Wait" a part) et "k Other Children" en occupation + attente (1,00 + 0,40 =
+		// 1,40 ms, " + 0.40 Wait"). Temps propre de la racine : 10 - 9 - 1 = 0. Avant : 10 - 9 - 1,4 borne a 0, et les postes
+		// faisaient 10,4 ms pour une racine de 10
+		struct FWaitRow
+		{
+			int Level;
+			double Ms;
+			double WaitMs;
+			const char* Name;
+		};
+		const FWaitRow WaitRows[] = {
+			{ 0, 10.00, 0.40, "<root>" },
+			{ 1, 9.00, 0.00, "Scene" },
+			{ 2, 9.00, 0.00, "BasePass" },
+			{ 0, 1.40, 0.40, "4 Other Children" },
+		};
+		std::vector<FGpuNode> WaitNodes;
+		double OtherWait = -1.0;
+		double OtherMs = -1.0;
+		for (const FWaitRow& Row : WaitRows)
+		{
+			const std::string S = EngineLine(Row.Level, (Row.Ms + Row.WaitMs) / 10.4 * 100.0, Row.Ms, Row.WaitMs, Row.Name);
+			FGpuLine L;
+			if (!ParseGpuLine(S.c_str(), static_cast<int>(S.size()), L))
+			{
+				continue;
+			}
+			if (L.bOtherChildren)
+			{
+				OtherWait = L.WaitMs;
+				OtherMs = L.Ms;
+			}
+			FGpuNode N;
+			N.Depth = L.Depth;
+			N.Ms = L.Ms;
+			N.Cat = CategoryOf(S.c_str() + L.NameStart, L.NameLen);
+			WaitNodes.push_back(N);
+		}
+		const double WaitRoot = Attribute(WaitNodes.data(), static_cast<int>(WaitNodes.size()), Ms);
+		double WaitSum = 0.0;
+		for (int C = 0; C < NumCategories; ++C)
+		{
+			WaitSum += Ms[C];
+		}
+		std::snprintf(Buf, sizeof(Buf), "\"4 Other Children\" ecrit 1,40 ms + 0,40 Wait : relu %.2f ms (attente %.2f) ; racine %.2f, somme des postes %.2f (10), base %.2f, autre %.2f (1,0)",
+			OtherMs, OtherWait, WaitRoot, WaitSum, Ms[CatBase], Ms[CatOther]);
+		Line(Buf, static_cast<int>(WaitNodes.size()) == 4 && Near(OtherMs, 1.0) && Near(OtherWait, 0.4) && Near(WaitRoot, 10.0) && Near(WaitSum, WaitRoot)
+			&& Near(Ms[CatBase], 9.0) && Near(Ms[CatOther], 1.0));
 	}
 
 	void TestPathsAndMedian()
