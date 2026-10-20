@@ -3,6 +3,8 @@
 Usage (Blender 5.0.1 ; module Python bpy, ou Blender en ligne de commande) :
     python Tools/Blender/build_level0_kit.py [--seed 9] [--out RawAssets/Level0Kit] [--render] [--samples 48] [--res 1280x720]
     blender -b -P Tools/Blender/build_level0_kit.py -- --seed 9 --render
+    blender -b -P Tools/Blender/build_level0_kit.py -- --out <dossier> --skip-textures [--no-bevels]   (v4.17, Blender 5.2 :
+    sans Pillow dans le Python de Blender, les textures existantes du dossier de sortie sont reprises)
 
 Ce qu'il fait, dans l'ordre (tout est reproductible : meme graine, memes fichiers) :
  1. Disposition : la grille du Level 0 pour la graine demandee (graine -BRSeed du jeu ; 9 = graine de demonstration),
@@ -21,6 +23,14 @@ Ce qu'il fait, dans l'ordre (tout est reproductible : meme graine, memes fichier
     rendus Cycles (avec --render), rapport build_report.json.
 Repere : Blender en metres, Z vers le haut. Unreal (cm, repere main gauche) : x_ue = 100 x, y_ue = -100 y, z_ue = 100 z,
 lacet_ue = -lacet_blender. Avec cette conversion, la cellule (X, Y) du jeu a son centre en ((X + 0,5) 350, (Y + 0,5) 350) cm.
+
+v4.17 : petits chanfreins cibles (BEVEL_SPEC) sur les pieces vues a hauteur du joueur : plinthes (murs, jambages, poteaux,
+pilier), chambranles, cadre, seuil, battant et poignee de la porte de service, cadre des luminaires. Les moulures sont des
+sections balayees le long d'un chemin (Profile, sweep : onglets aux angles), jamais sur une arete de contact (mur, sol,
+plafond, joint entre modules : verifie a la construction). Normales ponderees : faces planes a leur normale, chanfrein qui
+passe d'une normale a l'autre (normales personnalisees exportees dans le FBX). UV0 des chanfreins depliees depuis la face
+principale (meme densite, continuite de ce cote). Dimensions, pivots, noms, materiaux et collisions UCX inchanges.
+--no-bevels : geometrie de la v4.16 (boites), pour comparer.
 """
 import argparse
 import importlib.util
@@ -41,7 +51,11 @@ warnings.filterwarnings("ignore", message=".*use_nodes.*", category=DeprecationW
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
-import level0_kit_textures as KT  # noqa: E402
+try:
+    import level0_kit_textures as KT  # noqa: E402
+except ImportError as _kt_error:  # v4.17 : Pillow absent du Python de Blender ; --skip-textures reste possible
+    KT = None
+    KT_ERROR = str(_kt_error)
 
 # ----------------------------------------------------------------------------------------------- dimensions (jeu)
 S = 3.5           # cellule
@@ -61,6 +75,21 @@ SVC_HOLE_W = 1.30  # ouverture de la porte de service (ABRExit::ServiceHoleWidth
 SVC_HOLE_H = 2.25
 TEX_WORLD = {"Wallpaper": 1.2, "Carpet": 2.2, "CeilingTile": 1.2, "Concrete": 3.0, "PitConcrete": 3.0, "Baseboard": 1.0, "FixtureMetal": 1.0,
              "DoorSteel": 1.0, "Hardware": 0.5}
+# v4.17 : chanfreins : (largeur en m, retrait sur chacune des deux faces de l'arete ; segments : 1 = chanfrein a 45 degres,
+# 2 = arrondi a deux facettes). Seulement des aretes libres, vues a hauteur du joueur ; jamais une arete qui touche le mur,
+# le sol, le plafond ou un module voisin (Profile le refuse)
+BEVEL_SPEC = {
+    "Baseboard": (0.005, 1),        # plinthes (murs, jambages, poteaux, pilier) : arete superieure avant
+    "DoorCasing": (0.006, 1),       # chambranle des passages : aretes avant, cote passage et cote mur
+    "LightFrameOuter": (0.004, 1),  # cadre du luminaire : arete basse exterieure
+    "LightFrameInner": (0.003, 1),  # cadre du luminaire : arete basse cote diffuseur (et feuillure de 6 mm, avant ouverte)
+    "ServiceFrame": (0.004, 2),     # cadre metallique de la porte de service : aretes cote piece
+    "Threshold": (0.003, 1),        # seuil : deux aretes superieures
+    "Leaf": (0.004, 2),             # battant : pourtour des deux faces
+    "HandleRose": (0.003, 1),       # rosace de la poignee : pourtour de la face avant
+    "HandleLever": (0.004, 2),      # bequille : quatre aretes longues
+}
+BEVELS = True  # --no-bevels : modules de la v4.16
 
 
 def parse_args():
@@ -73,6 +102,7 @@ def parse_args():
     ap.add_argument("--res", default="1280x720")
     ap.add_argument("--skip-textures", action="store_true", help="reutilise les textures deja generees")
     ap.add_argument("--only", default="", help="rendus : seulement ces vues (ex. L0_VueEnsemble), les autres temps sont gardes")
+    ap.add_argument("--no-bevels", action="store_true", help="v4.17 : modules sans chanfreins (geometrie de la v4.16), pour comparer")
     return ap.parse_args(argv)
 
 
@@ -101,16 +131,38 @@ def vertex(x, y, z=0.0):
 
 
 # ----------------------------------------------------------------------------------------------- maillages
+def planar_uv(p, n, world):
+    """UV0 a l'echelle du monde : projection sur le plan de l'axe dominant de la normale n (celle des boites)"""
+    ax = max(range(3), key=lambda i: abs(n[i]))
+    if ax == 0:
+        u, v = (p.y if n.x > 0 else -p.y), p.z
+    elif ax == 1:
+        u, v = (-p.x if n.y > 0 else p.x), p.z
+    else:
+        u, v = p.x, (p.y if n.z > 0 else -p.y)
+    return (u / world, v / world)
+
+
 class MeshBuilder:
-    """Boites assemblees en un maillage, UV0 a l'echelle du monde par face (projection selon la normale)"""
+    """Boites assemblees en un maillage, UV0 a l'echelle du monde par face (projection selon la normale).
+    v4.17 : faces lisses a normales personnalisees (chanfreins) : normale par coin dans le calque "cn", groupe de lissage
+    par face dans "sg" (une arete entre deux groupes reste vive, comme l'onglet de deux chanfreins)"""
 
     def __init__(self, name):
         self.name = name
         self.bm = bmesh.new()
         self.uv = self.bm.loops.layers.uv.new("UVMap")
+        # Calques crees avant toute face (en ajouter un ensuite invaliderait les boucles), retires dans finish()
+        self.cn = self.bm.loops.layers.float_vector.new("cn")
+        self.sg = self.bm.faces.layers.int.new("sg")
+        self.groups = 0
         self.col = None
         self.mats = []
         self.inward = 0  # faces de boite tournees vers l'interieur de leur boite (doit rester a 0)
+
+    def new_group(self):
+        self.groups += 1
+        return self.groups
 
     def mat_index(self, mat):
         if mat not in self.mats:
@@ -122,26 +174,37 @@ class MeshBuilder:
             self.col = self.bm.loops.layers.color.new("Col")
         return self.col
 
-    def quad(self, pts, mat, world=1.0, shade=None):
+    def quad(self, pts, mat, world=1.0, shade=None, uvs=None, normals=None, group=0):
+        """Face (3 ou 4 points). uvs : UV0 imposees (chanfrein deplie) ; normals : normales des coins (face lisse, groupe)"""
         col = self.colors() if shade is not None else None  # avant les faces : ajouter un calque invalide les boucles
         verts = [self.bm.verts.new(p) for p in pts]
         f = self.bm.faces.new(verts)
         f.material_index = self.mat_index(mat)
         n = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[0]))
         n.normalize()
-        ax = max(range(3), key=lambda i: abs(n[i]))
-        for loop in f.loops:
+        for i, loop in enumerate(f.loops):
             p = loop.vert.co
-            if ax == 0:
-                u, v = (p.y if n.x > 0 else -p.y), p.z
-            elif ax == 1:
-                u, v = (-p.x if n.y > 0 else p.x), p.z
-            else:
-                u, v = p.x, (p.y if n.z > 0 else -p.y)
-            loop[self.uv].uv = (u / world, v / world)
+            loop[self.uv].uv = uvs[i] if uvs is not None else planar_uv(p, n, world)
             if shade is not None:
                 loop[col] = shade(p)
+            if normals is not None:
+                loop[self.cn] = normals[i]
+        if normals is not None:
+            f.smooth = True
+            f[self.sg] = group
         return f
+
+    def poly(self, pts, mat, world=1.0):
+        """Polygone plan convexe en quads et triangles (aucun n-gone : l'export FBX calcule les tangentes de chaque face)"""
+        if len(pts) <= 4:
+            return [self.quad(pts, mat, world)]
+        out = []
+        i = 1
+        while i < len(pts) - 1:
+            piece = [pts[0]] + list(pts[i:i + 3])
+            out.append(self.quad(piece, mat, world))
+            i += len(piece) - 2
+        return out
 
     def _check(self, f, center):
         if f.normal.dot(f.calc_center_median() - Vector(center)) <= 0:
@@ -178,10 +241,30 @@ class MeshBuilder:
 
     def finish(self, materials, coll):
         BUILD_ISSUES["inward"][self.name] = self.inward
-        bmesh.ops.remove_doubles(self.bm, verts=self.bm.verts, dist=1e-5)
+        bm = self.bm
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+        bm.normal_update()
+        # v4.17 : normales personnalisees, dans l'ordre des coins du maillage (faces puis boucles, celui de to_mesh) : faces
+        # planes a leur normale, faces lisses (chanfreins) a celles de leurs coins. Une arete n'est lisse qu'entre deux faces
+        # lisses du meme groupe : les fans de normales s'arretent aux faces planes et aux onglets
+        custom = None
+        if any(f.smooth for f in bm.faces):
+            custom = []
+            for f in bm.faces:
+                for loop in f.loops:
+                    n = Vector(loop[self.cn]) if f.smooth else Vector((0.0, 0.0, 0.0))
+                    custom.append(n.normalized() if n.length > 1e-6 else f.normal.copy())
+            for e in bm.edges:
+                lf = e.link_faces
+                if len(lf) != 2 or not (lf[0].smooth and lf[1].smooth) or lf[0][self.sg] != lf[1][self.sg]:
+                    e.smooth = False
+        bm.loops.layers.float_vector.remove(self.cn)
+        bm.faces.layers.int.remove(self.sg)
         me = bpy.data.meshes.new(self.name)
-        self.bm.to_mesh(me)
-        self.bm.free()
+        bm.to_mesh(me)
+        bm.free()
+        if custom is not None:
+            me.normals_split_custom_set(custom)
         for m in self.mats:
             me.materials.append(materials[m])
         ob = bpy.data.objects.new(self.name, me)
@@ -191,6 +274,204 @@ class MeshBuilder:
 
 BUILD_ISSUES = {"inward": {}}
 RENDER = {}  # objets que certains rendus modifient le temps d'une image (battant entrouvert)
+
+
+# ----------------------------------------------------------------------------------------------- v4.17 : moulures
+class Profile:
+    """Section 2D (a, b) d'une moulure : polygone convexe ferme (coins a 90 ou 180 degres), arete i = coin i -> coin i + 1.
+    hidden : aretes non emises (contre le mur, le sol, le plafond, ou couvertes par une autre face) ; contact : aretes qui
+    touchent un autre element (mur, sol, plafond, module voisin). bevels : {coin : (largeur, segments, ancre)}, ancre
+    "prev" ou "next" : l'arete (la face) depuis laquelle les UV du chanfrein sont depliees. Un chanfrein sur un coin dont une
+    arete est de contact ouvrirait le joint : refuse (AssertionError)"""
+
+    def __init__(self, corners, hidden=(), contact=(), bevels=None):
+        C = [Vector((float(a), float(b))) for a, b in corners]
+        n = len(C)
+        area = sum(C[i].x * C[(i + 1) % n].y - C[(i + 1) % n].x * C[i].y for i in range(n)) / 2
+        ccw = area > 0
+
+        def out_normal(d):
+            d = d.normalized()
+            return Vector((d.y, -d.x)) if ccw else Vector((-d.y, d.x))
+
+        en = [out_normal(C[(i + 1) % n] - C[i]) for i in range(n)]
+        self.centroid = sum(C, Vector((0.0, 0.0))) / n
+        bevels = bevels or {}
+        pts, nrm, arc_of, unfold = [], [], [], []
+        for i in range(n):
+            if i not in bevels:
+                pts.append(C[i])
+                nrm.append(None)
+                arc_of.append(None)
+                unfold.append(None)
+                continue
+            c, seg, anchor = bevels[i]
+            pe, ne = (i - 1) % n, i
+            assert pe not in contact and ne not in contact, "chanfrein sur une arete de contact (coin %d)" % i
+            din = (C[pe] - C[i])
+            dout = (C[(i + 1) % n] - C[i])
+            assert din.length > c + 1e-6 and dout.length > c + 1e-6, "chanfrein plus large que l'arete (coin %d)" % i
+            din.normalize()
+            dout.normalize()
+            assert abs(din.dot(dout)) < 1e-6, "chanfrein : coin a 90 degres seulement (coin %d)" % i
+            center = C[i] + (din + dout) * c
+            arc = []
+            for k in range(seg + 1):
+                th = (math.pi / 2) * k / seg
+                arc.append((center - dout * (c * math.cos(th)) - din * (c * math.sin(th)),
+                            (en[pe] * math.cos(th) + en[ne] * math.sin(th)).normalized()))
+            # Depli des UV : le chanfrein prolonge la face d'ancrage, a sa vraie longueur (meme densite de texels)
+            s = [0.0]
+            for k in range(1, len(arc)):
+                s.append(s[-1] + (arc[k][0] - arc[k - 1][0]).length)
+            if anchor == "prev":
+                d_a, base, ae = -din, arc[0][0], pe
+                unf = [base + d_a * s[k] for k in range(len(arc))]
+            else:
+                d_a, base, ae = dout, arc[-1][0], ne
+                unf = [base - d_a * (s[-1] - s[k]) for k in range(len(arc))]
+            for k, (p, nn) in enumerate(arc):
+                pts.append(p)
+                nrm.append(nn)
+                arc_of.append(i)
+                unfold.append((unf[k], en[ae]))
+        self.pts = pts
+        # Aretes du polygone affine : (i0, i1, emise, normale 2D sortante, coin du chanfrein ou None)
+        self.edges = []
+        m = len(pts)
+        src = []  # arete du polygone d'origine portee par chaque point (pour les aretes droites)
+        for i in range(n):
+            cnt = (bevels[i][1] + 1) if i in bevels else 1
+            src += [i] * cnt
+        for j in range(m):
+            j1 = (j + 1) % m
+            assert (pts[j1] - pts[j]).length > 1e-6, "section : arete de longueur nulle (chanfreins trop larges ?)"
+            if arc_of[j] is not None and arc_of[j] == arc_of[j1]:
+                d = pts[j1] - pts[j]
+                self.edges.append((j, j1, True, out_normal(d), arc_of[j]))
+            else:
+                e = src[j]  # arete d'origine : du dernier point du coin j au premier point du coin suivant
+                self.edges.append((j, j1, e not in hidden, en[e], None))
+        self.nrm = nrm
+        self.unfold = unfold
+
+
+def sweep(mb, prof, path, sides, up, mat, closed=False, caps=True, world=None):
+    """Balaye la section prof le long du chemin (points 3D) avec des onglets aux angles. sides[k] : direction a du segment k
+    (unitaire, perpendiculaire au segment, dans le plan du chemin) ; up : direction b, constante. Faces orientees vers
+    l'exterieur de la section, controlees (mb.inward) ; chanfreins lisses, un groupe par segment (onglets vifs)"""
+    world = TEX_WORLD.get(mat, 1.0) if world is None else world
+    P = [Vector(p) for p in path]
+    S = [Vector(s).normalized() for s in sides]
+    up = Vector(up).normalized()
+    nv = len(P)
+    nseg = nv if closed else nv - 1
+    assert len(S) == nseg
+
+    def miter(k):
+        if closed:
+            s0, s1 = S[(k - 1) % nseg], S[k % nseg]
+        else:
+            s0, s1 = S[max(k - 1, 0)], S[min(k, nseg - 1)]
+        return (s0 + s1) / (1.0 + s0.dot(s1))
+
+    Mi = [miter(k) for k in range(nv)]
+
+    def at(k, q):
+        return P[k % nv] + Mi[k % nv] * q.x + up * q.y
+
+    def to3(s_k, v2):
+        return (s_k * v2.x + up * v2.y).normalized()
+
+    def emit(pts, expect, interior, uvs=None, normals=None, group=0):
+        n = (pts[1] - pts[0]).cross(pts[2] - pts[0])
+        if n.dot(expect) < 0:
+            pts = pts[::-1]
+            uvs = uvs[::-1] if uvs is not None else None
+            normals = normals[::-1] if normals is not None else None
+            n = -n
+        center = sum(pts, Vector((0.0, 0.0, 0.0))) / len(pts)
+        if n.dot(center - interior) <= 0:
+            mb.inward += 1
+        mb.quad(pts, mat, world, uvs=uvs, normals=normals, group=group)
+
+    groups = {}
+    for k in range(nseg):
+        k0, k1 = k, k + 1
+        sk = S[k]
+        interior = (at(k0, prof.centroid) + at(k1, prof.centroid)) * 0.5
+        for (j0, j1, on, n2, corner) in prof.edges:
+            if not on:
+                continue
+            q0, q1 = prof.pts[j0], prof.pts[j1]
+            pts = [at(k0, q0), at(k1, q0), at(k1, q1), at(k0, q1)]
+            expect = to3(sk, n2)
+            if corner is None:
+                emit(pts, expect, interior)
+                continue
+            g = groups.setdefault((k, corner), mb.new_group())
+            n0, n1 = to3(sk, prof.nrm[j0]), to3(sk, prof.nrm[j1])
+            (u0, an), (u1, _an) = prof.unfold[j0], prof.unfold[j1]
+            a3 = to3(sk, an)
+            unf = [at(k0, u0), at(k1, u0), at(k1, u1), at(k0, u1)]
+            emit(pts, expect, interior, uvs=[planar_uv(p, a3, world) for p in unf], normals=[n0, n0, n1, n1], group=g)
+    if caps and not closed:
+        # Bouts : la section entiere (aretes cachees comprises), sans ses points alignes (coins a 180 degres)
+        q = prof.pts
+        ring2 = [q[j] for j in range(len(q)) if abs((q[j] - q[j - 1]).cross(q[(j + 1) % len(q)] - q[j])) > 1e-12]
+        for k, kin in ((0, 1), (nv - 1, nv - 2)):
+            expect = (P[k] - P[kin]).normalized()
+            ring = [at(k, p2) for p2 in ring2]
+            interior = at(k, prof.centroid) - expect * 0.001
+            if (ring[1] - ring[0]).cross(ring[2] - ring[0]).dot(expect) < 0:
+                ring = ring[::-1]
+            for f in mb.poly(ring, mat, world):
+                f.normal_update()
+                if f.normal.dot(f.calc_center_median() - interior) <= 0:
+                    mb.inward += 1
+
+
+def oriented_quad(mb, pts, mat, expect, world=None):
+    """Face plane (UV projetees comme les boites), ordonnee pour que sa normale suive expect"""
+    pts = [Vector(p) for p in pts]
+    if (pts[1] - pts[0]).cross(pts[2] - pts[0]).dot(Vector(expect)) < 0:
+        pts = pts[::-1]
+    return mb.quad(pts, mat, TEX_WORLD.get(mat, 1.0) if world is None else world)
+
+
+def plinth_profile():
+    """Plinthe : 1,5 x 12 cm, dos contre le mur et dessous sur le sol (non emis, sans chanfrein), arete superieure avant
+    chanfreinee, UV depliees depuis la face avant"""
+    c, seg = BEVEL_SPEC["Baseboard"]
+    return Profile([(0, 0), (BASE_D, 0), (BASE_D, BASE_H), (0, BASE_H)], hidden=(0, 3), contact=(0, 3), bevels={2: (c, seg, "prev")})
+
+
+def post_runs(h, exposed):
+    """Plinthes d'un poteau (carre de demi-cote h) : chaines de faces exposees voisines, parcourues dans le sens direct,
+    onglet a chaque angle saillant. Faces : x (-X), y (-Y), Y (+Y), X (+X). Renvoie [(chemin, cotes, ferme)]"""
+    order = ["y", "X", "Y", "x"]
+    seg = {"y": ((-h, -h), (h, -h), (0, -1)), "X": ((h, -h), (h, h), (1, 0)), "Y": ((h, h), (-h, h), (0, 1)), "x": ((-h, h), (-h, -h), (-1, 0))}
+    on = [f in exposed for f in order]
+    if all(on):
+        return [([seg[f][0] for f in order], [seg[f][2] for f in order], True)]
+    runs = []
+    for i in range(4):
+        if on[i] and not on[i - 1]:
+            chain, j = [], i
+            while on[j % 4]:
+                chain.append(order[j % 4])
+                j += 1
+            runs.append(([seg[chain[0]][0]] + [seg[f][1] for f in chain], [seg[f][2] for f in chain], False))
+    return runs
+
+
+def plinth_runs(mb, h, exposed):
+    for path, sides, closed in post_runs(h, exposed):
+        sweep(mb, plinth_profile(), [(x, y, 0.0) for x, y in path], [(sx, sy, 0.0) for sx, sy in sides], (0, 0, 1), "Baseboard", closed=closed)
+
+
+def triangles(ob):
+    return sum(len(p.vertices) - 2 for p in ob.data.polygons)
 
 
 def lightmap_uv(ob):
@@ -427,16 +708,30 @@ def build_modules(M, coll, ccoll):
     # Chambranle (deux faces) : jambages et traverse en legere saillie, sans collision
     mb = MeshBuilder("SM_L0_DoorCasing")
     cw, cd = 0.09, 0.025
-    for sgn in (-1, 1):
-        y0, y1 = (T / 2, T / 2 + cd) if sgn > 0 else (-T / 2 - cd, -T / 2)
-        mb.box((-DOOR_W / 2 - cw, y0, 0), (-DOOR_W / 2, y1, DOOR_H), "Baseboard")
-        mb.box((DOOR_W / 2, y0, 0), (DOOR_W / 2 + cw, y1, DOOR_H), "Baseboard")
-        mb.box((-DOOR_W / 2 - cw, y0, DOOR_H), (DOOR_W / 2 + cw, y1, DOOR_H + cw), "Baseboard")
+    if BEVELS:
+        # v4.17 : section balayee le long des jambages et de la traverse (onglets a 45 degres aux angles du passage) ; dos
+        # contre le mur et pieds sur le sol sans chanfrein, face interieure dans le plan de l'embrasure
+        c, seg = BEVEL_SPEC["DoorCasing"]
+        prof = Profile([(0, 0), (cw, 0), (cw, cd), (0, cd)], contact=(0,), bevels={2: (c, seg, "next"), 3: (c, seg, "prev")})
+        for sgn in (-1, 1):
+            yw = sgn * T / 2
+            sweep(mb, prof, [(-DOOR_W / 2, yw, 0), (-DOOR_W / 2, yw, DOOR_H), (DOOR_W / 2, yw, DOOR_H), (DOOR_W / 2, yw, 0)],
+                  [(-1, 0, 0), (0, 0, 1), (1, 0, 0)], (0, sgn, 0), "Baseboard")
+    else:
+        for sgn in (-1, 1):
+            y0, y1 = (T / 2, T / 2 + cd) if sgn > 0 else (-T / 2 - cd, -T / 2)
+            mb.box((-DOOR_W / 2 - cw, y0, 0), (-DOOR_W / 2, y1, DOOR_H), "Baseboard")
+            mb.box((DOOR_W / 2, y0, 0), (DOOR_W / 2 + cw, y1, DOOR_H), "Baseboard")
+            mb.box((-DOOR_W / 2 - cw, y0, DOOR_H), (DOOR_W / 2 + cw, y1, DOOR_H + cw), "Baseboard")
     done(mb)
     # Plinthes (une face de mur ; une longueur de jambage de porte)
     for name, ln in (("SM_L0_Baseboard_290", SPAN), ("SM_L0_Baseboard_070", side)):
         mb = MeshBuilder(name)
-        mb.box((-ln / 2, T / 2, 0), (ln / 2, T / 2 + BASE_D, BASE_H), "Baseboard", "xXYZ")
+        if BEVELS:
+            # v4.17 : bouts fermes par la section chanfreinee, la meme que celle des poteaux (joint sans marche)
+            sweep(mb, plinth_profile(), [(-ln / 2, T / 2, 0), (ln / 2, T / 2, 0)], [(0, 1, 0)], (0, 0, 1), "Baseboard")
+        else:
+            mb.box((-ln / 2, T / 2, 0), (ln / 2, T / 2 + BASE_D, BASE_H), "Baseboard", "xXYZ")
         done(mb)
     # Poteaux aux croisements : angle, T, croix, extremite ; plinthes sur les faces visibles seulement. Repere : les murs
     # du poteau arrivent par +X et +Y (angle), +X, +Y et -X (T), les quatre (croix), +X (extremite), +X et -X (droit)
@@ -444,19 +739,27 @@ def build_modules(M, coll, ccoll):
     for name, exposed in posts.items():
         mb = MeshBuilder(name)
         mb.box((-T / 2, -T / 2, 0), (T / 2, T / 2, H), "Wallpaper", "xXyYZ")
-        for f in exposed:
-            if f == "x":
-                mb.box((-T / 2 - BASE_D, -T / 2 - (BASE_D if "y" in exposed else 0), 0), (-T / 2, T / 2 + (BASE_D if "Y" in exposed else 0), BASE_H), "Baseboard", "xyYZ")
-            elif f == "y":
-                mb.box((-T / 2, -T / 2 - BASE_D, 0), (T / 2, -T / 2, BASE_H), "Baseboard", "yZ")
-            elif f == "Y":
-                mb.box((-T / 2, T / 2, 0), (T / 2, T / 2 + BASE_D, BASE_H), "Baseboard", "YZ")
+        if BEVELS:
+            # v4.17 : une plinthe continue par chaine de faces exposees, onglets aux angles saillants, bouts fermes par la
+            # section des plinthes de mur (contact sans marche)
+            plinth_runs(mb, T / 2, exposed)
+        else:
+            for f in exposed:
+                if f == "x":
+                    mb.box((-T / 2 - BASE_D, -T / 2 - (BASE_D if "y" in exposed else 0), 0), (-T / 2, T / 2 + (BASE_D if "Y" in exposed else 0), BASE_H), "Baseboard", "xyYZ")
+                elif f == "y":
+                    mb.box((-T / 2, -T / 2 - BASE_D, 0), (T / 2, -T / 2, BASE_H), "Baseboard", "yZ")
+                elif f == "Y":
+                    mb.box((-T / 2, T / 2, 0), (T / 2, T / 2 + BASE_D, BASE_H), "Baseboard", "YZ")
         done(mb, [((-T / 2, -T / 2, 0), (T / 2, T / 2, H))])
     # Pilier carre isole (45 cm) avec sa plinthe
     mb = MeshBuilder("SM_L0_Pillar")
     p = 0.225
     mb.box((-p, -p, 0), (p, p, H), "Wallpaper", "xXyYZ")
-    mb.box((-p - BASE_D, -p - BASE_D, 0), (p + BASE_D, p + BASE_D, BASE_H), "Baseboard", "xXyYZ")
+    if BEVELS:
+        plinth_runs(mb, p, "xXyY")  # anneau ferme, quatre onglets
+    else:
+        mb.box((-p - BASE_D, -p - BASE_D, 0), (p + BASE_D, p + BASE_D, BASE_H), "Baseboard", "xXyYZ")
     done(mb, [((-p, -p, 0), (p, p, H))])
     # Sol (moquette sur dalle) et plafond suspendu, une cellule
     mb = MeshBuilder("SM_L0_Floor_350")
@@ -472,11 +775,22 @@ def build_modules(M, coll, ccoll):
         mb = MeshBuilder(name)
         lx, ly = 0.6, 0.3
         fr = 0.035
-        mb.box((-lx, -ly, H - 0.012), (lx, ly, H), "FixtureMetal", "xXyY")
-        mb.box((-lx, -ly, H - 0.012), (-lx + fr, ly, H), "FixtureMetal", "z")
-        mb.box((lx - fr, -ly, H - 0.012), (lx, ly, H), "FixtureMetal", "z")
-        mb.box((-lx + fr, -ly, H - 0.012), (lx - fr, -ly + fr, H), "FixtureMetal", "z")
-        mb.box((-lx + fr, ly - fr, H - 0.012), (lx - fr, ly, H), "FixtureMetal", "z")
+        if BEVELS:
+            # v4.17 : cadre balaye (onglets aux quatre angles) : flanc, arete basse exterieure chanfreinee, face basse,
+            # arete cote diffuseur chanfreinee, feuillure de 6 mm jusqu'au diffuseur (avant : fente ouverte sur le plafond) ;
+            # dessus contre le plafond, non emis
+            c1, s1 = BEVEL_SPEC["LightFrameOuter"]
+            c2, s2 = BEVEL_SPEC["LightFrameInner"]
+            prof = Profile([(0, 0), (0, 0.012), (fr, 0.012), (fr, 0.006), (fr, 0)], hidden=(3, 4), contact=(4,),
+                           bevels={1: (c1, s1, "next"), 2: (c2, s2, "prev")})
+            sweep(mb, prof, [(-lx, -ly, H), (lx, -ly, H), (lx, ly, H), (-lx, ly, H)], [(0, 1, 0), (-1, 0, 0), (0, -1, 0), (1, 0, 0)],
+                  (0, 0, -1), "FixtureMetal", closed=True)
+        else:
+            mb.box((-lx, -ly, H - 0.012), (lx, ly, H), "FixtureMetal", "xXyY")
+            mb.box((-lx, -ly, H - 0.012), (-lx + fr, ly, H), "FixtureMetal", "z")
+            mb.box((lx - fr, -ly, H - 0.012), (lx, ly, H), "FixtureMetal", "z")
+            mb.box((-lx + fr, -ly, H - 0.012), (lx - fr, -ly + fr, H), "FixtureMetal", "z")
+            mb.box((-lx + fr, ly - fr, H - 0.012), (lx - fr, ly, H), "FixtureMetal", "z")
         mb.box((-lx + fr, -ly + fr, H - 0.006), (lx - fr, ly - fr, H), dif, "z", world=1.2)
         ob = done(mb)
         # UV du diffuseur : l'image entiere sur le panneau
@@ -542,24 +856,67 @@ def build_modules(M, coll, ccoll):
     mb.box((-T, -SVC_HOLE_W / 2, SVC_HOLE_H), (0, SVC_HOLE_W / 2, H), "Wallpaper", "xXzZ")
     done(mb, [((-T, -SPAN / 2, 0), (0, -SVC_HOLE_W / 2, H)), ((-T, SVC_HOLE_W / 2, 0), (0, SPAN / 2, H)), ((-T, -SVC_HOLE_W / 2, SVC_HOLE_H), (0, SVC_HOLE_W / 2, H))])
     mb = MeshBuilder("SM_L0_ServiceDoor_Frame")
-    mb.box((-T - 0.01, -clear / 2 - 0.1, 0), (0.02, -clear / 2, SVC_HOLE_H), "DoorSteel")
-    mb.box((-T - 0.01, clear / 2, 0), (0.02, clear / 2 + 0.1, SVC_HOLE_H), "DoorSteel")
-    mb.box((-T - 0.01, -SVC_HOLE_W / 2, SVC_HOLE_H - 0.1), (0.02, SVC_HOLE_W / 2, SVC_HOLE_H), "DoorSteel")
-    mb.box((-T + 0.0, -clear / 2, 0), (-T + 0.6, clear / 2, 0.016), "Hardware", "xXyYZ")  # seuil
+    if BEVELS:
+        # v4.17 : cadre balaye le long de l'ouverture (onglets aux angles hauts) : deux aretes cote piece arrondies (face
+        # interieure et chant de 2 cm en saillie du mur) ; la partie du chant dans l'epaisseur du mur (contact) reste vive
+        c, seg = BEVEL_SPEC["ServiceFrame"]
+        prof = Profile([(0, -T - 0.01), (0.1, -T - 0.01), (0.1, 0.0), (0.1, 0.02), (0, 0.02)], contact=(1,),
+                       bevels={3: (c, seg, "next"), 4: (c, seg, "prev")})
+        sweep(mb, prof, [(0, -clear / 2, 0), (0, -clear / 2, SVC_HOLE_H - 0.1), (0, clear / 2, SVC_HOLE_H - 0.1), (0, clear / 2, 0)],
+              [(0, -1, 0), (0, 0, 1), (0, 1, 0)], (1, 0, 0), "DoorSteel")
+        # Seuil : deux aretes superieures chanfreinees, dessous sur le sol
+        c, seg = BEVEL_SPEC["Threshold"]
+        prof = Profile([(0, 0), (0.6, 0), (0.6, 0.016), (0, 0.016)], hidden=(0,), contact=(0,), bevels={2: (c, seg, "next"), 3: (c, seg, "prev")})
+        sweep(mb, prof, [(-T, -clear / 2, 0), (-T, clear / 2, 0)], [(1, 0, 0)], (0, 0, 1), "Hardware")
+    else:
+        mb.box((-T - 0.01, -clear / 2 - 0.1, 0), (0.02, -clear / 2, SVC_HOLE_H), "DoorSteel")
+        mb.box((-T - 0.01, clear / 2, 0), (0.02, clear / 2 + 0.1, SVC_HOLE_H), "DoorSteel")
+        mb.box((-T - 0.01, -SVC_HOLE_W / 2, SVC_HOLE_H - 0.1), (0.02, SVC_HOLE_W / 2, SVC_HOLE_H), "DoorSteel")
+        mb.box((-T + 0.0, -clear / 2, 0), (-T + 0.6, clear / 2, 0.016), "Hardware", "xXyYZ")  # seuil
     done(mb, [((-T - 0.01, -clear / 2 - 0.1, 0), (0.02, -clear / 2, SVC_HOLE_H)), ((-T - 0.01, clear / 2, 0), (0.02, clear / 2 + 0.1, SVC_HOLE_H)),
               ((-T - 0.01, -SVC_HOLE_W / 2, SVC_HOLE_H - 0.1), (0.02, SVC_HOLE_W / 2, SVC_HOLE_H))])
     leaf_w, leaf_h, leaf_t = clear - 0.03, SVC_HOLE_H - 0.14, 0.045
     # Battant : pivot = axe des charnieres (origine du maillage), il s'etend vers -Y (fermee), s'ouvre vers le sas
     mb = MeshBuilder("SM_L0_ServiceDoor_Leaf")
-    mb.box((-leaf_t / 2, -leaf_w, 0.015), (leaf_t / 2, 0, 0.015 + leaf_h), "DoorSteel")
+    if BEVELS:
+        # v4.17 : pourtour des deux grandes faces arrondi (tole pliee) ; chant et grandes faces plats ; les aretes de
+        # l'epaisseur aux quatre angles restent vives (onglets)
+        c, seg = BEVEL_SPEC["Leaf"]
+        z0, z1 = 0.015, 0.015 + leaf_h
+        prof = Profile([(0, -leaf_t / 2), (0, leaf_t / 2), (0.02, leaf_t / 2), (0.02, -leaf_t / 2)], hidden=(1, 2, 3),
+                       bevels={1: (c, seg, "next"), 0: (c, seg, "prev")})
+        sweep(mb, prof, [(0, 0, z0), (0, 0, z1), (0, -leaf_w, z1), (0, -leaf_w, z0)], [(0, -1, 0), (0, 0, -1), (0, 1, 0), (0, 0, 1)],
+              (1, 0, 0), "DoorSteel", closed=True)
+        for sgn in (-1, 1):
+            x = sgn * leaf_t / 2
+            oriented_quad(mb, [(x, -leaf_w + c, z0 + c), (x, -c, z0 + c), (x, -c, z1 - c), (x, -leaf_w + c, z1 - c)], "DoorSteel", (sgn, 0, 0))
+    else:
+        mb.box((-leaf_t / 2, -leaf_w, 0.015), (leaf_t / 2, 0, 0.015 + leaf_h), "DoorSteel")
     mb.box((leaf_t / 2, -leaf_w * 0.5 - 0.18, 1.6), (leaf_t / 2 + 0.008, -leaf_w * 0.5 + 0.18, 1.7), "Hardware", "XxyYzZ")  # plaque
     mb.box((-leaf_t / 2 - 0.04, -leaf_w + 0.12, 1.0), (-leaf_t / 2, -0.12, 1.04), "Hardware")  # barre de poussee (cote sas)
     done(mb, [((-leaf_t / 2, -leaf_w, 0.015), (leaf_t / 2, 0, 0.015 + leaf_h))])
     mb = MeshBuilder("SM_L0_ServiceDoor_Handle")
     # Poignee bequille : pivot sur l'axe du carre (origine), des deux cotes du battant
     for sgn in (-1, 1):
-        mb.box((sgn * (leaf_t / 2) - (0.024 if sgn < 0 else 0), -0.03, -0.11), (sgn * (leaf_t / 2) + (0.024 if sgn > 0 else 0), 0.025, 0.11), "Hardware")
-        mb.box((sgn * (leaf_t / 2 + 0.03) - 0.012, 0.0, -0.013), (sgn * (leaf_t / 2 + 0.03) + 0.012, 0.14, 0.013), "Hardware")
+        if BEVELS:
+            # v4.17 : rosace a face avant chanfreinee (dos contre le battant, vif) ; bequille a quatre aretes arrondies
+            cr, sr = BEVEL_SPEC["HandleRose"]
+            cl, sl = BEVEL_SPEC["HandleLever"]
+            x0 = sgn * leaf_t / 2
+            y0r, y1r, zr = -0.03, 0.025, 0.11
+            prof = Profile([(0, 0), (0, 0.024), (0.01, 0.024), (0.01, 0)], hidden=(1, 2, 3), contact=(3,), bevels={1: (cr, sr, "next")})
+            sweep(mb, prof, [(x0, y0r, -zr), (x0, y1r, -zr), (x0, y1r, zr), (x0, y0r, zr)], [(0, 0, 1), (0, -1, 0), (0, 0, -1), (0, 1, 0)],
+                  (sgn, 0, 0), "Hardware", closed=True)
+            xf = x0 + sgn * 0.024
+            oriented_quad(mb, [(xf, y0r + cr, -zr + cr), (xf, y1r - cr, -zr + cr), (xf, y1r - cr, zr - cr), (xf, y0r + cr, zr - cr)], "Hardware", (sgn, 0, 0))
+            oriented_quad(mb, [(x0, y0r, -zr), (x0, y1r, -zr), (x0, y1r, zr), (x0, y0r, zr)], "Hardware", (-sgn, 0, 0))
+            xc = sgn * (leaf_t / 2 + 0.03)
+            prof = Profile([(-0.012, -0.013), (0.012, -0.013), (0.012, 0.013), (-0.012, 0.013)],
+                           bevels={k: (cl, sl, "prev") for k in range(4)})
+            sweep(mb, prof, [(xc, 0.0, 0.0), (xc, 0.14, 0.0)], [(1, 0, 0)], (0, 0, 1), "Hardware")
+        else:
+            mb.box((sgn * (leaf_t / 2) - (0.024 if sgn < 0 else 0), -0.03, -0.11), (sgn * (leaf_t / 2) + (0.024 if sgn > 0 else 0), 0.025, 0.11), "Hardware")
+            mb.box((sgn * (leaf_t / 2 + 0.03) - 0.012, 0.0, -0.013), (sgn * (leaf_t / 2 + 0.03) + 0.012, 0.14, 0.013), "Hardware")
     done(mb)
     # Filet de lumiere froide sous le battant (le courant d'air de la porte, son repere visuel)
     mb = MeshBuilder("SM_L0_ServiceDoor_DraftGlow")
@@ -1276,12 +1633,17 @@ def render_views(cams, out_dir, colls, args):
 
 # ----------------------------------------------------------------------------------------------- principal
 def main():
+    global BEVELS
     args = parse_args()
+    BEVELS = not args.no_bevels
     t_start = time.time()
     out = os.path.abspath(args.out)
     tex_dir = os.path.join(out, "Textures")
     os.makedirs(out, exist_ok=True)
     if not args.skip_textures or not os.path.isdir(tex_dir):
+        if KT is None:
+            raise SystemExit("Textures du kit : level0_kit_textures.py exige Pillow, absent de ce Python (%s). Generer les textures avec "
+                             "python Tools/Blender/level0_kit_textures.py %s, puis relancer avec --skip-textures" % (KT_ERROR, tex_dir))
         print("Textures...")
         KT.build_all(tex_dir)
     vp, P, L = load_layout(args.seed)
@@ -1431,6 +1793,9 @@ def main():
 
     report = {"blender": bpy.app.version_string, "seed": args.seed, "seed_level": L.seed, "counts": counts, "modules": len(mods),
               "archive": list(archive.keys()), "materials": len(bpy.data.materials), "images": len(bpy.data.images)}
+    # v4.17 : chanfreins (largeur en m, segments) et triangles par module
+    report["bevels"] = {"enabled": BEVELS, "spec_m_segments": {k: list(v) for k, v in BEVEL_SPEC.items()} if BEVELS else {}}
+    report["triangles"] = {name: triangles(ob) for name, ob in mods.items()}
     report["checks"] = run_checks(vp, L, mods, pit_info, svc, sc)
     print("Controles :", json.dumps({k: v for k, v in report["checks"].items() if k != "service_door"}, ensure_ascii=False)[:600])
 
