@@ -439,6 +439,8 @@ public:
 	/** v4.15 : la mission du niveau a sa sortie garantie vers l'avant (sortie de progression, BRMission::IsExitGuarded) :
 	 *  dans un niveau du parcours lineaire, les chunks ne tirent alors aucune sortie */
 	bool HasGuaranteedForwardExit() const;
+	/** v4.16 : sortie posee par la mission vers Target (cachee tant que son chunk n'est pas construit), nullptr sinon */
+	ABRExit* GetMissionExit(int32 Target) const;
 	/** Mecanismes : affichage selon les chunks construits et animation des seuls mecanismes proches */
 	void UpdateMissionDevices(float Dt);
 

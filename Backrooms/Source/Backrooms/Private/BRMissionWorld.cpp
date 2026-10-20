@@ -2180,6 +2180,18 @@ bool ABRWorld::HasGuaranteedForwardExit() const
 	return false;
 }
 
+ABRExit* ABRWorld::GetMissionExit(int32 Target) const
+{
+	for (ABRExit* Exit : MissionExits)
+	{
+		if (IsValid(Exit) && Exit->Target == Target)
+		{
+			return Exit;
+		}
+	}
+	return nullptr;
+}
+
 // =====================================================================================================================
 // Sorties
 // =====================================================================================================================

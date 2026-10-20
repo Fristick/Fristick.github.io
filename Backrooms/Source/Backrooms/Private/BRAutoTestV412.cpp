@@ -1510,6 +1510,15 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			const bool bSolved = E.bSolved || (Level == 0 && !W->IsMissionActive());
 			TestLevel = OpenForwardTarget(W, Level);
 			ABRExit* Exit = TestLevel >= 0 ? FindExit(GetWorld(), TestLevel) : nullptr;
+			// v4.16 (fusion) : partie reprise loin de la sortie garantie : la mission la pose cachee jusqu'a la construction de son
+			// chunk (ABRWorld::UpdateMissionDevices) ; la marche part vers elle depuis la place de la reprise. Avant : "sortie
+			// ouverte trouvee NON" une seconde apres une reprise aux Poolrooms quand la sortie etait loin du point de depart
+			bool bHiddenExit = false;
+			if (!Exit && TestLevel >= 0)
+			{
+				Exit = W->GetMissionExit(TestLevel);
+				bHiddenExit = Exit && Exit->IsHidden();
+			}
 			// v4.15 (correctifs 4) : mission de ce chargement-la pas faite a pied plus haut (echec deja note, ou NON VERIFIE) : la
 			// sortie n'est pas testee, sans second PROBLEME en cascade. Mission faite mais pas resolue, ou sortie absente : PROBLEME
 			if (!bSolved && WalkMission.Level == Level && WalkMission.LevelSerial == W->GetLevelSerial() && !WalkMission.bComplete)
@@ -1533,8 +1542,10 @@ void ABRAutoTest::AddWalkExitSteps(int32 Level)
 			const FVector Foot = bLadder ? Exit->GetClimbAnchor() : Exit->GetActorLocation();
 			const FVector Goal = Foot + Fwd * (bLadder ? 90.f : 130.f);
 			const float FootZ = static_cast<float>(Exit->GetActorLocation().Z);
-			Note(FString::Printf(TEXT("Niveau %d : sortie vers %d (%s, %s), voyant %s"), Level, TestLevel, bLadder ? TEXT("echelle") : TEXT("porte"),
-				*W->DestinationLabel(TestLevel), Exit->GetMissionOpen() < 0 ? TEXT("aucun (sortie libre)") : (Exit->GetMissionOpen() == 1 ? TEXT("vert") : TEXT("ROUGE"))),
+			Note(FString::Printf(TEXT("Niveau %d : sortie vers %d (%s, %s), voyant %s%s"), Level, TestLevel, bLadder ? TEXT("echelle") : TEXT("porte"),
+				*W->DestinationLabel(TestLevel), Exit->GetMissionOpen() < 0 ? TEXT("aucun (sortie libre)") : (Exit->GetMissionOpen() == 1 ? TEXT("vert") : TEXT("ROUGE")),
+				bHiddenExit ? *FString::Printf(TEXT(" ; sortie de la mission pas encore construite, a %.0f m : marche depuis la place du joueur"),
+					FVector::Dist2D(Exit->GetActorLocation(), C->GetActorLocation()) / 100.f) : TEXT("")),
 				Exit->GetMissionOpen() == 0);
 			BeginWalk(W, C, FVector(Goal.X, Goal.Y, FootZ + Half), bLadder ? 60.f : 80.f, true, true, FootZ);
 			TestCountB = C->ClimbRequestsSent;
