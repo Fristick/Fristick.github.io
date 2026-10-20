@@ -66,6 +66,9 @@ namespace
 		D.Fixture = EBRFixture::Panel;
 		D.LightChance = 0.38f; D.BrokenChance = 0.06f; D.FlickerChance = 0.07f;
 		D.LightLumens = 2400.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 620.f;
+		// v4.17 : image seulement (agents eclairage et direction artistique, Docs/v417/agents/) : murs plus clairs que la moquette
+		// et coins sans profondeur : rebond des plafonniers a 0,8, portee visible de 560 cm (la regle garde 620 cm)
+		D.LightIndirect = 0.8f; D.LightVisualRadius = 560.f;
 		D.DarkZoneChance = 0.06f; D.ShadowChance = 0.15f;
 		// v4.15 : neons blanc chaud (3700 K) vus avec une balance des blancs a 3900 K : lampe blanc chaud (1, 0,94, 0,86) ; le
 		// jaune vient du papier peint et de la moquette eclaires, plus de la teinte de l'image (moins saturee, plus

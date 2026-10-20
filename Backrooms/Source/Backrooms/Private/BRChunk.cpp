@@ -1864,7 +1864,9 @@ ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea
 		LC->SetUseTemperature(true);
 		LC->SetTemperature(D.LightTemperatureK);
 	}
-	LC->SetAttenuationRadius(D.LightRadius);
+	// v4.17 : rayon et rebond a l'image (FBRLevelDef::LightVisualRadius, LightIndirect) ; la lumiere de jeu n'en depend pas
+	LC->SetAttenuationRadius(D.LightVisualRadius > 0.f ? D.LightVisualRadius : D.LightRadius);
+	LC->SetIndirectLightingIntensity(D.LightIndirect);
 	// v4.15 : OMBRES DE TOUTES LES LAMPES (MegaLights, ray tracing materiel) : chaque plafonnier projette son ombre (la lumiere
 	// et l'eclairage global ne traversent plus les murs), sans distance d'ombre ni tirage ; affichee jusqu'au bout de la vue.
 	// Sinon (Performance, Linux, macOS, sans RT) : ombres tirees (ShadowChance) et coupees au loin, comme avant
