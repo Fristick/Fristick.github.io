@@ -3734,7 +3734,11 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_VolumetricFog:
 		return BR_STR(NSLOCTEXT("BR", "Menu.HalosLumiereAirHumide", "Halos de lumi\u00e8re dans l'air humide."));
 	case Row_VHSEffect:
-		return BR_STR(NSLOCTEXT("BR", "Menu.LignesBalayageLegereAberrationSalete", "Lignes de balayage, l\u00e9g\u00e8re aberration et salet\u00e9 d'objectif. D\u00e9sactiv\u00e9 : image nette."));
+		// v4.17 : l'aide dit tout ce que l'effet ajoute, et coupe vraiment (ABRCharacter::UpdatePostProcess)
+		return BR_STR(NSLOCTEXT("BR", "Menu.LignesBalayageLegereAberrationSalete", "Lignes de balayage, aberration, salet\u00e9 et reflets d'objectif du cam\u00e9scope. D\u00e9sactiv\u00e9 : image nette, sans effet d'objectif."));
+	case Row_FilmGrain:
+		// v4.17 : aide du grain (aucune avant)
+		return BR_STR(NSLOCTEXT("BR", "Menu.GrainCapteurOmbres", "Grain du capteur, plus marqu\u00e9 dans les ombres. D\u00e9sactiv\u00e9 : aucun grain, m\u00eame en vision nocturne ou quand la sant\u00e9 mentale baisse."));
 	case Row_DevMode:
 		return BR_STR(NSLOCTEXT("BR", "Menu.TousNiveauxJouablesDepuisChoix", "Tous les niveaux jouables depuis le choix des niveaux (non ajout\u00e9s \u00e0 la partie). En jeu : Page pr\u00e9c. / suiv. niveau, D\u00e9but nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares."));
 	default:

@@ -898,7 +898,7 @@ def build_world_material(cloth=False):
 
     # Caustiques (reflets de l'eau sur le carrelage), deformees par les vagues simulees autour du joueur
     cm = g.custom("BRCaustics", BR_CAUSTICS_HLSL, [
-        ("WP", wp), ("Wz", wz), ("T", g.time()), ("Amount", g.scalar("Caustics", 0.0)),
+        ("WP", wp), ("Wz", wz), ("NZ", g.mask(vn, "b")), ("T", g.time()), ("Amount", g.scalar("Caustics", 0.0)),
         ("CausTex", g.texobj("CausticsTex", load_tex("T_Caustics"))), ("SimTex", g.texobj("WaterSim", black_tex())),
         ("SimWin", g.vector4("WaterSimWindow", (0.0, 0.0, 1000.0, 0.0)))], output="CMOT_FLOAT1")
     col = g.mul(col, cm)
@@ -1115,7 +1115,8 @@ BR_WATER_SHADE_HLSL = (
     "float F = s2 >= 1.0 ? 1.0 : 0.02 + 0.98 * pow(1.0 - sqrt(1.0 - s2), 5.0);\n"
     "return float4(C * (1.0 - F), F);\n")
 
-# Caustiques du carrelage. Entrees : WP (position monde), Wz (poids des faces horizontales), T, Amount,
+# Caustiques du carrelage. Entrees : WP (position monde), Wz (poids des faces horizontales), NZ (normale du sommet,
+# z ; v4.17), T, Amount,
 # CausTex (T_Caustics), SimTex / SimWin (vagues simulees). Sortie : multiplicateur de la couleur.
 BR_CAUSTICS_HLSL = (
     "// Reseau lumineux qui derive lentement (deux echelles, legerement ondulees) ; les vagues simulees autour\n"
@@ -1130,10 +1131,18 @@ BR_CAUSTICS_HLSL = (
     "float k1 = Texture2DSample(CausTex, CausTexSampler, uv / 260.0 + T * float2(0.011, 0.006) + wob * 0.018).r;\n"
     "float k2 = Texture2DSample(CausTex, CausTexSampler, uv * float2(-1.0, 1.0) / 430.0 + T * float2(-0.007, 0.01) - wob * 0.012).r;\n"
     "float k = saturate(k1 + 0.45 * k2);\n"
-    "// Sous l'eau : partout ; au-dessus : reflets plus faibles qui s'eteignent 2 m au-dessus de la surface\n"
+    "// v4.17 : sous l'eau : partout (fond et parois) ; au-dessus : le lisere des murs pres de la surface (reflets qui\n"
+    "// s'eteignent en 90 cm) et un reflet doux et flou au plafond ; un sol ou le dessus d'un trottoir hors de l'eau est sec :\n"
+    "// aucune caustique (avant : faces horizontales a plein poids a toute hauteur, murs jusqu'a 2 m au-dessus de l'eau)\n"
     "float above = WP.z - 45.0;\n"
-    "float fade = lerp(above > 0.0 ? 0.75 * saturate(1.0 - above / 200.0) : saturate(1.0 + above / 300.0), 1.0, Wz);\n"
-    "return 1.0 + Amount * fade * (k * 1.5 - 0.27);\n")
+    "float down = saturate(-NZ * 4.0);\n"
+    "float wallFade = above > 0.0 ? 0.55 * saturate(1.0 - above / 90.0) : saturate(1.0 + above / 300.0);\n"
+    "float horizFade = above > 0.0 ? down * 0.6 : 1.0;\n"
+    "float fade = lerp(wallFade, horizFade, Wz);\n"
+    "// Plafond : motif plus flou (niveau de detail plus grossier de la texture) et contraste reduit\n"
+    "float kc = saturate(Texture2DSampleBias(CausTex, CausTexSampler, uv / 260.0 + T * float2(0.011, 0.006) + wob * 0.018, 3.0).r + 0.45 * k2);\n"
+    "float kk = lerp(k, kc * 0.7 + 0.12, down * saturate(above / 60.0));\n"
+    "return 1.0 + Amount * fade * (kk * 1.2 - 0.22);\n")
 
 
 BR_TRI_NORMAL_HLSL = (

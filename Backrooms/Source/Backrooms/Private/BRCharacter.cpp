@@ -3549,18 +3549,24 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	Camera->PostProcessBlendWeight = 1.f;
 
 	// v4.15 : objectif "reel" meme sans l'effet camescope : aberration, grain, salete et halo legers (plus marques avec
-	// l'effet VHS) ; avant : image sans aucun defaut d'objectif sans l'effet
+	// l'effet VHS) ; avant : image sans aucun defaut d'objectif sans l'effet.
+	// v4.17 : EFFET VHS coupe = image nette, comme l'annonce son aide : plus d'aberration de base (0,15), de salete (1) ni
+	// de reflets d'objectif (0,1). Restent les signaux d'etat (sante mentale, coup, transition, vision nocturne, eau,
+	// apnee, echelle, peur), deja regles par FLASHS : ils disent quelque chose du jeu, pas du camescope
 	const bool bVHS = Set.bVHSEffect;
 	S.bOverride_SceneFringeIntensity = true;
-	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.15f) + Insanity * Insanity * 4.f + Glitch * 8.f * Comfort + HitFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f * Comfort + ClimbGlitch * 6.f * Comfort + ScareFringe * 1.5f;
+	S.SceneFringeIntensity = (bVHS ? 0.4f : 0.f) + Insanity * Insanity * 4.f + Glitch * 8.f * Comfort + HitFlash * 3.f + (bNV ? 1.5f : 0.f) + UnderBlend * 1.5f + Choke * 2.f * Comfort + ClimbGlitch * 6.f * Comfort + ScareFringe * 1.5f;
 
 	// Aberration seulement vers les bords de l'image (40 % du rayon au centre restent nets)
 	S.bOverride_ChromaticAberrationStartOffset = true;
 	S.ChromaticAberrationStartOffset = 0.4f;
 
-	// v4.15 : grain du capteur des que GRAIN DE L'IMAGE est actif (moitie sans l'effet VHS), plus present dans les ombres
+	// v4.15 : grain du capteur des que GRAIN DE L'IMAGE est actif (moitie sans l'effet VHS), plus present dans les ombres.
+	// v4.17 : GRAIN DE L'IMAGE coupe = aucun grain, y compris celui de la sante mentale, des transitions et de la vision
+	// nocturne (avant : ajoutes hors du reglage). Ces etats restent lisibles sans lui : aberration, vignette, desaturation,
+	// image verte de la vision nocturne
 	S.bOverride_FilmGrainIntensity = true;
-	S.FilmGrainIntensity = (Set.bFilmGrain ? (D ? D->Grain : 0.25f) * (bVHS ? 1.f : 0.5f) : 0.f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f);
+	S.FilmGrainIntensity = Set.bFilmGrain ? (D ? D->Grain : 0.25f) * (bVHS ? 1.f : 0.5f) + Insanity * 0.5f + Glitch * 0.8f + (bNV ? 0.7f : 0.f) : 0.f;
 	S.bOverride_FilmGrainIntensityShadows = true;
 	S.FilmGrainIntensityShadows = 1.2f;
 	S.bOverride_FilmGrainIntensityHighlights = true;
@@ -3604,7 +3610,8 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 	S.bOverride_BloomIntensity = bNV || UnderBlend > 0.01f;
 	S.BloomIntensity = bNV ? 2.f : FMath::Lerp(D ? D->Bloom : 0.6f, 2.2f, UnderBlend);
 
-	// Salete sur l'objectif du camescope (visible dans les halos des neons). v4.15 : legere aussi sans l'effet VHS
+	// Salete sur l'objectif du camescope (visible dans les halos des neons). v4.15 : legere aussi sans l'effet VHS ;
+	// v4.17 : aucune sans l'effet VHS (image nette)
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
 		if (UTexture* Dirt = A->Texture(TEXT("T_LensDirt")))
@@ -3612,12 +3619,13 @@ void ABRCharacter::UpdatePostProcess(float Dt)
 			S.bOverride_BloomDirtMask = true;
 			S.BloomDirtMask = Dirt;
 			S.bOverride_BloomDirtMaskIntensity = true;
-			S.BloomDirtMaskIntensity = bVHS ? 3.f : 1.f;
+			S.BloomDirtMaskIntensity = bVHS ? 3.f : 0.f;
 		}
 	}
-	// v4.15 : reflets d'objectif (halo des neons regardes en face) a peine visibles, plus nets avec l'effet VHS
+	// v4.15 : reflets d'objectif (halo des neons regardes en face) a peine visibles, plus nets avec l'effet VHS ; v4.17 :
+	// aucun sans l'effet VHS
 	S.bOverride_LensFlareIntensity = true;
-	S.LensFlareIntensity = bVHS ? 0.3f : 0.1f;
+	S.LensFlareIntensity = bVHS ? 0.3f : 0.f;
 
 	S.bOverride_MotionBlurAmount = true;
 	// v4.7 : flou de mouvement au choix du joueur (desactive par defaut)
