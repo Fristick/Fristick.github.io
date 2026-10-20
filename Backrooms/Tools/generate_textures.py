@@ -181,14 +181,20 @@ def t_l0_wallpaper():
     Raccords des les : joint d'un pixel a peine ouvert et bord du le de droite souleve par endroits (relief de la normal
     map, 1 px ~ 0,5 mm) ; chaque le a son ton (+-1,2 %), variations douces de +-6 % ; couleurs 20 % moins saturees.
     Plus de taches dessinees dans la texture (elles se repetaient a chaque tuile) : la ligne de maree au-dessus de la
-    plinthe et la bande sous le plafond sont dans le materiau (hauteur monde), les aureoles sont des decalques."""
+    plinthe et la bande sous le plafond sont dans le materiau (hauteur monde), les aureoles sont des decalques.
+    v4.17 (direction artistique, Docs/v417/agents/direction_artistique.md, points 1 et 11) : les murs etaient la surface
+    la plus claire du Level 0 (1,1 a 2,5 fois la moquette) : bandes claires ~21 % moins lumineuses et tirees vers
+    l'ocre-olive (teinte 57 -> 52 degres), ecart bande / lisere reduit de 30 % ; embossage des chevrons et trame deux fois
+    plus discrets ; joint des les de 1,8 mm (3,5 px, avant 1 px) un peu encrasse ; ton de chaque le +-2,5 % (avant 1,2)."""
     S = 2048
     x, y = grid_coords(S)
     rolls, per_roll, rows = 2, 7, 4
     cols = rolls * per_roll
-    light = desaturate([185, 180, 98], 0.2)
-    mid = desaturate([166, 162, 80], 0.2)
-    dark = desaturate([146, 142, 60], 0.2)
+    light_v416 = desaturate([185, 180, 98], 0.2)
+    light = desaturate([170, 159, 92], 0.2)
+    # v4.17 : lisere et teinte intermediaire gardent leur rapport a la bande claire, ecart reduit de 30 %
+    mid = [light[i] * (1.0 - 0.7 * (1.0 - desaturate([166, 162, 80], 0.2)[i] / light_v416[i])) for i in range(3)]
+    dark = [light[i] * (1.0 - 0.7 * (1.0 - desaturate([146, 142, 60], 0.2)[i] / light_v416[i])) for i in range(3)]
     col = np.floor(x * cols).astype(int)
     u = (x * cols) % 1.0                        # position dans la colonne
     # liseré sombre (bord gauche de chaque colonne), bords adoucis
@@ -222,7 +228,7 @@ def t_l0_wallpaper():
     img *= (1 + 0.03 * paper)[..., None]
     # ton propre a chaque le (rouleaux d'un meme lot, un peu passes) et variations douces (+-6 %), trainees verticales
     roll = np.floor(x * rolls).astype(int)
-    img *= np.where(roll == 0, 1.012, 0.988)[..., None]
+    img *= np.where(roll == 0, 1.025, 0.975)[..., None]
     blot = noise(S, beta=3.0, seed=12)
     img *= (1 + 0.06 * np.clip(blot / 2.0, -1.0, 1.0))[..., None]
     streak = noise(S, beta=2.2, seed=14, aniso=(1.0, 0.06))
@@ -232,16 +238,16 @@ def t_l0_wallpaper():
     roll_px = S / rolls
     right = px % roll_px                         # distance au joint, cote droit (le suivant)
     left = roll_px - right                       # cote gauche
-    gap = np.exp(-(np.minimum(right, left) / 0.7) ** 2)
-    grime = np.exp(-(np.minimum(right, left) / 3.0) ** 2)
+    gap = np.exp(-(np.minimum(right, left) / 1.8) ** 2)
+    grime = np.exp(-(np.minimum(right, left) / 6.0) ** 2)
     lift_amount = np.stack([smoothstep(0.3, 1.4, column_noise(S, 15 + k)) for k in range(rolls)], -1)
     lift_v = lift_amount[np.arange(S)[:, None], roll]          # chaque joint a ses propres decollements
     lift = np.exp(-right / 5.0) * (right < 40) * lift_v
-    img *= (1 - 0.22 * gap - 0.05 * grime)[..., None]
+    img *= (1 - 0.24 * gap - 0.07 * grime)[..., None]
     img *= (1 + 0.035 * lift)[..., None]       # le bord souleve accroche un peu la lumiere
     save("T_L0_Wallpaper", img)
     # relief : motif tres legerement embosse, liseré en creux, joint et bord souleve (en pixels de hauteur)
-    height = 0.35 * motif - 0.3 * border + 0.12 * weave / 3.0 - 0.9 * gap + 0.6 * lift
+    height = 0.17 * motif - 0.2 * border + 0.06 * weave / 3.0 - 1.1 * gap + 0.6 * lift
     save_normal("T_L0_Wallpaper", height, 2.0, S)
 
 
