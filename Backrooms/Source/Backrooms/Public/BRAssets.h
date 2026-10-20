@@ -196,7 +196,8 @@ private:
 	void ApplyRoughMap(UMaterialInstanceDynamic* MID, FName BaseTexture, float Detail);
 
 	/** v4.15 : WorldCloth : variante "tissu" du monde (moquettes, FBRSurface::Sheen > 0) ; Decal : decalques d'usure */
-	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, WorldCloth, Decal, Count };
+	/** v4.17 : Gear : equipement du joueur (M_BR_Gear) */
+	enum class EParent : uint8 { World, Mesh, Skin, WaterSurface, PitShade, WorldCloth, Decal, Gear, Count };
 
 	UObject* LoadAsset(const TCHAR* Folder, FName Name, UClass* Class);
 	UTexture2D* LoadRawTexture(const TCHAR* SubFolder, FName Name, bool bLinear, bool bMips);

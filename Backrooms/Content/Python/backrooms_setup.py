@@ -49,12 +49,16 @@ VERSION = 13
 # ligne de maree ; nouveau M_BR_WorldCloth (moquette en modele d'eclairage "tissu") ;
 # 9 : M_BR_WorldCloth par un noeud d'attributs : sa creation echouait en 5.8 (Custom Data 0 cache a Python), la moquette
 # retombait sur M_BR_World et le paquet n'avait pas le materiau)
-MATERIAL_VERSION = 9
+# v4.17 : 10 : M_BR_Gear (equipement du joueur : normal map tangente, carte ORM, reflectance ; cartes derivees de la
+# combinaison dans RawAssets/Derived/Textures) ; caustiques des Poolrooms attachees a l'eau (entree NZ) ; papier peint du
+# Level 0 refait (moins clair, relief adouci, joints des les)
+MATERIAL_VERSION = 10
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 # (v4.15 : papier peint en les de 53 cm, moquette bouclee, dalles fissurees de 61 cm, et leurs cartes de rugosite)
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"],
               8: ["T_L0_Wallpaper.jpg", "T_L0_Wallpaper_N.png", "T_L0_Wallpaper_R.png", "T_L0_Carpet.jpg", "T_L0_Carpet_N.png",
-                  "T_L0_Carpet_R.png", "T_L0_Ceiling.jpg", "T_L0_Ceiling_N.png", "T_L0_Ceiling_R.png"]}
+                  "T_L0_Carpet_R.png", "T_L0_Ceiling.jpg", "T_L0_Ceiling_N.png", "T_L0_Ceiling_R.png"],
+              10: ["T_L0_Wallpaper.jpg", "T_L0_Wallpaper_N.png"]}
 # Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
 RESOUNDED = {4: ["S_Bacteria.wav"]}
 # Modeles refaits (v4.4 : nouveau Smiler)
@@ -70,7 +74,8 @@ MAT = ROOT + "/Materials"
 LIGHTS = ROOT + "/Lights"
 IES_EXT = (".ies",)
 MAP_PATH = ROOT + "/Maps/L_Backrooms"
-MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade", "M_BR_WorldCloth", "MD_BR_Decal")
+MATERIALS = ("M_BR_World", "M_BR_Mesh", "M_BR_Skin", "M_BR_WaterSurface", "M_BR_PitShade", "M_BR_WorldCloth", "MD_BR_Decal",
+             "M_BR_Gear")
 # v4.8 : usages que chaque materiau maitre doit declarer (meme liste que BRMaterialBuilder::RequiredUsages en C++)
 _MODEL_USAGES = ("used_with_instanced_static_meshes", "used_with_skeletal_mesh", "used_with_nanite")
 USAGES = {
@@ -82,6 +87,8 @@ USAGES = {
     "M_BR_WorldCloth": ("used_with_instanced_static_meshes",),
     # v4.15 : decalques projetes (UDecalComponent) et taches au sol en instances (decalques sur maillage)
     "MD_BR_Decal": ("used_with_instanced_static_meshes",),
+    # v4.17 : combinaison (maillage a squelette), pieces rigides de secours (Nanite), objets en instances
+    "M_BR_Gear": _MODEL_USAGES,
 }
 # v4.8 : slots attendus apres l'import de chaque maillage a squelette (noms des materiaux du FBX) : la validation
 # signale un slot renomme par l'importeur (le jeu affecte les materiaux par nom, jamais par indice)
@@ -99,6 +106,10 @@ EXPECTED_SLOTS = {
 }
 # v4.8 : textures dont la combinaison du joueur depend (taille minimale attendue apres import)
 HAZMAT_TEXTURES = ("T_Hazmat_Suit", "T_Hazmat_Mask")
+# v4.17 : cartes derivees de la combinaison (Tools/derive_hazmat_maps.py), sources dans RawAssets/Derived/Textures, importees
+# avec les autres textures (/Game/Backrooms/Textures : UBRAssets::Texture ne cherche que la)
+DERIVED_SUB = os.path.join("Derived", "Textures")
+GEAR_TEXTURES = ("T_Hazmat_Suit_N", "T_Hazmat_Suit_ORM")
 # Materiaux des versions precedentes, supprimes a la mise a jour (l'eau "Single Layer Water" a disparu en v7)
 OBSOLETE_MATERIALS = ("M_BR_Water",)
 
@@ -206,6 +217,11 @@ def is_roughness_map(name):
     return name.endswith("_R")
 
 
+def is_orm_map(name):
+    """v4.17 : cartes ORM (R occlusion, G rugosite, B metal) : donnees lineaires"""
+    return name.endswith("_ORM")
+
+
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
@@ -216,10 +232,12 @@ def missing_in(sub, folder, exts):
     return [f for f in list_raw(sub, exts) if not exists(folder + "/" + os.path.splitext(f)[0])]
 
 
-def import_textures(files, dest=TEX, ui=False):
+def import_textures(files, dest=TEX, ui=False, sub=None):
     if not files:
         return
-    sub = "Icons" if ui else "Textures"
+    # v4.17 : sub : dossier de RawAssets (cartes derivees : DERIVED_SUB)
+    if sub is None:
+        sub = "Icons" if ui else "Textures"
     tasks = [make_task(raw(sub, f), dest, os.path.splitext(f)[0]) for f in files]
     tools().import_asset_tasks(tasks)
     for f in files:
@@ -245,6 +263,17 @@ def import_textures(files, dest=TEX, ui=False):
         elif name == "T_NoiseLF":
             # Texture de donnees (bruits du materiau du monde) : valeurs lineaires
             safe_set(tex, "srgb", False)
+        elif is_orm_map(name):
+            # v4.17 : occlusion, rugosite absolue, metal : lineaire, compression par defaut lue par un echantillonneur
+            # "Linear Color" (comme les _ORM du kit) ; la variance de la normale du meme nom releve la rugosite dans les
+            # mips (moins d'etincelles de reflet a distance)
+            safe_set(tex, "srgb", False)
+            safe_set(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
+            nrm = unreal.load_asset(dest + "/" + name[:-len("_ORM")] + "_N")
+            if nrm:
+                safe_set(tex, "composite_texture", nrm)
+                safe_set(tex, "composite_texture_mode", unreal.CompositeTextureMode.CTM_NORMAL_ROUGHNESS_TO_GREEN)
+                safe_set(tex, "composite_power", 1.0)
         elif is_roughness_map(name):
             # v4.7 : rugosite relative (0,5 = valeur nominale de la surface) : lineaire, compression par defaut
             # (echantillonneur "Linear Color", comme T_NoiseLF qui sert de valeur par defaut au parametre RoughTex)
@@ -1055,6 +1084,43 @@ def build_mesh_material(name="M_BR_Mesh", skin=False):
     return m
 
 
+def build_gear_material():
+    """v4.17 : equipement du joueur (combinaison, masque, visiere) : eclairage standard (ni chair ni diffusion
+    sous-cutanee), normal map tangente (NormalTex) et carte ORM (MaskTex : R occlusion, G rugosite absolue, B metal,
+    lineaire). Sans carte, tout reste neutre (NormalStrength, RoughMapWeight, CavityWeight, MetalMapWeight a 0). Meme
+    graphe que BuildGear (BRMaterialBuilder.cpp)."""
+    m = new_material("M_BR_Gear")
+    g = Graph(m)
+    P = unreal.MaterialProperty
+    uv = g.mul(g.uv0(), g.scalar("TexScale", 1.0))
+    albedo = g.tex("BaseTex", load_tex("T_Hazmat_Suit"), uv)
+    tint = g.vector("Tint", (1, 1, 1, 1))
+    gray = g.dot(albedo, g.c3(0.2126, 0.7152, 0.0722))
+    base = g.mul(g.lerp(gray, albedo, g.scalar("Saturation", 1.0)), tint)
+    g.output(g.rt_switch(base, g.mul(albedo, tint)), P.MP_BASE_COLOR)
+    rough_c = g.scalar("Roughness", 0.38)
+    metal_c = g.scalar("Metallic", 0.0)
+    noise_tex = load_tex("T_NoiseLF")
+    if not noise_tex or is_srgb(noise_tex):
+        # Defaut lineaire indispensable (echantillonneur Linear Color) : un graphe sans carte ni parametre repere serait
+        # pris pour un ancien materiau ; mieux vaut l'echec (le jeu reconstruit alors le materiau en C++)
+        raise RuntimeError("T_NoiseLF absente ou en sRGB : M_BR_Gear non construit")
+    orm = g.tex("MaskTex", noise_tex, uv)
+    rough = g.lerp(rough_c, g.mask(orm, "g"), g.scalar("RoughMapWeight", 0.0))
+    metal = g.lerp(metal_c, g.mask(orm, "b"), g.scalar("MetalMapWeight", 0.0))
+    ao = g.lerp(g.const(1.0), g.mask(orm, "r"), g.scalar("CavityWeight", 0.0))
+    g.output(g.rt_switch(rough, rough_c), P.MP_ROUGHNESS)
+    g.output(metal, P.MP_METALLIC)
+    g.output(ao, P.MP_AMBIENT_OCCLUSION)
+    # Reflet attenue dans les creux (la moitie de l'occlusion)
+    g.output(g.mul(g.scalar("Specular", 0.5), g.lerp(g.const(1.0), ao, g.const(0.5))), P.MP_SPECULAR)
+    n = g.tex("NormalTex", load_tex("T_FlatNormal"), uv, normal=True)
+    g.output(g.rt_switch(g.lerp(g.c3(0.0, 0.0, 1.0), n, g.scalar("NormalStrength", 0.0)), g.c3(0.0, 0.0, 1.0)), P.MP_NORMAL)
+    g.output(g.add(g.mul(base, g.scalar("SelfIllum", 0.0)), g.vector("Emissive", (0, 0, 0, 1))), P.MP_EMISSIVE_COLOR)
+    finish_material(m)
+    return m
+
+
 # Code HLSL des noeuds Custom (meme code que BRMaterialBuilder.cpp en C++).
 
 # Houle et clapot de fond. Entrees : P (XY monde, cm), T (temps, s), Amp (houle), Chop (clapot).
@@ -1305,7 +1371,8 @@ def build_materials():
     jobs = (("M_BR_World", build_world_material), ("M_BR_Mesh", build_mesh_material),
             ("M_BR_Skin", lambda: build_mesh_material("M_BR_Skin", skin=True)),
             ("M_BR_WaterSurface", build_water_surface_material), ("M_BR_PitShade", build_pit_shade_material),
-            ("M_BR_WorldCloth", lambda: build_world_material(cloth=True)), ("MD_BR_Decal", build_decal_material))
+            ("M_BR_WorldCloth", lambda: build_world_material(cloth=True)), ("MD_BR_Decal", build_decal_material),
+            ("M_BR_Gear", build_gear_material))
     for name, fn in jobs:
         try:
             fn()
@@ -1432,6 +1499,21 @@ def validate(verbose=False):
                 problems.append(("texture", name, "importee en lineaire (sRGB attendu)"))
         except Exception:
             pass
+    # v4.17 : cartes derivees de la combinaison : presentes si leur source existe, lineaires, normale en TC_NORMALMAP
+    for name in GEAR_TEXTURES:
+        if not os.path.isfile(raw(DERIVED_SUB, name + ".png")):
+            continue
+        tex = load_tex(name)
+        if tex is None:
+            problems.append(("texture", name, "carte derivee de la combinaison non importee (combinaison sans relief)"))
+            continue
+        try:
+            if is_srgb(tex):
+                problems.append(("texture", name, "importee en sRGB (lineaire attendu)"))
+            if name.endswith("_N") and tex.get_editor_property("compression_settings") != unreal.TextureCompressionSettings.TC_NORMALMAP:
+                problems.append(("texture", name, "compression autre que TC_NORMALMAP"))
+        except Exception:
+            pass
     for f in list_raw("Skeletal", (".fbx",)):
         name = os.path.splitext(f)[0]
         sk = unreal.load_asset(MESH + "/" + name) if exists(MESH + "/" + name) else None
@@ -1529,7 +1611,8 @@ def needs_setup():
         return True
     return bool(materials_missing() or missing_in("Textures", TEX, IMG_EXT) or missing_in("Icons", UI, (".png",))
                 or missing_in("Sounds", SND, (".wav",)) or missing_in("Meshes", MESH, (".fbx",))
-                or missing_in("Skeletal", MESH, (".fbx",)) or missing_in("Lights", LIGHTS, IES_EXT) or not exists(MAP_PATH))
+                or missing_in("Skeletal", MESH, (".fbx",)) or missing_in("Lights", LIGHTS, IES_EXT) or not exists(MAP_PATH)
+                or missing_in(DERIVED_SUB, TEX, IMG_EXT))
 
 
 # ---------------------------------------------------------------------------
@@ -1875,6 +1958,8 @@ def run(force=False):
     if installed_version() < VERSION:
         force = True
     tex = list_raw("Textures", IMG_EXT) if force else missing_in("Textures", TEX, IMG_EXT)
+    # v4.17 : cartes derivees (combinaison) : reimportees avec la version des materiaux 10, ou si elles manquent
+    der = list_raw(DERIVED_SUB, IMG_EXT) if (force or installed_material_version() < 10) else missing_in(DERIVED_SUB, TEX, IMG_EXT)
     if not force:
         for mv, files in sorted(RETEXTURED.items()):
             if installed_material_version() < mv:
@@ -1899,6 +1984,8 @@ def run(force=False):
         task.make_dialog(True)
         task.enter_progress_frame(1, "Textures (%d)" % len(tex))
         import_textures(tex)
+        # v4.17 : normales d'abord (la carte ORM reference la normale du meme nom pour ses mips)
+        import_textures(sorted(der, key=lambda f: 0 if os.path.splitext(f)[0].endswith("_N") else 1), sub=DERIVED_SUB)
         task.enter_progress_frame(1, "Profils IES (%d)" % len(ies))
         import_light_profiles(ies)
         task.enter_progress_frame(1, "Icones (%d)" % len(ico))
@@ -1911,7 +1998,7 @@ def run(force=False):
         import_skeletal(skl)
         tune_skeletal()
         task.enter_progress_frame(1, "Materiaux")
-        if mats or tex:
+        if mats or tex or der:
             build_materials()
         task.enter_progress_frame(1, "Carte")
         create_map()

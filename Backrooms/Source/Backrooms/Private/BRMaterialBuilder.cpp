@@ -539,6 +539,60 @@ namespace
 		}
 	}
 
+	/** v4.17 : equipement (combinaison, masque, visiere du joueur) : eclairage standard (ni chair, ni diffusion
+	 *  sous-cutanee), normal map tangente (NormalTex) et carte ORM (MaskTex : R occlusion, G rugosite absolue, B metal,
+	 *  lineaire). Sans carte, tout reste neutre : NormalStrength, RoughMapWeight, CavityWeight et MetalMapWeight valent 0.
+	 *  Specular relie (attenue dans les creux), Saturation de l'albedo. Scene ray tracee : albedo, rugosite constante,
+	 *  normale plate. Meme graphe que build_gear_material() en Python (agent Unreal Technical Artist,
+	 *  Docs/v417/agents/materiaux_combinaison.md, 2.1) */
+	void BuildGear(FGraph& G, UMaterialEditorOnlyData* Out, TFunctionRef<UTexture*(FName)> LoadTexture)
+	{
+		UTexture* Def = LoadTexture(TEXT("T_Hazmat_Suit"));
+		if (!Def)
+		{
+			Def = EngineTexture(false);
+		}
+		const FPin Uv = G.Mul(G.UV0(), G.Scalar(TEXT("TexScale"), 1.f));
+		const FPin Albedo = G.Tex(TEXT("BaseTex"), Def, false, Uv);
+		const FPin Tint = G.Vector(TEXT("Tint"), FLinearColor::White);
+		const FPin Gray = G.Dot(Albedo, G.C3(0.2126f, 0.7152f, 0.0722f));
+		const FPin Base = G.Mul(G.Lerp(Gray, Albedo, G.Scalar(TEXT("Saturation"), 1.f)), Tint);
+		FGraph::Link(Out->BaseColor, G.RTSwitch(Base, G.Mul(Albedo, Tint)));
+
+		const FPin RoughConst = G.Scalar(TEXT("Roughness"), 0.38f);
+		const FPin MetalConst = G.Scalar(TEXT("Metallic"), 0.f);
+		FPin Rough = RoughConst;
+		FPin Metal = MetalConst;
+		FPin AO = G.Const(1.f);
+		// Defaut de MaskTex : T_NoiseLF, lineaire (une texture sRGB lue en Linear Color empecherait la compilation, comme
+		// RoughTex de BuildMesh) ; sans elle, les poids restent relies (parametre repere de version : RoughMapWeight)
+		UTexture* MaskDef = LoadTexture(TEXT("T_NoiseLF"));
+		const FPin RoughW = G.Scalar(TEXT("RoughMapWeight"), 0.f);
+		const FPin MetalW = G.Scalar(TEXT("MetalMapWeight"), 0.f);
+		const FPin CavityW = G.Scalar(TEXT("CavityWeight"), 0.f);
+		if (MaskDef && !MaskDef->SRGB)
+		{
+			const FPin Orm = G.Tex(TEXT("MaskTex"), MaskDef, false, Uv);
+			Rough = G.Lerp(RoughConst, G.Mask(Orm, TEXT("g")), RoughW);
+			Metal = G.Lerp(MetalConst, G.Mask(Orm, TEXT("b")), MetalW);
+			AO = G.Lerp(G.Const(1.f), G.Mask(Orm, TEXT("r")), CavityW);
+		}
+		else
+		{
+			Rough = G.Lerp(RoughConst, RoughConst, RoughW);
+			Metal = G.Lerp(MetalConst, MetalConst, MetalW);
+			AO = G.Lerp(G.Const(1.f), G.Const(1.f), CavityW);
+		}
+		FGraph::Link(Out->Roughness, G.RTSwitch(Rough, RoughConst));
+		FGraph::Link(Out->Metallic, Metal);
+		FGraph::Link(Out->AmbientOcclusion, AO);
+		// Reflet attenue dans les creux (la moitie de l'occlusion)
+		FGraph::Link(Out->Specular, G.Mul(G.Scalar(TEXT("Specular"), 0.5f), G.Lerp(G.Const(1.f), AO, G.Const(0.5f))));
+		const FPin N = G.Tex(TEXT("NormalTex"), EngineTexture(true), true, Uv);
+		FGraph::Link(Out->Normal, G.RTSwitch(G.Lerp(G.C3(0.f, 0.f, 1.f), N, G.Scalar(TEXT("NormalStrength"), 0.f)), G.C3(0.f, 0.f, 1.f)));
+		FGraph::Link(Out->EmissiveColor, G.Add(G.Mul(Base, G.Scalar(TEXT("SelfIllum"), 0.f)), G.Vector(TEXT("Emissive"), FLinearColor::Black)));
+	}
+
 	/** v4.7 : salles de fosses. Le brouillard ordinaire (sans brouillard volumetrique) ajoute sa couleur a tout ce qui est
 	 *  loin, y compris le fond d'un puits de 14 m qui devrait etre noir : environ 11 % de voile jaune a 15 m (densite
 	 *  0,08). Ce post-traitement assombrit les pixels situes sous le sol (position monde reconstruite depuis la
@@ -857,6 +911,7 @@ namespace BRMaterialBuilder
 		{
 		case EBRMasterMaterial::Mesh:
 		case EBRMasterMaterial::Skin:
+		case EBRMasterMaterial::Gear: // v4.17 : combinaison (squelette), pieces rigides de secours (Nanite)
 			// Modeles Blender en instances, modeles fournis en Nanite, combinaison et entites a squelette
 			return { MATUSAGE_InstancedStaticMeshes, MATUSAGE_SkeletalMesh, MATUSAGE_Nanite };
 		case EBRMasterMaterial::World:
@@ -897,7 +952,10 @@ namespace BRMaterialBuilder
 			return nullptr;
 		}
 		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_WaterSurface_Runtime"),
-			TEXT("M_BR_PitShade_Runtime"), TEXT("M_BR_WorldCloth_Runtime"), TEXT("MD_BR_Decal_Runtime") };
+			TEXT("M_BR_PitShade_Runtime"), TEXT("M_BR_WorldCloth_Runtime"), TEXT("MD_BR_Decal_Runtime"),
+			TEXT("M_BR_Gear_Runtime") };
+		// v4.17 : un nom par materiau maitre (rien ne protegeait cette table contre un decalage)
+		static_assert(UE_ARRAY_COUNT(Names) == static_cast<int32>(EBRMasterMaterial::Gear) + 1, "Un nom par EBRMasterMaterial");
 		UMaterial* M = NewObject<UMaterial>(Outer ? Outer : GetTransientPackage(), FName(Names[static_cast<int32>(Which)]), RF_Transient);
 		M->MaterialDomain = MD_Surface;
 		M->BlendMode = BLEND_Opaque;
@@ -929,6 +987,9 @@ namespace BRMaterialBuilder
 			break;
 		case EBRMasterMaterial::Mesh:
 			BuildMesh(G, Out, false, LoadTexture);
+			break;
+		case EBRMasterMaterial::Gear:
+			BuildGear(G, Out, LoadTexture);
 			break;
 		case EBRMasterMaterial::Skin:
 			M->SetShadingModel(MSM_Subsurface);
