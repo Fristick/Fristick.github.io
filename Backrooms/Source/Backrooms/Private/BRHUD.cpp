@@ -614,20 +614,35 @@ float ABRHUD::ScrollArea(float& Scroll, float X, float Y, float W, float H, floa
 	return -Offset;
 }
 
-void ABRHUD::PadScrollFocus(int32 Step)
+bool ABRHUD::PadScrollFocus(int32 Step)
 {
 	// v4.17 : zones de la derniere image de l'inventaire ; la premiere demande choisit la premiere zone (ou la derniere)
-	const int32 Count = LastScrollZones;
-	if (Count <= 0 || Step == 0)
+	if (Step == 0)
 	{
 		PadScrollZone = INDEX_NONE;
-		return;
+		return true;
+	}
+	const int32 Count = LastScrollZones;
+	if (Tab == ETab::Character || Count < 2)
+	{
+		return false;
 	}
 	PadScrollZone = PadScrollZone == INDEX_NONE ? (Step > 0 ? 0 : Count - 1) : ((PadScrollZone + Step) % Count + Count) % Count;
 	if (ABRCharacter* PadChar = PlayerOwner ? Cast<ABRCharacter>(PlayerOwner->GetPawn()) : nullptr)
 	{
 		PadChar->PlayUISound(TEXT("S_UIClick"), 0.35f);
 	}
+	return true;
+}
+
+bool ABRHUD::PadScrollLines(int32 Lines)
+{
+	if (Tab == ETab::Character)
+	{
+		return false;
+	}
+	PadScrollPixels(Lines * PadScrollLine);
+	return true;
 }
 
 void ABRHUD::PadScrollPixels(float Pixels)

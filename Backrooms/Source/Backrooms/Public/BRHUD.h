@@ -55,13 +55,17 @@ public:
 	bool PadSlotAction(bool bInspect);
 	/** v4.16 (relecture) : B : ferme l'inspection ouverte (true) ; false : rien a fermer ici (le controleur ferme l'inventaire) */
 	bool PadBack();
-	/** v4.17 (interface, a brancher dans ABRPlayerController) : zone de defilement suivante (Step +1) ou precedente (-1) de
-	 *  l'onglet ouvert (CARNET, JOURNAL : deux colonnes ; OBJECTIFS, aide des PARAMETRES : une zone), cadre jaune autour
-	 *  d'elle ; Step 0 : retour a toutes les zones. Tant qu'aucune zone n'est choisie (ouverture, changement d'onglet), le
+	/** v4.17 (interface, a brancher dans ABRPlayerController, croix gauche / droite) : colonne suivante (Step +1) ou precedente
+	 *  (-1) d'un onglet a deux zones de defilement (CARNET, JOURNAL), cadre jaune autour d'elle ; Step 0 : retour a toutes les
+	 *  zones. false (rien de fait) dans PERSONNAGE et dans un onglet a moins de deux zones : le controleur garde son action
+	 *  (PadDirection : curseur des cases, onglets). Tant qu'aucune zone n'est choisie (ouverture, changement d'onglet), le
 	 *  defilement de la manette s'applique a toutes les zones de l'image, comme en v4.16 */
-	void PadScrollFocus(int32 Step);
-	/** v4.17 (a brancher) : defilement de la zone choisie (ou de toutes), en pixels a 1080 lignes, a la prochaine image : une
-	 *  ligne (PadScrollLine) par appui de la croix, avec repetition ; vitesse x duree de l'image pour le stick droit */
+	bool PadScrollFocus(int32 Step);
+	/** v4.17 (a brancher, croix haut / bas avec repetition) : fait defiler la zone choisie (ou toutes) de Lines lignes du
+	 *  carnet (PadScrollLine) ; false (rien de fait) dans PERSONNAGE, ou la croix deplace le curseur (PadDirection) */
+	bool PadScrollLines(int32 Lines);
+	/** v4.17 (a brancher, stick droit) : defilement de la zone choisie (ou de toutes), en pixels a 1080 lignes, a la prochaine
+	 *  image (vitesse x duree de l'image) ; dans tous les onglets (PERSONNAGE : les objectifs) */
 	void PadScrollPixels(float Pixels);
 	/** v4.17 : pas d'une ligne du carnet, en pixels a 1080 lignes (croix haut / bas) */
 	static constexpr float PadScrollLine = 26.f;
