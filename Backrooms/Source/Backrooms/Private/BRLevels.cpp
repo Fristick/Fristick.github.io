@@ -158,7 +158,9 @@ namespace
 		D.PillarChance = 0.55f; D.PillarSize = 80.f; D.OpenZoneChance = 0.3f;
 		D.bTrim = false; D.bLintels = true;
 		D.Floor = S(TEXT("T_ConcreteFloor"), C(1, 1, 1), 400.f, 0.55f, 0.35f);
-		D.Floor.Puddles = 0.55f; D.Floor.Wetness = 0.12f; // le sol du garage : flaques en reflets ray traces
+		// le sol du garage : flaques en reflets ray traces ; v4.17 : 0,55 avant (~25 % du sol, des formes dures "en camouflage"),
+		// 0,22 : ~9 %, quelques flaques ou l'eau s'accumule (direction artistique : l'usure a une cause et reste rare)
+		D.Floor.Puddles = 0.22f; D.Floor.Wetness = 0.12f;
 		D.bGarage = true;
 		D.Wall = S(TEXT("T_Concrete"), C(0.95f, 0.95f, 0.95f), 350.f, 0.85f, 0.4f);
 		D.Ceiling = S(TEXT("T_Concrete"), C(0.6f, 0.6f, 0.6f), 400.f, 0.9f, 0.3f);
@@ -218,7 +220,7 @@ namespace
 		D.LoopChance = 0.15f; D.OpenZoneChance = 0.06f;
 		D.bTrim = false; D.bLintels = false;
 		D.Floor = S(TEXT("T_ConcreteFloor"), C(0.8f, 0.76f, 0.7f), 250.f, 0.7f, 0.5f);
-		D.Floor.Puddles = 0.35f; D.Floor.Wetness = 0.1f; // fuites des tuyaux
+		D.Floor.Puddles = 0.2f; D.Floor.Wetness = 0.1f; // fuites des tuyaux ; v4.17 : 0,35 avant (meme masque dur qu'au Niveau 1)
 		D.Wall = S(TEXT("T_Concrete"), C(0.72f, 0.68f, 0.6f), 250.f, 0.9f, 0.55f);
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
 		// v4.15 (realisme) : pores et fissures du beton dans l'ombre (occlusion de cavite)
