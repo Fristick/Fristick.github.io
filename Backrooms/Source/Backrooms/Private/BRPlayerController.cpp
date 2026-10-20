@@ -805,7 +805,9 @@ namespace BRPadInput
 		}
 		if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
 		{
-			const bool bDone = DX != 0 ? H->PadScrollFocus(DX) : (DY != 0 && H->PadScrollLines(DY));
+			// v4.17 (interface, C6) : PARAMETRES d'abord (ligne choisie, valeur reglee), puis les colonnes, puis l'action d'avant
+			const bool bDone = DX != 0 ? (H->PadSettingsAdjust(DX) || H->PadScrollFocus(DX))
+				: (DY != 0 && (H->PadSettingsMove(DY) || H->PadScrollLines(DY)));
 			if (!bDone)
 			{
 				H->PadDirection(DX, DY);
@@ -1311,6 +1313,18 @@ void ABRPlayerController::OnCrouch(const FInputActionValue& Value)
 
 void ABRPlayerController::OnFlash(const FInputActionValue& Value)
 {
+	// v4.17 (interface, C7) : Y dans PERSONNAGE : prendre puis poser l'objet de la case du curseur (ABRHUD::PadCarry, regles de
+	// la souris) ; ailleurs (false), l'aide du carnet comme avant
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && IsInputKeyDown(EKeys::Gamepad_FaceButton_Top))
+	{
+		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
+		{
+			if (H->PadCarry())
+			{
+				return;
+			}
+		}
+	}
 	// v4.16 : Y dans l'inventaire : aide progressive du carnet
 	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Top, 0, 0, true))
 	{
@@ -1498,6 +1512,12 @@ void ABRPlayerController::OnNightVision(const FInputActionValue& Value)
 
 void ABRPlayerController::OnLidarPulse(const FInputActionValue& Value)
 {
+	// v4.17 (interface, C6) : gachettes dans PARAMETRES (inventaire ouvert) : categorie precedente (LT) ou suivante (RT) ;
+	// la gachette est testee (l'impulsion est aussi liee au clic droit)
+	if (PadSettingsTrigger())
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1509,6 +1529,10 @@ void ABRPlayerController::OnLidarPulse(const FInputActionValue& Value)
 
 void ABRPlayerController::OnLidarFocusStarted(const FInputActionValue& Value)
 {
+	if (PadSettingsTrigger())
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1516,6 +1540,17 @@ void ABRPlayerController::OnLidarFocusStarted(const FInputActionValue& Value)
 			C->LidarFocus(true);
 		}
 	}
+}
+
+bool ABRPlayerController::PadSettingsTrigger()
+{
+	if (!bInventory || IsModalDialogOpen() || CaptureAction != INDEX_NONE)
+	{
+		return false;
+	}
+	const int32 Step = IsInputKeyDown(EKeys::Gamepad_RightTrigger) ? 1 : (IsInputKeyDown(EKeys::Gamepad_LeftTrigger) ? -1 : 0);
+	ABRHUD* H = Cast<ABRHUD>(GetHUD());
+	return Step != 0 && H && H->PadSettingsCategory(Step);
 }
 
 void ABRPlayerController::OnLidarFocusCompleted(const FInputActionValue& Value)
@@ -1697,6 +1732,17 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 	{
 		BRDisplay::Confirm(); // v4.9 : Entree pendant la confirmation de l'affichage : conserver
 		return;
+	}
+	// v4.17 (interface, C6) : A dans PARAMETRES : meme effet qu'un clic sur la ligne choisie a la manette
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom))
+	{
+		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
+		{
+			if (H->PadSettingsActivate())
+			{
+				return;
+			}
+		}
 	}
 	// v4.16 (relecture) : A dans PERSONNAGE : utiliser, equiper ou retirer l'objet de la case du curseur
 	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Bottom, false))
