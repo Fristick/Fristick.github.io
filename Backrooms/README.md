@@ -7,7 +7,34 @@ Jeu d'exploration horrifique à la première personne, **100 % procédural et in
 [Backrooms Wiki](https://backrooms-wiki.wikidot.com/normal-levels-i) (contenu sous licence CC BY-SA 3.0).
 Il comprend le **Niveau 0** et **11 autres niveaux** du wiki, **9 entités**, et des modèles 3D générés par Blender.
 
-**Version 4.15** (parcours linéaire, image réaliste, tests du jeu joués dans Unreal) :
+**Version 4.16** (fiabilisation de la v4.15 : lumière de jeu fidèle à l'image, scanner sur les supports mobiles,
+coopération, chapitre traversé dans le paquet) :
+
+- **Où lire** : résultats, défauts trouvés, mesures, limites : [`Docs/RAPPORT_v4.16.md`](Docs/RAPPORT_v4.16.md) ;
+  journaux des lots : [`Docs/v416/`](Docs/v416/).
+
+> **Exécuté** sous Windows (Unreal 5.8.3, RTX 5050 Laptop) : 23 lancements des tests du jeu (0 problème, hors une marche
+> du test complet bloquée par un Smiler : défaut du test, corrigé ; rejoué : 0 problème), test réseau v4.16 de 2 à 4
+> joueurs sur ce PC (arrivées tardives, reconnexion, latence simulée : 0 problème), paquet Windows Shipping construit et
+> **premier chapitre traversé dans le paquet**, mesures de performance. **Non exécuté** : Linux (plateforme absente du
+> moteur installé), macOS, machine de référence (RTX 4080), vraie manette, deux PC, second écran.
+
+- **Lumière de jeu** : un plafonnier derrière un mur ne compte plus pour les entités et la santé mentale ; même valeur
+  chez tous les joueurs et dans tous les profils ; pendant une coupure, les règles suivent le fondu commun, pas le
+  vacillement de l'écran ; l'inventaire indique « dans le noir », « pénombre » ou « éclairé ». Les Levels 0 à 3 sont
+  plus sombres pour les règles (seuils inchangés).
+- **Scanner LiDAR** : les inscriptions suivent le battant qui s'ouvre ; plus de faux mur de points dans une porte ouverte.
+- **Échelles** : plus de montée le long d'un mur haut près du pied ; on lâche l'échelle en descendant sur une caisse.
+- **Coopération** : réveils refusés loin des coéquipiers corrigés, mécanismes animés loin de l'hôte, actions maintenues
+  arrêtées par la pause, abandon à terre pour tous (hôte comme client) ; la porte de service ouverte ne coupe plus la
+  vue, les sons ni le scanner.
+- **Manette** : invites des boutons ; inventaire, carnet et pause se parcourent à la manette (§ 2).
+- **Visée** : entre deux mécanismes voisins, c'est celui au centre du regard qui est visé ; vannes des Poolrooms écartées.
+- **Cinématique** : Lumen n'éclaire plus aux impacts que les reflets (salles de fosses : 34,7 → 25,1 ms par image sur
+  le portable de test, § 7).
+- Protocole réseau 416, version du projet 4.16 ; sauvegarde au format 6, inchangé.
+
+**Nouveautés de la version 4.15** (parcours linéaire, image réaliste, tests du jeu joués dans Unreal) :
 
 - **Où lire** :
   - résultats, méthode, limites : [`Docs/RAPPORT_v4.15.md`](Docs/RAPPORT_v4.15.md) ;
@@ -887,6 +914,12 @@ efface une case, **PAR DÉFAUT** rétablit tout. Une touche déjà utilisée par
 **Dans l'inventaire** : **glisser-déposer** pour déplacer un objet (poches ↔ stockage ↔ équipement),
 **double-clic** pour l'utiliser / l'équiper / le retirer, **clic droit** pour l'inspecter.
 
+**À la manette** (v4.16 ; les invites montrent les boutons dès que la manette a servi en dernier) : dans l'inventaire et
+le carnet, **LB / RB** changent d'onglet, la **croix haut / bas** fait défiler, **Y** affiche l'aide du carnet, **B**
+ferme ; dans **PERSONNAGE**, la croix déplace le curseur des cases, **A** utilise ou équipe, **X** inspecte. Dans la
+**pause** (y compris en solo, jeu arrêté), la croix choisit une carte, **A** valide, **B** revient ; il n'y a plus de
+« Quitter » sur **Fin** à la manette. Déplacer un objet d'une case à l'autre se fait à la souris.
+
 **Commandes console** (touche `²` ou `` ` ``) :
 `BRLevel 37` (aller à un niveau) · `BRGod` (invincible) · `BRSpawn 0..8` (faire apparaître une entité ; 8 = Bacteria) ·
 `BRGiveAll` (remplit l'inventaire) · `BRBlackout` (coupure de courant) · `BRObjectives` (valide les objectifs) ·
@@ -1293,6 +1326,12 @@ les entités, les objets et les sorties. Ajoutez votre fonction à `BuildAll()`,
   changement de profil s'applique aussi à ce qui est déjà chargé. **RTX fluide** vise 60 images/s ou plus sur une
   RTX 4080 ; **ce n'est pas encore mesuré** (rapport v4.8, § 4.2).
 
+  **v4.16** : en **Cinématique**, les impacts éclairés de Lumen ne servent plus qu'aux reflets
+  (`r.Lumen.HardwareRayTracing.LightingMode 2`) ; l'éclairage indirect passe par les sondes ordinaires. Sur le
+  portable de test (RTX 5050 Laptop, fenêtre 1366 × 768) : salles de fosses 34,7 → 25,1 ms par image, Poolrooms
+  39,6 → 31,7 ms ; l'image change un peu (comparaison et retour en arrière : rapport v4.16, § 6). Rien de mesuré sur
+  une RTX 4080.
+
   Modifier un réglage à la main passe en **PERSONNALISÉ** ; des réglages d'une version précédente sont conservés tels
   quels (profil Personnalisé). Tout s'applique immédiatement, sauf le RHI et le support du ray tracing.
   *Choix des ombres* : les dizaines de plafonniers fixes gardent les ombres virtuelles (VSM, mises en cache) ; la lampe
@@ -1656,6 +1695,43 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   ```
   Sortie et réglages d'import (import exécuté en v4.15 par `backrooms_setup.run(force=True)` : kit du Level 0 complet,
   34 modules et 29 textures) : [`RawAssets/Level0Kit/README.md`](RawAssets/Level0Kit/README.md).
+- **Suites v4.16** (avec `-BRAutoTest -BRAutoTestStrict` ; chacune se lance seule, elles ne font pas partie du test
+  complet). **Exécutées** dans Unreal 5.8.3 : résultats et commits dans [`Docs/RAPPORT_v4.16.md`](Docs/RAPPORT_v4.16.md), § 3 et 4.
+  - `-BRAutoTestV416Light` : lumière de jeu (mur, passage, trappes d'échelle, coupure, profils graphiques, sources de
+    mission, coût ; empreinte de la grille comparée au banc `Tools/Light`) ;
+  - `-BRAutoTestV416Lidar` : battant de la porte du passage du Level 6 au scanner (seul, ou avec `-BRNetTest`) ;
+  - `-BRAutoTestV416Ladder` : échelles des chunks du Niveau 37 (graines du niveau 2303284074 et 115083815), montée depuis
+    le canal, Niveaux 8 et 6 ; leurs étapes réseau sont toujours à la fin du plan de `-BRNetTest` ;
+  - `-BRAutoTestV416Visual` : HUD (3 définitions, 22 langues), manette, modes d'affichage, scanner, entités, kit,
+    décalques ; `-BRV416PleinEcran` essaie aussi le plein écran exclusif (change la définition de l'écran) ;
+  - `-BRAutoTestV416Ship` (REJOUER et sauvegardes) et `-BRAutoTestChapter` avec `-BRChapterPhase=1`, `2`, `3`
+    (traversée du premier chapitre) : voir § 10 ;
+  - `-BRNetTest -BRAutoTestV416Net` : coopération v4.16 (ramassages et départs simultanés, morts et réveils, mécanismes
+    loin de l'hôte, inventaire, pause, touches et perte de focus pendant une action maintenue, chute dans une fosse) à la
+    place du plan réseau ordinaire. Lanceur, toutes les machines sur ce PC :
+    ```bat
+    powershell -ExecutionPolicy Bypass -File Tools\Tests\run_nettest.ps1 -Clients 3 -NullRhiClients -Tag net4
+    ```
+    `-LateJoin porte|lidar|passage|reconnexion` (client qui arrive en cours de partie ou se reconnecte),
+    `-Lag 150 -Jitter 40 -Loss 3` (réseau simulé), `-Classic` (plan `-BRNetTest` ordinaire). Résultats dans
+    `Saved\TestRuns\autotest\<étiquette>\` ; code 0 tout réussi, 1 un problème, 2 seulement des non vérifiés, 3 un
+    rapport manquant. Avec quatre instances de l'éditeur, un PC de 16 Go peut manquer de mémoire (un premier lancement
+    s'est arrêté ainsi) : fermez les autres programmes.
+- **Mesures de performance** (v4.16) : `-BRAutoTest -BRAutoTestPerf` mesure cinq scènes à graine fixe (fosses, Poolrooms,
+  marches aux Niveaux 0 et 1, scan au Level 6) dans les quatre profils (`-BRProfile=<n>` : un seul) ; préchauffage noté à
+  part ; médiane, 95 %, 99 %, longues images, GPU, VRAM, streaming et postes du GPU dans `Perf.csv`. N exécutions sous
+  une étiquette, puis comparaison avant / après :
+  ```bat
+  powershell -ExecutionPolicy Bypass -File Tools\Tests\run_perf.ps1 -Tag base -Runs 3
+  python Tools\Tests\perf_summary.py --before <dossier avant> --after <dossier après> --out comparaison.md
+  ```
+  Hors version publiée : `-BRPerfCmds="r.X 1;r.Y 2"` applique des commandes de la console après le profil, pour essayer
+  un réglage sans recompiler (`run_perf.ps1 -PerfCmds`) ; `-BRHitLightingMode=1` rend l'ancien mode de Lumen de la
+  Cinématique, pour comparer.
+- **Outils hors moteur v4.16** : `python Tools/run_benches.py` compile les bancs C++ avec chaque compilateur trouvé (GCC,
+  clang, clang-cl, MSVC ; options strictes), les exécute et compare leurs sorties (`--bench <nom>`, `--compilers
+  gcc,msvc`) ; `python Tools/verify_walk_block.py` rejoue hors moteur le classement d'un blocage de la marche des tests
+  (entité ou décor).
 
 ---
 
@@ -1663,8 +1739,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 
 | Système | Rendu | Construction | État |
 |---|---|---|---|
-| Windows 64 bits | DirectX 12, RT matériel si disponible | `Tools\Build\build_windows.ps1 -UERoot <moteur>` (`-NoUnityCheck` : éditeur compilé sans unity d'abord) | v4.15 : paquet Shipping du canal public construit, cuit, contrôlé et lancé (test de démarrage) ; v4.9 : préparé, non exécuté |
-| Linux x86_64 | Vulkan SM6 (SM5 en repli), Lumen logiciel | `UE_ROOT=<moteur> Tools/Build/build_linux.sh`, ou `build_windows.ps1 -Platform Linux` en croisé | préparé, non exécuté |
+| Windows 64 bits | DirectX 12, RT matériel si disponible | `Tools\Build\build_windows.ps1 -UERoot <moteur>` (`-NoUnityCheck` : éditeur compilé sans unity d'abord) | v4.16 : paquet Shipping construit, contrôlé, lancé, et premier chapitre traversé dans le paquet (`-Chapter`) ; v4.15 : paquet Shipping du canal public construit, cuit, contrôlé et lancé (test de démarrage) ; v4.9 : préparé, non exécuté |
+| Linux x86_64 | Vulkan SM6 (SM5 en repli), Lumen logiciel | `UE_ROOT=<moteur> Tools/Build/build_linux.sh`, ou `build_windows.ps1 -Platform Linux` en croisé | préparé, non exécuté ; v4.16 : bloqué sur le PC de test (plateforme Linux absente de l'installation du moteur, chaîne `v26_clang-20.1.8-rockylinux8` non installée) |
 | macOS | Metal, binaire universel arm64 + x86_64, Lumen logiciel | sur un Mac : `UE_ROOT=<moteur> Tools/Build/build_mac.sh` | préparé, non exécuté |
 
 - `Tools/Build/versions.env` fixe la version du moteur (5.8.3) ; un script s'arrête devant une autre version. Chaque
