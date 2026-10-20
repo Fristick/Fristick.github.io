@@ -24,9 +24,9 @@ $env:BR_SETUP_FORCE = if ($Force) { '1' } else { '0' }
 $env:BR_SETUP_KIT = if ($Kit) { '1' } else { '0' }
 $env:BR_SETUP_OUT = $result
 $script = Join-Path $PSScriptRoot 'editor_setup.py'
-$args = @("`"$project`"", "-ExecutePythonScript=`"$script`"", '-unattended', '-nosplash', '-log', "-abslog=`"$log`"")
+$argList = @("`"$project`"", "-ExecutePythonScript=`"$script`"", '-unattended', '-nosplash', '-log', "-abslog=`"$log`"")
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$p = Start-Process -FilePath $Editor -ArgumentList $args -PassThru
+$p = Start-Process -FilePath $Editor -ArgumentList $argList -PassThru
 $null = $p.Handle
 if (-not $p.WaitForExit($TimeoutMin * 60 * 1000)) { Stop-Process -Id $p.Id -Force; 'TIMEOUT'; exit 1 }
 $sw.Stop()

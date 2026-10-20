@@ -473,7 +473,9 @@ void ABRPlayerController::EnsureInput()
 	}
 	MoveAction = MakeAction(TEXT("IA_Move"), EInputActionValueType::Axis2D);
 	LookAction = MakeAction(TEXT("IA_Look"), EInputActionValueType::Axis2D);
-	LookPadAction = MakeAction(TEXT("IA_LookPad"), EInputActionValueType::Axis2D);
+	// v4.17 (relecture) : actives aussi pendant la pause (inventaire ouvert depuis la pause : stick droit, LT / RT de
+	// PARAMETRES) ; leurs gestionnaires de jeu verifient deja CanPlay()
+	LookPadAction = MakeAction(TEXT("IA_LookPad"), EInputActionValueType::Axis2D, true);
 	JumpAction = MakeAction(TEXT("IA_Jump"), EInputActionValueType::Boolean);
 	SprintAction = MakeAction(TEXT("IA_Sprint"), EInputActionValueType::Boolean);
 	// v4.16 (relecture) : les boutons de l'inventaire a la manette (B retour, Y aide, X inspecter, LB / RB onglets, croix
@@ -501,8 +503,8 @@ void ABRPlayerController::EnsureInput()
 	TalkAction = MakeAction(TEXT("IA_Talk"), EInputActionValueType::Boolean, true);
 	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean, true);
 	MenuDeleteAction = MakeAction(TEXT("IA_MenuDelete"), EInputActionValueType::Boolean);
-	LidarPulseAction = MakeAction(TEXT("IA_LidarPulse"), EInputActionValueType::Boolean);
-	LidarFocusAction = MakeAction(TEXT("IA_LidarFocus"), EInputActionValueType::Boolean);
+	LidarPulseAction = MakeAction(TEXT("IA_LidarPulse"), EInputActionValueType::Boolean, true);
+	LidarFocusAction = MakeAction(TEXT("IA_LidarFocus"), EInputActionValueType::Boolean, true);
 	PocketActions.Reset();
 	for (int32 i = 0; i < 4; ++i)
 	{
