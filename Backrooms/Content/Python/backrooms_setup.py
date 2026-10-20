@@ -39,7 +39,9 @@ import unreal
 # 12 : kit du Level 0 : papier peint, moquette et dalles projetes dans l'espace monde (M_L0K_PbrWorld), diffuseur texture
 # (M_L0K_ColorTex), textures du kit refaites ; atlas des decalques (tout est reimporte une fois) ;
 # 13 : profils IES refaits (Tools/generate_ies.py : faisceau plus large, au moins 70 % de la lumiere du cone d'avant)
-VERSION = 13
+# 14 (v4.17) : silhouette de l'inventaire refaite (I_Silhouette), kit du Level 0 chanfreine (FBX regeneres), papier
+# peint du Level 0 et cartes derivees de la combinaison : tout est reimporte une fois
+VERSION = 14
 # Version des materiaux maitres : quand elle change, seuls les materiaux sont reconstruits (v4.1 : flaques,
 # v4.3 : anti-repetition des sols, v4.4 : echantillonneur lineaire du bruit, le materiau du monde compile de nouveau,
 # v4.7 : cartes de rugosite RoughTex/RoughContrast dans le monde et les modeles,
