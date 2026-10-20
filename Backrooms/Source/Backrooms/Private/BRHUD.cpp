@@ -3708,6 +3708,8 @@ void ABRHUD::DrawObjectiveTracker(ABRWorld* W)
 	const float U = Ui();
 	const float RX = Canvas->ClipX - 58.f * U;
 	float Y = 110.f * U;
+	// v4.17 : objectifs en casse de phrase (ABRWorld::GetObjectives) ; le but du niveau se distingue par la graisse
+	const FString GoalText = W->IsMissionActive() ? BRMissionText::GoalTitle(W->GetLevelNumber()) : FString();
 	for (const FBRObjective& O : Objs)
 	{
 		if (!O.bRequired && O.IsDone())
@@ -3717,8 +3719,9 @@ void ABRHUD::DrawObjectiveTracker(ABRWorld* W)
 		FLinearColor Col = O.IsDone() ? Done : (O.bRequired ? WithAlpha(Yellow, 0.92f) : WithAlpha(InkDim, 0.8f));
 		Col.A *= A;
 		const FString Line = (O.Goal > 0 && !O.bHideCount) ? FString::Printf(TEXT("%s  %d/%d"), *O.Text, O.Progress, O.Goal) : O.Text;
-		const FVector2f LS = TextSize(Line, 11.5f, EUiWeight::Regular);
-		TextF(Line, RX, Y, Col, 11.5f, O.IsDone() ? EUiWeight::Light : EUiWeight::Regular, EUiAlign::Right);
+		const EUiWeight LineWt = O.IsDone() ? EUiWeight::Light : (!GoalText.IsEmpty() && O.Text == GoalText ? EUiWeight::Bold : EUiWeight::Regular);
+		const FVector2f LS = TextSize(Line, 11.5f, LineWt);
+		TextF(Line, RX, Y, Col, 11.5f, LineWt, EUiAlign::Right);
 		const float D = 7.f * U;
 		RoundRect(RX + 10.f * U, Y + (LS.Y - D) * 0.5f, D, D, D * 0.5f, Col);
 		Y += 24.f * U;
@@ -4827,18 +4830,23 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 			? BR_STR(NSLOCTEXT("BR", "HUD.SortiesSontStablesTrouvezMur", "Les sorties sont stables : trouvez un mur qui gr\u00e9sille."))
 			: BR_STR(NSLOCTEXT("BR", "HUD.ObjectifsRequisStabiliserSortiesNiveau", "Objectifs requis pour stabiliser les sorties du niveau."))) : FString();
 		// v4.9 : texte coupe sur plusieurs lignes (langues aux mots longs) plutot que reduit ; la molette fait defiler
+		// v4.17 : objectifs en casse de phrase (avant : FString::ToUpper, ASCII seulement : "ReTABLIR") ; le but du niveau se
+		// distingue par la graisse et la couleur
+		const FString GoalText = W->IsMissionActive() ? BRMissionText::GoalTitle(W->GetLevelNumber()) : FString();
 		auto Layout = [&](bool bDraw, float Offset) -> float
 		{
 			float Y = Top + Offset;
 			auto Visible = [&](float LY, float H) { return bDraw && LY >= Top - 1.f && LY + H <= Bottom + 1.f; };
 			for (const FBRObjective& O : Objs)
 			{
-				const FLinearColor Col = O.IsDone() ? Done : (O.bRequired ? Ink : InkDim);
+				const bool bGoal = !GoalText.IsEmpty() && O.Text == GoalText;
+				const EUiWeight Wt = bGoal ? EUiWeight::Bold : EUiWeight::Regular;
+				const FLinearColor Col = O.IsDone() ? Done : (bGoal ? Yellow : (O.bRequired ? Ink : InkDim));
 				const FString Count = (O.Goal > 0 && !O.bHideCount) ? FString::Printf(TEXT("%d/%d"), O.Progress, O.Goal) : FString();
 				// v4.17 : le texte s'arrete avant le compteur (plus large en 12 points gras), a 8U de lui
 				const float CountW = Count.IsEmpty() ? 0.f : TextSize(Count, UiType::Value, EUiWeight::Bold).X + 8.f * U;
 				const float TextW0 = LW - 50.f * U - FMath::Max(24.f * U, CountW);
-				const TArray<FString> Lines = WrapF(O.Text, TextW0, UiType::Body, EUiWeight::Regular);
+				const TArray<FString> Lines = WrapF(O.Text, TextW0, UiType::Body, Wt);
 				for (int32 k = 0; k < Lines.Num(); ++k)
 				{
 					if (Visible(Y, LineH))
@@ -4849,7 +4857,7 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 							DrawRect(O.bRequired ? Yellow : YellowDim, LX + 18.f * U, FMath::RoundToFloat(Y + (BodyH - Dot) * 0.5f), Dot, Dot);
 							TextF(Count, LX + LW - 18.f * U, Y, Col, UiType::Value, EUiWeight::Bold, EUiAlign::Right, false);
 						}
-						TextLineF(Lines[k], LX + 32.f * U, Y, TextW0, Col, UiType::Body, EUiWeight::Regular);
+						TextLineF(Lines[k], LX + 32.f * U, Y, TextW0, Col, UiType::Body, Wt);
 					}
 					Y += LineH;
 				}
@@ -6164,7 +6172,8 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	if (!Goal.IsEmpty())
 	{
 		const float GoalLH = LineStep(13.f, EUiWeight::Bold, 26.f);
-		for (const FString& L : WrapF(Goal.ToUpper(), ColWidth, 13.f, EUiWeight::Bold))
+		// v4.17 : casse de phrase, en gras (avant : FString::ToUpper, ASCII seulement : "LIRE LE SCHeMA")
+		for (const FString& L : WrapF(Goal, ColWidth, 13.f, EUiWeight::Bold))
 		{
 			Push(L, E.bSolved ? Done : Yellow, 13.f, EUiWeight::Bold, 0.f, GoalLH);
 		}
@@ -6713,8 +6722,9 @@ void ABRHUD::DrawDeparture(ABRWorld* W)
 		return;
 	}
 	const FString Dest = W->DestinationLabel(D.Target);
+	// v4.17 : capitales selon la langue (FText::ToUpper, ICU : I turc, lettres accentuees) ; avant : FString::ToUpper, ASCII
 	const FString Line1 = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.DepartureBanner", "D\u00c9PART VERS {Dest}  \u00b7  {Ready}/{Needed} rassembl\u00e9s  \u00b7  {Secs} s"),
-		{ { TEXT("Dest"), BRLoc::Arg(Dest.ToUpper()) }, { TEXT("Ready"), BRLoc::Int(D.Ready) }, { TEXT("Needed"), BRLoc::Int(D.Needed) },
+		{ { TEXT("Dest"), BRLoc::Arg(FText::AsCultureInvariant(Dest).ToUpper().ToString()) }, { TEXT("Ready"), BRLoc::Int(D.Ready) }, { TEXT("Needed"), BRLoc::Int(D.Needed) },
 			{ TEXT("Secs"), BRLoc::Int(FMath::CeilToInt(W->GetDepartureRemaining())) } });
 	FString Line2 = BR_STR(NSLOCTEXT("BR", "HUD.DepartureHelp", "Rejoignez la sortie (moins de 8 m, m\u00eame \u00e9tage). S'en \u00e9loigner annule le d\u00e9part."));
 	if (D.Style == static_cast<uint8>(BRGather::EStyle::Ladder))
@@ -6757,7 +6767,7 @@ void ABRHUD::DrawEnding(ABRPlayerController* PC, ABRWorld* W)
 	{
 		// v4.12 : fin du contenu disponible dans cette version (lot atteint), annoncee clairement
 		const int32 Lot = W->GetChapterEndLot();
-		Title = BRLoc::Fmt(NSLOCTEXT("BR", "Ending.ChapterTitle", "FIN DU CHAPITRE {Lot} : {Name}"), { { TEXT("Lot"), BRLoc::Int(Lot) }, { TEXT("Name"), BRLoc::Arg(BRLevels::LotName(Lot).ToString().ToUpper()) } });
+		Title = BRLoc::Fmt(NSLOCTEXT("BR", "Ending.ChapterTitle", "FIN DU CHAPITRE {Lot} : {Name}"), { { TEXT("Lot"), BRLoc::Int(Lot) }, { TEXT("Name"), BRLoc::Arg(BRLevels::LotName(Lot).ToUpper()) } }); // v4.17 : FText::ToUpper (ICU) au lieu de FString::ToUpper
 		Body = BRLoc::Fmt(NSLOCTEXT("BR", "Ending.ChapterBody", "Le passage s'ouvre sur un couloir qui ne m\u00e8ne encore nulle part : vous avez atteint la fin du contenu disponible dans cette version. La suite, \u00ab {Next} \u00bb, arrivera dans une prochaine mise \u00e0 jour de contenu. Votre partie, vos d\u00e9couvertes et vos fins sont conserv\u00e9es : ce passage s'ouvrira avec la suite."),
 			{ { TEXT("Next"), BRLoc::Arg(BRLevels::LotName(Lot + 1).ToString()) } });
 		Note = BR_STR(NSLOCTEXT("BR", "Ending.ChapterNote", "En attendant, les niveaux d\u00e9j\u00e0 disponibles restent \u00e0 explorer : objectifs facultatifs, documents, autres routes."));
