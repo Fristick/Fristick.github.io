@@ -159,6 +159,48 @@ namespace BRTestV417
 		return Best;
 	}
 
+	/** Place libre devant le personnage dans la direction Dir (sphere de 40 cm, hauteur de la taille) */
+	float FreeAhead(const ABRCharacter* C, const FVector& Dir, float Max)
+	{
+		const UWorld* InWorld = C ? C->GetWorld() : nullptr;
+		if (!InWorld)
+		{
+			return 0.f;
+		}
+		const FCollisionQueryParams Query(SCENE_QUERY_STAT(BRV417Steer), false, C);
+		const FVector From = C->GetActorLocation();
+		FHitResult Hit;
+		return InWorld->SweepSingleByChannel(Hit, From, From + Dir * Max, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(40.f), Query) ? Hit.Distance : Max;
+	}
+
+	/** Marche des videos : tout droit ; a moins de 1,6 m d'un obstacle, nouveau cap vers le cote le plus libre (gauche,
+	 *  droite, puis demi-tour, ordre fixe a egalite), atteint en tournant de 9 degres par pas (pas de saut de camera) */
+	void SteerWalk(ABRCharacter* C)
+	{
+		ABRPlayerController* PC = C ? Cast<ABRPlayerController>(C->GetController()) : nullptr;
+		if (!PC)
+		{
+			return;
+		}
+		if (FreeAhead(C, WalkDir, 160.f) < 159.f)
+		{
+			const FVector Left(-WalkDir.Y, WalkDir.X, 0.f);
+			const FVector Right(WalkDir.Y, -WalkDir.X, 0.f);
+			const float FL = FreeAhead(C, Left, 1500.f);
+			const float FR = FreeAhead(C, Right, 1500.f);
+			WalkDir = FL >= FR ? Left : Right;
+			if (FMath::Max(FL, FR) < 160.f)
+			{
+				WalkDir = -WalkDir;
+			}
+		}
+		FRotator Rot = PC->GetControlRotation();
+		const float Delta = FMath::FindDeltaAngleDegrees(Rot.Yaw, WalkDir.Rotation().Yaw);
+		Rot.Yaw += FMath::Clamp(Delta, -9.f, 9.f);
+		PC->SetControlRotation(Rot);
+		C->AddMovementInput(FRotator(0.f, Rot.Yaw, 0.f).Vector(), 1.f);
+	}
+
 	/** Camera independante (face de la combinaison) : memes reglages d'image que la camera du joueur */
 	ACameraActor* ShowCamera(UWorld* InWorld, const UCameraComponent* Theirs, ABRPlayerController* PC, const FVector& Loc, const FRotator& Rot)
 	{
@@ -452,22 +494,67 @@ void ABRAutoTest::AddV417VisualSteps()
 				return false;
 			}
 			Loc.Z = W->FloorZAt(Loc) + C->GetSimpleCollisionHalfHeight() + 5.f;
-			BRTestV417::Place(C, PC, Loc, FRotator(Look == 0 ? -5.f : 50.f, Yaw, 0.f));
+			BRTestV417::Place(C, PC, Loc, FRotator(Look == 0 ? -15.f : 50.f, Yaw, 0.f));
 			return true;
 		});
 	}
-	// Porte de service : a 3 m devant elle, regard sur le battant ; fermee, puis ouverte (battant anime, 2 s)
-	AddPose(Scene(TEXT("l0_porte_fermee")), Settle + 2.f, [](ABRWorld* W, ABRCharacter* C, ABRPlayerController* PC)
+	// Porte de service : a 3 m devant elle, regard sur le battant ; fermee, puis ouverte (battant anime, 2 s). Elle est dans
+	// le mur d'enceinte, loin du depart : on attend que les chunks autour d'elle soient construits (avant : capture noire,
+	// salle pas encore construite)
+	Add(TEXT("v4.17 visuel : porte de service : devant elle"), 0.f, [this]()
 	{
-		if (!W->HasServiceDoor())
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		ABRPlayerController* PC = GetPC();
+		if (!W || !C || !PC)
 		{
 			return false;
+		}
+		if (!W->HasServiceDoor())
+		{
+			Skip(TEXT("v417_l0_porte_fermee : pas de porte de service dans ce chargement"));
+			return true;
 		}
 		const FVector Door = W->GetServiceDoorLocation();
 		const FVector Out = FRotator(0.f, W->GetServiceDoorYaw(), 0.f).Vector();
 		FVector Loc = Door + Out * 300.f;
 		Loc.Z = W->FloorZAt(Loc) + C->GetSimpleCollisionHalfHeight() + 5.f;
 		BRTestV417::Place(C, PC, Loc, ((Door + FVector(0.f, 0.f, 110.f)) - (Loc + FVector(0.f, 0.f, C->BaseEyeHeight))).Rotation());
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : porte de service : salles construites"), Settle + 1.f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		if (!W || !C || !W->HasServiceDoor())
+		{
+			return true;
+		}
+		const FIntPoint Here = W->CellToChunk(W->WorldToCell(C->GetActorLocation()));
+		const FIntPoint Door = W->CellToChunk(W->GetServiceDoorCell());
+		bool bReady = W->IsChunkLoaded(Here) && W->IsChunkLoaded(Door);
+		for (int32 DX = -1; DX <= 1 && bReady; ++DX)
+		{
+			for (int32 DY = -1; DY <= 1 && bReady; ++DY)
+			{
+				const FIntPoint Near(Here.X + DX, Here.Y + DY);
+				bReady = !W->IsChunkInBounds(Near) || W->IsChunkLoaded(Near);
+			}
+		}
+		if (!bReady && StepTime < 20.f)
+		{
+			return false;
+		}
+		if (!bReady)
+		{
+			Skip(TEXT("v417_l0_porte_fermee : chunks autour de la porte pas construits apres 20 s (capture prise quand meme)"));
+		}
+		Note(FString::Printf(TEXT("porte de service : chunks prets apres %.1f s"), StepTime));
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : capture l0_porte_fermee"), 0.3f, [Snap]()
+	{
+		Snap(Scene(TEXT("l0_porte_fermee")));
 		return true;
 	});
 	Add(TEXT("v4.17 visuel : porte de service : ouverture"), 2.5f, [this]()
@@ -728,7 +815,7 @@ void ABRAutoTest::AddV417VisualSteps()
 	});
 	AddVideo(TEXT("l0_marche"), VideoFrames, [](ABRCharacter* C)
 	{
-		C->AddMovementInput(BRTestV417::WalkDir, 1.f);
+		BRTestV417::SteerWalk(C);
 	});
 	Add(TEXT("v4.17 visuel : 3e personne et Bacteria lachee"), 2.f, [this]()
 	{
@@ -755,7 +842,50 @@ void ABRAutoTest::AddV417VisualSteps()
 	});
 	AddVideo(TEXT("l0_3p"), VideoFrames, [](ABRCharacter* C)
 	{
-		C->AddMovementInput(BRTestV417::WalkDir, 1.f);
+		BRTestV417::SteerWalk(C);
+	});
+	// Entite de controle en mouvement : joueur immobile a la 1re personne au point de depart, Bacteria posee au bout de la
+	// direction la plus libre (jusqu'a 12 m) et lachee ; la camera la suit (marche, demi-tour, appui des pattes)
+	Add(TEXT("v4.17 visuel : Bacteria au bout du couloir"), 1.5f, [this]()
+	{
+		ABRWorld* W = GetBRWorld();
+		ABRCharacter* C = GetPlayer();
+		ABRPlayerController* PC = GetPC();
+		if (!W || !C || !PC)
+		{
+			return false;
+		}
+		BRTestV417::KillControl();
+		BRTestV417::SetThird(C, false);
+		float Free = 0.f;
+		const FVector Dir = BRTestV417::FreestDirection(GetWorld(), C, Free);
+		BRTestV417::Place(C, PC, BRTestV417::SpawnLoc, Dir.Rotation());
+		const float Dist = FMath::Clamp(Free - 100.f, 300.f, 1200.f);
+		const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Bacteria);
+		FVector Spot = BRTestV417::SpawnLoc + Dir * Dist;
+		Spot.Z = W->FloorZAt(Spot) + (Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
+		BRTestV417::Control = W->SpawnEntity(EBREntityKind::Bacteria, Spot);
+		if (!BRTestV417::Control.IsValid())
+		{
+			Skip(TEXT("v417_video_l0_bacteria : la Bacteria n'a pas pu etre posee (video sans entite)"));
+		}
+		Note(FString::Printf(TEXT("video de la Bacteria : posee a %.0f cm du joueur"), Dist));
+		return true;
+	});
+	AddVideo(TEXT("l0_bacteria"), VideoFrames, [](ABRCharacter* C)
+	{
+		ABRPlayerController* PC = C ? Cast<ABRPlayerController>(C->GetController()) : nullptr;
+		if (ABREntity* E = BRTestV417::Control.Get())
+		{
+			if (PC)
+			{
+				const FRotator Want = (E->GetActorLocation() - C->GetEyeLocation()).Rotation();
+				FRotator Rot = PC->GetControlRotation();
+				Rot.Yaw += FMath::Clamp(FMath::FindDeltaAngleDegrees(Rot.Yaw, Want.Yaw), -6.f, 6.f);
+				Rot.Pitch = FMath::Clamp(Want.Pitch, -30.f, 10.f);
+				PC->SetControlRotation(Rot);
+			}
+		}
 	});
 	Add(TEXT("v4.17 visuel : fin des videos du Level 0"), 0.5f, [this]()
 	{
@@ -1057,7 +1187,7 @@ void ABRAutoTest::AddV417VisualSteps()
 	});
 	AddVideo(TEXT("p_3p_eau"), VideoFrames, [](ABRCharacter* C)
 	{
-		C->AddMovementInput(BRTestV417::WalkDir, 1.f);
+		BRTestV417::SteerWalk(C);
 	});
 	Add(TEXT("v4.17 visuel : fin de la video des Poolrooms"), 0.5f, [this]()
 	{
@@ -1130,7 +1260,7 @@ void ABRAutoTest::AddV417VisualSteps()
 			});
 			AddVideo(TEXT("l1_marche"), LongVideoFrames, [](ABRCharacter* C)
 			{
-				C->AddMovementInput(BRTestV417::WalkDir, 1.f);
+				BRTestV417::SteerWalk(C);
 			});
 		}
 	}

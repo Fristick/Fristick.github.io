@@ -11,7 +11,8 @@
 //   marche1 : Niveau 1 (niveau infini), graine 4242 : meme marche vers une cellule a 40 cellules : chunks construits et demontes ;
 //   lidar6  : Level 6, graine 4136 : scan focalise maintenu et impulsions des qu'elles sont pretes, rotation de 30 degres/s,
 //             regard a -8 degres, apres 6 s de pre-remplissage (points deja en place : regime etabli).
-//   -BRPerfScenes=fosses,bassins,marche0,marche1,lidar6 : celles-la seules ; -BRPerfSeed=<n> : graine utilisateur n (meme
+//   -BRPerfScenes=fosses,bassins,marche0,marche1,lidar6 : celles-la seules, dans l'ordre donne (v4.17 : aussi entites0 et
+//   entites, hors de la liste par defaut ; "toutes" : les sept) ; -BRPerfSeed=<n> : graine utilisateur n (meme
 //   calcul que -BRSeed) pour toutes les scenes (plusieurs graines : un lancement par graine).
 // Profils : Performance, Qualite, RTX fluide, Cinematique, appliques AVANT le chargement de chaque scene (lumieres creees du
 //   bon type, meme etat de depart, comme le banc visuel) ; -BRProfile=<0|1|2|4> : ce profil seul. Reglages d'apparence fixes
@@ -25,7 +26,7 @@
 //      PerfShaderJobs), aucun chunk en preparation, temps d'image stabilises (BRPerf::IsSettled : trois fenetres de 30
 //      images, medianes a 3 % ou 0,3 ms, dispersion faible, aucune saccade) ; 45 s au plus, sinon la mesure est faite et
 //      marquee instable (NON VERIFIE) ;
-//   3. fenetre de mesure fixe : 10 s (marches 20 s, LiDAR 12 s ; -BRPerfSeconds=<s> pour toutes) : temps de chaque image,
+//   3. fenetre de mesure fixe : 10 s (marches 20 s, LiDAR 12 s, v4.17 : entites 20 s ; -BRPerfSeconds=<s> pour toutes) : temps de chaque image,
 //      threads du jeu, du rendu et du RHI, processeur graphique ; memoire video (budget et usage du pilote, textures,
 //      tampons), RAM ; chunks construits et demontes (ms), composants ajoutes aux chunks, chargements synchrones, PSO crees
 //      a la demande et saccades de creation de PSO ; LiDAR : rayons, visees, points, instances, inscriptions et materiaux par
@@ -57,6 +58,28 @@
 //     (MOVE_None pendant la marche : rien n'est integre, la vitesse reste exacte) : la prediction du streaming
 //     (ABRWorld::GetStreamingCenters, position dans 0,75 s a la vitesse du personnage) est celle d'un joueur qui court ;
 //     colonne collisions_predites (ABRWorld::PredictedCollisionBuilds).
+// v4.17 (perf) : scenes "joueur et entites" (les autres scenes coupent les apparitions : bPerfQuiet). HORS de la liste par
+// defaut (les mesures de base_v416 se comparent sans changement) : -BRPerfScenes=entites0,entites, ou -BRPerfScenes=toutes ;
+// meme fenetre de 20 s pour les deux :
+//   entites0 : Level 0, graine 9 (celle des fosses et de marche0) : point d'arrivee, regard sur celui des quatre axes de la
+//              grille qui a la plus longue vue degagee (a partir du regard d'arrivee), regard balaye de +/- 35 degres en 10 s
+//              (fonction du temps seul), sans aucune entite : le temoin ;
+//   entites  : la meme pose et le meme balayage, avec trois entites a des places fixes (meme regle a chaque execution :
+//              distances et angles essayes dans un ordre fixe, cellule praticable, ni bassin, ni salle de fosses, ni fosse,
+//              vue depuis l'oeil du joueur) : un Hound (maillage a squelette, SK_HoundLite hors Cinematique, SK_Hound en
+//              Cinematique : FBRSettings::bFullCreatures), la Bacteria (entite du Level 0, pieces rigides articulees) et un
+//              Smiler a une place sombre (lumiere de jeu sous BRLight::NeedsDark, la regle d'apparition du jeu ; aucune place
+//              sombre en vue : pas de Smiler, note dans la ligne). Au moins deux entites, sinon NON VERIFIE. Pendant le
+//              prechauffage, elles sont presque figees (CustomTimeDilation 0,02 : shaders, PSO et ombres prets) ; juste avant la
+//              fenetre, elles sont remplacees par des entites neuves aux memes places, IA active (etat de depart identique d'une
+//              execution a l'autre), et la fenetre commence au moins 1 s plus tard, shaders et PSO au repos. Joueur invincible
+//              (bGodMode : un coup ne retire rien et ne lance pas de jumpscare), sante mentale remise a 100 a chaque image (ni
+//              folie, ni effets d'image qui deriveraient) ; ni apparition, ni ronde, ni coupure du jeu (bPerfQuiet).
+//   Scenario (scenario_ok) : celui des scenes fixes (joueur a moins de 1,5 m de sa pose) ; entites : toutes presentes sur au
+//   moins 90 % des images et au moins 1 m parcouru par elles en tout (IA active). Notes de la ligne : places (cellule,
+//   distance, angle, lumiere), part des images avec toutes les entites, avec au moins une rendue, avec une poursuite,
+//   distance parcourue, preparations d'attaque, coups portes (sans degat) et esquives. Cout des entites : entites moins
+//   entites0 (meme pose, meme balayage).
 #include "BRAutoTest.h"
 #include "Backrooms.h"
 #include "BRAssets.h"
@@ -65,11 +88,14 @@
 #include "BREntity.h"
 #include "BRLevels.h"
 #include "BRLidar.h"
+#include "BRLightLogic.h"
 #include "BRPerfLogic.h"
 #include "BRPlayerController.h"
 #include "BRWorld.h"
 
+#include "CollisionQueryParams.h"
 #include "DynamicRHI.h"
+#include "Engine/HitResult.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
@@ -104,8 +130,18 @@ namespace BRTestPerf
 		Pits,
 		Spawn,
 		Walk,
-		Lidar
+		Lidar,
+		/** v4.17 (perf) : pose d'arrivee, regard balaye, trois entites a des places fixes, IA active */
+		Entities,
+		/** v4.17 (perf) : la meme pose et le meme balayage, sans entite (temoin de Entities) */
+		EntityWitness
 	};
+
+	/** v4.17 (perf) : scenes "entites" et "entites0" (meme pose, meme balayage) */
+	bool IsEntityKind(EPerfKind Kind)
+	{
+		return Kind == EPerfKind::Entities || Kind == EPerfKind::EntityWitness;
+	}
 
 	struct FPerfScene
 	{
@@ -117,14 +153,20 @@ namespace BRTestPerf
 		EPerfKind Kind;
 		/** Duree de la fenetre de mesure (s) */
 		float Seconds;
+		/** v4.17 (perf) : mesuree sans -BRPerfScenes (les cinq scenes de la v4.16) ; les autres seulement si elles sont nommees */
+		bool bDefault;
 	};
 
 	const FPerfScene PerfScenes[] = {
-		{ TEXT("fosses"), 0, 9u, 0u, EPerfKind::Pits, 10.f },
-		{ TEXT("bassins"), 37, 0u, 178662963u, EPerfKind::Spawn, 10.f },
-		{ TEXT("marche0"), 0, 9u, 0u, EPerfKind::Walk, 20.f },
-		{ TEXT("marche1"), 1, 4242u, 0u, EPerfKind::Walk, 20.f },
-		{ TEXT("lidar6"), 6, 4136u, 0u, EPerfKind::Lidar, 12.f },
+		{ TEXT("fosses"), 0, 9u, 0u, EPerfKind::Pits, 10.f, true },
+		{ TEXT("bassins"), 37, 0u, 178662963u, EPerfKind::Spawn, 10.f, true },
+		{ TEXT("marche0"), 0, 9u, 0u, EPerfKind::Walk, 20.f, true },
+		{ TEXT("marche1"), 1, 4242u, 0u, EPerfKind::Walk, 20.f, true },
+		{ TEXT("lidar6"), 6, 4136u, 0u, EPerfKind::Lidar, 12.f, true },
+		// v4.17 (perf) : hors de la liste par defaut (un lancement sans -BRPerfScenes mesure toujours les cinq scenes de la v4.16,
+		// dans le meme ordre) ; le temoin d'abord quand les deux sont demandees par -BRPerfScenes=toutes
+		{ TEXT("entites0"), 0, 9u, 0u, EPerfKind::EntityWitness, 20.f, false },
+		{ TEXT("entites"), 0, 9u, 0u, EPerfKind::Entities, 20.f, false },
 	};
 
 	struct FPerfProfile
@@ -163,6 +205,24 @@ namespace BRTestPerf
 	constexpr double PerfWalkMinRatio = 0.5;
 	constexpr double PerfLidarFocusMin = 0.9;
 	constexpr float PerfWalkVelocityProbe = 20.f;
+	/** v4.17 (perf) : scenes "entites" et "entites0" : regard (tangage, balayage en degres de part et d'autre de l'axe choisi,
+	 *  periode en s), longueur de la sonde de la vue degagee (cm) ; entites : au moins 3 m du joueur et 2,5 m entre elles,
+	 *  presque figees pendant le prechauffage, mises en jeu au moins 1 s avant la fenetre (au plus 8 s pour que shaders et PSO
+	 *  soient au repos depuis 0,25 s) ; scenario : au moins 2 entites posees, toutes presentes sur 90 % des images, 1 m
+	 *  parcouru en tout */
+	constexpr float PerfEntityPitch = -4.f;
+	constexpr float PerfEntitySweepDeg = 35.f;
+	constexpr float PerfEntitySweepPeriod = 10.f;
+	constexpr float PerfEntityViewProbe = 3000.f;
+	constexpr float PerfEntityMinPlayer = 300.f;
+	constexpr float PerfEntitySpacing = 250.f;
+	constexpr float PerfEntityFrozen = 0.02f;
+	constexpr double PerfEntityLead = 1.0;
+	constexpr double PerfEntityLeadTimeout = 8.0;
+	constexpr double PerfEntityQuiet = 0.25;
+	constexpr int32 PerfEntityMinCount = 2;
+	constexpr double PerfEntityPresentMin = 0.9;
+	constexpr double PerfEntityMovedMin = 100.0;
 
 	struct FPerfOptions
 	{
@@ -189,9 +249,12 @@ namespace BRTestPerf
 			SceneList.ParseIntoArray(Parts, TEXT(","), true);
 			for (const FString& Part : Parts)
 			{
+				const FString Wanted = Part.TrimStartAndEnd();
+				// v4.17 (perf) : "toutes" (ou "all") : toutes les scenes, celles hors de la liste par defaut comprises
+				const bool bAll = Wanted.Equals(TEXT("toutes"), ESearchCase::IgnoreCase) || Wanted.Equals(TEXT("all"), ESearchCase::IgnoreCase);
 				for (int32 I = 0; I < static_cast<int32>(UE_ARRAY_COUNT(PerfScenes)); ++I)
 				{
-					if (Part.TrimStartAndEnd().Equals(PerfScenes[I].Id, ESearchCase::IgnoreCase))
+					if (bAll || Wanted.Equals(PerfScenes[I].Id, ESearchCase::IgnoreCase))
 					{
 						Out.SceneIndices.AddUnique(I);
 					}
@@ -200,9 +263,13 @@ namespace BRTestPerf
 		}
 		if (Out.SceneIndices.Num() == 0)
 		{
+			// v4.17 (perf) : sans liste (ou sans nom reconnu) : les scenes par defaut, celles de la v4.16, dans leur ordre
 			for (int32 I = 0; I < static_cast<int32>(UE_ARRAY_COUNT(PerfScenes)); ++I)
 			{
-				Out.SceneIndices.Add(I);
+				if (PerfScenes[I].bDefault)
+				{
+					Out.SceneIndices.Add(I);
+				}
 			}
 		}
 		int32 Forced = -1;
@@ -297,6 +364,20 @@ namespace BRTestPerf
 		TMap<FString, int32> PathDepth;
 	};
 
+	/** v4.17 (perf) : une entite de la scene "entites" : espece, place (centre de la capsule, ou hauteur de vol), orientation
+	 *  (face au joueur), distance et angle depuis le regard de la pose, lumiere de jeu a cet endroit */
+	struct FPerfEntitySpot
+	{
+		EBREntityKind Kind = EBREntityKind::Hound;
+		const TCHAR* Name = TEXT("");
+		FVector Loc = FVector::ZeroVector;
+		FRotator Rot = FRotator::ZeroRotator;
+		FIntPoint Cell = FIntPoint::ZeroValue;
+		float Dist = 0.f;
+		float Angle = 0.f;
+		float Light = 0.f;
+	};
+
 	/** Etat de la mesure en cours (une scene x un profil a la fois) */
 	struct FPerfState
 	{
@@ -365,6 +446,26 @@ namespace BRTestPerf
 		int32 LidarPulses = 0;
 		bool bInfiniteLevel = false;
 		int32 PredictedBuilds = 0;
+		// v4.17 (perf) : scenes "entites" et "entites0" : places choisies a la pose, entites en jeu (celles du prechauffage, puis
+		// les neuves de la fenetre), position precedente de chacune ; mise en jeu (instant, shaders au repos depuis) ; images avec
+		// toutes les entites, avec au moins une rendue, avec une poursuite ; distance parcourue par les entites (cm) ; compteurs
+		// d'attaques (ABREntity::Stat*) au debut de la fenetre, puis ecarts a la fin ; entites presentes a la fin
+		TArray<FPerfEntitySpot> EntitySpots;
+		TArray<TWeakObjectPtr<ABREntity>> EntityActors;
+		TArray<FVector> EntityPrev;
+		double EntityLiveSince = 0.0;
+		double EntityQuietSince = -1.0;
+		int32 EntityAllFrames = 0;
+		int32 EntitySeenFrames = 0;
+		int32 EntityHuntFrames = 0;
+		double EntityMovedCm = 0.0;
+		int32 EntityWindupsBase = 0;
+		int32 EntityHitsBase = 0;
+		int32 EntityMissesBase = 0;
+		int32 EntityWindups = 0;
+		int32 EntityHits = 0;
+		int32 EntityMisses = 0;
+		int32 EntityAliveEnd = 0;
 		// Releves a la fin de la fenetre
 		int32 ChunksBuilt = 0;
 		float ChunkBuildMs = 0.f;
@@ -770,6 +871,357 @@ namespace BRTestPerf
 		}
 	}
 
+	/** v4.17 (perf) : scenes "entites" et "entites0" : regard de la pose : celui des quatre axes de la grille (a partir du plus
+	 *  proche du regard d'arrivee, puis de quart de tour en quart de tour) qui a la plus longue vue degagee depuis l'oeil (trace
+	 *  de visibilite de PerfEntityViewProbe ; le premier a 1 cm pres en cas d'egalite) : le meme a chaque execution pour une
+	 *  graine donnee. OutClear : longueur degagee (cm) */
+	float ChooseEntityViewYaw(const ABRCharacter* C, float ArrivalYaw, float& OutClear)
+	{
+		const float Base = static_cast<float>(FRotator::NormalizeAxis(FMath::RoundToFloat(static_cast<float>(FRotator::NormalizeAxis(ArrivalYaw)) / 90.f) * 90.f));
+		OutClear = 0.f;
+		UWorld* InWorld = C ? C->GetWorld() : nullptr;
+		if (!InWorld)
+		{
+			return Base;
+		}
+		const FVector Eye = C->GetEyeLocation();
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRPerfEntityView), false, C);
+		float BestYaw = Base;
+		float Best = -1.f;
+		for (int32 Turn = 0; Turn < 4; ++Turn)
+		{
+			const float Yaw = static_cast<float>(FRotator::NormalizeAxis(Base + 90.f * static_cast<float>(Turn)));
+			const FVector End = Eye + FRotator(0.f, Yaw, 0.f).Vector() * PerfEntityViewProbe;
+			FHitResult Hit;
+			const float Clear = InWorld->LineTraceSingleByChannel(Hit, Eye, End, ECC_Visibility, Q) ? static_cast<float>(Hit.Distance) : PerfEntityViewProbe;
+			if (Clear > Best + 1.f)
+			{
+				Best = Clear;
+				BestYaw = Yaw;
+			}
+		}
+		OutClear = FMath::Max(0.f, Best);
+		return BestYaw;
+	}
+
+	/** v4.17 (perf) : scene "entites" : une place pour une entite de l'espece Kind, cherchee dans un ordre fixe (distances Dists,
+	 *  puis angles Offsets autour du regard ViewYaw) : cellule praticable, ni bassin, ni salle de fosses, chunk construit, pas
+	 *  au-dessus d'une fosse, a PerfEntityMinPlayer du joueur et PerfEntitySpacing des places deja prises, vue depuis l'oeil du
+	 *  joueur (trace de visibilite libre) ; bDark : lumiere de jeu au plus BRLight::NeedsDark (regle d'apparition des entites de
+	 *  l'ombre, ABRWorld::UpdatePopulation : un Smiler hors poursuite se dissipe au-dela de BRLight::SmilerVanish) */
+	bool FindEntitySpot(const ABRWorld* W, const ABRCharacter* C, float ViewYaw, EBREntityKind Kind, const TCHAR* Name, bool bDark,
+		TConstArrayView<float> Dists, TConstArrayView<float> Offsets, const TArray<FPerfEntitySpot>& Taken, FPerfEntitySpot& Out)
+	{
+		UWorld* InWorld = C ? C->GetWorld() : nullptr;
+		if (!W || !InWorld)
+		{
+			return false;
+		}
+		const FBREntityInfo& Info = ABREntity::Info(Kind);
+		const FVector Eye = C->GetEyeLocation();
+		const FVector Feet = C->GetActorLocation();
+		const FIntPoint PlayerCell = W->WorldToCell(Feet);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRPerfEntitySpot), false, C);
+		for (const float Dist : Dists)
+		{
+			for (const float Offset : Offsets)
+			{
+				const FVector Dir = FRotator(0.f, ViewYaw + Offset, 0.f).Vector();
+				const FIntPoint Cell = W->WorldToCell(Feet + Dir * Dist);
+				if (Cell == PlayerCell || !W->IsWalkable(Cell) || W->IsPoolCell(Cell.X, Cell.Y) || W->IsPitRoomCell(Cell.X, Cell.Y)
+					|| !W->IsChunkLoaded(W->CellToChunk(Cell)))
+				{
+					continue;
+				}
+				const FVector Center = W->CellCenter(Cell);
+				const FVector At(Center.X, Center.Y, W->FloorZAt(Center) + (Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f));
+				const float FromPlayer = static_cast<float>(FVector::Dist2D(At, Feet));
+				if (FromPlayer < PerfEntityMinPlayer || W->IsOverPit(At, 60.f))
+				{
+					continue;
+				}
+				bool bFree = true;
+				for (const FPerfEntitySpot& Other : Taken)
+				{
+					bFree = bFree && FVector::Dist2D(Other.Loc, At) >= PerfEntitySpacing;
+				}
+				if (!bFree)
+				{
+					continue;
+				}
+				const float Light = W->LightLevelAt(At);
+				if (bDark && Light > BRLight::NeedsDark)
+				{
+					continue;
+				}
+				FHitResult Hit;
+				if (InWorld->LineTraceSingleByChannel(Hit, Eye, At, ECC_Visibility, Q))
+				{
+					continue; // cachee par le decor depuis l'oeil du joueur
+				}
+				FVector ToPlayer = Feet - At;
+				ToPlayer.Z = 0.f;
+				Out.Kind = Kind;
+				Out.Name = Name;
+				Out.Loc = At;
+				Out.Rot = ToPlayer.IsNearlyZero() ? FRotator::ZeroRotator : FRotator(0.f, ToPlayer.Rotation().Yaw, 0.f);
+				Out.Cell = Cell;
+				Out.Dist = FromPlayer;
+				Out.Angle = static_cast<float>(FRotator::NormalizeAxis((At - Feet).Rotation().Yaw - ViewYaw));
+				Out.Light = Light;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** v4.17 (perf) : scene "entites" : une entite a sa place, face au joueur ; au sol : posee (trace vers le bas, comme le banc
+	 *  visuel v4.16 : pas de chute au debut), mouvement en marche ; Dilation : 1 en jeu, PerfEntityFrozen presque figee */
+	ABREntity* SpawnPerfEntity(ABRWorld* W, const ABRCharacter* C, const FPerfEntitySpot& Spot, float Dilation)
+	{
+		UWorld* InWorld = W ? W->GetWorld() : nullptr;
+		ABREntity* E = InWorld ? W->SpawnEntity(Spot.Kind, Spot.Loc) : nullptr;
+		if (!E)
+		{
+			return nullptr;
+		}
+		E->SetActorRotation(Spot.Rot);
+		if (!ABREntity::Info(Spot.Kind).bFlying)
+		{
+			FCollisionQueryParams FloorQ(SCENE_QUERY_STAT(BRPerfEntityLand), false, E);
+			FloorQ.AddIgnoredActor(C);
+			FCollisionResponseParams FloorResp;
+			FloorResp.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+			FHitResult FloorHit;
+			if (InWorld->LineTraceSingleByChannel(FloorHit, Spot.Loc + FVector(0.f, 0.f, 50.f), Spot.Loc - FVector(0.f, 0.f, 400.f), ECC_Visibility, FloorQ, FloorResp))
+			{
+				E->SetActorLocation(FVector(Spot.Loc.X, Spot.Loc.Y, FloorHit.ImpactPoint.Z + E->GetSimpleCollisionHalfHeight() + 1.f), false, nullptr,
+					ETeleportType::TeleportPhysics);
+			}
+			if (UCharacterMovementComponent* Move = E->GetCharacterMovement())
+			{
+				Move->StopMovementImmediately();
+				Move->SetMovementMode(MOVE_Walking);
+			}
+		}
+		E->CustomTimeDilation = Dilation;
+		return E;
+	}
+
+	/** v4.17 (perf) : scene "entites" : entites de la scene retirees (fin de scene, remplacement avant la fenetre) */
+	void DestroyPerfEntities(FPerfState& S)
+	{
+		for (const TWeakObjectPtr<ABREntity>& Weak : S.EntityActors)
+		{
+			if (ABREntity* E = Weak.Get())
+			{
+				E->Destroy();
+			}
+		}
+		S.EntityActors.Reset();
+	}
+
+	/** v4.17 (perf) : scene "entites" : places du Hound, de la Bacteria et du Smiler (dans cet ordre, ViewYaw : regard de la
+	 *  pose), puis entites presque figees pour le prechauffage ; fiches du journal ouvertes tout de suite (leur annonce passe
+	 *  pendant le prechauffage, jamais dans la fenetre). OutMissing : especes sans place. Rend le nombre d'entites posees */
+	int32 PlacePerfEntities(FPerfState& S, ABRWorld* W, const ABRCharacter* C, float ViewYaw, TArray<FString>& OutMissing)
+	{
+		static const float HoundDists[] = { 700.f, 1050.f, 525.f, 1400.f };
+		static const float HoundOffsets[] = { 0.f, 12.f, -12.f, 24.f, -24.f };
+		static const float BacteriaDists[] = { 1050.f, 1400.f, 700.f, 1750.f };
+		static const float BacteriaOffsets[] = { 18.f, -18.f, 30.f, -30.f, 8.f, -8.f };
+		static const float DarkDists[] = { 700.f, 1050.f, 1400.f, 1750.f, 525.f };
+		static const float DarkOffsets[] = { 0.f, 15.f, -15.f, 30.f, -30.f, 45.f, -45.f, 60.f, -60.f };
+		struct FWant
+		{
+			EBREntityKind Kind;
+			const TCHAR* Name;
+			bool bDark;
+			TConstArrayView<float> Dists;
+			TConstArrayView<float> Offsets;
+		};
+		const FWant Wants[] = {
+			{ EBREntityKind::Hound, TEXT("Hound"), false, MakeArrayView(HoundDists), MakeArrayView(HoundOffsets) },
+			{ EBREntityKind::Bacteria, TEXT("Bacteria"), false, MakeArrayView(BacteriaDists), MakeArrayView(BacteriaOffsets) },
+			{ EBREntityKind::Smiler, TEXT("Smiler"), true, MakeArrayView(DarkDists), MakeArrayView(DarkOffsets) },
+		};
+		DestroyPerfEntities(S);
+		S.EntitySpots.Reset();
+		if (!W || !C)
+		{
+			return 0;
+		}
+		for (const FWant& Want : Wants)
+		{
+			FPerfEntitySpot Spot;
+			if (FindEntitySpot(W, C, ViewYaw, Want.Kind, Want.Name, Want.bDark, Want.Dists, Want.Offsets, S.EntitySpots, Spot))
+			{
+				S.EntitySpots.Add(Spot);
+			}
+			else
+			{
+				OutMissing.Add(FString::Printf(TEXT("%s : aucune des places essayees n'est libre et en vue%s"), Want.Name,
+					Want.bDark ? TEXT(" avec une lumiere de jeu au plus a BRLight::NeedsDark") : TEXT("")));
+			}
+		}
+		FMath::RandInit(PerfRandSeed);
+		FMath::SRandInit(PerfRandSeed);
+		int32 Placed = 0;
+		for (const FPerfEntitySpot& Spot : S.EntitySpots)
+		{
+			ABREntity* E = SpawnPerfEntity(W, C, Spot, PerfEntityFrozen);
+			S.EntityActors.Add(TWeakObjectPtr<ABREntity>(E));
+			if (E)
+			{
+				++Placed;
+				W->Discover(Spot.Kind);
+			}
+			else
+			{
+				OutMissing.Add(FString::Printf(TEXT("%s : echec de l'apparition"), Spot.Name));
+			}
+		}
+		return Placed;
+	}
+
+	/** v4.17 (perf) : scene "entites" : entites du prechauffage remplacees par des neuves aux memes places, IA active (etat de
+	 *  depart identique d'une execution a l'autre ; tirages du jeu sur la graine fixe). Rend le nombre d'entites en jeu */
+	int32 RespawnPerfEntities(FPerfState& S, ABRWorld* W, const ABRCharacter* C)
+	{
+		DestroyPerfEntities(S);
+		if (!W)
+		{
+			return 0;
+		}
+		FMath::RandInit(PerfRandSeed);
+		FMath::SRandInit(PerfRandSeed);
+		int32 Live = 0;
+		for (const FPerfEntitySpot& Spot : S.EntitySpots)
+		{
+			ABREntity* E = SpawnPerfEntity(W, C, Spot, 1.f);
+			S.EntityActors.Add(TWeakObjectPtr<ABREntity>(E));
+			Live += E ? 1 : 0;
+		}
+		return Live;
+	}
+
+	/** v4.17 (perf) : scene "entites" : debut de la fenetre : positions de depart, compteurs remis a zero, compteurs d'attaques
+	 *  du jeu releves (seules les entites de la scene existent : bPerfQuiet) */
+	void StartEntityWindow(FPerfState& S)
+	{
+		S.EntityPrev.Reset();
+		for (const TWeakObjectPtr<ABREntity>& Weak : S.EntityActors)
+		{
+			const ABREntity* E = Weak.Get();
+			S.EntityPrev.Add(E ? E->GetActorLocation() : FVector::ZeroVector);
+		}
+		S.EntityAllFrames = 0;
+		S.EntitySeenFrames = 0;
+		S.EntityHuntFrames = 0;
+		S.EntityMovedCm = 0.0;
+		S.EntityWindupsBase = ABREntity::StatWindups;
+		S.EntityHitsBase = ABREntity::StatHits;
+		S.EntityMissesBase = ABREntity::StatMisses;
+	}
+
+	/** v4.17 (perf) : scene "entites" : une image de la fenetre : toutes les entites presentes (ni detruites ni en train de se
+	 *  dissiper), au moins une rendue (AActor::WasRecentlyRendered), une poursuite ; distance parcourue (XY, image par image) */
+	void CountEntities(FPerfState& S)
+	{
+		int32 Alive = 0;
+		bool bSeen = false;
+		bool bHunt = false;
+		for (int32 I = 0; I < S.EntityActors.Num(); ++I)
+		{
+			const ABREntity* E = S.EntityActors[I].Get();
+			if (!IsValid(E) || E->IsVanishing())
+			{
+				continue;
+			}
+			++Alive;
+			bSeen = bSeen || E->WasRecentlyRendered(0.1f);
+			bHunt = bHunt || E->IsHunting();
+			const FVector Here = E->GetActorLocation();
+			if (S.EntityPrev.IsValidIndex(I))
+			{
+				S.EntityMovedCm += FVector::Dist2D(S.EntityPrev[I], Here);
+				S.EntityPrev[I] = Here;
+			}
+		}
+		S.EntityAllFrames += (Alive > 0 && Alive == S.EntitySpots.Num()) ? 1 : 0;
+		S.EntitySeenFrames += bSeen ? 1 : 0;
+		S.EntityHuntFrames += bHunt ? 1 : 0;
+	}
+
+	/** v4.17 (perf) : scene "entites" : fin de la fenetre : attaques pendant la fenetre, entites presentes a la fin */
+	void EndEntityWindow(FPerfState& S)
+	{
+		S.EntityWindups = ABREntity::StatWindups - S.EntityWindupsBase;
+		S.EntityHits = ABREntity::StatHits - S.EntityHitsBase;
+		S.EntityMisses = ABREntity::StatMisses - S.EntityMissesBase;
+		S.EntityAliveEnd = 0;
+		for (const TWeakObjectPtr<ABREntity>& Weak : S.EntityActors)
+		{
+			const ABREntity* E = Weak.Get();
+			S.EntityAliveEnd += (IsValid(E) && !E->IsVanishing()) ? 1 : 0;
+		}
+	}
+
+	/** v4.17 (perf) : regard des scenes "entites" et "entites0", fonction du temps seul (Seconds depuis le debut de la fenetre) :
+	 *  balayage sinusoidal de +/- PerfEntitySweepDeg autour du regard de la pose, periode PerfEntitySweepPeriod ; sante mentale et
+	 *  sante remises a 100 (ni folie, ni effets d'image qui deriveraient pendant la fenetre) */
+	void DriveEntityView(const FPerfState& S, ABRCharacter* C, ABRPlayerController* PC, double Seconds)
+	{
+		if (C)
+		{
+			C->Sanity = 100.f;
+			C->Health = 100.f;
+		}
+		if (!PC)
+		{
+			return;
+		}
+		const float Phase = static_cast<float>(2.0 * UE_PI * FMath::Max(0.0, Seconds) / PerfEntitySweepPeriod);
+		const float Yaw = static_cast<float>(S.PoseRot.Yaw) + PerfEntitySweepDeg * FMath::Sin(Phase);
+		PC->SetControlRotation(FRotator(PerfEntityPitch, FRotator::NormalizeAxis(Yaw), 0.f));
+	}
+
+	/** v4.17 (perf) : scene "entites" : places choisies (de quoi verifier qu'avant et apres mesurent la meme scene) */
+	FString EntitySpotsText(const FPerfState& S)
+	{
+		TArray<FString> Parts;
+		for (const FPerfEntitySpot& Spot : S.EntitySpots)
+		{
+			Parts.Add(FString::Printf(TEXT("%s cellule (%d, %d) a %.1f m, %.0f degres, lumiere de jeu %.2f"), Spot.Name, Spot.Cell.X, Spot.Cell.Y, Spot.Dist / 100.f,
+				Spot.Angle, Spot.Light));
+		}
+		return FString::Join(Parts, TEXT(", "));
+	}
+
+	/** v4.17 (perf) : scene "entites" : ce qui s'est passe pendant la fenetre (Images : images mesurees) */
+	FString EntityWindowText(const FPerfState& S, int32 Images)
+	{
+		const double Den = Images > 0 ? static_cast<double>(Images) : 1.0;
+		return FString::Printf(TEXT("entites pendant la fenetre : toutes presentes sur %.0f %% des images, au moins une rendue sur %.0f %%, poursuite sur %.0f %% ; %.1f m parcourus ; %d preparation(s) d'attaque, %d coup(s) porte(s) sans degat (invincible), %d esquive(s) ; %d presente(s) sur %d a la fin"),
+			100.0 * S.EntityAllFrames / Den, 100.0 * S.EntitySeenFrames / Den, 100.0 * S.EntityHuntFrames / Den, S.EntityMovedCm / 100.0, S.EntityWindups, S.EntityHits,
+			S.EntityMisses, S.EntityAliveEnd, S.EntitySpots.Num());
+	}
+
+	/** v4.17 (perf) : scene "entites" : raisons d'un scenario non realise (Images : images mesurees) */
+	void EntityScenario(const FPerfState& S, int32 Images, TArray<FString>& OutFail)
+	{
+		const double Share = Images > 0 ? static_cast<double>(S.EntityAllFrames) / Images : 0.0;
+		if (Share < PerfEntityPresentMin)
+		{
+			OutFail.Add(FString::Printf(TEXT("entites toutes presentes sur %.0f %% des images seulement (%d sur %d a la fin : detruite, dissipee, tombee ou non remise en jeu)"),
+				Share * 100.0, S.EntityAliveEnd, S.EntitySpots.Num()));
+		}
+		if (S.EntityMovedCm < PerfEntityMovedMin)
+		{
+			OutFail.Add(FString::Printf(TEXT("IA inactive : %.2f m parcourus par les entites en tout"), S.EntityMovedCm / 100.0));
+		}
+	}
+
 	/** Composants des chunks : ajoutes depuis le debut de la fenetre (nouveaux chunks compris) */
 	void CountChunkComponents(FPerfState& S, UWorld* InWorld, bool bBaseline)
 	{
@@ -1012,7 +1464,7 @@ void ABRAutoTest::AddPerfSteps()
 		}
 		Note(FString::Printf(TEXT("perf : scenes %s ; profils %s ; fenetre %s ; prechauffage d'au moins %.0f s ; %d releve(s) ProfileGPU par mesure ; graine %s ; etiquette \"%s\", execution %d"),
 			*FString::Join(SceneNames, TEXT(", ")), *FString::Join(ProfileNames, TEXT(", ")),
-			O.Seconds > 0.f ? *FString::Printf(TEXT("%.0f s (-BRPerfSeconds)"), O.Seconds) : TEXT("10 s (marches 20 s, LiDAR 12 s)"), O.WarmSeconds, O.GpuCaptures,
+			O.Seconds > 0.f ? *FString::Printf(TEXT("%.0f s (-BRPerfSeconds)"), O.Seconds) : TEXT("10 s (marches 20 s, LiDAR 12 s, entites 20 s)"), O.WarmSeconds, O.GpuCaptures,
 			O.Seed ? *FString::Printf(TEXT("utilisateur %u (-BRPerfSeed)"), O.Seed) : TEXT("de reference de chaque scene"), *O.Tag, O.Run));
 		Note(FString::Printf(TEXT("perf : carte %s, pilote %s (%s, %s) ; processeur %s (%d coeurs logiques), %.0f Go ; RHI %s, thread RHI %s ; ray tracing materiel %s"),
 			*GRHIAdapterName.TrimStartAndEnd(), *GRHIAdapterUserDriverVersion, *GRHIAdapterInternalDriverVersion, *GRHIAdapterDriverDate,
@@ -1231,10 +1683,38 @@ void ABRAutoTest::AddPerfSteps()
 					Rot = FRotator(BRTestPerf::PerfLidarPitch, Rot.Yaw, 0.f);
 					break;
 				}
+				case BRTestPerf::EPerfKind::Entities:
+				case BRTestPerf::EPerfKind::EntityWitness:
+				{
+					// v4.17 (perf) : point d'arrivee ; regard sur l'axe de la grille le plus degage (le meme pour la scene et son
+					// temoin, et a chaque execution d'une graine donnee)
+					float Clear = 0.f;
+					const float ViewYaw = BRTestPerf::ChooseEntityViewYaw(C, static_cast<float>(Rot.Yaw), Clear);
+					Rot = FRotator(BRTestPerf::PerfEntityPitch, ViewYaw, 0.f);
+					S.RowNotes.Add(FString::Printf(TEXT("pose d'arrivee, cellule (%d, %d), regard a %.0f degres (vue degagee %.1f m), balayage de +/- %.0f degres en %.0f s"),
+						W->WorldToCell(Loc).X, W->WorldToCell(Loc).Y, ViewYaw, Clear / 100.f, BRTestPerf::PerfEntitySweepDeg, BRTestPerf::PerfEntitySweepPeriod));
+					break;
+				}
 				default:
 					break;
 				}
 				BRTestPerf::PlacePlayer(C, PC, Loc, Rot);
+				if (Sc.Kind == BRTestPerf::EPerfKind::Entities)
+				{
+					// v4.17 (perf) : places fixes (ordre fixe des essais), entites presque figees pendant le prechauffage
+					TArray<FString> Missing;
+					const int32 Placed = BRTestPerf::PlacePerfEntities(S, W, C, static_cast<float>(Rot.Yaw), Missing);
+					const FString Spots = BRTestPerf::EntitySpotsText(S);
+					S.RowNotes.Add(FString::Printf(TEXT("%d entite(s) posee(s) : %s%s%s"), Placed, Spots.IsEmpty() ? TEXT("aucune") : *Spots,
+						Missing.Num() > 0 ? TEXT(" ; ") : TEXT(""), *FString::Join(Missing, TEXT(", "))));
+					if (Placed < BRTestPerf::PerfEntityMinCount)
+					{
+						BRTestPerf::DestroyPerfEntities(S);
+						Invalidate(FString::Printf(TEXT("%d entite(s) posee(s) au lieu d'au moins %d (%s)"), Placed, BRTestPerf::PerfEntityMinCount,
+							*FString::Join(Missing, TEXT(", "))));
+						return true;
+					}
+				}
 				if (Sc.Kind == BRTestPerf::EPerfKind::Walk)
 				{
 					// v4.16 (perf, corrections de relecture) : pendant la marche (prechauffage compris : meme etat), le mouvement
@@ -1347,6 +1827,63 @@ void ABRAutoTest::AddPerfSteps()
 				LimitLastStep(BRTestPerf::PerfLidarPrefillTimeout + 10.f);
 			}
 
+			// 4 ter. v4.17 (perf) : entites : celles du prechauffage (presque figees) remplacees par des neuves aux memes places, IA
+			// active : meme etat de depart a chaque execution. La fenetre commence au moins PerfEntityLead plus tard, quand shaders et
+			// PSO sont au repos depuis PerfEntityQuiet (creation des composants, structures du ray tracing : hors de la fenetre)
+			if (Scene.Kind == BRTestPerf::EPerfKind::Entities)
+			{
+				Add(FString::Printf(TEXT("v4.17 perf : %s : entites en jeu"), *Key), 0.f, [this]()
+				{
+					BRTestPerf::FPerfState& S = BRTestPerf::PerfState;
+					if (!S.bValid)
+					{
+						return true;
+					}
+					ABRWorld* W = GetBRWorld();
+					ABRCharacter* C = GetPlayer();
+					ABRPlayerController* PC = GetPC();
+					if (!W || !C || !PC)
+					{
+						return false;
+					}
+					const double Now = FPlatformTime::Seconds();
+					if (S.EntityLiveSince <= 0.0)
+					{
+						const int32 Live = BRTestPerf::RespawnPerfEntities(S, W, C);
+						if (Live < S.EntitySpots.Num())
+						{
+							S.RowNotes.Add(FString::Printf(TEXT("%d entite(s) remise(s) en jeu sur %d"), Live, S.EntitySpots.Num()));
+						}
+						S.EntityLiveSince = Now;
+						S.EntityQuietSince = -1.0;
+						BRTestPerf::DriveEntityView(S, C, PC, 0.0);
+						return false;
+					}
+					// Regard de la pose (debut du balayage), joueur au calme
+					BRTestPerf::DriveEntityView(S, C, PC, 0.0);
+					if (BRTestPerf::PerfShaderJobs() > 0)
+					{
+						S.EntityQuietSince = -1.0;
+					}
+					else if (S.EntityQuietSince < 0.0)
+					{
+						S.EntityQuietSince = Now;
+					}
+					const bool bQuiet = S.EntityQuietSince > 0.0 && Now - S.EntityQuietSince >= BRTestPerf::PerfEntityQuiet;
+					if (Now - S.EntityLiveSince >= BRTestPerf::PerfEntityLead && bQuiet)
+					{
+						return true;
+					}
+					if (Now - S.EntityLiveSince >= BRTestPerf::PerfEntityLeadTimeout)
+					{
+						S.RowNotes.Add(FString::Printf(TEXT("shaders ou PSO encore en preparation %.0f s apres la mise en jeu des entites"), BRTestPerf::PerfEntityLeadTimeout));
+						return true;
+					}
+					return false;
+				});
+				LimitLastStep(static_cast<float>(BRTestPerf::PerfEntityLeadTimeout) + 10.f);
+			}
+
 			// 5. Fenetre de mesure
 			Add(FString::Printf(TEXT("v4.16 perf : %s : mesure"), *Key), 0.f, [this]()
 			{
@@ -1400,6 +1937,10 @@ void ABRAutoTest::AddPerfSteps()
 					S.LidarPulses = 0;
 					S.SceneBroken.Reset();
 					C->Sanity = 100.f;
+					if (Sc.Kind == BRTestPerf::EPerfKind::Entities)
+					{
+						BRTestPerf::StartEntityWindow(S); // v4.17 (perf)
+					}
 					FMath::RandInit(BRTestPerf::PerfRandSeed);
 					FMath::SRandInit(BRTestPerf::PerfRandSeed);
 					return false;
@@ -1422,6 +1963,10 @@ void ABRAutoTest::AddPerfSteps()
 						S.LidarPeak = FMath::Max(S.LidarPeak, L->GetPointCount());
 						S.LidarFocusFrames += L->IsFocusing() ? 1 : 0;
 					}
+				}
+				else if (Sc.Kind == BRTestPerf::EPerfKind::Entities)
+				{
+					BRTestPerf::CountEntities(S); // v4.17 (perf)
 				}
 				// v4.16 (perf, corrections de relecture) : scenario verifie a chaque image (premiere raison gardee), distance
 				// mesuree d'une image a l'autre, ecart a la pose des scenes fixes
@@ -1483,6 +2028,10 @@ void ABRAutoTest::AddPerfSteps()
 					// v4.16 (perf, corrections de relecture) : distance mesuree image par image (avant : vitesse x temps pour
 					// les marches, ce qui ne verifiait rien)
 					S.WalkMeters = S.MovedCm / 100.0;
+					if (Sc.Kind == BRTestPerf::EPerfKind::Entities)
+					{
+						BRTestPerf::EndEntityWindow(S); // v4.17 (perf)
+					}
 					return true;
 				}
 				// Mouvements de la scene, fonction du temps seul (memes positions a chaque execution)
@@ -1493,6 +2042,11 @@ void ABRAutoTest::AddPerfSteps()
 				else if (Sc.Kind == BRTestPerf::EPerfKind::Lidar)
 				{
 					S.LidarPulses += BRTestPerf::DriveLidar(S, C, PC) ? 1 : 0;
+				}
+				else if (BRTestPerf::IsEntityKind(Sc.Kind))
+				{
+					// v4.17 (perf) : regard balaye (fonction du temps seul), sante mentale tenue a 100
+					BRTestPerf::DriveEntityView(S, C, PC, Elapsed);
 				}
 				return false;
 			});
@@ -1530,6 +2084,11 @@ void ABRAutoTest::AddPerfSteps()
 						// v4.16 (perf, relecture) : la marche continue pendant les releves (meme loi du temps que la fenetre) : le
 						// releve est celui d'une image de marche (streaming compris), pas d'un arret au bout du chemin
 						BRTestPerf::DriveWalk(S, GetPlayer(), GetPC(), Now - S.T0);
+					}
+					else if (BRTestPerf::IsEntityKind(Sc.Kind) && S.T0 > 0.0)
+					{
+						// v4.17 (perf) : le balayage continue pendant les releves (entites en jeu, comme pendant la fenetre)
+						BRTestPerf::DriveEntityView(S, GetPlayer(), GetPC(), Now - S.T0);
 					}
 					switch (S.GpuPhase)
 					{
@@ -1615,12 +2174,14 @@ void ABRAutoTest::AddPerfSteps()
 				const FString Who = FString::Printf(TEXT("perf %s %s"), Sc.Id, S.Profile.Name);
 				if (!S.bValid)
 				{
+					BRTestPerf::DestroyPerfEntities(S); // v4.17 (perf) : rien ne reste pour la scene suivante
 					++BRTestPerf::PerfInvalid;
 					Note(FString::Printf(TEXT("%s : non mesuree (%s)"), *Who, *S.Why));
 					return true;
 				}
 				if (S.FrameTimes.Num() == 0 || !W)
 				{
+					BRTestPerf::DestroyPerfEntities(S);
 					++BRTestPerf::PerfInvalid;
 					Note(FString::Printf(TEXT("%s : aucune image mesuree"), *Who), true);
 					return true;
@@ -1727,6 +2288,11 @@ void ABRAutoTest::AddPerfSteps()
 						ScenarioFail.Add(FString::Printf(TEXT("scan focalise maintenu sur %.0f %% des images seulement (scanner bloque : inventaire, pause, dialogue, entree verrouillee)"),
 							FocusShare * 100.0));
 					}
+					break;
+				case BRTestPerf::EPerfKind::Entities:
+					// v4.17 (perf) : entites toutes presentes et IA active ; ce qui s'est passe pendant la fenetre (notes de la ligne)
+					BRTestPerf::EntityScenario(S, S.FrameTimes.Num(), ScenarioFail);
+					S.RowNotes.Add(BRTestPerf::EntityWindowText(S, S.FrameTimes.Num()));
 					break;
 				default:
 					break;
@@ -2047,6 +2613,8 @@ void ABRAutoTest::AddPerfSteps()
 				{
 					Note(Who + TEXT(" : ") + Extra);
 				}
+				// v4.17 (perf) : entites de la scene retirees apres les decomptes (lumieres et composants du monde les comprennent)
+				BRTestPerf::DestroyPerfEntities(S);
 				return true;
 			});
 		}

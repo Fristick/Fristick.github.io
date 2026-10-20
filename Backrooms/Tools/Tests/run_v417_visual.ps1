@@ -13,7 +13,8 @@ Aucune autre instance d'Unreal ne doit tourner : un lancement est saute sinon.
 #>
 param(
   [string]$Tag = '',
-  [int[]]$Profiles = @(1),
+  # Profils separes par des virgules ("1,2,0") : une chaine, car -File ne convertit pas une liste en tableau
+  [string]$Profiles = '1',
   [int]$ResX = 1366,
   [int]$ResY = 768,
   [string]$Editor = 'C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe',
@@ -32,7 +33,8 @@ $sha = (git -C $projDir rev-parse HEAD).Trim()
 $dirty = if ((git -C $projDir status --porcelain --untracked-files=no -- Source Content Config) -ne $null) { 1 } else { 0 }
 $tagDir = Join-Path $OutRoot $Tag
 New-Item -ItemType Directory -Force $tagDir | Out-Null
-foreach ($p in $Profiles) {
+$profileList = @($Profiles.Split(',') | ForEach-Object { [int]$_.Trim() })
+foreach ($p in $profileList) {
   if (Get-Process UnrealEditor -ErrorAction SilentlyContinue) { "profil $p SAUTE : un autre Unreal tourne"; continue }
   $dir = Join-Path $tagDir $names[$p]
   if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
