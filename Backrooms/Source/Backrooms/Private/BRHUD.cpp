@@ -1322,6 +1322,11 @@ void ABRHUD::DrawHUD()
 	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
 	ABRCharacter* C = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
 	ABRWorld* W = ABRWorld::Get(this);
+	// v4.17 (tests) : capture de la scene seule (banc visuel v4.17) : rien n'est dessine, sauf l'inventaire ouvert
+	if (TestCaptureMode >= 2 && !(PC && PC->IsInventoryOpen()))
+	{
+		return;
+	}
 	// v4.9 (tests) : jauges de statut dessinees pendant cette image
 	LastFrameStatusGauges = StatusGaugesDrawn;
 	StatusGaugesDrawn = 0;
@@ -1411,7 +1416,7 @@ void ABRHUD::DrawHUD()
 		DrawQuickBar(C);
 		DrawObjectiveTracker(W);
 	}
-	if (PC && PC->IsDevMode() && !bInv)
+	if (PC && PC->IsDevMode() && !bInv && TestCaptureMode == 0)
 	{
 		DrawDevOverlay(PC, C, W);
 	}

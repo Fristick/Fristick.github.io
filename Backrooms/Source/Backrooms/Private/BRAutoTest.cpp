@@ -19,6 +19,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/App.h"
@@ -38,6 +39,7 @@
 #include "UnrealClient.h"
 #include "Widgets/SWindow.h"
 #include "Engine/GameViewportClient.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/ConfigCacheIni.h"
 #if PLATFORM_WINDOWS
@@ -408,6 +410,18 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Banc visuel v4.15 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV417Visual")))
+	{
+		// v4.17 (visuel) : captures comparables de la passe graphique et sequences pour les videos (BRAutoTestV417Visual.cpp)
+		AddV417VisualSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Banc visuel v4.17 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Light")))
 	{
 		// v4.16 : lumiere de gameplay alignee sur la lumiere visible (BRAutoTestV416Light.cpp)
@@ -545,6 +559,67 @@ void ABRAutoTest::Shot(const FString& Name)
 		}
 	}
 	FScreenshotRequest::RequestScreenshot(FPaths::Combine(OutDir, Name + TEXT(".png")), bShowUI, false);
+	WriteShotMeta(Name, bShowUI);
+}
+
+void ABRAutoTest::WriteShotMeta(const FString& Name, bool bShowUI)
+{
+	// v4.17 : de quoi comparer deux captures sans lire l'image (le bandeau du mode developpeur n'est plus la seule trace)
+	static const TCHAR* const ProfileNames[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique"), TEXT("Personnalise"), TEXT("RTXFluide") };
+	FString Commit = TEXT("inconnu");
+	FParse::Value(FCommandLine::Get(), TEXT("BRCommit="), Commit);
+	const ABRWorld* W = GetBRWorld();
+	const ABRCharacter* C = GetPlayer();
+	const ABRPlayerController* PC = GetPC();
+	const FBRSettings& S = FBRSettings::Get();
+	FVector CamLoc = FVector::ZeroVector;
+	FRotator CamRot = FRotator::ZeroRotator;
+	float Fov = 0.f;
+	if (PC && PC->PlayerCameraManager)
+	{
+		CamLoc = PC->PlayerCameraManager->GetCameraLocation();
+		CamRot = PC->PlayerCameraManager->GetCameraRotation();
+		Fov = PC->PlayerCameraManager->GetFOVAngle();
+	}
+	FIntPoint OutRes(0, 0);
+	if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
+	{
+		OutRes = GEngine->GameViewport->Viewport->GetSizeXY();
+	}
+	float Percent = 100.f;
+	if (const IConsoleVariable* SP = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
+	{
+		Percent = SP->GetFloat();
+	}
+	const FIntPoint InRes(FMath::RoundToInt(OutRes.X * Percent / 100.f), FMath::RoundToInt(OutRes.Y * Percent / 100.f));
+	const int32 Profile = S.GraphicsProfile;
+	const TCHAR* ProfileName = (Profile >= 0 && Profile < static_cast<int32>(UE_ARRAY_COUNT(ProfileNames))) ? ProfileNames[Profile] : TEXT("?");
+	const bool bLamp = C && C->IsFlashlightOn();
+	const FString Json = FString::Printf(
+		TEXT("{\n  \"capture\": \"%s\",\n  \"commit\": \"%s\",\n  \"heure_utc\": \"%s\",\n  \"niveau\": %d,\n  \"graine_niveau\": %u,\n  \"graine_test\": %u,\n")
+		TEXT("  \"camera\": { \"x\": %.1f, \"y\": %.1f, \"z\": %.1f, \"pitch\": %.2f, \"yaw\": %.2f, \"roll\": %.2f, \"fov\": %.2f },\n")
+		TEXT("  \"sortie\": [%d, %d],\n  \"rendu_interne\": [%d, %d],\n  \"pourcentage_rendu\": %.1f,\n  \"profil\": \"%s\",\n")
+		TEXT("  \"temps_depuis_arrivee_s\": %.2f,\n  \"alimentation_image\": %.3f,\n  \"alimentation_regles\": %.3f,\n  \"coupure\": %s,\n  \"lampe\": %s,\n")
+		TEXT("  \"megalights\": %s,\n  \"troisieme_personne\": %s,\n  \"vhs\": %s,\n  \"grain\": %s,\n  \"interface\": %s\n}\n"),
+		*Name, *Commit, *FDateTime::UtcNow().ToIso8601(), W ? W->GetLevelNumber() : -1, W ? W->GetSeed() : 0u, TestSeed,
+		CamLoc.X, CamLoc.Y, CamLoc.Z, CamRot.Pitch, CamRot.Yaw, CamRot.Roll, Fov,
+		OutRes.X, OutRes.Y, InRes.X, InRes.Y, Percent, ProfileName,
+		W ? W->GetLevelTime() : -1.f, W ? W->GetPower() : -1.f, W ? W->GetGameplayPower() : -1.f, (W && W->IsBlackout()) ? TEXT("true") : TEXT("false"),
+		bLamp ? TEXT("true") : TEXT("false"), ABRWorld::IsMegaLightsActive() ? TEXT("true") : TEXT("false"),
+		(C && C->IsThirdPerson()) ? TEXT("true") : TEXT("false"), S.bVHSEffect ? TEXT("true") : TEXT("false"), S.bFilmGrain ? TEXT("true") : TEXT("false"),
+		bShowUI ? TEXT("true") : TEXT("false"));
+	FFileHelper::SaveStringToFile(Json, *FPaths::Combine(OutDir, Name + TEXT(".json")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	const FString CsvPath = FPaths::Combine(OutDir, TEXT("Captures.csv"));
+	if (!IFileManager::Get().FileExists(*CsvPath))
+	{
+		FFileHelper::SaveStringToFile(TEXT("capture;commit;niveau;graine_niveau;x;y;z;pitch;yaw;fov;sortie;rendu;profil;temps_s;alimentation;coupure;lampe;vhs;grain\n"),
+			*CsvPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	}
+	FFileHelper::SaveStringToFile(FString::Printf(TEXT("%s;%s;%d;%u;%.1f;%.1f;%.1f;%.2f;%.2f;%.2f;%dx%d;%dx%d;%s;%.2f;%.3f;%d;%d;%d;%d\n"),
+		*Name, *Commit, W ? W->GetLevelNumber() : -1, W ? W->GetSeed() : 0u, CamLoc.X, CamLoc.Y, CamLoc.Z, CamRot.Pitch, CamRot.Yaw, Fov,
+		OutRes.X, OutRes.Y, InRes.X, InRes.Y, ProfileName, W ? W->GetLevelTime() : -1.f, W ? W->GetPower() : -1.f, (W && W->IsBlackout()) ? 1 : 0,
+		bLamp ? 1 : 0, S.bVHSEffect ? 1 : 0, S.bFilmGrain ? 1 : 0),
+		*CsvPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
 }
 
 void ABRAutoTest::Add(const FString& Name, float Wait, TFunction<bool()> Action)

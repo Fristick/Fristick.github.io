@@ -73,6 +73,9 @@ private:
 		int32 Layer = 0;
 	};
 	bool bTestRecordTexts = false;
+	/** v4.17 (tests, -BRAutoTestV417Visual) : captures comparables : 0 interface normale ; 1 sans le bandeau du mode
+	 *  developpeur ; 2 sans aucune interface hors inventaire (scene seule, sous-titres compris) */
+	int32 TestCaptureMode = 0;
 	int32 TestLayer = 0;
 	TArray<FTestText> TestTexts;
 	FVector4f TestPanel = FVector4f(0.f, 0.f, 0.f, 0.f);

@@ -451,4 +451,12 @@ private:
 	/** v4.16 : -BRAutoTestV416Light : lumiere de gameplay (murs, passages, coupure, profils, sources de mission, cout)
 	 *  (BRAutoTestV416Light.cpp) */
 	void AddV416LightSteps();
+
+	/** v4.17 (visuel) : -BRAutoTestV417Visual (BRAutoTestV417Visual.cpp) : captures comparables avant / apres de la passe
+	 *  graphique (Level 0, fosses, combinaison, entite de controle, Poolrooms, Niveaux 1 et 2, inventaire), sequences
+	 *  d'images pour les videos de deplacement ; metadonnees de chaque capture (WriteShotMeta) */
+	void AddV417VisualSteps();
+	/** v4.17 : fiche de la capture Name (Name.json et une ligne de Captures.csv) : commit (-BRCommit=), niveau, graines,
+	 *  pose et champ de la camera, definitions de sortie et de rendu, profil, temps depuis l'arrivee, etat de la lumiere */
+	void WriteShotMeta(const FString& Name, bool bShowUI);
 };
