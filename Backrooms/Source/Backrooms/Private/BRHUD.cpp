@@ -788,6 +788,7 @@ void ABRHUD::PadInventory(int32 TabStep, int32 ScrollStep, bool bHint)
 		PadScrollZone = INDEX_NONE; // v4.17 : nouvel onglet : toutes ses zones jusqu'au prochain choix
 		Inspecting = FSlotRef();
 		Dragging = FSlotRef();
+		bPadCarrying = false; // v4.17 (C7)
 		if (PC)
 		{
 			PC->CancelKeyCapture();
@@ -1557,6 +1558,7 @@ void ABRHUD::DrawHUD()
 	if (!bInv && bWasInventoryOpen)
 	{
 		Dragging = FSlotRef();
+		bPadCarrying = false; // v4.17 (C7)
 		Inspecting = FSlotRef();
 		HoverSlot = FSlotRef();
 		PadCursor = FSlotRef(); // v4.16 (relecture) : premiere case du sac a la prochaine ouverture
@@ -4453,6 +4455,21 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
 				{ TEXT("Move"), BRLoc::Arg(BRKeys::GamepadDpadName()) }, { TEXT("Use"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom)) },
 				{ TEXT("Inspect"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Left)) }, { TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
+		// v4.17 (C7) : Y deplace un objet (PadCarry) ; pendant le port : poser, choisir la case, annuler
+		FootHints = IsPadCarrying()
+			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryFooter", "[{Drop}]  POSER     [{Move}]  CHOISIR     [{Cancel}]  ANNULER"),
+				{ { TEXT("Drop"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) }, { TEXT("Move"), BRLoc::Arg(BRKeys::GamepadDpadName()) },
+					{ TEXT("Cancel"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } })
+			: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryHint", "[{Carry}]  D\u00c9PLACER"), { { TEXT("Carry"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } })
+				+ TEXT("     ") + FootHints;
+	}
+	else if (BRKeys::UsesGamepadPrompts() && Tab == ETab::Settings)
+	{
+		// v4.17 (C6) : manette dans PARAMETRES : onglets (LB / RB), categories (LT / RT), croix : choisir la ligne et la regler
+		FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadSettingsFooter", "[{Prev}] [{Next}]  ONGLETS     [{PrevCat}] [{NextCat}]  CAT\u00c9GORIE     [{Move}]  CHOISIR / R\u00c9GLER     [{Close}]  FERMER"),
+			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
+				{ TEXT("PrevCat"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftTrigger)) }, { TEXT("NextCat"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightTrigger)) },
+				{ TEXT("Move"), BRLoc::Arg(BRKeys::GamepadDpadName()) }, { TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
 	}
 	else if (BRKeys::UsesGamepadPrompts())
 	{
@@ -4498,7 +4515,19 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 			if (!It->IsEmpty())
 			{
 				const float S = 84.f * U;
-				Icon(ItemIcon(It->Item), MouseX - S * 0.5f, MouseY - S * 0.5f, S, S, FLinearColor(1.f, 1.f, 1.f, 0.85f));
+				// v4.17 (C7) : porte a la manette : au-dessus de la case du curseur (decale en haut a droite : son cadre et son
+				// nom restent visibles) ; a la souris : sous le pointeur
+				float CarryX = MouseX;
+				float CarryY = MouseY;
+				if (IsPadCarrying())
+				{
+					if (const FSlotBox* Target = SlotBoxOf(PadCursor))
+					{
+						CarryX = Target->X + Target->S * 0.78f;
+						CarryY = Target->Y + Target->S * 0.22f;
+					}
+				}
+				Icon(ItemIcon(It->Item), CarryX - S * 0.5f, CarryY - S * 0.5f, S, S, FLinearColor(1.f, 1.f, 1.f, 0.85f));
 			}
 		}
 	}
@@ -4595,6 +4624,11 @@ bool ABRHUD::PadSlotAction(bool bInspect)
 	{
 		return false;
 	}
+	if (IsPadCarrying())
+	{
+		// v4.17 (C7) : pendant un port a la manette, A pose l'objet (comme Y) ; X ne fait rien
+		return bInspect ? true : PadCarry();
+	}
 	if (Inspecting.IsValid())
 	{
 		if (!bInspect)
@@ -4643,12 +4677,193 @@ bool ABRHUD::PadSlotAction(bool bInspect)
 
 bool ABRHUD::PadBack()
 {
+	// v4.17 (C7) : B pendant un port a la manette : annule le port, l'inventaire reste ouvert
+	if (PadCancelCarry())
+	{
+		return true;
+	}
 	if (Inspecting.IsValid())
 	{
 		Inspecting = FSlotRef();
 		return true;
 	}
 	return false;
+}
+
+bool ABRHUD::PadCarry()
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	ABRCharacter* C = PC && !PC->IsInMenu() ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (!C || Tab != ETab::Character || Inspecting.IsValid())
+	{
+		return false;
+	}
+	if (!SlotBoxOf(PadCursor))
+	{
+		PadDirection(0, 0); // premiere case du sac
+		return true;
+	}
+	if (!IsPadCarrying())
+	{
+		const FBRItemSlot* S = C->GetSlot(PadCursor.Group, PadCursor.Index);
+		if (!S || S->IsEmpty())
+		{
+			DenySlot = PadCursor;
+			DenyAt = Clock;
+			C->PlayUISound(TEXT("S_UIDeny"), 0.4f);
+			return true;
+		}
+		// Prendre : meme etat qu'un glisser commence a la souris (case source estompee, objet porte)
+		Dragging = PadCursor;
+		bPadCarrying = true;
+		C->PlayUISound(TEXT("S_UIClick"), 0.5f);
+		return true;
+	}
+	if (PadCursor == Dragging)
+	{
+		return PadCancelCarry(); // reposee sur sa case de depart
+	}
+	// Poser : regles du glisser-deposer de la souris (ABRCharacter::MoveItem : echange, pile, equipement ; il previent quand
+	// l'emplacement refuse l'objet). Refuse : l'objet reste porte, la case visee refuse
+	if (C->MoveItem(Dragging.Group, Dragging.Index, PadCursor.Group, PadCursor.Index))
+	{
+		Dragging = FSlotRef();
+		bPadCarrying = false;
+	}
+	else
+	{
+		DenySlot = PadCursor;
+		DenyAt = Clock;
+		C->PlayUISound(TEXT("S_UIDeny"), 0.4f);
+	}
+	return true;
+}
+
+bool ABRHUD::PadCancelCarry()
+{
+	if (!IsPadCarrying())
+	{
+		bPadCarrying = false;
+		return false;
+	}
+	Dragging = FSlotRef();
+	bPadCarrying = false;
+	if (ABRCharacter* PadChar = PlayerOwner ? Cast<ABRCharacter>(PlayerOwner->GetPawn()) : nullptr)
+	{
+		PadChar->PlayUISound(TEXT("S_UIClick"), 0.35f);
+	}
+	return true;
+}
+
+void ABRHUD::SettingsRowsOf(const ABRPlayerController* PC, TArray<int32>& Out) const
+{
+	// v4.17 (C6) : les memes lignes, dans le meme ordre, que DrawSettingsTab
+	Out.Reset();
+	if (!PC)
+	{
+		return;
+	}
+	const int32 Cat = FMath::Clamp(SettingsCategory, 0, 3);
+	for (int32 i = 0; i < PC->GetSettingsCount(); ++i)
+	{
+		if (PC->GetSettingCategory(i) == Cat)
+		{
+			Out.Add(i);
+		}
+	}
+}
+
+bool ABRHUD::PadSettingsMove(int32 DY)
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	if (!PC || Tab != ETab::Settings || DY == 0)
+	{
+		return false;
+	}
+	TArray<int32> Rows;
+	SettingsRowsOf(PC, Rows);
+	if (Rows.Num() == 0)
+	{
+		return false;
+	}
+	const int32 Count = Rows.Num();
+	const int32 Pos = Rows.IndexOfByKey(SettingsPadRow);
+	const int32 Next = Pos == INDEX_NONE ? (DY > 0 ? 0 : Count - 1) : ((Pos + DY) % Count + Count) % Count;
+	SettingsPadRow = Rows[Next];
+	if (ABRCharacter* PadChar = !PC->IsInMenu() ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr)
+	{
+		PadChar->PlayUISound(TEXT("S_UIClick"), 0.35f);
+	}
+	return true;
+}
+
+bool ABRHUD::PadSettingsAdjust(int32 DX)
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	if (!PC || Tab != ETab::Settings || DX == 0)
+	{
+		return false;
+	}
+	TArray<int32> Rows;
+	SettingsRowsOf(PC, Rows);
+	if (Rows.Num() == 0)
+	{
+		return false;
+	}
+	if (!Rows.Contains(SettingsPadRow))
+	{
+		SettingsPadRow = Rows[0]; // aucune ligne choisie : la premiere, sans la regler
+		return true;
+	}
+	PadAdjustRow = SettingsPadRow;
+	PadAdjustDir = DX > 0 ? 1 : -1;
+	return true;
+}
+
+bool ABRHUD::PadSettingsActivate()
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	if (!PC || Tab != ETab::Settings)
+	{
+		return false;
+	}
+	TArray<int32> Rows;
+	SettingsRowsOf(PC, Rows);
+	if (Rows.Num() == 0)
+	{
+		return false;
+	}
+	if (!Rows.Contains(SettingsPadRow))
+	{
+		SettingsPadRow = Rows[0];
+		return true;
+	}
+	// Meme effet qu'un clic sur la ligne (Btn_SettingRow : AdjustSetting(ligne, +1))
+	PadAdjustRow = SettingsPadRow;
+	PadAdjustDir = 1;
+	return true;
+}
+
+bool ABRHUD::PadSettingsCategory(int32 Step)
+{
+	ABRPlayerController* PC = Cast<ABRPlayerController>(PlayerOwner);
+	if (!PC || Tab != ETab::Settings || Step == 0)
+	{
+		return false;
+	}
+	// Meme effet qu'un clic sur une pastille de categorie, puis curseur sur la premiere ligne
+	SettingsCategory = ((FMath::Clamp(SettingsCategory, 0, 3) + Step) % 4 + 4) % 4;
+	HoverSetting = INDEX_NONE;
+	PadAdjustRow = INDEX_NONE;
+	PC->CancelKeyCapture();
+	TArray<int32> Rows;
+	SettingsRowsOf(PC, Rows);
+	SettingsPadRow = Rows.Num() > 0 ? Rows[0] : INDEX_NONE;
+	if (ABRCharacter* PadChar = !PC->IsInMenu() ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr)
+	{
+		PadChar->PlayUISound(TEXT("S_UIClick"), 0.35f);
+	}
+	return true;
 }
 
 void ABRHUD::LayoutCharacterTab(ABRCharacter* C)
@@ -5230,6 +5445,12 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 			Hint = HoverSlot.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicRetirer", "[DOUBLE-CLIC]  RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicEquiper", "[DOUBLE-CLIC]  \u00c9QUIPER"));
 		}
 	}
+	if (PadBox)
+	{
+		// v4.17 (C7) : Y deplace l'objet (PadCarry)
+		Hint = (Hint.IsEmpty() ? FString() : Hint + TEXT("     "))
+			+ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryHint", "[{Carry}]  D\u00c9PLACER"), { { TEXT("Carry"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } });
+	}
 	const FString Title = Info.Name.ToUpper().ToString() + (It->Count > 1 ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt2", "  x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }) : FString());
 	const float TitleH = TextSize(TEXT("Hg"), UiType::PanelTitle, EUiWeight::Bold).Y;
 	const float LineH = LineStep(UiType::Body, EUiWeight::Regular, 22.f);
@@ -5574,14 +5795,10 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		CatX += CW + 12.f * U;
 	}
 	TArray<int32> Rows;
-	for (int32 i = 0; i < PC->GetSettingsCount(); ++i)
-	{
-		if (PC->GetSettingCategory(i) == SettingsCategory)
-		{
-			Rows.Add(i);
-		}
-	}
+	SettingsRowsOf(PC, Rows); // v4.17 : meme liste que le curseur de la manette (PadSettingsMove)
 	const int32 Count = Rows.Num();
+	// v4.17 (C6) : curseur de ligne de la manette, quand elle a servi en dernier
+	const bool bPadRows = BRKeys::UsesGamepadPrompts() && Rows.Contains(SettingsPadRow);
 	const int32 PerColumn = Count <= 8 ? Count : (Count + 1) / 2;
 	const float ColGap = 30.f * U;
 	const float W = PerColumn == Count ? FMath::Min(PanelW, 1100.f * U) : (PanelW - ColGap) * 0.5f;
@@ -5601,11 +5818,17 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		const int32 i = Rows[r];
 		const float X = PanelX + (r < PerColumn ? 0.f : W + ColGap);
 		const float Y = IY + 100.f * U + (r % PerColumn) * RowH;
-		const bool bHov = Hover(X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
+		const bool bHovRow = Hover(X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
+		const bool bPadRow = bPadRows && i == SettingsPadRow;
+		const bool bHov = bHovRow || bPadRow;
+		if (bHovRow)
+		{
+			HoverSetting = i;
+		}
 		if (bHov)
 		{
-			// v4.17 : jeton focus : fond jaune a 10 % et barre de 4U a gauche (avant : fond a 6 %, a peine visible)
-			HoverSetting = i;
+			// v4.17 : jeton focus (souris ou curseur de la manette) : fond jaune a 10 % et barre de 4U a gauche (avant : fond a
+			// 6 %, a peine visible)
 			DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.1f), X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
 			DrawRect(Yellow, FMath::RoundToFloat(X + 10.f * U), FMath::RoundToFloat(Y), FMath::Max(2.f, FMath::RoundToFloat(4.f * U)), FMath::RoundToFloat(RowH - 6.f * U));
 		}
@@ -5631,8 +5854,8 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		const float MCX = MX + Btn * 0.5f;
 		const float PCX = PX + Btn * 0.5f;
 		const float CCY = BY + Btn * 0.5f;
-		const FLinearColor MCol = bHovM ? Yellow : Ink;
-		const FLinearColor PCol = bHovP ? Yellow : Ink;
+		const FLinearColor MCol = bHovM || bPadRow ? Yellow : Ink;
+		const FLinearColor PCol = bHovP || bPadRow ? Yellow : Ink;
 		DrawLine(MCX + ChevD * 0.5f, CCY - ChevH, MCX - ChevD * 0.5f, CCY, MCol, ChevT);
 		DrawLine(MCX - ChevD * 0.5f, CCY, MCX + ChevD * 0.5f, CCY + ChevH, MCol, ChevT);
 		DrawLine(PCX - ChevD * 0.5f, CCY - ChevH, PCX + ChevD * 0.5f, CCY, PCol, ChevT);
@@ -5656,6 +5879,10 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	if (TestHintSetting != INDEX_NONE)
 	{
 		HintSetting = TestHintSetting;
+	}
+	else if (bPadRows)
+	{
+		HintSetting = SettingsPadRow; // v4.17 (C6) : l'aide de la ligne choisie a la manette, comme au survol
 	}
 	else if (HoverSetting != INDEX_NONE)
 	{
@@ -5715,7 +5942,20 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 {
 	if (!PlayerOwner || !PC || BRDisplay::IsPending())
 	{
+		PadAdjustRow = INDEX_NONE; // v4.17 (C6) : un reglage demande a la manette pendant la confirmation est abandonne
 		return; // v4.9 : pendant la confirmation de l'affichage, seuls ses deux boutons repondent
+	}
+	// v4.17 (C6) : reglage demande a la manette (PadSettingsAdjust, PadSettingsActivate) : le meme appel qu'un clic sur les
+	// fleches ou sur la ligne, au meme moment (pendant le dessin : un changement d'affichage est applique a l'image suivante)
+	if (PadAdjustRow != INDEX_NONE)
+	{
+		const int32 PadRow = PadAdjustRow;
+		PadAdjustRow = INDEX_NONE;
+		if (Tab == ETab::Settings)
+		{
+			PC->AdjustSetting(PadRow, PadAdjustDir);
+			return;
+		}
 	}
 	const bool bPressed = PlayerOwner->WasInputKeyJustPressed(EKeys::LeftMouseButton);
 	const bool bReleased = PlayerOwner->WasInputKeyJustReleased(EKeys::LeftMouseButton);
@@ -5723,7 +5963,8 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 	const bool bRight = PlayerOwner->WasInputKeyJustPressed(EKeys::RightMouseButton);
 
 	FSlotBox* Under = (C && Tab == ETab::Character && !Inspecting.IsValid()) ? FindSlot(MouseX, MouseY) : nullptr;
-	if (UsesPadCursor(C) && !bPressed && !bRight && !Dragging.IsValid())
+	// v4.17 (C7) : pendant un port a la manette aussi (l'objet suit le curseur)
+	if (UsesPadCursor(C) && !bPressed && !bRight && (!Dragging.IsValid() || IsPadCarrying()))
 	{
 		// v4.16 (relecture) : manette : la case du curseur est la case survolee (cadre, infobulle) ; premiere case du sac au debut.
 		// Un clic de souris garde la case sous la souris
@@ -5756,6 +5997,12 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 
 	if (bPressed)
 	{
+		if (IsPadCarrying())
+		{
+			// v4.17 (C7) : un clic de souris annule le port de la manette (l'objet reste dans sa case)
+			Dragging = FSlotRef();
+			bPadCarrying = false;
+		}
 		const int32 Id = ButtonAt(MouseX, MouseY);
 		if (Id != INDEX_NONE)
 		{
@@ -5840,13 +6087,15 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 					return;
 				}
 				Dragging = Under->Ref;
+				bPadCarrying = false; // v4.17 (C7) : glisser a la souris
 			}
 			LastClickSlot = Under->Ref;
 			LastClickTime = Now;
 		}
 	}
 
-	if (Dragging.IsValid() && (bReleased || !bHeld))
+	// v4.17 (C7) : un objet porte a la manette n'est pas lache par la souris (bouton relache)
+	if (Dragging.IsValid() && !IsPadCarrying() && (bReleased || !bHeld))
 	{
 		if (Under && C && !(Under->Ref == Dragging))
 		{

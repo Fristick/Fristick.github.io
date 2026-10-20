@@ -348,7 +348,7 @@ Mesures en Roboto, 16 langues (fr, en, de, es-ES, es-419, pt-BR, pt-PT, ru, uk, 
 - Contraste calculé par composition linéaire, sur la couleur du panneau mesurée en jeu (52, 47, 28) avec la teinte du HUD. La même méthode retrouve 1,13:1 pour l'ancienne image, soit la mesure en jeu de 1,12:1. Nouvelle image : **2,23:1** en moyenne contre le panneau, étendue p5–p95 de **63 niveaux** (avant : 6). Contre le fond local, halo compris : 1,85:1 avec un halo à 7 % et 1,94:1 à 5 %, d'où le choix de **5 %**.
 - **À faire dans Unreal** : réimporter `/Game/Backrooms/UI/I_Silhouette`. `backrooms_setup.py` ne réimporte une icône existante qu'au changement de version ; ce fichier m'est interdit.
 
-### 9.4 Nouvelle clé de texte (une seule)
+### 9.4 Nouvelle clé de texte (premier passage ; trois autres au § 9.8)
 
 `HUD.PadInventoryFooterNoScroll` vaut « [{Prev}] [{Next}]  ONGLETS     [{Close}]  FERMER ». C'est le pied de la manette hors PERSONNAGE quand rien ne défile. Ses 21 traductions sont dans `Docs/v417/agents/interface_cles.json`. Elles reprennent **mot pour mot** les termes de `HUD.PadInventoryFooter` de chaque `Game.po`, lus sans les modifier, sans le segment de défilement. À reporter dans les catalogues (`loc_extract.py`). Tant que ce n'est pas fait, les autres langues affichent le français pour ce seul pied.
 
@@ -396,3 +396,107 @@ int32 GetPadScrollZone() const;  int32 GetScrollZoneCount() const;  bool HadScro
   - `FText::ToUpper` suit-il la culture courante, par exemple le I pointé turc ?
 - **Silhouette** : contraste de 2,2:1 calculé, non mesuré en jeu. À mesurer sur une vraie fenêtre (1366 × 768 et 1080p, Level 0 et Level 1) après réimport de la texture.
 - **Coût** : `DenseScript` lit la culture à chaque police demandée, soit une copie de `TSharedRef` ; environ 3 000 appels par image d'inventaire, négligeable mais non mesuré.
+
+### 9.8 Second passage : C7, C6 et banc (après la fusion `0a5859d`)
+
+Branche `v417-ui`, mise à jour par `git merge v417-jeu` (fusion sans conflit, `BRHUD` inchangé par la fusion). Commits :
+
+- `ec1446d` : C7 et C6 côté HUD (`BRHUD.cpp`, `BRHUD.h`) ;
+- `59d3c7e` : banc (`BRAutoTestV416Visual.cpp`) ;
+- commit de documentation suivant : ce paragraphe et `interface_cles.json`.
+
+Pas de compilation possible ici. Les mêmes contrôles par script ont été repassés :
+- équilibre des accolades et des parenthèses ;
+- locales qui masqueraient un membre ou un nom de l'espace anonyme ;
+- locales des lambdas du banc qui masqueraient une locale de `AddV416VisualSteps` ou de `BRTestV416Vis` ;
+- constantes déclarées mais inutilisées.
+
+Aucun constat.
+
+**C7, déplacer un objet à la manette** (côté HUD fait, à brancher sur Y)
+- `PadCarry()`, premier appui : prend l'objet de la case du curseur. `Dragging` reçoit la case et `bPadCarrying` passe à vrai ; c'est le même état qu'un glisser à la souris, donc la source est estompée à 30 % par `DrawSlot`. L'objet porté (84U, 85 %) est dessiné sur la case du curseur, décalé en haut à droite. La case visée montre le jeton focus, ou le cadre rouge si elle refuse l'objet (C3).
+- Second appui : `ABRCharacter::MoveItem(source, curseur)`, la règle de la souris (échange, pile, équipement, avec son message de refus). S'il y a refus, l'objet reste porté et la case visée refuse (cadre rouge 150 ms, `S_UIDeny`). Un appui sur la case de départ annule le port. Une case vide refuse.
+- `PadCarry()` renvoie false hors de PERSONNAGE, sans personnage ou pendant une inspection : Y garde alors son rôle actuel (aide du carnet).
+- Pendant un port, A pose aussi l'objet (`PadSlotAction`) et X ne fait rien.
+- `PadCancelCarry()` annule le port. `PadBack()` l'appelle en premier : **B, déjà branché sur `PadBack`, annule donc le port sans fermer l'inventaire, sans aucun changement du contrôleur.**
+- La souris reprend la main : un clic annule le port de la manette, un glisser à la souris remet `bPadCarrying` à faux. Le port est aussi oublié au changement d'onglet et à la fermeture de l'inventaire.
+- Pied de PERSONNAGE : « [Y]  DÉPLACER » devant le pied actuel. Pendant le port : « [Y]  POSER     [CROIX]  CHOISIR     [B]  ANNULER ». Infobulle du curseur : « … [Y]  DÉPLACER ».
+
+**C6, PARAMÈTRES à la manette** (côté HUD fait, à brancher sur la croix, A, LT et RT)
+- `SettingsPadRow` contient l'**indice de réglage** d'`ABRPlayerController`, pas un rang à l'écran ; l'ordre et le contenu des lignes ne changent pas. Les lignes sont celles de `SettingsRowsOf`, la même liste dans le même ordre que le dessin.
+- Quand la manette a servi en dernier, la ligne choisie a une barre de 4U et un fond jaune à 10 %, son libellé et ses flèches passent en jaune, et son aide s'affiche comme au survol (`HintSetting`).
+- `AdjustSetting` est public sur le contrôleur. Le HUD ne l'appelle pas tout de suite : il met la demande en file (`PadAdjustRow`, `PadAdjustDir`) et l'applique dans `HandleInventoryMouse`, pendant le dessin suivant, **au même endroit qu'un clic**. Un changement d'affichage reste donc appliqué à l'image suivante (`BRDisplay::SetHudDrawing`). La demande est abandonnée pendant la confirmation de l'affichage, où A confirme déjà (`OnMenuConfirm`).
+- Pied de PARAMÈTRES à la manette : « [LB] [RB]  ONGLETS     [LT] [RT]  CATÉGORIE     [CROIX]  CHOISIR / RÉGLER     [B]  FERMER ».
+
+**API exacte à brancher** (`BRPlayerController.cpp`, numéros de ligne de `0a5859d`, `H` étant le HUD) :
+
+```cpp
+// Croix gauche / droite (1609, 1629), inventaire ouvert, dans cet ordre :
+if (H->PadSettingsAdjust(DX)) return;        // PARAMETRES : regle la ligne choisie (DX = -1 / +1)
+if (H->PadScrollFocus(DX)) return;           // CARNET, JOURNAL : colonne (9.6)
+H->PadDirection(DX, 0);                      // PERSONNAGE : curseur ; ailleurs : onglet (inchange)
+// Croix haut / bas (1648, 1663) :
+if (H->PadSettingsMove(DY)) return;          // PARAMETRES : ligne suivante / precedente, bouclee
+if (H->PadScrollLines(DY)) return;           // autres onglets sauf PERSONNAGE : une ligne (26 px a 1080)
+H->PadDirection(0, DY);                      // PERSONNAGE : curseur
+// A (OnMenuConfirm, avant BRPadInput::SlotAction, 1683) :
+if (H->PadSettingsActivate()) return;        // PARAMETRES : comme un clic sur la ligne (AdjustSetting(ligne, +1))
+// Y (OnFlash, avant l'aide du carnet, 1296) : seulement si la touche est Gamepad_FaceButton_Top
+if (PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Top) && H->PadCarry()) return;
+// LT / RT (OnLidarPulse 1480, OnLidarFocusStarted 1491), inventaire ouvert, seulement si la touche est la gachette
+// (LidarPulse est aussi lie au clic droit de la souris) :
+if (bInventory && IsInputKeyDown(EKeys::Gamepad_LeftTrigger) && H->PadSettingsCategory(-1)) return;   // RT : +1
+// B : rien a changer (PadBack annule deja un port)
+```
+
+Signatures dans `BRHUD.h` :
+- `bool PadCarry()` ; `bool PadCancelCarry()` ; `bool IsPadCarrying() const` ;
+- `bool PadSettingsMove(int32 DY)` ; `bool PadSettingsAdjust(int32 DX)` ; `bool PadSettingsActivate()` ; `bool PadSettingsCategory(int32 Step)` ;
+- `int32 GetPadSetting() const` (banc) ;
+- C8, sans changement depuis § 9.6 : `bool PadScrollFocus(int32)`, `bool PadScrollLines(int32)`, `void PadScrollPixels(float)`, `PadScrollLine`.
+
+**Banc** (`BRAutoTestV416Visual.cpp`, style du fichier, état dans `BRTestV416Vis`) :
+- « croix droite : onglet suivant (JOURNAL) » passe par **RB**. « croix gauche : onglet précédent (PERSONNAGE) », qui partait lui aussi du carnet, passe par **LB** pour la même raison : une fois branchée, la croix gauche ou droite y choisira la colonne.
+- **K14** : dans les vraies fenêtres, l'inventaire se ferme à l'étape qui suit la capture du carnet, attente de 0,2 s comprise. Avant, il se fermait dans la même étape, d'où les `v416_fenetre_*_carnet` vides.
+- **Carnet long**, après les captures de la fenêtre 1280 × 720 : taille d'interface 1,25, aide et rappel. Le banc vérifie `HadScrollRoom()` et le reste à défiler de la colonne de gauche, puis appelle `PadScrollLines(1)`. Il vérifie que `NotebookLeftScroll` monte de `min(PadScrollLine, reste)` à 0,5 près et capture `v417_carnet_long`. S'il n'y a rien à faire défiler, l'étape est notée NON VÉRIFIÉ. La taille d'interface est remise à 1 juste après.
+- **C7** :
+  - eau d'amande ×2 posée dans la 1re case du sac, 4e poche vidée ;
+  - `PadCarry` prend l'objet ; le curseur passe sur la 4e poche ; capture `v417_manette_port` pendant le port ;
+  - `PadCarry` pose dans la poche, puis aller et retour vers le sac, avec contenus relus ;
+  - B, vraie touche injectée, pendant un nouveau port : le port est annulé et l'inventaire reste ouvert ;
+  - sac et poche rétablis.
+- **C6** :
+  - PARAMÈTRES > VIDÉO ; la ligne LUMINOSITÉ est trouvée par son libellé (`Menu.Luminosite`) ;
+  - `PadSettingsMove(1)` jusqu'à elle, puis `PadSettingsAdjust(±1)`. Le premier cran descend si la valeur est au maximum (1,5).
+  - le banc relit la valeur (écart de 0,1), le texte affiché et l'aide montrée (`HintSetting`), puis capture `v417_manette_parametres` ;
+  - retour d'un cran, valeur revenue vérifiée (rétablie de force sinon).
+- **Dépendance au branchement** : les nouvelles étapes C6, C7 et carnet long appellent les fonctions du HUD directement et ne dépendent pas du contrôleur. « B pendant un port » passe par la vraie touche et marche avec le branchement actuel (`PadBack`). L'étape existante « croix bas : défilement du carnet » passe avant comme après le branchement (60 px puis 26 px par appui). RB et LB ne dépendent de rien.
+
+**Nouvelles clés** (quatre au total, dans `interface_cles.json`) :
+- `HUD.PadInventoryFooterNoScroll` (§ 9.4) ;
+- `HUD.PadCarryHint` « [{Carry}]  DÉPLACER » ;
+- `HUD.PadCarryFooter` « [{Drop}]  POSER     [{Move}]  CHOISIR     [{Cancel}]  ANNULER » ;
+- `HUD.PadSettingsFooter` « [{Prev}] [{Next}]  ONGLETS     [{PrevCat}] [{NextCat}]  CATÉGORIE     [{Move}]  CHOISIR / RÉGLER     [{Close}]  FERMER ».
+
+Origine des traductions :
+- DÉPLACER, CHOISIR, ANNULER, ONGLETS et FERMER sont repris des catalogues : `HUD.GlisserDeplacerDoubleClicUtiliser`, `HUD.PadCharacterFooter`, `HUD.ClicChangerClicDroitEffacer`.
+- POSER, CATÉGORIE et RÉGLER sont nouveaux, traduits ici et à relire.
+
+Largeurs en Roboto (16 langues), à 10,5 pt dans la place du pied :
+- PERSONNAGE avec « [Y] DÉPLACER » : 55 % au plus (ru) ;
+- pied du port : 22 % ;
+- pied de PARAMÈTRES : 40 % (uk).
+
+**Ce qui reste**
+- Contrôleur : branchements ci-dessus. Répétition de la croix (`Started` seulement pour l'instant) et stick droit (§ 9.6).
+- LT et RT : si l'orchestrateur ne les branche pas, il faut retirer le segment CATÉGORIE de `HUD.PadSettingsFooter`.
+- Pied de colonne du carnet (`HUD.PadColumn`, non créée).
+- TOUCHES à la manette (case choisie à la croix, saisie lancée par A) : non fait.
+- C9, C11, et la colonne d'aide de C12 (§ 9.5).
+
+**Risques à vérifier en jeu**
+- Avec le contrôleur branché :
+  - la croix dans PARAMÈTRES ne change plus d'onglet (LB et RB le font) ;
+  - LT et RT ne font rien aujourd'hui inventaire ouvert, car `CanPlay` est faux. Le branchement doit tester la gâchette elle-même : `LidarPulse` est aussi lié au clic droit de la souris, qui ne doit pas changer de catégorie.
+- Déplacement en multijoueur client : `MoveItem` est le même appel qu'à la souris, mais le port n'a été essayé qu'en solo dans le banc.
+- Port à cheval sur un changement d'objets par le jeu (ramassage pendant l'inventaire ouvert) : la source est relue à la pose, et `MoveItem` refuse si elle est vide.
