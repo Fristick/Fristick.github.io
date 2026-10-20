@@ -131,7 +131,7 @@ private:
 	{
 		FSlotRef Ref;
 		float X = 0.f, Y = 0.f, S = 0.f;
-		FString Caption;   // "1", "TETE"...
+		FString Caption;   // "TETE"... ; v4.17 : poche : sa touche ("1", ou celle choisie dans TOUCHES)
 	};
 
 	struct FButton
@@ -333,6 +333,10 @@ private:
 	/** v4.16 (relecture) : curseur de la manette dans PERSONNAGE (case survolee quand la manette a servi en dernier) ; remis a
 	 *  la premiere case du sac a chaque ouverture */
 	FSlotRef PadCursor;
+	/** v4.17 : case qui a refuse une action de la manette (A sur une case vide ou sur un objet sans usage) et instant du
+	 *  refus (cadre rouge pendant 150 ms, son de refus) */
+	FSlotRef DenySlot;
+	float DenyAt = -100.f;
 	const FSlotBox* SlotBoxOf(const FSlotRef& Ref) const;
 	/** Le curseur de la manette remplace la souris (manette en dernier, onglet PERSONNAGE, pas d'inspection ouverte) */
 	bool UsesPadCursor(const ABRCharacter* C) const;

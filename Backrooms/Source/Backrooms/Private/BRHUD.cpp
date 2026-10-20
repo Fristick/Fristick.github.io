@@ -63,6 +63,14 @@ namespace
 		constexpr float Value = 12.f;       // valeurs, compteurs (gras)
 	}
 
+	/** v4.17 : touche de la poche Index (actions POCHE 1 a 4, reassignables dans TOUCHES) ; vide si aucune touche. Avant : "1"
+	 *  a "4" ecrits en dur, faux quand la touche avait ete changee */
+	FString PocketKey(int32 Index)
+	{
+		const FString Name = BRKeys::Primary(static_cast<EBRAction>(static_cast<int32>(EBRAction::Pocket1) + Index));
+		return Name == TEXT("?") ? FString() : Name;
+	}
+
 	/** v4.9 : charge des piles, information des objets lumineux et des piles (plus de jauge PILES a l'ecran) */
 	FString ChargeLine(const ABRCharacter* C, EBRItem Item)
 	{
@@ -3640,7 +3648,8 @@ void ABRHUD::DrawQuickBar(ABRCharacter* C)
 		const float X = X0 + i * (S + G);
 		RoundRect(X, Y, S, S, 10.f * U, FLinearColor(0.f, 0.f, 0.f, 0.38f * A));
 		RoundRect(X, Y, S, S, 10.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.24f * A), true);
-		TextF(FString::FromInt(i + 1), X + 7.f * U, Y + 4.f * U, WithAlpha(InkDim, InkDim.A * A), 8.5f, EUiWeight::Bold);
+		// v4.17 : touche choisie pour la poche (avant : "1" a "4" en dur)
+		TextF(Ellipsize(PocketKey(i), S * 0.6f, 8.5f, EUiWeight::Bold), X + 7.f * U, Y + 4.f * U, WithAlpha(InkDim, InkDim.A * A), 8.5f, EUiWeight::Bold);
 		const FBRItemSlot* It = C->Pockets.IsValidIndex(i) ? &C->Pockets[i] : nullptr;
 		if (It && !It->IsEmpty())
 		{
@@ -4519,8 +4528,15 @@ bool ABRHUD::PadSlotAction(bool bInspect)
 		return true;
 	}
 	const FBRItemSlot* S = C->GetSlot(PadCursor.Group, PadCursor.Index);
-	if (!S || S->IsEmpty())
+	// v4.17 : rien a faire sur cette case (vide, ou A sur un objet qui ne s'utilise ni ne s'equipe) : la case refuse (cadre
+	// rouge bref, son de refus) au lieu de ne rien montrer
+	const bool bNothing = !S || S->IsEmpty();
+	const bool bNoUse = !bNothing && !bInspect && !BRItems::Get(S->Item).bConsumable && BRItems::Get(S->Item).Slot == EBREquipSlot::None;
+	if (bNothing || bNoUse)
 	{
+		DenySlot = PadCursor;
+		DenyAt = Clock;
+		C->PlayUISound(TEXT("S_UIDeny"), 0.4f);
 		return true;
 	}
 	if (bInspect)
@@ -4567,7 +4583,7 @@ void ABRHUD::LayoutCharacterTab(ABRCharacter* C)
 		B.X = InnerX + i * (S + G);
 		B.Y = Y;
 		B.S = S;
-		B.Caption = FString::FromInt(i + 1);
+		B.Caption = PocketKey(i); // v4.17 : touche de la poche (reassignable)
 		Slots.Add(B);
 	}
 	Y += S + 40.f * U;
@@ -4620,30 +4636,97 @@ void ABRHUD::LayoutCharacterTab(ABRCharacter* C)
 void ABRHUD::DrawSlot(ABRCharacter* C, const FSlotBox& Box)
 {
 	const float U = Ui();
-	UFont* Small = GEngine->GetSmallFont();
 	const FBRItemSlot* It = C ? C->GetSlot(Box.Ref.Group, Box.Ref.Index) : nullptr;
 	const bool bHov = HoverSlot == Box.Ref && !Inspecting.IsValid();
 	const bool bSrc = Dragging == Box.Ref;
 	const bool bTarget = Dragging.IsValid() && bHov && !bSrc;
+	const bool bEmpty = !It || It->IsEmpty();
 	const float X = Box.X;
 	const float Y = Box.Y;
 	const float S = Box.S;
+	const float Thin = FMath::Max(1.f, FMath::RoundToFloat(U));
+	const float FocusT = FMath::Max(2.f, FMath::RoundToFloat(2.f * U));
+
+	// v4.17 : depot impossible sur cette case (l'objet porte ne va pas dans cet emplacement, ou l'echange le renverrait dans un
+	// emplacement qui le refuse) : cadre rouge pendant le glisser
+	bool bRefuse = false;
+	if (bTarget && C)
+	{
+		const FBRItemSlot* Src = C->GetSlot(Dragging.Group, Dragging.Index);
+		if (Src && !Src->IsEmpty() && Box.Ref.Group == EBRSlotGroup::Equipment && !BRItems::CanEquipIn(Src->Item, static_cast<EBREquipSlot>(Box.Ref.Index)))
+		{
+			bRefuse = true;
+		}
+		if (!bEmpty && Dragging.Group == EBRSlotGroup::Equipment && !BRItems::CanEquipIn(It->Item, static_cast<EBREquipSlot>(Dragging.Index)))
+		{
+			bRefuse = true;
+		}
+	}
+	// v4.17 : action refusee a la manette (PadSlotAction) : cadre rouge pendant 150 ms
+	const bool bDenied = DenySlot == Box.Ref && Clock - DenyAt < 0.15f;
+	// v4.17 : objet equipable sous le curseur (ou porte) dans le sac ou une poche : la case d'equipement qui l'accepte s'eclaire
+	bool bAccepts = false;
+	if (C && Box.Ref.Group == EBRSlotGroup::Equipment && !Inspecting.IsValid())
+	{
+		const FSlotRef Lead = Dragging.IsValid() ? Dragging : HoverSlot;
+		if (Lead.IsValid() && Lead.Group != EBRSlotGroup::Equipment)
+		{
+			const FBRItemSlot* LeadIt = C->GetSlot(Lead.Group, Lead.Index);
+			bAccepts = LeadIt && !LeadIt->IsEmpty() && BRItems::CanEquipIn(LeadIt->Item, static_cast<EBREquipSlot>(Box.Ref.Index));
+		}
+	}
 
 	DrawRect(SlotBg, X, Y, S, S);
-	DrawRect(FLinearColor(1.f, 0.85f, 0.3f, bHov ? 0.08f : 0.035f), X, Y, S, S * 0.45f);
-	Frame(X, Y, S, S, bTarget ? Yellow : (bHov ? WithAlpha(Yellow, 0.85f) : YellowDim), (bHov ? 2.f : 1.f) * U);
-
-	const bool bEmpty = !It || It->IsEmpty();
-	if (Box.Ref.Group == EBRSlotGroup::Pockets)
+	if (bAccepts || bHov)
 	{
-		Txt(Box.Caption, X + 5.f * U, Y + S - 20.f * U, InkDim, 0.7f * U, Small, false, false);
+		// Jeton "focus" (souris ou curseur de la manette) : fond jaune a 10 % ; emplacement qui accepte l'objet : 25 %
+		DrawRect(WithAlpha(Yellow, bAccepts && !bHov ? 0.25f : 0.10f), X, Y, S, S);
+	}
+	const bool bRed = bRefuse || bDenied;
+	Frame(X, Y, S, S, bRed ? WithAlpha(Danger, 0.9f) : (bHov || bAccepts ? Yellow : YellowDim), (bHov || bRed) ? FocusT : Thin);
+	if (bHov && !bRed)
+	{
+		// Quatre coins plus epais : le curseur se repere aussi sur une capture reduite (avant : cadre de 2U a 85 %, 1,4 pixel)
+		const float X0 = FMath::RoundToFloat(X);
+		const float Y0 = FMath::RoundToFloat(Y);
+		const float X1 = FMath::RoundToFloat(X + S);
+		const float Y1 = FMath::RoundToFloat(Y + S);
+		const float CT = FocusT + Thin;
+		const float CL = FMath::Max(5.f, FMath::RoundToFloat(8.f * U));
+		DrawRect(Yellow, X0, Y0, CL, CT);
+		DrawRect(Yellow, X0, Y0, CT, CL);
+		DrawRect(Yellow, X1 - CL, Y0, CL, CT);
+		DrawRect(Yellow, X1 - CT, Y0, CT, CL);
+		DrawRect(Yellow, X0, Y1 - CT, CL, CT);
+		DrawRect(Yellow, X0, Y1 - CL, CT, CL);
+		DrawRect(Yellow, X1 - CL, Y1 - CT, CL, CT);
+		DrawRect(Yellow, X1 - CT, Y1 - CL, CT, CL);
+	}
+
+	// v4.17 : libelles en 10 points gras (avant : 6,2 a 7,5 points, bloques au plancher de 6 points)
+	const float LabelH = TextSize(TEXT("Hg"), UiType::Label, EUiWeight::Bold).Y;
+	if (Box.Ref.Group == EBRSlotGroup::Pockets && !Box.Caption.IsEmpty())
+	{
+		// Touche de la poche en pastille, en bas a gauche (nom de touche long : points de suspension)
+		const FString KeyText = Ellipsize(Box.Caption, S * 0.45f, UiType::Label, EUiWeight::Bold);
+		const float KW = TextSize(KeyText, UiType::Label, EUiWeight::Bold).X;
+		const float PH = LabelH + 2.f * U;
+		const float PY = Y + S - PH - 4.f * U;
+		RoundRect(X + 4.f * U, PY, KW + 8.f * U, PH, 4.f * U, FLinearColor(0.f, 0.f, 0.f, 0.6f));
+		TestTextMaxW = S * 0.45f;
+		bTestTextCut = KeyText != Box.Caption;
+		TextF(KeyText, X + 8.f * U, PY + 1.f * U, WithAlpha(Ink, 0.9f), UiType::Label, EUiWeight::Bold, EUiAlign::Left, false);
+		TestTextMaxW = 0.f;
+		bTestTextCut = false;
 	}
 	if (Box.Ref.Group == EBRSlotGroup::Equipment)
 	{
-		Txt(Box.Caption, X, Y - 22.f * U, Yellow, 0.75f * U, Small, false, false);
+		// Legende au-dessus de la case, a 6U de son cadre
+		TextFit(Box.Caption, X, Y - LabelH - 6.f * U, S + 12.f * U, Yellow, UiType::Label, EUiWeight::Bold, EUiAlign::Left, false);
 		if (bEmpty)
 		{
-			Txt(BR_STR(NSLOCTEXT("BR", "HUD.Vide", "VIDE")), X + S * 0.5f, Y + S * 0.5f - 9.f * U, WithAlpha(InkDim, 0.5f), 0.7f * U, Small, true, false);
+			TextFit(BR_STR(NSLOCTEXT("BR", "HUD.Vide", "VIDE")), X + S * 0.5f, Y + (S - LabelH) * 0.5f, S - 8.f * U, WithAlpha(InkDim, 0.5f), UiType::Label, EUiWeight::Regular,
+				EUiAlign::Center, false);
 		}
 	}
 	if (bEmpty)
@@ -4652,26 +4735,54 @@ void ABRHUD::DrawSlot(ABRCharacter* C, const FSlotBox& Box)
 	}
 	const FBRItemInfo& Info = BRItems::Get(It->Item);
 	const float A = bSrc ? 0.3f : 1.f;
-	// Nom court au-dessus de l'icone (reduit s'il est trop long)
-	float LS = 0.62f * U;
-	const float LW = TextW(Info.Short.ToString(), Small, LS);
-	if (LW > S - 8.f * U)
+	// v4.17 : nom court au-dessus de l'icone, deux lignes au plus puis points de suspension (avant : une ligne reduite jusqu'au
+	// plancher, qui debordait de la case en russe) ; bande claire sous le nom, seulement sur une case pleine
+	const float NameW = S - 10.f * U;
+	const FString Name = Info.Short.ToString();
+	TArray<FString> NameLines = WrapF(Name, NameW, UiType::Label, EUiWeight::Bold);
+	bool bNameCut = false;
+	if (NameLines.Num() > 2)
 	{
-		LS *= (S - 8.f * U) / LW;
+		NameLines.SetNum(2);
+		NameLines[1] = Ellipsize(NameLines[1] + TEXT("\u2026"), NameW, UiType::Label, EUiWeight::Bold);
+		bNameCut = true;
 	}
-	Txt(Info.Short.ToString(), X + S * 0.5f, Y + 4.f * U, WithAlpha(Ink, A), LS, Small, true, false);
+	const float NameTop = Y + 4.f * U;
+	const float NameBottom = NameTop + NameLines.Num() * LabelH;
+	DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.05f * A), X, Y, S, FMath::Min(S, NameBottom - Y + 6.f * U));
+	for (int32 k = 0; k < NameLines.Num(); ++k)
+	{
+		TestTextMaxW = NameW; // v4.17 (tests) : le banc controle le nom dans la largeur de sa case
+		bTestTextCut = bNameCut && k == NameLines.Num() - 1;
+		TextF(NameLines[k], X + S * 0.5f, NameTop + k * LabelH, WithAlpha(Ink, A), UiType::Label, EUiWeight::Bold, EUiAlign::Center, false);
+	}
+	TestTextMaxW = 0.f;
+	bTestTextCut = false;
+	// Icone sous le nom (plus petite quand le nom tient sur deux lignes), sur un halo chaud : les objets sombres (camescope,
+	// frontale, lampe) ressortent sur le fond presque noir de la case
+	const float IconTop = FMath::Max(Y + S * 0.22f, NameBottom + 2.f * U);
+	const float IconS = FMath::Max(S * 0.3f, FMath::Min(S * 0.68f, Y + S - 3.f * U - IconTop));
+	const float IconX = X + (S - IconS) * 0.5f;
+	Glow(X + S * 0.5f, IconTop + IconS * 0.5f, S * 0.42f, S * 0.42f, FLinearColor(1.f, 0.85f, 0.3f, 0.10f * A));
 	UTexture* Tex = ItemIcon(It->Item);
 	if (Tex)
 	{
-		Icon(Tex, X + S * 0.16f, Y + S * 0.22f, S * 0.68f, S * 0.68f, FLinearColor(1.f, 1.f, 1.f, A));
+		Icon(Tex, IconX, IconTop, IconS, IconS, FLinearColor(1.f, 1.f, 1.f, A));
 	}
 	else
 	{
-		DrawRect(WithAlpha(YellowDim, A), X + S * 0.3f, Y + S * 0.35f, S * 0.4f, S * 0.4f);
+		DrawRect(WithAlpha(YellowDim, A), X + S * 0.3f, IconTop + IconS * 0.2f, S * 0.4f, S * 0.4f);
 	}
 	if (It->Count > 1)
 	{
-		TxtRight(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt", "x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }), X + S - 6.f * U, Y + S - 20.f * U, WithAlpha(Ink, A), 0.75f * U, Small);
+		// v4.17 : quantite en pastille, en bas a droite (10 points gras sur fond noir)
+		const FString Qty = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt", "x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } });
+		const float QW = TextSize(Qty, UiType::Label, EUiWeight::Bold).X + 8.f * U;
+		const float QH = LabelH + 2.f * U;
+		const float QX = X + S - QW - 4.f * U;
+		const float QY = Y + S - QH - 4.f * U;
+		RoundRect(QX, QY, QW, QH, 4.f * U, FLinearColor(0.f, 0.f, 0.f, 0.6f * A));
+		TextF(Qty, QX + 4.f * U, QY + 1.f * U, WithAlpha(Ink, A), UiType::Label, EUiWeight::Bold, EUiAlign::Left, false);
 	}
 }
 
