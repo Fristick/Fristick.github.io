@@ -92,7 +92,9 @@ namespace
 		static TArray<FSlotStyle> Styles = []()
 		{
 			TArray<FSlotStyle> S = {
-				{ TEXT("Frame"), TEXT("T_Grime"), FLinearColor(0.85f, 0.85f, 0.82f), 0.4f, 0.3f, 1.f },
+				// v4.17 : cadre des dalles lumineuses (SM_LightPanel, seul modele a ce slot) en tole peinte blanc casse un peu jaunie,
+				// sans les taches de T_Grime ni metal (direction artistique, point 8 ; avant : T_Grime 0,85, metallic 0,3)
+				{ TEXT("Frame"), TEXT("T_Paper"), FLinearColor(0.86f, 0.83f, 0.74f), 0.45f, 0.f, 2.f },
 				{ TEXT("Trim"), TEXT("T_Grime"), FLinearColor(0.88f, 0.88f, 0.86f), 0.5f, 0.f, 1.f },
 				{ TEXT("Metal"), TEXT("T_Grime"), FLinearColor(0.5f, 0.5f, 0.52f), 0.45f, 0.85f, 1.f },
 				{ TEXT("DarkMetal"), TEXT("T_Grime"), FLinearColor(0.09f, 0.09f, 0.1f), 0.5f, 0.6f, 1.f },
