@@ -48,6 +48,21 @@ namespace
 	const FLinearColor Danger(0.95f, 0.3f, 0.22f, 1.f);
 	const FLinearColor Done(0.55f, 0.88f, 0.5f, 0.9f);
 
+	/** v4.17 : echelle typographique de l'interface : tailles en points a 1080 lignes, passees a TextF (taille finale :
+	 *  max(plancher, arrondi(taille x Ui())), UiFontInfo). Avant : facteurs des polices du moteur, de 6,2 a 8,6 points pour le
+	 *  corps du texte (6 points a 720 lignes) */
+	namespace UiType
+	{
+		constexpr float MenuTitle = 15.f;   // MENU > (gras)
+		constexpr float Tab = 13.f;         // onglets (gras)
+		constexpr float PanelTitle = 12.5f; // titres de panneau (gras)
+		constexpr float Body = 12.f;        // objectifs, carnet, infobulle, descriptions, lignes de reglage
+		constexpr float BodySmall = 11.f;   // phrases secondaires, observations, etats
+		constexpr float Hint = 10.5f;       // raccourcis du pied, lignes techniques
+		constexpr float Label = 10.f;       // nom en case, legendes, en-tetes de colonnes (gras)
+		constexpr float Value = 12.f;       // valeurs, compteurs (gras)
+	}
+
 	/** v4.9 : charge des piles, information des objets lumineux et des piles (plus de jauge PILES a l'ecran) */
 	FString ChargeLine(const ABRCharacter* C, EBRItem Item)
 	{
@@ -199,11 +214,39 @@ namespace
 		return NAME_None;
 	}
 
+	/** v4.17 : ecriture dense dans la langue courante (chinois, japonais, coreen, arabe, persan) : plancher de lecture plus
+	 *  haut, titres sans espacement des lettres. Culture relue seulement quand elle change (appele a chaque texte) */
+	bool DenseScript()
+	{
+		static const FCulture* Seen = nullptr;
+		static bool bDense = false;
+		const auto Cur = FInternationalization::Get().GetCurrentLanguage();
+		const FCulture* Now = &(*Cur);
+		if (Now != Seen)
+		{
+			Seen = Now;
+			const FString Name = Cur->GetName();
+			auto Is = [&Name](const TCHAR* Code)
+			{
+				return Name.Equals(Code, ESearchCase::IgnoreCase) || Name.StartsWith(FString(Code) + TEXT("-"), ESearchCase::IgnoreCase);
+			};
+			bDense = Is(TEXT("zh")) || Is(TEXT("ja")) || Is(TEXT("ko")) || Is(TEXT("ar")) || Is(TEXT("fa"));
+		}
+		return bDense;
+	}
+
+	/** v4.17 : plancher typographique en points : 7 en latin, cyrillique et grec, 8 pour les ecritures denses (avant : 6
+	 *  partout : lettres deformees a 1280 x 720, kanji illisibles) */
+	float FloorPt()
+	{
+		return DenseScript() ? 8.f : 7.f;
+	}
+
 	/** Police de l'interface v4 : Roboto, graisse Light / Regular / Bold / Black */
 	FSlateFontInfo UiFontInfo(float Size, int32 Weight, float U)
 	{
-		// Tailles entieres : chaque taille occupe sa place dans l'atlas des polices
-		const float Pt = FMath::Max(6.f, FMath::RoundToFloat(Size * U));
+		// Tailles entieres : chaque taille occupe sa place dans l'atlas des polices. v4.17 : plancher 7 ou 8 points (FloorPt)
+		const float Pt = FMath::Max(FloorPt(), FMath::RoundToFloat(Size * U));
 		const int32 Wt = FMath::Clamp(Weight, 0, 3);
 		UFont* Font = UiFontObject();
 		if (!Font)
@@ -742,6 +785,42 @@ TArray<FString> ABRHUD::Wrap(const FString& S, float MaxWidth, UFont* Font, floa
 	return WrapF(S, MaxWidth, LegacySize(Font ? Font : GEngine->GetMediumFont(), Scale, Ui()), EUiWeight::Regular);
 }
 
+void ABRHUD::TextLineF(const FString& S, float X, float Y, float W, const FLinearColor& C, float Size, EUiWeight Weight)
+{
+	// v4.17 : comme TxtLine, avec une taille en points de l'echelle typographique (UiType)
+	const bool bRtl = BRLoc::IsRightToLeft();
+	TestTextMaxW = W;
+	TextF(S, bRtl ? X + W : X, Y, C, Size, Weight, bRtl ? EUiAlign::Right : EUiAlign::Left, false);
+	TestTextMaxW = 0.f;
+}
+
+float ABRHUD::ParagraphF(const FString& S, float X, float Y, float W, const FLinearColor& C, float Size, EUiWeight Weight, float LineH, int32 MaxLines)
+{
+	TArray<FString> Lines = WrapF(S, W, Size, Weight);
+	bool bCutLast = false;
+	if (MaxLines > 0 && Lines.Num() > MaxLines)
+	{
+		// v4.17 : place limitee : la derniere ligne gardee dit qu'il reste du texte (points de suspension)
+		Lines.SetNum(MaxLines);
+		Lines.Last() = Ellipsize(Lines.Last() + TEXT("\u2026"), W, Size, Weight);
+		bCutLast = true;
+	}
+	for (int32 k = 0; k < Lines.Num(); ++k)
+	{
+		bTestTextCut = bCutLast && k == Lines.Num() - 1;
+		TextLineF(Lines[k], X, Y + k * LineH, W, C, Size, Weight);
+	}
+	bTestTextCut = false;
+	return Lines.Num() * LineH;
+}
+
+float ABRHUD::LineStep(float Size, EUiWeight Weight, float BaseU) const
+{
+	// v4.17 : hauteur de ligne = max(valeur prevue x U, hauteur mesuree x 1,2) : le plancher de 7 ou 8 points et les
+	// ecritures plus hautes ne font jamais se toucher deux lignes
+	return FMath::Max(BaseU * Ui(), FMath::CeilToFloat(TextSize(TEXT("Hg"), Size, Weight).Y * 1.2f));
+}
+
 void ABRHUD::Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label)
 {
 	const float U = Ui();
@@ -758,10 +837,28 @@ void ABRHUD::Bar(float X, float Y, float W, float H, float Fill, const FLinearCo
 
 void ABRHUD::Frame(float X, float Y, float W, float H, const FLinearColor& C, float Thickness)
 {
-	DrawRect(C, X, Y, W, Thickness);
-	DrawRect(C, X, Y + H - Thickness, W, Thickness);
-	DrawRect(C, X, Y + Thickness, Thickness, H - 2.f * Thickness);
-	DrawRect(C, X + W - Thickness, Y + Thickness, Thickness, H - 2.f * Thickness);
+	// v4.17 : bords sur des pixels entiers, d'au moins 1 pixel. Avant : 0,67 pixel a position fractionnaire a 720 lignes, qui
+	// ne couvrait parfois aucun centre de pixel (aretes de cases et de touches manquantes selon la position)
+	const float X0 = FMath::RoundToFloat(X);
+	const float Y0 = FMath::RoundToFloat(Y);
+	const float FW = FMath::RoundToFloat(X + W) - X0;
+	const float FH = FMath::RoundToFloat(Y + H) - Y0;
+	const float T = FMath::Max(1.f, FMath::RoundToFloat(Thickness));
+	if (FW < 1.f || FH < 1.f)
+	{
+		return;
+	}
+	DrawRect(C, X0, Y0, FW, T);
+	DrawRect(C, X0, Y0 + FH - T, FW, T);
+	DrawRect(C, X0, Y0 + T, T, FH - 2.f * T);
+	DrawRect(C, X0 + FW - T, Y0 + T, T, FH - 2.f * T);
+}
+
+void ABRHUD::HLine(float X, float Y, float W, const FLinearColor& C)
+{
+	// v4.17 : separateurs sur une ligne entiere de pixels (avant : 1U, soit 0,67 pixel a 720 lignes, saute par endroits)
+	const float X0 = FMath::RoundToFloat(X);
+	DrawRect(C, X0, FMath::RoundToFloat(Y), FMath::RoundToFloat(X + W) - X0, FMath::Max(1.f, FMath::RoundToFloat(Ui())));
 }
 
 void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
@@ -772,8 +869,10 @@ void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
 	RoundRect(X, Y, W, H, 14.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.22f), true);
 	if (!Title.IsEmpty())
 	{
-		TextSpaced(Title, X + 20.f * U, Y + 13.f * U, Yellow, 11.5f, EUiWeight::Bold, 2.5f * U);
-		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.25f), X + 18.f * U, Y + 42.f * U, W - 36.f * U, FMath::Max(1.f, U));
+		// v4.17 : titre en 12,5 points (avant : 11,5) ; lettres espacees de 2U, sauf en chinois, japonais et coreen (l'arabe
+		// et le persan sont dessines d'un bloc par TextSpaced)
+		TextSpaced(Title, X + 20.f * U, Y + 13.f * U, Yellow, UiType::PanelTitle, EUiWeight::Bold, DenseScript() ? 0.f : 2.f * U);
+		HLine(X + 18.f * U, Y + 42.f * U, W - 36.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.25f));
 	}
 }
 
@@ -1259,7 +1358,7 @@ float ABRHUD::KeyCap(float X, float Y, const FString& Key, const FString& Label,
 	{
 		RoundRect(X, Y, KW, KH, 6.f * U, FLinearColor(1.f, 0.93f, 0.75f, 0.12f * Alpha));
 		RoundRect(X, Y, KW, KH, 6.f * U, FLinearColor(1.f, 0.9f, 0.6f, 0.38f * Alpha), true);
-		DrawRect(FLinearColor(1.f, 0.9f, 0.6f, 0.22f * Alpha), X + 5.f * U, Y + KH - 2.f * U, KW - 10.f * U, FMath::Max(1.f, U));
+		HLine(X + 5.f * U, Y + KH - 2.f * U, KW - 10.f * U, FLinearColor(1.f, 0.9f, 0.6f, 0.22f * Alpha));
 		TextF(Key, X + KW * 0.5f, Y + (KH - KS.Y) * 0.5f, WithAlpha(Ink, Alpha), 10.5f, EUiWeight::Bold, EUiAlign::Center, false);
 		if (!Label.IsEmpty())
 		{
@@ -3729,7 +3828,8 @@ void ABRHUD::DrawMessages(float Dt, bool bOverPanel)
 		const FMsg& M = Messages.Last();
 		const float A = FMath::Clamp(M.Duration - M.Age, 0.f, 1.f) * FMath::Clamp(M.Age * 5.f, 0.f, 1.f);
 		const float Size = 12.5f;
-		const float MenuW = TextW(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), GEngine->GetLargeFont(), 1.25f * U);
+		// v4.17 : largeur de "MENU >" a sa taille de l'echelle typographique (DrawInventory)
+		const float MenuW = TextSize(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), UiType::MenuTitle, EUiWeight::Bold).X;
 		const float Left = IX + MenuW + 40.f * U;
 		const float Right = IX + IW - 20.f * U;
 		const FString More = Messages.Num() > 1 ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.MoreMessages", "+{Count}"), { { TEXT("Count"), BRLoc::Int(Messages.Num() - 1) } }) : FString();
@@ -4028,15 +4128,16 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 		return;
 	}
 	const float U = Ui();
-	UFont* Medium = GEngine->GetMediumFont();
-	UFont* Small = GEngine->GetSmallFont();
 	const float W = FMath::Min(IW, 1240.f * U);
 	const float X = IX + (IW - W) * 0.5f;
 	Panel(X, IY, W, IH, BR_STR(NSLOCTEXT("BR", "HUD.Touches", "TOUCHES")));
 
 	const int32 Count = BRKeys::NumActions();
 	const float Top = IY + 56.f * U;
-	const float RowH = FMath::Min(40.f * U, (IH - 140.f * U) / FMath::Max(1, Count));
+	// v4.17 : en-tetes en 10 points gras, actions en 12 points, touches en 10 points gras (avant : 6,5 ; 7,8 ; 7,2 points,
+	// tous au plancher de 6 points a 720 lignes) ; lignes centrees sur leur hauteur mesuree
+	const float HeadH = TextSize(TEXT("Hg"), UiType::Label, EUiWeight::Bold).Y;
+	const float RowH = FMath::Min(40.f * U, (IH - 116.f * U - HeadH) / FMath::Max(1, Count));
 	const float SlotW = 170.f * U;
 	const float SlotGap = 12.f * U;
 	const float SlotsX = X + W - 24.f * U - 3.f * SlotW - 2.f * SlotGap;
@@ -4044,10 +4145,17 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 	const FString Heads[] = { BR_STR(NSLOCTEXT("BR", "HUD.Touche1", "TOUCHE 1")), BR_STR(NSLOCTEXT("BR", "HUD.Touche2", "TOUCHE 2")), BR_STR(NSLOCTEXT("BR", "HUD.Touche3", "TOUCHE 3")) };
 	for (int32 k = 0; k < 3; ++k)
 	{
-		Txt(Heads[k], SlotsX + k * (SlotW + SlotGap) + SlotW * 0.5f, Top - 4.f * U, InkDim, 0.65f * U, Small, true, false);
+		TextFit(Heads[k], SlotsX + k * (SlotW + SlotGap) + SlotW * 0.5f, Top - 4.f * U, SlotW, InkDim, UiType::Label, EUiWeight::Bold, EUiAlign::Center, false);
 	}
-	float Y = Top + 18.f * U;
+	float Y = Top - 4.f * U + HeadH + 6.f * U;
 	const bool bBlink = FMath::Fmod(Clock, 0.8f) < 0.5f;
+	const float ActH = TextSize(TEXT("Hg"), UiType::Body, EUiWeight::Regular).Y;
+	// Cases des touches : hauteur de la ligne moins 5U ; le nom de la touche reste dans sa case (taille d'interface 1,25 a
+	// 720 lignes : lignes de 16 pixels)
+	const float SH = RowH - 5.f * U;
+	const float KeyH0 = TextSize(TEXT("Hg"), UiType::Label, EUiWeight::Bold).Y;
+	const float KeyPt = KeyH0 > SH - 2.f ? UiType::Label * FMath::Max(0.5f, (SH - 2.f) / FMath::Max(1.f, KeyH0)) : UiType::Label;
+	const float KeyH = TextSize(TEXT("Hg"), KeyPt, EUiWeight::Bold).Y;
 	for (int32 A = 0; A < Count; ++A)
 	{
 		const EBRAction Act = static_cast<EBRAction>(A);
@@ -4056,12 +4164,11 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 		{
 			DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.05f), X + 10.f * U, Y, W - 20.f * U, RowH - 4.f * U);
 		}
-		Txt(BRKeys::ActionLabel(Act), X + 28.f * U, Y + (RowH - 4.f * U) * 0.5f - 10.f * U, bRowHov ? Yellow : Ink, 0.78f * U, Medium, false, false);
+		TextFit(BRKeys::ActionLabel(Act), X + 28.f * U, Y + (RowH - 4.f * U - ActH) * 0.5f, SlotsX - X - 40.f * U, bRowHov ? Yellow : Ink, UiType::Body, EUiWeight::Regular, EUiAlign::Left, false);
 		for (int32 Slot = 0; Slot < BRKeys::SlotsPerAction; ++Slot)
 		{
 			const float SX = SlotsX + Slot * (SlotW + SlotGap);
-			const float SY = Y + 2.f * U;
-			const float SH = RowH - 8.f * U;
+			const float SY = Y + 1.f * U;
 			const bool bCap = PC->IsCapturingKey() && PC->GetCaptureAction() == A && PC->GetCaptureSlot() == Slot;
 			const bool bHov = Hover(SX, SY, SlotW, SH);
 			DrawRect(bCap ? WithAlpha(Yellow, bBlink ? 0.85f : 0.45f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), SX, SY, SlotW, SH);
@@ -4069,34 +4176,34 @@ void ABRHUD::DrawKeysTab(ABRPlayerController* PC)
 			const FKey K = BRKeys::GetKey(Act, Slot);
 			const FString Label = bCap ? FString(BR_STR(NSLOCTEXT("BR", "HUD.Appuyez", "APPUYEZ..."))) : BRKeys::KeyName(K);
 			const FLinearColor Col = bCap ? FLinearColor(0.05f, 0.04f, 0.01f) : (K.IsValid() ? Ink : WithAlpha(InkDim, 0.5f));
-			float LS = 0.72f * U;
-			const float LW = TextW(Label, Small, LS);
-			if (LW > SlotW - 12.f * U)
-			{
-				LS *= (SlotW - 12.f * U) / LW;
-			}
-			Txt(Label, SX + SlotW * 0.5f, SY + SH * 0.5f - 9.f * U, Col, LS, Small, true, false);
+			TextFit(Label, SX + SlotW * 0.5f, SY + (SH - KeyH) * 0.5f, SlotW - 12.f * U, Col, KeyPt, EUiWeight::Bold, EUiAlign::Center, false);
 			AddButton(Btn_KeySlot + A * BRKeys::SlotsPerAction + Slot, SX, SY, SlotW, SH);
 		}
-		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.1f), X + 18.f * U, Y + RowH - 3.f * U, W - 36.f * U, 1.f * U);
+		HLine(X + 18.f * U, Y + RowH - 3.f * U, W - 36.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.1f));
 		Y += RowH;
 	}
 
-	// Bouton de reinitialisation + aide
+	// Bouton de reinitialisation + aide. v4.17 : libelle en 12 points gras centre ; aide en 11 points sur deux lignes au plus,
+	// bornee au panneau (avant : une ligne de 7,2 points sans limite de largeur)
 	const FString ResetLabel(BR_STR(NSLOCTEXT("BR", "HUD.TouchesDefaut", "TOUCHES PAR D\u00c9FAUT")));
-	const float RW = TextW(ResetLabel, Medium, 0.8f * U) + 40.f * U;
+	const FVector2f ResetS = TextSize(ResetLabel, UiType::Value, EUiWeight::Bold);
+	const float RW = FMath::Min(ResetS.X + 40.f * U, W * 0.4f);
 	const float RH = 36.f * U;
 	const float RX = X + 24.f * U;
 	const float RY = IY + IH - RH - 16.f * U;
 	const bool bHovR = Hover(RX, RY, RW, RH);
 	DrawRect(bHovR ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), RX, RY, RW, RH);
 	Frame(RX, RY, RW, RH, Yellow, 1.f * U);
-	Txt(ResetLabel, RX + RW * 0.5f, RY + 6.f * U, bHovR ? FLinearColor(0.05f, 0.04f, 0.01f) : Yellow, 0.8f * U, Medium, true, false);
+	TextFit(ResetLabel, RX + RW * 0.5f, RY + (RH - ResetS.Y) * 0.5f, RW - 16.f * U, bHovR ? FLinearColor(0.05f, 0.04f, 0.01f) : Yellow, UiType::Value, EUiWeight::Bold, EUiAlign::Center, false);
 	AddButton(Btn_KeysReset, RX, RY, RW, RH);
 	const FString Help = PC->IsCapturingKey()
 		? FString(BR_STR(NSLOCTEXT("BR", "HUD.AppuyezNouvelleToucheClavierBouton", "Appuyez sur la nouvelle touche (clavier ou bouton de souris).  \u00c9chap : annuler   -   Retour arri\u00e8re : effacer")))
 		: FString(BR_STR(NSLOCTEXT("BR", "HUD.CliquezCasePuisAppuyezTouche", "Cliquez sur une case puis appuyez sur une touche. Clic droit : effacer. Les changements s'appliquent imm\u00e9diatement.")));
-	Txt(Help, RX + RW + 24.f * U, RY + 8.f * U, PC->IsCapturingKey() ? Yellow : InkDim, 0.72f * U, Small, false, false);
+	const float HelpX = RX + RW + 24.f * U;
+	const float HelpW = X + W - 24.f * U - HelpX;
+	const float HelpLH = FMath::Max(TextSize(TEXT("Hg"), UiType::BodySmall, EUiWeight::Regular).Y, RH * 0.5f);
+	const int32 HelpLines = FMath::Min(2, WrapF(Help, HelpW, UiType::BodySmall, EUiWeight::Regular).Num());
+	ParagraphF(Help, HelpX, RY + (RH - HelpLines * HelpLH) * 0.5f, HelpW, PC->IsCapturingKey() ? Yellow : InkDim, UiType::BodySmall, EUiWeight::Regular, HelpLH, 2);
 	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
@@ -4123,9 +4230,6 @@ void ABRHUD::DrawGlitch(float Amount)
 void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W)
 {
 	const float U = Ui();
-	UFont* Large = GEngine->GetLargeFont();
-	UFont* Medium = GEngine->GetMediumFont();
-	UFont* Small = GEngine->GetSmallFont();
 
 	if (PlayerOwner)
 	{
@@ -4153,9 +4257,10 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	TestBand = FVector4f(IX, 0.f, IW, Canvas->ClipY);
 	TestPanel = TestBand;
 
-	// En-tete "MENU >" et onglets
-	Txt(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), IX, 44.f * U, Yellow, 1.25f * U, Large, false, false);
-	DrawRect(YellowDim, IX, 92.f * U, IW, 1.f * U);
+	// En-tete "MENU >" et onglets. v4.17 : echelle typographique (MENU 15 points gras, onglets 13 points gras ; avant : 12,5
+	// et 9,5 points, 6 points a 720 lignes : capitales de 5 pixels)
+	TextF(BR_STR(NSLOCTEXT("BR", "HUD.Menu", "MENU >")), IX, 44.f * U, Yellow, UiType::MenuTitle, EUiWeight::Bold, EUiAlign::Left, false);
+	HLine(IX, 92.f * U, IW, YellowDim);
 	LastTopLineY = 92.f * U; // tests v4.10 : les notifications restent au-dessus
 	if (PC)
 	{
@@ -4182,19 +4287,23 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 		}
 		const bool bSel = static_cast<int32>(Tab) == i;
 		const FString Label = bSel ? FString(TEXT("> ")) + TabNames[i] : FString(TabNames[i]);
-		const float LW = TextW(Label, Medium, 0.95f * U);
+		const float LW = TextSize(Label, UiType::Tab, EUiWeight::Bold).X;
 		const bool bHov = Hover(TX - 6.f * U, 104.f * U, LW + 12.f * U, 34.f * U);
-		TextF(Label, TX, 106.f * U, bSel ? Yellow : (bHov ? Ink : InkDim), LegacySize(Medium, 0.95f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
+		TextF(Label, TX, 106.f * U, bSel ? Yellow : (bHov ? Ink : InkDim), UiType::Tab, EUiWeight::Bold, EUiAlign::Left, false);
 		if (bSel)
 		{
-			DrawRect(Yellow, TX, 138.f * U, LW, 2.f * U);
+			DrawRect(Yellow, FMath::RoundToFloat(TX), FMath::RoundToFloat(138.f * U), FMath::RoundToFloat(LW), FMath::Max(2.f, FMath::RoundToFloat(2.f * U)));
 		}
 		AddButton(Btn_TabCharacter + i, TX - 6.f * U, 104.f * U, LW + 12.f * U, 34.f * U);
 		TX += LW + 48.f * U;
 	}
 	if (W)
 	{
-		TxtRight(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauLevelnumberTitle", "NIVEAU {LevelNumber}  \u00ab {Title} \u00bb"), { { TEXT("LevelNumber"), BRLoc::Int(W->GetLevelNumber()) }, { TEXT("Title"), BRLoc::Arg(W->Def().Title) } }), IX + IW, 106.f * U, InkDim, 0.85f * U, Medium);
+		// v4.17 : 11 points (avant : 8,5), centre sur la ligne des onglets et borne a la place qu'ils laissent (langues longues)
+		const float TabH = TextSize(TEXT("Hg"), UiType::Tab, EUiWeight::Bold).Y;
+		const float LvH = TextSize(TEXT("Hg"), UiType::BodySmall, EUiWeight::Regular).Y;
+		TextFit(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauLevelnumberTitle", "NIVEAU {LevelNumber}  \u00ab {Title} \u00bb"), { { TEXT("LevelNumber"), BRLoc::Int(W->GetLevelNumber()) }, { TEXT("Title"), BRLoc::Arg(W->Def().Title) } }),
+			IX + IW, 106.f * U + (TabH - LvH) * 0.5f, FMath::Max(40.f * U, IX + IW - TX), InkDim, UiType::BodySmall, EUiWeight::Regular, EUiAlign::Right, true);
 	}
 
 	switch (Tab)
@@ -4239,9 +4348,11 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	// Pied de page
 	const float FY = Canvas->ClipY - 70.f * U;
 	EndTestPanel(); // v4.16 (tests) : bande de l'inventaire
-	DrawRect(YellowDim, IX, FY - 14.f * U, IW, 1.f * U);
+	HLine(IX, FY - 14.f * U, IW, YellowDim);
 	const FString Copyright(BR_STR(NSLOCTEXT("BR", "HUD.1992ThresholdSystems", "\u00a9 1992 THRESHOLD SYSTEMS")));
-	Txt(Copyright, IX, FY, InkDim, 0.8f * U, Small, false, false);
+	// v4.17 : pied en 10,5 points (avant : 8, soit 6 points a 720 lignes)
+	const float FootSize = UiType::Hint;
+	TextF(Copyright, IX, FY, InkDim, FootSize, EUiWeight::Regular, EUiAlign::Left, false);
 	FString FootHints;
 	if (BRKeys::UsesGamepadPrompts() && C && Tab == ETab::Character)
 	{
@@ -4277,7 +4388,6 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	}
 	// v4.16 : les aides tiennent entre le copyright et le bord droit (langues longues, petites fenetres) : taille reduite, puis
 	// points de suspension ; avant, rien ne les bornait
-	const float FootSize = LegacySize(Small, 0.8f * U, U);
 	TextFit(FootHints, IX + IW, FY, IW - TextSize(Copyright, FootSize, EUiWeight::Regular).X - 30.f * U, InkDim, FootSize, EUiWeight::Regular, EUiAlign::Right, true);
 
 	// Infobulle et objet en cours de deplacement (au-dessus de tout)
@@ -4568,8 +4678,6 @@ void ABRHUD::DrawSlot(ABRCharacter* C, const FSlotBox& Box)
 void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 {
 	const float U = Ui();
-	UFont* Small = GEngine->GetSmallFont();
-	UFont* Medium = GEngine->GetMediumFont();
 
 	// ---------------- Colonne gauche : OBJECTIFS + ETAT (v4.9 : exactement deux jauges, ENDURANCE et SANTE MENTALE)
 	const float LX = ColX[0];
@@ -4583,8 +4691,11 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		W->GetObjectives(Objs);
 		const float Top = IY + 56.f * U;
 		const float Bottom = IY + ObjH - 12.f * U;
-		const float TextW0 = LW - 74.f * U;
-		const float LineH = 20.f * U;
+		// v4.17 : objectifs en 12 points, compteur en 12 points gras, phrase du bas en 11 points (avant : 7,8 ; 8 ; 7,2 points,
+		// 6 points a 720 lignes) ; pas des lignes d'apres la mesure (20U -> 23U, 18U -> 21U)
+		const float LineH = LineStep(UiType::Body, EUiWeight::Regular, 23.f);
+		const float FootLineH = LineStep(UiType::BodySmall, EUiWeight::Regular, 21.f);
+		const float BodyH = TextSize(TEXT("Hg"), UiType::Body, EUiWeight::Regular).Y;
 		const FString Footer = W->HasServiceDoor() ? BR_STR(NSLOCTEXT("BR", "HUD.L0Footer", "Aucun objectif ici : explorez. Quelque part, de l'air froid passe sous une porte de service."))
 			: W->IsMissionActive() ? (W->AreObjectivesComplete() ? BRMissionText::SolvedLine(W->GetLevelNumber())
 			: BR_STR(NSLOCTEXT("BR", "HUD.MissionFooter", "La sortie s'ouvre quand la mission est r\u00e9solue. Indices, observations et aide : onglet CARNET.")))
@@ -4600,17 +4711,21 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 			{
 				const FLinearColor Col = O.IsDone() ? Done : (O.bRequired ? Ink : InkDim);
 				const FString Count = (O.Goal > 0 && !O.bHideCount) ? FString::Printf(TEXT("%d/%d"), O.Progress, O.Goal) : FString();
-				const TArray<FString> Lines = Wrap(O.Text, TextW0, Small, 0.78f * U);
+				// v4.17 : le texte s'arrete avant le compteur (plus large en 12 points gras), a 8U de lui
+				const float CountW = Count.IsEmpty() ? 0.f : TextSize(Count, UiType::Value, EUiWeight::Bold).X + 8.f * U;
+				const float TextW0 = LW - 50.f * U - FMath::Max(24.f * U, CountW);
+				const TArray<FString> Lines = WrapF(O.Text, TextW0, UiType::Body, EUiWeight::Regular);
 				for (int32 k = 0; k < Lines.Num(); ++k)
 				{
 					if (Visible(Y, LineH))
 					{
 						if (k == 0)
 						{
-							DrawRect(O.bRequired ? Yellow : YellowDim, LX + 18.f * U, Y + 6.f * U, 6.f * U, 6.f * U);
-							TxtRight(Count, LX + LW - 18.f * U, Y, Col, 0.8f * U, Small);
+							const float Dot = FMath::Max(4.f, FMath::RoundToFloat(6.f * U));
+							DrawRect(O.bRequired ? Yellow : YellowDim, LX + 18.f * U, FMath::RoundToFloat(Y + (BodyH - Dot) * 0.5f), Dot, Dot);
+							TextF(Count, LX + LW - 18.f * U, Y, Col, UiType::Value, EUiWeight::Bold, EUiAlign::Right, false);
 						}
-						TxtLine(Lines[k], LX + 32.f * U, Y, TextW0, Col, 0.78f * U, Small);
+						TextLineF(Lines[k], LX + 32.f * U, Y, TextW0, Col, UiType::Body, EUiWeight::Regular);
 					}
 					Y += LineH;
 				}
@@ -4628,13 +4743,13 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 			if (!Footer.IsEmpty())
 			{
 				Y += 8.f * U;
-				for (const FString& L : Wrap(Footer, LW - 40.f * U, Small, 0.72f * U))
+				for (const FString& L : WrapF(Footer, LW - 40.f * U, UiType::BodySmall, EUiWeight::Regular))
 				{
-					if (Visible(Y, 18.f * U))
+					if (Visible(Y, FootLineH))
 					{
-						TxtLine(L, LX + 18.f * U, Y, LW - 40.f * U, W->AreObjectivesComplete() ? Done : InkDim, 0.72f * U, Small);
+						TextLineF(L, LX + 18.f * U, Y, LW - 40.f * U, W->AreObjectivesComplete() ? Done : InkDim, UiType::BodySmall, EUiWeight::Regular);
 					}
-					Y += 18.f * U;
+					Y += FootLineH;
 				}
 			}
 			return Y - (Top + Offset);
@@ -4691,7 +4806,8 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		}
 		const FString Line = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.RecoveredItems", "MIS DE C\u00d4T\u00c9 : {Items}  -  faites de la place, ils se rangent tout seuls"),
 			{ { TEXT("Items"), BRLoc::Arg(Items) } });
-		TxtLine(Line, Left, Bottom + 8.f * U, Right - Left, Yellow, 0.72f * U, GEngine->GetSmallFont());
+		// v4.17 : 11 points, deux lignes au plus sous le sac (avant : une ligne de 7,2 points, sans coupure)
+		ParagraphF(Line, Left, Bottom + 8.f * U, Right - Left, Yellow, UiType::BodySmall, EUiWeight::Regular, LineStep(UiType::BodySmall, EUiWeight::Regular, 21.f), 2);
 	}
 	EndTestPanel(); // v4.16 (relecture, tests) : fin du panneau INVENTAIRE (ses cases sont dessinees plus bas, dans leur panneau)
 
@@ -4738,7 +4854,6 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 		DrawSlot(C, B);
 	}
 	EndTestPanel();
-	(void)Medium;
 }
 
 void ABRHUD::DrawStatusPanel(ABRCharacter* C, float X, float Y, float W, float H)
@@ -5025,30 +5140,32 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 		return;
 	}
 	const float U = Ui();
-	UFont* Large = GEngine->GetLargeFont();
-	UFont* Medium = GEngine->GetMediumFont();
-	UFont* Small = GEngine->GetSmallFont();
 	const FBRLevelDef& D = W->Def();
 	const float Gap = IW * 0.02f;
 	const float LW = IW * 0.49f;
 	const float RX = IX + LW + Gap;
 	const float RW = IW - LW - Gap;
+	// v4.17 : echelle typographique (titre 14 points gras, corps 12, phrases secondaires 11 ; avant : 7 a 9,5 points, 6 points
+	// a 720 lignes) ; pas des lignes d'apres la mesure
+	const float BodyLH = LineStep(UiType::Body, EUiWeight::Regular, 24.f);
+	const float SmallLH = LineStep(UiType::BodySmall, EUiWeight::Regular, 22.f);
+	const FLinearColor InfoCol(0.7f, 0.8f, 0.9f);
 
 	// ---- Niveau actuel + notes
 	Panel(IX, IY, LW, IH, BR_STR(NSLOCTEXT("BR", "HUD.JournalVagabond", "JOURNAL DU VAGABOND")));
 	float X = IX + 20.f * U;
 	float Y = IY + 60.f * U;
 	const float ColWidth = LW - 40.f * U;
-	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauNumberTitle2", "NIVEAU {Number} - \u00ab {Title} \u00bb"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } }), X, Y, Ink, 0.95f * U, Large, false, false);
-	Y += 40.f * U;
-	Txt(D.Nickname.ToString(), X, Y, InkDim, 0.85f * U, Medium, false, false);
-	Y += 26.f * U;
-	Txt(D.ClassText.ToString(), X, Y, ClassColor(D.SurvivalClass), 0.85f * U, Medium, false, false);
-	Y += 32.f * U;
-	for (const FString& L : Wrap(D.Description.ToString(), ColWidth, Medium, 0.8f * U))
+	TextFit(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NiveauNumberTitle2", "NIVEAU {Number} - \u00ab {Title} \u00bb"), { { TEXT("Number"), BRLoc::Int(D.Number) }, { TEXT("Title"), BRLoc::Arg(D.Title) } }), X, Y, ColWidth, Ink, 14.f, EUiWeight::Bold, EUiAlign::Left, false);
+	Y += LineStep(14.f, EUiWeight::Bold, 36.f);
+	TextFit(D.Nickname.ToString(), X, Y, ColWidth, InkDim, UiType::Body, EUiWeight::Regular, EUiAlign::Left, false);
+	Y += BodyLH;
+	TextFit(D.ClassText.ToString(), X, Y, ColWidth, ClassColor(D.SurvivalClass), UiType::Body, EUiWeight::Regular, EUiAlign::Left, false);
+	Y += BodyLH + 8.f * U;
+	for (const FString& L : WrapF(D.Description.ToString(), ColWidth, UiType::Body, EUiWeight::Regular))
 	{
-		TxtLine(L, X, Y, ColWidth, Ink, 0.8f * U, Medium);
-		Y += 23.f * U;
+		TextLineF(L, X, Y, ColWidth, Ink, UiType::Body, EUiWeight::Regular);
+		Y += BodyLH;
 	}
 	Y += 12.f * U;
 	FString Visited;
@@ -5056,33 +5173,33 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	{
 		Visited += Visited.IsEmpty() ? FString::FromInt(N) : FString(TEXT(", ")) + FString::FromInt(N);
 	}
-	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LevelsVisited", "Niveaux visit\u00e9s : {List}"), { { TEXT("List"), BRLoc::Arg(Visited) } }), X, Y, FLinearColor(0.7f, 0.8f, 0.9f), 0.8f * U, Medium, false, false);
-	Y += 26.f * U;
-	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TempsNiveauLeveltime", "Temps sur ce niveau : {LevelTime}"), { { TEXT("LevelTime"), BRLoc::Arg(Timecode(W->GetLevelTime())) } }), X, Y, FLinearColor(0.7f, 0.8f, 0.9f), 0.8f * U, Medium,
-		false, false);
-	Y += 26.f * U;
-	for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.LeaveLevelHelp", "Pour quitter un niveau : cherchez sa sortie (porte, ascenseur, \u00e9chelle...). Les sorties \u00e9mettent un bourdonnement \u00e9lectrique ; au Niveau 0, la porte de service laisse passer un courant d'air froid.")), ColWidth, Small, 0.75f * U))
+	TextFit(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LevelsVisited", "Niveaux visit\u00e9s : {List}"), { { TEXT("List"), BRLoc::Arg(Visited) } }), X, Y, ColWidth, InfoCol, UiType::BodySmall, EUiWeight::Regular, EUiAlign::Left, false);
+	Y += SmallLH;
+	TextFit(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TempsNiveauLeveltime", "Temps sur ce niveau : {LevelTime}"), { { TEXT("LevelTime"), BRLoc::Arg(Timecode(W->GetLevelTime())) } }), X, Y, ColWidth, InfoCol, UiType::BodySmall,
+		EUiWeight::Regular, EUiAlign::Left, false);
+	Y += SmallLH + 4.f * U;
+	for (const FString& L : WrapF(BR_STR(NSLOCTEXT("BR", "HUD.LeaveLevelHelp", "Pour quitter un niveau : cherchez sa sortie (porte, ascenseur, \u00e9chelle...). Les sorties \u00e9mettent un bourdonnement \u00e9lectrique ; au Niveau 0, la porte de service laisse passer un courant d'air froid.")), ColWidth, UiType::BodySmall, EUiWeight::Regular))
 	{
-		TxtLine(L, X, Y, ColWidth, Yellow, 0.75f * U, Small);
-		Y += 20.f * U;
+		TextLineF(L, X, Y, ColWidth, Yellow, UiType::BodySmall, EUiWeight::Regular);
+		Y += SmallLH;
 	}
 	Y += 14.f * U;
 	if (C)
 	{
-		Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NotesTrouveesReadnotes", "NOTES TROUV\u00c9ES ({ReadNotes})"), { { TEXT("ReadNotes"), BRLoc::Int(C->ReadNotes.Num()) } }), X, Y, Yellow, 0.85f * U, Medium, false, false);
-		Y += 30.f * U;
+		TextFit(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.NotesTrouveesReadnotes", "NOTES TROUV\u00c9ES ({ReadNotes})"), { { TEXT("ReadNotes"), BRLoc::Int(C->ReadNotes.Num()) } }), X, Y, ColWidth, Yellow, UiType::Value, EUiWeight::Bold, EUiAlign::Left, false);
+		Y += LineStep(UiType::Value, EUiWeight::Bold, 30.f);
 		// v4.9 : toutes les notes, a la molette (avant : coupees en bas du panneau)
 		TArray<TPair<FString, float>> NoteLines;
 		float ContentH = 0.f;
 		for (int32 i = C->ReadNotes.Num() - 1; i >= 0; --i)
 		{
-			const TArray<FString> Wrapped = Wrap(BRKeys::Expand(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.QuotedNote", "\u00ab {Note} \u00bb"),
-				{ { TEXT("Note"), BRLoc::Arg(BRLevels::NoteText(C->ReadNotes[i])) } })), ColWidth - 20.f * U, Small, 0.7f * U);
+			const TArray<FString> Wrapped = WrapF(BRKeys::Expand(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.QuotedNote", "\u00ab {Note} \u00bb"),
+				{ { TEXT("Note"), BRLoc::Arg(BRLevels::NoteText(C->ReadNotes[i])) } })), ColWidth - 20.f * U, UiType::BodySmall, EUiWeight::Regular);
 			for (int32 k = 0; k < Wrapped.Num(); ++k)
 			{
 				const float After = k == Wrapped.Num() - 1 ? 8.f * U : 0.f;
 				NoteLines.Add(TPair<FString, float>(Wrapped[k], After));
-				ContentH += 18.f * U + After;
+				ContentH += SmallLH + After;
 			}
 		}
 		const float Top = Y;
@@ -5090,11 +5207,11 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 		float LY = Top + ScrollArea(JournalScroll[0], X, Top, ColWidth, Bottom - Top, ContentH);
 		for (const TPair<FString, float>& L : NoteLines)
 		{
-			if (LY >= Top - 1.f && LY + 18.f * U <= Bottom + 1.f)
+			if (LY >= Top - 1.f && LY + SmallLH <= Bottom + 1.f)
 			{
-				TxtLine(L.Key, X, LY, ColWidth - 20.f * U, InkDim, 0.7f * U, Small);
+				TextLineF(L.Key, X, LY, ColWidth - 20.f * U, InkDim, UiType::BodySmall, EUiWeight::Regular);
 			}
-			LY += 18.f * U + L.Value;
+			LY += SmallLH + L.Value;
 		}
 	}
 
@@ -5104,6 +5221,7 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	X = RX + 20.f * U;
 	Y = IY + 60.f * U;
 	const float EW = RW - 40.f * U;
+	const float HeadLH = LineStep(UiType::PanelTitle, EUiWeight::Bold, 30.f);
 	bool bAny = false;
 	{
 		// v4.9 : fiches a la molette (avant : coupees en bas du panneau)
@@ -5127,18 +5245,18 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 			const FBREntityInfo& Info = ABREntity::Info(Kind);
 			Lines.Add({ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.EntityNumberName", "{Number} - {Name}"), { { TEXT("Number"), BRLoc::Arg(Info.Number) }, { TEXT("Name"), BRLoc::Arg(Info.Name) } }),
 				FLinearColor(1.f, 0.6f, 0.5f), true, 0.f });
-			ContentH += 28.f * U;
-			for (const FString& L : Wrap(Info.Description.ToString(), EW - 20.f * U, Small, 0.72f * U))
+			ContentH += HeadLH;
+			for (const FString& L : WrapF(Info.Description.ToString(), EW - 20.f * U, UiType::BodySmall, EUiWeight::Regular))
 			{
 				Lines.Add({ L, Ink, false, 0.f });
-				ContentH += 19.f * U;
+				ContentH += SmallLH;
 			}
-			const TArray<FString> Advice = Wrap(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.AdviceLine", "Conseil : {Advice}"), { { TEXT("Advice"), BRLoc::Arg(Info.Advice) } }), EW - 20.f * U, Small, 0.72f * U);
+			const TArray<FString> Advice = WrapF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.AdviceLine", "Conseil : {Advice}"), { { TEXT("Advice"), BRLoc::Arg(Info.Advice) } }), EW - 20.f * U, UiType::BodySmall, EUiWeight::Regular);
 			for (int32 k = 0; k < Advice.Num(); ++k)
 			{
 				const float After = k == Advice.Num() - 1 ? 12.f * U : 0.f;
 				Lines.Add({ Advice[k], Done, false, After });
-				ContentH += 19.f * U + After;
+				ContentH += SmallLH + After;
 			}
 		}
 		const float Top = Y;
@@ -5146,16 +5264,16 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 		float LY = Top + ScrollArea(JournalScroll[1], RX, Top, RW, Bottom - Top, ContentH);
 		for (const FLine& L : Lines)
 		{
-			const float LH = L.bHeader ? 28.f * U : 19.f * U;
+			const float LH = L.bHeader ? HeadLH : SmallLH;
 			if (LY >= Top - 1.f && LY + LH <= Bottom + 1.f)
 			{
 				if (L.bHeader)
 				{
-					Txt(L.Text, X, LY, L.Color, 0.9f * U, Medium, false, false);
+					TextFit(L.Text, X, LY, EW, L.Color, UiType::PanelTitle, EUiWeight::Bold, EUiAlign::Left, false);
 				}
 				else
 				{
-					TxtLine(L.Text, X + 12.f * U, LY, EW - 20.f * U, L.Color, 0.72f * U, Small);
+					TextLineF(L.Text, X + 12.f * U, LY, EW - 20.f * U, L.Color, UiType::BodySmall, EUiWeight::Regular);
 				}
 			}
 			LY += LH + L.After;
@@ -5163,12 +5281,12 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 	}
 	if (!bAny)
 	{
-		Txt(BR_STR(NSLOCTEXT("BR", "HUD.AucuneInstantTresBienComme", "Aucune pour l'instant... et c'est tr\u00e8s bien comme \u00e7a.")), X, Y, InkDim, 0.8f * U, Medium, false, false);
-		Y += 30.f * U;
-		for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.AstuceFilmerEntiteCamescopePendant", "Astuce : filmer une entit\u00e9 au cam\u00e9scope pendant 3 secondes ajoute sa fiche au journal.")), EW, Small, 0.72f * U))
+		TextFit(BR_STR(NSLOCTEXT("BR", "HUD.AucuneInstantTresBienComme", "Aucune pour l'instant... et c'est tr\u00e8s bien comme \u00e7a.")), X, Y, EW, InkDim, UiType::Body, EUiWeight::Regular, EUiAlign::Left, false);
+		Y += LineStep(UiType::Body, EUiWeight::Regular, 30.f);
+		for (const FString& L : WrapF(BR_STR(NSLOCTEXT("BR", "HUD.AstuceFilmerEntiteCamescopePendant", "Astuce : filmer une entit\u00e9 au cam\u00e9scope pendant 3 secondes ajoute sa fiche au journal.")), EW, UiType::BodySmall, EUiWeight::Regular))
 		{
-			TxtLine(L, X, Y, EW, InkDim, 0.72f * U, Small);
-			Y += 19.f * U;
+			TextLineF(L, X, Y, EW, InkDim, UiType::BodySmall, EUiWeight::Regular);
+			Y += SmallLH;
 		}
 	}
 	EndTestPanel(); // v4.16 (relecture, tests)
@@ -5182,7 +5300,6 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	}
 	const float U = Ui();
 	UFont* Medium = GEngine->GetMediumFont();
-	UFont* Small = GEngine->GetSmallFont();
 	const float PanelW = FMath::Min(IW, 1760.f * U);
 	const float PanelX = IX + (IW - PanelW) * 0.5f;
 	Panel(PanelX, IY, PanelW, IH, BR_STR(NSLOCTEXT("BR", "HUD.Parametres", "PARAM\u00c8TRES")));
@@ -5215,11 +5332,17 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	const int32 PerColumn = Count <= 8 ? Count : (Count + 1) / 2;
 	const float ColGap = 30.f * U;
 	const float W = PerColumn == Count ? FMath::Min(PanelW, 1100.f * U) : (PanelW - ColGap) * 0.5f;
-	// v4.10 : place gardee sous les lignes pour l'aide (3 lignes) et le mode de rendu (2 lignes)
-	const float RowH = FMath::Min(56.f * U, (IH - 220.f * U) / FMath::Max(1, PerColumn));
+	// v4.10 : place gardee sous les lignes pour l'aide (3 lignes) et le mode de rendu (2 lignes). v4.17 : aide sur 3 lignes de
+	// 22U (avant : 20U)
+	const float HelpLineH = LineStep(UiType::BodySmall, EUiWeight::Regular, 22.f);
+	const int32 HelpVisible = 3;
+	const float HelpH = HelpVisible * HelpLineH;
+	const float RowH = FMath::Min(56.f * U, (IH - 160.f * U - HelpH) / FMath::Max(1, PerColumn));
 	HoverSetting = INDEX_NONE;
 	const float Btn = 34.f * U;
 	const float ValueW = 250.f * U;
+	// v4.17 : libelles en 12 points, valeurs en 12 points gras (avant : 8,5 points, 6 points a 720 lignes), centres sur la ligne
+	const float RowTextH = TextSize(TEXT("Hg"), UiType::Body, EUiWeight::Regular).Y;
 	for (int32 r = 0; r < Count; ++r)
 	{
 		const int32 i = Rows[r];
@@ -5232,10 +5355,10 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 			DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.06f), X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
 		}
 		AddButton(Btn_SettingRow + i, X + 10.f * U, Y, W - 20.f * U - (ValueW + Btn * 2.f + 40.f * U), RowH - 6.f * U);
-		const float TY = Y + (RowH - 6.f * U) * 0.5f - 11.f * U;
+		const float TY = Y + (RowH - 6.f * U - RowTextH) * 0.5f;
 		// v4.8 : libelle ajuste a la place libre avant les fleches (langues aux mots longs)
 		const float LabelW = W - 56.f * U - (ValueW + Btn * 2.f + 40.f * U);
-		TextFit(PC->GetSettingLabel(i), X + 28.f * U, TY, LabelW, bHov ? Yellow : Ink, LegacySize(Medium, 0.85f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
+		TextFit(PC->GetSettingLabel(i), X + 28.f * U, TY, LabelW, bHov ? Yellow : Ink, UiType::Body, EUiWeight::Regular, EUiAlign::Left, false);
 
 		// [<]  valeur  [>]
 		const float PX = X + W - 28.f * U - Btn;
@@ -5247,10 +5370,10 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		Frame(PX, BY, Btn, Btn, bHovP ? Yellow : YellowDim, 1.f * U);
 		Txt(TEXT("<"), MX + Btn * 0.5f, BY + 4.f * U, bHovM ? Yellow : Ink, 0.85f * U, Medium, true, false);
 		Txt(TEXT(">"), PX + Btn * 0.5f, BY + 4.f * U, bHovP ? Yellow : Ink, 0.85f * U, Medium, true, false);
-		TextFit(PC->GetSettingValue(i), MX + Btn + ValueW * 0.5f, TY, ValueW - 12.f * U, Yellow, LegacySize(Medium, 0.85f * U, U), EUiWeight::Regular, EUiAlign::Center, false);
+		TextFit(PC->GetSettingValue(i), MX + Btn + ValueW * 0.5f, TY, ValueW - 12.f * U, Yellow, UiType::Value, EUiWeight::Bold, EUiAlign::Center, false);
 		AddButton(Btn_SettingBase + i * 2, MX, BY, Btn, Btn);
 		AddButton(Btn_SettingBase + i * 2 + 1, PX, BY, Btn, Btn);
-		DrawRect(FLinearColor(0.95f, 0.78f, 0.25f, 0.12f), X + 18.f * U, Y + RowH - 4.f * U, W - 36.f * U, 1.f * U);
+		HLine(X + 18.f * U, Y + RowH - 4.f * U, W - 36.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.12f));
 	}
 	LastRowsBottom = IY + 100.f * U + PerColumn * RowH;
 	const float X = PanelX;
@@ -5259,9 +5382,6 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	// v4.10 : aide de la ligne survolee dans une zone de hauteur fixe (3 lignes) au-dessus du mode de rendu. Un texte plus
 	// long defile (molette au-dessus de la zone, sinon tout seul, ligne par ligne) au lieu de recouvrir le mode de rendu
 	// et le pied de page. L'aide reste celle de la derniere ligne survolee quand la souris descend sur la zone.
-	const float HelpLineH = 20.f * U;
-	const int32 HelpVisible = 3;
-	const float HelpH = HelpVisible * HelpLineH;
 	const float HelpX = X + 18.f * U;
 	const float HelpW = W2 - 36.f * U;
 	const float HelpY = IY + IH - 52.f * U - HelpH;
@@ -5280,7 +5400,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	}
 	const FString Hint = HintSetting != INDEX_NONE ? PC->GetSettingHint(HintSetting) : FString();
 	const FString HelpText = Hint.IsEmpty() ? FString(BR_STR(NSLOCTEXT("BR", "HUD.ReglagesSontSauvegardesAutomatiquementBa", "Les r\u00e9glages sont sauvegard\u00e9s automatiquement (BackroomsPlayer.ini)."))) : Hint;
-	const TArray<FString> HelpLines = Wrap(HelpText, HelpW - 40.f * U, Small, 0.75f * U);
+	const TArray<FString> HelpLines = WrapF(HelpText, HelpW - 40.f * U, UiType::BodySmall, EUiWeight::Regular);
 	if (HelpText != HintShown)
 	{
 		HintShown = HelpText;
@@ -5295,7 +5415,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		HintClock += UiDt;
 		const float Cycle = 3.f + Extra * 2.f + 3.f;
 		const float T = FMath::Fmod(HintClock, Cycle);
-		HintScroll = FMath::Clamp(FMath::FloorToFloat((T - 3.f) / 2.f) + 1.f, 0.f, static_cast<float>(Extra)) * 20.f;
+		HintScroll = FMath::Clamp(FMath::FloorToFloat((T - 3.f) / 2.f) + 1.f, 0.f, static_cast<float>(Extra)) * HelpLineH / FMath::Max(U, 0.01f);
 		if (T < 3.f)
 		{
 			HintScroll = 0.f;
@@ -5312,15 +5432,15 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		{
 			continue; // hors de la zone : jamais dessine par-dessus le reste
 		}
-		TxtLine(HelpLines[k], X + 28.f * U, LY, W2 - 76.f * U, InkDim, 0.75f * U, Small);
+		TextLineF(HelpLines[k], X + 28.f * U, LY, W2 - 76.f * U, InkDim, UiType::BodySmall, EUiWeight::Regular);
 		LastHintBottom = FMath::Max(LastHintBottom, LY + HelpLineH);
 	}
 	LastHintLines = HelpLines.Num();
 	LastHintVisible = FMath::Min(HelpLines.Num(), HelpVisible);
 	// v4.5 : le mode de rendu reellement actif (et non celui demande) ; RHI et support du ray tracing : au demarrage.
 	// v4.10 : reduits a la largeur du panneau (langues aux mots longs, petites fenetres)
-	TextFit(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 42.f * U, W2 - 56.f * U, WithAlpha(Yellow, 0.85f), LegacySize(Small, 0.66f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
-	TextFit(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 24.f * U, W2 - 56.f * U, WithAlpha(InkDim, 0.7f), LegacySize(Small, 0.62f * U, U), EUiWeight::Regular, EUiAlign::Left, false);
+	TextFit(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 42.f * U, W2 - 56.f * U, WithAlpha(Yellow, 0.85f), UiType::Hint, EUiWeight::Regular, EUiAlign::Left, false);
+	TextFit(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 24.f * U, W2 - 56.f * U, WithAlpha(InkDim, 0.7f), UiType::Label, EUiWeight::Regular, EUiAlign::Left, false);
 	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
@@ -5784,9 +5904,11 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		return;
 	}
 	const float U = Ui();
-	UFont* Medium = GEngine->GetMediumFont();
-	UFont* Small = GEngine->GetSmallFont();
 	const float Gap = IW * 0.02f;
+	// v4.17 : echelle typographique (but du niveau 13 points gras, etapes 12, phrases secondaires 11, en-tetes 10 gras ; avant :
+	// 7 a 8,6 points, 6 points a 720 lignes) ; lignes de 26U et 22U (avant : 24U et 19U)
+	const float StepLH = LineStep(UiType::Body, EUiWeight::Regular, 26.f);
+	const float SmallLH = LineStep(UiType::BodySmall, EUiWeight::Regular, 22.f);
 	const float LW = IW * 0.47f;
 	const float RX = IX + LW + Gap;
 	const float RW = IW - LW - Gap;
@@ -5810,10 +5932,10 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		}
 		for (const FString& Para : Info)
 		{
-			for (const FString& L : Wrap(Para, ColWidth, Medium, 0.8f * U))
+			for (const FString& L : WrapF(Para, ColWidth, UiType::Body, EUiWeight::Regular))
 			{
-				TxtLine(L, X, Y, ColWidth, Ink, 0.8f * U, Medium);
-				Y += 24.f * U;
+				TextLineF(L, X, Y, ColWidth, Ink, UiType::Body, EUiWeight::Regular);
+				Y += StepLH;
 			}
 			Y += 10.f * U;
 		}
@@ -5825,10 +5947,10 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		const FString Info = W->IsLegacyObjectives()
 			? BR_STR(NSLOCTEXT("BR", "HUD.NotebookLegacy", "Partie commenc\u00e9e avant la version 4.11 : ce niveau garde son ancien objectif (cassettes VHS et enregistrement pendant une coupure). Les niveaux suivants auront leur mission, qui s'affichera ici."))
 			: BR_STR(NSLOCTEXT("BR", "HUD.NotebookNone", "Aucune mission dans ce niveau : trouvez une sortie."));
-		for (const FString& L : Wrap(Info, ColWidth, Medium, 0.8f * U))
+		for (const FString& L : WrapF(Info, ColWidth, UiType::Body, EUiWeight::Regular))
 		{
-			TxtLine(L, X, Y, ColWidth, Ink, 0.8f * U, Medium);
-			Y += 24.f * U;
+			TextLineF(L, X, Y, ColWidth, Ink, UiType::Body, EUiWeight::Regular);
+			Y += StepLH;
 		}
 		EndTestPanel(); // v4.16 (relecture, tests)
 		return;
@@ -5845,22 +5967,22 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		FString Text;
 		FString Right;
 		FLinearColor Color = FLinearColor::White;
-		float Scale = 1.f;
-		UFont* Font = nullptr;
+		float Size = UiType::Body;
+		EUiWeight Weight = EUiWeight::Regular;
 		float Indent = 0.f;
 		float H = 0.f;
 		bool bBullet = false;
 	};
 	TArray<FNoteLine> Left;
 	float LeftH = 0.f;
-	auto Push = [&](const FString& Text, const FLinearColor& Col, float Scale, UFont* Font, float Indent, float H, bool bBullet = false, const FString& Right = FString())
+	auto Push = [&](const FString& Text, const FLinearColor& Col, float Size, EUiWeight Weight, float Indent, float H, bool bBullet = false, const FString& Right = FString())
 	{
 		FNoteLine N;
 		N.Text = Text;
 		N.Right = Right;
 		N.Color = Col;
-		N.Scale = Scale;
-		N.Font = Font;
+		N.Size = Size;
+		N.Weight = Weight;
 		N.Indent = Indent;
 		N.H = H;
 		N.bBullet = bBullet;
@@ -5879,9 +6001,10 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	const FString Goal = BRMissionText::GoalTitle(Plan.Level);
 	if (!Goal.IsEmpty())
 	{
-		for (const FString& L : Wrap(Goal.ToUpper(), ColWidth, Medium, 0.86f * U))
+		const float GoalLH = LineStep(13.f, EUiWeight::Bold, 26.f);
+		for (const FString& L : WrapF(Goal.ToUpper(), ColWidth, 13.f, EUiWeight::Bold))
 		{
-			Push(L, E.bSolved ? Done : Yellow, 0.86f * U, Medium, 0.f, 26.f * U);
+			Push(L, E.bSolved ? Done : Yellow, 13.f, EUiWeight::Bold, 0.f, GoalLH);
 		}
 		Space(6.f * U);
 	}
@@ -5898,18 +6021,18 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		const FString Title = bUnknown ? BR_STR(NSLOCTEXT("BR", "HUD.StepUnknown", "Étape encore inconnue")) : BRMissionText::StepTitle(Plan.Level, I);
 		const FLinearColor Col = bDone ? Done : (I == Current ? Yellow : (bUnknown ? WithAlpha(InkDim, 0.6f) : Ink));
 		const FString Count = (!bUnknown && E.Goal[I] > 1) ? FString::Printf(TEXT("%d/%d"), E.Progress[I], E.Goal[I]) : FString();
-		const TArray<FString> Lines = Wrap(Title, ColWidth - 80.f * U, Medium, 0.82f * U);
+		const TArray<FString> Lines = WrapF(Title, ColWidth - 80.f * U, UiType::Body, EUiWeight::Regular);
 		for (int32 K = 0; K < Lines.Num(); ++K)
 		{
-			Push(Lines[K], Col, 0.82f * U, Medium, 18.f * U, 24.f * U, K == 0, K == 0 ? Count : FString());
+			Push(Lines[K], Col, UiType::Body, EUiWeight::Regular, 18.f * U, StepLH, K == 0, K == 0 ? Count : FString());
 		}
 		Space(4.f * U);
 	}
 	if (E.bSolved)
 	{
-		for (const FString& L : Wrap(BRMissionText::SolvedLine(Plan.Level), ColWidth, Small, 0.74f * U))
+		for (const FString& L : WrapF(BRMissionText::SolvedLine(Plan.Level), ColWidth, UiType::BodySmall, EUiWeight::Regular))
 		{
-			Push(L, Done, 0.74f * U, Small, 0.f, 19.f * U);
+			Push(L, Done, UiType::BodySmall, EUiWeight::Regular, 0.f, SmallLH);
 		}
 	}
 	// ---- Objets de l'equipe (fusibles, cles) : partages, un depart ne les emporte pas
@@ -5925,9 +6048,9 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	if (!Items.IsEmpty())
 	{
 		Space(6.f * U);
-		for (const FString& L : Wrap(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TeamItems", "Objets de l'équipe : {Items}"), { { TEXT("Items"), BRLoc::Arg(Items) } }), ColWidth, Small, 0.74f * U))
+		for (const FString& L : WrapF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.TeamItems", "Objets de l'équipe : {Items}"), { { TEXT("Items"), BRLoc::Arg(Items) } }), ColWidth, UiType::BodySmall, EUiWeight::Regular))
 		{
-			Push(L, Ink, 0.74f * U, Small, 0.f, 19.f * U);
+			Push(L, Ink, UiType::BodySmall, EUiWeight::Regular, 0.f, SmallLH);
 		}
 	}
 	// ---- Facultatif
@@ -5936,9 +6059,9 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	{
 		Space(6.f * U);
 		const bool bOptDone = E.bOptionalDone;
-		for (const FString& L : Wrap(Opt, ColWidth, Small, 0.74f * U))
+		for (const FString& L : WrapF(Opt, ColWidth, UiType::BodySmall, EUiWeight::Regular))
 		{
-			Push(L, bOptDone ? Done : InkDim, 0.74f * U, Small, 0.f, 19.f * U);
+			Push(L, bOptDone ? Done : InkDim, UiType::BodySmall, EUiWeight::Regular, 0.f, SmallLH);
 		}
 	}
 
@@ -5946,9 +6069,9 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	if (Plan.Level == BRStory::Poolrooms)
 	{
 		Space(8.f * U);
-		for (const FString& L : Wrap(BRMissionText::PoolInscription(), ColWidth, Small, 0.74f * U))
+		for (const FString& L : WrapF(BRMissionText::PoolInscription(), ColWidth, UiType::BodySmall, EUiWeight::Regular))
 		{
-			Push(L, Ink, 0.74f * U, Small, 0.f, 19.f * U);
+			Push(L, Ink, UiType::BodySmall, EUiWeight::Regular, 0.f, SmallLH);
 		}
 	}
 
@@ -5970,10 +6093,10 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		{
 			Space(12.f * U);
 			HintStart = LeftH;
-			Push(BR_STR(NSLOCTEXT("BR", "HUD.HintHeader", "AIDE  ·  étape en cours")), YellowDim, 0.7f * U, Small, 0.f, 20.f * U);
-			for (const FString& L : Wrap(BRKeys::Expand(BRMissionText::StepHint(Plan.Level, Current)), ColWidth, Small, 0.74f * U))
+			Push(BR_STR(NSLOCTEXT("BR", "HUD.HintHeader", "AIDE  ·  étape en cours")), YellowDim, UiType::Label, EUiWeight::Bold, 0.f, LineStep(UiType::Label, EUiWeight::Bold, 22.f));
+			for (const FString& L : WrapF(BRKeys::Expand(BRMissionText::StepHint(Plan.Level, Current)), ColWidth, UiType::BodySmall, EUiWeight::Regular))
 			{
-				Push(L, Ink, 0.74f * U, Small, 0.f, 19.f * U);
+				Push(L, Ink, UiType::BodySmall, EUiWeight::Regular, 0.f, SmallLH);
 			}
 		}
 		if (HintLevel >= 2)
@@ -6008,16 +6131,18 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			Space(6.f * U);
 			for (const FString& R : Recall)
 			{
-				for (const FString& L : Wrap(R, ColWidth - 14.f * U, Small, 0.72f * U))
+				for (const FString& L : WrapF(R, ColWidth - 14.f * U, UiType::BodySmall, EUiWeight::Regular))
 				{
-					Push(L, Yellow, 0.72f * U, Small, 14.f * U, 18.f * U);
+					Push(L, Yellow, UiType::BodySmall, EUiWeight::Regular, 14.f * U, SmallLH);
 				}
 			}
 		}
 	}
 
 	// ---- Rendu de la colonne de gauche : zone defilante, puis bouton d'aide fixe au bas du panneau
-	const float BtnH = 30.f * U;
+	// v4.17 : bouton d'aide a la hauteur de son texte (12 points gras), texte centre verticalement (avant : 30U, texte a BY + 4U)
+	const float BtnTextH = TextSize(TEXT("Hg"), UiType::Body, EUiWeight::Bold).Y;
+	const float BtnH = FMath::Max(34.f * U, BtnTextH + 10.f * U);
 	const float LTop = IY + 60.f * U;
 	const float LBottom = Current >= 0 ? IY + IH - 16.f * U - BtnH - 12.f * U : IY + IH - 16.f * U;
 	if (HintLevel != NotebookHintShown)
@@ -6035,12 +6160,14 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		{
 			if (N.bBullet)
 			{
-				DrawRect(N.Color, X, NY + 7.f * U, 7.f * U, 7.f * U);
+				// v4.17 : puce centree sur la ligne (sa hauteur mesuree)
+				const float Dot = FMath::Max(4.f, FMath::RoundToFloat(7.f * U));
+				DrawRect(N.Color, X, FMath::RoundToFloat(NY + (TextSize(TEXT("Hg"), N.Size, N.Weight).Y - Dot) * 0.5f), Dot, Dot);
 			}
-			TxtLine(N.Text, X + N.Indent, NY, ColWidth - N.Indent - (N.Right.IsEmpty() ? 0.f : 62.f * U), N.Color, N.Scale, N.Font);
+			TextLineF(N.Text, X + N.Indent, NY, ColWidth - N.Indent - (N.Right.IsEmpty() ? 0.f : 62.f * U), N.Color, N.Size, N.Weight);
 			if (!N.Right.IsEmpty())
 			{
-				TxtRight(N.Right, X + ColWidth, NY, N.Color, 0.8f * U, Medium);
+				TextF(N.Right, X + ColWidth, NY, N.Color, UiType::Value, EUiWeight::Bold, EUiAlign::Right, false);
 			}
 		}
 		NY += N.H;
@@ -6050,10 +6177,13 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		const FString BtnLabel = HintLevel == 0 ? BR_STR(NSLOCTEXT("BR", "HUD.HintAsk", "AIDE : afficher un indice"))
 			: (HintLevel == 1 ? BR_STR(NSLOCTEXT("BR", "HUD.HintMore", "AIDE : rappeler les indices trouvés")) : BR_STR(NSLOCTEXT("BR", "HUD.HintHide", "AIDE : masquer")));
 		const float BY = IY + IH - 16.f * U - BtnH;
-		const float BW = FMath::Min(ColWidth, TextW(BtnLabel, Medium, 0.78f * U) + 30.f * U);
+		const float BW = FMath::Min(ColWidth, TextSize(BtnLabel, UiType::Body, EUiWeight::Bold).X + 30.f * U);
 		const bool bHov = Hover(X, BY, BW, BtnH);
 		RoundRect(X, BY, BW, BtnH, 8.f * U, bHov ? FLinearColor(0.95f, 0.78f, 0.25f, 0.35f) : FLinearColor(0.95f, 0.78f, 0.25f, 0.15f));
-		TxtLine(BtnLabel, X + 15.f * U, BY + 4.f * U, BW - 30.f * U, Yellow, 0.78f * U, Medium);
+		const FString BtnShown = Ellipsize(BtnLabel, BW - 30.f * U, UiType::Body, EUiWeight::Bold);
+		bTestTextCut = BtnShown != BtnLabel;
+		TextLineF(BtnShown, X + 15.f * U, BY + (BtnH - BtnTextH) * 0.5f, BW - 30.f * U, Yellow, UiType::Body, EUiWeight::Bold);
+		bTestTextCut = false;
 		AddButton(Btn_NotebookHint, X, BY, BW, BtnH);
 	}
 
@@ -6069,6 +6199,17 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	};
 	TArray<FLine> Lines;
 	float ContentH = 0.f;
+	// v4.17 : en-tetes en 12 points gras (26U), lignes en 11 points (22U) ; toute ligne est coupee a la largeur de la colonne
+	// (avant : plaques du Level 6 et fragments de route sur une seule ligne, sans limite)
+	const float HeadLH = LineStep(UiType::Body, EUiWeight::Bold, 26.f);
+	auto AddWrapped = [&](const FString& Text)
+	{
+		for (const FString& L : WrapF(Text, OW - 14.f * U, UiType::BodySmall, EUiWeight::Regular))
+		{
+			Lines.Add({ L, false });
+			ContentH += SmallLH;
+		}
+	};
 	for (int32 D = 0; D < Plan.NumDevices; ++D)
 	{
 		const BRMission::EKind K = Plan.Devices[D].Kind;
@@ -6085,14 +6226,10 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		TArray<FString> ClueText;
 		BRMissionText::ClueLines(Clue, ClueText);
 		Lines.Add({ BRMissionText::DeviceName(Plan, D), true });
-		ContentH += 24.f * U;
+		ContentH += HeadLH;
 		for (const FString& T : ClueText)
 		{
-			for (const FString& L : Wrap(T, OW - 14.f * U, Small, 0.74f * U))
-			{
-				Lines.Add({ L, false });
-				ContentH += 19.f * U;
-			}
+			AddWrapped(T);
 			++LastNotebookObservations;
 		}
 		ContentH += 8.f * U;
@@ -6108,10 +6245,9 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			for (const int32 Rank : Ranks)
 			{
 				const FIntPoint FS = L->GetScannedPlates()[Rank];
-				Lines.Add({ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LidarPlate", "Porte du passage {N} : silhouette {Fig}, code {Sym}"),
+				AddWrapped(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.LidarPlate", "Porte du passage {N} : silhouette {Fig}, code {Sym}"),
 					{ { TEXT("N"), BRLoc::Int(Rank) }, { TEXT("Fig"), BRLoc::Arg(BRMissionText::FigureName(static_cast<uint8>(FS.X))) },
-						{ TEXT("Sym"), BRLoc::Arg(BRMissionText::Symbol(static_cast<uint8>(FS.Y))) } }), false });
-				ContentH += 19.f * U;
+						{ TEXT("Sym"), BRLoc::Arg(BRMissionText::Symbol(static_cast<uint8>(FS.Y))) } }));
 				++LastNotebookObservations;
 			}
 		}
@@ -6123,9 +6259,8 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			if ((W->GetCampaign().RouteBits & (1 << I)) != 0)
 			{
 				const int32 Digit = BRMission::KnownDigit(Plan, State, W->GetMissionCampaign(), I);
-				Lines.Add({ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.CampaignFragment", "Fragment de route rapport\u00e9 d'un niveau pr\u00e9c\u00e9dent : chiffre {I} = {D}"),
-					{ { TEXT("I"), BRLoc::Int(I + 1) }, { TEXT("D"), BRLoc::Arg(FString::FromInt(Digit)) } }), false });
-				ContentH += 19.f * U;
+				AddWrapped(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.CampaignFragment", "Fragment de route rapport\u00e9 d'un niveau pr\u00e9c\u00e9dent : chiffre {I} = {D}"),
+					{ { TEXT("I"), BRLoc::Int(I + 1) }, { TEXT("D"), BRLoc::Arg(FString::FromInt(Digit)) } }));
 				++LastNotebookObservations;
 			}
 		}
@@ -6136,10 +6271,10 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	{
 		// v4.12 : le message part du haut de SA colonne (avant : de la hauteur atteinte par la colonne de gauche)
 		float EY = Top;
-		for (const FString& L : Wrap(BR_STR(NSLOCTEXT("BR", "HUD.NoObservation", "Rien pour l'instant : lisez les panneaux et examinez ce qui sort de l'ordinaire (maintenir la touche d'interaction).")), OW, Small, 0.74f * U))
+		for (const FString& L : WrapF(BR_STR(NSLOCTEXT("BR", "HUD.NoObservation", "Rien pour l'instant : lisez les panneaux et examinez ce qui sort de l'ordinaire (maintenir la touche d'interaction).")), OW, UiType::BodySmall, EUiWeight::Regular))
 		{
-			TxtLine(L, OX, EY, OW, InkDim, 0.74f * U, Small);
-			EY += 19.f * U;
+			TextLineF(L, OX, EY, OW, InkDim, UiType::BodySmall, EUiWeight::Regular);
+			EY += SmallLH;
 		}
 		EndTestPanel(); // v4.16 (relecture, tests)
 		return;
@@ -6147,16 +6282,16 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	float LY = Top + ScrollArea(NotebookScroll, OX, Top, OW, Bottom - Top, ContentH);
 	for (const FLine& L : Lines)
 	{
-		const float H = L.bHeader ? 24.f * U : 19.f * U;
+		const float H = L.bHeader ? HeadLH : SmallLH;
 		if (LY >= Top - 1.f && LY + H <= Bottom + 1.f)
 		{
 			if (L.bHeader)
 			{
-				TxtLine(L.Text, OX, LY, OW, Yellow, 0.78f * U, Medium);
+				TextLineF(L.Text, OX, LY, OW, Yellow, UiType::Body, EUiWeight::Bold);
 			}
 			else
 			{
-				TxtLine(L.Text, OX + 14.f * U, LY, OW - 14.f * U, Ink, 0.74f * U, Small);
+				TextLineF(L.Text, OX + 14.f * U, LY, OW - 14.f * U, Ink, UiType::BodySmall, EUiWeight::Regular);
 			}
 		}
 		LY += H + (L.bHeader ? 0.f : 0.f);

@@ -262,6 +262,17 @@ private:
 		EUiAlign Align = EUiAlign::Left, bool bShadow = true);
 	/** Paragraphe deja coupe : aligne a gauche, ou a droite dans une langue ecrite de droite a gauche (arabe, persan) */
 	void DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight);
+	/** v4.17 : ligne d'un paragraphe coupe par WrapF (taille en points) dans un bloc de largeur W : a gauche, ou a droite en
+	 *  arabe et en persan ; la largeur du bloc est relevee pour le banc (TestTextMaxW) */
+	void TextLineF(const FString& S, float X, float Y, float W, const FLinearColor& C, float Size, EUiWeight Weight = EUiWeight::Regular);
+	/** v4.17 : paragraphe coupe dans W, d'au plus MaxLines lignes (0 : sans limite ; la derniere raccourcie par des points de
+	 *  suspension) ; renvoie la hauteur occupee */
+	float ParagraphF(const FString& S, float X, float Y, float W, const FLinearColor& C, float Size, EUiWeight Weight, float LineH, int32 MaxLines = 0);
+	/** v4.17 : pas d'une ligne de texte de taille Size : BaseU x Ui(), ou davantage si la ligne mesuree x 1,2 le demande
+	 *  (plancher typographique, ecritures plus hautes) */
+	float LineStep(float Size, EUiWeight Weight, float BaseU) const;
+	/** v4.17 : trait horizontal sur une ligne entiere de pixels, d'au moins 1 pixel d'epaisseur */
+	void HLine(float X, float Y, float W, const FLinearColor& C);
 	UTexture* UiTex(const TCHAR* Name);
 	/** Rectangle arrondi (UI_Round decoupee en 9) ; bOutline : contour seul (UI_RoundLine) */
 	void RoundRect(float X, float Y, float W, float H, float R, const FLinearColor& C, bool bOutline = false);
