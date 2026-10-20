@@ -55,6 +55,25 @@ public:
 	bool PadSlotAction(bool bInspect);
 	/** v4.16 (relecture) : B : ferme l'inspection ouverte (true) ; false : rien a fermer ici (le controleur ferme l'inventaire) */
 	bool PadBack();
+	/** v4.17 (interface, a brancher dans ABRPlayerController, croix gauche / droite) : colonne suivante (Step +1) ou precedente
+	 *  (-1) d'un onglet a deux zones de defilement (CARNET, JOURNAL), cadre jaune autour d'elle ; Step 0 : retour a toutes les
+	 *  zones. false (rien de fait) dans PERSONNAGE et dans un onglet a moins de deux zones : le controleur garde son action
+	 *  (PadDirection : curseur des cases, onglets). Tant qu'aucune zone n'est choisie (ouverture, changement d'onglet), le
+	 *  defilement de la manette s'applique a toutes les zones de l'image, comme en v4.16 */
+	bool PadScrollFocus(int32 Step);
+	/** v4.17 (a brancher, croix haut / bas avec repetition) : fait defiler la zone choisie (ou toutes) de Lines lignes du
+	 *  carnet (PadScrollLine) ; false (rien de fait) dans PERSONNAGE, ou la croix deplace le curseur (PadDirection) */
+	bool PadScrollLines(int32 Lines);
+	/** v4.17 (a brancher, stick droit) : defilement de la zone choisie (ou de toutes), en pixels a 1080 lignes, a la prochaine
+	 *  image (vitesse x duree de l'image) ; dans tous les onglets (PERSONNAGE : les objectifs) */
+	void PadScrollPixels(float Pixels);
+	/** v4.17 : pas d'une ligne du carnet, en pixels a 1080 lignes (croix haut / bas) */
+	static constexpr float PadScrollLine = 26.f;
+	/** v4.17 (tests) : zone choisie a la manette (INDEX_NONE : toutes), zones de defilement de la derniere image de
+	 *  l'inventaire, et s'il y restait du texte a faire defiler */
+	int32 GetPadScrollZone() const { return PadScrollZone; }
+	int32 GetScrollZoneCount() const { return LastScrollZones; }
+	bool HadScrollRoom() const { return bLastScrollRoom; }
 
 private:
 	/** v4.16 (tests, -BRAutoTestV416Visual) : releve des textes dessines pendant une image (bTestRecordTexts) : rectangle
@@ -92,6 +111,16 @@ private:
 	void RecordTestText(const FString& S, float X, float Y, const FVector2f& Size, float Points);
 	/** v4.16 : defilement demande a la manette (pixels a 1080p), applique par ScrollArea a la prochaine image de l'inventaire */
 	float PadScroll = 0.f;
+	/** v4.17 : zone qui recoit PadScroll (numero passe a ScrollArea) ; INDEX_NONE : toutes les zones (comportement v4.16) */
+	int32 PadScrollZone = INDEX_NONE;
+	/** v4.17 : zones numerotees dessinees pendant l'image de l'inventaire, et a la derniere image */
+	int32 ScrollZonesDrawn = 0;
+	int32 LastScrollZones = 0;
+	/** v4.17 : une zone de l'image cachait du texte (l'invite de defilement du pied n'est montree que dans ce cas) */
+	bool bScrollRoom = false;
+	bool bLastScrollRoom = false;
+	/** v4.17 : fondus du bas des zones qui cachent encore du texte (X, Y, largeur, hauteur), dessines apres leur contenu */
+	TArray<FVector4f> ScrollFades;
 
 private:
 	struct FCaption
@@ -131,7 +160,7 @@ private:
 	{
 		FSlotRef Ref;
 		float X = 0.f, Y = 0.f, S = 0.f;
-		FString Caption;   // "1", "TETE"...
+		FString Caption;   // "TETE"... ; v4.17 : poche : sa touche ("1", ou celle choisie dans TOUCHES)
 	};
 
 	struct FButton
@@ -232,8 +261,11 @@ private:
 	void DrawVideoConfirm(ABRPlayerController* PC);
 	/** v4.9 : opacite choisie des informations d'exploration */
 	float HudAlpha() const;
-	/** v4.9 : defilement a la molette d'une zone (Scroll : position, en pixels a 1080p) ; renvoie le decalage a appliquer */
-	float ScrollArea(float& Scroll, float X, float Y, float W, float H, float ContentH);
+	/** v4.9 : defilement a la molette d'une zone (Scroll : position, en pixels a 1080p) ; renvoie le decalage a appliquer.
+	 *  v4.17 : X et W sont ceux de la colonne (rail et curseur a 10U de son bord droit, hors du texte) ; Zone : numero de la
+	 *  zone dans l'onglet (manette : PadScrollZone, PadScrollFocus) ; INDEX_NONE (par defaut) : la zone recoit toujours le
+	 *  defilement de la manette, comme avant */
+	float ScrollArea(float& Scroll, float X, float Y, float W, float H, float ContentH, int32 Zone = INDEX_NONE);
 	void DrawKeysTab(ABRPlayerController* PC);
 	void HandlePauseMouse(ABRPlayerController* PC);
 	FString ControlsLine(int32 Line) const;
@@ -262,6 +294,17 @@ private:
 		EUiAlign Align = EUiAlign::Left, bool bShadow = true);
 	/** Paragraphe deja coupe : aligne a gauche, ou a droite dans une langue ecrite de droite a gauche (arabe, persan) */
 	void DrawParagraph(const TArray<FString>& Lines, float X, float Y, float W, float LineH, const FLinearColor& C, float Size, EUiWeight Weight);
+	/** v4.17 : ligne d'un paragraphe coupe par WrapF (taille en points) dans un bloc de largeur W : a gauche, ou a droite en
+	 *  arabe et en persan ; la largeur du bloc est relevee pour le banc (TestTextMaxW) */
+	void TextLineF(const FString& S, float X, float Y, float W, const FLinearColor& C, float Size, EUiWeight Weight = EUiWeight::Regular);
+	/** v4.17 : paragraphe coupe dans W, d'au plus MaxLines lignes (0 : sans limite ; la derniere raccourcie par des points de
+	 *  suspension) ; renvoie la hauteur occupee */
+	float ParagraphF(const FString& S, float X, float Y, float W, const FLinearColor& C, float Size, EUiWeight Weight, float LineH, int32 MaxLines = 0);
+	/** v4.17 : pas d'une ligne de texte de taille Size : BaseU x Ui(), ou davantage si la ligne mesuree x 1,2 le demande
+	 *  (plancher typographique, ecritures plus hautes) */
+	float LineStep(float Size, EUiWeight Weight, float BaseU) const;
+	/** v4.17 : trait horizontal sur une ligne entiere de pixels, d'au moins 1 pixel d'epaisseur */
+	void HLine(float X, float Y, float W, const FLinearColor& C);
 	UTexture* UiTex(const TCHAR* Name);
 	/** Rectangle arrondi (UI_Round decoupee en 9) ; bOutline : contour seul (UI_RoundLine) */
 	void RoundRect(float X, float Y, float W, float H, float R, const FLinearColor& C, bool bOutline = false);
@@ -280,7 +323,8 @@ private:
 	void TxtLine(const FString& S, float X, float Y, float W, const FLinearColor& C, float Scale, UFont* Font);
 	void Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label);
 	void Frame(float X, float Y, float W, float H, const FLinearColor& C, float Thickness);
-	void Panel(float X, float Y, float W, float H, const FString& Title);
+	/** v4.17 : bOpaque : fond opaque (fenetre posee sur l'inventaire : INSPECTER) ; sinon fond translucide habituel */
+	void Panel(float X, float Y, float W, float H, const FString& Title, bool bOpaque = false);
 	void VLabel(const FString& S, float X, float Y, const FLinearColor& C, float Scale);
 	void TrendBox(float X, float Y, float Size, float Trend);
 	void Icon(UTexture* Tex, float X, float Y, float W, float H, const FLinearColor& Tint);
@@ -322,6 +366,10 @@ private:
 	/** v4.16 (relecture) : curseur de la manette dans PERSONNAGE (case survolee quand la manette a servi en dernier) ; remis a
 	 *  la premiere case du sac a chaque ouverture */
 	FSlotRef PadCursor;
+	/** v4.17 : case qui a refuse une action de la manette (A sur une case vide ou sur un objet sans usage) et instant du
+	 *  refus (cadre rouge pendant 150 ms, son de refus) */
+	FSlotRef DenySlot;
+	float DenyAt = -100.f;
 	const FSlotBox* SlotBoxOf(const FSlotRef& Ref) const;
 	/** Le curseur de la manette remplace la souris (manette en dernier, onglet PERSONNAGE, pas d'inspection ouverte) */
 	bool UsesPadCursor(const ABRCharacter* C) const;
