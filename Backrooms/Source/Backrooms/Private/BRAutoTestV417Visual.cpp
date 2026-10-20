@@ -15,8 +15,10 @@
 //     profond, regard rasant au ras de l'eau, camera sous l'eau, contre-jour vers un plafonnier ;
 //   - Niveaux 1 et 2 (graine 4242) : depart, demi-tour, mur ; Niveau 2 : plafond ;
 //   - sequences pour les videos (pas de temps fixe de 1/30 s pendant l'enregistrement : une image par pas, quelle que soit
-//     la duree d'une capture) : marche au Level 0 a la 1re personne, a la 3e personne avec la Bacteria lachee, marche dans
-//     l'eau des Poolrooms a la 3e personne, marche au Niveau 1 (raccords du streaming). Images
+//     la duree d'une capture) : marche au Level 0 a la 1re puis a la 3e personne (elle tourne devant un mur), Bacteria
+//     lachee au bout du couloir et suivie par la camera, marche dans l'eau des Poolrooms a la 3e personne, marche au Niveau 1
+//     (raccords du streaming) ; tirages locaux fixes (FMath::RandInit) avant chaque chargement : tubes qui clignotent au
+//     meme instant d'un lancement a l'autre. Porte de service capturee lampe allumee (chemin hors des plafonniers). Images
 //     v417_video_<scene>_<nnn>.png, assemblees hors du jeu (Tools/Visual/make_v417_media.py).
 // Profil : Qualite, ou -BRProfile=<0|1|2|4> (un profil par lancement). Apparence fixee pendant le banc (VHS et grain coupes
 // sauf captures _vhs, luminosite 0, flashs normaux, flou de mouvement coupe) puis retablie au bilan, comme la langue.
@@ -384,6 +386,11 @@ void ABRAutoTest::AddV417VisualSteps()
 	});
 
 	// ===================================================================================================== Level 0
+	Add(TEXT("v4.17 visuel : tirages locaux fixes (Level 0, graine 9)"), 0.f, []()
+	{
+		FMath::RandInit(4170);
+		return true;
+	});
 	AddSeedLoad(0, 9u, TEXT("v4.17 visuel : Level 0, graine 9"));
 	Add(TEXT("v4.17 visuel : Level 0 : pose de depart"), 0.f, [this]()
 	{
@@ -494,7 +501,7 @@ void ABRAutoTest::AddV417VisualSteps()
 				return false;
 			}
 			Loc.Z = W->FloorZAt(Loc) + C->GetSimpleCollisionHalfHeight() + 5.f;
-			BRTestV417::Place(C, PC, Loc, FRotator(Look == 0 ? -15.f : 50.f, Yaw, 0.f));
+			BRTestV417::Place(C, PC, Loc, FRotator(Look == 0 ? -25.f : 50.f, Yaw, 0.f));
 			return true;
 		});
 	}
@@ -520,6 +527,10 @@ void ABRAutoTest::AddV417VisualSteps()
 		FVector Loc = Door + Out * 300.f;
 		Loc.Z = W->FloorZAt(Loc) + C->GetSimpleCollisionHalfHeight() + 5.f;
 		BRTestV417::Place(C, PC, Loc, ((Door + FVector(0.f, 0.f, 110.f)) - (Loc + FVector(0.f, 0.f, C->BaseEyeHeight))).Rotation());
+		// Le chemin de la porte finit hors des plafonniers (premier passage : image noire, chunks prets) : lampe allumee,
+		// comme le joueur qui y arrive
+		BRTestV417::SetLamp(C, true);
+		Note(FString::Printf(TEXT("porte de service : lumiere de jeu %.2f devant elle (lampe allumee pour les deux captures)"), W->LightLevelAt(Loc)));
 		return true;
 	});
 	Add(TEXT("v4.17 visuel : porte de service : salles construites"), Settle + 1.f, [this]()
@@ -579,9 +590,10 @@ void ABRAutoTest::AddV417VisualSteps()
 		}
 		return true;
 	});
-	Add(TEXT("v4.17 visuel : capture l0_porte_ouverte"), 0.3f, [Snap]()
+	Add(TEXT("v4.17 visuel : capture l0_porte_ouverte"), 0.3f, [this, Snap]()
 	{
 		Snap(Scene(TEXT("l0_porte_ouverte")));
+		BRTestV417::SetLamp(GetPlayer(), false);
 		return true;
 	});
 	// Salle de fosses (point de vue de la commande BRPits)
@@ -817,7 +829,7 @@ void ABRAutoTest::AddV417VisualSteps()
 	{
 		BRTestV417::SteerWalk(C);
 	});
-	Add(TEXT("v4.17 visuel : 3e personne et Bacteria lachee"), 2.f, [this]()
+	Add(TEXT("v4.17 visuel : 3e personne"), 2.f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
@@ -828,16 +840,6 @@ void ABRAutoTest::AddV417VisualSteps()
 		}
 		BRTestV417::Place(C, PC, BRTestV417::SpawnLoc, BRTestV417::WalkDir.Rotation());
 		BRTestV417::SetThird(C, true);
-		const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Bacteria);
-		FVector Spot;
-		if (FindSpotInFront(900.f, Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f, Spot))
-		{
-			BRTestV417::Control = W->SpawnEntity(EBREntityKind::Bacteria, Spot);
-		}
-		if (!BRTestV417::Control.IsValid())
-		{
-			Skip(TEXT("v417_video_l0_3p : pas de place pour la Bacteria a 9 m devant le joueur (video sans entite)"));
-		}
 		return true;
 	});
 	AddVideo(TEXT("l0_3p"), VideoFrames, [](ABRCharacter* C)
@@ -957,6 +959,11 @@ void ABRAutoTest::AddV417VisualSteps()
 	});
 
 	// ===================================================================================================== Poolrooms
+	Add(TEXT("v4.17 visuel : tirages locaux fixes (Poolrooms, graine 4242)"), 0.f, []()
+	{
+		FMath::RandInit(4170);
+		return true;
+	});
 	AddSeedLoad(37, 4242u, TEXT("v4.17 visuel : Poolrooms, graine 4242"));
 	Add(TEXT("v4.17 visuel : Poolrooms : pose de depart"), 0.f, [this]()
 	{
@@ -1199,6 +1206,11 @@ void ABRAutoTest::AddV417VisualSteps()
 	for (int32 Level : { 1, 2 })
 	{
 		const FString Tag = FString::Printf(TEXT("l%d"), Level);
+		Add(FString::Printf(TEXT("v4.17 visuel : tirages locaux fixes (Niveau %d)"), Level), 0.f, []()
+		{
+			FMath::RandInit(4170);
+			return true;
+		});
 		AddSeedLoad(Level, 4242u, FString::Printf(TEXT("v4.17 visuel : Niveau %d, graine 4242"), Level));
 		Add(FString::Printf(TEXT("v4.17 visuel : Niveau %d : pose de depart"), Level), 0.f, [this]()
 		{
