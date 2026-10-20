@@ -47,6 +47,10 @@ namespace
 	const FLinearColor SlotBg(0.f, 0.f, 0.f, 0.5f);
 	const FLinearColor Danger(0.95f, 0.3f, 0.22f, 1.f);
 	const FLinearColor Done(0.55f, 0.88f, 0.5f, 0.9f);
+	/** v4.17 : fonds opaques des fenetres posees sur l'inventaire : rien ne se lit au travers (avant : 72 % et 95 %, le
+	 *  melange en espace lineaire laissait voir libelles et cadres des cases) ; l'infobulle est un ton au-dessus des cases */
+	const FLinearColor ModalBg(0.03f, 0.027f, 0.012f, 1.f);
+	const FLinearColor TooltipBg(0.045f, 0.04f, 0.02f, 1.f);
 
 	/** v4.17 : echelle typographique de l'interface : tailles en points a 1080 lignes, passees a TextF (taille finale :
 	 *  max(plancher, arrondi(taille x Ui())), UiFontInfo). Avant : facteurs des polices du moteur, de 6,2 a 8,6 points pour le
@@ -869,11 +873,11 @@ void ABRHUD::HLine(float X, float Y, float W, const FLinearColor& C)
 	DrawRect(C, X0, FMath::RoundToFloat(Y), FMath::RoundToFloat(X + W) - X0, FMath::Max(1.f, FMath::RoundToFloat(Ui())));
 }
 
-void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title)
+void ABRHUD::Panel(float X, float Y, float W, float H, const FString& Title, bool bOpaque)
 {
 	const float U = Ui();
 	TestPanel = FVector4f(X, Y, W, H); // v4.16 (tests) : textes suivants dans ce panneau
-	RoundRect(X, Y, W, H, 14.f * U, PanelBg);
+	RoundRect(X, Y, W, H, 14.f * U, bOpaque ? ModalBg : PanelBg);
 	RoundRect(X, Y, W, H, 14.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.22f), true);
 	if (!Title.IsEmpty())
 	{
@@ -5093,15 +5097,17 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 		return;
 	}
 	const float U = Ui();
-	UFont* Small = GEngine->GetSmallFont();
-	UFont* Medium = GEngine->GetMediumFont();
 	const FBRItemInfo& Info = BRItems::Get(It->Item);
-	const float W = 380.f * U;
-	TArray<FString> Lines = Wrap(BRKeys::Expand(Info.Description.ToString()), W - 28.f * U, Small, 0.72f * U);
+	// v4.17 : 420U de large (avant : 380U), nom en 12,5 points gras, description en 12 points sur des lignes de 22U, raccourci en
+	// 10,5 points (avant : 8,5 ; 7,2 et 6,8 points, 6 points a 720 lignes)
+	const float W = 420.f * U;
+	const float PadX = 14.f * U;
+	const float TextWd = W - 2.f * PadX;
+	TArray<FString> Lines = WrapF(BRKeys::Expand(Info.Description.ToString()), TextWd, UiType::Body, EUiWeight::Regular);
 	const FString Charge = ChargeLine(C, It->Item);
 	if (!Charge.IsEmpty())
 	{
-		Lines.Append(Wrap(Charge, W - 28.f * U, Small, 0.72f * U));
+		Lines.Append(WrapF(Charge, TextWd, UiType::Body, EUiWeight::Regular));
 	}
 	FString Hint;
 	// v4.16 (relecture) : manette : le bouton A (meme effet que le double-clic) et une infobulle a cote de la case du curseur
@@ -5123,7 +5129,12 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 			Hint = HoverSlot.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicRetirer", "[DOUBLE-CLIC]  RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.DoubleClicEquiper", "[DOUBLE-CLIC]  \u00c9QUIPER"));
 		}
 	}
-	const float H = 52.f * U + Lines.Num() * 19.f * U + (Hint.IsEmpty() ? 0.f : 26.f * U);
+	const FString Title = Info.Name.ToUpper().ToString() + (It->Count > 1 ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt2", "  x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }) : FString());
+	const float TitleH = TextSize(TEXT("Hg"), UiType::PanelTitle, EUiWeight::Bold).Y;
+	const float LineH = LineStep(UiType::Body, EUiWeight::Regular, 22.f);
+	const float HintH = TextSize(TEXT("Hg"), UiType::Hint, EUiWeight::Regular).Y;
+	// Hauteur d'apres le contenu mesure
+	const float H = 12.f * U + TitleH + 10.f * U + Lines.Num() * LineH + (Hint.IsEmpty() ? 0.f : 6.f * U + HintH) + 12.f * U;
 	float X = PadBox ? PadBox->X + PadBox->S + 12.f * U : MouseX + 20.f * U;
 	float Y = PadBox ? PadBox->Y : MouseY + 20.f * U;
 	if (PadBox && X + W > Canvas->ClipX - 10.f * U)
@@ -5131,22 +5142,24 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 		X = PadBox->X - W - 12.f * U; // pas de place a droite : a gauche de la case
 	}
 	X = FMath::Max(10.f * U, FMath::Min(X, Canvas->ClipX - W - 10.f * U));
-	Y = FMath::Min(Y, Canvas->ClipY - H - 10.f * U);
+	Y = FMath::Max(10.f * U, FMath::Min(Y, Canvas->ClipY - H - 10.f * U));
 	TestPanel = FVector4f(X, Y, W, H); // v4.16 (relecture, tests) : textes de l'infobulle dans son cadre, sur sa couche
 	++TestLayer;
-	DrawRect(FLinearColor(0.02f, 0.018f, 0.008f, 0.95f), X, Y, W, H);
-	Frame(X, Y, W, H, YellowDim, 1.f * U);
-	Txt(FString::Printf(TEXT("%s%s"), *Info.Name.ToUpper().ToString(), It->Count > 1 ? *BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt2", "  x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }) : TEXT("")), X + 14.f * U,
-		Y + 10.f * U, Yellow, 0.85f * U, Medium, false, false);
-	float LY = Y + 44.f * U;
+	// v4.17 : ombre portee de 6U, fond opaque un ton au-dessus des cases, cadre jaune a 70 % : rien ne se lit au travers et
+	// l'infobulle se detache de la grille (avant : fond a 95 % presque de la couleur des cases)
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), X + 6.f * U, Y + 6.f * U, W, H);
+	DrawRect(TooltipBg, X, Y, W, H);
+	Frame(X, Y, W, H, WithAlpha(Yellow, 0.7f), FMath::Max(1.f, FMath::RoundToFloat(U)));
+	TextFit(Title, X + PadX, Y + 12.f * U, TextWd, Yellow, UiType::PanelTitle, EUiWeight::Bold, EUiAlign::Left, false);
+	float LY = Y + 12.f * U + TitleH + 10.f * U;
 	for (const FString& L : Lines)
 	{
-		TxtLine(L, X + 14.f * U, LY, W - 28.f * U, Ink, 0.72f * U, Small);
-		LY += 19.f * U;
+		TextLineF(L, X + PadX, LY, TextWd, Ink, UiType::Body, EUiWeight::Regular);
+		LY += LineH;
 	}
 	if (!Hint.IsEmpty())
 	{
-		Txt(Hint, X + 14.f * U, LY + 6.f * U, InkDim, 0.68f * U, Small, false, false);
+		TextFit(Hint, X + PadX, LY + 6.f * U, TextWd, InkDim, UiType::Hint, EUiWeight::Regular, EUiAlign::Left, false);
 	}
 	EndTestPanel(); // v4.16 (relecture, tests)
 }
@@ -5160,54 +5173,69 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 		return;
 	}
 	const float U = Ui();
-	UFont* Large = GEngine->GetLargeFont();
-	UFont* Medium = GEngine->GetMediumFont();
-	UFont* Small = GEngine->GetSmallFont();
 	const FBRItemInfo& Info = BRItems::Get(It->Item);
+	// v4.17 : nom 16 points gras, type et quantite 10,5, charge 11,5 jaune, description 12,5 sur des lignes de 26U, boutons 12
+	// points gras (avant : 10,5 ; 7,5 ; 7,8 ; 8 et 8,5 points) ; hauteur d'apres le contenu (au moins 340U), apercu de 200U
 	const float W = 760.f * U;
-	const float H = 340.f * U;
-	const float X = (Canvas->ClipX - W) * 0.5f;
-	const float Y = (Canvas->ClipY - H) * 0.5f;
-	++TestLayer; // v4.16 (relecture, tests) : fenetre posee sur l'inventaire
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
-	Panel(X, Y, W, H, BR_STR(NSLOCTEXT("BR", "HUD.Inspecter", "INSPECTER")));
-	const float IconS = 220.f * U;
-	DrawRect(SlotBg, X + 24.f * U, Y + 66.f * U, IconS, IconS);
-	Frame(X + 24.f * U, Y + 66.f * U, IconS, IconS, YellowDim, 1.f * U);
-	// Petit balancement de l'objet inspecte
-	const float Bob = FMath::Sin(Clock * 1.7f) * 4.f * U;
-	Icon(ItemIcon(It->Item), X + 34.f * U, Y + 76.f * U + Bob, IconS - 20.f * U, IconS - 20.f * U, FLinearColor::White);
-
-	const float TX = X + IconS + 50.f * U;
+	const float IconS = 200.f * U;
 	const float TW = W - IconS - 74.f * U;
-	Txt(Info.Name.ToUpper().ToString(), TX, Y + 64.f * U, Yellow, 1.05f * U, Large, false, false);
+	const FString NameText = Info.Name.ToUpper().ToString();
 	FString Kind = Info.bConsumable ? BR_STR(NSLOCTEXT("BR", "HUD.Consommable", "CONSOMMABLE")) : BR_STR(NSLOCTEXT("BR", "HUD.Objet", "OBJET"));
 	if (Info.Slot != EBREquipSlot::None)
 	{
 		Kind = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.EquipmentSlot", "\u00c9QUIPEMENT - {Slot}"), { { TEXT("Slot"), BRLoc::Arg(BRItems::SlotName(Info.Slot)) } });
 	}
-	Txt(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.KindQuantiteIt", "{Kind}     QUANTIT\u00c9 : {It}"), { { TEXT("Kind"), BRLoc::Arg(Kind) }, { TEXT("It"), BRLoc::Int(It->Count) } }), TX, Y + 112.f * U, InkDim, 0.75f * U, Small, false, false);
-	float LY = Y + 146.f * U;
+	const FString KindLine = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.KindQuantiteIt", "{Kind}     QUANTIT\u00c9 : {It}"), { { TEXT("Kind"), BRLoc::Arg(Kind) }, { TEXT("It"), BRLoc::Int(It->Count) } });
 	// v4.9 : charge des piles (lampe, frontale, camescope, piles) : information de l'objet
 	const FString Charge = ChargeLine(C, It->Item);
-	if (!Charge.IsEmpty())
+	const TArray<FString> ChargeLines = Charge.IsEmpty() ? TArray<FString>() : WrapF(Charge, TW, 11.5f, EUiWeight::Regular);
+	const TArray<FString> DescLines = WrapF(BRKeys::Expand(Info.Description.ToString()), TW, 12.5f, EUiWeight::Regular);
+	const float NameH = TextSize(TEXT("Hg"), 16.f, EUiWeight::Bold).Y;
+	const float KindH = TextSize(TEXT("Hg"), 10.5f, EUiWeight::Regular).Y;
+	const float ChargeLH = LineStep(11.5f, EUiWeight::Regular, 22.f);
+	const float DescLH = LineStep(12.5f, EUiWeight::Regular, 26.f);
+	const float BtnTextH = TextSize(TEXT("Hg"), UiType::Value, EUiWeight::Bold).Y;
+	const float BH = FMath::Max(40.f * U, BtnTextH + 14.f * U);
+	// Positions depuis le haut de la fenetre
+	const float NameTop = 64.f * U;
+	const float KindTop = NameTop + NameH + 8.f * U;
+	const float ChargeTop = KindTop + KindH + 14.f * U;
+	const float DescTop = ChargeTop + (ChargeLines.Num() > 0 ? ChargeLines.Num() * ChargeLH + 6.f * U : 0.f);
+	const float ContentBottom = DescTop + DescLines.Num() * DescLH;
+	const float PreviewTop = 66.f * U;
+	const float H = FMath::Min(Canvas->ClipY - 40.f * U, FMath::Max3(340.f * U, ContentBottom + 20.f * U + BH + 20.f * U, PreviewTop + IconS + 20.f * U));
+	const float X = (Canvas->ClipX - W) * 0.5f;
+	const float Y = (Canvas->ClipY - H) * 0.5f;
+	const float TX = X + IconS + 50.f * U;
+	const float BY = Y + H - BH - 20.f * U;
+	++TestLayer; // v4.16 (relecture, tests) : fenetre posee sur l'inventaire
+	// v4.17 : voile a 70 % (avant : 55 %) et fond opaque : les cases du dessous ne se lisent plus au travers
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.7f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	Panel(X, Y, W, H, BR_STR(NSLOCTEXT("BR", "HUD.Inspecter", "INSPECTER")), true);
+	DrawRect(SlotBg, X + 24.f * U, Y + PreviewTop, IconS, IconS);
+	Frame(X + 24.f * U, Y + PreviewTop, IconS, IconS, YellowDim, 1.f * U);
+	Glow(X + 24.f * U + IconS * 0.5f, Y + PreviewTop + IconS * 0.5f, IconS * 0.42f, IconS * 0.42f, FLinearColor(1.f, 0.85f, 0.3f, 0.10f));
+	// Petit balancement de l'objet inspecte
+	const float Bob = FMath::Sin(Clock * 1.7f) * 4.f * U;
+	Icon(ItemIcon(It->Item), X + 34.f * U, Y + PreviewTop + 10.f * U + Bob, IconS - 20.f * U, IconS - 20.f * U, FLinearColor::White);
+
+	TextFit(NameText, TX, Y + NameTop, TW, Yellow, 16.f, EUiWeight::Bold, EUiAlign::Left, false);
+	TextFit(KindLine, TX, Y + KindTop, TW, InkDim, 10.5f, EUiWeight::Regular, EUiAlign::Left, false);
+	for (int32 k = 0; k < ChargeLines.Num(); ++k)
 	{
-		for (const FString& L : Wrap(Charge, TW, Small, 0.78f * U))
-		{
-			TxtLine(L, TX, LY - 6.f * U, TW, Yellow, 0.78f * U, Small);
-			LY += 20.f * U;
-		}
-		LY += 6.f * U;
+		TextLineF(ChargeLines[k], TX, Y + ChargeTop + k * ChargeLH, TW, Yellow, 11.5f, EUiWeight::Regular);
 	}
-	for (const FString& L : Wrap(BRKeys::Expand(Info.Description.ToString()), TW, Medium, 0.8f * U))
+	for (int32 k = 0; k < DescLines.Num(); ++k)
 	{
-		TxtLine(L, TX, LY, TW, Ink, 0.8f * U, Medium);
-		LY += 24.f * U;
+		const float LY = Y + DescTop + k * DescLH;
+		if (LY + DescLH > BY - 4.f * U)
+		{
+			break; // fenetre bornee a l'ecran (tres petite fenetre) : le texte ne passe jamais sous les boutons
+		}
+		TextLineF(DescLines[k], TX, LY, TW, Ink, 12.5f, EUiWeight::Regular);
 	}
 
-	// Boutons
-	const float BH = 38.f * U;
-	const float BY = Y + H - BH - 20.f * U;
+	// Boutons en pastilles, texte centre ; v4.16 (relecture) : manette : chaque bouton nomme le sien (A : utiliser, B : fermer)
 	FString UseLabel;
 	if (Info.bConsumable)
 	{
@@ -5217,31 +5245,41 @@ void ABRHUD::DrawInspect(ABRCharacter* C)
 	{
 		UseLabel = Inspecting.Group == EBRSlotGroup::Equipment ? BR_STR(NSLOCTEXT("BR", "HUD.Retirer", "RETIRER")) : BR_STR(NSLOCTEXT("BR", "HUD.Equiper", "\u00c9QUIPER"));
 	}
-	float BX = TX;
-	// v4.16 (relecture) : manette : chaque bouton nomme le sien (A : utiliser, B : fermer)
 	const bool bPadInspect = BRKeys::UsesGamepadPrompts();
 	if (bPadInspect && !UseLabel.IsEmpty())
 	{
 		UseLabel = TEXT("[") + BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom) + TEXT("]  ") + UseLabel;
 	}
-	if (!UseLabel.IsEmpty())
-	{
-		const float BW = TextW(UseLabel, Medium, 0.85f * U) + 40.f * U;
-		const bool bHov = Hover(BX, BY, BW, BH);
-		DrawRect(bHov ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), BX, BY, BW, BH);
-		Frame(BX, BY, BW, BH, Yellow, 1.f * U);
-		Txt(UseLabel, BX + BW * 0.5f, BY + 6.f * U, bHov ? FLinearColor(0.05f, 0.04f, 0.01f) : Yellow, 0.85f * U, Medium, true, false);
-		AddButton(Btn_InspectUse, BX, BY, BW, BH);
-		BX += BW + 16.f * U;
-	}
 	const FString CloseLabel = (bPadInspect ? TEXT("[") + BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right) + TEXT("]  ") : FString())
 		+ BR_STR(NSLOCTEXT("BR", "HUD.Fermer", "FERMER"));
-	const float CW = TextW(CloseLabel, Medium, 0.85f * U) + 40.f * U;
-	const bool bHovC = Hover(BX, BY, CW, BH);
-	DrawRect(bHovC ? WithAlpha(Ink, 0.85f) : FLinearColor(0.f, 0.f, 0.f, 0.5f), BX, BY, CW, BH);
-	Frame(BX, BY, CW, BH, InkDim, 1.f * U);
-	Txt(CloseLabel, BX + CW * 0.5f, BY + 6.f * U, bHovC ? FLinearColor(0.05f, 0.04f, 0.01f) : Ink, 0.85f * U, Medium, true, false);
-	AddButton(Btn_InspectClose, BX, BY, CW, BH);
+	const float BtnGap = 16.f * U;
+	float UseW = UseLabel.IsEmpty() ? 0.f : TextSize(UseLabel, UiType::Value, EUiWeight::Bold).X + 40.f * U;
+	float CloseW = TextSize(CloseLabel, UiType::Value, EUiWeight::Bold).X + 40.f * U;
+	const float Need = UseW + CloseW + (UseLabel.IsEmpty() ? 0.f : BtnGap);
+	if (Need > TW)
+	{
+		// Libelles longs : les deux boutons se partagent la largeur du texte (libelles reduits, puis points de suspension)
+		const float K = (TW - (UseLabel.IsEmpty() ? 0.f : BtnGap)) / FMath::Max(1.f, UseW + CloseW);
+		UseW *= K;
+		CloseW *= K;
+	}
+	float BX = TX;
+	if (!UseLabel.IsEmpty())
+	{
+		const bool bHov = Hover(BX, BY, UseW, BH);
+		RoundRect(BX, BY, UseW, BH, 8.f * U, bHov ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, 0.5f));
+		RoundRect(BX, BY, UseW, BH, 8.f * U, Yellow, true);
+		TextFit(UseLabel, BX + UseW * 0.5f, BY + (BH - BtnTextH) * 0.5f, UseW - 16.f * U, bHov ? FLinearColor(0.05f, 0.04f, 0.01f) : Yellow, UiType::Value, EUiWeight::Bold,
+			EUiAlign::Center, false);
+		AddButton(Btn_InspectUse, BX, BY, UseW, BH);
+		BX += UseW + BtnGap;
+	}
+	const bool bHovC = Hover(BX, BY, CloseW, BH);
+	RoundRect(BX, BY, CloseW, BH, 8.f * U, bHovC ? WithAlpha(Ink, 0.85f) : FLinearColor(0.f, 0.f, 0.f, 0.5f));
+	RoundRect(BX, BY, CloseW, BH, 8.f * U, InkDim, true);
+	TextFit(CloseLabel, BX + CloseW * 0.5f, BY + (BH - BtnTextH) * 0.5f, CloseW - 16.f * U, bHovC ? FLinearColor(0.05f, 0.04f, 0.01f) : Ink, UiType::Value, EUiWeight::Bold,
+		EUiAlign::Center, false);
+	AddButton(Btn_InspectClose, BX, BY, CloseW, BH);
 }
 
 void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)

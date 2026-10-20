@@ -291,7 +291,8 @@ private:
 	void TxtLine(const FString& S, float X, float Y, float W, const FLinearColor& C, float Scale, UFont* Font);
 	void Bar(float X, float Y, float W, float H, float Fill, const FLinearColor& C, const FString& Label);
 	void Frame(float X, float Y, float W, float H, const FLinearColor& C, float Thickness);
-	void Panel(float X, float Y, float W, float H, const FString& Title);
+	/** v4.17 : bOpaque : fond opaque (fenetre posee sur l'inventaire : INSPECTER) ; sinon fond translucide habituel */
+	void Panel(float X, float Y, float W, float H, const FString& Title, bool bOpaque = false);
 	void VLabel(const FString& S, float X, float Y, const FLinearColor& C, float Scale);
 	void TrendBox(float X, float Y, float Size, float Trend);
 	void Icon(UTexture* Tex, float X, float Y, float W, float H, const FLinearColor& Tint);
