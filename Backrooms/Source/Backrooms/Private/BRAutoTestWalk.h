@@ -88,13 +88,21 @@ namespace BRTestV412
 	constexpr int32 MaxEntityClears = 3;
 	/** v4.15 (correctifs 4) : ce qui barre le passage du marcheur vers Target puis After : capsule du marcheur (raccourcie de
 	 *  30 cm par le bas : une marche franchie sans sauter ne compte pas, rayon moins 2 cm : le mur qu'il longe non plus)
-	 *  balayee sur 150 cm de son chemin, telle quelle puis en ignorant toutes les entites. Une entite barre le passage
-	 *  (bEntity) seulement si la premiere chose touchee est une entite ET si le meme balayage sans entite est libre : un mur,
-	 *  une porte fermee ou une cage reste un blocage du decor, meme avec une creature collee au marcheur */
+	 *  avancee sur 150 cm de son chemin, telle quelle puis en ignorant toutes les entites. Une entite barre le passage
+	 *  (bEntity) seulement si la capsule est arretee par une entite dans son chemin ET si la meme avance sans entite est libre :
+	 *  un mur, une porte fermee ou une cage reste un blocage du decor, meme avec une creature collee au marcheur.
+	 *  v4.16 : la capsule avance comme le personnage (BRTestV412::WalkLikeCharacter) : un decor touche de biais la fait glisser
+	 *  le long de sa face, puis elle vise a nouveau le point suivant ; un decor touche de face, un coin ou 12 pas sans parcourir
+	 *  le chemin l'arretent. Avant : deux segments droits depuis la place du marcheur, et tout contact arretait : marcheur pousse
+	 *  par un Smiler contre le bout d'un mur, au coin de son chemin (Niveau 2, graine du niveau 554144564, final416/full),
+	 *  segment qui frolait ce bout de mur : "decor", PROBLEME "NON ATTEINT a pied", alors que sans le Smiler le personnage y
+	 *  glisse et passe */
 	struct FBlock
 	{
+		/** La capsule est arretee sur son chemin (entite ou decor) */
 		bool bBlocked = false;
 		bool bEntity = false;
+		/** Ce qui l'arrete (l'entite dans son chemin, sinon le decor), ou le premier objet touche si rien ne l'arrete */
 		AActor* First = nullptr;
 		/** Ce qui bloque encore sans les entites (decor) */
 		AActor* Static = nullptr;
@@ -119,7 +127,8 @@ namespace BRTestV412
 	 *  ecartee chez l'hote (ABREntity::Dismiss : la dissipation du jeu, collision coupee) et la marche reprend ; un Smiler a
 	 *  moins de 3 m ne bouge jamais et un chasseur suit le marcheur invincible : attendre ne sert a rien. Au-dela de
 	 *  MaxEntityClears, ou chez un client (l'entite de l'hote bloque toujours sa simulation), le blocage est rendu avec
-	 *  Walk.bEntityBlock */
+	 *  Walk.bEntityBlock. v4.16 : un blocage final classe autrement est decrit dans WalkStats ("classement du blocage : decor :
+	 *  ..." ou "rien n'arrete sa capsule ..."), et la cause donne les positions du marcheur, de l'entite et du point vise */
 	EWalk StepWalk(const ABRWorld* W, ABRCharacter* C, float Dt, double Timeout, bool bBusy);
 
 	/** v4.15 : A* de la grille des tests, le meme qu'ABRWorld::FindPath (couts, heuristique, ordre des voisins) sans entrer dans

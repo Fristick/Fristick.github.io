@@ -403,6 +403,11 @@ namespace BRTestV412
 		{
 			Extra += TEXT(" ; passage barre par une entite seule : ") + Walk.BlockerText;
 		}
+		else if (!Walk.BlockerText.IsEmpty())
+		{
+			// v4.16 : le classement du blocage final aussi quand il n'accuse pas une entite (decor, ou rien sur le chemin regarde)
+			Extra += TEXT(" ; classement du blocage : ") + Walk.BlockerText;
+		}
 		return FString::Printf(TEXT("%.1f m en %.0f s, %d saut(s), %d nouveau(x) chemin(s), %d image(s) a la nage, %d deplacement(s) direct(s)%s%s%s"),
 			Walk.Travelled / 100.f, FPlatformTime::Seconds() - Walk.Start, Walk.Jumps, Walk.Replans, Walk.SwimFrames, Walk.Teleports,
 			Walk.bPath ? TEXT("") : TEXT(", sans chemin de grille (tout droit)"), Walk.bPoolFallback ? TEXT(", chemin du monde par un bassin (aucun chemin sans bassin)") : TEXT(""),
@@ -427,7 +432,9 @@ namespace BRTestV412
 	}
 
 	/** v4.15 (correctifs 3) : cause d'un blocage : ce que la capsule du marcheur touche 60 cm devant elle vers sa cible (porte du
-	 *  passage fermee, cage, entite...), l'entite la plus proche, le point de passage vise */
+	 *  passage fermee, cage, entite...), l'entite la plus proche, le point de passage vise. v4.16 : positions du marcheur, de
+	 *  l'entite (distance a plat) et du point de passage (avant : distances seules, la scene d'un blocage ne se reconstruisait
+	 *  qu'a partir de la capture) */
 	FString StuckReport(const ABRWorld* W, const ABRCharacter* C, const FVector& Target)
 	{
 		UWorld* World = W->GetWorld();
@@ -454,11 +461,162 @@ namespace BRTestV412
 		}
 		float EntityDist = 0.f;
 		const ABREntity* E = World ? NearestEntity(World, Pos, EntityDist) : nullptr;
-		const FString Entity = E ? FString::Printf(TEXT("entite la plus proche : %s (%s) a %.0f cm"), *E->MyInfo().Name.ToString(), *E->GetName(), EntityDist)
+		const FString Entity = E ? FString::Printf(TEXT("entite la plus proche : %s (%s) a %.0f cm (%.0f cm a plat, en (%.0f, %.0f, %.0f))"), *E->MyInfo().Name.ToString(),
+			*E->GetName(), EntityDist, FVector::Dist2D(E->GetActorLocation(), Pos), E->GetActorLocation().X, E->GetActorLocation().Y, E->GetActorLocation().Z)
 			: FString(TEXT("aucune entite"));
 		const FVector Way = Walk.Points.IsValidIndex(Walk.Next) ? Walk.Points[Walk.Next] : Walk.Goal;
 		const FIntPoint Cell = W->WorldToCell(Way);
-		return FString::Printf(TEXT("%s ; %s ; point de passage %d/%d (cellule %d, %d)"), *Ahead, *Entity, Walk.Next + 1, Walk.Points.Num(), Cell.X, Cell.Y);
+		return FString::Printf(TEXT("%s ; %s ; point de passage %d/%d (cellule %d, %d, en (%.0f, %.0f)) ; marcheur en (%.0f, %.0f, %.0f)"), *Ahead, *Entity, Walk.Next + 1,
+			Walk.Points.Num(), Cell.X, Cell.Y, Way.X, Way.Y, Pos.X, Pos.Y, Pos.Z);
+	}
+
+	float WaypointReach(const ABRWorld* W, const FVector& P);
+
+	/** v4.16 : avance de la capsule du classement (ClassifyBlock) sur son chemin regarde */
+	struct FBlockWalk
+	{
+		/** BlockLook cm de chemin parcourus (ou son dernier point atteint) sans etre arretee */
+		bool bFree = false;
+		/** Premier objet touche ; entite qui l'arrete (dans son chemin) ; decor qui l'arrete (de face, coin, pas epuises) ; dernier
+		 *  decor le long duquel elle a glisse. Impact sans acteur : rien */
+		FHitResult First;
+		FHitResult Entity;
+		FHitResult Stop;
+		FHitResult Along;
+		/** Deplacement de la capsule jusqu'a l'arret */
+		float Travel = 0.f;
+	};
+
+	/** v4.16 : la capsule du classement avance comme le personnage qui vise ses points de passage (Ways, comme StepWalk : le
+	 *  suivant a WaypointReach) : un decor touche de biais la fait glisser le long de sa face, le reste du pas projete sur son plan
+	 *  (UCharacterMovementComponent::SlideAlongSurface, normale de l'impact a plat), puis elle vise a nouveau. L'arretent : un
+	 *  decor touche de face (glissement de moins de BlockSlideMin du pas), une entite dans son chemin (elle n'y glisse pas, comme
+	 *  avant), ou BlockMoves pas sans avoir parcouru BlockLook cm de chemin (coin). Une entite deja contre elle sans etre devant
+	 *  elle (le pas s'en eloigne) ne l'arrete pas. Avant (v4.15 correctifs 4) : deux segments droits, tout contact arretait : contre
+	 *  le cote d'un couloir ou le bout d'un mur, ou une entite l'avait poussee, le decor etait juge bloquant alors que le personnage
+	 *  y glisse (Niveau 2, graine du niveau 554144564, final416/full : marcheur cale au bout d'un mur par un Smiler, "NON ATTEINT
+	 *  a pied", decor) */
+	constexpr float BlockLook = 150.f;
+	constexpr float BlockSlideMin = 0.1f;
+	constexpr int32 BlockMoves = 12;
+	/** Recul apres un impact (UPrimitiveComponent::MoveComponent recule aussi) : le pas suivant ne part pas dans le decor */
+	constexpr float BlockPullBack = 0.2f;
+
+	FBlockWalk WalkLikeCharacter(UWorld* World, const ABRWorld* W, const FVector& From, const TArray<FVector, TInlineAllocator<2>>& Ways, const FCollisionShape& Shape,
+		ECollisionChannel Channel, FCollisionQueryParams Params, const FCollisionResponseParams& R)
+	{
+		FBlockWalk Out;
+		// Chemin restant (plan) depuis A, le point vise etant Ways[Leg] (comme RemainingRoute)
+		auto Remaining = [&Ways](const FVector& A, int32 Leg)
+		{
+			float Sum = static_cast<float>(FVector::Dist2D(A, Ways[Leg]));
+			for (int32 I = Leg; I + 1 < Ways.Num(); ++I)
+			{
+				Sum += static_cast<float>(FVector::Dist2D(Ways[I], Ways[I + 1]));
+			}
+			return Sum;
+		};
+		auto Flat = [](const FVector& V)
+		{
+			return FVector(V.X, V.Y, 0.f).GetSafeNormal();
+		};
+		const float Base = Remaining(From, 0);
+		const float Goal = FMath::Min(BlockLook, Base);
+		FVector At = From;
+		int32 Leg = 0;
+		for (int32 Move = 0; Move < BlockMoves; ++Move)
+		{
+			while (Leg + 1 < Ways.Num() && FVector::Dist2D(At, Ways[Leg]) < WaypointReach(W, Ways[Leg]))
+			{
+				++Leg;
+			}
+			const float Left = Goal - (Base - Remaining(At, Leg));
+			const float ToWay = static_cast<float>(FVector::Dist2D(At, Ways[Leg]));
+			if (Left <= 1.f || ToWay <= 1.f)
+			{
+				Out.bFree = true;
+				return Out;
+			}
+			const FVector Dir = Flat(Ways[Leg] - At);
+			const float Len = FMath::Min(ToWay, Left);
+			FHitResult Hit;
+			if (!World->SweepSingleByChannel(Hit, At, At + Dir * Len, FQuat::Identity, Channel, Shape, Params, R))
+			{
+				At += Dir * Len;
+				Out.Travel += Len;
+				continue;
+			}
+			const FVector N = Flat(Hit.Normal);
+			const bool bEntity = Cast<ABREntity>(Hit.GetActor()) != nullptr;
+			if (Hit.bStartPenetrating && bEntity && FVector::DotProduct(Dir, N) >= 0.f)
+			{
+				// Entite deja contre la capsule, derriere ou a cote : le pas s'en eloigne, elle ne barre pas ce chemin
+				Params.AddIgnoredActor(Hit.GetActor());
+				continue;
+			}
+			if (!Out.First.GetActor())
+			{
+				Out.First = Hit;
+			}
+			if (bEntity)
+			{
+				Out.Entity = Hit;
+				Out.Travel += Hit.Distance;
+				return Out;
+			}
+			if (Hit.bStartPenetrating)
+			{
+				// Capsule deja dans le decor : sortie par la normale de l'impact (comme le personnage), puis le pas vise a nouveau
+				if (N.IsNearlyZero())
+				{
+					Out.Stop = Hit;
+					return Out;
+				}
+				At += N * (Hit.PenetrationDepth + BlockPullBack);
+				continue;
+			}
+			const float Reached = FMath::Max(0.f, static_cast<float>(Hit.Distance) - BlockPullBack);
+			At += Dir * Reached;
+			Out.Travel += Reached;
+			const FVector Slide = Dir - N * FVector::DotProduct(Dir, N);
+			if (N.IsNearlyZero() || Slide.Size() < BlockSlideMin)
+			{
+				Out.Stop = Hit; // de face
+				return Out;
+			}
+			Out.Along = Hit;
+			const FVector SlideDir = Flat(Slide);
+			const float SlideLen = FMath::Max(Len - Reached, 1.f) * static_cast<float>(Slide.Size());
+			const FVector SlideFrom = At + N * BlockPullBack;
+			FHitResult Next;
+			if (!World->SweepSingleByChannel(Next, SlideFrom, SlideFrom + SlideDir * SlideLen, FQuat::Identity, Channel, Shape, Params, R))
+			{
+				At = SlideFrom + SlideDir * SlideLen;
+				Out.Travel += SlideLen;
+				continue;
+			}
+			const bool bNextEntity = Cast<ABREntity>(Next.GetActor()) != nullptr;
+			if (bNextEntity && Next.bStartPenetrating && FVector::DotProduct(SlideDir, Flat(Next.Normal)) >= 0.f)
+			{
+				Params.AddIgnoredActor(Next.GetActor());
+				continue;
+			}
+			if (bNextEntity)
+			{
+				Out.Entity = Next; // le glissement la pousse contre une entite
+				Out.Travel += Next.Distance;
+				return Out;
+			}
+			if (!Next.bStartPenetrating)
+			{
+				const float Slid = FMath::Max(0.f, static_cast<float>(Next.Distance) - BlockPullBack);
+				At = SlideFrom + SlideDir * Slid;
+				Out.Travel += Slid;
+			}
+			// Second decor (coin) : le pas suivant vise a nouveau ; sans progres, les pas s'epuisent
+		}
+		Out.Stop = Out.Along.GetActor() ? Out.Along : Out.First;
+		return Out;
 	}
 
 	FBlock ClassifyBlock(const ABRWorld* W, const ABRCharacter* C, const FVector& Target, const FVector& After)
@@ -470,29 +628,22 @@ namespace BRTestV412
 		{
 			return Out;
 		}
-		// Chemin du marcheur sur 150 cm : vers Target, puis vers After (plan, a la hauteur du marcheur)
-		constexpr float Look = 150.f;
+		// Chemin du marcheur sur BlockLook cm : vers Target, puis vers After (plan, capsule relevee de Lift)
 		constexpr float Lift = 15.f;
 		const FVector Pos = C->GetActorLocation();
-		TArray<FVector, TInlineAllocator<3>> Legs;
-		Legs.Add(Pos);
-		float Left = Look;
+		const FVector From = Pos + FVector(0.f, 0.f, Lift);
+		TArray<FVector, TInlineAllocator<2>> Ways;
 		for (const FVector& Way : { Target, After })
 		{
-			const FVector From = Legs.Last();
-			const FVector To(Way.X, Way.Y, Pos.Z);
-			const float D = static_cast<float>(FVector::Dist2D(From, To));
-			if (D < 1.f || Left < 1.f)
+			const FVector P(Way.X, Way.Y, From.Z);
+			if (FVector::Dist2D(Ways.Num() > 0 ? Ways.Last() : From, P) >= 1.f)
 			{
-				continue;
+				Ways.Add(P);
 			}
-			const float Step = FMath::Min(D, Left);
-			Legs.Add(From + (To - From).GetSafeNormal2D() * Step);
-			Left -= Step;
 		}
-		if (Legs.Num() < 2)
+		if (Ways.Num() == 0)
 		{
-			Legs.Add(Pos + C->GetActorForwardVector().GetSafeNormal2D() * Look);
+			Ways.Add(From + C->GetActorForwardVector().GetSafeNormal2D() * BlockLook);
 		}
 		// Capsule du marcheur, rayon moins 2 cm, raccourcie de 2 x 15 cm et relevee de 15 cm (haut inchange, bas 30 cm plus haut)
 		const FCollisionShape Shape = FCollisionShape::MakeCapsule(Cap->GetScaledCapsuleRadius() - BRMech::Clearance::Margin, Cap->GetScaledCapsuleHalfHeight() - Lift);
@@ -500,41 +651,32 @@ namespace BRTestV412
 		FCollisionResponseParams R;
 		Cap->InitSweepCollisionParams(Q, R);
 		const ECollisionChannel Channel = Cap->GetCollisionObjectType();
-		auto Sweep = [&](const FCollisionQueryParams& Params, FHitResult& OutHit)
+		const FBlockWalk With = WalkLikeCharacter(World, W, From, Ways, Shape, Channel, Q, R);
+		if (!With.First.GetActor())
 		{
-			for (int32 I = 0; I + 1 < Legs.Num(); ++I)
-			{
-				if (World->SweepSingleByChannel(OutHit, Legs[I] + FVector(0.f, 0.f, Lift), Legs[I + 1] + FVector(0.f, 0.f, Lift), FQuat::Identity, Channel, Shape, Params, R))
-				{
-					return true;
-				}
-			}
-			return false;
-		};
-		FHitResult First;
-		if (!Sweep(Q, First))
-		{
-			return Out;
+			return Out; // rien touche sur son chemin
 		}
-		Out.bBlocked = true;
-		Out.First = First.GetActor();
-		// Le meme balayage sans aucune entite : libre seulement si les entites barraient seules le passage
+		// La meme avance sans aucune entite : libre seulement si les entites barraient seules le passage
 		FCollisionQueryParams NoEntities = Q;
 		for (TActorIterator<ABREntity> It(World); It; ++It)
 		{
 			NoEntities.AddIgnoredActor(*It);
 		}
-		FHitResult Behind;
-		if (Sweep(NoEntities, Behind))
-		{
-			Out.Static = Behind.GetActor();
-		}
+		const FBlockWalk Without = WalkLikeCharacter(World, W, From, Ways, Shape, Channel, NoEntities, R);
+		const FHitResult& Seen = With.Entity.GetActor() ? With.Entity : (With.Stop.GetActor() ? With.Stop : With.First);
+		const FHitResult& Behind = Without.Stop.GetActor() ? Without.Stop : Without.First;
+		Out.bBlocked = !With.bFree;
+		Out.First = Seen.GetActor();
+		Out.Static = Without.bFree ? nullptr : Behind.GetActor();
 		const ABREntity* E = Cast<ABREntity>(Out.First);
-		Out.bEntity = E != nullptr && Out.Static == nullptr;
-		const FIntPoint Cell = W->WorldToCell(First.ImpactPoint);
-		Out.What = FString::Printf(TEXT("%s (%s, %s) a %.0f cm, cellule (%d, %d)%s"), E ? *E->MyInfo().Name.ToString() : *FocusName(W, Out.First), *GetNameSafe(Out.First),
-			*GetNameSafe(First.GetComponent()), First.Distance, Cell.X, Cell.Y, Out.Static ? *FString::Printf(TEXT(" ; sans les entites, toujours bloque par %s (%s)"),
-			*FocusName(W, Out.Static), *GetNameSafe(Behind.GetComponent())) : TEXT(""));
+		Out.bEntity = E != nullptr && Without.bFree;
+		const FIntPoint Cell = W->WorldToCell(Seen.ImpactPoint);
+		const FString Slid = With.Along.GetActor() ? FString::Printf(TEXT(", apres glissement le long de %s (%s)"), *FocusName(W, With.Along.GetActor()),
+			*GetNameSafe(With.Along.GetComponent())) : FString();
+		const FString Still = Without.bFree ? FString() : FString::Printf(TEXT(" ; sans les entites, toujours bloque par %s (%s)"), *FocusName(W, Out.Static),
+			*GetNameSafe(Behind.GetComponent()));
+		Out.What = FString::Printf(TEXT("%s (%s, %s) a %.0f cm, cellule (%d, %d)%s%s%s"), E ? *E->MyInfo().Name.ToString() : *FocusName(W, Out.First), *GetNameSafe(Out.First),
+			*GetNameSafe(Seen.GetComponent()), With.Travel, Cell.X, Cell.Y, *Slid, With.bFree ? TEXT(", contourne en glissant") : TEXT(""), *Still);
 		return Out;
 	}
 
@@ -726,8 +868,21 @@ namespace BRTestV412
 			{
 				const FBlock B = ClassifyBlock(W, C, Target, WayAfter(Target, bDetourNow));
 				Walk.bEntityBlock = B.bEntity;
-				Walk.BlockerText = B.bEntity ? FString::Printf(TEXT("%s (%s)"), *B.What, W->HasAuthority() ? *FString::Printf(TEXT("deja %d entite(s) ecartee(s) dans cette marche"),
-					Walk.EntityClears) : TEXT("client : seul l'hote peut l'ecarter")) : FString();
+				// v4.16 : un blocage final qui n'accuse pas une entite est decrit aussi (WalkStats) : decor, ou rien qui arrete la capsule
+				// sur le chemin regarde
+				if (B.bEntity)
+				{
+					Walk.BlockerText = FString::Printf(TEXT("%s (%s)"), *B.What, W->HasAuthority() ? *FString::Printf(TEXT("deja %d entite(s) ecartee(s) dans cette marche"),
+						Walk.EntityClears) : TEXT("client : seul l'hote peut l'ecarter"));
+				}
+				else if (B.bBlocked)
+				{
+					Walk.BlockerText = TEXT("decor : ") + B.What;
+				}
+				else
+				{
+					Walk.BlockerText = FString::Printf(TEXT("rien n'arrete sa capsule sur %.0f cm de son chemin%s"), BlockLook, B.What.IsEmpty() ? TEXT("") : *(TEXT(" (") + B.What + TEXT(")")));
+				}
 			}
 			return EWalk::Stuck;
 		}
