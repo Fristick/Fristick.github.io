@@ -39,7 +39,7 @@ rejouées dans Unreal.
 |---|---|---|
 | démarrage | réussi | **réussi** |
 | V415 (parcours linéaire) | — | **réussi, 0 problème** |
-| V415Fix (places des mécanismes, échelle du Niveau 8) | — | **0 problème** (1 non vérifié : pas de couloir sombre pour le Smiler sur cette graine) |
+| V415Fix (places des mécanismes, échelle du Niveau 8) | — | **0 problème** (2 non vérifiés : pas de couloir sombre pour le Smiler sur cette graine ; prise depuis le canal des Poolrooms, aucune place libre dans le canal) |
 | banc visuel (`-BRAutoTestVisual`, 93 captures) | — | **réussi** |
 | V414 | incomplet (3 non vérifiés) | incomplet (les mêmes 3) |
 | V413 (histoire, à pied du Level 0 au Niveau 3) | échec, 11 problèmes | **réussi, 0 problème** |
@@ -50,7 +50,7 @@ rejouées dans Unreal.
 | V48 (performances, RTX fluide) | échec, 2 | **réussi** (Poolrooms à la limite, voir § 6) |
 | fosses | échec, 1 (img/s) | échec, 1 (img/s : 22, limite de la machine) |
 | complet (`-BRSeed=4242`) | échec, 29 | **1** (img/s des fosses) ; 6 non vérifiés propres à la machine |
-| réseau, hôte / client | échec, 5 / 6 (après la fusion du linéaire) | **0 / 0** (3 et 2 non vérifiés : arrivée tardive, 4 joueurs) |
+| réseau, hôte / client | échec, 5 / 6 (après la fusion du linéaire) | **0 / 0** (4 et 3 non vérifiés : arrivée tardive, 4 joueurs, aucune échelle des Poolrooms dans les chunks construits) |
 
 Le test réseau couvre maintenant aussi le départ de groupe par une porte murale et par l'échelle du Niveau 8 (2/2
 rassemblés, arrivée au Niveau 9 des deux côtés), l'arrivée d'un joueur sans chute, et des décalques identiques chez
@@ -100,7 +100,9 @@ eux-mêmes. Journaux des corrections : [`correctifs_places.txt`](v415/correctifs
 ## 6. Limites restantes
 
 - **Poolrooms, échelles des chunks vers le Niveau 2** (parcours classique seulement) : corrigé au 5e lot
-  ([`correctifs_5.txt`](v415/correctifs_5.txt)) ; reste ouvert : la vérification en jeu (étapes ajoutées, non lancées).
+  ([`correctifs_5.txt`](v415/correctifs_5.txt)) ; reste ouvert : la vérification en jeu (étapes lancées au dernier
+  passage, `final4` et `net_final4`, mais NON VÉRIFIÉES : aucune place libre dans le canal devant l'échelle du chunk
+  (-1, -1) ; aucune échelle dans les chunks construits du test réseau).
   Une échelle n'est plus posée au fond du canal contre la marche immergée du trottoir d'un mur voisin (22 % des
   échelles des chunks : la capsule du grimpeur y entrait ; la visée n'était pas gênée) ; 77 % des échelles des chunks
   sont maintenant sur un trottoir (60 % avant). Prise depuis le canal, une échelle sur son trottoir arrêtait le

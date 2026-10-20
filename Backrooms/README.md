@@ -1529,8 +1529,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   vérification n'a pas pu être faite. `Saved/AutoTest/Rapport.json` reprend le résultat, les problèmes et les
   vérifications « NON VÉRIFIÉ ». Avant la v4.10, le code valait toujours 0.
 - **`-BRAutoTestV411`** (v4.11, avec `-BRAutoTest`) lance seules les vérifications v4.11 ; elles sont aussi dans
-  `-BRAutoTest`. **Préparé, non exécuté** : écrit sans Unreal sous la main, à lancer en premier après la compilation.
-  Les parties du joueur et ses réglages sont rétablis à la fin (sauvegardes du test : `BR_AutoTestV411_*`) :
+  `-BRAutoTest`. **Exécuté en v4.15** (Unreal 5.8.3) : 0 problème, 1 non vérifié (volume général lisible seulement sur
+  le fil audio). Les parties du joueur et ses réglages sont rétablis à la fin (sauvegardes du test : `BR_AutoTestV411_*`) :
   ```bat
   UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV411 -BRAutoTestStrict
   ```
@@ -1554,8 +1554,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   ```
   Résultat et journaux : [`Docs/RAPPORT_v4.11.md`](Docs/RAPPORT_v4.11.md), [`Docs/v411/`](Docs/v411/).
 - **`-BRAutoTestV412`** (v4.12, avec `-BRAutoTest`) lance seules les vérifications v4.12 ; elles sont aussi dans
-  `-BRAutoTest`. **Préparé, non exécuté.** Les parties, l'inventaire, la langue et le canal de contenu du joueur sont
-  rétablis à la fin (sauvegardes du test : `BR_AutoTestV412_*`) :
+  `-BRAutoTest`. **Exécuté en v4.15** : réussi, 0 problème. Les parties, l'inventaire, la langue et le canal de
+  contenu du joueur sont rétablis à la fin (sauvegardes du test : `BR_AutoTestV412_*`) :
   ```bat
   UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV412 -BRAutoTestStrict
   ```
@@ -1590,8 +1590,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
       Source/Backrooms/Private/BRMechLogic.cpp Source/Backrooms/Private/BRMissionLogic.cpp -o test_mechanisms && ./test_mechanisms
   ```
 - **`-BRAutoTestV415`** (v4.15, avec `-BRAutoTest`) lance seules les vérifications du parcours linéaire ; elles sont
-  aussi dans `-BRAutoTest`. **Préparé, à exécuter dans Unreal.** Sauvegardes du test : `BR_AutoTestV415_*` ; partie
-  active, mode, menu et canal de contenu sont rétablis.
+  aussi dans `-BRAutoTest`. **Exécuté en v4.15** : réussi, 0 problème. Sauvegardes du test : `BR_AutoTestV415_*` ;
+  partie active, mode, menu et canal de contenu sont rétablis.
   ```bat
   UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV415 -BRAutoTestStrict
   ```
@@ -1608,7 +1608,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   **`-BRNetTest`, v4.15** : l'hôte impose le parcours linéaire (test seulement) ; drapeau, graine et sortie unique
   identiques chez l'hôte et le client ; le client tombe et se réveille dans le niveau (règle de la coopération).
 - **`-BRAutoTestV414`** (v4.14, avec `-BRAutoTest`) lance seules les vérifications v4.14 ; elles sont aussi dans
-  `-BRAutoTest`. **Préparé, non exécuté.** Sauvegardes du test : `BR_AutoTestV414_*` ; la partie active est rétablie.
+  `-BRAutoTest`. **Exécuté en v4.15** : 0 problème, 3 non vérifiés (perte du focus, à vérifier à la main ; 144 et 240
+  images/s non atteintes sur cette machine). Sauvegardes du test : `BR_AutoTestV414_*` ; la partie active est rétablie.
   ```bat
   UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV414 -BRAutoTestStrict
   ```
@@ -1622,8 +1623,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 
   **`-BRNetTest`, v4.14** : porte du Level 0 du client comparée à celle de l'hôte.
 - **`-BRAutoTestV413`** (v4.13, avec `-BRAutoTest`) lance seules les vérifications v4.13 ; elles sont aussi dans
-  `-BRAutoTest`. **Préparé, non exécuté.** La partie active et le mode du joueur sont rétablis à la fin (sauvegardes du
-  test : `BR_AutoTestV413_*`) :
+  `-BRAutoTest`. **Exécuté en v4.15** : réussi, 0 problème. La partie active et le mode du joueur sont rétablis à la
+  fin (sauvegardes du test : `BR_AutoTestV413_*`) :
   ```bat
   UnrealEditor.exe Backrooms.uproject -game -windowed -ResX=1920 -ResY=1080 -BRAutoTest -BRAutoTestV413 -BRAutoTestStrict
   ```
@@ -1653,7 +1654,8 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
   ```sh
   python Tools/Blender/build_level0_kit.py --seed 9 --render     # ou : blender -b -P Tools/Blender/build_level0_kit.py -- --seed 9 --render
   ```
-  Sortie et réglages d'import (préparés, non exécutés) : [`RawAssets/Level0Kit/README.md`](RawAssets/Level0Kit/README.md).
+  Sortie et réglages d'import (import exécuté en v4.15 par `backrooms_setup.run(force=True)` : kit du Level 0 complet,
+  34 modules et 29 textures) : [`RawAssets/Level0Kit/README.md`](RawAssets/Level0Kit/README.md).
 
 ---
 
@@ -1661,7 +1663,7 @@ UnrealEditor.exe "C:\...\Backrooms.uproject" 127.0.0.1 -game -windowed -BRNetTes
 
 | Système | Rendu | Construction | État |
 |---|---|---|---|
-| Windows 64 bits | DirectX 12, RT matériel si disponible | `Tools\Build\build_windows.ps1 -UERoot <moteur>` (`-NoUnityCheck` : éditeur compilé sans unity d'abord) | préparé, non exécuté pour la v4.9 |
+| Windows 64 bits | DirectX 12, RT matériel si disponible | `Tools\Build\build_windows.ps1 -UERoot <moteur>` (`-NoUnityCheck` : éditeur compilé sans unity d'abord) | v4.15 : paquet Shipping du canal public construit, cuit, contrôlé et lancé (test de démarrage) ; v4.9 : préparé, non exécuté |
 | Linux x86_64 | Vulkan SM6 (SM5 en repli), Lumen logiciel | `UE_ROOT=<moteur> Tools/Build/build_linux.sh`, ou `build_windows.ps1 -Platform Linux` en croisé | préparé, non exécuté |
 | macOS | Metal, binaire universel arm64 + x86_64, Lumen logiciel | sur un Mac : `UE_ROOT=<moteur> Tools/Build/build_mac.sh` | préparé, non exécuté |
 

@@ -4,7 +4,8 @@ Ce document complète [`HISTOIRE_PROGRESSION_v4.13.md`](HISTOIRE_PROGRESSION_v4.
 l'hôte, les fins de chapitre et la migration décrits là restent valables. Il fixe les règles du **parcours linéaire**
 (R-L1 à R-L6), telles que codées dans la v4.15. La logique pure (`BRStoryLogic`) est vérifiée hors moteur (banc de
 l'histoire, section J, [`v415/banc_histoire.txt`](v415/banc_histoire.txt)) ; les étapes du test du jeu
-`-BRAutoTestV415` sont préparées, à exécuter dans Unreal. Pour le joueur : [`GAMEPLAY_v4.15.md`](GAMEPLAY_v4.15.md).
+`-BRAutoTestV415` ont été exécutées dans Unreal 5.8.3 (réussi, 0 problème : [`RAPPORT_v4.15.md`](RAPPORT_v4.15.md) § 2).
+Pour le joueur : [`GAMEPLAY_v4.15.md`](GAMEPLAY_v4.15.md).
 
 ## 1. État de la partie
 
@@ -78,7 +79,7 @@ au point de départ du niveau avec l'équipement de départ, message `World.Reve
 - Banc de l'histoire, section J : graines (déterminisme, jamais nulles, distinctes), table complète de `DeathRuleFor`,
   table des 8 cas de `ChunkExitAllowed`, fil, accès et reprise identiques en linéaire, mort classique fermée à terre
   ramenée au Level 0, règles d'écriture, nouvelle partie, REJOUER et mode développeur, migration toujours classique.
-- Test du jeu `-BRAutoTestV415` (préparé) : menu, graine et drapeau du Niveau 2, sortie unique, mort et jeu fermé
-  pendant la mort (linéaire et classique), contraste classique, marche jusqu'au Niveau 3, version publiée, REJOUER,
-  mode développeur, migration 5 → 6, protocole ; `-BRNetTest` : drapeau, graine et sortie identiques chez l'hôte et le
-  client, mort du client dans le niveau.
+- Test du jeu `-BRAutoTestV415` (exécuté : réussi, 0 problème) : menu, graine et drapeau du Niveau 2, sortie unique,
+  mort et jeu fermé pendant la mort (linéaire et classique), contraste classique, marche jusqu'au Niveau 3, version
+  publiée, REJOUER, mode développeur, migration 5 → 6, protocole ; `-BRNetTest` (exécuté : 0 problème chez l'hôte et le
+  client) : drapeau, graine et sortie identiques chez l'hôte et le client, mort du client dans le niveau.

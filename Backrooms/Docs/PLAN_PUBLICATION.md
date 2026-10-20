@@ -133,7 +133,7 @@ l'hôte. L'hôte refuse un niveau indisponible : demande d'un client, console de
 
 La signature dépend du protocole, du lot courant et des niveaux disponibles. Deux versions publiées du même lot jouent
 ensemble ; une version publiée et une version de test, non. Vérifié hors moteur (§ 6). Dans le jeu, `-BRAutoTestV412`
-vérifie la règle de l'hôte et la lecture du refus (étape « contenu : version publiée », préparé, non exécuté) et
+vérifie la règle de l'hôte et la lecture du refus (étape « contenu : version publiée » ; exécutée en v4.15, réussie) et
 `-BRNetTest` compare protocole et signature entre l'hôte et le client (étape « compatibilité »). **L'essai d'un vrai
 client incompatible (deux paquets de canaux différents) n'est pas automatisé** : il reste à faire à la main.
 
@@ -160,7 +160,7 @@ chaque niveau publié.
 **Developed → Internal** :
 
 - mission résolue par le solveur sur 3000 graines (`Tools/Missions`) ;
-- placement réel essayé (`-BRAutoTestV411`/`V412`, préparé) ;
+- placement réel essayé (`-BRAutoTestV411`/`V412`, exécutés en v4.15 : V411 0 problème et 1 non vérifié, V412 réussi) ;
 - textes traduits dans les 22 langues (`loc_build.py --check`) ;
 - ressources essentielles présentes (`check_package.py`) ;
 - banc de contenu OK.
@@ -198,21 +198,27 @@ réelles des niveaux dans `BRLevels.cpp` et la progression de la base dans `BRMi
 Les tests des outils de paquet (`Tools/Build/tests`) vérifient en plus qu'une version interne n'est jamais préparée
 comme version publique pour Steam.
 
-**Préparé, non exécuté.**
+**Exécuté en v4.15** (Unreal 5.8.3, Windows, RTX 5050 Laptop ; résultats : [`RAPPORT_v4.15.md`](RAPPORT_v4.15.md) § 1
+et 2) :
 
-- Constructions Shipping par canal.
-- `-BRAutoTestV413` : porte de service à pied sur cinq graines, histoire `0 → 1 → 37 → 2 → fin du chapitre` en marchant,
-  raccourcis refusés par l'hôte, migration de vrais fichiers du format 4 ; porte stable après une mort, une sauvegarde
-  et reprise, un rechargement ; Level 6 LiDAR (scanner, calibrage, mission en marchant, traversée jusqu'au Niveau 8,
+- paquet Windows Shipping du canal public : construit, cuit, contrôlé et lancé (test de démarrage réussi) ;
+- `-BRAutoTestV413` (réussi, 0 problème ; `-BRNetTest` : 0 problème chez l'hôte et le client) : porte de service à
+  pied sur cinq graines, histoire `0 → 1 → 37 → 2 → fin du chapitre` en marchant, raccourcis refusés par l'hôte,
+  migration de vrais fichiers du format 4 ; porte stable après une mort, une sauvegarde et reprise, un rechargement ; Level 6 LiDAR (scanner, calibrage, mission en marchant, traversée jusqu'au Niveau 8,
   sauvegarde et reprise, anciennes sessions converties) ; `-BRNetTest` : porte ouverte par l'hôte pour le groupe, un seul
   départ ; Level 6 : même aile et même plan chez l'hôte et le client, calibrage de l'hôte reçu par le client.
-- `-BRAutoTestV412`, dans la version publiée simulée (`BRLevels::SetChannelOverride`, hors Shipping) :
+- `-BRAutoTestV412` (réussi, 0 problème), dans la version publiée simulée (`BRLevels::SetChannelOverride`, hors
+  Shipping) :
   - liste du menu ;
   - sorties du fil, sans raccourci ;
   - règle de connexion ;
   - reprise d'une partie v4.11 arrêtée au Niveau 5 (v4.13 : reprise aux Poolrooms, progression garée) ;
   - missions des Niveaux 1, 2 et 37 résolues en marchant, sorties prises à pied, arrivée ou écran de fin du contenu
     au Niveau 2.
+
+**Préparé, non exécuté.**
+
+- Constructions Shipping des autres canaux et des autres systèmes (canal interne ; Linux, macOS).
 - Essai à la main d'un client incompatible (voir § 4).
 
 ## 7. Steam (préparé, non exécuté)

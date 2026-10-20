@@ -91,8 +91,9 @@ les bancs et les sorties réelles : [`Docs/v415/correctifs_places.txt`](v415/cor
   environ une sur cinq était posée au fond du canal contre la marche immergée du trottoir d'un mur voisin, où le
   grimpeur ne tenait pas. Elles sont maintenant posées là où il tient à plat, le plus souvent sur un trottoir ; environ
   2 % des zones qui en tiraient une n'en ont plus. Prise depuis plus bas (le canal sous un trottoir), la montée passe
-  maintenant par-dessus la marche et le bord du trottoir au lieu de s'y arrêter (à vérifier en jeu : étape ajoutée,
-  pas encore lancée).
+  maintenant par-dessus la marche et le bord du trottoir au lieu de s'y arrêter (à vérifier en jeu : l'étape a tourné
+  au dernier passage mais n'a pas pu se faire, faute de place libre dans le canal devant l'échelle essayée : non
+  vérifié).
 - **Niveau 9** : la maison ne recouvre plus le « Plan de maison » (porche).
 - **Niveau 10, moulin** : les poteaux d'une même pièce avaient chacun leur orientation ; un mécanisme pouvait cacher son
   voisin à la visée (« Orientation du moulin » et « Frein du moulin »). Les poteaux d'une pièce sont maintenant en rang
