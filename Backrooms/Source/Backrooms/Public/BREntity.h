@@ -249,6 +249,15 @@ private:
 		 *  du parent) et points d'appui (repere du pivot) ; KeepRigidPartsAboveGround releve le pivot du manque du plus bas */
 		FVector Joint = FVector::ZeroVector;
 		TArray<FVector> Contacts;
+		/** v4.17 (animation) : cuisse / haut de patte : hauteur de la hanche au-dessus du sol au repos (cm) et facteur de foulee de
+		 *  cette jambe (une jambe plus courte que LegLength tourne plus pour reculer d'autant : pattes arriere du Hound) */
+		float HipHeight = 0.f;
+		float StrideScale = 1.f;
+		/** v4.17 (animation) : tibia / bas de patte : pied en appui, et son point d'appui au monde (pose au debut de l'appui) ;
+		 *  cuisse / haut de patte : tangage ajoute pour garder le pied a ce point pendant l'appui (borne a 15 cm) */
+		bool bStance = false;
+		FVector Anchor = FVector::ZeroVector;
+		float LockPitch = 0.f;
 	};
 
 	/** Ce que l'entite percoit du joueur cette image */
@@ -336,7 +345,7 @@ private:
 	float AttackMoveScale() const;
 	/** v4.7 : appui de chaque pied sur le sol reel (trottoirs, marches, bords de bassin) : le bassin descend vers le
 	 *  sol le plus bas, chaque jambe plie le genou pour poser le pied sur un sol plus haut */
-	void UpdateFootPlanting(float Dt);
+	void UpdateFootPlanting(float Dt, float InGait);
 	void PlayVoice(float Volume = 1.f);
 	void PlaySound2D(FName Sound, float Volume);
 	void StartVanish();
@@ -526,6 +535,15 @@ private:
 	float SupportSpeed = 0.f;
 	float SupportRun = 0.f;
 	float FoldTimer = 0.f;
+	// ---- v4.17 (animation) : marcheurs a jambes articulees (pose locale, rien de replique)
+	/** Allongement de la foulee quand la cadence atteint son plafond (Hound en poursuite), 1 sinon */
+	float StrideBoost = 1.f;
+	/** Pietinement en tournant sur place (0..1) ; lacet de la capsule a l'image precedente */
+	float TurnShuffle = 0.f;
+	float LastAnimYaw = 0.f;
+	bool bAnimYawSeen = false;
+	/** Distance horizontale la plus grande d'un pied a l'axe de la capsule, au repos (cm) ; 0 sans jambes mesurees */
+	float FootRadius = 0.f;
 	/** Place le modele (position, lacet, tangage) et pose les griffes ; apres AnimateLimbs, avant KeepRigidPartsAboveGround */
 	void AnimateBacteriaGait(float Dt);
 	/** Rotation (repere du Visual) d'un bras rigide dont la griffe TipLocal (repere du pivot) vise WorldPoint */
