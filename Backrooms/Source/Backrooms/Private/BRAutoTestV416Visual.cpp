@@ -11,7 +11,10 @@
 //   3. manette : invites des boutons (HUD, pause, inventaire, scanner) = liaisons reelles de la manette ; inventaire a la
 //      manette par de vraies touches injectees (LB / RB, croix, Y, B ; dans PERSONNAGE, curseur des cases, X inspecter, A
 //      equiper) ; cartes de la pause a la croix et A, puis dans l'inventaire ouvert depuis la pause (jeu arrete) RB / LB et
-//      B (retour a la pause) ; vision nocturne du camescope reste dans le sac (croix haut) ;
+//      B (retour a la pause) ; vision nocturne du camescope reste dans le sac (croix haut). v4.17 (interface) : onglets par
+//      LB / RB (la croix choisira la colonne du carnet) ; deplacer un objet (ABRHUD::PadCarry, B annule le port), PARAMETRES
+//      (ABRHUD::PadSettingsMove / PadSettingsAdjust : LUMINOSITE d'un cran puis retour) ; carnet long a 1280 x 720 et taille
+//      1,25 (une ligne par appui, ABRHUD::PadScrollLines) ; captures du carnet des vraies fenetres prises avant la fermeture ;
 //   4. scanner du Level 6 (graine 4136) : HUD contextuel (rappel des touches au clavier et a la manette, recharge, cone du
 //      focus, releve de la mire, repos, aide des parasites derriere et devant) ;
 //   5. les neuf entites (Level 4, graine 4242 ; Smiler dans le noir) : premiere personne au repos (posee au sol) et en menace
@@ -355,6 +358,15 @@ namespace BRTestV416Vis
 	FRotator AnchorRot = FRotator::ZeroRotator;
 	TWeakObjectPtr<ABREntity> Entity;
 	FString PadFooterSeen;
+	/** v4.17 (interface) : 1re case du sac et 4e poche avant l'essai du deplacement a la manette (retablies) ; ligne
+	 *  LUMINOSITE, sens du premier cran, valeur et texte affiche avant l'essai des PARAMETRES a la manette */
+	bool bCarrySaved = false;
+	FBRItemSlot SavedCarryStorage;
+	FBRItemSlot SavedCarryPocket;
+	int32 BrightRow = INDEX_NONE;
+	int32 BrightDir = 1;
+	float BrightBefore = 0.f;
+	FString BrightShownBefore;
 
 	/** Graphemes de controle : langue d'un rapport */
 	FString LangTag()
@@ -1182,7 +1194,9 @@ void ABRAutoTest::AddV416VisualSteps()
 		return true;
 	});
 	AddPadPress(TEXT("RB : onglet suivant (CARNET)"), EKeys::Gamepad_RightShoulder, nullptr, TabIs(4));
-	AddPadPress(TEXT("croix droite : onglet suivant (JOURNAL)"), EKeys::Gamepad_DPad_Right, nullptr, TabIs(1));
+	// v4.17 (interface) : RB (avant : croix droite) : dans le carnet, la croix gauche / droite choisit la colonne a faire defiler
+	// (ABRHUD::PadScrollFocus, branche par le controleur)
+	AddPadPress(TEXT("RB : onglet suivant (JOURNAL)"), EKeys::Gamepad_RightShoulder, nullptr, TabIs(1));
 	AddPadPress(TEXT("LB : onglet precedent (CARNET)"), EKeys::Gamepad_LeftShoulder, nullptr, TabIs(4));
 	AddPadPress(TEXT("Y : aide du carnet"), EKeys::Gamepad_FaceButton_Top, [this, HudOf]()
 	{
@@ -1232,7 +1246,8 @@ void ABRAutoTest::AddV416VisualSteps()
 		}
 		return static_cast<int32>(H->Tab) == 4 && H->NotebookLeftScroll > PressFloat + 0.5f;
 	});
-	AddPadPress(TEXT("croix gauche : onglet precedent (PERSONNAGE)"), EKeys::Gamepad_DPad_Left, nullptr, TabIs(0));
+	// v4.17 (interface) : LB (avant : croix gauche), pour la meme raison
+	AddPadPress(TEXT("LB : onglet precedent (PERSONNAGE)"), EKeys::Gamepad_LeftShoulder, nullptr, TabIs(0));
 	// v4.16 (relecture) : objets du sac a la manette : une frontale posee dans la 2e case du sac (tete vide), curseur sur la 1re ;
 	// croix droite (curseur), X (inspecter), B (fermer l'inspection), A (equiper), B (fermer l'inventaire). Sac retabli ensuite
 	Add(TEXT("v4.16 visuel : manette, objets du sac (preparation)"), 0.3f, [this, HudOf]()
@@ -1321,6 +1336,256 @@ void ABRAutoTest::AddV416VisualSteps()
 			C->OnEquipmentChanged();
 		}
 		bInvSaved = false;
+		return true;
+	});
+	// v4.17 (interface, C7) : deplacer un objet a la manette. ABRHUD::PadCarry est appele ici directement (le controleur branche Y
+	// dessus) : eau d'amande de la 1re case du sac vers la 4e poche (capture pendant le port), puis retour. B pendant un port
+	// passe par une vraie touche : B est deja branche sur ABRHUD::PadBack, qui annule le port sans fermer l'inventaire
+	Add(TEXT("v4.17 visuel : manette, deplacer un objet (preparation)"), 0.4f, [this, HudOf, ShowScreen]()
+	{
+		ABRCharacter* C = GetPlayer();
+		ABRHUD* H = HudOf();
+		FBRItemSlot* S0 = C ? C->GetSlot(EBRSlotGroup::Storage, 0) : nullptr;
+		FBRItemSlot* P3 = C ? C->GetSlot(EBRSlotGroup::Pockets, 3) : nullptr;
+		if (!H || !S0 || !P3)
+		{
+			Skip(TEXT("manette, deplacer un objet : joueur, HUD ou cases absents : deplacement a la manette NON VERIFIE"));
+			return true;
+		}
+		if (!BRTestV416Vis::bCarrySaved)
+		{
+			BRTestV416Vis::SavedCarryStorage = *S0;
+			BRTestV416Vis::SavedCarryPocket = *P3;
+			BRTestV416Vis::bCarrySaved = true;
+		}
+		*S0 = FBRItemSlot{ EBRItem::AlmondWater, 2 };
+		P3->Clear();
+		ShowScreen(0, false);
+		if (ABRPlayerController* PC = GetPC())
+		{
+			PC->bPadActive = true;
+		}
+		H->PadCancelCarry();
+		H->PadCursor.Group = EBRSlotGroup::Storage;
+		H->PadCursor.Index = 0;
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, Y : prendre l'eau d'amande (PadCarry)"), 0.25f, [this, HudOf]()
+	{
+		ABRHUD* H = HudOf();
+		if (!H || !BRTestV416Vis::bCarrySaved)
+		{
+			return true; // deja note NON VERIFIE a la preparation
+		}
+		const bool bAct = H->PadCarry();
+		const bool bOk = bAct && H->IsPadCarrying() && H->Dragging.Group == EBRSlotGroup::Storage && H->Dragging.Index == 0;
+		Note(FString::Printf(TEXT("manette, deplacer : Y sur la 1re case du sac : action %s, objet porte %s (case %d du groupe %d)"), BRTestV416Vis::Oui(bAct),
+			BRTestV416Vis::Oui(H->IsPadCarrying()), H->Dragging.Index, static_cast<int32>(H->Dragging.Group)), !bOk);
+		// Le curseur va sur la 4e poche : l'objet porte le suit (capture a l'etape suivante)
+		H->PadCursor.Group = EBRSlotGroup::Pockets;
+		H->PadCursor.Index = 3;
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, capture pendant le port"), 0.3f, [this, HudOf, ShotNamed]()
+	{
+		ABRHUD* H = HudOf();
+		if (!H || !BRTestV416Vis::bCarrySaved)
+		{
+			return true;
+		}
+		Note(FString::Printf(TEXT("manette, deplacer : pendant le port, curseur sur la case %d du groupe %d, objet porte %s"), H->PadCursor.Index,
+			static_cast<int32>(H->PadCursor.Group), BRTestV416Vis::Oui(H->IsPadCarrying())), !H->IsPadCarrying());
+		ShotNamed(TEXT("v417_manette_port"));
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, Y : poser dans la 4e poche"), 0.25f, [this, HudOf]()
+	{
+		ABRHUD* H = HudOf();
+		ABRCharacter* C = GetPlayer();
+		if (!H || !C || !BRTestV416Vis::bCarrySaved)
+		{
+			return true;
+		}
+		const bool bAct = H->PadCarry();
+		const FBRItemSlot* S0 = C->GetSlot(EBRSlotGroup::Storage, 0);
+		const FBRItemSlot* P3 = C->GetSlot(EBRSlotGroup::Pockets, 3);
+		const bool bInPocket = P3 && P3->Item == EBRItem::AlmondWater && P3->Count == 2;
+		const bool bOk = bAct && !H->IsPadCarrying() && bInPocket && S0 && S0->IsEmpty();
+		Note(FString::Printf(TEXT("manette, deplacer : Y sur la 4e poche : poche %s (x%d), 1re case du sac %s, port termine %s"), bInPocket ? TEXT("eau d'amande") : TEXT("autre"),
+			P3 ? P3->Count : 0, S0 && S0->IsEmpty() ? TEXT("vide") : TEXT("occupee"), BRTestV416Vis::Oui(!H->IsPadCarrying())), !bOk);
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, retour de la poche vers le sac (PadCarry deux fois)"), 0.25f, [this, HudOf]()
+	{
+		ABRHUD* H = HudOf();
+		ABRCharacter* C = GetPlayer();
+		if (!H || !C || !BRTestV416Vis::bCarrySaved)
+		{
+			return true;
+		}
+		H->PadCursor.Group = EBRSlotGroup::Pockets;
+		H->PadCursor.Index = 3;
+		const bool bTake = H->PadCarry();
+		H->PadCursor.Group = EBRSlotGroup::Storage;
+		H->PadCursor.Index = 0;
+		const bool bDrop = H->PadCarry();
+		const FBRItemSlot* S0 = C->GetSlot(EBRSlotGroup::Storage, 0);
+		const FBRItemSlot* P3 = C->GetSlot(EBRSlotGroup::Pockets, 3);
+		const bool bBack = S0 && S0->Item == EBRItem::AlmondWater && S0->Count == 2 && P3 && P3->IsEmpty();
+		Note(FString::Printf(TEXT("manette, deplacer : retour : prise %s, pose %s, eau d'amande dans la 1re case du sac %s, 4e poche vide %s"), BRTestV416Vis::Oui(bTake),
+			BRTestV416Vis::Oui(bDrop), BRTestV416Vis::Oui(S0 && S0->Item == EBRItem::AlmondWater), BRTestV416Vis::Oui(P3 && P3->IsEmpty())), !(bTake && bDrop && bBack));
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, port a annuler (preparation)"), 0.2f, [this, HudOf]()
+	{
+		ABRHUD* H = HudOf();
+		if (H && BRTestV416Vis::bCarrySaved)
+		{
+			H->PadCursor.Group = EBRSlotGroup::Storage;
+			H->PadCursor.Index = 0;
+			H->PadCarry();
+		}
+		return true;
+	});
+	AddPadPress(TEXT("B pendant un port : annule sans fermer l'inventaire"), EKeys::Gamepad_FaceButton_Right, nullptr, [this, HudOf](FString& Detail)
+	{
+		ABRHUD* H = HudOf();
+		ABRPlayerController* PC = GetPC();
+		ABRCharacter* C = GetPlayer();
+		if (!BRTestV416Vis::bCarrySaved)
+		{
+			Detail = TEXT("preparation impossible (deja notee)");
+			return true;
+		}
+		const FBRItemSlot* S0 = C ? C->GetSlot(EBRSlotGroup::Storage, 0) : nullptr;
+		const bool bOpen = PC && PC->IsInventoryOpen();
+		Detail = FString::Printf(TEXT("port %s, inventaire %s, 1re case du sac %s"), H && H->IsPadCarrying() ? TEXT("en cours") : TEXT("annule"), bOpen ? TEXT("ouvert") : TEXT("ferme"),
+			S0 && S0->Item == EBRItem::AlmondWater ? TEXT("eau d'amande") : TEXT("autre"));
+		return H && !H->IsPadCarrying() && bOpen && S0 && S0->Item == EBRItem::AlmondWater;
+	});
+	Add(TEXT("v4.17 visuel : manette, sac et poche retablis"), 0.f, [this, HudOf]()
+	{
+		if (ABRHUD* H = HudOf())
+		{
+			H->PadCancelCarry();
+		}
+		ABRCharacter* C = GetPlayer();
+		FBRItemSlot* S0 = C ? C->GetSlot(EBRSlotGroup::Storage, 0) : nullptr;
+		FBRItemSlot* P3 = C ? C->GetSlot(EBRSlotGroup::Pockets, 3) : nullptr;
+		if (BRTestV416Vis::bCarrySaved && S0 && P3)
+		{
+			*S0 = BRTestV416Vis::SavedCarryStorage;
+			*P3 = BRTestV416Vis::SavedCarryPocket;
+		}
+		BRTestV416Vis::bCarrySaved = false;
+		return true;
+	});
+	// v4.17 (interface, C6) : PARAMETRES a la manette. ABRHUD::PadSettingsMove et PadSettingsAdjust sont appeles directement (le
+	// controleur branche la croix dessus) : curseur sur LUMINOSITE (VIDEO), un cran (applique au dessin suivant, comme un clic),
+	// valeur relue, capture, puis retour d'un cran
+	Add(TEXT("v4.17 visuel : manette, PARAMETRES > VIDEO (preparation)"), 0.4f, [this, HudOf, ShowScreen]()
+	{
+		ABRPlayerController* PC = GetPC();
+		ABRHUD* H = HudOf();
+		BRTestV416Vis::BrightRow = INDEX_NONE;
+		if (!PC || !H)
+		{
+			Skip(TEXT("manette, PARAMETRES : controleur ou HUD absent : reglage a la manette NON VERIFIE"));
+			return true;
+		}
+		ShowScreen(2, false); // VIDEO
+		PC->bPadActive = true;
+		H->SettingsPadRow = INDEX_NONE;
+		const FString Want = BR_STR(NSLOCTEXT("BR", "Menu.Luminosite", "LUMINOSIT\u00c9"));
+		for (int32 i = 0; i < PC->GetSettingsCount(); ++i)
+		{
+			if (PC->GetSettingCategory(i) == 1 && PC->GetSettingLabel(i) == Want)
+			{
+				BRTestV416Vis::BrightRow = i;
+			}
+		}
+		if (BRTestV416Vis::BrightRow == INDEX_NONE)
+		{
+			Skip(TEXT("manette, PARAMETRES : ligne LUMINOSITE introuvable dans VIDEO : reglage a la manette NON VERIFIE"));
+		}
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, croix bas jusqu'a LUMINOSITE (PadSettingsMove)"), 0.3f, [this, HudOf]()
+	{
+		ABRHUD* H = HudOf();
+		ABRPlayerController* PC = GetPC();
+		if (!H || !PC || BRTestV416Vis::BrightRow == INDEX_NONE)
+		{
+			return true;
+		}
+		int32 Moves = 0;
+		bool bAct = true;
+		while (bAct && H->GetPadSetting() != BRTestV416Vis::BrightRow && Moves < PC->GetSettingsCount())
+		{
+			bAct = H->PadSettingsMove(1);
+			++Moves;
+		}
+		const bool bOk = bAct && H->GetPadSetting() == BRTestV416Vis::BrightRow;
+		Note(FString::Printf(TEXT("manette, PARAMETRES : %d appui(s) de la croix bas, ligne choisie %d (LUMINOSITE : %d)"), Moves, H->GetPadSetting(), BRTestV416Vis::BrightRow), !bOk);
+		BRTestV416Vis::BrightBefore = FBRSettings::Get().Brightness;
+		BRTestV416Vis::BrightShownBefore = PC->GetSettingValue(BRTestV416Vis::BrightRow);
+		BRTestV416Vis::BrightDir = BRTestV416Vis::BrightBefore < 1.45f ? 1 : -1; // au maximum : le premier cran descend
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, croix droite : LUMINOSITE d'un cran (PadSettingsAdjust)"), 0.3f, [this, HudOf]()
+	{
+		ABRHUD* H = HudOf();
+		if (!H || BRTestV416Vis::BrightRow == INDEX_NONE || H->GetPadSetting() != BRTestV416Vis::BrightRow)
+		{
+			return true;
+		}
+		const bool bAct = H->PadSettingsAdjust(BRTestV416Vis::BrightDir);
+		Note(FString::Printf(TEXT("manette, PARAMETRES : cran %+d demande sur LUMINOSITE : %s"), BRTestV416Vis::BrightDir, BRTestV416Vis::Oui(bAct)), !bAct);
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, LUMINOSITE relue et capture"), 0.3f, [this, HudOf, ShotNamed]()
+	{
+		ABRHUD* H = HudOf();
+		ABRPlayerController* PC = GetPC();
+		if (!H || !PC || BRTestV416Vis::BrightRow == INDEX_NONE)
+		{
+			return true;
+		}
+		const float After = FBRSettings::Get().Brightness;
+		const bool bChanged = FMath::Abs(After - (BRTestV416Vis::BrightBefore + 0.1f * BRTestV416Vis::BrightDir)) < 0.01f;
+		const bool bHint = H->HintSetting == BRTestV416Vis::BrightRow;
+		Note(FString::Printf(TEXT("manette, PARAMETRES : LUMINOSITE %.1f -> %.1f (affiche \"%s\" -> \"%s\") ; aide de la ligne choisie montree %s"), BRTestV416Vis::BrightBefore, After,
+			*BRTestV416Vis::BrightShownBefore, *PC->GetSettingValue(BRTestV416Vis::BrightRow), BRTestV416Vis::Oui(bHint)), !bChanged || !bHint);
+		ShotNamed(TEXT("v417_manette_parametres"));
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, croix gauche : LUMINOSITE revient d'un cran"), 0.3f, [this, HudOf]()
+	{
+		ABRHUD* H = HudOf();
+		if (H && BRTestV416Vis::BrightRow != INDEX_NONE)
+		{
+			H->PadSettingsAdjust(-BRTestV416Vis::BrightDir);
+		}
+		return true;
+	});
+	Add(TEXT("v4.17 visuel : manette, LUMINOSITE revenue"), 0.f, [this, HudOf, CloseScreens]()
+	{
+		ABRHUD* H = HudOf();
+		ABRPlayerController* PC = GetPC();
+		if (H && PC && BRTestV416Vis::BrightRow != INDEX_NONE)
+		{
+			const float Back = FBRSettings::Get().Brightness;
+			const bool bBack = FMath::Abs(Back - BRTestV416Vis::BrightBefore) < 0.01f;
+			Note(FString::Printf(TEXT("manette, PARAMETRES : retour d'un cran : LUMINOSITE %.1f (avant l'essai %.1f, affiche \"%s\")"), Back, BRTestV416Vis::BrightBefore,
+				*PC->GetSettingValue(BRTestV416Vis::BrightRow)), !bBack);
+			if (!bBack)
+			{
+				FBRSettings::Get().Brightness = BRTestV416Vis::BrightBefore;
+				PC->ApplySettings();
+			}
+			H->SettingsPadRow = INDEX_NONE;
+		}
+		CloseScreens();
 		return true;
 	});
 	// v4.16 (relecture) : camescope reste dans le sac : sa vision nocturne a la manette (croix haut), deux fois (allumee, eteinte)
@@ -1489,17 +1754,13 @@ void ABRAutoTest::AddV416VisualSteps()
 				}
 				return true;
 			});
-			Add(FString::Printf(TEXT("v4.16 visuel : fenetre %s, capture %d"), Wc.Name, Tab), 0.2f, [this, Wc, Tab, HudOf, Grab, ShotNamed, CloseScreens]()
+			Add(FString::Printf(TEXT("v4.16 visuel : fenetre %s, capture %d"), Wc.Name, Tab), 0.2f, [this, Wc, Tab, HudOf, Grab, ShotNamed]()
 			{
 				if (!BRDisplay::CanChange())
 				{
 					if (ABRHUD* H0 = HudOf())
 					{
 						H0->bTestRecordTexts = false;
-					}
-					if (Tab == 4)
-					{
-						CloseScreens();
 					}
 					return true; // deja note NON VERIFIE a la demande
 				}
@@ -1528,10 +1789,84 @@ void ABRAutoTest::AddV416VisualSteps()
 						Eff.Resolution.Y, Eff.Window, View.X, View.Y, bSize ? TEXT("taille obtenue") : TEXT("TAILLE NON OBTENUE (textes controles a la taille obtenue)")), !bSize);
 				}
 				ShotNamed(FString::Printf(TEXT("v416_fenetre_%s_%s"), Wc.Name, Tab == 0 ? TEXT("personnage") : TEXT("carnet")));
-				if (Tab == 4)
+				return true;
+			});
+			if (Tab == 4)
+			{
+				// v4.17 (K14) : l'inventaire se ferme a l'etape suivante : la capture, demandee a l'etape d'avant et prise a la fin
+				// de l'image suivante, le montre encore (avant : ferme dans la meme etape, les captures du carnet etaient vides)
+				Add(FString::Printf(TEXT("v4.17 visuel : fenetre %s, inventaire ferme apres la capture"), Wc.Name), 0.f, [CloseScreens]()
 				{
 					CloseScreens();
+					return true;
+				});
+			}
+		}
+		if (Wc.Kind == 0)
+		{
+			// v4.17 (interface, C8) : carnet long a 1280 x 720 et taille d'interface 1,25 (aide et rappel) : il reste du texte a
+			// faire defiler (HadScrollRoom) et un appui (ABRHUD::PadScrollLines(1), ce que le controleur appelle pour la croix bas)
+			// fait descendre la colonne de gauche d'une ligne (PadScrollLine), ou de ce qui restait
+			Add(TEXT("v4.17 visuel : carnet long (taille d'interface 1,25, aide et rappel)"), 0.6f, [this, HudOf, ShowScreen]()
+			{
+				ABRHUD* H = HudOf();
+				if (!H)
+				{
+					Skip(TEXT("carnet long : HUD absent : une ligne par appui NON VERIFIE"));
+					return true;
 				}
+				FBRSettings::Get().UiScale = 1.25f;
+				ShowScreen(4);
+				if (H->NotebookHintStep >= 0)
+				{
+					H->NotebookHint.FindOrAdd(H->NotebookHintStep) = 2;
+				}
+				H->PadScrollFocus(0);
+				return true;
+			});
+			Add(TEXT("v4.17 visuel : carnet long, une ligne par appui (PadScrollLines)"), 0.2f, [this, HudOf, ShotNamed]()
+			{
+				ABRHUD* H = HudOf();
+				if (!H)
+				{
+					return true;
+				}
+				FIntPoint View(0, 0);
+				if (ABRPlayerController* PC = GetPC())
+				{
+					PC->GetViewportSize(View.X, View.Y);
+				}
+				if (BRTestV416Vis::Phase == 0)
+				{
+					BRTestV416Vis::PressRoom = H->LastNotebookLeftRoom;
+					BRTestV416Vis::PressFloat = H->NotebookLeftScroll;
+					if (!H->HadScrollRoom() || BRTestV416Vis::PressRoom < 1.f)
+					{
+						Skip(FString::Printf(TEXT("carnet long : rien a faire defiler a %d x %d (texte cache %s, reste a gauche %.0f) : une ligne par appui NON VERIFIE"), View.X, View.Y,
+							BRTestV416Vis::Oui(H->HadScrollRoom()), BRTestV416Vis::PressRoom));
+						return true;
+					}
+					H->PadScrollLines(1);
+					BRTestV416Vis::Phase = 1;
+					return false;
+				}
+				if (StepTime < 0.15f)
+				{
+					return false;
+				}
+				BRTestV416Vis::Phase = 0;
+				const float Want = FMath::Min(ABRHUD::PadScrollLine, BRTestV416Vis::PressRoom);
+				const float Got = H->NotebookLeftScroll - BRTestV416Vis::PressFloat;
+				Note(FString::Printf(TEXT("carnet long a %d x %d : texte cache %s, reste a gauche %.0f, zones %d ; un appui (PadScrollLines(1)) : %.1f -> %.1f (attendu +%.0f, obtenu %+.1f)"),
+					View.X, View.Y, BRTestV416Vis::Oui(H->HadScrollRoom()), BRTestV416Vis::PressRoom, H->GetScrollZoneCount(), BRTestV416Vis::PressFloat, H->NotebookLeftScroll, Want, Got),
+					FMath::Abs(Got - Want) > 0.5f);
+				ShotNamed(TEXT("v417_carnet_long"));
+				return true;
+			});
+			Add(TEXT("v4.17 visuel : carnet long, taille d'interface retablie"), 0.f, [this, CloseScreens]()
+			{
+				FBRSettings::Get().UiScale = 1.f;
+				CloseScreens();
 				return true;
 			});
 		}
