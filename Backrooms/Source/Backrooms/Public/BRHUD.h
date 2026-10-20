@@ -55,6 +55,21 @@ public:
 	bool PadSlotAction(bool bInspect);
 	/** v4.16 (relecture) : B : ferme l'inspection ouverte (true) ; false : rien a fermer ici (le controleur ferme l'inventaire) */
 	bool PadBack();
+	/** v4.17 (interface, a brancher dans ABRPlayerController) : zone de defilement suivante (Step +1) ou precedente (-1) de
+	 *  l'onglet ouvert (CARNET, JOURNAL : deux colonnes ; OBJECTIFS, aide des PARAMETRES : une zone), cadre jaune autour
+	 *  d'elle ; Step 0 : retour a toutes les zones. Tant qu'aucune zone n'est choisie (ouverture, changement d'onglet), le
+	 *  defilement de la manette s'applique a toutes les zones de l'image, comme en v4.16 */
+	void PadScrollFocus(int32 Step);
+	/** v4.17 (a brancher) : defilement de la zone choisie (ou de toutes), en pixels a 1080 lignes, a la prochaine image : une
+	 *  ligne (PadScrollLine) par appui de la croix, avec repetition ; vitesse x duree de l'image pour le stick droit */
+	void PadScrollPixels(float Pixels);
+	/** v4.17 : pas d'une ligne du carnet, en pixels a 1080 lignes (croix haut / bas) */
+	static constexpr float PadScrollLine = 26.f;
+	/** v4.17 (tests) : zone choisie a la manette (INDEX_NONE : toutes), zones de defilement de la derniere image de
+	 *  l'inventaire, et s'il y restait du texte a faire defiler */
+	int32 GetPadScrollZone() const { return PadScrollZone; }
+	int32 GetScrollZoneCount() const { return LastScrollZones; }
+	bool HadScrollRoom() const { return bLastScrollRoom; }
 
 private:
 	/** v4.16 (tests, -BRAutoTestV416Visual) : releve des textes dessines pendant une image (bTestRecordTexts) : rectangle
@@ -92,6 +107,16 @@ private:
 	void RecordTestText(const FString& S, float X, float Y, const FVector2f& Size, float Points);
 	/** v4.16 : defilement demande a la manette (pixels a 1080p), applique par ScrollArea a la prochaine image de l'inventaire */
 	float PadScroll = 0.f;
+	/** v4.17 : zone qui recoit PadScroll (numero passe a ScrollArea) ; INDEX_NONE : toutes les zones (comportement v4.16) */
+	int32 PadScrollZone = INDEX_NONE;
+	/** v4.17 : zones numerotees dessinees pendant l'image de l'inventaire, et a la derniere image */
+	int32 ScrollZonesDrawn = 0;
+	int32 LastScrollZones = 0;
+	/** v4.17 : une zone de l'image cachait du texte (l'invite de defilement du pied n'est montree que dans ce cas) */
+	bool bScrollRoom = false;
+	bool bLastScrollRoom = false;
+	/** v4.17 : fondus du bas des zones qui cachent encore du texte (X, Y, largeur, hauteur), dessines apres leur contenu */
+	TArray<FVector4f> ScrollFades;
 
 private:
 	struct FCaption
@@ -232,8 +257,11 @@ private:
 	void DrawVideoConfirm(ABRPlayerController* PC);
 	/** v4.9 : opacite choisie des informations d'exploration */
 	float HudAlpha() const;
-	/** v4.9 : defilement a la molette d'une zone (Scroll : position, en pixels a 1080p) ; renvoie le decalage a appliquer */
-	float ScrollArea(float& Scroll, float X, float Y, float W, float H, float ContentH);
+	/** v4.9 : defilement a la molette d'une zone (Scroll : position, en pixels a 1080p) ; renvoie le decalage a appliquer.
+	 *  v4.17 : X et W sont ceux de la colonne (rail et curseur a 10U de son bord droit, hors du texte) ; Zone : numero de la
+	 *  zone dans l'onglet (manette : PadScrollZone, PadScrollFocus) ; INDEX_NONE (par defaut) : la zone recoit toujours le
+	 *  defilement de la manette, comme avant */
+	float ScrollArea(float& Scroll, float X, float Y, float W, float H, float ContentH, int32 Zone = INDEX_NONE);
 	void DrawKeysTab(ABRPlayerController* PC);
 	void HandlePauseMouse(ABRPlayerController* PC);
 	FString ControlsLine(int32 Line) const;

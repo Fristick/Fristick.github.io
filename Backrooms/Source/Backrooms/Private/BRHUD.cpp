@@ -561,9 +561,10 @@ float ABRHUD::HudAlpha() const
 	return FMath::Clamp(FBRSettings::Get().HudOpacity, 0.4f, 1.f);
 }
 
-float ABRHUD::ScrollArea(float& Scroll, float X, float Y, float W, float H, float ContentH)
+float ABRHUD::ScrollArea(float& Scroll, float X, float Y, float W, float H, float ContentH, int32 Zone)
 {
-	// v4.9 : molette au-dessus de la zone ; position bornee au contenu ; reperes discrets s'il reste du texte cache
+	// v4.9 : molette au-dessus de la zone ; position bornee au contenu. v4.17 : rail et curseur proportionnel (avant : deux
+	// chevrons de 6U a 45 %, peu visibles), fondu du bas tant que du texte reste cache, cadre de la zone choisie a la manette
 	const float U = Ui();
 	const float MaxOffset = FMath::Max(0.f, ContentH - H);
 	if (PlayerOwner && Hover(X, Y, W, H))
@@ -577,22 +578,62 @@ float ABRHUD::ScrollArea(float& Scroll, float X, float Y, float W, float H, floa
 			Scroll -= 60.f;
 		}
 	}
-	// v4.16 : croix de la manette (PadInventory) : toutes les listes de l'onglet, chacune bornee a son contenu
-	Scroll += PadScroll;
+	// v4.16 : croix de la manette (PadInventory) : toutes les listes de l'onglet, chacune bornee a son contenu. v4.17 : la zone
+	// choisie seulement (PadScrollFocus) ; tant qu'aucune ne l'est, toutes, comme avant
+	if (PadScrollZone == INDEX_NONE || Zone == PadScrollZone)
+	{
+		Scroll += PadScroll;
+	}
+	if (Zone != INDEX_NONE)
+	{
+		ScrollZonesDrawn = FMath::Max(ScrollZonesDrawn, Zone + 1);
+		if (Zone == PadScrollZone)
+		{
+			RoundRect(X + 2.f * U, Y - 6.f * U, W - 4.f * U, H + 12.f * U, 8.f * U, WithAlpha(Yellow, 0.6f), true);
+		}
+	}
 	Scroll = FMath::Clamp(Scroll, 0.f, MaxOffset / FMath::Max(U, 0.01f));
 	const float Offset = Scroll * U;
-	const float AX = X + W - 14.f * U;
-	if (Offset > 1.f)
+	if (MaxOffset > 1.f)
 	{
-		DrawLine(AX - 6.f * U, Y + 8.f * U, AX, Y + 2.f * U, YellowDim, 2.f * U);
-		DrawLine(AX, Y + 2.f * U, AX + 6.f * U, Y + 8.f * U, YellowDim, 2.f * U);
-	}
-	if (Offset < MaxOffset - 1.f)
-	{
-		DrawLine(AX - 6.f * U, Y + H - 8.f * U, AX, Y + H - 2.f * U, YellowDim, 2.f * U);
-		DrawLine(AX, Y + H - 2.f * U, AX + 6.f * U, Y + H - 8.f * U, YellowDim, 2.f * U);
+		bScrollRoom = true;
+		// Rail de 3U a 15 % et curseur proportionnel d'au moins 28U a 60 %, a 10U du bord droit de la colonne
+		const float RailW = FMath::Max(2.f, FMath::RoundToFloat(3.f * U));
+		const float RailX = FMath::RoundToFloat(X + W - 10.f * U - RailW * 0.5f);
+		DrawRect(WithAlpha(Yellow, 0.15f), RailX, FMath::RoundToFloat(Y), RailW, FMath::RoundToFloat(H));
+		const float ThumbH = FMath::Min(H, FMath::Max(28.f * U, H * H / FMath::Max(ContentH, 1.f)));
+		const float ThumbY = Y + (H - ThumbH) * FMath::Clamp(Offset / MaxOffset, 0.f, 1.f);
+		DrawRect(WithAlpha(Yellow, 0.6f), RailX, FMath::RoundToFloat(ThumbY), RailW, FMath::RoundToFloat(ThumbH));
+		if (Offset < MaxOffset - 1.f)
+		{
+			// Fondu de 24U (au plus 20 % de la zone) sur le bas du texte, dessine apres lui (DrawInventory)
+			const float FadeH = FMath::Min(24.f * U, H * 0.2f);
+			ScrollFades.Add(FVector4f(X + 2.f * U, Y + H - FadeH, FMath::Max(0.f, RailX - 4.f * U - (X + 2.f * U)), FadeH));
+		}
 	}
 	return -Offset;
+}
+
+void ABRHUD::PadScrollFocus(int32 Step)
+{
+	// v4.17 : zones de la derniere image de l'inventaire ; la premiere demande choisit la premiere zone (ou la derniere)
+	const int32 Count = LastScrollZones;
+	if (Count <= 0 || Step == 0)
+	{
+		PadScrollZone = INDEX_NONE;
+		return;
+	}
+	PadScrollZone = PadScrollZone == INDEX_NONE ? (Step > 0 ? 0 : Count - 1) : ((PadScrollZone + Step) % Count + Count) % Count;
+	if (ABRCharacter* PadChar = PlayerOwner ? Cast<ABRCharacter>(PlayerOwner->GetPawn()) : nullptr)
+	{
+		PadChar->PlayUISound(TEXT("S_UIClick"), 0.35f);
+	}
+}
+
+void ABRHUD::PadScrollPixels(float Pixels)
+{
+	// v4.17 : applique par ScrollArea a la prochaine image de l'inventaire (PadInventory : pas fixe de 60 pixels)
+	PadScroll += Pixels;
 }
 
 void ABRHUD::Notify(const UObject* WorldContext, const FString& Text, float Duration, FLinearColor Color)
@@ -729,6 +770,7 @@ void ABRHUD::PadInventory(int32 TabStep, int32 ScrollStep, bool bHint)
 			}
 		}
 		Tab = Order[First + ((Cur + TabStep) % Count + Count) % Count];
+		PadScrollZone = INDEX_NONE; // v4.17 : nouvel onglet : toutes ses zones jusqu'au prochain choix
 		Inspecting = FSlotRef();
 		Dragging = FSlotRef();
 		if (PC)
@@ -1503,6 +1545,7 @@ void ABRHUD::DrawHUD()
 		Inspecting = FSlotRef();
 		HoverSlot = FSlotRef();
 		PadCursor = FSlotRef(); // v4.16 (relecture) : premiere case du sac a la prochaine ouverture
+		PadScrollZone = INDEX_NONE; // v4.17 : toutes les zones a la prochaine ouverture
 	}
 	bWasInventoryOpen = bInv;
 
@@ -4253,6 +4296,10 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	}
 	Buttons.Reset();
 	Slots.Reset();
+	// v4.17 : zones de defilement de cette image (manette : PadScrollFocus), texte cache, fondus a dessiner
+	ScrollZonesDrawn = 0;
+	bScrollRoom = false;
+	ScrollFades.Reset();
 
 	// Fond sombre teinte de jaune + lignes de balayage
 	DrawRect(FLinearColor(0.025f, 0.022f, 0.006f, 0.84f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
@@ -4284,6 +4331,7 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 		if (Wanted >= 0 && Wanted <= 4)
 		{
 			Tab = static_cast<ETab>(Wanted);
+			PadScrollZone = INDEX_NONE; // v4.17
 		}
 	}
 	if (!C && (Tab == ETab::Character || Tab == ETab::Journal || Tab == ETab::Notebook))
@@ -4341,6 +4389,18 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 		DrawKeysTab(PC);
 		break;
 	}
+	// v4.17 : fondus du bas des zones qui cachent encore du texte, par-dessus leurs dernieres lignes visibles
+	for (const FVector4f& Fade : ScrollFades)
+	{
+		Gradient(Fade.X, Fade.Y, Fade.Z, Fade.W, FLinearColor(0.03f, 0.026f, 0.01f, 0.9f), 3);
+	}
+	ScrollFades.Reset();
+	LastScrollZones = ScrollZonesDrawn;
+	bLastScrollRoom = bScrollRoom;
+	if (PadScrollZone >= LastScrollZones)
+	{
+		PadScrollZone = INDEX_NONE; // zone disparue (contenu change) : toutes les zones, comme avant
+	}
 	EndTestPanel(); // v4.16 (relecture, tests)
 
 	if (Inspecting.IsValid())
@@ -4383,9 +4443,14 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 	{
 		// v4.16 : manette : ses boutons dans l'inventaire (onglets, defilement, aide du carnet, fermeture) ; avant : les gestes
 		// de la souris seulement
-		FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadInventoryFooter", "[{Prev}] [{Next}]  ONGLETS     [{Up}] [{Down}]  FAIRE D\u00c9FILER     [{Close}]  FERMER"),
+		// v4.17 : l'invite FAIRE DEFILER seulement s'il reste du texte a faire defiler dans l'onglet (avant : toujours, meme quand
+		// rien ne defilait)
+		FootHints = bScrollRoom ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadInventoryFooter", "[{Prev}] [{Next}]  ONGLETS     [{Up}] [{Down}]  FAIRE D\u00c9FILER     [{Close}]  FERMER"),
 			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
 				{ TEXT("Up"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Up)) }, { TEXT("Down"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Down)) },
+				{ TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } })
+			: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadInventoryFooterNoScroll", "[{Prev}] [{Next}]  ONGLETS     [{Close}]  FERMER"),
+			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
 				{ TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
 		if (Tab == ETab::Notebook)
 		{
@@ -4887,7 +4952,7 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 			return Y - (Top + Offset);
 		};
 		const float ContentH = Layout(false, 0.f);
-		Layout(true, ScrollArea(ObjectiveScroll, LX, Top, LW, Bottom - Top, ContentH));
+		Layout(true, ScrollArea(ObjectiveScroll, LX, Top, LW, Bottom - Top, ContentH, 0));
 	}
 	EndTestPanel(); // v4.16 (relecture, tests) : fin du panneau OBJECTIFS
 	DrawStatusPanel(C, LX, IY + ObjH + 18.f * U, LW, StatusH);
@@ -5374,7 +5439,8 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 		}
 		const float Top = Y;
 		const float Bottom = IY + IH - 16.f * U;
-		float LY = Top + ScrollArea(JournalScroll[0], X, Top, ColWidth, Bottom - Top, ContentH);
+		// v4.17 : zone 0, colonne entiere (rail dans la marge du panneau)
+		float LY = Top + ScrollArea(JournalScroll[0], IX, Top, LW, Bottom - Top, ContentH, 0);
 		for (const TPair<FString, float>& L : NoteLines)
 		{
 			if (LY >= Top - 1.f && LY + SmallLH <= Bottom + 1.f)
@@ -5431,7 +5497,7 @@ void ABRHUD::DrawJournalTab(ABRCharacter* C, ABRWorld* W)
 		}
 		const float Top = Y;
 		const float Bottom = IY + IH - 16.f * U;
-		float LY = Top + ScrollArea(JournalScroll[1], RX, Top, RW, Bottom - Top, ContentH);
+		float LY = Top + ScrollArea(JournalScroll[1], RX, Top, RW, Bottom - Top, ContentH, 1); // v4.17 : zone 1
 		for (const FLine& L : Lines)
 		{
 			const float LH = L.bHeader ? HeadLH : SmallLH;
@@ -5591,7 +5657,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 			HintScroll = 0.f;
 		}
 	}
-	const float Offset = ScrollArea(HintScroll, HelpX, HelpY, HelpW, HelpH, ContentH);
+	const float Offset = ScrollArea(HintScroll, HelpX, HelpY, HelpW, HelpH, ContentH, 0);
 	LastHintBottom = 0.f; // mesure de cette image seulement (tests)
 	LastHintZoneTop = HelpY;
 	LastHintZoneBottom = HelpY + HelpH;
@@ -5689,6 +5755,7 @@ void ABRHUD::HandleInventoryMouse(ABRPlayerController* PC, ABRCharacter* C)
 				if (C || NewTab == ETab::Settings || NewTab == ETab::Keys) // carnet et personnage : seulement en jeu
 				{
 					Tab = NewTab;
+					PadScrollZone = INDEX_NONE; // v4.17
 				}
 				Inspecting = FSlotRef();
 				Dragging = FSlotRef();
@@ -6322,7 +6389,8 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		NotebookHintShown = HintLevel;
 		NotebookLeftScroll = HintStart >= 0.f ? FMath::Max(0.f, (HintStart - (LBottom - LTop) * 0.25f) / FMath::Max(U, 0.01f)) : 0.f;
 	}
-	float NY = LTop + ScrollArea(NotebookLeftScroll, X, LTop, ColWidth, LBottom - LTop, LeftH);
+	// v4.17 : zone 0, colonne entiere (rail dans la marge du panneau, hors des compteurs alignes a droite)
+	float NY = LTop + ScrollArea(NotebookLeftScroll, IX, LTop, LW, LBottom - LTop, LeftH, 0);
 	// v4.16 (relecture, tests) : defilement encore possible (le banc verifie que la croix bas fait defiler quand il en reste)
 	LastNotebookLeftRoom = FMath::Max(0.f, FMath::Max(0.f, LeftH - (LBottom - LTop)) / FMath::Max(U, 0.01f) - NotebookLeftScroll);
 	for (const FNoteLine& N : Left)
@@ -6367,6 +6435,8 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	{
 		FString Text;
 		bool bHeader;
+		/** v4.17 : ecart apres la ligne (fin d'un appareil) */
+		float After = 0.f;
 	};
 	TArray<FLine> Lines;
 	float ContentH = 0.f;
@@ -6377,7 +6447,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 	{
 		for (const FString& L : WrapF(Text, OW - 14.f * U, UiType::BodySmall, EUiWeight::Regular))
 		{
-			Lines.Add({ L, false });
+			Lines.Add({ L, false, 0.f });
 			ContentH += SmallLH;
 		}
 	};
@@ -6396,13 +6466,16 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		}
 		TArray<FString> ClueText;
 		BRMissionText::ClueLines(Clue, ClueText);
-		Lines.Add({ BRMissionText::DeviceName(Plan, D), true });
+		Lines.Add({ BRMissionText::DeviceName(Plan, D), true, 0.f });
 		ContentH += HeadLH;
 		for (const FString& T : ClueText)
 		{
 			AddWrapped(T);
 			++LastNotebookObservations;
 		}
+		// v4.17 : l'ecart de 8U entre deux appareils est dessine (avant : compte dans ContentH seulement, la fin de la liste
+		// etait trop basse de 8U par appareil)
+		Lines.Last().After = 8.f * U;
 		ContentH += 8.f * U;
 	}
 	// v4.13 : Level 6 : plaques des portes relevees par CE joueur au scan focalise (releve local, comme une photo)
@@ -6450,7 +6523,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		EndTestPanel(); // v4.16 (relecture, tests)
 		return;
 	}
-	float LY = Top + ScrollArea(NotebookScroll, OX, Top, OW, Bottom - Top, ContentH);
+	float LY = Top + ScrollArea(NotebookScroll, RX, Top, RW, Bottom - Top, ContentH, 1); // v4.17 : zone 1, colonne entiere
 	for (const FLine& L : Lines)
 	{
 		const float H = L.bHeader ? HeadLH : SmallLH;
@@ -6465,7 +6538,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 				TextLineF(L.Text, OX + 14.f * U, LY, OW - 14.f * U, Ink, UiType::BodySmall, EUiWeight::Regular);
 			}
 		}
-		LY += H + (L.bHeader ? 0.f : 0.f);
+		LY += H + L.After;
 	}
 	EndTestPanel(); // v4.16 (relecture, tests)
 }
