@@ -640,7 +640,9 @@ namespace
 		D.DeckHeight = 68.f; D.DeckWidth = 120.f; D.DeckStep = 34.f; D.DeckStepWidth = 40.f; D.DeckChance = 0.6f;
 		D.Floor = S(TEXT("T_PoolTile37"), C(1.f, 1.02f, 1.f), 100.f, 0.12f, 0.08f);
 		D.Wall = S(TEXT("T_PoolTile37"), C(1.02f, 1.02f, 1.f), 100.f, 0.1f, 0.1f);
-		D.Ceiling = S(TEXT("T_Plaster"), C(1.08f, 1.09f, 1.08f), 300.f, 0.55f, 0.05f);
+		// v4.17 : plafond en platre moins clair que le carrelage (1,08 avant : le plafond etait la surface la plus claire de
+		// l'image, 0,28 de mediane contre 0,11 pour les murs sur la pose de demi-tour)
+		D.Ceiling = S(TEXT("T_Plaster"), C(0.9f, 0.91f, 0.9f), 300.f, 0.55f, 0.05f);
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::SkyPanel;
 		D.LightChance = 0.6f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
@@ -656,8 +658,9 @@ namespace
 		D.WaterAbsorption = 1.f; D.WaterScattering = 0.22f;
 		D.WaterWaves = 0.3f; D.WaterChop = 0.35f;
 		D.PoolChance = 0.15f; D.PoolDepth = 260.f;
-		D.FogDensity = 0.012f; D.FogColor = C(0.66f, 0.73f, 0.71f);
-		D.ShadowTint = C(0.95f, 1.f, 1.02f); D.HighlightTint = C(1.02f, 1.02f, 1.f); D.VolumetricScatter = 0.5f;
+		// v4.17 : brume moins laiteuse dans les grandes salles (0,012 avant), formes lisibles au fond des couloirs
+		D.FogDensity = 0.009f; D.FogColor = C(0.66f, 0.73f, 0.71f);
+		D.ShadowTint = C(0.95f, 1.f, 1.02f); D.HighlightTint = C(1.02f, 1.02f, 1.f); D.VolumetricScatter = 0.4f; // v4.17 : 0,5 avant
 		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.4f;
 		D.MinEV = 3.f; D.MaxEV = 10.f;
 		D.AmbientSound = TEXT("S_Amb_Pool"); D.AmbientVolume = 0.7f;
