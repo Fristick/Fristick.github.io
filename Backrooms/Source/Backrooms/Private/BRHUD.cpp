@@ -5535,7 +5535,6 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		return;
 	}
 	const float U = Ui();
-	UFont* Medium = GEngine->GetMediumFont();
 	const float PanelW = FMath::Min(IW, 1760.f * U);
 	const float PanelX = IX + (IW - PanelW) * 0.5f;
 	Panel(PanelX, IY, PanelW, IH, BR_STR(NSLOCTEXT("BR", "HUD.Parametres", "PARAM\u00c8TRES")));
@@ -5546,13 +5545,16 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	SettingsCategory = FMath::Clamp(SettingsCategory, 0, 3);
 	float CatX = PanelX + 28.f * U;
 	const float CatY = IY + 52.f * U;
+	// v4.17 : pastilles en 11,5 points gras, texte centre verticalement (avant : 12 points a CatY + 6U, plus gros que les lignes)
+	const float CatPt = 11.5f;
+	const float CatTextH = TextSize(TEXT("Hg"), CatPt, EUiWeight::Bold).Y;
 	for (int32 c = 0; c < 4; ++c)
 	{
 		const bool bSel = SettingsCategory == c;
-		const float CW = TextSize(CatNames[c], 12.f, EUiWeight::Bold).X + 28.f * U;
+		const float CW = TextSize(CatNames[c], CatPt, EUiWeight::Bold).X + 28.f * U;
 		const bool bHovCat = Hover(CatX, CatY, CW, 32.f * U);
 		RoundRect(CatX, CatY, CW, 32.f * U, 6.f * U, bSel ? WithAlpha(Yellow, 0.9f) : FLinearColor(0.f, 0.f, 0.f, bHovCat ? 0.6f : 0.4f));
-		TextF(CatNames[c], CatX + CW * 0.5f, CatY + 6.f * U, bSel ? FLinearColor(0.05f, 0.04f, 0.01f) : (bHovCat ? Yellow : Ink), 12.f, EUiWeight::Bold, EUiAlign::Center, false);
+		TextF(CatNames[c], CatX + CW * 0.5f, CatY + (32.f * U - CatTextH) * 0.5f, bSel ? FLinearColor(0.05f, 0.04f, 0.01f) : (bHovCat ? Yellow : Ink), CatPt, EUiWeight::Bold, EUiAlign::Center, false);
 		AddButton(Btn_SettingCat + c, CatX, CatY, CW, 32.f * U);
 		CatX += CW + 12.f * U;
 	}
@@ -5587,8 +5589,10 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		const bool bHov = Hover(X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
 		if (bHov)
 		{
+			// v4.17 : jeton focus : fond jaune a 10 % et barre de 4U a gauche (avant : fond a 6 %, a peine visible)
 			HoverSetting = i;
-			DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.06f), X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
+			DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.1f), X + 10.f * U, Y, W - 20.f * U, RowH - 6.f * U);
+			DrawRect(Yellow, FMath::RoundToFloat(X + 10.f * U), FMath::RoundToFloat(Y), FMath::Max(2.f, FMath::RoundToFloat(4.f * U)), FMath::RoundToFloat(RowH - 6.f * U));
 		}
 		AddButton(Btn_SettingRow + i, X + 10.f * U, Y, W - 20.f * U - (ValueW + Btn * 2.f + 40.f * U), RowH - 6.f * U);
 		const float TY = Y + (RowH - 6.f * U - RowTextH) * 0.5f;
@@ -5604,8 +5608,20 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 		const bool bHovP = Hover(PX, BY, Btn, Btn);
 		Frame(MX, BY, Btn, Btn, bHovM ? Yellow : YellowDim, 1.f * U);
 		Frame(PX, BY, Btn, Btn, bHovP ? Yellow : YellowDim, 1.f * U);
-		Txt(TEXT("<"), MX + Btn * 0.5f, BY + 4.f * U, bHovM ? Yellow : Ink, 0.85f * U, Medium, true, false);
-		Txt(TEXT(">"), PX + Btn * 0.5f, BY + 4.f * U, bHovP ? Yellow : Ink, 0.85f * U, Medium, true, false);
+		// v4.17 : chevrons dessines en traits, centres dans leur case (avant : glyphes "<" et ">" a BY + 4U, hors du centre, et
+		// retournes vers la valeur en arabe par le miroir bidirectionnel des caracteres)
+		const float ChevH = 5.f * U;
+		const float ChevD = 4.f * U;
+		const float ChevT = FMath::Max(1.5f, 2.f * U);
+		const float MCX = MX + Btn * 0.5f;
+		const float PCX = PX + Btn * 0.5f;
+		const float CCY = BY + Btn * 0.5f;
+		const FLinearColor MCol = bHovM ? Yellow : Ink;
+		const FLinearColor PCol = bHovP ? Yellow : Ink;
+		DrawLine(MCX + ChevD * 0.5f, CCY - ChevH, MCX - ChevD * 0.5f, CCY, MCol, ChevT);
+		DrawLine(MCX - ChevD * 0.5f, CCY, MCX + ChevD * 0.5f, CCY + ChevH, MCol, ChevT);
+		DrawLine(PCX - ChevD * 0.5f, CCY - ChevH, PCX + ChevD * 0.5f, CCY, PCol, ChevT);
+		DrawLine(PCX + ChevD * 0.5f, CCY, PCX - ChevD * 0.5f, CCY + ChevH, PCol, ChevT);
 		TextFit(PC->GetSettingValue(i), MX + Btn + ValueW * 0.5f, TY, ValueW - 12.f * U, Yellow, UiType::Value, EUiWeight::Bold, EUiAlign::Center, false);
 		AddButton(Btn_SettingBase + i * 2, MX, BY, Btn, Btn);
 		AddButton(Btn_SettingBase + i * 2 + 1, PX, BY, Btn, Btn);
