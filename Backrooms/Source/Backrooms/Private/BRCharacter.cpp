@@ -3811,11 +3811,21 @@ namespace
 		float Ground[2] = { 0.f, 0.f };
 		float FootLift[2] = { 0.f, 0.f };
 		float PelvisDrop = 0.f;
+		/** Derniere pose, pour les tests (BRRig::GetBodyPoseInfo) */
+		float LastYawOff = 0.f;
+		float LastWalkDrop = 0.f;
+		FVector FootWorld[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	};
+
+	TMap<const ABRCharacter*, FBRBodyPoseState>& BRBodyPoseStates()
+	{
+		static TMap<const ABRCharacter*, FBRBodyPoseState> States;
+		return States;
+	}
 
 	FBRBodyPoseState& BRBodyPoseStateOf(const ABRCharacter* C)
 	{
-		static TMap<const ABRCharacter*, FBRBodyPoseState> States;
+		TMap<const ABRCharacter*, FBRBodyPoseState>& States = BRBodyPoseStates();
 		if (States.Num() > 16)
 		{
 			// Personnages detruits (fin de partie, deconnexion) : leur etat part
@@ -3836,6 +3846,28 @@ namespace
 		}
 		return S;
 	}
+}
+
+bool BRRig::GetBodyPoseInfo(const AActor* Character, FBRBodyPoseInfo& Out)
+{
+	// v4.17 (animation, tests) : lecture seule de la derniere pose calculee par ABRCharacter::AnimateBody
+	const ABRCharacter* C = Cast<ABRCharacter>(Character);
+	const FBRBodyPoseState* S = C ? BRBodyPoseStates().Find(C) : nullptr;
+	if (!S || !S->bInit || S->Owner.Get() != C)
+	{
+		return false;
+	}
+	Out.LowerYaw = S->LowerYaw;
+	Out.YawOffset = S->LastYawOff;
+	Out.TurnStep = S->TurnStep;
+	Out.PelvisDrop = -S->PelvisDrop;
+	Out.WalkDrop = S->LastWalkDrop;
+	for (int32 i = 0; i < 2; ++i)
+	{
+		Out.FootGround[i] = S->Ground[i];
+		Out.FootWorld[i] = S->FootWorld[i];
+	}
+	return true;
 }
 
 void ABRCharacter::AnimateBody(float Dt)
@@ -4006,6 +4038,15 @@ void ABRCharacter::AnimateBody(float Dt)
 		}
 	}
 	WalkDrop *= LegW;
+	// Pour les tests (BRRig::GetBodyPoseInfo) : derniere pose et pieds estimes (geometrie de la foulee, au sol sous chaque pied)
+	Gs.LastYawOff = YawOff;
+	Gs.LastWalkDrop = WalkDrop;
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const float Theta = FMath::DegreesToRadians(StrideDeg * FMath::Sin(BodyAnim + (i == 0 ? 0.f : PI)));
+		Gs.FootWorld[i] = Here + LowerRight * Spec.Hip[i].Y + LowerFwd * static_cast<double>(LegL * FMath::Sin(Theta));
+		Gs.FootWorld[i].Z = static_cast<double>(FloorZ + Gs.Ground[i]);
+	}
 
 	FRotator Thigh[2], Shin[2], Upper[2], Lower[2];
 	for (int32 i = 0; i < 2; ++i)
