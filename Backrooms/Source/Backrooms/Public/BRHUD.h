@@ -75,6 +75,35 @@ public:
 	int32 GetScrollZoneCount() const { return LastScrollZones; }
 	bool HadScrollRoom() const { return bLastScrollRoom; }
 
+	/** v4.17 (C7, a brancher : Y dans PERSONNAGE) : deplacer un objet a la manette. Premier appui : prend l'objet de la case du
+	 *  curseur (meme etat qu'un glisser commence a la souris : case source estompee, objet porte dessine sur la case du
+	 *  curseur) ; la croix deplace le curseur ; second appui : pose l'objet sur la case du curseur par les regles du
+	 *  glisser-deposer (ABRCharacter::MoveItem : echange, pile, equipement) ; sur sa case de depart : le port est annule ;
+	 *  emplacement refuse : l'objet reste porte et la case refuse (rouge, son). Case vide : refus. false (rien de fait) hors de
+	 *  PERSONNAGE, sans personnage ou pendant une inspection : Y garde son role ailleurs (aide du carnet). A pendant un port
+	 *  pose aussi l'objet (PadSlotAction) */
+	bool PadCarry();
+	/** v4.17 (C7, B pendant un port) : annule le port (l'objet reste dans sa case), l'inventaire reste ouvert ; false : aucun
+	 *  port en cours. PadBack l'appelle en premier : B, deja branche sur PadBack, annule donc le port sans autre changement */
+	bool PadCancelCarry();
+	/** v4.17 (C7) : un objet est porte a la manette */
+	bool IsPadCarrying() const { return bPadCarrying && Dragging.IsValid(); }
+	/** v4.17 (C6, a brancher : croix haut / bas dans PARAMETRES) : ligne suivante (DY > 0) ou precedente, bouclee dans la
+	 *  categorie ; le premier appui choisit la premiere (ou la derniere) ligne. Ligne choisie : barre de focus, fond jaune a
+	 *  10 %, son aide affichee comme au survol. false (rien de fait) hors de PARAMETRES */
+	bool PadSettingsMove(int32 DY);
+	/** v4.17 (C6, croix gauche / droite) : regle la ligne choisie d'un cran (DX < 0 : moins, > 0 : plus) par
+	 *  ABRPlayerController::AdjustSetting, appele pendant le dessin suivant comme un clic sur les fleches ; sans ligne choisie :
+	 *  choisit la premiere. false hors de PARAMETRES */
+	bool PadSettingsAdjust(int32 DX);
+	/** v4.17 (C6, A) : meme effet qu'un clic sur la ligne choisie (AdjustSetting(ligne, +1)) ; false hors de PARAMETRES */
+	bool PadSettingsActivate();
+	/** v4.17 (C6, LT / RT) : categorie precedente ou suivante (JEU, VIDEO, INTERFACE, GRAPHISMES, bouclee), curseur sur sa
+	 *  premiere ligne ; false hors de PARAMETRES */
+	bool PadSettingsCategory(int32 Step);
+	/** v4.17 (tests) : ligne choisie a la manette (indice de reglage d'ABRPlayerController ; INDEX_NONE : aucune) */
+	int32 GetPadSetting() const { return SettingsPadRow; }
+
 private:
 	/** v4.16 (tests, -BRAutoTestV416Visual) : releve des textes dessines pendant une image (bTestRecordTexts) : rectangle
 	 *  (X, Y, largeur, hauteur), panneau en cours (Panel ; inventaire : sa bande), largeur permise par l'appelant (TextFit,
@@ -370,6 +399,8 @@ private:
 	 *  refus (cadre rouge pendant 150 ms, son de refus) */
 	FSlotRef DenySlot;
 	float DenyAt = -100.f;
+	/** v4.17 (C7) : l'objet porte (Dragging) a ete pris a la manette (PadCarry) : il suit le curseur, pas la souris */
+	bool bPadCarrying = false;
 	const FSlotBox* SlotBoxOf(const FSlotRef& Ref) const;
 	/** Le curseur de la manette remplace la souris (manette en dernier, onglet PERSONNAGE, pas d'inspection ouverte) */
 	bool UsesPadCursor(const ABRCharacter* C) const;
@@ -378,6 +409,15 @@ private:
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	int32 HoverSetting = INDEX_NONE;
+	/** v4.17 (C6) : ligne des PARAMETRES sous le curseur de la manette (indice de reglage d'ABRPlayerController, pas rang a
+	 *  l'ecran) ; INDEX_NONE : aucune. Dessinee quand la manette a servi en dernier et que la ligne est dans la categorie */
+	int32 SettingsPadRow = INDEX_NONE;
+	/** v4.17 (C6) : reglage demande a la manette (indice, sens), applique pendant le dessin suivant, au meme endroit qu'un
+	 *  clic (HandleInventoryMouse) ; INDEX_NONE : aucun */
+	int32 PadAdjustRow = INDEX_NONE;
+	int32 PadAdjustDir = 0;
+	/** v4.17 (C6) : lignes de la categorie ouverte des PARAMETRES (indices de reglage, dans l'ordre du dessin) */
+	void SettingsRowsOf(const ABRPlayerController* PC, TArray<int32>& Out) const;
 	/** v4.10 : aide des parametres : ligne dont l'aide est montree (gardee quand la souris passe sur la zone d'aide),
 	 *  texte montre, defilement (molette ou automatique), lignes du dernier texte et lignes visibles (tests) */
 	int32 HintSetting = INDEX_NONE;
