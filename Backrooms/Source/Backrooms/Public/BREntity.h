@@ -103,6 +103,20 @@ public:
 	bool IsScaring() const { return bScareOverride; }
 	USceneComponent* GetVisual() const { return Visual; }
 
+	/** v4.17 (animation, tests, lecture seule) : appuis visibles du modele en coordonnees monde : pieds des jambes articulees
+	 *  (dans l'ordre des membres), puis appuis du corps rigide (BodyContacts), puis griffe la plus basse de chaque bras-bequille.
+	 *  Glissement d'un appui = son deplacement d'une image a l'autre tant qu'il est a moins de 2 cm de GetSupportGroundZ */
+	void GetSupportPoints(TArray<FVector>& OutWorld) const;
+	/** v4.17 (animation, tests) : sol de reference des appuis (bas de la capsule, cm) */
+	float GetSupportGroundZ() const;
+	/** v4.17 (animation, tests) : ecart horizontal entre le modele affiche et la capsule (cm), lacet du modele affiche (deg) */
+	float GetVisualLag() const;
+	float GetVisualYaw() const;
+	/** v4.17 (animation, tests) : Bacteria : allure portee (0 : posee, avance par bonds ; 1 : course portee par les bras) */
+	float GetSupportRun() const { return SupportRun; }
+	/** v4.17 (animation, tests) : Bacteria : un bond est en cours (le pied a quitte le sol) */
+	bool IsHopping() const { return HopT >= 0.f; }
+
 protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USceneComponent> Visual;
@@ -478,4 +492,44 @@ private:
 	FTransform ScareTM;
 	FTransform ScareSavedRel;
 	TWeakObjectPtr<ABRWorld> World;
+
+	// ---- v4.17 (animation) : Bacteria posee au sol (corps et jambes d'une seule piece rigide, modele protege). Pose locale,
+	// calculee chez chacun a partir de la vitesse et de la rotation repliquees : rien n'est replique, la capsule decide seule
+	// des deplacements et des coups ; l'ecart du modele affiche a la capsule reste borne
+	/** Un bras-bequille : griffe posee au monde, ou levee (Swing 0..1) entre deux appuis ; repliement pres d'un mur */
+	struct FCrutchArm
+	{
+		bool bPlanted = false;
+		FVector Planted = FVector::ZeroVector;   // monde
+		FVector SwingFrom = FVector::ZeroVector;
+		float Swing = -1.f;
+		/** Roulis vers le corps (degres) pour ne pas entrer dans un mur ou un chambranle, et sa cible (rayon lateral) */
+		float Fold = 0.f;
+		float FoldWant = 0.f;
+	};
+	FCrutchArm CrutchArms[2];
+	bool bSupportInit = false;
+	/** Origine du modele au sol (monde) et lacet affiche : tenus tant qu'elle est posee, rattrapes par les bonds */
+	FVector SupportPos = FVector::ZeroVector;
+	float SupportYaw = 0.f;
+	/** Bond en cours (0..1), -1 : posee ; depart, duree et hauteur du bond ; temps a l'arret avec un ecart a rattraper */
+	float HopT = -1.f;
+	FVector HopFromPos = FVector::ZeroVector;
+	float HopFromYaw = 0.f;
+	float HopDuration = 0.2f;
+	float HopHeight = 3.f;
+	float HopSettle = 0.f;
+	/** Hochement a la reception (1 -> 0) ; reception non encore entendue (UpdateFootsteps) */
+	float LandNod = 0.f;
+	bool bHopLanded = false;
+	/** Vitesse lissee (montee rapide, descente lente) et allure : 0 posee et bonds, 1 course portee par les bras */
+	float SupportSpeed = 0.f;
+	float SupportRun = 0.f;
+	float FoldTimer = 0.f;
+	/** Place le modele (position, lacet, tangage) et pose les griffes ; apres AnimateLimbs, avant KeepRigidPartsAboveGround */
+	void AnimateBacteriaGait(float Dt);
+	/** Rotation (repere du Visual) d'un bras rigide dont la griffe TipLocal (repere du pivot) vise WorldPoint */
+	FQuat AimRigidArm(const FLimb& L, const FVector& TipLocal, const FVector& WorldPoint) const;
+	/** Point d'appui le plus bas d'une piece rigide (repere du pivot) */
+	static FVector LowestContact(const FLimb& L);
 };
