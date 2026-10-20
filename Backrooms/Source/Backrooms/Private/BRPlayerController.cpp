@@ -793,7 +793,10 @@ namespace BRPadInput
 	}
 
 	/** v4.16 (relecture) : croix de la manette dans l'inventaire (ABRHUD::PadDirection : curseur des cases dans PERSONNAGE,
-	 *  onglets et defilement ailleurs) */
+	 *  onglets et defilement ailleurs). v4.17 (interface, agent UI Designer : Docs/v417/agents/interface.md, C8) : dans un
+	 *  onglet a deux colonnes (CARNET, JOURNAL), gauche / droite choisit la colonne (LB / RB restent les onglets) ; haut /
+	 *  bas fait defiler la colonne choisie (ou toutes) d'une ligne du carnet (ABRHUD::PadScrollLine) au lieu de 60 px pour
+	 *  toutes les zones ; PERSONNAGE et les onglets d'une colonne gardent l'action d'avant */
 	bool Direction(ABRPlayerController* PC, bool bOpen, const FKey& Key, int32 DX, int32 DY)
 	{
 		if (!bOpen || !PC->IsInputKeyDown(Key))
@@ -802,7 +805,11 @@ namespace BRPadInput
 		}
 		if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
 		{
-			H->PadDirection(DX, DY);
+			const bool bDone = DX != 0 ? H->PadScrollFocus(DX) : (DY != 0 && H->PadScrollLines(DY));
+			if (!bDone)
+			{
+				H->PadDirection(DX, DY);
+			}
 		}
 		return true;
 	}
@@ -1225,6 +1232,18 @@ void ABRPlayerController::OnLook(const FInputActionValue& Value)
 
 void ABRPlayerController::OnLookPad(const FInputActionValue& Value)
 {
+	// v4.17 (interface, C8) : inventaire ouvert : le stick droit vertical fait defiler la colonne choisie (ou toutes), environ
+	// 900 px/s a 1080 lignes, vers le haut quand le stick monte (non essaye avec une vraie manette)
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE)
+	{
+		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
+		{
+			const FVector2D V = Value.Get<FVector2D>();
+			const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
+			H->PadScrollPixels(-V.Y * 900.f * Dt);
+		}
+		return;
+	}
 	if (!CanPlay())
 	{
 		return;
