@@ -6,8 +6,8 @@ intacte ; aucune branche distante suivie).
 | | |
 |---|---|
 | **Base** | `aada32b` (v4.15, 17 octobre 2026, 18:39:55 à Paris), base auditée par le prompt v4.16 |
-| **Tête** | `b5d8c4c` (20 octobre, 08:15). Dernier changement du comportement du jeu : `a04a3bb` (01:51) ; ensuite `0ebb8f7` (une fonction de lecture pour le test du chapitre), `6d39fe8` (documents), `b5d8c4c` (marche des tests et un outil Python) |
-| **Passages finaux** | `6d39fe8` : suites du jeu `final416`, test complet rejoué `final416b`, test réseau `fnet_*`, contrôles hors moteur ; `b5d8c4c` : `final416c` en cours (§ 3, § 7) ; paquet Shipping : manifeste `b5d8c4c` (§ 5) |
+| **Tête** | dernier code `b5d8c4c` (20 octobre, 08:15) ; puis `4bc75ad` et le commit de ce rapport (documents seulement). Dernier changement du comportement du jeu : `a04a3bb` (01:51) ; ensuite `0ebb8f7` (une fonction de lecture pour le test du chapitre), `6d39fe8` (documents), `b5d8c4c` (marche des tests et un outil Python) |
+| **Passages finaux** | `6d39fe8` : suites du jeu `final416`, test complet rejoué `final416b`, test réseau `fnet_*`, contrôles hors moteur ; `b5d8c4c` : `final416c` (v412, v415fix, chapitre en un lancement et en trois phases, test complet : 0 problème) ; `4bc75ad` (documents seulement) : réseau `fnet_v416lidar`, mesures sur deux graines `seeds_cine_mode1` / `seeds_cine_mode2` et `seeds_all_final` (§ 4, § 6.2 bis) ; paquet Shipping : manifeste `b5d8c4c` (§ 5) |
 | **Journaux** | [`Docs/v416/`](v416/) : [`correctifs_lumiere.txt`](v416/correctifs_lumiere.txt), [`banc_lumiere.txt`](v416/banc_lumiere.txt), [`correctifs_net.txt`](v416/correctifs_net.txt), [`correctifs_ship.txt`](v416/correctifs_ship.txt), [`perf_mesures.txt`](v416/perf_mesures.txt) ; résultats (hors dépôt) : `Saved/TestRuns/autotest/<étiquette>/`, `Saved/TestRuns/perf/`, `Saved/TestRuns/v416/final/` ; relectures : `Saved/TestRuns/v416/reviews/*.json` |
 | **Versions** | jeu `v4.16`, `ProjectVersion=4.16.0.0`, protocole réseau **416** (un client 4.15 est refusé) ; sauvegarde au format 6, inchangé |
 | **Demande** | prompt v4.16 (« fiabiliser et finaliser la branche v4.15 »), § 3 à 11 |
@@ -56,8 +56,10 @@ absente du moteur installé) et macOS ; une vraie manette, un second PC, quatre 
 plein écran exclusif ; la vue d'un coéquipier chez un client ; la montée d'une échelle depuis le canal par une personne
 (l'essai automatique, entrées injectées, a réussi) ; l'équilibrage de la lumière en partie réelle.
 
-**En cours à la rédaction** : `final416c` (v412, v415fix, chapitre en un lancement et en trois phases, test complet,
-sur `b5d8c4c`) ; voir § 3 et § 7.
+**Dernier passage** (`final416c`, `b5d8c4c`) : v412, chapitre en un lancement et en trois phases et test complet
+réussis, 0 problème ; v415fix 0 problème, 1 non vérifié (couloir sombre du Smiler). Dans la traversée du chapitre, un
+Smiler collé au joueur au Level 2 a été écarté par le test (correction T9) et la mission résolue. Réseau du scanner
+relancé sur `4bc75ad` : 0 problème. Gain du mode 2 de Lumen confirmé sur deux graines par scène (§ 6.2 bis).
 
 **Machine des essais** : Windows 11 Famille 10.0.26200, Intel Core i7-13620H, 16 Go, **NVIDIA GeForce RTX 5050 Laptop
 GPU** (pilote 610.88 ; écran sur l'Intel UHD, 1536 × 960), Unreal Engine 5.8.3 (CL 58210709), Visual Studio 2026
@@ -224,8 +226,9 @@ test) ; **correction validée en jeu**.
     scanner 0,081 ms par image (processeur ; le coût de rendu des instances n'est pas un poste mesuré) ;
   - passages antérieurs : `v416a` (`822d39f`, échec d'un défaut du test, corrigé par `2e78cbe`), `v416b` (`2e78cbe`) et
     `v416c` (`425eb01`) réussis ; réseau avec `-BRAutoTestV416Lidar` : `net_v416lidar` (`822d39f`) : 0 problème chez
-    l'hôte et le client, même plan `20b45d7c`, 82 / 82 sur la plaque actuelle des deux côtés ; **non relancé sur le commit
-    final** (le client tardif en mission LiDAR, `fnet_lidar`, l'a été : § 4).
+    l'hôte et le client, même plan `20b45d7c`, 82 / 82 sur la plaque actuelle des deux côtés ; **relancé sur `4bc75ad`**
+    (`fnet_v416lidar`, code du jeu de `b5d8c4c`) : 0 problème chez l'hôte et le client (le client tardif en mission
+    LiDAR, `fnet_lidar`, aussi : § 4).
 - **Après la fusion** : la boîte d'interaction de la porte de service ouverte coupait aussi le scanner (défaut J5,
   § 2.9).
 - **Relecture** (`reviews/lidar.json`, 3 constats, corrigés par `2e78cbe` et `425eb01`). La boîte des cages n'a pas
@@ -464,7 +467,7 @@ Passage final `final416` : commit `6d39fe8`, 20 octobre de 02:10 (début) à 05:
 | `visual` | `-BRAutoTest -BRAutoTestVisual` | réussi | réussi | — |
 | `full` | `-BRAutoTest -BRAutoTestStrict -BRSeed=4242` | échec, 1 (img/s des fosses), 6 non vérifiés | **échec, 2 problèmes**, 7 non vérifiés : marche du test bloquée par un Smiler au Niveau 2 et sa conséquence (défaut du test T9) | les 6 de `final416b` ; Niveau 2 : sortie non testée (mission non résolue à pied) |
 | `final416b/full` | test complet rejoué, même commit `6d39fe8` | — | **0 problème**, 6 non vérifiés ; accès par déplacement réel 5 niveaux sur 5 | un seul écran (2) ; volume général (fil audio) ; perte du focus ; 144 et 240 img/s non atteintes |
-| `final416c` : `v412`, `v415fix`, `chapitre`, `chapitre1` à `3`, `full` | mêmes drapeaux, commit `b5d8c4c` | — | final416c : A REMPLIR (en cours) | |
+| `final416c` : `v412`, `v415fix`, `chapitre`, `chapitre1` à `3`, `full` | mêmes drapeaux, commit `b5d8c4c` | — | **v412, chapitre (un lancement), chapitre1, chapitre2, chapitre3 : réussis, 0 problème, 0 non vérifié** ; `full` : 0 problème, 6 non vérifiés ; `v415fix` : 0 problème, 1 non vérifié. Chapitre : Niveau 2, vanne V1 atteinte, « 1 entité(s) écartée(s) par le test (Smilers …) », mission résolue | `full` : les 6 de `final416b` ; `v415fix` : aucun couloir droit et sombre pour la marche avec un Smiler |
 
 Dans le paquet Shipping (`b5d8c4c`, § 5) : test de démarrage réussi ; chapitre en trois phases : 0 problème, 0 non
 vérifié chacune.
@@ -575,8 +578,9 @@ pas.
 Toutes les mesures : RTX 5050 Laptop (pilote 610.88), i7-13620H, fenêtre **1366 × 768**, `-BRAutoTestPerf`, graines
 de référence (une par scène), mesures instables ou sans scénario exclues (aucune ici). **Aucune mesure sur la machine
 de référence (RTX 4080 + 7800X3D).** Les chiffres de la v4.15 (fosses à 21–22 img/s en Cinématique) venaient d'une
-fenêtre de 1536 × 960 : ils ne se comparent pas à ceux-ci. **Plusieurs graines par scène : non mesuré** (la série
-`base_v416_graines` prévue n'a pas été lancée).
+fenêtre de 1536 × 960 : ils ne se comparent pas à ceux-ci. Plusieurs graines : le profil Cinématique (le seul que le
+changement de rendu touche) est mesuré sur deux graines par scène, ancien et nouveau mode, sur le même binaire (§ 6.2 bis) ;
+les autres profils sur une seconde graine (`seeds_all_final`, 1 exécution, pour mémoire).
 
 ### 6.1 Base v4.16, profils sans changement (`perf/base_v416`, 3 exécutions)
 
@@ -617,6 +621,27 @@ Rendu interne 1366 × 768 (100 %) des deux côtés ; `hl2_cine` mesuré sur `2a3
 
 Fosses : 28,8 → 39,8 img/s ; aucune image au-delà de 100 ms avant comme après. Dans le test `pits` du passage final
 (`6d39fe8`, autre test, même fenêtre) : Cinématique 38 img/s, médiane 25,9 ms.
+
+### 6.2 bis Deux graines par scène, même binaire (`seeds_cine_mode1` → `seeds_cine_mode2`, commit `4bc75ad`)
+
+Ancien mode rendu par `-BRPerfCmds="r.Lumen.HardwareRayTracing.LightingMode 1"` (appliqué après le profil), nouveau mode
+par défaut ; graines `0` et `4242` du banc, 2 exécutions par graine et par mode, arbre propre ; résumé
+`perf/cmp_seeds_cine_parseed.md` (`perf_summary.py --by-seed`).
+
+| Scène | Graine du niveau | Médiane (ms) | 95 % | Pire 99 % | > 33 ms ‰ | GPU (ms) |
+|---|---|---|---|---|---|---|
+| fosses | 1896875771 | 34,02 → **24,77** (−27,2 %) | −9,08 | −8,69 | 619,3 → 0,0 | −8,91 |
+| fosses | 2271519799 | 33,37 → **24,01** (−28,0 %) | −9,59 | −10,54 | 512,5 → 1,2 | −9,11 |
+| bassins | 178662963 | 38,54 → **31,06** (−19,4 %) | −7,37 | −8,14 | 942,4 → 172,4 | −7,18 |
+| bassins | 2772684265 | 40,28 → **31,61** (−21,5 %) | −8,00 | −6,96 | 994,0 → 247,6 | −8,47 |
+| marche0 | 1896875771 | 31,22 → **24,79** (−20,6 %) | −8,00 | −8,90 | 251,4 → 1,2 | −6,22 |
+| marche0 | 2271519799 | 33,01 → **25,31** (−23,3 %) | −10,75 | −12,75 | 461,5 → 0,0 | −7,40 |
+| marche1 | 814216900 (les deux graines du banc donnent ce niveau) | 29,94 → **25,45** (−15,0 %) | −6,28 | −6,81 | 141,8 → 2,2 | −4,32 |
+| lidar6 | 229355065 | 21,82 → **19,15** (−12,2 %) | −3,43 | −3,40 | 0 → 0 | −2,68 |
+| lidar6 | 2702236446 | 21,61 → **18,97** (−12,2 %) | −3,36 | −5,54 | 2,7 → 0 | −2,71 |
+
+Le gain ne dépend pas de la graine (écart entre graines de la même scène : au plus 2 points). Les bassins restent la
+scène la plus lourde en Cinématique (≈ 31 ms, 32 img/s sur cette machine).
 
 ### 6.3 Coût dominant (relevés ProfileGPU de `base_v416`)
 
@@ -688,7 +713,13 @@ de rendu du scanner (ordre du prompt § 7) : **mesurés, pas optimisés**.
 - compilation de l'éditeur (0 avertissement), `run_benches` 12 × 3, `verify_device_clearance`, `verify_pitfalls`,
   `verify_walk_block` (message du commit) ;
 - le paquet Shipping et sa traversée du chapitre (manifeste `b5d8c4c`, § 5) ;
-- final416c : A REMPLIR (en cours)
+- `final416c` : v412, chapitre en un lancement, chapitre1, chapitre2, chapitre3 réussis (0 problème, 0 non vérifié) ;
+  `full` 0 problème, 6 non vérifiés ; `v415fix` 0 problème, 1 non vérifié.
+
+**Sur `4bc75ad`** (documents seulement ; code du jeu de `b5d8c4c`) :
+
+- `fnet_v416lidar` : test réseau avec `-BRAutoTestV416Lidar` : 0 problème chez l'hôte et le client ;
+- mesures `seeds_cine_mode1`, `seeds_cine_mode2` (Cinématique, deux graines, deux modes) et `seeds_all_final` (§ 6.2 bis).
 
 **Sur un commit antérieur** :
 
@@ -698,7 +729,7 @@ de rendu du scanner (ordre du prompt § 7) : **mesurés, pas optimisés**.
   ensuite ;
 - comparaison des modes de Lumen `hlcmpc` : rapports du 20 octobre, 01:08 et 01:12, après `013541a` ;
 - scanner : `v416a` (`822d39f`), `v416b` (`2e78cbe`), `v416c` (`425eb01`) en solo, remplacés par `final416/v416lidar` ;
-  `net_v416lidar` (`822d39f`), test réseau avec `-BRAutoTestV416Lidar`, **pas relancé sur le commit final** ;
+  `net_v416lidar` (`822d39f`), test réseau avec `-BRAutoTestV416Lidar`, relancé depuis sur `4bc75ad` ;
 - passages intermédiaires qui ont montré les défauts du § 2.9 : `v416m1` (`600dc94`), `v416m2` (`b1b19d3`), `v416m3`,
   `v416m4`, `v416chap` (binaires de `45c6562`), `v416chap2`, `net416_*` (`45c6562`), `net416b_*` : preuves de l'« avant »,
   pas des validations ;
@@ -706,16 +737,16 @@ de rendu du scanner (ordre du prompt § 7) : **mesurés, pas optimisés**.
 
 **Restant à faire** :
 
-- relever `final416c` (orchestrateur) ;
-- le test réseau avec `-BRAutoTestV416Lidar` sur le commit final ;
-- les mesures sur plusieurs graines (`base_v416_graines`), et toute optimisation des fosses, des Poolrooms, du streaming
-  et du rendu du scanner ;
+- une optimisation au-delà du mode de Lumen : en RTX fluide aucun poste ne domine aux Poolrooms (≈ 90 img/s ici), le
+  streaming et le scanner restent dans leur budget, et les deux essais du § 6.5 n'ont rien gagné ; rien n'est mesuré à
+  1440p ni sur la machine de référence ;
 - le jugement à l'œil des captures du banc visuel et des planches `hlcmpc` ;
 - le refus d'un autre plan de test par le paquet Shipping, à la main ;
 - la traversée manuelle d'une échelle depuis le canal, par une personne ;
 - les essais sur le matériel absent et la machine de référence (§ 8) ; Linux après installation de la plateforme ;
 - la décision d'équilibrage de la lumière (§ 9) ;
-- aucun `GAMEPLAY_v4.16.md` n'a été écrit : les changements pour le joueur sont décrits dans ce rapport et le README.
+- [`GAMEPLAY_v4.16.md`](GAMEPLAY_v4.16.md) décrit les changements pour le joueur (écrit après ce rapport, à partir de
+  lui).
 
 ## 8. Ce qui n'est pas vérifié
 
@@ -736,7 +767,7 @@ de rendu du scanner (ordre du prompt § 7) : **mesurés, pas optimisés**.
   physique seule cache 152 paires sur 6646, § 2.1) ; plafonnier derrière une vraie porte de mission (crochet de test seulement) ; Niveau 9 hors
   du banc ; équilibrage en partie réelle (§ 9).
 - **Scanner** : coût de rendu des instances sur le GPU ; boîte de visée des cages (pas d'étape dédiée) ; débit à 144 et
-  240 img/s ; scanner en réseau sur le commit final (`net_v416lidar` antérieur).
+  240 img/s.
 - **Coopération** : chemin du défaut 7 (personnage reçu après le fondu) jamais emprunté ; latence et pertes réelles
   (simulées par le moteur seulement).
 - **Visée** : le cas exact de la graine 3053711763 (vanne B) n'a été rejoué que hors moteur ; la visée entre voisins
