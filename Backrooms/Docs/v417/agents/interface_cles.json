@@ -1,0 +1,35 @@
+{
+  "version": "4.17",
+  "auteur": "agent UI Designer (branche v417-ui)",
+  "note": "Nouvelles cles de texte de l'interface v4.17 (NSLOCTEXT \"BR\"). A reporter dans les catalogues Game.po par l'orchestrateur (Tools/Localization/loc_extract.py). Arguments {Prev}, {Next}, {Close} : noms des boutons LB, RB, B.",
+  "cles": [
+    {
+      "cle": "HUD.PadInventoryFooterNoScroll",
+      "espace": "BR",
+      "ou": "Source/Backrooms/Private/BRHUD.cpp, ABRHUD::DrawInventory : pied de l'inventaire a la manette (onglets autres que PERSONNAGE) quand aucune zone de l'onglet n'a de texte a faire defiler",
+      "derivee_de": "HUD.PadInventoryFooter (meme texte sans le segment [{Up}] [{Down}] FAIRE DEFILER) : termes repris tels quels de chaque catalogue",
+      "fr": "[{Prev}] [{Next}]  ONGLETS     [{Close}]  FERMER",
+      "en": "[{Prev}] [{Next}]  TABS     [{Close}]  CLOSE",
+      "de": "[{Prev}] [{Next}]  REITER     [{Close}]  SCHLIESSEN",
+      "es-ES": "[{Prev}] [{Next}]  PESTAÑAS     [{Close}]  CERRAR",
+      "pt-BR": "[{Prev}] [{Next}]  ABAS     [{Close}]  FECHAR",
+      "ru": "[{Prev}] [{Next}]  ВКЛАДКИ     [{Close}]  ЗАКРЫТЬ",
+      "it": "[{Prev}] [{Next}]  SCHEDE     [{Close}]  CHIUDI",
+      "tr": "[{Prev}] [{Next}]  SEKMELER     [{Close}]  KAPAT",
+      "es-419": "[{Prev}] [{Next}]  PESTAÑAS     [{Close}]  CERRAR",
+      "pl": "[{Prev}] [{Next}]  KARTY     [{Close}]  ZAMKNIJ",
+      "zh-Hans": "[{Prev}] [{Next}]  切换标签     [{Close}]  关闭",
+      "uk": "[{Prev}] [{Next}]  ВКЛАДКИ     [{Close}]  ЗАКРИТИ",
+      "ar": "[{Prev}] [{Next}]  التبويبات     [{Close}]  إغلاق",
+      "ko": "[{Prev}] [{Next}]  탭     [{Close}]  닫기",
+      "fa": "[{Prev}] [{Next}]  زبانه‌ها     [{Close}]  بستن",
+      "ja": "[{Prev}] [{Next}]  タブ     [{Close}]  閉じる",
+      "hu": "[{Prev}] [{Next}]  LAPOK     [{Close}]  BEZÁRÁS",
+      "cs": "[{Prev}] [{Next}]  KARTY     [{Close}]  ZAVŘÍT",
+      "pt-PT": "[{Prev}] [{Next}]  SEPARADORES     [{Close}]  FECHAR",
+      "sv": "[{Prev}] [{Next}]  FLIKAR     [{Close}]  STÄNG",
+      "zh-Hant": "[{Prev}] [{Next}]  切換分頁     [{Close}]  關閉",
+      "id": "[{Prev}] [{Next}]  TAB     [{Close}]  TUTUP"
+    }
+  ]
+}
