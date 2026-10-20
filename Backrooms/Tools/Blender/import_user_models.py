@@ -405,17 +405,92 @@ def process_hazmat():
     print("  articulations (cm, Unreal) :", JOINTS["Hazmat"])
 
 
+# v4.17 : silhouette de l'inventaire. Lumieres : (energie, direction de la lumiere en reperes Blender : le modele regarde
+# vers +X, la camera aussi ; +Y : droite de l'image). Tons : gris de sortie = SIL_BASE + SIL_GAIN x gris du rendu (sur 255).
+# Avant : deux soleils (0,7 de face, 4,0 en contre-jour) et gris x 0,28 : un aplat de 43 a 45 sur 255, plus sombre que le
+# panneau de l'inventaire (contraste 1,1:1), sans aucun pli visible
+SIL_LIGHTS = (
+    (3.0, (-0.55, 0.55, -0.62)),  # principale : de face, haut gauche de l'image : modele des plis
+    (0.8, (-0.75, -0.55, -0.2)),  # appoint : de face, a droite, rase : ombres non bouchees
+    (4.0, (0.97, -0.17, -0.17)),  # contre-jour (celui d'avant) : contour net
+)
+SIL_BASE = 20.0
+SIL_GAIN = 0.42
+# Matieres neutres du rendu (gris de base, rugosite) : combinaison claire et mate, masque plus sombre, visiere sombre
+SIL_SHADES = {"HazmatSuit": (0.62, 0.6), "HazmatMask": (0.2, 0.5), "HazmatGlass": (0.06, 0.15)}
+
+
+def _silhouette_materials(obj):
+    """v4.17 : matieres neutres du rendu de la silhouette (seulement sur l'objet rendu : les pieces exportees gardent les
+    leurs). La combinaison, le masque et la visiere se distinguent par leur valeur, pas par leur couleur"""
+    for slot in obj.material_slots:
+        name = slot.material.name if slot.material else ""
+        key = next((k for k in SIL_SHADES if name.startswith(k)), "HazmatSuit")
+        grey, rough = SIL_SHADES[key]
+        mat = bpy.data.materials.new("SIL_" + key)
+        try:
+            mat.use_nodes = True  # toujours vrai a partir de Blender 5.0
+        except (AttributeError, TypeError):
+            pass
+        nodes = mat.node_tree.nodes
+        bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf is None:
+            bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+            out = next((n for n in nodes if n.type == "OUTPUT_MATERIAL"), None) or nodes.new("ShaderNodeOutputMaterial")
+            mat.node_tree.links.new(bsdf.outputs[0], out.inputs[0])
+        bsdf.inputs["Base Color"].default_value = (grey, grey, grey, 1.0)
+        bsdf.inputs["Roughness"].default_value = rough
+        slot.link = "OBJECT"
+        slot.material = mat
+
+
+def _silhouette_tones(path):
+    """v4.17 : rendu -> gris (ponderations ITU-R 601, comme PIL "L"), puis SIL_BASE + SIL_GAIN x gris ; alpha garde.
+    Par numpy dans Blender (avant : PIL, absent du Python de Blender)"""
+    img = bpy.data.images.load(path, check_existing=False)
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    px = px.reshape(h, w, 4)
+    v = (px[..., 0] * 0.299 + px[..., 1] * 0.587 + px[..., 2] * 0.114) * 255.0
+    g = np.clip(np.floor(SIL_BASE + SIL_GAIN * v + 0.5), 0.0, 255.0) / 255.0
+    out = np.empty_like(px)
+    out[..., 0] = g
+    out[..., 1] = g
+    out[..., 2] = g
+    out[..., 3] = px[..., 3]
+    img.pixels.foreach_set(out.ravel())
+    img.filepath_raw = path
+    img.file_format = "PNG"
+    img.save()
+    a = px[..., 3] > 0.8
+    if a.any():
+        q = np.percentile(np.floor(SIL_BASE + SIL_GAIN * v[a] + 0.5), [5, 50, 95])
+        print("  silhouette : gris p5 %.0f, p50 %.0f, p95 %.0f (sur 255), couverture %.0f %%" % (q[0], q[1], q[2], 100.0 * a.mean()))
+    bpy.data.images.remove(img)
+
+
 def render_silhouette(obj):
-    """Silhouette sombre de la combinaison (panneau EQUIPEMENT de l'inventaire)"""
+    """Silhouette de la combinaison (panneau EQUIPEMENT de l'inventaire). v4.17 : modelee et plus claire (SIL_LIGHTS,
+    SIL_BASE, SIL_GAIN), sur des matieres neutres ; transformation de vue Standard (resultat independant des reglages de
+    couleur de la version de Blender)"""
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     sc.cycles.device = "CPU"
-    sc.cycles.samples = 32
+    sc.cycles.samples = 64
     sc.render.resolution_x = 384
     sc.render.resolution_y = 768
     sc.render.film_transparent = True
     sc.render.image_settings.file_format = "PNG"
     sc.render.image_settings.color_mode = "RGBA"
+    try:
+        sc.view_settings.view_transform = "Standard"
+        sc.view_settings.look = "None"
+        sc.view_settings.exposure = 0.0
+        sc.view_settings.gamma = 1.0
+    except (TypeError, AttributeError):
+        pass
+    _silhouette_materials(obj)
     world = bpy.data.worlds.new("WS")
     world.use_nodes = True
     world.node_tree.nodes["Background"].inputs[0].default_value = (0.5, 0.5, 0.52, 1)
@@ -431,10 +506,11 @@ def render_silhouette(obj):
     cam.location = ctr + Vector((6.0, -0.4, 0.2))
     cam.rotation_euler = (ctr - cam.location).to_track_quat("-Z", "Y").to_euler()
     sc.camera = cam
-    for e, rot in ((0.7, (60, 0, 90)), (4.0, (80, 0, -100))):
+    for e, direction in SIL_LIGHTS:
         l = link(bpy.data.objects.new("LS", bpy.data.lights.new("LS", "SUN")))
         l.data.energy = e
-        l.rotation_euler = [math.radians(a) for a in rot]
+        # l'axe -Z d'un soleil est la direction de sa lumiere
+        l.rotation_euler = Vector(direction).normalized().to_track_quat("-Z", "Y").to_euler()
     os.makedirs(OUT_ICON, exist_ok=True)
     path = os.path.join(OUT_ICON, "I_Silhouette.png")
     sc.render.filepath = path
@@ -445,12 +521,49 @@ def render_silhouette(obj):
     for o in hidden:
         o.hide_render = False
     sc.render.film_transparent = False
-    from PIL import Image
-    im = Image.open(path).convert("RGBA")
-    r, g, b, a = im.split()
-    lum = Image.merge("RGB", (r, g, b)).convert("L").point(lambda v: int(v * 0.28))
-    Image.merge("RGBA", (lum, lum, lum, a)).save(path)
+    _silhouette_tones(path)
     print("  silhouette", path)
+
+
+def process_silhouette_from_parts():
+    """v4.17 : silhouette refaite sans l'original (Tools/SourceModels/asyc_hazmat.glb, absent du depot) : les dix pieces
+    derivees RawAssets/Meshes/SM_Hazmat_*.fbx (pivot sur leur articulation) sont replacees sur leurs articulations
+    (user_models.json, centimetres et reperes Unreal), reunies, puis rendues comme dans process_hazmat.
+        blender -b -P Tools/Blender/import_user_models.py -- silhouette"""
+    src = os.path.join(OUT_MESH, "user_models.json")
+    joints = {}
+    if os.path.isfile(src):
+        with open(src) as fh:
+            joints = json.load(fh).get("Hazmat", {})
+    if not all(p in joints for p in PART_NAMES):
+        print("!! articulations Hazmat absentes de", src)
+        return
+    print("== Silhouette (pieces derivees)")
+    reset()
+    parts = []
+    for p in PART_NAMES:
+        path = os.path.join(OUT_MESH, "SM_Hazmat_" + p + ".fbx")
+        if not os.path.isfile(path):
+            print("!! introuvable :", path)
+            return
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.fbx(filepath=path)
+        for o in bpy.data.objects:
+            if o not in before and o.type == "MESH":
+                j = joints[p]
+                # Unreal (cm, +Y a droite) -> Blender (m, +Y a gauche) : l'inverse de ue()
+                o.location = Vector((j[0] / 100.0, -j[1] / 100.0, j[2] / 100.0))
+                parts.append(o)
+    bpy.context.view_layer.update()
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in parts:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
+    bpy.ops.object.join()
+    full = parts[0]
+    pts = [full.matrix_world @ Vector(c) for c in full.bound_box]
+    print("  modele reconstitue : hauteur %.2f m, %d sommets" % (max(p.z for p in pts) - min(p.z for p in pts), len(full.data.vertices)))
+    render_silhouette(full)
 
 
 # ---------------------------------------------------------------------------
@@ -1837,12 +1950,16 @@ if __name__ == "__main__":
         make_office_textures()
     if "office" in todo:
         process_office()
+    # v4.17 : silhouette seule, depuis les pieces derivees (sans les originaux) ; jamais par defaut
+    if "silhouette" in todo:
+        process_silhouette_from_parts()
     out = os.path.join(OUT_MESH, "user_models.json")
-    old = {}
-    if os.path.isfile(out):
-        with open(out) as fh:
-            old = json.load(fh)
-    old.update(JOINTS)
-    with open(out, "w") as fh:
-        json.dump(old, fh, indent=2)
-    print("articulations ->", out)
+    if JOINTS:  # v4.17 : rien de nouveau (silhouette seule) : le fichier n'est pas reecrit
+        old = {}
+        if os.path.isfile(out):
+            with open(out) as fh:
+                old = json.load(fh)
+        old.update(JOINTS)
+        with open(out, "w") as fh:
+            json.dump(old, fh, indent=2)
+        print("articulations ->", out)

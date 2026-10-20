@@ -4617,11 +4617,20 @@ void ABRHUD::LayoutCharacterTab(ABRCharacter* C)
 		float X;
 		float Y;
 	};
+	// v4.17 : entre deux cases d'une meme colonne, la place de la legende du dessous (hauteur mesuree, 6U jusqu'a son cadre) et
+	// 8U jusqu'au cadre du dessus. Avant : TORSE a 0,2 et CEINTURE a 0,5 de la silhouette, soit 18 pixels entre les cases a 1080
+	// lignes pour une legende de 22 : CEINTURE chevauchait le cadre de TORSE
+	const float CapGap = TextSize(TEXT("Hg"), UiType::Label, EUiWeight::Bold).Y + 14.f * U;
+	const float LowY = IY + IH - 16.f * U - EqS;
+	const float HeadY = SilY + SilH * 0.02f;
+	const float ChestY = SilY + SilH * 0.2f;
+	const float HandY = FMath::Min(LowY, FMath::Max(SilY + SilH * 0.44f, HeadY + EqS + CapGap));
+	const float BeltY = FMath::Min(LowY, FMath::Max(SilY + SilH * 0.5f, ChestY + EqS + CapGap));
 	const FEq Eqs[] = {
-		{ EBREquipSlot::Head, LeftX, SilY + SilH * 0.02f },
-		{ EBREquipSlot::Chest, RightX, SilY + SilH * 0.2f },
-		{ EBREquipSlot::Hand, LeftX, SilY + SilH * 0.44f },
-		{ EBREquipSlot::Belt, RightX, SilY + SilH * 0.5f },
+		{ EBREquipSlot::Head, LeftX, HeadY },
+		{ EBREquipSlot::Chest, RightX, ChestY },
+		{ EBREquipSlot::Hand, LeftX, HandY },
+		{ EBREquipSlot::Belt, RightX, BeltY },
 	};
 	for (const FEq& E : Eqs)
 	{
@@ -4930,7 +4939,11 @@ void ABRHUD::DrawCharacterTab(ABRCharacter* C, ABRWorld* W)
 	Panel(ColX[2], IY, ColW[2], IH, BR_STR(NSLOCTEXT("BR", "HUD.Equipement", "\u00c9QUIPEMENT")));
 	if (UBRAssets* A = UBRAssets::Get(this))
 	{
-		Icon(A->Icon(TEXT("I_Silhouette")), SilX, SilY, SilW, SilH, FLinearColor(0.85f, 0.82f, 0.72f, 0.95f));
+		// v4.17 : halo chaud discret derriere la silhouette, image presque sans teinte. Le rendu (import_user_models.py) est
+		// modele et plus clair que le panneau : contraste moyen de 2,2:1 et 63 niveaux entre p5 et p95 (avant : image assombrie
+		// a 28 % puis teintee (0,85 ; 0,82 ; 0,72 ; 0,95) : 1,1:1 et un aplat de 6 niveaux)
+		Glow(SilX + SilW * 0.5f, SilY + SilH * 0.45f, SilW * 0.9f, SilH * 0.6f, FLinearColor(1.f, 0.85f, 0.3f, 0.05f));
+		Icon(A->Icon(TEXT("I_Silhouette")), SilX, SilY, SilW, SilH, FLinearColor(1.f, 0.97f, 0.9f, 1.f));
 	}
 	// Traits reliant chaque emplacement au corps
 	for (const FSlotBox& B : Slots)
