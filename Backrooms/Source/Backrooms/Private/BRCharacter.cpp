@@ -3857,10 +3857,14 @@ namespace
 		FVector SwingFrom = FVector::ZeroVector;
 		/** Cheville voulue a cette image (monde) */
 		FVector Target = FVector::ZeroVector;
-		/** Avancee du pas : phase parcourue depuis le lever, phase a parcourir, fraction 0..1 */
+		/** v4.17 (appuis) : point de pose prevu (pas de la marche) ; 1 : pas de la marche, 0 : petit pas de recalage ; avancee
+		 *  du pas (0..1) */
+		FVector SwingTo = FVector::ZeroVector;
 		float SwingAcc = 0.f;
-		float SwingSpan = PI;
 		float SwingW = 0.f;
+		/** Avancee au lever (un pas peut commencer en cours de phase : depart d'un arret) ; avancee depuis le lever (0..1) */
+		float SwingW0 = -1.f;
+		float SwingN = 0.f;
 	};
 
 	struct FBRBodyPoseState
@@ -4253,7 +4257,6 @@ void ABRCharacter::AnimateBody(float Dt)
 			FBRBodyLeg& G = Gs.Leg[i];
 			const float Ph = BodyAnim + (i == 0 ? 0.f : PI);
 			const bool bPhaseStance = FMath::Cos(Ph) <= 0.f;
-			bool bStarted = false;
 			if (!G.bSwing)
 			{
 				// Appui trop loin du corps : le point d'appui suit (glissement du reste seulement) ; sol change sous lui : repose
@@ -4281,8 +4284,6 @@ void ABRCharacter::AnimateBody(float Dt)
 				{
 					G.bSwing = true;
 					G.bTimed = false;
-					const float Wrapped = FMath::UnwindRadians(Ph);
-					G.SwingSpan = FMath::Clamp(PhaseStep >= 0.f ? HALF_PI - Wrapped : Wrapped + HALF_PI, 0.25f, PI);
 				}
 				else if (!bCadence && bOtherDown && Gs.IdleTime > 0.12f && Off > 5.0 && Off >= OtherOff)
 				{
@@ -4292,42 +4293,74 @@ void ABRCharacter::AnimateBody(float Dt)
 				if (G.bSwing)
 				{
 					G.SwingFrom = G.Anchor;
-					G.SwingAcc = 0.f;
+					G.SwingTo = StrideW[i];
+					G.SwingAcc = G.bTimed ? 0.f : 1.f; // 1 : pas de la marche (meme apres un arret en cours de pas)
 					G.SwingW = 0.f;
-					bStarted = true;
+					G.SwingW0 = -1.f;
+					G.SwingN = 0.f;
 				}
 			}
 			if (G.bSwing)
 			{
 				bool bLand = false;
+				// Point ou le pied se posera : a l'arret, sa place sous la hanche ; a la cadence, le point de foulee a la fin du pas
+				// (phase de pose), la ou le corps sera alors (vitesse actuelle) : il ne bouge pas au monde a allure tenue, et le pied
+				// n'a plus a le rattraper au ras du sol avant de se poser
+				FVector Land = StrideW[i];
 				if (!G.bTimed && bCadence)
 				{
-					// La phase de cette image est deja dans SwingSpan au lever ; pose quand la phase revient a l'appui
-					G.SwingAcc += bStarted ? 0.f : FMath::Abs(PhaseStep);
-					G.SwingW = FMath::Clamp(G.SwingAcc / FMath::Max(G.SwingSpan, 0.05f), 0.f, 1.f);
+					// Avancee du pas tiree de la phase (un demi-cycle) ; pose quand la phase revient a l'appui
+					const float Dir = PhaseStep >= 0.f ? 1.f : -1.f;
+					const float Wrapped = FMath::UnwindRadians(Ph);
+					const float Rem = FMath::Clamp(Dir > 0.f ? HALF_PI - Wrapped : Wrapped + HALF_PI, 0.f, PI);
+					G.SwingW = 1.f - Rem / PI;
+					if (G.SwingW0 < 0.f)
+					{
+						G.SwingW0 = FMath::Min(G.SwingW, 0.9f);
+					}
 					bLand = bPhaseStance;
+					const float Rate = FMath::Abs(PhaseStep) / FMath::Max(Dt, 1.0e-4f);
+					const float TimeLeft = FMath::Min(Rem / FMath::Max(Rate, 0.5f), 0.5f);
+					FVector LandCS = StrideCS[i];
+					LandCS.X = Gs.RestAnkle[i].X + CrouchFwd + Dir * LegL * FMath::Sin(FMath::DegreesToRadians(StrideDeg));
+					Land = Frame.TransformPosition(LandCS) + FVector(Vel.X, Vel.Y, 0.0) * static_cast<double>(TimeLeft);
+					Land.Z = StrideW[i].Z;
+					G.SwingTo = Land;
 				}
 				else
 				{
+					// Pas de la marche interrompu par l'arret : il finit au point de pose prevu
+					if (G.SwingAcc > 0.f)
+					{
+						Land = FVector(G.SwingTo.X, G.SwingTo.Y, StrideW[i].Z);
+					}
 					// Arret pendant le pas, ou recalage : fin au temps, sous la hanche
 					G.bTimed = true;
+					G.SwingW0 = FMath::Max(G.SwingW0, 0.f);
 					G.SwingW = FMath::Min(1.f, G.SwingW + Dt / 0.2f);
 					bLand = G.SwingW >= 1.f;
 				}
-				const float S = G.SwingW * G.SwingW * (3.f - 2.f * G.SwingW);
-				FVector P = FMath::Lerp(G.SwingFrom, StrideW[i], static_cast<double>(S));
+				// Avancee depuis le lever : le pied part toujours de son point d'appui, meme si la phase etait deja avancee
+				const float Wn = FMath::Clamp((G.SwingW - G.SwingW0) / FMath::Max(1.f - G.SwingW0, 0.05f), 0.f, 1.f);
+				G.SwingN = Wn;
+				// Le pied se leve d'abord (10 % du pas), avance franchement, puis se pose a la verticale (10 % du pas) ; avant :
+				// depart et arrivee lents au ras du sol (pied qui trainait derriere, hanche qui devait descendre pour l'atteindre)
+				const float U = FMath::Clamp((Wn - 0.1f) / 0.8f, 0.f, 1.f);
+				const float S = 0.5f * U + 0.5f * U * U * (3.f - 2.f * U);
+				FVector P = FMath::Lerp(G.SwingFrom, Land, static_cast<double>(S));
+				P.Z = FMath::Lerp(G.SwingFrom.Z, Land.Z, static_cast<double>(S));
 				if (bLand)
 				{
 					G.bSwing = false;
 					G.bTimed = false;
-					G.Anchor = FVector(P.X, P.Y, StrideW[i].Z);
+					G.Anchor = FVector(P.X, P.Y, Land.Z);
 					G.Target = G.Anchor;
 					bLanded[i] = true;
 				}
 				else
 				{
 					const float H = G.bTimed && G.SwingAcc <= 0.f ? FMath::Min(LiftH, 5.f) : LiftH;
-					P.Z += static_cast<double>(H * FMath::Sin(PI * G.SwingW));
+					P.Z += static_cast<double>(H * FMath::Sin(PI * Wn));
 					G.Target = P;
 				}
 			}
@@ -4369,6 +4402,8 @@ void ABRCharacter::AnimateBody(float Dt)
 	// Bassin en marche (v4.17) : la jambe d'appui, tendue, porte le corps : il descend pour que chaque cheville atteigne sa cible
 	// (avant : les deux pieds a ~12,6 cm du sol a chaque double appui de la marche, 31 cm en course). v4.17 (appuis) : descente
 	// tiree des cibles au monde (appuis tenus, pas en l'air), au lieu de l'angle de la cadence
+	// v4.17 (appuis) : la jambe d'appui seulement, et celle qui va se poser (dernier cinquieme du pas) ; une jambe qui vient de
+	// lever plie le genou au lieu de faire descendre le bassin (avant : jusqu'a 27 cm de descente juste apres le lever)
 	float WalkDrop = 0.f;
 	FVector TargetCS[2];
 	for (int32 i = 0; i < 2; ++i)
@@ -4377,7 +4412,9 @@ void ABRCharacter::AnimateBody(float Dt)
 		const FVector D = TargetCS[i] - Gs.RestHip[i];
 		const double Reach = (Gs.RestAnkle[i] - Gs.RestHip[i]).Size();
 		const double Need = -D.Z - FMath::Sqrt(FMath::Max(Reach * Reach - D.X * D.X - D.Y * D.Y, 1.0));
-		WalkDrop = FMath::Max(WalkDrop, static_cast<float>(Need));
+		const FBRBodyLeg& G = Gs.Leg[i];
+		const float Weight = !bFeetDown || !G.bSwing ? 1.f : FMath::Clamp((G.SwingN - 0.8f) / 0.2f, 0.f, 1.f);
+		WalkDrop = FMath::Max(WalkDrop, static_cast<float>(Need) * Weight);
 	}
 	WalkDrop = FMath::Clamp(WalkDrop, 0.f, 35.f) * LockW;
 	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, FeetZ(WalkDrop)));
@@ -4510,7 +4547,7 @@ void ABRCharacter::AnimateBody(float Dt)
 			for (int32 i = 0; i < 2; ++i)
 			{
 				const FBRBodyLeg& G = Gs.Leg[i];
-				const float W = G.SwingW;
+				const float W = G.SwingN;
 				const float FootPitch = (G.bSwing && !G.bTimed) ? FMath::Lerp(-20.f, 12.f, W) * FMath::Sin(PI * W) : 0.f;
 				const FQuat Follow = Thigh[i].Quaternion() * Shin[i].Quaternion();
 				const FQuat Delta = FQuat::Slerp(Follow, FRotator(FootPitch, 0.f, 0.f).Quaternion(), LockW);
