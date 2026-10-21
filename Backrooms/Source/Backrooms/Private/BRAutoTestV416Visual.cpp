@@ -316,6 +316,9 @@ namespace BRTestV416Vis
 	int32 PressInt = 0;
 	float PressFloat = 0.f;
 	float PressRoom = 0.f;
+	/** v4.17 (correction) : carnet long : defilement de la colonne OBSERVATIONS avant l'appui, langue d'avant l'essai */
+	float PressRight = 0.f;
+	FString LongLang;
 	/** v4.16 (relecture) : sac et equipement modifies pour l'essai des objets a la manette (retablis), batterie et vision
 	 *  nocturne avant l'essai du camescope */
 	bool bInvSaved = false;
@@ -1816,6 +1819,27 @@ void ABRAutoTest::AddV416VisualSteps()
 					return true;
 				}
 				FBRSettings::Get().UiScale = 1.25f;
+				// v4.17 (correction, QA visuelle : le carnet long n'etait jamais long) : tous les indices et observations du niveau
+				// lus, carnet en allemand. Essai seulement : l'etat de la mission est ecrit ici sans passer par les appareils
+				// (le chargement suivant le refait)
+				if (ABRWorld* W = GetBRWorld())
+				{
+					const BRMission::FPlan& Plan = W->GetMissionPlan();
+					BRMission::FState& State = const_cast<BRMission::FState&>(W->GetMissionState());
+					for (int32 D = 0; D < Plan.NumDevices; ++D)
+					{
+						if (Plan.Devices[D].Kind == BRMission::EKind::Clue)
+						{
+							State.Dev[D] = 1;
+						}
+						else if (Plan.Devices[D].Kind == BRMission::EKind::Observe)
+						{
+							State.Dev[D] = static_cast<uint8>(Plan.Devices[D].Positions);
+						}
+					}
+				}
+				BRTestV416Vis::LongLang = FString(BRLoc::Current().Code);
+				BRLoc::SetLanguage(TEXT("de"));
 				ShowScreen(4);
 				if (H->NotebookHintStep >= 0)
 				{
@@ -1840,7 +1864,8 @@ void ABRAutoTest::AddV416VisualSteps()
 				{
 					BRTestV416Vis::PressRoom = H->LastNotebookLeftRoom;
 					BRTestV416Vis::PressFloat = H->NotebookLeftScroll;
-					if (!H->HadScrollRoom() || BRTestV416Vis::PressRoom < 1.f)
+					BRTestV416Vis::PressRight = H->NotebookScroll;
+					if (!H->HadScrollRoom())
 					{
 						Skip(FString::Printf(TEXT("carnet long : rien a faire defiler a %d x %d (texte cache %s, reste a gauche %.0f) : une ligne par appui NON VERIFIE"), View.X, View.Y,
 							BRTestV416Vis::Oui(H->HadScrollRoom()), BRTestV416Vis::PressRoom));
@@ -1855,17 +1880,27 @@ void ABRAutoTest::AddV416VisualSteps()
 					return false;
 				}
 				BRTestV416Vis::Phase = 0;
+				// v4.17 (correction) : la colonne de gauche si elle deborde (descente exacte : une ligne ou ce qui restait), sinon
+				// OBSERVATIONS (une ligne au plus, au moins un pixel)
+				const bool bLeft = BRTestV416Vis::PressRoom >= 1.f;
 				const float Want = FMath::Min(ABRHUD::PadScrollLine, BRTestV416Vis::PressRoom);
-				const float Got = H->NotebookLeftScroll - BRTestV416Vis::PressFloat;
-				Note(FString::Printf(TEXT("carnet long a %d x %d : texte cache %s, reste a gauche %.0f, zones %d ; un appui (PadScrollLines(1)) : %.1f -> %.1f (attendu +%.0f, obtenu %+.1f)"),
-					View.X, View.Y, BRTestV416Vis::Oui(H->HadScrollRoom()), BRTestV416Vis::PressRoom, H->GetScrollZoneCount(), BRTestV416Vis::PressFloat, H->NotebookLeftScroll, Want, Got),
-					FMath::Abs(Got - Want) > 0.5f);
+				const float Got = bLeft ? H->NotebookLeftScroll - BRTestV416Vis::PressFloat : H->NotebookScroll - BRTestV416Vis::PressRight;
+				const bool bBad = bLeft ? FMath::Abs(Got - Want) > 0.5f : (Got < 0.5f || Got > ABRHUD::PadScrollLine + 0.5f);
+				Note(FString::Printf(TEXT("carnet long (de, tous les indices lus) a %d x %d : texte cache %s, reste a gauche %.0f, zones %d, observations %d ; un appui (PadScrollLines(1)), colonne %s : %+.1f (attendu %s)"),
+					View.X, View.Y, BRTestV416Vis::Oui(H->HadScrollRoom()), BRTestV416Vis::PressRoom, H->GetScrollZoneCount(), H->LastNotebookObservations,
+					bLeft ? TEXT("de gauche") : TEXT("OBSERVATIONS"), Got, bLeft ? *FString::Printf(TEXT("+%.0f"), Want) : *FString::Printf(TEXT("+1 a +%.0f"), ABRHUD::PadScrollLine)),
+					bBad);
 				ShotNamed(TEXT("v417_carnet_long"));
 				return true;
 			});
 			Add(TEXT("v4.17 visuel : carnet long, taille d'interface retablie"), 0.f, [this, CloseScreens]()
 			{
 				FBRSettings::Get().UiScale = 1.f;
+				if (!BRTestV416Vis::LongLang.IsEmpty())
+				{
+					BRLoc::SetLanguage(BRTestV416Vis::LongLang);
+					BRTestV416Vis::LongLang.Reset();
+				}
 				CloseScreens();
 				return true;
 			});
