@@ -1,0 +1,276 @@
+{
+ "atlas": "RawAssets/Textures/T_Hazmat_Suit.jpg",
+ "atlas_sha256": "7c3a9ca5faf9b7884d9c8725443d7877a7e2b33b316971d9ce3f41095600e8b5",
+ "fbx_sha256": "2eb5d8dd7449c146f9391501dab7ebe04e4d32dd62637b118a97b8978120d7ed",
+ "import_unreal": {
+  "N": "srgb False, TC_Normalmap (BC5), groupe WorldNormalMap, pas d'inversion du vert",
+  "ORM": "srgb False, compression par defaut, composite_texture T_Hazmat_Suit_N, CTM_NormalRoughnessToGreen, composite_power 1"
+ },
+ "masks": "masques UV de SK_Hazmat (export_hazmat_uv.py)",
+ "masks_files": {
+  "hazmat_uv_edges.png": "bf63f2fda4eecbb2e70542b3dbda079ea04b62541d993aa1c18d901b888eb867",
+  "hazmat_uv_islands.json": "7be87c5a605358c16e027baf1530dbbd661d228f04e4f0fb1fe3f8e7bc048ccc",
+  "hazmat_uv_islands.png": "ec960180d60089c45891d0c651c19e9f83e1a42597a73f3fcbfa8518a2eca85d"
+ },
+ "numpy": "2.5.3",
+ "outputs": {
+  "T_Hazmat_Suit_N.png": {
+   "file_sha256": "72e2cb557835ad5010cbee393e9120df46c45b3f39bef0f23a28bda335e5d243",
+   "format": "PNG RGB 8 bits, normale tangente DirectX",
+   "pixels_sha256": "c4a4612f99364017d0b53b83e34dfaa7b6d3b7d4f8838091e085c31db9cf074e"
+  },
+  "T_Hazmat_Suit_ORM.png": {
+   "file_sha256": "9c95c25a501c0b95739614d7059401d80f4c299062f96d099b7bc798985d4cfe",
+   "format": "PNG RGB 8 bits lineaire : R occlusion, G rugosite absolue, B metal",
+   "pixels_sha256": "f2715a5bb02a23654d4b0b290298c084a1c56377e2c306946104b04aa803b976"
+  }
+ },
+ "params": {
+  "checks": {
+   "rough_max": 0.85,
+   "rough_min": 0.04,
+   "seam_crease_p99_max_deg": 4.0,
+   "slope_max": 45.0,
+   "slope_p50_max": 1.5,
+   "slope_p99_max": 15.0
+  },
+  "crinkle": 0,
+  "relief_mm": {
+   "edge_sigma_px": 8.0,
+   "fold": [
+    3.0,
+    18.0,
+    0.45,
+    0.35
+   ],
+   "hem": [
+    0.35,
+    5.0,
+    3.0
+   ],
+   "tape": [
+    0.3,
+    0.0,
+    9.0,
+    12.0,
+    3.0
+   ],
+   "trim": 0.3
+  },
+  "rough": {
+   "dirt": 0.78,
+   "glass_center": 0.05,
+   "glass_edge": 0.15,
+   "glove": 0.5,
+   "hollow": 0.46,
+   "orange": 0.55,
+   "pvc": 0.36,
+   "ridge": 0.3,
+   "sole": 0.78,
+   "tape": 0.46,
+   "trim": 0.55
+  },
+  "size": 2048,
+  "sole_rule": "os LeftFoot/RightFoot/LeftToeBase/RightToeBase, hauteur relative max < 0.05"
+ },
+ "pillow": "12.3.0",
+ "script": "Tools/derive_hazmat_maps.py",
+ "script_version": 1,
+ "stats": {
+  "ao": {
+   "min": 0.678,
+   "p5": 0.863,
+   "p50": 1.0
+  },
+  "background_flat": true,
+  "fractions": {
+   "dirt_gt_half": 0.0342,
+   "glass_pixels": 38867,
+   "island_pixels": 1881219,
+   "sole": 0.0255,
+   "trim": 0.0243
+  },
+  "island_kinds": {
+   "boot": 2,
+   "glove": 2,
+   "pvc": 77,
+   "sole": 2
+  },
+  "rough": {
+   "max": 0.78,
+   "min": 0.306,
+   "p5": 0.337,
+   "p50": 0.365,
+   "p95": 0.69
+  },
+  "rough_all": {
+   "max": 0.78,
+   "min": 0.051
+  },
+  "rough_glass": {
+   "max": 0.149,
+   "min": 0.051,
+   "p50": 0.067
+  },
+  "rough_regions": {
+   "glove": 0.502,
+   "orange": 0.561,
+   "sole": 0.78,
+   "trim": 0.549,
+   "yellow": 0.361
+  },
+  "seams": {
+   "crease_deg": {
+    "max": 6.892,
+    "p50": 0.624,
+    "p90": 1.193,
+    "p99": 3.306
+   },
+   "dh_mm": {
+    "p50": 0.0,
+    "p90": 0.004,
+    "p99": 0.294
+   },
+   "missing": 108,
+   "samples": 4249,
+   "slits": {
+    "crease_deg": {
+     "max": 8.855,
+     "p50": 0.835,
+     "p99": 8.012
+    },
+    "samples": 203
+   },
+   "worst_px": [
+    {
+     "a": [
+      2,
+      1214.7,
+      363.5
+     ],
+     "b": [
+      59,
+      1377.3,
+      1624.3
+     ],
+     "deg": 6.89
+    },
+    {
+     "a": [
+      2,
+      1214.0,
+      361.3
+     ],
+     "b": [
+      59,
+      1377.2,
+      1622.0
+     ],
+     "deg": 6.8
+    },
+    {
+     "a": [
+      2,
+      1213.3,
+      359.0
+     ],
+     "b": [
+      59,
+      1377.0,
+      1619.6
+     ],
+     "deg": 6.7
+    },
+    {
+     "a": [
+      3,
+      1760.5,
+      176.6
+     ],
+     "b": [
+      51,
+      95.1,
+      1273.2
+     ],
+     "deg": 6.01
+    },
+    {
+     "a": [
+      3,
+      1759.9,
+      174.9
+     ],
+     "b": [
+      51,
+      95.9,
+      1271.5
+     ],
+     "deg": 5.75
+    },
+    {
+     "a": [
+      26,
+      362.1,
+      671.6
+     ],
+     "b": [
+      51,
+      378.7,
+      1202.8
+     ],
+     "deg": 5.55
+    },
+    {
+     "a": [
+      3,
+      1759.4,
+      173.2
+     ],
+     "b": [
+      51,
+      96.8,
+      1269.8
+     ],
+     "deg": 5.52
+    },
+    {
+     "a": [
+      26,
+      392.2,
+      728.3
+     ],
+     "b": [
+      51,
+      315.7,
+      1193.7
+     ],
+     "deg": 5.29
+    }
+   ]
+  },
+  "size": [
+   2048,
+   2048
+  ],
+  "slope_deg": {
+   "max": 10.912,
+   "p50": 0.318,
+   "p90": 1.31,
+   "p99": 5.558
+  },
+  "slope_dirt_deg": {
+   "p50": 0.318,
+   "p99": 4.772
+  },
+  "slope_tape_deg": {
+   "max": 10.912,
+   "p50": 0.318,
+   "p99": 7.439
+  },
+  "slope_yellow_clean_deg": {
+   "p50": 0.318,
+   "p90": 1.146,
+   "p99": 2.314
+  }
+ }
+}
