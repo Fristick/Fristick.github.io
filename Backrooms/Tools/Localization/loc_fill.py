@@ -3,7 +3,8 @@ v4.17 : remplit les traductions de cles donnees dans les catalogues Content/Loca
 
 Usage :  python Tools/Localization/loc_fill.py <fichier.json> [<fichier.json> ...]
  - chaque fichier : {"<cle>": {"fr": "...", "<culture>": "<traduction>", ...}, ...} (le francais est ignore : la source
-   est le texte du code, recopie par loc_extract.py) ;
+   est le texte du code, recopie par loc_extract.py), ou {"cles": [{"cle": "<cle>", "<culture>": "...", ...}, ...]}
+   (format des agents : les champs autres que les cultures, comme "ou" ou "termes", sont ignores) ;
  - a lancer APRES loc_extract.py (les cles doivent exister dans les catalogues) et AVANT loc_build.py ;
  - chaque traduction ecrite est marquee "fuzzy" (a relire par une personne qui parle la langue), comme les traductions
    produites automatiquement des versions precedentes ; l'ancien texte source garde son commentaire (#| msgid) ;
@@ -27,10 +28,15 @@ def main():
         print(__doc__)
         sys.exit(2)
     data = {}
+    codes = [c for c, _, _ in lc.CULTURES]
     for path in sys.argv[1:]:
         with open(path, encoding="utf-8") as f:
-            data.update(json.load(f))
-    codes = [c for c, _, _ in lc.CULTURES]
+            raw = json.load(f)
+        if isinstance(raw, dict) and isinstance(raw.get("cles"), list):
+            for entry in raw["cles"]:
+                data[entry["cle"]] = {k: v for k, v in entry.items() if k in codes}
+        else:
+            data.update(raw)
     errors = 0
     for key, langs in data.items():
         for code in langs:
