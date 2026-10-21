@@ -1243,14 +1243,29 @@ void ABREntity::UpdateFootsteps()
 	}
 	// Une foulee = un demi-cycle d'AnimTime (le pied d'appui change)
 	const int32 Index = FMath::FloorToInt(AnimTime / PI);
-	if (Index == LastStepIndex)
+	// v4.17 (animation) : Bacteria posee (allure a appuis) : un bruit quand elle retombe d'un bond, pas au rythme de ses bras
+	const bool bHopStep = Kind == EBREntityKind::Bacteria && BodyContacts.Num() > 0 && SupportRun < 0.5f;
+	if (bHopStep)
 	{
-		return;
+		LastStepIndex = Index;
+		if (!bHopLanded)
+		{
+			return;
+		}
+		bHopLanded = false;
 	}
-	LastStepIndex = Index;
+	else
+	{
+		bHopLanded = false;
+		if (Index == LastStepIndex)
+		{
+			return;
+		}
+		LastStepIndex = Index;
+	}
 	const float Speed = static_cast<float>(GetVelocity().Size2D());
 	const APawn* Listener = UGameplayStatics::GetPlayerPawn(this, 0);
-	if (Speed < 40.f || !Listener || FVector::DistSquared(Listener->GetActorLocation(), GetActorLocation()) > FMath::Square(2600.f))
+	if ((Speed < 40.f && !bHopStep) || !Listener || FVector::DistSquared(Listener->GetActorLocation(), GetActorLocation()) > FMath::Square(2600.f))
 	{
 		return;
 	}
@@ -2936,7 +2951,7 @@ void ABREntity::PickPatrolGoal(ABRWorld* W, const ABRCharacter* P)
 // Animation procedurale
 // =====================================================================================================================
 
-void ABREntity::UpdateFootPlanting(float Dt)
+void ABREntity::UpdateFootPlanting(float Dt, float InGait)
 {
 	const FBREntityInfo& I = MyInfo();
 	const APawn* Viewer = UGameplayStatics::GetPlayerPawn(this, 0);
@@ -2950,9 +2965,19 @@ void ABREntity::UpdateFootPlanting(float Dt)
 		for (FLimb& L : Limbs)
 		{
 			L.PlantPitch = FMath::FInterpTo(L.PlantPitch, 0.f, Dt, 6.f);
+			L.LockPitch = FMath::FInterpTo(L.LockPitch, 0.f, Dt, 10.f);
+			L.bStance = false;
 		}
 		return;
 	}
+	// v4.17 (animation) : appui verrouille a l'horizontale. Au debut de l'appui (cos(phase) <= 0 : la jambe recule, genou
+	// tendu), le pied pose son point au monde ; pendant l'appui, la cuisse tourne de ce qu'il faut pour l'y garder (deadbeat :
+	// l'ecart mesure a cette image est corrige a la suivante), 15 cm au plus ; au lever du pied, la correction s'efface.
+	// Avant, seule la hauteur etait corrigee : le pied glissait des que la cadence ne suivait pas exactement le corps (depart,
+	// arret, virage, cadence plafonnee, position recue du serveur chez un client)
+	const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
+	const bool bLock = InGait > 0.05f;
+	constexpr float LockBound = 15.f;
 	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : I.HalfHeight;
 	const float BaseZ = static_cast<float>(GetActorLocation().Z) - Half;
 	// Rayons au sol sous chaque pied, 20 fois par seconde (sol statique seulement : ni joueurs ni entites)
@@ -2999,6 +3024,36 @@ void ABREntity::UpdateFootPlanting(float Dt)
 		}
 		FootLift[i] = FMath::FInterpTo(FootLift[i], FMath::Clamp(FootGround[i] - PelvisDrop, 0.f, 35.f), Dt, 12.f);
 		const float Lift = FootLift[i];
+		if (i > 0 && (Limbs[i - 1].Type == ELimb::Thigh || Limbs[i - 1].Type == ELimb::HoundUpper))
+		{
+			FLimb& U = Limbs[i - 1];
+			const USceneComponent* C = L.Pivot.Get();
+			const bool bStanceNow = bLock && C && FMath::Cos(AnimTime + L.Phase) <= 0.f;
+			if (bStanceNow)
+			{
+				const FVector Foot = C->GetComponentTransform().TransformPosition(L.FootOffset);
+				if (!L.bStance)
+				{
+					L.Anchor = Foot; // le pied se pose
+				}
+				float Err = static_cast<float>(FVector::DotProduct(L.Anchor - Foot, Fwd));
+				if (FMath::Abs(Err) > LockBound)
+				{
+					// Trop loin (virage serre, arret net, correction du serveur) : le point d'appui suit, le pied glisse du reste
+					L.Anchor -= Fwd * static_cast<double>(Err - FMath::Sign(Err) * LockBound);
+					Err = FMath::Sign(Err) * LockBound;
+				}
+				// Hauteur de la hanche (rotation de la cuisse -> avancee du pied) ; LegLength si la mesure manque
+				const float LegH = FMath::Max(U.HipHeight > 0.5f * LegLength ? U.HipHeight : LegLength, 20.f);
+				const float MaxDeg = FMath::RadiansToDegrees(FMath::Atan(LockBound / LegH));
+				U.LockPitch = FMath::Clamp(U.LockPitch + FMath::RadiansToDegrees(FMath::Atan(Err / LegH)), -MaxDeg, MaxDeg);
+			}
+			else
+			{
+				U.LockPitch = FMath::FInterpTo(U.LockPitch, 0.f, Dt, 10.f);
+			}
+			L.bStance = bStanceNow;
+		}
 		if (L.Type == ELimb::HoundLower)
 		{
 			// Patte : le bas de la patte se replie (meme sens que le lever du pas)
@@ -3045,8 +3100,23 @@ bool ABREntity::MeasureFeet()
 		if (Idx > 0 && Limbs[Idx - 1].Pivot.IsValid())
 		{
 			L.UpperLen = static_cast<float>(FVector::Dist(Limbs[Idx - 1].Pivot->GetComponentLocation(), C->GetComponentLocation()));
+			// v4.17 (animation) : hauteur de la hanche au-dessus du sol, au repos : place du pivot de la cuisse dans son parent
+			// (Visual ou forme du Skin-Stealer, poses au sol), qui ne depend pas de l'echelle de la forme (masse ecrasee au debut)
+			Limbs[Idx - 1].HipHeight = static_cast<float>(Limbs[Idx - 1].Pivot->GetRelativeLocation().Z);
 		}
+		// v4.17 (animation) : rayon des pieds autour de l'axe (pietinement en tournant sur place)
+		FootRadius = FMath::Max(FootRadius, static_cast<float>(Knee.Size2D()));
 		bAny = true;
+	}
+	// v4.17 (animation) : facteur de foulee de chaque jambe. La cadence vient de LegLength : une jambe dont la hanche est plus
+	// basse (pattes arriere du Hound : ~59 cm contre 67) tourne d'un angle plus grand pour reculer d'autant pendant l'appui
+	// (avant : ~12 % de glissement a la marche, ~33 cm par appui en poursuite)
+	for (FLimb& L : Limbs)
+	{
+		if ((L.Type == ELimb::Thigh || L.Type == ELimb::HoundUpper) && L.HipHeight > 10.f)
+		{
+			L.StrideScale = FMath::Clamp(LegLength / L.HipHeight, 0.8f, 1.35f);
+		}
 	}
 	FootLift.SetNumZeroed(Limbs.Num());
 	FootGround.SetNumZeroed(Limbs.Num());
@@ -3112,6 +3182,341 @@ void ABREntity::KeepRigidPartsAboveGround()
 	}
 }
 
+FVector ABREntity::LowestContact(const FLimb& L)
+{
+	FVector Best = FVector::ZeroVector;
+	bool bAny = false;
+	for (const FVector& P : L.Contacts)
+	{
+		if (!bAny || P.Z < Best.Z)
+		{
+			Best = P;
+			bAny = true;
+		}
+	}
+	return Best;
+}
+
+FQuat ABREntity::AimRigidArm(const FLimb& L, const FVector& TipLocal, const FVector& WorldPoint) const
+{
+	// Bras rigide : la plus petite rotation qui amene la direction epaule -> griffe (pose de repos L.Base) vers le point vise.
+	// La longueur ne change pas : si le point est plus pres que la griffe, KeepRigidPartsAboveGround releve l'epaule du manque
+	const FQuat BaseQ = L.Base.Quaternion();
+	if (!Visual)
+	{
+		return BaseQ;
+	}
+	const FVector RestDir = BaseQ.RotateVector(TipLocal).GetSafeNormal();
+	const FVector WantDir = (Visual->GetComponentTransform().InverseTransformPosition(WorldPoint) - L.Joint).GetSafeNormal();
+	if (RestDir.IsNearlyZero() || WantDir.IsNearlyZero())
+	{
+		return BaseQ;
+	}
+	return FQuat::FindBetweenNormals(RestDir, WantDir) * BaseQ;
+}
+
+void ABREntity::AnimateBacteriaGait(float Dt)
+{
+	// v4.17 (animation) : la Bacteria fournie n'a pas de jambes articulees (corps et jambes d'une seule piece, modele protege).
+	// Avant, le modele suivait la capsule et son pied d'appui glissait sur la moquette (banc v4.17, l0_bacteria 020 -> 021 :
+	// ~1 m de glissement entre deux images), ses griffes frottaient le sol, et le corps tournait d'un bloc avec la capsule.
+	// - Allure a appuis (marche, rondes, approche lente, arret) : le modele reste pose au monde (pied et griffes immobiles)
+	//   tant que la capsule ne s'en est pas trop eloignee (40 cm, 60 pendant un coup) ni trop tournee (22 degres) ; puis il la
+	//   rattrape par un bond court (0,16 a 0,26 s, 2 a 5 cm de haut). A l'arret, il se recale par un petit bond. Pendant un
+	//   coup, le pied reste pose quand la capsule pousse contre la proie (l0_bacteria 029 -> 030 : saut de 8 a 15 cm avant).
+	// - Course (vitesse lissee au-dela de 200 a 320 cm/s) : portee par ses bras, pieds a 5-8 cm du sol, elle suit la capsule ;
+	//   son lacet affiche tourne a 420 degres/s au plus (avant : demi-tour d'un bloc, l0_bacteria 023 -> 024).
+	// - Poursuite a moins de 8 m : le corps fait face a sa proie (70 degres au plus de la capsule), meme quand le chemin passe
+	//   par le centre d'une cellule voisine.
+	// - Griffes : posees au monde a l'allure a appuis ; quand le corps les a depassees, elles se levent et se reposent devant,
+	//   un bras a la fois (meme principe que les mains d'appui du Clump). Pres d'un mur ou d'un chambranle, le bras se replie
+	//   vers le corps (rayon lateral toutes les 0,1 s, 22 degres au plus).
+	// Pose locale seulement (aucune propriete repliquee ; la capsule decide toujours du jeu). Cout : quelques transformations
+	// par image, 2 rayons toutes les 0,1 s ; rien de plus a plus de 25 m (le pas des rayons ne change pas).
+	if (!Visual)
+	{
+		return;
+	}
+	const FBREntityInfo& I = MyInfo();
+	const UCharacterMovementComponent* CharMove = GetCharacterMovement();
+	const bool bGrounded = CharMove && CharMove->IsMovingOnGround();
+	const FVector Here = GetActorLocation();
+	const FVector Vel = GetVelocity();
+	const float Speed = static_cast<float>(Vel.Size2D());
+	const float HereYaw = static_cast<float>(GetActorRotation().Yaw);
+	const float Strike = StrikeCurve();
+	const bool bAttack = WindupClock >= 0.f || StrikeTime >= 0.f;
+
+	// Allure : vitesse lissee, montee rapide et descente lente (les arrets secs de la poursuite ne la font pas retomber)
+	SupportSpeed = FMath::FInterpTo(SupportSpeed, Speed, Dt, Speed > SupportSpeed ? 6.f : 1.5f);
+	const float RunT = FMath::Clamp((SupportSpeed - 200.f) / 120.f, 0.f, 1.f);
+	SupportRun = RunT * RunT * (3.f - 2.f * RunT);
+
+	// Lacet voulu : celui de la capsule ; en poursuite proche, vers la proie
+	float WantYaw = HereYaw;
+	if (State == EState::Chase)
+	{
+		if (const ABRCharacter* P = Target.Get())
+		{
+			const FVector To = P->GetActorLocation() - Here;
+			const double D2 = To.SizeSquared2D();
+			if (D2 > 1.0 && D2 < FMath::Square(800.0))
+			{
+				const float ToYaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(To.Y, To.X)));
+				WantYaw = HereYaw + FMath::Clamp(FMath::FindDeltaAngleDegrees(HereYaw, ToYaw), -70.f, 70.f);
+			}
+		}
+	}
+
+	// Debut, jumpscare, chute, teleportation : posee la ou est la capsule
+	const float LagNow = static_cast<float>(FVector::Dist2D(Here, SupportPos));
+	if (!bSupportInit || bScareOverride || !bGrounded || LagNow > 200.f
+		|| (HopT < 0.f && FMath::Abs(FMath::FindDeltaAngleDegrees(SupportYaw, WantYaw)) > 120.f))
+	{
+		bSupportInit = true;
+		SupportPos = Here;
+		SupportYaw = WantYaw;
+		HopT = -1.f;
+		HopSettle = 0.f;
+		for (FCrutchArm& Arm : CrutchArms)
+		{
+			Arm.bPlanted = false;
+			Arm.Swing = -1.f;
+		}
+	}
+
+	float Lift = 0.f;
+	if (SupportRun >= 0.5f)
+	{
+		// Course : le modele suit la capsule ; lacet affiche a vitesse bornee, jamais plus de 45 degres de retard
+		SupportPos = Here;
+		HopT = -1.f;
+		HopSettle = 0.f;
+		const float YawGap = FMath::FindDeltaAngleDegrees(SupportYaw, WantYaw);
+		const float Turn = FMath::Clamp(YawGap, -420.f * Dt, 420.f * Dt);
+		SupportYaw = FMath::UnwindDegrees(WantYaw - FMath::Clamp(YawGap - Turn, -45.f, 45.f));
+	}
+	else
+	{
+		const float Lag = static_cast<float>(FVector::Dist2D(Here, SupportPos));
+		const float YawGap = FMath::FindDeltaAngleDegrees(SupportYaw, WantYaw);
+		if (HopT < 0.f)
+		{
+			// Posee : bond quand la capsule s'est trop eloignee ou a trop tourne ; a l'arret, petit bond pour se recaler (pas
+			// pendant un coup : le pied reste pose quand la capsule pousse contre la proie)
+			const bool bStill = Speed < 25.f;
+			HopSettle = (bStill && !bAttack && (Lag > 12.f || FMath::Abs(YawGap) > 6.f)) ? HopSettle + Dt : 0.f;
+			const float MaxLag = bAttack ? 60.f : 40.f;
+			const float MaxYaw = bAttack ? 35.f : 22.f;
+			// Marche ou bord franchi par la capsule : le modele pose a une autre hauteur la rattrape tout de suite
+			const bool bStepped = FMath::Abs(static_cast<float>(Here.Z - SupportPos.Z)) > 8.f;
+			if (Lag > MaxLag || FMath::Abs(YawGap) > MaxYaw || HopSettle > 0.35f || bStepped)
+			{
+				HopT = 0.f;
+				HopFromPos = SupportPos;
+				HopFromYaw = SupportYaw;
+				HopDuration = FMath::Clamp(0.16f + Lag / 500.f, 0.16f, 0.26f);
+				HopHeight = FMath::Clamp(2.f + Lag * 0.06f, 2.f, 5.f);
+				HopSettle = 0.f;
+			}
+		}
+		if (HopT >= 0.f)
+		{
+			// Bond vers la capsule (un peu en avant d'elle quand elle avance), en arc ; le lacet suit
+			HopT = FMath::Min(1.f, HopT + Dt / FMath::Max(HopDuration, 0.05f));
+			const float HopS = HopT * HopT * (3.f - 2.f * HopT);
+			const FVector Lead = (FVector(Vel.X, Vel.Y, 0.0) * 0.08).GetClampedToMaxSize(12.0);
+			SupportPos = FMath::Lerp(HopFromPos, Here + Lead, HopS);
+			SupportYaw = FMath::UnwindDegrees(HopFromYaw + FMath::FindDeltaAngleDegrees(HopFromYaw, WantYaw) * HopS);
+			Lift = FMath::Sin(HopT * PI) * HopHeight;
+			if (HopT >= 1.f)
+			{
+				HopT = -1.f;
+				bHopLanded = true;
+				LandNod = 1.f;
+			}
+		}
+	}
+	LandNod = FMath::Max(0.f, LandNod - Dt / 0.2f);
+
+	// Place du modele dans le repere de la capsule : l'ecart pose, hauteur comprise (attenue vers la course), hauteur du bond,
+	// portee en course
+	const FTransform AT = GetActorTransform();
+	FVector Rel = AT.InverseTransformPosition(SupportPos);
+	Rel *= static_cast<double>(FMath::Clamp(1.f - 2.f * SupportRun, 0.f, 1.f));
+	Lift += SupportRun * (5.f + 3.f * FMath::Abs(FMath::Sin(AnimTime)));
+	AppliedGroundZ = Lift;
+	Visual->SetRelativeLocation(VisualBase + FVector(Rel.X, Rel.Y, Rel.Z + static_cast<double>(AppliedGroundZ)));
+	// Penche en poursuite, ramassee a l'armee ; la fente de la frappe est un tangage autour du pied (avant : 16 cm de
+	// translation du corps rigide, le pied glissait d'autant) ; hochement a chaque reception. Les appuis du corps sont mesures
+	// pour un tangage de -20 a +20 degres
+	const float Pitch = FMath::Clamp(-LeanAnim * 6.f - WindupAnim * 6.f - Strike * 5.f - LandNod * 2.f, -20.f, 20.f);
+	Visual->SetRelativeRotation(FRotator(Pitch, FMath::FindDeltaAngleDegrees(HereYaw, SupportYaw), 0.f));
+
+	// Bras-bequilles
+	const FTransform VT = Visual->GetComponentTransform();
+	const FVector Origin = VT.GetLocation();
+	const FVector SideAxis = VT.GetUnitAxis(EAxis::Y).GetSafeNormal2D();
+	const UCapsuleComponent* Cap = GetCapsuleComponent();
+	const float GroundZ = static_cast<float>(Here.Z) - (Cap ? Cap->GetScaledCapsuleHalfHeight() : I.HalfHeight);
+	const float Ready = FMath::Clamp(FMath::Max(WindupAnim, Strike), 0.f, 1.f);
+	const float PlantW = bScareOverride ? 0.f
+		: FMath::Clamp(1.f - 2.f * SupportRun, 0.f, 1.f) * (1.f - FMath::Clamp(Reach, 0.f, 1.f)) * (1.f - Ready);
+	const FVector Ahead = Speed > 25.f ? (FVector(Vel.X, Vel.Y, 0.0) * 0.1).GetClampedToMaxSize(12.0) : FVector::ZeroVector;
+	const ABRWorld* PW = World.Get();
+	FoldTimer -= Dt;
+	const bool bTraceFold = FoldTimer <= 0.f && GetWorld() != nullptr;
+	if (bTraceFold)
+	{
+		FoldTimer = 0.1f;
+	}
+	int32 Swinging = 0;
+	for (const FCrutchArm& Arm : CrutchArms)
+	{
+		Swinging += Arm.Swing >= 0.f ? 1 : 0;
+	}
+	int32 ArmIndex = 0;
+	for (FLimb& L : Limbs)
+	{
+		USceneComponent* C = L.Pivot.Get();
+		if (!C || L.Type != ELimb::UpperArm || L.Contacts.Num() == 0 || ArmIndex >= 2)
+		{
+			continue;
+		}
+		FCrutchArm& Arm = CrutchArms[ArmIndex++];
+		const FVector TipLocal = LowestContact(L);
+		const FQuat BaseQ = L.Base.Quaternion();
+		const FVector RestTip = L.Joint + BaseQ.RotateVector(TipLocal); // repere du Visual
+		const float Out = RestTip.Y >= 0.0 ? 1.f : -1.f;
+		const float Ext = FMath::Abs(static_cast<float>(RestTip.Y));
+		if (bTraceFold)
+		{
+			// Mur ou chambranle de ce cote, a 45 cm du sol, depuis l'axe du modele
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BREntityCrutchFold), false, this);
+			const FCollisionObjectQueryParams Obj(ECC_WorldStatic);
+			const FVector From(Origin.X, Origin.Y, static_cast<double>(GroundZ) + 45.0);
+			FHitResult Hit;
+			Arm.FoldWant = 0.f;
+			if (GetWorld()->LineTraceSingleByObjectType(Hit, From, From + SideAxis * static_cast<double>(Out * (Ext + 20.f)), Obj, Q))
+			{
+				const float Free = static_cast<float>(Hit.Distance) - 8.f;
+				const float ArmLen = FMath::Max(static_cast<float>(TipLocal.Size()), 50.f);
+				Arm.FoldWant = FMath::Clamp(FMath::RadiansToDegrees((Ext - Free) / ArmLen), 0.f, 22.f);
+			}
+		}
+		Arm.Fold = FMath::FInterpTo(Arm.Fold, Arm.FoldWant, Dt, 8.f);
+		// Roulis positif = vers le corps pour un bras du cote +Y (et negatif pour -Y), comme le roulis de repos de 6 degres
+		const FQuat FoldQ = FRotator(0.f, 0.f, Out * Arm.Fold).Quaternion();
+		// Geste libre (AnimateLimbs : balancement, bras tendus, armee, frappe), replie pres d'un mur
+		FQuat Want = FoldQ * C->GetRelativeRotation().Quaternion();
+		if (PlantW > 0.01f)
+		{
+			// Griffe au repos (repliee), au sol, un peu devant quand le corps avance
+			FVector Home = VT.TransformPosition(L.Joint + (FoldQ * BaseQ).RotateVector(TipLocal)) + Ahead;
+			Home.Z = GroundZ;
+			const bool bVoid = PW && PW->HasPits() && PW->IsOverPit(Home);
+			if (bVoid)
+			{
+				// Rien sous la griffe (bord d'une fosse) : pas d'appui, le geste libre reste
+				Arm.bPlanted = false;
+				Arm.Swing = -1.f;
+			}
+			else
+			{
+				if (!Arm.bPlanted)
+				{
+					Arm.Planted = Home;
+					Arm.bPlanted = true;
+					Arm.Swing = -1.f;
+				}
+				// Le corps l'a depassee (apres un bond) ou elle doit se replier : elle se leve et se repose (un bras a la fois,
+				// sauf si elle est restee trop loin derriere : plus de 45 cm)
+				const double PlantGap = FVector::Dist2D(Arm.Planted, Home);
+				if (Arm.Swing < 0.f && PlantGap > 16.0 && ((HopT < 0.f && Swinging == 0) || PlantGap > 45.0))
+				{
+					Arm.SwingFrom = Arm.Planted;
+					Arm.Swing = 0.f;
+					++Swinging;
+				}
+				FVector Claw = Arm.Planted;
+				if (Arm.Swing >= 0.f)
+				{
+					Arm.Swing = FMath::Min(1.f, Arm.Swing + Dt / 0.16f);
+					const float SwingS = Arm.Swing * Arm.Swing * (3.f - 2.f * Arm.Swing);
+					Claw = FMath::Lerp(Arm.SwingFrom, Home, SwingS) + FVector(0.0, 0.0, static_cast<double>(FMath::Sin(Arm.Swing * PI) * 25.f));
+					if (Arm.Swing >= 1.f)
+					{
+						Arm.Planted = Home;
+						Arm.Swing = -1.f;
+					}
+				}
+				Want = FQuat::Slerp(Want, AimRigidArm(L, TipLocal, Claw), PlantW);
+			}
+		}
+		else
+		{
+			Arm.bPlanted = false;
+			Arm.Swing = -1.f;
+		}
+		C->SetRelativeRotation(Want);
+	}
+}
+
+void ABREntity::GetSupportPoints(TArray<FVector>& OutWorld) const
+{
+	OutWorld.Reset();
+	for (const FLimb& L : Limbs)
+	{
+		const USceneComponent* C = L.Pivot.Get();
+		if (C && (L.Type == ELimb::Shin || L.Type == ELimb::HoundLower))
+		{
+			OutWorld.Add(C->GetComponentTransform().TransformPosition(L.FootOffset));
+		}
+	}
+	if (Visual)
+	{
+		const FTransform VT = Visual->GetComponentTransform();
+		for (const FVector& P : BodyContacts)
+		{
+			OutWorld.Add(VT.TransformPosition(P));
+		}
+	}
+	for (const FLimb& L : Limbs)
+	{
+		const USceneComponent* C = L.Pivot.Get();
+		if (C && L.Contacts.Num() > 0)
+		{
+			const FTransform CT = C->GetComponentTransform();
+			FVector Low = CT.TransformPosition(L.Contacts[0]);
+			for (const FVector& P : L.Contacts)
+			{
+				const FVector W = CT.TransformPosition(P);
+				if (W.Z < Low.Z)
+				{
+					Low = W;
+				}
+			}
+			OutWorld.Add(Low);
+		}
+	}
+}
+
+float ABREntity::GetSupportGroundZ() const
+{
+	const UCapsuleComponent* Cap = GetCapsuleComponent();
+	return static_cast<float>(GetActorLocation().Z) - (Cap ? Cap->GetScaledCapsuleHalfHeight() : MyInfo().HalfHeight);
+}
+
+float ABREntity::GetVisualLag() const
+{
+	return Visual ? static_cast<float>(FVector::Dist2D(Visual->GetComponentLocation(), GetActorLocation())) : 0.f;
+}
+
+float ABREntity::GetVisualYaw() const
+{
+	return Visual ? static_cast<float>(Visual->GetComponentRotation().Yaw) : static_cast<float>(GetActorRotation().Yaw);
+}
+
 bool ABREntity::LowestFootHeight(float& OutHeight) const
 {
 	const FTransform AT = GetActorTransform();
@@ -3145,6 +3550,16 @@ void ABREntity::Animate(float Dt)
 	// v4.5 : amplitude du pas selon la vitesse (jusqu'a 1,5 x en poursuite), cadence deduite de la distance parcourue :
 	// pendant l'appui, le pied recule exactement de ce dont le corps avance (2 L sin A par demi-cycle) : pas de glissement
 	const float Gait = FMath::Clamp(Speed / 220.f, 0.f, 1.5f);
+	// v4.17 (animation) : rotation de la capsule sur place, mesuree chez chacun d'une image a l'autre (rien de replique en plus)
+	const float YawNow = static_cast<float>(GetActorRotation().Yaw);
+	const float YawRate = (bAnimYawSeen && Dt > 0.f) ? FMath::Abs(FMath::FindDeltaAngleDegrees(LastAnimYaw, YawNow)) / Dt : 0.f;
+	LastAnimYaw = YawNow;
+	bAnimYawSeen = true;
+	const bool bLegged = FootRadius > 1.f && LegLength > 1.f;
+	TurnShuffle = FMath::FInterpTo(TurnShuffle, (bLegged && !bFrozen && Speed < 40.f && YawRate > 25.f) ? 1.f : 0.f, Dt, 8.f);
+	// Allure des membres : celle de la vitesse, ou les petits pas d'une rotation sur place
+	float AnimGait = Gait;
+	StrideBoost = 1.f;
 	if (!bFrozen)
 	{
 		float LegAmpDeg = 26.f;
@@ -3157,7 +3572,23 @@ void ABREntity::Animate(float Dt)
 			}
 		}
 		const float A = FMath::DegreesToRadians(LegAmpDeg * FMath::Max(Gait, 0.2f));
-		const float Omega = Speed > 5.f ? (PI * Speed) / (2.f * LegLength * FMath::Max(FMath::Sin(A), 0.05f)) : 0.f;
+		float Omega = Speed > 5.f ? (PI * Speed) / (2.f * LegLength * FMath::Max(FMath::Sin(A), 0.05f)) : 0.f;
+		if (Omega > 16.f && bLegged)
+		{
+			// v4.17 (animation) : au-dela de 16 rad/s (Hound en poursuite : il en faudrait ~21), la foulee s'allonge au lieu de laisser
+			// glisser le pied d'appui (avant : ~23 cm de glissement par appui) ; 50 degres au plus
+			const float WantSin = FMath::Min(PI * Speed / (2.f * LegLength * 16.f), 0.766f);
+			StrideBoost = FMath::Max(1.f, FMath::Asin(WantSin) / FMath::Max(A, 0.01f));
+			Omega = PI * Speed / (2.f * LegLength * WantSin);
+		}
+		if (TurnShuffle > 0.01f)
+		{
+			// v4.17 (animation) : rotation sur place : petits pas de 10 degres au rythme de l'arc que parcourent les pieds (avant :
+			// membres immobiles, pieds qui patinaient en arc : ~116 cm par demi-tour pour les pattes du Hound)
+			const float OmegaTurn = FMath::DegreesToRadians(YawRate) * FootRadius / (2.f * LegLength * FMath::Sin(FMath::DegreesToRadians(10.f)));
+			Omega = FMath::Max(Omega, OmegaTurn * TurnShuffle);
+			AnimGait = FMath::Max(Gait, TurnShuffle * 10.f / FMath::Max(LegAmpDeg, 1.f));
+		}
 		AnimTime += Dt * FMath::Clamp(Omega, 0.f, 16.f);
 	}
 
@@ -3222,10 +3653,19 @@ void ABREntity::Animate(float Dt)
 
 	if (!bFrozen)
 	{
-		AnimateLimbs(Dt, Gait);
+		AnimateLimbs(Dt, AnimGait);
 	}
 	// v4.7 : chaque pied cherche son propre sol (le reglage v4.6 supposait un sol plat sous tout le corps)
-	UpdateFootPlanting(Dt);
+	// v4.17 (animation) : et le pied d'appui reste a sa place au monde (UpdateFootPlanting)
+	UpdateFootPlanting(Dt, bFrozen ? 0.f : AnimGait);
+	if (Kind == EBREntityKind::Bacteria && BodyContacts.Num() > 0)
+	{
+		// v4.17 (animation) : modele fourni (corps rigide) : pose au sol et bonds au lieu de glisser avec la capsule, puis
+		// la meme garde d'appui que la v4.16
+		AnimateBacteriaGait(Dt);
+		KeepRigidPartsAboveGround();
+		return;
+	}
 
 	// Accroupissement (Faceling), palpitation de la masse (Skin-Stealer)
 	// v4.5 : armee (le corps se tasse), frappe (fente vers l'avant), sursaut de la detection
@@ -3393,7 +3833,8 @@ void ABREntity::AnimateLimbs(float Dt, float Gait)
 			R.Pitch += WindupAnim * (1.f - Strike) * 55.f - Strike * 10.f + AlertAnim * 20.f; // coude plie, puis bras detendu
 			break;
 		case ELimb::Thigh:
-			R.Pitch += L.Amp * Swing * Gait + Ready * 14.f + L.PlantPitch;
+			// v4.17 (animation) : foulee allongee au plafond de cadence (StrideBoost), facteur de la jambe, appui tenu au monde
+			R.Pitch += L.Amp * Swing * Gait * StrideBoost * L.StrideScale + Ready * 14.f + L.PlantPitch + L.LockPitch;
 			break;
 		case ELimb::Shin:
 			R.Pitch -= L.Amp * Lift * Gait + Ready * 26.f; // le genou plie vers l'arriere ; flechi pour l'appel
@@ -3401,7 +3842,8 @@ void ABREntity::AnimateLimbs(float Dt, float Gait)
 			break;
 		case ELimb::HoundUpper:
 			// Hound : tasse sur ses pattes avant de bondir, puis pattes avant lancees vers la proie
-			R.Pitch += L.Amp * Swing * Gait + L.Sign * (WindupAnim * 18.f - Strike * 30.f);
+			// v4.17 (animation) : foulee allongee au plafond de cadence, pattes arriere plus courtes, appui tenu au monde
+			R.Pitch += L.Amp * Swing * Gait * StrideBoost * L.StrideScale + L.Sign * (WindupAnim * 18.f - Strike * 30.f) + L.LockPitch;
 			break;
 		case ELimb::HoundLower:
 			R.Pitch += L.Sign * L.Amp * Lift * Gait - L.Sign * WindupAnim * 30.f + L.PlantPitch;
