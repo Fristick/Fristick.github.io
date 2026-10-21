@@ -3223,7 +3223,7 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 		if (!Goal.IsEmpty())
 		{
 			FBRObjective G;
-			G.Text = Goal.ToUpper();
+			G.Text = Goal; // v4.17 : casse de phrase (FString::ToUpper ne traitait que l'ASCII : "ReTABLIR", russe en minuscules)
 			G.Progress = E.bSolved ? 1 : 0;
 			G.bRequired = true;
 			G.bHideCount = true;
@@ -3236,7 +3236,7 @@ void ABRWorld::GetObjectives(TArray<FBRObjective>& Out) const
 				continue;
 			}
 			FBRObjective Step;
-			Step.Text = BRMissionText::StepTitle(D.Number, I).ToUpper();
+			Step.Text = BRMissionText::StepTitle(D.Number, I); // v4.17 : casse de phrase, comme le carnet
 			Step.Progress = E.Steps[I] == BRMission::EStep::Done ? FMath::Max<int32>(1, E.Goal[I]) : E.Progress[I];
 			Step.Goal = E.Goal[I] > 1 ? E.Goal[I] : 0;
 			if (Step.Goal == 0)

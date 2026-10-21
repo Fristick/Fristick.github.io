@@ -90,8 +90,30 @@ struct FBRSkinDriver
 	void Apply() const;
 };
 
+/** v4.17 (animation, tests, lecture seule) : pose du corps d'un joueur a la derniere image ou il a ete anime (3e personne ou
+ *  coequipier ; rien a la 1re personne). Calculee chez chacun, rien n'est replique. Les os du maillage se lisent directement sur
+ *  son UPoseableMeshComponent (LeftUpLeg, LeftLeg, RightHand...) */
+struct FBRBodyPoseInfo
+{
+	/** Lacet monde des jambes et ecart des jambes a la visee (deg, le buste reste face a la visee) */
+	float LowerYaw = 0.f;
+	float YawOffset = 0.f;
+	/** Rattrapage du lacet par de petits pas (0..1) */
+	float TurnStep = 0.f;
+	/** Descente du bassin vers le sol le plus bas sous les pieds, et sur la jambe d'appui (cm, positive vers le bas) */
+	float PelvisDrop = 0.f;
+	float WalkDrop = 0.f;
+	/** Sol sous chaque pied (cm, par rapport au bas de la capsule ; 0 gauche, 1 droite) et pied estime au monde (geometrie de la
+	 *  foulee, pas l'os : celui que suivent les rayons au sol) */
+	float FootGround[2] = { 0.f, 0.f };
+	FVector FootWorld[2] = { FVector::ZeroVector, FVector::ZeroVector };
+};
+
 namespace BRRig
 {
+	/** v4.17 (animation, tests) : pose du corps du joueur Character (ABRCharacter) ; false s'il n'a pas encore ete anime */
+	bool GetBodyPoseInfo(const AActor* Character, FBRBodyPoseInfo& Out);
+
 	/**
 	 * Ajoute une piece : un pivot (USceneComponent) place sur l'articulation + le maillage (ou une boite de repli).
 	 * Les composants crees sont ajoutes a OutComponents, a conserver dans un UPROPERTY de l'acteur.

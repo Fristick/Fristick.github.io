@@ -214,8 +214,8 @@ int main(int Argc, char** Argv)
 		BRColor::HueSat(Lamp, Hue, Sat);
 		std::snprintf(Buf, sizeof(Buf), "Level 0 : lampe blanc chaud (teinte %.0f, saturation %.2f ; avant %.0f / %.2f)", Hue, Sat, HueBefore, SatBefore);
 		Line(Buf, Hue >= 25.f && Hue <= 50.f && Sat < SatBefore);
-		// Papier peint du Level 0 (moyenne de T_L0_Wallpaper)
-		const float Paper[3] = { 0.67f, 0.65f, 0.40f };
+		// Papier peint du Level 0 (moyenne de T_L0_Wallpaper ; v4.17 : bandes moins claires, ocre-olive, avant 0,67 / 0,65 / 0,40)
+		const float Paper[3] = { 0.62f, 0.59f, 0.38f };
 		const float PaperBefore[3] = { Paper[0] * Before[0], Paper[1] * Before[1], Paper[2] * Before[2] };
 		float WallBefore[3];
 		BRColor::WhiteBalance(PaperBefore, 6500.f, 0.f, WallBefore);

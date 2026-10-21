@@ -66,6 +66,9 @@ namespace
 		D.Fixture = EBRFixture::Panel;
 		D.LightChance = 0.38f; D.BrokenChance = 0.06f; D.FlickerChance = 0.07f;
 		D.LightLumens = 2400.f; D.LightColor = C(1.f, 1.f, 1.f); D.LightRadius = 620.f;
+		// v4.17 : image seulement (agents eclairage et direction artistique, Docs/v417/agents/) : murs plus clairs que la moquette
+		// et coins sans profondeur : rebond des plafonniers a 0,8, portee visible de 560 cm (la regle garde 620 cm)
+		D.LightIndirect = 0.8f; D.LightVisualRadius = 560.f;
 		D.DarkZoneChance = 0.06f; D.ShadowChance = 0.15f;
 		// v4.15 : neons blanc chaud (3700 K) vus avec une balance des blancs a 3900 K : lampe blanc chaud (1, 0,94, 0,86) ; le
 		// jaune vient du papier peint et de la moquette eclaires, plus de la teinte de l'image (moins saturee, plus
@@ -155,7 +158,9 @@ namespace
 		D.PillarChance = 0.55f; D.PillarSize = 80.f; D.OpenZoneChance = 0.3f;
 		D.bTrim = false; D.bLintels = true;
 		D.Floor = S(TEXT("T_ConcreteFloor"), C(1, 1, 1), 400.f, 0.55f, 0.35f);
-		D.Floor.Puddles = 0.55f; D.Floor.Wetness = 0.12f; // le sol du garage : flaques en reflets ray traces
+		// le sol du garage : flaques en reflets ray traces ; v4.17 : 0,55 avant (~25 % du sol, des formes dures "en camouflage"),
+		// 0,22 : ~9 %, quelques flaques ou l'eau s'accumule (direction artistique : l'usure a une cause et reste rare)
+		D.Floor.Puddles = 0.22f; D.Floor.Wetness = 0.12f;
 		D.bGarage = true;
 		D.Wall = S(TEXT("T_Concrete"), C(0.95f, 0.95f, 0.95f), 350.f, 0.85f, 0.4f);
 		D.Ceiling = S(TEXT("T_Concrete"), C(0.6f, 0.6f, 0.6f), 400.f, 0.9f, 0.3f);
@@ -215,7 +220,7 @@ namespace
 		D.LoopChance = 0.15f; D.OpenZoneChance = 0.06f;
 		D.bTrim = false; D.bLintels = false;
 		D.Floor = S(TEXT("T_ConcreteFloor"), C(0.8f, 0.76f, 0.7f), 250.f, 0.7f, 0.5f);
-		D.Floor.Puddles = 0.35f; D.Floor.Wetness = 0.1f; // fuites des tuyaux
+		D.Floor.Puddles = 0.2f; D.Floor.Wetness = 0.1f; // fuites des tuyaux ; v4.17 : 0,35 avant (meme masque dur qu'au Niveau 1)
 		D.Wall = S(TEXT("T_Concrete"), C(0.72f, 0.68f, 0.6f), 250.f, 0.9f, 0.55f);
 		D.Ceiling = S(TEXT("T_ConcreteDark"), C(1, 1, 1), 250.f, 0.9f, 0.4f);
 		// v4.15 (realisme) : pores et fissures du beton dans l'ombre (occlusion de cavite)
@@ -640,7 +645,9 @@ namespace
 		D.DeckHeight = 68.f; D.DeckWidth = 120.f; D.DeckStep = 34.f; D.DeckStepWidth = 40.f; D.DeckChance = 0.6f;
 		D.Floor = S(TEXT("T_PoolTile37"), C(1.f, 1.02f, 1.f), 100.f, 0.12f, 0.08f);
 		D.Wall = S(TEXT("T_PoolTile37"), C(1.02f, 1.02f, 1.f), 100.f, 0.1f, 0.1f);
-		D.Ceiling = S(TEXT("T_Plaster"), C(1.08f, 1.09f, 1.08f), 300.f, 0.55f, 0.05f);
+		// v4.17 : plafond en platre moins clair que le carrelage (1,08 avant : le plafond etait la surface la plus claire de
+		// l'image, 0,28 de mediane contre 0,11 pour les murs sur la pose de demi-tour)
+		D.Ceiling = S(TEXT("T_Plaster"), C(0.9f, 0.91f, 0.9f), 300.f, 0.55f, 0.05f);
 		D.Pillar = D.Wall;
 		D.Fixture = EBRFixture::SkyPanel;
 		D.LightChance = 0.6f; D.BrokenChance = 0.f; D.FlickerChance = 0.f;
@@ -656,8 +663,9 @@ namespace
 		D.WaterAbsorption = 1.f; D.WaterScattering = 0.22f;
 		D.WaterWaves = 0.3f; D.WaterChop = 0.35f;
 		D.PoolChance = 0.15f; D.PoolDepth = 260.f;
-		D.FogDensity = 0.012f; D.FogColor = C(0.66f, 0.73f, 0.71f);
-		D.ShadowTint = C(0.95f, 1.f, 1.02f); D.HighlightTint = C(1.02f, 1.02f, 1.f); D.VolumetricScatter = 0.5f;
+		// v4.17 : brume moins laiteuse dans les grandes salles (0,012 avant), formes lisibles au fond des couloirs
+		D.FogDensity = 0.009f; D.FogColor = C(0.66f, 0.73f, 0.71f);
+		D.ShadowTint = C(0.95f, 1.f, 1.02f); D.HighlightTint = C(1.02f, 1.02f, 1.f); D.VolumetricScatter = 0.4f; // v4.17 : 0,5 avant
 		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.4f;
 		D.MinEV = 3.f; D.MaxEV = 10.f;
 		D.AmbientSound = TEXT("S_Amb_Pool"); D.AmbientVolume = 0.7f;

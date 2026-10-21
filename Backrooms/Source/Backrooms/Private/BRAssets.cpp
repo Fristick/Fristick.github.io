@@ -76,6 +76,14 @@ namespace
 		float TexScale;
 		/** v4.5 : normal map propre (modele cuit) ; sinon T_Skin_N pour la peau */
 		const TCHAR* Normal = nullptr;
+		/** v4.17 : equipement (parent M_BR_Gear) : carte ORM (R occlusion, G rugosite, B metal), reflectance, saturation de
+		 *  l'albedo, force de la normale, part de l'occlusion */
+		const TCHAR* Orm = nullptr;
+		bool bGear = false;
+		float Specular = 0.5f;
+		float Saturation = 1.f;
+		float NormalStrength = 1.f;
+		float Cavity = 0.f;
 	};
 
 	// Style de chaque nom de materiau utilise par les modeles Blender (generate_models.py)
@@ -84,7 +92,9 @@ namespace
 		static TArray<FSlotStyle> Styles = []()
 		{
 			TArray<FSlotStyle> S = {
-				{ TEXT("Frame"), TEXT("T_Grime"), FLinearColor(0.85f, 0.85f, 0.82f), 0.4f, 0.3f, 1.f },
+				// v4.17 : cadre des dalles lumineuses (SM_LightPanel, seul modele a ce slot) en tole peinte blanc casse un peu jaunie,
+				// sans les taches de T_Grime ni metal (direction artistique, point 8 ; avant : T_Grime 0,85, metallic 0,3)
+				{ TEXT("Frame"), TEXT("T_Paper"), FLinearColor(0.86f, 0.83f, 0.74f), 0.45f, 0.f, 2.f },
 				{ TEXT("Trim"), TEXT("T_Grime"), FLinearColor(0.88f, 0.88f, 0.86f), 0.5f, 0.f, 1.f },
 				{ TEXT("Metal"), TEXT("T_Grime"), FLinearColor(0.5f, 0.5f, 0.52f), 0.45f, 0.85f, 1.f },
 				{ TEXT("DarkMetal"), TEXT("T_Grime"), FLinearColor(0.09f, 0.09f, 0.1f), 0.5f, 0.6f, 1.f },
@@ -154,9 +164,13 @@ namespace
 				{ TEXT("Reflective"), TEXT("T_Grime"), FLinearColor(0.85f, 0.85f, 0.8f), 0.2f, 0.6f, 1.f },
 				{ TEXT("Glove"), TEXT("T_Skin"), FLinearColor(0.7f, 0.55f, 0.08f), 0.5f, 0.f, 3.f },
 				// v3 : modeles fournis (textures UV d'origine)
-				{ TEXT("HazmatSuit"), TEXT("T_Hazmat_Suit"), FLinearColor(1.f, 1.f, 1.f), 0.62f, 0.f, 1.f },
-				{ TEXT("HazmatMask"), TEXT("T_Hazmat_Mask"), FLinearColor(1.f, 1.f, 1.f), 0.45f, 0.1f, 1.f },
-				{ TEXT("HazmatGlass"), TEXT("T_Grime"), FLinearColor(0.015f, 0.02f, 0.025f), 0.04f, 0.7f, 1.f },
+				// v4.17 : equipement sur M_BR_Gear (agent Unreal Technical Artist, Docs/v417/agents/materiaux_combinaison.md) :
+				// PVC enduit 0,36 (carte ORM : coutures, plis, gants, bottes, salissure), normal map derivee de l'atlas ;
+				// masque en caoutchouc sans metal (0,1 avant) ; visiere en verre fume, dielectrique (metallic 0,7 avant : deux
+				// fois moins de reflet qu'un vrai verre), rugosite 0,06 au centre a 0,15 au bord par la carte ORM
+				{ TEXT("HazmatSuit"), TEXT("T_Hazmat_Suit"), FLinearColor(1.f, 1.f, 1.f), 0.38f, 0.f, 1.f, TEXT("T_Hazmat_Suit_N"), TEXT("T_Hazmat_Suit_ORM"), true, 0.5f, 1.f, 1.f, 0.6f },
+				{ TEXT("HazmatMask"), TEXT("T_Hazmat_Mask"), FLinearColor(1.f, 1.f, 1.f), 0.55f, 0.f, 1.f, nullptr, nullptr, true, 0.5f, 1.f, 0.f, 0.f },
+				{ TEXT("HazmatGlass"), TEXT("T_Hazmat_Suit"), FLinearColor(0.016f, 0.018f, 0.02f), 0.06f, 0.f, 1.f, nullptr, TEXT("T_Hazmat_Suit_ORM"), true, 0.6f, 1.f, 0.f, 0.f },
 				{ TEXT("MothTex"), TEXT("T_Deathmoth"), FLinearColor(1.f, 1.f, 1.f), 0.78f, 0.f, 1.f },
 				{ TEXT("BacteriaSkin"), TEXT("T_Grime"), FLinearColor(0.006f, 0.006f, 0.008f), 0.22f, 0.f, 1.f },
 				// v3.5 : Skin-Stealer, Faceling, Partygoer, Hound fournis ; Smiler et Clump refaits d'apres les images
@@ -1233,8 +1247,14 @@ UTexture* UBRAssets::Texture(FName Name)
 	const FString N = Name.ToString();
 	// Normal maps et textures de donnees (bruits du materiau du monde) : valeurs lineaires
 	// v4.7 : cartes de rugosite (<Texture>_R) : donnees, lineaires
-	const bool bLinear = N.EndsWith(TEXT("_N")) || N.EndsWith(TEXT("_R")) || N.Contains(TEXT("Normal")) || N == TEXT("T_NoiseLF");
+	// v4.17 : cartes ORM (occlusion, rugosite, metal) : donnees, lineaires ; cartes derivees (RawAssets/Derived/Textures,
+	// combinaison) lues ensuite (editeur seulement, comme tout ce secours)
+	const bool bLinear = N.EndsWith(TEXT("_N")) || N.EndsWith(TEXT("_R")) || N.EndsWith(TEXT("_ORM")) || N.Contains(TEXT("Normal")) || N == TEXT("T_NoiseLF");
 	UTexture2D* Raw = LoadRawTexture(TEXT("Textures"), Name, bLinear, true);
+	if (!Raw && !FPlatformProperties::RequiresCookedData())
+	{
+		Raw = LoadRawTexture(TEXT("Derived/Textures"), Name, bLinear, true);
+	}
 	if (Raw)
 	{
 		Loaded.Add(RawKey, Raw);
@@ -1405,12 +1425,12 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	ParentResolved[Index] = true;
 
 	const TCHAR* AssetNames[] = { TEXT("M_BR_World"), TEXT("M_BR_Mesh"), TEXT("M_BR_Skin"), TEXT("M_BR_WaterSurface"), TEXT("M_BR_PitShade"),
-		TEXT("M_BR_WorldCloth"), TEXT("MD_BR_Decal") };
+		TEXT("M_BR_WorldCloth"), TEXT("MD_BR_Decal"), TEXT("M_BR_Gear") };
 	// Parametre propre a la version attendue de chaque materiau : une version plus ancienne (sans ce parametre) est ignoree
 	// (v4.7 : "RoughContrast", la carte de rugosite ; la peau et les modeles l'ont aussi. v4.15 : "Cavity" pour le monde,
 	// materiaux v8 : normales reorientees, occlusion de cavite, reflectance ; "Sheen" pour la moquette)
 	const TCHAR* V2Params[] = { TEXT("Cavity"), TEXT("RoughContrast"), TEXT("RoughContrast"), TEXT("WaterSim"), TEXT("PitShadeAmount"),
-		TEXT("Sheen"), TEXT("DecalOpacity") };
+		TEXT("Sheen"), TEXT("DecalOpacity"), TEXT("RoughMapWeight") };
 	static_assert(UE_ARRAY_COUNT(AssetNames) == static_cast<int32>(EParent::Count), "Un materiau maitre par EParent");
 	// -BRRuntimeMaterials : ignore les materiaux importes (pour tester ceux construits en C++)
 	static const bool bForceRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
@@ -1426,10 +1446,15 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 		{
 			UE_LOG(LogBackrooms, Warning, TEXT("%s date d'une ancienne version : relancez l'import (backrooms_setup.run(force=True))."),
 				AssetNames[Index]);
-			// Sans constructeur de materiaux (jeu empaquete), une ancienne version vaut mieux que des couleurs unies
+			// Sans constructeur de materiaux (jeu empaquete), une ancienne version vaut mieux que des couleurs unies.
+			// v4.17 : mais plus en silence : c'est un probleme de materiau (rapport des tests, paquet), plus un simple avertissement
 			if (BRMaterialBuilder::IsAvailable())
 			{
 				M = nullptr;
+			}
+			else
+			{
+				ReportMaterialProblem(FString::Printf(TEXT("%s date d'une ancienne version dans le paquet : rendu ancien"), AssetNames[Index]));
 			}
 		}
 	}
@@ -1437,7 +1462,8 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 	// v4.8 : usages declares (instances, maillages a squelette, Nanite). Un materiau importe avant la v4.8 n'a que l'usage
 	// "instances" : la combinaison et les entites a squelette recevaient le materiau par defaut hors de l'editeur
 	static const EBRMasterMaterial UsageKinds[] = { EBRMasterMaterial::World, EBRMasterMaterial::Mesh, EBRMasterMaterial::Skin,
-		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade, EBRMasterMaterial::WorldCloth, EBRMasterMaterial::Decal };
+		EBRMasterMaterial::WaterSurface, EBRMasterMaterial::PitShade, EBRMasterMaterial::WorldCloth, EBRMasterMaterial::Decal,
+		EBRMasterMaterial::Gear };
 	static_assert(UE_ARRAY_COUNT(UsageKinds) == static_cast<int32>(EParent::Count), "Un type de materiau par EParent");
 	if (M && !EnsureUsages(M, UsageKinds[Index], AssetNames[Index]) && BRMaterialBuilder::IsAvailable())
 	{
@@ -1451,6 +1477,15 @@ UMaterialInterface* UBRAssets::Parent(EParent Which)
 		{
 			bRuntimeContent = true;
 		}
+	}
+	// v4.17 : l'equipement retombe sur le materiau des modeles (sans relief), signale
+	if (!M && Which == EParent::Gear)
+	{
+		ReportMaterialProblem(TEXT("M_BR_Gear absent : equipement sur M_BR_Mesh, sans relief"));
+		M = Parent(EParent::Mesh);
+		ParentCustom[Index] = ParentCustom[static_cast<int32>(EParent::Mesh)];
+		Parents[Index] = M;
+		return M;
 	}
 	// La peau retombe sur le materiau des modeles
 	if (!M && Which == EParent::Skin)
@@ -1985,8 +2020,10 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 	{
 		const FSlotStyle* Style = FindSlotStyle(SlotName);
 		const FLinearColor Color = TintOverride ? *TintOverride : (Style ? Style->Color : FLinearColor(0.6f, 0.6f, 0.6f));
-		const bool bSkin = IsSkinSlot(SlotName);
-		UMaterialInterface* ParentMat = Parent(bSkin ? EParent::Skin : EParent::Mesh);
+		// v4.17 : l'equipement (combinaison, masque, visiere) a son parent M_BR_Gear (jamais la chair)
+		const bool bGear = Style && Style->bGear;
+		const bool bSkin = !bGear && IsSkinSlot(SlotName);
+		UMaterialInterface* ParentMat = Parent(bGear ? EParent::Gear : (bSkin ? EParent::Skin : EParent::Mesh));
 		const bool bCustom = ParentMat != nullptr;
 		if (!ParentMat)
 		{
@@ -2006,7 +2043,45 @@ UMaterialInterface* UBRAssets::SlotMaterial(const FString& SlotName, const FLine
 				MID->SetScalarParameterValue(TEXT("Roughness"), Style ? Style->Rough : 0.7f);
 				MID->SetScalarParameterValue(TEXT("Metallic"), Style ? Style->Metal : 0.f);
 				// v4.7 : carte de rugosite de la texture du modele (peaux du Wretch et du Clump, metal rouille)
-				ApplyRoughMap(MID, Style ? FName(Style->Tex) : NAME_None, 1.f);
+				if (!bGear)
+				{
+					ApplyRoughMap(MID, Style ? FName(Style->Tex) : NAME_None, 1.f);
+				}
+				else
+				{
+					// v4.17 : normal map et carte ORM de l'equipement ; une carte declaree mais absente, ou en sRGB, donne des
+					// valeurs neutres et un probleme de materiau (jamais en silence)
+					UTexture* N = Style->Normal ? Texture(FName(Style->Normal)) : nullptr;
+					if (Style->Normal && !N)
+					{
+						ReportMaterialProblem(FString::Printf(TEXT("%s : %s absente (combinaison sans relief)"), *SlotName, Style->Normal));
+					}
+					if (N)
+					{
+						MID->SetTextureParameterValue(TEXT("NormalTex"), N);
+					}
+					MID->SetScalarParameterValue(TEXT("NormalStrength"), N ? Style->NormalStrength : 0.f);
+					UTexture* Orm = Style->Orm ? Texture(FName(Style->Orm)) : nullptr;
+					// Echantillonneur fige a la compilation du parent : carte branchee seulement si elle et la valeur par defaut
+					// sont lineaires (meme garde que ApplyRoughMap)
+					UTexture* MaskDefault = nullptr;
+					const bool bMaskParam = MID->GetTextureParameterValue(FHashedMaterialParameterInfo{ FName(TEXT("MaskTex")) }, MaskDefault);
+					const bool bOrm = Orm && !Orm->SRGB && bMaskParam && MaskDefault && !MaskDefault->SRGB;
+					if (Style->Orm && !bOrm)
+					{
+						ReportMaterialProblem(FString::Printf(TEXT("%s : %s %s (rugosite constante)"), *SlotName, Style->Orm,
+							!Orm ? TEXT("absente") : (Orm->SRGB ? TEXT("en sRGB") : TEXT("non branchable sur ce parent"))));
+					}
+					if (bOrm)
+					{
+						MID->SetTextureParameterValue(TEXT("MaskTex"), Orm);
+					}
+					MID->SetScalarParameterValue(TEXT("RoughMapWeight"), bOrm ? 1.f : 0.f);
+					MID->SetScalarParameterValue(TEXT("CavityWeight"), bOrm ? Style->Cavity : 0.f);
+					MID->SetScalarParameterValue(TEXT("MetalMapWeight"), 0.f);
+					MID->SetScalarParameterValue(TEXT("Specular"), Style->Specular);
+					MID->SetScalarParameterValue(TEXT("Saturation"), Style->Saturation);
+				}
 				MID->SetVectorParameterValue(TEXT("Emissive"), FLinearColor::Black);
 				if (bSkin)
 				{

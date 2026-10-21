@@ -13,6 +13,10 @@
 /Game/Backrooms/Materials/M_BR_WorldCloth
 /Game/Backrooms/Materials/MD_BR_Decal
 /Game/Backrooms/Textures/T_Decal_Atlas
+# v4.17 : equipement du joueur (normal map et carte ORM derivees de la combinaison)
+/Game/Backrooms/Materials/M_BR_Gear
+/Game/Backrooms/Textures/T_Hazmat_Suit_N
+/Game/Backrooms/Textures/T_Hazmat_Suit_ORM
 
 # Joueur : combinaison hazmat, camescope, lampe
 /Game/Backrooms/Meshes/SK_Hazmat

@@ -456,3 +456,254 @@ attendu de la vitesse (|Δx − v·dt| ≤ 3 cm), à comparer avec la version ac
    poursuite touchent l'IA sur l'hôte.
 10. Captures à ajouter : escalier du sas de service (8 marches de 20 cm), portes de 130 et 150 cm, gros plans de main
     et de coude, Hound et Skin-Stealer en mouvement, vue d'un client.
+
+---
+
+## Réalisation (v417-anim)
+
+Branche `v417-anim`, partie de `v417-jeu` (`7c50c7a`). Toujours dans le rôle Technical Artist. Fichiers modifiés :
+`Source/Backrooms/Private/BREntity.cpp`, `Public/BREntity.h`, `Public/BRRig.h`, et dans `Private/BRCharacter.cpp`
+seulement `AnimateBody` et `PoseSkin`, plus l'état local de la pose et un crochet de lecture placés juste avant
+`AnimateBody`.
+
+Je n'ai touché ni au banc (`BRAutoTestV417Visual.cpp`), ni aux fichiers partagés, ni aux ressources protégées. Rien de
+ce qui est répliqué n'a changé, ni l'IA décidée par l'hôte, ni les capsules, collisions, vitesses, attaques et dégâts :
+seules les poses et l'orientation visuelle des modèles changent.
+
+**Rien n'a été compilé ni lancé** : la compilation (MSVC strict) et les essais reviennent à l'orchestrateur. J'ai relu le
+code ligne à ligne, avec une attention particulière aux points suivants :
+- avertissements C4458/C4459 : aucun nom local ne reprend un membre ou une déclaration globale (vérifié par recherche) ;
+- conversions double → float : toujours explicites ;
+- API déjà employées dans ces fichiers ;
+- `UPoseableMeshComponent::SetBoneTransformByName` : relu dans les sources 5.8 (pose de l'espace du composant reconstruite
+  à chaque appel).
+
+| Commit | Contenu |
+|---|---|
+| `f14dbf7` | Priorité 1 : Bacteria posée au sol |
+| `14b2a4c` | Priorité 2 : corps du joueur |
+| `f662494` | Priorité 3 : marcheurs à squelette |
+| `1f3bc1e` | Crochet de test du corps du joueur (`BRRig::GetBodyPoseInfo`) |
+
+### R.1 Bacteria (priorité 1, `f14dbf7`)
+
+**Où.**
+- `BREntity.cpp` : `AnimateBacteriaGait` (l. 3218-3463), `AimRigidArm` (3200), `LowestContact` (3185).
+- Branche dans `Animate`, juste après `UpdateFootPlanting` (≈ 3661-3668), suivie de `KeepRigidPartsAboveGround`.
+- Bruit de pas dans `UpdateFootsteps` (1237-1290).
+- État dans `BREntity.h`, en fin de classe (`FCrutchArm`, `SupportPos`, `HopT`…).
+
+**Principe.** Le modèle n'est plus collé à la capsule. On mémorise son origine au sol et son lacet, en coordonnées monde.
+- **Allure à appuis** (vitesse lissée sous 200 cm/s : marche, rondes, « elle m'a vu ? », approche lente, arrêts) :
+  - le modèle reste posé, pied et griffes immobiles ;
+  - un **bond** de 0,16 à 0,26 s et de 2 à 5 cm de haut rattrape la capsule (un peu en avant d'elle si elle avance)
+    dès qu'elle est à plus de 40 cm, qu'elle a tourné de plus de 22°, ou qu'elle a changé de hauteur de plus de 8 cm ;
+  - pendant une attaque, les seuils passent à 60 cm et 35°, et il n'y a aucun recalage : le pied ne saute plus quand la
+    capsule pousse contre la proie (028-089 du banc) ;
+  - à l'arrêt, un petit bond recale le modèle quand l'écart dépasse 12 cm ou 6° pendant 0,35 s ;
+  - à chaque réception : un hochement de 2° et un bruit de pas, au lieu des pas au rythme des bras.
+- **Course** (vitesse lissée au-delà de 200 à 320 cm/s ; montée rapide, descente lente, donc les arrêts secs de la
+  poursuite ne la font pas retomber) :
+  - portée par ses bras, pieds à 5-8 cm du sol, elle suit la capsule ;
+  - son lacet affiché tourne à 420°/s au plus, jamais plus de 45° de retard : plus de demi-tour d'un bloc comme entre
+    023 et 024 ;
+  - en poursuite à moins de 8 m, le corps fait face à sa proie (70° au plus de la capsule).
+- **Frappe** : la fente de 16 cm en translation devient un tangage de 5° autour du pied (le pied reste posé).
+- **Griffes** :
+  - posées au monde à l'allure à appuis ;
+  - quand le corps les a dépassées de plus de 16 cm (après un bond), elles se lèvent (arc de 25 cm, 0,16 s) et se
+    reposent devant, un bras à la fois, sauf si l'une est restée à plus de 45 cm ; même principe que les mains d'appui
+    du Clump ;
+  - le bras rigide est tourné par la plus petite rotation qui amène sa griffe sur le point posé, et l'écart de longueur
+    est rattrapé par `KeepRigidPartsAboveGround` ;
+  - pas d'appui au-dessus d'une fosse (`IsOverPit`) ;
+  - le geste d'`AnimateLimbs` reprend la main en course, bras tendus, armée et frappe.
+- **Portes et murs** : toutes les 0,1 s, un rayon latéral à 45 cm du sol, de chaque côté. Si un mur ou un chambranle est
+  plus près que l'envergure de la griffe + 8 cm, le bras se replie vers le corps (roulis de 22° au plus) et la griffe se
+  repose à l'intérieur.
+
+**Risques.**
+- Le modèle affiché peut être jusqu'à 40 cm (60 pendant un coup) derrière la capsule. Les coups, la vue et les tests de
+  fosses utilisent toujours la capsule : rien ne change pour le jeu, mais la créature peut sembler frapper d'un peu plus
+  loin.
+- Près d'une fosse, la corde d'un bond (≤ 60 cm) peut couper un angle de passage d'environ 15 cm.
+- Chez un client, la pose est calculée depuis la vitesse et la rotation répliquées ; le verrou masque aussi les sauts de
+  correction de la capsule. Il peut y avoir quelques centimètres d'écart entre machines (pose locale).
+- **Coût estimé** : environ 3 µs par Bacteria et par image (transformations, deux quaternions, deux recherches
+  `IsOverPit`), plus 2 rayons toutes les 0,1 s. Aucun rayon par image.
+
+**Critères d'acceptation** (vidéo `l0_bacteria` à vrai pas fixe de 1/30 s, avec les crochets du § R.4 relevés à chaque
+image) :
+1. Pied posé, `IsHopping()` faux et `GetSupportRun()` < 0,5 : déplacement monde des appuis du corps ≤ 0,5 cm par image
+   et ≤ 2 cm par appui. Aujourd'hui, environ 100 cm entre deux images du banc (020 → 021).
+2. Course (`GetSupportRun()` ≥ 0,5) : appuis du corps à au moins 3 cm de `GetSupportGroundZ()` sur 90 % des images en
+   mouvement.
+3. Griffe à moins de 2 cm du sol : ≤ 1 cm de déplacement par image.
+4. `GetVisualYaw()` : ≤ 15° de variation par image en course ; ≤ 25° par bond à l'allure à appuis. Aujourd'hui
+   environ 90° entre 023 et 024.
+5. `GetVisualLag()` ≤ 40 cm (≤ 60 pendant un coup), et contrôle v4.16 « bas des volumes ≥ −1 cm » conservé.
+6. À l'œil (vidéo assemblée par `Tools/Visual/make_v417_media.py`) : bonds et appuis lisibles, plus de glissement,
+   griffes repliées dans une porte du Level 0 (capture du § C.1).
+
+### R.2 Corps du joueur (priorité 2, `14b2a4c`, crochet `1f3bc1e`)
+
+**Où.**
+- `BRCharacter.cpp` : `AnimateBody` (l. 3873-4166), `PoseSkin` (4172-4235).
+- État local `FBRBodyPoseState`, clé : le personnage (3800-3849), et `BRRig::GetBodyPoseInfo` (3851).
+- `BRRig.h` : `FBRBodyPoseInfo`.
+
+**Principe.**
+- **Cadence tirée de la jambe**, comme pour les entités : `Ω = π v / (2 L sin A)`.
+  - L : hanche à 93,9 cm, ou 52 cm accroupi.
+  - A : amplitude de 30° × allure, au moins 8° en marche (16° accroupi).
+  - Le pas de marche passe de 141 à environ 94 cm (environ 2,8 pas/s à 260 cm/s) ; course inchangée (environ 1 % de
+    glissement avant comme après).
+- **Bassin** :
+  - il descend de L (1 − cos θ) sur la jambe d'appui : plus de pieds à 12,6 cm du sol au double appui ;
+  - il descend aussi vers le sol le plus bas sous les pieds : 2 rayons à 20 Hz, sol statique ;
+  - un pied posé plus haut plie le genou, avec la même IK à deux segments que les entités (vérifiée par
+    `Tools/check_leg_ik.py`) : marches, trottoirs, bords de bassin.
+- **Bas du corps en retard** :
+  - en marche, les jambes vont vers le déplacement (35° au plus de la visée ; à reculons, elles gardent la visée) ;
+  - à l'arrêt, elles restent en place jusqu'à 40° d'écart, puis de petits pas (12°) les ramènent à 220°/s ;
+  - torsion bornée à 45°, répartie par tiers sur `Spine`, `Spine1` et `Spine2` (`PoseSkin`) ;
+  - pour les pièces rigides de repli, le buste reçoit le lacet inverse.
+- **Placement avant la pose** : le corps est placé avant d'être posé, donc la main et l'objet tenu n'ont plus une image
+  de retard.
+
+**Risques.**
+- Torsion de la taille jusqu'à 45° (35° en marche latérale) : la déformation du maillage `SK_Hazmat` (protégé, poids
+  inchangés) est à juger à l'image.
+- Les pieds sont 2 cm plus bas : le sol est mesuré, et la capsule flotte d'environ 2 cm au-dessus.
+- La 1re personne n'est pas touchée (`AnimateBody` n'y est pas appelé).
+- Les coéquipiers sont animés depuis leur vitesse et leur rotation répliquées.
+- L'état est gardé dans une table propre à `BRCharacter.cpp` pour ne pas toucher à `BRCharacter.h`. **À l'intégration :
+  en faire un membre d'`ABRCharacter`.**
+- **Coût estimé** : 2 rayons à 20 Hz et environ 5 à 10 µs par image pour chaque corps visible (4 au plus), dont deux
+  appels de plus à `SetBoneTransformByName` (chacun reconstruit la pose de l'espace du composant, comme les dix
+  existants).
+
+**Critères d'acceptation** : séquence « pieds visibles » du § C.1 et `l0_3p` après correction de `SteerWalk`. Les os se
+lisent sur le `UPoseableMeshComponent` du personnage (`LeftLeg`, `RightLeg`, et `LeftFoot`/`RightFoot` s'ils existent) ;
+la pose sur `BRRig::GetBodyPoseInfo`.
+1. Glissement du pied d'appui ≤ 3 cm par pas en marche, course et accroupi.
+2. Au double appui, les deux pieds à ≤ 2 cm du sol.
+3. Pendant un glissement le long d'un mur (comme `l0_3p` 010-014), écart entre la direction du déplacement et `LowerYaw`
+   ≤ 37°. Aujourd'hui, le corps entier est à 43-72° du déplacement.
+4. Demi-tour sur place : `YawOffset` atteint au plus 40-45° avant que `TurnStep` > 0 ne fasse des pas, et aucun pied ne
+   bouge de plus de 5 cm hors d'un pas.
+5. Escalier du sas : pied à ±2 cm de la marche ; `FootGround` suit les 8 marches de 20 cm.
+6. À l'œil : taille sans pincement à 35-45° de torsion.
+
+### R.3 Marcheurs à squelette (priorité 3, `f662494`)
+
+**Où.** Dans `BREntity.cpp` :
+- `UpdateFootPlanting(Dt, InGait)` (l. 2954-3078 ; signature changée, appel unique dans `Animate`) ;
+- `MeasureFeet` (3080-3125) ;
+- cadence et piétinement dans `Animate` (3550-3593) ;
+- `AnimateLimbs`, cas `Thigh` et `HoundUpper` (3835-3848).
+
+Champs ajoutés à `FLimb` et membres `StrideBoost`, `TurnShuffle`, `FootRadius` dans `BREntity.h`.
+
+**Principe.**
+- **Pied tenu au monde à l'horizontale.**
+  - Au début de l'appui (cos(phase) ≤ 0), le pied pose son point au monde.
+  - Pendant l'appui, la cuisse ou le haut de patte tourne de atan(écart / hauteur de hanche) pour l'y garder. La
+    correction est sans retard (l'écart mesuré à une image est corrigé à la suivante) et bornée à 15 cm. Au-delà, le
+    point d'appui suit (virage serré, arrêt net, correction du serveur).
+  - Au lever du pied, la correction s'efface.
+- **Piétinement en tournant** : sous 40 cm/s et au-delà de 25°/s de lacet, la phase avance au rythme de l'arc parcouru
+  par les pieds, avec de petits pas de 10°. Avant, les membres restaient immobiles pendant que le corps tournait.
+- **Foulée du Hound** : quand la cadence demandée dépasse 16 rad/s, la foulée s'allonge (jusqu'à 50°) au lieu de
+  plafonner la cadence.
+- **Foulée par jambe** : hauteur de chaque hanche mesurée sur le pivot, facteur = `LegLength` / hauteur.
+  - Pattes arrière du Hound : environ 1,13.
+  - Skin-Stealer : sa vraie forme reçoit 0,93, car `LegLength` vient du déguisement construit en dernier ; cela corrige
+    un écart existant.
+
+**Risques.**
+- Le sens des pivots (tangage positif = pied vers l'avant, comme le balancement existant) est déduit du code et de la
+  matrice de `FRotator`, pas encore vu en jeu (`check_leg_ik.py` le signalait déjà). À vérifier d'abord sur une capture.
+- Le verrou est seulement dans l'axe de marche : un reste de glissement latéral subsiste dans les virages, que le
+  piétinement atténue.
+- Le Hound en poursuite a une foulée plus longue, donc une silhouette plus étirée.
+- Le rayon des pieds du Skin-Stealer est mesuré sous l'échelle de sa masse (environ moitié) : il piétine plus lentement.
+- **Coût estimé** : moins de 2 µs par marcheur et par image (une transformation et quelques fonctions
+  trigonométriques par jambe), aucun rayon de plus.
+
+**Critères d'acceptation** (séquence Hound et Skin-Stealer du § C.1, `GetSupportPoints` à chaque image) :
+1. Glissement par appui ≤ 3 cm en marche, ≤ 6 cm pour le Hound en poursuite. Aujourd'hui environ 23 cm, d'après le
+   calcul.
+2. Demi-tour sur place : aucun pied d'appui déplacé de plus de 5 cm.
+3. Escalier du sas : pieds à ±2 cm des marches.
+4. `GetSkinPeriod()` = 0 à moins de 25 m.
+
+### R.4 Crochets de test (lecture seule)
+
+- `ABREntity::GetSupportPoints(TArray<FVector>&)` : appuis visibles en coordonnées monde, dans cet ordre :
+  1. pieds des jambes articulées, dans l'ordre des membres ;
+  2. appuis du corps rigide (`BodyContacts`, Bacteria : pied gauche) ;
+  3. griffe la plus basse de chaque bras-béquille.
+- `ABREntity::GetSupportGroundZ()` : sol de référence (bas de la capsule).
+- `ABREntity::GetVisualLag()` : écart horizontal modèle/capsule, en cm.
+- `ABREntity::GetVisualYaw()` : lacet du modèle affiché.
+- `ABREntity::GetSupportRun()` et `IsHopping()` : allure et bond de la Bacteria.
+- `BRRig::GetBodyPoseInfo(const AActor*, FBRBodyPoseInfo&)` :
+  - lacet des jambes (`LowerYaw`) et écart à la visée (`YawOffset`) ;
+  - pas en tournant (`TurnStep`) ;
+  - descentes du bassin (`PelvisDrop`, `WalkDrop`) ;
+  - sol sous chaque pied (`FootGround`) et pied estimé (`FootWorld`) ;
+  - renvoie faux tant que le corps n'a pas été animé (1re personne).
+
+Mesure de glissement proposée : déplacement monde d'un appui entre deux images consécutives tant qu'il est à moins de
+2 cm du sol. Elle remplace les estimations au pixel de la partie A.
+
+### R.5 Non fait, et pourquoi
+
+- **Priorité 4** : seule l'orientation visuelle locale de la Bacteria est faite. Restent hors de ce lot, comme demandé :
+  - le lissage du chemin et l'orientation de la capsule (IA de l'hôte) ;
+  - l'anticipation au départ de la poursuite ;
+  - la frappe bornée (le bras de la Bacteria balaie toujours la caméra : `AnimateLimbs`, `Strike * 105°`).
+- **Priorité 5** :
+  - seul le retard d'une image de l'objet tenu est corrigé ;
+  - prise dans la paume et coude non faits, faute de capture. Les axes des os de la main et la pose de repos des doigts
+    de `SK_Hazmat` sont inconnus ; le point de prise actuel (`RightHand` + 6 cm dans l'axe de l'avant-bras, pivot de
+    `SM_Flashlight` à la poignée) tombe déjà à environ 1 cm du milieu de la paume. Le vrai défaut probable est la main
+    ouverte : il faudrait fermer les doigts, os à vérifier sur un gros plan (§ C.1) ;
+  - bras qui s'écartent des murs : non fait.
+- **Priorité 6** (décrite seulement, car elle change l'attachement réseau) : attacher `Visual` à `GetMesh()` au lieu de la
+  capsule (`BREntity.cpp:208-209`) et prendre les sols de référence dans le repère du parent du Visual
+  (`UpdateFootPlanting`, `MeasureFeet`, `KeepRigidPartsAboveGround`, `LowestFootHeight`). Le verrou de la Bacteria
+  masque déjà en partie ces sauts chez un client.
+- **Pas sonores du joueur** : je n'ai pas touché `UpdateCamera` (`BobTime`, 2,55 pas/s à la marche) ni `TickRemote`
+  (minuterie de 0,46 s), qui sortent des fonctions du corps. Le corps fait maintenant environ 2,8 pas/s à la marche. À
+  aligner : dans `UpdateCamera`, prendre la même `Ω` que `AnimateBody` ; dans `TickRemote`, jouer le pas aux
+  demi-cycles de `BodyAnim`.
+- **À voir d'abord à l'image**, dans cet ordre :
+  1. sens de l'IK horizontale des marcheurs (§ R.3) ;
+  2. torsion de la taille du joueur ;
+  3. repliement des bras de la Bacteria dans une porte (sens du roulis déduit de la matrice de `FRotator` et du
+     commentaire de `BuildBacteriaModel`) ;
+  4. hauteur des bonds.
+
+### Résumé de la réalisation
+
+1. Branche `v417-anim`, 4 commits sur `7c50c7a` (plus celui de ce document). Rien compilé ni lancé : compilation et
+   essais par l'orchestrateur.
+2. Bacteria : posée au monde (pied et griffes immobiles), elle avance par bonds de 0,16 à 0,26 s. En course, portée par
+   ses bras, pieds au-dessus du sol.
+3. Bacteria : lacet affiché borné (420°/s, au plus 45° de retard), face à la proie à moins de 8 m. Frappe en tangage
+   autour du pied, griffes posées comme celles du Clump, bras repliés près des murs.
+4. Joueur : cadence tirée de la jambe (pas de 141 à environ 94 cm), bassin sur la jambe d'appui et vers le sol le plus
+   bas, IK du genou sur les marches.
+5. Joueur : bas du corps en retard (35° en marche, petits pas au-delà de 40° à l'arrêt), torsion répartie sur trois
+   vertèbres.
+6. Marcheurs : pied tenu au monde pendant l'appui (15 cm au plus), piétinement en tournant, foulée du Hound au lieu de
+   la cadence plafonnée, foulée par jambe.
+7. Crochets de lecture : `GetSupportPoints`, `GetVisualLag`, `GetVisualYaw`, `GetSupportRun`, `IsHopping`,
+   `BRRig::GetBodyPoseInfo`.
+8. Coût estimé : environ 3 µs par Bacteria, 5 à 10 µs par corps de joueur visible, moins de 2 µs par marcheur ; rayons
+   bornés (20 Hz par corps, 10 Hz par bras).
+9. Rien de répliqué, ni IA, ni capsules, ni vitesses, ni coups modifiés ; ressources protégées intactes.
+10. Reste : frappe bornée et chemin (priorité 4, IA), main fermée et coude (priorité 5, captures), lissage réseau
+    (priorité 6, décrit), pas sonores du joueur.

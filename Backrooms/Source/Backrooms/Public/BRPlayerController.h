@@ -403,6 +403,8 @@ private:
 	void OnTalkCompleted(const FInputActionValue& Value);
 	void OnLidarPulse(const FInputActionValue& Value);
 	void OnLidarFocusStarted(const FInputActionValue& Value);
+	/** v4.17 (interface, C6) : LT / RT dans PARAMETRES (inventaire ouvert) : categorie precedente / suivante ; false sinon */
+	bool PadSettingsTrigger();
 	void OnLidarFocusCompleted(const FInputActionValue& Value);
 	void UpdateVoice(float DeltaTime);
 	void OnMenuDown(const FInputActionValue& Value);

@@ -473,6 +473,12 @@ struct FBRLevelDef
 	/** Temperature de couleur des plafonniers (K) ; 0 : couleur RGB LightColor seule (rendu d'avant). LightColor multiplie
 	 *  la temperature (la teinte rouge pres de la Bacteria reste rouge) */
 	float LightTemperatureK = 0.f;
+	/** v4.17 : part de l'eclairage indirect des plafonniers (Lumen ; 1 : celle du moteur). Rendu seulement : la lumiere de
+	 *  gameplay ne compte pas le rebond (BRWorldLight.cpp) */
+	float LightIndirect = 1.f;
+	/** v4.17 : rayon d'attenuation des plafonniers a l'image (cm ; 0 : LightRadius). Rendu seulement : la regle de jeu garde
+	 *  LightRadius (loi (1 - d/R)^2, BRLightLogic.h) */
+	float LightVisualRadius = 0.f;
 	/** Balance des blancs de la camera (K ; 6500 : neutre). Proche de la temperature des lampes : le papier peint garde sa
 	 *  couleur sans virer a l'orange. Attention : a partir de 4000 K, le moteur prend le blanc sur le lieu du jour et non
 	 *  plus sur celui des lampes : une lampe y vire au rose ou a la peche, sauf WhiteTint (BRColorLogic.h, banc

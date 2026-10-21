@@ -473,7 +473,9 @@ void ABRPlayerController::EnsureInput()
 	}
 	MoveAction = MakeAction(TEXT("IA_Move"), EInputActionValueType::Axis2D);
 	LookAction = MakeAction(TEXT("IA_Look"), EInputActionValueType::Axis2D);
-	LookPadAction = MakeAction(TEXT("IA_LookPad"), EInputActionValueType::Axis2D);
+	// v4.17 (relecture) : actives aussi pendant la pause (inventaire ouvert depuis la pause : stick droit, LT / RT de
+	// PARAMETRES) ; leurs gestionnaires de jeu verifient deja CanPlay()
+	LookPadAction = MakeAction(TEXT("IA_LookPad"), EInputActionValueType::Axis2D, true);
 	JumpAction = MakeAction(TEXT("IA_Jump"), EInputActionValueType::Boolean);
 	SprintAction = MakeAction(TEXT("IA_Sprint"), EInputActionValueType::Boolean);
 	// v4.16 (relecture) : les boutons de l'inventaire a la manette (B retour, Y aide, X inspecter, LB / RB onglets, croix
@@ -501,8 +503,8 @@ void ABRPlayerController::EnsureInput()
 	TalkAction = MakeAction(TEXT("IA_Talk"), EInputActionValueType::Boolean, true);
 	MenuDownAction = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean, true);
 	MenuDeleteAction = MakeAction(TEXT("IA_MenuDelete"), EInputActionValueType::Boolean);
-	LidarPulseAction = MakeAction(TEXT("IA_LidarPulse"), EInputActionValueType::Boolean);
-	LidarFocusAction = MakeAction(TEXT("IA_LidarFocus"), EInputActionValueType::Boolean);
+	LidarPulseAction = MakeAction(TEXT("IA_LidarPulse"), EInputActionValueType::Boolean, true);
+	LidarFocusAction = MakeAction(TEXT("IA_LidarFocus"), EInputActionValueType::Boolean, true);
 	PocketActions.Reset();
 	for (int32 i = 0; i < 4; ++i)
 	{
@@ -793,7 +795,10 @@ namespace BRPadInput
 	}
 
 	/** v4.16 (relecture) : croix de la manette dans l'inventaire (ABRHUD::PadDirection : curseur des cases dans PERSONNAGE,
-	 *  onglets et defilement ailleurs) */
+	 *  onglets et defilement ailleurs). v4.17 (interface, agent UI Designer : Docs/v417/agents/interface.md, C8) : dans un
+	 *  onglet a deux colonnes (CARNET, JOURNAL), gauche / droite choisit la colonne (LB / RB restent les onglets) ; haut /
+	 *  bas fait defiler la colonne choisie (ou toutes) d'une ligne du carnet (ABRHUD::PadScrollLine) au lieu de 60 px pour
+	 *  toutes les zones ; PERSONNAGE et les onglets d'une colonne gardent l'action d'avant */
 	bool Direction(ABRPlayerController* PC, bool bOpen, const FKey& Key, int32 DX, int32 DY)
 	{
 		if (!bOpen || !PC->IsInputKeyDown(Key))
@@ -802,7 +807,13 @@ namespace BRPadInput
 		}
 		if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
 		{
-			H->PadDirection(DX, DY);
+			// v4.17 (interface, C6) : PARAMETRES d'abord (ligne choisie, valeur reglee), puis les colonnes, puis l'action d'avant
+			const bool bDone = DX != 0 ? (H->PadSettingsAdjust(DX) || H->PadScrollFocus(DX))
+				: (DY != 0 && (H->PadSettingsMove(DY) || H->PadScrollLines(DY)));
+			if (!bDone)
+			{
+				H->PadDirection(DX, DY);
+			}
 		}
 		return true;
 	}
@@ -1225,6 +1236,18 @@ void ABRPlayerController::OnLook(const FInputActionValue& Value)
 
 void ABRPlayerController::OnLookPad(const FInputActionValue& Value)
 {
+	// v4.17 (interface, C8) : inventaire ouvert : le stick droit vertical fait defiler la colonne choisie (ou toutes), environ
+	// 900 px/s a 1080 lignes, vers le haut quand le stick monte (non essaye avec une vraie manette)
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE)
+	{
+		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
+		{
+			const FVector2D V = Value.Get<FVector2D>();
+			const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
+			H->PadScrollPixels(-V.Y * 900.f * Dt);
+		}
+		return;
+	}
 	if (!CanPlay())
 	{
 		return;
@@ -1292,6 +1315,18 @@ void ABRPlayerController::OnCrouch(const FInputActionValue& Value)
 
 void ABRPlayerController::OnFlash(const FInputActionValue& Value)
 {
+	// v4.17 (interface, C7) : Y dans PERSONNAGE : prendre puis poser l'objet de la case du curseur (ABRHUD::PadCarry, regles de
+	// la souris) ; ailleurs (false), l'aide du carnet comme avant
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && IsInputKeyDown(EKeys::Gamepad_FaceButton_Top))
+	{
+		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
+		{
+			if (H->PadCarry())
+			{
+				return;
+			}
+		}
+	}
 	// v4.16 : Y dans l'inventaire : aide progressive du carnet
 	if (BRPadInput::Inventory(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Top, 0, 0, true))
 	{
@@ -1479,6 +1514,12 @@ void ABRPlayerController::OnNightVision(const FInputActionValue& Value)
 
 void ABRPlayerController::OnLidarPulse(const FInputActionValue& Value)
 {
+	// v4.17 (interface, C6) : gachettes dans PARAMETRES (inventaire ouvert) : categorie precedente (LT) ou suivante (RT) ;
+	// la gachette est testee (l'impulsion est aussi liee au clic droit)
+	if (PadSettingsTrigger())
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1490,6 +1531,10 @@ void ABRPlayerController::OnLidarPulse(const FInputActionValue& Value)
 
 void ABRPlayerController::OnLidarFocusStarted(const FInputActionValue& Value)
 {
+	if (PadSettingsTrigger())
+	{
+		return;
+	}
 	if (CanPlay())
 	{
 		if (ABRCharacter* C = GetBRCharacter())
@@ -1497,6 +1542,17 @@ void ABRPlayerController::OnLidarFocusStarted(const FInputActionValue& Value)
 			C->LidarFocus(true);
 		}
 	}
+}
+
+bool ABRPlayerController::PadSettingsTrigger()
+{
+	if (!bInventory || IsModalDialogOpen() || CaptureAction != INDEX_NONE)
+	{
+		return false;
+	}
+	const int32 Step = IsInputKeyDown(EKeys::Gamepad_RightTrigger) ? 1 : (IsInputKeyDown(EKeys::Gamepad_LeftTrigger) ? -1 : 0);
+	ABRHUD* H = Cast<ABRHUD>(GetHUD());
+	return Step != 0 && H && H->PadSettingsCategory(Step);
 }
 
 void ABRPlayerController::OnLidarFocusCompleted(const FInputActionValue& Value)
@@ -1678,6 +1734,17 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 	{
 		BRDisplay::Confirm(); // v4.9 : Entree pendant la confirmation de l'affichage : conserver
 		return;
+	}
+	// v4.17 (interface, C6) : A dans PARAMETRES : meme effet qu'un clic sur la ligne choisie a la manette
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom))
+	{
+		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
+		{
+			if (H->PadSettingsActivate())
+			{
+				return;
+			}
+		}
 	}
 	// v4.16 (relecture) : A dans PERSONNAGE : utiliser, equiper ou retirer l'objet de la case du curseur
 	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Bottom, false))
@@ -3734,7 +3801,11 @@ FString ABRPlayerController::GetSettingHint(int32 Index) const
 	case Row_VolumetricFog:
 		return BR_STR(NSLOCTEXT("BR", "Menu.HalosLumiereAirHumide", "Halos de lumi\u00e8re dans l'air humide."));
 	case Row_VHSEffect:
-		return BR_STR(NSLOCTEXT("BR", "Menu.LignesBalayageLegereAberrationSalete", "Lignes de balayage, l\u00e9g\u00e8re aberration et salet\u00e9 d'objectif. D\u00e9sactiv\u00e9 : image nette."));
+		// v4.17 : l'aide dit tout ce que l'effet ajoute, et coupe vraiment (ABRCharacter::UpdatePostProcess)
+		return BR_STR(NSLOCTEXT("BR", "Menu.LignesBalayageLegereAberrationSalete", "Lignes de balayage, aberration, salet\u00e9 et reflets d'objectif du cam\u00e9scope. D\u00e9sactiv\u00e9 : image nette, sans effet d'objectif."));
+	case Row_FilmGrain:
+		// v4.17 : aide du grain (aucune avant)
+		return BR_STR(NSLOCTEXT("BR", "Menu.GrainCapteurOmbres", "Grain du capteur, plus marqu\u00e9 dans les ombres. D\u00e9sactiv\u00e9 : aucun grain, m\u00eame en vision nocturne ou quand la sant\u00e9 mentale baisse."));
 	case Row_DevMode:
 		return BR_STR(NSLOCTEXT("BR", "Menu.TousNiveauxJouablesDepuisChoix", "Tous les niveaux jouables depuis le choix des niveaux (non ajout\u00e9s \u00e0 la partie). En jeu : Page pr\u00e9c. / suiv. niveau, D\u00e9but nouvelle disposition, Fin objectifs, Inser coupure, F6 vol libre, F7 invincible, F10 jumpscares."));
 	default:

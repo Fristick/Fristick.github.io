@@ -290,3 +290,213 @@ Pour chaque correction : **Où**, **Actuel**, **Proposé**, **Risque dans les 22
 10. C9 : arabe non inversé (puces à environ 400 px, titres à gauche, flèches inversées).
 11. C10 : `FString::ToUpper` ASCII (« RéTABLIR ») ; casse de phrase ou `FText::ToUpper`.
 12. C11 et C12 : pied en pastilles comme la pause, libellés de groupe horizontaux, aide des réglages à droite et flèches centrées.
+
+---
+
+## 9. Implémentation (v417-ui)
+
+| | |
+|---|---|
+| **Branche** | `v417-ui`, partie de `1e67bb1`, arbre `wt/ui`. Rien n'est poussé. |
+| **Fichiers modifiés** | `Source/Backrooms/Private/BRHUD.cpp`, `Source/Backrooms/Public/BRHUD.h`, `Source/Backrooms/Private/BRWorld.cpp` (les deux lignes `ToUpper` de C10, rien d'autre), `Tools/Blender/import_user_models.py`, `RawAssets/Icons/I_Silhouette.png` (régénérée). Plus ce rapport et `Docs/v417/agents/interface_cles.json`. |
+| **Non vérifié** | Unreal n'a été ni compilé ni lancé dans cet arbre. Le C++ a été relu à la main et par trois contrôles par script : équilibre des accolades et parenthèses, locales qui masqueraient un membre d'`ABRHUD` ou un symbole de l'espace anonyme (C4458, C4459), polices et constantes locales déclarées mais inutilisées. Aucun constat. Les largeurs de texte ont été mesurées en Roboto, avec les polices du moteur (`UE_5.8/Engine/Content/Slate/Fonts`), pour 16 langues. Le chinois, le japonais, le coréen, l'arabe et le persan passent par les polices de secours et n'ont pas été mesurés. |
+
+### 9.1 Par correction
+
+| Correction | Commit | Contenu |
+|---|---|---|
+| **C2 + C1** | `9d57ed8` | Plancher de `UiFontInfo` à **7 pt**, **8 pt** en zh, ja, ko, ar et fa (`DenseScript`, culture relue seulement quand elle change). Jetons `UiType` (§ 9.2). En-tête, onglets, pied, OBJECTIFS, JOURNAL, PARAMÈTRES, TOUCHES et CARNET passent des anciens facteurs de police aux jetons. Les hauteurs de ligne viennent de `LineStep` : max(valeur × U, hauteur mesurée × 1,2). `TextLineF` et `ParagraphF` (lignes au plus, puis points de suspension) alimentent `TestTextMaxW` et `bTestTextCut`. Titres de panneau sans espacement des lettres en CJK. `Frame` et `HLine` tombent sur des pixels entiers, d'au moins 1 px. Textes désormais bornés : nom du niveau (place laissée par les onglets), aide de TOUCHES (2 lignes), objets mis de côté (2 lignes), plaques du Level 6 et fragments de route (coupés à la colonne). Le bouton d'aide du carnet est centré verticalement. La largeur de « MENU > » est relue dans `DrawMessages`. |
+| **C3** | `ddd2aec` | Nom en case : 10 pt gras, 2 lignes au plus puis « … », `TestTextMaxW = S − 10U`. Icône sous le nom (réduite si le nom prend 2 lignes), sur un halo `UI_Radial` de 0,42·S à 10 %. Bande claire seulement sur une case pleine. Quantité « x{N} » en pastille en bas à droite. **Touche de poche** = `BRKeys::Primary(Pocket1 + i)` (l'API existait), en pastille en bas à gauche, dans l'inventaire et dans la barre rapide. Jeton focus : cadre max(2 px, 2U), fond jaune 10 %, quatre coins épais. La case d'équipement qui accepte l'objet survolé ou porté s'éclaire à 25 % (`BRItems::CanEquipIn`). Dépôt impossible : cadre rouge. A ou X sur une case sans action : cadre rouge 150 ms et `S_UIDeny`. |
+| **C5** | `2301718` | INSPECTER : voile 0,70, panneau opaque `ModalBg` (`Panel(..., bOpaque)`). Nom 16 pt gras, type 10,5, charge 11,5, description 12,5 (lignes de 26U), boutons en pastilles 12 pt gras centrés. Hauteur = max(340U, contenu + 20U + boutons + 20U, aperçu), bornée à l'écran. Aperçu de 200U sur un halo. Les deux boutons se partagent la largeur si les libellés sont longs. Infobulle : 420U, `TooltipBg` opaque, cadre jaune 70 %, ombre portée de 6U, nom 12,5 gras, texte 12 (22U), raccourci 10,5, hauteur mesurée. |
+| **C4** | `ba6a8b6` | **Rendu régénéré dans Blender 5.2.2** (§ 9.3). Dessin : teinte (1 ; 0,97 ; 0,9 ; 1), halo (1 ; 0,85 ; 0,3) à **5 %** (proposé : 7 %, voir § 9.3). Équipement : entre deux cases d'une même colonne, la légende du dessous (hauteur mesurée + 6U) et 8U jusqu'au cadre du dessus. Il en résulte CEINTURE = max(0,5·SilH, TORSE + EqS + écart) et MAIN de même sous TÊTE, sans descendre sous le panneau. Légendes en 10 pt gras, à 6U de leur cadre, bornées à S + 12U. |
+| **C10** | `af337ed` | `BRWorld.cpp` : `ToUpper` retiré du but et des étapes (casse de phrase, comme le carnet). Carnet : but du niveau en casse de phrase, en gras. OBJECTIFS et suivi d'exploration : le but se distingue par le gras (et le jaune dans OBJECTIFS). Destination du départ de groupe et nom du lot de fin de chapitre : `FText::ToUpper` (ICU). |
+| **C8, dessin** | `cbf4548`, `ec8f2df` | `ScrollArea` : rail de 3U à 15 % et curseur proportionnel d'au moins 28U à 60 %, à 10U du bord droit de la colonne. Fondu de 24U (20 % de la zone au plus) dessiné **après** le contenu, tant que du texte reste caché. Paramètre `Zone` avec `INDEX_NONE` par défaut, qui garde le comportement v4.16. `PadScrollZone` : seule la zone choisie reçoit le défilement de la manette, avec un cadre jaune à 60 %. Zones : OBJECTIFS 0 ; JOURNAL 0 et 1 ; CARNET 0 (étapes) et 1 (observations) ; aide des PARAMÈTRES 0. Les zones des colonnes reçoivent la colonne entière : le rail passe dans la marge, hors des compteurs alignés à droite. Pied de la manette : « FAIRE DÉFILER » seulement s'il reste à défiler (`bScrollRoom`). **K13 corrigé** : l'écart de 8U entre deux appareils est dessiné. API pour le contrôleur : § 9.6. |
+| **C12, en partie** | `a74fd4f` | Chevrons moins et plus **dessinés en traits** et centrés dans leur case, donc insensibles au miroir bidirectionnel en arabe. Pastilles de catégorie en 11,5 pt gras centrées. Ligne survolée : fond 10 % et barre de 4U. Les libellés à 12 pt, les valeurs à 12 pt gras et les lignes techniques à 10,5 et 10 pt sont faits dans C1. |
+
+### 9.2 Valeurs choisies
+
+| Jeton (`UiType`) | Points à 1080 lignes | À 720 lignes (U = 0,667) | Usage |
+|---|---|---|---|
+| `MenuTitle` | 15 gras | 10 | MENU > |
+| `Tab` | 13 gras | 9 | onglets |
+| `PanelTitle` | 12,5 gras | 8 | titres de panneau, en-têtes d'entités, nom de l'infobulle |
+| `Body` | 12 | 8 | objectifs, étapes, descriptions, lignes de réglage, actions de TOUCHES |
+| `BodySmall` | 11 | 7 | phrases secondaires, observations, notes, aide des réglages |
+| `Hint` | 10,5 | 7 | pied, raccourci de l'infobulle, mode de rendu |
+| `Label` | 10 gras | 7 (8 en CJK, arabe, persan) | nom en case, légendes, pastilles, en-têtes de colonnes |
+| `Value` | 12 gras | 8 | compteurs, valeurs des réglages, boutons |
+
+Hauteurs de ligne (base × U, ou plus si la mesure × 1,2 l'exige) : objectifs 23U (avant 20), phrase du bas 21U (18), carnet 26U et 22U (24 et 19), observations 26U et 22U (24 et 19), infobulle 22U (19), aide des réglages 22U (20), journal 24U et 22U (avant : 23U, et 18 à 20U). Couleurs ajoutées : `ModalBg` (0,03 ; 0,027 ; 0,012 ; 1), `TooltipBg` (0,045 ; 0,04 ; 0,02 ; 1). Le jeton focus suit le § 5.
+
+Mesures en Roboto, 16 langues (fr, en, de, es-ES, es-419, pt-BR, pt-PT, ru, uk, it, tr, pl, hu, cs, sv, id) :
+- **noms en case** : tous tiennent en 2 lignes au plus, aussi bien à 1080 lignes (10 pt dans 111 px) qu'à 720 (7 pt dans 74 px). Aucun mot n'est plus large que la case.
+- **légendes d'équipement** : toutes tiennent sans réduction.
+- **onglets** : de 580 à 743 px à 1080 lignes, pour 1 760 px disponibles ; de 404 à 521 px à 720 lignes, pour 1 173. Le nom du niveau (≤ 331 px) tient à côté.
+- **pieds** : tous tiennent, PERSONNAGE à la manette compris.
+- **libellés de réglage** : le plus long fait 404 px pour 686 permis (« REFLEJOS CON TRAZADO DE RAYOS DE ALTA CALIDAD »).
+
+### 9.3 Vue du personnage (C4), rendu
+
+- `import_user_models.py` dépend de `Tools/SourceModels/asyc_hazmat.glb`, absent du dépôt. Le nouveau mode `blender -b -P Tools/Blender/import_user_models.py -- silhouette` (`process_silhouette_from_parts`) s'en passe. Il recharge les dix pièces dérivées `RawAssets/Meshes/SM_Hazmat_*.fbx`, dont le pivot est sur leur articulation, et les replace sur les articulations de `user_models.json` (hauteur reconstituée : 1,80 m, 55 521 sommets). Il les réunit, puis appelle le même `render_silhouette` que `process_hazmat`. `user_models.json` n'est pas réécrit. Les pièces protégées sont seulement lues.
+- `render_silhouette` :
+  - lumière principale de trois quarts, en haut à gauche (soleil 3,0) ; appoint à droite (0,8) ; contre-jour d'avant gardé (4,0) ;
+  - matières neutres sur l'objet rendu seulement : combinaison 0,62, masque 0,2, visière 0,06 ;
+  - vue « Standard » et 64 échantillons ;
+  - gris = **20 + 0,42 × rendu** (avant : × 0,28) ;
+  - post-traitement par numpy dans Blender, car PIL est absent du Python de Blender.
+- Résultat, `RawAssets/Icons/I_Silhouette.png` : même cadrage (couverture 49 %), gris p5, p50 et p95 à **52, 104 et 117** (avant : 38, 43 et 45). Le relief est visible (plis, visière, tuyau, poches). Image vue avec l'outil de lecture.
+- Contraste calculé par composition linéaire, sur la couleur du panneau mesurée en jeu (52, 47, 28) avec la teinte du HUD. La même méthode retrouve 1,13:1 pour l'ancienne image, soit la mesure en jeu de 1,12:1. Nouvelle image : **2,23:1** en moyenne contre le panneau, étendue p5–p95 de **63 niveaux** (avant : 6). Contre le fond local, halo compris : 1,85:1 avec un halo à 7 % et 1,94:1 à 5 %, d'où le choix de **5 %**.
+- **À faire dans Unreal** : réimporter `/Game/Backrooms/UI/I_Silhouette`. `backrooms_setup.py` ne réimporte une icône existante qu'au changement de version ; ce fichier m'est interdit.
+
+### 9.4 Nouvelle clé de texte (premier passage ; trois autres au § 9.8)
+
+`HUD.PadInventoryFooterNoScroll` vaut « [{Prev}] [{Next}]  ONGLETS     [{Close}]  FERMER ». C'est le pied de la manette hors PERSONNAGE quand rien ne défile. Ses 21 traductions sont dans `Docs/v417/agents/interface_cles.json`. Elles reprennent **mot pour mot** les termes de `HUD.PadInventoryFooter` de chaque `Game.po`, lus sans les modifier, sans le segment de défilement. À reporter dans les catalogues (`loc_extract.py`). Tant que ce n'est pas fait, les autres langues affichent le français pour ce seul pied.
+
+### 9.5 Ce qui reste
+
+- **Non fait, comme demandé** : C6 (PARAMÈTRES à la manette), C7 (déplacer un objet à la manette), partie manette de C8 (§ 9.6), C9 (mise en page de droite à gauche). Le mode RTL est inchangé, sauf les chevrons des réglages, désormais tracés et orientés vers l'extérieur dans toutes les langues.
+- **C11** : pied en pastilles `KeyHints`, libellés de groupe horizontaux. `VLabel` (POCHES, STOCKAGE) reste empilé ; il passe seulement au plancher de 7 pt.
+- **C12** : colonne d'aide à droite sans défilement automatique. Elle n'est pas faite, car le banc v4.10 vérifie que l'aide est sous les lignes (`LastRowsBottom <= LastHintZoneTop`). Il faudrait adapter ce test en même temps.
+- **K2** : `Ui()` reste plafonnée à 820 lignes virtuelles.
+- Écrans hors inventaire encore sur les anciennes primitives (menu, pause, mort, note, document de mission, LiDAR) : seul le plancher de 7 et 8 pt s'y applique.
+- `BRKeys::KeyName` (`BRKeys.cpp`, hors périmètre) met encore les noms de touches en capitales par `FString::ToUpper`, ASCII seulement.
+- Banc : le relevé compte toujours les textes « au plancher de 6 points » (`<= 6,01`). Il en trouvera 0 ; un compteur à 7 et 8 pt serait plus utile.
+
+### 9.6 Points à brancher côté contrôleur (`BRPlayerController.cpp`, `BRPadInput`)
+
+Fonctions publiques ajoutées à `BRHUD.h` :
+
+```cpp
+bool  PadScrollFocus(int32 Step);   // croix gauche / droite : colonne suivante (+1) ou precedente (-1) ; 0 : toutes les zones.
+                                    // false dans PERSONNAGE ou un onglet a moins de 2 zones : garder PadDirection
+bool  PadScrollLines(int32 Lines);  // croix haut / bas : Lines x PadScrollLine (26 px a 1080 lignes) ; false dans PERSONNAGE
+void  PadScrollPixels(float Pixels);// stick droit : defilement continu (pixels a 1080 lignes), tous onglets
+static constexpr float PadScrollLine = 26.f;
+int32 GetPadScrollZone() const;  int32 GetScrollZoneCount() const;  bool HadScrollRoom() const;   // banc
+```
+
+1. **Croix gauche et droite** (lignes 1609 et 1629, `BRPadInput::Direction(..., ±1, 0)`) : appeler d'abord `H->PadScrollFocus(DX)`, et `H->PadDirection(DX, 0)` seulement si elle renvoie false. Dans CARNET et JOURNAL, la croix choisit alors la colonne ; LB et RB restent les onglets. **Banc à adapter** : `BRAutoTestV416Visual`, « croix droite : onglet suivant (JOURNAL) » depuis CARNET (passer par RB).
+2. **Croix haut et bas** (lignes 1648 et 1663) : `if (!H->PadScrollLines(DY)) H->PadDirection(0, DY);`. Répétition : 8 pas par seconde après 0,35 s d'appui ; la liaison actuelle est en `ETriggerEvent::Started`, il faudrait un minuteur ou `Triggered`. Avant, un appui faisait défiler de 60 px toutes les zones.
+3. **Stick droit vertical** (`OnLookPad`, inventaire ouvert) : `H->PadScrollPixels(V.Y * 900.f * Dt)`, environ 900 px/s à 1080 lignes, au lieu de tourner la vue.
+4. **Pied** : une fois la colonne branchée, ajouter « [◄] [►] COLONNE » au pied de CARNET et de JOURNAL. Cela demande une clé courte, `HUD.PadColumn`, non créée ici.
+5. **Banc** : dans un cas long (carnet du Level 6 ou 11, aide de niveau 2, 1280 × 720, taille 1,25), vérifier que `LastNotebookLeftRoom` baisse de 26 par appui de `PadScrollLines(1)`. Fermer l'inventaire à l'étape **suivante** de la capture (K14).
+
+### 9.7 Risques à vérifier en jeu
+
+- **Débordements** : relancer le banc visuel (`-BRAutoTestV416Visual`, `-BRAutoTestV417Visual`) aux trois définitions. Attendu : 0 texte hors de l'image, 0 hors du panneau, 0 au-delà de la largeur permise et 0 chevauchement. Zones à regarder en premier :
+  - TOUCHES à 720 lignes avec la taille d'interface à 1,25 : lignes de 16 px ; le nom de touche est réduit pour tenir dans sa case ;
+  - colonne gauche du JOURNAL (texte fixe plus haut avant la zone des notes) ;
+  - INSPECTER en allemand.
+- **Langues** : chinois, japonais, coréen, arabe et persan au plancher de 8 pt, non mesurés (polices de secours). Vérifier :
+  - les noms en case en japonais (2 lignes) ;
+  - les pastilles de code de la page Langue (« ZH-HANT » à 7 pt gras dans 70U).
+- **Arabe et persan** : mise en page toujours de gauche à droite (C9) ; seuls les chevrons des réglages changent.
+- **Casse** :
+  - objectifs et étapes en casse de phrase à côté de « FILMER UNE ENTITÉ » (libellé de 3 mots, laissé en capitales) ;
+  - `FText::ToUpper` suit-il la culture courante, par exemple le I pointé turc ?
+- **Silhouette** : contraste de 2,2:1 calculé, non mesuré en jeu. À mesurer sur une vraie fenêtre (1366 × 768 et 1080p, Level 0 et Level 1) après réimport de la texture.
+- **Coût** : `DenseScript` lit la culture à chaque police demandée, soit une copie de `TSharedRef` ; environ 3 000 appels par image d'inventaire, négligeable mais non mesuré.
+
+### 9.8 Second passage : C7, C6 et banc (après la fusion `0a5859d`)
+
+Branche `v417-ui`, mise à jour par `git merge v417-jeu` (fusion sans conflit, `BRHUD` inchangé par la fusion). Commits :
+
+- `ec1446d` : C7 et C6 côté HUD (`BRHUD.cpp`, `BRHUD.h`) ;
+- `59d3c7e` : banc (`BRAutoTestV416Visual.cpp`) ;
+- commit de documentation suivant : ce paragraphe et `interface_cles.json`.
+
+Pas de compilation possible ici. Les mêmes contrôles par script ont été repassés :
+- équilibre des accolades et des parenthèses ;
+- locales qui masqueraient un membre ou un nom de l'espace anonyme ;
+- locales des lambdas du banc qui masqueraient une locale de `AddV416VisualSteps` ou de `BRTestV416Vis` ;
+- constantes déclarées mais inutilisées.
+
+Aucun constat.
+
+**C7, déplacer un objet à la manette** (côté HUD fait, à brancher sur Y)
+- `PadCarry()`, premier appui : prend l'objet de la case du curseur. `Dragging` reçoit la case et `bPadCarrying` passe à vrai ; c'est le même état qu'un glisser à la souris, donc la source est estompée à 30 % par `DrawSlot`. L'objet porté (84U, 85 %) est dessiné sur la case du curseur, décalé en haut à droite. La case visée montre le jeton focus, ou le cadre rouge si elle refuse l'objet (C3).
+- Second appui : `ABRCharacter::MoveItem(source, curseur)`, la règle de la souris (échange, pile, équipement, avec son message de refus). S'il y a refus, l'objet reste porté et la case visée refuse (cadre rouge 150 ms, `S_UIDeny`). Un appui sur la case de départ annule le port. Une case vide refuse.
+- `PadCarry()` renvoie false hors de PERSONNAGE, sans personnage ou pendant une inspection : Y garde alors son rôle actuel (aide du carnet).
+- Pendant un port, A pose aussi l'objet (`PadSlotAction`) et X ne fait rien.
+- `PadCancelCarry()` annule le port. `PadBack()` l'appelle en premier : **B, déjà branché sur `PadBack`, annule donc le port sans fermer l'inventaire, sans aucun changement du contrôleur.**
+- La souris reprend la main : un clic annule le port de la manette, un glisser à la souris remet `bPadCarrying` à faux. Le port est aussi oublié au changement d'onglet et à la fermeture de l'inventaire.
+- Pied de PERSONNAGE : « [Y]  DÉPLACER » devant le pied actuel. Pendant le port : « [Y]  POSER     [CROIX]  CHOISIR     [B]  ANNULER ». Infobulle du curseur : « … [Y]  DÉPLACER ».
+
+**C6, PARAMÈTRES à la manette** (côté HUD fait, à brancher sur la croix, A, LT et RT)
+- `SettingsPadRow` contient l'**indice de réglage** d'`ABRPlayerController`, pas un rang à l'écran ; l'ordre et le contenu des lignes ne changent pas. Les lignes sont celles de `SettingsRowsOf`, la même liste dans le même ordre que le dessin.
+- Quand la manette a servi en dernier, la ligne choisie a une barre de 4U et un fond jaune à 10 %, son libellé et ses flèches passent en jaune, et son aide s'affiche comme au survol (`HintSetting`).
+- `AdjustSetting` est public sur le contrôleur. Le HUD ne l'appelle pas tout de suite : il met la demande en file (`PadAdjustRow`, `PadAdjustDir`) et l'applique dans `HandleInventoryMouse`, pendant le dessin suivant, **au même endroit qu'un clic**. Un changement d'affichage reste donc appliqué à l'image suivante (`BRDisplay::SetHudDrawing`). La demande est abandonnée pendant la confirmation de l'affichage, où A confirme déjà (`OnMenuConfirm`).
+- Pied de PARAMÈTRES à la manette : « [LB] [RB]  ONGLETS     [LT] [RT]  CATÉGORIE     [CROIX]  CHOISIR / RÉGLER     [B]  FERMER ».
+
+**API exacte à brancher** (`BRPlayerController.cpp`, numéros de ligne de `0a5859d`, `H` étant le HUD) :
+
+```cpp
+// Croix gauche / droite (1609, 1629), inventaire ouvert, dans cet ordre :
+if (H->PadSettingsAdjust(DX)) return;        // PARAMETRES : regle la ligne choisie (DX = -1 / +1)
+if (H->PadScrollFocus(DX)) return;           // CARNET, JOURNAL : colonne (9.6)
+H->PadDirection(DX, 0);                      // PERSONNAGE : curseur ; ailleurs : onglet (inchange)
+// Croix haut / bas (1648, 1663) :
+if (H->PadSettingsMove(DY)) return;          // PARAMETRES : ligne suivante / precedente, bouclee
+if (H->PadScrollLines(DY)) return;           // autres onglets sauf PERSONNAGE : une ligne (26 px a 1080)
+H->PadDirection(0, DY);                      // PERSONNAGE : curseur
+// A (OnMenuConfirm, avant BRPadInput::SlotAction, 1683) :
+if (H->PadSettingsActivate()) return;        // PARAMETRES : comme un clic sur la ligne (AdjustSetting(ligne, +1))
+// Y (OnFlash, avant l'aide du carnet, 1296) : seulement si la touche est Gamepad_FaceButton_Top
+if (PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Top) && H->PadCarry()) return;
+// LT / RT (OnLidarPulse 1480, OnLidarFocusStarted 1491), inventaire ouvert, seulement si la touche est la gachette
+// (LidarPulse est aussi lie au clic droit de la souris) :
+if (bInventory && IsInputKeyDown(EKeys::Gamepad_LeftTrigger) && H->PadSettingsCategory(-1)) return;   // RT : +1
+// B : rien a changer (PadBack annule deja un port)
+```
+
+Signatures dans `BRHUD.h` :
+- `bool PadCarry()` ; `bool PadCancelCarry()` ; `bool IsPadCarrying() const` ;
+- `bool PadSettingsMove(int32 DY)` ; `bool PadSettingsAdjust(int32 DX)` ; `bool PadSettingsActivate()` ; `bool PadSettingsCategory(int32 Step)` ;
+- `int32 GetPadSetting() const` (banc) ;
+- C8, sans changement depuis § 9.6 : `bool PadScrollFocus(int32)`, `bool PadScrollLines(int32)`, `void PadScrollPixels(float)`, `PadScrollLine`.
+
+**Banc** (`BRAutoTestV416Visual.cpp`, style du fichier, état dans `BRTestV416Vis`) :
+- « croix droite : onglet suivant (JOURNAL) » passe par **RB**. « croix gauche : onglet précédent (PERSONNAGE) », qui partait lui aussi du carnet, passe par **LB** pour la même raison : une fois branchée, la croix gauche ou droite y choisira la colonne.
+- **K14** : dans les vraies fenêtres, l'inventaire se ferme à l'étape qui suit la capture du carnet, attente de 0,2 s comprise. Avant, il se fermait dans la même étape, d'où les `v416_fenetre_*_carnet` vides.
+- **Carnet long**, après les captures de la fenêtre 1280 × 720 : taille d'interface 1,25, aide et rappel. Le banc vérifie `HadScrollRoom()` et le reste à défiler de la colonne de gauche, puis appelle `PadScrollLines(1)`. Il vérifie que `NotebookLeftScroll` monte de `min(PadScrollLine, reste)` à 0,5 près et capture `v417_carnet_long`. S'il n'y a rien à faire défiler, l'étape est notée NON VÉRIFIÉ. La taille d'interface est remise à 1 juste après.
+- **C7** :
+  - eau d'amande ×2 posée dans la 1re case du sac, 4e poche vidée ;
+  - `PadCarry` prend l'objet ; le curseur passe sur la 4e poche ; capture `v417_manette_port` pendant le port ;
+  - `PadCarry` pose dans la poche, puis aller et retour vers le sac, avec contenus relus ;
+  - B, vraie touche injectée, pendant un nouveau port : le port est annulé et l'inventaire reste ouvert ;
+  - sac et poche rétablis.
+- **C6** :
+  - PARAMÈTRES > VIDÉO ; la ligne LUMINOSITÉ est trouvée par son libellé (`Menu.Luminosite`) ;
+  - `PadSettingsMove(1)` jusqu'à elle, puis `PadSettingsAdjust(±1)`. Le premier cran descend si la valeur est au maximum (1,5).
+  - le banc relit la valeur (écart de 0,1), le texte affiché et l'aide montrée (`HintSetting`), puis capture `v417_manette_parametres` ;
+  - retour d'un cran, valeur revenue vérifiée (rétablie de force sinon).
+- **Dépendance au branchement** : les nouvelles étapes C6, C7 et carnet long appellent les fonctions du HUD directement et ne dépendent pas du contrôleur. « B pendant un port » passe par la vraie touche et marche avec le branchement actuel (`PadBack`). L'étape existante « croix bas : défilement du carnet » passe avant comme après le branchement (60 px puis 26 px par appui). RB et LB ne dépendent de rien.
+
+**Nouvelles clés** (quatre au total, dans `interface_cles.json`) :
+- `HUD.PadInventoryFooterNoScroll` (§ 9.4) ;
+- `HUD.PadCarryHint` « [{Carry}]  DÉPLACER » ;
+- `HUD.PadCarryFooter` « [{Drop}]  POSER     [{Move}]  CHOISIR     [{Cancel}]  ANNULER » ;
+- `HUD.PadSettingsFooter` « [{Prev}] [{Next}]  ONGLETS     [{PrevCat}] [{NextCat}]  CATÉGORIE     [{Move}]  CHOISIR / RÉGLER     [{Close}]  FERMER ».
+
+Origine des traductions :
+- DÉPLACER, CHOISIR, ANNULER, ONGLETS et FERMER sont repris des catalogues : `HUD.GlisserDeplacerDoubleClicUtiliser`, `HUD.PadCharacterFooter`, `HUD.ClicChangerClicDroitEffacer`.
+- POSER, CATÉGORIE et RÉGLER sont nouveaux, traduits ici et à relire.
+
+Largeurs en Roboto (16 langues), à 10,5 pt dans la place du pied :
+- PERSONNAGE avec « [Y] DÉPLACER » : 55 % au plus (ru) ;
+- pied du port : 22 % ;
+- pied de PARAMÈTRES : 40 % (uk).
+
+**Ce qui reste**
+- Contrôleur : branchements ci-dessus. Répétition de la croix (`Started` seulement pour l'instant) et stick droit (§ 9.6).
+- LT et RT : si l'orchestrateur ne les branche pas, il faut retirer le segment CATÉGORIE de `HUD.PadSettingsFooter`.
+- Pied de colonne du carnet (`HUD.PadColumn`, non créée).
+- TOUCHES à la manette (case choisie à la croix, saisie lancée par A) : non fait.
+- C9, C11, et la colonne d'aide de C12 (§ 9.5).
+
+**Risques à vérifier en jeu**
+- Avec le contrôleur branché :
+  - la croix dans PARAMÈTRES ne change plus d'onglet (LB et RB le font) ;
+  - LT et RT ne font rien aujourd'hui inventaire ouvert, car `CanPlay` est faux. Le branchement doit tester la gâchette elle-même : `LidarPulse` est aussi lié au clic droit de la souris, qui ne doit pas changer de catégorie.
+- Déplacement en multijoueur client : `MoveItem` est le même appel qu'à la souris, mais le port n'a été essayé qu'en solo dans le banc.
+- Port à cheval sur un changement d'objets par le jeu (ramassage pendant l'inventaire ouvert) : la source est relue à la pose, et `MoveItem` refuse si elle est vide.

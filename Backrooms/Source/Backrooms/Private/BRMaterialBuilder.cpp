@@ -416,6 +416,8 @@ namespace
 		TArray<TPair<FName, FPin>> CausticIn;
 		CausticIn.Add(TPair<FName, FPin>(TEXT("WP"), WP));
 		CausticIn.Add(TPair<FName, FPin>(TEXT("Wz"), Wz));
+		// v4.17 : sens de la face (sol sec, plafond)
+		CausticIn.Add(TPair<FName, FPin>(TEXT("NZ"), G.Mask(VN, TEXT("b"))));
 		CausticIn.Add(TPair<FName, FPin>(TEXT("T"), G.Time()));
 		CausticIn.Add(TPair<FName, FPin>(TEXT("Amount"), G.Scalar(TEXT("Caustics"), 0.f)));
 		CausticIn.Add(TPair<FName, FPin>(TEXT("CausTex"), G.TexObj(TEXT("CausticsTex"), Caustics)));
@@ -535,6 +537,60 @@ namespace
 			FGraph::Link(Out->SubsurfaceColor, G.Mul(Base, G.Vector(TEXT("SubsurfaceColor"), FLinearColor(1.f, 0.35f, 0.25f))));
 			FGraph::Link(Out->Opacity, G.Scalar(TEXT("Subsurface"), 0.6f));
 		}
+	}
+
+	/** v4.17 : equipement (combinaison, masque, visiere du joueur) : eclairage standard (ni chair, ni diffusion
+	 *  sous-cutanee), normal map tangente (NormalTex) et carte ORM (MaskTex : R occlusion, G rugosite absolue, B metal,
+	 *  lineaire). Sans carte, tout reste neutre : NormalStrength, RoughMapWeight, CavityWeight et MetalMapWeight valent 0.
+	 *  Specular relie (attenue dans les creux), Saturation de l'albedo. Scene ray tracee : albedo, rugosite constante,
+	 *  normale plate. Meme graphe que build_gear_material() en Python (agent Unreal Technical Artist,
+	 *  Docs/v417/agents/materiaux_combinaison.md, 2.1) */
+	void BuildGear(FGraph& G, UMaterialEditorOnlyData* Out, TFunctionRef<UTexture*(FName)> LoadTexture)
+	{
+		UTexture* Def = LoadTexture(TEXT("T_Hazmat_Suit"));
+		if (!Def)
+		{
+			Def = EngineTexture(false);
+		}
+		const FPin Uv = G.Mul(G.UV0(), G.Scalar(TEXT("TexScale"), 1.f));
+		const FPin Albedo = G.Tex(TEXT("BaseTex"), Def, false, Uv);
+		const FPin Tint = G.Vector(TEXT("Tint"), FLinearColor::White);
+		const FPin Gray = G.Dot(Albedo, G.C3(0.2126f, 0.7152f, 0.0722f));
+		const FPin Base = G.Mul(G.Lerp(Gray, Albedo, G.Scalar(TEXT("Saturation"), 1.f)), Tint);
+		FGraph::Link(Out->BaseColor, G.RTSwitch(Base, G.Mul(Albedo, Tint)));
+
+		const FPin RoughConst = G.Scalar(TEXT("Roughness"), 0.38f);
+		const FPin MetalConst = G.Scalar(TEXT("Metallic"), 0.f);
+		FPin Rough = RoughConst;
+		FPin Metal = MetalConst;
+		FPin AO = G.Const(1.f);
+		// Defaut de MaskTex : T_NoiseLF, lineaire (une texture sRGB lue en Linear Color empecherait la compilation, comme
+		// RoughTex de BuildMesh) ; sans elle, les poids restent relies (parametre repere de version : RoughMapWeight)
+		UTexture* MaskDef = LoadTexture(TEXT("T_NoiseLF"));
+		const FPin RoughW = G.Scalar(TEXT("RoughMapWeight"), 0.f);
+		const FPin MetalW = G.Scalar(TEXT("MetalMapWeight"), 0.f);
+		const FPin CavityW = G.Scalar(TEXT("CavityWeight"), 0.f);
+		if (MaskDef && !MaskDef->SRGB)
+		{
+			const FPin Orm = G.Tex(TEXT("MaskTex"), MaskDef, false, Uv);
+			Rough = G.Lerp(RoughConst, G.Mask(Orm, TEXT("g")), RoughW);
+			Metal = G.Lerp(MetalConst, G.Mask(Orm, TEXT("b")), MetalW);
+			AO = G.Lerp(G.Const(1.f), G.Mask(Orm, TEXT("r")), CavityW);
+		}
+		else
+		{
+			Rough = G.Lerp(RoughConst, RoughConst, RoughW);
+			Metal = G.Lerp(MetalConst, MetalConst, MetalW);
+			AO = G.Lerp(G.Const(1.f), G.Const(1.f), CavityW);
+		}
+		FGraph::Link(Out->Roughness, G.RTSwitch(Rough, RoughConst));
+		FGraph::Link(Out->Metallic, Metal);
+		FGraph::Link(Out->AmbientOcclusion, AO);
+		// Reflet attenue dans les creux (la moitie de l'occlusion)
+		FGraph::Link(Out->Specular, G.Mul(G.Scalar(TEXT("Specular"), 0.5f), G.Lerp(G.Const(1.f), AO, G.Const(0.5f))));
+		const FPin N = G.Tex(TEXT("NormalTex"), EngineTexture(true), true, Uv);
+		FGraph::Link(Out->Normal, G.RTSwitch(G.Lerp(G.C3(0.f, 0.f, 1.f), N, G.Scalar(TEXT("NormalStrength"), 0.f)), G.C3(0.f, 0.f, 1.f)));
+		FGraph::Link(Out->EmissiveColor, G.Add(G.Mul(Base, G.Scalar(TEXT("SelfIllum"), 0.f)), G.Vector(TEXT("Emissive"), FLinearColor::Black)));
 	}
 
 	/** v4.7 : salles de fosses. Le brouillard ordinaire (sans brouillard volumetrique) ajoute sa couleur a tout ce qui est
@@ -818,7 +874,8 @@ namespace BRMaterialBuilder
 
 	const FString& CausticsHLSL()
 	{
-		// Entrees : WP (position monde), Wz (poids des faces horizontales), T (temps), Amount (reglage de la surface),
+		// Entrees : WP (position monde), Wz (poids des faces horizontales), NZ (normale du sommet, z ; v4.17), T (temps),
+		// Amount (reglage de la surface),
 		// CausTex (T_Caustics), SimTex / SimWin (vagues simulees). Sortie : multiplicateur de la couleur.
 		static const FString Code = TEXT(
 			"// Reseau lumineux qui derive lentement (deux echelles, legerement ondulees) ; les vagues simulees autour\n"
@@ -833,10 +890,18 @@ namespace BRMaterialBuilder
 			"float k1 = Texture2DSample(CausTex, CausTexSampler, uv / 260.0 + T * float2(0.011, 0.006) + wob * 0.018).r;\n"
 			"float k2 = Texture2DSample(CausTex, CausTexSampler, uv * float2(-1.0, 1.0) / 430.0 + T * float2(-0.007, 0.01) - wob * 0.012).r;\n"
 			"float k = saturate(k1 + 0.45 * k2);\n"
-			"// Sous l'eau : partout ; au-dessus : reflets plus faibles qui s'eteignent 2 m au-dessus de la surface\n"
+			"// v4.17 : sous l'eau : partout (fond et parois) ; au-dessus : le lisere des murs pres de la surface (reflets qui\n"
+			"// s'eteignent en 90 cm) et un reflet doux et flou au plafond ; un sol ou le dessus d'un trottoir hors de l'eau est sec :\n"
+			"// aucune caustique (avant : faces horizontales a plein poids a toute hauteur, murs jusqu'a 2 m au-dessus de l'eau)\n"
 			"float above = WP.z - 45.0;\n"
-			"float fade = lerp(above > 0.0 ? 0.75 * saturate(1.0 - above / 200.0) : saturate(1.0 + above / 300.0), 1.0, Wz);\n"
-			"return 1.0 + Amount * fade * (k * 1.5 - 0.27);\n");
+			"float down = saturate(-NZ * 4.0);\n"
+			"float wallFade = above > 0.0 ? 0.55 * saturate(1.0 - above / 90.0) : saturate(1.0 + above / 300.0);\n"
+			"float horizFade = above > 0.0 ? down * 0.6 : 1.0;\n"
+			"float fade = lerp(wallFade, horizFade, Wz);\n"
+			"// Plafond : motif plus flou (niveau de detail plus grossier de la texture) et contraste reduit\n"
+			"float kc = saturate(Texture2DSampleBias(CausTex, CausTexSampler, uv / 260.0 + T * float2(0.011, 0.006) + wob * 0.018, 3.0).r + 0.45 * k2);\n"
+			"float kk = lerp(k, kc * 0.7 + 0.12, down * saturate(above / 60.0));\n"
+			"return 1.0 + Amount * fade * (kk * 1.2 - 0.22);\n");
 		return Code;
 	}
 
@@ -846,6 +911,7 @@ namespace BRMaterialBuilder
 		{
 		case EBRMasterMaterial::Mesh:
 		case EBRMasterMaterial::Skin:
+		case EBRMasterMaterial::Gear: // v4.17 : combinaison (squelette), pieces rigides de secours (Nanite)
 			// Modeles Blender en instances, modeles fournis en Nanite, combinaison et entites a squelette
 			return { MATUSAGE_InstancedStaticMeshes, MATUSAGE_SkeletalMesh, MATUSAGE_Nanite };
 		case EBRMasterMaterial::World:
@@ -886,7 +952,10 @@ namespace BRMaterialBuilder
 			return nullptr;
 		}
 		const TCHAR* Names[] = { TEXT("M_BR_World_Runtime"), TEXT("M_BR_Mesh_Runtime"), TEXT("M_BR_Skin_Runtime"), TEXT("M_BR_WaterSurface_Runtime"),
-			TEXT("M_BR_PitShade_Runtime"), TEXT("M_BR_WorldCloth_Runtime"), TEXT("MD_BR_Decal_Runtime") };
+			TEXT("M_BR_PitShade_Runtime"), TEXT("M_BR_WorldCloth_Runtime"), TEXT("MD_BR_Decal_Runtime"),
+			TEXT("M_BR_Gear_Runtime") };
+		// v4.17 : un nom par materiau maitre (rien ne protegeait cette table contre un decalage)
+		static_assert(UE_ARRAY_COUNT(Names) == static_cast<int32>(EBRMasterMaterial::Gear) + 1, "Un nom par EBRMasterMaterial");
 		UMaterial* M = NewObject<UMaterial>(Outer ? Outer : GetTransientPackage(), FName(Names[static_cast<int32>(Which)]), RF_Transient);
 		M->MaterialDomain = MD_Surface;
 		M->BlendMode = BLEND_Opaque;
@@ -918,6 +987,9 @@ namespace BRMaterialBuilder
 			break;
 		case EBRMasterMaterial::Mesh:
 			BuildMesh(G, Out, false, LoadTexture);
+			break;
+		case EBRMasterMaterial::Gear:
+			BuildGear(G, Out, LoadTexture);
 			break;
 		case EBRMasterMaterial::Skin:
 			M->SetShadingModel(MSM_Subsurface);

@@ -401,3 +401,106 @@ Les captures suivent le modèle existant de `BRAutoTestV416Visual.cpp:2621-2672`
 - La visière n'apparaît dans aucune capture disponible.
 - L'hypothèse du GLB d'origine (§ 1.5) n'a pas pu être vérifiée : le fichier n'est ni dans l'arbre ni sur le disque examiné.
 - Les sources des taches au sol (§ 5.3) sont des hypothèses, à séparer par les trois captures proposées.
+
+---
+
+## 8. Réalisation (v417-suit)
+
+Branche `v417-suit` (arbre `wt/suit`, base `1e67bb1`), même agent. Unreal n'a pas été lancé et aucun fichier partagé n'a été touché (`BRAssets.*`, `BRMaterialBuilder.*`, `backrooms_setup.py`, `essential_packages.txt`) : l'orchestrateur les a intégrés dans `v417-jeu`, lus ici en lecture seule pour aligner les noms. Les aperçus regardés sont dans le scratchpad de la session, hors dépôt.
+
+### 8.1 Fichiers livrés
+
+| Fichier | Rôle |
+|---|---|
+| `Tools/Blender/export_hazmat_uv.py` | étape 0 : lit `SK_Hazmat.fbx` (empreinte comparée au registre avant, revérifiée après), écrit les masques UV |
+| `RawAssets/Derived/Hazmat/hazmat_uv_islands.png` | identifiant d'îlot, gris 16 bits (combinaison 1…83, visière 65535) |
+| `RawAssets/Derived/Hazmat/hazmat_uv_edges.png` | coutures (255) et bords libres (128), 1 px |
+| `RawAssets/Derived/Hazmat/hazmat_uv_islands.json` | par îlot : matériau, faces, os dominant, px/mm, hauteur relative, miroir, boîte UV ; **chaque côté de couture avec l'îlot d'en face** (`seams`, 3 699 lignes) ; empreintes des deux PNG et du FBX |
+| `Tools/derive_hazmat_maps.py` | étapes 1 à 10 (numpy + Pillow, aucun hasard), contrôles qui échouent, `--size`, `--crinkle`, `--check`, `--preview` |
+| `RawAssets/Derived/Textures/T_Hazmat_Suit_N.png` | normale tangente 2048², DirectX, plate hors îlots |
+| `RawAssets/Derived/Textures/T_Hazmat_Suit_ORM.png` | R occlusion, G rugosité absolue, B métal (0), 2048², linéaire |
+| `RawAssets/Derived/Textures/T_Hazmat_Suit_maps.json` | provenance : empreintes de l'atlas, des masques et du FBX, paramètres, mesures, empreintes des pixels et des fichiers |
+| `RawAssets/Derived/.gitattributes` | `* -text` : aucune conversion de fin de ligne sur ces données, dont les empreintes sont écrites dans les JSON |
+| `Tools/Tests/test_material_sync.py` | contrôle statique du § 4.4 (9 tests) |
+| `Source/Backrooms/Private/BRAutoTestV48.cpp` | test « combinaison : matériaux » du § 4.5, point 4 |
+
+Commits : `d2049ec` (étape 0), `ebe559a` (cartes), `bc79f2c` (test statique), `347adac` (test v4.8), `69fa579` (copie de ce document, identique au blob de `a9ccf1c`), puis cette section. **À la fusion dans `backrooms-v4.17`**, ce fichier arrive des deux côtés (ajout/ajout) : garder la version de `v417-suit`, qui est celle de `a9ccf1c` plus la section 8.
+
+### 8.2 Commandes exécutées
+
+```
+"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" --background --factory-startup --python Tools/Blender/export_hazmat_uv.py -- --size 2048
+python Tools/derive_hazmat_maps.py --preview <scratchpad>      (écrit les cartes : 65 s)
+python Tools/derive_hazmat_maps.py --check                      (recalcule et compare : 110 s, « controles : OK »)
+python -m unittest Tools/Tests/test_material_sync.py            (depuis Backrooms/)
+```
+
+- Export Blender : 20 s ; deux exécutions donnent des fichiers identiques octet pour octet (sha256). Hauteur lue 180,0 cm, unité 1 cm.
+- `--check` après la dernière écriture : pixels identiques aux PNG livrés, provenance à jour. Le script échoue (code 1) **avant toute écriture** si un contrôle échoue.
+- `test_material_sync.py` : sur `v417-suit` seul, 6 réussis et 3 échecs attendus (classe `TestGear` : `M_BR_Gear` absent de `MATERIALS`, `AssetNames`, `GEAR_TEXTURES`, etc.). Sur une copie fusionnée dans le scratchpad (sources de `v417-jeu` + `RawAssets/Derived` de `v417-suit`) : **9/9**. Sur l'arbre principal (avant intégration) : `TestMasterSync` réussit, `TestGear` échoue. Deux mutations ont été vérifiées : renommer `RoughMapWeight` dans le graphe Python, ou permuter deux entrées de `Names[]`, fait échouer le test.
+- Pas de compilation possible ici : le C++ a été relu à la main contre les en-têtes d'Unreal 5.8 installés (`GetScalarParameterValue` et `GetTextureParameterValue` sont `const` sur `UMaterialInterface`, `FHashedMaterialParameterInfo` vient de `Materials/MaterialParameters.h`, inclus par `MaterialInterface.h`) ; aucun nom local ne masque un membre d'`ABRAutoTest` ni d'`AActor`, et les nouveaux symboles de l'espace anonyme (`V48Scalar`, `V48TextureName`, `FV48GearSlot`, `V48GearSlots`) n'existent nulle part ailleurs (build unifié).
+
+### 8.3 Mesures (cartes livrées, lues comme le jeu : 8 bits, z reconstruit comme en BC5)
+
+| Mesure | Prototype (§ 2.5) | Livré |
+|---|---|---|
+| Pente dans les îlots p50 / p90 / p99 / max | 0,82 / 2,6 / 7,3 / 26,7° | **0,32 / 1,31 / 5,56 / 10,9°** |
+| Pente du PVC propre p99 | — | 2,31° |
+| Pente dans la salissure p99 | — | 4,77° |
+| Pli aux raccords p50 / p90 / p99 / max (4 249 points, 108 non mesurables) | non mesuré | **0,62 / 1,19 / 3,31 / 6,9°** (plancher de quantification 0,45°) |
+| Écart de hauteur aux raccords p50 / p99 | — | 0,000 / 0,29 mm (bande peinte d'un seul côté, sans pente : invisible) |
+| Fentes (203 points, coupures de 2 à 3 px dans un même panneau) | — | pli p99 8,0°, max 8,9° (compté à part) |
+| Rugosité dans les îlots p5 / p50 / p95 | 0,33 / 0,37 / 0,64 | **0,337 / 0,365 / 0,690** |
+| Rugosité médiane : PVC, bottes, gants, bandes, semelles | — | 0,361 ; 0,561 ; 0,502 ; 0,549 ; 0,78 |
+| Visière min / médiane / max | — | 0,051 / 0,067 / 0,149 |
+| Occlusion min / p5 / p50 | — | 0,68 / 0,86 / 1,0 |
+| Salissure > 0,5 ; bandes noires ; semelles | 5,8 % ; 1,2 % ; — | 3,4 % ; 2,4 % ; 2,5 % |
+| Îlots : PVC, gants, bottes, semelles | — | 77, 2, 2, 2 |
+
+Le « pli aux raccords » est le contrôle des marches : pour chaque arête de couture entre deux grands îlots, aux quarts de l'arête, la pente de la normal map livrée est lue de chaque côté (le long de l'arête et vers l'intérieur, à 1,5 et 3 px puis extrapolée au bord). La même surface vue des deux côtés a la même pente le long de l'arête et des pentes opposées en travers ; l'écart est l'angle du pli que dessinerait le raccord. Seuil : p99 ≤ 4°. Vérifications du contrôle : une normale plate donne 0,45° (quantification) ; l'ancienne crête de couture du § 2.4 donnait 3,1° en médiane.
+
+### 8.4 Ce que j'ai vu sur les cartes, et corrigé
+
+Aperçus regardés : normale ombrée en lumière rasante (haut et gauche, contraste ×3 et ×4), atlas éclairé en rasant (GGX avec la rugosité de la carte), rugosité, occlusion, masques, gros plans du torse et des pastilles, de la capuche, du bas des jambes et des bottes, avant et après chaque correction.
+
+1. **Bord UV en dents de scie.** Les bords d'îlots du modèle suivent les arêtes des triangles (1 à 5 px d'amplitude, période 10 à 20 px) : la bande de couture, mesurée depuis ces lignes, zigzaguait (déjà dans le prototype). Les bandes et les ourlets suivent maintenant le **contour lissé** de l'îlot : distance signée tirée du logit d'un flou de l'îlot (σ = 8 px). Le flou ne voit que l'îlot, comme l'autre côté de la couture en 3D : la distance est opposée des deux côtés, et le relief se raccorde. Les lignes sont maintenant lisses et régulières.
+2. **Crête au raccord.** La crête de 0,12 mm et de 3 mm de large (§ 2.4) posée sur la couture est plus fine que la résolution : elle dessinait un pli de 2 à 4° exactement sur le bord UV, de chaque côté. Supprimée : la bande est un plateau de 0,30 mm sur 9 mm, qui retombe à 0 à 12 mm de chaque côté. Ses deux bords se lisent comme un ruban d'environ 2 cm à cheval sur la couture.
+3. **Anneaux de bande au milieu des panneaux.** Le modèle a 61 fragments d'îlots (1 à 29 faces, 2 835 px) et des trous de 1 à 2 px : chacun faisait un anneau de bande. L'îlot est fermé (3 px) avant le flou ; les fragments prennent la densité du panneau qui les entoure. Les grands îlots sont à plus de 16 px les uns des autres (mesuré) : la fermeture ne les relie jamais.
+4. **Grumeaux de bande à la jonction du masque.** Les arêtes « ourlet » (vers le masque) et « couture » alternent sur quelques millimètres : le choix tranché du plus proche faisait des grumeaux. La nature du bord est maintenant une part pondérée (flou de 6 px), et le pli p99 de la seule bande aux raccords est passé de 5,1° à 1,0°.
+5. **Pastilles en puzzle, plaques sur la boue.** Le seuil uniforme sur l'écart type local ne prenait qu'une partie des pastilles (motif gris imprimé) et des bandes de capuche, et quelques taches aux chevilles. Les bandes noires sont désormais des **composantes entières**, retenues si elles sont noires et neutres en médiane et assez unies. Les pastilles, les poignets de manche et les bandes de capuche sont complets. Aucune composante de boue n'est retenue : il n'y a plus de plaque sur la salissure. Les poignets de cheville (bruns et striés dans l'atlas) ne sont levés sur aucune jambe : ils restent en rugosité de salissure, sans relief.
+6. **Grumeaux au front de la salissure.** Au-dessus de la boue, des taches olive restent aussi saturées que le PVC et échappent au masque de salissure. Le passe-bande en faisait des creux allant jusqu'à −0,8 mm. Corrections : aucun pli à moins d'environ 5 cm d'une salissure, et hauteur des plis écrêtée en douceur à ±0,35 mm. Les plis peints restent entre −0,21 et +0,20 mm (p5 / p95). Il reste un léger relief de plis plus haut sur les tibias, qui se lit comme des plis du tissu.
+7. **Bruit.** Avec σ = 1,5 ou 2 px, la trame horizontale de l'albedo passait dans le relief, en stries fines sur tout le PVC. Le passe-bande vaut maintenant **σ 3 / 18 px** : les plis peints dominent, et il ne reste qu'un léger moutonnement de faible amplitude. L'option des rides (`--crinkle 1`) a été revue et ajoute encore le grain du JPEG et de la trame : elle reste désactivée.
+8. **Restes, à juger dans le jeu.** Une encoche de 2 à 3 mm au bord de deux pastilles, là où le modèle a une fente. Un bord de pastille légèrement polygonal, qui suit l'albedo. La semelle est entourée d'un ourlet : ses arêtes ne sont pas soudées à la botte dans le FBX, et ce bord se lit comme une arête arrondie.
+9. **Rugosité et occlusion.** Le PVC est à 0,36 ; les creux des plis sont plus rugueux et les crêtes plus lisses. Les bandes de couture font des rubans à 0,46 le long des coutures, les gants sont à 0,50, les bottes à 0,55 avec la boue à 0,78, les semelles à 0,78. La visière va de 0,05 au centre à 0,15 au bord, et le fond est bourré. L'occlusion n'assombrit que les creux de plis et la salissure (minimum 0,68).
+
+### 8.5 Écarts au cahier des charges
+
+- **Bandes et ourlets** : profil calculé sur le contour lissé et non sur la distance brute aux lignes, sans crête (points 1 et 2). Le caoutchouc moulé ne reçoit aucune bande (gant contre gant, botte contre botte, botte contre semelle). La bande couvre les deux côtés d'une jonction PVC / caoutchouc (le § 2.4 l'ôtait côté gant, ce qui laissait une demi-bande). La jonction avec le masque est un ourlet.
+- **Normale** : différences d'un seul côté au bord de l'îlot au lieu de pentes mises à zéro. La pente au raccord est ainsi la vraie pente, ce que mesure le contrôle des raccords.
+- **Bandes noires** : détection par composantes (point 5) ; poignets de cheville non retenus.
+- **Plis** : σ 3 au lieu de 1,5, écrêtage à ±0,35 mm, poids de saturation, exclusion d'environ 5 cm autour de la salissure.
+- **Semelles** : hauteur relative maximale < 0,05 au lieu de 0,03 (valeur mesurée : 0,032).
+- **Contrôles** : un contrôle des raccords est ajouté (pli p99 ≤ 4°). Celui de la « sortie identique d'une exécution à l'autre » passe par `--check`, qui compare les pixels recalculés à ceux livrés et à leur empreinte.
+- **Étape 0** : le JSON décrit aussi chaque côté de couture et l'îlot d'en face (`seams`). Il compte 3 699 arêtes de couture et 491 bords libres, contre 3 703 et 487 dans le prototype : quatre côtés en double sur la même arête sont désormais comptés comme bords libres.
+- **Test v4.8** : en plus du § 4.5, il vérifie sur la visière `MaskTex = T_Hazmat_Suit_ORM` et `RoughMapWeight = 1`, et l'absence de métal sur le masque.
+
+### 8.6 Registre des ressources protégées : non enregistrées, et pourquoi
+
+Les cartes ne sont **pas** ajoutées à la section « derived » de `RawAssets/protected_assets.json`. Dans `Tools/protect_assets.py`, `record()` n'enregistre qu'un fichier qui correspond à `PROTECTED_PATTERNS`. Ces motifs ne couvrent que les dérivés de ressources fournies, que l'on ne peut pas refaire sans les originaux de `Tools/SourceModels` (non versionnés) : les 83 entrées actuelles y correspondent toutes. Les textures générées par les scripts du dépôt (`generate_textures.py`, `_R.png` de `generate_roughness.py`) n'y sont pas. Nos cartes se régénèrent à partir de l'atlas enregistré et de scripts versionnés. Les enregistrer aurait demandé un motif de plus dans `protect_assets.py`, `may_write` aurait refusé chaque régénération sans `--force`, et `check` aurait signalé chaque régénération comme « MODIFIE ». La provenance est donc dans `T_Hazmat_Suit_maps.json`. Le script vérifie l'empreinte de l'atlas contre le registre avant de commencer, et `test_gear_maps_derive_from_the_protected_atlas` vérifie que la provenance cite l'atlas protégé actuel et les PNG livrés.
+
+### 8.7 Ce que l'orchestrateur doit faire dans les fichiers partagés (rappel du § 4.1-4.3, corrigé)
+
+Lu dans `v417-jeu` (`17585a1`) : `EBRMasterMaterial::Gear`, `BuildGear`, `Names[]` avec `static_assert`, `EParent::Gear`, `AssetNames`/`V2Params` (`RoughMapWeight`), `FSlotStyle` et les trois slots, le branchement `NormalTex`/`MaskTex` avec signalement, le repli `M_BR_Gear` → `M_BR_Mesh` signalé, l'ancien maître signalé dans le paquet, le repli de l'éditeur sur `Derived/Textures` et `_ORM` linéaire, `MATERIAL_VERSION = 10`, `MATERIALS`/`USAGES`, `DERIVED_SUB`/`GEAR_TEXTURES`, l'import `_ORM` avec texture composite, `build_gear_material`, l'import des dérivés avant `build_materials`, `validate` et `essential_packages.txt` sont **faits**. Le graphe C++ et le graphe Python sont conformes au § 2.1. Reste :
+
+1. **Fusionner `v417-suit`** : `RawAssets/Derived/**` (avec son `.gitattributes`), les deux outils, `test_material_sync.py`, `BRAutoTestV48.cpp` et ce document (voir 8.1 pour l'ajout/ajout). Puis lancer `python -m unittest Tools/Tests/test_material_sync.py` (9/9 attendu) et `python Tools/derive_hazmat_maps.py --check`.
+2. **Rejouer l'import dans l'éditeur** avant toute cuisson (`MATERIAL_VERSION 10` le déclenche) et contrôler `backrooms_setup.validate()`. L'import des cartes repose sur deux préalables : `_N` doit être importée avant `_ORM` pour la texture composite (`run()` trie déjà ainsi), et `T_NoiseLF` doit être linéaire (sinon `M_BR_Gear` n'est pas construit, ce qui est voulu).
+3. **Facultatif, recommandé** (`backrooms_setup.py`, `import_textures`/`validate`) : étiquette `BRSourceSha256` posée à l'import et comparée au sha256 du PNG de `RawAssets/Derived/Textures`. Aujourd'hui, une carte régénérée sans changement de `MATERIAL_VERSION` reste l'ancienne dans l'éditeur sans que la validation le dise. Il faudrait aussi vérifier une taille d'au moins 2048 (§ 4.3).
+4. **Facultatif** (`fbx_skeletal_options`, § 2.6) : `normal_import_method = FBXNIM_IMPORT_NORMALS` et `normal_generation_method = MIKK_T_SPACE` explicites pour le prochain import de `SK_Hazmat`. Il ne faut **pas** `IMPORT_NORMALS_AND_TANGENTS` : le FBX de la combinaison n'a pas de tangentes. Pas de changement de `VERSION`.
+5. **Facultatif** (`BRAssets.cpp`, `DescribeSections`) : afficher `NormalTex`, `MaskTex`, `NormalStrength` et `RoughMapWeight` pour un parent `M_BR_Gear`. Le test v4.8 écrit désormais lui-même une ligne par slot avec ces valeurs.
+6. **À l'image** (§ 6, banc v4.17) : poses L1 à L5, vue réseau de face pour la visière, profils Performance et Cinématique, paire `-BRRuntimeMaterials`. À regarder en particulier : les bords des bandes de couture, les pastilles, le bas des jambes et le scintillement. Si le relief paraît trop fort, baisser `NormalStrength` dans le style `HazmatSuit` (`BRAssets.cpp`), sans régénérer les cartes.
+
+### 8.8 Limites
+
+- Le rendu dans le jeu n'a pas été vu (Unreal n'a pas été lancé) : les aperçus sont un éclairage rasant appliqué à l'atlas à plat, pas la combinaison déformée ; la continuité aux raccords est mesurée, non vue en 3D.
+- Le test v4.8 et le test statique n'ont pas été exécutés dans le moteur ; le C++ n'a pas été compilé.
+- Le contrôle des raccords suppose des UV localement conformes (même échelle dans toutes les directions) ; les fentes et les fragments de moins de 30 faces en sont exclus et comptés à part.
