@@ -595,19 +595,27 @@ void ABRAutoTest::WriteShotMeta(const FString& Name, bool bShowUI)
 	const int32 Profile = S.GraphicsProfile;
 	const TCHAR* ProfileName = (Profile >= 0 && Profile < static_cast<int32>(UE_ARRAY_COUNT(ProfileNames))) ? ProfileNames[Profile] : TEXT("?");
 	const bool bLamp = C && C->IsFlashlightOn();
-	const FString Json = FString::Printf(
+	// v4.17 (correction du banc) : etat du directeur et de la frayeur : une capture prise pendant une poursuite ou un sursaut ne
+	// se compare pas a une capture calme
+	const FString Tension = W ? FString(ABRWorld::TensionName(W->GetTension())) : FString(TEXT("?"));
+	const FString Extra = ShotExtra.IsEmpty() ? FString() : FString::Printf(TEXT(",\n  \"mesures\": %s"), *ShotExtra);
+	ShotExtra.Reset();
+	FString Json = FString::Printf(
 		TEXT("{\n  \"capture\": \"%s\",\n  \"commit\": \"%s\",\n  \"heure_utc\": \"%s\",\n  \"niveau\": %d,\n  \"graine_niveau\": %u,\n  \"graine_test\": %u,\n")
 		TEXT("  \"camera\": { \"x\": %.1f, \"y\": %.1f, \"z\": %.1f, \"pitch\": %.2f, \"yaw\": %.2f, \"roll\": %.2f, \"fov\": %.2f },\n")
 		TEXT("  \"sortie\": [%d, %d],\n  \"rendu_interne\": [%d, %d],\n  \"pourcentage_rendu\": %.1f,\n  \"profil\": \"%s\",\n")
 		TEXT("  \"temps_depuis_arrivee_s\": %.2f,\n  \"alimentation_image\": %.3f,\n  \"alimentation_regles\": %.3f,\n  \"coupure\": %s,\n  \"lampe\": %s,\n")
-		TEXT("  \"megalights\": %s,\n  \"troisieme_personne\": %s,\n  \"vhs\": %s,\n  \"grain\": %s,\n  \"interface\": %s\n}\n"),
+		TEXT("  \"megalights\": %s,\n  \"troisieme_personne\": %s,\n  \"vhs\": %s,\n  \"grain\": %s,\n  \"interface\": %s,\n")
+		TEXT("  \"tension\": \"%s\",\n  \"banc_fige\": %s,\n  \"frayeur\": %.3f,\n  \"entites\": %d"),
 		*Name, *Commit, *FDateTime::UtcNow().ToIso8601(), W ? W->GetLevelNumber() : -1, W ? W->GetSeed() : 0u, TestSeed,
 		CamLoc.X, CamLoc.Y, CamLoc.Z, CamRot.Pitch, CamRot.Yaw, CamRot.Roll, Fov,
 		OutRes.X, OutRes.Y, InRes.X, InRes.Y, Percent, ProfileName,
 		W ? W->GetLevelTime() : -1.f, W ? W->GetPower() : -1.f, W ? W->GetGameplayPower() : -1.f, (W && W->IsBlackout()) ? TEXT("true") : TEXT("false"),
 		bLamp ? TEXT("true") : TEXT("false"), ABRWorld::IsMegaLightsActive() ? TEXT("true") : TEXT("false"),
 		(C && C->IsThirdPerson()) ? TEXT("true") : TEXT("false"), S.bVHSEffect ? TEXT("true") : TEXT("false"), S.bFilmGrain ? TEXT("true") : TEXT("false"),
-		bShowUI ? TEXT("true") : TEXT("false"));
+		bShowUI ? TEXT("true") : TEXT("false"), *Tension, ABRWorld::bTestFreeze ? TEXT("true") : TEXT("false"), C ? C->ScareDark : 0.f,
+		W ? W->GetEntities().Num() : 0);
+	Json += Extra + TEXT("\n}\n");
 	FFileHelper::SaveStringToFile(Json, *FPaths::Combine(OutDir, Name + TEXT(".json")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	const FString CsvPath = FPaths::Combine(OutDir, TEXT("Captures.csv"));
 	if (!IFileManager::Get().FileExists(*CsvPath))

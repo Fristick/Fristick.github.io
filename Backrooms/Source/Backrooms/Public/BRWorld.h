@@ -808,6 +808,10 @@ public:
 	/** v4.15 : OMBRES DE TOUTES LES LAMPES (MegaLights) en vigueur : reglage, ray tracing materiel demande ET actif, MegaLights
 	 *  permis par le moteur. Faux sous Linux, macOS, DirectX 11 ou sans RT : ombres a distance (LocalShadowDistance) */
 	static bool IsMegaLightsActive();
+	/** v4.17 (tests) : banc fige (bancs visuels) : ni rencontre, ni phenomene, ni ronde, ni coupure tiree, ni Smiler de
+	 *  coupure ; tension tenue au calme ; neons qui clignotent tenus allumes (ABRChunk::Tick). Les coupures demandees
+	 *  (ForceBlackout) et les entites posees par le banc restent */
+	static bool bTestFreeze;
 	/** v4.8 : reglages graphiques changes : lumieres des chunks deja construits (type, ombres), detail des entites */
 	void OnGraphicsSettingsChanged();
 	/** v4.8 : lumieres projetant une ombre (dernier passage) */

@@ -2581,8 +2581,14 @@ const TCHAR* ABRWorld::TensionName(ETension T)
 	}
 }
 
+bool ABRWorld::bTestFreeze = false;
+
 bool ABRWorld::AllowsNewEncounter() const
 {
+	if (bTestFreeze)
+	{
+		return false;
+	}
 	// Calme : apres 20 s seulement (on a le temps de decouvrir les lieux) ; malaise : oui ; le reste : non
 	const ETension T = GetTension();
 	// v4.11 : budget de menace (coupure, entites presentes et en chasse, fosses) : au-dela, pas de nouvelle rencontre
@@ -2591,6 +2597,10 @@ bool ABRWorld::AllowsNewEncounter() const
 
 bool ABRWorld::AllowsPhenomena() const
 {
+	if (bTestFreeze)
+	{
+		return false;
+	}
 	const ETension T = GetTension();
 	return (T == ETension::Calm && TensionTime > 15.f) || T == ETension::Unease;
 }
@@ -2623,6 +2633,11 @@ void ABRWorld::SetTension(ETension NewTension)
 void ABRWorld::UpdateTension(float Dt)
 {
 	TensionTime += Dt;
+	if (bTestFreeze && HasAuthority())
+	{
+		SetTension(ETension::Calm);
+		return;
+	}
 	if (!HasAuthority())
 	{
 		if (NetTension != SeenTension)
@@ -3014,7 +3029,7 @@ void ABRWorld::UpdateBlackout(float Dt)
 	{
 	case EBlackout::None:
 		// v4.7 : une coupure ne commence ni pendant une poursuite ni pendant le repit qui suit
-		if (bAuth && BlackoutTimer <= 0.f && !bBlackoutForced && (GetTension() == ETension::Chase || GetTension() == ETension::Recovery))
+		if (bAuth && BlackoutTimer <= 0.f && !bBlackoutForced && (bTestFreeze || GetTension() == ETension::Chase || GetTension() == ETension::Recovery))
 		{
 			BlackoutTimer = 8.f;
 		}
@@ -4220,6 +4235,10 @@ void ABRWorld::UpdatePatrol(float Dt)
 			return;
 		}
 	}
+	if (bTestFreeze)
+	{
+		return;
+	}
 	PatrolSpawnTimer -= Dt;
 	if (PatrolSpawnTimer > 0.f)
 	{
@@ -4256,6 +4275,10 @@ void ABRWorld::SpawnBlackoutEntities()
 
 bool ABRWorld::SpawnBlackoutSmiler(const ABRCharacter* P, bool bInView)
 {
+	if (bTestFreeze)
+	{
+		return false;
+	}
 	FVector Loc;
 	const bool bFound = (bInView && FindBlackoutSpot(P, Loc)) || FindSpawnSpot(EBREntityKind::Smiler, P, 700.f, 1700.f, false, Loc);
 	if (!bFound)

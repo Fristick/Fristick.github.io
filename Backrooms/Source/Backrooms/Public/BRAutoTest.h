@@ -459,4 +459,7 @@ private:
 	/** v4.17 : fiche de la capture Name (Name.json et une ligne de Captures.csv) : commit (-BRCommit=), niveau, graines,
 	 *  pose et champ de la camera, definitions de sortie et de rendu, profil, temps depuis l'arrivee, etat de la lumiere */
 	void WriteShotMeta(const FString& Name, bool bShowUI);
+	/** v4.17 (correction du banc) : mesures propres a la prochaine capture (objet JSON, champ "mesures" de sa fiche) ; videe a
+	 *  chaque fiche */
+	FString ShotExtra;
 };

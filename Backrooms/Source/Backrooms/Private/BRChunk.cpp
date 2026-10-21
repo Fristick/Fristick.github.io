@@ -3692,7 +3692,8 @@ void ABRChunk::Tick(float DeltaSeconds)
 	for (FBRFlicker& F : Flickers)
 	{
 		float Mod = Power;
-		if (F.bFlickers)
+		// v4.17 (tests) : banc fige : le tube reste allume (son etat est tire au hasard, FMath::FRand)
+		if (F.bFlickers && !ABRWorld::bTestFreeze)
 		{
 			bool bOffEvent = false;
 			Mod *= BRFluo::Step(F.Tube, DeltaSeconds, FS, Rand, bOffEvent);

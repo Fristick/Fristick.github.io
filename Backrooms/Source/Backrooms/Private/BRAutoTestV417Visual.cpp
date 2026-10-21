@@ -28,6 +28,7 @@
 #include "Backrooms.h"
 #include "BRCharacter.h"
 #include "BREntity.h"
+#include "BRRig.h"
 #include "BRHUD.h"
 #include "BRInteractables.h"
 #include "BRLevels.h"
@@ -77,6 +78,29 @@ namespace BRTestV417
 	double LastVideoTime = -1.0;
 	double MinVideoStep = 1.0e9;
 	double MaxVideoStep = 0.0;
+	/** v4.17 (correction) : images de la video de la Bacteria ou elle est rendue */
+	int32 SeenFrames = 0;
+	/** v4.17 (correction, QA visuelle) : camera qui suit (Bacteria, marche vue de cote) et cote de la marche le plus libre */
+	FVector TrackCam = FVector::ZeroVector;
+	float FeetSide = 1.f;
+	/** v4.17 (correction, QA visuelle) : mesures de la prochaine image de video (ABRAutoTest::ShotExtra) */
+	FString Extra;
+
+	/** Point ou poser une camera qui suit Target : Want, ramene devant le premier obstacle (mur, pilier) */
+	FVector ClearCamera(UWorld* InWorld, const FVector& Target, const FVector& Want, const AActor* IgnoreA, const AActor* IgnoreB)
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRV417TrackCam), false, IgnoreA);
+		if (IgnoreB)
+		{
+			Q.AddIgnoredActor(IgnoreB);
+		}
+		if (InWorld && InWorld->LineTraceSingleByChannel(Hit, Target, Want, ECC_Visibility, Q))
+		{
+			return Hit.Location + (Target - Want).GetSafeNormal() * 20.f;
+		}
+		return Want;
+	}
 	/** v4.17 (correction) : marche des videos : images sans avancer (coin, obstacle bas) */
 	int32 Stuck = 0;
 	FVector LastWalkLoc = FVector::ZeroVector;
@@ -363,6 +387,8 @@ void ABRAutoTest::AddV417VisualSteps()
 				return false;
 			}
 			Move(C);
+			ShotExtra = BRTestV417::Extra;
+			BRTestV417::Extra.Reset();
 			if (const ABRWorld* VW = GetBRWorld())
 			{
 				const double T = VW->GetLevelTime();
@@ -428,6 +454,9 @@ void ABRAutoTest::AddV417VisualSteps()
 		SetHudMode(2);
 		BRTestV417::Shots = 0;
 		BRTestV417::SuiteStart = FPlatformTime::Seconds();
+		// v4.17 (correction, QA visuelle) : banc fige : les poses ne dependent plus du directeur de tension (Smilers, sursauts,
+		// coupures tirees) ni des neons qui clignotent ; seules les entites posees par le banc apparaissent
+		ABRWorld::bTestFreeze = true;
 		FLevelReport R;
 		R.Title = TEXT("v4.17 banc visuel (poses fixes, fiches des captures)");
 		R.Scene = TEXT("v417");
@@ -435,7 +464,7 @@ void ABRAutoTest::AddV417VisualSteps()
 		Reports.Add(R);
 		FString Commit = TEXT("inconnu");
 		FParse::Value(FCommandLine::Get(), TEXT("BRCommit="), Commit);
-		Note(FString::Printf(TEXT("banc visuel v4.17 : profil %d, commit %s, ray tracing materiel %s ; apparence fixee : VHS et grain coupes (sauf captures _vhs), luminosite 0, flashs normaux, flou de mouvement coupe ; interface cachee (scene seule)"),
+		Note(FString::Printf(TEXT("banc visuel v4.17 : profil %d, commit %s, ray tracing materiel %s ; apparence fixee : VHS et grain coupes (sauf captures _vhs), luminosite 0, flashs normaux, flou de mouvement coupe ; interface cachee (scene seule) ; banc fige (ni rencontre, ni phenomene, ni coupure tiree, neons tenus allumes)"),
 			Profile, *Commit, ABRPlayerController::IsHardwareRayTracingAvailable() ? TEXT("actif") : TEXT("indisponible")));
 		return true;
 	});
@@ -474,7 +503,8 @@ void ABRAutoTest::AddV417VisualSteps()
 		}
 		return true;
 	});
-	Add(TEXT("v4.17 visuel : capture l0_salle_vhs"), 0.3f, [Snap]()
+	// v4.17 (correction, QA visuelle) : 2,5 s apres le basculement : l'exposition s'est reposee (avant : 0,3 s)
+	Add(TEXT("v4.17 visuel : capture l0_salle_vhs"), 2.5f, [Snap]()
 	{
 		Snap(Scene(TEXT("l0_salle_vhs")));
 		return true;
@@ -901,9 +931,61 @@ void ABRAutoTest::AddV417VisualSteps()
 	{
 		BRTestV417::SteerWalk(C);
 	});
+	// v4.17 (correction, QA visuelle) : la camera de la 3e personne coupe le personnage a mi-cuisse : marche vue de cote, camera
+	// a 2,8 m du cote le plus libre et a 80 cm du sol, pieds dans le cadre (appuis, bassin, retard du bas du corps)
+	Add(TEXT("v4.17 visuel : 3e personne vue de cote"), 1.f, [this]()
+	{
+		ABRCharacter* C = GetPlayer();
+		ABRPlayerController* PC = GetPC();
+		if (!C || !PC)
+		{
+			return false;
+		}
+		BRTestV417::Place(C, PC, BRTestV417::SpawnLoc, BRTestV417::WalkDir.Rotation());
+		BRTestV417::SetThird(C, true);
+		const FVector Loc = C->GetActorLocation();
+		const FVector Right = FVector::CrossProduct(FVector::UpVector, BRTestV417::WalkDir).GetSafeNormal();
+		const float FreeR = static_cast<float>(FVector::Dist(Loc, BRTestV417::ClearCamera(GetWorld(), Loc, Loc + Right * 400.f, C, nullptr)));
+		const float FreeL = static_cast<float>(FVector::Dist(Loc, BRTestV417::ClearCamera(GetWorld(), Loc, Loc - Right * 400.f, C, nullptr)));
+		BRTestV417::FeetSide = FreeR >= FreeL ? 1.f : -1.f;
+		Note(FString::Printf(TEXT("l0_3p_cote : camera a %s (libre : droite %.0f cm, gauche %.0f cm)"), BRTestV417::FeetSide > 0.f ? TEXT("droite") : TEXT("gauche"), FreeR, FreeL));
+		return true;
+	});
+	AddVideo(TEXT("l0_3p_cote"), VideoFrames, [](ABRCharacter* C)
+	{
+		BRTestV417::SteerWalk(C);
+		ABRPlayerController* PC = C ? Cast<ABRPlayerController>(C->GetController()) : nullptr;
+		if (!PC)
+		{
+			return;
+		}
+		const FVector Loc = C->GetActorLocation();
+		const FVector Fwd = FRotator(0.f, C->GetActorRotation().Yaw, 0.f).Vector();
+		const FVector Side = FVector::CrossProduct(FVector::UpVector, Fwd) * BRTestV417::FeetSide;
+		const FVector Foot = Loc - FVector(0.f, 0.f, C->GetSimpleCollisionHalfHeight());
+		const FVector Want = BRTestV417::ClearCamera(C->GetWorld(), Loc, Foot + Side * 280.f + Fwd * 60.f + FVector(0.f, 0.f, 80.f), C, nullptr);
+		BRTestV417::TrackCam = BRTestV417::Frame == 0 ? Want : FMath::Lerp(BRTestV417::TrackCam, Want, 0.35f);
+		const FVector Look = Foot + FVector(0.f, 0.f, 85.f);
+		BRTestV417::ShowCamera(C->GetWorld(), C->Camera, PC, BRTestV417::TrackCam, (Look - BRTestV417::TrackCam).Rotation());
+		FBRBodyPoseInfo P;
+		if (BRRig::GetBodyPoseInfo(C, P))
+		{
+			BRTestV417::Extra = FString::Printf(TEXT("{ \"corps\": { \"lacet_jambes\": %.2f, \"ecart_jambes\": %.2f, \"pas_de_rattrapage\": %.2f, \"bassin_cm\": %.2f, \"appui_cm\": %.2f, ")
+				TEXT("\"sol_pieds_cm\": [%.2f, %.2f], \"pied_gauche\": [%.1f, %.1f, %.1f], \"pied_droit\": [%.1f, %.1f, %.1f] } }"),
+				P.LowerYaw, P.YawOffset, P.TurnStep, P.PelvisDrop, P.WalkDrop, P.FootGround[0], P.FootGround[1],
+				P.FootWorld[0].X, P.FootWorld[0].Y, P.FootWorld[0].Z, P.FootWorld[1].X, P.FootWorld[1].Y, P.FootWorld[1].Z);
+		}
+	});
+	Add(TEXT("v4.17 visuel : fin de la marche vue de cote"), 0.f, [this]()
+	{
+		BRTestV417::HideCamera(GetPlayer(), GetPC());
+		return true;
+	});
 	// Entite de controle en mouvement : joueur immobile a la 1re personne au point de depart, Bacteria posee au bout de la
 	// direction la plus libre (jusqu'a 12 m) et lachee ; la camera la suit (marche, demi-tour, appui des pattes)
-	Add(TEXT("v4.17 visuel : Bacteria au bout du couloir"), 1.5f, [this]()
+	// v4.17 (correction) : tirages fixes juste avant l'apparition et enregistrement aussitot (pas fixe) : l'IA fait les memes
+	// choix d'une version a l'autre (avant : chemin different apres l'image 0, entite cachee derriere un pilier)
+	Add(TEXT("v4.17 visuel : Bacteria au bout du couloir"), 0.f, [this]()
 	{
 		ABRWorld* W = GetBRWorld();
 		ABRCharacter* C = GetPlayer();
@@ -918,6 +1000,8 @@ void ABRAutoTest::AddV417VisualSteps()
 		const FVector Dir = BRTestV417::FreestDirection(GetWorld(), C, Free);
 		BRTestV417::Place(C, PC, BRTestV417::SpawnLoc, Dir.Rotation());
 		const float Dist = FMath::Clamp(Free - 100.f, 300.f, 1200.f);
+		FMath::RandInit(4171);
+		BRTestV417::SeenFrames = 0;
 		const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Bacteria);
 		FVector Spot = BRTestV417::SpawnLoc + Dir * Dist;
 		Spot.Z = W->FloorZAt(Spot) + (Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
@@ -929,23 +1013,44 @@ void ABRAutoTest::AddV417VisualSteps()
 		Note(FString::Printf(TEXT("video de la Bacteria : posee a %.0f cm du joueur"), Dist));
 		return true;
 	});
-	AddVideo(TEXT("l0_bacteria"), VideoFrames, [](ABRCharacter* C)
+	AddVideo(TEXT("l0_bacteria"), LongVideoFrames, [](ABRCharacter* C)
 	{
 		ABRPlayerController* PC = C ? Cast<ABRPlayerController>(C->GetController()) : nullptr;
 		if (ABREntity* E = BRTestV417::Control.Get())
 		{
+			BRTestV417::SeenFrames += E->WasRecentlyRendered(0.05f) ? 1 : 0;
+			const FVector Target = E->GetActorLocation();
 			if (PC)
 			{
-				const FRotator Want = (E->GetActorLocation() - C->GetEyeLocation()).Rotation();
-				FRotator Rot = PC->GetControlRotation();
-				Rot.Yaw += FMath::Clamp(FMath::FindDeltaAngleDegrees(Rot.Yaw, Want.Yaw), -6.f, 6.f);
-				Rot.Pitch = FMath::Clamp(Want.Pitch, -30.f, 10.f);
-				PC->SetControlRotation(Rot);
+				// v4.17 (correction, QA visuelle) : camera qui suit l'entite a 3,5 m, du cote du joueur, a 1,5 m du sol, ramenee
+				// devant un mur ou un pilier (avant : camera du joueur, entite cachee par un pilier des l'image 8)
+				FVector Away = C->GetActorLocation() - Target;
+				Away.Z = 0.f;
+				Away = Away.GetSafeNormal(UE_SMALL_NUMBER, FVector(1.f, 0.f, 0.f));
+				const float FloorZ = Target.Z - ABREntity::Info(EBREntityKind::Bacteria).HalfHeight;
+				FVector Want = Target + Away * 350.f;
+				Want.Z = FloorZ + 150.f;
+				const FVector Clear = BRTestV417::ClearCamera(C->GetWorld(), Target, Want, C, E);
+				BRTestV417::TrackCam = (BRTestV417::Frame == 0 || !Clear.Equals(Want, 1.f)) ? Clear : FMath::Lerp(BRTestV417::TrackCam, Clear, 0.25f);
+				const FVector Look(Target.X, Target.Y, FloorZ + 50.f);
+				BRTestV417::ShowCamera(C->GetWorld(), C->Camera, PC, BRTestV417::TrackCam, (Look - BRTestV417::TrackCam).Rotation());
 			}
+			TArray<FVector> Pts;
+			E->GetSupportPoints(Pts);
+			FString Json = FString::Printf(TEXT("{ \"entite\": { \"x\": %.1f, \"y\": %.1f, \"z\": %.1f, \"lacet_affiche\": %.2f, \"ecart_affiche_cm\": %.2f, \"sol_z\": %.1f, \"course\": %.2f, \"bond\": %s, \"rendue\": %s, \"appuis\": ["),
+				Target.X, Target.Y, Target.Z, E->GetVisualYaw(), E->GetVisualLag(), E->GetSupportGroundZ(), E->GetSupportRun(), E->IsHopping() ? TEXT("true") : TEXT("false"),
+				E->WasRecentlyRendered(0.05f) ? TEXT("true") : TEXT("false"));
+			for (int32 i = 0; i < Pts.Num(); ++i)
+			{
+				Json += FString::Printf(TEXT("%s[%.1f, %.1f, %.1f]"), i ? TEXT(", ") : TEXT(""), Pts[i].X, Pts[i].Y, Pts[i].Z);
+			}
+			BRTestV417::Extra = Json + TEXT("] } }");
 		}
 	});
 	Add(TEXT("v4.17 visuel : fin des videos du Level 0"), 0.5f, [this]()
 	{
+		Note(FString::Printf(TEXT("l0_bacteria : entite rendue sur %d image(s) sur %d"), BRTestV417::SeenFrames, BRTestV417::LongVideoFrames));
+		BRTestV417::HideCamera(GetPlayer(), GetPC());
 		BRTestV417::KillControl();
 		BRTestV417::SetThird(GetPlayer(), false);
 		return true;
@@ -958,7 +1063,8 @@ void ABRAutoTest::AddV417VisualSteps()
 		const TCHAR* Lang;
 		int32 Tab;
 	};
-	static const FInvShot InvShots[] = { { TEXT("l0_inventaire_personnage_fr"), TEXT("fr"), 0 }, { TEXT("l0_inventaire_carnet_fr"), TEXT("fr"), 1 },
+	static const FInvShot InvShots[] = { { TEXT("l0_inventaire_personnage_fr"), TEXT("fr"), 0 }, { TEXT("l0_inventaire_journal_fr"), TEXT("fr"), 1 },
+		{ TEXT("l0_inventaire_carnet_fr"), TEXT("fr"), 4 },
 		{ TEXT("l0_inventaire_personnage_de"), TEXT("de"), 0 }, { TEXT("l0_inventaire_personnage_ar"), TEXT("ar"), 0 } };
 	Add(TEXT("v4.17 visuel : inventaire : pose"), 1.f, [this, SetHudMode]()
 	{
@@ -1047,7 +1153,7 @@ void ABRAutoTest::AddV417VisualSteps()
 		}
 		return true;
 	});
-	Add(TEXT("v4.17 visuel : capture p_vue_vhs"), 0.3f, [Snap]()
+	Add(TEXT("v4.17 visuel : capture p_vue_vhs"), 2.5f, [Snap]()
 	{
 		Snap(Scene(TEXT("p_vue_vhs")));
 		return true;
@@ -1340,6 +1446,7 @@ void ABRAutoTest::AddV417VisualSteps()
 			GEngine->bUseFixedFrameRate = false;
 		}
 		BRTestV417::KillControl();
+		ABRWorld::bTestFreeze = false;
 		if (ACameraActor* A = BRTestV417::Cam.Get())
 		{
 			A->Destroy();
