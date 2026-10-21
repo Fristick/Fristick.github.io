@@ -4,7 +4,8 @@
 //     d'ecriture garde jusqu'a son acquittement, meme apres une ecriture reussie ;
 //   - journal : notes d'une ancienne sauvegarde (texte francais) converties en identifiants, texte dans la langue choisie ;
 //   - combinaison du joueur : materiau de chaque section (ni materiau par defaut, ni materiau d'erreur, usage "squelette"),
-//     problemes de materiaux signales pendant la session ;
+//     problemes de materiaux signales pendant la session ; v4.17 : equipement sur M_BR_Gear, normal map et carte ORM
+//     derivees branchees sur la combinaison, carte ORM sur la visiere, masque et visiere sans metal ;
 //   - profils graphiques appliques a ce qui est deja charge (type des lumieres des chunks construits, Hound complet ou
 //     allege) ;
 //   - profil RTX fluide : mesures pendant une course au Niveau 0 et dans les Poolrooms (objectif : 60 images/s) ;
@@ -29,6 +30,7 @@
 #include "BRWorld.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
@@ -36,8 +38,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 
 namespace
@@ -57,6 +61,39 @@ namespace
 	};
 	/** Ordre choisi pour que chaque profil change quelque chose (lumieres surfaciques ou ponctuelles, Hound complet ou allege) */
 	const FV48Profile V48Profiles[] = { { 2, TEXT("Cinematique") }, { 0, TEXT("Performance") }, { 4, TEXT("RTX_fluide") }, { 1, TEXT("Qualite") } };
+
+	/** v4.17 : ce que chaque slot de l'equipement doit porter (Docs/v417/agents/materiaux_combinaison.md, 2.2 et 4.5) :
+	 *  normal map et carte ORM attendues (nullptr : aucune) ; parent M_BR_Gear et aucun metal pour les trois */
+	struct FV48GearSlot
+	{
+		const TCHAR* Slot;
+		const TCHAR* NormalMap;
+		const TCHAR* OrmMap;
+	};
+	const FV48GearSlot V48GearSlots[] = { { TEXT("HazmatSuit"), TEXT("T_Hazmat_Suit_N"), TEXT("T_Hazmat_Suit_ORM") },
+		{ TEXT("HazmatGlass"), nullptr, TEXT("T_Hazmat_Suit_ORM") }, { TEXT("HazmatMask"), nullptr, nullptr } };
+
+	/** Valeur d'un parametre scalaire du materiau, ou Fallback s'il n'existe pas */
+	float V48Scalar(const UMaterialInterface* Mat, const TCHAR* Param, float Fallback)
+	{
+		float Value = Fallback;
+		if (!Mat || !Mat->GetScalarParameterValue(FHashedMaterialParameterInfo(FName(Param)), Value))
+		{
+			Value = Fallback;
+		}
+		return Value;
+	}
+
+	/** Nom de la texture d'un parametre du materiau ("(aucune)" s'il n'existe pas) */
+	FString V48TextureName(const UMaterialInterface* Mat, const TCHAR* Param)
+	{
+		UTexture* Tex = nullptr;
+		if (!Mat || !Mat->GetTextureParameterValue(FHashedMaterialParameterInfo(FName(Param)), Tex) || !Tex)
+		{
+			return TEXT("(aucune)");
+		}
+		return Tex->GetName();
+	}
 
 	void DeleteV48Files()
 	{
@@ -285,13 +322,80 @@ void ABRAutoTest::AddV48Steps()
 					true);
 			}
 		}
+		// v4.17 : l'equipement sur son parent M_BR_Gear (M_BR_Gear_Runtime avec -BRRuntimeMaterials), normal map et carte ORM
+		// derivees branchees (Tools/derive_hazmat_maps.py), sans metal. Un manque est un ECHEC, pas une note : sans elles, la
+		// combinaison redevient mate et plate sans autre signe (agent Unreal Technical Artist, materiaux_combinaison.md, 4.5)
+		static const bool bGearRuntime = FParse::Param(FCommandLine::Get(), TEXT("BRRuntimeMaterials"));
+		const FString GearParent = bGearRuntime ? TEXT("M_BR_Gear_Runtime") : TEXT("M_BR_Gear");
+		const TArray<FName> GearSlotNames = Body->GetMaterialSlotNames();
+		int32 GearBad = 0;
+		for (const FV48GearSlot& Expect : V48GearSlots)
+		{
+			const int32 GearIndex = GearSlotNames.IndexOfByKey(FName(Expect.Slot));
+			const UMaterialInterface* GearMat = GearIndex != INDEX_NONE ? Body->GetMaterial(GearIndex) : nullptr;
+			const UMaterial* GearBase = GearMat ? GearMat->GetMaterial() : nullptr;
+			TArray<FString> Wrong;
+			if (!GearMat)
+			{
+				Wrong.Add(TEXT("slot ou materiau absent"));
+			}
+			else
+			{
+				const FString BaseName = GetNameSafe(GearBase);
+				if (BaseName != GearParent)
+				{
+					Wrong.Add(FString::Printf(TEXT("parent %s au lieu de %s%s"), *BaseName, *GearParent,
+						BaseName == TEXT("M_BR_Gear_Runtime") ? TEXT(" (M_BR_Gear importe absent ou ancien : rejouer l'import)") : TEXT("")));
+				}
+				if (Expect.NormalMap)
+				{
+					const FString NormalName = V48TextureName(GearMat, TEXT("NormalTex"));
+					if (NormalName != Expect.NormalMap)
+					{
+						Wrong.Add(FString::Printf(TEXT("NormalTex %s au lieu de %s"), *NormalName, Expect.NormalMap));
+					}
+					if (V48Scalar(GearMat, TEXT("NormalStrength"), 0.f) <= 0.f)
+					{
+						Wrong.Add(TEXT("NormalStrength nul"));
+					}
+				}
+				if (Expect.OrmMap)
+				{
+					const FString OrmName = V48TextureName(GearMat, TEXT("MaskTex"));
+					if (OrmName != Expect.OrmMap)
+					{
+						Wrong.Add(FString::Printf(TEXT("MaskTex %s au lieu de %s"), *OrmName, Expect.OrmMap));
+					}
+					const float RoughWeight = V48Scalar(GearMat, TEXT("RoughMapWeight"), 0.f);
+					if (!FMath::IsNearlyEqual(RoughWeight, 1.f, 1.e-3f))
+					{
+						Wrong.Add(FString::Printf(TEXT("RoughMapWeight %.2f au lieu de 1"), RoughWeight));
+					}
+				}
+				const float MetalValue = V48Scalar(GearMat, TEXT("Metallic"), 0.f);
+				const float MetalWeight = V48Scalar(GearMat, TEXT("MetalMapWeight"), 0.f);
+				if (MetalValue > 1.e-3f || MetalWeight > 1.e-3f)
+				{
+					Wrong.Add(FString::Printf(TEXT("metal %.2f (carte %.2f) au lieu de 0"), MetalValue, MetalWeight));
+				}
+			}
+			Note(FString::Printf(TEXT("  %s : parent %s, NormalTex %s (force %.2f), MaskTex %s (rugosite %.2f, cavite %.2f), metallic %.2f, specular %.2f"),
+				Expect.Slot, *GetNameSafe(GearBase), *V48TextureName(GearMat, TEXT("NormalTex")), V48Scalar(GearMat, TEXT("NormalStrength"), 0.f),
+				*V48TextureName(GearMat, TEXT("MaskTex")), V48Scalar(GearMat, TEXT("RoughMapWeight"), 0.f), V48Scalar(GearMat, TEXT("CavityWeight"), 0.f),
+				V48Scalar(GearMat, TEXT("Metallic"), 0.f), V48Scalar(GearMat, TEXT("Specular"), 0.5f)));
+			if (Wrong.Num() > 0)
+			{
+				++GearBad;
+				Note(FString::Printf(TEXT("combinaison : %s : %s"), Expect.Slot, *FString::Join(Wrong, TEXT(" ; "))), true);
+			}
+		}
 		const TArray<FString>& MatProblems = UBRAssets::GetMaterialProblems();
 		for (int32 i = 0; i < MatProblems.Num() && i < 12; ++i)
 		{
 			Note(TEXT("materiau : ") + MatProblems[i], true);
 		}
-		Note(FString::Printf(TEXT("combinaison : %d section(s), %d materiau(x) incorrect(s), %d probleme(s) de materiaux signales depuis le lancement"),
-			Body->GetNumMaterials(), Bad, MatProblems.Num()));
+		Note(FString::Printf(TEXT("combinaison : %d section(s), %d materiau(x) incorrect(s), %d slot(s) d'equipement hors de %s, %d probleme(s) de materiaux signales depuis le lancement"),
+			Body->GetNumMaterials(), Bad, GearBad, *GearParent, MatProblems.Num()));
 		return true;
 	});
 	Add(TEXT("v4.8 combinaison : 3e personne"), 1.5f, [this]()
