@@ -3550,7 +3550,9 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 		const FQuat FoldQ = FRotator(0.f, 0.f, Out * Arm.Fold).Quaternion();
 		// Geste libre (AnimateLimbs : balancement, bras tendus, armee, frappe), replie pres d'un mur
 		FQuat Want = FoldQ * C->GetRelativeRotation().Quaternion();
-		if (PlantW > 0.01f)
+		// v4.17 (appuis) : griffe posee franchement des que le poids de l'appui depasse 0,5 (avant : melange du geste libre et de
+		// l'appui a ce poids, la griffe glissait au sol a mesure qu'il montait, au retour de la course)
+		if (PlantW > 0.5f)
 		{
 			// Griffe au repos (repliee), au sol, un peu devant quand le corps avance ; v4.17 (appuis) : la ou la griffe peut
 			// vraiment se poser (AimClaw)
@@ -3573,9 +3575,17 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 			{
 				if (!Arm.bPlanted)
 				{
+					// v4.17 (appuis) : de retour a l'appui (fin de course, de coup), la griffe se repose par un pas qui part de la ou
+					// elle est affichee ; au premier appui, posee au repos
 					Arm.Planted = Home;
 					Arm.bPlanted = true;
 					Arm.Swing = -1.f;
+					if (Arm.bLastClaw && FVector::Dist(Arm.LastClaw, Home) > 2.0)
+					{
+						Arm.SwingFrom = Arm.LastClaw;
+						Arm.Swing = 0.f;
+						++Swinging;
+					}
 				}
 				// Le corps l'a depassee (apres un bond) ou elle doit se replier : elle se leve et se repose (un bras a la fois,
 				// sauf si elle est restee trop loin derriere : plus de 45 cm)
@@ -3609,14 +3619,29 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 				{
 					Arm.Planted = Reached;
 				}
-				Want = FQuat::Slerp(Want, Aim, PlantW);
-				L.ClawRaise = Raise * PlantW;
+				Want = Aim;
+				L.ClawRaise = Raise;
+				Arm.bReleasing = true;
 			}
 		}
 		else
 		{
+			// Appui qui se relache (course, bras tendus, coup) : du point d'appui vers le geste libre, a mesure que le poids baisse
 			Arm.bPlanted = false;
 			Arm.Swing = -1.f;
+			const bool bVoidHere = PW && PW->HasPits() && PW->IsOverPit(Arm.Planted);
+			if (Arm.bReleasing && PlantW > 0.01f && !bScareOverride && !bVoidHere)
+			{
+				float Raise = 0.f;
+				FVector Reached = Arm.Planted;
+				const float W = FMath::Clamp(2.f * PlantW, 0.f, 1.f);
+				Want = FQuat::Slerp(Want, AimClaw(L, Arm.Planted, 8.f, Raise, Reached), W);
+				L.ClawRaise = Raise * W;
+			}
+			else
+			{
+				Arm.bReleasing = false;
+			}
 		}
 		C->SetRelativeRotation(Want);
 	}
@@ -3629,6 +3654,22 @@ void ABREntity::PoseBacteria(float Dt)
 	// v4.17 (appuis, tests) : appuis, lacet et ecart du modele tels qu'affiches a cette image (le banc les lit dans son Tick,
 	// dont l'ordre avec le deplacement de l'image n'est pas fixe)
 	ComputeSupportPoints(PosedSupports);
+	// v4.17 (appuis) : griffes affichees (les dernieres des appuis, dans l'ordre des bras-bequilles), point de depart d'un
+	// retour a l'appui
+	int32 ArmCount = 0;
+	for (const FLimb& L : Limbs)
+	{
+		ArmCount += (L.Pivot.IsValid() && L.Contacts.Num() > 0) ? 1 : 0;
+	}
+	for (int32 a = 0; a < FMath::Min(ArmCount, 2); ++a)
+	{
+		const int32 Idx = PosedSupports.Num() - ArmCount + a;
+		CrutchArms[a].bLastClaw = !bScareOverride && PosedSupports.IsValidIndex(Idx);
+		if (CrutchArms[a].bLastClaw)
+		{
+			CrutchArms[a].LastClaw = PosedSupports[Idx];
+		}
+	}
 	PosedYaw = Visual ? static_cast<float>(Visual->GetComponentRotation().Yaw) : static_cast<float>(GetActorRotation().Yaw);
 	PosedLag = Visual ? static_cast<float>(FVector::Dist2D(Visual->GetComponentLocation(), GetActorLocation())) : 0.f;
 	bPosedValid = !bScareOverride;

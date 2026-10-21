@@ -540,6 +540,10 @@ private:
 		/** Roulis vers le corps (degres) pour ne pas entrer dans un mur ou un chambranle, et sa cible (rayon lateral) */
 		float Fold = 0.f;
 		float FoldWant = 0.f;
+		/** v4.17 (appuis) : griffe affichee a la derniere pose (monde) ; appui qui se relache (le poids de l'appui baisse) */
+		FVector LastClaw = FVector::ZeroVector;
+		bool bLastClaw = false;
+		bool bReleasing = false;
 	};
 	FCrutchArm CrutchArms[2];
 	bool bSupportInit = false;

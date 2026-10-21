@@ -4062,7 +4062,6 @@ void ABRCharacter::AnimateBody(float Dt)
 		// Petits pas en tournant sur place
 		PhaseStep = Dt * 9.f * Gs.TurnStep;
 	}
-	BodyAnim = FMath::Fmod(BodyAnim + PhaseStep, 2.f * PI * 64.f);
 	// v4.17 (appuis) : la cadence fait avancer les pas (marche, petits pas en tournant sur place)
 	const bool bCadence = !bSwimming && (bStepping || Gs.TurnStep > 0.01f);
 
@@ -4100,14 +4099,32 @@ void ABRCharacter::AnimateBody(float Dt)
 			}
 		}
 		Gs.bFootBones = Found == 2;
-		static bool bLogged = false;
-		if (!bLogged)
+		static bool bLogged0 = false;
+		if (!bLogged0)
 		{
-			bLogged = true;
+			bLogged0 = true;
 			UE_LOG(LogBackrooms, Log, TEXT("Corps : jambe gauche au repos (repere des jambes) hanche %s genou %s cheville %s ; os des pieds %s"),
 				*Gs.RestHip[0].ToString(), *Gs.RestKnee[0].ToString(), *Gs.RestAnkle[0].ToString(), Gs.bFootBones ? TEXT("oui") : TEXT("non"));
 		}
 	}
+	// v4.17 (appuis) : depart apres un arret : la phase de la cadence est recalee sur les pieds poses. Avant, elle repartait ou
+	// elle s'etait arretee, et le pied d'appui pouvait rester pose un demi-cycle entier (hanche a 94 cm de lui, bassin a sa
+	// butee). Le pied le plus en avant dans le sens de la marche commence son appui a la phase qui le place ou il est :
+	// sin(phase) = son avance / (L sin A), A de la marche ; l'autre leve le pied
+	if (bCadence && Gs.bLegsInit && Gs.IdleTime > 0.12f && !Gs.Leg[0].bSwing && !Gs.Leg[1].bSwing)
+	{
+		const FVector Travel = FRotator(0.f, Gs.LowerYaw, 0.f).Vector() * (PhaseStep >= 0.f ? 1.0 : -1.0);
+		float Ahead[2];
+		for (int32 i = 0; i < 2; ++i)
+		{
+			Ahead[i] = static_cast<float>(FVector::DotProduct(Gs.Leg[i].Anchor - GetActorLocation(), Travel)) - static_cast<float>(Gs.RestAnkle[i].X);
+		}
+		const int32 Front = Ahead[1] > Ahead[0] ? 1 : 0;
+		const float Reach = LegL * FMath::Sin(FMath::DegreesToRadians(Spec.LegAmp));
+		const float Sn = FMath::Clamp(Ahead[Front] / FMath::Max(Reach, 1.f), -1.f, 1.f) * (PhaseStep >= 0.f ? 1.f : -1.f);
+		BodyAnim = FMath::Fmod(PI - FMath::Asin(Sn) - (Front == 1 ? PI : 0.f) + 2.f * PI * 4.f, 2.f * PI);
+	}
+	BodyAnim = FMath::Fmod(BodyAnim + PhaseStep, 2.f * PI * 64.f);
 
 	// Corps entier : penche a l'horizontale pendant la brasse, s'effondre a la mort
 	const float SwimPitch = -72.f * SwimMove * SwimBlend;
@@ -4210,7 +4227,9 @@ void ABRCharacter::AnimateBody(float Dt)
 			for (int32 i = 0; i < 2; ++i)
 			{
 				const FBRBodyLeg& G = Gs.Leg[i];
-				if (FVector::Dist2D(G.bSwing ? G.SwingFrom : G.Anchor, StrideW[i]) > 150.0)
+				// Cible de l'image precedente (pied en l'air : il suit le corps ; son point de lever est naturellement a pres de 2 m
+				// du point de foulee en fin de pas)
+				if (FVector::Dist2D(G.bSwing ? G.Target : G.Anchor, StrideW[i]) > 150.0)
 				{
 					Gs.bLegsInit = false; // teleportation, changement de niveau : les pieds se reposent sous le corps
 				}
