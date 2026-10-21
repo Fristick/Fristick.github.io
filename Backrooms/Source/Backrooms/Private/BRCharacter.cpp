@@ -4319,8 +4319,11 @@ void ABRCharacter::AnimateBody(float Dt)
 						G.SwingW0 = FMath::Min(G.SwingW, 0.9f);
 					}
 					bLand = bPhaseStance;
+					// Temps jusqu'a la phase de pose, negatif a l'image ou elle est depassee : le pied se pose la ou etait prevu le point
+					// de foulee a la phase de pose, pas une fraction d'image plus loin
 					const float Rate = FMath::Abs(PhaseStep) / FMath::Max(Dt, 1.0e-4f);
-					const float TimeLeft = FMath::Min(Rem / FMath::Max(Rate, 0.5f), 0.5f);
+					const float RemSigned = Dir > 0.f ? HALF_PI - Wrapped : Wrapped + HALF_PI;
+					const float TimeLeft = FMath::Clamp(RemSigned / FMath::Max(Rate, 0.5f), -0.1f, 0.5f);
 					FVector LandCS = StrideCS[i];
 					LandCS.X = Gs.RestAnkle[i].X + CrouchFwd + Dir * LegL * FMath::Sin(FMath::DegreesToRadians(StrideDeg));
 					Land = Frame.TransformPosition(LandCS) + FVector(Vel.X, Vel.Y, 0.0) * static_cast<double>(TimeLeft);
@@ -4402,8 +4405,9 @@ void ABRCharacter::AnimateBody(float Dt)
 	// Bassin en marche (v4.17) : la jambe d'appui, tendue, porte le corps : il descend pour que chaque cheville atteigne sa cible
 	// (avant : les deux pieds a ~12,6 cm du sol a chaque double appui de la marche, 31 cm en course). v4.17 (appuis) : descente
 	// tiree des cibles au monde (appuis tenus, pas en l'air), au lieu de l'angle de la cadence
-	// v4.17 (appuis) : la jambe d'appui seulement, et celle qui va se poser (dernier cinquieme du pas) ; une jambe qui vient de
-	// lever plie le genou au lieu de faire descendre le bassin (avant : jusqu'a 27 cm de descente juste apres le lever)
+	// v4.17 (appuis) : la jambe d'appui, celle qui se leve (premiers 15 % du pas : le pied monte a la verticale, sans etre tire
+	// en avant) et celle qui va se poser (dernier cinquieme) ; entre les deux, la jambe en l'air plie le genou au lieu de faire
+	// descendre le bassin (avant : jusqu'a 27 cm de descente juste apres le lever)
 	float WalkDrop = 0.f;
 	FVector TargetCS[2];
 	for (int32 i = 0; i < 2; ++i)
@@ -4413,7 +4417,8 @@ void ABRCharacter::AnimateBody(float Dt)
 		const double Reach = (Gs.RestAnkle[i] - Gs.RestHip[i]).Size();
 		const double Need = -D.Z - FMath::Sqrt(FMath::Max(Reach * Reach - D.X * D.X - D.Y * D.Y, 1.0));
 		const FBRBodyLeg& G = Gs.Leg[i];
-		const float Weight = !bFeetDown || !G.bSwing ? 1.f : FMath::Clamp((G.SwingN - 0.8f) / 0.2f, 0.f, 1.f);
+		const float Weight = !bFeetDown || !G.bSwing ? 1.f
+			: FMath::Max(FMath::Clamp(1.f - G.SwingN / 0.15f, 0.f, 1.f), FMath::Clamp((G.SwingN - 0.8f) / 0.2f, 0.f, 1.f));
 		WalkDrop = FMath::Max(WalkDrop, static_cast<float>(Need) * Weight);
 	}
 	WalkDrop = FMath::Clamp(WalkDrop, 0.f, 35.f) * LockW;
