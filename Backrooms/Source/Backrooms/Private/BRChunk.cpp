@@ -1850,7 +1850,7 @@ ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea
 	else if (IsAreaFixture(R.Fixture))
 	{
 		// v4.17 (correction, eclairage B.3 reglage 2) : sans lumieres surfaciques (Performance), une dalle devient un projecteur
-		// vers le bas (cone de 80 deg, 35 deg plein), plus une lumiere ponctuelle : plus de halo au plafond ni de point chaud
+		// vers le bas (cone de 80 deg, 50 deg plein), plus une lumiere ponctuelle : plus de halo au plafond ni de point chaud
 		// dans le diffuseur, et le sol recoit la meme intensite au nadir que sous la dalle (1320 lm / pi = 420 cd ; flux du
 		// projecteur = Lumens x 0,55 x 2 (1 - cos 80 deg)). Une seule vue d'ombre au lieu de six
 		constexpr float Outer = 80.f;
@@ -1860,7 +1860,9 @@ ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea
 		SL->SetRelativeLocation(R.Pos - GetActorLocation());
 		SL->SetRelativeRotation(FRotator(-90.f, R.Yaw, 0.f));
 		SL->SetOuterConeAngle(Outer);
-		SL->SetInnerConeAngle(35.f);
+		// 50 deg plein : a 60 deg de l'axe, 0,48 de l'intensite au nadir, comme une dalle lambertienne (0,5) ; avec 35 deg
+		// (premier essai), 0,26 : haut des murs et plafond plus sombres qu'en Qualite (tiers haut de l0_salle 0,16 contre 0,24)
+		SL->SetInnerConeAngle(50.f);
 		SL->SetSourceRadius(R.Fixture == EBRFixture::SkyPanel ? 40.f : 8.f);
 		SL->SetSourceLength(R.SourceLength);
 		Lumens *= 0.55f * 2.f * (1.f - FMath::Cos(FMath::DegreesToRadians(Outer)));
