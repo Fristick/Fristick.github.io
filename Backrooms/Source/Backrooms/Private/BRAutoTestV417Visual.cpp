@@ -988,9 +988,9 @@ void ABRAutoTest::AddV417VisualSteps()
 		FString Bones;
 		if (UPoseableMeshComponent* Skin = C->BodySkin)
 		{
-			auto BoneAt = [Skin](const TCHAR* Foot, const TCHAR* Leg)
+			auto BoneAt = [Skin](const TCHAR* FootBone, const TCHAR* Leg)
 			{
-				const FName N = Skin->GetBoneIndex(FName(Foot)) != INDEX_NONE ? FName(Foot) : FName(Leg);
+				const FName N = Skin->GetBoneIndex(FName(FootBone)) != INDEX_NONE ? FName(FootBone) : FName(Leg);
 				return Skin->GetBoneIndex(N) != INDEX_NONE ? Skin->GetBoneLocationByName(N, EBoneSpaces::WorldSpace) : FVector::ZeroVector;
 			};
 			const FVector L = BoneAt(TEXT("LeftFoot"), TEXT("LeftLeg"));

@@ -2450,6 +2450,8 @@ void ABRAutoTest::Finish()
 		return;
 	}
 	bFinished = true;
+	// v4.17 (seconde relecture, R4) : le gel du banc visuel ne survit pas a un essai arrete avant sa derniere etape (-BRAutoTestStay)
+	ABRWorld::bTestFreeze = false;
 	if (Reports.Num() > 0 && Capture.IsValid())
 	{
 		Reports.Last().LastLogLine = Capture->Num();

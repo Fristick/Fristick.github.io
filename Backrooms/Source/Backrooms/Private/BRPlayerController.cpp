@@ -1759,8 +1759,10 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 		return;
 	}
 	// v4.17 (interface, C6) : A dans PARAMETRES : meme effet qu'un clic sur la ligne choisie a la manette. v4.17 (accessibilite,
-	// S1) : Entree aussi (curseur aux fleches)
-	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && (IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom) || IsInputKeyDown(EKeys::Enter)))
+	// S1) : Entree aussi, seulement quand le curseur des fleches est montre (seconde relecture, C1 : avant, Entree agissait sur
+	// un curseur cache, que le joueur a la souris ne voyait pas : objet utilise ou reglage change sans le savoir)
+	const bool bKeyEnter = BRKeys::UsesKeyboardCursor() && IsInputKeyDown(EKeys::Enter);
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && (IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom) || bKeyEnter))
 	{
 		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
 		{
@@ -1772,7 +1774,7 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 	}
 	// v4.16 (relecture) : A dans PERSONNAGE : utiliser, equiper ou retirer l'objet de la case du curseur
 	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Bottom, false)
-		|| BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Enter, false))
+		|| BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && bKeyEnter, EKeys::Enter, false))
 	{
 		return;
 	}

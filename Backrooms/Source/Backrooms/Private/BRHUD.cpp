@@ -5455,7 +5455,9 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 	FString Hint;
 	// v4.16 (relecture) : manette : le bouton A (meme effet que le double-clic) et une infobulle a cote de la case du curseur
 	const FSlotBox* PadBox = UsesPadCursor(C) && HoverSlot == PadCursor ? SlotBoxOf(PadCursor) : nullptr;
-	const FString PadUse = TEXT("[") + BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom) + TEXT("]  ");
+	// v4.17 (seconde relecture, C3) : au clavier (curseur aux fleches), Entree et la touche LAMPE, pas les boutons A et Y
+	const bool bKeyCursor = PadBox && BRKeys::UsesKeyboardCursor();
+	const FString PadUse = TEXT("[") + (bKeyCursor ? BRKeys::KeyName(EKeys::Enter) : BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom)) + TEXT("]  ");
 	if (Info.bConsumable)
 	{
 		Hint = PadBox ? PadUse + Info.UseVerb.ToUpper().ToString()
@@ -5476,7 +5478,8 @@ void ABRHUD::DrawTooltip(ABRCharacter* C)
 	{
 		// v4.17 (C7) : Y deplace l'objet (PadCarry)
 		Hint = (Hint.IsEmpty() ? FString() : Hint + TEXT("     "))
-			+ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryHint", "[{Carry}]  D\u00c9PLACER"), { { TEXT("Carry"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } });
+			+ BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryHint", "[{Carry}]  D\u00c9PLACER"),
+				{ { TEXT("Carry"), BRLoc::Arg(bKeyCursor ? BRKeys::Primary(EBRAction::Flashlight) : BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } });
 	}
 	const FString Title = Info.Name.ToUpper().ToString() + (It->Count > 1 ? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt2", "  x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }) : FString());
 	const float TitleH = TextSize(TEXT("Hg"), UiType::PanelTitle, EUiWeight::Bold).Y;

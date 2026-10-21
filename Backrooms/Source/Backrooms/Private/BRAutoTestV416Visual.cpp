@@ -1117,20 +1117,22 @@ void ABRAutoTest::AddV416VisualSteps()
 	// Inventaire a la manette par de vraies touches (injectees dans le controleur, comme une manette branchee). v4.16 (relecture) :
 	// chaque appui a sa propre verification : Before note l'etat avant l'appui ; Check, deux images plus tard (touche encore
 	// enfoncee), dit si le resultat attendu est la et le decrit (Detail) ; une precondition absente y est notee NON VERIFIE
-	auto AddPadPress = [this](const FString& What, const FKey& Key, TFunction<void()> Before, TFunction<bool(FString&)> Check)
+	// v4.17 (seconde relecture, C1 et C3) : bPad = false : appui du clavier (manette inactive, invites du clavier)
+	auto AddPress = [this](bool bPad, const FString& What, const FKey& Key, TFunction<void()> Before, TFunction<bool(FString&)> Check)
 	{
-		Add(FString::Printf(TEXT("v4.16 visuel : manette, %s"), *What), 0.f, [this, What, Key, Before, Check]()
+		const FString Dev = bPad ? TEXT("manette") : TEXT("clavier");
+		Add(FString::Printf(TEXT("v4.16 visuel : %s, %s"), *Dev, *What), 0.f, [this, bPad, Dev, What, Key, Before, Check]()
 		{
 			ABRPlayerController* PC = GetPC();
 			if (!PC)
 			{
-				Skip(FString::Printf(TEXT("manette, %s : controleur absent : NON VERIFIE"), *What));
+				Skip(FString::Printf(TEXT("%s, %s : controleur absent : NON VERIFIE"), *Dev, *What));
 				return true;
 			}
 			if (BRTestV416Vis::Phase == 0)
 			{
 				BRTestV416Vis::Phase = 1;
-				PC->bPadActive = true;
+				PC->bPadActive = bPad;
 				if (Before)
 				{
 					Before();
@@ -1151,12 +1153,12 @@ void ABRAutoTest::AddV416VisualSteps()
 				const bool bOk = Check(Detail);
 				if (!bOk && !bDown)
 				{
-					Skip(FString::Printf(TEXT("manette, %s : la touche injectee n'est pas enfoncee pour le controleur (injection sans effet ici : a verifier avec une vraie manette) ; %s"),
-						*What, *Detail));
+					Skip(FString::Printf(TEXT("%s, %s : la touche injectee n'est pas enfoncee pour le controleur (injection sans effet ici : a verifier avec une vraie %s) ; %s"),
+						*Dev, *What, bPad ? TEXT("manette") : TEXT("touche"), *Detail));
 				}
 				else
 				{
-					Note(FString::Printf(TEXT("manette, %s : touche enfoncee %s ; %s"), *What, BRTestV416Vis::Oui(bDown), *Detail), !bOk);
+					Note(FString::Printf(TEXT("%s, %s : touche enfoncee %s ; %s"), *Dev, *What, BRTestV416Vis::Oui(bDown), *Detail), !bOk);
 				}
 				PC->InputKey(FInputKeyEventArgs::CreateSimulated(Key, IE_Released, 0.f));
 				return false;
@@ -1168,6 +1170,10 @@ void ABRAutoTest::AddV416VisualSteps()
 			BRTestV416Vis::Phase = 0;
 			return true;
 		});
+	};
+	auto AddPadPress = [AddPress](const FString& What, const FKey& Key, TFunction<void()> Before, TFunction<bool(FString&)> Check)
+	{
+		AddPress(true, What, Key, MoveTemp(Before), MoveTemp(Check));
 	};
 	// Onglet attendu apres l'appui (et inventaire ouvert)
 	auto TabIs = [this, HudOf](int32 Want)
@@ -1319,6 +1325,97 @@ void ABRAutoTest::AddV416VisualSteps()
 		Detail = FString::Printf(TEXT("tete : %s, 2e case du sac %s"), C && C->GetEquipped(EBREquipSlot::Head) == EBRItem::Headlamp ? TEXT("frontale") : TEXT("autre"),
 			S1 && S1->IsEmpty() ? TEXT("vide") : TEXT("occupee"));
 		ShotNamed(TEXT("v416_manette_equipe"));
+		return bOk;
+	});
+	// v4.17 (seconde relecture, C1 et C3) : meme sac au clavier seul : frontale remise dans la 2e case (tete vide), curseur
+	// dessus mais cache (souris). Entree ne fait rien tant que le curseur n'est pas montre (avant : la frontale etait equipee
+	// sans que le joueur voie le curseur) ; les fleches le montrent ; l'infobulle nomme alors Entree et la touche LAMPE (avant :
+	// les boutons A et Y de la manette) ; Entree equipe
+	Add(TEXT("v4.17 visuel : clavier, objets du sac (preparation)"), 0.2f, [this, HudOf]()
+	{
+		ABRCharacter* C = GetPlayer();
+		ABRHUD* H = HudOf();
+		ABRPlayerController* PC = GetPC();
+		FBRItemSlot* S1 = C ? C->GetSlot(EBRSlotGroup::Storage, 1) : nullptr;
+		FBRItemSlot* Head = C ? C->GetSlot(EBRSlotGroup::Equipment, static_cast<int32>(EBREquipSlot::Head)) : nullptr;
+		if (!H || !S1 || !Head || !PC || !PC->IsInventoryOpen())
+		{
+			Skip(TEXT("clavier, objets du sac : joueur, HUD, cases ou inventaire absents : inventaire au clavier NON VERIFIE"));
+			return true;
+		}
+		*S1 = FBRItemSlot{ EBRItem::Headlamp, 1 };
+		Head->Clear();
+		C->OnEquipmentChanged();
+		H->PadCursor.Group = EBRSlotGroup::Storage;
+		H->PadCursor.Index = 1;
+		H->Inspecting = ABRHUD::FSlotRef();
+		PC->bPadActive = false;
+		BRKeys::SetKeyboardCursor(false);
+		return true;
+	});
+	auto HeadlampState = [this](FString& Detail)
+	{
+		ABRCharacter* C = GetPlayer();
+		const FBRItemSlot* S1 = C ? C->GetSlot(EBRSlotGroup::Storage, 1) : nullptr;
+		const bool bWorn = C && C->GetEquipped(EBREquipSlot::Head) == EBRItem::Headlamp;
+		const bool bInBag = S1 && !S1->IsEmpty() && S1->Item == EBRItem::Headlamp;
+		Detail = FString::Printf(TEXT("tete : %s, 2e case du sac : %s, curseur du clavier %s"), bWorn ? TEXT("frontale") : TEXT("autre ou vide"),
+			bInBag ? TEXT("frontale") : TEXT("autre ou vide"), BRKeys::UsesKeyboardCursor() ? TEXT("montre") : TEXT("cache"));
+		return bWorn ? 1 : (bInBag ? 0 : -1);
+	};
+	AddPress(false, TEXT("Entree, curseur cache : rien ne change (C1)"), EKeys::Enter, nullptr, [this, HeadlampState](FString& Detail)
+	{
+		ABRPlayerController* PC = GetPC();
+		const bool bDown = PC && PC->IsInputKeyDown(EKeys::Enter);
+		const bool bOpen = PC && PC->IsInventoryOpen();
+		const int32 State = HeadlampState(Detail);
+		Detail += FString::Printf(TEXT(", inventaire %s"), bOpen ? TEXT("ouvert") : TEXT("ferme"));
+		// Touche non recue : rien ne prouve l'absence d'effet (NON VERIFIE par AddPress)
+		return bDown && bOpen && State == 0 && !BRKeys::UsesKeyboardCursor();
+	});
+	AddPress(false, TEXT("fleche gauche : curseur montre, 1re case du sac"), EKeys::Left, nullptr, [this, HudOf](FString& Detail)
+	{
+		ABRHUD* H = HudOf();
+		Detail = H ? FString::Printf(TEXT("curseur sur la case %d du groupe %d (attendu 0 du groupe %d), curseur du clavier %s"), H->PadCursor.Index,
+			static_cast<int32>(H->PadCursor.Group), static_cast<int32>(EBRSlotGroup::Storage), BRKeys::UsesKeyboardCursor() ? TEXT("montre") : TEXT("cache"))
+			: FString(TEXT("HUD absent"));
+		return H && BRKeys::UsesKeyboardCursor() && H->PadCursor.Group == EBRSlotGroup::Storage && H->PadCursor.Index == 0;
+	});
+	AddPress(false, TEXT("fleche droite : infobulle de la frontale aux touches du clavier (C3)"), EKeys::Right, nullptr, [this, HudOf, Offscreen, ShotNamed](FString& Detail)
+	{
+		ABRHUD* H = HudOf();
+		if (!H || H->PadCursor.Group != EBRSlotGroup::Storage || H->PadCursor.Index != 1 || !BRKeys::UsesKeyboardCursor())
+		{
+			Detail = TEXT("curseur du clavier absent ou pas sur la 2e case du sac");
+			return false;
+		}
+		TArray<FDrawnText> Texts;
+		if (!Offscreen(1920, 1080, FString(), Texts))
+		{
+			Skip(TEXT("clavier, infobulle : aucun rendu hors ecran : noms des touches NON VERIFIES"));
+			return true;
+		}
+		ShotNamed(TEXT("v417_clavier_infobulle"));
+		const FString KeyUse = TEXT("[") + BRKeys::KeyName(EKeys::Enter) + TEXT("]");
+		const FString KeyCarry = TEXT("[") + BRKeys::Primary(EBRAction::Flashlight) + TEXT("]");
+		const FString PadUse = TEXT("[") + BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom) + TEXT("]");
+		FString Tip;
+		bool bPad = false;
+		for (const FDrawnText& T : Texts)
+		{
+			if (T.Text.StartsWith(KeyUse) && T.Text.Contains(KeyCarry))
+			{
+				Tip = T.Text;
+			}
+			bPad |= T.Text.StartsWith(PadUse);
+		}
+		Detail = FString::Printf(TEXT("infobulle \"%s\" (attendu : %s puis %s), invite de la manette %s"), *Tip, *KeyUse, *KeyCarry, bPad ? TEXT("PRESENTE") : TEXT("absente"));
+		return !Tip.IsEmpty() && !bPad;
+	});
+	AddPress(false, TEXT("Entree, curseur montre : equiper la frontale"), EKeys::Enter, nullptr, [this, HeadlampState](FString& Detail)
+	{
+		const bool bOk = HeadlampState(Detail) == 1;
+		BRKeys::SetKeyboardCursor(false); // la suite du banc revient a la manette
 		return bOk;
 	});
 	AddPadPress(TEXT("B : fermer l'inventaire"), EKeys::Gamepad_FaceButton_Right, nullptr, [this](FString& Detail)
@@ -1824,17 +1921,17 @@ void ABRAutoTest::AddV416VisualSteps()
 				// (le chargement suivant le refait)
 				if (ABRWorld* W = GetBRWorld())
 				{
-					const BRMission::FPlan& Plan = W->GetMissionPlan();
+					const BRMission::FPlan& MPlan = W->GetMissionPlan();
 					BRMission::FState& State = const_cast<BRMission::FState&>(W->GetMissionState());
-					for (int32 D = 0; D < Plan.NumDevices; ++D)
+					for (int32 D = 0; D < MPlan.NumDevices; ++D)
 					{
-						if (Plan.Devices[D].Kind == BRMission::EKind::Clue)
+						if (MPlan.Devices[D].Kind == BRMission::EKind::Clue)
 						{
 							State.Dev[D] = 1;
 						}
-						else if (Plan.Devices[D].Kind == BRMission::EKind::Observe)
+						else if (MPlan.Devices[D].Kind == BRMission::EKind::Observe)
 						{
-							State.Dev[D] = static_cast<uint8>(Plan.Devices[D].Positions);
+							State.Dev[D] = static_cast<uint8>(MPlan.Devices[D].Positions);
 						}
 					}
 				}
