@@ -16,6 +16,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -1707,6 +1708,7 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 		{
 			F.GlowColor = UBRAssets::TemperatureGlow(F.GlowColor, D.LightTemperatureK);
 		}
+		F.GlowColor *= D.DiffuserGlow; // v4.17 (correction) : eclat des diffuseurs du niveau
 		if (Mesh)
 		{
 			Comp->SetStaticMesh(Mesh);
@@ -1738,7 +1740,7 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 	{
 		const FString Key = FString::Printf(TEXT("FIXTURE|%s|%d"), *MeshName.ToString(), L.bBroken ? 0 : 1);
 		FBatch& B = GetBatch(Key, Mesh, nullptr, false, bFixtureShadow, 0.f);
-		B.GlowScale = L.bBroken ? 0.f : 1.f;
+		B.GlowScale = L.bBroken ? 0.f : D.DiffuserGlow;
 		B.bPowered = !L.bBroken;
 		// v4.15 : diffuseurs groupes : meme couleur que leur lumiere (et que les diffuseurs individuels du niveau)
 		B.LightTemperatureK = D.LightTemperatureK;
@@ -1754,6 +1756,7 @@ void ABRChunk::AddLight(int32 X, int32 Y, const FBRLightInfo& L)
 			{
 				Fb.Emissive = UBRAssets::TemperatureGlow(Fb.Emissive, D.LightTemperatureK);
 			}
+			Fb.Emissive *= D.DiffuserGlow;
 		}
 		FBatch& B = GetBatch(TEXT("FIXTUREBOX|") + Fb.Key(), A->Cube(), A->Surface(Fb), false, false, 0.f);
 		B.Transforms.Add(FTransform(FQuat::Identity, FVector(0.f, 0.f, FallbackZ + FallbackSize.Z * 0.5f), FallbackSize / 100.f) * Local);
@@ -1839,10 +1842,29 @@ ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea
 		}
 		RL->SetSourceWidth(Width);
 		RL->SetSourceHeight(Length);
-		RL->SetBarnDoorAngle(88.f);
-		RL->SetBarnDoorLength(4.f);
+		RL->SetBarnDoorAngle(D.LightBarnAngle);
+		RL->SetBarnDoorLength(D.LightBarnLength);
 		Lumens *= 0.55f; // tout le flux part vers le bas
 		LC = RL;
+	}
+	else if (IsAreaFixture(R.Fixture))
+	{
+		// v4.17 (correction, eclairage B.3 reglage 2) : sans lumieres surfaciques (Performance), une dalle devient un projecteur
+		// vers le bas (cone de 80 deg, 35 deg plein), plus une lumiere ponctuelle : plus de halo au plafond ni de point chaud
+		// dans le diffuseur, et le sol recoit la meme intensite au nadir que sous la dalle (1320 lm / pi = 420 cd ; flux du
+		// projecteur = Lumens x 0,55 x 2 (1 - cos 80 deg)). Une seule vue d'ombre au lieu de six
+		constexpr float Outer = 80.f;
+		USpotLightComponent* SL = NewObject<USpotLightComponent>(this);
+		SL->SetupAttachment(Root);
+		SL->SetMobility(EComponentMobility::Movable);
+		SL->SetRelativeLocation(R.Pos - GetActorLocation());
+		SL->SetRelativeRotation(FRotator(-90.f, R.Yaw, 0.f));
+		SL->SetOuterConeAngle(Outer);
+		SL->SetInnerConeAngle(35.f);
+		SL->SetSourceRadius(R.Fixture == EBRFixture::SkyPanel ? 40.f : 8.f);
+		SL->SetSourceLength(R.SourceLength);
+		Lumens *= 0.55f * 2.f * (1.f - FMath::Cos(FMath::DegreesToRadians(Outer)));
+		LC = SL;
 	}
 	else
 	{

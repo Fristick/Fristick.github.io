@@ -69,6 +69,11 @@ namespace
 		// v4.17 : image seulement (agents eclairage et direction artistique, Docs/v417/agents/) : murs plus clairs que la moquette
 		// et coins sans profondeur : rebond des plafonniers a 0,8, portee visible de 560 cm (la regle garde 620 cm)
 		D.LightIndirect = 0.8f; D.LightVisualRadius = 560.f;
+		// v4.17 (correction, QA visuelle : diffuseurs brules a 79 %, murs encore plus clairs que la moquette) : volets de 70 deg
+		// sur 8 cm, diffuseurs a 0,72 (luminance 86 au lieu de 120), exposition locale qui tient les hautes lumieres (0,7) sans
+		// relever les ombres (1,0)
+		D.LightBarnAngle = 70.f; D.LightBarnLength = 8.f; D.DiffuserGlow = 0.72f;
+		D.LocalHighlightContrast = 0.7f; D.LocalShadowContrast = 1.f;
 		D.DarkZoneChance = 0.06f; D.ShadowChance = 0.15f;
 		// v4.15 : neons blanc chaud (3700 K) vus avec une balance des blancs a 3900 K : lampe blanc chaud (1, 0,94, 0,86) ; le
 		// jaune vient du papier peint et de la moquette eclaires, plus de la teinte de l'image (moins saturee, plus
@@ -666,7 +671,10 @@ namespace
 		// v4.17 : brume moins laiteuse dans les grandes salles (0,012 avant), formes lisibles au fond des couloirs
 		D.FogDensity = 0.009f; D.FogColor = C(0.66f, 0.73f, 0.71f);
 		D.ShadowTint = C(0.95f, 1.f, 1.02f); D.HighlightTint = C(1.02f, 1.02f, 1.f); D.VolumetricScatter = 0.4f; // v4.17 : 0,5 avant
-		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.4f;
+		// v4.17 (correction, QA visuelle : image laiteuse, p1 = 0,061) : bloom 1,0 (1,4 avant : le halo des dalles voilait tout
+		// le carrelage) et ombres de l'exposition locale non relevees
+		D.SceneTint = C(0.97f, 1.f, 0.98f); D.Saturation = 0.95f; D.Bloom = 1.f;
+		D.LocalShadowContrast = 1.f;
 		D.MinEV = 3.f; D.MaxEV = 10.f;
 		D.AmbientSound = TEXT("S_Amb_Pool"); D.AmbientVolume = 0.7f;
 		D.Step = EBRStep::Water;

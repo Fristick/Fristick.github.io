@@ -1269,9 +1269,9 @@ void ABRWorld::ApplyEnvironment()
 	S.ColorGainHighlights = FVector4(D.HighlightTint.R, D.HighlightTint.G, D.HighlightTint.B, 1.f);
 	// Exposition locale : les neons ne brulent plus l'image, les recoins sombres gardent du detail
 	S.bOverride_LocalExposureHighlightContrastScale = true;
-	S.LocalExposureHighlightContrastScale = 0.8f;
+	S.LocalExposureHighlightContrastScale = D.LocalHighlightContrast;
 	S.bOverride_LocalExposureShadowContrastScale = true;
-	S.LocalExposureShadowContrastScale = 0.9f;
+	S.LocalExposureShadowContrastScale = D.LocalShadowContrast;
 	S.bOverride_LocalExposureDetailStrength = true;
 	S.LocalExposureDetailStrength = 1.12f;
 

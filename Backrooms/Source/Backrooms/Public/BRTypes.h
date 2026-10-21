@@ -479,6 +479,17 @@ struct FBRLevelDef
 	/** v4.17 : rayon d'attenuation des plafonniers a l'image (cm ; 0 : LightRadius). Rendu seulement : la regle de jeu garde
 	 *  LightRadius (loi (1 - d/R)^2, BRLightLogic.h) */
 	float LightVisualRadius = 0.f;
+	/** v4.17 (correction) : volets des dalles lumineuses en ray tracing (angle en degres, longueur en cm ; 88 et 4 avant pour
+	 *  tous les niveaux) : moins de lumiere sur le haut des murs pres des lampes, flaque au sol mieux dessinee. Rendu seulement */
+	float LightBarnAngle = 88.f;
+	float LightBarnLength = 4.f;
+	/** v4.17 (correction) : eclat des diffuseurs des plafonniers (facteur ; 1 : luminance 120, UBRAssets::GlowColorForSlot).
+	 *  Rendu seulement : la lumiere des lampes ne change pas */
+	float DiffuserGlow = 1.f;
+	/** v4.17 (correction) : exposition locale : contraste des hautes lumieres et des ombres (0,8 et 0,9 avant pour tous les
+	 *  niveaux ; 1 : celui de l'image) */
+	float LocalHighlightContrast = 0.8f;
+	float LocalShadowContrast = 0.9f;
 	/** Balance des blancs de la camera (K ; 6500 : neutre). Proche de la temperature des lampes : le papier peint garde sa
 	 *  couleur sans virer a l'orange. Attention : a partir de 4000 K, le moteur prend le blanc sur le lieu du jour et non
 	 *  plus sur celui des lampes : une lampe y vire au rose ou a la peche, sauf WhiteTint (BRColorLogic.h, banc
