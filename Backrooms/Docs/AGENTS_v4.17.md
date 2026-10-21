@@ -102,7 +102,7 @@ dépôt.
 | `M_BR_Gear` et visière en verre diélectrique (C++ et Python) | Unreal Technical Artist § 4.1-4.3 | `5e3d710` |
 | Corrections de la relecture : B1 cartes absentes, C1 six textes sans traduction, C2 actions sans `bTriggerWhenPaused`, C3 rugosité du papier peint | Code Reviewer | C2, C3 : `b79c8e7` ; B1 : fusion `42de87e` ; C1 : `eb3cc8f` |
 | Banc figé, Bacteria filmée de près, marche vue de côté, captures CARNET et JOURNAL distinctes, poses VHS reposées | Evidence Collector § 1, § 2.11 | `de3645c` |
-| Projecteur en Performance, volets 70°, diffuseurs × 0,72, exposition locale, bloom des Poolrooms (réglages 2, 4, 6, 8) | éclairage B.3, Evidence Collector § 3 | `3bb039b` |
+| Projecteur en Performance, volets 70°, diffuseurs × 0,72, exposition locale, bloom des Poolrooms (réglages 2, 4, 6, 8) | éclairage B.3, Evidence Collector § 3 | `3bb039b`, puis `ee3365e` (cône plein de 50°) et `2074046` (projecteur limité au Level 0 et aux Poolrooms) |
 | Inventaire au clavier, jetons opaques, pastille de la barre rapide, pied d'INSPECTER, `HUD.PadColumn`, `FText::ToUpper` | Accessibility Auditor S1, M1, M3, m1, m2, m7 | `88b9ff0` |
 | Contour des icônes sombres | Accessibility Auditor M2, Evidence Collector n° 9 | `3fa7ef5` |
 | Version du jeu 4.17 | Evidence Collector n° 10 | `2a13965` |
