@@ -1,0 +1,69 @@
+THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.21-15.53.06   Duree : 487 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte.
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 2 - v4.16 : traversee du premier chapitre publie (phase 0 : un seul lancement)
+  chapitre : binaire Development (binaire de l'editeur, -game), canal 0 (publie oui, chapitre 1), parcours de la partie : lineaire ; parties de test BR_AutoTestChapitre_* des le lancement oui (parties du joueur ni lues ni ecrites)
+  chapitre : SOLO -> VOS PARTIES (0 partie(s) de test) -> NOUVELLE PARTIE oui -> COMMENCER : emplacement 1
+  chapitre : Level 0 de la partie : session d'histoire oui, niveau lineaire oui, graine du parcours 2368271495, graine du Level 0 2927609675, mission aucune (Level 0 sans enigme) ; pour rejouer cette disposition : -BRChapterSeed=2368271495 -BRChapterIntro=2927609675
+  chapitre : nouvelle partie relue du disque : format 6 (jeu 6), nom "Traversee du chapitre", parcours lineaire oui, graine du parcours 2368271495, graine du Level 0 2927609675, etapes 0x0, morts 0
+  chapitre : porte en (0, -16) vers (0, -1), palier 0, chemin 32 pas (112 m), marques de L. 10, fosses sur le chemin 0, discontinuites 0, depart oui, fin devant la porte oui, autres sorties 0, mission aucune, porte construite oui
+  chapitre : porte atteinte a pied : 107.4 m en 42 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  chapitre : porte visee par l'interaction, invite "[E] Ouvrir la porte de service  (Niveau 1 ?)", fermee oui
+  chapitre : porte ouverte par l'hote oui, battant a 95 degres apres 1 s (0 ferme, 95 ouvert)
+  chapitre : arrivee au Niveau 1 oui, un seul changement de niveau oui (serie 2 -> 3)
+  chapitre, Niveau 1 : partie relue du disque (format 6, 3 s apres l'arrivee) : Niveau 0 accompli oui, reprise 1, plus loin 1, explore oui, session du Niveau 1 graine 2402419881 (monde 2402419881, attendue 2402419881), parcours lineaire oui (graine 2368271495), morts 0 ; monde : session d'histoire oui, niveau lineaire oui
+  Niveau 1 (canal 0, graine du niveau 2402419881) : mission active, placement 0, passages condamnes 0, voyants rouges 1, verts 0
+  Niveau 1 : marche vers le mecanisme 0 (Schéma de distribution) : 24.0 m en 9 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 1 (Fusible E) : 48.6 m en 19 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 2 (Fusible A) : 113.9 m en 44 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 3 (Fusible D) : 78.6 m en 32 s, 1 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 8 (Porte-fusible E) : 60.1 m en 23 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 4 (Porte-fusible A) : 0.5 m en 0 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 13 (Disjoncteur E) : 7.0 m en 3 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 9 (Disjoncteur A) : 6.7 m en 3 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : marche vers le mecanisme 14 (Appel de l'ascenseur) : 5.9 m en 2 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 1 : 9 actions faites en marchant (347 m, 140 s ; 9 marche(s) dont 0 approche(s) et 0 reprise(s), 0 image(s) a la nage, 0 chemin(s) par un bassin, 0 entite(s) ecartee(s) par le test ; graine du niveau 2402419881)
+  Niveau 1 : sortie vers 37 (porte, Niveau 37), voyant vert
+  Niveau 1 : sortie atteinte a pied : 7.3 m en 3 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau  1 -> Niveau 37 : arrivee oui
+  chapitre, Niveau 37 : partie relue du disque (format 6, 29 s apres l'arrivee) : Niveau 1 accompli oui, reprise 37, plus loin 2, explore oui, session du Niveau 37 graine 3231712913 (monde 3231712913, attendue 3231712913), parcours lineaire oui (graine 2368271495), morts 0 ; monde : session d'histoire oui, niveau lineaire oui
+  Niveau 37 (canal 0, graine du niveau 3231712913) : mission active, placement 0, passages condamnes 0, voyants rouges 1, verts 0
+  Niveau 37 : marche vers le mecanisme 0 (Marques de niveau d'eau) : 35.7 m en 14 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : marche vers le mecanisme 1 (Courant de l'eau) (place autour du mecanisme : devant lui, capsule genee) : 37.6 m en 14 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : marche vers le mecanisme 2 (Vanne du bassin A) (place autour du mecanisme : devant lui, capsule genee) : 46.6 m en 20 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : marche vers le mecanisme 3 (Vanne du bassin B) : 0.0 m en 0 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : 6 actions faites en marchant (121 m, 56 s ; 4 marche(s) dont 0 approche(s) et 0 reprise(s), 0 image(s) a la nage, 0 chemin(s) par un bassin, 0 entite(s) ecartee(s) par le test ; graine du niveau 3231712913)
+  chapitre : fermeture aux Poolrooms resolues (ecriture de QUITTER) : session du Niveau 37, graine 3231712913 (monde 3231712913), etat de mission identique oui (17 octets), sortie vers le Niveau 2 ouverte oui (voyant vert), reprise 37
+  chapitre : relance : carte de la partie (LINEAIRE oui, session des Poolrooms graine 3231712913) oui, CONTINUER vers le Niveau 37 (attendu 37)
+  chapitre : reprise aux Poolrooms : graine 3231712913 (avant la fermeture 3231712913), etat de mission identique oui, mission resolue oui, sortie vers le Niveau 2 ouverte oui (voyant vert), niveau lineaire oui
+  Niveau 37 : sortie vers 2 (echelle, Niveau 2), voyant vert
+  Niveau 37 : sortie atteinte a pied : 20.0 m en 8 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s) ; volume d'eau local traverse : 3 image(s), 0 a la nage, profondeur maximale 0 cm
+  Niveau 37 -> Niveau 2 : arrivee oui, demandes de depart au sommet de l'echelle : 1 (attendu 1)
+  chapitre, Niveau 2 : partie relue du disque (format 6, 3 s apres l'arrivee) : Niveau 37 accompli oui, reprise 2, plus loin 3, explore oui, session du Niveau 2 graine 1059365579 (monde 1059365579, attendue 1059365579), parcours lineaire oui (graine 2368271495), morts 0 ; monde : session d'histoire oui, niveau lineaire oui
+  Niveau 2 (canal 0, graine du niveau 1059365579) : mission active, placement 0, passages condamnes 0, voyants rouges 1, verts 0
+  Niveau 2 : marche vers le mecanisme 0 (Plaque des pressions) : 9.4 m en 4 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 1 (Manomètre M1) : 73.2 m en 28 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 6 (Vanne V3) (place autour du mecanisme : devant lui, capsule genee) : 109.9 m en 42 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 2 (Manomètre M2) : 55.4 m en 22 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 5 (Vanne V2) (place autour du mecanisme : devant lui, capsule genee) : 56.2 m en 22 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 3 (Manomètre M3) : 32.1 m en 12 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 4 (Vanne V1) (place autour du mecanisme : devant lui, capsule genee) : 30.9 m en 12 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : 18 actions faites en marchant (366 m, 148 s ; 7 marche(s) dont 0 approche(s) et 0 reprise(s), 0 image(s) a la nage, 0 chemin(s) par un bassin, 0 entite(s) ecartee(s) par le test ; graine du niveau 1059365579)
+  Niveau 2 : sortie vers 3 (porte, la fin du contenu disponible), voyant vert
+  Niveau 2 : sortie atteinte a pied : 0.5 m en 0 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau  2 -> fin du contenu disponible (chapitre 1) : oui
+  chapitre : fin du chapitre 1 : atteinte oui ; partie ecrite par le jeu et relue : fin du chapitre oui, etapes 0xf (0, 1, 37 et 2 accomplis oui), marque de L. oui, fin vue oui, parcours lineaire oui, CONTINUER au Niveau 2 (attendu 2 tant que le Niveau 3 n'est pas publie), session du Niveau 2 oui, morts 0
+  chapitre : apres la fin : carte de la partie : fin du chapitre 1 oui, Niveau 2 accompli oui, parcours lineaire oui ; CONTINUER vers le Niveau 2 (attendu 2)
+  chapitre : Niveau 2 repris apres la fin : graine 1059365579 (attendue 1059365579), etat de mission identique oui, mission accomplie oui, sortie de la fin ouverte oui (voyant vert), fin du chapitre gardee oui, niveau lineaire oui
+  chapitre : parties de test et etat de la traversee effaces (0 fichier(s) restant(s)) ; aucune partie active
+  chapitre, phase 0 : PHASE VALIDE ; niveaux atteints dans ce lancement : 0 -> 1 -> 37 -> 2 -> fin du chapitre ; fermeture oui, reprise oui, fin du chapitre oui (enregistree oui), apres relance oui, nettoyage oui ; 0 probleme(s), 0 non verifie(s)
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Console object named 'r.ScreenPercentage' shows many (500) FindConsoleObject() calls (consider caching e.g. using static)

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Rôle** | Agent installé « Evidence Collector » (`C:\Users\Fristick\.claude\agents\testing-evidence-collector.md`, lu en entier), lancé comme sous-agent générique et appliqué à la QA visuelle d'un jeu Unreal. Les commandes Playwright de ce fichier ne s'appliquent pas ici et n'ont pas été exécutées. |
+| **Rôle** | Agent installé « Evidence Collector » (`~/.claude/agents/testing-evidence-collector.md`, lu en entier), lancé comme sous-agent générique et appliqué à la QA visuelle d'un jeu Unreal. Les commandes Playwright de ce fichier ne s'appliquent pas ici et n'ont pas été exécutées. |
 | **Mission** | Demande du propriétaire, § 3, 4 et 7 : vérifier à l'image, profil par profil, chaque changement annoncé entre `711b02d` et `eb3cc8f`. Pour chacun, dire s'il est amélioré, inchangé ou en régression, et chercher ce qui invalide une conclusion trop optimiste. |
 | **Base** | Captures « avant » : code v4.16 avec le banc v4.17 (`711b02d`, `modifie=0`). Captures « après » : `eb3cc8f`, ressources réimportées (`modifie=1`, voir § 1.7). Branche `backrooms-v4.17`. |
 | **Écriture** | Ce fichier seulement. Unreal et Blender n'ont pas été lancés. Les mesures et recadrages ont été faits en Python (Pillow, numpy) dans le dossier temporaire de la session (`…\scratchpad\qa\`), hors du dépôt. |

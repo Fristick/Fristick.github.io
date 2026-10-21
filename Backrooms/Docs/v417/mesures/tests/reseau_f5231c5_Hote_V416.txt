@@ -1,0 +1,5 @@
+debut|niveau|0/1896875771|egal
+ramassage|gagnant|0|somme=1
+depart|niveau|1/1520872147|egal
+sas|entree_libre|1|egal
+passerelle|posee|1|egal

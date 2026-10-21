@@ -1,0 +1,34 @@
+{
+	"etat": "reussi",
+	"duree_s": 6.9393404982984066,
+	"jeu": "v4.17",
+	"moteur": "++UE5+Release-5.8-CL-58210709",
+	"rhi": "D3D12 (SM6)",
+	"carte_graphique": "NVIDIA GeForce RTX 5050 Laptop GPU",
+	"ligne_de_commande": "-BRAutoTest -BRAutoTestChapter -BRChapterPhase=3 -BRAutoTestStrict -BRSmokeOut=C:\\Users\\Fristick\\Desktop\\Backrooms\\Backrooms\\Saved\\TestRuns\\v417\\paquet_final_f5231c5\\chapitre\\chapitre_3.json -BRChapterOut=C:\\Users\\Fristick\\Desktop\\Backrooms\\Backrooms\\Saved\\TestRuns\\v417\\paquet_final_f5231c5\\chapitre\\chapitre_3_etat.json -unattended -windowed -ResX=1280 -ResY=720 -abslog=C:\\Users\\Fristick\\Desktop\\Backrooms\\Backrooms\\Saved\\TestRuns\\v417\\paquet_final_f5231c5\\chapitre\\chapitre_3.log",
+	"problemes": [],
+	"non_verifies": [],
+	"scenes": [
+		{
+			"niveau": 2,
+			"titre": "v4.16 : traversee du premier chapitre publie (phase 3 sur 3)",
+			"img_s": 0,
+			"p95_ms": 0,
+			"p99_ms": 0,
+			"gpu_ms": 0,
+			"jeu_ms": 0,
+			"rendu_ms": 0,
+			"ram_mo": 0,
+			"textures_mo": 0,
+			"notes": [
+				"chapitre : binaire Shipping (paquet), canal 0 (publie oui, chapitre 1), parcours de la partie : lineaire ; parties de test BR_AutoTestChapitre_* des le lancement oui (parties du joueur ni lues ni ecrites)",
+				"chapitre, phase 3 : etat de la phase 2 relu (emplacement 1, graine du parcours 3037823107, Poolrooms 1972499291, Niveau 2 3867876059)",
+				"chapitre : apres un nouveau redemarrage du jeu : carte de la partie : fin du chapitre 1 oui, Niveau 2 accompli oui, parcours lineaire oui ; CONTINUER vers le Niveau 2 (attendu 2)",
+				"chapitre : Niveau 2 repris apres la fin : graine 3867876059 (attendue 3867876059), etat de mission identique oui, mission accomplie oui, sortie de la fin ouverte oui (voyant vert), fin du chapitre gardee oui, niveau lineaire oui",
+				"chapitre : parties de test et etat de la traversee effaces (0 fichier(s) restant(s)) ; aucune partie active",
+				"chapitre, phase 3 : PHASE VALIDE ; niveaux atteints dans ce lancement : aucun ; fermeture NON, reprise NON, fin du chapitre NON (enregistree NON), apres relance oui, nettoyage oui ; 0 probleme(s), 0 non verifie(s)"
+			]
+		}
+	],
+	"resume": "0 probleme(s), 0 non verifie(s)"
+}

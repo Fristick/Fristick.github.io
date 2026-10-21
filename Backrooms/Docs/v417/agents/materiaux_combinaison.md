@@ -1,6 +1,6 @@
 # v4.17 — Matériaux : combinaison, visière et surfaces du Level 0 (conception)
 
-- **Agent** : « Unreal Technical Artist » (définition lue : `C:\Users\Fristick\.claude\agents\unreal-technical-artist.md`), lancé comme sous-agent générique ayant adopté ce rôle.
+- **Agent** : « Unreal Technical Artist » (définition lue : `~/.claude/agents/unreal-technical-artist.md`), lancé comme sous-agent générique ayant adopté ce rôle.
 - **Base** : branche `backrooms-v4.17`, tête `c07eddb` (arbre propre au moment de la lecture).
 - **Périmètre** : lecture et conception. Aucun fichier du dépôt n'a été modifié ; ce rapport est le seul fichier créé dans le dépôt. Les essais (lecture du FBX dans Blender 5.2 en arrière-plan, prototype de dérivation des cartes) ont été faits dans le scratchpad de la session, hors dépôt, sur des copies en mémoire : ils n'écrivent ni dans `RawAssets/` ni dans `Content/`.
 - **Images regardées par cet agent** : `v416_entite_SkinStealers_3p_face.png`, `v416_entite_SkinStealers_3p_cote.png`, `v416_fenetre_169_max_personnage.png`, `RawAssets/Icons/I_Silhouette.png`, `ref_01.jpg`, `ref_03.jpg`, l'atlas `T_Hazmat_Suit.jpg` (réduit et extrait 1:1), `T_Hazmat_Mask.jpg` réduit, `vis_0_Qualite_{mur_x,sol,plafond,vue,lampe}.png`, `V48_combinaison_L00.png` et `_L37.png` (final416 et final416c), ainsi que les aperçus du prototype.

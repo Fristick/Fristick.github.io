@@ -1,0 +1,16 @@
+commit e612818, 2026-10-21 11:42
+run_benches        code=0 416s  RESULTAT : OK (12 banc(s) x 3 compilateur(s))
+unittest           code=0 54s  Ecrit : <temp>
+protect_assets     code=0 2s  OK
+derive_hazmat      code=0 138s  controles : OK
+outline_icons      code=0 1s  I_Vest           mediane 4.03:1  -
+loc_extract_check  code=0 6s  Verification seule (rien n'est ecrit) : a jour
+loc_review         code=0 2s  
+pitfalls           code=0 56s  Verifie pour chaque graine : au moins 1 salle(s), hors des chunks du depart ; fosses presentes ; portes ; galerie qui contourne la salle ; salle accessible ; aucun pilier ni neon au-dessus du vide ; sol du chunk = chunk moins les ouvertures (surface exacte, aucun recouvrement, aucune dalle au-dessus d'une fosse, bords du chunk entierement couverts) ; points d'apparition hors des fosses ; cachettes, cassettes et sorties hors des salles et atteignables depuis le depart SANS traverser de salle ; nombre de cassettes >= exige ; chaque sorte de sortie presente.
+lidar_500          code=0 35s  RESULTAT : OK (0 echec(s))
+device_clearance   code=0 890s  RESULTAT : OK (A v4.14 echoue / v4.15 passe, B v4.14 echoue / v4.15 passe, C v4.14 echoue / v4.15 passe, D v4.14 echoue / v4.15 passe, E v4.14 echoue / v4.15 passe, F v4.14 echoue / v4.15 passe, G avant (vanne B a 58 cm) echoue / v4.16 passe, H visee au premier contact echoue / v4.16 (point vise le plus pres de l'axe) passe)
+walk_block         code=0 46s  RESULTAT : OK
+check_paths        code=0 0s    BREntity.cpp : SM_Partygoer
+roughness_check    code=0 9s  OK      T_Clump_R.png  ecart max 0/255
+ies_check          code=0 1s    IES_Headlamp    frontale (cone 22 / 45 deg) : 75 % du flux du cone seul (au moins 70 %) : OK
+leg_ik             code=0 0s  648 cas (cuisse et tibia de 30 a 70 cm, elevation de 2 a 35 cm) : ecart maximal 0.0000 cm

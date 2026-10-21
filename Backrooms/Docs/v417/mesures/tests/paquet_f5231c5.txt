@@ -1,0 +1,38 @@
+build_manifest.txt
+projet : Backrooms
+commit : f5231c58b46cbf02f3ffcbbcddca3f459075bae9
+arbre : modifie
+date : 2026-10-21T13:11:46Z
+plateforme : Win64
+configuration : Shipping
+contenu : public
+moteur : 5.8.3
+chaine de compilation : MSVC (voir le journal UBT)
+hote : Windows Microsoft Windows NT 10.0.26200.0
+
+
+check_package.py (fin du journal de build_windows.ps1)
+BuildCookRun time: 236.35 s
+BUILD SUCCESSFUL
+AutomationTool executed for 0h 3m 58s
+AutomationTool exiting with ExitCode=0 (Success)
+Paquet Windows : <depot>\Backrooms\Build\Windows\Shipping
+  structure    OK
+      jeu : <depot>\Backrooms\Build\Windows\Shipping
+      binaire : Backrooms\Binaries\Win64\Backrooms-Win64-Shipping.exe (161 Mo)
+      conteneurs : 1 .pak, 2 .utoc
+  contenu      OK
+      fichiers des .pak : 4604 ; entrees IoStore : 1698
+  architecture OK
+      binaire : x86_64
+  dependances  OK
+      importees : 41, chargees a la demande : 13
+  lancement    OK (facultatif)
+      lancement : code 0, etat reussi, 0 probleme(s), 0 verification(s) non faite(s)
+  chapitre     OK
+      rapports et etats des phases : <depot>\Backrooms\Saved\TestRuns\v417\paquet_final_f5231c5\chapitre
+      phase 1 : code 0, etat reussi, 0 probleme(s), 0 verification(s) non faite(s) ; niveaux atteints 0 -> 1 -> 37 ; phase valide oui
+      phase 2 : code 0, etat reussi, 0 probleme(s), 0 verification(s) non faite(s) ; niveaux atteints 2 ; phase valide oui
+      phase 3 : code 0, etat reussi, 0 probleme(s), 0 verification(s) non faite(s) ; niveaux atteints aucun ; phase valide oui
+      traversee : 0 -> 1 -> 37 -> 2 -> fin du chapitre ; phase 1 : fermeture aux Poolrooms, phase 2 : reprise apres redemarrage, phase 2 : fin du chapitre atteinte, phase 2 : fin du chapitre enregistree, phase 3 : partie apres un nouveau redemarrage, phase 3 : CONTINUER au Niveau 2, phase 3 : nettoyage des parties de test
+RESULTAT : PAQUET VERIFIE ET LANCE, CHAPITRE TRAVERSE

@@ -1,6 +1,6 @@
 # v4.17 : direction artistique et environnement (Level 0, Poolrooms)
 
-**Rôle** : agent installé « Level Designer » (`C:\Users\Fristick\.claude\agents\level-designer.md`), lancé comme sous-agent générique avec ce rôle. Mission : direction artistique et environnement.
+**Rôle** : agent installé « Level Designer » (`~/.claude/agents/level-designer.md`), lancé comme sous-agent générique avec ce rôle. Mission : direction artistique et environnement.
 **Base** : branche `backrooms-v4.17`, tête `1e67bb1` (banc visuel v4.17, sans changement d'image). Les captures examinées sont celles du code v4.16 (`c07eddb`).
 **Date** : 20 et 21 octobre 2026.
 **Périmètre d'écriture** : ce fichier seulement. Aucun autre fichier du dépôt n'a été modifié.

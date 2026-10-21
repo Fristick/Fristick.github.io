@@ -1,0 +1,9 @@
+smoke  exit=0 time=0,5min etat=reussi problemes=0 non_verifies=0
+v48    exit=0 time=2,0min etat=reussi problemes=0 non_verifies=0
+v416light exit=2 time=2,7min etat=incomplet problemes=0 non_verifies=2
+v416lidar exit=0 time=1,7min etat=reussi problemes=0 non_verifies=0
+v416ladder exit=0 time=1,6min etat=reussi problemes=0 non_verifies=0
+v416ship exit=0 time=0,9min etat=reussi problemes=0 non_verifies=0
+v415   exit=0 time=4,6min etat=reussi problemes=0 non_verifies=0
+v416vis exit=2 time=4,1min etat=incomplet problemes=0 non_verifies=8
+chapitre exit=0 time=9,6min etat=reussi problemes=0 non_verifies=0

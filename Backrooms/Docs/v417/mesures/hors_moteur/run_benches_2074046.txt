@@ -1,0 +1,42 @@
+Bancs hors moteur depuis <depot>\Backrooms
+  clang-cl clang version 22.1.3 (https://github.com/llvm/llvm-project e9846648fd6183ee6d8cbdb4502213fcf902a211)
+  gcc      g++.EXE (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r2) 16.2.0
+  msvc     cl (C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat)
+  story         clang-cl OK    RESULTAT : OK
+  story         gcc      OK    RESULTAT : OK
+  story         msvc     OK    RESULTAT : OK
+  lidar         clang-cl OK    RESULTAT : OK
+  lidar         gcc      OK    RESULTAT : OK
+  lidar         msvc     OK    RESULTAT : OK
+  content       clang-cl OK    RESULTAT : OK (70 verifications, 0 echec(s))
+  content       gcc      OK    RESULTAT : OK (70 verifications, 0 echec(s))
+  content       msvc     OK    RESULTAT : OK (70 verifications, 0 echec(s))
+  departure     clang-cl OK    RESULTAT : OK
+  departure     gcc      OK    RESULTAT : OK
+  departure     msvc     OK    RESULTAT : OK
+  light         clang-cl OK    RESULTAT : OK
+  light         gcc      OK    RESULTAT : OK
+  light         msvc     OK    RESULTAT : OK
+  color         clang-cl OK    RESULTAT : OK (24 verification(s))
+  color         gcc      OK    RESULTAT : OK (24 verification(s))
+  color         msvc     OK    RESULTAT : OK (24 verification(s))
+  fluo          clang-cl OK    RESULTAT : OK (20 verifications, 0 echec(s))
+  fluo          gcc      OK    RESULTAT : OK (20 verifications, 0 echec(s))
+  fluo          msvc     OK    RESULTAT : OK (20 verifications, 0 echec(s))
+  decals        clang-cl OK    RESULTAT : OK
+  decals        gcc      OK    RESULTAT : OK
+  decals        msvc     OK    RESULTAT : OK
+  mechanisms    clang-cl OK    RESULTAT : OK (86 verifications, 0 echec(s))
+  mechanisms    gcc      OK    RESULTAT : OK (86 verifications, 0 echec(s))
+  mechanisms    msvc     OK    RESULTAT : OK (86 verifications, 0 echec(s))
+  missions      clang-cl OK    RESULTAT : OK
+  missions      gcc      OK    RESULTAT : OK
+  missions      msvc     OK    RESULTAT : OK
+  transactions  clang-cl OK    RESULTAT : OK
+  transactions  gcc      OK    RESULTAT : OK
+  transactions  msvc     OK    RESULTAT : OK
+  perf          clang-cl OK    RESULTAT : OK
+  perf          gcc      OK    RESULTAT : OK
+  perf          msvc     OK    RESULTAT : OK
+RESULTAT : OK (12 banc(s) x 3 compilateur(s))
+code 0

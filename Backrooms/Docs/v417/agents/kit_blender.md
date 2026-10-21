@@ -1,6 +1,6 @@
 # v4.17 — Kit Blender du Level 0 : chanfreins ciblés et normales (§ 4.2)
 
-- **Agent** : « Blender Add-on Engineer » (définition lue : `C:\Users\Fristick\.claude\agents\blender-addon-engineer.md`). Il a été lancé comme sous-agent générique et a adopté ce rôle.
+- **Agent** : « Blender Add-on Engineer » (définition lue : `~/.claude/agents/blender-addon-engineer.md`). Il a été lancé comme sous-agent générique et a adopté ce rôle.
 - **Base** : branche `backrooms-v4.17`, tête `c07eddb`. L'arbre était propre au départ.
 - **Fichiers du dépôt** : un seul fichier modifié, `Tools/Blender/build_level0_kit.py`. Deux fichiers créés : `Tools/Blender/compare_level0_kit.py` (comparaison et rendus) et ce rapport. **Rien n'est commité.** `RawAssets/Level0Kit` n'a pas été touché.
 - **Sorties de travail** (scratchpad de la session, `…\scratchpad\`, abrégé `SP`) :

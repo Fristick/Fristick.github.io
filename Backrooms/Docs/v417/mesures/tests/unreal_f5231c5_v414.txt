@@ -1,0 +1,47 @@
+THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.21-15.39.56   Duree : 77 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte, mais 3 verification(s) NON VERIFIEE(S) (voir ci-dessous)
+  - NON VERIFIE : Niveau 6 : perte du focus de la fenetre (FSlateApplication::IsActive) et touche relachee hors de la fenetre : a verifier a la main (Alt+Tab pendant le scan)
+  - NON VERIFIE : Niveau 6 : 144 images/s non atteintes sur cette machine : debit non juge a cette cadence
+  - NON VERIFIE : Niveau 6 : 240 images/s non atteintes sur cette machine : debit non juge a cette cadence
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - (demarrage)
+  partie de campagne de test ecrite oui (emplacement 1) : objets[0:0:1:2,0:1:2:1,] sante 80.0 mental 70.0 piles 100.0 morts 1 temps 1234 niveau 2 explores 4 notes 0 campagne 0/0/0 mort en attente 0 session 1/2/14344123/3 octets gare 0/0 histoire 3/7/0/2/-1
+  REJOUER : mode rejeu oui ; apres consommation, ramassage, blessure et ecritures, partie du fichier inchangee oui
+  REJOUER : mort oui ; partie du fichier inchangee (ni mort en attente, ni session effacee, ni mort comptee) oui
+  REJOUER : reveil au Niveau 1 (attendu 1, le niveau rejoue)
+  REJOUER : apres la fermeture, la partie relue du disque est identique oui (equipement 2 objets, session du Niveau 2, histoire reprise 2)
+  mode developpeur : session libre oui, partie du fichier inchangee oui
+  [0, 1, 37, 4] : traversee des Poolrooms creditee non (attendu : non, ordre ambigu) ; reprise 37 ; Niveau 4 gare oui, session garee intacte oui
+  session garee disponible oui ; toujours garee apres un passage 0 -> 1 (Poolrooms pas encore traversees) oui ; voulue au Niveau 4 seulement apres la traversee oui
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Console object named 'r.ScreenPercentage' shows many (500) FindConsoleObject() calls (consider caching e.g. using static)
+
+=== Niveau 6 - v4.14 Level 6, premier chargement
+  premier chargement : 1368 points, 0 plaque(s) relevee(s), identite 1e96b9b24459183e
+
+=== Niveau 6 - v4.14 Level 6, autre graine
+  rechargement 6 -> 6 (autre graine) : identite changee oui, points 0 (avant : 1368), plaques 0, focus arrete oui, cible aucune
+  focus en marche oui ; arrete a l'ouverture de l'inventaire oui (maintien sur un Smiler remis a zero oui) ; arrete a la pause oui
+  NON VERIFIE : perte du focus de la fenetre (FSlateApplication::IsActive) et touche relachee hors de la fenetre : a verifier a la main (Alt+Tab pendant le scan)
+  30 images/s visees, 30 obtenues : 1110 rayons/s (attendu ~1110), points demandes 4440, acceptes 4440, remplaces 0, expires 0, refuses 0, inscriptions 0 points ; pic 37 points par image ; temps 0.40 ms/image
+  60 images/s visees, 60 obtenues : 1110 rayons/s (attendu ~1110), points demandes 4440, acceptes 4440, remplaces 0, expires 0, refuses 0, inscriptions 0 points ; pic 19 points par image ; temps 0.18 ms/image
+  144 images/s visees, 109 obtenues : 1110 rayons/s (attendu ~1110), points demandes 4441, acceptes 4441, remplaces 1850, expires 0, refuses 0, inscriptions 0 points ; pic 14 points par image ; temps 0.22 ms/image
+  NON VERIFIE : 144 images/s non atteintes sur cette machine : debit non juge a cette cadence
+  240 images/s visees, 111 obtenues : 1110 rayons/s (attendu ~1110), points demandes 4447, acceptes 4447, remplaces 4477, expires 0, refuses 0, inscriptions 0 points ; pic 14 points par image ; temps 0.23 ms/image
+  NON VERIFIE : 240 images/s non atteintes sur cette machine : debit non juge a cette cadence
+  au repos (16 s sans action) : barre de recharge 0.00, cone 0.00, rappel 1.00 ; recharge restante 0.00, focus NON
+  exploration au repos : recharge et cone caches oui, rappel des touches AFFICHE (calibre : NON) ; pendant la recharge : barre affichee oui
+
+=== Niveau 0 - v4.14 Level 0, graine du kit
+  kit du Level 0 : kit du Level 0 complet (13 modules) ; 582 composant(s), 7887 instance(s), 15 module(s) differents dans les chunks
+  autour du depart : 61 porte(s), 0 bloquee(s) pour la capsule (34 x 176 cm) ; 109 mur(s), 0 traversable(s)
+  captures a hauteur d'oeil de la graine 9 avec et sans le kit : v414_kit_graine9_avec / _sans (a comparer)
+  scanner : 4 cadence(s) mesuree(s) sur 4

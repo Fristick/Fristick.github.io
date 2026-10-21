@@ -7,7 +7,7 @@ délégation n'est inventée : la liste vient du journal de la session (appels d
 ## 1. Provenance des agents
 
 - **Dépôt** : `https://github.com/Hotragn/agency-agents` (fourche de `msitarzewski/agency-agents`), commit `35548a5`.
-- **Installation** : 243 définitions copiées dans `C:\Users\Fristick\.claude\agents\` (un fichier `.md` par agent, en-tête
+- **Installation** : 243 définitions copiées dans `~/.claude/agents/` (un fichier `.md` par agent, en-tête
   `name:` / `description:` puis le rôle en texte).
 - **Audit avant usage** : aucun crochet (`hooks`), aucune permission, aucun outil imposé, aucun caractère Unicode caché dans
   les 243 fichiers. Une nouvelle session de la CLI 2.1.299 les liste (249 agents avec ceux d'origine).
@@ -31,7 +31,7 @@ délégation n'est inventée : la liste vient du journal de la session (appels d
 
 - **Émulation de rôle, pas agents natifs.** La session qui a mené la v4.17 avait été ouverte avant l'installation : son outil
   Agent ne proposait que les types intégrés. Chaque agent a donc été lancé comme **sous-agent générique** dont la consigne
-  commençait par « lis en entier `C:\Users\Fristick\.claude\agents\<fichier>.md` et adopte ce rôle ». Chaque rapport le
+  commençait par « lis en entier `~/.claude/agents/<fichier>.md` et adopte ce rôle ». Chaque rapport le
   dit dans son en-tête. Le rôle oriente la méthode et le livrable. Il ne donne aucune compétence ni aucun accès en plus :
   mêmes outils, même modèle que l'orchestrateur.
 - **Ce que les agents n'ont pas fait.** Aucun n'a compilé ni lancé Unreal. La compilation, la réimportation, les bancs et le
@@ -64,7 +64,8 @@ délégation n'est inventée : la liste vient du journal de la session (appels d
 | 11 | 20/10 23:05 | Technical Artist (suite) | Implémentation : Bacteria posée au sol, corps du joueur, marcheurs, crochet de test | `wt/anim`, branche `v417-anim` | `f14dbf7`, `14b2a4c`, `f662494`, `1f3bc1e`, `animation.md` « Réalisation » | — |
 | 12 | 21/10 02:27 | Evidence Collector | QA visuelle avant/après de tous les changements, sur les captures du banc | lecture seule | `qa_visuel.md` (`ba8c120`) | oui : 40 poses × 3 profils, 5 vidéos, plus de 60 recadrages |
 | 13 | 21/10 02:32 | Accessibility Auditor | Audit du lot interface (C1-C12) dans fr, de, ru, ar, ja | lecture seule | `accessibilite.md` (`88b9ff0`) | oui (captures `v416vis`, `v417`) |
-| 14 | à venir | Reality Checker | Revue finale de la livraison | — | § 6 de ce registre | — |
+| 14 | 21/10 13:56 | Reality Checker | Revue finale de la livraison : affirmations, étiquettes, exigences du prompt, secrets | lecture seule, mesures refaites sur des images choisies | `Docs/v417/agents/revue_finale.md` | oui (planches, gros plans, images brutes des vidéos) |
+| 15 | 21/10 14:25 | Code Reviewer (seconde relecture) | Relecture des lots que personne n'avait relus : animation, outils de la combinaison, corrections d'éclairage et d'accessibilité, crochets de test | lecture seule | `Docs/v417/agents/relecture_code_2.md` | sans objet |
 
 Deux sous-agents ont été interrompus par une limite d'usage puis relancés par un message de suite (Unreal Technical
 Artist, export des coutures ; Technical Artist, section « Réalisation »). Ils ont repris là où ils s'étaient arrêtés.
@@ -106,6 +107,7 @@ dépôt.
 | Inventaire au clavier, jetons opaques, pastille de la barre rapide, pied d'INSPECTER, `HUD.PadColumn`, `FText::ToUpper` | Accessibility Auditor S1, M1, M3, m1, m2, m7 | `88b9ff0` |
 | Contour des icônes sombres | Accessibility Auditor M2, Evidence Collector n° 9 | `3fa7ef5` |
 | Version du jeu 4.17 | Evidence Collector n° 10 | `2a13965` |
+| Entrée n'agit qu'avec le curseur du clavier montré (C1) ; infobulle de PERSONNAGE aux touches du clavier, Entrée et LAMPE (C3) ; gel du banc remis à zéro à la fin de tout essai (R4) ; deux noms masqués renommés dans les bancs (R7) | Code Reviewer (seconde relecture) | `f5231c5` |
 
 ### 4.3 Proposé, non repris (et pourquoi)
 
@@ -125,6 +127,13 @@ dépôt.
   - M6 (aide des réglages sans défilement automatique) : non fait ;
   - m3 (répétition de la croix) : non fait.
 - **Animation** : continuité des états, prise d'objet, lissage réseau du visuel des entités (priorités 4 à 6) : non faits.
+- **Seconde relecture du code** :
+  - C2 (onglets par Page préc. / Page suiv., catégories de PARAMÈTRES, Échap qui annule d'abord l'inspection ou le port) :
+    non fait. Il faut de nouvelles touches actives pendant la pause et de nouveaux pieds à traduire dans les 22 langues ;
+  - C1 est corrigé autrement que proposé : sans curseur montré, Entrée ne fait rien (comme en v4.16), au lieu de montrer
+    le curseur ;
+  - R1 (souris), R2 (lissage de la rotation chez un client), R3 (cadence des pas sonores), R5 (contrôle du contour des
+    icônes), R6 (robustesse des outils de la combinaison) : non faits.
 
 ## 5. Revues croisées
 
@@ -133,8 +142,32 @@ dépôt.
 | Code Reviewer | `v417-jeu` (tête `93c7fb6`) | 1 bloquant (B1 cartes de la combinaison absentes de la branche), 3 à corriger (C1-C3), remarques | tout corrigé : C2 et C3 dans `b79c8e7`, B1 par la fusion `42de87e`, C1 dans `eb3cc8f` ; FBX du kit régénérés (`e359095`) |
 | Accessibility Auditor | lot interface, captures `v416vis` et `v417` | 1 sérieux (clavier seul), 6 moyens, 7 mineurs ; C9 et C11 non faits | S1, M1, M2, M3, m1, m2, m7 corrigés (`88b9ff0`, `3fa7ef5`) ; M4-M6, m3 restent |
 | Evidence Collector | captures avant/après des 3 profils | statut NEEDS WORK (B−) : banc non figé, animations non démontrées, diffuseurs brûlés, murs plus clairs que la moquette, Poolrooms laiteuses, icônes sous 3:1, version v4.16 | banc, éclairage, icônes et version corrigés (`de3645c` … `2a13965`) ; nouvelles captures dans `Docs/VISUELS_v4.17.md` |
-| Reality Checker | livraison finale | § 6 | — |
+| Reality Checker | livraison finale (tête `21bf02b`) | NEEDS WORK, C+ : 1 bloquant (paquet de `2074046` incomplet : exécutable de `e612818`, 13 fichiers non copiés), 2 erreurs du § 7, 25 affirmations inexactes ou trop fortes | § 6 |
+| Code Reviewer (seconde relecture) | lots fusionnés après la première relecture : animation, outils de la combinaison, corrections d'éclairage et d'accessibilité, crochets de test (tête `21bf02b`) | aucun bloquant ; 3 à corriger, tous dans l'inventaire au clavier (`88b9ff0`) : **C1** Entrée agit sur un curseur caché (joueur à la souris), **C2** au clavier seul, ni onglet, ni catégorie de PARAMÈTRES, ni « retour » par Échap, **C3** infobulle de PERSONNAGE aux boutons de la manette ; 7 remarques (R1 la souris n'efface pas le curseur du clavier, R2 piétinement chez un client, R3 pas sonores, R4 gel du banc, R5 contour des icônes non contrôlé, R6 outils de la combinaison, R7 noms masqués) | C1, C3, R4 et R7 corrigés (`f5231c5`) et vérifiés par quatre appuis au clavier ajoutés à `v416vis` ; C2, R1-R3, R5 et R6 restent (`RAPPORT_v4.17.md` § 8.2) |
 
 ## 6. Revue finale (Reality Checker)
 
-À remplir après la revue.
+Rapport : `v417/agents/revue_finale.md`, sur la tête `21bf02b`. Statut **NEEDS WORK**, note C+ (environ 60/100) :
+à peu près la moitié du prompt livrée et prouvée.
+
+**Confirmé par ses propres mesures** :
+
+- image nette (0,4-0,8 px → 0) ;
+- diffuseurs de `l0_salle` (71-82 % → 0 en Qualité et en Cinématique) ;
+- plafond délavé du Performance corrigé ; caustiques ;
+- banc figé (41 sur 41) ; planches identiques aux captures brutes ;
+- tableaux de performance exacts ; empreintes des définitions d'agents.
+
+**Constats et suite donnée** :
+
+| Constat | Suite |
+|---|---|
+| **Bloquant** : le « paquet de `2074046` » contenait l'exécutable de `e612818`. 13 fichiers non copiés, verrouillés par le jeu resté ouvert du banc d'interface | paquet refait sur machine propre, puis vérifié et retraversé (`RAPPORT_v4.17.md` § 6) |
+| Le § 7 attribuait au code final des tests lancés sur l'avant-dernier ; un marqueur de travail était resté | tests Unreal relancés sur le code final ; § 7 réécrit |
+| Diffuseur de `l0_dos` en Performance au-dessus de la cible ; résolutions internes fausses ; stabilité du banc (3,1 points, pas 0,2) ; queues p99, images de plus de 50 ms, VRAM, bassins en Cinématique | corrigé dans le rapport (§ 1, 4, 5) |
+| Étiquettes trop fortes pour l'animation ([correction validée]) | ramenées à [jugé à l'image], avec les critères non tenus |
+| Rallumage pris à 1,5 et 4 s, plus lent après ; bras en A du coéquipier chez le client ; aide aux parasites non vérifiée ; `protect_assets` sans les originaux | ajouté au rapport et à l'index visuel, comme défauts ou non-vérifiés |
+| Non fait : 152 paires, variantes, matières des Niveaux 1-2, carnet qui défile, arabe | écrit « non fait », sans excuse de périmètre |
+| Lots non relus | seconde relecture par le Code Reviewer (délégation 15, § 5) ; C1, C3, R4 et R7 corrigés dans `f5231c5`, puis paquet et tests refaits sur ce code |
+| Chemins privés dans les documents | remplacés (`~/.claude/agents/`, `%USERPROFILE%`) ; aucun jeton ni adresse trouvés |
+| `v417_criteria.py` plantait sur une sortie redirigée | sortie forcée en UTF-8 |

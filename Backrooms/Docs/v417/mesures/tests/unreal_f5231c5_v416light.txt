@@ -1,0 +1,135 @@
+THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.21-15.24.30   Duree : 142 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte, mais 2 verification(s) NON VERIFIEE(S) (voir ci-dessous)
+  - NON VERIFIE : Niveau 9 : Niveau 9 : empreinte non comparee au banc (le banc ne porte pas les rues des Niveaux 9 et 11)
+  - NON VERIFIE : Niveau 0 : plafonnier derriere une porte de mission reelle (ABRWorld::GetClosedMissionEdges) : aucune porte de mission n'est posee sur une ouverture de la grille d'un niveau a plafonniers (aile du Level 6 seulement) ; chemin exerce par le crochet de test
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - v4.16 : lumiere de gameplay (murs, passages, trappes, coupure, profils, sources de mission, cout)
+  ray tracing materiel disponible ; seuils : apparition sous 0.12, dissipation du Smiler au-dessus de 0.50
+
+=== Niveau 0 - v4.16 lumiere : Niveau 0, -BRSeed=9
+  Niveau 0, -BRSeed=9 (graine du niveau 1896875771) : empreinte de la grille de lumiere 33387e10, banc 33387e10
+  Niveau 0 : 147 plafonnier(s) de jeu dans les chunks construits, 147 a la place d'une lumiere construite (313 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 0 : regle de la grille et trace physique d'accord sur 910 / 910 paires (100.0 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 0
+  Niveau 0 (graine 1896875771) : 289 positions du joueur, lumiere changee pour 81.3 % ; joueur dans le noir 18.7 -> 37.0 % ; Smiler qui se dissipe 44.6 -> 34.6 % (regle d'avant -> v4.16, courant plein)
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Console object named 'r.ScreenPercentage' shows many (500) FindConsoleObject() calls (consider caching e.g. using static)
+
+=== Niveau 0 - v4.16 lumiere : Niveau 0, -BRSeed=4242
+  Niveau 0, -BRSeed=4242 (graine du niveau 2271519799) : empreinte de la grille de lumiere b142f19c, banc b142f19c
+  Niveau 0 : 176 plafonnier(s) de jeu dans les chunks construits, 176 a la place d'une lumiere construite (380 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 0 : regle de la grille et trace physique d'accord sur 898 / 902 paires (99.6 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 4 ; ecarts : BRChunk_34.InstancedStaticMeshComponent_17 x4
+  Niveau 0 (graine 2271519799) : 289 positions du joueur, lumiere changee pour 84.8 % ; joueur dans le noir 4.8 -> 23.5 % ; Smiler qui se dissipe 56.4 -> 41.9 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 1 - v4.16 lumiere : Niveau 1, -BRSeed=4242
+  Niveau 1, -BRSeed=4242 (graine du niveau 814216900) : empreinte de la grille de lumiere d0705669, banc d0705669
+  Niveau 1 : 128 plafonnier(s) de jeu dans les chunks construits, 128 a la place d'une lumiere construite (216 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 1 : regle de la grille et trace physique d'accord sur 902 / 902 paires (100.0 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 0
+  Niveau 1 (graine 814216900) : 288 positions du joueur, lumiere changee pour 67.7 % ; joueur dans le noir 26.4 -> 33.3 % ; Smiler qui se dissipe 44.4 -> 35.1 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 2 - v4.16 lumiere : Niveau 2, -BRSeed=4242
+  Niveau 2, -BRSeed=4242 (graine du niveau 755154332) : empreinte de la grille de lumiere 94f0c4d7, banc 94f0c4d7
+  Niveau 2 : 89 plafonnier(s) de jeu dans les chunks construits, 89 a la place d'une lumiere construite (307 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 2 : regle de la grille et trace physique d'accord sur 906 / 906 paires (100.0 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 0
+  Niveau 2 (graine 755154332) : 289 positions du joueur, lumiere changee pour 82.7 % ; joueur dans le noir 23.9 -> 45.7 % ; Smiler qui se dissipe 35.6 -> 25.6 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 4 - v4.16 lumiere : Niveau 4, -BRSeed=4242
+  Niveau 4, -BRSeed=4242 (graine du niveau 2325780338) : empreinte de la grille de lumiere 8d3f54e3, banc 8d3f54e3
+  Niveau 4 : 304 plafonnier(s) de jeu dans les chunks construits, 304 a la place d'une lumiere construite (774 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 4 : regle de la grille et trace physique d'accord sur 812 / 900 paires (90.2 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 88 ; ecarts : BRChunk_95.InstancedStaticMeshComponent_7 x18, BRChunk_95.InstancedStaticMeshComponent_6 x18, BRChunk_94.InstancedStaticMeshComponent_13 x16, BRChunk_95.InstancedStaticMeshComponent_8 x14
+  Niveau 4 (graine 2325780338) : 289 positions du joueur, lumiere changee pour 90.7 % ; joueur dans le noir 0.7 -> 5.5 % ; Smiler qui se dissipe 96.9 -> 84.8 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 5 - v4.16 lumiere : Niveau 5, -BRSeed=4242
+  Niveau 5, -BRSeed=4242 (graine du niveau 2376421866) : empreinte de la grille de lumiere b752f85f, banc b752f85f
+  Niveau 5 : 33 plafonnier(s) de jeu dans les chunks construits, 33 a la place d'une lumiere construite (108 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 5 : regle de la grille et trace physique d'accord sur 200 / 200 paires (100.0 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 0
+  Niveau 5 (graine 2376421866) : 104 positions du joueur, lumiere changee pour 13.5 % ; joueur dans le noir 55.8 -> 57.7 % ; Smiler qui se dissipe 15.4 -> 11.5 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 8 - v4.16 lumiere : Niveau 8, -BRSeed=4242
+  Niveau 8, -BRSeed=4242 (graine du niveau 3155158614) : empreinte de la grille de lumiere 9c633728, banc 9c633728
+  Niveau 8 : 33 plafonnier(s) de jeu dans les chunks construits, 33 a la place d'une lumiere construite (54 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 8 : regle de la grille et trace physique d'accord sur 468 / 486 paires (96.3 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 18 ; ecarts : BRChunk_138.InstancedStaticMeshComponent_2 x6, BRChunk_136.InstancedStaticMeshComponent_2 x6, BRChunk_139.InstancedStaticMeshComponent_2 x6
+  Niveau 8 (graine 3155158614) : 226 positions du joueur, lumiere changee pour 11.5 % ; joueur dans le noir 69.0 -> 69.0 % ; Smiler qui se dissipe 13.7 -> 13.3 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 37 - v4.16 lumiere : Niveau 37, -BRSeed=4242
+  Niveau 37, -BRSeed=4242 (graine du niveau 2772684265) : empreinte de la grille de lumiere 5b6e31f0, banc 5b6e31f0
+  Niveau 37 : 239 plafonnier(s) de jeu dans les chunks construits, 239 a la place d'une lumiere construite (509 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 37 : regle de la grille et trace physique d'accord sur 904 / 904 paires (100.0 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %), plus 0 par les ecoincons d'arche sans collision (attendu) ; la physique seule cache : 0
+  Niveau 37 (graine 2772684265) : 244 positions du joueur, lumiere changee pour 93.4 % ; joueur dans le noir 0.8 -> 6.6 % ; Smiler qui se dissipe 92.2 -> 76.2 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 9 - v4.16 lumiere : Niveau 9, -BRSeed=4242
+  Niveau 9, -BRSeed=4242 (graine du niveau 607357951) : empreinte de la grille de lumiere 04082cdd
+  NON VERIFIE : Niveau 9 : empreinte non comparee au banc (le banc ne porte pas les rues des Niveaux 9 et 11)
+  Niveau 9 : 39 plafonnier(s) de jeu dans les chunks construits, 39 a la place d'une lumiere construite (94 lumiere(s) dans les chunks) ; sous une trappe d'echelle : 0, dont 0 avec une lumiere construite (attendu 0)
+  Niveau 9 : regle de la grille et trace physique d'accord sur 494 / 536 paires (92.2 %) ; la grille seule cache : 0 (0.0 %, au plus 3 %) ; la physique seule cache : 42 ; ecarts : BRChunk_166.InstancedStaticMeshComponent_1 x11, BRChunk_164.InstancedStaticMeshComponent_1 x11, BRChunk_165.InstancedStaticMeshComponent_1 x8, BRChunk_171.InstancedStaticMeshComponent_1 x5
+  Niveau 9 (graine 607357951) : 119 positions du joueur, lumiere changee pour 26.9 % ; joueur dans le noir 30.3 -> 31.9 % ; Smiler qui se dissipe 35.3 -> 33.6 % (regle d'avant -> v4.16, courant plein)
+
+=== Niveau 8 - v4.16 lumiere : Niveau 8 (graine du niveau 233637237, partie classique)
+  Niveau 8 (graine du niveau 233637237, partie classique) : 16 trappe(s) d'echelle predite(s), premiere au chunk (-6, -3) (-18112..-17998 x -7062..-6938) ; 3 chunk(s) a trappe construits au depart, verifies avant le depart du joueur ; trappe visee au chunk (-20, -11) (-61062..-60938 x -34512..-34398) : plafonnier de la grille de la cellule (-153, -87) dessous ; joueur pose a cote
+  Niveau 8, partie classique : 4 chunk(s) a trappe construits : echelle a la trappe predite 4 / 4 ; plafonniers poses 7 (lumiere construite 7) ; sous la trappe 1 (lumiere construite 0, attendu 0 ; la regle ne les compte plus : jusqu'a 0.726 retire sous la trappe) ; 2 chunk(s) a trappe en demontage, pas comptes (dont 1 deja sans echelle)
+
+=== Niveau 37 - v4.16 lumiere : Niveau 37 (graine du niveau 115083815, partie classique)
+  Niveau 37 (graine du niveau 115083815, partie classique) : 8 trappe(s) d'echelle predite(s), premiere au chunk (-5, -1) (-17442..-17328 x -2312..-2188) ; 1 chunk(s) a trappe construits au depart, verifies avant le depart du joueur ; trappe visee au chunk (-1, -1) (-1312..-1188 x -1672..-1558) : plafonnier de la grille de la cellule (-3, -4) dessous ; joueur pose a cote
+  Niveau 37, partie classique : 1 chunk(s) a trappe construits : echelle a la trappe predite 1 / 1 ; plafonniers poses 39 (lumiere construite 39) ; sous la trappe 1 (lumiere construite 0, attendu 0 ; la regle ne les compte plus : jusqu'a 0.850 retire sous la trappe)
+
+=== Niveau 0 - v4.16 lumiere : Level 0, -BRSeed=9 (scenes de controle)
+  mur (cellule (-2, 0), plafonnier (-2, -1) derriere le mur, point a 165 cm du sol) : lumiere de jeu 0.218 (plafonniers 0.218 dont 4/6 caches ; regle d'avant 0.727) ; apport du plafonnier derriere le mur 0.348 : ne compte plus ; trace physique : BRChunk_233.InstancedStaticMeshComponent_9 a 165 cm
+  mur (cellule (-2, 0), plafonnier (-2, -1) derriere le mur, point a 92 cm du sol) : lumiere de jeu 0.218 (plafonniers 0.218 dont 4/6 caches ; regle d'avant 0.727) ; apport du plafonnier derriere le mur 0.348 : ne compte plus ; trace physique : BRChunk_233.InstancedStaticMeshComponent_9 a 186 cm
+  sans mur (cellule (0, 0), plafonnier (1, 0) de l'autre cote d'une arete ouverte, meme position) : apport 0.352 compte ; trace physique : rien
+  passage (cellule (-1, -1), plafonnier (-2, -1), la cellule a son plafonnier) : axe, 40 cm du mur, joueur : eclaire (apport 0.311) ; trace physique : rien
+  passage (cellule (-1, -1), plafonnier (-2, -1), la cellule a son plafonnier) : axe, 40 cm du mur, Smiler : eclaire (apport 0.311) ; trace physique : rien
+  passage (cellule (-1, -1), plafonnier (-2, -1), la cellule a son plafonnier) : axe, fond de la cellule, joueur : eclaire (apport 0.048) ; trace physique : rien
+  passage (cellule (-1, -1), plafonnier (-2, -1), la cellule a son plafonnier) : axe, fond de la cellule, Smiler : cache (apport 0.048) ; trace physique : BRChunk_233.InstancedStaticMeshComponent_5 a 178 cm
+  passage (cellule (-1, -1), plafonnier (-2, -1), la cellule a son plafonnier) : derriere le jambage, joueur : cache (apport 0.255) ; trace physique : BRChunk_233.InstancedStaticMeshComponent_5 a 224 cm
+  28 points de controle releves (point le plus eclaire : plafonniers 1.882)
+  Smiler du coin sombre : coin V(X=-625.00, Y=95.00, Z=165.00) : lumiere de jeu 0.108, regle d'avant 0.560 (dissipation au-dessus de 0.50) ; temoin V(X=175.00, Y=175.00, Z=165.00) : 1.500 : il s'y dissipait avant la v4.16 ; le Smiler reste dans le coin sombre ; temoin dans la lumiere : se dissipe (capture v416_mur_smiler)
+  arete (0, 0) - (1, 0) fermee comme une porte de mission (crochet de test) : plafonnier (1, 0) ouvert : compte (lumiere de jeu 1.500) ; ferme : ne compte plus (1.242) ; rouvert : compte (1.500) ; caches vides a la fermeture : oui
+  NON VERIFIE : plafonnier derriere une porte de mission reelle (ABRWorld::GetClosedMissionEdges) : aucune porte de mission n'est posee sur une ouverture de la grille d'un niveau a plafonniers (aile du Level 6 seulement) ; chemin exerce par le crochet de test
+  inventaire : lumiere de jeu du joueur 0.469 : "penombre" affiche sous la sante mentale (capture v416_inventaire_lumiere)
+  coupure (defaillance, flashs normaux) : 119 image(s) ; lumiere de jeu = plafonniers visibles x alimentation des regles a chaque image : oui ; alimentation toujours decroissante ; vacillement local different des regles sur 99 image(s)
+  coupure : noir : alimentation des regles 0.00 (image : 0.00) ; plus forte lumiere de jeu aux 28 points : 0.000
+  coupure (retour, flashs attenues) : 89 image(s) ; lumiere de jeu = plafonniers visibles x alimentation des regles a chaque image : oui ; alimentation toujours croissante ; vacillement local different des regles sur 80 image(s)
+  courant revenu : 0 / 28 point(s) differents des valeurs d'avant la coupure
+  profil Performance (MegaLights inactif) : 0 / 28 point(s) differents (au bit pres)
+  profil Qualite (MegaLights actif) : 0 / 28 point(s) differents (au bit pres)
+  profil RTX fluide (MegaLights actif) : 0 / 28 point(s) differents (au bit pres)
+  profil Cinematique (MegaLights actif) : 0 / 28 point(s) differents (au bit pres)
+  ombres de toutes les lampes, neons surfaciques et flashs coupes : 0 / 28 point(s) differents
+  source de mission : rien entre la source et le joueur (528 cm) : apport 0.341 (loi 0.341), filtre d'avant 0.000 ; obstacles : aucun / avant : BRCharacter_0.CollisionCylinder
+  source de mission, rien entre : filtre d'avant la v4.16 : 0.000, trace arretee par la capsule du joueur lui-meme (BRCharacter_0.CollisionCylinder) : defaut d'avant reproduit (elle ne comptait jamais pour un joueur ou une creature)
+  source de mission, capsule de coequipier entre les deux : apport 0.341 (sans obstacle 0.341 ; attendu : comme sans obstacle) ; filtre d'avant la v4.16 : 0.000 ; capsules comprises, sans la cible : 0.000 ; obstacles touches : aucun / avant : Character_0.CollisionCylinder / capsules comprises : Character_0.CollisionCylinder ; LightLevelAt 1.500, recalcul 1.500 (defaut reproduit : la capsule sur le rayon coupait la lumiere ; v4.16 : ignoree)
+  source de mission, creature (Skin-Stealer) entre les deux : apport 0.341 (sans obstacle 0.341 ; attendu : comme sans obstacle) ; filtre d'avant la v4.16 : 0.000 ; capsules comprises, sans la cible : 0.000 ; obstacles touches : aucun / avant : BREntity_4.CollisionCylinder / capsules comprises : BREntity_4.CollisionCylinder ; LightLevelAt 1.500, recalcul 1.500 (defaut reproduit : la capsule sur le rayon coupait la lumiere ; v4.16 : ignoree)
+  source de mission, porte physique fermee entre les deux : apport 0.000 (sans obstacle 0.341 ; attendu : 0) ; filtre d'avant la v4.16 : 0.000 ; capsules comprises, sans la cible : 0.000 ; obstacles touches : Actor_0.V416DoorBlocker / avant : Actor_0.V416DoorBlocker / capsules comprises : Actor_0.V416DoorBlocker ; LightLevelAt 1.500, recalcul 1.500
+  source de mission, porte ouverte : apport 0.341 (sans obstacle 0.341 ; attendu : comme sans obstacle) ; filtre d'avant la v4.16 : 0.000 ; capsules comprises, sans la cible : 0.341 ; obstacles touches : aucun / avant : BRCharacter_0.CollisionCylinder / capsules comprises : aucun ; LightLevelAt 1.500, recalcul 1.500
+  source de mission, source eteinte : apport 0.000 (sans obstacle 0.341 ; attendu : 0) ; filtre d'avant la v4.16 : 0.000 ; capsules comprises, sans la cible : 0.000 ; obstacles touches : aucun / avant : aucun / capsules comprises : aucun ; LightLevelAt 1.500, recalcul 1.500
+  source de mission derriere un mur : apport 0.000 (loi sans mur 1.246, attendu 0) ; obstacle touche : BRChunk_233.InstancedStaticMeshComponent_9
+  cout (immobiles, 5 creature(s), 249 images en 3.0 s) : par image 8.0 appel(s), 0.0 calcul(s), 8.0 repris du cache (99.7 % des plafonniers repris), 0.1 plafonnier(s), 0 obstacle(s), 0.32 trace(s) (0.06 par creature), 7.7 trace(s) reprise(s) ; 0 chunk(s) de grille mis en cache
+  cout (libres, 5 creature(s), 267 images en 3.0 s) : par image 8.0 appel(s), 0.5 calcul(s), 7.5 repris du cache (93.7 % des plafonniers repris), 2.6 plafonnier(s), 8 obstacle(s), 0.65 trace(s) (0.13 par creature), 7.3 trace(s) reprise(s) ; 0 chunk(s) de grille mis en cache
+  temps d'un appel de LightLevelAt : 4.38 us (cache vide : 16 chunk(s) de grille construits, 5.3 plafonnier(s) et 13 obstacle(s) par appel), 0.071 us (cache plein) ; somme 2486.0
+  Journal (11 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Setting the console variable 'r.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '80'
+    Avert. [LogConsoleManager] Setting the console variable 'r.TSR.History.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '100'
+    Avert. [LogConsoleManager] Setting the console variable 'r.VolumetricFog' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '1'
+    Avert. [LogConsoleManager] Setting the console variable 'r.MegaLights.NumSamplesPerPixel' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '4'
+    Avert. [LogConsoleManager] Setting the console variable 'r.RayTracing.Geometry.SkeletalMeshes' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '1'
+    Avert. [LogConsoleManager] Setting the console variable 'r.Lumen.TranslucencyReflections.FrontLayer.Enable' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '1'
+    Avert. [LogConsoleManager] Setting the console variable 'r.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '67'
+    Avert. [LogConsoleManager] Setting the console variable 'r.RayTracing.Geometry.SkeletalMeshes' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '0'
+    Avert. [LogConsoleManager] Setting the console variable 'r.Lumen.TranslucencyReflections.FrontLayer.Enable' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '0'
+    Avert. [LogConsoleManager] Setting the console variable 'r.MegaLights.NumSamplesPerPixel' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '2'
+    Avert. [LogConsoleManager] Setting the console variable 'r.TSR.History.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '200'
+
+=== Niveau 0 - v4.16 lumiere : Level 0, -BRSeed=9 recharge
+  Level 0 recharge (graine 1896875771) : 0 / 28 point(s) differents de la premiere construction (meme regle chez l'hote et chez les clients : graine et grille)
+
+=== Niveau 0 - v4.16 : lumiere de gameplay : bilan
+  lumiere de gameplay : regle de la grille et trace physique d'accord sur 6494 / 6646 paires plafonnier / point (97.7 %), tous niveaux
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Many (31) failed FindConsoleObject() for 'r.Lumen.Reflections.HardwareRayTracing.Retrace.HitLighting'. 

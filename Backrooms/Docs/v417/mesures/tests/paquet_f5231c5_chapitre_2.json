@@ -1,0 +1,50 @@
+{
+	"etat": "reussi",
+	"duree_s": 169.61774880066514,
+	"jeu": "v4.17",
+	"moteur": "++UE5+Release-5.8-CL-58210709",
+	"rhi": "D3D12 (SM6)",
+	"carte_graphique": "NVIDIA GeForce RTX 5050 Laptop GPU",
+	"ligne_de_commande": "-BRAutoTest -BRAutoTestChapter -BRChapterPhase=2 -BRAutoTestStrict -BRSmokeOut=C:\\Users\\Fristick\\Desktop\\Backrooms\\Backrooms\\Saved\\TestRuns\\v417\\paquet_final_f5231c5\\chapitre\\chapitre_2.json -BRChapterOut=C:\\Users\\Fristick\\Desktop\\Backrooms\\Backrooms\\Saved\\TestRuns\\v417\\paquet_final_f5231c5\\chapitre\\chapitre_2_etat.json -unattended -windowed -ResX=1280 -ResY=720 -abslog=C:\\Users\\Fristick\\Desktop\\Backrooms\\Backrooms\\Saved\\TestRuns\\v417\\paquet_final_f5231c5\\chapitre\\chapitre_2.log",
+	"problemes": [],
+	"non_verifies": [],
+	"scenes": [
+		{
+			"niveau": 2,
+			"titre": "v4.16 : traversee du premier chapitre publie (phase 2 sur 3)",
+			"img_s": 0,
+			"p95_ms": 0,
+			"p99_ms": 0,
+			"gpu_ms": 0,
+			"jeu_ms": 0,
+			"rendu_ms": 0,
+			"ram_mo": 0,
+			"textures_mo": 0,
+			"notes": [
+				"chapitre : binaire Shipping (paquet), canal 0 (publie oui, chapitre 1), parcours de la partie : lineaire ; parties de test BR_AutoTestChapitre_* des le lancement oui (parties du joueur ni lues ni ecrites)",
+				"chapitre, phase 2 : etat de la phase 1 relu (emplacement 1, graine du parcours 3037823107, Poolrooms 1972499291, Niveau 2 0)",
+				"chapitre : relance apres une vraie fermeture du jeu : carte de la partie (LINEAIRE oui, session des Poolrooms graine 1972499291) oui, CONTINUER vers le Niveau 37 (attendu 37)",
+				"chapitre : reprise aux Poolrooms : graine 1972499291 (avant la fermeture 1972499291), etat de mission identique oui, mission resolue oui, sortie vers le Niveau 2 ouverte oui (voyant vert), niveau lineaire oui",
+				"Niveau 37 : sortie vers 2 (echelle, Niveau 2), voyant vert",
+				"Niveau 37 : sortie atteinte a pied : 45.9 m en 23 s, 2 saut(s), 1 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s) ; volume d'eau local traverse : 26 image(s), 0 a la nage, profondeur maximale 0 cm",
+				"Niveau 37 -> Niveau 2 : arrivee oui, demandes de depart au sommet de l'echelle : 1 (attendu 1)",
+				"chapitre, Niveau 2 : partie relue du disque (format 6, 3 s apres l'arrivee) : Niveau 37 accompli oui, reprise 2, plus loin 3, explore oui, session du Niveau 2 graine 3867876059 (monde 3867876059, attendue 3867876059), parcours lineaire oui (graine 3037823107), morts 0 ; monde : session d'histoire oui, niveau lineaire oui",
+				"Niveau 2 (canal 0, graine du niveau 3867876059) : mission active, placement 0, passages condamnes 0, voyants rouges 1, verts 0",
+				"Niveau 2 : marche vers le mecanisme 0 (Plaque des pressions) : 11.0 m en 4 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau 2 : marche vers le mecanisme 1 (Manomètre M1) : 33.9 m en 13 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau 2 : marche vers le mecanisme 5 (Vanne V2) (place autour du mecanisme : devant lui, capsule genee) : 63.4 m en 25 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau 2 : marche vers le mecanisme 2 (Manomètre M2) : 39.8 m en 15 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau 2 : marche vers le mecanisme 4 (Vanne V1) (place autour du mecanisme : devant lui, capsule genee) : 41.3 m en 16 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau 2 : marche vers le mecanisme 3 (Manomètre M3) : 67.1 m en 26 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau 2 : marche vers le mecanisme 6 (Vanne V3) (place autour du mecanisme : devant lui, capsule genee) : 66.5 m en 26 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau 2 : 13 actions faites en marchant (323 m, 128 s ; 7 marche(s) dont 0 approche(s) et 0 reprise(s), 0 image(s) a la nage, 0 chemin(s) par un bassin, 0 entite(s) ecartee(s) par le test ; graine du niveau 3867876059)",
+				"Niveau 2 : sortie vers 3 (porte, la fin du contenu disponible), voyant vert",
+				"Niveau 2 : sortie atteinte a pied : 1.0 m en 0 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)",
+				"Niveau  2 -> fin du contenu disponible (chapitre 1) : oui",
+				"chapitre : fin du chapitre 1 : atteinte oui ; partie ecrite par le jeu et relue : fin du chapitre oui, etapes 0xf (0, 1, 37 et 2 accomplis oui), marque de L. oui, fin vue oui, parcours lineaire oui, CONTINUER au Niveau 2 (attendu 2 tant que le Niveau 3 n'est pas publie), session du Niveau 2 oui, morts 0",
+				"chapitre, phase 2 : PHASE VALIDE ; niveaux atteints dans ce lancement : 2 -> fin du chapitre ; fermeture NON, reprise oui, fin du chapitre oui (enregistree oui), apres relance NON, nettoyage NON ; 0 probleme(s), 0 non verifie(s)"
+			]
+		}
+	],
+	"resume": "0 probleme(s), 0 non verifie(s)"
+}

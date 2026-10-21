@@ -1,0 +1,28 @@
+THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.21-15.28.37   Duree : 34 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte.
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 2 - v4.16 : REJOUER et sauvegardes (consommation, degats, document, mort, fermeture, reprise, migration)
+  campagne de test ecrite oui (emplacement 1, parcours lineaire, 3 eaux d'amande, 1 bandage, note "Note.L37.3") ; VOS PARTIES -> CONTINUER oui
+  campagne : Niveau 2 (graine 309643131), session d'histoire oui, equipement de la partie oui (eau 3, bandages 1)
+  campagne : degats 30 -> sante 70, eau d'amande bue (eau 3 -> 2, sante 80) ; fichier apres la fermeture : eau 2, bandages 1, sante 80, session du Niveau 2 graine 309643131, mission identique oui, morts 0
+  rejeu : VOS PARTIES -> la partie -> REJOUER le Niveau 1 oui
+  rejeu : session de rejeu oui (la partie n'est pas ecrite), niveau classique oui, equipement de la campagne repris oui (eau 2)
+  rejeu : degats 25 (sante 65), eau bue 2 -> 1, note lue "Note.Common.3" (note posee par le niveau), entite 0 vue ; apres les ecritures du rejeu (minuterie, pause, bloquante), fichier : champs durables identiques oui ; notes [Note.L37.3, Note.Common.3] (attendu : celles de la partie et la note du rejeu) ; entites [0] (attendu : celles de la partie et l'entite du rejeu)
+  rejeu : mort oui ; fichier inchange (ni mort comptee, ni mort en attente, ni session effacee, journal garde) oui
+  rejeu : reveil au Niveau 1 (attendu 1, le niveau rejoue), note du rejeu toujours au carnet oui
+  rejeu : apres la fermeture, partie relue du disque : champs durables identiques a la campagne oui, journal = union oui
+  campagne : VOS PARTIES -> la partie -> CONTINUER oui
+  campagne reprise apres le rejeu : graine 309643131 (attendue 309643131), mission identique oui ; equipement et sante de la campagne oui (eau 2, bandages 1, sante 83, attendu 2, 1, 80) ; carnet : notes et entites du rejeu presentes oui ; histoire et morts inchangees oui
+  format 5 lu par VOS PARTIES : migre en memoire (format lu 5, parcours classique oui), copie d'origine _Format5 identique oui, fichier non reecrit par la lecture oui ; REJOUER du Niveau 1 oui
+  migration : REJOUER, note lue "Note.L1.5" (note posee par le niveau), fermeture : fichier relu au format 6, champs durables de la partie migree identiques oui, notes [Note.L37.3, Note.L1.5], copie _Format5 toujours identique a l'original oui
+  v4.16 sauvegardes : partie active, mode et parties de test retablis
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Console object named 'r.ScreenPercentage' shows many (500) FindConsoleObject() calls (consider caching e.g. using static)

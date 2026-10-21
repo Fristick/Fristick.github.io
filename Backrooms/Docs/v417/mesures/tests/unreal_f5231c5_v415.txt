@@ -1,0 +1,60 @@
+THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.21-15.33.14   Duree : 258 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte.
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - v4.15 : parcours lineaire (menu, graines, sortie unique, mort, migration, REJOUER, protocole)
+  menu : page NOUVELLE PARTIE oui, 2 element(s) (attendu 2 : "COMMENCER" puis RETOUR, aucun choix de parcours), emplacement 1
+  NOUVELLE PARTIE : fichier relu au format 6 (format du jeu 6), parcours lineaire oui, graine du parcours 431211319 ; Level 0 : session d'histoire oui, niveau lineaire oui (drapeaux 1), graine 4215327664, graine du Level 0 de la partie oui
+  page VOS PARTIES : carte de la nouvelle partie oui, pastille LINEAIRE oui
+  partie lineaire de test ecrite oui (emplacement 2) : Level 0, Niveau 1 et Poolrooms accomplis, reprise au Niveau 2, aucune session ; graine attendue du Niveau 2 : 3029665265
+  CONTINUER : Niveau 2, graine 3029665265 (attendue 3029665265, BRStory::LevelSeedFor), niveau lineaire oui (drapeaux 1), mission oui, sortie garantie vers l'avant oui
+  parcours lineaire, Niveau 2 (32 chunks charges) : 0 sortie(s) tiree(s) par les chunks (attendu 0), 1 sortie(s) de la mission dont 1 vers le Niveau 3 (attendu 1) : mission -> 3 (-7, -13)
+  avant la mort : 1 action(s) de la solution appliquee(s) par les regles de l'hote, etat de la mission change oui ; piles 3 (depart : 1) ; morts 0
+  mort en solo, parcours lineaire : regle 1 (attendu 1, le niveau recommence) ; partie : mort en attente oui, niveau de reveil 2 (attendu 2), session effacee oui, morts 0 -> 1
+  reveil : Niveau 2, graine 3029665265 (attendue 3029665265, la meme), chargement 3 -> 4 (nouveau), mission neuve oui, equipement de depart oui (piles 1), reprise 2, Niveau 2 accompli non
+  partie apres le reveil : mort resolue oui, morts 1 (attendu 1), reprise 2, parcours lineaire oui, graine du parcours 41500
+  fichier ecrit a terre : mort en attente oui, niveau de reveil 2 (attendu 2), session effacee oui
+  relance : fichier d'avant la fermeture remis oui, mort en attente au Niveau 2 relue par la page des parties oui ; partie choisie : mort resolue oui, CONTINUER vers le Niveau 2 (attendu 2) ; le monde montrait deja ce niveau et sa graine oui
+  CONTINUER apres la fermeture a terre : Niveau 2, graine 3029665265 (attendue 3029665265), niveau lineaire oui, debout oui, equipement de depart oui, mission neuve oui, mort resolue oui
+  partie classique de test ecrite oui (emplacement 3), meme etat, Niveau 2 charge avec la meme graine 3029665265
+  parcours classique, meme graine 3029665265 : niveau lineaire non (drapeaux 0) ; 10 sortie(s) tiree(s) par les chunks, 1 de la mission : mission -> 3 (-7, -13) chunk -> 3 (-4, -1) chunk -> 3 (10, -4) chunk -> 3 (15, -16) chunk -> 3 (19, 3) chunk -> 3 (-19, -5) chunk -> 3 (12, 17) chunk -> 37 (11, 17) chunk -> 3 (22, -9) chunk -> 3 (13, -17) chunk -> 37 (-23, -12)
+  partie classique, mort en solo au Niveau 2 : reveil au Niveau 0 (attendu 0, regle inchangee)
+  partie classique de test reecrite oui : reprise au Niveau 2, CONTINUER
+  partie classique, fichier ecrit a terre : mort en attente oui, niveau de reveil 0 (attendu 0), reprise de l'histoire encore 2, session effacee oui
+  partie classique relancee : fichier d'avant la fermeture remis oui, mort en attente relue oui ; partie choisie : mort resolue oui, CONTINUER vers le Niveau 0 (attendu 0, la regle de la mort en solo)
+  partie classique fermee a terre, CONTINUER : Niveau 0 (attendu 0), niveau classique oui, session d'histoire oui, equipement de depart oui
+  marche : Niveau 2, graine 3029665265 (attendue 3029665265), niveau lineaire oui
+  Niveau 2 (canal 2, graine du niveau 3029665265) : mission active, placement 0, passages condamnes 0, voyants rouges 1, verts 0
+  Niveau 2 : marche vers le mecanisme 0 (Plaque des pressions) : 21.4 m en 8 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 1 (Manomètre M1) : 25.0 m en 10 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 4 (Vanne V1) : 46.2 m en 18 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 2 (Manomètre M2) : 37.5 m en 14 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 6 (Vanne V3) : 39.8 m en 15 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 3 (Manomètre M3) : 84.2 m en 32 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : marche vers le mecanisme 5 (Vanne V2) : 83.6 m en 32 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 2 : 19 actions faites en marchant (337 m, 134 s ; 7 marche(s) dont 0 approche(s) et 0 reprise(s), 0 image(s) a la nage, 0 chemin(s) par un bassin, 0 entite(s) ecartee(s) par le test ; graine du niveau 3029665265)
+  Niveau 2 : sortie vers 3 (porte, Niveau 3), voyant vert
+  Niveau 2 : sortie atteinte a pied : 0.5 m en 0 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau  2 -> Niveau 3 : arrivee oui
+  Niveau 3 par la sortie unique : Niveau 2 accompli oui, reprise 3, graine 2623254967 (attendue 2623254967), niveau lineaire oui ; 0 sortie(s) des chunks (attendu 0), 1 vers le Niveau 4 : mission -> 4 (-14, -4)
+  version publiee : partie lineaire reecrite oui, CONTINUER vers le Niveau 2
+  version publiee, Niveau 2 : graine 3029665265 (attendue 3029665265, la meme dans tous les canaux), 19 action(s) appliquee(s), mission resolue oui ; 0 sortie(s) des chunks, 1 de la mission vers le Niveau 3
+  Niveau 2 : sortie vers 3 (porte, la fin du contenu disponible), voyant vert
+  Niveau 2 : sortie atteinte a pied : 48.0 m en 19 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau  2 -> fin du contenu disponible (chapitre 1) : oui
+  version publiee : fin du chapitre 1 enregistree oui, Niveau 2 accompli oui, parcours lineaire garde oui, CONTINUER au Niveau 2 (attendu 2)
+  REJOUER dans une partie lineaire : session de rejeu oui, niveau classique oui (drapeaux 0) ; partie du fichier inchangee oui
+  mode developpeur : REJOUER du Niveau 3 (inexplore) depuis la partie lineaire, session du mode developpeur oui
+  mode developpeur dans une partie lineaire : session libre oui ; niveau classique oui (drapeaux 0, graine 3873765089, graine du parcours 2623254967 non utilisee, mort : regle 0) ; partie du fichier inchangee oui
+  format 5 -> 6 : copie d'origine (_Format5) identique oui ; parcours classique oui (drapeaux 0, graine 0) ; etapes, reprise, Level 0 et porte gardes oui
+  protocole 416, options d'entree "?BRNet=416?BRContent=856368797", version affichee 4.16, jeu v4.17
+  v4.15 : partie active, mode, menu (page, niveau choisi, hebergement), canal de contenu et parties de test retablis
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Console object named 'r.ScreenPercentage' shows many (500) FindConsoleObject() calls (consider caching e.g. using static)

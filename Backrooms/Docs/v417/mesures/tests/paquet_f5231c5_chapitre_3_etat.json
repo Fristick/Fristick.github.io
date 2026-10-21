@@ -1,0 +1,20 @@
+{
+	"phase": 3,
+	"binaire": "Shipping (paquet)",
+	"canal": "public",
+	"chapitre": 1,
+	"parties_de_test_des_le_lancement": true,
+	"graine_parcours": 3037823107,
+	"graine_level0": 2826935230,
+	"niveaux": [],
+	"fermeture": false,
+	"reprise": false,
+	"fin_du_chapitre": false,
+	"fin_enregistree": false,
+	"apres_relance": true,
+	"continuer": 2,
+	"nettoyage": true,
+	"problemes": 0,
+	"non_verifies": 0,
+	"valide": true
+}

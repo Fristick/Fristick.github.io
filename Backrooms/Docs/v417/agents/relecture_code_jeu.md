@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Rôle** | « Code Reviewer », définition installée `C:\Users\Fristick\.claude\agents\engineering-code-reviewer.md`, lue en entier. Lancé comme sous-agent générique par l'orchestrateur. |
+| **Rôle** | « Code Reviewer », définition installée `~/.claude/agents/engineering-code-reviewer.md`, lue en entier. Lancé comme sous-agent générique par l'orchestrateur. |
 | **Périmètre** | `git diff 1e67bb1..v417-jeu -- Backrooms/Source Backrooms/Content/Python Backrooms/Tools`, commits lus un par un. La branche a avancé pendant la relecture (`7c50c7a`, puis `d8fa05d`, puis `93c7fb6`). **Tête relue : `93c7fb6`.** Les numéros de ligne renvoient à `93c7fb6`. |
 | **Méthode** | Lecture des diffs et des fonctions touchées en entier. Contrôle des API dans le moteur installé (`UE_5.8/Engine/Source`, `Engine/Shaders/Private/Common.ush`, `PythonScriptPlugin`). Scripts de contrôle sans compilation : comparaison des chaînes HLSL C++ / Python, recherche heuristique des noms masqués (C4456 à C4459), relevé des clés de traduction ajoutées ou modifiées. |
 | **Non fait** | Aucune compilation, aucun lancement d'Unreal, de Blender ni des bancs, à la demande de l'orchestrateur. Les points « certain » le sont à la lecture du code. Ceux qui portent sur l'image ou le ressenti sont marqués « à vérifier en jeu ». |

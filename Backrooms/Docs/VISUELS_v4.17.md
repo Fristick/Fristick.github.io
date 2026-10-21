@@ -41,21 +41,21 @@ captures du jeu telles qu'il les a écrites : rien n'est retouché. Les planches
 Les planches de **Performance** viennent du passage `apres9` (`2074046`, Performance seulement). Au passage 7, le Niveau 1
 y était trop sombre (`l1_vue` L* 48,2 → 29,9), ses tubes étant devenus des projecteurs. Le projecteur ne reste qu'au
 Level 0 et aux Poolrooms, et le Niveau 1 revient à 48,8 (Qualité : 49,3). Au Level 0 et aux Poolrooms, `apres9` est
-identique au passage 7.
+identique au passage 7 à 1,2 point près : diffuseur de `l0_dos` 4,8 → 6,0 % ; pixel maximal de la lampe 99 → 119.
 
 ### 2.1 Level 0
 
 | Pose | Examiné | Constat (après) | Défaut restant |
 |---|---|---|---|
-| `l0_salle` | diffuseurs, murs, piliers, moquette, plafond | diffuseurs non écrêtés (≥ 250/255 : 71,5 → 0 % en Qualité) ; haut des murs et plafond plus sombres (volets 70°) ; papier peint moins clair et moins vert | murs encore plus clairs que la moquette (1,17 à 1,82, cible ≤ 1,0) ; pas de motif dans le diffuseur |
-| `l0_dos` | mur de face, embrasure, diffuseur | mur moins clair, embrasure plus profonde | mur / moquette 1,53 |
+| `l0_salle` | diffuseurs, murs, piliers, moquette, plafond | diffuseurs non écrêtés (≥ 250/255 : 71,5 → 0 % en Qualité) ; haut des murs et plafond plus sombres (volets 70°) ; papier peint moins clair et moins vert | murs encore plus clairs que la moquette (1,17 à 1,84 selon la zone et le profil, cible ≤ 1,0) ; pas de motif dans le diffuseur |
+| `l0_dos` | mur de face, embrasure, diffuseur | mur moins clair, embrasure plus profonde | mur / moquette 1,53 ; diffuseur encore à 4,8-6,0 % au-dessus de 250/255 en Performance (cible < 2 %) |
 | `l0_rasante` | papier peint à 1 et 5 m | chevrons adoucis, lés visibles | au-delà de 5 m, des rayures seulement |
 | `l0_plinthe` | arête de plinthe, joints | liseré clair sur l'arête (chanfrein du kit), joints fermés | ligne de marée à la même hauteur partout |
 | `l0_raccord_mur`, `l0_raccord_plafond` | joints entre chunks, plafond | aucune fente de lumière ; plafond plus sombre près du mur | — |
 | `l0_porte_fermee`, `l0_porte_ouverte` | porte de service à la lampe | inchangées (le kit ne pose pas la porte) | filets bleus au-dessus du battant, matière tachée identique à l'embrasure |
 | `l0_fosses` | bord, fond, parois | fonds plus noirs (p5 3,9 → 1,3 L*) ; en Performance, proche de la Qualité | damier des trous inchangé (direction artistique n° 4 non faite) |
 | `l0_coupure`, `l0_coupure_lampe` | noir, halo de la lampe | noir tenu ; lampe lisible (pixel maximal 148 → 121) | — |
-| `l0_retour_15`, `l0_retour_40` | rallumage à 15 et 40 s | comparable en Qualité et en Cinématique | en Performance « après », le courant était déjà revenu : pose sans valeur |
+| `l0_retour_15`, `l0_retour_40` | rallumage, **1,5 et 4 s** après la remise du courant | à 1,5 s, l'après reste de 6 à 8 L* sous son état stable (Qualité : 46,6 contre 52,4 ; passage 6 : 44,5), quand l'avant y est déjà (54,4 contre 53,7) ; à 4 s, encore 2,5 L* en dessous ; même écart aux passages 6 et 7 | rallumage plus lent à l'image, **non voulu**, cause non établie [hypothèse : adaptation de l'exposition ou rattrapage de l'indirect, avec le rebond à 0,8 et l'exposition locale] ; en Performance « après » 7, le courant était déjà revenu : pose sans valeur |
 | `l0_salle_vhs` | mode caméscope | inchangé (franges, vignette) | — |
 | `l0_entite_bacteria` | entité de contrôle, lumière rouge | plus sombre autour (L* 40,3 → 34,6) | aucune ombre de contact nette sous les pattes |
 
@@ -172,8 +172,11 @@ Tests du jeu sur `516ad17`, même code du jeu que `ee3365e`.
   - `coequipier_vu_par_hote.jpg` et `coequipier_vu_par_client.jpg` : la combinaison d'un coéquipier, de face, à 2,3 m, telle
     que chaque machine la rend ;
   - le test relit les slots du personnage répliqué : 3 sur 3 sur `M_BR_Gear` chez l'hôte comme chez le client ;
-  - à l'image : plis et reflet de la visière des deux côtés. Bras plus écartés dans la vue du client (pose de repos du
-    coéquipier distant), à vérifier en mouvement ;
+  - à l'image : plis et reflet de la visière des deux côtés ;
+  - **chez le client, le coéquipier (l'hôte) a les bras en A**, alors que l'hôte voit le sien les bras le long du corps.
+    Dans les deux cas, c'est un coéquipier distant : cette différence n'est donc pas une « pose de repos ». Défaut
+    possible de la pose des personnages simulés chez le client, à reproduire ;
+  - les deux captures sont prises avec le VHS et le grain actifs (réglages par défaut du test réseau) ;
   - les fiches portent `commit : inconnu` : ce lanceur ne transmet pas `-BRCommit`.
 - `v417/visuels/interface/` :
   - `carnet_niveau3_de_1280x720_tous_indices.jpg` (banc `-BRAutoTestV417Carnet`, `e612818`) : le carnet le plus rempli des
@@ -184,6 +187,10 @@ Tests du jeu sur `516ad17`, même code du jeu que `ee3365e`.
   - `v417_manette_port.jpg` : objet porté à la manette (4e poche), source estompée, pied « [Y] POSER [CROIX] CHOISIR
     [B] ANNULER » ;
   - `v417_manette_parametres.jpg` : ligne LUMINOSITÉ choisie à la manette, avec son aide ;
+  - `v417_clavier_infobulle.jpg` (`v416vis` sur `f5231c5`, fiche `commit : inconnu` : ce lanceur ne transmet pas
+    `-BRCommit`) : inventaire au clavier seul, curseur amené par les flèches sur la frontale. L'infobulle dit
+    « [ENTRÉE] ÉQUIPER     [F] DÉPLACER » (avant, lu dans le code, pas capturé : les boutons A et Y de la manette) ;
+    le pied est celui du clavier. Le test vérifie aussi qu'Entrée ne fait rien tant que le curseur est caché ;
   - `v416_fenetre_ultralarge_max_personnage.jpg` : fenêtre ultra-large ;
   - `v416_hud_1280x720_ar_personnage.jpg` : arabe, mise en page encore de gauche à droite (C9 non fait) ;
   - `v416_hud_1920x1080_ja_carnet.jpg` : japonais ;

@@ -1,6 +1,6 @@
 # v4.17 : animation procédurale et intégration des créatures (état initial v4.16)
 
-Rôle : agent installé **Technical Artist** (`C:\Users\Fristick\.claude\agents\technical-artist.md`), lancé comme
+Rôle : agent installé **Technical Artist** (`~/.claude/agents/technical-artist.md`), lancé comme
 sous-agent générique pour l'animation procédurale et l'intégration des créatures (aucun agent « animateur » n'est
 installé). Mission : § 4.5 de la demande v4.17. Analyse seule : aucun fichier du dépôt modifié hors de ce rapport ;
 Unreal et Blender non lancés (mesures de performances en cours).

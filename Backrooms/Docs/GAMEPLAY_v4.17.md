@@ -23,15 +23,17 @@ manette n'a été essayée.
   - en **Performance** (Level 0 et Poolrooms), les dalles éclairent vers le bas comme dans les autres profils : plus de
     halo blanc au plafond. Les autres niveaux gardent l'éclairage de la v4.16 dans ce profil.
 - **Poolrooms** : plus de reflets d'eau au plafond ni sur les trottoirs secs (seulement sous et près de l'eau) ; plafond
-  moins clair ; voile plus léger.
-- **Niveaux 1 et 2** : moins de flaques brillantes.
-- **Combinaison** (joueur et coéquipiers) : plis et coutures en relief, PVC brillant sous une lumière froide, visière en
-  verre sombre.
+  moins clair ; voile un peu plus léger en Qualité, RTX fluide et Cinématique (pas en Performance).
+- **Niveau 1** : un peu moins de flaques brillantes ; les taches sombres du sol restent. Niveau 2 : inchangé.
+- **Combinaison** (joueur et coéquipiers) : plis en relief, PVC brillant sous une lumière froide, visière en verre sombre.
+  Les coutures sont dans les cartes dérivées mais ne se voient pas à 1,5-3 m.
 - **Créatures** :
-  - la Bacteria pose ses pieds et ses griffes au sol, avance par petits bonds et replie ses bras près des murs ;
-  - les marcheurs gardent leur pied d'appui au sol et piétinent en tournant.
-- **Corps du joueur** (3e personne, coéquipiers) : cadence tirée de la jambe, pieds posés au sol, bas du corps en léger
-  retard dans les virages.
+  - la Bacteria pose ses pieds et ses griffes au sol, avance par petits bonds et replie ses bras près des murs. Elle glisse
+    encore au démarrage et au demi-tour ;
+  - les marcheurs gardent leur pied d'appui au sol et piétinent en tournant (code ; pas filmé dans cette version).
+- **Corps du joueur** (3e personne, coéquipiers) : cadence tirée de la jambe, pieds qui descendent jusqu'au sol (ils
+  flottaient à environ 5 cm), bas du corps en léger retard dans les virages. Le pied d'appui glisse encore d'environ
+  16 cm par pas (41 cm en v4.16).
 
 Les mécanismes, les indices et la lumière qui décide des créatures et de la santé mentale ne dépendent toujours ni du
 profil, ni du ray tracing, ni de FLASHS.
@@ -52,12 +54,16 @@ profil, ni du ray tracing, ni de FLASHS.
   - **CARNET et JOURNAL** : la croix gauche ou droite choisit une colonne (annoncé dans le pied), la croix haut ou bas
     fait défiler d'une ligne, le stick droit fait défiler ;
   - LB et RB changent toujours d'onglet ; les commandes marchent aussi dans l'inventaire ouvert depuis la pause.
-- **Clavier seul** (nouveau) :
+- **Clavier seul** (nouveau, en partie) :
   - les flèches choisissent une case dans PERSONNAGE et une ligne dans PARAMÈTRES, et font défiler ailleurs ; le curseur
     s'affiche ;
-  - **Entrée** utilise, équipe ou pose, et active une ligne de réglage ;
+  - une fois le curseur montré, **Entrée** utilise, équipe ou pose, et active une ligne de réglage. Sans curseur montré,
+    Entrée ne fait rien dans l'inventaire : un joueur à la souris ne peut plus utiliser un objet sans le voir ;
   - la touche **INTERAGIR** (E par défaut) inspecte ; la touche **LAMPE** (F par défaut) prend puis pose un objet ;
-  - le pied de PERSONNAGE l'indique ; un mouvement de la souris rend la main à la souris.
+  - le pied de PERSONNAGE et l'infobulle de la case l'indiquent (« [ENTRÉE] ÉQUIPER », « [F] DÉPLACER ») ;
+  - un glisser à la souris rend la main à la souris ; un simple survol ne suffit pas encore ;
+  - **pas encore** : changer d'onglet ou de catégorie de PARAMÈTRES au clavier ; Échap ferme tout l'inventaire, sans
+    annuler d'abord l'inspection ou l'objet porté.
 - Toujours **aucune barre de vie** : endurance et santé mentale dans PERSONNAGE seulement.
 
 ## 4. Ce qui ne change pas

@@ -1,6 +1,6 @@
 # v4.17 — Performances : protocole avant / après, scène « entites », isolation des coûts
 
-Rapport de l'agent **Performance Benchmarker** (définition lue : `C:\Users\Fristick\.claude\agents\testing-performance-benchmarker.md`,
+Rapport de l'agent **Performance Benchmarker** (définition lue : `~/.claude/agents/testing-performance-benchmarker.md`,
 rôle adapté à Unreal ; lancé par l'orchestrateur comme sous-agent générique). Mission : prompt v4.17 § 5.
 
 **Ce que j'ai fait réellement** : lecture du banc (`BRAutoTestV416Perf.cpp`), de `run_perf.ps1`, `perf_summary.py`, des
@@ -61,9 +61,9 @@ les variables du moteur, pas les réglages du pilote).
    contenu est encore celui de la v4.16, mais `Tools/Blender/build_level0_kit.py` est déjà modifié dans l'arbre (lot
    modèles en cours). **Avant que les lots matériaux / import ne régénèrent le contenu**, faire la copie de l'avant :
    ```powershell
-   git -C C:\Users\Fristick\Desktop\Backrooms worktree add C:\Users\Fristick\Desktop\Backrooms\wt\avant <B0>
-   robocopy C:\Users\Fristick\Desktop\Backrooms\Backrooms\Content\Backrooms C:\Users\Fristick\Desktop\Backrooms\wt\avant\Backrooms\Content\Backrooms /MIR
-   & "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" BackroomsEditor Win64 Development "-Project=C:\Users\Fristick\Desktop\Backrooms\wt\avant\Backrooms\Backrooms.uproject" -WaitMutex
+   git -C <depot> worktree add wt\avant <B0>
+   robocopy Backrooms\Content\Backrooms wt\avant\Backrooms\Content\Backrooms /MIR
+   & "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" BackroomsEditor Win64 Development "-Project=wt\avant\Backrooms\Backrooms.uproject" -WaitMutex
    ```
    (copier aussi `DerivedDataCache\` s'il existe dans le projet : sinon l'amorçage recompile tous les shaders), et
    écrire une empreinte du contenu à côté de chaque étiquette (avant comme après), par exemple
@@ -91,14 +91,14 @@ les variables du moteur, pas les réglages du pilote).
 
 ### 2.4 Commandes exactes
 
-Depuis `C:\Users\Fristick\Desktop\Backrooms\Backrooms` (PowerShell 5.1) ; `$Avant` et `$Apres` : chemins des deux
+Depuis `Backrooms` (PowerShell 5.1) ; `$Avant` et `$Apres` : chemins des deux
 `Backrooms.uproject` ; un profil par lancement (`-Profiles 0,1,4,2`, VRAM de 8 Go), deux graines (`0` = graines de
 référence de chaque scène, `4242`), trois exécutions, les cinq scènes v4.16 **puis** les deux scènes v4.17 en fin de
 lancement (elles ne précèdent donc jamais une scène v4.16 dans le même processus) :
 
 ```powershell
 $Scenes = 'fosses,bassins,marche0,marche1,lidar6,entites0,entites'
-$Out = 'C:\Users\Fristick\Desktop\Backrooms\Backrooms\Saved\TestRuns\perf'
+$Out = 'Backrooms\Saved\TestRuns\perf'
 # Amorcage (jete)
 powershell -ExecutionPolicy Bypass -File Tools\Tests\run_perf.ps1 -Project $Avant -Tag v417_avant_amorce -Runs 1 -Seeds 0 -Profiles 0,1,4,2 -Scenes $Scenes -ResX 1366 -ResY 768 -OutRoot $Out -NoSummary
 # Avant : 3 executions x 2 graines x 4 profils

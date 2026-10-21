@@ -1,0 +1,43 @@
+THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.21-15.27.43   Duree : 76 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte.
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - v4.16 (echelles) : echelles des chunks du Niveau 37 et deplacement de secours de la montee
+
+=== Niveau 37 - v4.16 echelles : Niveau 37 (graine du niveau 2303284074, partie classique)
+  Niveau 37 (graine du niveau 2303284074, partie classique) : 10 echelle(s) vers le Niveau 2 tirees (chunks -6..6), 9 sur un trottoir ; sur un trottoir avec une place dans le canal devant elle (grille) : (7560, 6750, 68) chunk (1, 1), 12 place(s) ; (13750, 10440, 68) chunk (3, 2), 12 place(s) ; (15750, -8440, 68) chunk (3, -3), 12 place(s) ; (-22940, 12250, 68) chunk (-6, 3), 12 place(s) ; (25750, 17560, 68) chunk (6, 4), 12 place(s) ; au fond du canal avec un sol plat devant elle : (11750, -1560, 0) chunk (2, -1), 1 place(s)
+  Niveau 37 (graine du niveau 2303284074) : echelle au fond du canal (sol plat devant elle) : BRExit_3 en (11750, -1560, 0), chunk (2, -1), sommet de la montee a 600 cm du pied ; point vise libre, capsule du grimpeur libre ; place libre en (11750, -1772, 0), 160 cm devant l'accroche, 0 cm de cote (accroche (11750, -1612, 0))
+  echelle au fond du canal (pied a 0 cm), caisse de 20 cm entre le joueur et l'accroche, avancer 4 s : accroche atteinte (pieds au plus 55.3 cm au-dessus du depart, a 9 cm de l'accroche, 0.34 s ; dernier obstacle : aucun) ; capsule dans une collision : 0 image sur 21 (attendu : franchie (marche basse), BRGather::ClimbAfterHit)
+  caisse de 20 cm : puis reculer : echelle lachee oui (pieds a 1.9 cm du pied, 0.45 s)
+  echelle au fond du canal (pied a 0 cm), caisse de 50 cm entre le joueur et l'accroche, avancer 4 s : arrete au sol (pieds au plus 0.0 cm au-dessus du depart, a 155 cm de l'accroche, 4.01 s ; dernier obstacle : Actor_1 (BRTestV416Block)) ; capsule dans une collision : 0 image sur 327 (attendu : jamais franchie, aucune hausse le long d'elle, BRGather::ClimbAfterHit)
+  caisse de 50 cm : puis reculer : echelle lachee oui (pieds a 2.1 cm du pied, 0.02 s)
+  Niveau 37 (graine du niveau 2303284074), chunk (2, -1) construit : echelle vers le Niveau 2 a la place de la regle du jeu (banc : (11750, -1560, 0)) oui (BRExit_3 en (11750, -1560, 0) ; tiree a cette place par la regle oui) ; ancienne place (11750, -2060, 0) sans echelle oui
+
+=== Niveau 37 - v4.16 echelles : Niveau 37 (graine du niveau 115083815, partie classique)
+  Niveau 37 (graine du niveau 115083815, partie classique) : 11 echelle(s) vers le Niveau 2 tirees (chunks -6..6), 10 sur un trottoir ; sur un trottoir avec une place dans le canal devant elle (grille) : (8250, 9440, 68) chunk (2, 2), 12 place(s) ; (9940, -21250, 68) chunk (2, -6), 12 place(s) ; (26250, -1560, 68) chunk (6, -1), 12 place(s) ; (22440, 14250, 68) chunk (5, 3), 12 place(s) ; (24440, -10750, 68) chunk (6, -3), 12 place(s) ; (-18940, 22250, 68) chunk (-5, 5), 12 place(s) ; au fond du canal avec un sol plat devant elle : aucune
+  Niveau 37 (graine du niveau 115083815) : echelle sur un trottoir avec une place dans le canal devant elle : BRExit_8 en (8250, 9440, 68), chunk (2, 2), sommet de la montee a 532 cm du pied ; point vise libre, capsule du grimpeur libre ; place libre en (8250, 9238, 0), 150 cm devant l'accroche, 0 cm de cote (accroche (8250, 9388, 68))
+  echelle sur son trottoir (pied a 68 cm) prise depuis le canal (pieds a 2 cm, 150 cm devant l'accroche, 0 cm de cote, visee et touche d'interaction), avancer tout de suite : montee au-dessus du trottoir (pieds a 95 cm, a 9 cm de l'accroche, 0.58 s apres la prise ; dernier obstacle : aucun) ; capsule dans une collision : 0 image sur 36 (attendu : montee, ABRCharacter::UpdateClimb)
+  prise depuis le canal (avancer tout de suite) puis lacher (Interagir) : debout sur le trottoir oui (pieds a 70.2 cm, pied de l'echelle a 68 cm), echelle tenue NON
+  echelle sur son trottoir (pied a 68 cm) prise depuis le canal (pieds a 2 cm, 150 cm devant l'accroche, 0 cm de cote, visee et touche d'interaction), avancer 0,5 s apres la prise : montee au-dessus du trottoir (pieds a 95 cm, a 9 cm de l'accroche, 1.09 s apres la prise ; dernier obstacle : aucun) ; capsule dans une collision : 0 image sur 87 (attendu : montee, ABRCharacter::UpdateClimb)
+  prise depuis le canal (avancer 0,5 s apres), montee jusqu'a 201 cm au-dessus du pied, puis descente : echelle lachee oui apres 1.44 s, debout sur le trottoir oui (pieds a 70.1 cm) ; capsule dans une collision : 0 image sur 304 (attendu : lachee au pied, debout, jamais coincee)
+  mur haut (400 cm) entre le joueur dans le canal et l'accroche, echelle sur son trottoir (pied a 68 cm), prise directe, avancer 3 s : pieds au plus 0.0 cm au-dessus du depart (attendu : moins de 10 ; avant, v4.15 correctifs 5 : levee jusqu'a 103 cm), a 143 cm de l'accroche, cote du mur garde oui ; dernier obstacle : BRChunk_52 (InstancedStaticMeshComponent_4) ; capsule dans une collision : 0 image sur 268
+  mur haut (400 cm) entre le joueur dans le canal et l'accroche : puis reculer : echelle lachee oui (0.02 s, pieds a 2.1 cm)
+  plafond bas (15 cm au-dessus de la tete) au-dessus du canal, echelle sur son trottoir (pied a 68 cm), prise directe, avancer 3 s : pieds au plus 0.0 cm au-dessus du depart (attendu : moins de 10 ; avant, v4.15 correctifs 5 : levee jusqu'a 103 cm), a 143 cm de l'accroche, tete au plus a -17.8 cm du bas du plafond (attendu <= 0) ; dernier obstacle : BRChunk_52 (InstancedStaticMeshComponent_4) ; capsule dans une collision : 0 image sur 250
+  plafond bas (15 cm au-dessus de la tete) au-dessus du canal : puis reculer : echelle lachee oui (0.03 s, pieds a 2.0 cm)
+  descente sur une caisse de 20 cm posee sur le trottoir sous l'accroche : echelle lachee apres 0.96 s, pieds a 20.1 cm du pied au lacher ; puis debout sur la caisse oui (pieds a 22.1 cm) ; capsule dans une collision : 0 image sur 83 (attendu : lachee sur la caisse, BRGather::ClimbReleaseOnDescent ; avant : accrochee au-dessus)
+  echelle sur son trottoir montee depuis le canal (visee et touche d'interaction) : sommet de la montee atteint, demandes de depart au sommet 1 (attendu 1), arrivee au Niveau 2 oui ; capsule dans une collision : 0 image sur 306
+
+=== Niveau 8 - v4.16 echelles : Niveau 8 (graine du niveau 233637237, partie classique)
+  Niveau 8 (graine du niveau 233637237, partie classique), echelle BRExit_42 du Niveau 8 (tablier incline) (BRExit_23, visee et touche d'interaction ; 0 entite(s) proche(s) ecartee(s)) : montee jusqu'a 201 cm au-dessus du pied (attendu 200), puis descente : echelle lachee oui apres 1.43 s, au sol oui (pieds a 2.2 cm du pied) ; capsule dans une collision : 0 image sur 292 (attendu : lachee au pied, au sol, jamais coincee)
+  Niveau 8 : echelle BRExit_42 du Niveau 8 (tablier incline) reprise au pied, lachee (Saut) les pieds a 120 cm du pied : echelle tenue NON, au sol oui apres 0.50 s (attendu : moins de 1,5 s), pieds a 0.0 cm du sol de la descente ; capsule dans une collision : 0 image sur 87 (attendu : chute au sol, jamais en l'air sans echelle)
+
+=== Niveau 6 - v4.16 echelles : Niveau 6 (graine du niveau 2702236446, partie classique)
+  Niveau 6 (graine du niveau 2702236446, partie classique), echelle de l'alcove de l'aile du Level 6 (BRExit_27, visee et touche d'interaction ; 0 entite(s) proche(s) ecartee(s)) : montee jusqu'a 83 cm au-dessus du pied (attendu 83), puis descente : echelle lachee oui apres 0.58 s, au sol oui (pieds a 2.2 cm du pied) ; capsule dans une collision : 0 image sur 127 (attendu : lachee au pied, au sol, jamais coincee)
+  Niveau 6 : echelle de l'alcove de l'aile du Level 6 reprise au pied, lachee (Saut) les pieds a 84 cm du pied : echelle tenue NON, au sol oui apres 0.42 s (attendu : moins de 1,5 s), pieds a 0.0 cm du sol de la descente ; capsule dans une collision : 0 image sur 64 (attendu : chute au sol, jamais en l'air sans echelle)

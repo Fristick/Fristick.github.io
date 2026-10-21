@@ -1,0 +1,80 @@
+THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.21-15.38.21   Duree : 289 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte, mais 1 verification(s) NON VERIFIEE(S) (voir ci-dessous)
+  - NON VERIFIE : Niveau 2 : marche avec un Smiler : aucun point de passage en couloir droit et sombre parmi 4
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - v4.15 (correctifs) : places des mecanismes (Niveaux 6, 8, 9), Poolrooms a pied sans nager
+
+=== Niveau 8 - v4.15 correctifs : Niveau 8 (graine 4111)
+  Niveau 8 (graine du niveau 643828852) : 6/6 mecanismes degages et atteignables (point d'interaction hors des volumes, place a portee de la visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)
+
+=== Niveau 9 - v4.15 correctifs : Niveau 9 (graine 4111)
+  Niveau 9 (graine du niveau 774538619) : 7/7 mecanismes degages et atteignables (point d'interaction hors des volumes, place a portee de la visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)
+
+=== Niveau 6 - v4.15 Level 6, graine 4136 : aile, postes et cages
+  Level 6, graine 4136 (graine du niveau 2702236446) : aile au chunk (-3, 1) valide, mission oui, portes 4 dont 4 dans l'aile (salle de l'aile oui), avertissement "entree de l'aile non atteinte" non, point vise dans le volume d'un autre mecanisme non
+  Niveau 6 (graine du niveau 2702236446) : 8/8 postes et cages degages et atteignables (point d'interaction hors des volumes, place a portee de la visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)
+  Level 6, graine 4136 : poste 1 (mecanisme 1) tourne depuis sa place : postes 1/4 (attendu 1) apres 3 demande(s), refus "trop loin" 0, dernier retour 10 ; yeux a 123 cm du point, regle de l'hote action acceptee
+
+=== Niveau 6 - v4.15 Level 6, graine 4126 : aile, postes et cages
+  Level 6, graine 4126 (graine du niveau 2622470042) : aile au chunk (-3, 0) valide, mission oui, portes 4 dont 4 dans l'aile (salle de l'aile oui), avertissement "entree de l'aile non atteinte" non, point vise dans le volume d'un autre mecanisme non
+  Niveau 6 (graine du niveau 2622470042) : 8/8 postes et cages degages et atteignables (point d'interaction hors des volumes, place a portee de la visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)
+  Level 6, graine 4126 : poste 1 (mecanisme 1) tourne depuis sa place : postes 1/4 (attendu 1) apres 3 demande(s), refus "trop loin" 0, dernier retour 10 ; yeux a 123 cm du point, regle de l'hote action acceptee
+
+=== Niveau 6 - v4.15 Level 6, graine 6 : aile, postes et cages
+  Level 6, graine 6 (graine du niveau 3124583934) : aile au chunk (2, 1) valide, mission oui, portes 4 dont 4 dans l'aile (salle de l'aile oui), avertissement "entree de l'aile non atteinte" non, point vise dans le volume d'un autre mecanisme non
+  Niveau 6 (graine du niveau 3124583934) : 8/8 postes et cages degages et atteignables (point d'interaction hors des volumes, place a portee de la visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)
+  Level 6, graine 6 : poste 1 (mecanisme 1) tourne depuis sa place : postes 1/4 (attendu 1) apres 3 demande(s), refus "trop loin" 0, dernier retour 10 ; yeux a 123 cm du point, regle de l'hote action acceptee
+
+=== Niveau 6 - v4.15 Level 6, graine 208 : aile, postes et cages
+  Level 6, graine 208 (graine du niveau 2925637012) : aile au chunk (-3, -3) valide, mission oui, portes 4 dont 4 dans l'aile (salle de l'aile oui), avertissement "entree de l'aile non atteinte" non, point vise dans le volume d'un autre mecanisme non
+  Niveau 6 (graine du niveau 2925637012) : 8/8 postes et cages degages et atteignables (point d'interaction hors des volumes, place a portee de la visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)
+  Level 6, graine 208 : poste 1 (mecanisme 1) tourne depuis sa place : postes 1/4 (attendu 1) apres 3 demande(s), refus "trop loin" 0, dernier retour 10 ; yeux a 123 cm du point, regle de l'hote action acceptee
+
+=== Niveau 37 - v4.15 Poolrooms : vanne B depuis l'eau des canaux (graine 1217121623)
+  Niveau 37 (canal 2, graine du niveau 125584919) : mission active, placement 0, passages condamnes 0, voyants rouges 1, verts 0
+  Niveau 37 : marche vers le mecanisme 0 (Marques de niveau d'eau) : 30.7 m en 13 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : marche vers le mecanisme 1 (Courant de l'eau) (place autour du mecanisme : devant lui, capsule genee) : 36.4 m en 16 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : marche vers le mecanisme 2 (Vanne du bassin A) : 121.2 m en 53 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : marche vers le mecanisme 3 (Vanne du bassin B) : 0.6 m en 0 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  Niveau 37 : 6 actions faites en marchant (189 m, 85 s ; 4 marche(s) dont 0 approche(s) et 0 reprise(s), 0 image(s) a la nage, 0 chemin(s) par un bassin, 0 entite(s) ecartee(s) par le test ; graine du niveau 125584919)
+  Poolrooms, graine 1217121623 (niveau 125584919) : 6/6 actions faites a pied ; vanne B (mecanisme 3) actionnee oui, dans 60 cm d'eau (on nage au-dela de 120 cm), a la nage non ; mission : 0 image(s) a la nage, 0 chemin(s) par un bassin
+  Niveau 37 : sortie vers 2 (echelle, Niveau 2), voyant vert
+  Niveau 37 : sortie atteinte a pied : 84.4 m en 39 s, 2 saut(s), 1 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s) ; volume d'eau local traverse : 37 image(s), 0 a la nage, profondeur maximale 0 cm
+  Niveau 37 -> Niveau 2 : arrivee oui, demandes de depart au sommet de l'echelle : 1 (attendu 1)
+  Poolrooms, graine 1217121623 : sortie atteinte a pied oui, 0 image(s) a la nage (dans le sas : 0, eau au plus 0 cm), arrivee au niveau suivant oui
+
+=== Niveau 2 - v4.15 correctifs 4 : Niveau 2 (graine 4120)
+  Niveau 2 (graine du niveau 554144564) : 7/7 mecanismes degages et atteignables (point d'interaction hors des volumes, place a portee de la visee et selon la regle de l'hote, action acceptee depuis cette place, visee du client)
+  classement d'un blocage, cellule (-5, 8) : creature devant le marcheur dans le couloir libre : creature seule (Hounds (BREntity_1, CollisionCylinder) a 20 cm, cellule (-5, 8)) ; la meme devant un mur a 140 cm : decor (Hounds (BREntity_0, CollisionCylinder) a 20 cm, cellule (-5, 8) ; sans les entites, toujours bloque par BRChunk_424 (InstancedStaticMeshComponent_1)) (attendu : creature seule, puis decor : le mur reste un blocage du decor malgre la creature)
+  NON VERIFIE : marche avec un Smiler : aucun point de passage en couloir droit et sombre parmi 4
+
+=== Niveau 8 - v4.15 correctifs 4 : Niveau 8 (graine du niveau 233637237, partie classique)
+  Niveau 8 (graine du niveau 233637237, partie classique), chunk (1, -2) : echelle vers le Niveau 9 (BRExit_41) en (4000, -5400, 0), paroi de la cellule (9, -14), sommet de la montee a 600 cm du pied ; point vise par le depart de groupe (4100, -5400, 90) libre ; capsule du grimpeur a l'accroche libre (attendu : libres, verification du developpeur ABRExit::CheckDepartureViewPoint)
+  echelle BRExit_42 : pied de l'echelle atteint a pied depuis 4 cellule(s) de la grille : 19.8 m en 10 s, 1 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  echelle BRExit_42 visee et montee : centre du grimpeur au plus haut a 599 cm du pied (sommet de la montee a 600 cm) atteint, demandes de depart au sommet 1 (attendu 1), arrivee au Niveau 9 oui
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogBackrooms] Sortie vers le Niveau 9 (BRExit_38) en (-2600, -1600, 140) : point vise par le depart de groupe (-2600, -1500, 230) pris dans BRMissionDevice_103 (StaticMeshComponent_8) : la vue du rassemblement y serait coupee
+
+=== Niveau 37 - v4.15 correctifs 5 : Niveau 37 (graine du niveau 115083815, partie classique)
+  Niveau 37 (graine du niveau 115083815, partie classique) : ancienne place (-3250, -1560, 0), au fond du canal contre la marche d'un trottoir lateral : aucune sortie (attendu : aucune sortie, regle BRMech::Grid::StandFlat)
+  Niveau 37 (graine du niveau 115083815, partie classique), chunk (-1, -1) : echelle vers le Niveau 2 (BRExit_49) en (-1250, -1560, 68), paroi de la cellule (-3, -4), sommet de la montee a 532 cm du pied ; point vise par le depart de groupe (-1250, -1660, 158) libre ; capsule du grimpeur a l'accroche libre (attendu : libres) ; place du banc (-1250, -1560, 68) oui
+  Niveau 37 : 1 echelle(s) des chunks construits, point vise ou capsule du grimpeur pris : 0 (attendu 0)
+  prise depuis le canal devant l'echelle BRExit_49 (pied a 68 cm) : aucune place libre dans le canal devant son trottoir (140 a 260 cm devant l'accroche) : sans objet pour cette echelle, jugee plus bas sur une echelle des chunks sur son trottoir avec une place dans le canal (v4.16, graine du niveau 115083815)
+  echelle du chunk (-1, -1) du Niveau 37 : pied de l'echelle atteint a pied depuis 4 cellule(s) de la grille : 21.0 m en 9 s, 0 saut(s), 0 nouveau(x) chemin(s), 0 image(s) a la nage, 0 deplacement(s) direct(s)
+  echelle du chunk (-1, -1) du Niveau 37 visee et montee : centre du grimpeur au plus haut a 531 cm du pied (sommet de la montee a 532 cm) atteint, demandes de depart au sommet 1 (attendu 1), arrivee au Niveau 2 oui
+
+=== Niveau 37 - v4.16 echelles : Niveau 37 (graine du niveau 115083815, partie classique)
+  Niveau 37 (graine du niveau 115083815, partie classique) : 11 echelle(s) vers le Niveau 2 tirees (chunks -6..6), 10 sur un trottoir ; sur un trottoir avec une place dans le canal devant elle (grille) : (8250, 9440, 68) chunk (2, 2), 12 place(s) ; (9940, -21250, 68) chunk (2, -6), 12 place(s) ; (26250, -1560, 68) chunk (6, -1), 12 place(s) ; (22440, 14250, 68) chunk (5, 3), 12 place(s) ; (24440, -10750, 68) chunk (6, -3), 12 place(s) ; (-18940, 22250, 68) chunk (-5, 5), 12 place(s) ; au fond du canal avec un sol plat devant elle : aucune
+  Niveau 37 (graine du niveau 115083815) : echelle sur un trottoir avec une place dans le canal devant elle : BRExit_65 en (8250, 9440, 68), chunk (2, 2), sommet de la montee a 532 cm du pied ; point vise libre, capsule du grimpeur libre ; place libre en (8250, 9238, 0), 150 cm devant l'accroche, 0 cm de cote (accroche (8250, 9388, 68))
+  echelle sur son trottoir (pied a 68 cm) prise depuis le canal (pieds a 2 cm, 150 cm devant l'accroche, 0 cm de cote, visee et touche d'interaction), avancer tout de suite : montee au-dessus du trottoir (pieds a 96 cm, a 8 cm de l'accroche, 0.57 s apres la prise ; dernier obstacle : aucun) ; capsule dans une collision : 0 image sur 31 (attendu : montee, ABRCharacter::UpdateClimb)
+  prise depuis le canal (avancer tout de suite) puis lacher (Interagir) : debout sur le trottoir oui (pieds a 70.2 cm, pied de l'echelle a 68 cm), echelle tenue NON
+  echelle sur son trottoir (pied a 68 cm) prise depuis le canal (pieds a 2 cm, 150 cm devant l'accroche, 0 cm de cote, visee et touche d'interaction), avancer 0,5 s apres la prise : montee au-dessus du trottoir (pieds a 96 cm, a 9 cm de l'accroche, 1.09 s apres la prise ; dernier obstacle : aucun) ; capsule dans une collision : 0 image sur 88 (attendu : montee, ABRCharacter::UpdateClimb)
+  prise depuis le canal (avancer 0,5 s apres), montee jusqu'a 202 cm au-dessus du pied, puis descente : echelle lachee oui apres 1.44 s, debout sur le trottoir oui (pieds a 70.1 cm) ; capsule dans une collision : 0 image sur 308 (attendu : lachee au pied, debout, jamais coincee)
