@@ -71,17 +71,17 @@ void ABRAutoTest::AddV417CarnetSteps()
 				return false;
 			}
 			// Essai seulement : l'etat de la mission est ecrit ici sans passer par les appareils (le chargement suivant le refait)
-			const BRMission::FPlan& Plan = W->GetMissionPlan();
+			const BRMission::FPlan& MPlan = W->GetMissionPlan();
 			BRMission::FState& State = const_cast<BRMission::FState&>(W->GetMissionState());
-			for (int32 D = 0; D < Plan.NumDevices; ++D)
+			for (int32 D = 0; D < MPlan.NumDevices; ++D)
 			{
-				if (Plan.Devices[D].Kind == BRMission::EKind::Clue)
+				if (MPlan.Devices[D].Kind == BRMission::EKind::Clue)
 				{
 					State.Dev[D] = 1;
 				}
-				else if (Plan.Devices[D].Kind == BRMission::EKind::Observe)
+				else if (MPlan.Devices[D].Kind == BRMission::EKind::Observe)
 				{
-					State.Dev[D] = static_cast<uint8>(Plan.Devices[D].Positions);
+					State.Dev[D] = static_cast<uint8>(MPlan.Devices[D].Positions);
 				}
 			}
 			BRLoc::SetLanguage(TEXT("de"));
