@@ -187,6 +187,25 @@ def bones(src, scene="l0_3p_cote"):
         print("  pied %s : vitesse moyenne %.1f cm/image, %d appui(s), glissement par appui median %.1f cm, max %.1f (critere <= 3) ; "
               "os a %.1f-%.1f cm du sol pendant l'appui, %.1f cm au plus bas pendant le pas"
               % (name, mean, len(s2), s2[len(s2) // 2], s2[-1], min(stance_z), max(stance_z), min(swing_z) if swing_z else float("nan")))
+        # v4.17 (appuis) : meme detection, l'os devant aussi etre a moins de 2 cm de sa hauteur d'appui (la plus basse de la
+        # video) : une image ou le pied monte deja (lever) ou descend encore (pose) n'est pas de l'appui
+        low = min(P[j][2] - ground[j] for j in range(len(P)))
+        segs2, s = [], None
+        for i in range(1, len(P)):
+            flat = (P[i][2] - ground[i] <= low + 2.0) and (P[i - 1][2] - ground[i - 1] <= low + 2.0)
+            if v[i] < slow and flat:
+                if s is None:
+                    s = i - 1
+            else:
+                if s is not None and i - 1 - s >= 3:
+                    segs2.append((s, i - 1))
+                s = None
+        slips2 = sorted(max(d2(P[j], P[a]) for j in range(a, b + 1)) for a, b in segs2)
+        if slips2:
+            print("    os a moins de 2 cm de sa hauteur d'appui (%.1f cm) : %d appui(s), glissement par appui median %.1f cm, max %.1f (critere <= 3)"
+                  % (low, len(slips2), slips2[len(slips2) // 2], slips2[-1]))
+        else:
+            print("    os a moins de 2 cm de sa hauteur d'appui (%.1f cm) : aucun appui (l'os n'y reste jamais 3 images de suite)" % low)
     # Pied en l'air plus bas que le pied d'appui (images ou un seul pied est en appui, selon la vitesse de l'os)
     if len(segs_by_foot) == 2:
         def in_seg(segs, j):
