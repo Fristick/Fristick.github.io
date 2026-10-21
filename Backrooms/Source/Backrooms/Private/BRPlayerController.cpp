@@ -801,9 +801,17 @@ namespace BRPadInput
 	 *  toutes les zones ; PERSONNAGE et les onglets d'une colonne gardent l'action d'avant */
 	bool Direction(ABRPlayerController* PC, bool bOpen, const FKey& Key, int32 DX, int32 DY)
 	{
-		if (!bOpen || !PC->IsInputKeyDown(Key))
+		// v4.17 (accessibilite, agent Accessibility Auditor : Docs/v417/agents/accessibilite.md) : les fleches du clavier font
+		// la meme chose que la croix (avant : inventaire inutilisable sans souris ni manette : ni case, ni reglage, ni objet).
+		// Les autres touches de ces actions (A, D, Q, Z, W, S : deplacement) restent sans effet ici
+		const FKey Arrow = DX < 0 ? EKeys::Left : (DX > 0 ? EKeys::Right : (DY < 0 ? EKeys::Up : EKeys::Down));
+		if (!bOpen || !(PC->IsInputKeyDown(Key) || PC->IsInputKeyDown(Arrow)))
 		{
 			return false;
+		}
+		if (!PC->IsInputKeyDown(Key))
+		{
+			BRKeys::SetKeyboardCursor(true); // curseur des cases et des reglages montre (ABRHUD::UsesPadCursor)
 		}
 		if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
 		{
@@ -905,6 +913,7 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 		if (FMath::Abs(MouseDX) + FMath::Abs(MouseDY) > 1.f)
 		{
 			bPadActive = false;
+			BRKeys::SetKeyboardCursor(false);
 		}
 		// v4.16 : les invites (HUD, carnet, scanner) nomment les boutons de la manette quand elle a servi en dernier
 		BRKeys::SetGamepadPrompts(bPadActive);
@@ -1317,7 +1326,9 @@ void ABRPlayerController::OnFlash(const FInputActionValue& Value)
 {
 	// v4.17 (interface, C7) : Y dans PERSONNAGE : prendre puis poser l'objet de la case du curseur (ABRHUD::PadCarry, regles de
 	// la souris) ; ailleurs (false), l'aide du carnet comme avant
-	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && IsInputKeyDown(EKeys::Gamepad_FaceButton_Top))
+	// v4.17 (accessibilite, S1) : au clavier (curseur aux fleches), la touche LAMPE fait la meme chose
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE
+		&& (IsInputKeyDown(EKeys::Gamepad_FaceButton_Top) || (BRKeys::UsesKeyboardCursor() && BRKeys::IsActionKeyDown(this, EBRAction::Flashlight))))
 	{
 		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
 		{
@@ -1343,10 +1354,22 @@ void ABRPlayerController::OnFlash(const FInputActionValue& Value)
 
 void ABRPlayerController::OnInteract(const FInputActionValue& Value)
 {
-	// v4.16 (relecture) : X dans PERSONNAGE : inspecter la case du curseur
-	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Left, true))
+	// v4.16 (relecture) : X dans PERSONNAGE : inspecter la case du curseur. v4.17 (accessibilite, S1) : au clavier (curseur aux
+	// fleches), la touche INTERAGIR fait la meme chose
+	const bool bInvInput = bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE;
+	if (BRPadInput::SlotAction(this, bInvInput, EKeys::Gamepad_FaceButton_Left, true))
 	{
 		return;
+	}
+	if (bInvInput && BRKeys::UsesKeyboardCursor() && BRKeys::IsActionKeyDown(this, EBRAction::Interact))
+	{
+		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
+		{
+			if (H->PadSlotAction(true))
+			{
+				return;
+			}
+		}
 	}
 	if (CanPlay())
 	{
@@ -1735,8 +1758,9 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 		BRDisplay::Confirm(); // v4.9 : Entree pendant la confirmation de l'affichage : conserver
 		return;
 	}
-	// v4.17 (interface, C6) : A dans PARAMETRES : meme effet qu'un clic sur la ligne choisie a la manette
-	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom))
+	// v4.17 (interface, C6) : A dans PARAMETRES : meme effet qu'un clic sur la ligne choisie a la manette. v4.17 (accessibilite,
+	// S1) : Entree aussi (curseur aux fleches)
+	if (bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE && (IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom) || IsInputKeyDown(EKeys::Enter)))
 	{
 		if (ABRHUD* H = Cast<ABRHUD>(GetHUD()))
 		{
@@ -1747,7 +1771,8 @@ void ABRPlayerController::OnMenuConfirm(const FInputActionValue& Value)
 		}
 	}
 	// v4.16 (relecture) : A dans PERSONNAGE : utiliser, equiper ou retirer l'objet de la case du curseur
-	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Bottom, false))
+	if (BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Gamepad_FaceButton_Bottom, false)
+		|| BRPadInput::SlotAction(this, bInventory && !IsModalDialogOpen() && CaptureAction == INDEX_NONE, EKeys::Enter, false))
 	{
 		return;
 	}

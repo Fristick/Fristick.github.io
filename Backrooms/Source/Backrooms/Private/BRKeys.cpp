@@ -1,4 +1,5 @@
 #include "BRKeys.h"
+#include "GameFramework/PlayerController.h"
 #include "BRConfig.h"
 
 #include "Misc/ConfigCacheIni.h"
@@ -58,6 +59,7 @@ namespace
 	bool GInitialized = false;
 	/** v4.16 : la manette a servi en dernier (invites de ses boutons) */
 	bool GPadPrompts = false;
+	bool GKeyCursor = false;
 
 	void SetDefault(EBRAction A, const FKey& K0, const FKey& K1 = FKey(), const FKey& K2 = FKey())
 	{
@@ -205,7 +207,9 @@ namespace BRKeys
 		{
 			return TEXT("-");
 		}
-		return Key.GetDisplayName(false).ToString().ToUpper();
+		// v4.17 (accessibilite) : capitales selon la langue (FText::ToUpper, ICU) ; FString::ToUpper ne traite que l'ASCII
+		// (avant : "BOTóN", "BOTãO")
+		return Key.GetDisplayName(false).ToUpper().ToString();
 	}
 
 	FString Primary(EBRAction Action)
@@ -292,6 +296,33 @@ namespace BRKeys
 	bool UsesGamepadPrompts()
 	{
 		return GPadPrompts;
+	}
+
+	void SetKeyboardCursor(bool bKeys)
+	{
+		GKeyCursor = bKeys;
+	}
+
+	bool UsesKeyboardCursor()
+	{
+		return GKeyCursor && !GPadPrompts;
+	}
+
+	bool IsActionKeyDown(const APlayerController* PC, EBRAction Action)
+	{
+		if (!PC)
+		{
+			return false;
+		}
+		for (int32 Slot = 0; Slot < SlotsPerAction; ++Slot)
+		{
+			const FKey Key = GetKey(Action, Slot);
+			if (Key.IsValid() && !Key.IsGamepadKey() && PC->IsInputKeyDown(Key))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	FKey GamepadKey(EBRAction Action)

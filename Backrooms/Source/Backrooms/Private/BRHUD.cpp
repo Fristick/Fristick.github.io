@@ -43,6 +43,10 @@ namespace
 	const FLinearColor YellowDim(0.95f, 0.78f, 0.25f, 0.45f);
 	const FLinearColor Ink(0.93f, 0.91f, 0.84f, 1.f);
 	const FLinearColor InkDim(0.75f, 0.72f, 0.62f, 0.8f);
+	/** v4.17 (accessibilite, M1) : textes attenues opaques (avant : InkDim a 40-56 % ou YellowDim a 45 % : 2,8 a 3,4:1 dans la
+	 *  vraie fenetre, avec la VHS et le grain) : moins clairs que Ink et Yellow, mais sans transparence */
+	const FLinearColor InkFaint(0.68f, 0.65f, 0.56f, 1.f);
+	const FLinearColor YellowFaint(0.82f, 0.66f, 0.2f, 1.f);
 	const FLinearColor PanelBg(0.035f, 0.03f, 0.012f, 0.72f);
 	const FLinearColor SlotBg(0.f, 0.f, 0.f, 0.5f);
 	const FLinearColor Danger(0.95f, 0.3f, 0.22f, 1.f);
@@ -3712,8 +3716,6 @@ void ABRHUD::DrawQuickBar(ABRCharacter* C)
 		const float X = X0 + i * (S + G);
 		RoundRect(X, Y, S, S, 10.f * U, FLinearColor(0.f, 0.f, 0.f, 0.38f * A));
 		RoundRect(X, Y, S, S, 10.f * U, FLinearColor(0.95f, 0.78f, 0.25f, 0.24f * A), true);
-		// v4.17 : touche choisie pour la poche (avant : "1" a "4" en dur)
-		TextF(Ellipsize(PocketKey(i), S * 0.6f, 8.5f, EUiWeight::Bold), X + 7.f * U, Y + 4.f * U, WithAlpha(InkDim, InkDim.A * A), 8.5f, EUiWeight::Bold);
 		const FBRItemSlot* It = C->Pockets.IsValidIndex(i) ? &C->Pockets[i] : nullptr;
 		if (It && !It->IsEmpty())
 		{
@@ -3723,6 +3725,15 @@ void ABRHUD::DrawQuickBar(ABRCharacter* C)
 				TextF(BRLoc::Fmt(NSLOCTEXT("BR", "HUD.XIt", "x{It}"), { { TEXT("It"), BRLoc::Int(It->Count) } }), X + S - 6.f * U, Y + S - 20.f * U, WithAlpha(Ink, Ink.A * A), 9.5f,
 					EUiWeight::Bold, EUiAlign::Right);
 			}
+		}
+		// v4.17 : touche choisie pour la poche (avant : "1" a "4" en dur). v4.17 (accessibilite, M3) : en pastille sombre, dessinee
+		// apres l'icone (avant : InkDim a 80 % sur la case a 38 %, 2,2 a 2,5:1 sur la moquette claire, en partie sous l'icone)
+		const FString Key = Ellipsize(PocketKey(i), S * 0.6f, 8.5f, EUiWeight::Bold);
+		if (!Key.IsEmpty())
+		{
+			const FVector2f KS = TextSize(Key, 8.5f, EUiWeight::Bold);
+			RoundRect(X + 3.f * U, Y + 3.f * U, KS.X + 8.f * U, KS.Y + 2.f * U, 4.f * U, FLinearColor(0.02f, 0.018f, 0.008f, 0.85f * A));
+			TextF(Key, X + 7.f * U, Y + 4.f * U, WithAlpha(Ink, A), 8.5f, EUiWeight::Bold, EUiAlign::Left, false);
 		}
 	}
 }
@@ -4455,13 +4466,17 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
 				{ TEXT("Move"), BRLoc::Arg(BRKeys::GamepadDpadName()) }, { TEXT("Use"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Bottom)) },
 				{ TEXT("Inspect"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Left)) }, { TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
-		// v4.17 (C7) : Y deplace un objet (PadCarry) ; pendant le port : poser, choisir la case, annuler
-		FootHints = IsPadCarrying()
-			? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryFooter", "[{Drop}]  POSER     [{Move}]  CHOISIR     [{Cancel}]  ANNULER"),
-				{ { TEXT("Drop"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) }, { TEXT("Move"), BRLoc::Arg(BRKeys::GamepadDpadName()) },
-					{ TEXT("Cancel"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } })
-			: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryHint", "[{Carry}]  D\u00c9PLACER"), { { TEXT("Carry"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } })
-				+ TEXT("     ") + FootHints;
+		// v4.17 (C7) : Y deplace un objet (PadCarry) ; pendant le port : poser, choisir la case, annuler. v4.17 (accessibilite) :
+		// rien de plus pendant une inspection, ou Y n'agit pas (avant : le pied annoncait [Y] DEPLACER)
+		if (!Inspecting.IsValid())
+		{
+			FootHints = IsPadCarrying()
+				? BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryFooter", "[{Drop}]  POSER     [{Move}]  CHOISIR     [{Cancel}]  ANNULER"),
+					{ { TEXT("Drop"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) }, { TEXT("Move"), BRLoc::Arg(BRKeys::GamepadDpadName()) },
+						{ TEXT("Cancel"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } })
+				: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadCarryHint", "[{Carry}]  D\u00c9PLACER"), { { TEXT("Carry"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } })
+					+ TEXT("     ") + FootHints;
+		}
 	}
 	else if (BRKeys::UsesGamepadPrompts() && Tab == ETab::Settings)
 	{
@@ -4484,11 +4499,23 @@ void ABRHUD::DrawInventory(ABRPlayerController* PC, ABRCharacter* C, ABRWorld* W
 			: BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadInventoryFooterNoScroll", "[{Prev}] [{Next}]  ONGLETS     [{Close}]  FERMER"),
 			{ { TEXT("Prev"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_LeftShoulder)) }, { TEXT("Next"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_RightShoulder)) },
 				{ TEXT("Close"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Right)) } });
+		// v4.17 (accessibilite, m2) : CARNET et JOURNAL : la croix gauche / droite choisit la colonne (ABRHUD::PadScrollFocus) ; le
+		// pied ne le disait pas
+		if (GetScrollZoneCount() > 1)
+		{
+			FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadColumn", "[{Left}] [{Right}]  COLONNE"), { { TEXT("Left"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Left)) },
+				{ TEXT("Right"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_DPad_Right)) } }) + TEXT("     ") + FootHints;
+		}
 		if (Tab == ETab::Notebook)
 		{
 			FootHints = BRLoc::Fmt(NSLOCTEXT("BR", "HUD.PadNotebookHint", "[{Hint}]  AIDE"), { { TEXT("Hint"), BRLoc::Arg(BRKeys::GamepadName(EKeys::Gamepad_FaceButton_Top)) } })
 				+ TEXT("     ") + FootHints;
 		}
+	}
+	else if (Tab == ETab::Character && BRKeys::UsesKeyboardCursor())
+	{
+		// v4.17 (accessibilite, S1) : inventaire au clavier : fleches, Entree, touches INTERAGIR et LAMPE
+		FootHints = BRKeys::Expand(BR_STR(NSLOCTEXT("BR", "HUD.KeyCharacterFooter", "[FL\u00c8CHES]  CHOISIR     [ENTR\u00c9E]  UTILISER / \u00c9QUIPER / POSER     {Interact}  INSPECTER     {Flashlight}  D\u00c9PLACER     {Inventory}  FERMER")));
 	}
 	else if (Tab == ETab::Character)
 	{
@@ -4550,7 +4577,7 @@ const ABRHUD::FSlotBox* ABRHUD::SlotBoxOf(const FSlotRef& Ref) const
 
 bool ABRHUD::UsesPadCursor(const ABRCharacter* C) const
 {
-	return C && Tab == ETab::Character && !Inspecting.IsValid() && BRKeys::UsesGamepadPrompts();
+	return C && Tab == ETab::Character && !Inspecting.IsValid() && (BRKeys::UsesGamepadPrompts() || BRKeys::UsesKeyboardCursor());
 }
 
 void ABRHUD::PadDirection(int32 DX, int32 DY)
@@ -5036,7 +5063,7 @@ void ABRHUD::DrawSlot(ABRCharacter* C, const FSlotBox& Box)
 		TextFit(Box.Caption, X, Y - LabelH - 6.f * U, S + 12.f * U, Yellow, UiType::Label, EUiWeight::Bold, EUiAlign::Left, false);
 		if (bEmpty)
 		{
-			TextFit(BR_STR(NSLOCTEXT("BR", "HUD.Vide", "VIDE")), X + S * 0.5f, Y + (S - LabelH) * 0.5f, S - 8.f * U, WithAlpha(InkDim, 0.5f), UiType::Label, EUiWeight::Regular,
+			TextFit(BR_STR(NSLOCTEXT("BR", "HUD.Vide", "VIDE")), X + S * 0.5f, Y + (S - LabelH) * 0.5f, S - 8.f * U, InkFaint, UiType::Label, EUiWeight::Regular,
 				EUiAlign::Center, false);
 		}
 	}
@@ -5798,7 +5825,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	SettingsRowsOf(PC, Rows); // v4.17 : meme liste que le curseur de la manette (PadSettingsMove)
 	const int32 Count = Rows.Num();
 	// v4.17 (C6) : curseur de ligne de la manette, quand elle a servi en dernier
-	const bool bPadRows = BRKeys::UsesGamepadPrompts() && Rows.Contains(SettingsPadRow);
+	const bool bPadRows = (BRKeys::UsesGamepadPrompts() || BRKeys::UsesKeyboardCursor()) && Rows.Contains(SettingsPadRow);
 	const int32 PerColumn = Count <= 8 ? Count : (Count + 1) / 2;
 	const float ColGap = 30.f * U;
 	const float W = PerColumn == Count ? FMath::Min(PanelW, 1100.f * U) : (PanelW - ColGap) * 0.5f;
@@ -5934,7 +5961,7 @@ void ABRHUD::DrawSettingsTab(ABRPlayerController* PC)
 	// v4.5 : le mode de rendu reellement actif (et non celui demande) ; RHI et support du ray tracing : au demarrage.
 	// v4.10 : reduits a la largeur du panneau (langues aux mots longs, petites fenetres)
 	TextFit(PC->GetRenderModeText(), X + 28.f * U, IY + IH - 42.f * U, W2 - 56.f * U, WithAlpha(Yellow, 0.85f), UiType::Hint, EUiWeight::Regular, EUiAlign::Left, false);
-	TextFit(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 24.f * U, W2 - 56.f * U, WithAlpha(InkDim, 0.7f), UiType::Label, EUiWeight::Regular, EUiAlign::Left, false);
+	TextFit(BR_STR(NSLOCTEXT("BR", "HUD.ImmediatProfilQualiteRayTracing", "Imm\u00e9diat : profil, qualit\u00e9, ray tracing, reflets, ombres de la lampe, r\u00e9solution.  Au red\u00e9marrage : DirectX 12 / 11, support du ray tracing, cache de skinning (Config/DefaultEngine.ini).")), X + 28.f * U, IY + IH - 24.f * U, W2 - 56.f * U, InkFaint, UiType::Label, EUiWeight::Regular, EUiAlign::Left, false);
 	EndTestPanel(); // v4.16 (relecture, tests)
 }
 
@@ -6537,7 +6564,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 			Current = I;
 		}
 		const FString Title = bUnknown ? BR_STR(NSLOCTEXT("BR", "HUD.StepUnknown", "Étape encore inconnue")) : BRMissionText::StepTitle(Plan.Level, I);
-		const FLinearColor Col = bDone ? Done : (I == Current ? Yellow : (bUnknown ? WithAlpha(InkDim, 0.6f) : Ink));
+		const FLinearColor Col = bDone ? Done : (I == Current ? Yellow : (bUnknown ? InkFaint : Ink));
 		const FString Count = (!bUnknown && E.Goal[I] > 1) ? FString::Printf(TEXT("%d/%d"), E.Progress[I], E.Goal[I]) : FString();
 		const TArray<FString> Lines = WrapF(Title, ColWidth - 80.f * U, UiType::Body, EUiWeight::Regular);
 		for (int32 K = 0; K < Lines.Num(); ++K)
@@ -6611,7 +6638,7 @@ void ABRHUD::DrawNotebookTab(ABRCharacter* C, ABRWorld* W)
 		{
 			Space(12.f * U);
 			HintStart = LeftH;
-			Push(BR_STR(NSLOCTEXT("BR", "HUD.HintHeader", "AIDE  ·  étape en cours")), YellowDim, UiType::Label, EUiWeight::Bold, 0.f, LineStep(UiType::Label, EUiWeight::Bold, 22.f));
+			Push(BR_STR(NSLOCTEXT("BR", "HUD.HintHeader", "AIDE  ·  étape en cours")), YellowFaint, UiType::Label, EUiWeight::Bold, 0.f, LineStep(UiType::Label, EUiWeight::Bold, 22.f));
 			for (const FString& L : WrapF(BRKeys::Expand(BRMissionText::StepHint(Plan.Level, Current)), ColWidth, UiType::BodySmall, EUiWeight::Regular))
 			{
 				Push(L, Ink, UiType::BodySmall, EUiWeight::Regular, 0.f, SmallLH);
