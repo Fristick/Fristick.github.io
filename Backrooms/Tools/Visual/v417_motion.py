@@ -10,7 +10,8 @@ Critères (Docs/v417/agents/animation.md, R.1 et R.2) :
  Bacteria : appui posé (à moins de 2 cm du sol, hors bond et hors course) : <= 0,5 cm par image et <= 2 cm sur l'appui ;
             griffe : <= 1 cm par image ; lacet affiché : <= 15 deg par image en course, <= 25 deg par bond ;
             écart entre le modèle affiché et la capsule : <= 40 cm.
- Joueur   : pied d'appui : <= 3 cm de glissement par pas ; double appui : les deux pieds à <= 2 cm du sol.
+ Joueur   : pied d'appui : <= 3 cm de glissement par pas ; double appui : les deux pieds à <= 2 cm du sol. Mesure sur les
+            os des pieds (fiche "os", avant comme après) ; le point de foulée ("corps") est une estimation au sol.
 
 Usage (depuis Backrooms/) :
     python Tools/Visual/v417_motion.py --src Saved/TestRuns/v417/apres7/Qualite
@@ -147,12 +148,50 @@ def player(src):
     print("  ecart des jambes a la visee : max %.1f deg, median %.1f" % (max(yaw_off), sorted(yaw_off)[len(yaw_off) // 2]))
 
 
+def bones(src, scene="l0_3p_cote"):
+    """Os des pieds (fiche "os") : un appui est une suite d'au moins 3 images ou l'os avance de moins de 0,75 fois sa vitesse
+    moyenne (le pied en l'air va environ deux fois plus vite que le corps) ; glissement d'un appui = deplacement horizontal
+    maximal de l'os depuis le debut de l'appui. Hauteur : la plus basse de l'os pendant les appuis et pendant le pas"""
+    fr = [(i, m.get("os")) for i, m in frames(src, scene)]
+    fr = [(i, o) for i, o in fr if o and o.get("visible", True)]
+    if len(fr) < 4:
+        print("%s : pas d'os des pieds dans les fiches" % scene)
+        return
+    print("%s : os %s, %d images" % (scene, fr[0][1].get("nom", "?"), len(fr)))
+    for key, name in (("pied_gauche", "gauche"), ("pied_droit", "droit")):
+        P = [o[key] for _, o in fr]
+        ground = [o.get("sol_z", 0.0) for _, o in fr]
+        v = [0.0] + [d2(P[i], P[i - 1]) for i in range(1, len(P))]
+        mean = sum(v[1:]) / (len(v) - 1)
+        slow = 0.75 * mean
+        segs, s = [], None
+        for i in range(1, len(P)):
+            if v[i] < slow:
+                if s is None:
+                    s = i - 1
+            else:
+                if s is not None and i - 1 - s >= 3:
+                    segs.append((s, i - 1))
+                s = None
+        slips = [max(d2(P[j], P[a]) for j in range(a, b + 1)) for a, b in segs]
+        stance_z = [P[j][2] - ground[j] for a, b in segs for j in range(a, b + 1)]
+        swing_z = [P[j][2] - ground[j] for j in range(len(P)) if not any(a <= j <= b for a, b in segs)]
+        if not slips:
+            print("  pied %s : aucun appui trouve (vitesse moyenne %.1f cm/image)" % (name, mean))
+            continue
+        s2 = sorted(slips)
+        print("  pied %s : vitesse moyenne %.1f cm/image, %d appui(s), glissement par appui median %.1f cm, max %.1f (critere <= 3) ; "
+              "os a %.1f-%.1f cm du sol pendant l'appui, %.1f cm au plus bas pendant le pas"
+              % (name, mean, len(s2), s2[len(s2) // 2], s2[-1], min(stance_z), max(stance_z), min(swing_z) if swing_z else float("nan")))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True)
     args = ap.parse_args()
     bacteria(args.src)
     player(args.src)
+    bones(args.src)
 
 
 if __name__ == "__main__":
