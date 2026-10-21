@@ -38,6 +38,7 @@
 #include "Camera/CameraComponent.h"
 #include "CollisionQueryParams.h"
 #include "Components/PointLightComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/HitResult.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -69,6 +70,16 @@ namespace BRTestV417
 	double RestoreStart = 0.0;
 	FVector WalkDir = FVector(1.f, 0.f, 0.f);
 	FString SavedLanguage;
+	/** v4.17 (correction) : cadence fixe du moteur pendant une video (UEngine::bUseFixedFrameRate : le reglage de FApp seul
+	 *  restait sans effet : 0,1 s de jeu par image, agent Technical Artist), etat d'avant, pas de jeu releves par image */
+	bool bPrevFixedRate = false;
+	float PrevFixedRate = 30.f;
+	double LastVideoTime = -1.0;
+	double MinVideoStep = 1.0e9;
+	double MaxVideoStep = 0.0;
+	/** v4.17 (correction) : marche des videos : images sans avancer (coin, obstacle bas) */
+	int32 Stuck = 0;
+	FVector LastWalkLoc = FVector::ZeroVector;
 
 	FString Scene(const TCHAR* Name)
 	{
@@ -170,9 +181,11 @@ namespace BRTestV417
 			return 0.f;
 		}
 		const FCollisionQueryParams Query(SCENE_QUERY_STAT(BRV417Steer), false, C);
-		const FVector From = C->GetActorLocation();
+		// v4.17 (correction) : sonde a la hauteur de la taille, un peu plus fine que la capsule (les plinthes et les rebords
+		// arretaient la sphere de 40 cm au centre de la capsule)
+		const FVector From = C->GetActorLocation() + FVector(0.f, 0.f, 30.f);
 		FHitResult Hit;
-		return InWorld->SweepSingleByChannel(Hit, From, From + Dir * Max, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(40.f), Query) ? Hit.Distance : Max;
+		return InWorld->SweepSingleByChannel(Hit, From, From + Dir * Max, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(32.f), Query) ? Hit.Distance : Max;
 	}
 
 	/** Marche des videos : tout droit ; a moins de 1,6 m d'un obstacle, nouveau cap vers le cote le plus libre (gauche,
@@ -184,8 +197,13 @@ namespace BRTestV417
 		{
 			return;
 		}
-		if (FreeAhead(C, WalkDir, 160.f) < 159.f)
+		// v4.17 (correction) : bloque 8 images de suite (coin, obstacle que la sonde ne voit pas) : nouveau cap comme devant un mur
+		const FVector Here = C->GetActorLocation();
+		Stuck = FVector::Dist2D(Here, LastWalkLoc) < 1.f ? Stuck + 1 : 0;
+		LastWalkLoc = Here;
+		if (FreeAhead(C, WalkDir, 160.f) < 159.f || Stuck >= 8)
 		{
+			Stuck = 0;
 			const FVector Left(-WalkDir.Y, WalkDir.X, 0.f);
 			const FVector Right(WalkDir.Y, -WalkDir.X, 0.f);
 			const float FL = FreeAhead(C, Left, 1500.f);
@@ -319,6 +337,21 @@ void ABRAutoTest::AddV417VisualSteps()
 			BRTestV417::Frame = 0;
 			FApp::SetFixedDeltaTime(1.0 / 30.0);
 			FApp::SetUseFixedTimeStep(true);
+			if (GEngine)
+			{
+				BRTestV417::bPrevFixedRate = GEngine->bUseFixedFrameRate;
+				BRTestV417::PrevFixedRate = GEngine->FixedFrameRate;
+				GEngine->bUseFixedFrameRate = true;
+				GEngine->FixedFrameRate = 30.f;
+			}
+			BRTestV417::LastVideoTime = -1.0;
+			BRTestV417::MinVideoStep = 1.0e9;
+			BRTestV417::MaxVideoStep = 0.0;
+			BRTestV417::Stuck = 0;
+			if (const ABRCharacter* C0 = GetPlayer())
+			{
+				BRTestV417::LastWalkLoc = C0->GetActorLocation();
+			}
 			Note(FString::Printf(TEXT("%s : enregistrement a pas fixe de 1/30 s"), *Name));
 			return true;
 		});
@@ -330,6 +363,16 @@ void ABRAutoTest::AddV417VisualSteps()
 				return false;
 			}
 			Move(C);
+			if (const ABRWorld* VW = GetBRWorld())
+			{
+				const double T = VW->GetLevelTime();
+				if (BRTestV417::LastVideoTime >= 0.0)
+				{
+					BRTestV417::MinVideoStep = FMath::Min(BRTestV417::MinVideoStep, T - BRTestV417::LastVideoTime);
+					BRTestV417::MaxVideoStep = FMath::Max(BRTestV417::MaxVideoStep, T - BRTestV417::LastVideoTime);
+				}
+				BRTestV417::LastVideoTime = T;
+			}
 			Shot(FString::Printf(TEXT("v417_video_%s_%03d"), *Name, BRTestV417::Frame));
 			return ++BRTestV417::Frame >= Frames;
 		});
@@ -337,6 +380,11 @@ void ABRAutoTest::AddV417VisualSteps()
 		Add(FString::Printf(TEXT("v4.17 visuel : video %s : fin"), *Name), 0.5f, [this, Name, Frames]()
 		{
 			FApp::SetUseFixedTimeStep(false);
+			if (GEngine)
+			{
+				GEngine->bUseFixedFrameRate = BRTestV417::bPrevFixedRate;
+				GEngine->FixedFrameRate = BRTestV417::PrevFixedRate;
+			}
 			if (ABRCharacter* C = GetPlayer())
 			{
 				if (UCharacterMovementComponent* Move = C->GetCharacterMovement())
@@ -344,7 +392,14 @@ void ABRAutoTest::AddV417VisualSteps()
 					Move->StopMovementImmediately();
 				}
 			}
-			Note(FString::Printf(TEXT("%s : %d images"), *Name, Frames));
+			// Pas de jeu reellement obtenus (temps du niveau entre deux captures) : 1/30 s attendu ; un autre pas est un
+			// defaut du banc, pas une video valable
+			const bool bFixed = BRTestV417::MaxVideoStep < 0.04 && BRTestV417::MinVideoStep > 0.026;
+			Note(FString::Printf(TEXT("%s : %d images, pas de jeu de %.4f a %.4f s"), *Name, Frames, BRTestV417::MinVideoStep, BRTestV417::MaxVideoStep));
+			if (!bFixed)
+			{
+				Skip(FString::Printf(TEXT("%s : pas de jeu de %.3f a %.3f s (attendu 1/30 s) : video a pas variable"), *Name, BRTestV417::MinVideoStep, BRTestV417::MaxVideoStep));
+			}
 			return true;
 		});
 	};
@@ -1280,6 +1335,10 @@ void ABRAutoTest::AddV417VisualSteps()
 	Add(TEXT("v4.17 banc visuel : bilan"), 0.f, [this, SetHudMode]()
 	{
 		FApp::SetUseFixedTimeStep(false);
+		if (GEngine && GEngine->bUseFixedFrameRate && !BRTestV417::bPrevFixedRate)
+		{
+			GEngine->bUseFixedFrameRate = false;
+		}
 		BRTestV417::KillControl();
 		if (ACameraActor* A = BRTestV417::Cam.Get())
 		{
