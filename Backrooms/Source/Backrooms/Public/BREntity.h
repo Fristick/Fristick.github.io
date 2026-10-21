@@ -267,6 +267,9 @@ private:
 		bool bStance = false;
 		FVector Anchor = FVector::ZeroVector;
 		float LockPitch = 0.f;
+		/** v4.17 (appuis) : bras-bequille : montee de l'epaule (monde, cm) pour que la griffe atteigne exactement son point (posee ou
+		 *  levee), appliquee par KeepRigidPartsAboveGround avant le releve du manque */
+		float ClawRaise = 0.f;
 	};
 
 	/** Ce que l'entite percoit du joueur cette image */
@@ -548,6 +551,27 @@ private:
 	float SupportSpeed = 0.f;
 	float SupportRun = 0.f;
 	float FoldTimer = 0.f;
+	/** v4.17 (appuis) : course portee par les bras (le modele suit la capsule) ; montee du corps de la course (0 posee, 1 portee) ;
+	 *  bond d'elan en cours, qui la fait passer de posee a portee */
+	bool bCarried = false;
+	float CarryBlend = 0.f;
+	bool bLaunchHop = false;
+	/** v4.17 (appuis) : pose de la Bacteria apres le composant de deplacement de l'image (FBREntityLateTick, BREntity.cpp) :
+	 *  demandee par Animate avec le pas de l'image, faite une fois la capsule deplacee ; avant, le modele pose dans le Tick suivait
+	 *  ensuite la capsule du deplacement de l'image (glissement au demarrage, saut de lacet au demi-tour) */
+	struct FBREntityLateTick* LateTick = nullptr;
+	friend struct FBREntityLateTick;
+	bool bGaitPending = false;
+	float GaitDt = 0.f;
+	/** v4.17 (appuis, tests) : appuis, lacet et ecart du modele tels qu'affiches a la derniere pose (GetSupportPoints...) */
+	bool bPosedValid = false;
+	TArray<FVector> PosedSupports;
+	float PosedYaw = 0.f;
+	float PosedLag = 0.f;
+	/** v4.17 (appuis) : place le modele (AnimateBacteriaGait), le garde au-dessus du sol, releve ses appuis affiches */
+	void PoseBacteria(float Dt);
+	/** v4.17 (appuis) : appuis du modele calcules sur ses composants (GetSupportPoints sans pose relevee) */
+	void ComputeSupportPoints(TArray<FVector>& OutWorld) const;
 	// ---- v4.17 (animation) : marcheurs a jambes articulees (pose locale, rien de replique)
 	/** Allongement de la foulee quand la cadence atteint son plafond (Hound en poursuite), 1 sinon */
 	float StrideBoost = 1.f;
@@ -555,12 +579,17 @@ private:
 	float TurnShuffle = 0.f;
 	float LastAnimYaw = 0.f;
 	bool bAnimYawSeen = false;
+	/** v4.17 (relecture R2) : vitesse de rotation de la capsule, lissee chez un client (rotation repliquee par paliers) */
+	float YawRateSmooth = 0.f;
 	/** Distance horizontale la plus grande d'un pied a l'axe de la capsule, au repos (cm) ; 0 sans jambes mesurees */
 	float FootRadius = 0.f;
 	/** Place le modele (position, lacet, tangage) et pose les griffes ; apres AnimateLimbs, avant KeepRigidPartsAboveGround */
 	void AnimateBacteriaGait(float Dt);
-	/** Rotation (repere du Visual) d'un bras rigide dont la griffe TipLocal (repere du pivot) vise WorldPoint */
-	FQuat AimRigidArm(const FLimb& L, const FVector& TipLocal, const FVector& WorldPoint) const;
+	/** v4.17 (appuis) : rotation (repere du Visual) d'un bras rigide dont la griffe la plus basse se pose exactement en Point
+	 *  (monde) : OutRaise, montee de l'epaule qu'il faut si Point est plus pres que la longueur du bras (MaxRaise au plus : au-dela,
+	 *  la griffe s'ecarte, a la meme hauteur) ; trop loin, la griffe se pose plus pres, a la meme hauteur (OutReached : point
+	 *  atteint) */
+	FQuat AimClaw(const FLimb& L, const FVector& Point, float MaxRaise, float& OutRaise, FVector& OutReached) const;
 	/** Point d'appui le plus bas d'une piece rigide (repere du pivot) */
 	static FVector LowestContact(const FLimb& L);
 };

@@ -23,6 +23,28 @@
 #include "Net/UnrealNetwork.h"
 #include "Sound/SoundBase.h"
 
+/** v4.17 (appuis) : pose de la Bacteria apres le composant de deplacement de l'image (ACharacter : le deplacement attend le
+ *  Tick de l'acteur, ou Animate est appele) : le modele pose au monde est place par rapport a la capsule deja deplacee */
+struct FBREntityLateTick : public FTickFunction
+{
+	TWeakObjectPtr<ABREntity> Target;
+
+	virtual void ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent) override
+	{
+		ABREntity* E = Target.Get();
+		if (E && IsValid(E) && E->bGaitPending)
+		{
+			E->bGaitPending = false;
+			E->PoseBacteria(E->GaitDt);
+		}
+	}
+
+	virtual FString DiagnosticMessage() override
+	{
+		return TEXT("FBREntityLateTick");
+	}
+};
+
 // =====================================================================================================================
 // Fiches des entites (descriptions inspirees du Backrooms Wiki)
 // =====================================================================================================================
@@ -337,6 +359,21 @@ void ABREntity::BeginPlay()
 	}
 	BuildVisual();
 	UpdateMorph(0.f);
+	// v4.17 (appuis) : Bacteria posee au sol : sa pose suit le deplacement de l'image (FBREntityLateTick), chez chacun
+	if (Kind == EBREntityKind::Bacteria && BodyContacts.Num() > 0 && !LateTick && GetLevel())
+	{
+		LateTick = new FBREntityLateTick();
+		LateTick->Target = this;
+		LateTick->bCanEverTick = true;
+		LateTick->bStartWithTickEnabled = true;
+		LateTick->TickGroup = TG_PrePhysics;
+		LateTick->RegisterTickFunction(GetLevel());
+		LateTick->AddPrerequisite(this, PrimaryActorTick);
+		if (UCharacterMovementComponent* CM = GetCharacterMovement())
+		{
+			LateTick->AddPrerequisite(CM, CM->PrimaryComponentTick);
+		}
+	}
 }
 
 void ABREntity::OnRep_State()
@@ -365,6 +402,12 @@ void ABREntity::EndPlay(const EEndPlayReason::Type Reason)
 	if (ABRWorld* W = World.Get())
 	{
 		W->UnregisterEntity(this);
+	}
+	if (LateTick)
+	{
+		LateTick->UnRegisterTickFunction();
+		delete LateTick;
+		LateTick = nullptr;
 	}
 	Super::EndPlay(Reason);
 }
@@ -3172,6 +3215,14 @@ void ABREntity::KeepRigidPartsAboveGround()
 		{
 			continue;
 		}
+		// v4.17 (appuis) : montee de l'epaule voulue par AimClaw (la griffe atteint exactement son point), puis le manque
+		const USceneComponent* Parent = C->GetAttachParent();
+		auto ToParent = [Parent](float Z) { return Parent ? Parent->GetComponentTransform().InverseTransformVector(FVector(0.f, 0.f, Z)) : FVector(0.f, 0.f, Z); };
+		const FVector Base = L.ClawRaise > 0.f ? L.Joint + ToParent(L.ClawRaise) : L.Joint;
+		if (L.ClawRaise > 0.f)
+		{
+			C->SetRelativeLocation(Base);
+		}
 		const FTransform CT = C->GetComponentTransform();
 		float Low = TNumericLimits<float>::Max();
 		for (const FVector& P : L.Contacts)
@@ -3181,9 +3232,7 @@ void ABREntity::KeepRigidPartsAboveGround()
 		const float Missing = Ground - Low;
 		if (Missing > 0.f)
 		{
-			const USceneComponent* Parent = C->GetAttachParent();
-			const FVector Up = Parent ? Parent->GetComponentTransform().InverseTransformVector(FVector(0.f, 0.f, Missing)) : FVector(0.f, 0.f, Missing);
-			C->SetRelativeLocation(L.Joint + Up);
+			C->SetRelativeLocation(Base + ToParent(Missing));
 		}
 	}
 }
@@ -3203,22 +3252,82 @@ FVector ABREntity::LowestContact(const FLimb& L)
 	return Best;
 }
 
-FQuat ABREntity::AimRigidArm(const FLimb& L, const FVector& TipLocal, const FVector& WorldPoint) const
+FQuat ABREntity::AimClaw(const FLimb& L, const FVector& Point, float MaxRaise, float& OutRaise, FVector& OutReached) const
 {
-	// Bras rigide : la plus petite rotation qui amene la direction epaule -> griffe (pose de repos L.Base) vers le point vise.
-	// La longueur ne change pas : si le point est plus pres que la griffe, KeepRigidPartsAboveGround releve l'epaule du manque
+	// v4.17 (appuis) : bras rigide : la griffe la plus basse se pose exactement au point vise. Plus pres que la longueur du bras,
+	// l'epaule monte de ce qu'il faut (OutRaise, appliquee par KeepRigidPartsAboveGround), MaxRaise au plus : au-dela, la griffe
+	// s'ecarte (le bras de 2,4 m, presque vertical, ne leve sa griffe qu'en la balancant) ; trop loin, la griffe se pose plus
+	// pres, a la hauteur voulue. Avant (AimRigidArm) : direction epaule -> point vise seule : la griffe passait sous le sol, puis
+	// l'epaule etait relevee du manque, et la griffe glissait au sol a cote du point (levee comprise : 19 a 30 cm par image,
+	// banc v4.17, l0_bacteria)
 	const FQuat BaseQ = L.Base.Quaternion();
-	if (!Visual)
+	OutRaise = 0.f;
+	OutReached = Point;
+	if (!Visual || L.Contacts.Num() == 0)
 	{
 		return BaseQ;
 	}
-	const FVector RestDir = BaseQ.RotateVector(TipLocal).GetSafeNormal();
-	const FVector WantDir = (Visual->GetComponentTransform().InverseTransformPosition(WorldPoint) - L.Joint).GetSafeNormal();
-	if (RestDir.IsNearlyZero() || WantDir.IsNearlyZero())
+	const FTransform VT = Visual->GetComponentTransform();
+	const FVector J = VT.TransformPosition(L.Joint);
+	FVector Tip = LowestContact(L);
+	FQuat Q = BaseQ;
+	for (int32 Pass = 0; Pass < 3; ++Pass)
 	{
-		return BaseQ;
+		const FVector RestW = VT.TransformVector(BaseQ.RotateVector(Tip)); // epaule -> griffe au repos, monde (echelle comprise)
+		const double R = RestW.Size();
+		if (R < 1.0)
+		{
+			break;
+		}
+		FVector Flat = Point - J;
+		Flat.Z = 0.0;
+		double D = Flat.Size();
+		const FVector U = D > 1.0 ? Flat / D : RestW.GetSafeNormal2D();
+		const double H = FMath::Clamp(J.Z - Point.Z, -R + 1.0, R - 1.0); // epaule au-dessus du point vise
+		const double Rho = FMath::Sqrt(R * R - H * H);
+		double Raise = 0.0;
+		if (D > Rho)
+		{
+			D = Rho;
+		}
+		else
+		{
+			Raise = FMath::Sqrt(FMath::Max(R * R - D * D, 0.0)) - H;
+			if (Raise > MaxRaise)
+			{
+				Raise = MaxRaise;
+				D = FMath::Sqrt(FMath::Max(R * R - FMath::Square(H + Raise), 0.0));
+			}
+		}
+		const FVector WantW = U * D - FVector(0.0, 0.0, H + Raise);
+		const FVector RestDir = BaseQ.RotateVector(Tip).GetSafeNormal();
+		const FVector WantDir = VT.InverseTransformVector(WantW).GetSafeNormal();
+		if (RestDir.IsNearlyZero() || WantDir.IsNearlyZero())
+		{
+			break;
+		}
+		Q = FQuat::FindBetweenNormals(RestDir, WantDir) * BaseQ;
+		OutRaise = static_cast<float>(Raise);
+		OutReached = FVector(J.X + U.X * D, J.Y + U.Y * D, Point.Z);
+		// Griffe la plus basse dans cette pose : si c'en est une autre (trois paquets de griffes par bras), on vise avec elle
+		FVector Best = Tip;
+		double BestZ = TNumericLimits<double>::Max();
+		for (const FVector& P : L.Contacts)
+		{
+			const double Z = VT.TransformPosition(L.Joint + Q.RotateVector(P)).Z;
+			if (Z < BestZ - 0.01)
+			{
+				BestZ = Z;
+				Best = P;
+			}
+		}
+		if (Best.Equals(Tip, 0.01))
+		{
+			break;
+		}
+		Tip = Best;
 	}
-	return FQuat::FindBetweenNormals(RestDir, WantDir) * BaseQ;
+	return Q;
 }
 
 void ABREntity::AnimateBacteriaGait(float Dt)
@@ -3237,6 +3346,16 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 	// - Griffes : posees au monde a l'allure a appuis ; quand le corps les a depassees, elles se levent et se reposent devant,
 	//   un bras a la fois (meme principe que les mains d'appui du Clump). Pres d'un mur ou d'un chambranle, le bras se replie
 	//   vers le corps (rayon lateral toutes les 0,1 s, 22 degres au plus).
+	// v4.17 (appuis) :
+	// - pose faite apres le deplacement de l'image (FBREntityLateTick) : avant, le modele place dans le Tick suivait ensuite la
+	//   capsule de son deplacement de l'image (3,5 cm par image au demarrage) et de sa rotation (18 degres au demi-tour) ;
+	// - plus de melange entre pose et course : la Bacteria reste posee jusqu'a la course, ou elle entre par un bond d'elan vers la
+	//   capsule, et dont elle sort posee la ou elle est (avant : de 0 a 0,5 d'allure, le modele pose glissait vers la capsule) ;
+	// - 25 degres de lacet au plus par bond : un demi-tour se fait en plusieurs bonds, ou par la course (avant : un bond de 58
+	//   degres, le lacet suivant la capsule pendant tout le bond, et un retard de lacet de plus de 120 degres remettait le
+	//   modele d'un coup dans l'axe de la capsule) ; en course, plus de saut a 45 degres de retard : le lacet rattrape a 420
+	//   degres/s ;
+	// - griffes visees exactement (AimClaw) : posees, elles ne glissent plus ; levees, elles quittent vraiment le sol.
 	// Pose locale seulement (aucune propriete repliquee ; la capsule decide toujours du jeu). Cout : quelques transformations
 	// par image, 2 rayons toutes les 0,1 s ; rien de plus a plus de 25 m (le pas des rayons ne change pas).
 	if (!Visual)
@@ -3274,16 +3393,18 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 		}
 	}
 
-	// Debut, jumpscare, chute, teleportation : posee la ou est la capsule
+	// Debut, jumpscare, chute, teleportation : posee la ou est la capsule (portee si elle court)
 	const float LagNow = static_cast<float>(FVector::Dist2D(Here, SupportPos));
-	if (!bSupportInit || bScareOverride || !bGrounded || LagNow > 200.f
-		|| (HopT < 0.f && FMath::Abs(FMath::FindDeltaAngleDegrees(SupportYaw, WantYaw)) > 120.f))
+	if (!bSupportInit || bScareOverride || !bGrounded || LagNow > 200.f)
 	{
 		bSupportInit = true;
 		SupportPos = Here;
 		SupportYaw = WantYaw;
 		HopT = -1.f;
 		HopSettle = 0.f;
+		bLaunchHop = false;
+		bCarried = SupportRun >= 0.5f;
+		CarryBlend = bCarried ? 1.f : 0.f;
 		for (FCrutchArm& Arm : CrutchArms)
 		{
 			Arm.bPlanted = false;
@@ -3292,65 +3413,87 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 	}
 
 	float Lift = 0.f;
-	if (SupportRun >= 0.5f)
+	if (bCarried && SupportRun < 0.4f)
 	{
-		// Course : le modele suit la capsule ; lacet affiche a vitesse bornee, jamais plus de 45 degres de retard
+		// Fin de course : posee la ou elle est ; le corps redescend sur ses appuis (CarryBlend)
+		bCarried = false;
+		SupportPos = Here;
+		HopSettle = 0.f;
+	}
+	if (bCarried)
+	{
+		// Course : le modele suit la capsule ; lacet affiche a vitesse bornee
 		SupportPos = Here;
 		HopT = -1.f;
 		HopSettle = 0.f;
 		const float YawGap = FMath::FindDeltaAngleDegrees(SupportYaw, WantYaw);
-		const float Turn = FMath::Clamp(YawGap, -420.f * Dt, 420.f * Dt);
-		SupportYaw = FMath::UnwindDegrees(WantYaw - FMath::Clamp(YawGap - Turn, -45.f, 45.f));
+		SupportYaw = FMath::UnwindDegrees(SupportYaw + FMath::Clamp(YawGap, -420.f * Dt, 420.f * Dt));
+		CarryBlend = FMath::Min(1.f, CarryBlend + Dt / 0.15f);
 	}
 	else
 	{
+		CarryBlend = FMath::Max(0.f, CarryBlend - Dt / 0.2f);
 		const float Lag = static_cast<float>(FVector::Dist2D(Here, SupportPos));
 		const float YawGap = FMath::FindDeltaAngleDegrees(SupportYaw, WantYaw);
 		if (HopT < 0.f)
 		{
 			// Posee : bond quand la capsule s'est trop eloignee ou a trop tourne ; a l'arret, petit bond pour se recaler (pas
-			// pendant un coup : le pied reste pose quand la capsule pousse contre la proie)
+			// pendant un coup : le pied reste pose quand la capsule pousse contre la proie) ; allure de course : bond d'elan
 			const bool bStill = Speed < 25.f;
 			HopSettle = (bStill && !bAttack && (Lag > 12.f || FMath::Abs(YawGap) > 6.f)) ? HopSettle + Dt : 0.f;
 			const float MaxLag = bAttack ? 60.f : 40.f;
 			const float MaxYaw = bAttack ? 35.f : 22.f;
 			// Marche ou bord franchi par la capsule : le modele pose a une autre hauteur la rattrape tout de suite
 			const bool bStepped = FMath::Abs(static_cast<float>(Here.Z - SupportPos.Z)) > 8.f;
-			if (Lag > MaxLag || FMath::Abs(YawGap) > MaxYaw || HopSettle > 0.35f || bStepped)
+			const bool bLaunch = SupportRun >= 0.5f;
+			if (bLaunch || Lag > MaxLag || FMath::Abs(YawGap) > MaxYaw || HopSettle > 0.35f || bStepped)
 			{
 				HopT = 0.f;
 				HopFromPos = SupportPos;
 				HopFromYaw = SupportYaw;
-				HopDuration = FMath::Clamp(0.16f + Lag / 500.f, 0.16f, 0.26f);
+				// Capsule rapide (depart, demi-tour) : bond court, le modele ne reste pas loin derriere elle
+				HopDuration = (bLaunch || Speed > 200.f) ? 0.16f : FMath::Clamp(0.16f + Lag / 500.f, 0.16f, 0.26f);
 				HopHeight = FMath::Clamp(2.f + Lag * 0.06f, 2.f, 5.f);
 				HopSettle = 0.f;
+				bLaunchHop = bLaunch;
 			}
 		}
 		if (HopT >= 0.f)
 		{
-			// Bond vers la capsule (un peu en avant d'elle quand elle avance), en arc ; le lacet suit
+			// Bond vers la capsule (un peu en avant d'elle quand elle avance ; bond d'elan : sur elle, la course la suit ensuite
+			// sans saut), en arc ; le lacet suit, 25 degres au plus
 			HopT = FMath::Min(1.f, HopT + Dt / FMath::Max(HopDuration, 0.05f));
 			const float HopS = HopT * HopT * (3.f - 2.f * HopT);
-			const FVector Lead = (FVector(Vel.X, Vel.Y, 0.0) * 0.08).GetClampedToMaxSize(12.0);
+			// L'allure de course arrive pendant le bond : il devient le bond d'elan ; l'avance s'efface a mesure que la course monte
+			bLaunchHop = bLaunchHop || SupportRun >= 0.5f;
+			const double LeadW = FMath::Clamp(1.f - 2.f * SupportRun, 0.f, 1.f);
+			const FVector Lead = (FVector(Vel.X, Vel.Y, 0.0) * 0.08).GetClampedToMaxSize(12.0) * LeadW;
 			SupportPos = FMath::Lerp(HopFromPos, Here + Lead, HopS);
-			SupportYaw = FMath::UnwindDegrees(HopFromYaw + FMath::FindDeltaAngleDegrees(HopFromYaw, WantYaw) * HopS);
+			const float HopYaw = FMath::Clamp(FMath::FindDeltaAngleDegrees(HopFromYaw, WantYaw), -25.f, 25.f);
+			SupportYaw = FMath::UnwindDegrees(HopFromYaw + HopYaw * HopS);
 			Lift = FMath::Sin(HopT * PI) * HopHeight;
+			if (bLaunchHop)
+			{
+				// Le corps monte a la hauteur de la course pendant le bond (sans saut si le bond l'est devenu en cours de route)
+				CarryBlend = FMath::Max(CarryBlend, FMath::Min(HopS, CarryBlend + Dt / 0.1f));
+			}
 			if (HopT >= 1.f)
 			{
 				HopT = -1.f;
 				bHopLanded = true;
 				LandNod = 1.f;
+				// Bond d'elan : la course prend le relais si l'allure s'y tient (sinon posee, la ou elle est retombee)
+				bCarried = bLaunchHop && SupportRun >= 0.4f;
+				bLaunchHop = false;
 			}
 		}
 	}
 	LandNod = FMath::Max(0.f, LandNod - Dt / 0.2f);
 
-	// Place du modele dans le repere de la capsule : l'ecart pose, hauteur comprise (attenue vers la course), hauteur du bond,
-	// portee en course
+	// Place du modele dans le repere de la capsule : l'ecart pose, hauteur comprise, hauteur du bond, portee en course
 	const FTransform AT = GetActorTransform();
-	FVector Rel = AT.InverseTransformPosition(SupportPos);
-	Rel *= static_cast<double>(FMath::Clamp(1.f - 2.f * SupportRun, 0.f, 1.f));
-	Lift += SupportRun * (5.f + 3.f * FMath::Abs(FMath::Sin(AnimTime)));
+	const FVector Rel = AT.InverseTransformPosition(SupportPos);
+	Lift += CarryBlend * (5.f + 3.f * FMath::Abs(FMath::Sin(AnimTime)));
 	AppliedGroundZ = Lift;
 	Visual->SetRelativeLocation(VisualBase + FVector(Rel.X, Rel.Y, Rel.Z + static_cast<double>(AppliedGroundZ)));
 	// Penche en poursuite, ramassee a l'armee ; la fente de la frappe est un tangage autour du pied (avant : 16 cm de
@@ -3367,7 +3510,7 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 	const float GroundZ = static_cast<float>(Here.Z) - (Cap ? Cap->GetScaledCapsuleHalfHeight() : I.HalfHeight);
 	const float Ready = FMath::Clamp(FMath::Max(WindupAnim, Strike), 0.f, 1.f);
 	const float PlantW = bScareOverride ? 0.f
-		: FMath::Clamp(1.f - 2.f * SupportRun, 0.f, 1.f) * (1.f - FMath::Clamp(Reach, 0.f, 1.f)) * (1.f - Ready);
+		: (1.f - CarryBlend) * (1.f - FMath::Clamp(Reach, 0.f, 1.f)) * (1.f - Ready);
 	const FVector Ahead = Speed > 25.f ? (FVector(Vel.X, Vel.Y, 0.0) * 0.1).GetClampedToMaxSize(12.0) : FVector::ZeroVector;
 	const ABRWorld* PW = World.Get();
 	FoldTimer -= Dt;
@@ -3390,6 +3533,7 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 			continue;
 		}
 		FCrutchArm& Arm = CrutchArms[ArmIndex++];
+		L.ClawRaise = 0.f;
 		const FVector TipLocal = LowestContact(L);
 		const FQuat BaseQ = L.Base.Quaternion();
 		const FVector RestTip = L.Joint + BaseQ.RotateVector(TipLocal); // repere du Visual
@@ -3417,9 +3561,16 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 		FQuat Want = FoldQ * C->GetRelativeRotation().Quaternion();
 		if (PlantW > 0.01f)
 		{
-			// Griffe au repos (repliee), au sol, un peu devant quand le corps avance
+			// Griffe au repos (repliee), au sol, un peu devant quand le corps avance ; v4.17 (appuis) : la ou la griffe peut
+			// vraiment se poser (AimClaw)
 			FVector Home = VT.TransformPosition(L.Joint + (FoldQ * BaseQ).RotateVector(TipLocal)) + Ahead;
 			Home.Z = GroundZ;
+			{
+				float HomeRaise = 0.f;
+				FVector HomeReached = Home;
+				AimClaw(L, Home, 8.f, HomeRaise, HomeReached);
+				Home = HomeReached;
+			}
 			const bool bVoid = PW && PW->HasPits() && PW->IsOverPit(Home);
 			if (bVoid)
 			{
@@ -3445,18 +3596,30 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 					++Swinging;
 				}
 				FVector Claw = Arm.Planted;
+				bool bClawLanded = false;
 				if (Arm.Swing >= 0.f)
 				{
 					Arm.Swing = FMath::Min(1.f, Arm.Swing + Dt / 0.16f);
 					const float SwingS = Arm.Swing * Arm.Swing * (3.f - 2.f * Arm.Swing);
-					Claw = FMath::Lerp(Arm.SwingFrom, Home, SwingS) + FVector(0.0, 0.0, static_cast<double>(FMath::Sin(Arm.Swing * PI) * 25.f));
+					// v4.17 (appuis) : 8 cm de haut, vraiment atteints, en arc vers l'exterieur (avant : 25 cm vises, la griffe
+					// restait au sol)
+					Claw = FMath::Lerp(Arm.SwingFrom, Home, SwingS) + FVector(0.0, 0.0, static_cast<double>(FMath::Sin(Arm.Swing * PI) * 8.f));
 					if (Arm.Swing >= 1.f)
 					{
-						Arm.Planted = Home;
 						Arm.Swing = -1.f;
+						bClawLanded = true;
 					}
 				}
-				Want = FQuat::Slerp(Want, AimRigidArm(L, TipLocal, Claw), PlantW);
+				float Raise = 0.f;
+				FVector Reached = Claw;
+				// Epaule : 3 cm au plus pendant le pas de la griffe, 8 cm posee (hochement, tassement)
+				const FQuat Aim = AimClaw(L, Claw, Arm.Swing >= 0.f || bClawLanded ? 3.f : 8.f, Raise, Reached);
+				if (bClawLanded)
+				{
+					Arm.Planted = Reached;
+				}
+				Want = FQuat::Slerp(Want, Aim, PlantW);
+				L.ClawRaise = Raise * PlantW;
 			}
 		}
 		else
@@ -3468,7 +3631,29 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 	}
 }
 
+void ABREntity::PoseBacteria(float Dt)
+{
+	AnimateBacteriaGait(Dt);
+	KeepRigidPartsAboveGround();
+	// v4.17 (appuis, tests) : appuis, lacet et ecart du modele tels qu'affiches a cette image (le banc les lit dans son Tick,
+	// dont l'ordre avec le deplacement de l'image n'est pas fixe)
+	ComputeSupportPoints(PosedSupports);
+	PosedYaw = Visual ? static_cast<float>(Visual->GetComponentRotation().Yaw) : static_cast<float>(GetActorRotation().Yaw);
+	PosedLag = Visual ? static_cast<float>(FVector::Dist2D(Visual->GetComponentLocation(), GetActorLocation())) : 0.f;
+	bPosedValid = !bScareOverride;
+}
+
 void ABREntity::GetSupportPoints(TArray<FVector>& OutWorld) const
+{
+	if (bPosedValid)
+	{
+		OutWorld = PosedSupports;
+		return;
+	}
+	ComputeSupportPoints(OutWorld);
+}
+
+void ABREntity::ComputeSupportPoints(TArray<FVector>& OutWorld) const
 {
 	OutWorld.Reset();
 	for (const FLimb& L : Limbs)
@@ -3515,11 +3700,19 @@ float ABREntity::GetSupportGroundZ() const
 
 float ABREntity::GetVisualLag() const
 {
+	if (bPosedValid)
+	{
+		return PosedLag;
+	}
 	return Visual ? static_cast<float>(FVector::Dist2D(Visual->GetComponentLocation(), GetActorLocation())) : 0.f;
 }
 
 float ABREntity::GetVisualYaw() const
 {
+	if (bPosedValid)
+	{
+		return PosedYaw;
+	}
 	return Visual ? static_cast<float>(Visual->GetComponentRotation().Yaw) : static_cast<float>(GetActorRotation().Yaw);
 }
 
@@ -3558,9 +3751,13 @@ void ABREntity::Animate(float Dt)
 	const float Gait = FMath::Clamp(Speed / 220.f, 0.f, 1.5f);
 	// v4.17 (animation) : rotation de la capsule sur place, mesuree chez chacun d'une image a l'autre (rien de replique en plus)
 	const float YawNow = static_cast<float>(GetActorRotation().Yaw);
-	const float YawRate = (bAnimYawSeen && Dt > 0.f) ? FMath::Abs(FMath::FindDeltaAngleDegrees(LastAnimYaw, YawNow)) / Dt : 0.f;
+	const float YawRateNow = (bAnimYawSeen && Dt > 0.f) ? FMath::Abs(FMath::FindDeltaAngleDegrees(LastAnimYaw, YawNow)) / Dt : 0.f;
 	LastAnimYaw = YawNow;
 	bAnimYawSeen = true;
+	// v4.17 (relecture R2) : chez un client, la rotation repliquee arrive par paliers (pics aux mises a jour, 0 entre elles) :
+	// mesure lissee (pietinement regulier) ; l'hote et le solo gardent la mesure de l'image
+	YawRateSmooth = HasAuthority() ? YawRateNow : FMath::FInterpTo(YawRateSmooth, YawRateNow, Dt, 6.f);
+	const float YawRate = YawRateSmooth;
 	const bool bLegged = FootRadius > 1.f && LegLength > 1.f;
 	TurnShuffle = FMath::FInterpTo(TurnShuffle, (bLegged && !bFrozen && Speed < 40.f && YawRate > 25.f) ? 1.f : 0.f, Dt, 8.f);
 	// Allure des membres : celle de la vitesse, ou les petits pas d'une rotation sur place
@@ -3667,9 +3864,17 @@ void ABREntity::Animate(float Dt)
 	if (Kind == EBREntityKind::Bacteria && BodyContacts.Num() > 0)
 	{
 		// v4.17 (animation) : modele fourni (corps rigide) : pose au sol et bonds au lieu de glisser avec la capsule, puis
-		// la meme garde d'appui que la v4.16
-		AnimateBacteriaGait(Dt);
-		KeepRigidPartsAboveGround();
+		// la meme garde d'appui que la v4.16. v4.17 (appuis) : une fois la capsule deplacee (FBREntityLateTick) ; jumpscare :
+		// tout de suite (le modele est ensuite tenu devant la camera)
+		if (LateTick && !bScareOverride)
+		{
+			bGaitPending = true;
+			GaitDt = Dt;
+		}
+		else
+		{
+			PoseBacteria(Dt);
+		}
 		return;
 	}
 
