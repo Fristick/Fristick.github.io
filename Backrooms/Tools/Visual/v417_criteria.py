@@ -20,6 +20,7 @@ Mesures :
 import argparse
 import json
 import os
+import sys
 
 import numpy as np
 from PIL import Image
@@ -103,6 +104,9 @@ def f(v, n=2):
 
 
 def main():
+    # Sortie en UTF-8 meme redirigee sous Windows (cp1252 ne connait ni « ≈ » ni « ≤ »)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.join("Saved", "TestRuns", "v417"))
     ap.add_argument("--before", required=True)
