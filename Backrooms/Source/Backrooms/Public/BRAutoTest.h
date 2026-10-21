@@ -456,6 +456,9 @@ private:
 	 *  graphique (Level 0, fosses, combinaison, entite de controle, Poolrooms, Niveaux 1 et 2, inventaire), sequences
 	 *  d'images pour les videos de deplacement ; metadonnees de chaque capture (WriteShotMeta) */
 	void AddV417VisualSteps();
+	/** v4.17 (correction) : -BRAutoTestV417Carnet (BRAutoTestV417Carnet.cpp) : carnet de plusieurs niveaux a mission, tous
+	 *  leurs indices lus, en allemand, taille d'interface 1,25 : texte cache, puis un appui de la croix bas */
+	void AddV417CarnetSteps();
 	/** v4.17 : fiche de la capture Name (Name.json et une ligne de Captures.csv) : commit (-BRCommit=), niveau, graines,
 	 *  pose et champ de la camera, definitions de sortie et de rendu, profil, temps depuis l'arrivee, etat de la lumiere */
 	void WriteShotMeta(const FString& Name, bool bShowUI);

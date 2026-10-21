@@ -422,6 +422,17 @@ void ABRAutoTest::BeginPlay()
 		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Banc visuel v4.17 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
 		return;
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV417Carnet")))
+	{
+		AddV417CarnetSteps();
+		Add(TEXT("Fin"), 0.f, [this]()
+		{
+			Finish();
+			return true;
+		});
+		UE_LOG(LogBackrooms, Display, TEXT("[AutoTest] Carnet long v4.17 : %d etapes. Captures et rapport : %s"), Plan.Num(), *OutDir);
+		return;
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("BRAutoTestV416Light")))
 	{
 		// v4.16 : lumiere de gameplay alignee sur la lumiere visible (BRAutoTestV416Light.cpp)
