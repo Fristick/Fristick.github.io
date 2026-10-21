@@ -43,6 +43,7 @@
 #include "BRAutoTestWalk.h"
 #include "Backrooms.h"
 #include "BRCharacter.h"
+#include "BRHUD.h"
 #include "BRInteractables.h"
 #include "BRKeys.h"
 #include "BRLevels.h"
@@ -57,7 +58,12 @@
 #include "BRTxnLogic.h"
 #include "BRWorld.h"
 
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
+#include "Components/MeshComponent.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInterface.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -185,6 +191,9 @@ namespace BRTestV416Net
 		const APlayerState* PS = HostState(World);
 		return PS ? FMath::RoundToInt(PS->GetScore()) : 0;
 	}
+
+	/** v4.17 : camera posee devant un coequipier (capture de sa combinaison) */
+	TWeakObjectPtr<ACameraActor> MateCam;
 
 	struct FMate
 	{
@@ -1281,6 +1290,141 @@ void ABRAutoTest::AddNetV416Plan()
 		}
 		return true;
 	});
+
+	// v4.17 (prompt § 4.1) : combinaison d'un coequipier vue ici (l'hote voit un client, un client voit l'hote) : materiaux de
+	// ses slots de combinaison sur le personnage replique (M_BR_Gear attendu), puis capture de face a 2,3 m
+	if (Opt6.Late.IsEmpty())
+	{
+		Add(TEXT("v4.17 reseau : coequipier vu ici, materiaux"), 1.f, [this, bOnClient]()
+		{
+			ABRWorld* W = GetBRWorld();
+			ABRCharacter* C = GetPlayer();
+			ABRPlayerController* PC = GetPC();
+			if (!W || !C || !PC)
+			{
+				return false;
+			}
+			const TCHAR* Who = bOnClient ? TEXT("client") : TEXT("hote");
+			const TArray<V6::FMate> M = V6::Mates(W);
+			ABRCharacter* Mate = M.Num() > 0 ? M[0].Pawn : nullptr;
+			if (!Mate)
+			{
+				Skip(FString::Printf(TEXT("%s : aucun coequipier replique ici : combinaison d'un coequipier NON VERIFIEE"), Who));
+				return true;
+			}
+			int32 Suit = 0;
+			int32 Gear = 0;
+			FString Others;
+			TInlineComponentArray<UMeshComponent*> Meshes;
+			Mate->GetComponents(Meshes);
+			for (UMeshComponent* Mesh : Meshes)
+			{
+				if (!Mesh || !Mesh->IsVisible())
+				{
+					continue;
+				}
+				const TArray<FName> Slots = Mesh->GetMaterialSlotNames();
+				for (int32 i = 0; i < Mesh->GetNumMaterials(); ++i)
+				{
+					const FString Slot = Slots.IsValidIndex(i) ? Slots[i].ToString() : FString();
+					if (!Slot.Contains(TEXT("Hazmat")))
+					{
+						continue;
+					}
+					++Suit;
+					UMaterialInterface* Mat = Mesh->GetMaterial(i);
+					const UMaterial* Base = Mat ? Mat->GetBaseMaterial() : nullptr;
+					const FString BaseName = Base ? Base->GetName() : FString(TEXT("aucun"));
+					if (BaseName.StartsWith(TEXT("M_BR_Gear")))
+					{
+						++Gear;
+					}
+					else
+					{
+						Others += FString::Printf(TEXT(" %s=%s"), *Slot, *BaseName);
+					}
+				}
+			}
+			Note(FString::Printf(TEXT("%s : combinaison du coequipier (place %d) : %d slot(s), dont %d sur M_BR_Gear%s"), Who, M[0].Slot, Suit, Gear,
+				Others.IsEmpty() ? TEXT("") : *(TEXT(" ; autres :") + Others)), Suit == 0 || Gear != Suit);
+			if (!FApp::CanEverRender())
+			{
+				Skip(FString::Printf(TEXT("%s : sans rendu (-nullrhi) : capture du coequipier NON FAITE"), Who));
+				return true;
+			}
+			// Devant lui, sinon a sa droite, a sa gauche ou derriere : le premier cote sans mur a 2,3 m
+			const FVector Chest = Mate->GetActorLocation() + FVector(0.f, 0.f, 20.f);
+			const FVector Fwd = FRotator(0.f, Mate->GetActorRotation().Yaw, 0.f).Vector();
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+			FVector Loc = Chest + Fwd * 230.f;
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BRV417MateCam), false, Mate);
+			Q.AddIgnoredActor(C);
+			for (const FVector& Dir : { Fwd, Right, -Right, -Fwd })
+			{
+				FHitResult Hit;
+				if (!GetWorld()->LineTraceSingleByChannel(Hit, Chest, Chest + Dir * 230.f, ECC_Visibility, Q))
+				{
+					Loc = Chest + Dir * 230.f;
+					break;
+				}
+			}
+			const FRotator Rot = (Chest - Loc).Rotation();
+			ACameraActor* Cam = V6::MateCam.Get();
+			if (!Cam)
+			{
+				Cam = GetWorld()->SpawnActor<ACameraActor>(Loc, Rot);
+				V6::MateCam = Cam;
+			}
+			if (Cam)
+			{
+				Cam->SetActorLocationAndRotation(Loc, Rot);
+				if (UCameraComponent* Mine = Cam->GetCameraComponent())
+				{
+					Mine->SetFieldOfView(70.f);
+					if (C->Camera)
+					{
+						Mine->PostProcessSettings = C->Camera->PostProcessSettings;
+						Mine->PostProcessBlendWeight = C->Camera->PostProcessBlendWeight;
+					}
+					Mine->bConstrainAspectRatio = false;
+				}
+				PC->SetViewTarget(Cam);
+			}
+			if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
+			{
+				H->TestCaptureMode = 2; // scene seule
+			}
+			return true;
+		});
+		Add(TEXT("v4.17 reseau : coequipier vu ici, capture"), 1.5f, [this, bOnClient]()
+		{
+			if (V6::MateCam.IsValid())
+			{
+				Shot(bOnClient ? TEXT("v417_coequipier_vu_par_client") : TEXT("v417_coequipier_vu_par_hote"));
+			}
+			return true;
+		});
+		Add(TEXT("v4.17 reseau : coequipier vu ici, retour"), 0.5f, [this]()
+		{
+			if (ABRPlayerController* PC = GetPC())
+			{
+				if (ABRCharacter* C = GetPlayer())
+				{
+					PC->SetViewTarget(C);
+				}
+				if (ABRHUD* H = Cast<ABRHUD>(PC->GetHUD()))
+				{
+					H->TestCaptureMode = 0;
+				}
+			}
+			if (ACameraActor* Cam = V6::MateCam.Get())
+			{
+				Cam->Destroy();
+			}
+			V6::MateCam.Reset();
+			return true;
+		});
+	}
 
 	const FString Late = Opt6.Late;
 	if (Late.IsEmpty())
