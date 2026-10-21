@@ -985,6 +985,8 @@ void ABRAutoTest::AddV417VisualSteps()
 		const FVector Look = Foot + FVector(0.f, 0.f, 85.f);
 		BRTestV417::ShowCamera(C->GetWorld(), C->Camera, PC, BRTestV417::TrackCam, (Look - BRTestV417::TrackCam).Rotation());
 		// v4.17 (correction) : os des pieds au monde : le glissement du pied d'appui se lit sur l'os (avant et apres)
+		FBRBodyPoseInfo P;
+		const bool bPose = BRRig::GetBodyPoseInfo(C, P);
 		FString Bones;
 		if (UPoseableMeshComponent* Skin = C->BodySkin)
 		{
@@ -993,14 +995,26 @@ void ABRAutoTest::AddV417VisualSteps()
 				const FName N = Skin->GetBoneIndex(FName(FootBone)) != INDEX_NONE ? FName(FootBone) : FName(Leg);
 				return Skin->GetBoneIndex(N) != INDEX_NONE ? Skin->GetBoneLocationByName(N, EBoneSpaces::WorldSpace) : FVector::ZeroVector;
 			};
-			const FVector L = BoneAt(TEXT("LeftFoot"), TEXT("LeftLeg"));
-			const FVector R = BoneAt(TEXT("RightFoot"), TEXT("RightLeg"));
-			Bones = FString::Printf(TEXT("\"os\": { \"nom\": \"%s\", \"pied_gauche\": [%.1f, %.1f, %.1f], \"pied_droit\": [%.1f, %.1f, %.1f], \"sol_z\": %.1f, \"visible\": %s }"),
-				Skin->GetBoneIndex(FName(TEXT("LeftFoot"))) != INDEX_NONE ? TEXT("LeftFoot") : TEXT("LeftLeg"), L.X, L.Y, L.Z, R.X, R.Y, R.Z, Foot.Z,
-				Skin->IsVisible() ? TEXT("true") : TEXT("false"));
+			FVector L = BoneAt(TEXT("LeftFoot"), TEXT("LeftLeg"));
+			FVector R = BoneAt(TEXT("RightFoot"), TEXT("RightLeg"));
+			// v4.17 (appuis) : la pose du corps est faite apres le deplacement de l'image (FBRBodyLateTick) : os releves juste apres
+			// la pose (ce qui est affiche) plutot qu'au passage du banc, dont l'ordre avec le deplacement n'est pas fixe ; sol reel
+			// sous chaque pied (rayon de la pose), hauteur de la cheville au repos, pied pose ou en l'air
+			FString PoseFields;
+			const TCHAR* Source = TEXT("maillage");
+			if (bPose && P.bAnkleValid)
+			{
+				L = P.AnkleWorld[0];
+				R = P.AnkleWorld[1];
+				Source = TEXT("pose");
+				PoseFields = FString::Printf(TEXT(", \"cheville_repos_cm\": %.2f, \"sol_reel_z\": [%.1f, %.1f], \"appui\": [%s, %s]"), P.AnkleRestZ,
+					Foot.Z + P.FootGround[0], Foot.Z + P.FootGround[1], P.bPlanted[0] ? TEXT("true") : TEXT("false"), P.bPlanted[1] ? TEXT("true") : TEXT("false"));
+			}
+			Bones = FString::Printf(TEXT("\"os\": { \"nom\": \"%s\", \"source\": \"%s\", \"pied_gauche\": [%.1f, %.1f, %.1f], \"pied_droit\": [%.1f, %.1f, %.1f], \"sol_z\": %.1f, \"visible\": %s%s }"),
+				Skin->GetBoneIndex(FName(TEXT("LeftFoot"))) != INDEX_NONE ? TEXT("LeftFoot") : TEXT("LeftLeg"), Source, L.X, L.Y, L.Z, R.X, R.Y, R.Z, Foot.Z,
+				Skin->IsVisible() ? TEXT("true") : TEXT("false"), *PoseFields);
 		}
-		FBRBodyPoseInfo P;
-		if (BRRig::GetBodyPoseInfo(C, P))
+		if (bPose)
 		{
 			BRTestV417::Extra = FString::Printf(TEXT("{ \"corps\": { \"lacet_jambes\": %.2f, \"ecart_jambes\": %.2f, \"pas_de_rattrapage\": %.2f, \"bassin_cm\": %.2f, \"appui_cm\": %.2f, ")
 				TEXT("\"sol_pieds_cm\": [%.2f, %.2f], \"pied_gauche\": [%.1f, %.1f, %.1f], \"pied_droit\": [%.1f, %.1f, %.1f] } }"),

@@ -107,6 +107,13 @@ struct FBRBodyPoseInfo
 	 *  foulee, pas l'os : celui que suivent les rayons au sol) */
 	float FootGround[2] = { 0.f, 0.f };
 	FVector FootWorld[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	/** v4.17 (appuis) : cheville voulue au monde (FootWorld : point d'appui tenu, ou point du pas en l'air), pied pose (appui tenu
+	 *  au monde) ou en l'air, os des chevilles (LeftFoot, RightFoot) lus juste apres la pose de l'image (ce qui est affiche),
+	 *  hauteur de la cheville au-dessus de la semelle au repos (cm) */
+	bool bPlanted[2] = { false, false };
+	bool bAnkleValid = false;
+	FVector AnkleWorld[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	float AnkleRestZ = 0.f;
 };
 
 namespace BRRig

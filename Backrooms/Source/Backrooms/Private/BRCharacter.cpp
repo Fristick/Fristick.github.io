@@ -36,6 +36,30 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "Sound/SoundBase.h"
+#include "AnimationRuntime.h"
+
+/** v4.17 (appuis) : pose du corps apres le composant de deplacement (et son lissage reseau) de l'image : le Tick du
+ *  personnage passe avant (ACharacter : le deplacement attend le Tick de l'acteur), et un pied tenu au monde dans le Tick
+ *  suivait ensuite la capsule du deplacement de l'image (glissement d'un pas d'image a chaque changement d'allure) */
+struct FBRBodyLateTick : public FTickFunction
+{
+	TWeakObjectPtr<ABRCharacter> Target;
+
+	virtual void ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent) override
+	{
+		ABRCharacter* C = Target.Get();
+		if (C && IsValid(C) && TickType != LEVELTICK_ViewportsOnly && C->PrimaryActorTick.IsTickFunctionEnabled())
+		{
+			// Meme pas que le Tick de l'acteur (dilatation propre comprise)
+			C->AnimateBody(FMath::Min(DeltaTime * C->CustomTimeDilation, 0.1f));
+		}
+	}
+
+	virtual FString DiagnosticMessage() override
+	{
+		return TEXT("FBRBodyLateTick");
+	}
+};
 
 namespace
 {
@@ -163,6 +187,21 @@ ABRCharacter::ABRCharacter()
 void ABRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	// v4.17 (appuis) : pose du corps apres le deplacement de l'image (FBRBodyLateTick), chez chacun
+	if (!BodyLateTick && GetLevel())
+	{
+		BodyLateTick = new FBRBodyLateTick();
+		BodyLateTick->Target = this;
+		BodyLateTick->bCanEverTick = true;
+		BodyLateTick->bStartWithTickEnabled = true;
+		BodyLateTick->TickGroup = TG_PrePhysics;
+		BodyLateTick->RegisterTickFunction(GetLevel());
+		BodyLateTick->AddPrerequisite(this, PrimaryActorTick);
+		if (UCharacterMovementComponent* M = GetCharacterMovement())
+		{
+			BodyLateTick->AddPrerequisite(M, M->PrimaryComponentTick);
+		}
+	}
 	SetFlashlightRayTracedShadows(FBRSettings::Get().bRTShadows && ABRPlayerController::IsHardwareRayTracingAvailable());
 
 	// Immobile tant que le monde ne nous a pas place sur un sol
@@ -1681,6 +1720,12 @@ void ABRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			ServerReturnedPickups += N;
 		}
 	}
+	if (BodyLateTick)
+	{
+		BodyLateTick->UnRegisterTickFunction();
+		delete BodyLateTick;
+		BodyLateTick = nullptr;
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -2747,7 +2792,10 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	UpdateLidar(Dt);
 	UpdateAudio(Dt);
 	UpdatePostProcess(Dt);
-	AnimateBody(Dt);
+	if (!BodyLateTick)
+	{
+		AnimateBody(Dt); // v4.17 (appuis) : sinon apres le deplacement de l'image (FBRBodyLateTick)
+	}
 	SwimInput = FVector::ZeroVector;
 
 	// Taches d'enregistrement : il suffit d'avoir le camescope sur soi (il filme ce que l'on regarde)
@@ -2910,7 +2958,10 @@ void ABRCharacter::TickRemote(float Dt)
 	const float Speed = static_cast<float>(GetVelocity().Size2D());
 	const UCharacterMovementComponent* Move = GetCharacterMovement();
 	RemoteStepTimer -= Dt;
-	if (!bDead && Speed > 40.f && RemoteStepTimer <= 0.f && (bSwimming || (Move && Move->IsMovingOnGround())))
+	// v4.17 (relecture R3) : a pied, le pas d'un coequipier sonne a la pose de chacun de ses pieds (AnimateBody) ; la minuterie
+	// reste pour la nage, et sans corps
+	const bool bBodySteps = !bSwimming && bHasBody && BodyRoot && BodyFeet && Body.Torso;
+	if (!bDead && !bBodySteps && Speed > 40.f && RemoteStepTimer <= 0.f && (bSwimming || (Move && Move->IsMovingOnGround())))
 	{
 		const bool bSprint = (NetFlags & 2) != 0;
 		RemoteStepTimer = bSwimming ? 1.f : (bSprint ? 0.3f : (bIsCrouched ? 0.65f : 0.46f));
@@ -2931,7 +2982,10 @@ void ABRCharacter::TickRemote(float Dt)
 			}
 		}
 	}
-	AnimateBody(Dt);
+	if (!BodyLateTick)
+	{
+		AnimateBody(Dt); // v4.17 (appuis) : sinon apres le deplacement de l'image (FBRBodyLateTick)
+	}
 }
 
 void ABRCharacter::UpdateStats(float Dt)
@@ -3063,7 +3117,12 @@ void ABRCharacter::UpdateCamera(float Dt)
 		if (Phase != LastStepPhase)
 		{
 			LastStepPhase = Phase;
-			PlayFootstep();
+			// v4.17 (relecture R3) : corps visible (3e personne) : le pas sonne a la pose de chaque pied (AnimateBody) ; a la 1re
+			// personne, il garde le rythme du balancement de la camera
+			if (!(ShowsBody() && bHasBody && BodyRoot && BodyFeet && Body.Torso))
+			{
+				PlayFootstep();
+			}
 		}
 	}
 
@@ -3797,6 +3856,23 @@ namespace
 	/** v4.17 (animation) : etat de la pose du corps d'un joueur, chez chacun (joueur local a la 3e personne, coequipiers) :
 	 *  lacet du bas du corps, pas en tournant, sol sous chaque pied. Rien n'est replique. Garde ici, cle = le personnage, pour
 	 *  ne pas toucher a l'en-tete partage BRCharacter.h ; a deplacer en membre d'ABRCharacter lors de l'integration */
+	/** v4.17 (appuis) : une jambe du corps d'un joueur. Pied pose : la cheville reste a son point d'appui au monde (Anchor) ;
+	 *  pas : de son point de lever (SwingFrom) au point de foulee de la cadence, en arc */
+	struct FBRBodyLeg
+	{
+		bool bSwing = false;
+		/** Pas au temps (arret, recalage sous la hanche) plutot qu'a la phase de la cadence */
+		bool bTimed = false;
+		FVector Anchor = FVector::ZeroVector;
+		FVector SwingFrom = FVector::ZeroVector;
+		/** Cheville voulue a cette image (monde) */
+		FVector Target = FVector::ZeroVector;
+		/** Avancee du pas : phase parcourue depuis le lever, phase a parcourir, fraction 0..1 */
+		float SwingAcc = 0.f;
+		float SwingSpan = PI;
+		float SwingW = 0.f;
+	};
+
 	struct FBRBodyPoseState
 	{
 		TWeakObjectPtr<const ABRCharacter> Owner;
@@ -3806,15 +3882,29 @@ namespace
 		float LowerYaw = 0.f;
 		bool bTurning = false;
 		float TurnStep = 0.f;
-		/** Sol sous chaque pied (cm, par rapport au bas de la capsule), elevation lissee de chaque pied, bassin */
+		/** Sol sous chaque pied (cm, par rapport au bas de la capsule), bassin */
 		float TraceTimer = 0.f;
 		float Ground[2] = { 0.f, 0.f };
-		float FootLift[2] = { 0.f, 0.f };
+		/** v4.17 (appuis) : meme sol, au monde (la capsule monte d'un coup sur une marche, entre deux rayons) */
+		float GroundZ[2] = { 0.f, 0.f };
 		float PelvisDrop = 0.f;
+		/** v4.17 (appuis) : jambes (appuis au monde) ; temps a l'arret ; geometrie de repos de chaque jambe dans le repere des
+		 *  jambes (BodyFeet : +X avant, Z = 0 sous la semelle) : hanche, genou, cheville, rotation de repos du pied */
+		bool bLegsInit = false;
+		FBRBodyLeg Leg[2];
+		float IdleTime = 0.f;
+		bool bRest = false;
+		FVector RestHip[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FVector RestKnee[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FVector RestAnkle[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FQuat RestFoot[2] = { FQuat::Identity, FQuat::Identity };
+		bool bFootBones = false;
 		/** Derniere pose, pour les tests (BRRig::GetBodyPoseInfo) */
 		float LastYawOff = 0.f;
 		float LastWalkDrop = 0.f;
 		FVector FootWorld[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		bool bAnkleValid = false;
+		FVector AnkleWorld[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	};
 
 	TMap<const ABRCharacter*, FBRBodyPoseState>& BRBodyPoseStates()
@@ -3866,7 +3956,11 @@ bool BRRig::GetBodyPoseInfo(const AActor* Character, FBRBodyPoseInfo& Out)
 	{
 		Out.FootGround[i] = S->Ground[i];
 		Out.FootWorld[i] = S->FootWorld[i];
+		Out.bPlanted[i] = S->bLegsInit && !S->Leg[i].bSwing;
+		Out.AnkleWorld[i] = S->AnkleWorld[i];
 	}
+	Out.bAnkleValid = S->bAnkleValid;
+	Out.AnkleRestZ = S->bRest ? static_cast<float>(0.5 * (S->RestAnkle[0].Z + S->RestAnkle[1].Z)) : 0.f;
 	return true;
 }
 
@@ -3904,6 +3998,8 @@ void ABRCharacter::AnimateBody(float Dt)
 		Gs.LowerYaw = ActorYaw;
 		Gs.bTurning = false;
 		Gs.TurnStep = 0.f;
+		Gs.bLegsInit = false;
+		Gs.TraceTimer = 0.f;
 	}
 	Gs.LastTime = Now;
 	const bool bFeetDown = bGrounded && !bSwimming && !bClimbPose && !bDead && !bDevFly;
@@ -3960,27 +4056,97 @@ void ABRCharacter::AnimateBody(float Dt)
 	const float LegL = FMath::Max(30.f, static_cast<float>(Spec.Hip[0].Z) - 42.f * CrouchBlend);
 	const bool bStepping = !bSwimming && Speed2D > 10.f;
 	const float StrideDeg = FMath::Max(Spec.LegAmp * Gait, FMath::Max(bStepping ? FMath::Lerp(8.f, 16.f, CrouchBlend) : 0.f, 12.f * Gs.TurnStep));
+	float PhaseStep = 0.f;
 	if (bSwimming)
 	{
-		BodyAnim += Dt * (2.2f + 2.6f * SwimMove);
+		PhaseStep = Dt * (2.2f + 2.6f * SwimMove);
 	}
 	else if (bStepping)
 	{
 		const float SinA = FMath::Max(FMath::Sin(FMath::DegreesToRadians(StrideDeg)), 0.05f);
 		const float Omega = FMath::Min(PI * Speed2D / (2.f * LegL * SinA), 16.f);
-		BodyAnim += Dt * Omega * (FwdSpeed < -10.f ? -1.f : 1.f);
+		PhaseStep = Dt * Omega * (FwdSpeed < -10.f ? -1.f : 1.f);
 	}
 	else if (Gs.TurnStep > 0.01f)
 	{
 		// Petits pas en tournant sur place
-		BodyAnim += Dt * 9.f * Gs.TurnStep;
+		PhaseStep = Dt * 9.f * Gs.TurnStep;
 	}
-	BodyAnim = FMath::Fmod(BodyAnim, 2.f * PI * 64.f);
+	BodyAnim = FMath::Fmod(BodyAnim + PhaseStep, 2.f * PI * 64.f);
+	// v4.17 (appuis) : la cadence fait avancer les pas (marche, petits pas en tournant sur place)
+	const bool bCadence = !bSwimming && (bStepping || Gs.TurnStep > 0.01f);
 
-	// Appuis (v4.17) : sol sous chaque pied (20 fois par seconde, sol statique seulement), bassin vers le sol le plus bas, genou
-	// plie pour un pied pose plus haut (marche, trottoir, bord de bassin) : meme IK a deux segments que les entites
-	// (ABREntity::UpdateFootPlanting, Tools/check_leg_ik.py). Avant : pieds a hauteur fixe, a 35 cm pres sur une marche
+	// v4.17 (appuis) : geometrie de repos des jambes dans le repere des jambes (BodyFeet : +X avant, Z = 0 sous la semelle), une
+	// fois : os de la combinaison au repos (hanche, genou, cheville, rotation du pied), ou articulations des pieces rigides
+	// (cheville sous le genou, au niveau de la semelle)
+	static const FName NUpLeg[2] = { FName(TEXT("LeftUpLeg")), FName(TEXT("RightUpLeg")) };
+	static const FName NLeg[2] = { FName(TEXT("LeftLeg")), FName(TEXT("RightLeg")) };
+	static const FName NFoot[2] = { FName(TEXT("LeftFoot")), FName(TEXT("RightFoot")) };
+	if (!Gs.bRest)
+	{
+		Gs.bRest = true;
+		int32 Found = 0;
+		const USkinnedAsset* Asset = BodySkin ? BodySkin->GetSkinnedAsset() : nullptr;
+		for (int32 i = 0; i < 2; ++i)
+		{
+			Gs.RestHip[i] = Spec.Hip[i];
+			Gs.RestKnee[i] = Spec.Knee[i];
+			Gs.RestAnkle[i] = FVector(Spec.Knee[i].X, Spec.Knee[i].Y, 0.0);
+			if (Asset)
+			{
+				const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+				const int32 H = Ref.FindBoneIndex(NUpLeg[i]);
+				const int32 K = Ref.FindBoneIndex(NLeg[i]);
+				const int32 F = Ref.FindBoneIndex(NFoot[i]);
+				if (H != INDEX_NONE && K != INDEX_NONE && F != INDEX_NONE)
+				{
+					Gs.RestHip[i] = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, H).GetLocation();
+					Gs.RestKnee[i] = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, K).GetLocation();
+					const FTransform FootRest = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, F);
+					Gs.RestAnkle[i] = FootRest.GetLocation();
+					Gs.RestFoot[i] = FootRest.GetRotation();
+					++Found;
+				}
+			}
+		}
+		Gs.bFootBones = Found == 2;
+		static bool bLogged = false;
+		if (!bLogged)
+		{
+			bLogged = true;
+			UE_LOG(LogBackrooms, Log, TEXT("Corps : jambe gauche au repos (repere des jambes) hanche %s genou %s cheville %s ; os des pieds %s"),
+				*Gs.RestHip[0].ToString(), *Gs.RestKnee[0].ToString(), *Gs.RestAnkle[0].ToString(), Gs.bFootBones ? TEXT("oui") : TEXT("non"));
+		}
+	}
+
+	// Corps entier : penche a l'horizontale pendant la brasse, s'effondre a la mort
+	const float SwimPitch = -72.f * SwimMove * SwimBlend;
+	// v4.17 (animation) : le corps est place avant la pose (la main, et l'objet tenu, sont lus sur l'image en cours : avant, ils
+	// avaient une image de retard). Pieds au sol : la capsule raccourcit en position accroupie, et la pose plie les jambes
+	// (~42 cm) ; le maillage du Character remonte de la difference de hauteur de capsule quand on s'accroupit : on la retire.
+	// v4.17 : bassin vers le sol le plus bas sous les pieds et sur la jambe d'appui ; jambes tournees de YawOff (bas du corps)
+	BodyRoot->SetRelativeRotation(FRotator(SwimPitch, 0.f, 80.f * DeathBlend));
+	BodyRoot->SetRelativeLocation(FVector(0.f, 0.f, 35.f * SwimMove * SwimBlend - 60.f * DeathBlend));
+	const float MeshLift = (GetMesh() && BodyRoot->GetAttachParent() == GetMesh()) ? static_cast<float>(GetBaseTranslationOffset().Z) : 0.f;
 	const float Half = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+	auto FeetZ = [&](float Drop) { return -Half - 42.f * CrouchBlend + 8.f * AirBlend - MeshLift + Gs.PelvisDrop - Drop; };
+	BodyFeet->SetRelativeRotation(FRotator(0.f, YawOff, 0.f));
+	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, FeetZ(0.f)));
+
+	// v4.17 (appuis) : point de foulee de chaque jambe a cette phase (repere des jambes) : la jambe tendue tournee de theta,
+	// cheville a sa hauteur de repos ; accroupi, le pied passe un peu devant la hanche (pose d'avant)
+	const float CrouchFwd = 10.f * CrouchBlend;
+	FVector StrideCS[2];
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const float Theta = FMath::DegreesToRadians(StrideDeg * FMath::Sin(BodyAnim + (i == 0 ? 0.f : PI)));
+		StrideCS[i] = FVector(Gs.RestAnkle[i].X + LegL * FMath::Sin(Theta) + CrouchFwd, Gs.RestAnkle[i].Y, Gs.RestAnkle[i].Z);
+	}
+
+	// Appuis (v4.17) : sol sous chaque pied (20 fois par seconde, sol statique seulement), bassin vers le sol le plus bas.
+	// v4.17 (appuis) : rayons sous l'appui tenu, ou sous le point de foulee d'un pied en l'air ; la hauteur du sol sert de cible
+	// a la cheville (marche, trottoir, bord de bassin : le genou plie de lui-meme). Avant : pieds a hauteur fixe, a 35 cm pres
+	// sur une marche, puis pli de genou ajoute a la pose
 	const FVector Here = GetActorLocation();
 	const float FloorZ = static_cast<float>(Here.Z) - Half;
 	Gs.TraceTimer -= Dt;
@@ -3988,64 +4154,263 @@ void ABRCharacter::AnimateBody(float Dt)
 	{
 		Gs.Ground[0] = 0.f;
 		Gs.Ground[1] = 0.f;
+		Gs.TraceTimer = 0.f; // premier appui : rayons tout de suite
 	}
 	else if (Gs.TraceTimer <= 0.f && GetWorld())
 	{
 		Gs.TraceTimer = 0.05f;
+		const FTransform Frame0 = BodyFeet->GetComponentTransform();
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRBodyFeet), false, this);
 		const FCollisionObjectQueryParams Obj(ECC_WorldStatic);
 		for (int32 i = 0; i < 2; ++i)
 		{
-			const float Theta = FMath::DegreesToRadians(StrideDeg * FMath::Sin(BodyAnim + (i == 0 ? 0.f : PI)));
-			const FVector Foot = Here + LowerRight * Spec.Hip[i].Y + LowerFwd * static_cast<double>(LegL * FMath::Sin(Theta));
+			const FVector Foot = (Gs.bLegsInit && !Gs.Leg[i].bSwing) ? Gs.Leg[i].Anchor : Frame0.TransformPosition(StrideCS[i]);
 			const FVector From(Foot.X, Foot.Y, static_cast<double>(FloorZ) + 45.0);
 			const FVector To(Foot.X, Foot.Y, static_cast<double>(FloorZ) - 45.0);
 			FHitResult Hit;
 			Gs.Ground[i] = (GetWorld()->LineTraceSingleByObjectType(Hit, From, To, Obj, Q) && Hit.ImpactNormal.Z > 0.6)
 				? FMath::Clamp(static_cast<float>(Hit.ImpactPoint.Z) - FloorZ, -25.f, 35.f) : 0.f;
+			Gs.GroundZ[i] = FloorZ + Gs.Ground[i];
 		}
 	}
-	const float LegW = (1.f - CrouchBlend) * (1.f - SwimBlend) * (1.f - ClimbBlend) * (1.f - AirBlend) * (1.f - DeathBlend);
 	Gs.PelvisDrop = FMath::FInterpTo(Gs.PelvisDrop, bFeetDown ? FMath::Min(0.f, FMath::Min(Gs.Ground[0], Gs.Ground[1])) : 0.f, Dt, 10.f);
-	float ThighIK[2] = { 0.f, 0.f };
-	float KneeIK[2] = { 0.f, 0.f };
+	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, FeetZ(0.f)));
+	const FTransform Frame = BodyFeet->GetComponentTransform();
+
+	// v4.17 (appuis) : poids de l'appui au monde (pieds au sol : marche, accroupi, eau aux genoux) ; en l'air, a la nage, sur
+	// l'echelle et a la mort, la pose d'avant (angles de la cadence) reprend
+	const float LockW = (1.f - SwimBlend) * (1.f - ClimbBlend) * (1.f - AirBlend) * (1.f - DeathBlend);
+	// Point de foulee au monde, cheville a sa hauteur au-dessus du sol trouve sous le pied (pieds en l'air : sous la hanche, jambe
+	// au repos)
+	FVector StrideW[2];
 	for (int32 i = 0; i < 2; ++i)
 	{
-		Gs.FootLift[i] = FMath::FInterpTo(Gs.FootLift[i], bFeetDown ? FMath::Clamp(Gs.Ground[i] - Gs.PelvisDrop, 0.f, 35.f) : 0.f, Dt, 12.f);
-		const float LiftCm = Gs.FootLift[i] * LegW;
-		if (LiftCm > 0.2f)
+		StrideW[i] = Frame.TransformPosition(StrideCS[i]);
+		if (bFeetDown)
 		{
-			// Raccourcir la distance hanche -> pied de LiftCm : la cuisse avance, le genou plie, le pied reste sous la hanche
-			const float A = FMath::Max(static_cast<float>(Spec.Hip[i].Z - Spec.Knee[i].Z), 5.f);
-			const float B = FMath::Max(static_cast<float>(Spec.Knee[i].Z), 5.f);
-			const float D0 = A + B - 2.f;
-			const float D1 = FMath::Max(D0 - LiftCm, FMath::Abs(A - B) + 5.f);
-			auto HipAngle = [A, B](float D) { return FMath::Acos(FMath::Clamp((A * A + D * D - B * B) / (2.f * A * D), -1.f, 1.f)); };
-			auto KneeBend = [A, B](float D) { return PI - FMath::Acos(FMath::Clamp((A * A + B * B - D * D) / (2.f * A * B), -1.f, 1.f)); };
-			ThighIK[i] = FMath::RadiansToDegrees(HipAngle(D1) - HipAngle(D0));
-			KneeIK[i] = FMath::RadiansToDegrees(KneeBend(D1) - KneeBend(D0));
+			StrideW[i].Z = static_cast<double>(Gs.GroundZ[i]) + Gs.RestAnkle[i].Z;
 		}
 	}
-	// Bassin en marche (v4.17) : la jambe d'appui, tendue a l'angle theta, porte le corps : il descend de L (1 - cos theta) pour
-	// que son pied reste au sol (avant : les deux pieds a ~12,6 cm du sol a chaque double appui de la marche, 31 cm en course)
+
+	// v4.17 (appuis) : pied d'appui tenu au monde, comme les marcheurs (ABREntity::UpdateFootPlanting). Avant : jambes tournees
+	// a la cadence seule (sinus), la cheville glissait d'environ 16 cm par appui (banc v4.17, l0_3p_cote, os des pieds).
+	// - Pose : la cheville reste au point ou le pied s'est pose (sol trouve sous lui) ;
+	// - lever (la phase de la jambe quitte l'appui) : le pied part de son point d'appui, en arc (5 a 14 cm de haut selon l'allure),
+	//   vers le point de foulee de la cadence, qu'il atteint quand la phase revient a l'appui ;
+	// - arret : un pas en l'air se finit au temps (0,2 s) sous la hanche, puis un petit pas recale l'autre pied s'il est reste
+	//   a plus de 5 cm de sa place ;
+	// - trop loin (arret net, virage serre, teleportation) : le point d'appui suit, le pied glisse du reste.
+	// Les cibles sont au monde ; la jambe les atteint par la meme IK a deux segments que les entites (Tools/check_leg_ik.py),
+	// la hanche descendant de ce qu'il faut (bassin de la marche).
+	bool bLanded[2] = { false, false };
+	if (!bFeetDown)
+	{
+		Gs.bLegsInit = false;
+		Gs.IdleTime = 0.f;
+		for (int32 i = 0; i < 2; ++i)
+		{
+			Gs.Leg[i].bSwing = false;
+			Gs.Leg[i].Target = StrideW[i];
+		}
+	}
+	else
+	{
+		if (Gs.bLegsInit)
+		{
+			for (int32 i = 0; i < 2; ++i)
+			{
+				const FBRBodyLeg& G = Gs.Leg[i];
+				if (FVector::Dist2D(G.bSwing ? G.SwingFrom : G.Anchor, StrideW[i]) > 150.0)
+				{
+					Gs.bLegsInit = false; // teleportation, changement de niveau : les pieds se reposent sous le corps
+				}
+			}
+		}
+		if (!Gs.bLegsInit)
+		{
+			Gs.bLegsInit = true;
+			Gs.IdleTime = 0.f;
+			for (int32 i = 0; i < 2; ++i)
+			{
+				Gs.Leg[i] = FBRBodyLeg();
+				Gs.Leg[i].Anchor = StrideW[i];
+				Gs.Leg[i].Target = StrideW[i];
+			}
+		}
+		Gs.IdleTime = bCadence ? 0.f : Gs.IdleTime + Dt;
+		const float LiftH = FMath::Clamp(3.f + 8.f * FMath::Max(Gait, 0.5f * Gs.TurnStep), 3.f, 14.f);
+		for (int32 i = 0; i < 2; ++i)
+		{
+			FBRBodyLeg& G = Gs.Leg[i];
+			const float Ph = BodyAnim + (i == 0 ? 0.f : PI);
+			const bool bPhaseStance = FMath::Cos(Ph) <= 0.f;
+			bool bStarted = false;
+			if (!G.bSwing)
+			{
+				// Appui trop loin du corps : le point d'appui suit (glissement du reste seulement) ; sol change sous lui : repose
+				FVector A = Frame.InverseTransformPosition(G.Anchor);
+				const double MaxX = static_cast<double>(LegL) * 0.85;
+				const double DX = FMath::Clamp(A.X - Gs.RestAnkle[i].X, -MaxX, MaxX);
+				const double DY = FMath::Clamp(A.Y - Gs.RestAnkle[i].Y, -22.0, 22.0);
+				if (DX != A.X - Gs.RestAnkle[i].X || DY != A.Y - Gs.RestAnkle[i].Y)
+				{
+					A.X = Gs.RestAnkle[i].X + DX;
+					A.Y = Gs.RestAnkle[i].Y + DY;
+					const double Z = G.Anchor.Z;
+					G.Anchor = Frame.TransformPosition(A);
+					G.Anchor.Z = Z;
+				}
+				if (FMath::Abs(G.Anchor.Z - StrideW[i].Z) > 30.0)
+				{
+					G.Anchor.Z = StrideW[i].Z;
+				}
+				// Lever : a la phase de la cadence ; a l'arret, petit pas de recalage (un pied a la fois)
+				const bool bOtherDown = !Gs.Leg[1 - i].bSwing;
+				const double Off = FVector::Dist2D(G.Anchor, StrideW[i]);
+				const double OtherOff = FVector::Dist2D(Gs.Leg[1 - i].Anchor, StrideW[1 - i]);
+				if (bCadence && !bPhaseStance)
+				{
+					G.bSwing = true;
+					G.bTimed = false;
+					const float Wrapped = FMath::UnwindRadians(Ph);
+					G.SwingSpan = FMath::Clamp(PhaseStep >= 0.f ? HALF_PI - Wrapped : Wrapped + HALF_PI, 0.25f, PI);
+				}
+				else if (!bCadence && bOtherDown && Gs.IdleTime > 0.12f && Off > 5.0 && Off >= OtherOff)
+				{
+					G.bSwing = true;
+					G.bTimed = true;
+				}
+				if (G.bSwing)
+				{
+					G.SwingFrom = G.Anchor;
+					G.SwingAcc = 0.f;
+					G.SwingW = 0.f;
+					bStarted = true;
+				}
+			}
+			if (G.bSwing)
+			{
+				bool bLand = false;
+				if (!G.bTimed && bCadence)
+				{
+					// La phase de cette image est deja dans SwingSpan au lever ; pose quand la phase revient a l'appui
+					G.SwingAcc += bStarted ? 0.f : FMath::Abs(PhaseStep);
+					G.SwingW = FMath::Clamp(G.SwingAcc / FMath::Max(G.SwingSpan, 0.05f), 0.f, 1.f);
+					bLand = bPhaseStance;
+				}
+				else
+				{
+					// Arret pendant le pas, ou recalage : fin au temps, sous la hanche
+					G.bTimed = true;
+					G.SwingW = FMath::Min(1.f, G.SwingW + Dt / 0.2f);
+					bLand = G.SwingW >= 1.f;
+				}
+				const float S = G.SwingW * G.SwingW * (3.f - 2.f * G.SwingW);
+				FVector P = FMath::Lerp(G.SwingFrom, StrideW[i], static_cast<double>(S));
+				if (bLand)
+				{
+					G.bSwing = false;
+					G.bTimed = false;
+					G.Anchor = FVector(P.X, P.Y, StrideW[i].Z);
+					G.Target = G.Anchor;
+					bLanded[i] = true;
+				}
+				else
+				{
+					const float H = G.bTimed && G.SwingAcc <= 0.f ? FMath::Min(LiftH, 5.f) : LiftH;
+					P.Z += static_cast<double>(H * FMath::Sin(PI * G.SwingW));
+					G.Target = P;
+				}
+			}
+			else
+			{
+				G.Target = G.Anchor;
+			}
+		}
+	}
+
+	// v4.17 (relecture R3) : pas sonore a la pose d'un pied de la marche (pas les petits pas de recalage) : chez soi a la 3e personne
+	// (meme son que la 1re personne), et pour un coequipier, au pied qui se pose (avant : minuterie de 0,46 s, et cadence du
+	// balancement de la camera pour soi, 2,55 pas/s contre ~2,8 pour le corps a la marche)
+	if ((bLanded[0] || bLanded[1]) && bCadence && !bDead && Speed2D > (bRemoteView ? 40.f : 15.f))
+	{
+		if (!bRemoteView)
+		{
+			PlayFootstep();
+		}
+		else if (UBRAssets* A = UBRAssets::Get(this))
+		{
+			const bool bSprint = (NetFlags & 2) != 0;
+			const FVector At = Gs.Leg[bLanded[0] ? 0 : 1].Anchor;
+			if (USoundBase* S = A->Sound(StepSoundName()))
+			{
+				const float Vol = bIsCrouched ? 0.25f : (bSprint ? 0.9f : 0.6f);
+				UGameplayStatics::PlaySoundAtLocation(this, S, At, Vol, FMath::FRandRange(0.92f, 1.08f), 0.f, A->Attenuation(1800.f));
+			}
+			if (ABRWorld* RW = ABRWorld::Get(this))
+			{
+				if (WaterDepth > 4.f)
+				{
+					RW->AddWaterRipple(At, 0.8f);
+				}
+			}
+		}
+	}
+
+	// Bassin en marche (v4.17) : la jambe d'appui, tendue, porte le corps : il descend pour que chaque cheville atteigne sa cible
+	// (avant : les deux pieds a ~12,6 cm du sol a chaque double appui de la marche, 31 cm en course). v4.17 (appuis) : descente
+	// tiree des cibles au monde (appuis tenus, pas en l'air), au lieu de l'angle de la cadence
 	float WalkDrop = 0.f;
+	FVector TargetCS[2];
 	for (int32 i = 0; i < 2; ++i)
 	{
-		const float PhS = BodyAnim + (i == 0 ? 0.f : PI);
-		if (FMath::Cos(PhS) <= 0.f)
+		TargetCS[i] = Frame.InverseTransformPosition(Gs.Leg[i].Target);
+		const FVector D = TargetCS[i] - Gs.RestHip[i];
+		const double Reach = (Gs.RestAnkle[i] - Gs.RestHip[i]).Size();
+		const double Need = -D.Z - FMath::Sqrt(FMath::Max(Reach * Reach - D.X * D.X - D.Y * D.Y, 1.0));
+		WalkDrop = FMath::Max(WalkDrop, static_cast<float>(Need));
+	}
+	WalkDrop = FMath::Clamp(WalkDrop, 0.f, 35.f) * LockW;
+	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, FeetZ(WalkDrop)));
+
+	// v4.17 (appuis) : IK a deux segments dans le plan de la jambe (avant, haut) : le genou plie vers l'avant pour amener la
+	// cheville a sa cible ; un roulis de la cuisse porte l'ecart lateral (virage, pas en tournant). Angles ajoutes a la pose de
+	// repos (comme ceux de la cadence)
+	float IkThigh[2] = { 0.f, 0.f };
+	float IkKnee[2] = { 0.f, 0.f };
+	float IkRoll[2] = { 0.f, 0.f };
+	if (LockW > 0.f)
+	{
+		for (int32 i = 0; i < 2; ++i)
 		{
-			WalkDrop = FMath::Max(WalkDrop, LegL * (1.f - FMath::Cos(FMath::DegreesToRadians(StrideDeg * FMath::Sin(PhS)))));
+			const FVector T0 = Gs.RestKnee[i] - Gs.RestHip[i];
+			const FVector S0 = Gs.RestAnkle[i] - Gs.RestKnee[i];
+			const FVector L0 = Gs.RestAnkle[i] - Gs.RestHip[i];
+			const float A = FMath::Max(static_cast<float>(FMath::Sqrt(T0.X * T0.X + T0.Z * T0.Z)), 5.f);
+			const float B = FMath::Max(static_cast<float>(FMath::Sqrt(S0.X * S0.X + S0.Z * S0.Z)), 5.f);
+			const float D0 = static_cast<float>(FMath::Sqrt(L0.X * L0.X + L0.Z * L0.Z));
+			const FVector D3 = TargetCS[i] + FVector(0.0, 0.0, WalkDrop) - Gs.RestHip[i];
+			const float Dx = static_cast<float>(D3.X);
+			const float Dz = static_cast<float>(D3.Z);
+			const float D = FMath::Clamp(FMath::Sqrt(Dx * Dx + Dz * Dz), FMath::Abs(A - B) + 2.f, FMath::Min(A + B - 0.05f, D0));
+			const float Gamma = FMath::Acos(FMath::Clamp((A * A + B * B - D * D) / (2.f * A * B), -1.f, 1.f));
+			const float Beta = FMath::Acos(FMath::Clamp((A * A + D * D - B * B) / (2.f * A * D), -1.f, 1.f));
+			const float AlphaT = FMath::Atan2(Dx, -Dz) + Beta;
+			const float AlphaS = AlphaT - (PI - Gamma);
+			const float AlphaT0 = FMath::Atan2(static_cast<float>(T0.X), static_cast<float>(-T0.Z));
+			const float AlphaS0 = FMath::Atan2(static_cast<float>(S0.X), static_cast<float>(-S0.Z));
+			IkThigh[i] = FMath::RadiansToDegrees(AlphaT - AlphaT0);
+			IkKnee[i] = FMath::RadiansToDegrees((AlphaS - AlphaS0) - (AlphaT - AlphaT0));
+			// Roulis positif : un membre tendu vers le bas part vers -Y (comme le roulis des bras qui les ecarte du corps)
+			IkRoll[i] = FMath::Clamp(-FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(D3.Y - L0.Y), FMath::Max(D, 20.f))), -15.f, 15.f);
 		}
 	}
-	WalkDrop *= LegW;
-	// Pour les tests (BRRig::GetBodyPoseInfo) : derniere pose et pieds estimes (geometrie de la foulee, au sol sous chaque pied)
+	// Pour les tests (BRRig::GetBodyPoseInfo) : derniere pose et chevilles voulues au monde (appui tenu ou pas en l'air)
 	Gs.LastYawOff = YawOff;
 	Gs.LastWalkDrop = WalkDrop;
 	for (int32 i = 0; i < 2; ++i)
 	{
-		const float Theta = FMath::DegreesToRadians(StrideDeg * FMath::Sin(BodyAnim + (i == 0 ? 0.f : PI)));
-		Gs.FootWorld[i] = Here + LowerRight * Spec.Hip[i].Y + LowerFwd * static_cast<double>(LegL * FMath::Sin(Theta));
-		Gs.FootWorld[i].Z = static_cast<double>(FloorZ + Gs.Ground[i]);
+		Gs.FootWorld[i] = Gs.Leg[i].Target;
 	}
 
 	FRotator Thigh[2], Shin[2], Upper[2], Lower[2];
@@ -4055,9 +4420,13 @@ void ABRCharacter::AnimateBody(float Dt)
 		const float Out = i == 0 ? 1.f : -1.f; // roulis qui ecarte le membre du corps
 
 		// ---- A pied : marche / course, accroupi, en l'air, dans l'eau jusqu'aux genoux ----
-		// v4.17 (animation) : amplitude de la foulee StrideDeg (celle qui donne la cadence), pli d'appui des marches
-		float TP = StrideDeg * FMath::Sin(Ph) + 80.f * CrouchBlend + 22.f * AirBlend + ThighIK[i];
-		float SP = -StrideDeg * 1.3f * FMath::Max(0.f, FMath::Cos(Ph)) - 115.f * CrouchBlend - 38.f * AirBlend - KneeIK[i];
+		// v4.17 (animation) : amplitude de la foulee StrideDeg (celle qui donne la cadence)
+		// v4.17 (appuis) : pieds au sol, les jambes suivent l'IK des appuis (accroupi compris) ; ces angles restent ceux d'en l'air,
+		// de la nage, de l'echelle et de la mort
+		float TP = StrideDeg * FMath::Sin(Ph) + 80.f * CrouchBlend + 22.f * AirBlend;
+		float SP = -StrideDeg * 1.3f * FMath::Max(0.f, FMath::Cos(Ph)) - 115.f * CrouchBlend - 38.f * AirBlend;
+		TP = FMath::Lerp(TP, IkThigh[i], LockW);
+		SP = FMath::Lerp(SP, IkKnee[i], LockW);
 		float UP = -Spec.ArmAmp * Gait * FMath::Sin(Ph) + 18.f * CrouchBlend + 10.f * Wade;
 		float UR = Out * (16.f * AirBlend + 20.f * Wade);
 		float LP = 8.f + 14.f * FMath::Min(Gait, 1.f) + 25.f * CrouchBlend;
@@ -4102,7 +4471,7 @@ void ABRCharacter::AnimateBody(float Dt)
 			UR = FMath::Lerp(UR, Out * 8.f, ClimbBlend);
 			LP = FMath::Lerp(LP, 35.f - 25.f * Reach, ClimbBlend);
 		}
-		Thigh[i] = FRotator(TP, 0.f, Out * 4.f * SwimBlend * SwimMove);
+		Thigh[i] = FRotator(TP, 0.f, Out * 4.f * SwimBlend * SwimMove + IkRoll[i] * LockW);
 		Shin[i] = FRotator(SP, 0.f, 0.f);
 		Upper[i] = FRotator(UP, 0.f, UR);
 		Lower[i] = FRotator(LP, 0.f, 0.f);
@@ -4118,17 +4487,6 @@ void ABRCharacter::AnimateBody(float Dt)
 		Lower[1] = FMath::Lerp(Lower[1], FRotator(62.f, 0.f, 0.f), Hold);
 	}
 
-	// Corps entier : penche a l'horizontale pendant la brasse, s'effondre a la mort
-	const float SwimPitch = -72.f * SwimMove * SwimBlend;
-	// v4.17 (animation) : le corps est place avant la pose (la main, et l'objet tenu, sont lus sur l'image en cours : avant, ils
-	// avaient une image de retard). Pieds au sol : la capsule raccourcit en position accroupie, et la pose plie les jambes
-	// (~42 cm) ; le maillage du Character remonte de la difference de hauteur de capsule quand on s'accroupit : on la retire.
-	// v4.17 : bassin vers le sol le plus bas sous les pieds et sur la jambe d'appui ; jambes tournees de YawOff (bas du corps)
-	BodyRoot->SetRelativeRotation(FRotator(SwimPitch, 0.f, 80.f * DeathBlend));
-	BodyRoot->SetRelativeLocation(FVector(0.f, 0.f, 35.f * SwimMove * SwimBlend - 60.f * DeathBlend));
-	const float MeshLift = (GetMesh() && BodyRoot->GetAttachParent() == GetMesh()) ? static_cast<float>(GetBaseTranslationOffset().Z) : 0.f;
-	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, -Half - 42.f * CrouchBlend + 8.f * AirBlend - MeshLift + Gs.PelvisDrop - WalkDrop));
-	BodyFeet->SetRelativeRotation(FRotator(0.f, YawOff, 0.f));
 	// Le buste reste face a la visee : il tourne de -YawOff par rapport aux jambes
 	const FRotator TorsoRot(TorsoPitch, -YawOff, 0.f);
 	// La tete regarde ou vise le joueur (et se redresse quand on nage a plat ventre ; vers le haut sur l'echelle)
@@ -4136,6 +4494,22 @@ void ABRCharacter::AnimateBody(float Dt)
 	if (BodySkin)
 	{
 		PoseSkin(Thigh, Shin, Upper, Lower, TorsoRot, HeadRot);
+		if (Gs.bFootBones)
+		{
+			// v4.17 (appuis) : pied a plat pendant l'appui (avant : il suivait le tibia, pointe ou talon dans le sol aux extremites
+			// du pas) ; en l'air, pointe basse au lever, relevee avant la pose. Sans appui (saut, nage, echelle), il suit le tibia
+			for (int32 i = 0; i < 2; ++i)
+			{
+				const FBRBodyLeg& G = Gs.Leg[i];
+				const float W = G.SwingW;
+				const float FootPitch = (G.bSwing && !G.bTimed) ? FMath::Lerp(-20.f, 12.f, W) * FMath::Sin(PI * W) : 0.f;
+				const FQuat Follow = Thigh[i].Quaternion() * Shin[i].Quaternion();
+				const FQuat Delta = FQuat::Slerp(Follow, FRotator(FootPitch, 0.f, 0.f).Quaternion(), LockW);
+				FTransform T = BodySkin->GetBoneTransformByName(NFoot[i], EBoneSpaces::ComponentSpace);
+				T.SetRotation(Delta * Gs.RestFoot[i]);
+				BodySkin->SetBoneTransformByName(NFoot[i], T, EBoneSpaces::ComponentSpace);
+			}
+		}
 		if (HeldMesh && HeldMesh->GetStaticMesh())
 		{
 			// L'objet tenu suit la main droite, dans l'axe de l'avant-bras
@@ -4146,6 +4520,12 @@ void ABRCharacter::AnimateBody(float Dt)
 			{
 				HeldMesh->SetWorldLocationAndRotation(Hand + Dir * 6.f, FRotationMatrix::MakeFromX(Dir).Rotator());
 			}
+		}
+		// Pour les tests : chevilles telles qu'affichees a cette image
+		Gs.bAnkleValid = Gs.bFootBones;
+		for (int32 i = 0; i < 2 && Gs.bFootBones; ++i)
+		{
+			Gs.AnkleWorld[i] = BodySkin->GetBoneLocationByName(NFoot[i], EBoneSpaces::WorldSpace);
 		}
 	}
 	else
@@ -4161,6 +4541,11 @@ void ABRCharacter::AnimateBody(float Dt)
 		if (Body.Head)
 		{
 			Body.Head->SetRelativeRotation(HeadRot);
+		}
+		Gs.bAnkleValid = Body.Shin[0] && Body.Shin[1];
+		for (int32 i = 0; i < 2 && Gs.bAnkleValid; ++i)
+		{
+			Gs.AnkleWorld[i] = Body.Shin[i]->GetComponentTransform().TransformPosition(Gs.RestAnkle[i] - Gs.RestKnee[i]);
 		}
 	}
 }

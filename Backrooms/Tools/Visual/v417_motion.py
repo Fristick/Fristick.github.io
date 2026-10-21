@@ -157,7 +157,10 @@ def bones(src, scene="l0_3p_cote"):
     if len(fr) < 4:
         print("%s : pas d'os des pieds dans les fiches" % scene)
         return
-    print("%s : os %s, %d images" % (scene, fr[0][1].get("nom", "?"), len(fr)))
+    src = fr[0][1].get("source", "maillage")
+    print("%s : os %s (%s), %d images" % (scene, fr[0][1].get("nom", "?"),
+          "releves juste apres la pose" if src == "pose" else "lus sur le maillage au passage du banc", len(fr)))
+    segs_by_foot = {}
     for key, name in (("pied_gauche", "gauche"), ("pied_droit", "droit")):
         P = [o[key] for _, o in fr]
         ground = [o.get("sol_z", 0.0) for _, o in fr]
@@ -173,6 +176,7 @@ def bones(src, scene="l0_3p_cote"):
                 if s is not None and i - 1 - s >= 3:
                     segs.append((s, i - 1))
                 s = None
+        segs_by_foot[key] = segs
         slips = [max(d2(P[j], P[a]) for j in range(a, b + 1)) for a, b in segs]
         stance_z = [P[j][2] - ground[j] for a, b in segs for j in range(a, b + 1)]
         swing_z = [P[j][2] - ground[j] for j in range(len(P)) if not any(a <= j <= b for a, b in segs)]
@@ -183,6 +187,46 @@ def bones(src, scene="l0_3p_cote"):
         print("  pied %s : vitesse moyenne %.1f cm/image, %d appui(s), glissement par appui median %.1f cm, max %.1f (critere <= 3) ; "
               "os a %.1f-%.1f cm du sol pendant l'appui, %.1f cm au plus bas pendant le pas"
               % (name, mean, len(s2), s2[len(s2) // 2], s2[-1], min(stance_z), max(stance_z), min(swing_z) if swing_z else float("nan")))
+    # Pied en l'air plus bas que le pied d'appui (images ou un seul pied est en appui, selon la vitesse de l'os)
+    if len(segs_by_foot) == 2:
+        def in_seg(segs, j):
+            return any(a <= j <= b for a, b in segs)
+        lower, n, worst = 0, 0, 0.0
+        for j, (_, o) in enumerate(fr):
+            sl = in_seg(segs_by_foot["pied_gauche"], j)
+            sr = in_seg(segs_by_foot["pied_droit"], j)
+            if sl == sr:
+                continue
+            stance, swing = (o["pied_gauche"], o["pied_droit"]) if sl else (o["pied_droit"], o["pied_gauche"])
+            n += 1
+            if swing[2] < stance[2] - 0.5:
+                lower += 1
+                worst = max(worst, stance[2] - swing[2])
+        print("  pied en l'air plus bas que le pied d'appui (de plus de 0,5 cm) : %d image(s) sur %d a un seul appui%s"
+              % (lower, n, (", jusqu'a %.1f cm" % worst) if lower else ""))
+    # v4.17 (appuis) : fiches de la pose (source "pose") : sol reel sous chaque pied, cheville au repos, appuis du jeu
+    if all("sol_reel_z" in o and "appui" in o for _, o in fr):
+        rest = fr[0][1].get("cheville_repos_cm", 0.0)
+        print("  cheville au repos : %.1f cm au-dessus de la semelle" % rest)
+        for k, (key, name) in enumerate((("pied_gauche", "gauche"), ("pied_droit", "droit"))):
+            # appui = suite d'images ou le jeu declare le pied pose : [debut, glissement max, hauteurs de la cheville]
+            spans, cur = [], None
+            for j, (_, o) in enumerate(fr):
+                if o["appui"][k]:
+                    if cur is None:
+                        cur = [o[key], 0.0, []]
+                        spans.append(cur)
+                    cur[1] = max(cur[1], d2(o[key], cur[0]))
+                    cur[2].append(o[key][2] - o["sol_reel_z"][k])
+                else:
+                    cur = None
+            if not spans:
+                continue
+            drifts = sorted(s[1] for s in spans)
+            hz = [z for s in spans for z in s[2]]
+            print("  pied %s, appuis du jeu : %d appui(s), glissement par appui median %.2f cm, max %.2f (critere <= 3) ; "
+                  "cheville a %.1f-%.1f cm au-dessus du sol reel pendant l'appui"
+                  % (name, len(drifts), drifts[len(drifts) // 2], drifts[-1], min(hz), max(hz)))
 
 
 def main():

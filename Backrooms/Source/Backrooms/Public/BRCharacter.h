@@ -86,6 +86,8 @@ class BACKROOMS_API ABRCharacter : public ACharacter
 	GENERATED_BODY()
 	/** v4.7 : le test automatique regle le souffle (noyade) et lit l'etat interne */
 	friend class ABRAutoTest;
+	/** v4.17 (appuis) : pose du corps apres le deplacement de l'image (BRCharacter.cpp) */
+	friend struct FBRBodyLateTick;
 
 public:
 	ABRCharacter();
@@ -835,6 +837,9 @@ private:
 	float WaterDepth = 0.f;
 	float WaterZ = -1.0e6f;
 	float BodyAnim = 0.f;
+	/** v4.17 (appuis) : AnimateBody tourne apres le composant de deplacement de l'image (et son lissage reseau) : les pieds poses
+	 *  sont tenus au monde par rapport a la capsule deja deplacee. Cree dans BeginPlay, detruit dans EndPlay */
+	struct FBRBodyLateTick* BodyLateTick = nullptr;
 	/** v4.4 : combinaison a squelette (SK_Hazmat), animee os par os ; nullptr : pieces rigides (repli) */
 	UPROPERTY()
 	TObjectPtr<UPoseableMeshComponent> BodySkin;
