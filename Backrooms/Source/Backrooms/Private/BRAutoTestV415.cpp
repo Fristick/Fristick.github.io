@@ -1159,8 +1159,9 @@ void ABRAutoTest::AddV415Steps()
 	{
 		const FString Options = BRLevels::JoinOptions();
 		const FString Label = BRLevels::VersionLabel(BRContent::NetVersion);
-		// v4.16 : protocole 416 (abandon a terre d'un client, ABRCharacter::ServerReportGiveUp)
-		const bool bOk = BRContent::NetVersion == 416 && Options.Contains(TEXT("?BRNet=416")) && Label == TEXT("4.16") && FString(BR_GAME_VERSION) == TEXT("v4.16");
+		// v4.16 : protocole 416 (abandon a terre d'un client, ABRCharacter::ServerReportGiveUp). v4.17 : jeu v4.17, protocole
+		// inchange (rendu, interface et animation locaux : rien de nouveau n'est replique)
+		const bool bOk = BRContent::NetVersion == 416 && Options.Contains(TEXT("?BRNet=416")) && Label == TEXT("4.16") && FString(BR_GAME_VERSION) == TEXT("v4.17");
 		Note(FString::Printf(TEXT("protocole %d, options d'entree \"%s\", version affichee %s, jeu %s"), BRContent::NetVersion, *Options, *Label, BR_GAME_VERSION), !bOk);
 		return true;
 	});
