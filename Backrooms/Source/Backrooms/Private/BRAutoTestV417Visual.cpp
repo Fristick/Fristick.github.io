@@ -39,6 +39,7 @@
 #include "Camera/CameraComponent.h"
 #include "CollisionQueryParams.h"
 #include "Components/PointLightComponent.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/HitResult.h"
 #include "Engine/World.h"
@@ -983,6 +984,21 @@ void ABRAutoTest::AddV417VisualSteps()
 		BRTestV417::TrackCam = bCut ? Want : FMath::Lerp(BRTestV417::TrackCam, Want, 0.35f);
 		const FVector Look = Foot + FVector(0.f, 0.f, 85.f);
 		BRTestV417::ShowCamera(C->GetWorld(), C->Camera, PC, BRTestV417::TrackCam, (Look - BRTestV417::TrackCam).Rotation());
+		// v4.17 (correction) : os des pieds au monde : le glissement du pied d'appui se lit sur l'os (avant et apres)
+		FString Bones;
+		if (UPoseableMeshComponent* Skin = C->BodySkin)
+		{
+			auto BoneAt = [Skin](const TCHAR* Foot, const TCHAR* Leg)
+			{
+				const FName N = Skin->GetBoneIndex(FName(Foot)) != INDEX_NONE ? FName(Foot) : FName(Leg);
+				return Skin->GetBoneIndex(N) != INDEX_NONE ? Skin->GetBoneLocationByName(N, EBoneSpaces::WorldSpace) : FVector::ZeroVector;
+			};
+			const FVector L = BoneAt(TEXT("LeftFoot"), TEXT("LeftLeg"));
+			const FVector R = BoneAt(TEXT("RightFoot"), TEXT("RightLeg"));
+			Bones = FString::Printf(TEXT("\"os\": { \"nom\": \"%s\", \"pied_gauche\": [%.1f, %.1f, %.1f], \"pied_droit\": [%.1f, %.1f, %.1f], \"sol_z\": %.1f, \"visible\": %s }"),
+				Skin->GetBoneIndex(FName(TEXT("LeftFoot"))) != INDEX_NONE ? TEXT("LeftFoot") : TEXT("LeftLeg"), L.X, L.Y, L.Z, R.X, R.Y, R.Z, Foot.Z,
+				Skin->IsVisible() ? TEXT("true") : TEXT("false"));
+		}
 		FBRBodyPoseInfo P;
 		if (BRRig::GetBodyPoseInfo(C, P))
 		{
@@ -990,6 +1006,10 @@ void ABRAutoTest::AddV417VisualSteps()
 				TEXT("\"sol_pieds_cm\": [%.2f, %.2f], \"pied_gauche\": [%.1f, %.1f, %.1f], \"pied_droit\": [%.1f, %.1f, %.1f] } }"),
 				P.LowerYaw, P.YawOffset, P.TurnStep, P.PelvisDrop, P.WalkDrop, P.FootGround[0], P.FootGround[1],
 				P.FootWorld[0].X, P.FootWorld[0].Y, P.FootWorld[0].Z, P.FootWorld[1].X, P.FootWorld[1].Y, P.FootWorld[1].Z);
+		}
+		if (!Bones.IsEmpty())
+		{
+			BRTestV417::Extra = BRTestV417::Extra.IsEmpty() ? TEXT("{ ") + Bones + TEXT(" }") : BRTestV417::Extra.LeftChop(2) + TEXT(", ") + Bones + TEXT(" }");
 		}
 	});
 	Add(TEXT("v4.17 visuel : fin de la marche vue de cote"), 0.f, [this]()
