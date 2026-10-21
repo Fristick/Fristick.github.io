@@ -251,6 +251,20 @@ def bones(src, scene="l0_3p_cote"):
             print("  pied %s, appuis du jeu : %d appui(s), glissement par appui median %.2f cm, max %.2f (critere <= 3) ; "
                   "cheville a %.1f-%.1f cm au-dessus du sol reel pendant l'appui"
                   % (name, len(drifts), drifts[len(drifts) // 2], drifts[-1], min(hz), max(hz)))
+        # Pied en l'air plus bas que le pied pose, selon les appuis du jeu (un seul pied pose)
+        lower, n, worst = 0, 0, 0.0
+        for _, o in fr:
+            a = o["appui"]
+            if a[0] == a[1]:
+                continue
+            k = 0 if a[0] else 1
+            stance, swing = o[("pied_gauche", "pied_droit")[k]], o[("pied_gauche", "pied_droit")[1 - k]]
+            n += 1
+            if swing[2] < stance[2] - 0.5:
+                lower += 1
+                worst = max(worst, stance[2] - swing[2])
+        print("  appuis du jeu : pied en l'air plus bas que le pied pose (de plus de 0,5 cm) : %d image(s) sur %d a un seul pied pose%s"
+              % (lower, n, (", jusqu'a %.1f cm" % worst) if lower else ""))
 
 
 def main():
