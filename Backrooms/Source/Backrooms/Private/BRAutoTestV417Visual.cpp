@@ -83,6 +83,8 @@ namespace BRTestV417
 	/** v4.17 (correction, QA visuelle) : camera qui suit (Bacteria, marche vue de cote) et cote de la marche le plus libre */
 	FVector TrackCam = FVector::ZeroVector;
 	float FeetSide = 1.f;
+	/** v4.17 (correction) : point de depart de la Bacteria (trajet impose de sa video) */
+	FVector EntitySpot = FVector::ZeroVector;
 	/** v4.17 (correction, QA visuelle) : mesures de la prochaine image de video (ABRAutoTest::ShotExtra) */
 	FString Extra;
 
@@ -963,8 +965,22 @@ void ABRAutoTest::AddV417VisualSteps()
 		const FVector Fwd = FRotator(0.f, C->GetActorRotation().Yaw, 0.f).Vector();
 		const FVector Side = FVector::CrossProduct(FVector::UpVector, Fwd) * BRTestV417::FeetSide;
 		const FVector Foot = Loc - FVector(0.f, 0.f, C->GetSimpleCollisionHalfHeight());
-		const FVector Want = BRTestV417::ClearCamera(C->GetWorld(), Loc, Foot + Side * 280.f + Fwd * 60.f + FVector(0.f, 0.f, 80.f), C, nullptr);
-		BRTestV417::TrackCam = BRTestV417::Frame == 0 ? Want : FMath::Lerp(BRTestV417::TrackCam, Want, 0.35f);
+		// v4.17 (correction) : cote bouche (mur, pilier a moins de 1,8 m) et l'autre libre : la camera change de cote (coupe
+		// franche) ; avant, elle se rapprochait contre le personnage et coupait les pieds
+		const FVector Off = Fwd * 60.f + FVector(0.f, 0.f, 80.f);
+		FVector Want = BRTestV417::ClearCamera(C->GetWorld(), Loc, Foot + Side * 280.f + Off, C, nullptr);
+		bool bCut = BRTestV417::Frame == 0;
+		if (FVector::Dist2D(Want, Loc) < 180.f)
+		{
+			const FVector Other = BRTestV417::ClearCamera(C->GetWorld(), Loc, Foot - Side * 280.f + Off, C, nullptr);
+			if (FVector::Dist2D(Other, Loc) > FVector::Dist2D(Want, Loc) + 60.f)
+			{
+				BRTestV417::FeetSide = -BRTestV417::FeetSide;
+				Want = Other;
+				bCut = true;
+			}
+		}
+		BRTestV417::TrackCam = bCut ? Want : FMath::Lerp(BRTestV417::TrackCam, Want, 0.35f);
 		const FVector Look = Foot + FVector(0.f, 0.f, 85.f);
 		BRTestV417::ShowCamera(C->GetWorld(), C->Camera, PC, BRTestV417::TrackCam, (Look - BRTestV417::TrackCam).Rotation());
 		FBRBodyPoseInfo P;
@@ -1006,6 +1022,7 @@ void ABRAutoTest::AddV417VisualSteps()
 		FVector Spot = BRTestV417::SpawnLoc + Dir * Dist;
 		Spot.Z = W->FloorZAt(Spot) + (Info.bFlying ? Info.HoverHeight : Info.HalfHeight + 5.f);
 		BRTestV417::Control = W->SpawnEntity(EBREntityKind::Bacteria, Spot);
+		BRTestV417::EntitySpot = Spot;
 		if (!BRTestV417::Control.IsValid())
 		{
 			Skip(TEXT("v417_video_l0_bacteria : la Bacteria n'a pas pu etre posee (video sans entite)"));
@@ -1019,6 +1036,21 @@ void ABRAutoTest::AddV417VisualSteps()
 		if (ABREntity* E = BRTestV417::Control.Get())
 		{
 			BRTestV417::SeenFrames += E->WasRecentlyRendered(0.05f) ? 1 : 0;
+			// v4.17 (correction) : trajet impose, le meme d'une version a l'autre : marche vers le joueur (arret a 2 m), puis
+			// demi-tour en course a l'image 75 vers son point de depart (avant : au calme, elle restait sur place)
+			if (BRTestV417::Frame == 0 || BRTestV417::Frame == 75)
+			{
+				const FBREntityInfo& Info = ABREntity::Info(EBREntityKind::Bacteria);
+				const FVector ToPlayer = (BRTestV417::SpawnLoc - BRTestV417::EntitySpot).GetSafeNormal2D();
+				if (BRTestV417::Frame == 0)
+				{
+					E->SetTestWalk(BRTestV417::SpawnLoc - ToPlayer * 200.f, Info.WalkSpeed);
+				}
+				else
+				{
+					E->SetTestWalk(BRTestV417::EntitySpot, Info.ChaseSpeed);
+				}
+			}
 			const FVector Target = E->GetActorLocation();
 			if (PC)
 			{

@@ -84,6 +84,15 @@ public:
 	void LidarRepel(const FVector& From);
 	/** Fait disparaitre l'entite (fin d'une coupure de courant pour les Smilers) */
 	void Dismiss() { StartVanish(); }
+	/** v4.17 (tests) : marche imposee par un banc (videos d'animation) : l'entite suit son chemin vers Goal a Speed (cm/s) et ne
+	 *  decide plus rien d'autre (ni poursuite, ni attaque nouvelle) ; ClearTestWalk lui rend son IA. Jamais appele en jeu */
+	void SetTestWalk(const FVector& Goal, float Speed)
+	{
+		bTestWalk = true;
+		TestWalkGoal = Goal;
+		TestWalkSpeed = Speed;
+	}
+	void ClearTestWalk() { bTestWalk = false; }
 	/** Bacteria : 0..1, a quel point elle a repere le joueur (1 = poursuite) */
 	float GetSuspicion() const { return Suspicion; }
 	bool IsVanishing() const { return Vanish >= 0.f; }
@@ -353,6 +362,10 @@ private:
 	void PickPatrolGoal(ABRWorld* W, const ABRCharacter* P);
 
 	EState State = EState::Wander;
+	/** v4.17 (tests) : marche imposee (SetTestWalk) */
+	bool bTestWalk = false;
+	FVector TestWalkGoal = FVector::ZeroVector;
+	float TestWalkSpeed = 0.f;
 	float StateTime = 0.f;
 	float RepathTimer = 0.f;
 	TArray<FIntPoint> Path;

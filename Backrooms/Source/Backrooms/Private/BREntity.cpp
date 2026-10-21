@@ -2051,6 +2051,12 @@ void ABREntity::Think(float Dt)
 	// v4.7 : l'attaque en cours se deroule jusqu'au bout (meme si la proie change ou tombe), puis la demarche
 	UpdateAttack(Dt);
 	UpdateGait(Dt, P);
+	// v4.17 (tests) : marche imposee par un banc : le chemin vers le but, rien d'autre
+	if (bTestWalk)
+	{
+		FollowPathTo(TestWalkGoal, TestWalkSpeed, Dt);
+		return;
+	}
 	if (!W || !P || P->IsDead())
 	{
 		Reach = FMath::FInterpTo(Reach, 0.f, Dt, 3.f);

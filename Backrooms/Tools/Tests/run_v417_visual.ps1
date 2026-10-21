@@ -29,7 +29,14 @@ $saved = Join-Path $projDir 'Saved'
 if (-not $OutRoot) { $OutRoot = Join-Path $saved 'TestRuns\v417' }
 if (-not $Tag) { $Tag = 'v417_' + (Get-Date -Format 'yyyyMMdd_HHmm') }
 $names = @{ 0 = 'Performance'; 1 = 'Qualite'; 2 = 'Cinematique'; 3 = 'Personnalise'; 4 = 'RTXFluide' }
-$sha = (git -C $projDir rev-parse HEAD).Trim()
+# v4.17 (correction) : copie hors depot (reference avant / apres) : premiere ligne de COMMIT_AVANT.txt si elle existe ;
+# avant, -BRCommit= restait vide et le jeu lisait l'argument suivant comme commit (fiches JSON invalides)
+$sha = (& git -C $projDir rev-parse HEAD 2>$null | Select-Object -First 1)
+if (-not $sha) {
+  $ref = Join-Path $projDir 'COMMIT_AVANT.txt'
+  $sha = if (Test-Path $ref) { 'copie-' + (Get-Content $ref -TotalCount 1).Trim() } else { 'hors-depot' }
+}
+$sha = $sha.Trim()
 $dirty = if ((git -C $projDir status --porcelain --untracked-files=no -- Source Content Config) -ne $null) { 1 } else { 0 }
 $tagDir = Join-Path $OutRoot $Tag
 New-Item -ItemType Directory -Force $tagDir | Out-Null

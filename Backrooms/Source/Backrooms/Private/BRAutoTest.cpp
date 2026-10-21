@@ -568,6 +568,12 @@ void ABRAutoTest::WriteShotMeta(const FString& Name, bool bShowUI)
 	static const TCHAR* const ProfileNames[] = { TEXT("Performance"), TEXT("Qualite"), TEXT("Cinematique"), TEXT("Personnalise"), TEXT("RTXFluide") };
 	FString Commit = TEXT("inconnu");
 	FParse::Value(FCommandLine::Get(), TEXT("BRCommit="), Commit);
+	// v4.17 (correction) : "-BRCommit=" vide (copie hors depot) : FParse::Value lisait l'argument suivant (un chemin, fiche JSON
+	// invalide) ; une valeur qui commence par un tiret ou contient \ ou " est ecartee
+	if (Commit.StartsWith(TEXT("-")) || Commit.Contains(TEXT("\\")) || Commit.Contains(TEXT("\"")))
+	{
+		Commit = TEXT("inconnu");
+	}
 	const ABRWorld* W = GetBRWorld();
 	const ABRCharacter* C = GetPlayer();
 	const ABRPlayerController* PC = GetPC();
