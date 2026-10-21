@@ -58,6 +58,15 @@ struct FBREntityInfo
 	float TurnRate = 300.f;
 };
 
+/** v4.17 (appuis) : pose de la Bacteria apres le composant de deplacement de l'image (BREntity.cpp). Membre de l'acteur
+ *  (comme PrimaryActorTick) : desinscrite dans EndPlay, liberee avec lui (jamais pendant l'image ou elle est en file) */
+struct FBREntityLateTick : public FTickFunction
+{
+	TWeakObjectPtr<class ABREntity> Target;
+	virtual void ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent) override;
+	virtual FString DiagnosticMessage() override;
+};
+
 UCLASS()
 class BACKROOMS_API ABREntity : public ACharacter
 {
@@ -559,7 +568,7 @@ private:
 	/** v4.17 (appuis) : pose de la Bacteria apres le composant de deplacement de l'image (FBREntityLateTick, BREntity.cpp) :
 	 *  demandee par Animate avec le pas de l'image, faite une fois la capsule deplacee ; avant, le modele pose dans le Tick suivait
 	 *  ensuite la capsule du deplacement de l'image (glissement au demarrage, saut de lacet au demi-tour) */
-	struct FBREntityLateTick* LateTick = nullptr;
+	FBREntityLateTick LateTick;
 	friend struct FBREntityLateTick;
 	bool bGaitPending = false;
 	float GaitDt = 0.f;

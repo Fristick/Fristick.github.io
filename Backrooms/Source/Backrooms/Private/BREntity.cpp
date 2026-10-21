@@ -23,27 +23,22 @@
 #include "Net/UnrealNetwork.h"
 #include "Sound/SoundBase.h"
 
-/** v4.17 (appuis) : pose de la Bacteria apres le composant de deplacement de l'image (ACharacter : le deplacement attend le
- *  Tick de l'acteur, ou Animate est appele) : le modele pose au monde est place par rapport a la capsule deja deplacee */
-struct FBREntityLateTick : public FTickFunction
+// v4.17 (appuis) : pose de la Bacteria apres le composant de deplacement de l'image (ACharacter : le deplacement attend le
+// Tick de l'acteur, ou Animate est appele) : le modele pose au monde est place par rapport a la capsule deja deplacee
+void FBREntityLateTick::ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent)
 {
-	TWeakObjectPtr<ABREntity> Target;
-
-	virtual void ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent) override
+	ABREntity* E = Target.Get();
+	if (E && IsValid(E) && E->bGaitPending)
 	{
-		ABREntity* E = Target.Get();
-		if (E && IsValid(E) && E->bGaitPending)
-		{
-			E->bGaitPending = false;
-			E->PoseBacteria(E->GaitDt);
-		}
+		E->bGaitPending = false;
+		E->PoseBacteria(E->GaitDt);
 	}
+}
 
-	virtual FString DiagnosticMessage() override
-	{
-		return TEXT("FBREntityLateTick");
-	}
-};
+FString FBREntityLateTick::DiagnosticMessage()
+{
+	return TEXT("FBREntityLateTick");
+}
 
 // =====================================================================================================================
 // Fiches des entites (descriptions inspirees du Backrooms Wiki)
@@ -360,18 +355,17 @@ void ABREntity::BeginPlay()
 	BuildVisual();
 	UpdateMorph(0.f);
 	// v4.17 (appuis) : Bacteria posee au sol : sa pose suit le deplacement de l'image (FBREntityLateTick), chez chacun
-	if (Kind == EBREntityKind::Bacteria && BodyContacts.Num() > 0 && !LateTick && GetLevel())
+	if (Kind == EBREntityKind::Bacteria && BodyContacts.Num() > 0 && !LateTick.IsTickFunctionRegistered() && GetLevel())
 	{
-		LateTick = new FBREntityLateTick();
-		LateTick->Target = this;
-		LateTick->bCanEverTick = true;
-		LateTick->bStartWithTickEnabled = true;
-		LateTick->TickGroup = TG_PrePhysics;
-		LateTick->RegisterTickFunction(GetLevel());
-		LateTick->AddPrerequisite(this, PrimaryActorTick);
+		LateTick.Target = this;
+		LateTick.bCanEverTick = true;
+		LateTick.bStartWithTickEnabled = true;
+		LateTick.TickGroup = TG_PrePhysics;
+		LateTick.RegisterTickFunction(GetLevel());
+		LateTick.AddPrerequisite(this, PrimaryActorTick);
 		if (UCharacterMovementComponent* CM = GetCharacterMovement())
 		{
-			LateTick->AddPrerequisite(CM, CM->PrimaryComponentTick);
+			LateTick.AddPrerequisite(CM, CM->PrimaryComponentTick);
 		}
 	}
 }
@@ -403,12 +397,9 @@ void ABREntity::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		W->UnregisterEntity(this);
 	}
-	if (LateTick)
-	{
-		LateTick->UnRegisterTickFunction();
-		delete LateTick;
-		LateTick = nullptr;
-	}
+	// v4.17 (appuis) : desinscrite seulement (elle peut encore etre en file pour cette image) ; liberee avec l'acteur
+	LateTick.UnRegisterTickFunction();
+	bGaitPending = false;
 	Super::EndPlay(Reason);
 }
 
@@ -3866,7 +3857,7 @@ void ABREntity::Animate(float Dt)
 		// v4.17 (animation) : modele fourni (corps rigide) : pose au sol et bonds au lieu de glisser avec la capsule, puis
 		// la meme garde d'appui que la v4.16. v4.17 (appuis) : une fois la capsule deplacee (FBREntityLateTick) ; jumpscare :
 		// tout de suite (le modele est ensuite tenu devant la camera)
-		if (LateTick && !bScareOverride)
+		if (LateTick.IsTickFunctionRegistered() && !bScareOverride)
 		{
 			bGaitPending = true;
 			GaitDt = Dt;

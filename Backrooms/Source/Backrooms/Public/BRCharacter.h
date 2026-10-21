@@ -80,6 +80,15 @@ enum class EBRActionStatus : uint8
 	Refused
 };
 
+/** v4.17 (appuis) : pose du corps d'un joueur apres le composant de deplacement de l'image (BRCharacter.cpp). Membre de
+ *  l'acteur (comme PrimaryActorTick) : desinscrite dans EndPlay, liberee avec lui (jamais pendant l'image ou elle est en file) */
+struct FBRBodyLateTick : public FTickFunction
+{
+	TWeakObjectPtr<class ABRCharacter> Target;
+	virtual void ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent) override;
+	virtual FString DiagnosticMessage() override;
+};
+
 UCLASS()
 class BACKROOMS_API ABRCharacter : public ACharacter
 {
@@ -838,8 +847,8 @@ private:
 	float WaterZ = -1.0e6f;
 	float BodyAnim = 0.f;
 	/** v4.17 (appuis) : AnimateBody tourne apres le composant de deplacement de l'image (et son lissage reseau) : les pieds poses
-	 *  sont tenus au monde par rapport a la capsule deja deplacee. Cree dans BeginPlay, detruit dans EndPlay */
-	struct FBRBodyLateTick* BodyLateTick = nullptr;
+	 *  sont tenus au monde par rapport a la capsule deja deplacee. Inscrite dans BeginPlay, desinscrite dans EndPlay */
+	FBRBodyLateTick BodyLateTick;
 	/** v4.4 : combinaison a squelette (SK_Hazmat), animee os par os ; nullptr : pieces rigides (repli) */
 	UPROPERTY()
 	TObjectPtr<UPoseableMeshComponent> BodySkin;

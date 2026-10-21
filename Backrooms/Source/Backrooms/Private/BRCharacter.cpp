@@ -38,28 +38,23 @@
 #include "Sound/SoundBase.h"
 #include "AnimationRuntime.h"
 
-/** v4.17 (appuis) : pose du corps apres le composant de deplacement (et son lissage reseau) de l'image : le Tick du
- *  personnage passe avant (ACharacter : le deplacement attend le Tick de l'acteur), et un pied tenu au monde dans le Tick
- *  suivait ensuite la capsule du deplacement de l'image (glissement d'un pas d'image a chaque changement d'allure) */
-struct FBRBodyLateTick : public FTickFunction
+// v4.17 (appuis) : pose du corps apres le composant de deplacement (et son lissage reseau) de l'image : le Tick du
+// personnage passe avant (ACharacter : le deplacement attend le Tick de l'acteur), et un pied tenu au monde dans le Tick
+// suivait ensuite la capsule du deplacement de l'image (glissement d'un pas d'image a chaque changement d'allure)
+void FBRBodyLateTick::ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent)
 {
-	TWeakObjectPtr<ABRCharacter> Target;
-
-	virtual void ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent) override
+	ABRCharacter* C = Target.Get();
+	if (C && IsValid(C) && TickType != LEVELTICK_ViewportsOnly && C->PrimaryActorTick.IsTickFunctionEnabled())
 	{
-		ABRCharacter* C = Target.Get();
-		if (C && IsValid(C) && TickType != LEVELTICK_ViewportsOnly && C->PrimaryActorTick.IsTickFunctionEnabled())
-		{
-			// Meme pas que le Tick de l'acteur (dilatation propre comprise)
-			C->AnimateBody(FMath::Min(DeltaTime * C->CustomTimeDilation, 0.1f));
-		}
+		// Meme pas que le Tick de l'acteur (dilatation propre comprise)
+		C->AnimateBody(FMath::Min(DeltaTime * C->CustomTimeDilation, 0.1f));
 	}
+}
 
-	virtual FString DiagnosticMessage() override
-	{
-		return TEXT("FBRBodyLateTick");
-	}
-};
+FString FBRBodyLateTick::DiagnosticMessage()
+{
+	return TEXT("FBRBodyLateTick");
+}
 
 namespace
 {
@@ -188,18 +183,17 @@ void ABRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	// v4.17 (appuis) : pose du corps apres le deplacement de l'image (FBRBodyLateTick), chez chacun
-	if (!BodyLateTick && GetLevel())
+	if (!BodyLateTick.IsTickFunctionRegistered() && GetLevel())
 	{
-		BodyLateTick = new FBRBodyLateTick();
-		BodyLateTick->Target = this;
-		BodyLateTick->bCanEverTick = true;
-		BodyLateTick->bStartWithTickEnabled = true;
-		BodyLateTick->TickGroup = TG_PrePhysics;
-		BodyLateTick->RegisterTickFunction(GetLevel());
-		BodyLateTick->AddPrerequisite(this, PrimaryActorTick);
+		BodyLateTick.Target = this;
+		BodyLateTick.bCanEverTick = true;
+		BodyLateTick.bStartWithTickEnabled = true;
+		BodyLateTick.TickGroup = TG_PrePhysics;
+		BodyLateTick.RegisterTickFunction(GetLevel());
+		BodyLateTick.AddPrerequisite(this, PrimaryActorTick);
 		if (UCharacterMovementComponent* M = GetCharacterMovement())
 		{
-			BodyLateTick->AddPrerequisite(M, M->PrimaryComponentTick);
+			BodyLateTick.AddPrerequisite(M, M->PrimaryComponentTick);
 		}
 	}
 	SetFlashlightRayTracedShadows(FBRSettings::Get().bRTShadows && ABRPlayerController::IsHardwareRayTracingAvailable());
@@ -1720,12 +1714,8 @@ void ABRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			ServerReturnedPickups += N;
 		}
 	}
-	if (BodyLateTick)
-	{
-		BodyLateTick->UnRegisterTickFunction();
-		delete BodyLateTick;
-		BodyLateTick = nullptr;
-	}
+	// v4.17 (appuis) : desinscrite seulement (elle peut encore etre en file pour cette image) ; liberee avec l'acteur
+	BodyLateTick.UnRegisterTickFunction();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -2792,7 +2782,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	UpdateLidar(Dt);
 	UpdateAudio(Dt);
 	UpdatePostProcess(Dt);
-	if (!BodyLateTick)
+	if (!BodyLateTick.IsTickFunctionRegistered())
 	{
 		AnimateBody(Dt); // v4.17 (appuis) : sinon apres le deplacement de l'image (FBRBodyLateTick)
 	}
@@ -2982,7 +2972,7 @@ void ABRCharacter::TickRemote(float Dt)
 			}
 		}
 	}
-	if (!BodyLateTick)
+	if (!BodyLateTick.IsTickFunctionRegistered())
 	{
 		AnimateBody(Dt); // v4.17 (appuis) : sinon apres le deplacement de l'image (FBRBodyLateTick)
 	}
