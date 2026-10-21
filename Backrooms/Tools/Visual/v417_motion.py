@@ -146,6 +146,11 @@ def player(src):
             print("  pied %s : %d appui(s), glissement par pas median %.2f cm, max %.2f (critere <= 3)" % (names[k], len(s), s[len(s) // 2], s[-1]))
     print("  double appui : %d image(s), les deux pieds a <= 2 cm du sol sur %d" % (double, double_ok))
     print("  ecart des jambes a la visee : max %.1f deg, median %.1f" % (max(yaw_off), sorted(yaw_off)[len(yaw_off) // 2]))
+    # v4.17 (appuis) : descente du bassin de la marche (appui_cm) et son plus grand saut d'une image a l'autre
+    drop = [c.get("appui_cm", 0.0) for _, c in fr]
+    jumps = [abs(drop[j] - drop[j - 1]) for j in range(1, len(drop))]
+    print("  bassin de la marche : descente max %.1f cm, mediane %.1f ; plus grand changement d'une image a l'autre %.1f cm"
+          % (max(drop), sorted(drop)[len(drop) // 2], max(jumps) if jumps else 0.0))
 
 
 def bones(src, scene="l0_3p_cote"):

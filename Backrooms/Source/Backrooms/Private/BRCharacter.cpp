@@ -3882,6 +3882,8 @@ namespace
 		/** v4.17 (appuis) : meme sol, au monde (la capsule monte d'un coup sur une marche, entre deux rayons) */
 		float GroundZ[2] = { 0.f, 0.f };
 		float PelvisDrop = 0.f;
+		/** v4.17 (appuis) : descente du bassin de la marche, remontee a vitesse bornee */
+		float WalkDrop = 0.f;
 		/** v4.17 (appuis) : jambes (appuis au monde) ; temps a l'arret ; geometrie de repos de chaque jambe dans le repere des
 		 *  jambes (BodyFeet : +X avant, Z = 0 sous la semelle) : hanche, genou, cheville, rotation de repos du pied */
 		bool bLegsInit = false;
@@ -3994,6 +3996,7 @@ void ABRCharacter::AnimateBody(float Dt)
 		Gs.TurnStep = 0.f;
 		Gs.bLegsInit = false;
 		Gs.TraceTimer = 0.f;
+		Gs.WalkDrop = 0.f;
 	}
 	Gs.LastTime = Now;
 	const bool bFeetDown = bGrounded && !bSwimming && !bClimbPose && !bDead && !bDevFly;
@@ -4421,6 +4424,10 @@ void ABRCharacter::AnimateBody(float Dt)
 		WalkDrop = FMath::Max(WalkDrop, static_cast<float>(Need) * Weight);
 	}
 	WalkDrop = FMath::Clamp(WalkDrop, 0.f, 35.f) * LockW;
+	// v4.17 (appuis) : le bassin descend aussitot qu'il le faut, mais remonte a 80 cm/s au plus : quand un pied se leve, sa jambe
+	// ne compte plus et le bassin sautait de 5 a 14 cm en une image ; il reste un peu plus bas (genoux plus plies)
+	Gs.WalkDrop = FMath::Max(WalkDrop, Gs.WalkDrop - 80.f * Dt);
+	WalkDrop = Gs.WalkDrop;
 	BodyFeet->SetRelativeLocation(FVector(0.f, 0.f, FeetZ(WalkDrop)));
 
 	// v4.17 (appuis) : IK a deux segments dans le plan de la jambe (avant, haut) : le genou plie vers l'avant pour amener la
