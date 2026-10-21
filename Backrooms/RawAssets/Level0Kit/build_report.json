@@ -1,5 +1,5 @@
 {
- "blender": "5.0.1",
+ "blender": "5.2.2 LTS",
  "seed": 9,
  "seed_level": 1896875771,
  "counts": {
@@ -24,6 +24,83 @@
  ],
  "materials": 22,
  "images": 28,
+ "bevels": {
+  "enabled": true,
+  "spec_m_segments": {
+   "Baseboard": [
+    0.005,
+    1
+   ],
+   "DoorCasing": [
+    0.006,
+    1
+   ],
+   "LightFrameOuter": [
+    0.004,
+    1
+   ],
+   "LightFrameInner": [
+    0.003,
+    1
+   ],
+   "ServiceFrame": [
+    0.004,
+    2
+   ],
+   "Threshold": [
+    0.003,
+    1
+   ],
+   "Leaf": [
+    0.004,
+    2
+   ],
+   "HandleRose": [
+    0.003,
+    1
+   ],
+   "HandleLever": [
+    0.004,
+    2
+   ]
+  }
+ },
+ "triangles": {
+  "SM_L0_Reference_1m": 12,
+  "SM_L0_Wall_350": 10,
+  "SM_L0_Wall_Aged_350": 10,
+  "SM_L0_Doorway": 28,
+  "SM_L0_DoorCasing": 88,
+  "SM_L0_Baseboard_290": 12,
+  "SM_L0_Baseboard_070": 12,
+  "SM_L0_Wall_Corner": 28,
+  "SM_L0_Wall_JunctionT": 22,
+  "SM_L0_Wall_JunctionX": 10,
+  "SM_L0_Wall_End": 34,
+  "SM_L0_Wall_Straight": 34,
+  "SM_L0_Pillar": 34,
+  "SM_L0_Floor_350": 12,
+  "SM_L0_Ceiling_350": 12,
+  "SM_L0_Light_Panel": 42,
+  "SM_L0_Light_Panel_Off": 42,
+  "SM_L0_Pit_HoleTile": 40,
+  "SM_L0_Pit_Walkway_350": 12,
+  "SM_L0_Pit_WalkwayCorner": 12,
+  "SM_L0_Pit_Shaft": 56,
+  "SM_L0_Pit_Bottom": 2,
+  "SM_L0_ServiceDoor_Wall": 28,
+  "SM_L0_ServiceDoor_Frame": 84,
+  "SM_L0_ServiceDoor_Leaf": 68,
+  "SM_L0_ServiceDoor_Handle": 128,
+  "SM_L0_ServiceDoor_DraftGlow": 6,
+  "SM_L0_ServiceDoor_Hinge": 12,
+  "SM_L0_ServiceVestibule": 168,
+  "SM_L0_ChalkMark": 32,
+  "SM_L0_ChalkArrow": 6,
+  "SM_L0_Decal_WaterStain": 2,
+  "SM_L0_Decal_CeilingStain": 2,
+  "SM_L0_Decal_CarpetDamp": 2
+ },
  "checks": {
   "reference_1m_dims": [
    1.0,
@@ -1001,6 +1078,6 @@
    ]
   }
  },
- "blend_mb": 30.8,
- "seconds": 25.1
+ "blend_mb": 24.9,
+ "seconds": 18.1
 }
