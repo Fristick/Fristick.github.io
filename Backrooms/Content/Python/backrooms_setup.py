@@ -54,13 +54,16 @@ VERSION = 14
 # v4.17 : 10 : M_BR_Gear (equipement du joueur : normal map tangente, carte ORM, reflectance ; cartes derivees de la
 # combinaison dans RawAssets/Derived/Textures) ; caustiques des Poolrooms attachees a l'eau (entree NZ) ; papier peint du
 # Level 0 refait (moins clair, relief adouci, joints des les)
-MATERIAL_VERSION = 10
+# 11 : icones sombres de l'inventaire avec un contour clair (Tools/outline_icons.py, accessibilite) : reimportees (REICONED)
+MATERIAL_VERSION = 11
 # Textures refaites depuis une version des materiaux : reimportees avec elle, sans tout reimporter
 # (v4.15 : papier peint en les de 53 cm, moquette bouclee, dalles fissurees de 61 cm, et leurs cartes de rugosite)
 RETEXTURED = {3: ["T_L0_Carpet.jpg", "T_L0_Carpet_N.png"],
               8: ["T_L0_Wallpaper.jpg", "T_L0_Wallpaper_N.png", "T_L0_Wallpaper_R.png", "T_L0_Carpet.jpg", "T_L0_Carpet_N.png",
                   "T_L0_Carpet_R.png", "T_L0_Ceiling.jpg", "T_L0_Ceiling_N.png", "T_L0_Ceiling_R.png"],
               10: ["T_L0_Wallpaper.jpg", "T_L0_Wallpaper_N.png", "T_L0_Wallpaper_R.png"]}
+# v4.17 : icones refaites depuis une version des materiaux : reimportees avec elle
+REICONED = {11: ["I_Battery.png", "I_Camcorder.png", "I_Flashlight.png", "I_Headlamp.png", "I_VHSTape.png"]}
 # Sons remplaces depuis une version des materiaux (v4.4 : cris de la Bacteria fournis, en boucle)
 RESOUNDED = {4: ["S_Bacteria.wav"]}
 # Modeles refaits (v4.4 : nouveau Smiler)
@@ -1967,6 +1970,10 @@ def run(force=False):
             if installed_material_version() < mv:
                 tex += [f for f in files if f not in tex and os.path.isfile(raw("Textures", f))]
     ico = list_raw("Icons", (".png",)) if force else missing_in("Icons", UI, (".png",))
+    if not force:
+        for mv, files in sorted(REICONED.items()):
+            if installed_material_version() < mv:
+                ico += [f for f in files if f not in ico and os.path.isfile(raw("Icons", f))]
     snd = list_raw("Sounds", (".wav",)) if force else missing_in("Sounds", SND, (".wav",))
     if not force:
         for mv, files in sorted(RESOUNDED.items()):
