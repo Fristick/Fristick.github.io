@@ -3971,7 +3971,20 @@ void ABRCharacter::AnimateBody(float Dt)
 	const FBRHumanoidSpec Spec = FBRHumanoidSpec::Hazmat();
 	const FVector Vel = GetVelocity();
 	const float Speed2D = static_cast<float>(Vel.Size2D());
-	const bool bGrounded = Move && Move->IsMovingOnGround();
+	bool bGrounded = Move && Move->IsMovingOnGround();
+	// v4.17 (appuis) : chez un client, le personnage simule d'un autre joueur peut rester en mode de deplacement « aucun »
+	// (test reseau : l'hote vu par le client, mode 0 au moment de la capture). Le corps prenait alors la pose en l'air : bras en
+	// A (rapport v4.17 § 5 bis), pieds jamais tenus. Pose seulement : le sol est cherche sous la capsule (15 cm), rien n'est
+	// replique en plus
+	if (!bGrounded && bRemoteView && Move && Move->MovementMode == MOVE_None && FMath::Abs(Vel.Z) < 100.0 && GetWorld())
+	{
+		const float CapHalf = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+		const FVector Bottom = GetActorLocation() - FVector(0.0, 0.0, CapHalf);
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(BRBodyRemoteFloor), false, this);
+		FHitResult Hit;
+		bGrounded = GetWorld()->LineTraceSingleByObjectType(Hit, Bottom + FVector(0.0, 0.0, 5.0), Bottom - FVector(0.0, 0.0, 15.0),
+			FCollisionObjectQueryParams(ECC_WorldStatic), Q) && Hit.ImpactNormal.Z > 0.6;
+	}
 
 	CrouchBlend = FMath::FInterpTo(CrouchBlend, (bIsCrouched && !bSwimming) ? 1.f : 0.f, Dt, 10.f);
 	SwimBlend = FMath::FInterpTo(SwimBlend, bSwimming ? 1.f : 0.f, Dt, 5.f);

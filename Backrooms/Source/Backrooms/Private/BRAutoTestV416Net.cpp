@@ -1398,6 +1398,18 @@ void ABRAutoTest::AddNetV416Plan()
 		});
 		Add(TEXT("v4.17 reseau : coequipier vu ici, capture"), 1.5f, [this, bOnClient]()
 		{
+			// v4.17 (appuis) : etat du coequipier tel que cette machine l'anime (bras en A chez le client, rapport v4.17 § 5 bis)
+			if (ABRWorld* W = GetBRWorld())
+			{
+				const TArray<V6::FMate> M = V6::Mates(W);
+				if (const ABRCharacter* Mate = M.Num() > 0 ? M[0].Pawn : nullptr)
+				{
+					const UCharacterMovementComponent* MM = Mate->GetCharacterMovement();
+					Note(FString::Printf(TEXT("%s : coequipier anime ici : mode de deplacement %d, au sol %s, pose en l'air %.2f, nage %.2f, role %d"),
+						bOnClient ? TEXT("client") : TEXT("hote"), MM ? static_cast<int32>(MM->MovementMode) : -1,
+						(MM && MM->IsMovingOnGround()) ? TEXT("oui") : TEXT("non"), Mate->AirBlend, Mate->SwimBlend, static_cast<int32>(Mate->GetLocalRole())));
+				}
+			}
 			if (V6::MateCam.IsValid())
 			{
 				Shot(bOnClient ? TEXT("v417_coequipier_vu_par_client") : TEXT("v417_coequipier_vu_par_hote"));
