@@ -1847,7 +1847,7 @@ ULocalLightComponent* ABRChunk::CreateLightComponent(FLightRecord& R, bool bArea
 		Lumens *= 0.55f; // tout le flux part vers le bas
 		LC = RL;
 	}
-	else if (IsAreaFixture(R.Fixture))
+	else if (IsAreaFixture(R.Fixture) && D.bPerfSpotLights)
 	{
 		// v4.17 (correction, eclairage B.3 reglage 2) : sans lumieres surfaciques (Performance), une dalle devient un projecteur
 		// vers le bas (cone de 80 deg, 50 deg plein), plus une lumiere ponctuelle : plus de halo au plafond ni de point chaud

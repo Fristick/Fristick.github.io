@@ -483,6 +483,10 @@ struct FBRLevelDef
 	 *  tous les niveaux) : moins de lumiere sur le haut des murs pres des lampes, flaque au sol mieux dessinee. Rendu seulement */
 	float LightBarnAngle = 88.f;
 	float LightBarnLength = 4.f;
+	/** v4.17 (correction) : sans lumieres surfaciques (Performance), dalles et tubes en projecteur vers le bas au lieu d'une
+	 *  lumiere ponctuelle (ABRChunk::CreateLightComponent). Seulement dans les niveaux verifies a l'image (Level 0,
+	 *  Poolrooms) : au Niveau 1, les tubes suspendus n'eclairaient plus le plafond ni le haut des murs (L* 48 -> 30) */
+	bool bPerfSpotLights = false;
 	/** v4.17 (correction) : eclat des diffuseurs des plafonniers (facteur ; 1 : luminance 120, UBRAssets::GlowColorForSlot).
 	 *  Rendu seulement : la lumiere des lampes ne change pas */
 	float DiffuserGlow = 1.f;
