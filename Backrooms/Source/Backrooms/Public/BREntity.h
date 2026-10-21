@@ -134,6 +134,9 @@ public:
 	float GetSupportRun() const { return SupportRun; }
 	/** v4.17 (animation, tests) : Bacteria : un bond est en cours (le pied a quitte le sol) */
 	bool IsHopping() const { return HopT >= 0.f; }
+	/** v4.17 (appuis, tests) : Bacteria posee au sol (ni en bond, ni portee par ses bras, ni en train de redescendre de la
+	 *  course) ; toujours vrai pour les autres entites */
+	bool IsPosed() const { return HopT < 0.f && !bCarried && CarryBlend <= 0.01f; }
 
 protected:
 	UPROPERTY(VisibleAnywhere)

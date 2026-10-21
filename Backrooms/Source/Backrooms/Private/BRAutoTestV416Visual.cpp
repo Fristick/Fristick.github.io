@@ -3151,6 +3151,20 @@ void ABRAutoTest::AddV416VisualSteps()
 				return true;
 			}
 			const FBREntityInfo& Info = ABREntity::Info(Kind);
+			// v4.17 (appuis) : une Bacteria en bond ou portee par ses bras quitte le sol par conception (demi-tour en bonds de 25
+			// degres) : on attend qu'elle soit posee, 1,5 s au plus, avant de mesurer son appui
+			static double PosedWait = -1.0;
+			const double NowT = FPlatformTime::Seconds();
+			if (!E->IsPosed() && (PosedWait < 0.0 || NowT - PosedWait < 1.5))
+			{
+				if (PosedWait < 0.0)
+				{
+					PosedWait = NowT;
+				}
+				return false;
+			}
+			const bool bPosedAtCheck = E->IsPosed();
+			PosedWait = -1.0;
 			int32 Bad = 0;
 			const FString Mats = MaterialAudit(E, Bad);
 			Note(FString::Printf(TEXT("%s : materiaux : %s"), *Name, *Mats), Bad > 0);
@@ -3227,7 +3241,8 @@ void ABRAutoTest::AddV416VisualSteps()
 						? FString::Printf(TEXT("sommets de %d piece(s) rigide(s)%s ; bas des boites a %+.1f cm"), VertexParts, BoxParts > 0 ? *FString::Printf(TEXT(", boites de %d"), BoxParts)
 							: TEXT(""), LowBoxes - Floor)
 						: FString(TEXT("boites"));
-					Note(FString::Printf(TEXT("%s : appui au sol (au sol en marche %s) : %s ; bas des volumes visibles a %+.1f cm du sol (borne 3 cm%s ; %s)"), *Name, Oui(bGround),
+					Note(FString::Printf(TEXT("%s : appui au sol (au sol en marche %s%s) : %s ; bas des volumes visibles a %+.1f cm du sol (borne 3 cm%s ; %s)"), *Name, Oui(bGround),
+						bPosedAtCheck ? TEXT("") : TEXT(", encore en bond ou portee apres 1,5 s d'attente"),
 						!bRigid ? *FString::Printf(TEXT("os le plus bas \"%s\" a %+.1f cm"), *LowName.ToString(), LowBone - Floor) : TEXT("sans squelette (pieces rigides)"),
 						Gap, bRigid ? TEXT(", des deux cotes") : TEXT(" au-dessus"), *Measure), bGround && (bFloating || bSunk));
 				}
