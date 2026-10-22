@@ -1,0 +1,82 @@
+﻿THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.22-02.36.14   Duree : 191 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : 9
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 024x576 → 1 280x720 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte, mais 4 verification(s) NON VERIFIEE(S) (voir ci-dessous)
+  - NON VERIFIE : Niveau 0 : ramassage simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)
+  - NON VERIFIE : Niveau 1 : depart simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)
+  - NON VERIFIE : Niveau 37 : sas loin de l'hote : interactions simultanees sur un mecanisme NON VERIFIEES (moins de 2 clients)
+  - NON VERIFIE : Niveau 6 : second ecran, deuxieme machine et quatre joueurs physiques : materiel absent de ce PC (essais a faire a la main)
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - Cooperation v4.16 (hote)
+  hote : 1 client(s) present(s) (attendu 1), 0 encore en chargement : 2 joueur(s)
+  hote (place 0) : niveau 0, graine 1896875771, chargement 1, 2 joueur(s), rendu oui, fenetre active NON
+  hote : reseau simule du moteur : latence 0 ms, gigue +-0 ms, pertes 0 % a l'envoi (demande : 0, 0, 0)
+  hote : combinaison du coequipier (place 1) : 3 slot(s), dont 3 sur M_BR_Gear
+  hote : coequipier anime ici : mode de deplacement 1, au sol oui, pose en l'air 0.00, nage 0.00, role 3
+  hote : ramassage simultane a 2 joueurs : 1 attribution(s) (attendu 1), objet retire pour tous oui
+  NON VERIFIE : ramassage simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)
+  hote : depart simultane : niveau 1, 1 chargement(s) (attendu 1), depart 1 (avant 0)
+  hote : 2 joueur(s) devant la porte, 1 depart(s) annonce(s) (attendu 1), joueurs attendus au plus 2 (attendu 2), rassembles au plus 2
+  NON VERIFIE : depart simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)
+  hote : Niveau 37, graine 115083815 (attendue 115083815) charge
+  hote : coup mortel sur le client lointain (a 230 m), mort officielle NON
+  hote : reveil du client mort loin de ses coequipiers refuse non (attendu non ; v4.15 : refuse, le client se croyait seul), abandon a terre accepte oui (attendu oui, v4.16 : ServerReportGiveUp)
+  hote : client mort loin de ses coequipiers, apres son reveil : en chargement chez l'hote non, position d'avant le placement non, a terre non, chutes constatees depuis 0 (attendu 0)
+  hote : place 1 a terre, puis les autres et l'hote 3 s apres (hote a terre oui)
+  hote (place 0) : a terre 1 fois (attendu 1), reveils 1, reveil 6.0 s apres sa mort (delai a la mort 5.9 s)
+  hote : equipe a terre, reveil refuse par l'hote non (attendu non ; v4.15 : refuse a la place 1, qui retombait au point de depart)
+  hote : equipe a terre, client de la place 1 apres son reveil : en chargement chez l'hote non, position d'avant le placement non, a terre non, chutes constatees depuis 0 (attendu 0)
+  hote : mort loin apres les autres : hote et autres clients a terre oui, puis coup mortel sur le client lointain (a 235 m de l'hote), mort officielle oui (0.0 s apres le coup, attendu au plus 3 s)
+  hote (place 0) tombe avant le client lointain : a terre 1 fois (attendu 1), reveils 1, reveil 6.0 s apres sa mort (delai a la mort 5.9 s ; ramene a 6 s a la chute du dernier : attendu avant 12 s)
+  hote : mort loin apres les autres, reveil refuse par l'hote non (attendu non)
+  hote : mort loin apres les autres, client de la place 1 apres son reveil : en chargement chez l'hote non, position d'avant le placement non, a terre non, chutes constatees depuis 0 (attendu 0)
+  hote : sas loin de l'hote : hote a 53 m du mecanisme (au-dela de 35 m, son Tick y etait coupe chez l'hote)
+  hote : sas loin de l'hote : 5 action(s) jouees par l'hote, la derniere (mecanisme 3, role 58, action 0) revient au client ; etat de la mission : revision 6
+  NON VERIFIE : sas loin de l'hote : interactions simultanees sur un mecanisme NON VERIFIEES (moins de 2 clients)
+  hote : sas loin de l'hote : mission resolue par l'action du client
+  hote (a 53 m du sas) : sas vide oui (surface 41, dallage 70), entree a 30 cm au-dessus du dallage libre oui ; Tick du sas vu oui
+  hote : Niveau 8, graine 1401743838 (attendue 1401743838) charge
+  hote : passerelle loin de l'hote : hote a 50 m du mecanisme (au-dela de 35 m, son Tick y etait coupe chez l'hote)
+  hote : passerelle loin de l'hote : 12 action(s) jouees par l'hote, la derniere (mecanisme 3, role 40, action 2) revient au client ; etat de la mission : revision 13
+  hote : passerelle loin de l'hote : mission resolue par l'action du client
+  hote (a 50 m de la passerelle) : tablier pose oui (progression 1.00 en 0.0 s), sol du tablier au milieu de l'interruption oui, navigation des entites par le tablier oui ; Tick vu oui
+  hote : Niveau 6, graine 2622470042 (attendue 2622470042) charge
+  hote : scan focalise par la touche X : en marche oui, son oui
+  hote : inventaire ouvert pendant le scan maintenu : scan arrete oui, son arrete oui
+  hote : inventaire ferme, touche toujours tenue : le scan ne reprend pas seul oui
+  hote : inventaire ferme, repetition de la touche toujours tenue : scan repris seul non (attendu non ; v4.15 : oui), repetition(s) ignoree(s) 1
+  hote : nouvel appui apres l'inventaire : scan en marche oui
+  hote : menu pause ouvert oui, interaction maintenue arretee oui (v4.15 : continuait sous la pause), scan arrete oui, son arrete oui
+  hote : pause fermee, touches toujours tenues : ni interaction ni scan sans nouvel appui oui
+  hote : touche NumPadNine ajoutee au scan pendant l'appui : entrees reconstruites oui, scan arrete oui, son arrete oui
+  hote : apres le changement de touches, touche toujours tenue : pas de reprise seule oui
+  hote : nouvelle touche NumPadNine : scan en marche oui
+  hote : avant la perte de focus (fenetre active oui) : scan oui, course oui, interaction maintenue oui
+  hote : fenetre reduite par le test (FSlateApplication::IsActive faux) : scan arrete oui, son arrete oui, course arretee oui, interaction maintenue arretee oui
+  hote : retour au premier plan, touches toujours tenues (repetition) : scan repris seul non, course reprise seule non, interaction reprise seule non (attendu non ; v4.15 : la repetition devenait un nouvel appui), repetition(s) ignoree(s) 3/3
+  hote : nouvel appui apres le retour au premier plan : scan en marche oui
+  hote : chute du client dans une fosse : mort vue oui, chutes constatees a la mort 1 (0 : signalee par le client, 1 : vue par l'hote), reveil vu oui, reveil refuse non ; apres le reveil : en chargement chez l'hote non, position d'avant le placement non, a terre non, chutes constatees depuis 0 (attendu 0) (v4.15 : seconde chute a la position du fond de la fosse, le joueur reveille etait tue de nouveau)
+  NON VERIFIE : second ecran, deuxieme machine et quatre joueurs physiques : materiel absent de ce PC (essais a faire a la main)
+  entre machines : debut|niveau : identique sur 2 machine(s) : Client1=0/1896875771, Hote=0/1896875771
+  entre machines : ramassage|gagnant : somme 1 (attendu 1) sur 2 machine(s) : Client1=1, Hote=0
+  entre machines : depart|niveau : identique sur 2 machine(s) : Client1=1/1520872147, Hote=1/1520872147
+  entre machines : sas|entree_libre : identique sur 2 machine(s) : Client1=1, Hote=1
+  entre machines : passerelle|posee : identique sur 2 machine(s) : Client1=1, Hote=1
+  entre machines : 2 machine(s), 4 valeur(s) identiques
+  Journal (10 avertissements / erreurs uniques) :
+    Avert. [LogBackrooms] Test reseau : client sans options de version (adresse en ligne de commande) accepte (127.0.0.1)
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_0.InstancedStaticMeshComponent_4 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_1.InstancedStaticMeshComponent_4 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_8.InstancedStaticMeshComponent_4 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_17.InstancedStaticMeshComponent_0 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_33.InstancedStaticMeshComponent_4 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_33.InstancedStaticMeshComponent_5 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_82.InstancedStaticMeshComponent_0 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_81.InstancedStaticMeshComponent_0 NOT Supported.
+    Avert. [LogNetPackageMap] FNetGUIDCache::SupportsObject: InstancedStaticMeshComponent /Game/Backrooms/Maps/L_Backrooms.L_Backrooms:PersistentLevel.BRChunk_111.InstancedStaticMeshComponent_0 NOT Supported.

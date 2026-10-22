@@ -28,12 +28,15 @@ manette n'a été essayée.
 - **Combinaison** (joueur et coéquipiers) : plis en relief, PVC brillant sous une lumière froide, visière en verre sombre.
   Les coutures sont dans les cartes dérivées mais ne se voient pas à 1,5-3 m.
 - **Créatures** :
-  - la Bacteria pose ses pieds et ses griffes au sol, avance par petits bonds et replie ses bras près des murs. Elle glisse
-    encore au démarrage et au demi-tour ;
+  - la Bacteria pose ses pieds et ses griffes au sol, avance par petits bonds et replie ses bras près des murs. Pieds et
+    griffes ne glissent plus, ni au démarrage ni au demi-tour ; elle se retourne en plusieurs petits bonds, puis en
+    courant ; ses griffes se lèvent vraiment pour changer d'appui ;
   - les marcheurs gardent leur pied d'appui au sol et piétinent en tournant (code ; pas filmé dans cette version).
-- **Corps du joueur** (3e personne, coéquipiers) : cadence tirée de la jambe, pieds qui descendent jusqu'au sol (ils
-  flottaient à environ 5 cm), bas du corps en léger retard dans les virages. Le pied d'appui glisse encore d'environ
-  16 cm par pas (41 cm en v4.16).
+- **Corps du joueur** (3e personne, coéquipiers) : cadence tirée de la jambe, bas du corps en léger retard dans les
+  virages. Le pied d'appui reste là où il s'est posé, semelle à plat (il glissait de 16 cm par pas, 41 cm en v4.16). Le
+  pied en l'air se lève, avance puis se pose à la verticale. À l'arrêt, un petit pas ramène le pied resté en arrière.
+  Le bassin descend un peu plus au changement d'appui. Vus à la 3e personne et chez les coéquipiers, les pas sonnent à
+  la pose de chaque pied.
 
 Les mécanismes, les indices et la lumière qui décide des créatures et de la santé mentale ne dépendent toujours ni du
 profil, ni du ray tracing, ni de FLASHS.

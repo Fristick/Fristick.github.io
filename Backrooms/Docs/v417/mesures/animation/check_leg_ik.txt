@@ -1,0 +1,3 @@
+# python Tools/check_leg_ik.py
+648 cas (cuisse et tibia de 30 a 70 cm, elevation de 2 a 35 cm) : ecart maximal 0.0000 cm
+corps du joueur : 300 cas (genou au repos a -1,5 / 0 / +1,5 cm, cible de -60 a +60 cm, 0 a 15 cm de haut) : ecart maximal 0.050 cm

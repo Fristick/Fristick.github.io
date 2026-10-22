@@ -1,0 +1,186 @@
+﻿THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.22-00.29.18   Duree : 266 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : 1 probleme(s), 8 verification(s) NON VERIFIEE(S)
+  - Niveau 4 : Bacteria : appui au sol (au sol en marche oui) : sans squelette (pieces rigides) ; bas des volumes visibles a +3.1 cm du sol (borne 3 cm, des deux cotes ; sommets de 4 piece(s) rigide(s) ; bas des boites a +2.2 cm)
+  - NON VERIFIE : Niveau 1 : manette, croix bas : colonne du carnet plus courte que sa zone (ou deja en bas) : defilement a la manette NON VERIFIE
+  - NON VERIFIE : Niveau 1 : carnet long : rien a faire defiler a 1280 x 720 (texte cache NON, reste a gauche 0) : une ligne par appui NON VERIFIE
+  - NON VERIFIE : Niveau 1 : plein ecran exclusif : present dans la liste des definitions, non essaye (option -BRV416PleinEcran : change la definition de l'ecran) : mode obtenu et libelle NON VERIFIES
+  - NON VERIFIE : Niveau 1 : decalques Level 1, graine 4242 : 3 decalque(s) projete(s) et 4 point(s) de taches au sol au bord de la zone construite (mur ou sol bati par un chunk pas encore construit) : leur surface NON VERIFIEE (a verifier joueur deplace vers eux)
+  - NON VERIFIE : Niveau 6 : scanner : aucune place a 8-14 m des parasites
+  - NON VERIFIE : Niveau 6 : scanner : aucune place a 8-14 m des parasites
+  - NON VERIFIE : Niveau 4 : vue d'un coequipier reel (client qui regarde l'entite et le joueur de l'hote) : NON VERIFIE (banc solo ; a faire au test reseau)
+  - NON VERIFIE : Niveau 2 : decalques Level 2, graine 4242 : 1 decalque(s) projete(s) et 0 point(s) de taches au sol au bord de la zone construite (mur ou sol bati par un chunk pas encore construit) : leur surface NON VERIFIEE (a verifier joueur deplace vers eux)
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - v4.16 visuel : HUD, manette, langues, modes d'affichage
+  ecran : 1536 x 960 (zone utile 1536 x 912, 96 ppp, 1 ecran(s)) ; fenetre du jeu : mode 2, 1366 x 768 (mode enregistre du joueur : 2, 1366 x 768) ; affichage modifiable : oui
+
+=== Niveau 1 - v4.16 visuel : Level 1 (HUD, carnet rempli)
+  Level 1 : mission oui, 2 indice(s) et observation(s) lus pour remplir le carnet
+  carnet : aide et rappel de l'etape en cours montres pour les rendus (cle 17)
+  commandes de la console sous la pause en mode developpeur (controle positif) : 1 ligne(s) relevee(s) (attendu au moins 1)
+  HUD hors ecran (1280x720, 1920x1080, 2560x1080 ; 5 onglets, la pause et le HUD du jeu ; 22 langues) : 462 image(s), 17749 texte(s) : hors de l'image 0, au-dela de la largeur permise 0, hors du panneau 0, chevauchements 0 ; raccourcis (points de suspension) 45 ; plus petit texte 9.3 px (cadratin), 0 texte(s) au plancher de 6 points
+    es-ES : 0 probleme(s), 3 texte(s) raccourci(s)
+    pt-BR : 0 probleme(s), 3 texte(s) raccourci(s)
+    ru : 0 probleme(s), 15 texte(s) raccourci(s)
+    it : 0 probleme(s), 6 texte(s) raccourci(s)
+    es-419 : 0 probleme(s), 1 texte(s) raccourci(s)
+    pl : 0 probleme(s), 15 texte(s) raccourci(s)
+    fa : 0 probleme(s), 1 texte(s) raccourci(s)
+    zh-Hant : 0 probleme(s), 1 texte(s) raccourci(s)
+    raccourci : 1280x720 es-ES touches "BOTÓN CENTRAL DEL R…"
+    raccourci : 1920x1080 es-ES touches "BOTÓN CENTRAL DEL RAT…"
+    raccourci : 2560x1080 es-ES touches "BOTÓN CENTRAL DEL RAT…"
+    raccourci : 1280x720 pt-BR touches "BOTÃO DO MEIO DO MO…"
+    raccourci : 1920x1080 pt-BR touches "BOTÃO DO MEIO DO MO…"
+    raccourci : 2560x1080 pt-BR touches "BOTÃO DO MEIO DO MO…"
+    raccourci : 1280x720 ru touches "ЛЕВАЯ КЛАВИША "SHI…"
+    raccourci : 1280x720 ru touches "ЛЕВАЯ КЛАВИША "CTR…"
+    raccourci : 1280x720 ru touches ""1" НА ЦИФРОВОЙ КЛ…"
+    raccourci : 1280x720 ru touches ""2" НА ЦИФРОВОЙ КЛ…"
+  jauges : endurance et sante mentale dans PERSONNAGE (66 rendu(s), 0 sans les deux jauges) ; aucune ailleurs (396 rendu(s) du jeu, du carnet, du journal, des parametres, des touches et de la pause, 0 avec une jauge) ; barre de vie : sante a 93 montree en pourcentage 0 fois, 0 barre(s) sur 66 rendu(s) du HUD du jeu (attendu 0 et 0) ; commandes de la console sous la pause d'un joueur (mode developpeur coupe) : 0 (attendu 0)
+  manette : 18 action(s) nommees a la manette, 0 sans la liaison annoncee
+  invites a la manette (manette active oui) : interagir "X", inventaire "[VUE]", deplacement "[STICK GAUCHE]", echelle "[STICK GAUCHE] / [STICK GAUCHE] / [A]", scan "RT" ; commandes de la pause : STICK GAUCHE  se déplacer     LS  courir     B..
+  manette, inventaire et pause hors ecran : 18 image(s), 664 texte(s) : hors de l'image 0, au-dela de la largeur permise 0, hors du panneau 0, chevauchements 0 ; raccourcis (points de suspension) 0 ; plus petit texte 9.3 px (cadratin), 0 texte(s) au plancher de 6 points ; pied de l'inventaire : "[Y]  HILFE     [STEUERKREUZ LINKS] [STEUERKREUZ RECHTS]  SPALTE     [LB] [RB]  REITER     [B]  SCHLIESSEN"
+  pause a la manette (6 rendu(s)) : bouton A (valider) montre 6 fois, touche FIN du clavier montree 0 fois (attendu : a chaque rendu, jamais)
+  manette, RB : onglet suivant (CARNET) : touche enfoncee oui ; onglet 4 (attendu 4), inventaire ouvert
+  manette, RB : onglet suivant (JOURNAL) : touche enfoncee oui ; onglet 1 (attendu 1), inventaire ouvert
+  manette, LB : onglet precedent (CARNET) : touche enfoncee oui ; onglet 4 (attendu 4), inventaire ouvert
+  manette, Y : aide du carnet : touche enfoncee oui ; onglet 4, aide du carnet 0 -> 1
+  NON VERIFIE : manette, croix bas : colonne du carnet plus courte que sa zone (ou deja en bas) : defilement a la manette NON VERIFIE
+  manette, croix bas : defilement du carnet : touche enfoncee oui ; onglet 4, defilement du carnet 0 -> 0 (reste a defiler avant l'appui : 0)
+  manette, LB : onglet precedent (PERSONNAGE) : touche enfoncee oui ; onglet 0 (attendu 0), inventaire ouvert
+  manette, croix droite dans PERSONNAGE : curseur sur la 2e case du sac : touche enfoncee oui ; curseur sur la case 1 du groupe 1 (attendu 1 du groupe 1), onglet 0
+  manette, X : inspecter la frontale : touche enfoncee oui ; inspection de la case 1 du groupe 1
+  manette, B : fermer l'inspection (inventaire ouvert) : touche enfoncee oui ; inspection fermee, inventaire ouvert
+  manette, A : equiper la frontale : touche enfoncee oui ; tete : frontale, 2e case du sac vide
+  clavier, Entree, curseur cache : rien ne change (C1) : touche enfoncee oui ; tete : autre ou vide, 2e case du sac : frontale, curseur du clavier cache, inventaire ouvert
+  clavier, fleche gauche : curseur montre, 1re case du sac : touche enfoncee oui ; curseur sur la case 0 du groupe 1 (attendu 0 du groupe 1), curseur du clavier montre
+  clavier, fleche droite : infobulle de la frontale aux touches du clavier (C3) : touche enfoncee oui ; infobulle "[ENTRÉE]  ÉQUIPER     [F]  DÉPLACER" (attendu : [ENTRÉE] puis [F]), invite de la manette absente
+  clavier, Entree, curseur montre : equiper la frontale : touche enfoncee oui ; tete : frontale, 2e case du sac : autre ou vide, curseur du clavier montre
+  manette, B : fermer l'inventaire : touche enfoncee NON ; inventaire ferme
+  manette, deplacer : Y sur la 1re case du sac : action oui, objet porte oui (case 0 du groupe 1)
+  manette, deplacer : pendant le port, curseur sur la case 3 du groupe 0, objet porte oui
+  manette, deplacer : Y sur la 4e poche : poche eau d'amande (x2), 1re case du sac vide, port termine oui
+  manette, deplacer : retour : prise oui, pose oui, eau d'amande dans la 1re case du sac oui, 4e poche vide oui
+  manette, B pendant un port : annule sans fermer l'inventaire : touche enfoncee oui ; port annule, inventaire ouvert, 1re case du sac eau d'amande
+  manette, PARAMETRES : 1 appui(s) de la croix bas, ligne choisie 13 (LUMINOSITE : 13)
+  manette, PARAMETRES : cran +1 demande sur LUMINOSITE : oui
+  manette, PARAMETRES : LUMINOSITE 0.0 -> 0.1 (affiche "+0.0" -> "+0.1") ; aide de la ligne choisie montree oui
+  manette, PARAMETRES : retour d'un cran : LUMINOSITE 0.0 (avant l'essai 0.0, affiche "+0.0")
+  manette, croix haut : vision nocturne du camescope reste dans le sac : touche enfoncee oui ; camescope dans le sac oui, vision nocturne oui (attendu oui)
+  manette, croix haut : vision nocturne coupee : touche enfoncee oui ; camescope dans le sac oui, vision nocturne NON (attendu NON)
+  pause a la manette (fenetre) : invites de la manette oui
+  manette, pause, croix bas : carte PARAMETRES : touche enfoncee oui ; pause ouverte, carte 1 (attendu 1)
+  manette, pause, A : ouvrir PARAMETRES : touche enfoncee NON ; onglet 2 (attendu 2), inventaire ouvert
+  manette, pause, RB : onglet suivant (TOUCHES) : touche enfoncee oui ; onglet 3 (attendu 3), inventaire ouvert, pause ouverte
+  manette, pause, LB : onglet precedent (PARAMETRES) : touche enfoncee oui ; onglet 2 (attendu 2), inventaire ouvert, pause ouverte
+  manette, pause, B : retour a la pause : touche enfoncee NON ; inventaire ferme, pause ouverte
+  fenetre petite_1280x720 : 1280 x 720 demandee (zone utile 1536 x 912)
+  fenetre petite_1280x720 : demandee 1280 x 720, obtenue 1280 x 720 (mode 2), image 1280 x 720 : taille obtenue
+  NON VERIFIE : carnet long : rien a faire defiler a 1280 x 720 (texte cache NON, reste a gauche 0) : une ligne par appui NON VERIFIE
+  fenetre 169_max : 1520 x 855 demandee (zone utile 1536 x 912)
+  fenetre 169_max : demandee 1520 x 855, obtenue 1520 x 855 (mode 2), image 1520 x 855 : taille obtenue
+  fenetre ultralarge_max : 1520 x 641 demandee (zone utile 1536 x 912)
+  fenetre ultralarge_max : demandee 1520 x 641, obtenue 1520 x 641 (mode 2), image 1520 x 641 : taille obtenue
+  vraies fenetres : 6 image(s), 250 texte(s) : hors de l'image 0, au-dela de la largeur permise 0, hors du panneau 0, chevauchements 0 ; raccourcis (points de suspension) 0 ; plus petit texte 9.3 px (cadratin), 0 texte(s) au plancher de 6 points
+  PARAMETRES > VIDEO : ligne "MODE D'AFFICHAGE" oui ; mode en cours 2, valeur affichee "FENÊTRÉ" (attendu "FENÊTRÉ") ; noms distincts oui ; definitions proposees : plein ecran 16, sans bordures 1, fenetre 3 ; plein ecran exclusif sur cette plateforme oui
+  essai du mode 1 : demande faite, en attente de confirmation oui
+  mode 1 : demande 1 en 1536 x 960, obtenu 1 en 1536 x 960 (ecran 1536 x 960) ; valeur affichee "FENÊTRÉ SANS BORDURE" (attendu "FENÊTRÉ SANS BORDURE")
+  NON VERIFIE : plein ecran exclusif : present dans la liste des definitions, non essaye (option -BRV416PleinEcran : change la definition de l'ecran) : mode obtenu et libelle NON VERIFIES
+  fenetre d'origine retablie : mode 2, 1366 x 768 (image 1366 x 768) ; fenetre du lancement : mode 2, 1366 x 768 : identique ; libelles lus dans la ligne : plein ecran non lu, sans bordures oui, fenetre oui
+  Journal (1 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Console object named 'r.ScreenPercentage' shows many (500) FindConsoleObject() calls (consider caching e.g. using static)
+
+=== Niveau 1 - v4.16 decalques : Level 1, graine 4242
+  Level 1, graine 4242 : 12 chunk(s), 103 decalque(s) crees sur 103 gardes, 0 tirage(s) ecarte(s) par la borne dans 0 chunk(s) (aureoles 12, taches de plafond 29, eraflures 44 ; taches au sol 18) ; par chunk 2 a 11 projetes (borne 40), 5 taches au sol au plus (borne 24) ; chunks qui ne gardent pas min(tirages, borne) : 0
+  Level 1, graine 4242 : surface sous les decalques projetes : 1230 point(s) sur 1275 sur la surface, 0 dans le vide, 0 derriere un obstacle, 0 sur un objet (aucun), 0 obliques ; decalques sans aucune surface 0, partiellement dans le vide 0 (dont murs 0), au-dessus d'un passage 0 ; support dans un chunk non construit (bord de la zone construite, non juge) : 3 decalque(s) (45 point(s)), le plus proche a 99.4 m du joueur, 0 avant son effacement
+  Level 1, graine 4242 : taches au sol : 162 point(s), 38 caches sous un mur, 8 sous un objet ou un mur pose sur le sol, 25 dans l'ouverture d'un passage (juges), 0 flottant(s) (> 2 cm), 1 enfoui(s) (< 1 mm), ecart au sol le plus grand 39.7 cm ; sol dans un chunk non construit (non juge) : 4 point(s), le plus proche a 84.0 m du joueur, 0 avant 35 m
+  NON VERIFIE : decalques Level 1, graine 4242 : 3 decalque(s) projete(s) et 4 point(s) de taches au sol au bord de la zone construite (mur ou sol bati par un chunk pas encore construit) : leur surface NON VERIFIEE (a verifier joueur deplace vers eux)
+  Level 1, graine 4242 : motifs : 1.82 % des faces de cellule portent une aureole ou une eraflure ; meme sorte sur deux faces voisines 5 / 56 ; 83 signatures pour 85 decalques projetes, la plus frequente 2 fois ; eraflures retournees 15 / 44
+  Level 1, graine 4242 : distance utile (vue locale : image de 1093 px de large, champ du reglage 88 degres, camera 88) : de 11.8 a 35.0 m selon la taille (au plus 35 m) ; 11 decalque(s) projete(s) sur 85 a portee du joueur
+
+=== Niveau 6 - v4.16 visuel : Level 6 (HUD contextuel du scanner)
+
+=== Niveau 6 - v4.16 scanner : HUD contextuel
+  arrivee : rappel des touches 1.00, recharge 0.00, cone 0.00 ; textes : NIVEAU | 6 | « Lights Out » | Lumières éteintes | Classe 4 : Dangereux - Obscurité totale | BDS | Impulsion | X | Scan focalisé (maintenir) | 
+  rappel du scanner a la manette : LT oui, RT oui (rappel 1.00)
+  recharge apres une impulsion : barre 1.00 (recharge restante 0.82)
+  scan focalise : cone 1.00
+  releve de la mire au scan focalise : cible oui, cone 1.00
+  au repos apres le calibrage (oui) : rappel 0.00, recharge 0.00, cone 0.00 (attendu : rien)
+  NON VERIFIE : scanner : aucune place a 8-14 m des parasites
+  NON VERIFIE : scanner : aucune place a 8-14 m des parasites
+  textes du scanner : 1 image(s), 9 texte(s) : hors de l'image 0, au-dela de la largeur permise 0, hors du panneau 0, chevauchements 0 ; raccourcis (points de suspension) 0 ; plus petit texte 9.3 px (cadratin), 0 texte(s) au plancher de 6 points
+
+=== Niveau 4 - v4.16 visuel : Level 4 (entites)
+
+=== Niveau 4 - v4.16 entites : premiere et troisieme personne
+  joueur (combinaison, troisieme personne locale) : 1 maillage(s) visible(s), 0 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  NON VERIFIE : vue d'un coequipier reel (client qui regarde l'entite et le joueur de l'hote) : NON VERIFIE (banc solo ; a faire au test reseau)
+  Smilers : menace capturee (phase d'attaque 0, avertissement 0.00)
+  Smilers : materiaux : 2 maillage(s) visible(s), 5 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  Hounds : menace capturee (phase d'attaque 0, avertissement 1.00)
+  Hounds : materiaux : 2 maillage(s) visible(s), 7 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  Hounds : appui au sol (au sol en marche oui) : os le plus bas "Bone_028" a -1.1 cm ; bas des volumes visibles a -5.0 cm du sol (borne 3 cm au-dessus ; boites)
+  Facelings : menace capturee (phase d'attaque 0, avertissement 0.00)
+  Facelings : materiaux : 2 maillage(s) visible(s), 1 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  Facelings : appui au sol (au sol en marche oui) : os le plus bas "foot_R_16" a +9.5 cm ; bas des volumes visibles a -2.2 cm du sol (borne 3 cm au-dessus ; boites)
+  SkinStealers : menace capturee (phase d'attaque 0, avertissement 0.00)
+  SkinStealers : materiaux : 3 maillage(s) visible(s), 6 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  SkinStealers : appui au sol (au sol en marche oui) : os le plus bas "_rootJoint" a -2816.7 cm ; bas des volumes visibles a -3.5 cm du sol (borne 3 cm au-dessus ; sommets de 1 piece(s) rigide(s) ; bas des boites a -3.5 cm)
+  Deathmoths : menace capturee (phase d'attaque 0, avertissement 0.00)
+  Deathmoths : materiaux : 4 maillage(s) visible(s), 3 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  Wretches : menace capturee (phase d'attaque 0, avertissement 0.00)
+  Wretches : materiaux : 2 maillage(s) visible(s), 3 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  Wretches : appui au sol (au sol en marche oui) : os le plus bas "Root" a -1.9 cm ; bas des volumes visibles a -2.3 cm du sol (borne 3 cm au-dessus ; boites)
+  Partygoers : menace capturee (phase d'attaque 0, avertissement 0.00)
+  Partygoers : materiaux : 3 maillage(s) visible(s), 2 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  Partygoers : appui au sol (au sol en marche oui) : os le plus bas "RL_BoneRoot" a +0.0 cm ; bas des volumes visibles a +0.0 cm du sol (borne 3 cm au-dessus ; sommets de 1 piece(s) rigide(s) ; bas des boites a +0.0 cm)
+  Clump : menace capturee (phase d'attaque 0, avertissement 0.60)
+  Clump : materiaux : 2 maillage(s) visible(s), 2 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  Clump : appui au sol (au sol en marche oui) : os le plus bas "Root" a +0.2 cm ; bas des volumes visibles a -5.1 cm du sol (borne 3 cm au-dessus ; boites)
+  Bacteria : menace capturee (phase d'attaque 0, avertissement 0.00)
+  Bacteria : materiaux : 5 maillage(s) visible(s), 4 emplacement(s) de materiau, 0 vide(s), 0 au materiau par defaut du moteur
+  PROBLEME : Bacteria : appui au sol (au sol en marche oui) : sans squelette (pieces rigides) ; bas des volumes visibles a +3.1 cm du sol (borne 3 cm, des deux cotes ; sommets de 4 piece(s) rigide(s) ; bas des boites a +2.2 cm)
+
+=== Niveau 0 - v4.16 visuel : Level 0, graine 9 (kit)
+
+=== Niveau 0 - v4.16 kit du Level 0 : raccords
+  plinthes : 2015 face(s) de mur, 297792 point(s) (37800 caches dans un mur ou un poteau), 259992 couverts, 0 trou(s) (le plus long 0 cm)
+  plafonds et sols du kit : 875 cellule(s) praticable(s) (hors salles de fosses) ; sans plafond 0 (trappes d'echelle comprises), sans sol 31 ; joints de plafond ouverts entre deux cellules 0 ; dessous des plafonds de 290.0 a 290.0 cm, dessus des sols de 0.0 a 0.0 cm ; 416 chambranle(s), 3312 plinthe(s), 934 poteau(x)
+
+=== Niveau 0 - v4.16 decalques : Level 0, graine 9
+  Level 0, graine 9 : 16 chunk(s), 519 decalque(s) crees sur 519 gardes, 0 tirage(s) ecarte(s) par la borne dans 0 chunk(s) (aureoles 82, taches de plafond 78, eraflures 241 ; taches au sol 118) ; par chunk 6 a 35 projetes (borne 40), 13 taches au sol au plus (borne 24) ; chunks qui ne gardent pas min(tirages, borne) : 0
+  Level 0, graine 9 : surface sous les decalques projetes : 6003 point(s) sur 6015 sur la surface, 0 dans le vide, 12 derriere un obstacle, 0 sur un objet (aucun), 0 obliques ; decalques sans aucune surface 0, partiellement dans le vide 8 (dont murs 0), au-dessus d'un passage 0 ; support dans un chunk non construit (bord de la zone construite, non juge) : aucun
+  Level 0, graine 9 : taches au sol : 1062 point(s), 300 caches sous un mur, 20 sous un objet ou un mur pose sur le sol, 105 dans l'ouverture d'un passage (juges), 0 flottant(s) (> 2 cm), 20 enfoui(s) (< 1 mm), ecart au sol le plus grand 22.6 cm ; sol dans un chunk non construit (non juge) : aucun
+  Level 0, graine 9 : motifs : 7.89 % des faces de cellule portent une aureole ou une eraflure ; meme sorte sur deux faces voisines 18 / 323 ; 299 signatures pour 401 decalques projetes, la plus frequente 7 fois ; eraflures retournees 120 / 241
+  Level 0, graine 9 : distance utile (vue locale : image de 1093 px de large, champ du reglage 88 degres, camera 88) : de 11.9 a 35.0 m selon la taille (au plus 35 m) ; 81 decalque(s) projete(s) sur 401 a portee du joueur
+
+=== Niveau 0 - v4.16 visuel : Level 0, graine 4242 (decalques)
+
+=== Niveau 0 - v4.16 decalques : Level 0, graine 4242
+  Level 0, graine 4242 : 16 chunk(s), 493 decalque(s) crees sur 493 gardes, 2 tirage(s) ecarte(s) par la borne dans 1 chunk(s) (aureoles 59, taches de plafond 84, eraflures 237 ; taches au sol 113) ; par chunk 6 a 40 projetes (borne 40), 15 taches au sol au plus (borne 24) ; chunks qui ne gardent pas min(tirages, borne) : 0
+  Level 0, graine 4242 : surface sous les decalques projetes : 5675 point(s) sur 5700 sur la surface, 0 dans le vide, 25 derriere un obstacle, 0 sur un objet (aucun), 0 obliques ; decalques sans aucune surface 0, partiellement dans le vide 14 (dont murs 0), au-dessus d'un passage 0 ; support dans un chunk non construit (bord de la zone construite, non juge) : aucun
+  Level 0, graine 4242 : taches au sol : 1017 point(s), 298 caches sous un mur, 21 sous un objet ou un mur pose sur le sol, 88 dans l'ouverture d'un passage (juges), 0 flottant(s) (> 2 cm), 14 enfoui(s) (< 1 mm), ecart au sol le plus grand 22.6 cm ; sol dans un chunk non construit (non juge) : aucun
+  Level 0, graine 4242 : motifs : 7.23 % des faces de cellule portent une aureole ou une eraflure ; meme sorte sur deux faces voisines 22 / 296 ; 281 signatures pour 380 decalques projetes, la plus frequente 6 fois ; eraflures retournees 128 / 237
+  Level 0, graine 4242 : distance utile (vue locale : image de 1093 px de large, champ du reglage 88 degres, camera 88) : de 11.8 a 35.0 m selon la taille (au plus 35 m) ; 82 decalque(s) projete(s) sur 380 a portee du joueur
+
+=== Niveau 2 - v4.16 visuel : Level 2, graine 4242 (decalques)
+
+=== Niveau 2 - v4.16 decalques : Level 2, graine 4242
+  Level 2, graine 4242 : 32 chunk(s), 419 decalque(s) crees sur 419 gardes, 0 tirage(s) ecarte(s) par la borne dans 0 chunk(s) (aureoles 161, taches de plafond 79, eraflures 80 ; taches au sol 99) ; par chunk 5 a 15 projetes (borne 40), 6 taches au sol au plus (borne 24) ; chunks qui ne gardent pas min(tirages, borne) : 0
+  Level 2, graine 4242 : surface sous les decalques projetes : 4732 point(s) sur 4800 sur la surface, 0 dans le vide, 53 derriere un obstacle, 0 sur un objet (aucun), 0 obliques ; decalques sans aucune surface 0, partiellement dans le vide 23 (dont murs 0), au-dessus d'un passage 0 ; support dans un chunk non construit (bord de la zone construite, non juge) : 1 decalque(s) (15 point(s)), le plus proche a 67.5 m du joueur, 0 avant son effacement
+  Level 2, graine 4242 : taches au sol : 891 point(s), 396 caches sous un mur, 99 sous un objet ou un mur pose sur le sol, 0 dans l'ouverture d'un passage (juges), 0 flottant(s) (> 2 cm), 1 enfoui(s) (< 1 mm), ecart au sol le plus grand 18.1 cm ; sol dans un chunk non construit (non juge) : aucun
+  NON VERIFIE : decalques Level 2, graine 4242 : 1 decalque(s) projete(s) et 0 point(s) de taches au sol au bord de la zone construite (mur ou sol bati par un chunk pas encore construit) : leur surface NON VERIFIEE (a verifier joueur deplace vers eux)
+  Level 2, graine 4242 : motifs : 2.94 % des faces de cellule portent une aureole ou une eraflure ; meme sorte sur deux faces voisines 9 / 241 ; 295 signatures pour 320 decalques projetes, la plus frequente 3 fois ; eraflures retournees 49 / 80
+  Level 2, graine 4242 : distance utile (vue locale : image de 1093 px de large, champ du reglage 88 degres, camera 88) : de 18.9 a 35.0 m selon la taille (au plus 35 m) ; 83 decalque(s) projete(s) sur 320 a portee du joueur
+
+=== Niveau 0 - v4.16 visuel : bilan
+  banc v4.16 visuel : 149 capture(s) (v416_*.png) ; reglages, langue (fr), affichage et manette du joueur retablis

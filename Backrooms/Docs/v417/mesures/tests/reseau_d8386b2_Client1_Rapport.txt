@@ -1,0 +1,62 @@
+﻿THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.22-02.36.14   Duree : 175 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 024x576 → 1 280x720 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte.
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - Cooperation v4.16 (client)
+  client (place 1) : niveau 0, graine 1896875771, chargement 1, 2 joueur(s), rendu oui, fenetre active oui
+  client : reseau simule du moteur : latence 0 ms, gigue +-0 ms, pertes 0 % a l'envoi (demande : 0, 0, 0)
+  client : combinaison du coequipier (place 0) : 3 slot(s), dont 3 sur M_BR_Gear
+  client : coequipier anime ici : mode de deplacement 0, au sol non, pose en l'air 0.00, nage 0.00, role 1
+  client : ramassage simultane, objet recu oui
+  client : depart simultane : niveau 1, 1 chargement(s) (attendu 1), depart 1 (avant 0)
+  client : Niveau 37, graine 115083815 (attendue 115083815) charge
+  client (mort loin des coequipiers) : a 230 m du depart, coequipier le plus proche a 230 m : personnages des coequipiers toujours repliques ici 1/1 (attendu tous ; v4.15 : aucun au-dela de 150 m)
+  client a terre : appui sur {Saut} (abandon) 28.5 s avant la fin du delai : reveil 0.3 s apres l'appui (attendu moins de 1,5 s), toujours debout 2,5 s apres oui, a terre 1 fois (attendu 1 ; v4.15 : reveil refuse par l'hote, retour a terre au point de depart)
+  client mort loin de ses coequipiers : delai a terre 30.0 s (attendu 30 : coequipiers debout, repliques a toute distance ; v4.15 : 6), aide d'un coequipier affichee oui (attendu oui), a terre 1 fois (attendu 1), reveils 1, reveil 1.8 s apres la mort
+  client (place 1) : a terre 1 fois (attendu 1), reveils 1, reveil 9.0 s apres sa mort (delai a la mort 30.0 s) ; tombee la premiere : attendu 3 + 6 s, avant la fin de sa fenetre
+  client (mort loin apres les autres) : a 235 m du depart, coequipier le plus proche a 235 m : personnages des coequipiers toujours repliques ici 1/1 (attendu tous ; v4.15 : aucun au-dela de 150 m)
+  client lointain tombe apres tous les autres : delai a terre 6.0 s (attendu 6 : plus personne debout, coequipiers lointains repliques ; premiere correction v4.16 : 30), aide d'un coequipier affichee NON (attendu non), a terre 1 fois (attendu 1), reveils 1, reveil 6.0 s apres la mort
+  client (place 1) : sas loin de l'hote : etat recu de l'hote (revision 6) a une action de la resolution oui : mecanisme 3, action 0 (le solveur rejoue 9 action(s) depuis cet etat)
+  client (place 1) : sas loin de l'hote : derniere action (mecanisme 3, action 0) demandee a l'hote : reponse oui, retour 11
+  client (a 2 m du sas) : sas vide oui (surface 41, dallage 70), entree a 30 cm au-dessus du dallage libre oui ; Tick du sas vu oui
+  client : Niveau 8, graine 1401743838 (attendue 1401743838) charge
+  client (place 1) : passerelle loin de l'hote : etat recu de l'hote (revision 13) a une action de la resolution oui : mecanisme 3, action 2 (le solveur rejoue 4 action(s) depuis cet etat)
+  client (place 1) : passerelle loin de l'hote : derniere action (mecanisme 3, action 2) demandee a l'hote : reponse oui, retour 10
+  client (a 5 m de la passerelle) : tablier pose oui (progression 1.00 en 0.0 s), sol du tablier au milieu de l'interruption oui, navigation des entites par le tablier oui ; Tick vu oui
+  client : Niveau 6, graine 2622470042 (attendue 2622470042) charge
+  client : scan focalise par la touche X : en marche oui, son oui
+  client : inventaire ouvert pendant le scan maintenu : scan arrete oui, son arrete oui
+  client : inventaire ferme, touche toujours tenue : le scan ne reprend pas seul oui
+  client : inventaire ferme, repetition de la touche toujours tenue : scan repris seul non (attendu non ; v4.15 : oui), repetition(s) ignoree(s) 1
+  client : nouvel appui apres l'inventaire : scan en marche oui
+  client : menu pause ouvert oui, interaction maintenue arretee oui (v4.15 : continuait sous la pause), scan arrete oui, son arrete oui
+  client : pause fermee, touches toujours tenues : ni interaction ni scan sans nouvel appui oui
+  client : touche NumPadNine ajoutee au scan pendant l'appui : entrees reconstruites oui, scan arrete oui, son arrete oui
+  client : apres le changement de touches, touche toujours tenue : pas de reprise seule oui
+  client : nouvelle touche NumPadNine : scan en marche oui
+  client : avant la perte de focus (fenetre active oui) : scan oui, course oui, interaction maintenue oui
+  client : fenetre reduite par le test (FSlateApplication::IsActive faux) : scan arrete oui, son arrete oui, course arretee oui, interaction maintenue arretee oui
+  client : retour au premier plan, touches toujours tenues (repetition) : scan repris seul non, course reprise seule non, interaction reprise seule non (attendu non ; v4.15 : la repetition devenait un nouvel appui), repetition(s) ignoree(s) 3/3
+  client : nouvel appui apres le retour au premier plan : scan en marche oui
+  client : scan focalise par la touche X : en marche oui, son oui
+  client : inventaire ouvert pendant le scan maintenu : scan arrete oui, son arrete oui
+  client : inventaire ferme, touche toujours tenue : le scan ne reprend pas seul oui
+  client : inventaire ferme, repetition de la touche toujours tenue : scan repris seul non (attendu non ; v4.15 : oui), repetition(s) ignoree(s) 1
+  client : nouvel appui apres l'inventaire : scan en marche oui
+  client : menu pause ouvert oui, interaction maintenue arretee oui (v4.15 : continuait sous la pause), scan arrete oui, son arrete oui
+  client : pause fermee, touches toujours tenues : ni interaction ni scan sans nouvel appui oui
+  client : touche NumPadNine ajoutee au scan pendant l'appui : entrees reconstruites oui, scan arrete oui, son arrete oui
+  client : apres le changement de touches, touche toujours tenue : pas de reprise seule oui
+  client : nouvelle touche NumPadNine : scan en marche oui
+  client : avant la perte de focus (fenetre active oui) : scan oui, course oui, interaction maintenue oui
+  client : fenetre reduite par le test (FSlateApplication::IsActive faux) : scan arrete oui, son arrete oui, course arretee oui, interaction maintenue arretee oui
+  client : retour au premier plan, touches toujours tenues (repetition) : scan repris seul non, course reprise seule non, interaction reprise seule non (attendu non ; v4.15 : la repetition devenait un nouvel appui), repetition(s) ignoree(s) 3/3
+  client : nouvel appui apres le retour au premier plan : scan en marche oui
+  client tombe dans une fosse : cause Fall, delai a terre 6.0 s (attendu 6), a terre 1 fois (attendu 1), reveils 1, reveil 6.0 s apres la mort, reveil hors des fosses oui (810, 260, 90)

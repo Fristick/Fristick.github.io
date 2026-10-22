@@ -1,0 +1,31 @@
+# python Tools/Visual/v417_motion.py --src Saved/TestRuns/v417/apres_appuis_d8386b2/Qualite
+commit=d8386b252c3640b5494c1f04a98a54a6ad7da4a8
+modifie=0
+profil=1
+
+l0_bacteria : 150 images mesurees, 5 appuis par image, trajet du corps 581 cm, 8 bond(s)
+  appui 0 : 75 images posees, glissement par image median 0.00 cm, p95 0.00, max 0.00 (critere <= 0,5 ; griffe <= 1) ; derive sur un appui max 0.00 cm (<= 2)
+  appui 1 : 75 images posees, glissement par image median 0.00 cm, p95 0.00, max 0.00 (critere <= 0,5 ; griffe <= 1) ; derive sur un appui max 0.00 cm (<= 2)
+  appui 2 : 75 images posees, glissement par image median 0.00 cm, p95 0.00, max 0.00 (critere <= 0,5 ; griffe <= 1) ; derive sur un appui max 0.00 cm (<= 2)
+  appui 3 : 70 images posees, glissement par image median 0.00 cm, p95 0.00, max 0.00 (critere <= 0,5 ; griffe <= 1) ; derive sur un appui max 0.00 cm (<= 2)
+  appui 4 : 65 images posees, glissement par image median 0.00 cm, p95 0.00, max 0.00 (critere <= 0,5 ; griffe <= 1) ; derive sur un appui max 0.00 cm (<= 2)
+  lacet affiche en course : max 14.0 deg par image (critere <= 15), 22 images
+  lacet affiche a l'allure a appuis, hors bond : max 2.5 deg par image
+  lacet par bond : max 23.2 deg (critere <= 25)
+  ecart modele / capsule : max 38.6 cm (critere <= 40), median 2.8
+l0_3p_cote : 90 images mesurees
+  pied gauche : 5 appui(s), glissement par pas median 0.00 cm, max 0.00 (critere <= 3)
+  pied droit : 5 appui(s), glissement par pas median 0.00 cm, max 0.00 (critere <= 3)
+  double appui : 16 image(s), les deux pieds a <= 2 cm du sol sur 16
+  ecart des jambes a la visee : max 0.0 deg, median 0.0
+  bassin de la marche : descente max 16.3 cm, mediane 4.8 ; plus grand changement d'une image a l'autre 5.7 cm
+l0_3p_cote : os LeftFoot (releves juste apres la pose), 90 images
+  pied gauche : vitesse moyenne 8.3 cm/image, 4 appui(s), glissement par appui median 13.3 cm, max 17.9 (critere <= 3) ; os a 9.5-24.2 cm du sol pendant l'appui, 9.5 cm au plus bas pendant le pas
+    os a moins de 2 cm de sa hauteur d'appui (9.5 cm) : 4 appui(s), glissement par appui median 0.0 cm, max 0.8 (critere <= 3)
+  pied droit : vitesse moyenne 8.8 cm/image, 5 appui(s), glissement par appui median 12.7 cm, max 13.7 (critere <= 3) ; os a 9.5-23.8 cm du sol pendant l'appui, 17.9 cm au plus bas pendant le pas
+    os a moins de 2 cm de sa hauteur d'appui (9.5 cm) : 4 appui(s), glissement par appui median 0.0 cm, max 0.1 (critere <= 3)
+  pied en l'air plus bas que le pied d'appui (de plus de 0,5 cm) : 2 image(s) sur 52 a un seul appui, jusqu'a 12.5 cm
+  cheville au repos : 11.7 cm au-dessus de la semelle
+  pied gauche, appuis du jeu : 5 appui(s), glissement par appui median 0.00 cm, max 0.00 (critere <= 3) ; cheville a 11.7-11.7 cm au-dessus du sol reel pendant l'appui
+  pied droit, appuis du jeu : 5 appui(s), glissement par appui median 0.00 cm, max 0.10 (critere <= 3) ; cheville a 11.7-11.7 cm au-dessus du sol reel pendant l'appui
+  appuis du jeu : pied en l'air plus bas que le pied pose (de plus de 0,5 cm) : 0 image(s) sur 88 a un seul pied pose

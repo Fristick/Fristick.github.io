@@ -1,0 +1,136 @@
+﻿THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.22-00.51.15   Duree : 143 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : 1 probleme(s)
+  - Niveau 37 : objectif non atteint : 60 images/s (95 % des images sous 16,7 ms) en RTX fluide dans les Poolrooms
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+     0 | RTX fluide : course au Ni |    81 |     48 |     11.9 |     18.8 |      24.9 |      7.0 |      4.8 |       12.3 |     16 |            7.1 |      352 (352) |       0 |     4407 |      951
+    37 | v4.8 RTX fluide : Poolroo |    73 |     46 |     13.0 |     20.8 |      22.7 |      8.8 |      6.0 |       13.6 |     12 |            0.2 |      514 (478) |       0 |     4436 |      957
+
+=== Niveau 0 - v4.8 : sauvegardes et journal (fichiers BR_AutoTest_*)
+  format plus recent (12) : OK (lu en lecture seule oui, format signale 12, ecriture refusee oui, ecriture de fond refusee oui, fichier intact oui, aucune copie ecrite oui, echecs gardes 2 / 2)
+  echec d'ecriture : OK (echec constate oui, demande 3, ecriture suivante reussie oui, echec garde apres la reussite oui, montre puis acquitte oui)
+  journal v4.7 -> v4.8 : OK (note convertie en Note.Common.1, texte inconnu garde tel quel oui, texte en anglais : "RULE NO. 1: don't run unless you have to. Noise attracts thi")
+  Journal (4 avertissements / erreurs uniques) :
+    Avert. [LogBackrooms] BR_AutoTest_4 : format 12 plus recent que ce jeu (6) : fichier preserve, partie en lecture seule
+    Avert. [LogBackrooms] BR_AutoTest_4 : format 12 plus recent que ce jeu : ecriture refusee
+    Avert. [LogBackrooms] Echec de l'ecriture de la sauvegarde BR_AutoTest_5 (demande 3) : ecriture de BR_AutoTest_5.tmp impossible (disque plein ou dossier protege)
+    Avert. [LogBackrooms] Sauvegarde : echec de la demande 3 (emplacement 5) : ecriture de BR_AutoTest_5.tmp impossible (disque plein ou dossier protege)
+
+=== Niveau 0 - v4.8 : combinaison, profils et RTX fluide (Niveau 0, graine 4605)
+    SK_Hazmat LOD0 section 0 -> slot 0 "HazmatMask" : MID_M_BR_Gear_0 (parent M_BR_Gear, BaseTex T_Hazmat_Mask, usage squelette OK, secours non)
+    SK_Hazmat LOD0 section 1 -> slot 1 "HazmatGlass" : MID_M_BR_Gear_1 (parent M_BR_Gear, BaseTex T_Hazmat_Suit, usage squelette OK, secours non)
+    SK_Hazmat LOD0 section 2 -> slot 2 "HazmatSuit" : MID_M_BR_Gear_2 (parent M_BR_Gear, BaseTex T_Hazmat_Suit, usage squelette OK, secours non)
+    SK_Hazmat LOD1 section 0 -> slot 0 "HazmatMask" : MID_M_BR_Gear_0 (parent M_BR_Gear, BaseTex T_Hazmat_Mask, usage squelette OK, secours non)
+    SK_Hazmat LOD1 section 1 -> slot 1 "HazmatGlass" : MID_M_BR_Gear_1 (parent M_BR_Gear, BaseTex T_Hazmat_Suit, usage squelette OK, secours non)
+    SK_Hazmat LOD1 section 2 -> slot 2 "HazmatSuit" : MID_M_BR_Gear_2 (parent M_BR_Gear, BaseTex T_Hazmat_Suit, usage squelette OK, secours non)
+    SK_Hazmat LOD2 section 0 -> slot 0 "HazmatMask" : MID_M_BR_Gear_0 (parent M_BR_Gear, BaseTex T_Hazmat_Mask, usage squelette OK, secours non)
+    SK_Hazmat LOD2 section 1 -> slot 1 "HazmatGlass" : MID_M_BR_Gear_1 (parent M_BR_Gear, BaseTex T_Hazmat_Suit, usage squelette OK, secours non)
+    SK_Hazmat LOD2 section 2 -> slot 2 "HazmatSuit" : MID_M_BR_Gear_2 (parent M_BR_Gear, BaseTex T_Hazmat_Suit, usage squelette OK, secours non)
+    HazmatSuit : parent M_BR_Gear, NormalTex T_Hazmat_Suit_N (force 1.00), MaskTex T_Hazmat_Suit_ORM (rugosite 1.00, cavite 0.60), metallic 0.00, specular 0.50
+    HazmatGlass : parent M_BR_Gear, NormalTex T_FlatNormal (force 0.00), MaskTex T_Hazmat_Suit_ORM (rugosite 1.00, cavite 0.00), metallic 0.00, specular 0.60
+    HazmatMask : parent M_BR_Gear, NormalTex T_FlatNormal (force 0.00), MaskTex T_NoiseLF (rugosite 0.00, cavite 0.00), metallic 0.00, specular 0.50
+  combinaison : 3 section(s), 0 materiau(x) incorrect(s), 0 slot(s) d'equipement hors de M_BR_Gear, 0 probleme(s) de materiaux signales depuis le lancement
+  profil Cinematique : 16 chunk(s) construits, 0 avec des lumieres d'un autre type (surfaciques attendues), 0 avec des ombres d'un autre mode (MegaLights actif) ; Hound : SK_Hound ; ombres locales : 351 (toutes (MegaLights))
+    Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : éclairés par les rayons)  ·  ombres : virtuelles (VSM), lampe ray tracée  ·  rendu 1 366x768 → 1 366x768 (100 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+  profil Performance : 16 chunk(s) construits, 0 avec des lumieres d'un autre type (ponctuelles attendues), 0 avec des ombres d'un autre mode (MegaLights inactif) ; Hound : SK_HoundLite ; ombres locales : 4 (jusqu'a 15 m)
+    Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen logiciel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 915x515 → 1 366x768 (67 %, TSR)  ·  MegaLights : désactivé
+  profil RTX_fluide : 16 chunk(s) construits, 0 avec des lumieres d'un autre type (surfaciques attendues), 0 avec des ombres d'un autre mode (MegaLights actif) ; Hound : SK_HoundLite ; ombres locales : 351 (toutes (MegaLights))
+    Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 915x515 → 1 366x768 (67 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+  profil Qualite : 16 chunk(s) construits, 0 avec des lumieres d'un autre type (surfaciques attendues), 0 avec des ombres d'un autre mode (MegaLights actif) ; Hound : SK_HoundLite ; ombres locales : 351 (toutes (MegaLights))
+    Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+  Journal (11 avertissements / erreurs uniques) :
+    Avert. [LogConsoleManager] Performance warning: Console object named 'r.ScreenPercentage' shows many (500) FindConsoleObject() calls (consider caching e.g. using static)
+    Avert. [LogConsoleManager] Setting the console variable 'r.TSR.History.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '100'
+    Avert. [LogConsoleManager] Setting the console variable 'r.VolumetricFog' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '1'
+    Avert. [LogConsoleManager] Setting the console variable 'r.MegaLights.NumSamplesPerPixel' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '4'
+    Avert. [LogConsoleManager] Setting the console variable 'r.RayTracing.Geometry.SkeletalMeshes' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '1'
+    Avert. [LogConsoleManager] Setting the console variable 'r.Lumen.TranslucencyReflections.FrontLayer.Enable' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '1'
+    Avert. [LogConsoleManager] Setting the console variable 'r.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '100'
+    Avert. [LogConsoleManager] Setting the console variable 'r.TSR.History.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '200'
+    Avert. [LogConsoleManager] Setting the console variable 'r.ScreenPercentage' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '67'
+    Avert. [LogConsoleManager] Setting the console variable 'r.RayTracing.Geometry.SkeletalMeshes' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '0'
+    Avert. [LogConsoleManager] Setting the console variable 'r.Lumen.TranslucencyReflections.FrontLayer.Enable' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByConsole'. Value remains '0'
+
+=== Niveau 0 - RTX fluide : course au Niveau 0
+  temps par image : GPU 7.0 ms, jeu 4.8 ms, rendu 12.3 ms
+  fluidite : mediane 11.9 ms, 95 % 16.6 ms, 99 % 18.8 ms, 1 % le plus lent 48 img/s
+  memoire : processus 4407 Mo, textures 951 Mo (memoire video dediee 7910 Mo)
+  construction des chunks : 2 termines, travail moyen 17.4 ms par chunk, pire image 7.1 ms (budget 4.0 ms)
+    etapes : planification 1.70 ms (pire 2.1), collisions 6.32, visuels 1.27, lumieres 3.99, objets 4.15 ; forcees : 0
+  v4.8 streaming : budget 4.0 ms (plafond 4.0), 1 image(s) au-dela du budget, 2 chunk(s) demonte(s) (pire 3.1 ms), 0 collision(s) preparee(s) a l'avance, ombres locales 351
+  v4.8 chargements synchrones en jeu : 2 (pire 3.0 ms) : UI_IconQuit (1.4 ms), UI_IconTip (3.0 ms) ; attente des shaders a l'arrivee : 0.0 s
+  v4.9 lumieres recreees : 0 (pire tranche 0.00 ms)
+  v4.9 prechargement : 11 ensemble(s) en memoire sur 37 au catalogue, 333 ressources, 0 ensemble(s) libere(s) depuis le lancement
+  v4.9 common : 208 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Bacteria : 12 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Faceling : 14 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Hound : 15 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Smiler : 3 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 kit:Level0 : 68 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 props:Warehouse : 1 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 tex:T_ConcreteFloor : 3 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 tex:T_L0_Carpet : 3 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 tex:T_L0_Ceiling : 3 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 tex:T_L0_Wallpaper : 3 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 915x515 → 1 366x768 (67 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+  RTX fluide (course) : resolution interne 915x515, 95 % des images en 16.6 ms (objectif 16,7 ms), 1 % le plus lent 48 img/s, 0 image(s) sans sol sur 1631
+
+=== Niveau 37 - v4.8 RTX fluide : Poolrooms (Niveau 37, graine 4605)
+  temps par image : GPU 8.8 ms, jeu 6.0 ms, rendu 13.6 ms
+  fluidite : mediane 13.0 ms, 95 % 18.4 ms, 99 % 20.8 ms, 1 % le plus lent 46 img/s
+  memoire : processus 4436 Mo, textures 957 Mo (memoire video dediee 7910 Mo)
+  construction des chunks : 12 termines, travail moyen 13.7 ms par chunk, pire image 0.2 ms (budget 4.0 ms)
+    etapes : planification 7.42 ms (pire 11.5), collisions 4.00, visuels 0.98, lumieres 1.04, objets 0.28 ; forcees : 0
+  v4.8 streaming : budget 1.5 ms (plafond 4.0), 0 image(s) au-dela du budget, 0 chunk(s) demonte(s) (pire 0.0 ms), 0 collision(s) preparee(s) a l'avance, ombres locales 471
+  v4.8 chargements synchrones en jeu : 2 (pire 3.0 ms) : UI_IconQuit (1.4 ms), UI_IconTip (3.0 ms) ; attente des shaders a l'arrivee : 0.0 s
+  v4.9 lumieres recreees : 0 (pire tranche 0.00 ms)
+  v4.9 prechargement : 14 ensemble(s) en memoire sur 37 au catalogue, 282 ressources, 5 ensemble(s) libere(s) depuis le lancement
+  v4.9 common : 208 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Clump : 15 ressources en 13.1 s, RAM +28 Mo, textures +6 Mo (ecart pendant le chargement)
+  v4.9 entity:Faceling : 14 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Hound : 15 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Smiler : 3 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 entity:Wretch : 12 ressources en 13.1 s, RAM +28 Mo, textures +6 Mo (ecart pendant le chargement)
+  v4.9 fixture:SkyPanel : 1 ressources en 1.5 s, RAM -0 Mo, textures +0 Mo (ecart pendant le chargement)
+  v4.9 props:Pool : 1 ressources en 1.5 s, RAM -0 Mo, textures +0 Mo (ecart pendant le chargement)
+  v4.9 props:Warehouse : 1 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 tex:T_ConcreteDark : 2 ressources en 13.1 s, RAM +28 Mo, textures +6 Mo (ecart pendant le chargement)
+  v4.9 tex:T_ConcreteFloor : 3 ressources en 55.5 s, RAM +1220 Mo, textures +775 Mo (ecart pendant le chargement)
+  v4.9 tex:T_Plaster : 3 ressources en 1.5 s, RAM -0 Mo, textures +0 Mo (ecart pendant le chargement)
+  v4.9 tex:T_PoolTile37 : 3 ressources en 1.5 s, RAM -0 Mo, textures +0 Mo (ecart pendant le chargement)
+  v4.9 tex:T_WaterNormal : 1 ressources en 1.5 s, RAM -0 Mo, textures +0 Mo (ecart pendant le chargement)
+  Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 915x515 → 1 366x768 (67 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+  PROBLEME : objectif non atteint : 60 images/s (95 % des images sous 16,7 ms) en RTX fluide dans les Poolrooms
+
+=== Niveau 0 - v4.8 : langues (22)
+  langue au lancement : fr (preference "", systeme : fr) ; 1222 textes ; polices manquantes : 0
+  fr (Français) : 1222/1222 textes traduits, relue, texte traduit ; nombre 1 234,5, date 05/10/2026 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 344 px sur 360
+  en (English) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1,234.5, date 10/5/26, 2:30 PM ; sens gauche a droite ; coupure : 2 lignes, la plus large 359 px sur 360
+  de (Deutsch) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1.234,5, date 05.10.26, 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 318 px sur 360
+  es-ES (Español (España)) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1234,5, date 5/10/26 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 345 px sur 360
+  pt-BR (Português (Brasil)) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1.234,5, date 05/10/2026 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 311 px sur 360
+  ru (Русский) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1 234,5, date 05.10.2026, 14:30 ; sens gauche a droite ; coupure : 3 lignes, la plus large 337 px sur 360
+  it (Italiano) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1.234,5, date 05/10/26, 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 338 px sur 360
+  tr (Türkçe) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1.234,5, date 5.10.2026 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 322 px sur 360
+  es-419 (Español (Latinoamérica)) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1234,5, date 5/10/26 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 345 px sur 360
+  pl (Polski) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1 234,5, date 05.10.2026, 14:30 ; sens gauche a droite ; coupure : 3 lignes, la plus large 313 px sur 360
+  zh-Hans (简体中文) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1,234.5, date 2026/10/5 下午2:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 357 px sur 360
+  uk (Українська) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1 234,5, date 05.10.26, 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 344 px sur 360
+  ar (العربية) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre ١٬٢٣٤٫٥, date ٥‏/١٠‏/٢٠٢٦ ٢:٣٠ م ; sens droite a gauche ; coupure : 2 lignes, la plus large 302 px sur 360, titre mis en forme 95 px
+  ko (한국어) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1,234.5, date 26. 10. 5. 오후 2:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 324 px sur 360
+  fa (فارسی) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre ۱٬۲۳۴٫۵, date ۱۴۰۵/۷/۱۳،‏ ۱۴:۳۰ ; sens droite a gauche ; coupure : 2 lignes, la plus large 351 px sur 360, titre mis en forme 95 px
+  ja (日本語) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1,234.5, date 2026/10/05 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 348 px sur 360
+  hu (Magyar) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1 234,5, date 2026. 10. 05. 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 347 px sur 360
+  cs (Čeština) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1 234,5, date 05.10.26 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 329 px sur 360
+  pt-PT (Português (Portugal)) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1 234,5, date 05/10/26, 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 328 px sur 360
+  sv (Svenska) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1 234,5, date 2026-10-05 14:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 326 px sur 360
+  zh-Hant (繁體中文) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1,234.5, date 2026/10/5 下午2:30 ; sens gauche a droite ; coupure : 2 lignes, la plus large 357 px sur 360
+  id (Bahasa Indonesia) : 1222/1222 textes traduits, traduction automatique a relire, texte traduit ; nombre 1.234,5, date 05/10/26 14.30 ; sens gauche a droite ; coupure : 3 lignes, la plus large 332 px sur 360
+  preference : "de" enregistree dans BackroomsPlayer.ini, reprise au lancement : de
+  langue retablie : fr (preference "")

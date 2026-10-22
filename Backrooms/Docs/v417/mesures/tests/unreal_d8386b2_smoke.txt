@@ -1,0 +1,19 @@
+﻿THE BACKROOMS - RAPPORT DU TEST AUTOMATIQUE
+Date : 2026.10.22-02.16.18   Duree : 14 s
+Jeu : v4.17   Moteur : ++UE5+Release-5.8-CL-58210709   RHI : D3D12 (SM6)
+Processeur : 13th Gen Intel(R) Core(TM) i7-13620H   Carte graphique : NVIDIA GeForce RTX 5050 Laptop GPU (ecran : Intel(R) UHD Graphics)   Memoire : 16 Go
+Profil : Qualite (qualite 3, RT 1, hit lighting 0, ombres RT lampe 0, rendu 80 %)   Graine fixe : non (-BRSeed=<n>)
+Mode réel : D3D12 SM6  ·  ray tracing matériel actif  ·  Lumen matériel (reflets : cache de surfaces)  ·  ombres : virtuelles (VSM)  ·  rendu 1 093x614 → 1 366x768 (80 %, TSR)  ·  MegaLights : actif (ombres de toutes les lampes)
+
+RESULTAT : aucun probleme detecte.
+
+Niveau | Titre                     | img/s | 1% bas | med (ms) | 99% (ms) | pire (ms) | GPU (ms) | jeu (ms) | rendu (ms) | chunks | chunk max (ms) | lumieres (ombres) | entites | RAM (Mo) | tex (Mo)
+
+=== Niveau 0 - Lancement du paquet
+  carte : L_Backrooms
+  niveau construit : oui, 16 chunk(s)
+  polices des autres ecritures absentes : aucune
+  caracteres sans glyphe : 0 
+  langues : 22 ; textes manquants dans la langue courante (fr) : 0
+  catalogue des ressources : 37 ensemble(s)
+  sol sous le joueur : oui

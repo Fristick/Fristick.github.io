@@ -1,0 +1,30 @@
+# v48 alternes, 22 octobre 01:02-01:10, machine sans autre Unreal ni compilation de cette session (verrou partage)
+# reference : arbre temporaire au commit 132eba6 (code f5231c5) ; apres : ede4d80
+== base1
+=== Niveau 0 - RTX fluide : course au Niveau 0
+  temps par image : GPU 7.1 ms, jeu 4.6 ms, rendu 11.8 ms
+  fluidite : mediane 11.6 ms, 95 % 15.6 ms, 99 % 17.6 ms, 1 % le plus lent 53 img/s
+=== Niveau 37 - v4.8 RTX fluide : Poolrooms (Niveau 37, graine 4605)
+  temps par image : GPU 8.8 ms, jeu 5.3 ms, rendu 12.6 ms
+  fluidite : mediane 11.9 ms, 95 % 17.6 ms, 99 % 19.8 ms, 1 % le plus lent 46 img/s
+== apres1
+=== Niveau 0 - RTX fluide : course au Niveau 0
+  temps par image : GPU 6.9 ms, jeu 4.7 ms, rendu 11.8 ms
+  fluidite : mediane 11.3 ms, 95 % 16.2 ms, 99 % 18.3 ms, 1 % le plus lent 48 img/s
+=== Niveau 37 - v4.8 RTX fluide : Poolrooms (Niveau 37, graine 4605)
+  temps par image : GPU 8.7 ms, jeu 5.7 ms, rendu 12.7 ms
+  fluidite : mediane 12.0 ms, 95 % 17.9 ms, 99 % 20.2 ms, 1 % le plus lent 31 img/s
+== base2
+=== Niveau 0 - RTX fluide : course au Niveau 0
+  temps par image : GPU 6.9 ms, jeu 4.7 ms, rendu 12.2 ms
+  fluidite : mediane 11.9 ms, 95 % 16.6 ms, 99 % 18.9 ms, 1 % le plus lent 51 img/s
+=== Niveau 37 - v4.8 RTX fluide : Poolrooms (Niveau 37, graine 4605)
+  temps par image : GPU 8.7 ms, jeu 6.3 ms, rendu 14.7 ms
+  fluidite : mediane 14.5 ms, 95 % 18.7 ms, 99 % 21.1 ms, 1 % le plus lent 29 img/s
+== apres2
+=== Niveau 0 - RTX fluide : course au Niveau 0
+  temps par image : GPU 7.0 ms, jeu 4.9 ms, rendu 12.7 ms
+  fluidite : mediane 12.4 ms, 95 % 17.4 ms, 99 % 19.8 ms, 1 % le plus lent 46 img/s
+=== Niveau 37 - v4.8 RTX fluide : Poolrooms (Niveau 37, graine 4605)
+  temps par image : GPU 8.8 ms, jeu 5.9 ms, rendu 14.0 ms
+  fluidite : mediane 14.0 ms, 95 % 18.3 ms, 99 % 19.4 ms, 1 % le plus lent 29 img/s

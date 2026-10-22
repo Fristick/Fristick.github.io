@@ -1,0 +1,8 @@
+﻿run_nettest net_final_d8386b2 : clients 1 (sans rendu 0), arrivee tardive none, latence 0 ms, gigue 0 ms, pertes 0 %, plan v4.16 (-BRAutoTestV416Net)
+Hote     sortie=0 etat=incomplet problemes=0 non_verifies=4
+   NON VERIFIE: Niveau 0 : ramassage simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)
+   NON VERIFIE: Niveau 1 : depart simultane : demandes en concurrence NON VERIFIEES (moins de 2 clients : la demande de l'hote, appliquee sur place, passe toujours la premiere)
+   NON VERIFIE: Niveau 37 : sas loin de l'hote : interactions simultanees sur un mecanisme NON VERIFIEES (moins de 2 clients)
+   NON VERIFIE: Niveau 6 : second ecran, deuxieme machine et quatre joueurs physiques : materiel absent de ce PC (essais a faire a la main)
+Client1  sortie=0 etat=reussi problemes=0 non_verifies=0
+code de sortie : 2 (0 tout reussi, 1 au moins un probleme, 2 seulement des verifications non faites, 3 un rapport manquant)

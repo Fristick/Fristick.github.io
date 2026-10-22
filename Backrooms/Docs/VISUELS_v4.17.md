@@ -115,6 +115,10 @@ jeu fixe de 1/30 s vérifié par le banc.
 | `p_3p_eau` (90 images) | marche dans l'eau des Poolrooms | caustiques et rides stables |
 | `l1_marche` (150 images) | marche au Niveau 1, raccords de streaming | néons fixes : banc figé, voir § 6 pour le clignotement |
 
+Passe « appuis » (22 octobre, `d8386b2`, passage `apres_appuis_d8386b2`, Qualité) : `l0_3p_cote_appuis.webp` et
+`l0_bacteria_appuis.webp`. Leur « avant » est `l0_3p_cote_apres.webp` et `l0_bacteria_apres.webp` (même code
+d'animation que `f5231c5`). Mesures : § 5.
+
 ## 4. Gros plans
 
 `v417/visuels/details/` :
@@ -128,41 +132,77 @@ jeu fixe de 1/30 s vérifié par le banc.
 - `barre_rapide.jpg` : barre rapide en jeu × 2.
 - `icones_contour.png` : les cinq icônes sombres à 64 px sur le fond des cases, v4.16 en haut, v4.17 en bas.
 - `pieds_l0_3p_cote_010-032.jpg` : pieds sur un cycle de marche, une image sur deux.
+- Passe « appuis » (`f5231c5` contre `d8386b2`) :
+  - `pieds_appuis_l0_3p_cote_017-029.jpg` : marche de côté, une image sur deux. Avant : pied qui suit le tibia (pointe ou
+    talon dans le sol) ; après : semelle à plat et ombre de contact pendant l'appui, pied en l'air levé ;
+  - `bacteria_demitour_appuis_074-090.jpg` et `bacteria_depart_appuis.jpg` (départ de chaque version : avant images 106-116, après 88-98) : recadrées et **éclaircies × 2,2**
+    pour la lecture (contre-jour). Les horaires de la capsule diffèrent d'une version à l'autre (§ 5).
 
 ## 5. Mesures tirées des fiches (animation)
 
-`python Tools/Visual/v417_motion.py --src Saved/TestRuns/v417/apres7/Qualite`. Les crochets n'existent qu'après :
-l'avant n'a que ses images.
+`python Tools/Visual/v417_motion.py --src Saved/TestRuns/v417/<passage>/Qualite`. Les crochets n'existent qu'à partir de
+la v4.17 ; les fiches de la passe « appuis » ajoutent les chevilles relevées juste après la pose, le sol réel sous chaque
+pied et les appuis déclarés par le jeu.
 
-**Bacteria** (passage 7, après ; le passage 8 donne les mêmes valeurs à 0,3 cm près) :
+### 5.1 Passe « appuis » (22 octobre) : `avant_appuis` (`f5231c5`) contre `apres_appuis_d8386b2` (`d8386b2`)
 
-| Critère (`animation.md` R.1) | Mesuré | Tenu ? |
-|---|---|---|
-| Appuis posés, hors bond et hors course : ≤ 0,5 cm par image | glissement médian 0 cm ; p95 3,6 à 6,8 cm ; max 10 à 27 cm | **non**, sur les démarrages et le demi-tour |
-| Dérive sur un appui ≤ 2 cm | 15 à 29 cm au plus | **non** |
-| Lacet affiché en course ≤ 15° par image | 15,3° au plus, sur 32 images de course | presque (0,3° de trop) |
-| Lacet ≤ 25° par bond | 59,7° pour le bond du demi-tour (les autres, environ 0°) | **non** au demi-tour |
-| Écart entre le modèle et la capsule ≤ 40 cm | 38,6 cm au plus, 5,1 cm médian | oui |
-| Course : corps porté au-dessus du sol | 4 à 8 cm au-dessus du sol sur les images de course | oui |
+**Bacteria** (appuis hors bond et hors course ; critères d'`animation.md` R.1) :
 
-Image par image :
+| Critère | Avant | Après | Tenu ? |
+|---|---|---|---|
+| Appuis posés : ≤ 0,5 cm par image (griffe ≤ 1) | corps p95 3,6, max 11,2 ; griffes p95 5,4-6,8, max 16,6-26,8 cm | 0 ; 0 | **oui** |
+| Dérive sur un appui ≤ 2 cm | corps 15,1 ; griffes 22,6 et 29,1 cm | 0 | **oui** |
+| Lacet affiché en course ≤ 15° par image | 15,3° | 14,0° | **oui** |
+| Lacet ≤ 25° par bond | 59,7° | 23,2° | **oui** |
+| Écart entre le modèle et la capsule ≤ 40 cm | 38,6 cm (médiane 5,1) | 38,6 cm (médiane 2,8) | oui |
+| Lacet hors bond, allure à appuis | 18,0° par image (saut à l'image 76) | 2,5° | — |
+
+- Passages de contrôle : `apres_appuis3` à `apres_appuis7` (appuis à 0, lacet par bond de 23,2 à 24,8°). Le passage de
+  `cec3f0b`, sur l'horaire final, avait une griffe qui dérivait de 5,7 cm en fin de course ; corrigé dans `d8386b2`.
+- **Horaire** : la capsule a les mêmes buts et le même demi-tour à l'image 75. Ses arrêts (saccades) sont tirés au
+  hasard, comme le bruit de chaque réception de bond : un bond de plus décale la suite. Trajet de 628 cm avant et 581
+  après ; arrêt de l'image 90 à 110 avant, course continue après. Les premières images diffèrent aussi de 5,6 cm (une image
+  de marche) : le banc lit la capsule avant ou après son déplacement, selon l'ordre des ticks.
+- Image par image : au démarrage, le modèle reste posé jusqu'au bond d'élan, puis il est porté. Au demi-tour, les bonds
+  tournent de 25° au plus, puis le lacet est rattrapé en course à 14° par image. Une griffe levée monte de 13 à 21 cm ;
+  avant, elle restait au ras du sol pendant son pas.
+
+**Joueur** (`l0_3p_cote`) :
+
+| Mesure | Avant | Après | Critère |
+|---|---|---|---|
+| Glissement par appui, appuis déclarés par le jeu | — (pas de verrou) | 0,0 cm médian, 0,1 au plus | ≤ 3 cm : **tenu** |
+| Cheville pendant l'appui, au-dessus du sol réel | — | 11,7 cm à chaque image (cheville au repos : 11,7) | au sol : **tenu** |
+| Pied en l'air plus bas que le pied posé (appuis du jeu) | — | 0 image sur 88 | jamais : **tenu** |
+| Os lent **et** à moins de 2 cm de sa hauteur d'appui | aucun appui trouvé | 0,0 cm médian, 0,8 au plus | ≤ 3 cm : **tenu** |
+| Os lent (détection d'origine) | 16,3 et 6,8 cm médian, 27,0 au plus | 13,3 et 12,7 cm médian, 17,9 au plus | voir ci-dessous |
+| Pied en l'air plus bas que le pied d'appui (détection d'origine) | 26 images sur 68, jusqu'à 5,8 cm | 2 sur 52, jusqu'à 12,5 cm | voir ci-dessous |
+| Descente du bassin : max, médiane, plus grand changement par image | 12,6 ; 5,9 ; 3,7 cm | 16,3 ; 4,8 ; 5,7 cm | — |
+
+- La détection d'origine prend pour de l'appui tout os lent, à n'importe quelle hauteur. Après la passe, elle compte les
+  deux images du décollement : le pied y monte de 6 puis 12 cm en avançant de 5 puis 4 cm. Elle compte aussi, pour le
+  pied « en l'air », un pied réellement posé. Image par image, l'os reste au même point pendant tout l'appui déclaré
+  (x = 347,3 cm des images 17 à 28).
+- Avant, la même détection avec la condition de hauteur ne trouve aucun appui : l'os ne restait jamais trois images de
+  suite à sa hauteur la plus basse (pied qui tournait avec le tibia).
+- Après, les os sont relevés juste après la pose ; avant, ils étaient lus sur le maillage au passage du banc.
+
+### 5.2 Mesures de la v4.17 avant la passe
+
+**Bacteria** (passage 7, après ; le passage 8 donne les mêmes valeurs à 0,3 cm près) : glissement médian 0 ; p95 de 3,6 à
+6,8 cm ; jusqu'à 27 cm sur les démarrages et le demi-tour ; dérive de 15 à 29 cm sur un appui ; lacet en course de 15,3°
+par image au plus ; 59,7° pour le bond du demi-tour ; écart de 38,6 cm au plus.
 
 - **Allure à appuis** : pieds et griffes immobiles entre des bonds de rattrapage de 8 images, toutes les 25 images
   environ (0,8 s).
 - **Démarrage depuis l'arrêt** : le modèle glisse de 3,5 cm par image pendant 3 à 4 images avant le premier bond.
 - **Demi-tour** (image 76) : saut de lacet de 18° avec 11 cm de glissement, puis un bond qui tourne de 58°.
-- Fin de course : arrêt au point de départ.
 
-**Joueur, os des pieds** (passage 8, Qualité, `avant8` contre `apres8`, même trajet) :
+**Joueur, os des pieds** (passage 8, Qualité, `avant8` contre `apres8`) : glissement par appui de 34 à 41 cm en v4.16,
+15,6 à 15,8 cm en v4.17 ; os à 6,6 cm au plus bas pendant l'appui, 3,6 cm au plus bas pendant le pas.
 
-| Mesure | v4.16 | v4.17 | Critère |
-|---|---|---|---|
-| Glissement du pied par appui (médian) | 34 à 41 cm | 15,6 à 15,8 cm | ≤ 3 cm : **non tenu** (−60 % environ) |
-| Hauteur de l'os pendant l'appui (au plus bas) | 11,6 cm : le pied ne touche pas le sol | 6,6 à 6,7 cm : semelle à plat | — |
-| Hauteur de l'os au plus bas du pas | 11,6 à 14,9 cm | 3,6 à 3,7 cm, plus bas que pendant l'appui | à vérifier : la pointe du pied en l'air frôle peut-être le sol |
-
-Le point de foulée de `BRRig::GetBodyPoseInfo` (fiche « corps ») est une estimation au sol, pas l'os : il ne sert pas
-à mesurer le glissement. Non mesuré : demi-tour sur place, escalier, accroupi.
+Le point de foulée de `BRRig::GetBodyPoseInfo` (fiche « corps ») était alors une estimation au sol. Depuis la passe, c'est
+la cible de la cheville (appui tenu ou pas en l'air). Non mesuré : demi-tour sur place, escalier, accroupi, course.
 
 ## 5 bis. Réseau, interface et Level 6 (tests du jeu)
 
@@ -174,8 +214,11 @@ Tests du jeu sur `516ad17`, même code du jeu que `ee3365e`.
   - le test relit les slots du personnage répliqué : 3 sur 3 sur `M_BR_Gear` chez l'hôte comme chez le client ;
   - à l'image : plis et reflet de la visière des deux côtés ;
   - **chez le client, le coéquipier (l'hôte) a les bras en A**, alors que l'hôte voit le sien les bras le long du corps.
-    Dans les deux cas, c'est un coéquipier distant : cette différence n'est donc pas une « pose de repos ». Défaut
-    possible de la pose des personnages simulés chez le client, à reproduire ;
+    Dans les deux cas, c'est un coéquipier distant : cette différence n'est donc pas une « pose de repos ». **Cause
+    trouvée par la passe « appuis »** : chez le client, le personnage simulé de l'hôte reste en mode de déplacement
+    « aucun », et son corps prenait la pose en l'air (bras écartés). Corrigé dans `cec3f0b` (rapport § 3.5) :
+    `coequipier_vu_par_client_appuis.jpg`, bras le long du corps comme chez l'hôte, et note du test « pose en l'air
+    0,00 » chez le client ;
   - les deux captures sont prises avec le VHS et le grain actifs (réglages par défaut du test réseau) ;
   - les fiches portent `commit : inconnu` : ce lanceur ne transmet pas `-BRCommit`.
 - `v417/visuels/interface/` :

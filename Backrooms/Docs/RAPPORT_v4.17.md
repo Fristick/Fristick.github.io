@@ -31,13 +31,13 @@ Documents liés : [`AGENTS_v4.17.md`](AGENTS_v4.17.md) (agents, délégations, r
   - en Performance, plus de plafond délavé : tiers haut 0,40 → 0,18, Qualité 0,24.
 - **Poolrooms** : caustiques seulement sous l'eau et près d'elle ; plafond un peu moins clair.
 - **Combinaison** : matériau dédié `M_BR_Gear` (normale et ORM dérivées), visière en verre. Plis brillants sous une
-  lumière froide, gain modeste sous le néon chaud. Matériau vérifié chez l'hôte et chez un client ; chez le client, le
-  coéquipier a les bras en A (défaut possible de pose, à reproduire).
-- **Animation** (amélioration partielle ; critères non tenus, § 4.3) :
-  - pied d'appui du joueur plus bas (cheville à 6,6 cm au lieu de 11,6) et glissement par appui divisé par 2,5, mais
-    encore 16 cm ;
-  - Bacteria immobile entre ses bonds de rattrapage, mais glissement de 15 à 29 cm sur un appui au démarrage et au
-    demi-tour.
+  lumière froide, gain modeste sous le néon chaud. Matériau vérifié chez l'hôte et chez un client. Le coéquipier qui
+  avait les bras en A chez le client est corrigé par la passe « appuis » : il y était posé « en l'air » (§ 3.5, § 7.3).
+- **Animation** (critères d'appui tenus après la passe « appuis » du 22 octobre, § 4.3) :
+  - pied d'appui du joueur tenu au monde : glissement de 0,0 à 0,1 cm par appui (16 cm avant la passe, 34-41 en
+    v4.16) ; cheville à sa hauteur de repos au-dessus du sol pendant l'appui ; pied en l'air jamais sous le pied posé ;
+  - Bacteria : appuis du corps et griffes à 0 cm de glissement au démarrage et au demi-tour (15 à 29 cm avant) ; 24,8°
+    au plus par bond (58° avant).
 - **Inventaire** :
   - textes plus grands ; icônes sombres cernées ; touches de la barre rapide en pastille ;
   - utilisable à la manette (réglages, déplacement d'objet) ;
@@ -51,7 +51,8 @@ Documents liés : [`AGENTS_v4.17.md`](AGENTS_v4.17.md) (agents, délégations, r
 - murs du Level 0 encore plus clairs que la moquette (1,17 à 1,84 pour ≤ 1) ;
 - voile des Poolrooms (p1 ≈ 0,05 pour ≤ 0,01) ;
 - taches sombres des flaques du Niveau 1 ;
-- pied d'appui qui glisse encore (16 cm par appui) ; bond de 58° de la Bacteria au demi-tour ;
+- bassin du joueur qui descend jusqu'à 16 cm au changement d'appui (longue foulée, jambe tendue) ; pose des marcheurs
+  encore faite avant le déplacement de l'image ;
 - arabe affiché de gauche à droite ;
 - inventaire au clavier seul incomplet (onglets, catégories de PARAMÈTRES, Échap) ;
 - aucun carnet réel assez long pour défiler ;
@@ -201,6 +202,35 @@ rien de répliqué, ni IA, capsules, vitesses ou attaques, ni ressources protég
   - marche du joueur **vue de côté**, pieds dans le cadre ;
   - appuis de la Bacteria et pose du corps du joueur relevés dans les fiches.
   - Résultats : § 4.
+- **Passe « appuis »** (22 octobre, `94cb3c3` à `d8386b2`, après le code final `f5231c5`). Poses locales seulement : rien
+  de répliqué, protocole 416 inchangé, lumière de jeu non touchée.
+  - **Pose après le déplacement** (joueur et Bacteria) : une tick fonction par acteur, qui passe après le composant de
+    déplacement et son lissage réseau (`FBRBodyLateTick`, `FBREntityLateTick`).
+  - **Corps du joueur** : pied d'appui tenu au point où il s'est posé (sol trouvé sous lui). Pas en trois temps : le pied
+    lève, avance vers son point de pose (la foulée à la phase de pose, là où sera le corps), puis se pose à la verticale.
+    IK à deux segments (genou vers l'avant, roulis de cuisse pour l'écart latéral). Bassin descendu pour la jambe
+    d'appui ; il remonte à 80 cm/s au plus. Pied à plat pendant l'appui. Au départ d'un arrêt, la cadence est recalée
+    sur les pieds posés. À l'arrêt, un petit pas recale le pied resté en arrière. Nage, échelle, saut et mort : pose
+    d'avant.
+  - **Bacteria** : plus de mélange entre pose et course (bond d'élan vers la capsule) ; 25° de lacet au plus par bond ;
+    en course, lacet rattrapé à 420°/s sans saut. Griffes visées exactement : l'épaule monte de 8 cm au plus posée, de 3
+    pendant le pas ; une griffe qui revient à l'appui s'y repose par un pas.
+  - **Coéquipier vu par un client** : son personnage simulé y restait en mode de déplacement « aucun » (test réseau : mode
+    0 chez le client au moment de la capture, mode 1 chez l'hôte). Son corps prenait donc la pose en l'air : bras en A
+    (§ 5 bis de `VISUELS_v4.17.md`), pieds jamais tenus. La pose cherche maintenant le sol sous la capsule pour un
+    personnage distant dans ce mode (`cec3f0b`). Le test réseau note l'état du coéquipier sur chaque machine. Après :
+    pose en l'air 0,00 chez le client, bras le long du corps comme chez l'hôte [correction validée à l'image et par la
+    note du test]. Le mode « aucun » lui-même n'est pas expliqué ; il est laissé tel quel (déplacement non touché).
+  - **Relecture R2** : vitesse de rotation des marcheurs lissée chez un client [constat de source, non vérifié en jeu].
+  - **Relecture R3** : corps visible (3e personne, coéquipiers), le pas sonne à la pose de chaque pied ; à la 1re
+    personne, le rythme reste celui du balancement de la caméra [constat de source, non écouté].
+    - La cadence du corps accroupi (~15 rad/s) aurait fait trembler la caméra : la 1re personne n'a pas changé.
+  - Banc et outil :
+    - les fiches relèvent les chevilles juste après la pose, avec le sol réel sous chaque pied et les appuis déclarés
+      par le jeu ;
+    - `v417_motion.py` donne aussi la détection d'origine avec l'os tenu à sa hauteur d'appui, et la descente du bassin ;
+    - `Tools/check_leg_ik.py` contrôle la formule d'IK du joueur.
+  - Résultats : § 4.3.
 - **Non vérifié** : escalier, main dans une porte, objet tenu, coude, continuité attente → poursuite → attaque, Hound et
   Skin-Stealer en mouvement, entités dans les reflets en ray tracing hors champ.
 
@@ -309,18 +339,81 @@ Lecture :
 
 Détail : `VISUELS_v4.17.md` § 5. Outil : `Tools/Visual/v417_motion.py`.
 
-- **Bacteria** (après) :
-  - **[jugé à l'image]**, mesuré en partie : à l'allure à appuis, pieds et griffes immobiles entre des bonds de
-    rattrapage (glissement médian 0) ;
-  - en course, corps porté et lacet ≤ 15,3° par image ; écart du modèle ≤ 38,6 cm ;
-  - **non tenu** : glissement de 3,5 cm par image au démarrage depuis l'arrêt ; au demi-tour, saut de lacet de 18° avec
-    11 cm de glissement, puis un bond de 58° (critère ≤ 25°).
-- **Joueur** (os des pieds, avant / après, même trajet) :
-  - **[jugé à l'image]** le pied d'appui descend au sol : os à 6,6 cm au plus bas, contre 11,6 cm en v4.16, semelle à
-    plat et ombre de contact sur les gros plans. Le contact exact n'est pas mesuré ;
-  - glissement par appui divisé par 2,5 environ (34-41 → 15,7 cm) ;
-  - **non tenu** : critère de 3 cm par appui ; le pied en l'air descend plus bas que le pied d'appui au milieu du pas
-    (3,6 cm), à vérifier.
+**Passe « appuis »** (22 octobre, après `f5231c5`) : banc figé, profil Qualité, même machine, un seul Unreal à la fois.
+Avant : `avant_appuis` (code `f5231c5`, branche au commit `132eba6`). Après : `apres_appuis_d8386b2` (`d8386b2`, code final
+de la passe). Commandes :
+`python Tools/Visual/v417_motion.py --src Saved/TestRuns/v417/<passage>/Qualite`.
+
+Changements (§ 3.5) :
+
+- la pose du corps du joueur et celle de la Bacteria sont faites **après** le déplacement de l'image. Avant, elles
+  l'étaient dans le `Tick` de l'acteur, que le moteur passe avant le composant de déplacement : un appui tenu au monde
+  suivait ensuite la capsule du déplacement de l'image ;
+- **joueur** : chaque cheville vise un point au monde, le point où le pied s'est posé. Le pas lève le pied, l'avance vers
+  son point de pose, puis le pose à la verticale. IK à deux segments, bassin descendu de ce qu'il faut, pied à plat
+  pendant l'appui. La cadence ne change pas ;
+- **Bacteria** : posée jusqu'à la course, où elle entre par un bond d'élan ; 25° de lacet au plus par bond ; griffes visées
+  exactement, épaule relevée de ce qu'il faut.
+
+**Bacteria** (`l0_bacteria`, appuis hors bond et hors course) :
+
+| Mesure | Critère | Avant | Après |
+|---|---|---|---|
+| Appuis du corps : glissement par image (p95 / max) | ≤ 0,5 cm | 3,6 / 11,2 cm | **0 / 0** |
+| Appuis du corps : dérive sur un appui | ≤ 2 cm | 15,1 cm | **0** |
+| Griffes : glissement par image (p95 / max) | ≤ 1 cm | 5,4-6,8 / 16,6-26,8 cm | **0 / 0** |
+| Griffes : dérive sur un appui | ≤ 2 cm | 22,6 et 29,1 cm | **0** |
+| Lacet par bond | ≤ 25° | 59,7° | **23,2°** |
+| Lacet en course, par image | ≤ 15° | 15,3° | **14,0°** |
+| Lacet hors bond, allure à appuis, par image | — | 18,0° | 2,5° |
+| Écart modèle / capsule (max / médian) | ≤ 40 cm | 38,6 / 5,1 cm | 38,6 / 2,8 cm |
+
+- **[correction validée]** Appuis tenus au démarrage et au demi-tour, demi-tour sans bond de plus de 25°.
+- Passages de contrôle : de `apres_appuis3` à `apres_appuis7` (`95c4603` à `5e91e4b`), appuis à 0 cm et lacet par bond de
+  23,2 à 24,8°. Le passage `apres_appuis_final` (`cec3f0b`), avec un autre horaire (8 bonds), a montré une griffe qui
+  dérivait de 5,7 cm : elle pendait en geste libre pendant que le corps redescendait de la course. Corrigé dans
+  `d8386b2` (griffes reposées dès la fin de la course), puis 0 cm sur le même horaire.
+- La capsule a les mêmes buts et le même demi-tour à l'image 75, mais **pas le même horaire**. Les arrêts de la Bacteria
+  (saccades) sont tirés au hasard, comme le bruit de chaque réception de bond : un bond de plus décale la suite des
+  tirages. Trajet de la capsule : 628 cm avant, 581 cm après ; 6 bonds avant, 8 après. Un horaire n'est mesuré que
+  s'il est rejoué : d'autres horaires ne sont pas couverts.
+- **[jugé à l'image]** Le demi-tour tourne progressivement d'une image à l'autre (avant : bascule de près de 60° vers
+  l'image 80). La caméra du banc coupe le haut du corps à cette distance. Une griffe levée quitte vraiment le sol (13 à
+  21 cm) ; avant, elle restait au ras du sol pendant son pas.
+
+**Joueur** (`l0_3p_cote`, marche de côté) :
+
+| Mesure | Critère | Avant | Après |
+|---|---|---|---|
+| Glissement par appui, appuis déclarés par le jeu (médian / max) | ≤ 3 cm | — (pas de verrou) | **0,0 / 0,1 cm** |
+| Os de la cheville pendant l'appui, au-dessus du sol réel | au sol | — | **11,7 cm** à chaque image (hauteur de la cheville au repos) |
+| Pied en l'air plus bas que le pied posé (appuis du jeu) | jamais | — | **0** image sur 88 |
+| Glissement par appui, os à moins de 2 cm de sa hauteur d'appui (médian / max) | ≤ 3 cm | aucun appui trouvé | **0,0 / 0,8 cm** |
+| Glissement par appui, détection d'origine (vitesse de l'os seule) | ≤ 3 cm | 16,3 et 6,8 cm (max 27,0) | 13,3 et 12,7 cm (max 17,9) |
+| Pied en l'air plus bas que le pied d'appui (détection d'origine) | jamais | 26 images sur 68, jusqu'à 5,8 cm | 2 sur 52, jusqu'à 12,5 cm |
+| Descente du bassin (max / médiane ; plus grand changement d'une image à l'autre) | — | 12,6 / 5,9 ; 3,7 cm | 16,3 / 4,8 ; 5,7 cm |
+
+- **[correction validée]** Le pied d'appui ne glisse plus (0,0 à 0,1 cm par appui). Pendant l'appui, la cheville reste à
+  sa hauteur de repos au-dessus du sol trouvé sous elle. Le pied en l'air ne passe jamais sous le pied posé. Image par
+  image : l'os reste au même point de sa pose à son lever (par exemple x = 347,3 cm des images 17 à 28).
+- La **détection d'origine** (appui = os lent, sans regarder sa hauteur) compte comme de l'appui les deux images du
+  décollement : le pied y monte de 6 puis 12 cm en avançant de 5 puis 4 cm, ce qui n'est pas un glissement. Avec la même
+  détection et l'os tenu à moins de 2 cm de sa hauteur d'appui : 0,0 cm. Avant, cette détection plus stricte ne trouve
+  aucun appui : l'os ne restait jamais trois images à sa hauteur d'appui.
+- Les fiches d'après lisent les os juste après la pose (« source pose ») ; celles d'avant les lisaient sur le maillage
+  au passage du banc. L'ordre du banc et du déplacement n'étant pas fixé, l'avant peut avoir une image de décalage
+  entre l'os et la capsule. Ce décalage reste sans effet sur un glissement mesuré à allure tenue.
+- **[jugé à l'image]** Semelle à plat sur le sol pendant tout l'appui. Avant, le pied suivait le tibia : talon ou pointe
+  dans le sol aux extrémités du pas. Le pied lève d'abord et se pose à la verticale.
+- Le bassin descend un peu plus au changement d'appui : 16,3 cm au plus contre 12,6. C'est la jambe tendue qui tient
+  son appui avec la longue foulée de la cadence (2 × 93,9 × sin 30°, soit 94 cm par pas). La descente médiane est plus
+  faible (4,8 cm contre 5,9). La remontée est bornée à 80 cm/s : sans cette borne, le bassin sautait de 8 cm en une image quand
+  un pied se levait (passage intermédiaire `apres_appuis6`). Le plus grand changement restant (5,7 cm par image) est la descente de fin d'appui,
+  jambe tendue.
+- Contrôle hors moteur de la formule d'IK : `python Tools/check_leg_ik.py`, 300 cas, écart au plus de 0,05 cm.
+- **Non mesuré** : course, accroupi, escalier, demi-tour sur place, arrêt et redépart rapprochés. Coéquipier vu par un
+  autre joueur : le test réseau ne photographie qu'un coéquipier immobile, désormais posé au sol chez le client aussi
+  (§ 3.5) ; sa marche n'est pas filmée.
 
 ## 5. Performances
 
@@ -475,7 +568,8 @@ ou `Content/` n'y change.
 
 ## 7. Tests exécutés après la dernière correction
 
-Dernière modification du code : `f5231c5`. Elle corrige l'inventaire au clavier : Entrée seulement avec le curseur
+Passe « appuis » (22 octobre, `94cb3c3` à `d8386b2`, animation et tests seulement) : ses tests sont au § 7.3. Avant elle,
+dernière modification du code : `f5231c5`. Elle corrige l'inventaire au clavier : Entrée seulement avec le curseur
 montré, infobulle aux touches du clavier. Elle remet aussi le gel du banc à zéro à la fin de tout essai et ajoute quatre
 appuis au clavier à `v416vis`. Les commits suivants ne touchent que les documents et `Tools/Visual/v417_criteria.py`.
 
@@ -541,6 +635,36 @@ réussis (`v417/mesures/hors_moteur/run_benches_2074046.txt`). `f5231c5` ne chan
 | `check_paths.py`, `generate_roughness.py --check`, `generate_ies.py --check`, `check_leg_ik.py` | OK |
 | réimportation sans surveillance (`run_editor_setup.ps1`) | RESULT=OK, matériaux v11, 0 problème |
 
+### 7.3 Passe « appuis » (code final `d8386b2`)
+
+Les sessions parallèles partageaient la machine : un seul Unreal à la fois, sous un verrou commun. Série finale sur
+`d8386b2` : `Saved/TestRuns/autotest/final_d8386b2/`, `final_d8386b2_v48/` et `net_final_d8386b2/` ; rapports copiés dans
+`v417/mesures/tests/unreal_d8386b2_*.txt` et `reseau_d8386b2_*.txt`.
+
+| Test | `d8386b2` (code final) | Remarque |
+|---|---|---|
+| `smoke` | réussi | |
+| `v415` | réussi | |
+| `v416vis` | 0 problème, 8 non vérifiés (les mêmes qu'avant) | Bacteria : bas des volumes à +2,2 cm (+2,1 avant) |
+| `chapitre` | réussi (7,7 min) | |
+| `v48` | réussi | RTX fluide, 95e centile : Poolrooms 14,4 ms, course au Level 0 14,0 ms |
+| test réseau `run_nettest.ps1 -Clients 1` | hôte : 0 problème, 4 non vérifiés ; client : réussi, 0 non vérifié | comme sur `f5231c5` ; coéquipier posé au sol chez le client (pose en l'air 0,00) |
+| banc visuel, Qualité (`apres_appuis_d8386b2`) | 0 problème | mesures du § 4.3 |
+
+Échecs rencontrés en cours de passe, et ce qui en a été fait (rapports : `v417/mesures/tests/unreal_5e91e4b_v416vis.txt`,
+`unreal_ede4d80_v416vis.txt`, `unreal_5e91e4b_v48.txt`, `unreal_ede4d80_v48.txt`) :
+
+- `v416vis` sur `5e91e4b` : « Bacteria : bas des volumes visibles à +3,1 cm du sol » (borne 3 cm). La mesure tombait
+  pendant un bond : la Bacteria quitte le sol par conception et tourne maintenant en bonds de 25°. Le test attend
+  désormais qu'elle soit posée, 1,5 s au plus (`ede4d80`, test seulement), et le dit s'il mesure encore en l'air.
+- **`v48`** a échoué toute la nuit du 21 au 22 (Poolrooms à 18,4-19,0 ms au 95e centile pour 16,7 ; 13,5 ms aux tests
+  finaux de `f5231c5`). Quatre lancements alternés ont été faits sans autre Unreal ni compilation
+  (`v417/mesures/tests/v48_alterne_reference_apres.txt`). Référence `132eba6` (arbre temporaire, code `f5231c5`) : 17,6 et
+  18,7 ms. Après : 17,9 et 18,3 ms. **La référence échouait aussi** : machine plus lente, cause non établie, sans
+  régression de la passe. La série finale, à 2 h 37, l'a réussi (14,4 ms).
+- Banc visuel sur `cec3f0b` : une griffe de la Bacteria dérivait de 5,7 cm en fin de course (horaire tiré différent,
+  § 4.3) ; corrigé dans `d8386b2`.
+
 ## 8. Non vérifié, défauts restants, décisions du propriétaire
 
 ### 8.1 Non vérifié
@@ -557,7 +681,9 @@ réussis (`v417/mesures/hors_moteur/run_benches_2074046.txt`). `f5231c5` ne chan
   - Niveau 6 : **aide aux parasites** du scanner, deux fois : aucune place à 8-14 m des parasites ;
   - Niveau 4 : vue d'un coéquipier réel (banc solo ; le test réseau la couvre pour la combinaison).
 - **Animation** : escalier, main dans une porte, objet tenu, coude, enchaînement attente → poursuite → attaque, Hound et
-  Skin-Stealer en mouvement, demi-tour sur place du joueur.
+  Skin-Stealer en mouvement, demi-tour sur place du joueur. Passe « appuis » : appuis du joueur seulement mesurés à la
+  marche (ni course, ni accroupi, ni escalier, ni arrêt et redépart rapprochés) ; coéquipier en marche vu par un autre
+  joueur non filmé ; pas sonores non écoutés.
 - **Reflets en ray tracing** des entités hors champ, selon le profil.
 - **Eau** : caméra qui traverse la surface ; coût séparé de l'eau, du translucide, des reflets et du brouillard.
 - **Lumière en mouvement** : néon puis mur sombre, porte, fosse, lampe (essais D.1 d'`eclairage.md`), sauf l'entrée dans
@@ -577,11 +703,25 @@ réussis (`v417/mesures/hors_moteur/run_benches_2074046.txt`). `f5231c5` ne chan
   du matériau partagé, pas de la texture : il faut le reprendre en C++ et en Python, avec une nouvelle version des
   matériaux. Niveau 2 quasi inchangé.
 - **Animation** :
-  - pied d'appui du joueur qui glisse encore d'environ 16 cm par appui. Le corps du joueur n'a pas de verrou du pied au
-    monde ; les marcheurs l'ont ;
-  - Bacteria : glissement au démarrage, bond de 58° au demi-tour ;
-  - [constat de source] chez un client, la rotation des marcheurs arrive par paliers : piétinement irrégulier probable
-    (R2) ; pas sonores du joueur sur l'ancienne cadence (R3).
+  - corrigés par la passe « appuis » (§ 3.5, § 4.3) : glissement du pied d'appui du joueur ; glissement de la Bacteria
+    au démarrage et son bond de 58° au demi-tour ;
+  - joueur : le bassin descend jusqu'à 16,3 cm au changement d'appui (12,6 avant). C'est la jambe tendue qui tient son
+    appui avec la longue foulée de la cadence (94 cm par pas à la marche). Une foulée plus courte, ou un genou plié à
+    l'appui, la réduirait ;
+  - joueur : le talon ne se lève pas en fin d'appui ; le pied reste à plat jusqu'au lever, puis avance de quelques
+    centimètres en montant ;
+  - [constat de source] Bacteria : au demi-tour, elle peut courir quelques images en regardant encore derrière elle (lacet
+    rattrapé à 420°/s, sans le saut d'avant) ; ses griffes changent d'appui en 0,16 s, en arc vers l'extérieur ;
+  - [constat de source] marcheurs (Hound, Skin-Stealer, Faceling, Wretch, Partygoer) : leur pose est encore faite dans le
+    `Tick`, avant le déplacement de l'image. Leur pied tenu suit donc la capsule d'une image de déplacement quand l'allure
+    change, comme la Bacteria avant la passe ;
+  - [constat de source] chez un client, le personnage simulé d'un autre joueur reste en mode de déplacement « aucun » (test
+    réseau). La pose du corps s'en accommode maintenant (§ 3.5) ; la cause n'est pas cherchée. Tout autre code qui lirait
+    « au sol » pour ce personnage chez un client le croirait en l'air ;
+  - [constat de source] R2 : rotation des marcheurs lissée chez un client, non vérifiée en jeu ;
+  - [constat de source] R3 : à la 1re personne, les pas sonnent toujours au rythme du balancement de la caméra
+    (2,55 pas/s à la marche, ~2,8 pour le corps). À la 3e personne et pour un coéquipier, ils sonnent à la pose de
+    chaque pied, non écoutés.
 - **Interface** :
   - arabe et persan affichés de gauche à droite (C9) ;
   - libellés de groupe empilés lettre par lettre (C11) ;

@@ -1,0 +1,5 @@
+smoke  exit=0 time=0,6min etat=reussi problemes=0 non_verifies=0
+v415   exit=0 time=4,6min etat=reussi problemes=0 non_verifies=0
+v416vis exit=2 time=4,1min etat=incomplet problemes=0 non_verifies=8
+chapitre exit=0 time=7,7min etat=reussi problemes=0 non_verifies=0
+v48    exit=0 time=2,6min etat=reussi problemes=0 non_verifies=0
