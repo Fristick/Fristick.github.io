@@ -3500,8 +3500,12 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 	const UCapsuleComponent* Cap = GetCapsuleComponent();
 	const float GroundZ = static_cast<float>(Here.Z) - (Cap ? Cap->GetScaledCapsuleHalfHeight() : I.HalfHeight);
 	const float Ready = FMath::Clamp(FMath::Max(WindupAnim, Strike), 0.f, 1.f);
-	const float PlantW = bScareOverride ? 0.f
-		: (1.f - CarryBlend) * (1.f - FMath::Clamp(Reach, 0.f, 1.f)) * (1.f - Ready);
+	const float PlantOther = bScareOverride ? 0.f : (1.f - FMath::Clamp(Reach, 0.f, 1.f)) * (1.f - Ready);
+	const float PlantW = (1.f - CarryBlend) * PlantOther;
+	// v4.17 (appuis) : griffes posees des que la Bacteria n'est plus portee (ni bond d'elan), meme pendant que son corps
+	// redescend de la course (l'epaule absorbe la descente) : avant, elles pendaient en geste libre a 1-2 cm du sol tant que
+	// le poids de l'appui restait sous 0,5, et derivaient (5,7 cm, banc final)
+	const bool bPlantNow = PlantOther > 0.5f && !bCarried && !bLaunchHop;
 	const FVector Ahead = Speed > 25.f ? (FVector(Vel.X, Vel.Y, 0.0) * 0.1).GetClampedToMaxSize(12.0) : FVector::ZeroVector;
 	const ABRWorld* PW = World.Get();
 	FoldTimer -= Dt;
@@ -3550,9 +3554,9 @@ void ABREntity::AnimateBacteriaGait(float Dt)
 		const FQuat FoldQ = FRotator(0.f, 0.f, Out * Arm.Fold).Quaternion();
 		// Geste libre (AnimateLimbs : balancement, bras tendus, armee, frappe), replie pres d'un mur
 		FQuat Want = FoldQ * C->GetRelativeRotation().Quaternion();
-		// v4.17 (appuis) : griffe posee franchement des que le poids de l'appui depasse 0,5 (avant : melange du geste libre et de
-		// l'appui a ce poids, la griffe glissait au sol a mesure qu'il montait, au retour de la course)
-		if (PlantW > 0.5f)
+		// v4.17 (appuis) : griffe posee franchement (avant : melange du geste libre et de l'appui au poids de l'appui, la griffe
+		// glissait au sol a mesure qu'il montait, au retour de la course)
+		if (bPlantNow)
 		{
 			// Griffe au repos (repliee), au sol, un peu devant quand le corps avance ; v4.17 (appuis) : la ou la griffe peut
 			// vraiment se poser (AimClaw)
