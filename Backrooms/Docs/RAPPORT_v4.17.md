@@ -230,7 +230,7 @@ rien de répliqué, ni IA, capsules, vitesses ou attaques, ni ressources protég
       par le jeu ;
     - `v417_motion.py` donne aussi la détection d'origine avec l'os tenu à sa hauteur d'appui, et la descente du bassin ;
     - `Tools/check_leg_ik.py` contrôle la formule d'IK du joueur.
-  - Résultats : § 4.3.
+  - Résultats : § 4.3. Reprise sur un autre PC et suite (marcheurs) : [`PASSATION_v4.17_appuis.md`](PASSATION_v4.17_appuis.md).
 - **Non vérifié** : escalier, main dans une porte, objet tenu, coude, continuité attente → poursuite → attaque, Hound et
   Skin-Stealer en mouvement, entités dans les reflets en ray tracing hors champ.
 
